@@ -6,7 +6,7 @@ import type {
   TerminalTransport,
 } from '@floegence/floeterm-terminal-web';
 import type { RedevenV1Rpc } from '../protocol/redeven_v1';
-import { ProtocolNotConnectedError } from '@floegence/floe-webapp-protocol';
+import { ProtocolNotConnectedError, RpcError } from '@floegence/floe-webapp-protocol';
 
 export function getOrCreateTerminalConnId(storageKey = 'redeven_terminal_conn_id'): string {
   const existing = sessionStorage.getItem(storageKey);
@@ -25,6 +25,32 @@ export type TerminalSessionStats = { history: { totalBytes: number } };
 export type RedevenTerminalTransport = TerminalTransport & {
   getSessionStats: (sessionId: string) => Promise<TerminalSessionStats>;
 };
+
+function terminalTransportErrorText(e: unknown): string {
+  if (e == null) return '';
+  if (typeof e === 'string') return e;
+  if (e instanceof Error) {
+    const causeText = terminalTransportErrorText(e.cause);
+    return `${e.name} ${e.message} ${causeText}`.toLowerCase();
+  }
+  try {
+    return JSON.stringify(e).toLowerCase();
+  } catch {
+    return String(e).toLowerCase();
+  }
+}
+
+export function isBestEffortTerminalDisconnectError(e: unknown): boolean {
+  if (e instanceof ProtocolNotConnectedError) return true;
+  if (e instanceof RpcError && e.code === -1) {
+    const text = terminalTransportErrorText(e);
+    return text.includes('rpc client closed')
+      || text.includes('rpc closed')
+      || text.includes('websocket closed')
+      || text.includes('transport error');
+  }
+  return false;
+}
 
 export function createRedevenTerminalEventSource(rpc: RedevenV1Rpc): TerminalEventSource {
   return {
@@ -58,7 +84,7 @@ export function createRedevenTerminalEventSource(rpc: RedevenV1Rpc): TerminalEve
 
 export function createRedevenTerminalTransport(rpc: RedevenV1Rpc, connId: string): RedevenTerminalTransport {
   const ignoreIfNotConnected = (e: unknown) => {
-    if (e instanceof ProtocolNotConnectedError) return true;
+    if (isBestEffortTerminalDisconnectError(e)) return true;
     return false;
   };
 

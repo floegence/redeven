@@ -2,7 +2,6 @@ import { createMemo, createSignal, onCleanup, untrack, type Component, type JSX 
 import { Maximize, Minus, X } from '@floegence/floe-webapp-core/icons';
 import { startPointerSession, type PointerSessionController } from '@floegence/floe-webapp-core/ui';
 import type {
-  WorkbenchWidgetBodyProps,
   WorkbenchWidgetDefinition,
   WorkbenchWidgetItem,
   WorkbenchWidgetType,
@@ -18,6 +17,10 @@ import {
   resolveRedevenWorkbenchWidgetEventOwnership,
   shouldActivateRedevenWorkbenchWidgetLocalTarget,
 } from './workbenchInputRouting';
+import {
+  resolveRedevenWorkbenchWidgetLifecycle,
+  type RedevenWorkbenchWidgetBodyProps,
+} from './workbenchWidgetLifecycle';
 
 interface LocalDragState {
   pointerId: number;
@@ -113,11 +116,20 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
 
   const isDragging = () => dragState() !== null;
   const isResizing = () => resizeState() !== null;
+  const lifecycle = createMemo(() => resolveRedevenWorkbenchWidgetLifecycle({
+    selected: props.selected,
+    filtered: props.filtered,
+  }));
   const resolveEventOwnership = (target: EventTarget | null) =>
     resolveRedevenWorkbenchWidgetEventOwnership({
       target,
       widgetRoot: widgetRootEl ?? null,
     });
+  const requestActivate = () => {
+    props.onSelect(props.widgetId);
+    props.onCommitFront(props.widgetId);
+    widgetRootEl?.focus({ preventScroll: true });
+  };
   const handlePointerDown: JSX.EventHandler<HTMLElement, PointerEvent> = (event) => {
     if (event.button !== 0 && event.button !== 2) return;
 
@@ -410,17 +422,17 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
       </header>
       <div class="workbench-widget__body" data-floe-canvas-interactive="true">
         {(() => {
-          const Body = props.definition.body as Component<
-            WorkbenchWidgetBodyProps & {
-              activation?: RedevenWorkbenchWidgetBodyActivation;
-            }
-          >;
+          const Body = props.definition.body as Component<RedevenWorkbenchWidgetBodyProps>;
           return (
             <Body
               widgetId={props.widgetId}
               title={props.widgetTitle}
               type={props.widgetType}
               activation={bodyActivation()}
+              lifecycle={lifecycle()}
+              selected={props.selected}
+              filtered={props.filtered}
+              requestActivate={requestActivate}
             />
           );
         })()}

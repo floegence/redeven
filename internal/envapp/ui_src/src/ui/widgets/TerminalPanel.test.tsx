@@ -1044,6 +1044,57 @@ describe('TerminalPanel', () => {
     expect(handledSpy).toHaveBeenCalledWith('request-workbench-group');
   });
 
+  it('keeps only the active workbench terminal tab mounted live', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace/repo',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      (() => {
+        const [groupState, setGroupState] = createSignal({
+          sessionIds: ['session-1', 'session-2'],
+          activeSessionId: 'session-1' as string | null,
+        });
+
+        return (
+          <TerminalPanel
+            variant="workbench"
+            sessionGroupState={groupState()}
+            onSessionGroupStateChange={setGroupState}
+          />
+        );
+      })()
+    ), host);
+    await settleTerminalPanel();
+
+    expect(terminalEventSourceState.dataHandlers.get('session-1')?.size).toBe(1);
+    expect(terminalEventSourceState.dataHandlers.get('session-2')?.size ?? 0).toBe(0);
+
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await settleTerminalPanel();
+
+    expect(terminalEventSourceState.dataHandlers.get('session-1')?.size ?? 0).toBe(0);
+    expect(terminalEventSourceState.dataHandlers.get('session-2')?.size).toBe(1);
+  });
+
   it('uses workbench session operations for tab create and close', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

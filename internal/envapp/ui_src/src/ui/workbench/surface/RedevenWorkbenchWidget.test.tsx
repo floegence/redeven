@@ -3,7 +3,6 @@
 import { createEffect, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { WorkbenchWidgetBodyProps } from '@floegence/floe-webapp-core/workbench';
 
 import { RedevenWorkbenchWidget } from './RedevenWorkbenchWidget';
 import {
@@ -12,6 +11,7 @@ import {
   REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR,
   type RedevenWorkbenchWidgetBodyActivation,
 } from './workbenchInputRouting';
+import type { RedevenWorkbenchWidgetBodyProps } from './workbenchWidgetLifecycle';
 
 function dispatchPointerEvent(
   type: string,
@@ -53,13 +53,9 @@ function dispatchPointerEvent(
 
 function createActivationBody(
   onActivation: (activation: RedevenWorkbenchWidgetBodyActivation) => void,
-  children: (props: WorkbenchWidgetBodyProps & {
-    activation?: RedevenWorkbenchWidgetBodyActivation;
-  }) => JSX.Element,
+  children: (props: RedevenWorkbenchWidgetBodyProps) => JSX.Element,
 ) {
-  return (props: WorkbenchWidgetBodyProps & {
-    activation?: RedevenWorkbenchWidgetBodyActivation;
-  }) => {
+  return (props: RedevenWorkbenchWidgetBodyProps) => {
     createEffect(() => {
       const activation = props.activation;
       if (activation) onActivation(activation);
@@ -166,6 +162,47 @@ describe('RedevenWorkbenchWidget', () => {
     await Promise.resolve();
 
     expect(document.activeElement).toBe(widgetRoot);
+  });
+
+  it('passes local lifecycle and activation affordance to widget bodies', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const seen: Array<{
+      lifecycle: string;
+      selected: boolean;
+      filtered: boolean;
+      requestActivate: () => void;
+    }> = [];
+    const props = createWidgetProps({
+      selected: false,
+      filtered: false,
+      definition: {
+        icon: () => <svg aria-hidden="true" />,
+        body: (bodyProps: RedevenWorkbenchWidgetBodyProps) => {
+          seen.push({
+            lifecycle: bodyProps.lifecycle ?? '',
+            selected: Boolean(bodyProps.selected),
+            filtered: Boolean(bodyProps.filtered),
+            requestActivate: () => bodyProps.requestActivate?.(),
+          });
+          return <div data-testid="widget-body">Body</div>;
+        },
+      } as any,
+    });
+
+    dispose = render(() => <RedevenWorkbenchWidget {...props} />, host);
+
+    expect(seen[0]).toMatchObject({
+      lifecycle: 'warm',
+      selected: false,
+      filtered: false,
+    });
+
+    seen[0]!.requestActivate();
+
+    expect(props.onSelect).toHaveBeenCalledWith('widget-files-1');
+    expect(props.onCommitFront).toHaveBeenCalledWith('widget-files-1');
   });
 
   it('starts dragging from the header and commits movement in world coordinates', () => {
