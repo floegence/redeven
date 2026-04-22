@@ -1659,6 +1659,199 @@ describe("GitBranchesPanel interactions", () => {
     }
   });
 
+  it("routes branch-status Files shortcuts to the active linked-worktree directory scope", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const onBrowseFiles = vi.fn();
+
+    mockListWorkspacePage.mockResolvedValueOnce({
+      repoRootPath: "/workspace/repo-linked",
+      section: "changes",
+      directoryPath: "internal/ui",
+      breadcrumbs: [
+        { label: "repo-linked", path: "" },
+        { label: "internal", path: "internal" },
+        { label: "ui", path: "internal/ui" },
+      ],
+      summary: {
+        stagedCount: 0,
+        unstagedCount: 1,
+        untrackedCount: 0,
+        conflictedCount: 0,
+      },
+      scopeFileCount: 1,
+      totalCount: 1,
+      offset: 0,
+      nextOffset: 1,
+      hasMore: false,
+      items: [
+        {
+          section: "unstaged",
+          changeType: "modified",
+          path: "internal/ui/GitChangesPanel.tsx",
+          displayPath: "internal/ui/GitChangesPanel.tsx",
+        },
+      ],
+    });
+
+    const branch = {
+      name: "feature/linked",
+      fullName: "refs/heads/feature/linked",
+      kind: "local" as const,
+      worktreePath: "/workspace/repo-linked",
+    };
+
+    const dispose = render(
+      () => (
+        <LayoutProvider>
+          <NotificationProvider>
+            <ProtocolProvider contract={redevenV1Contract}>
+              <div class="h-[640px]">
+                <GitBranchesPanel
+                  repoRootPath="/workspace/repo"
+                  selectedBranch={branch}
+                  branches={{
+                    repoRootPath: "/workspace/repo",
+                    currentRef: "main",
+                    local: [
+                      {
+                        name: "main",
+                        fullName: "refs/heads/main",
+                        kind: "local",
+                        current: true,
+                      },
+                      branch,
+                    ],
+                    remote: [],
+                  }}
+                  onBrowseFiles={onBrowseFiles}
+                />
+              </div>
+            </ProtocolProvider>
+          </NotificationProvider>
+        </LayoutProvider>
+      ),
+      host,
+    );
+
+    try {
+      await flush();
+
+      const browseFilesButton = host.querySelector(
+        'button[aria-label="Files"]',
+      ) as HTMLButtonElement | null;
+      expect(browseFilesButton).toBeTruthy();
+
+      browseFilesButton!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+
+      expect(onBrowseFiles).toHaveBeenCalledWith({
+        path: "/workspace/repo-linked/internal/ui",
+        preferredName: "ui",
+      });
+    } finally {
+      dispose();
+    }
+  });
+
+  it("keeps branch-status breadcrumb navigation primary and uses the launch arrow for file-browser handoff", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const onBrowseFiles = vi.fn();
+
+    mockListWorkspacePage.mockResolvedValueOnce({
+      repoRootPath: "/workspace/repo-linked",
+      section: "changes",
+      directoryPath: "internal/ui/dialogs",
+      breadcrumbs: [
+        { label: "repo-linked", path: "" },
+        { label: "internal", path: "internal" },
+        { label: "ui", path: "internal/ui" },
+        { label: "dialogs", path: "internal/ui/dialogs" },
+      ],
+      summary: {
+        stagedCount: 0,
+        unstagedCount: 1,
+        untrackedCount: 0,
+        conflictedCount: 0,
+      },
+      scopeFileCount: 1,
+      totalCount: 1,
+      offset: 0,
+      nextOffset: 1,
+      hasMore: false,
+      items: [
+        {
+          section: "unstaged",
+          changeType: "modified",
+          path: "internal/ui/dialogs/GitChangesBreadcrumb.tsx",
+          displayPath: "internal/ui/dialogs/GitChangesBreadcrumb.tsx",
+        },
+      ],
+    });
+
+    const branch = {
+      name: "feature/linked",
+      fullName: "refs/heads/feature/linked",
+      kind: "local" as const,
+      worktreePath: "/workspace/repo-linked",
+    };
+
+    const dispose = render(
+      () => (
+        <LayoutProvider>
+          <NotificationProvider>
+            <ProtocolProvider contract={redevenV1Contract}>
+              <div class="h-[640px]">
+                <GitBranchesPanel
+                  repoRootPath="/workspace/repo"
+                  selectedBranch={branch}
+                  branches={{
+                    repoRootPath: "/workspace/repo",
+                    currentRef: "main",
+                    local: [
+                      {
+                        name: "main",
+                        fullName: "refs/heads/main",
+                        kind: "local",
+                        current: true,
+                      },
+                      branch,
+                    ],
+                    remote: [],
+                  }}
+                  onBrowseFiles={onBrowseFiles}
+                />
+              </div>
+            </ProtocolProvider>
+          </NotificationProvider>
+        </LayoutProvider>
+      ),
+      host,
+    );
+
+    try {
+      await flush();
+
+      const launchButton = host.querySelector(
+        'button[aria-label="Open ui in Files"]',
+      ) as HTMLButtonElement | null;
+      expect(launchButton).toBeTruthy();
+
+      launchButton!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+
+      expect(onBrowseFiles).toHaveBeenCalledWith({
+        path: "/workspace/repo-linked/internal/ui",
+        preferredName: "ui",
+      });
+    } finally {
+      dispose();
+    }
+  });
+
   it("shows an unavailable status message for a local branch without a checked-out worktree", () => {
     const host = document.createElement("div");
     document.body.appendChild(host);

@@ -4146,6 +4146,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     await ctx.openFileBrowserAtPath(path, {
       homePath,
       title: request.title,
+      openStrategy: ctx.viewMode() === 'workbench' ? 'create_new' : undefined,
     });
   };
 

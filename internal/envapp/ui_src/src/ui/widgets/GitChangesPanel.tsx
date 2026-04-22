@@ -8,7 +8,6 @@ import {
   changeSecondaryPath,
   isGitWorkspaceDirectoryEntry,
   pickDefaultWorkspaceViewSection,
-  repoDisplayName,
   type GitSeededWorkspaceChange,
   type GitSeededWorkspaceChangesResponse,
   type GitWorkspaceViewPageState,
@@ -47,8 +46,11 @@ import {
   gitChangedFilesRowClass,
   gitChangedFilesStickyCellClass,
 } from './GitWorkbenchPrimitives';
-import type { GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
-import type { GitAskFlowerRequest } from '../utils/gitBrowserShortcuts';
+import {
+  buildGitDirectoryShortcutRequest,
+  type GitAskFlowerRequest,
+  type GitDirectoryShortcutRequest,
+} from '../utils/gitBrowserShortcuts';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { GitVirtualTable } from './GitVirtualTable';
 import { GitChangesBreadcrumb } from './GitChangesBreadcrumb';
@@ -359,14 +361,12 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const activeDirectoryPath = () => selectedSection() === 'changes' ? String(selectedPageState().directoryPath ?? '').trim() : '';
   const activeBreadcrumbs = () => selectedSection() === 'changes' ? selectedPageState().breadcrumbs ?? [] : [];
   const repoRootPath = () => String(props.workspace?.repoRootPath ?? props.repoSummary?.repoRootPath ?? '').trim();
-  const repoShortcutRequest = (): GitDirectoryShortcutRequest | null => {
-    const path = repoRootPath();
-    if (!path) return null;
-    return {
-      path,
-      preferredName: repoDisplayName(path),
-    };
-  };
+  const repoShortcutRequest = (directoryPath = activeDirectoryPath()): GitDirectoryShortcutRequest | null => (
+    buildGitDirectoryShortcutRequest({
+      rootPath: repoRootPath(),
+      directoryPath,
+    })
+  );
   const diffItem = () => diffDialogItem() ?? props.selectedItem ?? null;
   const selectedKey = () => workspaceEntryKey(diffItem());
   const canCommit = () => stagedCount() > 0 && String(props.commitMessage ?? '').trim().length > 0 && !props.commitBusy;
@@ -676,6 +676,11 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
       {renderOverflowAction()}
     </div>
   );
+  const browseFilesForBreadcrumb = (segment: GitChangesBreadcrumbSegment) => {
+    const request = repoShortcutRequest(segment.path);
+    if (!request) return;
+    void props.onBrowseFiles?.(request);
+  };
 
   return (
     <div class="flex h-full min-h-0 flex-col overflow-hidden">
@@ -748,6 +753,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                     <GitChangesBreadcrumb
                       segments={breadcrumbSegments()}
                       onSelect={props.onNavigateDirectory ? (segment) => props.onNavigateDirectory?.(segment.path) : undefined}
+                      onBrowseFiles={props.onBrowseFiles ? browseFilesForBreadcrumb : undefined}
                       class="pt-0.5"
                     />
                   </Show>

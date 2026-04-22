@@ -53,7 +53,6 @@ import {
   isGitWorkspaceDirectoryEntry,
   pickDefaultWorkspaceViewSectionFromSummary,
   reattachBranchFromRepoSummary,
-  repoDisplayName,
   shortGitHash,
   workspaceEntryKey,
   workspaceDirectoryPath,
@@ -75,9 +74,10 @@ import {
   redevenSegmentedItemClass,
   redevenSurfaceRoleClass,
 } from "../utils/redevenSurfaceRoles";
-import type {
-  GitAskFlowerRequest,
-  GitDirectoryShortcutRequest,
+import {
+  buildGitDirectoryShortcutRequest,
+  type GitAskFlowerRequest,
+  type GitDirectoryShortcutRequest,
 } from "../utils/gitBrowserShortcuts";
 import {
   gitBranchTone,
@@ -1584,14 +1584,13 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const reattachBranch = () => reattachBranchFromRepoSummary(props.repoSummary);
   const statusRepoRootPath = () =>
     resolveGitBranchWorktreePath(interactiveBranch(), activeRepoRootPath());
-  const branchDirectoryRequest = (): GitDirectoryShortcutRequest | null => {
-    const path = statusRepoRootPath();
-    if (!path) return null;
-    return {
-      path,
-      preferredName: repoDisplayName(path),
-    };
-  };
+  const branchDirectoryRequest = (
+    directoryPath = activeStatusDirectoryPath(),
+  ): GitDirectoryShortcutRequest | null =>
+    buildGitDirectoryShortcutRequest({
+      rootPath: statusRepoRootPath(),
+      directoryPath,
+    });
   const resetStatusWorkspace = () => {
     statusReqSeqBySection = { changes: 0, conflicted: 0, staged: 0 };
     setStatusWorkspace(null);
@@ -1711,6 +1710,11 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   };
   const selectStatusBreadcrumb = (segment: { path: string }) => {
     navigateStatusDirectory(segment.path);
+  };
+  const browseFilesForStatusBreadcrumb = (segment: { path: string }) => {
+    const request = branchDirectoryRequest(segment.path);
+    if (!request) return;
+    void props.onBrowseFiles?.(request);
   };
   const visibleStatusKey = () => workspaceEntryKey(diffDialogItem());
   const statusEmptyState = () =>
@@ -2566,6 +2570,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                         <GitChangesBreadcrumb
                           segments={statusBreadcrumbSegments()}
                           onSelect={selectStatusBreadcrumb}
+                          onBrowseFiles={props.onBrowseFiles ? browseFilesForStatusBreadcrumb : undefined}
                           class="mt-2"
                         />
                       </Show>

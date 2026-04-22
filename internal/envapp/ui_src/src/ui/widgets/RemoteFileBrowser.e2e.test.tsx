@@ -2666,6 +2666,44 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
+  it('uses create_new when Git browse-files handoff runs inside workbench mode', async () => {
+    widgetStateStore.values['widget-1'] = {
+      lastPathByEnv: { 'env-1': '/workspace/repo' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'git' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext({ viewMode: 'workbench' })}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const browseFilesButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-git-browse-files') as HTMLButtonElement | undefined;
+      expect(browseFilesButton).toBeTruthy();
+
+      browseFilesButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(envActionSpies.openFileBrowserAtPath).toHaveBeenCalledWith('/workspace/repo', {
+        homePath: '/workspace',
+        title: 'Repo',
+        openStrategy: 'create_new',
+      });
+    } finally {
+      dispose();
+    }
+  });
+
   it('falls back to the nearest visible ancestor when hidden files are disabled from a hidden path', async () => {
     widgetStateStore.values['widget-1'] = {
       lastPathByEnv: { 'env-1': '/workspace/src/.cache/config' },

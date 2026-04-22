@@ -11,6 +11,7 @@ import { createClientId } from './clientId';
 import {
   branchDisplayName,
   changeDisplayPath,
+  repoDisplayName,
   type GitSeededCommitFileSummary,
   type GitSeededWorkspaceChange,
   type GitWorkspaceViewSection,
@@ -24,6 +25,14 @@ type GitCommitLike = GitCommitDetail | GitCommitSummary;
 
 export type GitDirectoryShortcutRequest = Readonly<{
   path: string;
+  preferredName?: string;
+  title?: string;
+  homePath?: string;
+}>;
+
+export type BuildGitDirectoryShortcutRequestParams = Readonly<{
+  rootPath: string;
+  directoryPath?: string;
   preferredName?: string;
   title?: string;
   homePath?: string;
@@ -61,6 +70,46 @@ export type BuildGitAskFlowerIntentResult = Readonly<{
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+function normalizeGitDirectoryPath(value: unknown): string | null {
+  const raw = compact(value).replace(/\\/g, '/');
+  if (!raw || raw === '.' || raw === '/') return '';
+
+  const parts = raw
+    .replace(/^\/+/, '')
+    .replace(/\/+$/, '')
+    .split('/')
+    .map((part) => part.trim())
+    .filter((part) => part && part !== '.');
+
+  if (parts.some((part) => part === '..')) return null;
+  return parts.join('/');
+}
+
+export function buildGitDirectoryShortcutRequest(
+  params: BuildGitDirectoryShortcutRequestParams,
+): GitDirectoryShortcutRequest | null {
+  const rootPath = normalizeAbsolutePath(params.rootPath);
+  if (!rootPath) return null;
+
+  const directoryPath = normalizeGitDirectoryPath(params.directoryPath);
+  if (directoryPath === null) return null;
+  const path = directoryPath
+    ? normalizeAbsolutePath(`${rootPath === '/' ? '' : rootPath}/${directoryPath}`)
+    : rootPath;
+  if (!path) return null;
+
+  const preferredName = compact(params.preferredName) || repoDisplayName(path);
+  const title = compact(params.title);
+  const homePath = normalizeAbsolutePath(params.homePath ?? '');
+
+  return {
+    path,
+    preferredName,
+    ...(title ? { title } : {}),
+    ...(homePath ? { homePath } : {}),
+  };
 }
 
 function pluralize(count: number, noun: string): string {

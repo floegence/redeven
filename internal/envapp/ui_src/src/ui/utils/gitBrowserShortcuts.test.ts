@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { buildGitAskFlowerIntent } from './gitBrowserShortcuts';
+import {
+  buildGitAskFlowerIntent,
+  buildGitDirectoryShortcutRequest,
+} from './gitBrowserShortcuts';
 
 describe('gitBrowserShortcuts', () => {
   it('builds a git-browser intent for workspace sections', () => {
@@ -102,5 +105,32 @@ describe('gitBrowserShortcuts', () => {
 
     expect(result.intent).toBeNull();
     expect(result.error).toBe('Failed to resolve the Git repository root.');
+  });
+
+  it('builds a directory shortcut request for a scoped Git directory', () => {
+    expect(buildGitDirectoryShortcutRequest({
+      rootPath: '/workspace/repo',
+      directoryPath: 'src/ui/workbench',
+    })).toEqual({
+      path: '/workspace/repo/src/ui/workbench',
+      preferredName: 'workbench',
+    });
+  });
+
+  it('uses the repository root when the Git scope is empty', () => {
+    expect(buildGitDirectoryShortcutRequest({
+      rootPath: '/workspace/repo',
+      directoryPath: '',
+    })).toEqual({
+      path: '/workspace/repo',
+      preferredName: 'repo',
+    });
+  });
+
+  it('rejects parent-traversal Git directory scopes', () => {
+    expect(buildGitDirectoryShortcutRequest({
+      rootPath: '/workspace/repo',
+      directoryPath: '../secrets',
+    })).toBeNull();
   });
 });

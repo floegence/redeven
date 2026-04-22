@@ -962,6 +962,145 @@ describe('GitChangesPanel interactions', () => {
     }
   });
 
+  it('routes the Files shortcut to the active Git directory scope', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onBrowseFiles = vi.fn();
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[620px]">
+              <GitChangesPanel
+                repoSummary={{
+                  repoRootPath: '/workspace/repo',
+                  headRef: 'main',
+                  workspaceSummary: { stagedCount: 0, unstagedCount: 2, untrackedCount: 0, conflictedCount: 0 },
+                }}
+                workspace={{
+                  repoRootPath: '/workspace/repo',
+                  summary: { stagedCount: 0, unstagedCount: 2, untrackedCount: 0, conflictedCount: 0 },
+                  staged: [],
+                  unstaged: [
+                    { section: 'unstaged', changeType: 'modified', path: 'src/components/Button.tsx', displayPath: 'src/components/Button.tsx' },
+                  ],
+                  untracked: [],
+                  conflicted: [],
+                }}
+                workspacePages={{
+                  changes: {
+                    items: [
+                      { section: 'unstaged', changeType: 'modified', path: 'src/components/Button.tsx', displayPath: 'src/components/Button.tsx' },
+                    ],
+                    totalCount: 1,
+                    scopeFileCount: 1,
+                    nextOffset: 1,
+                    hasMore: false,
+                    loading: false,
+                    error: '',
+                    initialized: true,
+                    directoryPath: 'src/components',
+                    breadcrumbs: [
+                      { label: 'repo', path: '' },
+                      { label: 'src', path: 'src' },
+                      { label: 'components', path: 'src/components' },
+                    ],
+                  },
+                }}
+                selectedSection="changes"
+                onBrowseFiles={onBrowseFiles}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await setHeaderWidth(host, 960);
+      const browseFilesButton = host.querySelector('button[aria-label="Files"]') as HTMLButtonElement | null;
+      expect(browseFilesButton).toBeTruthy();
+
+      browseFilesButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(onBrowseFiles).toHaveBeenCalledWith({
+        path: '/workspace/repo/src/components',
+        preferredName: 'components',
+      });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps breadcrumb navigation primary and uses the launch arrow for real file-browser handoff', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onNavigateDirectory = vi.fn();
+    const onBrowseFiles = vi.fn();
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[620px]">
+              <GitChangesPanel
+                workspace={{
+                  repoRootPath: '/workspace/repo',
+                  summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 5, conflictedCount: 0 },
+                  staged: [],
+                  unstaged: [],
+                  untracked: [],
+                  conflicted: [],
+                }}
+                workspacePages={{
+                  changes: {
+                    items: [],
+                    totalCount: 5,
+                    scopeFileCount: 5,
+                    nextOffset: 5,
+                    hasMore: false,
+                    loading: false,
+                    error: '',
+                    initialized: true,
+                    directoryPath: 'desktop/workbench/dialogs/routing',
+                    breadcrumbs: [
+                      { label: 'repo', path: '' },
+                      { label: 'desktop', path: 'desktop' },
+                      { label: 'workbench', path: 'desktop/workbench' },
+                      { label: 'dialogs', path: 'desktop/workbench/dialogs' },
+                      { label: 'routing', path: 'desktop/workbench/dialogs/routing' },
+                    ],
+                  },
+                }}
+                selectedSection="changes"
+                onNavigateDirectory={onNavigateDirectory}
+                onBrowseFiles={onBrowseFiles}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await setHeaderWidth(host, 720);
+
+      const launchButton = host.querySelector('button[aria-label="Open dialogs in Files"]') as HTMLButtonElement | null;
+      expect(launchButton).toBeTruthy();
+
+      launchButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(onBrowseFiles).toHaveBeenCalledWith({
+        path: '/workspace/repo/desktop/workbench/dialogs',
+        preferredName: 'dialogs',
+      });
+      expect(onNavigateDirectory).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
   it('keeps clean-state headers quiet by hiding irrelevant disabled actions', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
