@@ -1,5 +1,6 @@
 import { cn } from '@floegence/floe-webapp-core';
 import type {
+  WorkbenchWidgetBodyProps as RedevenWorkbenchWidgetBodyProps,
   WorkbenchWidgetDefinition,
   WorkbenchWidgetType,
 } from '@floegence/floe-webapp-core/workbench';
@@ -24,7 +25,6 @@ import { useEnvWorkbenchInstancesContext } from './EnvWorkbenchInstancesContext'
 import { EnvWorkbenchConversationShell } from './EnvWorkbenchConversationShell';
 import { WorkbenchFilePreviewWidget } from './WorkbenchFilePreviewWidget';
 import { buildWorkbenchFileBrowserStateScope } from './workbenchInstanceState';
-import type { RedevenWorkbenchWidgetBodyProps } from './surface/workbenchWidgetLifecycle';
 
 function formatTerminalSessionCount(count: number): string {
   if (!Number.isFinite(count) || count <= 0) return 'No sessions';

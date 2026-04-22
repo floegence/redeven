@@ -2,6 +2,9 @@
 
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type {
+  WorkbenchWidgetBodyProps as RedevenWorkbenchWidgetBodyProps,
+} from '@floegence/floe-webapp-core/workbench';
 
 const workbenchMocks = vi.hoisted(() => ({
   terminalPanelState: vi.fn(() => ({
@@ -40,7 +43,6 @@ vi.mock('../widgets/TerminalPanel', () => ({
 }));
 
 import { redevenWorkbenchWidgets } from './redevenWorkbenchWidgets';
-import type { RedevenWorkbenchWidgetBodyProps } from './surface/workbenchWidgetLifecycle';
 
 function terminalBody() {
   const entry = redevenWorkbenchWidgets.find((widget) => widget.type === 'redeven.terminal');
@@ -106,4 +108,3 @@ describe('redevenWorkbenchWidgets terminal lifecycle', () => {
     });
   });
 });
-
