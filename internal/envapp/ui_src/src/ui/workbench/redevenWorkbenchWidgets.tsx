@@ -23,6 +23,11 @@ import { useEnvWorkbenchInstancesContext } from './EnvWorkbenchInstancesContext'
 import { EnvWorkbenchConversationShell } from './EnvWorkbenchConversationShell';
 import { WorkbenchFilePreviewWidget } from './WorkbenchFilePreviewWidget';
 import { buildWorkbenchFileBrowserStateScope } from './workbenchInstanceState';
+import type { RedevenWorkbenchWidgetBodyActivation } from './surface/workbenchInputRouting';
+
+type RedevenWorkbenchWidgetBodyProps = WorkbenchWidgetBodyProps & {
+  activation?: RedevenWorkbenchWidgetBodyActivation;
+};
 
 function WorkbenchBodyNotice(props: {
   title: string;
@@ -46,7 +51,7 @@ function WorkbenchBodyNotice(props: {
   );
 }
 
-function FilesWidget(props: WorkbenchWidgetBodyProps) {
+function FilesWidget(props: RedevenWorkbenchWidgetBodyProps) {
   const workbench = useEnvWorkbenchInstancesContext();
   return (
     <div class="h-full min-h-0 bg-background">
@@ -67,7 +72,7 @@ function FilesWidget(props: WorkbenchWidgetBodyProps) {
   );
 }
 
-function TerminalWidget(props: WorkbenchWidgetBodyProps) {
+function TerminalWidget(props: RedevenWorkbenchWidgetBodyProps) {
   const workbench = useEnvWorkbenchInstancesContext();
   const panelState = () => workbench.terminalPanelState(props.widgetId);
 
@@ -84,6 +89,7 @@ function TerminalWidget(props: WorkbenchWidgetBodyProps) {
         createSession: (name, workingDir) => workbench.createTerminalSession(props.widgetId, name, workingDir),
         deleteSession: (sessionId) => workbench.deleteTerminalSession(props.widgetId, sessionId),
       }}
+      workbenchActivationSeq={props.activation?.seq}
       onTitleChange={(title) => {
         workbench.updateWidgetTitle(props.widgetId, title);
       }}
@@ -125,7 +131,7 @@ function PortsWidget() {
   );
 }
 
-function FlowerWidget(_props: WorkbenchWidgetBodyProps) {
+function FlowerWidget(_props: RedevenWorkbenchWidgetBodyProps) {
   const env = useEnvContext();
   const available = () => env.env.state !== 'ready' || hasRWXPermissions(env.env());
 
@@ -149,7 +155,7 @@ function FlowerWidget(_props: WorkbenchWidgetBodyProps) {
   );
 }
 
-function CodexWidget(_props: WorkbenchWidgetBodyProps) {
+function CodexWidget(_props: RedevenWorkbenchWidgetBodyProps) {
   const env = useEnvContext();
   const available = () => env.env.state !== 'ready' || hasRWXPermissions(env.env());
 

@@ -1485,6 +1485,32 @@ describe('TerminalPanel', () => {
     expect(transportMocks.resize).toHaveBeenCalledWith('session-1', 80, 24);
   });
 
+  it('restores focus to the active terminal when workbench local activation advances', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => {
+      const [activationSeq, setActivationSeq] = createSignal(0);
+      (host as HTMLElement & { bumpWorkbenchActivation?: () => void }).bumpWorkbenchActivation = () => {
+        setActivationSeq((value) => value + 1);
+      };
+
+      return (
+        <TerminalPanel
+          variant="workbench"
+          workbenchActivationSeq={activationSeq()}
+        />
+      );
+    }, host);
+    await settleTerminalPanel();
+    focusSpy.mockClear();
+
+    (host as HTMLElement & { bumpWorkbenchActivation?: () => void }).bumpWorkbenchActivation?.();
+    await settleTerminalPanel();
+
+    expect(focusSpy).toHaveBeenCalled();
+  });
+
   it('defaults to the Floe keyboard on mobile and sends payloads to the active session', async () => {
     layoutState.mobile = true;
     terminalPrefsState.mobileInputMode = 'floe';

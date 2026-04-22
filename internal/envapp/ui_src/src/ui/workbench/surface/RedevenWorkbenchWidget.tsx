@@ -1,7 +1,8 @@
-import { createMemo, createSignal, onCleanup, untrack, type JSX } from 'solid-js';
+import { createMemo, createSignal, onCleanup, untrack, type Component, type JSX } from 'solid-js';
 import { Maximize, Minus, X } from '@floegence/floe-webapp-core/icons';
 import { startPointerSession, type PointerSessionController } from '@floegence/floe-webapp-core/ui';
 import type {
+  WorkbenchWidgetBodyProps,
   WorkbenchWidgetDefinition,
   WorkbenchWidgetItem,
   WorkbenchWidgetType,
@@ -13,7 +14,9 @@ import {
   REDEVEN_WORKBENCH_WIDGET_ID_ATTR,
   REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR,
   WORKBENCH_WIDGET_SHELL_ATTR,
+  type RedevenWorkbenchWidgetBodyActivation,
   resolveRedevenWorkbenchWidgetEventOwnership,
+  shouldActivateRedevenWorkbenchWidgetLocalTarget,
 } from './workbenchInputRouting';
 
 interface LocalDragState {
@@ -79,6 +82,8 @@ export interface RedevenWorkbenchWidgetProps {
 export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
   const [dragState, setDragState] = createSignal<LocalDragState | null>(null);
   const [resizeState, setResizeState] = createSignal<LocalResizeState | null>(null);
+  const [bodyActivation, setBodyActivation] =
+    createSignal<RedevenWorkbenchWidgetBodyActivation>();
   let dragSession: PointerSessionController | undefined;
   let resizeSession: PointerSessionController | undefined;
   let widgetRootEl: HTMLElement | undefined;
@@ -120,8 +125,27 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
     props.onCommitFront(props.widgetId);
 
     if (event.button !== 0) return;
-    if (resolveEventOwnership(event.target) !== 'widget_shell') return;
-    widgetRootEl?.focus({ preventScroll: true });
+    const ownership = resolveEventOwnership(event.target);
+    if (ownership === 'widget_shell') {
+      widgetRootEl?.focus({ preventScroll: true });
+      return;
+    }
+
+    if (ownership !== 'widget_local') return;
+    if (
+      !shouldActivateRedevenWorkbenchWidgetLocalTarget({
+        target: event.target,
+        widgetRoot: widgetRootEl ?? null,
+      })
+    ) {
+      return;
+    }
+
+    setBodyActivation((previous) => ({
+      seq: (previous?.seq ?? 0) + 1,
+      source: 'local_pointer',
+      pointerType: event.pointerType || undefined,
+    }));
   };
 
   const livePosition = createMemo(() => {
@@ -386,12 +410,17 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
       </header>
       <div class="workbench-widget__body" data-floe-canvas-interactive="true">
         {(() => {
-          const Body = props.definition.body;
+          const Body = props.definition.body as Component<
+            WorkbenchWidgetBodyProps & {
+              activation?: RedevenWorkbenchWidgetBodyActivation;
+            }
+          >;
           return (
             <Body
               widgetId={props.widgetId}
               title={props.widgetTitle}
               type={props.widgetType}
+              activation={bodyActivation()}
             />
           );
         })()}

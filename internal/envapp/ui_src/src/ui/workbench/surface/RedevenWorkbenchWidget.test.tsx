@@ -1,13 +1,16 @@
 // @vitest-environment jsdom
 
+import { createEffect, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { WorkbenchWidgetBodyProps } from '@floegence/floe-webapp-core/workbench';
 
 import { RedevenWorkbenchWidget } from './RedevenWorkbenchWidget';
 import {
   FLOE_DIALOG_SURFACE_HOST_ATTR,
   REDEVEN_WORKBENCH_WIDGET_ID_ATTR,
   REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR,
+  type RedevenWorkbenchWidgetBodyActivation,
 } from './workbenchInputRouting';
 
 function dispatchPointerEvent(
@@ -19,6 +22,7 @@ function dispatchPointerEvent(
     button?: number;
     pointerId?: number;
     buttons?: number;
+    pointerType?: string;
   } = {},
 ): void {
   const EventCtor = typeof PointerEvent === 'function' ? PointerEvent : MouseEvent;
@@ -38,10 +42,43 @@ function dispatchPointerEvent(
     configurable: true,
     value: options.buttons ?? 1,
   });
+  if (!('pointerType' in event)) {
+    Object.defineProperty(event, 'pointerType', {
+      configurable: true,
+      value: options.pointerType ?? 'mouse',
+    });
+  }
   target.dispatchEvent(event);
 }
 
-function createWidgetProps() {
+function createActivationBody(
+  onActivation: (activation: RedevenWorkbenchWidgetBodyActivation) => void,
+  children: (props: WorkbenchWidgetBodyProps & {
+    activation?: RedevenWorkbenchWidgetBodyActivation;
+  }) => JSX.Element,
+) {
+  return (props: WorkbenchWidgetBodyProps & {
+    activation?: RedevenWorkbenchWidgetBodyActivation;
+  }) => {
+    createEffect(() => {
+      const activation = props.activation;
+      if (activation) onActivation(activation);
+    });
+
+    return children(props);
+  };
+}
+
+function createWidgetProps(
+  overrides: Partial<ReturnType<typeof createWidgetPropsBase>> = {}
+) {
+  return {
+    ...createWidgetPropsBase(),
+    ...overrides,
+  };
+}
+
+function createWidgetPropsBase() {
   return {
     definition: {
       icon: () => <svg aria-hidden="true" />,
@@ -191,6 +228,89 @@ describe('RedevenWorkbenchWidget', () => {
     expect(document.activeElement).toBe(outsideInput);
     expect(props.onSelect).toHaveBeenCalledWith('widget-files-1');
     expect(props.onCommitFront).toHaveBeenCalledWith('widget-files-1');
+  });
+
+  it('emits local activation for non-focusable body presses without stealing root focus', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const outsideInput = document.createElement('input');
+    document.body.appendChild(outsideInput);
+
+    const onActivation = vi.fn();
+    const props = createWidgetProps({
+      definition: {
+        icon: () => <svg aria-hidden="true" />,
+        body: createActivationBody(onActivation, () => (
+          <div data-testid="widget-activation-body">Body</div>
+        )),
+      } as any,
+    });
+
+    dispose = render(() => <RedevenWorkbenchWidget {...props} />, host);
+
+    const widgetBody = host.querySelector('[data-testid="widget-activation-body"]') as HTMLElement | null;
+    expect(widgetBody).toBeTruthy();
+
+    outsideInput.focus();
+    dispatchPointerEvent('pointerdown', widgetBody!);
+    await Promise.resolve();
+
+    expect(document.activeElement).toBe(outsideInput);
+    expect(onActivation).toHaveBeenCalledTimes(1);
+    expect(onActivation).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        seq: 1,
+        source: 'local_pointer',
+        pointerType: 'mouse',
+      })
+    );
+  });
+
+  it('does not emit local activation for shell, native controls, local surfaces, or secondary presses', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const onActivation = vi.fn();
+    const props = createWidgetProps({
+      definition: {
+        icon: () => <svg aria-hidden="true" />,
+        body: createActivationBody(onActivation, () => (
+          <div data-testid="widget-body-controls">
+            <button type="button" data-testid="native-button">
+              <span data-testid="native-button-label">Native button</span>
+            </button>
+            <input aria-label="Native input" data-testid="native-input" />
+            <div data-floe-local-interaction-surface="true" data-testid="local-surface">
+              Local surface
+            </div>
+            <div data-testid="secondary-target">Secondary target</div>
+          </div>
+        )),
+      } as any,
+    });
+
+    dispose = render(() => <RedevenWorkbenchWidget {...props} />, host);
+
+    const widgetHeader = host.querySelector('.workbench-widget__header') as HTMLElement | null;
+    const nativeButtonLabel = host.querySelector('[data-testid="native-button-label"]') as HTMLElement | null;
+    const nativeInput = host.querySelector('[data-testid="native-input"]') as HTMLElement | null;
+    const localSurface = host.querySelector('[data-testid="local-surface"]') as HTMLElement | null;
+    const secondaryTarget = host.querySelector('[data-testid="secondary-target"]') as HTMLElement | null;
+    expect(widgetHeader).toBeTruthy();
+    expect(nativeButtonLabel).toBeTruthy();
+    expect(nativeInput).toBeTruthy();
+    expect(localSurface).toBeTruthy();
+    expect(secondaryTarget).toBeTruthy();
+
+    dispatchPointerEvent('pointerdown', widgetHeader!);
+    dispatchPointerEvent('pointerdown', nativeButtonLabel!);
+    dispatchPointerEvent('pointerdown', nativeInput!);
+    dispatchPointerEvent('pointerdown', localSurface!);
+    dispatchPointerEvent('pointerdown', secondaryTarget!, { button: 2, buttons: 2 });
+    await Promise.resolve();
+
+    expect(onActivation).not.toHaveBeenCalled();
   });
 
   it('keeps header action buttons clickable without starting a drag', () => {

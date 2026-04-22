@@ -87,6 +87,7 @@ export interface TerminalPanelProps {
   sessionGroupState?: TerminalPanelSessionGroupState;
   onSessionGroupStateChange?: (next: TerminalPanelSessionGroupState) => void;
   sessionOperations?: TerminalPanelSessionOperations;
+  workbenchActivationSeq?: number;
   onTitleChange?: (title: string) => void;
 }
 
@@ -1426,6 +1427,14 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       getActiveCore()?.focus();
     });
   };
+
+  createEffect(() => {
+    const activationSeq = props.workbenchActivationSeq ?? 0;
+    if (variant !== 'workbench') return;
+    if (activationSeq <= 0) return;
+    if (!viewActive()) return;
+    restoreActiveTerminalFocus();
+  });
 
   const openFloeMobileKeyboard = () => {
     if (!shouldUseFloeMobileKeyboard()) return;

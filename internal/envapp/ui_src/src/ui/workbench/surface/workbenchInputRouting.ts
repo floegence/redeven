@@ -31,6 +31,13 @@ export type WorkbenchWidgetOwnerReason = 'pointer' | 'focus' | 'activation';
 export type WorkbenchWheelLocalReason =
   | SurfaceWheelLocalReason
   | 'selected_widget';
+export type RedevenWorkbenchWidgetBodyActivationSource = 'local_pointer';
+
+export interface RedevenWorkbenchWidgetBodyActivation {
+  seq: number;
+  source: RedevenWorkbenchWidgetBodyActivationSource;
+  pointerType?: string;
+}
 
 export type WorkbenchInputOwner =
   | { kind: 'canvas'; reason: WorkbenchCanvasOwnerReason }
@@ -76,6 +83,21 @@ export function isFocusableElement(el: Element | null): boolean {
 
   const tabIndex = el.getAttribute('tabindex');
   return tabIndex !== null && tabIndex !== '-1';
+}
+
+function hasFocusableOrTypingTargetInsideWidget(
+  targetElement: Element,
+  widgetElement: Element,
+): boolean {
+  let currentElement: Element | null = targetElement;
+  while (currentElement && currentElement !== widgetElement) {
+    if (isTypingElement(currentElement) || isFocusableElement(currentElement)) {
+      return true;
+    }
+    currentElement = currentElement.parentElement;
+  }
+
+  return false;
 }
 
 function resolveEventTargetElement(target: EventTarget | null): Element | null {
@@ -153,6 +175,38 @@ export function resolveRedevenWorkbenchWidgetEventOwnership(args: {
     interactiveSelector: REDEVEN_WORKBENCH_INTERACTIVE_SELECTOR,
     panSurfaceSelector: REDEVEN_WORKBENCH_PAN_SURFACE_SELECTOR,
   });
+}
+
+export function shouldActivateRedevenWorkbenchWidgetLocalTarget(args: {
+  target: EventTarget | null;
+  widgetRoot: Element | EventTarget | null;
+}): boolean {
+  const widgetElement = resolveEventTargetElement(args.widgetRoot);
+  const targetElement = resolveEventTargetElement(args.target);
+  if (!widgetElement || !targetElement || !widgetElement.contains(targetElement)) {
+    return false;
+  }
+
+  if (
+    targetElement === widgetElement ||
+    targetElement.closest(`[${WORKBENCH_WIDGET_SHELL_ATTR}="true"]`) !== null
+  ) {
+    return false;
+  }
+
+  if (targetElement.closest(REDEVEN_WORKBENCH_PAN_SURFACE_SELECTOR) !== null) {
+    return false;
+  }
+
+  if (targetElement.closest(DEFAULT_LOCAL_INTERACTION_SURFACE_SELECTOR) !== null) {
+    return false;
+  }
+
+  if (hasFocusableOrTypingTargetInsideWidget(targetElement, widgetElement)) {
+    return false;
+  }
+
+  return resolveRedevenWorkbenchWidgetEventOwnership(args) === 'widget_local';
 }
 
 export function resolveWorkbenchWheelRouting(args: {
