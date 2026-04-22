@@ -19,6 +19,9 @@ the interaction and performance contract, not the exact UI tree.
 - Live assistant output keeps the dedicated non-virtualized tail ownership model.
 - User-triggered follow-bottom stays smooth; system restore stays instant.
 - Code, diff, and diagram blocks keep their current visual treatments unless explicitly redesigned.
+- Activity switching must update shell ownership synchronously before any heavy page bootstrap starts.
+- Codex-specific network/bootstrap work must wait until the activated view has painted once.
+- Codex transcript DOM must stay bounded to the viewport window instead of scaling with total history length.
 
 ## Rendering rules
 
@@ -29,6 +32,8 @@ the interaction and performance contract, not the exact UI tree.
 - Host callbacks that can run arbitrary logic must leave the hot path first.
 - Transcript bottom clearance must stay transcript-owned even when a page-specific floating composer is used.
 - Page-level floating composer layouts must measure the real dock height and synchronize transcript bottom inset from that measured value instead of relying on a fixed magic-number spacer.
+- View-local transcript surfaces such as Codex must use shell-first activation and defer remote bootstrap until after paint.
+- View-local transcript surfaces must window row rendering so only visible rows plus overscan mount heavy subtrees.
 
 ### Markdown
 

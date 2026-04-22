@@ -141,11 +141,14 @@ export function createFollowBottomController(
   let remainingSyncPasses = 0;
   let followRaf: number | null = null;
   let animatedFollowRaf: number | null = null;
+  let layoutBatchRaf: number | null = null;
   let animatedFollowTargetTop = 0;
   let animatedFollowLastTimestamp = 0;
   let recentUserScrollIntentUntilMs = 0;
   let pointerScrollGestureActive = false;
   let disposeUserScrollIntentListeners: (() => void) | null = null;
+  let contentLayoutDirty = false;
+  let containerLayoutDirty = false;
 
   const clearUserScrollIntent = (): void => {
     recentUserScrollIntentUntilMs = 0;
@@ -239,6 +242,15 @@ export function createFollowBottomController(
       animatedFollowRaf = null;
     }
     animatedFollowLastTimestamp = 0;
+  };
+
+  const cancelLayoutBatch = (): void => {
+    if (layoutBatchRaf !== null) {
+      cancelFrame(layoutBatchRaf);
+      layoutBatchRaf = null;
+    }
+    contentLayoutDirty = false;
+    containerLayoutDirty = false;
   };
 
   const setFollowMotionMode = (nextMode: FollowBottomMotionMode): void => {
@@ -395,12 +407,32 @@ export function createFollowBottomController(
     updateDistanceToBottom(scrollContainerEl);
   };
 
-  const contentResizeObserver = createResizeObserver(() => {
+  const flushObservedLayoutBatch = (): void => {
+    layoutBatchRaf = null;
+    if (!contentLayoutDirty && !containerLayoutDirty) return;
+    contentLayoutDirty = false;
+    containerLayoutDirty = false;
     handleObservedLayoutChange();
+  };
+
+  const queueObservedLayoutBatch = (source: 'content' | 'container'): void => {
+    if (source === 'content') {
+      contentLayoutDirty = true;
+    } else {
+      containerLayoutDirty = true;
+    }
+    if (layoutBatchRaf !== null) return;
+    layoutBatchRaf = requestFrame(() => {
+      flushObservedLayoutBatch();
+    });
+  };
+
+  const contentResizeObserver = createResizeObserver(() => {
+    queueObservedLayoutBatch('content');
   });
 
   const scrollContainerResizeObserver = createResizeObserver(() => {
-    handleObservedLayoutChange();
+    queueObservedLayoutBatch('container');
   });
 
   const setScrollContainer = (element: HTMLElement | null | undefined): void => {
@@ -478,6 +510,7 @@ export function createFollowBottomController(
     disposeUserScrollIntentListeners = null;
     cancelScheduledInstantFollow();
     cancelAnimatedFollow();
+    cancelLayoutBatch();
     scrollContainerEl = null;
     contentRootEl = null;
     viewportAnchor = null;

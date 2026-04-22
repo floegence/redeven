@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { createEffect } from 'solid-js';
+import { createEffect, onCleanup } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -82,11 +82,19 @@ type ResizeObserverRecord = {
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...classes: Array<string | undefined | null | false>) => classes.filter(Boolean).join(' '),
+  deferAfterPaint: (fn: () => void) => {
+    fn();
+  },
   useLayout: () => ({
     sidebarActiveTab: () => 'codex',
     isMobile: () => false,
   }),
   useNotification: () => notification,
+  useViewActivation: () => ({
+    id: 'codex',
+    active: () => true,
+    activationSeq: () => 1,
+  }),
 }));
 
 vi.mock('@floegence/floe-webapp-core/icons', () => {
@@ -545,6 +553,21 @@ function renderPage(host: HTMLDivElement) {
 
 function CodexHarness(props: { onReady: (codex: ReturnType<typeof useCodexContext>) => void }) {
   const codex = useCodexContext();
+  createEffect(() => {
+    codex.reportSurfaceActivation({
+      mounted: true,
+      active: true,
+      activation_seq: 1,
+    });
+    codex.reportSurfaceAfterPaint(1);
+  });
+  onCleanup(() => {
+    codex.reportSurfaceActivation({
+      mounted: false,
+      active: false,
+      activation_seq: 1,
+    });
+  });
   createEffect(() => {
     if (codex.statusLoading()) return;
     props.onReady(codex);
@@ -3638,6 +3661,8 @@ describe('CodexPage', () => {
       await flushAsync();
 
       expect(startCodexTurnMock).toHaveBeenCalledTimes(1);
+      expect(scrollRegion?.scrollTop).toBe(40);
+      raf.flushOne();
       expect(scrollRegion?.scrollTop).toBe(40);
       raf.flushOne();
       expect(scrollRegion?.scrollTop).toBe(40);

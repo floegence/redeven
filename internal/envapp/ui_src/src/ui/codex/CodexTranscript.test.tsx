@@ -89,11 +89,13 @@ function renderTranscript(items: CodexTranscriptItem[], options?: {
   showWorkingState?: boolean;
   workingLabel?: string;
   workingFlags?: string[];
+  scrollContainer?: HTMLElement | null;
 }) {
   const host = document.createElement('div');
   document.body.append(host);
   const dispose = render(() => (
     <CodexTranscript
+      scrollContainer={options?.scrollContainer}
       items={items}
       optimisticUserTurns={options?.optimisticUserTurns}
       showWorkingState={options?.showWorkingState}
@@ -106,6 +108,16 @@ function renderTranscript(items: CodexTranscriptItem[], options?: {
   return { host, dispose };
 }
 
+function createVirtualScrollContainer(clientHeight = 240): HTMLDivElement {
+  const element = document.createElement('div');
+  Object.defineProperty(element, 'clientHeight', {
+    configurable: true,
+    get: () => clientHeight,
+  });
+  document.body.append(element);
+  return element;
+}
+
 function flushAsync(): Promise<void> {
   return Promise.resolve().then(() => Promise.resolve());
 }
@@ -114,10 +126,94 @@ afterEach(() => {
   openPreview.mockReset();
   readFileBytesOnceMock.mockReset();
   protocolState.client = () => null;
+  vi.unstubAllGlobals();
   document.body.innerHTML = '';
 });
 
 describe('CodexTranscript', () => {
+  it('bounds rendered rows to the viewport when an external scroll container is provided', async () => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(16);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    const scrollContainer = createVirtualScrollContainer(240);
+    const items: CodexTranscriptItem[] = Array.from({ length: 48 }, (_, index) => ({
+      id: `item_${index}`,
+      type: index % 2 === 0 ? 'userMessage' : 'agentMessage',
+      text: `Transcript row ${index}`,
+      status: index % 2 === 0 ? undefined : 'completed',
+      order: index,
+    }));
+
+    const { host, dispose } = renderTranscript(items, { scrollContainer });
+
+    await flushAsync();
+
+    expect(host.querySelectorAll('.codex-transcript-row').length).toBeLessThan(items.length);
+    expect(host.textContent).toContain('Transcript row 0');
+    expect(host.textContent).not.toContain('Transcript row 47');
+
+    scrollContainer.scrollTop = 4_800;
+    scrollContainer.dispatchEvent(new Event('scroll'));
+    await flushAsync();
+
+    expect(host.querySelectorAll('.codex-transcript-row').length).toBeLessThan(items.length);
+    expect(host.textContent).toContain('Transcript row 47');
+    expect(host.textContent).not.toContain('Transcript row 0');
+
+    dispose();
+  });
+
+  it('preserves reasoning expansion after a virtualized row leaves and re-enters the viewport', async () => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(16);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    const scrollContainer = createVirtualScrollContainer(220);
+    const items: CodexTranscriptItem[] = [
+      {
+        id: 'item_reasoning_virtual',
+        type: 'reasoning',
+        text: 'Reasoning detail survives virtualization.',
+        status: 'completed',
+        order: 0,
+      },
+      ...Array.from({ length: 36 }, (_, index) => ({
+        id: `item_filler_${index}`,
+        type: index % 2 === 0 ? 'userMessage' : 'agentMessage',
+        text: `Filler row ${index}`,
+        status: index % 2 === 0 ? undefined : 'completed',
+        order: index + 1,
+      }) satisfies CodexTranscriptItem),
+    ];
+
+    const { host, dispose } = renderTranscript(items, { scrollContainer });
+
+    await flushAsync();
+
+    const toggle = host.querySelector('.codex-chat-reasoning-toggle') as HTMLButtonElement | null;
+    expect(toggle).toBeTruthy();
+    toggle?.click();
+    await flushAsync();
+    expect(host.querySelector('[data-codex-reasoning-row="true"]')?.getAttribute('data-codex-reasoning-expanded')).toBe('true');
+
+    scrollContainer.scrollTop = 4_000;
+    scrollContainer.dispatchEvent(new Event('scroll'));
+    await flushAsync();
+    expect(host.querySelector('[data-codex-reasoning-row="true"]')).toBeNull();
+
+    scrollContainer.scrollTop = 0;
+    scrollContainer.dispatchEvent(new Event('scroll'));
+    await flushAsync();
+
+    expect(host.querySelector('[data-codex-reasoning-row="true"]')?.getAttribute('data-codex-reasoning-expanded')).toBe('true');
+    expect(host.textContent).toContain('Reasoning detail survives virtualization.');
+
+    dispose();
+  });
+
   it('renders a single pending assistant lane with the pre-output cursor above the compact working indicator', () => {
     const { host, dispose } = renderTranscript([], {
       showWorkingState: true,

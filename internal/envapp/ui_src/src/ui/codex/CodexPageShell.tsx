@@ -44,6 +44,7 @@ export function CodexPageShell() {
   const followBottomController = createFollowBottomController();
   const [workingDirPickerOpen, setWorkingDirPickerOpen] = createSignal(false);
   const [transcriptOverlayTrackRef, setTranscriptOverlayTrackRef] = createSignal<HTMLDivElement>();
+  const [transcriptScrollRegionRef, setTranscriptScrollRegionRef] = createSignal<HTMLDivElement>();
 
   onCleanup(() => {
     followBottomController.dispose();
@@ -404,6 +405,7 @@ export function CodexPageShell() {
             <div
               ref={(element) => {
                 followBottomController.setScrollContainer(element);
+                setTranscriptScrollRegionRef(element);
               }}
               class="codex-page-transcript-main"
               data-codex-transcript-scroll-region="true"
@@ -411,6 +413,7 @@ export function CodexPageShell() {
             >
               <CodexTranscript
                 rootRef={followBottomController.setContentRoot}
+                scrollContainer={transcriptScrollRegionRef()}
                 items={codex.transcriptItems()}
                 optimisticUserTurns={codex.activeOptimisticUserTurns()}
                 showWorkingState={shouldShowWorkingState()}

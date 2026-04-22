@@ -20,6 +20,9 @@ describe('chat responsiveness guardrails', () => {
     expect(contract).toContain('Large diffs must prefer a worker-backed diff model.');
     expect(contract).toContain('Large code blocks should prefer worker-backed highlighting when available.');
     expect(contract).toContain('Mermaid rendering must be scheduled after paint');
+    expect(contract).toContain('Activity switching must update shell ownership synchronously');
+    expect(contract).toContain('Codex-specific network/bootstrap work must wait until the activated view has painted once.');
+    expect(contract).toContain('Codex transcript DOM must stay bounded to the viewport window');
   });
 
   it('keeps heavy chat blocks on explicit non-blocking render paths', () => {
@@ -37,5 +40,20 @@ describe('chat responsiveness guardrails', () => {
     expect(mermaidBlock).toContain('deferAfterPaint');
     expect(mermaidBlock).toContain('requestIdleCallback');
     expect(mermaidBlock).toContain('mermaidSvgCache');
+  });
+
+  it('keeps Codex responsiveness on the shell-first and bounded-transcript path', () => {
+    const envShell = readText('src/ui/EnvAppShell.tsx');
+    const codexPage = readText('src/ui/codex/CodexPage.tsx');
+    const codexProvider = readText('src/ui/codex/CodexProvider.tsx');
+    const codexTranscript = readText('src/ui/codex/CodexTranscript.tsx');
+
+    expect(envShell).toContain('resolveSidebarVisibilityMotion={({ currentActiveId, nextActiveId, isMobile }) => (');
+    expect(envShell).not.toContain('onClick: () => activateActivitySurface(nextSurface)');
+
+    expect(codexPage).toContain('reportSurfaceAfterPaint');
+    expect(codexProvider).toContain('surfaceReady');
+    expect(codexTranscript).toContain('useVirtualList');
+    expect(codexTranscript).toContain('scrollContainer?: HTMLElement | null;');
   });
 });

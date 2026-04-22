@@ -98,7 +98,7 @@ import { buildAskFlowerDraftMarkdown } from './utils/askFlowerContextTemplate';
 import { basenameFromAbsolutePath, normalizeAbsolutePath, resolveSuggestedWorkingDirAbsolute } from './utils/askFlowerPath';
 import { createClientId } from './utils/clientId';
 import { reloadCurrentPage } from './utils/windowNavigation';
-import { resolveEnvSidebarVisibilityMotion, shouldEnvTabOpenSidebar, type EnvSidebarVisibilityMotion } from './envSidebarVisibilityMotion';
+import { resolveEnvSidebarVisibilityMotion, shouldEnvTabOpenSidebar } from './envSidebarVisibilityMotion';
 import { buildDesktopShellCommandPaletteEntries } from './services/desktopShellCommandPalette';
 import {
   desktopShellBridgeAvailable,
@@ -532,9 +532,7 @@ export function EnvAppShell() {
   const [workbenchFilePreviewActivationSeq, setWorkbenchFilePreviewActivationSeq] = createSignal(0);
   const [workbenchFilePreviewActivation, setWorkbenchFilePreviewActivation] = createSignal<EnvWorkbenchFilePreviewActivationRequest | null>(null);
   const [filesMobileSidebarOpen, setFilesMobileSidebarOpen] = createSignal(false);
-  const [sidebarVisibilityMotion, setSidebarVisibilityMotion] = createSignal<EnvSidebarVisibilityMotion>('animated');
   const toggleFilesMobileSidebar = () => setFilesMobileSidebarOpen((open) => !open);
-  let sidebarVisibilityMotionRevision = 0;
   let initialActivitySurface: EnvSurfaceId | null = null;
 
   const [askFlowerIntentSeq, setAskFlowerIntentSeq] = createSignal(0);
@@ -1719,18 +1717,21 @@ export function EnvAppShell() {
 
   const [persistReady, setPersistReady] = createSignal(false);
 
-  const queueSidebarVisibilityMotion = (motion: EnvSidebarVisibilityMotion) => {
-    if (motion !== 'instant') {
-      return;
-    }
-    sidebarVisibilityMotionRevision += 1;
-    const revision = sidebarVisibilityMotionRevision;
-    setSidebarVisibilityMotion('instant');
-    deferAfterPaint(() => {
-      if (sidebarVisibilityMotionRevision !== revision) {
-        return;
-      }
-      setSidebarVisibilityMotion('animated');
+  const resolveSidebarVisibilityMotion = (
+    nextTab: string,
+  ) => resolveEnvSidebarVisibilityMotion({
+    currentTab: layout.sidebarActiveTab(),
+    nextTab,
+    isMobile: layout.isMobile(),
+  });
+
+  const setEnvSidebarActiveTab = (
+    tab: string,
+    opts?: { openSidebar?: boolean },
+  ) => {
+    layout.setSidebarActiveTab(tab, {
+      openSidebar: opts?.openSidebar,
+      visibilityMotion: resolveSidebarVisibilityMotion(tab),
     });
   };
 
@@ -1742,13 +1743,7 @@ export function EnvAppShell() {
         persistActiveSurface(surface);
       }
     }
-    queueSidebarVisibilityMotion(resolveEnvSidebarVisibilityMotion({
-      currentTab: layout.sidebarActiveTab(),
-      nextTab: surface,
-      isMobile: layout.isMobile(),
-    }));
-
-    layout.setSidebarActiveTab(surface, { openSidebar: shouldEnvTabOpenSidebar(surface) });
+    setEnvSidebarActiveTab(surface, { openSidebar: shouldEnvTabOpenSidebar(surface) });
   };
 
   const fallbackSurfaceFor = (surfaceId: EnvSurfaceId): EnvSurfaceId => {
@@ -1944,7 +1939,7 @@ export function EnvAppShell() {
             onClick: () => {
               const active = layout.sidebarActiveTab() === 'files';
               if (!active) {
-                layout.setSidebarActiveTab('files', { openSidebar: false });
+                setEnvSidebarActiveTab('files', { openSidebar: false });
                 setFilesMobileSidebarOpen(true);
                 return;
               }
@@ -1973,23 +1968,7 @@ export function EnvAppShell() {
         collapseBehavior: 'toggle',
       });
     }
-    return items.map((item) => {
-      if (item.onClick) {
-        return item;
-      }
-      const nextSurface = item.id as EnvSurfaceId;
-      if (resolveEnvSidebarVisibilityMotion({
-        currentTab: layout.sidebarActiveTab(),
-        nextTab: nextSurface,
-        isMobile: layout.isMobile(),
-      }) !== 'instant') {
-        return item;
-      }
-      return {
-        ...item,
-        onClick: () => activateActivitySurface(nextSurface),
-      };
-    });
+    return items;
   };
 
   const activityBottomItems = (): ActivityBarItem[] => {
@@ -2553,8 +2532,15 @@ export function EnvAppShell() {
     <Shell
       sidebarMode={viewMode() === 'activity' ? 'auto' : 'hidden'}
       slotClassNames={{
-        sidebar: viewMode() === 'activity' && sidebarVisibilityMotion() === 'instant' ? 'transition-none' : undefined,
+        sidebar: viewMode() === 'activity' && layout.sidebarVisibilityMotion() === 'instant' ? 'transition-none' : undefined,
       }}
+      resolveSidebarVisibilityMotion={({ currentActiveId, nextActiveId, isMobile }) => (
+        resolveEnvSidebarVisibilityMotion({
+          currentTab: currentActiveId,
+          nextTab: nextActiveId,
+          isMobile,
+        })
+      )}
       sidebarContent={(activeTab) =>
         viewMode() !== 'activity'
           ? <></>
