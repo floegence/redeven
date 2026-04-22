@@ -80,6 +80,34 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
+function shouldTrackSurfaceOwnerHandoff(previous: WorkbenchState, next: WorkbenchState): boolean {
+  const nextSelectedWidgetId = compact(next.selectedWidgetId);
+  if (!nextSelectedWidgetId || nextSelectedWidgetId === compact(previous.selectedWidgetId)) {
+    return false;
+  }
+  return next.widgets.some((widget) => widget.id === nextSelectedWidgetId);
+}
+
+function requestPostInteractionFrame(callback: () => void): void {
+  queueMicrotask(() => {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => callback());
+      return;
+    }
+    globalThis.setTimeout(() => callback(), 0);
+  });
+}
+
+function shouldReplaceBufferedSnapshot(
+  previous: RuntimeWorkbenchLayoutSnapshot | null,
+  next: RuntimeWorkbenchLayoutSnapshot,
+): boolean {
+  if (!previous) {
+    return true;
+  }
+  return next.seq > previous.seq || (next.seq === previous.seq && next.revision >= previous.revision);
+}
+
 function sameStringArray(left: readonly string[], right: readonly string[]): boolean {
   if (left.length !== right.length) {
     return false;
@@ -336,6 +364,8 @@ export function EnvWorkbenchPage() {
   const [fileBrowserOpenRequests, setFileBrowserOpenRequests] = createSignal<Record<string, WorkbenchOpenFileBrowserRequest>>({});
   const [previewOpenRequests, setPreviewOpenRequests] = createSignal<Record<string, WorkbenchOpenFilePreviewRequest>>({});
   const [widgetRemoveGuards, setWidgetRemoveGuards] = createSignal<Record<string, () => boolean>>({});
+  const [localOwnerHandoffActive, setLocalOwnerHandoffActive] = createSignal(false);
+  let localOwnerHandoffToken = 0;
 
   const runtimeWidgetStateById = createMemo(() => runtimeWorkbenchWidgetStateById(runtimeSnapshot().widget_states));
   const runtimeFilesWidgetStateById = createMemo<Record<string, RuntimeWorkbenchWidgetState>>(() => Object.fromEntries(
@@ -375,6 +405,49 @@ export function EnvWorkbenchPage() {
       existingState: previous,
       widgetDefinitions: redevenWorkbenchWidgets,
     }));
+  };
+
+  const beginLocalOwnerHandoff = () => {
+    const token = ++localOwnerHandoffToken;
+    setLocalOwnerHandoffActive(true);
+    requestPostInteractionFrame(() => {
+      if (localOwnerHandoffToken !== token) {
+        return;
+      }
+      setLocalOwnerHandoffActive(false);
+    });
+  };
+
+  const bufferRuntimeSnapshot = (snapshot: RuntimeWorkbenchLayoutSnapshot) => {
+    setPendingRemoteSnapshot((previous) => (shouldReplaceBufferedSnapshot(previous, snapshot) ? snapshot : previous));
+  };
+
+  const applyRemoteRuntimeSnapshotWhenReady = (snapshot: RuntimeWorkbenchLayoutSnapshot) => {
+    if (submitQueued() || submitInFlight() || localOwnerHandoffActive()) {
+      bufferRuntimeSnapshot(snapshot);
+      return;
+    }
+    applyRuntimeSnapshot(snapshot);
+  };
+
+  const applyLocalRuntimeSnapshotWhenReady = (snapshot: RuntimeWorkbenchLayoutSnapshot) => {
+    if (localOwnerHandoffActive()) {
+      bufferRuntimeSnapshot(snapshot);
+      return;
+    }
+    applyRuntimeSnapshot(snapshot);
+  };
+
+  const setSurfaceWorkbenchState = (updater: (previous: WorkbenchState) => WorkbenchState) => {
+    let shouldStartOwnerHandoff = false;
+    setWorkbenchState((previous) => {
+      const next = updater(previous);
+      shouldStartOwnerHandoff = shouldTrackSurfaceOwnerHandoff(previous, next);
+      return next;
+    });
+    if (shouldStartOwnerHandoff) {
+      beginLocalOwnerHandoff();
+    }
   };
 
   const applyRuntimeWidgetState = (state: RuntimeWorkbenchWidgetState, eventSeq?: number) => {
@@ -433,7 +506,7 @@ export function EnvWorkbenchPage() {
     } catch (error) {
       if (retry && error instanceof WorkbenchWidgetStateConflictError) {
         const latestSnapshot = await getWorkbenchLayoutSnapshot();
-        applyRuntimeSnapshot(latestSnapshot);
+        applyLocalRuntimeSnapshotWhenReady(latestSnapshot);
         const latest = latestSnapshot.widget_states.find((state) => state.widget_id === normalizedWidgetId);
         if (latest && runtimeWorkbenchWidgetStateDataEqual(latest.state, desiredState)) {
           return latest;
@@ -468,6 +541,8 @@ export function EnvWorkbenchPage() {
     setFileBrowserOpenRequests({});
     setPreviewOpenRequests({});
     setWidgetRemoveGuards({});
+    setLocalOwnerHandoffActive(false);
+    localOwnerHandoffToken += 1;
 
     const abortController = new AbortController();
 
@@ -482,16 +557,7 @@ export function EnvWorkbenchPage() {
             onEvent: (event) => {
               if (event.type === 'layout.replaced') {
                 const nextSnapshot = event.payload as RuntimeWorkbenchLayoutSnapshot;
-                if (submitQueued() || submitInFlight()) {
-                  setPendingRemoteSnapshot((previous) => {
-                    if (!previous || nextSnapshot.seq >= previous.seq) {
-                      return nextSnapshot;
-                    }
-                    return previous;
-                  });
-                  return;
-                }
-                applyRuntimeSnapshot(nextSnapshot);
+                applyRemoteRuntimeSnapshotWhenReady(nextSnapshot);
                 return;
               }
 
@@ -584,12 +650,12 @@ export function EnvWorkbenchPage() {
       return;
     }
 
-    const timer = window.setTimeout(() => {
+    const timer = globalThis.setTimeout(() => {
       writeUIStorageJSON(key, state);
     }, WORKBENCH_PERSIST_DELAY_MS);
 
     onCleanup(() => {
-      window.clearTimeout(timer);
+      globalThis.clearTimeout(timer);
     });
   });
 
@@ -611,7 +677,7 @@ export function EnvWorkbenchPage() {
     }
 
     setSubmitQueued(true);
-    const timer = window.setTimeout(async () => {
+    const timer = globalThis.setTimeout(async () => {
       const nextDesiredLayout = extractRuntimeWorkbenchLayoutFromWorkbenchState(workbenchState());
       if (runtimeWorkbenchLayoutWidgetsEqual(runtimeSnapshot().widgets, nextDesiredLayout.widgets)) {
         setSubmitQueued(false);
@@ -624,12 +690,12 @@ export function EnvWorkbenchPage() {
           base_revision: runtimeSnapshot().revision,
           widgets: nextDesiredLayout.widgets,
         });
-        applyRuntimeSnapshot(nextSnapshot);
+        applyLocalRuntimeSnapshotWhenReady(nextSnapshot);
       } catch (error) {
         if (error instanceof WorkbenchLayoutConflictError) {
           try {
             const latestSnapshot = await getWorkbenchLayoutSnapshot();
-            applyRuntimeSnapshot(latestSnapshot);
+            applyLocalRuntimeSnapshotWhenReady(latestSnapshot);
           } catch (refreshError) {
             console.warn('Failed to refresh workbench layout after conflict:', refreshError);
           }
@@ -643,13 +709,13 @@ export function EnvWorkbenchPage() {
     }, WORKBENCH_LAYOUT_FLUSH_DELAY_MS);
 
     onCleanup(() => {
-      window.clearTimeout(timer);
+      globalThis.clearTimeout(timer);
     });
   });
 
   createEffect(() => {
     const bufferedSnapshot = pendingRemoteSnapshot();
-    if (!bufferedSnapshot || submitQueued() || submitInFlight()) {
+    if (!bufferedSnapshot || submitQueued() || submitInFlight() || localOwnerHandoffActive()) {
       return;
     }
     setPendingRemoteSnapshot(null);
@@ -663,12 +729,12 @@ export function EnvWorkbenchPage() {
       return;
     }
 
-    const timer = window.setTimeout(() => {
+    const timer = globalThis.setTimeout(() => {
       writeUIStorageJSON(key, state);
     }, WORKBENCH_PERSIST_DELAY_MS);
 
     onCleanup(() => {
-      window.clearTimeout(timer);
+      globalThis.clearTimeout(timer);
     });
   });
 
@@ -1326,7 +1392,7 @@ export function EnvWorkbenchPage() {
       <div class="relative h-full min-h-0 overflow-hidden">
         <RedevenWorkbenchSurface
           state={workbenchState}
-          setState={setWorkbenchState}
+          setState={setSurfaceWorkbenchState}
           widgetDefinitions={redevenWorkbenchWidgets}
           filterBarWidgetTypes={redevenWorkbenchFilterBarWidgetTypes}
           onApiReady={setSurfaceApi}

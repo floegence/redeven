@@ -525,6 +525,11 @@ export function projectWorkbenchStateFromRuntimeLayout(args: Readonly<{
     .filter((widget): widget is NonNullable<typeof widget> => widget !== null);
 
   const widgetIDs = new Set(widgets.map((widget) => widget.id));
+  const liveSelectedWidgetId = compact(args.existingState?.selectedWidgetId);
+  const persistedSelectedWidgetId = compact(args.localState.selectedWidgetId);
+  const selectedWidgetId = widgetIDs.has(liveSelectedWidgetId)
+    ? liveSelectedWidgetId
+    : (widgetIDs.has(persistedSelectedWidgetId) ? persistedSelectedWidgetId : null);
   return sanitizeWorkbenchState(
     {
       ...defaultState,
@@ -535,7 +540,7 @@ export function projectWorkbenchStateFromRuntimeLayout(args: Readonly<{
         ...defaultState.filters,
         ...args.localState.filters,
       },
-      selectedWidgetId: widgetIDs.has(args.localState.selectedWidgetId ?? '') ? args.localState.selectedWidgetId : null,
+      selectedWidgetId,
       theme: args.localState.theme,
     },
     {

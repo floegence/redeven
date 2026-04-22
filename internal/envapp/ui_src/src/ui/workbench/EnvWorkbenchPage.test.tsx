@@ -280,12 +280,23 @@ vi.mock('./surface/RedevenWorkbenchSurface', () => ({
     surfaceApiMocks.lastSetState = props.setState;
     surfaceApiMocks.lastSurfaceProps = props;
     props.onApiReady?.(stableSurfaceApi);
+    const topWidgetId = () => ([...props.state().widgets].sort((left: any, right: any) => {
+      if (left.z_index !== right.z_index) {
+        return right.z_index - left.z_index;
+      }
+      if (left.created_at_unix_ms !== right.created_at_unix_ms) {
+        return right.created_at_unix_ms - left.created_at_unix_ms;
+      }
+      return String(right.id).localeCompare(String(left.id));
+    })[0]?.id ?? '');
     return (
       <div
         data-testid="env-workbench-surface"
         data-widget-ids={props.state().widgets.map((widget: any) => widget.id).join(',')}
         data-viewport-x={String(props.state().viewport.x)}
         data-widget-x={String(props.state().widgets[0]?.x ?? '')}
+        data-selected-widget-id={String(props.state().selectedWidgetId ?? '')}
+        data-top-widget-id={topWidgetId()}
       >
         {props.state().widgets.map((widget: any) => {
           const definition = props.widgetDefinitions.find((entry: any) => entry.type === widget.type);
@@ -676,6 +687,110 @@ describe('EnvWorkbenchPage', () => {
 
     surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement;
     expect(surface.dataset.widgetX).toBe('540');
+  });
+
+  it('defers remote layout acks during cross-widget owner handoff', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 100,
+      widgets: [
+        {
+          widget_id: 'widget-files-1',
+          widget_type: 'redeven.files',
+          x: 320,
+          y: 180,
+          width: 760,
+          height: 560,
+          z_index: 2,
+          created_at_unix_ms: 123,
+        },
+        {
+          widget_id: 'widget-terminal-1',
+          widget_type: 'redeven.terminal',
+          x: 1080,
+          y: 180,
+          width: 760,
+          height: 560,
+          z_index: 1,
+          created_at_unix_ms: 124,
+        },
+      ],
+      widget_states: [],
+    });
+    storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
+      if (key === 'workbench:env-123:local_state') {
+        return {
+          version: 1,
+          viewport: { x: 80, y: 60, scale: 1 },
+          locked: false,
+          filters: {
+            'redeven.terminal': true,
+            'redeven.files': true,
+            'redeven.preview': true,
+          },
+          selectedWidgetId: 'widget-files-1',
+          theme: 'default',
+          legacyLayoutMigrated: true,
+        };
+      }
+      return null;
+    }) as any);
+
+    render(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    surfaceApiMocks.lastSetState((previous: any) => ({
+      ...previous,
+      selectedWidgetId: 'widget-terminal-1',
+      widgets: previous.widgets.map((widget: any) => (
+        widget.id === 'widget-terminal-1'
+          ? { ...widget, z_index: 3 }
+          : widget
+      )),
+    }));
+
+    layoutApiMocks.lastStreamArgs.onEvent({
+      seq: 2,
+      type: 'layout.replaced',
+      created_at_unix_ms: 200,
+      payload: {
+        seq: 2,
+        revision: 2,
+        updated_at_unix_ms: 200,
+        widgets: [
+          {
+            widget_id: 'widget-files-1',
+            widget_type: 'redeven.files',
+            x: 320,
+            y: 180,
+            width: 760,
+            height: 560,
+            z_index: 2,
+            created_at_unix_ms: 123,
+          },
+          {
+            widget_id: 'widget-terminal-1',
+            widget_type: 'redeven.terminal',
+            x: 1080,
+            y: 180,
+            width: 760,
+            height: 560,
+            z_index: 1,
+            created_at_unix_ms: 124,
+          },
+        ],
+        widget_states: [],
+      },
+    });
+    await flushMicrotasks();
+
+    const surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement;
+    expect(surface.dataset.selectedWidgetId).toBe('widget-terminal-1');
+    expect(surface.dataset.topWidgetId).toBe('widget-terminal-1');
   });
 
   it('defers layout persistence during active widget interactions and flushes once at the end', async () => {
