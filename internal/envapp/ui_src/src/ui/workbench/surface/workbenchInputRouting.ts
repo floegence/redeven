@@ -2,12 +2,14 @@ import {
   DEFAULT_LOCAL_INTERACTION_SURFACE_SELECTOR,
   resolveSurfaceInteractionTargetRole,
   resolveSurfaceWheelRouting,
+  shouldActivateWorkbenchWidgetLocalTarget,
   resolveWorkbenchWidgetEventOwnership,
   WORKBENCH_WIDGET_SHELL_ATTR,
   type SurfaceInteractionTargetRole,
   type SurfaceWheelLocalReason,
   type WorkbenchWidgetEventOwnership,
 } from '@floegence/floe-webapp-core/ui';
+import type { WorkbenchWidgetBodyActivation } from '@floegence/floe-webapp-core/workbench';
 import {
   REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_SELECTOR,
 } from './workbenchWheelInteractive';
@@ -31,13 +33,7 @@ export type WorkbenchWidgetOwnerReason = 'pointer' | 'focus' | 'activation';
 export type WorkbenchWheelLocalReason =
   | SurfaceWheelLocalReason
   | 'selected_widget';
-export type RedevenWorkbenchWidgetBodyActivationSource = 'local_pointer';
-
-export interface RedevenWorkbenchWidgetBodyActivation {
-  seq: number;
-  source: RedevenWorkbenchWidgetBodyActivationSource;
-  pointerType?: string;
-}
+export type RedevenWorkbenchWidgetBodyActivation = WorkbenchWidgetBodyActivation;
 
 export type WorkbenchInputOwner =
   | { kind: 'canvas'; reason: WorkbenchCanvasOwnerReason }
@@ -71,32 +67,6 @@ export function isTypingElement(el: Element | null): boolean {
   if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
   if (el.isContentEditable) return true;
   if (el.getAttribute('role') === 'textbox') return true;
-  return false;
-}
-
-export function isFocusableElement(el: Element | null): boolean {
-  if (!el || typeof HTMLElement === 'undefined' || !(el instanceof HTMLElement)) return false;
-
-  if (el.matches('button, input, select, textarea, summary')) return true;
-  if (el.matches('a[href], area[href]')) return true;
-  if (el.matches('iframe, [contenteditable="true"]')) return true;
-
-  const tabIndex = el.getAttribute('tabindex');
-  return tabIndex !== null && tabIndex !== '-1';
-}
-
-function hasFocusableOrTypingTargetInsideWidget(
-  targetElement: Element,
-  widgetElement: Element,
-): boolean {
-  let currentElement: Element | null = targetElement;
-  while (currentElement && currentElement !== widgetElement) {
-    if (isTypingElement(currentElement) || isFocusableElement(currentElement)) {
-      return true;
-    }
-    currentElement = currentElement.parentElement;
-  }
-
   return false;
 }
 
@@ -181,32 +151,14 @@ export function shouldActivateRedevenWorkbenchWidgetLocalTarget(args: {
   target: EventTarget | null;
   widgetRoot: Element | EventTarget | null;
 }): boolean {
-  const widgetElement = resolveEventTargetElement(args.widgetRoot);
-  const targetElement = resolveEventTargetElement(args.target);
-  if (!widgetElement || !targetElement || !widgetElement.contains(targetElement)) {
-    return false;
-  }
-
-  if (
-    targetElement === widgetElement ||
-    targetElement.closest(`[${WORKBENCH_WIDGET_SHELL_ATTR}="true"]`) !== null
-  ) {
-    return false;
-  }
-
-  if (targetElement.closest(REDEVEN_WORKBENCH_PAN_SURFACE_SELECTOR) !== null) {
-    return false;
-  }
-
-  if (targetElement.closest(DEFAULT_LOCAL_INTERACTION_SURFACE_SELECTOR) !== null) {
-    return false;
-  }
-
-  if (hasFocusableOrTypingTargetInsideWidget(targetElement, widgetElement)) {
-    return false;
-  }
-
-  return resolveRedevenWorkbenchWidgetEventOwnership(args) === 'widget_local';
+  return shouldActivateWorkbenchWidgetLocalTarget({
+    target: args.target,
+    widgetRoot: args.widgetRoot,
+    interactiveSelector: REDEVEN_WORKBENCH_INTERACTIVE_SELECTOR,
+    panSurfaceSelector: REDEVEN_WORKBENCH_PAN_SURFACE_SELECTOR,
+    localInteractionSurfaceSelector: DEFAULT_LOCAL_INTERACTION_SURFACE_SELECTOR,
+    shellSelector: `[${WORKBENCH_WIDGET_SHELL_ATTR}="true"]`,
+  });
 }
 
 export function resolveWorkbenchWheelRouting(args: {
