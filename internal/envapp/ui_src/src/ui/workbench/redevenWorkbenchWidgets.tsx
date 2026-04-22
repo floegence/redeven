@@ -1,4 +1,3 @@
-import { cn } from '@floegence/floe-webapp-core';
 import type {
   WorkbenchWidgetBodyProps as RedevenWorkbenchWidgetBodyProps,
   WorkbenchWidgetDefinition,
@@ -6,7 +5,6 @@ import type {
 } from '@floegence/floe-webapp-core/workbench';
 import { Activity, Code, Files, Globe, Search, Terminal } from '@floegence/floe-webapp-core/icons';
 import { Show, type JSX } from 'solid-js';
-import { useProtocol } from '@floegence/floe-webapp-protocol';
 
 import { CodexNavigationIcon } from '../icons/CodexIcon';
 import { FlowerNavigationIcon } from '../icons/FlowerSoftAuraIcon';
@@ -25,12 +23,6 @@ import { useEnvWorkbenchInstancesContext } from './EnvWorkbenchInstancesContext'
 import { EnvWorkbenchConversationShell } from './EnvWorkbenchConversationShell';
 import { WorkbenchFilePreviewWidget } from './WorkbenchFilePreviewWidget';
 import { buildWorkbenchFileBrowserStateScope } from './workbenchInstanceState';
-
-function formatTerminalSessionCount(count: number): string {
-  if (!Number.isFinite(count) || count <= 0) return 'No sessions';
-  if (count === 1) return '1 session';
-  return `${Math.floor(count)} sessions`;
-}
 
 function WorkbenchBodyNotice(props: {
   title: string;
@@ -77,71 +69,26 @@ function FilesWidget(props: RedevenWorkbenchWidgetBodyProps) {
 
 function TerminalWidget(props: RedevenWorkbenchWidgetBodyProps) {
   const workbench = useEnvWorkbenchInstancesContext();
-  const protocol = useProtocol();
   const panelState = () => workbench.terminalPanelState(props.widgetId);
-  const pausedReason = () => {
-    if (props.filtered) return 'Filtered';
-    if (protocol.status() !== 'connected') return 'Disconnected';
-    return 'Paused';
-  };
-
-  const pausedSubtitle = () => {
-    const state = panelState();
-    const countLabel = formatTerminalSessionCount(state.sessionIds.length);
-    const activeLabel = state.activeSessionId ? 'Active tab preserved' : 'Open to start a session';
-    return `${countLabel} · ${activeLabel}`;
-  };
 
   return (
-    <Show
-      when={props.lifecycle === 'hot'}
-      fallback={(
-        <button
-          type="button"
-          data-testid="terminal-paused-preview"
-          class={cn(
-            'group flex h-full min-h-0 w-full cursor-pointer flex-col items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_top,_color-mix(in_srgb,var(--primary)_10%,transparent),_transparent_58%)] p-6 text-center',
-            'transition duration-150 hover:bg-muted/25 focus:outline-none focus:ring-2 focus:ring-primary/30'
-          )}
-          aria-label="Resume terminal widget"
-          title="Click to resume terminal"
-          onClick={(event) => {
-            event.preventDefault();
-            props.requestActivate?.();
-          }}
-        >
-          <span class="relative flex h-14 w-14 items-center justify-center rounded-2xl border border-border/70 bg-background/90 shadow-sm transition group-hover:scale-[1.02]">
-            <Terminal class="h-6 w-6 text-primary" aria-hidden="true" />
-            <span class="absolute -right-1 -top-1 rounded-full border border-background bg-amber-500 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-white shadow-sm">
-              {pausedReason()}
-            </span>
-          </span>
-          <span class="mt-4 max-w-full truncate text-sm font-semibold text-foreground">{props.title || 'Terminal'}</span>
-          <span class="mt-1 max-w-full truncate text-xs text-muted-foreground">{pausedSubtitle()}</span>
-          <span class="mt-4 rounded-full border border-border/70 bg-background/70 px-3 py-1 text-[11px] font-medium text-muted-foreground transition group-hover:border-primary/40 group-hover:text-foreground">
-            Click to resume live terminal
-          </span>
-        </button>
-      )}
-    >
-      <TerminalPanel
-        variant="workbench"
-        openSessionRequest={workbench.terminalOpenRequest(props.widgetId)}
-        onOpenSessionRequestHandled={workbench.consumeTerminalOpenRequest}
-        sessionGroupState={panelState()}
-        onSessionGroupStateChange={(next) => {
-          workbench.updateTerminalPanelState(props.widgetId, () => next);
-        }}
-        sessionOperations={{
-          createSession: (name, workingDir) => workbench.createTerminalSession(props.widgetId, name, workingDir),
-          deleteSession: (sessionId) => workbench.deleteTerminalSession(props.widgetId, sessionId),
-        }}
-        workbenchActivationSeq={props.activation?.seq}
-        onTitleChange={(title) => {
-          workbench.updateWidgetTitle(props.widgetId, title);
-        }}
-      />
-    </Show>
+    <TerminalPanel
+      variant="workbench"
+      openSessionRequest={workbench.terminalOpenRequest(props.widgetId)}
+      onOpenSessionRequestHandled={workbench.consumeTerminalOpenRequest}
+      sessionGroupState={panelState()}
+      onSessionGroupStateChange={(next) => {
+        workbench.updateTerminalPanelState(props.widgetId, () => next);
+      }}
+      sessionOperations={{
+        createSession: (name, workingDir) => workbench.createTerminalSession(props.widgetId, name, workingDir),
+        deleteSession: (sessionId) => workbench.deleteTerminalSession(props.widgetId, sessionId),
+      }}
+      workbenchActivationSeq={props.activation?.seq}
+      onTitleChange={(title) => {
+        workbench.updateWidgetTitle(props.widgetId, title);
+      }}
+    />
   );
 }
 
