@@ -81,11 +81,19 @@ if (typeof window !== 'undefined') {
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...classes: Array<string | undefined | null | false>) => classes.filter(Boolean).join(' '),
+  deferAfterPaint: (fn: () => void) => {
+    fn();
+  },
   useLayout: () => ({
     sidebarActiveTab: () => 'codex',
     isMobile: () => false,
   }),
   useNotification: () => notification,
+  useViewActivation: () => ({
+    id: 'codex',
+    active: () => true,
+    activationSeq: () => 1,
+  }),
 }));
 
 vi.mock('@floegence/floe-webapp-core/icons', () => {

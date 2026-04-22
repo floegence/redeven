@@ -1,10 +1,11 @@
-import { For, Show, createEffect, createMemo, createSignal, type Accessor, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, type Accessor, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { ChevronRight, Sparkles } from '@floegence/floe-webapp-core/icons';
 import { Tag } from '@floegence/floe-webapp-core/ui';
 
 import { MarkdownBlock } from '../chat/blocks/MarkdownBlock';
 import { ShellBlock } from '../chat/blocks/ShellBlock';
+import { useVirtualList } from '../chat/hooks/useVirtualList';
 import { StreamingCursor } from '../chat/status/StreamingCursor';
 import { CodexIcon } from '../icons/CodexIcon';
 import { CodexFileChangeDiff } from './CodexFileChangeDiff';
@@ -22,10 +23,17 @@ import type { CodexOptimisticUserTurn, CodexTranscriptItem } from './types';
 
 type CodexTranscriptSurfaceMode = 'empty' | 'loading' | 'feed';
 type CodexTranscriptSurfaceName = 'empty-state' | 'loading-state';
+type CodexTranscriptRowKind = 'optimistic' | 'item' | 'pending_assistant' | 'working_state';
 type CodexTranscriptRenderRow = Readonly<{
   id: string;
-  item: CodexTranscriptItem;
-  showAssistantAvatar: boolean;
+  kind: CodexTranscriptRowKind;
+  anchorId: string;
+  estimatedHeightPx: number;
+  item?: CodexTranscriptItem;
+  optimisticTurn?: CodexOptimisticUserTurn;
+  showAssistantAvatar?: boolean;
+  pendingAssistantState?: PendingAssistantVisualState;
+  workingPhaseLabel?: string;
 }>;
 type CodexTranscriptFallbackState = Readonly<{
   mode: Exclude<CodexTranscriptSurfaceMode, 'feed'>;
@@ -37,6 +45,29 @@ type CodexTranscriptSurfaceState = CodexTranscriptFallbackState | Readonly<{
   mode: 'feed';
   hasRows: true;
 }>;
+
+const CODEX_TRANSCRIPT_VIRTUAL_LIST = {
+  defaultItemHeight: 128,
+  overscan: 10,
+  hotWindow: 20,
+  warmWindow: 60,
+  loadBatchSize: 20,
+  loadThreshold: 0,
+} as const;
+
+const CODEX_TRANSCRIPT_ROW_HEIGHTS = {
+  optimistic: 92,
+  pending_assistant: 104,
+  working_state: 76,
+  userMessage: 92,
+  agentMessage: 128,
+  reasoning: 112,
+  plan: 112,
+  commandExecution: 176,
+  fileChange: 232,
+  webSearch: 96,
+  evidence: 128,
+} as const;
 
 function CodexTranscriptStateHero(props: {
   surface: CodexTranscriptSurfaceName;
@@ -688,6 +719,104 @@ function shouldShowWorkingAvatar(items: readonly CodexTranscriptItem[]): boolean
   return !hasAssistantMessageInCurrentRun(items, items.length);
 }
 
+function estimateTranscriptRowHeight(row: CodexTranscriptRenderRow): number {
+  switch (row.kind) {
+    case 'optimistic':
+      return CODEX_TRANSCRIPT_ROW_HEIGHTS.optimistic;
+    case 'pending_assistant':
+      return CODEX_TRANSCRIPT_ROW_HEIGHTS.pending_assistant;
+    case 'working_state':
+      return CODEX_TRANSCRIPT_ROW_HEIGHTS.working_state;
+    case 'item':
+    default: {
+      const item = row.item;
+      if (!item) return CODEX_TRANSCRIPT_VIRTUAL_LIST.defaultItemHeight;
+      switch (item.type) {
+        case 'userMessage':
+          return CODEX_TRANSCRIPT_ROW_HEIGHTS.userMessage;
+        case 'agentMessage':
+          return CODEX_TRANSCRIPT_ROW_HEIGHTS.agentMessage;
+        case 'reasoning':
+          return CODEX_TRANSCRIPT_ROW_HEIGHTS.reasoning;
+        case 'plan':
+          return CODEX_TRANSCRIPT_ROW_HEIGHTS.plan;
+        case 'commandExecution':
+          return CODEX_TRANSCRIPT_ROW_HEIGHTS.commandExecution;
+        case 'fileChange':
+          return CODEX_TRANSCRIPT_ROW_HEIGHTS.fileChange;
+        case 'webSearch':
+          return CODEX_TRANSCRIPT_ROW_HEIGHTS.webSearch;
+        default:
+          return CODEX_TRANSCRIPT_ROW_HEIGHTS.evidence;
+      }
+    }
+  }
+}
+
+function CodexTranscriptMeasuredRow(props: {
+  row: Accessor<CodexTranscriptRenderRow | null>;
+  reasoningExpandedByID: Accessor<Record<string, boolean>>;
+  onReasoningExpandedChange: (itemID: string, expanded: boolean) => void;
+  observeRow: (element: HTMLElement, rowID: string) => void;
+  unobserveRow: (element: HTMLElement) => void;
+}) {
+  let rowEl: HTMLDivElement | undefined;
+
+  createEffect(() => {
+    const row = props.row();
+    const element = rowEl;
+    if (!row || !element) return;
+    props.observeRow(element, row.id);
+    onCleanup(() => {
+      props.unobserveRow(element);
+    });
+  });
+
+  return (
+    <Show when={props.row()}>
+      {(rowAccessor) => {
+        const row = () => rowAccessor();
+        return (
+          <div
+            ref={(element) => {
+              rowEl = element;
+            }}
+            class="codex-transcript-row"
+            data-follow-bottom-anchor-id={row().anchorId}
+          >
+            <Show when={row().kind === 'optimistic' && row().optimisticTurn}>
+              <OptimisticUserMessageRow turn={row().optimisticTurn!} />
+            </Show>
+            <Show when={row().kind === 'item' && row().item}>
+              <TranscriptRow
+                item={() => row().item ?? null}
+                showAssistantAvatar={() => Boolean(row().showAssistantAvatar)}
+                reasoningExpanded={Boolean(
+                  row().item ? props.reasoningExpandedByID()[String(row().item?.id ?? '').trim()] : false,
+                )}
+                onReasoningExpandedChange={(expanded) => {
+                  const itemID = String(row().item?.id ?? '').trim();
+                  if (!itemID) return;
+                  props.onReasoningExpandedChange(itemID, expanded);
+                }}
+              />
+            </Show>
+            <Show when={row().kind === 'pending_assistant' && row().pendingAssistantState}>
+              <PendingAssistantRow state={row().pendingAssistantState!} />
+            </Show>
+            <Show when={row().kind === 'working_state' && row().workingPhaseLabel}>
+              <WorkingStateRow
+                phaseLabel={row().workingPhaseLabel!}
+                showAvatar={Boolean(row().showAssistantAvatar)}
+              />
+            </Show>
+          </div>
+        );
+      }}
+    </Show>
+  );
+}
+
 function TranscriptRow(props: {
   item: Accessor<CodexTranscriptItem | null>;
   showAssistantAvatar: Accessor<boolean>;
@@ -727,6 +856,7 @@ function TranscriptRow(props: {
 
 export function CodexTranscript(props: {
   rootRef?: (element: HTMLDivElement) => void;
+  scrollContainer?: HTMLElement | null;
   items: readonly CodexTranscriptItem[];
   optimisticUserTurns?: readonly CodexOptimisticUserTurn[];
   showWorkingState?: boolean;
@@ -740,25 +870,29 @@ export function CodexTranscript(props: {
 }) {
   const optimisticUserTurns = createMemo<readonly CodexOptimisticUserTurn[]>(() => props.optimisticUserTurns ?? []);
   const [reasoningExpandedByID, setReasoningExpandedByID] = createSignal<Record<string, boolean>>({});
-  const transcriptRows = createMemo<readonly CodexTranscriptRenderRow[]>(() => {
+  const [rowHeightsByID, setRowHeightsByID] = createSignal<Record<string, number>>({});
+  const itemRows = createMemo<readonly CodexTranscriptRenderRow[]>(() => {
     const rows: CodexTranscriptRenderRow[] = [];
     props.items.forEach((item, index) => {
       if (!shouldRenderTranscriptItem(item)) return;
       const itemID = String(item.id ?? '').trim();
       if (!itemID) return;
-      rows.push({
-        id: itemID,
+      const seedRow: CodexTranscriptRenderRow = {
+        id: `item:${itemID}`,
+        kind: 'item',
+        anchorId: `item:${itemID}`,
         item,
         showAssistantAvatar: shouldShowAgentAvatar(props.items, index),
+        estimatedHeightPx: CODEX_TRANSCRIPT_VIRTUAL_LIST.defaultItemHeight,
+      };
+      rows.push({
+        ...seedRow,
+        estimatedHeightPx: estimateTranscriptRowHeight(seedRow),
       });
     });
     return rows;
   });
-  const transcriptRowsByID = createMemo<Record<string, CodexTranscriptRenderRow>>(() => Object.fromEntries(
-    transcriptRows().map((row) => [row.id, row]),
-  ));
-  const transcriptRowOrder = createMemo<string[]>(() => transcriptRows().map((row) => row.id));
-  const hasRows = () => transcriptRowOrder().length > 0 || optimisticUserTurns().length > 0 || Boolean(props.showWorkingState);
+  const hasRows = () => itemRows().length > 0 || optimisticUserTurns().length > 0 || Boolean(props.showWorkingState);
   const transcriptSurfaceState = createMemo<CodexTranscriptSurfaceState>(() => resolveCodexTranscriptSurfaceState({
     hasRows: hasRows(),
     loading: props.loading,
@@ -786,6 +920,95 @@ export function CodexTranscript(props: {
     };
   });
   const showStandaloneWorkingRow = createMemo(() => Boolean(props.showWorkingState) && !pendingAssistantState().show);
+  const transcriptRows = createMemo<readonly CodexTranscriptRenderRow[]>(() => {
+    const rows: CodexTranscriptRenderRow[] = optimisticUserTurns().map((turn) => {
+      const seedRow: CodexTranscriptRenderRow = {
+        id: `optimistic:${turn.id}`,
+        kind: 'optimistic',
+        anchorId: `optimistic:${turn.id}`,
+        optimisticTurn: turn,
+        estimatedHeightPx: CODEX_TRANSCRIPT_VIRTUAL_LIST.defaultItemHeight,
+      };
+      return {
+        ...seedRow,
+        estimatedHeightPx: estimateTranscriptRowHeight(seedRow),
+      };
+    });
+
+    rows.push(...itemRows());
+
+    if (pendingAssistantState().show) {
+      const seedRow: CodexTranscriptRenderRow = {
+        id: 'pending-assistant',
+        kind: 'pending_assistant',
+        anchorId: 'pending-assistant',
+        pendingAssistantState: pendingAssistantState(),
+        estimatedHeightPx: CODEX_TRANSCRIPT_VIRTUAL_LIST.defaultItemHeight,
+      };
+      rows.push({
+        ...seedRow,
+        estimatedHeightPx: estimateTranscriptRowHeight(seedRow),
+      });
+    }
+
+    if (showStandaloneWorkingRow()) {
+      const seedRow: CodexTranscriptRenderRow = {
+        id: 'working-state',
+        kind: 'working_state',
+        anchorId: 'working-state',
+        workingPhaseLabel: pendingAssistantState().phaseLabel,
+        showAssistantAvatar: shouldShowWorkingAvatar(props.items),
+        estimatedHeightPx: CODEX_TRANSCRIPT_VIRTUAL_LIST.defaultItemHeight,
+      };
+      rows.push({
+        ...seedRow,
+        estimatedHeightPx: estimateTranscriptRowHeight(seedRow),
+      });
+    }
+
+    return rows;
+  });
+  const transcriptRowsByID = createMemo<Record<string, CodexTranscriptRenderRow>>(() => Object.fromEntries(
+    transcriptRows().map((row) => [row.id, row]),
+  ));
+  const transcriptRowOrder = createMemo<string[]>(() => transcriptRows().map((row) => row.id));
+  const transcriptRowIndexByID = createMemo<Map<string, number>>(() => new Map(
+    transcriptRowOrder().map((rowID, index) => [rowID, index]),
+  ));
+  const virtualized = createMemo(() => Boolean(props.scrollContainer));
+  const virtualList = useVirtualList({
+    count: () => transcriptRowOrder().length,
+    getItemKey: (index: number) => transcriptRowOrder()[index] ?? `codex-row:${index}`,
+    getItemHeight: (index: number) => {
+      const rowID = transcriptRowOrder()[index];
+      if (!rowID) return CODEX_TRANSCRIPT_VIRTUAL_LIST.defaultItemHeight;
+      return rowHeightsByID()[rowID] ?? transcriptRowsByID()[rowID]?.estimatedHeightPx ?? CODEX_TRANSCRIPT_VIRTUAL_LIST.defaultItemHeight;
+    },
+    config: CODEX_TRANSCRIPT_VIRTUAL_LIST,
+  });
+  const visibleRowIDs = createMemo<string[]>(() => {
+    const order = transcriptRowOrder();
+    if (!virtualized()) return order;
+    const range = virtualList.visibleRange();
+    return order.slice(range.start, range.end);
+  });
+  const paddingTopPx = createMemo(() => (virtualized() ? virtualList.paddingTop() : 0));
+  const paddingBottomPx = createMemo(() => (virtualized() ? virtualList.paddingBottom() : 0));
+
+  createEffect(() => {
+    const element = props.scrollContainer ?? null;
+    virtualList.scrollRef(element);
+    if (!element || !virtualized()) return;
+    virtualList.containerRef(element);
+    virtualList.onScroll();
+    const handleScroll = () => {
+      virtualList.onScroll();
+    };
+    element.addEventListener('scroll', handleScroll, { passive: true });
+    onCleanup(() => {
+      element.removeEventListener('scroll', handleScroll);
+    });
+  });
 
   createEffect(() => {
     const visibleReasoningIDs = new Set<string>();
@@ -812,6 +1035,69 @@ export function CodexTranscript(props: {
     });
   });
 
+  createEffect(() => {
+    const visibleRowIDs = new Set(transcriptRowOrder());
+    setRowHeightsByID((current) => {
+      let next = current;
+      let changed = false;
+      for (const rowID of Object.keys(current)) {
+        if (visibleRowIDs.has(rowID)) continue;
+        if (next === current) next = { ...current };
+        delete next[rowID];
+        changed = true;
+      }
+      return changed ? next : current;
+    });
+  });
+
+  const rowResizeTargets = new Map<Element, string>();
+  const rowResizeObserver = typeof ResizeObserver === 'undefined'
+    ? null
+    : new ResizeObserver((entries) => {
+      const updates = new Map<string, number>();
+      for (const entry of entries) {
+        const rowID = rowResizeTargets.get(entry.target);
+        if (!rowID) continue;
+        const rawHeight = entry.contentBoxSize?.[0]?.blockSize ?? entry.contentRect.height;
+        const nextHeight = Math.max(1, Math.round(rawHeight));
+        if (nextHeight <= 0) continue;
+        updates.set(rowID, nextHeight);
+      }
+      if (updates.size === 0) return;
+      setRowHeightsByID((current) => {
+        let next = current;
+        let changed = false;
+        for (const [rowID, nextHeight] of updates) {
+          const fallbackHeight = transcriptRowsByID()[rowID]?.estimatedHeightPx ?? CODEX_TRANSCRIPT_VIRTUAL_LIST.defaultItemHeight;
+          const currentHeight = current[rowID] ?? fallbackHeight;
+          if (Math.abs(currentHeight - nextHeight) < 1) continue;
+          if (next === current) next = { ...current };
+          next[rowID] = nextHeight;
+          changed = true;
+        }
+        return changed ? next : current;
+      });
+      for (const [rowID, nextHeight] of updates) {
+        const rowIndex = transcriptRowIndexByID().get(rowID);
+        if (rowIndex === undefined) continue;
+        virtualList.setItemHeight(rowIndex, nextHeight);
+      }
+    });
+
+  const observeRow = (element: HTMLElement, rowID: string): void => {
+    rowResizeTargets.set(element, rowID);
+    rowResizeObserver?.observe(element);
+  };
+
+  const unobserveRow = (element: HTMLElement): void => {
+    rowResizeTargets.delete(element);
+    rowResizeObserver?.unobserve(element);
+  };
+
+  onCleanup(() => {
+    rowResizeObserver?.disconnect();
+  });
+
   return (
     <div
       ref={props.rootRef}
@@ -835,45 +1121,30 @@ export function CodexTranscript(props: {
       >
         <div class="codex-transcript-shell-feed">
           <div class="codex-transcript-feed">
-            <For each={optimisticUserTurns()}>
-              {(turn) => (
-                <div class="codex-transcript-row" data-follow-bottom-anchor-id={`optimistic:${turn.id}`}>
-                  <OptimisticUserMessageRow turn={turn} />
-                </div>
-              )}
-            </For>
-            <For each={transcriptRowOrder()}>
-              {(itemID) => (
-                <div class="codex-transcript-row" data-follow-bottom-anchor-id={`item:${itemID}`}>
-                  <TranscriptRow
-                    item={() => transcriptRowsByID()[itemID]?.item ?? null}
-                    showAssistantAvatar={() => Boolean(transcriptRowsByID()[itemID]?.showAssistantAvatar)}
-                    reasoningExpanded={Boolean(reasoningExpandedByID()[itemID])}
-                    onReasoningExpandedChange={(expanded) => {
-                      setReasoningExpandedByID((current) => {
-                        if (Boolean(current[itemID]) === expanded) return current;
-                        return {
-                          ...current,
-                          [itemID]: expanded,
-                        };
-                      });
-                    }}
-                  />
-                </div>
-              )}
-            </For>
-            <Show when={pendingAssistantState().show}>
-              <div class="codex-transcript-row" data-follow-bottom-anchor-id="pending-assistant">
-                <PendingAssistantRow state={pendingAssistantState()} />
-              </div>
+            <Show when={paddingTopPx() > 0}>
+              <div aria-hidden="true" style={{ height: `${paddingTopPx()}px` }} />
             </Show>
-            <Show when={showStandaloneWorkingRow()}>
-              <div class="codex-transcript-row" data-follow-bottom-anchor-id="working-state">
-                <WorkingStateRow
-                  phaseLabel={pendingAssistantState().phaseLabel}
-                  showAvatar={shouldShowWorkingAvatar(props.items)}
+            <For each={visibleRowIDs()}>
+              {(rowID) => (
+                <CodexTranscriptMeasuredRow
+                  row={() => transcriptRowsByID()[rowID] ?? null}
+                  reasoningExpandedByID={reasoningExpandedByID}
+                  onReasoningExpandedChange={(itemID, expanded) => {
+                    setReasoningExpandedByID((current) => {
+                      if (Boolean(current[itemID]) === expanded) return current;
+                      return {
+                        ...current,
+                        [itemID]: expanded,
+                      };
+                    });
+                  }}
+                  observeRow={observeRow}
+                  unobserveRow={unobserveRow}
                 />
-              </div>
+              )}
+            </For>
+            <Show when={paddingBottomPx() > 0}>
+              <div aria-hidden="true" style={{ height: `${paddingBottomPx()}px` }} />
             </Show>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import { parseGitPatchRenderedLines } from '../utils/gitPatch';
+import { summarizeGitPatchRenderedLines } from '../utils/gitPatch';
 import type { GitDiffFileContent } from '../protocol/redeven_v1';
 import {
   hasMeaningfulGitPatchText,
@@ -173,17 +173,7 @@ function buildCodexFilePatchText(
 }
 
 function countPatchMetrics(patchText: string): { additions: number; deletions: number } {
-  const renderedLines = parseGitPatchRenderedLines(patchText);
-  let additions = 0;
-  let deletions = 0;
-  for (const line of renderedLines) {
-    if (line.kind === 'add') {
-      additions += 1;
-    } else if (line.kind === 'del') {
-      deletions += 1;
-    }
-  }
-  return { additions, deletions };
+  return summarizeGitPatchRenderedLines(patchText);
 }
 
 function buildCodexDiffFileContent(

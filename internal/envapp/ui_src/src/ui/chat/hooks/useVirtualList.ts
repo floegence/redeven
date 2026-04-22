@@ -19,7 +19,7 @@ export interface UseVirtualListOptions {
 
 export interface UseVirtualListReturn {
   containerRef: (el: HTMLElement) => void;
-  scrollRef: (el: HTMLElement) => void;
+  scrollRef: (el: HTMLElement | null) => void;
   onScroll: () => void;
   virtualItems: () => VirtualItem[];
   totalHeight: () => number;
@@ -109,6 +109,7 @@ export function useVirtualList(options: UseVirtualListOptions): UseVirtualListRe
   // Per-item height tracking
   let heights: number[] = [];
   let bit: number[] = [0];
+  let keys: string[] = [];
   let prevCount = 0;
 
   // Pending rAF for batched updates
@@ -122,30 +123,35 @@ export function useVirtualList(options: UseVirtualListOptions): UseVirtualListRe
     return Math.max(1, Math.round(height));
   }
 
-  /** Ensure the BIT is sized for the current item count. */
-  function ensureSize(n: number): void {
-    if (n === prevCount) return;
+  /** Ensure the BIT matches the current item keys and count. */
+  function ensureSize(n: number, nextKeys?: readonly string[]): void {
+    const resolvedKeys = nextKeys ? [...nextKeys] : Array.from({ length: n }, (_, index) => getItemKey(index));
+    const keysChanged = (
+      resolvedKeys.length !== keys.length ||
+      resolvedKeys.some((key, index) => key !== keys[index])
+    );
 
-    if (n > prevCount) {
-      // Expand: add new items with default heights
-      for (let i = prevCount; i < n; i++) {
-        const h = getItemHeight(i);
-        heights.push(h);
-      }
-    } else {
-      // Shrink
-      heights.length = n;
-    }
+    if (n === prevCount && !keysChanged) return;
 
-    // Rebuild the BIT from scratch (simpler and safer on resize)
+    const heightByKey = new Map<string, number>();
+    keys.forEach((key, index) => {
+      const height = heights[index];
+      if (!key || !Number.isFinite(height)) return;
+      heightByKey.set(key, height);
+    });
+
+    keys = resolvedKeys;
+    heights = resolvedKeys.map((key, index) => heightByKey.get(key) ?? getItemHeight(index));
     bit = bitBuild(heights);
     prevCount = n;
   }
 
-  // React to count changes
+  // React to count and key changes so cached heights stay aligned with item identity.
   createEffect(() => {
     const n = count();
-    untrack(() => ensureSize(n));
+    const nextKeys = Array.from({ length: n }, (_, index) => getItemKey(index));
+    void nextKeys.length;
+    untrack(() => ensureSize(n, nextKeys));
   });
 
   // Compute the visible range with overscan
@@ -315,9 +321,18 @@ export function useVirtualList(options: UseVirtualListOptions): UseVirtualListRe
 
   // Container ref setter — also sets up ResizeObserver
   let resizeObserver: ResizeObserver | null = null;
+  let containerEl: HTMLElement | null = null;
 
   function containerRef(el: HTMLElement): void {
+    if (containerEl === el) return;
+    resizeObserver?.disconnect();
+    resizeObserver = null;
+    containerEl = el;
     setContainerHeight(normalizeHeight(el.clientHeight));
+
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
 
     resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
@@ -333,7 +348,7 @@ export function useVirtualList(options: UseVirtualListOptions): UseVirtualListRe
   }
 
   // Scroll ref setter
-  function scrollRefSetter(el: HTMLElement): void {
+  function scrollRefSetter(el: HTMLElement | null): void {
     scrollEl = el;
   }
 

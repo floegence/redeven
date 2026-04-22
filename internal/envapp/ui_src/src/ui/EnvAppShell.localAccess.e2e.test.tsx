@@ -55,8 +55,13 @@ let protocolError: unknown = null;
 let resumeCalls: string[] = [];
 let layoutIsMobile = false;
 let sidebarActiveTabValue = 'deck';
-const setSidebarActiveTabMock = vi.fn((tab: string) => {
+let sidebarVisibilityMotionValue: 'animated' | 'instant' = 'animated';
+const setSidebarActiveTabMock = vi.fn((tab: string, opts?: {
+  openSidebar?: boolean;
+  visibilityMotion?: 'animated' | 'instant';
+}) => {
   sidebarActiveTabValue = tab;
+  sidebarVisibilityMotionValue = opts?.visibilityMotion ?? 'animated';
 });
 const setSidebarCollapsedMock = vi.fn();
 const EnvContextMock = createContext({} as any);
@@ -95,6 +100,7 @@ vi.mock('@floegence/floe-webapp-core', () => ({
   useLayout: () => ({
     isMobile: () => layoutIsMobile,
     sidebarActiveTab: () => sidebarActiveTabValue,
+    sidebarVisibilityMotion: () => sidebarVisibilityMotionValue,
     setSidebarActiveTab: setSidebarActiveTabMock,
     setSidebarCollapsed: setSidebarCollapsedMock,
   }),
@@ -148,35 +154,52 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
   sanitizeDisplayMode: (value: unknown, fallback = 'activity') => (
     value === 'activity' || value === 'deck' || value === 'workbench' ? value : fallback
   ),
-  Shell: (props: any) => (
-    <div data-floe-shell="">
-      {props.logo}
-      {props.topBarActions}
-      <div>
-        {Array.isArray(props.activityItems)
-          ? props.activityItems.map((item: any) => (
-              <button type="button" data-activity-id={item.id} onClick={item.onClick}>
-                {item.label}
-              </button>
-            ))
-          : null}
+  Shell: (props: any) => {
+    const activateItem = (item: any) => {
+      if (item.onClick) {
+        item.onClick();
+        return;
+      }
+      const openSidebar = item.collapseBehavior === 'toggle';
+      const visibilityMotion = props.resolveSidebarVisibilityMotion?.({
+        currentActiveId: sidebarActiveTabValue,
+        nextActiveId: item.id,
+        openSidebar,
+        source: 'activity-bar',
+        isMobile: layoutIsMobile,
+      });
+      setSidebarActiveTabMock(item.id, { openSidebar, visibilityMotion });
+    };
+    return (
+      <div data-floe-shell="">
+        {props.logo}
+        {props.topBarActions}
+        <div>
+          {Array.isArray(props.activityItems)
+            ? props.activityItems.map((item: any) => (
+                <button type="button" data-activity-id={item.id} onClick={() => activateItem(item)}>
+                  {item.label}
+                </button>
+              ))
+            : null}
+        </div>
+        <div>
+          {Array.isArray(props.activityBottomItems)
+            ? props.activityBottomItems.map((item: any) => (
+                <button type="button" data-activity-id={item.id} onClick={() => activateItem(item)}>
+                  {item.label}
+                </button>
+              ))
+            : null}
+        </div>
+        {props.bottomBarItems}
+        <div data-testid="shell-sidebar" data-floe-shell-slot="sidebar" class={props.slotClassNames?.sidebar} />
+        <div data-floe-shell-slot="content-area">
+          <main data-floe-shell-slot="main">{props.children}</main>
+        </div>
       </div>
-      <div>
-        {Array.isArray(props.activityBottomItems)
-          ? props.activityBottomItems.map((item: any) => (
-              <button type="button" data-activity-id={item.id} onClick={item.onClick}>
-                {item.label}
-              </button>
-            ))
-          : null}
-      </div>
-      {props.bottomBarItems}
-      <div data-testid="shell-sidebar" data-floe-shell-slot="sidebar" class={props.slotClassNames?.sidebar} />
-      <div data-floe-shell-slot="content-area">
-        <main data-floe-shell-slot="main">{props.children}</main>
-      </div>
-    </div>
-  ),
+    );
+  },
   StatusIndicator: (props: any) => <div>{props.label ?? props.status}</div>,
   TopBarIconButton: (props: any) => (
     <button
@@ -782,8 +805,10 @@ describe('EnvAppShell environment entry affordances', () => {
 
       codexButton?.click();
 
-      expect(setSidebarActiveTabMock).toHaveBeenCalledWith('codex', { openSidebar: true });
-      expect(shellSidebar?.className).toContain('transition-none');
+      expect(setSidebarActiveTabMock).toHaveBeenCalledWith(
+        'codex',
+        expect.objectContaining({ openSidebar: true, visibilityMotion: 'instant' }),
+      );
 
       await flushAsync();
 
@@ -1089,8 +1114,14 @@ describe('EnvAppShell local access gate', () => {
       await flushAsync();
       await flushAsync();
 
-      expect(setSidebarActiveTabMock).toHaveBeenCalledWith('terminal', { openSidebar: false });
-      expect(setSidebarActiveTabMock).toHaveBeenCalledWith('codex', { openSidebar: true });
+      expect(setSidebarActiveTabMock).toHaveBeenCalledWith(
+        'terminal',
+        expect.objectContaining({ openSidebar: false }),
+      );
+      expect(setSidebarActiveTabMock).toHaveBeenCalledWith(
+        'codex',
+        expect.objectContaining({ openSidebar: true, visibilityMotion: 'instant' }),
+      );
       expect(sidebarActiveTabValue).toBe('codex');
       expect(storage.getItem('redeven_envapp_active_tab')).toBe('codex');
     } finally {

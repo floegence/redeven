@@ -5,9 +5,9 @@ import type { GitDiffFileContent } from '../protocol/redeven_v1';
 import {
   GIT_PATCH_PREVIEW_LINES,
   formatGitPatchLineNumber,
+  getGitPatchRenderSnapshot,
   gitPatchPreviewLineClass,
   gitPatchRenderedLineClass,
-  parseGitPatchRenderedLines,
 } from '../utils/gitPatch';
 import { hasMeaningfulGitPatchText } from '../utils/gitPatchText';
 import { changeDisplayPath, changeMetricsText } from '../utils/gitWorkbench';
@@ -36,7 +36,8 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
 
   const patchText = createMemo(() => String(props.item?.patchText ?? ''));
   const patchTruncated = createMemo(() => Boolean(props.item?.patchTruncated));
-  const renderedPatchLines = createMemo(() => parseGitPatchRenderedLines(patchText()));
+  const patchSnapshot = createMemo(() => getGitPatchRenderSnapshot(patchText()));
+  const renderedPatchLines = createMemo(() => patchSnapshot().renderedLines);
   const visiblePatchLines = createMemo(() => patchExpanded() ? renderedPatchLines() : renderedPatchLines().slice(0, GIT_PATCH_PREVIEW_LINES));
   const hasMorePatchLines = createMemo(() => renderedPatchLines().length > GIT_PATCH_PREVIEW_LINES);
   const canCopyPatch = createMemo(() => hasMeaningfulGitPatchText(patchText()));

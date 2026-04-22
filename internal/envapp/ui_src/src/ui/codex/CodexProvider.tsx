@@ -11,7 +11,7 @@ import {
   untrack,
   useContext,
 } from 'solid-js';
-import { useLayout, useNotification } from '@floegence/floe-webapp-core';
+import { useNotification } from '@floegence/floe-webapp-core';
 
 import { useEnvContext } from '../pages/EnvContext';
 import type {
@@ -61,6 +61,7 @@ import type {
   CodexOptimisticUserTurn,
   CodexPendingRequest,
   CodexQueuedFollowup,
+  CodexSurfaceActivationSnapshot,
   CodexStatus,
   CodexStreamTransportState,
   CodexThread,
@@ -652,12 +653,17 @@ export type CodexContextValue = Readonly<{
   answerRequest: (request: CodexPendingRequest, decision?: string) => Promise<void>;
   scrollToBottomRequest: Accessor<FollowBottomRequest | null>;
   requestScrollToBottom: (reason?: CodexScrollToBottomReason) => void;
+  reportSurfaceActivation: (snapshot: Readonly<{
+    mounted: boolean;
+    active: boolean;
+    activation_seq: number;
+  }>) => void;
+  reportSurfaceAfterPaint: (activationSeq: number) => void;
 }>;
 
 const CodexContext = createContext<CodexContextValue>();
 
 export function CodexProvider(props: ParentProps) {
-  const layout = useLayout();
   const notify = useNotification();
   const env = useEnvContext();
 
@@ -679,7 +685,52 @@ export function CodexProvider(props: ParentProps) {
   const [scrollToBottomRequest, setScrollToBottomRequest] = createSignal<FollowBottomRequest | null>(null);
   const [markingReadKeyByThread, setMarkingReadKeyByThread] = createSignal<Record<string, string>>({});
   const [blockedAutoSendKey, setBlockedAutoSendKey] = createSignal('');
+  const [surfaceActivation, setSurfaceActivation] = createSignal<CodexSurfaceActivationSnapshot>({
+    mounted: false,
+    active: false,
+    activation_seq: 0,
+    after_paint_seq: 0,
+  });
   let scrollToBottomRequestSeq = 0;
+
+  const reportSurfaceActivation = (snapshot: Readonly<{
+    mounted: boolean;
+    active: boolean;
+    activation_seq: number;
+  }>): void => {
+    setSurfaceActivation((current) => {
+      const activationSeq = Math.max(0, Math.floor(Number(snapshot.activation_seq ?? 0) || 0));
+      const next: CodexSurfaceActivationSnapshot = {
+        mounted: Boolean(snapshot.mounted),
+        active: Boolean(snapshot.active),
+        activation_seq: activationSeq,
+        after_paint_seq: current.after_paint_seq,
+      };
+      if (
+        current.mounted === next.mounted &&
+        current.active === next.active &&
+        current.activation_seq === next.activation_seq &&
+        current.after_paint_seq === next.after_paint_seq
+      ) {
+        return current;
+      }
+      return next;
+    });
+  };
+
+  const reportSurfaceAfterPaint = (activationSeq: number): void => {
+    const normalizedSeq = Math.max(0, Math.floor(Number(activationSeq ?? 0) || 0));
+    if (normalizedSeq <= 0) return;
+    setSurfaceActivation((current) => {
+      if (!current.active) return current;
+      if (current.activation_seq !== normalizedSeq) return current;
+      if (current.after_paint_seq === normalizedSeq) return current;
+      return {
+        ...current,
+        after_paint_seq: normalizedSeq,
+      };
+    });
+  };
 
   const replaceThreadDispatching = (threadID: string, nextItems: readonly CodexDispatchingInput[]) => {
     const normalizedThreadID = String(threadID ?? '').trim();
@@ -732,7 +783,15 @@ export function CodexProvider(props: ParentProps) {
     removeDispatchingInputs(threadID, new Set([normalizedInputID]));
   };
 
-  const codexVisible = createMemo(() => layout.sidebarActiveTab() === 'codex');
+  const surfaceReady = createMemo(() => {
+    const snapshot = surfaceActivation();
+    return (
+      snapshot.mounted &&
+      snapshot.active &&
+      snapshot.activation_seq > 0 &&
+      snapshot.after_paint_seq === snapshot.activation_seq
+    );
+  });
 
   const requestScrollToBottom = (reason: CodexScrollToBottomReason = 'manual'): void => {
     scrollToBottomRequestSeq += 1;
@@ -744,11 +803,11 @@ export function CodexProvider(props: ParentProps) {
   };
 
   const [status, { refetch: refetchStatus }] = createResource(
-    () => (codexVisible() ? env.settingsSeq() : null),
+    () => (surfaceReady() ? env.settingsSeq() : null),
     async (settingsSeq) => (settingsSeq === null ? null : fetchCodexStatus()),
   );
   const [threadsResource, { refetch: refetchThreads, mutate: mutateThreads }] = createResource<CodexThread[], number | null>(
-    () => (codexVisible() && !status.loading && status()?.available ? env.settingsSeq() : null),
+    () => (surfaceReady() && !status.loading && status()?.available ? env.settingsSeq() : null),
     async (settingsSeq, info) => {
       if (settingsSeq == null || !status()?.available) return [];
       const incoming = await listCodexThreads({ limit: 100, archived: false });
@@ -756,7 +815,7 @@ export function CodexProvider(props: ParentProps) {
     },
   );
   const threadListReady = createMemo(() => {
-    if (!codexVisible()) return false;
+    if (!surfaceReady()) return false;
     if (status.loading) return false;
     if (!status()?.available) return true;
     return threadsResource.state === 'ready' || threadsResource.state === 'refreshing';
@@ -961,9 +1020,9 @@ export function CodexProvider(props: ParentProps) {
   }));
 
   createEffect(on(
-    () => (codexVisible() ? String(status()?.agent_home_dir ?? '').trim() : ''),
+    () => (surfaceReady() ? String(status()?.agent_home_dir ?? '').trim() : ''),
     (agentHomeDir) => {
-      if (!codexVisible()) return;
+      if (!surfaceReady()) return;
       draftController.ensureOwner(
         CODEX_NEW_THREAD_OWNER,
         { cwd: agentHomeDir },
@@ -974,7 +1033,7 @@ export function CodexProvider(props: ParentProps) {
 
   createEffect(on(
     () => (
-      codexVisible()
+      surfaceReady()
         ? `${activeOwnerID()}::${runtimeConfigKey(ownerFallbackRuntimeConfig())}`
         : ''
     ),
@@ -994,7 +1053,7 @@ export function CodexProvider(props: ParentProps) {
 
   createEffect(on(
     () => {
-      if (!codexVisible()) return '';
+      if (!surfaceReady()) return '';
       const ownerID = activeOwnerID();
       if (ownerID === CODEX_NEW_THREAD_OWNER) return '';
       return `${ownerID}::${String(ownerFallbackRuntimeConfig().cwd ?? '').trim()}`;
@@ -1021,7 +1080,7 @@ export function CodexProvider(props: ParentProps) {
 
   const [capabilities, { refetch: refetchCapabilities }] = createResource(
     () => {
-      if (!codexVisible() || status.loading || !status()?.available) return null;
+      if (!surfaceReady() || status.loading || !status()?.available) return null;
       return `${env.settingsSeq()}::${activeCapabilitiesCWD()}`;
     },
     async (key) => fetchCodexCapabilities(String(key ?? '').split('::').slice(1).join('::')),
@@ -1029,7 +1088,7 @@ export function CodexProvider(props: ParentProps) {
 
   createEffect(on(
     () => {
-      if (!codexVisible()) return '';
+      if (!surfaceReady()) return '';
       const effectiveConfig = capabilities()?.effective_config;
       const agentHomeDir = String(status()?.agent_home_dir ?? '').trim();
       return `${agentHomeDir}::${runtimeConfigKey({
@@ -1054,7 +1113,7 @@ export function CodexProvider(props: ParentProps) {
 
   createEffect(on(
     () => {
-      if (!codexVisible()) return '';
+      if (!surfaceReady()) return '';
       const ownerDraft = activeOwnerDraft();
       return [
         activeOwnerID(),
@@ -1172,7 +1231,7 @@ export function CodexProvider(props: ParentProps) {
   };
 
   createEffect(() => {
-    if (!codexVisible()) return;
+    if (!surfaceReady()) return;
     const current = selectedListThread();
     if (current && isVisibleThread(current)) return;
     const list = threads();
@@ -1190,7 +1249,7 @@ export function CodexProvider(props: ParentProps) {
   });
 
   createEffect(on(
-    () => (codexVisible() ? String(foregroundThreadID() ?? '').trim() : ''),
+    () => (surfaceReady() ? String(foregroundThreadID() ?? '').trim() : ''),
     (threadID) => {
       if (!threadID) return;
       void untrack(() => loadThreadBootstrap(threadID));
@@ -1205,7 +1264,7 @@ export function CodexProvider(props: ParentProps) {
   });
 
   createEffect(() => {
-    if (!codexVisible()) return;
+    if (!surfaceReady()) return;
     const threadID = String(displayedThreadID() ?? '').trim();
     if (!threadID) {
       setStreamBinding(null);
@@ -1223,7 +1282,7 @@ export function CodexProvider(props: ParentProps) {
   });
 
   createEffect(() => {
-    if (!codexVisible()) {
+    if (!surfaceReady()) {
       streamCoordinator.attach(null);
       return;
     }
@@ -1307,7 +1366,7 @@ export function CodexProvider(props: ParentProps) {
   });
 
   createEffect(() => {
-    if (!codexVisible() || status.loading || !hasHostBinary() || !hasBackgroundRunningThread()) return;
+    if (!surfaceReady() || status.loading || !hasHostBinary() || !hasBackgroundRunningThread()) return;
     const timer = window.setInterval(() => {
       void refetchThreads();
     }, 1500);
@@ -2340,6 +2399,8 @@ export function CodexProvider(props: ParentProps) {
     answerRequest,
     scrollToBottomRequest,
     requestScrollToBottom,
+    reportSurfaceActivation,
+    reportSurfaceAfterPaint,
   };
 
   return <CodexContext.Provider value={value}>{props.children}</CodexContext.Provider>;

@@ -10,16 +10,54 @@ export type GitPatchRenderedLine = {
   kind: GitPatchRenderedLineKind;
 };
 
+export type GitPatchRenderSnapshot = Readonly<{
+  renderedLines: GitPatchRenderedLine[];
+  additions: number;
+  deletions: number;
+}>;
+
 export const GIT_PATCH_PREVIEW_LINES = 220;
 
-export function parseGitPatchRenderedLines(patchText: string): GitPatchRenderedLine[] {
-  if (!hasMeaningfulGitPatchText(patchText)) {
-    return [];
+const GIT_PATCH_RENDER_CACHE_LIMIT = 200;
+const gitPatchRenderCache = new Map<string, GitPatchRenderSnapshot>();
+
+function normalizeGitPatchCacheKey(patchText: string): string {
+  return hasMeaningfulGitPatchText(patchText) ? normalizeGitPatchText(patchText) : '';
+}
+
+function pruneGitPatchRenderCache(): void {
+  if (gitPatchRenderCache.size <= GIT_PATCH_RENDER_CACHE_LIMIT) return;
+  const oldestKey = gitPatchRenderCache.keys().next().value;
+  if (typeof oldestKey === 'string') {
+    gitPatchRenderCache.delete(oldestKey);
   }
-  const lines = normalizeGitPatchText(patchText).split('\n');
+}
+
+export function getGitPatchRenderSnapshot(patchText: string): GitPatchRenderSnapshot {
+  const cacheKey = normalizeGitPatchCacheKey(patchText);
+  if (!cacheKey) {
+    return {
+      renderedLines: [],
+      additions: 0,
+      deletions: 0,
+    };
+  }
+  const cached = gitPatchRenderCache.get(cacheKey);
+  if (cached) return cached;
+
+  if (!hasMeaningfulGitPatchText(patchText)) {
+    return {
+      renderedLines: [],
+      additions: 0,
+      deletions: 0,
+    };
+  }
+  const lines = cacheKey.split('\n');
   const rendered: GitPatchRenderedLine[] = [];
   let oldLineNumber = 1;
   let newLineNumber = 1;
+  let additions = 0;
+  let deletions = 0;
   const hunkHeaderRE = /^@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/;
 
   for (let index = 0; index < lines.length; index += 1) {
@@ -38,12 +76,14 @@ export function parseGitPatchRenderedLines(patchText: string): GitPatchRenderedL
     if (line.startsWith('+') && !line.startsWith('+++')) {
       rendered.push({ key: `${index}:add`, text: line, oldLine: null, newLine: newLineNumber, kind: 'add' });
       newLineNumber += 1;
+      additions += 1;
       continue;
     }
 
     if (line.startsWith('-') && !line.startsWith('---')) {
       rendered.push({ key: `${index}:del`, text: line, oldLine: oldLineNumber, newLine: null, kind: 'del' });
       oldLineNumber += 1;
+      deletions += 1;
       continue;
     }
 
@@ -57,7 +97,29 @@ export function parseGitPatchRenderedLines(patchText: string): GitPatchRenderedL
     rendered.push({ key: `${index}:meta-fallback`, text: line, oldLine: null, newLine: null, kind: 'meta' });
   }
 
-  return rendered;
+  const snapshot: GitPatchRenderSnapshot = {
+    renderedLines: rendered,
+    additions,
+    deletions,
+  };
+  gitPatchRenderCache.set(cacheKey, snapshot);
+  pruneGitPatchRenderCache();
+  return snapshot;
+}
+
+export function parseGitPatchRenderedLines(patchText: string): GitPatchRenderedLine[] {
+  return getGitPatchRenderSnapshot(patchText).renderedLines;
+}
+
+export function summarizeGitPatchRenderedLines(patchText: string): Readonly<{
+  additions: number;
+  deletions: number;
+}> {
+  const snapshot = getGitPatchRenderSnapshot(patchText);
+  return {
+    additions: snapshot.additions,
+    deletions: snapshot.deletions,
+  };
 }
 
 export function formatGitPatchLineNumber(value: number | null): string {

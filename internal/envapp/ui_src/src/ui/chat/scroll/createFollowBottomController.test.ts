@@ -400,6 +400,9 @@ describe('createFollowBottomController', () => {
 
     const beforeGrowthAnimation = scrollContainer.scrollTop;
     raf.flushOne();
+    expect(scrollContainer.scrollTop).toBe(beforeGrowthAnimation);
+
+    raf.flushOne();
     expect(scrollContainer.scrollTop).toBeGreaterThan(beforeGrowthAnimation);
     expect(scrollContainer.scrollTop).toBeLessThan(expectedBottomScrollTop(scrollHeight));
 

@@ -6,6 +6,13 @@ export type CodexStatus = Readonly<{
   error?: string;
 }>;
 
+export type CodexSurfaceActivationSnapshot = Readonly<{
+  mounted: boolean;
+  active: boolean;
+  activation_seq: number;
+  after_paint_seq: number;
+}>;
+
 export type CodexThreadRuntimeConfig = Readonly<{
   model?: string;
   model_provider?: string;

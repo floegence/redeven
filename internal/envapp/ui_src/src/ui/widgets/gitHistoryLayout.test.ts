@@ -407,7 +407,7 @@ describe('browser workspace layout wiring', () => {
 
     expect(envSrc).toContain('filesSidebarOpen: filesMobileSidebarOpen');
     expect(envSrc).toContain('toggleFilesSidebar: toggleFilesMobileSidebar');
-    expect(envSrc).toContain("layout.setSidebarActiveTab('files', { openSidebar: false });");
+    expect(envSrc).toContain("setEnvSidebarActiveTab('files', { openSidebar: false });");
     expect(browserSrc).toContain('ctx.filesSidebarOpen()');
     expect(browserSrc).toContain('ctx.setFilesSidebarOpen(open);');
     expect(browserSrc).toContain('const togglePageSidebar = () => setMobileSidebarOpen(!mobileSidebarOpen());');
