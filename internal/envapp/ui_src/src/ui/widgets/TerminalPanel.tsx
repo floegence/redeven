@@ -3,7 +3,17 @@ import { useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, 
 import { Copy, Folder, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
-import { Button, Dropdown, type DropdownItem, Input, MobileKeyboard, Tabs, TabPanel, type TabItem } from '@floegence/floe-webapp-core/ui';
+import {
+  Button,
+  Dropdown,
+  Input,
+  MobileKeyboard,
+  Tabs,
+  TabPanel,
+  WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR,
+  type DropdownItem,
+  type TabItem,
+} from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { FlowerContextMenuIcon } from '../icons/FlowerSoftAuraIcon';
 import { useRedevenRpc } from '../protocol/redeven_v1';
@@ -182,6 +192,7 @@ function formatBytes(bytes: number): string {
 
 type terminal_session_view_props = {
   session: TerminalSessionInfo;
+  variant: TerminalPanelVariant;
   active: () => boolean;
   connected: () => boolean;
   protocolClient: () => unknown;
@@ -768,6 +779,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
           container = n;
           props.registerSurfaceElement(sessionId(), n);
         }}
+        {...{ [WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR]: props.variant === 'workbench' ? 'true' : undefined }}
         {...REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS}
         class="absolute top-2 left-2 right-0 bottom-0 redeven-terminal-surface"
         style={{
@@ -2692,6 +2704,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                     <TabPanel active={activeSessionId() === session().id} keepMounted class="h-full">
                       <TerminalSessionView
                         session={session()}
+                        variant={variant}
                         active={() => activeSessionId() === session().id}
                         connected={connected}
                         protocolClient={() => protocol.client()}

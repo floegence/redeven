@@ -29,9 +29,7 @@ export const REDEVEN_WORKBENCH_PAN_SURFACE_SELECTOR = '[data-floe-canvas-pan-sur
 
 export { WORKBENCH_WIDGET_SHELL_ATTR };
 
-export type WorkbenchWheelLocalReason =
-  | SurfaceWheelLocalReason
-  | 'selected_widget';
+export type WorkbenchWheelLocalReason = SurfaceWheelLocalReason;
 export type RedevenWorkbenchWidgetBodyActivation = WorkbenchWidgetBodyActivation;
 
 export const INITIAL_WORKBENCH_INPUT_OWNER: WorkbenchInputOwner = {
@@ -60,16 +58,6 @@ export function isTypingElement(el: Element | null): boolean {
   if (el.isContentEditable) return true;
   if (el.getAttribute('role') === 'textbox') return true;
   return false;
-}
-
-function resolveEventTargetElement(target: EventTarget | null): Element | null {
-  if (target instanceof Element) {
-    return target;
-  }
-  if (typeof Node !== 'undefined' && target instanceof Node) {
-    return target.parentElement;
-  }
-  return null;
 }
 
 export function findWorkbenchWidgetRoot(target: EventTarget | null): HTMLElement | null {
@@ -168,30 +156,13 @@ export function resolveWorkbenchWheelRouting(args: {
   selectedWidgetId?: string | null;
   wheelInteractiveSelector?: string;
 }): WorkbenchWheelRoutingDecision {
-  const element = resolveEventTargetElement(args.target);
-  const targetWidgetId = readWorkbenchWidgetId(findWorkbenchWidgetRoot(element));
-  if (targetWidgetId && targetWidgetId === (args.selectedWidgetId ?? null)) {
-    return { kind: 'local_surface', reason: 'selected_widget' };
-  }
-
-  const fallback = resolveSurfaceWheelRouting({
+  return resolveSurfaceWheelRouting({
     target: args.target,
     disablePanZoom: args.disablePanZoom,
     localInteractionSurfaceSelector: DEFAULT_LOCAL_INTERACTION_SURFACE_SELECTOR,
     wheelInteractiveSelector:
       args.wheelInteractiveSelector ?? REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_SELECTOR,
   });
-  if (
-    fallback.kind === 'local_surface'
-    && fallback.reason === 'wheel_interactive'
-    && targetWidgetId
-  ) {
-    return args.disablePanZoom
-      ? { kind: 'ignore', reason: 'pan_zoom_disabled' }
-      : { kind: 'canvas_zoom' };
-  }
-
-  return fallback;
 }
 
 export function shouldBypassWorkbenchGlobalHotkeys(args: {

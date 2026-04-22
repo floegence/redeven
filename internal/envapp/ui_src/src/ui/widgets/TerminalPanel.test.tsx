@@ -3,6 +3,7 @@
 import { For, Show, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
 
 import { TerminalPanel } from './TerminalPanel';
 
@@ -249,6 +250,7 @@ vi.mock('@floegence/floe-webapp-core/loading', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
+  WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR: 'data-floe-workbench-widget-activation-surface',
   Button: (props: any) => (
     <button
       type="button"
@@ -1560,6 +1562,18 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     expect(focusSpy).toHaveBeenCalled();
+  });
+
+  it('marks the live terminal host as a shared activation surface in workbench mode', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
+    expect(terminalSurface).toBeTruthy();
+    expect(terminalSurface?.getAttribute(WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR)).toBe('true');
   });
 
   it('defaults to the Floe keyboard on mobile and sends payloads to the active session', async () => {
