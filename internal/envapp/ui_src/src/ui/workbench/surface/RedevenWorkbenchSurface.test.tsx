@@ -1,12 +1,17 @@
 // @vitest-environment jsdom
 
 import { render } from 'solid-js/web';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { RedevenWorkbenchSurface, type RedevenWorkbenchSurfaceApi } from './RedevenWorkbenchSurface';
+import {
+  REDEVEN_WORKBENCH_SURFACE_ROOT_ATTR,
+  REDEVEN_WORKBENCH_WIDGET_ID_ATTR,
+  REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR,
+} from './workbenchInputRouting';
 
-const modelMocks = vi.hoisted(() => {
-  const widget = {
+const upstreamApiMocks = vi.hoisted(() => ({
+  widget: {
     id: 'widget-files-1',
     type: 'redeven.files',
     title: 'Files',
@@ -16,236 +21,102 @@ const modelMocks = vi.hoisted(() => {
     height: 520,
     z_index: 1,
     created_at_unix_ms: 1,
-  };
-
-  return {
-    widget,
-    handleArrowNavigation: vi.fn(),
-    focusWidget: vi.fn((nextWidget: any) => nextWidget),
-    fitWidget: vi.fn((nextWidget: any) => nextWidget),
-    overviewWidget: vi.fn((nextWidget: any) => nextWidget),
-    ensureWidget: vi.fn(() => widget),
-    deleteSelected: vi.fn(),
-    clearSelection: vi.fn(),
-    cancelViewportNavigation: vi.fn(),
-    setCanvasFrameRef: vi.fn(),
-    setTheme: vi.fn(),
-  };
-});
-
-const surfaceMocks = vi.hoisted(() => ({
-  contextMenuState: null as any,
-  contextMenuItems: [] as any[],
-  contextMenuProps: null as any,
-  contextMenuClose: vi.fn(),
-  canvasProps: null as any,
-  hudProps: null as any,
+  },
+  ensureWidget: vi.fn(),
+  createWidget: vi.fn(),
+  clearSelection: vi.fn(),
+  focusWidget: vi.fn(),
+  fitWidget: vi.fn(),
+  overviewWidget: vi.fn(),
+  findWidgetByType: vi.fn(),
+  findWidgetById: vi.fn(),
+  updateWidgetTitle: vi.fn(),
 }));
 
-const TEST_WORKBENCH_FILTERS = {
-  terminal: true,
-  'file-browser': true,
-  'system-monitor': true,
-  'log-viewer': true,
-  'code-editor': true,
-} as const;
+const sharedSurfaceMocks = vi.hoisted(() => ({
+  lastProps: null as any,
+}));
 
-function createWorkbenchState(overrides: Record<string, unknown> = {}): any {
+vi.mock('@floegence/floe-webapp-core/workbench', () => ({
+  WorkbenchSurface: (props: any) => {
+    sharedSurfaceMocks.lastProps = props;
+    props.onApiReady?.({
+      ensureWidget: upstreamApiMocks.ensureWidget,
+      createWidget: upstreamApiMocks.createWidget,
+      clearSelection: upstreamApiMocks.clearSelection,
+      focusWidget: upstreamApiMocks.focusWidget,
+      fitWidget: upstreamApiMocks.fitWidget,
+      overviewWidget: upstreamApiMocks.overviewWidget,
+      findWidgetByType: upstreamApiMocks.findWidgetByType,
+      findWidgetById: upstreamApiMocks.findWidgetById,
+      updateWidgetTitle: upstreamApiMocks.updateWidgetTitle,
+    });
+    return <div data-testid="mock-workbench-surface" />;
+  },
+}));
+
+function createWorkbenchState(): any {
   return {
     version: 1,
     widgets: [],
     viewport: { x: 0, y: 0, scale: 1 },
     locked: false,
-    filters: TEST_WORKBENCH_FILTERS,
+    filters: { 'redeven.files': true },
     selectedWidgetId: null,
     theme: 'mica',
-    ...overrides,
   };
 }
 
-function dispatchPointerDown(target: EventTarget): void {
-  const EventCtor = typeof PointerEvent === 'function' ? PointerEvent : MouseEvent;
-  const event = new EventCtor('pointerdown', {
-    bubbles: true,
-    button: 0,
-  });
-  if (!('pointerId' in event)) {
-    Object.defineProperty(event, 'pointerId', { configurable: true, value: 1 });
-  }
-  target.dispatchEvent(event);
-}
-
-vi.mock('@floegence/floe-webapp-core/workbench', () => ({
-  WorkbenchContextMenu: (props: any) => {
-    surfaceMocks.contextMenuProps = props;
-    return (
-      <div
-        data-testid="mock-context-menu"
-        data-floe-workbench-context-menu="true"
-      >
-        {props.items.map((item: any) => item.id).join(',')}
-      </div>
-    );
-  },
-  useWorkbenchModel: () => ({
-    widgets: () => [modelMocks.widget],
-    viewport: () => ({ x: 0, y: 0, scale: 1 }),
-    locked: () => false,
-    filters: () => ({ 'redeven.files': true }),
-    selectedWidgetId: () => modelMocks.widget.id,
-    topZIndex: () => 1,
-    scaleLabel: () => '100%',
-    theme: () => 'mica',
-    optimisticFrontWidgetId: () => null,
-    widgetDefinitions: () => [],
-    contextMenu: {
-      state: () => surfaceMocks.contextMenuState,
-      items: () => surfaceMocks.contextMenuItems,
-      position: () => undefined,
-      close: surfaceMocks.contextMenuClose,
-      retarget: vi.fn(),
-    },
-    canvas: {
-      commitViewport: vi.fn(),
-      openCanvasContextMenu: vi.fn(),
-      selectWidget: vi.fn(),
-      openWidgetContextMenu: vi.fn(),
-      startOptimisticFront: vi.fn(),
-      commitFront: vi.fn(),
-      commitMove: vi.fn(),
-      commitResize: vi.fn(),
-      cancelViewportNavigation: modelMocks.cancelViewportNavigation,
-    },
-    hud: {
-      zoomOut: vi.fn(),
-      zoomIn: vi.fn(),
-    },
-    lock: {
-      toggle: vi.fn(),
-    },
-    filter: {
-      solo: vi.fn(),
-      showAll: vi.fn(),
-    },
-    navigation: {
-      handleArrowNavigation: modelMocks.handleArrowNavigation,
-      centerOnWidget: vi.fn(),
-      focusWidget: modelMocks.focusWidget,
-      fitWidget: modelMocks.fitWidget,
-      overviewWidget: modelMocks.overviewWidget,
-    },
-    selection: {
-      clear: modelMocks.clearSelection,
-    },
-    widgetActions: {
-      ensureWidget: modelMocks.ensureWidget,
-      deleteSelected: modelMocks.deleteSelected,
-      deleteWidget: vi.fn(),
-      addWidget: vi.fn(),
-      addWidgetAtCursor: vi.fn(),
-      addWidgetCentered: vi.fn(),
-    },
-    queries: {
-      findWidgetByType: vi.fn(() => modelMocks.widget),
-      findWidgetById: vi.fn(() => modelMocks.widget),
-    },
-    appearance: {
-      setTheme: modelMocks.setTheme,
-    },
-    setCanvasFrameRef: modelMocks.setCanvasFrameRef,
-    handleCloseRequest: vi.fn(),
-  }),
-}));
-
-vi.mock('./RedevenWorkbenchCanvas', () => ({
-  RedevenWorkbenchCanvas: (props: any) => (
-    <div
-      class="workbench-canvas"
-      ref={(el) => {
-        props.setCanvasFrameRef?.(el);
-      }}
-      data-testid="mock-canvas"
-    >
-      {(() => {
-        surfaceMocks.canvasProps = props;
-        return null;
-      })()}
-      <button
-        type="button"
-        data-testid="mock-blank-canvas"
-        onPointerDown={(event) => props.onCanvasPointerDown?.(event)}
-      >
-        Blank canvas
-      </button>
-      <article
-        data-redeven-workbench-widget-root="true"
-        data-redeven-workbench-widget-id="widget-files-1"
-        tabIndex={0}
-      >
-        Files
-      </article>
-    </div>
-  ),
-}));
-
-vi.mock('./RedevenWorkbenchFilterBar', () => ({
-  RedevenWorkbenchFilterBar: () => null,
-}));
-
-vi.mock('./RedevenWorkbenchHud', () => ({
-  RedevenWorkbenchHud: (props: any) => {
-    surfaceMocks.hudProps = props;
-    return null;
-  },
-}));
-
-vi.mock('./RedevenWorkbenchLockButton', () => ({
-  RedevenWorkbenchLockButton: () => null,
-}));
-
 describe('RedevenWorkbenchSurface', () => {
-  let dispose: (() => void) | undefined;
-
-  beforeEach(() => {
-    modelMocks.handleArrowNavigation.mockReset();
-    modelMocks.focusWidget.mockReset();
-    modelMocks.focusWidget.mockImplementation((nextWidget: any) => nextWidget);
-    modelMocks.fitWidget.mockReset();
-    modelMocks.fitWidget.mockImplementation((nextWidget: any) => nextWidget);
-    modelMocks.overviewWidget.mockReset();
-    modelMocks.overviewWidget.mockImplementation((nextWidget: any) => nextWidget);
-    modelMocks.ensureWidget.mockReset();
-    modelMocks.ensureWidget.mockImplementation(() => modelMocks.widget);
-    modelMocks.deleteSelected.mockReset();
-    modelMocks.clearSelection.mockReset();
-    modelMocks.cancelViewportNavigation.mockReset();
-    modelMocks.setCanvasFrameRef.mockReset();
-    modelMocks.setTheme.mockReset();
-    surfaceMocks.contextMenuState = null;
-    surfaceMocks.contextMenuItems = [];
-    surfaceMocks.contextMenuProps = null;
-    surfaceMocks.contextMenuClose.mockReset();
-    surfaceMocks.canvasProps = null;
-    surfaceMocks.hudProps = null;
-  });
-
   afterEach(() => {
-    dispose?.();
-    dispose = undefined;
+    sharedSurfaceMocks.lastProps = null;
+    Object.values(upstreamApiMocks).forEach((value) => {
+      if (typeof value === 'function' && 'mockReset' in value) {
+        value.mockReset();
+      }
+    });
     document.body.innerHTML = '';
   });
 
-  it('focuses the widget root when the surface api focuses a widget', async () => {
+  it('forwards the shared launcher contract and Redeven interaction adapter', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <RedevenWorkbenchSurface
+        state={() => createWorkbenchState()}
+        setState={() => {}}
+        filterBarWidgetTypes={['redeven.files', 'redeven.terminal']}
+        onRequestDelete={vi.fn()}
+        onLayoutInteractionStart={vi.fn()}
+        onLayoutInteractionEnd={vi.fn()}
+      />
+    ), host);
+
+    expect(sharedSurfaceMocks.lastProps).toMatchObject({
+      launcherWidgetTypes: ['redeven.files', 'redeven.terminal'],
+    });
+    expect(sharedSurfaceMocks.lastProps.interactionAdapter.surfaceRootAttr).toBe(
+      REDEVEN_WORKBENCH_SURFACE_ROOT_ATTR
+    );
+    expect(sharedSurfaceMocks.lastProps.interactionAdapter.widgetRootAttr).toBe(
+      REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR
+    );
+    expect(sharedSurfaceMocks.lastProps.interactionAdapter.widgetIdAttr).toBe(
+      REDEVEN_WORKBENCH_WIDGET_ID_ATTR
+    );
+  });
+
+  it('maps the shared overview api to the local unfocusWidget alias', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
     let capturedApi: RedevenWorkbenchSurfaceApi | null = null;
 
-    dispose = render(() => (
+    render(() => (
       <RedevenWorkbenchSurface
         state={() => createWorkbenchState()}
         setState={() => {}}
-        widgetDefinitions={[]}
         onApiReady={(api) => {
           capturedApi = api;
         }}
@@ -253,258 +124,38 @@ describe('RedevenWorkbenchSurface', () => {
     ), host);
 
     expect(capturedApi).toBeTruthy();
-    const api = capturedApi!;
-    modelMocks.setCanvasFrameRef.mockClear();
-    api.focusWidget(modelMocks.widget, { centerViewport: false });
-    await Promise.resolve();
+    capturedApi!.unfocusWidget(upstreamApiMocks.widget as any);
 
-    const widgetRoot = host.querySelector('[data-redeven-workbench-widget-root="true"]');
-    expect(document.activeElement).toBe(widgetRoot);
-    expect(modelMocks.focusWidget).toHaveBeenCalledWith(modelMocks.widget, { centerViewport: false });
-    expect(modelMocks.setCanvasFrameRef).not.toHaveBeenCalled();
+    expect(upstreamApiMocks.overviewWidget).toHaveBeenCalledWith(upstreamApiMocks.widget);
   });
 
-  it('delegates ensureWidget without an extra canvas measurement refresh', async () => {
+  it('preserves the shared api surface for create/find/title flows', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
     let capturedApi: RedevenWorkbenchSurfaceApi | null = null;
 
-    dispose = render(() => (
+    render(() => (
       <RedevenWorkbenchSurface
         state={() => createWorkbenchState()}
         setState={() => {}}
-        widgetDefinitions={[]}
         onApiReady={(api) => {
           capturedApi = api;
         }}
       />
     ), host);
 
-    modelMocks.setCanvasFrameRef.mockClear();
+    capturedApi!.createWidget('redeven.files', { centerViewport: false });
+    capturedApi!.findWidgetById('widget-files-1');
+    capturedApi!.updateWidgetTitle('widget-files-1', 'README.md');
 
-    const api = capturedApi!;
-    api.ensureWidget('redeven.files', { centerViewport: true });
-
-    expect(modelMocks.setCanvasFrameRef).not.toHaveBeenCalled();
-    expect(modelMocks.ensureWidget).toHaveBeenCalledWith('redeven.files', { centerViewport: true });
-  });
-
-  it('exposes fit, overview, and clear-selection surface api helpers', async () => {
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    let capturedApi: RedevenWorkbenchSurfaceApi | null = null;
-
-    dispose = render(() => (
-      <RedevenWorkbenchSurface
-        state={() => createWorkbenchState()}
-        setState={() => {}}
-        widgetDefinitions={[]}
-        onApiReady={(api) => {
-          capturedApi = api;
-        }}
-      />
-    ), host);
-
-    const api = capturedApi!;
-    api.fitWidget(modelMocks.widget);
-    api.unfocusWidget(modelMocks.widget);
-    api.clearSelection();
-    await Promise.resolve();
-
-    expect(modelMocks.fitWidget).toHaveBeenCalledWith(modelMocks.widget);
-    expect(modelMocks.overviewWidget).toHaveBeenCalledWith(modelMocks.widget);
-    expect(modelMocks.clearSelection).toHaveBeenCalledTimes(1);
-  });
-
-  it('exposes the upstream workbench theme attribute on the surface root', async () => {
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    dispose = render(() => (
-      <RedevenWorkbenchSurface
-        state={() => createWorkbenchState()}
-        setState={() => {}}
-        widgetDefinitions={[]}
-      />
-    ), host);
-
-    const surfaceRoot = host.querySelector('.workbench-surface') as HTMLElement | null;
-    expect(surfaceRoot?.getAttribute('data-workbench-theme')).toBe('mica');
-  });
-
-  it('forwards upstream theme controls into the hud', async () => {
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    dispose = render(() => (
-      <RedevenWorkbenchSurface
-        state={() => createWorkbenchState()}
-        setState={() => {}}
-        widgetDefinitions={[]}
-      />
-    ), host);
-
-    expect(surfaceMocks.hudProps).toMatchObject({
-      scaleLabel: '100%',
-      activeTheme: 'mica',
+    expect(upstreamApiMocks.createWidget).toHaveBeenCalledWith('redeven.files', {
+      centerViewport: false,
     });
-    surfaceMocks.hudProps.onSelectTheme('aurora');
-    expect(modelMocks.setTheme).toHaveBeenCalledWith('aurora');
-  });
-
-  it('does not trigger global arrow navigation when a widget root owns focus', async () => {
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    let capturedApi: RedevenWorkbenchSurfaceApi | null = null;
-
-    dispose = render(() => (
-      <RedevenWorkbenchSurface
-        state={() => createWorkbenchState()}
-        setState={() => {}}
-        widgetDefinitions={[]}
-        onApiReady={(api) => {
-          capturedApi = api;
-        }}
-      />
-    ), host);
-
-    const api = capturedApi!;
-    api.focusWidget(modelMocks.widget, { centerViewport: false });
-    await Promise.resolve();
-
-    const widgetRoot = host.querySelector('[data-redeven-workbench-widget-root="true"]') as HTMLElement | null;
-    expect(widgetRoot).toBeTruthy();
-    widgetRoot!.focus();
-    widgetRoot!.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
-    modelMocks.setCanvasFrameRef.mockClear();
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
-
-    expect(modelMocks.handleArrowNavigation).not.toHaveBeenCalled();
-    expect(modelMocks.setCanvasFrameRef).not.toHaveBeenCalled();
-  });
-
-  it('delegates global arrow navigation without an extra canvas measurement refresh', async () => {
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    dispose = render(() => (
-      <RedevenWorkbenchSurface
-        state={() => createWorkbenchState()}
-        setState={() => {}}
-        widgetDefinitions={[]}
-      />
-    ), host);
-
-    modelMocks.setCanvasFrameRef.mockClear();
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
-
-    expect(modelMocks.setCanvasFrameRef).not.toHaveBeenCalled();
-    expect(modelMocks.handleArrowNavigation).toHaveBeenCalledWith('right');
-  });
-
-  it('filters programmatic widget types out of the manual add context menu', () => {
-    surfaceMocks.contextMenuState = {
-      clientX: 32,
-      clientY: 48,
-      worldX: 120,
-      worldY: 160,
-    };
-    surfaceMocks.contextMenuItems = [
-      { id: 'add-redeven.files', kind: 'action', label: 'Add Files' },
-      { id: 'add-redeven.preview', kind: 'action', label: 'Add Preview' },
-      { id: 'add-redeven.terminal', kind: 'action', label: 'Add Terminal' },
-    ];
-
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    dispose = render(() => (
-      <RedevenWorkbenchSurface
-        state={() => createWorkbenchState()}
-        setState={() => {}}
-        widgetDefinitions={[]}
-        filterBarWidgetTypes={['redeven.files', 'redeven.terminal']}
-      />
-    ), host);
-
-    const contextMenu = document.querySelector('[data-testid="mock-context-menu"]');
-    expect(contextMenu?.textContent).toContain('add-redeven.files');
-    expect(contextMenu?.textContent).toContain('add-redeven.terminal');
-    expect(contextMenu?.textContent).not.toContain('add-redeven.preview');
-  });
-
-  it('clears the current selection when blank canvas is pressed', () => {
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    dispose = render(() => (
-      <RedevenWorkbenchSurface
-        state={() => createWorkbenchState({ selectedWidgetId: 'widget-files-1' })}
-        setState={() => {}}
-        widgetDefinitions={[]}
-      />
-    ), host);
-
-    const blankCanvas = host.querySelector('[data-testid="mock-blank-canvas"]') as HTMLButtonElement | null;
-    expect(blankCanvas).toBeTruthy();
-
-    dispatchPointerDown(blankCanvas!);
-
-    expect(modelMocks.clearSelection).toHaveBeenCalledTimes(1);
-  });
-
-  it('cancels programmatic viewport navigation when canvas direct manipulation begins', () => {
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    dispose = render(() => (
-      <RedevenWorkbenchSurface
-        state={() => createWorkbenchState()}
-        setState={() => {}}
-        widgetDefinitions={[]}
-      />
-    ), host);
-
-    expect(typeof surfaceMocks.canvasProps?.onViewportInteractionStart).toBe('function');
-
-    surfaceMocks.canvasProps?.onViewportInteractionStart?.('wheel');
-    surfaceMocks.canvasProps?.onViewportInteractionStart?.('pan');
-
-    expect(modelMocks.cancelViewportNavigation).toHaveBeenCalledTimes(2);
-  });
-
-  it('closes the workbench menu only when pointerdown lands outside the menu boundary', () => {
-    surfaceMocks.contextMenuState = {
-      clientX: 32,
-      clientY: 48,
-      worldX: 120,
-      worldY: 160,
-    };
-    surfaceMocks.contextMenuItems = [
-      { id: 'add-redeven.files', kind: 'action', label: 'Add Files' },
-    ];
-
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    dispose = render(() => (
-      <RedevenWorkbenchSurface
-        state={() => createWorkbenchState()}
-        setState={() => {}}
-        widgetDefinitions={[]}
-      />
-    ), host);
-
-    const menu = document.querySelector('[data-testid="mock-context-menu"]') as HTMLElement | null;
-    expect(menu).toBeTruthy();
-
-    dispatchPointerDown(menu!);
-    expect(surfaceMocks.contextMenuClose).not.toHaveBeenCalled();
-
-    dispatchPointerDown(document.body);
-    expect(surfaceMocks.contextMenuClose).toHaveBeenCalledTimes(1);
+    expect(upstreamApiMocks.findWidgetById).toHaveBeenCalledWith('widget-files-1');
+    expect(upstreamApiMocks.updateWidgetTitle).toHaveBeenCalledWith(
+      'widget-files-1',
+      'README.md'
+    );
   });
 });

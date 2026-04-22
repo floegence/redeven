@@ -5,8 +5,8 @@ import { createSignal, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FloeConfigProvider, LayoutProvider } from '@floegence/floe-webapp-core';
+import { InfiniteCanvas } from '@floegence/floe-webapp-core/ui';
 
-import { RedevenInfiniteCanvas } from '../workbench/surface/RedevenInfiniteCanvas';
 import { PersistentFloatingWindow } from './PersistentFloatingWindow';
 
 function Providers(props: Readonly<{ children: JSX.Element }>) {
@@ -77,7 +77,7 @@ function WorkbenchFloatingWindowHarness() {
 
   return (
     <Providers>
-      <RedevenInfiniteCanvas
+      <InfiniteCanvas
         viewport={viewport()}
         onViewportChange={setViewport}
         ariaLabel="Workbench floating window harness"
@@ -115,7 +115,7 @@ function WorkbenchFloatingWindowHarness() {
             </div>
           </PersistentFloatingWindow>
         </div>
-      </RedevenInfiniteCanvas>
+      </InfiniteCanvas>
     </Providers>
   );
 }

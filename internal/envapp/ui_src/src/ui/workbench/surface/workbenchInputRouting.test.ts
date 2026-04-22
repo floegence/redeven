@@ -10,6 +10,7 @@ import {
   WORKBENCH_WIDGET_SHELL_ATTR,
   createWidgetInputOwner,
   focusWorkbenchWidgetElement,
+  redevenWorkbenchInteractionAdapter,
   resolveRedevenWorkbenchWidgetEventOwnership,
   resolveWorkbenchSurfaceTargetRole,
   resolveWorkbenchWheelRouting,
@@ -190,5 +191,11 @@ describe('workbenchInputRouting', () => {
       owner: INITIAL_WORKBENCH_INPUT_OWNER,
       interactiveSelector: '[data-floe-canvas-interactive="true"]',
     })).toBe(false);
+  });
+
+  it('exposes the Redeven interaction adapter contract for the shared surface', () => {
+    expect(redevenWorkbenchInteractionAdapter.surfaceRootAttr).toBe('data-redeven-workbench-surface-root');
+    expect(redevenWorkbenchInteractionAdapter.widgetRootAttr).toBe(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR);
+    expect(redevenWorkbenchInteractionAdapter.widgetIdAttr).toBe(REDEVEN_WORKBENCH_WIDGET_ID_ATTR);
   });
 });

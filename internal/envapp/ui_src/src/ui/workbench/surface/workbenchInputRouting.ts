@@ -1,18 +1,24 @@
 import {
   DEFAULT_LOCAL_INTERACTION_SURFACE_SELECTOR,
+  WORKBENCH_WIDGET_SHELL_ATTR,
   resolveSurfaceInteractionTargetRole,
   resolveSurfaceWheelRouting,
   shouldActivateWorkbenchWidgetLocalTarget,
   resolveWorkbenchWidgetEventOwnership,
-  WORKBENCH_WIDGET_SHELL_ATTR,
   type SurfaceInteractionTargetRole,
   type SurfaceWheelLocalReason,
   type WorkbenchWidgetEventOwnership,
 } from '@floegence/floe-webapp-core/ui';
 import type { WorkbenchWidgetBodyActivation } from '@floegence/floe-webapp-core/workbench';
 import {
-  REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_SELECTOR,
-} from './workbenchWheelInteractive';
+  type WorkbenchCanvasOwnerReason,
+  type WorkbenchInputOwner,
+  type WorkbenchInteractionAdapter,
+  type WorkbenchWidgetOwnerReason,
+  type WorkbenchWheelRoutingDecision,
+} from '@floegence/floe-webapp-core/workbench';
+
+import { REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_SELECTOR } from './workbenchWheelInteractive';
 
 export const REDEVEN_WORKBENCH_SURFACE_ROOT_ATTR = 'data-redeven-workbench-surface-root';
 export const REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR = 'data-redeven-workbench-widget-root';
@@ -23,26 +29,10 @@ export const REDEVEN_WORKBENCH_PAN_SURFACE_SELECTOR = '[data-floe-canvas-pan-sur
 
 export { WORKBENCH_WIDGET_SHELL_ATTR };
 
-export type WorkbenchCanvasOwnerReason =
-  | 'initial'
-  | 'background_pointer'
-  | 'background_focus'
-  | 'widget_removed';
-
-export type WorkbenchWidgetOwnerReason = 'pointer' | 'focus' | 'activation';
 export type WorkbenchWheelLocalReason =
   | SurfaceWheelLocalReason
   | 'selected_widget';
 export type RedevenWorkbenchWidgetBodyActivation = WorkbenchWidgetBodyActivation;
-
-export type WorkbenchInputOwner =
-  | { kind: 'canvas'; reason: WorkbenchCanvasOwnerReason }
-  | { kind: 'widget'; widgetId: string; reason: WorkbenchWidgetOwnerReason };
-
-export type WorkbenchWheelRoutingDecision =
-  | { kind: 'canvas_zoom' }
-  | { kind: 'local_surface'; reason: WorkbenchWheelLocalReason }
-  | { kind: 'ignore'; reason: 'pan_zoom_disabled' };
 
 export const INITIAL_WORKBENCH_INPUT_OWNER: WorkbenchInputOwner = {
   kind: 'canvas',
@@ -61,7 +51,9 @@ export function createWidgetInputOwner(
 }
 
 export function isTypingElement(el: Element | null): boolean {
-  if (!el || typeof HTMLElement === 'undefined' || !(el instanceof HTMLElement)) return false;
+  if (!el || typeof HTMLElement === 'undefined' || !(el instanceof HTMLElement)) {
+    return false;
+  }
 
   const tag = el.tagName.toLowerCase();
   if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
@@ -71,7 +63,9 @@ export function isTypingElement(el: Element | null): boolean {
 }
 
 function resolveEventTargetElement(target: EventTarget | null): Element | null {
-  if (target instanceof Element) return target;
+  if (target instanceof Element) {
+    return target;
+  }
   if (typeof Node !== 'undefined' && target instanceof Node) {
     return target.parentElement;
   }
@@ -79,7 +73,9 @@ function resolveEventTargetElement(target: EventTarget | null): Element | null {
 }
 
 export function findWorkbenchWidgetRoot(target: EventTarget | null): HTMLElement | null {
-  if (!(target instanceof Element)) return null;
+  if (!(target instanceof Element)) {
+    return null;
+  }
 
   const widgetRoot = target.closest(`[${REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR}="true"]`);
   return widgetRoot instanceof HTMLElement ? widgetRoot : null;
@@ -95,7 +91,9 @@ export function findWorkbenchWidgetElement(
   root: ParentNode | null | undefined,
   widgetId: string,
 ): HTMLElement | null {
-  if (!root || typeof root.querySelectorAll !== 'function') return null;
+  if (!root || typeof root.querySelectorAll !== 'function') {
+    return null;
+  }
 
   const widgetRoots = root.querySelectorAll(`[${REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR}="true"]`);
   for (const widgetRoot of widgetRoots) {
@@ -104,6 +102,7 @@ export function findWorkbenchWidgetElement(
       return widgetRoot;
     }
   }
+
   return null;
 }
 
@@ -112,7 +111,9 @@ export function focusWorkbenchWidgetElement(
   widgetId: string,
 ): boolean {
   const widgetRoot = findWorkbenchWidgetElement(root, widgetId);
-  if (!widgetRoot) return false;
+  if (!widgetRoot) {
+    return false;
+  }
 
   widgetRoot.focus({ preventScroll: true });
   return true;
@@ -177,7 +178,8 @@ export function resolveWorkbenchWheelRouting(args: {
     target: args.target,
     disablePanZoom: args.disablePanZoom,
     localInteractionSurfaceSelector: DEFAULT_LOCAL_INTERACTION_SURFACE_SELECTOR,
-    wheelInteractiveSelector: args.wheelInteractiveSelector ?? REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_SELECTOR,
+    wheelInteractiveSelector:
+      args.wheelInteractiveSelector ?? REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_SELECTOR,
   });
   if (
     fallback.kind === 'local_surface'
@@ -220,3 +222,24 @@ export function shouldBypassWorkbenchGlobalHotkeys(args: {
   const activeElement = typeof document !== 'undefined' ? document.activeElement : null;
   return activeElement instanceof Element && widgetRoot.contains(activeElement);
 }
+
+export const redevenWorkbenchInteractionAdapter: WorkbenchInteractionAdapter = {
+  surfaceRootAttr: REDEVEN_WORKBENCH_SURFACE_ROOT_ATTR,
+  widgetRootAttr: REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR,
+  widgetIdAttr: REDEVEN_WORKBENCH_WIDGET_ID_ATTR,
+  dialogSurfaceHostAttr: FLOE_DIALOG_SURFACE_HOST_ATTR,
+  interactiveSelector: REDEVEN_WORKBENCH_INTERACTIVE_SELECTOR,
+  panSurfaceSelector: REDEVEN_WORKBENCH_PAN_SURFACE_SELECTOR,
+  wheelInteractiveSelector: REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_SELECTOR,
+  createInitialInputOwner: () => INITIAL_WORKBENCH_INPUT_OWNER,
+  createCanvasInputOwner,
+  createWidgetInputOwner,
+  findWidgetRoot: findWorkbenchWidgetRoot,
+  readWidgetId: readWorkbenchWidgetId,
+  focusWidgetElement: focusWorkbenchWidgetElement,
+  resolveSurfaceTargetRole: resolveWorkbenchSurfaceTargetRole,
+  resolveWidgetEventOwnership: ({ target, widgetRoot }) =>
+    resolveRedevenWorkbenchWidgetEventOwnership({ target, widgetRoot }),
+  resolveWheelRouting: resolveWorkbenchWheelRouting,
+  shouldBypassGlobalHotkeys: shouldBypassWorkbenchGlobalHotkeys,
+};
