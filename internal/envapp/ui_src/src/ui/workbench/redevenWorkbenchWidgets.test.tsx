@@ -9,6 +9,7 @@ import {
   WorkbenchWidgetBodyProps as RedevenWorkbenchWidgetBodyProps,
   type WorkbenchWidgetDefinition,
 } from '@floegence/floe-webapp-core/workbench';
+import { WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
 
 import { RedevenWorkbenchSurface } from './surface/RedevenWorkbenchSurface';
 
@@ -38,7 +39,7 @@ vi.mock('../widgets/TerminalPanel', async () => {
 
   return {
     TerminalPanel: (props: any) => {
-      let inputEl: HTMLInputElement | undefined;
+      let inputEl: HTMLTextAreaElement | undefined;
       let lastActivationSeq = 0;
       terminalPanelMocks.render(props);
       createEffect(() => {
@@ -50,8 +51,12 @@ vi.mock('../widgets/TerminalPanel', async () => {
 
       return (
         <div data-testid="live-terminal-panel">
-          <div data-testid="terminal-surface">Terminal surface</div>
-          <input ref={inputEl} data-testid="terminal-input" />
+          <div
+            data-testid="terminal-surface"
+            {...{ [WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR]: 'true' }}
+          >
+            <textarea ref={inputEl} data-testid="terminal-input" />
+          </div>
         </div>
       );
     },
@@ -206,11 +211,11 @@ describe('redevenWorkbenchWidgets terminal behavior', () => {
     ), host);
 
     const terminalSurface = host.querySelector('[data-testid="terminal-surface"]') as HTMLElement | null;
-    const terminalInput = host.querySelector('[data-testid="terminal-input"]') as HTMLInputElement | null;
+    const terminalInput = host.querySelector('[data-testid="terminal-input"]') as HTMLTextAreaElement | null;
     expect(terminalSurface).toBeTruthy();
     expect(terminalInput).toBeTruthy();
 
-    dispatchPointerDown(terminalSurface!);
+    dispatchPointerDown(terminalInput!);
     await flushWorkbenchInteraction();
 
     expect(state().selectedWidgetId).toBe('widget-terminal-1');
