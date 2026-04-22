@@ -29,7 +29,7 @@ export const REDEVEN_WORKBENCH_PAN_SURFACE_SELECTOR = '[data-floe-canvas-pan-sur
 
 export { WORKBENCH_WIDGET_SHELL_ATTR };
 
-export type WorkbenchWheelLocalReason = SurfaceWheelLocalReason;
+export type WorkbenchWheelLocalReason = SurfaceWheelLocalReason | 'selected_widget';
 export type RedevenWorkbenchWidgetBodyActivation = WorkbenchWidgetBodyActivation;
 
 export const INITIAL_WORKBENCH_INPUT_OWNER: WorkbenchInputOwner = {
@@ -60,12 +60,23 @@ export function isTypingElement(el: Element | null): boolean {
   return false;
 }
 
+function resolveElement(target: EventTarget | null): Element | null {
+  if (typeof Element !== 'undefined' && target instanceof Element) {
+    return target;
+  }
+  if (typeof Node !== 'undefined' && target instanceof Node) {
+    return target.parentElement;
+  }
+  return null;
+}
+
 export function findWorkbenchWidgetRoot(target: EventTarget | null): HTMLElement | null {
-  if (!(target instanceof Element)) {
+  const element = resolveElement(target);
+  if (!element) {
     return null;
   }
 
-  const widgetRoot = target.closest(`[${REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR}="true"]`);
+  const widgetRoot = element.closest(`[${REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR}="true"]`);
   return widgetRoot instanceof HTMLElement ? widgetRoot : null;
 }
 
@@ -156,6 +167,18 @@ export function resolveWorkbenchWheelRouting(args: {
   selectedWidgetId?: string | null;
   wheelInteractiveSelector?: string;
 }): WorkbenchWheelRoutingDecision {
+  const widgetRoot = findWorkbenchWidgetRoot(args.target);
+  if (widgetRoot) {
+    const ownerWidgetId = readWorkbenchWidgetId(widgetRoot);
+    if (ownerWidgetId !== null && ownerWidgetId === args.selectedWidgetId) {
+      return { kind: 'local_surface', reason: 'selected_widget' };
+    }
+    if (args.disablePanZoom) {
+      return { kind: 'ignore', reason: 'pan_zoom_disabled' };
+    }
+    return { kind: 'canvas_zoom' };
+  }
+
   return resolveSurfaceWheelRouting({
     target: args.target,
     disablePanZoom: args.disablePanZoom,

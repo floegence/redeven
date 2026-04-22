@@ -25,7 +25,7 @@ describe('workbenchInputRouting', () => {
     document.body.innerHTML = '';
   });
 
-  it('keeps selected widget regions zoomable until the shared shell marks them as wheel-interactive', () => {
+  it('routes the entire selected widget boundary to the widget', () => {
     const widget = document.createElement('article');
     widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
     widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-files-1');
@@ -39,7 +39,13 @@ describe('workbenchInputRouting', () => {
       target: body,
       disablePanZoom: false,
       selectedWidgetId: 'widget-files-1',
-    })).toEqual({ kind: 'canvas_zoom' });
+    })).toEqual({ kind: 'local_surface', reason: 'selected_widget' });
+
+    expect(resolveWorkbenchWheelRouting({
+      target: body,
+      disablePanZoom: true,
+      selectedWidgetId: 'widget-files-1',
+    })).toEqual({ kind: 'local_surface', reason: 'selected_widget' });
   });
 
   it('keeps ordinary widget regions zoomable until their widget is selected', () => {
@@ -59,7 +65,7 @@ describe('workbenchInputRouting', () => {
     })).toEqual({ kind: 'canvas_zoom' });
   });
 
-  it('keeps widget-local wheel markers local even before the widget becomes selected', () => {
+  it('keeps widget-local wheel markers on canvas until their widget is selected', () => {
     const widget = document.createElement('article');
     widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
     widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-files-1');
@@ -75,10 +81,31 @@ describe('workbenchInputRouting', () => {
       target: button,
       disablePanZoom: false,
       selectedWidgetId: 'widget-terminal-1',
-    })).toEqual({ kind: 'local_surface', reason: 'wheel_interactive' });
+    })).toEqual({ kind: 'canvas_zoom' });
   });
 
-  it('keeps the shared selected-widget wheel marker local when the shared shell applies it on the widget root', () => {
+  it('keeps canvas ownership when another widget is selected and the pointer hovers a different widget', () => {
+    const selectedWidget = document.createElement('article');
+    selectedWidget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
+    selectedWidget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-terminal-1');
+
+    const hoveredWidget = document.createElement('article');
+    hoveredWidget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
+    hoveredWidget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-files-1');
+
+    const wheelRegion = document.createElement('div');
+    wheelRegion.setAttribute(REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR, 'true');
+    hoveredWidget.appendChild(wheelRegion);
+    document.body.append(selectedWidget, hoveredWidget);
+
+    expect(resolveWorkbenchWheelRouting({
+      target: wheelRegion,
+      disablePanZoom: false,
+      selectedWidgetId: 'widget-terminal-1',
+    })).toEqual({ kind: 'canvas_zoom' });
+  });
+
+  it('keeps selected widgets local even without consulting wheel markers', () => {
     const widget = document.createElement('article');
     widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
     widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-files-1');
@@ -93,7 +120,7 @@ describe('workbenchInputRouting', () => {
       target: body,
       disablePanZoom: false,
       selectedWidgetId: 'widget-files-1',
-    })).toEqual({ kind: 'local_surface', reason: 'wheel_interactive' });
+    })).toEqual({ kind: 'local_surface', reason: 'selected_widget' });
   });
 
   it('keeps explicit non-widget wheel consumers local', () => {
@@ -110,7 +137,7 @@ describe('workbenchInputRouting', () => {
     })).toEqual({ kind: 'local_surface', reason: 'wheel_interactive' });
   });
 
-  it('treats local dialog overlay surfaces inside a widget host as local surfaces', () => {
+  it('keeps local dialog overlays inside the selected widget boundary local', () => {
     const widget = document.createElement('article');
     widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
     widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-files-1');
@@ -131,7 +158,14 @@ describe('workbenchInputRouting', () => {
     expect(resolveWorkbenchWheelRouting({
       target: dialogAction,
       disablePanZoom: false,
-    })).toEqual({ kind: 'local_surface', reason: 'local_interaction_surface' });
+      selectedWidgetId: 'widget-files-1',
+    })).toEqual({ kind: 'local_surface', reason: 'selected_widget' });
+
+    expect(resolveWorkbenchWheelRouting({
+      target: dialogAction,
+      disablePanZoom: false,
+      selectedWidgetId: null,
+    })).toEqual({ kind: 'canvas_zoom' });
   });
 
   it('distinguishes shell-owned widget chrome from widget-local interaction surfaces', () => {

@@ -65,7 +65,7 @@ function dispatchPointerEvent(
     clientX?: number;
     clientY?: number;
   } = {},
-): void {
+): Event {
   const EventCtor = typeof PointerEvent === 'function' ? PointerEvent : MouseEvent;
   const event = new EventCtor(type, {
     bubbles: true,
@@ -82,6 +82,7 @@ function dispatchPointerEvent(
   }
 
   target.dispatchEvent(event);
+  return event;
 }
 
 function dispatchWheel(target: EventTarget, deltaY: number): WheelEvent {
@@ -199,5 +200,75 @@ describe('RedevenWorkbenchSurface interaction contract', () => {
 
     const wheelAfterCanvasHandoff = dispatchWheel(widgetBody!, -120);
     expect(wheelAfterCanvasHandoff.defaultPrevented).toBe(true);
+  });
+
+  it('selects a widget and preserves the original target click in the same interaction', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const clicks: boolean[] = [];
+    const buttonDefinitions: readonly WorkbenchWidgetDefinition[] = [
+      {
+        type: 'redeven.button-panel',
+        label: 'Button Panel',
+        icon: () => null,
+        body: (props) => (
+          <button
+            type="button"
+            data-testid="widget-body-button"
+            onClick={() => clicks.push(Boolean(props.selected))}
+          >
+            Open
+          </button>
+        ),
+        defaultTitle: 'Button Panel',
+        defaultSize: { width: 320, height: 220 },
+      },
+    ];
+    const [state, setState] = createSignal<WorkbenchState>({
+      version: 1,
+      widgets: [
+        {
+          id: 'widget-button-1',
+          type: 'redeven.button-panel',
+          title: 'Button Panel',
+          x: 80,
+          y: 64,
+          width: 320,
+          height: 220,
+          z_index: 1,
+          created_at_unix_ms: 1,
+        },
+      ],
+      viewport: { x: 120, y: 72, scale: 1 },
+      locked: false,
+      filters: createWorkbenchFilterState(buttonDefinitions),
+      selectedWidgetId: null,
+      theme: 'default',
+    });
+
+    render(() => (
+      <RedevenWorkbenchSurface
+        state={state}
+        setState={setState}
+        widgetDefinitions={buttonDefinitions}
+        filterBarWidgetTypes={[]}
+        enableKeyboard={false}
+      />
+    ), host);
+
+    await flushWorkbenchInteraction();
+
+    const bodyButton = host.querySelector('[data-testid="widget-body-button"]') as HTMLButtonElement | null;
+    expect(bodyButton).toBeTruthy();
+
+    const pointerDown = dispatchPointerEvent('pointerdown', bodyButton!, { pointerId: 3 });
+    dispatchPointerEvent('pointerup', bodyButton!, { pointerId: 3 });
+    await flushWorkbenchInteraction();
+    bodyButton!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+
+    expect(pointerDown.defaultPrevented).toBe(false);
+    expect(state().selectedWidgetId).toBe('widget-button-1');
+    expect(clicks).toEqual([true]);
   });
 });
