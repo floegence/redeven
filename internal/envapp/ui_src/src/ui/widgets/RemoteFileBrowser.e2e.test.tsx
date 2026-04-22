@@ -14,6 +14,7 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EnvContext, type EnvContextValue } from '../pages/EnvContext';
+import type { EnvViewMode } from '../envViewMode';
 import { RemoteFileBrowser } from './RemoteFileBrowser';
 
 const widgetStateStore = vi.hoisted(() => ({
@@ -880,12 +881,13 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function createEnvContext(options?: { canExecute?: boolean }): EnvContextValue {
+function createEnvContext(options?: { canExecute?: boolean; viewMode?: EnvViewMode }): EnvContextValue {
   return createEnvContextWithIdAccessor(() => 'env-1', options);
 }
 
-function createEnvContextWithIdAccessor(envId: () => string, options?: { canExecute?: boolean }): EnvContextValue {
+function createEnvContextWithIdAccessor(envId: () => string, options?: { canExecute?: boolean; viewMode?: EnvViewMode }): EnvContextValue {
   const canExecute = options?.canExecute ?? true;
+  const viewMode = options?.viewMode ?? 'activity';
   const envResource = Object.assign(
     () => ({ permissions: { can_execute: canExecute } } as any),
     { state: 'ready' as const },
@@ -899,7 +901,7 @@ function createEnvContextWithIdAccessor(envId: () => string, options?: { canExec
     connectError: () => null,
     connectionOverlayVisible: () => false,
     connectionOverlayMessage: () => 'Connecting to runtime...',
-    viewMode: () => 'activity',
+    viewMode: () => viewMode,
     setViewMode: () => {},
     activeSurface: () => 'files',
     lastActivitySurface: () => 'files',
@@ -2967,6 +2969,38 @@ describe('RemoteFileBrowser persistence', () => {
 
       expect(envActionSpies.openTerminalInDirectory).toHaveBeenNthCalledWith(1, '/workspace/repo/src', { preferredName: 'src' });
       expect(envActionSpies.openTerminalInDirectory).toHaveBeenNthCalledWith(2, '/workspace/repo/src', { preferredName: 'src' });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps the workbench file browser context menu to a single terminal action', async () => {
+    widgetStateStore.values['widget-1'] = {
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext({ viewMode: 'workbench' })}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      expect(host.querySelector('[data-testid="mock-folder-menu-order"]')?.textContent).toBe(
+        'ask-flower,open-in-terminal,new[new-file|new-folder],separator:new,duplicate,copy-name,copy-path,rename,delete',
+      );
+      expect(host.querySelector('[data-testid="mock-background-menu-order"]')?.textContent).toBe(
+        'ask-flower,open-in-terminal,new[new-file|new-folder]',
+      );
     } finally {
       dispose();
     }
