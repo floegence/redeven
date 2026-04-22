@@ -76,4 +76,17 @@ describe('redevenWorkbenchWidgets terminal behavior', () => {
       },
     });
   });
+
+  it('forwards the shared workbench activation sequence into the live terminal panel', () => {
+    renderTerminalBody({
+      activation: {
+        seq: 7,
+      },
+    });
+
+    expect(terminalPanelMocks.render).toHaveBeenCalledTimes(1);
+    expect(terminalPanelMocks.render.mock.calls[0]?.[0]).toMatchObject({
+      workbenchActivationSeq: 7,
+    });
+  });
 });
