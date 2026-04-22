@@ -4287,25 +4287,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     });
   };
 
-  const handleOpenDirectoryContextInNewTerminalWindow = (event?: ContextMenuEvent | null) => {
-    const directory = resolveDirectoryContextTarget(event);
-    if (!directory) return;
-
-    openDirectoryInTerminal({
-      path: directory.path,
-      preferredName: directory.preferredName,
-      openTerminalInDirectory: (workingDir, options) => {
-        ctx.openTerminalInDirectory(workingDir, {
-          preferredName: options?.preferredName,
-          openStrategy: 'create_new',
-        });
-      },
-      onInvalidDirectory: () => {
-        notification.error('Invalid directory', 'Could not resolve a terminal working directory.');
-      },
-    });
-  };
-
   const openCreateEntryDialog = (kind: CreateEntryKind, event?: ContextMenuEvent | null) => {
     const directory = resolveDirectoryContextTarget(event);
     if (!directory) {
@@ -4470,16 +4451,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     },
   });
 
-  const buildOpenInNewTerminalWindowMenuItem = (): ContextMenuItem => ({
-    id: 'open-in-new-terminal-window',
-    label: 'Open in New Terminal Window',
-    type: 'custom',
-    icon: (props) => <Terminal class={props.class} />,
-    onAction: (_items, event) => {
-      handleOpenDirectoryContextInNewTerminalWindow(event);
-    },
-  });
-
   const buildNewContextMenuItem = (separator = false): ContextMenuItem => ({
     id: 'new',
     label: 'New',
@@ -4520,9 +4491,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       ];
       if (canOpenDirectoryContextInTerminal(event)) {
         backgroundItems.push(buildOpenInTerminalMenuItem());
-        if (ctx.viewMode() === 'workbench') {
-          backgroundItems.push(buildOpenInNewTerminalWindowMenuItem());
-        }
       }
       backgroundItems.push(buildNewContextMenuItem());
       return backgroundItems;
@@ -4534,9 +4502,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       ];
       if (canOpenDirectoryContextInTerminal(event)) {
         folderItems.push(buildOpenInTerminalMenuItem());
-        if (ctx.viewMode() === 'workbench') {
-          folderItems.push(buildOpenInNewTerminalWindowMenuItem());
-        }
       }
       folderItems.push(buildNewContextMenuItem(true));
       return [...folderItems, ...filterSecondaryContextMenuItems(singleSelectSecondaryContextMenuItemIds)];
