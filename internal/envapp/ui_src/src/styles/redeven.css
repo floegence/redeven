@@ -3003,3 +3003,25 @@ a.chat-sources-cell-url:focus-visible {
     justify-content: flex-end;
   }
 }
+
+.workbench-entry-intro {
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  pointer-events: auto;
+  overflow: hidden;
+  perspective: 1400px;
+}
+
+.redeven-workbench-intro-preparing {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.workbench-entry-intro__veil {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at center, color-mix(in srgb, var(--background) 78%, transparent), transparent 48%),
+    radial-gradient(circle at center, color-mix(in srgb, var(--primary) 8%, transparent), transparent 62%);
+}
