@@ -4,6 +4,7 @@ import { Button, ProcessingIndicator, Tag } from '@floegence/floe-webapp-core/ui
 
 import { CodexIcon } from '../icons/CodexIcon';
 import { Tooltip } from '../primitives/Tooltip';
+import { REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { useCodexContext } from './CodexProvider';
 import {
   displayStatus,
@@ -21,6 +22,10 @@ type SidebarThreadGroup = Readonly<{
   threadIDs: string[];
 }>;
 
+const THREAD_RAIL_CONTENT_CLASS = 'codex-sidebar-shell flex h-full min-h-0 flex-col overflow-hidden';
+const THREAD_RAIL_SECTION_CLASS = 'min-h-0 flex-1 overflow-hidden [&>div:last-child]:min-h-0 [&>div:last-child]:overflow-hidden';
+const THREAD_RAIL_SCROLL_CLASS = 'h-full min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] [touch-action:pan-y_pinch-zoom]';
+
 function RuntimeSummary() {
   const codex = useCodexContext();
   const summary = createMemo(() => buildCodexSidebarSummary({
@@ -32,7 +37,7 @@ function RuntimeSummary() {
   return (
     <div
       data-codex-surface="sidebar-summary"
-      class="codex-sidebar-summary"
+      class="codex-sidebar-summary shrink-0"
       title={summary().binaryPath || summary().secondaryLabel}
     >
       <div class="flex items-center gap-2">
@@ -228,8 +233,8 @@ export function CodexSidebarShell() {
     </Button>
   );
   return (
-    <SidebarContent class="codex-sidebar-shell">
-      <div class="codex-sidebar-toolbar">
+    <SidebarContent class={THREAD_RAIL_CONTENT_CLASS}>
+      <div class="codex-sidebar-toolbar shrink-0">
         <Show when={!codex.hasHostBinary() && newChatDisabledReason()} fallback={renderNewChatButton()}>
           <Tooltip content={newChatDisabledReason()} placement="top" delay={0}>
             <span class="flex w-full">
@@ -242,71 +247,79 @@ export function CodexSidebarShell() {
       <RuntimeSummary />
 
       <Show when={codex.statusError()}>
-        <div class="codex-sidebar-error">
+        <div class="codex-sidebar-error shrink-0">
           {codex.statusError()}
         </div>
       </Show>
 
-      <Show
-        when={!showInitialLoading()}
-        fallback={
-          <div class="codex-sidebar-loading">
-            Loading chats...
-          </div>
-        }
-      >
-        <Show when={hasThreads()} fallback={<EmptyState />}>
-          <SidebarSection title="Conversations">
-            <div class="codex-sidebar-thread-list">
-              <Index each={groupedThreads()}>
-                {(groupAccessor) => {
-                  const group = () => groupAccessor();
-                  return (
-                    <>
-                      <Show when={showGroupHeaders()}>
-                        <div class="codex-sidebar-group-label">
-                          {group().group}
-                        </div>
-                      </Show>
-                      <For each={group().threadIDs}>
-                        {(threadID) => {
-                          const thread = createMemo(() => threadByID().get(threadID) ?? null);
-                          return (
-                            <Show when={thread()}>
-                              {(resolvedThread) => (
-                                <ThreadCard
-                                  thread={resolvedThread()}
-                                  active={threadID === codex.selectedThreadID()}
-                                  isRunning={codex.isThreadRunning(threadID)}
-                                  unread={codex.isThreadUnread(threadID)}
-                                  actionLabel={
-                                    codex.supportsOperation('thread_archive')
-                                      ? (codex.archivingThreadID() === threadID ? 'Archiving…' : 'Archive')
-                                      : ''
-                                  }
-                                  actionAriaLabel={
-                                    `Archive chat ${String(resolvedThread().name ?? resolvedThread().preview ?? threadID).trim() || threadID}`
-                                  }
-                                  actionDisabled={
-                                    !codex.hasHostBinary() || codex.archivingThreadID() === threadID
-                                  }
-                                  actionDisabledReason={!codex.hasHostBinary() ? codex.hostDisabledReason() : ''}
-                                  onClick={() => codex.selectThread(threadID)}
-                                  onAction={() => void codex.archiveThread(threadID)}
-                                />
-                              )}
-                            </Show>
-                          );
-                        }}
-                      </For>
-                    </>
-                  );
-                }}
-              </Index>
+      <div class="min-h-0 flex-1 overflow-hidden">
+        <Show
+          when={!showInitialLoading()}
+          fallback={
+            <div class="codex-sidebar-loading">
+              Loading chats...
             </div>
-          </SidebarSection>
+          }
+        >
+          <Show when={hasThreads()} fallback={<EmptyState />}>
+            <SidebarSection title="Conversations" class={THREAD_RAIL_SECTION_CLASS}>
+              <div
+                {...REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS}
+                data-testid="codex-thread-scroll-region"
+                class={THREAD_RAIL_SCROLL_CLASS}
+              >
+                <div class="codex-sidebar-thread-list">
+                  <Index each={groupedThreads()}>
+                    {(groupAccessor) => {
+                      const group = () => groupAccessor();
+                      return (
+                        <>
+                          <Show when={showGroupHeaders()}>
+                            <div class="codex-sidebar-group-label">
+                              {group().group}
+                            </div>
+                          </Show>
+                          <For each={group().threadIDs}>
+                            {(threadID) => {
+                              const thread = createMemo(() => threadByID().get(threadID) ?? null);
+                              return (
+                                <Show when={thread()}>
+                                  {(resolvedThread) => (
+                                    <ThreadCard
+                                      thread={resolvedThread()}
+                                      active={threadID === codex.selectedThreadID()}
+                                      isRunning={codex.isThreadRunning(threadID)}
+                                      unread={codex.isThreadUnread(threadID)}
+                                      actionLabel={
+                                        codex.supportsOperation('thread_archive')
+                                          ? (codex.archivingThreadID() === threadID ? 'Archiving…' : 'Archive')
+                                          : ''
+                                      }
+                                      actionAriaLabel={
+                                        `Archive chat ${String(resolvedThread().name ?? resolvedThread().preview ?? threadID).trim() || threadID}`
+                                      }
+                                      actionDisabled={
+                                        !codex.hasHostBinary() || codex.archivingThreadID() === threadID
+                                      }
+                                      actionDisabledReason={!codex.hasHostBinary() ? codex.hostDisabledReason() : ''}
+                                      onClick={() => codex.selectThread(threadID)}
+                                      onAction={() => void codex.archiveThread(threadID)}
+                                    />
+                                  )}
+                                </Show>
+                              );
+                            }}
+                          </For>
+                        </>
+                      );
+                    }}
+                  </Index>
+                </div>
+              </div>
+            </SidebarSection>
+          </Show>
         </Show>
-      </Show>
+      </div>
     </SidebarContent>
   );
 }
