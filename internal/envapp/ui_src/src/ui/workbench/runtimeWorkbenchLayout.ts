@@ -499,37 +499,62 @@ export function projectWorkbenchStateFromRuntimeLayout(args: Readonly<{
   const defaultState = createDefaultWorkbenchState(args.widgetDefinitions);
   const widgetDefinitionByType = new Map(args.widgetDefinitions.map((definition) => [definition.type, definition]));
   const existingWidgetByID = new Map((args.existingState?.widgets ?? []).map((widget) => [widget.id, widget]));
+  const runtimeWidgetByID = new Map(args.snapshot.widgets.map((widget) => [widget.widget_id, widget]));
+  const visitedWidgetIDs = new Set<string>();
 
-  const widgets = args.snapshot.widgets
-    .map((widget) => {
-      const definition = widgetDefinitionByType.get(widget.widget_type);
-      if (!definition) {
-        return null;
-      }
-      const existing = existingWidgetByID.get(widget.widget_id);
-      const title = existing?.type === widget.widget_type
-        ? compact(existing.title) || definition.defaultTitle
-        : definition.defaultTitle;
-      return {
-        id: widget.widget_id,
-        type: widget.widget_type,
-        title,
-        x: widget.x,
-        y: widget.y,
-        width: widget.width,
-        height: widget.height,
-        z_index: widget.z_index,
-        created_at_unix_ms: widget.created_at_unix_ms,
-      };
-    })
-    .filter((widget): widget is NonNullable<typeof widget> => widget !== null);
+  const projectRuntimeWidget = (widget: RuntimeWorkbenchLayoutWidget): WorkbenchState['widgets'][number] | null => {
+    const definition = widgetDefinitionByType.get(widget.widget_type);
+    if (!definition) {
+      return null;
+    }
+    const existing = existingWidgetByID.get(widget.widget_id);
+    const title = existing?.type === widget.widget_type
+      ? compact(existing.title) || definition.defaultTitle
+      : definition.defaultTitle;
+    return {
+      id: widget.widget_id,
+      type: widget.widget_type,
+      title,
+      x: widget.x,
+      y: widget.y,
+      width: widget.width,
+      height: widget.height,
+      z_index: widget.z_index,
+      created_at_unix_ms: widget.created_at_unix_ms,
+    };
+  };
+
+  const widgets: WorkbenchState['widgets'] = [];
+  for (const existing of args.existingState?.widgets ?? []) {
+    const runtimeWidget = runtimeWidgetByID.get(existing.id);
+    if (!runtimeWidget || visitedWidgetIDs.has(runtimeWidget.widget_id)) {
+      continue;
+    }
+    const projectedWidget = projectRuntimeWidget(runtimeWidget);
+    if (!projectedWidget) {
+      continue;
+    }
+    visitedWidgetIDs.add(runtimeWidget.widget_id);
+    widgets.push(projectedWidget);
+  }
+
+  for (const runtimeWidget of args.snapshot.widgets) {
+    if (visitedWidgetIDs.has(runtimeWidget.widget_id)) {
+      continue;
+    }
+    const projectedWidget = projectRuntimeWidget(runtimeWidget);
+    if (!projectedWidget) {
+      continue;
+    }
+    visitedWidgetIDs.add(runtimeWidget.widget_id);
+    widgets.push(projectedWidget);
+  }
 
   const widgetIDs = new Set(widgets.map((widget) => widget.id));
   const liveSelectedWidgetId = compact(args.existingState?.selectedWidgetId);
-  const persistedSelectedWidgetId = compact(args.localState.selectedWidgetId);
   const selectedWidgetId = widgetIDs.has(liveSelectedWidgetId)
     ? liveSelectedWidgetId
-    : (widgetIDs.has(persistedSelectedWidgetId) ? persistedSelectedWidgetId : null);
+    : null;
   return sanitizeWorkbenchState(
     {
       ...defaultState,

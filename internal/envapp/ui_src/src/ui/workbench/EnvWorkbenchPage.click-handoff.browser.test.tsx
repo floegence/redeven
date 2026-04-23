@@ -1,3 +1,4 @@
+import { page } from '@vitest/browser/context';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -68,6 +69,11 @@ const envContextState = vi.hoisted(() => ({
 
 async function flushWork() {
   await Promise.resolve();
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  if (typeof requestAnimationFrame === 'function') {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  }
   await Promise.resolve();
   await Promise.resolve();
 }
@@ -115,36 +121,52 @@ vi.mock('./redevenWorkbenchWidgets', () => ({
       label: 'Files',
       icon: () => null,
       body: (props: any) => (
-        <button
-          type="button"
-          data-testid="widget-files-button"
-          data-selected={String(Boolean(props.selected))}
-          onClick={() => layoutApiState.clicks.push(`files:${String(Boolean(props.selected))}`)}
-        >
-          Files
-        </button>
+        <div>
+          <button
+            type="button"
+            data-testid="widget-files-button"
+            data-selected={String(Boolean(props.selected))}
+            onClick={() => layoutApiState.clicks.push(`files:${String(Boolean(props.selected))}`)}
+          >
+            Files
+          </button>
+          <input
+            aria-label="Files input"
+            data-testid="widget-files-input"
+            data-selected={String(Boolean(props.selected))}
+          />
+        </div>
       ),
       defaultTitle: 'Files',
       defaultSize: { width: 360, height: 240 },
       singleton: false,
+      renderMode: 'projected_surface',
     },
     {
       type: 'redeven.terminal',
       label: 'Terminal',
       icon: () => null,
       body: (props: any) => (
-        <button
-          type="button"
-          data-testid="widget-terminal-button"
-          data-selected={String(Boolean(props.selected))}
-          onClick={() => layoutApiState.clicks.push(`terminal:${String(Boolean(props.selected))}`)}
-        >
-          Terminal
-        </button>
+        <div>
+          <button
+            type="button"
+            data-testid="widget-terminal-button"
+            data-selected={String(Boolean(props.selected))}
+            onClick={() => layoutApiState.clicks.push(`terminal:${String(Boolean(props.selected))}`)}
+          >
+            Terminal
+          </button>
+          <input
+            aria-label="Terminal input"
+            data-testid="widget-terminal-input"
+            data-selected={String(Boolean(props.selected))}
+          />
+        </div>
       ),
       defaultTitle: 'Terminal',
       defaultSize: { width: 360, height: 240 },
       singleton: false,
+      renderMode: 'projected_surface',
     },
     {
       type: 'redeven.preview',
@@ -182,6 +204,10 @@ describe('EnvWorkbenchPage click handoff', () => {
       }
       return null;
     }) as any);
+  });
+
+  beforeEach(async () => {
+    await page.viewport(1400, 900);
   });
 
   afterEach(() => {
@@ -259,5 +285,30 @@ describe('EnvWorkbenchPage click handoff', () => {
 
     expect(terminalButton!.dataset.selected).toBe('true');
     expect(layoutApiState.clicks).toEqual(['terminal:true']);
+  });
+
+  it('keeps input focus after cross-widget z-index layout acks reorder runtime widgets', async () => {
+    const host = document.createElement('div');
+    host.style.position = 'fixed';
+    host.style.inset = '0';
+    document.body.appendChild(host);
+
+    render(() => <EnvWorkbenchPage />, host);
+    await flushWork();
+
+    const filesInput = host.querySelector('[data-testid="widget-files-input"]') as HTMLInputElement | null;
+    const terminalInput = host.querySelector('[data-testid="widget-terminal-input"]') as HTMLInputElement | null;
+    expect(filesInput).toBeTruthy();
+    expect(terminalInput).toBeTruthy();
+
+    await page.elementLocator(terminalInput!).click();
+    await flushWork();
+    expect(document.activeElement).toBe(terminalInput);
+
+    await page.elementLocator(filesInput!).click();
+    await flushWork();
+
+    expect(document.activeElement).toBe(filesInput);
+    expect(filesInput!.dataset.selected).toBe('true');
   });
 });
