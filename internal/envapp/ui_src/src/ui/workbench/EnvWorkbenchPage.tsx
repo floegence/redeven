@@ -67,6 +67,7 @@ import {
   readLegacyWorkbenchThemeMigration,
   removeLegacyWorkbenchAppearance,
 } from './workbenchThemeMigration';
+import { WorkbenchEntryIntro } from './WorkbenchEntryIntro';
 
 const WORKBENCH_PERSIST_DELAY_MS = 120;
 const WORKBENCH_LAYOUT_FLUSH_DELAY_MS = 0;
@@ -365,7 +366,14 @@ export function EnvWorkbenchPage() {
   const [previewOpenRequests, setPreviewOpenRequests] = createSignal<Record<string, WorkbenchOpenFilePreviewRequest>>({});
   const [widgetRemoveGuards, setWidgetRemoveGuards] = createSignal<Record<string, () => boolean>>({});
   const [localOwnerHandoffActive, setLocalOwnerHandoffActive] = createSignal(false);
+  const [introSurfaceHost, setIntroSurfaceHost] = createSignal<HTMLDivElement>();
+  const [introPreparing, setIntroPreparing] = createSignal(true);
+  const [introVisible, setIntroVisible] = createSignal(false);
+  const [introSequence, setIntroSequence] = createSignal(0);
+  const [introDecisionMade, setIntroDecisionMade] = createSignal(false);
   let localOwnerHandoffToken = 0;
+  let introStartFrame: number | undefined;
+  let introStartSettleFrame: number | undefined;
 
   const runtimeWidgetStateById = createMemo(() => runtimeWorkbenchWidgetStateById(runtimeSnapshot().widget_states));
   const runtimeFilesWidgetStateById = createMemo<Record<string, RuntimeWorkbenchWidgetState>>(() => Object.fromEntries(
@@ -854,6 +862,32 @@ export function EnvWorkbenchPage() {
 
     api.enterOverview();
     env.consumeWorkbenchOverviewEntry(requestId);
+  });
+
+  createEffect(() => {
+    const host = introSurfaceHost();
+    const api = surfaceApi();
+    const ready = runtimeLayoutReady();
+    const overlayVisible = env.connectionOverlayVisible();
+    if (!host || !api || !ready || overlayVisible || introDecisionMade()) {
+      return;
+    }
+
+    setIntroDecisionMade(true);
+    if (workbenchState().widgets.length === 0) {
+      setIntroPreparing(false);
+      return;
+    }
+
+    setIntroPreparing(true);
+    introStartFrame = window.requestAnimationFrame(() => {
+      introStartFrame = undefined;
+      introStartSettleFrame = window.requestAnimationFrame(() => {
+        introStartSettleFrame = undefined;
+        setIntroVisible(true);
+        setIntroSequence((value) => value + 1);
+      });
+    });
   });
 
   createEffect(() => {
@@ -1400,23 +1434,50 @@ export function EnvWorkbenchPage() {
     updateWidgetTitle,
   } as const;
 
+  onCleanup(() => {
+    if (introStartFrame !== undefined) {
+      window.cancelAnimationFrame(introStartFrame);
+    }
+    if (introStartSettleFrame !== undefined) {
+      window.cancelAnimationFrame(introStartSettleFrame);
+    }
+  });
+
   return (
     <EnvWorkbenchInstancesContext.Provider value={workbenchInstancesContextValue}>
       <div class="relative h-full min-h-0 overflow-hidden">
-        <RedevenWorkbenchSurface
-          state={workbenchState}
-          setState={setSurfaceWorkbenchState}
-          widgetDefinitions={redevenWorkbenchWidgets}
-          filterBarWidgetTypes={redevenWorkbenchFilterBarWidgetTypes}
-          onApiReady={setSurfaceApi}
-          onRequestDelete={requestWidgetRemoval}
-          onLayoutInteractionStart={() => {
-            setActiveLayoutInteractions((count) => count + 1);
-          }}
-          onLayoutInteractionEnd={() => {
-            setActiveLayoutInteractions((count) => Math.max(0, count - 1));
-          }}
-        />
+        <div
+          ref={setIntroSurfaceHost}
+          class={`h-full min-h-0${introPreparing() ? ' redeven-workbench-intro-preparing' : ''}`}
+        >
+          <RedevenWorkbenchSurface
+            state={workbenchState}
+            setState={setSurfaceWorkbenchState}
+            widgetDefinitions={redevenWorkbenchWidgets}
+            filterBarWidgetTypes={redevenWorkbenchFilterBarWidgetTypes}
+            onApiReady={setSurfaceApi}
+            onRequestDelete={requestWidgetRemoval}
+            onLayoutInteractionStart={() => {
+              setActiveLayoutInteractions((count) => count + 1);
+            }}
+            onLayoutInteractionEnd={() => {
+              setActiveLayoutInteractions((count) => Math.max(0, count - 1));
+            }}
+          />
+        </div>
+        {introVisible() ? (
+          <WorkbenchEntryIntro
+            state={workbenchState}
+            frameSize={() => ({ width: 0, height: 0 })}
+            surfaceHost={introSurfaceHost}
+            sequence={introSequence}
+            onStart={() => setIntroPreparing(false)}
+            onComplete={() => {
+              setIntroPreparing(false);
+              setIntroVisible(false);
+            }}
+          />
+        ) : null}
         <LoadingOverlay
           visible={!runtimeLayoutReady() || env.connectionOverlayVisible()}
           message={!runtimeLayoutReady() ? 'Loading workbench…' : env.connectionOverlayMessage()}
