@@ -2504,6 +2504,7 @@ export function EnvAppShell() {
         await openFileBrowserAtPath(params.path, {
           homePath: params.homePath,
           title: params.title,
+          openStrategy: 'create_new',
         });
         return;
       }
