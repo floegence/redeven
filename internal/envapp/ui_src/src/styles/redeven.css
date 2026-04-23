@@ -3011,6 +3011,7 @@ a.chat-sources-cell-url:focus-visible {
   pointer-events: auto;
   overflow: hidden;
   perspective: 1400px;
+  isolation: isolate;
 }
 
 .redeven-workbench-intro-preparing {
@@ -3022,6 +3023,47 @@ a.chat-sources-cell-url:focus-visible {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at center, color-mix(in srgb, var(--background) 78%, transparent), transparent 48%),
-    radial-gradient(circle at center, color-mix(in srgb, var(--primary) 8%, transparent), transparent 62%);
+    radial-gradient(ellipse 74% 60% at 50% 46%, color-mix(in srgb, var(--background) 78%, transparent), transparent 62%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--background) 92%, transparent),
+      color-mix(in srgb, var(--background) 80%, transparent)
+    );
+}
+
+.workbench-entry-intro__wash,
+.workbench-entry-intro__halo,
+.workbench-entry-intro__grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.workbench-entry-intro__wash {
+  inset: -16%;
+  background:
+    radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--primary) 18%, transparent), transparent 40%),
+    radial-gradient(circle at 50% 52%, color-mix(in srgb, var(--card) 60%, transparent), transparent 66%);
+  filter: blur(42px);
+  transform-origin: center;
+}
+
+.workbench-entry-intro__halo {
+  inset: 20% 24%;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at center, color-mix(in srgb, var(--foreground) 12%, transparent), transparent 34%),
+    radial-gradient(circle at center, color-mix(in srgb, var(--primary) 18%, transparent), transparent 62%);
+  filter: blur(22px);
+  transform-origin: center;
+}
+
+.workbench-entry-intro__grid {
+  inset: -10%;
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--border) 18%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--border) 18%, transparent) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: radial-gradient(circle at center, black 22%, transparent 74%);
+  transform-origin: center;
 }

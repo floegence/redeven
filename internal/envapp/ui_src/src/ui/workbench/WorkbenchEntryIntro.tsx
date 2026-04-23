@@ -21,19 +21,24 @@ type IntroCard = Readonly<{
   widget: WorkbenchWidgetItem;
   source: HTMLElement;
   startTransform: string;
+  glideTransform: string;
+  settleTransform: string;
   finalTransform: string;
   delayMs: number;
   restore: () => void;
 }>;
 
-const INTRO_BASE_DELAY_MS = 36;
-const INTRO_MIN_DELAY_STEP_MS = 16;
-const INTRO_MAX_DELAY_STEP_MS = 38;
-const INTRO_MAX_CASCADE_MS = 280;
-const INTRO_CARD_DURATION_MS = 620;
-const INTRO_LINGER_MS = 140;
-const INTRO_WAIT_FOR_WIDGETS_TIMEOUT_MS = 260;
+const INTRO_BASE_DELAY_MS = 72;
+const INTRO_MIN_DELAY_STEP_MS = 42;
+const INTRO_MAX_DELAY_STEP_MS = 74;
+const INTRO_MAX_CASCADE_MS = 460;
+const INTRO_CARD_DURATION_MS = 980;
+const INTRO_LINGER_MS = 210;
+const INTRO_SETTLE_LEAD_MS = 360;
+const INTRO_WAIT_FOR_WIDGETS_TIMEOUT_MS = 320;
 const INTRO_MIN_RENDERED_EDGE_PX = 16;
+const INTRO_CARD_EASING = 'cubic-bezier(0.16, 1, 0.3, 1)';
+const INTRO_OVERLAY_EASING = [0.22, 1, 0.36, 1] as const;
 
 function resolveIntroDelayStepMs(cardCount: number): number {
   const normalizedCardCount = Math.max(0, Math.trunc(Number(cardCount)));
@@ -135,10 +140,22 @@ export function WorkbenchEntryIntro(props: WorkbenchEntryIntroProps) {
         const animation = card.source.animate(
           [
             {
+              offset: 0,
               transform: card.startTransform,
               opacity: 0,
             },
             {
+              offset: 0.58,
+              transform: card.glideTransform,
+              opacity: 0.84,
+            },
+            {
+              offset: 0.86,
+              transform: card.settleTransform,
+              opacity: 1,
+            },
+            {
+              offset: 1,
               transform: card.finalTransform,
               opacity: 1,
             },
@@ -146,7 +163,7 @@ export function WorkbenchEntryIntro(props: WorkbenchEntryIntroProps) {
           {
             duration: INTRO_CARD_DURATION_MS,
             delay: card.delayMs,
-            easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+            easing: INTRO_CARD_EASING,
             fill: 'both',
           },
         );
@@ -187,7 +204,7 @@ export function WorkbenchEntryIntro(props: WorkbenchEntryIntroProps) {
 
     settleTimer = window.setTimeout(
       () => setPhase('settle'),
-      Math.max(220, totalDurationMs - 260),
+      Math.max(320, totalDurationMs - INTRO_SETTLE_LEAD_MS),
     );
     completeTimer = window.setTimeout(
       () => props.onComplete?.(),
@@ -269,25 +286,35 @@ export function WorkbenchEntryIntro(props: WorkbenchEntryIntroProps) {
         const finalScaleY = Math.max(sourceRect.height / baseHeight, 0.0001);
         const finalCenterX = sourceRect.left - frameRect.left + sourceRect.width / 2;
         const finalCenterY = sourceRect.top - frameRect.top + sourceRect.height / 2;
-        const bloomVectorX = (finalCenterX - centerX) * 0.16;
-        const bloomVectorY = (finalCenterY - centerY) * 0.16;
-        const orbitAngle = (index - (state.widgets.length - 1) / 2) * 0.48;
-        const orbitRadius = 18 + index * 10;
+        const vectorFromCenterX = finalCenterX - centerX;
+        const vectorFromCenterY = finalCenterY - centerY;
+        const bloomVectorX = vectorFromCenterX * 0.14;
+        const bloomVectorY = vectorFromCenterY * 0.14;
+        const orbitAngle = (index - (state.widgets.length - 1) / 2) * 0.4;
+        const orbitRadius = 16 + index * 9;
         const orbitX = Math.cos(orbitAngle) * orbitRadius;
         const orbitY = Math.sin(orbitAngle) * orbitRadius * 0.72;
+        const finalScreenX = sourceRect.left - frameRect.left;
+        const finalScreenY = sourceRect.top - frameRect.top;
         const finalScreenMatrix = createScreenMatrix({
-          x: sourceRect.left - frameRect.left,
-          y: sourceRect.top - frameRect.top,
+          x: finalScreenX,
+          y: finalScreenY,
           scaleX: finalScaleX,
           scaleY: finalScaleY,
         });
         const ancestorMatrix = finalScreenMatrix.multiply(finalLocalMatrix.inverse());
-        const introScale = 0.28 + Math.min(index * 0.02, 0.08);
+        const introScale = 0.36 + Math.min(index * 0.024, 0.12);
         const startScaleX = Math.max(finalScaleX * introScale, 0.0001);
         const startScaleY = Math.max(finalScaleY * introScale, 0.0001);
         const startX = centerX - (baseWidth * startScaleX) / 2 + bloomVectorX + orbitX;
         const startY = centerY - (baseHeight * startScaleY) / 2 + bloomVectorY + orbitY;
-        const tiltDeg = (index % 2 === 0 ? -1 : 1) * (3.2 + index * 0.45);
+        const tiltDeg = (index % 2 === 0 ? -1 : 1) * (2.4 + index * 0.28);
+        const glideX = finalScreenX - vectorFromCenterX * 0.12 + orbitX * 0.28;
+        const glideY = finalScreenY - vectorFromCenterY * 0.12 + orbitY * 0.24;
+        const glideScale = 1.024 - Math.min(index * 0.004, 0.016);
+        const settleX = finalScreenX + vectorFromCenterX * 0.03;
+        const settleY = finalScreenY + vectorFromCenterY * 0.03;
+        const settleScale = 1.008;
         const startScreenMatrix = createScreenMatrix({
           x: startX,
           y: startY,
@@ -295,7 +322,23 @@ export function WorkbenchEntryIntro(props: WorkbenchEntryIntroProps) {
           scaleY: startScaleY,
           rotateDeg: tiltDeg,
         });
+        const glideScreenMatrix = createScreenMatrix({
+          x: glideX,
+          y: glideY,
+          scaleX: Math.max(finalScaleX * glideScale, 0.0001),
+          scaleY: Math.max(finalScaleY * glideScale, 0.0001),
+          rotateDeg: tiltDeg * 0.24,
+        });
+        const settleScreenMatrix = createScreenMatrix({
+          x: settleX,
+          y: settleY,
+          scaleX: Math.max(finalScaleX * settleScale, 0.0001),
+          scaleY: Math.max(finalScaleY * settleScale, 0.0001),
+          rotateDeg: tiltDeg * 0.08,
+        });
         const startLocalMatrix = ancestorMatrix.inverse().multiply(startScreenMatrix);
+        const glideLocalMatrix = ancestorMatrix.inverse().multiply(glideScreenMatrix);
+        const settleLocalMatrix = ancestorMatrix.inverse().multiply(settleScreenMatrix);
         const previousInlineTransform = source.style.transform;
         const previousInlineOpacity = source.style.opacity;
         const previousInlineWillChange = source.style.willChange;
@@ -305,6 +348,8 @@ export function WorkbenchEntryIntro(props: WorkbenchEntryIntroProps) {
           widget,
           source,
           startTransform: matrixToCSS(startLocalMatrix),
+          glideTransform: matrixToCSS(glideLocalMatrix),
+          settleTransform: matrixToCSS(settleLocalMatrix),
           finalTransform: computed.transform === 'none' ? 'none' : computed.transform,
           delayMs: INTRO_BASE_DELAY_MS + index * delayStepMs,
           restore: () => {
@@ -324,9 +369,36 @@ export function WorkbenchEntryIntro(props: WorkbenchEntryIntroProps) {
       <div class="workbench-entry-intro" aria-hidden="true">
         <Motion.div
           class="workbench-entry-intro__veil"
-          initial={{ opacity: 1 }}
-          animate={{ opacity: phase() === 'settle' ? 0.18 : 1 }}
-          transition={{ duration: phase() === 'settle' ? 0.34 : 0.12, easing: 'ease-out' }}
+          initial={{ opacity: 0.96 }}
+          animate={{ opacity: phase() === 'settle' ? 0.14 : 0.96 }}
+          transition={{ duration: phase() === 'settle' ? 0.62 : 0.18, easing: INTRO_OVERLAY_EASING }}
+        />
+        <Motion.div
+          class="workbench-entry-intro__wash"
+          initial={{ opacity: 0.16, scale: 0.92 }}
+          animate={{
+            opacity: phase() === 'settle' ? 0.08 : 0.34,
+            scale: phase() === 'settle' ? 1.08 : 1,
+          }}
+          transition={{ duration: phase() === 'settle' ? 0.8 : 0.46, easing: INTRO_OVERLAY_EASING }}
+        />
+        <Motion.div
+          class="workbench-entry-intro__halo"
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{
+            opacity: phase() === 'settle' ? 0.1 : 0.52,
+            scale: phase() === 'settle' ? 1.16 : 1.02,
+          }}
+          transition={{ duration: phase() === 'settle' ? 0.88 : 0.58, easing: INTRO_OVERLAY_EASING }}
+        />
+        <Motion.div
+          class="workbench-entry-intro__grid"
+          initial={{ opacity: 0, scale: 0.96 }}
+          animate={{
+            opacity: phase() === 'settle' ? 0.04 : 0.12,
+            scale: phase() === 'settle' ? 1.02 : 1,
+          }}
+          transition={{ duration: phase() === 'settle' ? 0.72 : 0.42, easing: INTRO_OVERLAY_EASING }}
         />
       </div>
     </Show>
