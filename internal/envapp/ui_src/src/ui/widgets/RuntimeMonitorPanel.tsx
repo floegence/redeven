@@ -19,7 +19,7 @@ import {
 } from '../utils/monitorProcessUsageTone';
 import { isPermissionDeniedError } from '../utils/permission';
 import { REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS } from '../workbench/surface/workbenchWheelInteractive';
-import { FLOATING_CONTEXT_MENU_WIDTH_PX, FloatingContextMenu, estimateFloatingContextMenuHeight, type FloatingContextMenuItem } from './FloatingContextMenu';
+import { FloatingContextMenu, type FloatingContextMenuItem } from './FloatingContextMenu';
 import { PermissionEmptyState } from './PermissionEmptyState';
 
 export type RuntimeMonitorPanelVariant = 'page' | 'deck' | 'workbench';
@@ -101,9 +101,6 @@ function normalizeProcessPid(value: unknown): number | null {
   const pid = Math.trunc(Number(value ?? 0));
   return Number.isFinite(pid) && pid > 0 ? pid : null;
 }
-
-const PROCESS_CONTEXT_MENU_ACTION_COUNT = 4;
-const PROCESS_CONTEXT_MENU_SEPARATOR_COUNT = 1;
 
 export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
   const protocol = useProtocol();
@@ -334,24 +331,6 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
 
   onCleanup(() => stopPolling());
 
-  const clampProcessMenuPosition = (x: number, y: number): { x: number; y: number } => {
-    if (typeof window === 'undefined') return { x, y };
-
-    const margin = 8;
-    const menuWidth = FLOATING_CONTEXT_MENU_WIDTH_PX;
-    const menuHeight = estimateFloatingContextMenuHeight(
-      PROCESS_CONTEXT_MENU_ACTION_COUNT,
-      PROCESS_CONTEXT_MENU_SEPARATOR_COUNT,
-    );
-    const maxX = Math.max(margin, window.innerWidth - menuWidth - margin);
-    const maxY = Math.max(margin, window.innerHeight - menuHeight - margin);
-
-    return {
-      x: Math.min(Math.max(x, margin), maxX),
-      y: Math.min(Math.max(y, margin), maxY),
-    };
-  };
-
   createEffect(() => {
     const menu = processContextMenu();
     if (!menu) return;
@@ -381,14 +360,13 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
   });
 
   const openProcessContextMenu = (event: MouseEvent, process: SysMonitorProcessInfo) => {
-    const pos = clampProcessMenuPosition(event.clientX, event.clientY);
     event.preventDefault();
     event.stopPropagation();
     setSelectedProcessPid(normalizeProcessPid(process.pid));
     const snapshot = data();
     setProcessContextMenu({
-      x: pos.x,
-      y: pos.y,
+      x: event.clientX,
+      y: event.clientY,
       process,
       snapshot: snapshot ? { platform: snapshot.platform, timestampMs: snapshot.timestampMs } : null,
     });

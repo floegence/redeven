@@ -280,6 +280,24 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       </div>
     </div>
   ),
+  SurfaceFloatingLayer: (props: any) => {
+    const { children, layerRef, position, class: className, style, ...rest } = props;
+    return (
+      <div
+        ref={layerRef}
+        class={className}
+        style={{
+          ...(style ?? {}),
+          left: `${position?.x ?? 0}px`,
+          top: `${position?.y ?? 0}px`,
+        }}
+        data-floe-local-interaction-surface="true"
+        {...rest}
+      >
+        {children}
+      </div>
+    );
+  },
   Input: (props: any) => (
     <input
       ref={props.ref}
@@ -1910,6 +1928,41 @@ describe('TerminalPanel', () => {
 
     expect(terminalCoreInstances).toHaveLength(1);
     expect(terminalCoreInstances[0]?.copySelection).toHaveBeenCalledWith('command');
+  });
+
+  it('keeps the workbench terminal context menu inside the local surface host', async () => {
+    terminalSelectionState.text = 'pwd';
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <div data-floe-dialog-surface-host="true">
+        <TerminalPanel variant="workbench" />
+      </div>
+    ), host);
+    await settleTerminalPanel();
+
+    const surfaceHost = host.querySelector('[data-floe-dialog-surface-host="true"]') as HTMLDivElement | null;
+    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
+    expect(surfaceHost).toBeTruthy();
+    expect(terminalSurface).toBeTruthy();
+
+    terminalSurface?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 24,
+      clientY: 32,
+    }));
+    await settleTerminalPanel();
+
+    const menu = surfaceHost?.querySelector('[role="menu"]') as HTMLDivElement | null;
+    const copyButton = Array.from(menu?.querySelectorAll('button') ?? []).find((button) =>
+      button.textContent?.includes('Copy selection')
+    ) as HTMLButtonElement | undefined;
+    expect(menu).toBeTruthy();
+    expect(menu?.getAttribute('data-floe-local-interaction-surface')).toBe('true');
+    expect(copyButton).toBeTruthy();
   });
 
   it('opens the shared file browser from the terminal context menu', async () => {

@@ -46,7 +46,7 @@ import { canOpenDirectoryPathInTerminal, openDirectoryInTerminal } from "../util
 import { replacePickerChildren, sortPickerFolderItems, toPickerFolderItem, toPickerTreeAbsolutePath } from "../utils/directoryPickerTree";
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from "../utils/redevenSurfaceRoles";
 import { REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS } from "../workbench/surface/workbenchWheelInteractive";
-import { FLOATING_CONTEXT_MENU_WIDTH_PX, FloatingContextMenu, estimateFloatingContextMenuHeight, type FloatingContextMenuItem } from "../widgets/FloatingContextMenu";
+import { FloatingContextMenu, type FloatingContextMenuItem } from "../widgets/FloatingContextMenu";
 
 type SpaceStatus = Readonly<{
   code_space_id: string;
@@ -115,21 +115,6 @@ function fmtRelativeTime(ms: number): string {
   } catch {
     return String(ms);
   }
-}
-
-function clampCodespaceContextMenuPosition(x: number, y: number): { x: number; y: number } {
-  if (typeof window === "undefined") return { x, y };
-
-  const margin = 8;
-  const menuWidth = FLOATING_CONTEXT_MENU_WIDTH_PX;
-  const menuHeight = estimateFloatingContextMenuHeight(2);
-  const maxX = Math.max(margin, window.innerWidth - menuWidth - margin);
-  const maxY = Math.max(margin, window.innerHeight - menuHeight - margin);
-
-  return {
-    x: Math.min(Math.max(x, margin), maxX),
-    y: Math.min(Math.max(y, margin), maxY),
-  };
 }
 
 function codespaceOrigin(codeSpaceID: string): string {
@@ -1206,10 +1191,9 @@ export function EnvCodespacesPage() {
   const openCodespaceContextMenu = (event: MouseEvent, space: SpaceStatus) => {
     event.preventDefault();
     event.stopPropagation();
-    const pos = clampCodespaceContextMenuPosition(event.clientX, event.clientY);
     setCodespaceContextMenu({
-      x: pos.x,
-      y: pos.y,
+      x: event.clientX,
+      y: event.clientY,
       space,
     });
   };

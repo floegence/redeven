@@ -93,6 +93,24 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Input: (props: any) => <input value={props.value} onInput={props.onInput} />,
   Tag: (props: any) => <span class={props.class}>{props.children}</span>,
   Tooltip: (props: any) => <>{props.children}</>,
+  SurfaceFloatingLayer: (props: any) => {
+    const { children, layerRef, position, class: className, style, ...rest } = props;
+    return (
+      <div
+        ref={layerRef}
+        class={className}
+        style={{
+          ...(style ?? {}),
+          left: `${position?.x ?? 0}px`,
+          top: `${position?.y ?? 0}px`,
+        }}
+        data-floe-local-interaction-surface="true"
+        {...rest}
+      >
+        {children}
+      </div>
+    );
+  },
 }));
 
 vi.mock('@floegence/floe-webapp-protocol', () => ({
@@ -617,6 +635,36 @@ describe('EnvCodespacesPage', () => {
 
     expect(envContextMocks.openTerminalInDirectory).toHaveBeenCalledTimes(1);
     expect(envContextMocks.openTerminalInDirectory).toHaveBeenCalledWith('/workspace/demo', { preferredName: 'Demo Space' });
+  });
+
+  it('keeps the codespace context menu inside the local surface host', async () => {
+    render(() => (
+      <div data-floe-dialog-surface-host="true">
+        <EnvCodespacesPage />
+      </div>
+    ), host);
+    await flushPage();
+
+    const surfaceHost = host.querySelector('[data-floe-dialog-surface-host="true"]') as HTMLDivElement | null;
+    const card = host.querySelector('[data-testid="codespace-card"]') as HTMLDivElement | null;
+    expect(surfaceHost).toBeTruthy();
+    expect(card).toBeTruthy();
+
+    card?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 40,
+      clientY: 56,
+    }));
+    await flushPage();
+
+    const menu = surfaceHost?.querySelector('[role="menu"]') as HTMLDivElement | null;
+    const askFlowerButton = Array.from(menu?.querySelectorAll('button') ?? []).find((button) =>
+      button.textContent?.includes('Ask Flower')
+    ) as HTMLButtonElement | undefined;
+    expect(menu).toBeTruthy();
+    expect(menu?.getAttribute('data-floe-local-interaction-surface')).toBe('true');
+    expect(askFlowerButton).toBeTruthy();
   });
 
   it('hides Open in Terminal when execute permission is unavailable', async () => {

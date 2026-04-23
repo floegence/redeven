@@ -1,5 +1,6 @@
 import { For, type Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
+import { SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 
 export const FLOATING_CONTEXT_MENU_WIDTH_PX = 180;
@@ -43,14 +44,21 @@ export function estimateFloatingContextMenuHeight(actionCount: number, separator
 }
 
 export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) => (
-  <div
-    ref={props.menuRef}
+  <SurfaceFloatingLayer
+    layerRef={props.menuRef}
+    position={{ x: props.x, y: props.y }}
+    estimatedSize={{
+      width: FLOATING_CONTEXT_MENU_WIDTH_PX,
+      height: estimateFloatingContextMenuHeight(
+        props.items.filter((item) => item.kind === 'action').length,
+        props.items.filter((item) => item.kind === 'separator').length,
+      ),
+    }}
     role="menu"
     class={cn(
-      'fixed z-50 min-w-[180px] py-1 border rounded-lg shadow-lg animate-in fade-in zoom-in-95 duration-100',
+      'min-w-[180px] py-1 border rounded-lg shadow-lg animate-in fade-in zoom-in-95 duration-100',
       redevenSurfaceRoleClass('overlay'),
     )}
-    style={{ left: `${props.x}px`, top: `${props.y}px` }}
     onContextMenu={(event) => event.preventDefault()}
   >
     <For each={props.items}>
@@ -77,5 +85,5 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
         );
       }}
     </For>
-  </div>
+  </SurfaceFloatingLayer>
 );

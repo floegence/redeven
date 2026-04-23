@@ -60,6 +60,24 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   MonitoringChart: () => <div data-testid="chart" />,
+  SurfaceFloatingLayer: (props: any) => {
+    const { children, layerRef, position, class: className, style, ...rest } = props;
+    return (
+      <div
+        ref={layerRef}
+        class={className}
+        style={{
+          ...(style ?? {}),
+          left: `${position?.x ?? 0}px`,
+          top: `${position?.y ?? 0}px`,
+        }}
+        data-floe-local-interaction-surface="true"
+        {...rest}
+      >
+        {children}
+      </div>
+    );
+  },
 }));
 
 vi.mock('@floegence/floe-webapp-protocol', () => ({
@@ -230,6 +248,42 @@ describe('RuntimeMonitorPanel', () => {
     expect(rpcMocks.monitor.killProcess).toHaveBeenCalledWith({ pid: 4242 });
     expect(notificationMocks.success).toHaveBeenCalledWith('Process killed', 'node (PID 4242) was killed.');
     expect(rpcMocks.monitor.getSysMonitor).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the workbench process context menu inside the local surface host', async () => {
+    rpcMocks.monitor.getSysMonitor.mockResolvedValue(
+      makeSnapshot(1, [
+        { pid: 4242, name: 'node', cpuPercent: 87.3, memoryBytes: 268_435_456, username: 'alice' },
+      ]),
+    );
+
+    render(() => (
+      <div data-floe-dialog-surface-host="true">
+        <RuntimeMonitorPanel variant="workbench" />
+      </div>
+    ), host);
+    await flushPanel();
+
+    const surfaceHost = host.querySelector('[data-floe-dialog-surface-host="true"]') as HTMLDivElement | null;
+    const processRow = host.querySelector('tbody tr') as HTMLTableRowElement | null;
+    expect(surfaceHost).toBeTruthy();
+    expect(processRow).toBeTruthy();
+
+    processRow?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 40,
+      clientY: 56,
+    }));
+    await flushPanel();
+
+    const menu = surfaceHost?.querySelector('[role="menu"]') as HTMLDivElement | null;
+    const askFlowerButton = Array.from(menu?.querySelectorAll('button') ?? []).find((button) =>
+      button.textContent?.includes('Ask Flower')
+    ) as HTMLButtonElement | undefined;
+    expect(menu).toBeTruthy();
+    expect(menu?.getAttribute('data-floe-local-interaction-surface')).toBe('true');
+    expect(askFlowerButton).toBeTruthy();
   });
 
   it('shows a persistent selected state when a process row is clicked', async () => {
