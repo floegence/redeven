@@ -24,6 +24,8 @@ import { EnvWorkbenchConversationShell } from './EnvWorkbenchConversationShell';
 import { WorkbenchFilePreviewWidget } from './WorkbenchFilePreviewWidget';
 import { buildWorkbenchFileBrowserStateScope } from './workbenchInstanceState';
 
+const FRONTABLE_WORKBENCH_RENDER_MODE = 'projected_surface';
+
 function WorkbenchBodyNotice(props: {
   title: string;
   description: string;
@@ -184,7 +186,7 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
     defaultSize: { width: 760, height: 560 },
     group: 'workspace',
     singleton: false,
-    renderMode: 'projected_surface',
+    renderMode: FRONTABLE_WORKBENCH_RENDER_MODE,
   },
   {
     type: 'redeven.terminal',
@@ -195,7 +197,7 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
     defaultSize: { width: 840, height: 500 },
     group: 'runtime',
     singleton: false,
-    renderMode: 'projected_surface',
+    renderMode: FRONTABLE_WORKBENCH_RENDER_MODE,
   },
   {
     type: 'redeven.preview',
@@ -206,7 +208,7 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
     defaultSize: { width: 900, height: 620 },
     group: 'workspace',
     singleton: false,
-    renderMode: 'projected_surface',
+    renderMode: FRONTABLE_WORKBENCH_RENDER_MODE,
   },
   {
     type: 'redeven.monitor',
@@ -217,6 +219,7 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
     defaultSize: { width: 760, height: 420 },
     group: 'observability',
     singleton: true,
+    renderMode: FRONTABLE_WORKBENCH_RENDER_MODE,
   },
   {
     type: 'redeven.codespaces',
@@ -227,7 +230,7 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
     defaultSize: { width: 780, height: 520 },
     group: 'workspace',
     singleton: true,
-    renderMode: 'projected_surface',
+    renderMode: FRONTABLE_WORKBENCH_RENDER_MODE,
   },
   {
     type: 'redeven.ports',
@@ -238,6 +241,7 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
     defaultSize: { width: 760, height: 480 },
     group: 'network',
     singleton: true,
+    renderMode: FRONTABLE_WORKBENCH_RENDER_MODE,
   },
   {
     type: 'redeven.ai',
@@ -248,7 +252,7 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
     defaultSize: { width: 980, height: 620 },
     group: 'assistant',
     singleton: true,
-    renderMode: 'projected_surface',
+    renderMode: FRONTABLE_WORKBENCH_RENDER_MODE,
   },
   {
     type: 'redeven.codex',
@@ -259,7 +263,7 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
     defaultSize: { width: 980, height: 620 },
     group: 'assistant',
     singleton: true,
-    renderMode: 'projected_surface',
+    renderMode: FRONTABLE_WORKBENCH_RENDER_MODE,
   },
 ];
 

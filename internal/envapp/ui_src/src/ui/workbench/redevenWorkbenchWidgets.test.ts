@@ -13,21 +13,33 @@ function widgetBlockOf(type: string): string {
 }
 
 function expectProjectedSurface(type: string): void {
-  expect(widgetBlockOf(type)).toMatch(/renderMode:\s*'projected_surface'/);
+  expect(widgetBlockOf(type)).toMatch(/renderMode:\s*FRONTABLE_WORKBENCH_RENDER_MODE/);
+}
+
+function filterBarWidgetTypes(): string[] {
+  const match = source.match(/redevenWorkbenchFilterBarWidgetTypes:[\s\S]*?=\s*\[([\s\S]*?)\];/);
+  expect(match?.[1]).toBeTruthy();
+  return [...match![1].matchAll(/'([^']+)'/g)].map((entry) => entry[1]);
 }
 
 describe('redevenWorkbenchWidgets source contract', () => {
-  it('projects heavy workbench widgets onto the overlay surface', () => {
-    expectProjectedSurface('redeven.files');
-    expectProjectedSurface('redeven.terminal');
-    expectProjectedSurface('redeven.preview');
-    expectProjectedSurface('redeven.codespaces');
-    expectProjectedSurface('redeven.ai');
-    expectProjectedSurface('redeven.codex');
+  it('defines a shared projected render mode for frontable widgets', () => {
+    expect(source).toMatch(/const\s+FRONTABLE_WORKBENCH_RENDER_MODE\s*=\s*'projected_surface'/);
   });
 
-  it('keeps lightweight widgets off the projected path by default', () => {
-    expect(widgetBlockOf('redeven.monitor')).not.toMatch(/renderMode:\s*'projected_surface'/);
-    expect(widgetBlockOf('redeven.ports')).not.toMatch(/renderMode:\s*'projected_surface'/);
+  it('projects every launcher-frontable widget onto the overlay surface', () => {
+    const widgetTypes = filterBarWidgetTypes();
+    expect(widgetTypes).toEqual([
+      'redeven.files',
+      'redeven.terminal',
+      'redeven.monitor',
+      'redeven.codespaces',
+      'redeven.ports',
+      'redeven.ai',
+      'redeven.codex',
+    ]);
+    for (const type of widgetTypes) {
+      expectProjectedSurface(type);
+    }
   });
 });
