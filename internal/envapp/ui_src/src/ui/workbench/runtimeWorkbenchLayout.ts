@@ -8,6 +8,8 @@ import {
 
 import { normalizeWorkbenchTheme } from './workbenchThemeMigration';
 
+export const REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE = 0.45;
+
 export type RuntimeWorkbenchLayoutWidget = Readonly<{
   widget_id: string;
   widget_type: string;
@@ -86,11 +88,9 @@ export type RuntimeWorkbenchTerminalCreateSessionResponse = Readonly<{
 }>;
 
 export type PersistedWorkbenchLocalState = Readonly<{
-  version: 1;
-  viewport: WorkbenchState['viewport'];
+  version: 2;
   locked: boolean;
   filters: Record<string, boolean>;
-  selectedWidgetId: string | null;
   theme: WorkbenchThemeId;
   legacyLayoutMigrated: boolean;
 }>;
@@ -114,17 +114,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function finiteNumber(value: unknown, fallback = 0): number {
   const next = Number(value);
   return Number.isFinite(next) ? next : fallback;
-}
-
-function viewportOrFallback(value: unknown, fallback: WorkbenchState['viewport']): WorkbenchState['viewport'] {
-  if (!isRecord(value)) {
-    return fallback;
-  }
-  return {
-    x: finiteNumber(value.x, fallback.x),
-    y: finiteNumber(value.y, fallback.y),
-    scale: finiteNumber(value.scale, fallback.scale),
-  };
 }
 
 function normalizeRuntimeWorkbenchLayoutWidget(value: unknown): RuntimeWorkbenchLayoutWidget | null {
@@ -323,17 +312,11 @@ export function derivePersistedWorkbenchLocalState(
   legacyLayoutMigrated: boolean,
 ): PersistedWorkbenchLocalState {
   return {
-    version: 1,
-    viewport: {
-      x: finiteNumber(state.viewport?.x, 0),
-      y: finiteNumber(state.viewport?.y, 0),
-      scale: finiteNumber(state.viewport?.scale, 1),
-    },
+    version: 2,
     locked: Boolean(state.locked),
     filters: Object.fromEntries(
       Object.entries(state.filters ?? {}).map(([key, enabled]) => [key, Boolean(enabled)]),
     ),
-    selectedWidgetId: compact(state.selectedWidgetId) || null,
     theme: normalizeWorkbenchTheme(state.theme),
     legacyLayoutMigrated,
   };
@@ -357,11 +340,9 @@ export function sanitizePersistedWorkbenchLocalState(
     };
   }
   return {
-    version: 1,
-    viewport: viewportOrFallback(value.viewport, fallback.viewport),
+    version: 2,
     locked: typeof value.locked === 'boolean' ? value.locked : fallback.locked,
     filters: normalizeFilters(value.filters, defaultState.filters, widgetDefinitions),
-    selectedWidgetId: compact(value.selectedWidgetId) || null,
     theme: normalizeWorkbenchTheme(value.theme, fallback.theme),
     legacyLayoutMigrated: typeof value.legacyLayoutMigrated === 'boolean' ? value.legacyLayoutMigrated : fallback.legacyLayoutMigrated,
   };
@@ -373,13 +354,9 @@ export function samePersistedWorkbenchLocalState(
 ): boolean {
   if (
     left.locked !== right.locked
-    || left.selectedWidgetId !== right.selectedWidgetId
     || left.theme !== right.theme
     || left.legacyLayoutMigrated !== right.legacyLayoutMigrated
   ) {
-    return false;
-  }
-  if (left.viewport.x !== right.viewport.x || left.viewport.y !== right.viewport.y || left.viewport.scale !== right.viewport.scale) {
     return false;
   }
   const leftFilters = Object.entries(left.filters);
@@ -388,6 +365,69 @@ export function samePersistedWorkbenchLocalState(
     return false;
   }
   return leftFilters.every(([key, value]) => right.filters[key] === value);
+}
+
+export function createWorkbenchOverviewViewport(args: Readonly<{
+  widgets: readonly WorkbenchState['widgets'][number][];
+  frameWidth: number;
+  frameHeight: number;
+  fallbackViewport?: WorkbenchState['viewport'];
+}>): WorkbenchState['viewport'] {
+  const frameWidth = finiteNumber(args.frameWidth, 0);
+  const frameHeight = finiteNumber(args.frameHeight, 0);
+  const fallbackViewport = args.fallbackViewport ?? {
+    x: 0,
+    y: 0,
+    scale: REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE,
+  };
+
+  if (frameWidth <= 0 || frameHeight <= 0) {
+    return {
+      x: finiteNumber(fallbackViewport.x, 0),
+      y: finiteNumber(fallbackViewport.y, 0),
+      scale: REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE,
+    };
+  }
+
+  if (!Array.isArray(args.widgets) || args.widgets.length <= 0) {
+    return {
+      x: frameWidth / 2,
+      y: frameHeight / 2,
+      scale: REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE,
+    };
+  }
+
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+
+  for (const widget of args.widgets) {
+    const left = finiteNumber(widget.x, 0);
+    const top = finiteNumber(widget.y, 0);
+    const right = left + Math.max(0, finiteNumber(widget.width, 0));
+    const bottom = top + Math.max(0, finiteNumber(widget.height, 0));
+    minX = Math.min(minX, left);
+    minY = Math.min(minY, top);
+    maxX = Math.max(maxX, right);
+    maxY = Math.max(maxY, bottom);
+  }
+
+  if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
+    return {
+      x: frameWidth / 2,
+      y: frameHeight / 2,
+      scale: REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE,
+    };
+  }
+
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+  return {
+    x: frameWidth / 2 - centerX * REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE,
+    y: frameHeight / 2 - centerY * REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE,
+    scale: REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE,
+  };
 }
 
 export function runtimeWorkbenchLayoutIsEmpty(snapshot: RuntimeWorkbenchLayoutSnapshot): boolean {
@@ -559,7 +599,7 @@ export function projectWorkbenchStateFromRuntimeLayout(args: Readonly<{
     {
       ...defaultState,
       widgets,
-      viewport: args.localState.viewport,
+      viewport: args.existingState?.viewport ?? defaultState.viewport,
       locked: args.localState.locked,
       filters: {
         ...defaultState.filters,

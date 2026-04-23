@@ -46,6 +46,7 @@ import {
   type AskFlowerComposerAnchor,
   type EnvDeckSurfaceActivationRequest,
   type EnvSettingsSection,
+  type EnvWorkbenchOverviewEntryRequest,
   type EnvWorkbenchFilePreviewActivationRequest,
   type EnvWorkbenchSurfaceActivationRequest,
   type OpenTerminalInDirectoryRequest,
@@ -529,6 +530,8 @@ export function EnvAppShell() {
   const [deckSurfaceActivation, setDeckSurfaceActivation] = createSignal<EnvDeckSurfaceActivationRequest | null>(null);
   const [workbenchSurfaceActivationSeq, setWorkbenchSurfaceActivationSeq] = createSignal(0);
   const [workbenchSurfaceActivation, setWorkbenchSurfaceActivation] = createSignal<EnvWorkbenchSurfaceActivationRequest | null>(null);
+  const [workbenchOverviewEntrySeq, setWorkbenchOverviewEntrySeq] = createSignal(0);
+  const [workbenchOverviewEntry, setWorkbenchOverviewEntry] = createSignal<EnvWorkbenchOverviewEntryRequest | null>(null);
   const [workbenchFilePreviewActivationSeq, setWorkbenchFilePreviewActivationSeq] = createSignal(0);
   const [workbenchFilePreviewActivation, setWorkbenchFilePreviewActivation] = createSignal<EnvWorkbenchFilePreviewActivationRequest | null>(null);
   const [filesMobileSidebarOpen, setFilesMobileSidebarOpen] = createSignal(false);
@@ -638,6 +641,24 @@ export function EnvAppShell() {
     if (!normalizedRequestId) return;
 
     setWorkbenchSurfaceActivation((current) => {
+      if (!current) return current;
+      return current.requestId === normalizedRequestId ? null : current;
+    });
+  };
+
+  const requestWorkbenchOverviewEntry = () => {
+    setWorkbenchOverviewEntry({
+      requestId: createClientId('workbench-overview'),
+      reason: 'mode_switch',
+    });
+    setWorkbenchOverviewEntrySeq((n) => n + 1);
+  };
+
+  const consumeWorkbenchOverviewEntry = (requestId: string) => {
+    const normalizedRequestId = String(requestId ?? '').trim();
+    if (!normalizedRequestId) return;
+
+    setWorkbenchOverviewEntry((current) => {
       if (!current) return current;
       return current.requestId === normalizedRequestId ? null : current;
     });
@@ -1610,6 +1631,9 @@ export function EnvAppShell() {
       setLastRequestedSurface(initialSurface);
       layout.setSidebarActiveTab(initialSurface, { openSidebar: false });
       initialActivitySurface = initialSurface;
+      if (!layout.isMobile() && preferredDesktopViewMode === 'workbench') {
+        requestWorkbenchOverviewEntry();
+      }
       setPersistReady(true);
 
       if (accessLocked()) {
@@ -1826,13 +1850,21 @@ export function EnvAppShell() {
       return;
     }
 
-    setViewMode('workbench', { surfaceId, focusSurface: false });
+    setViewMode('workbench', { surfaceId, focusSurface: false, requestWorkbenchOverview: false });
     queueMicrotask(() => {
       openSurface(surfaceId, options);
     });
   };
 
-  const setViewMode = (mode: EnvViewMode, options?: { surfaceId?: EnvSurfaceId; focusSurface?: boolean }) => {
+  const setViewMode = (
+    mode: EnvViewMode,
+    options?: {
+      surfaceId?: EnvSurfaceId;
+      focusSurface?: boolean;
+      requestWorkbenchOverview?: boolean;
+    },
+  ) => {
+    const previousMode = viewMode();
     const requestedMode = layout.isMobile() ? 'activity' : mode;
     if (!layout.isMobile()) {
       setDesktopViewMode(requestedMode);
@@ -1850,8 +1882,12 @@ export function EnvAppShell() {
       activateDeckSurface(targetSurface, { reason: 'mode_restore', focus: true, ensureVisible: true });
       return;
     }
-    if (requestedMode === 'workbench' && (options?.focusSurface ?? true)) {
-      activateWorkbenchSurface(targetSurface, { reason: 'mode_restore', focus: true, ensureVisible: true });
+    if (
+      requestedMode === 'workbench'
+      && previousMode !== 'workbench'
+      && (options?.requestWorkbenchOverview ?? true)
+    ) {
+      requestWorkbenchOverviewEntry();
     }
   };
 
@@ -2696,6 +2732,9 @@ export function EnvAppShell() {
         workbenchSurfaceActivationSeq,
         workbenchSurfaceActivation,
         consumeWorkbenchSurfaceActivation,
+        workbenchOverviewEntrySeq,
+        workbenchOverviewEntry,
+        consumeWorkbenchOverviewEntry,
         workbenchFilePreviewActivationSeq,
         workbenchFilePreviewActivation,
         consumeWorkbenchFilePreviewActivation,

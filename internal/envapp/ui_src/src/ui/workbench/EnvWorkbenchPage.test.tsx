@@ -81,6 +81,7 @@ const surfaceApiMocks = vi.hoisted(() => ({
   focusWidget: vi.fn(),
   fitWidget: vi.fn(),
   unfocusWidget: vi.fn(),
+  enterOverview: vi.fn(),
   clearSelection: vi.fn(),
   findWidgetByType: vi.fn(() => null),
   findWidgetById: vi.fn(() => null),
@@ -97,6 +98,7 @@ const stableSurfaceApi = vi.hoisted(() => ({
   focusWidget: (widget: any, options?: any) => surfaceApiMocks.focusWidget(widget, options),
   fitWidget: (widget: any) => surfaceApiMocks.fitWidget(widget),
   unfocusWidget: (widget: any) => surfaceApiMocks.unfocusWidget(widget),
+  enterOverview: () => surfaceApiMocks.enterOverview(),
   clearSelection: () => surfaceApiMocks.clearSelection(),
   findWidgetByType: (type: any) => (surfaceApiMocks.findWidgetByType as any)(type),
   findWidgetById: (widgetId: any) => (surfaceApiMocks.findWidgetById as any)(widgetId),
@@ -104,6 +106,7 @@ const stableSurfaceApi = vi.hoisted(() => ({
 }));
 
 const contextMocks = vi.hoisted(() => ({
+  consumeWorkbenchOverviewEntry: vi.fn(),
   consumeWorkbenchSurfaceActivation: vi.fn(),
   consumeWorkbenchFilePreviewActivation: vi.fn(),
 }));
@@ -121,10 +124,13 @@ const contextProbeState = vi.hoisted(() => ({
 }));
 
 const [envId, setEnvId] = createSignal('env-123');
+const [workbenchOverviewEntrySeq, setWorkbenchOverviewEntrySeq] = createSignal(0);
+const [workbenchOverviewEntry, setWorkbenchOverviewEntry] = createSignal<any>(null);
 const [workbenchSurfaceActivationSeq, setWorkbenchSurfaceActivationSeq] = createSignal(0);
 const [workbenchSurfaceActivation, setWorkbenchSurfaceActivation] = createSignal<any>(null);
 const [workbenchFilePreviewActivationSeq, setWorkbenchFilePreviewActivationSeq] = createSignal(0);
 const [workbenchFilePreviewActivation, setWorkbenchFilePreviewActivation] = createSignal<any>(null);
+const testDisposers: Array<() => void> = [];
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -142,6 +148,11 @@ async function flushMicrotasks() {
   await Promise.resolve();
 }
 
+function mount(ui: () => any, host: HTMLElement) {
+  const dispose = render(ui, host);
+  testDisposers.push(dispose);
+}
+
 vi.mock('@floegence/floe-webapp-core/loading', () => ({
   LoadingOverlay: () => null,
 }));
@@ -151,10 +162,18 @@ vi.mock('../pages/EnvContext', () => ({
     env_id: envId,
     connectionOverlayVisible: () => false,
     connectionOverlayMessage: () => 'Connecting to runtime...',
+    workbenchOverviewEntrySeq,
+    workbenchOverviewEntry,
     workbenchSurfaceActivationSeq,
     workbenchSurfaceActivation,
     workbenchFilePreviewActivationSeq,
     workbenchFilePreviewActivation,
+    consumeWorkbenchOverviewEntry: (requestId: string) => {
+      contextMocks.consumeWorkbenchOverviewEntry(requestId);
+      setWorkbenchOverviewEntry((current) => (
+        current?.requestId === requestId ? null : current
+      ));
+    },
     consumeWorkbenchSurfaceActivation: (requestId: string) => {
       contextMocks.consumeWorkbenchSurfaceActivation(requestId);
       setWorkbenchSurfaceActivation((current) => (
@@ -316,6 +335,8 @@ describe('EnvWorkbenchPage', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     setEnvId('env-123');
+    setWorkbenchOverviewEntry(null);
+    setWorkbenchOverviewEntrySeq(0);
     setWorkbenchSurfaceActivation(null);
     setWorkbenchSurfaceActivationSeq(0);
     setWorkbenchFilePreviewActivation(null);
@@ -362,6 +383,7 @@ describe('EnvWorkbenchPage', () => {
     surfaceApiMocks.ensureWidget.mockReset();
     surfaceApiMocks.createWidget.mockReset();
     surfaceApiMocks.focusWidget.mockReset();
+    surfaceApiMocks.enterOverview.mockReset();
     surfaceApiMocks.findWidgetByType.mockReset();
     surfaceApiMocks.findWidgetByType.mockReturnValue(null);
     surfaceApiMocks.findWidgetById.mockReset();
@@ -371,6 +393,7 @@ describe('EnvWorkbenchPage', () => {
     surfaceApiMocks.lastStateAccessor = null;
     surfaceApiMocks.lastSetState = null;
     surfaceApiMocks.lastSurfaceProps = null;
+    contextMocks.consumeWorkbenchOverviewEntry.mockReset();
     contextMocks.consumeWorkbenchSurfaceActivation.mockReset();
     contextMocks.consumeWorkbenchFilePreviewActivation.mockReset();
     widgetBodyMocks.renderFilesBody = null;
@@ -382,6 +405,10 @@ describe('EnvWorkbenchPage', () => {
   });
 
   afterEach(() => {
+    while (testDisposers.length > 0) {
+      const dispose = testDisposers.pop();
+      dispose?.();
+    }
     document.body.innerHTML = '';
     vi.runOnlyPendingTimers();
     vi.useRealTimers();
@@ -440,7 +467,7 @@ describe('EnvWorkbenchPage', () => {
       return null;
     }) as any);
 
-    render(() => <EnvWorkbenchPage />, host);
+    mount(() => <EnvWorkbenchPage />, host);
     await flushMicrotasks();
 
     const surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement;
@@ -454,8 +481,7 @@ describe('EnvWorkbenchPage', () => {
     expect(storageMocks.writeUIStorageJSON).toHaveBeenCalledWith(
       'workbench:env-123:local_state',
       expect.objectContaining({
-        version: 1,
-        viewport: { x: 180, y: 120, scale: 1.25 },
+        version: 2,
         locked: true,
         theme: 'mica',
       }),
@@ -473,7 +499,7 @@ describe('EnvWorkbenchPage', () => {
       return null;
     }) as any);
 
-    render(() => <EnvWorkbenchPage />, host);
+    mount(() => <EnvWorkbenchPage />, host);
     await flushMicrotasks();
 
     expect(surfaceApiMocks.lastStateAccessor().theme).toBe('midnight');
@@ -492,7 +518,7 @@ describe('EnvWorkbenchPage', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <EnvWorkbenchPage />, host);
+    mount(() => <EnvWorkbenchPage />, host);
     await flushMicrotasks();
 
     expect(surfaceApiMocks.lastSetState).toBeTypeOf('function');
@@ -501,6 +527,75 @@ describe('EnvWorkbenchPage', () => {
       expect.objectContaining({ type: 'redeven.files', singleton: false }),
       expect.objectContaining({ type: 'redeven.preview', singleton: false }),
     ]));
+  });
+
+  it('enters overview mode when the shell issues a workbench overview request', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 100,
+      widgets: [
+        {
+          widget_id: 'widget-files-1',
+          widget_type: 'redeven.files',
+          x: 320,
+          y: 180,
+          width: 760,
+          height: 560,
+          z_index: 1,
+          created_at_unix_ms: 123,
+        },
+      ],
+      widget_states: [],
+    });
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    setWorkbenchOverviewEntry({
+      requestId: 'overview-1',
+      reason: 'mode_switch',
+    });
+    setWorkbenchOverviewEntrySeq((value) => value + 1);
+    await flushMicrotasks();
+
+    expect(surfaceApiMocks.enterOverview).toHaveBeenCalledTimes(1);
+    expect(contextMocks.consumeWorkbenchOverviewEntry).toHaveBeenCalledWith('overview-1');
+  });
+
+  it('waits for runtime layout readiness before entering overview mode', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const snapshotLoad = deferred<any>();
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockReturnValue(snapshotLoad.promise);
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    setWorkbenchOverviewEntry({
+      requestId: 'overview-pending',
+      reason: 'mode_switch',
+    });
+    setWorkbenchOverviewEntrySeq((value) => value + 1);
+    await flushMicrotasks();
+
+    expect(surfaceApiMocks.enterOverview).not.toHaveBeenCalled();
+
+    snapshotLoad.resolve({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 100,
+      widgets: [],
+      widget_states: [],
+    });
+    await flushMicrotasks();
+
+    expect(surfaceApiMocks.enterOverview).toHaveBeenCalledTimes(1);
+    expect(contextMocks.consumeWorkbenchOverviewEntry).toHaveBeenCalledWith('overview-pending');
   });
 
   it('applies remote layout events without moving the local viewport', async () => {
@@ -544,7 +639,7 @@ describe('EnvWorkbenchPage', () => {
       return null;
     }) as any);
 
-    render(() => <EnvWorkbenchPage />, host);
+    mount(() => <EnvWorkbenchPage />, host);
     await flushMicrotasks();
 
     layoutApiMocks.lastStreamArgs.onEvent({
@@ -603,7 +698,7 @@ describe('EnvWorkbenchPage', () => {
     const putDeferred = deferred<any>();
     layoutApiMocks.putWorkbenchLayout.mockReturnValue(putDeferred.promise);
 
-    render(() => <EnvWorkbenchPage />, host);
+    mount(() => <EnvWorkbenchPage />, host);
     await flushMicrotasks();
 
     surfaceApiMocks.lastSetState((previous: any) => ({
@@ -740,7 +835,7 @@ describe('EnvWorkbenchPage', () => {
       return null;
     }) as any);
 
-    render(() => <EnvWorkbenchPage />, host);
+    mount(() => <EnvWorkbenchPage />, host);
     await flushMicrotasks();
 
     surfaceApiMocks.lastSetState((previous: any) => ({
@@ -816,7 +911,7 @@ describe('EnvWorkbenchPage', () => {
       widget_states: [],
     });
 
-    render(() => <EnvWorkbenchPage />, host);
+    mount(() => <EnvWorkbenchPage />, host);
     await flushMicrotasks();
 
     surfaceApiMocks.lastSurfaceProps.onLayoutInteractionStart();
@@ -906,7 +1001,7 @@ describe('EnvWorkbenchPage', () => {
       );
     };
 
-    render(() => <EnvWorkbenchPage />, host);
+    mount(() => <EnvWorkbenchPage />, host);
     await flushMicrotasks();
 
     expect(contextProbeState.fileOpenRequest).toMatchObject({
@@ -984,7 +1079,7 @@ describe('EnvWorkbenchPage', () => {
       return null;
     };
 
-    render(() => <EnvWorkbenchPage />, host);
+    mount(() => <EnvWorkbenchPage />, host);
     await flushMicrotasks();
 
     expect(contextProbeState.terminalPanelState).toEqual({
@@ -1062,7 +1157,7 @@ describe('EnvWorkbenchPage', () => {
       return null;
     };
 
-    render(() => <EnvWorkbenchPage />, host);
+    mount(() => <EnvWorkbenchPage />, host);
     await flushMicrotasks();
 
     expect(contextProbeState.previewItem).toMatchObject({
@@ -1154,7 +1249,7 @@ describe('EnvWorkbenchPage', () => {
     surfaceApiMocks.createWidget.mockReturnValue(existingWidget as any);
     surfaceApiMocks.findWidgetById.mockReturnValue(existingWidget as any);
 
-    render(() => <EnvWorkbenchPage />, host);
+    mount(() => <EnvWorkbenchPage />, host);
     await flushMicrotasks();
 
     setWorkbenchFilePreviewActivation({

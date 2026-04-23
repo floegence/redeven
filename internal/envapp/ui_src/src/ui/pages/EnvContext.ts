@@ -32,6 +32,7 @@ export type AskFlowerComposerAnchor = {
 export type SetEnvViewModeOptions = {
   surfaceId?: EnvSurfaceId;
   focusSurface?: boolean;
+  requestWorkbenchOverview?: boolean;
 };
 
 export type EnvDeckSurfaceActivationRequest = {
@@ -63,6 +64,11 @@ export type EnvWorkbenchFilePreviewActivationRequest = {
   openStrategy?: EnvWorkbenchSurfaceOpenStrategy;
 };
 
+export type EnvWorkbenchOverviewEntryRequest = {
+  requestId: string;
+  reason: 'mode_switch';
+};
+
 export type OpenTerminalInDirectoryRequest = {
   requestId: string;
   workingDir: string;
@@ -92,6 +98,9 @@ export type EnvContextValue = {
   workbenchSurfaceActivationSeq: () => number;
   workbenchSurfaceActivation: () => EnvWorkbenchSurfaceActivationRequest | null;
   consumeWorkbenchSurfaceActivation: (requestId: string) => void;
+  workbenchOverviewEntrySeq: () => number;
+  workbenchOverviewEntry: () => EnvWorkbenchOverviewEntryRequest | null;
+  consumeWorkbenchOverviewEntry: (requestId: string) => void;
   workbenchFilePreviewActivationSeq: () => number;
   workbenchFilePreviewActivation: () => EnvWorkbenchFilePreviewActivationRequest | null;
   consumeWorkbenchFilePreviewActivation: (requestId: string) => void;

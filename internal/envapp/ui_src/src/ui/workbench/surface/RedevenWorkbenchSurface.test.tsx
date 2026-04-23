@@ -51,7 +51,30 @@ vi.mock('@floegence/floe-webapp-core/workbench', () => ({
       findWidgetById: upstreamApiMocks.findWidgetById,
       updateWidgetTitle: upstreamApiMocks.updateWidgetTitle,
     });
-    return <div data-testid="mock-workbench-surface" />;
+    return (
+      <div data-testid="mock-workbench-surface">
+        <div
+          data-floe-workbench-canvas-frame="true"
+          ref={(el) => {
+            if (!el) return;
+            Object.defineProperty(el, 'getBoundingClientRect', {
+              configurable: true,
+              value: () => ({
+                left: 0,
+                top: 0,
+                right: 960,
+                bottom: 640,
+                width: 960,
+                height: 640,
+                x: 0,
+                y: 0,
+                toJSON: () => undefined,
+              }),
+            });
+          }}
+        />
+      </div>
+    );
   },
 }));
 
@@ -157,5 +180,55 @@ describe('RedevenWorkbenchSurface', () => {
       'widget-files-1',
       'README.md'
     );
+  });
+
+  it('exposes a semantic overview entry api that clears selection and resets the viewport', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    let currentState = createWorkbenchState();
+    const setState = vi.fn((updater: (prev: any) => any) => {
+      currentState = updater(currentState);
+    });
+    let capturedApi: RedevenWorkbenchSurfaceApi | null = null;
+
+    render(() => (
+      <RedevenWorkbenchSurface
+        state={() => currentState}
+        setState={setState}
+        onApiReady={(api) => {
+          capturedApi = api;
+        }}
+      />
+    ), host);
+
+    currentState = {
+      ...currentState,
+      widgets: [
+        {
+          id: 'widget-files-1',
+          type: 'redeven.files',
+          title: 'Files',
+          x: 100,
+          y: 80,
+          width: 300,
+          height: 200,
+          z_index: 1,
+          created_at_unix_ms: 1,
+        },
+      ],
+      selectedWidgetId: 'widget-files-1',
+    };
+
+    capturedApi!.enterOverview();
+
+    expect(upstreamApiMocks.clearSelection).toHaveBeenCalledTimes(1);
+    expect(setState).toHaveBeenCalledTimes(1);
+    expect(currentState.selectedWidgetId).toBeNull();
+    expect(currentState.viewport).toEqual({
+      x: 367.5,
+      y: 239,
+      scale: 0.45,
+    });
   });
 });

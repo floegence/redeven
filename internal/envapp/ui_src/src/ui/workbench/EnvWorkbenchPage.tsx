@@ -844,6 +844,19 @@ export function EnvWorkbenchPage() {
   });
 
   createEffect(() => {
+    env.workbenchOverviewEntrySeq();
+    const request = env.workbenchOverviewEntry();
+    const requestId = compact(request?.requestId);
+    const api = surfaceApi();
+    if (!requestId || !request || !api || !runtimeLayoutReady()) {
+      return;
+    }
+
+    api.enterOverview();
+    env.consumeWorkbenchOverviewEntry(requestId);
+  });
+
+  createEffect(() => {
     env.workbenchSurfaceActivationSeq();
     const request = env.workbenchSurfaceActivation();
     const requestId = String(request?.requestId ?? '').trim();

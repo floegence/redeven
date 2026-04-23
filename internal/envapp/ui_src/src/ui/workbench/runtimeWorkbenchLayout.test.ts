@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildWorkbenchLocalStateStorageKey,
+  createWorkbenchOverviewViewport,
   derivePersistedWorkbenchLocalState,
   extractRuntimeWorkbenchLayoutFromWorkbenchState,
   normalizeRuntimeWorkbenchLayoutSnapshot,
@@ -110,7 +111,7 @@ describe('runtimeWorkbenchLayout', () => {
     });
   });
 
-  it('prefers the live selected widget over a stale persisted selection', () => {
+  it('keeps the live selected widget when projecting a remote scene', () => {
     const existingState = {
       version: 1,
       widgets: [
@@ -146,10 +147,7 @@ describe('runtimeWorkbenchLayout', () => {
       selectedWidgetId: 'widget-terminal-1',
       theme: 'default',
     };
-    const localState = {
-      ...derivePersistedWorkbenchLocalState(existingState as any, true),
-      selectedWidgetId: 'widget-files-1',
-    };
+    const localState = derivePersistedWorkbenchLocalState(existingState as any, true);
 
     const projected = projectWorkbenchStateFromRuntimeLayout({
       snapshot: {
@@ -213,10 +211,7 @@ describe('runtimeWorkbenchLayout', () => {
       selectedWidgetId: null,
       theme: 'default',
     };
-    const localState = {
-      ...derivePersistedWorkbenchLocalState(existingState as any, true),
-      selectedWidgetId: 'widget-files-1',
-    };
+    const localState = derivePersistedWorkbenchLocalState(existingState as any, true);
 
     const projected = projectWorkbenchStateFromRuntimeLayout({
       snapshot: {
@@ -481,16 +476,87 @@ describe('runtimeWorkbenchLayout', () => {
     }, legacyState as any, widgetDefinitions as any);
 
     expect(sanitized).toEqual({
+      version: 2,
+      locked: true,
+      filters: {
+        'redeven.files': false,
+        'redeven.terminal': true,
+      },
+      theme: 'default',
+      legacyLayoutMigrated: true,
+    });
+  });
+
+  it('drops viewport and selection from the persisted local-state contract', () => {
+    const localState = derivePersistedWorkbenchLocalState({
       version: 1,
-      viewport: { x: 200, y: 140, scale: 1.3 },
+      widgets: [],
+      viewport: { x: 180, y: 120, scale: 1.25 },
       locked: true,
       filters: {
         'redeven.files': false,
         'redeven.terminal': true,
       },
       selectedWidgetId: 'widget-files-1',
-      theme: 'default',
+      theme: 'mica',
+    } as any, true);
+
+    expect(localState).toEqual({
+      version: 2,
+      locked: true,
+      filters: {
+        'redeven.files': false,
+        'redeven.terminal': true,
+      },
+      theme: 'mica',
       legacyLayoutMigrated: true,
+    });
+  });
+
+  it('builds an overview viewport around the scene center at minimum scale', () => {
+    const viewport = createWorkbenchOverviewViewport({
+      widgets: [
+        {
+          id: 'widget-files-1',
+          type: 'redeven.files',
+          title: 'Files',
+          x: 100,
+          y: 80,
+          width: 300,
+          height: 200,
+          z_index: 1,
+          created_at_unix_ms: 1,
+        },
+        {
+          id: 'widget-terminal-1',
+          type: 'redeven.terminal',
+          title: 'Terminal',
+          x: 700,
+          y: 420,
+          width: 400,
+          height: 240,
+          z_index: 2,
+          created_at_unix_ms: 2,
+        },
+      ] as any,
+      frameWidth: 1200,
+      frameHeight: 800,
+    });
+
+    expect(viewport.scale).toBe(0.45);
+    expect(viewport.x).toBe(330);
+    expect(viewport.y).toBe(233.5);
+  });
+
+  it('centers the empty scene at minimum scale', () => {
+    expect(createWorkbenchOverviewViewport({
+      widgets: [],
+      frameWidth: 1200,
+      frameHeight: 800,
+    })).toEqual({
+      x: 600,
+      y: 400,
+      scale: 0.45,
     });
   });
 
