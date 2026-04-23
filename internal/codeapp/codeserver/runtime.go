@@ -907,16 +907,14 @@ func detectRuntimeCandidate(ctx context.Context, candidate binaryCandidate) runt
 		detection.present = true
 	}
 
-	if err := probeRuntimeBinary(ctx, path); err != nil {
+	version, err := probeRuntimeBinaryVersion(ctx, path)
+	if err != nil {
 		detection.state = RuntimeDetectionUnusable
 		detection.errorCode = "binary_unusable"
 		detection.errorMessage = fmt.Sprintf("%s is not usable: %v", path, err)
 		return detection
 	}
-	version, err := probeRuntimeBinaryVersion(ctx, path)
-	if err == nil {
-		detection.version = strings.TrimSpace(version)
-	}
+	detection.version = strings.TrimSpace(version)
 	detection.state = RuntimeDetectionReady
 	detection.present = true
 	return detection
