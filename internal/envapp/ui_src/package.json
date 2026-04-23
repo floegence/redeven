@@ -39,7 +39,8 @@
     "minimatch@^3.0.0": "^3.1.4",
     "minimatch@^5.0.0": "^5.1.8",
     "picomatch": "^4.0.4",
-    "rollup": "^4.59.0"
+    "rollup": "^4.59.0",
+    "uuid": "^14.0.0"
   },
   "pnpm": {
     "overrides": {
@@ -50,7 +51,8 @@
       "minimatch@^3.0.0": "^3.1.4",
       "minimatch@^5.0.0": "^5.1.8",
       "picomatch": "^4.0.4",
-      "rollup": "^4.59.0"
+      "rollup": "^4.59.0",
+      "uuid": "^14.0.0"
     },
     "onlyBuiltDependencies": [
       "esbuild"
