@@ -188,6 +188,231 @@ describe('runtimeWorkbenchLayout', () => {
     expect(projected.selectedWidgetId).toBe('widget-terminal-1');
   });
 
+  it('does not restore persisted selection when no live widget is selected', () => {
+    const existingState = {
+      version: 1,
+      widgets: [
+        {
+          id: 'widget-files-1',
+          type: 'redeven.files',
+          title: 'Files',
+          x: 20,
+          y: 20,
+          width: 720,
+          height: 520,
+          z_index: 1,
+          created_at_unix_ms: 100,
+        },
+      ],
+      viewport: { x: 80, y: 60, scale: 1 },
+      locked: false,
+      filters: {
+        'redeven.files': true,
+        'redeven.terminal': true,
+      },
+      selectedWidgetId: null,
+      theme: 'default',
+    };
+    const localState = {
+      ...derivePersistedWorkbenchLocalState(existingState as any, true),
+      selectedWidgetId: 'widget-files-1',
+    };
+
+    const projected = projectWorkbenchStateFromRuntimeLayout({
+      snapshot: {
+        seq: 5,
+        revision: 3,
+        updated_at_unix_ms: 300,
+        widgets: [
+          {
+            widget_id: 'widget-files-1',
+            widget_type: 'redeven.files',
+            x: 20,
+            y: 20,
+            width: 720,
+            height: 520,
+            z_index: 1,
+            created_at_unix_ms: 100,
+          },
+        ],
+        widget_states: [],
+      },
+      localState,
+      existingState: existingState as any,
+      widgetDefinitions: widgetDefinitions as any,
+    });
+
+    expect(projected.selectedWidgetId).toBeNull();
+  });
+
+  it('keeps existing widget order stable when runtime z-index order changes', () => {
+    const existingState = {
+      version: 1,
+      widgets: [
+        {
+          id: 'widget-files-1',
+          type: 'redeven.files',
+          title: 'Files · repo',
+          x: 20,
+          y: 20,
+          width: 720,
+          height: 520,
+          z_index: 1,
+          created_at_unix_ms: 100,
+        },
+        {
+          id: 'widget-terminal-1',
+          type: 'redeven.terminal',
+          title: 'Terminal · api',
+          x: 80,
+          y: 80,
+          width: 840,
+          height: 500,
+          z_index: 2,
+          created_at_unix_ms: 101,
+        },
+      ],
+      viewport: { x: 80, y: 60, scale: 1 },
+      locked: false,
+      filters: {
+        'redeven.files': true,
+        'redeven.terminal': true,
+      },
+      selectedWidgetId: 'widget-files-1',
+      theme: 'default',
+    };
+    const localState = derivePersistedWorkbenchLocalState(existingState as any, true);
+
+    const projected = projectWorkbenchStateFromRuntimeLayout({
+      snapshot: {
+        seq: 6,
+        revision: 4,
+        updated_at_unix_ms: 400,
+        widgets: [
+          {
+            widget_id: 'widget-terminal-1',
+            widget_type: 'redeven.terminal',
+            x: 88,
+            y: 96,
+            width: 860,
+            height: 510,
+            z_index: 1,
+            created_at_unix_ms: 101,
+          },
+          {
+            widget_id: 'widget-files-1',
+            widget_type: 'redeven.files',
+            x: 30,
+            y: 42,
+            width: 740,
+            height: 530,
+            z_index: 9,
+            created_at_unix_ms: 100,
+          },
+        ],
+        widget_states: [],
+      },
+      localState,
+      existingState: existingState as any,
+      widgetDefinitions: widgetDefinitions as any,
+    });
+
+    expect(projected.widgets.map((widget) => widget.id)).toEqual([
+      'widget-files-1',
+      'widget-terminal-1',
+    ]);
+    expect(projected.widgets[0]).toMatchObject({
+      id: 'widget-files-1',
+      title: 'Files · repo',
+      x: 30,
+      y: 42,
+      width: 740,
+      height: 530,
+      z_index: 9,
+    });
+    expect(projected.widgets[1]).toMatchObject({
+      id: 'widget-terminal-1',
+      title: 'Terminal · api',
+      x: 88,
+      y: 96,
+      width: 860,
+      height: 510,
+      z_index: 1,
+    });
+  });
+
+  it('appends new runtime widgets after the stable live widget order', () => {
+    const existingState = {
+      version: 1,
+      widgets: [
+        {
+          id: 'widget-files-1',
+          type: 'redeven.files',
+          title: 'Files',
+          x: 20,
+          y: 20,
+          width: 720,
+          height: 520,
+          z_index: 1,
+          created_at_unix_ms: 100,
+        },
+      ],
+      viewport: { x: 80, y: 60, scale: 1 },
+      locked: false,
+      filters: {
+        'redeven.files': true,
+        'redeven.terminal': true,
+      },
+      selectedWidgetId: null,
+      theme: 'default',
+    };
+    const localState = derivePersistedWorkbenchLocalState(existingState as any, true);
+
+    const projected = projectWorkbenchStateFromRuntimeLayout({
+      snapshot: {
+        seq: 7,
+        revision: 5,
+        updated_at_unix_ms: 500,
+        widgets: [
+          {
+            widget_id: 'widget-terminal-1',
+            widget_type: 'redeven.terminal',
+            x: 80,
+            y: 80,
+            width: 840,
+            height: 500,
+            z_index: 1,
+            created_at_unix_ms: 101,
+          },
+          {
+            widget_id: 'widget-files-1',
+            widget_type: 'redeven.files',
+            x: 20,
+            y: 20,
+            width: 720,
+            height: 520,
+            z_index: 2,
+            created_at_unix_ms: 100,
+          },
+        ],
+        widget_states: [],
+      },
+      localState,
+      existingState: existingState as any,
+      widgetDefinitions: widgetDefinitions as any,
+    });
+
+    expect(projected.widgets.map((widget) => widget.id)).toEqual([
+      'widget-files-1',
+      'widget-terminal-1',
+    ]);
+    expect(projected.widgets[1]).toMatchObject({
+      id: 'widget-terminal-1',
+      type: 'redeven.terminal',
+      title: 'Terminal',
+    });
+  });
+
   it('drops local-only fields when extracting runtime layout widgets', () => {
     const state = {
       version: 1,
