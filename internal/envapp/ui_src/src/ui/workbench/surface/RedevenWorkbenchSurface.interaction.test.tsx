@@ -97,6 +97,20 @@ function dispatchWheel(target: EventTarget, deltaY: number): WheelEvent {
   return event;
 }
 
+function dispatchPrimaryClickSequence(
+  target: EventTarget,
+  options: {
+    pointerId?: number;
+    clientX?: number;
+    clientY?: number;
+  } = {},
+): Event {
+  const pointerDown = dispatchPointerEvent('pointerdown', target, options);
+  dispatchPointerEvent('pointerup', target, options);
+  target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  return pointerDown;
+}
+
 function mockCanvasRect(canvas: HTMLElement): void {
   Object.defineProperty(canvas, 'getBoundingClientRect', {
     configurable: true,
@@ -262,10 +276,8 @@ describe('RedevenWorkbenchSurface interaction contract', () => {
     const bodyButton = host.querySelector('[data-testid="widget-body-button"]') as HTMLButtonElement | null;
     expect(bodyButton).toBeTruthy();
 
-    const pointerDown = dispatchPointerEvent('pointerdown', bodyButton!, { pointerId: 3 });
-    dispatchPointerEvent('pointerup', bodyButton!, { pointerId: 3 });
+    const pointerDown = dispatchPrimaryClickSequence(bodyButton!, { pointerId: 3 });
     await flushWorkbenchInteraction();
-    bodyButton!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
 
     expect(pointerDown.defaultPrevented).toBe(false);
     expect(state().selectedWidgetId).toBe('widget-button-1');
