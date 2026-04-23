@@ -103,7 +103,12 @@ export type wire_terminal_session_stats_resp = {
 };
 
 export type wire_terminal_sessions_changed_notify = {
-  reason: 'created' | 'closed' | 'deleted';
+  reason: 'created' | 'closing' | 'closed' | 'deleted' | 'close_failed_hidden';
   session_id?: string;
   timestamp_ms?: number;
+  lifecycle?: 'open' | 'closing' | 'closed' | 'close_failed_hidden';
+  hidden?: boolean;
+  owner_widget_id?: string;
+  failure_code?: string;
+  failure_message?: string;
 };

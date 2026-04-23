@@ -42,14 +42,15 @@ type Manager struct {
 	agentHomeAbs string
 	log          *slog.Logger
 
-	term *termgo.Manager
+	term              *termgo.Manager
+	deleteSessionFunc func(sessionID string) error
 
-	mu              sync.Mutex
-	writers         map[*rpc.Server]*sinkWriter
-	byServer        map[*rpc.Server]map[string]string // server -> session_id -> conn_id
-	bySession       map[string]map[*rpc.Server]string // session_id -> server -> conn_id
-	closedSinks     map[*rpc.Server]struct{}          // best-effort marker to avoid repeated work
-	deleteRequested map[string]struct{}               // session_id -> delete requested (used for lifecycle reason)
+	mu               sync.Mutex
+	writers          map[*rpc.Server]*sinkWriter
+	byServer         map[*rpc.Server]map[string]string // server -> session_id -> conn_id
+	bySession        map[string]map[*rpc.Server]string // session_id -> server -> conn_id
+	closedSinks      map[*rpc.Server]struct{}          // best-effort marker to avoid repeated work
+	sessionLifecycle map[string]SessionLifecycleRecord
 }
 
 type SessionInfo struct {
@@ -104,17 +105,18 @@ func NewManager(shell string, agentHomeAbs string, log *slog.Logger) *Manager {
 	}
 
 	m := &Manager{
-		agentHomeAbs:    resolved,
-		log:             log,
-		writers:         make(map[*rpc.Server]*sinkWriter),
-		byServer:        make(map[*rpc.Server]map[string]string),
-		bySession:       make(map[string]map[*rpc.Server]string),
-		closedSinks:     make(map[*rpc.Server]struct{}),
-		deleteRequested: make(map[string]struct{}),
+		agentHomeAbs:     resolved,
+		log:              log,
+		writers:          make(map[*rpc.Server]*sinkWriter),
+		byServer:         make(map[*rpc.Server]map[string]string),
+		bySession:        make(map[string]map[*rpc.Server]string),
+		closedSinks:      make(map[*rpc.Server]struct{}),
+		sessionLifecycle: make(map[string]SessionLifecycleRecord),
 	}
 
 	m.term = termgo.NewManager(newTerminalGoManagerConfig(shell, log))
 	m.term.SetEventHandler(&eventHandler{m: m})
+	m.deleteSessionFunc = m.deleteSessionNow
 
 	return m
 }
@@ -128,19 +130,7 @@ func (m *Manager) CreateSession(name string, workingDir string) (*SessionInfo, e
 }
 
 func (m *Manager) DeleteSession(sessionID string) error {
-	if m == nil {
-		return &rpc.Error{Code: 500, Message: "internal error"}
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		return &rpc.Error{Code: 400, Message: "session_id is required"}
-	}
-	m.markDeleteRequested(sessionID)
-	if err := m.term.DeleteSession(sessionID); err != nil {
-		m.unmarkDeleteRequested(sessionID)
-		return ErrSessionNotFound
-	}
-	return nil
+	return m.requestSessionDelete(sessionID, "", true)
 }
 
 func (m *Manager) Register(r *rpc.Router, meta *session.Meta, streamServer *rpc.Server) {
@@ -179,13 +169,10 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 			return nil, &rpc.Error{Code: 403, Message: "execute permission denied"}
 		}
 
-		sessions := m.term.ListSessions()
+		sessions := m.visibleSessionInfos()
 		out := make([]*terminalSessionInfo, 0, len(sessions))
 		for _, s := range sessions {
-			if s == nil {
-				continue
-			}
-			out = append(out, toWireSessionInfo(s.ToSessionInfo()))
+			out = append(out, toWireSessionInfo(s))
 		}
 		return &terminalListResp{Sessions: out}, nil
 	})
@@ -270,6 +257,10 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 			return nil, &rpc.Error{Code: 400, Message: "session_id is required"}
 		}
 
+		if !m.sessionAvailableForInteraction(sessionID) {
+			return nil, &rpc.Error{Code: 404, Message: "terminal session not found"}
+		}
+
 		sess, ok := m.term.GetSession(sessionID)
 		if !ok || sess == nil {
 			return nil, &rpc.Error{Code: 404, Message: "terminal session not found"}
@@ -308,6 +299,9 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 		if sessionID == "" {
 			return nil, &rpc.Error{Code: 400, Message: "session_id is required"}
 		}
+		if !m.sessionAvailableForInteraction(sessionID) {
+			return nil, &rpc.Error{Code: 404, Message: "terminal session not found"}
+		}
 
 		sess, ok := m.term.GetSession(sessionID)
 		if !ok || sess == nil {
@@ -339,6 +333,9 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 		if sessionID == "" {
 			return nil, &rpc.Error{Code: 400, Message: "session_id is required"}
 		}
+		if !m.sessionAvailableForInteraction(sessionID) {
+			return nil, &rpc.Error{Code: 404, Message: "terminal session not found"}
+		}
 		if err := m.term.ClearSessionHistory(sessionID); err != nil {
 			return nil, &rpc.Error{Code: 404, Message: "terminal session not found"}
 		}
@@ -357,9 +354,7 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 		if sessionID == "" {
 			return nil, &rpc.Error{Code: 400, Message: "session_id is required"}
 		}
-		m.markDeleteRequested(sessionID)
-		if err := m.term.DeleteSession(sessionID); err != nil {
-			m.unmarkDeleteRequested(sessionID)
+		if err := m.DeleteSession(sessionID); err != nil {
 			return nil, &rpc.Error{Code: 404, Message: "terminal session not found"}
 		}
 		return &terminalDeleteResp{OK: true}, nil
@@ -412,6 +407,9 @@ func (m *Manager) Cleanup() {
 		return
 	}
 	m.term.Cleanup()
+	m.mu.Lock()
+	clear(m.sessionLifecycle)
+	m.mu.Unlock()
 }
 
 type sinkDetach struct {
@@ -429,37 +427,6 @@ func (m *Manager) ensureWriter(sink *rpc.Server) {
 		return
 	}
 	m.writers[sink] = newSinkWriter(sink, m.log)
-}
-
-func (m *Manager) markDeleteRequested(sessionID string) {
-	if m == nil || sessionID == "" {
-		return
-	}
-	m.mu.Lock()
-	m.deleteRequested[sessionID] = struct{}{}
-	m.mu.Unlock()
-}
-
-func (m *Manager) unmarkDeleteRequested(sessionID string) {
-	if m == nil || sessionID == "" {
-		return
-	}
-	m.mu.Lock()
-	delete(m.deleteRequested, sessionID)
-	m.mu.Unlock()
-}
-
-func (m *Manager) takeDeleteRequested(sessionID string) bool {
-	if m == nil || sessionID == "" {
-		return false
-	}
-	m.mu.Lock()
-	_, ok := m.deleteRequested[sessionID]
-	if ok {
-		delete(m.deleteRequested, sessionID)
-	}
-	m.mu.Unlock()
-	return ok
 }
 
 func (m *Manager) attachSink(sessionID string, connID string, sink *rpc.Server) {
@@ -516,6 +483,9 @@ func (m *Manager) broadcast(sessionID string, payload json.RawMessage) {
 	if m == nil || sessionID == "" || len(payload) == 0 {
 		return
 	}
+	if m.sessionHidden(sessionID) {
+		return
+	}
 
 	var writers []*sinkWriter
 	m.mu.Lock()
@@ -543,6 +513,9 @@ func (m *Manager) broadcast(sessionID string, payload json.RawMessage) {
 // connected clients attached to the given session.
 func (m *Manager) broadcastNameUpdate(sessionID string, newName string, workingDir string) {
 	if m == nil || sessionID == "" {
+		return
+	}
+	if m.sessionHidden(sessionID) {
 		return
 	}
 
@@ -617,6 +590,9 @@ func (m *Manager) write(sessionID string, connID string, dataB64 string) error {
 	if sessionID == "" {
 		return &rpc.Error{Code: 400, Message: "session_id is required"}
 	}
+	if !m.sessionAvailableForInteraction(sessionID) {
+		return &rpc.Error{Code: 404, Message: "terminal session not found"}
+	}
 	if connID == "" {
 		return &rpc.Error{Code: 400, Message: "conn_id is required"}
 	}
@@ -667,6 +643,9 @@ func (m *Manager) attachSession(sessionID string, connID string, cols int, rows 
 	if sessionID == "" {
 		return &rpc.Error{Code: 400, Message: "session_id is required"}
 	}
+	if !m.sessionAvailableForInteraction(sessionID) {
+		return &rpc.Error{Code: 404, Message: "terminal session not found"}
+	}
 	if connID == "" {
 		return &rpc.Error{Code: 400, Message: "conn_id is required"}
 	}
@@ -706,6 +685,9 @@ func (m *Manager) resize(sessionID string, connID string, cols int, rows int) er
 	}
 	if sessionID == "" {
 		return &rpc.Error{Code: 400, Message: "session_id is required"}
+	}
+	if !m.sessionAvailableForInteraction(sessionID) {
+		return &rpc.Error{Code: 404, Message: "terminal session not found"}
 	}
 	if connID == "" {
 		return &rpc.Error{Code: 400, Message: "conn_id is required"}
@@ -760,11 +742,13 @@ func (h *eventHandler) OnTerminalSessionCreated(session *termgo.Session) {
 	if sessionID == "" {
 		return
 	}
+	h.m.trackSessionOpen(sessionID)
 
 	h.m.broadcastSessionsChanged(terminalSessionsChangedPayload{
 		Reason:      "created",
 		SessionID:   sessionID,
 		TimestampMs: time.Now().UnixMilli(),
+		Lifecycle:   string(SessionLifecycleOpen),
 	})
 }
 
@@ -777,15 +761,12 @@ func (h *eventHandler) OnTerminalSessionClosed(sessionID string) {
 		return
 	}
 
-	reason := "closed"
-	if h.m.takeDeleteRequested(sessionID) {
-		reason = "deleted"
-	}
-
+	reason := h.m.finalizeSessionClosed(sessionID)
 	h.m.broadcastSessionsChanged(terminalSessionsChangedPayload{
 		Reason:      reason,
 		SessionID:   sessionID,
 		TimestampMs: time.Now().UnixMilli(),
+		Lifecycle:   string(SessionLifecycleClosed),
 	})
 }
 
@@ -884,9 +865,14 @@ type terminalNameUpdatePayload struct {
 }
 
 type terminalSessionsChangedPayload struct {
-	Reason      string `json:"reason"`
-	SessionID   string `json:"session_id,omitempty"`
-	TimestampMs int64  `json:"timestamp_ms,omitempty"`
+	Reason         string `json:"reason"`
+	SessionID      string `json:"session_id,omitempty"`
+	TimestampMs    int64  `json:"timestamp_ms,omitempty"`
+	Lifecycle      string `json:"lifecycle,omitempty"`
+	Hidden         bool   `json:"hidden,omitempty"`
+	OwnerWidgetID  string `json:"owner_widget_id,omitempty"`
+	FailureCode    string `json:"failure_code,omitempty"`
+	FailureMessage string `json:"failure_message,omitempty"`
 }
 
 type terminalHistoryReq struct {

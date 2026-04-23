@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -103,6 +104,77 @@ func TestAttachSessionActivatesDormantSessionAndKeepsResizeWorking(t *testing.T)
 	waitForPTYSize(t, sess, 95, 29, 2*time.Second)
 }
 
+func TestDeleteSessionHidesImmediatelyWhileCleanupRuns(t *testing.T) {
+	root := t.TempDir()
+	m := newQuietTestManager(t, root)
+	t.Cleanup(m.Cleanup)
+
+	sess, err := m.createSession("test", "")
+	if err != nil {
+		t.Fatalf("createSession() error = %v", err)
+	}
+
+	releaseDelete := make(chan struct{})
+	m.deleteSessionFunc = func(sessionID string) error {
+		<-releaseDelete
+		return m.deleteSessionNow(sessionID)
+	}
+
+	if err := m.DeleteSession(sess.ID); err != nil {
+		t.Fatalf("DeleteSession() error = %v", err)
+	}
+	defer close(releaseDelete)
+
+	if got := m.visibleSessionInfos(); len(got) != 0 {
+		t.Fatalf("visibleSessionInfos() = %#v, want hidden closing session", got)
+	}
+	if err := m.attachSession(sess.ID, "conn-closed", 80, 24, nil); err == nil {
+		t.Fatalf("attachSession() succeeded for hidden closing session")
+	}
+	if err := m.resize(sess.ID, "conn-closed", 80, 24); err == nil {
+		t.Fatalf("resize() succeeded for hidden closing session")
+	}
+	if err := m.write(sess.ID, "conn-closed", ""); err == nil {
+		t.Fatalf("write() succeeded for hidden closing session")
+	}
+	waitForLifecycle(t, m, sess.ID, SessionLifecycleClosing, time.Second)
+}
+
+func TestDeleteSessionFailureStaysHiddenAndCanRetry(t *testing.T) {
+	root := t.TempDir()
+	m := newQuietTestManager(t, root)
+	t.Cleanup(m.Cleanup)
+
+	sess, err := m.createSession("test", "")
+	if err != nil {
+		t.Fatalf("createSession() error = %v", err)
+	}
+
+	m.deleteSessionFunc = func(string) error {
+		return errors.New("delete failed")
+	}
+	if err := m.DeleteSession(sess.ID); err != nil {
+		t.Fatalf("DeleteSession() error = %v", err)
+	}
+
+	waitForLifecycle(t, m, sess.ID, SessionLifecycleCloseFailedHidden, time.Second)
+	if got := m.visibleSessionInfos(); len(got) != 0 {
+		t.Fatalf("visibleSessionInfos() = %#v, want failed hidden session omitted", got)
+	}
+	if err := m.attachSession(sess.ID, "conn-hidden", 80, 24, nil); err == nil {
+		t.Fatalf("attachSession() succeeded for failed hidden session")
+	}
+	if err := m.resize(sess.ID, "conn-hidden", 80, 24); err == nil {
+		t.Fatalf("resize() succeeded for failed hidden session")
+	}
+
+	m.deleteSessionFunc = m.deleteSessionNow
+	if err := m.DeleteSession(sess.ID); err != nil {
+		t.Fatalf("DeleteSession(retry) error = %v", err)
+	}
+	waitForSessionGone(t, m, sess.ID, time.Second)
+}
+
 func TestRedevenShellInitEnvProviderInjectsSentinelWhenPathPrependIsEmpty(t *testing.T) {
 	provider := redevenShellInitEnvProvider{base: termgo.DefaultEnvProvider{}}
 
@@ -190,6 +262,36 @@ func waitForPTYSize(t *testing.T, session *termgo.Session, expectedCols int, exp
 	}
 
 	t.Fatalf("timeout waiting for PTY size %dx%d", expectedCols, expectedRows)
+}
+
+func waitForLifecycle(t *testing.T, m *Manager, sessionID string, lifecycle SessionLifecycle, timeout time.Duration) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		record, ok := m.lifecycleRecord(sessionID)
+		if ok && record.Lifecycle == lifecycle {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	record, ok := m.lifecycleRecord(sessionID)
+	t.Fatalf("timeout waiting for lifecycle %q, got record=%#v ok=%v", lifecycle, record, ok)
+}
+
+func waitForSessionGone(t *testing.T, m *Manager, sessionID string, timeout time.Duration) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if _, ok := m.term.GetSession(sessionID); !ok {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	t.Fatalf("timeout waiting for session %q to be removed", sessionID)
 }
 
 func assertFileContains(t *testing.T, path string, needle string) {

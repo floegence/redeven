@@ -365,6 +365,24 @@ func TestGatewayWorkbenchTerminalSessionAPIs(t *testing.T) {
 		t.Fatalf("widget_state = %#v, want one terminal session", createData.WidgetState)
 	}
 
+	createSecondResp := performWorkbenchLayoutRequest(t, gw, http.MethodPost, "/_redeven_proxy/api/workbench/widgets/widget-terminal-1/terminal/sessions", `{
+  "name": "server",
+  "working_dir": ""
+}`)
+	if createSecondResp.Code != http.StatusOK {
+		t.Fatalf("second create status = %d, body = %s", createSecondResp.Code, createSecondResp.Body.String())
+	}
+	createSecondData := decodeWorkbenchLayoutResponse[struct {
+		Session     terminal.SessionInfo        `json:"session"`
+		WidgetState workbenchlayout.WidgetState `json:"widget_state"`
+	}](t, createSecondResp)
+	if createSecondData.Session.ID == "" || createSecondData.Session.ID == createData.Session.ID {
+		t.Fatalf("second created session is invalid: %#v", createSecondData.Session)
+	}
+	if got := createSecondData.WidgetState.State.SessionIDs; len(got) != 2 || got[0] != createData.Session.ID || got[1] != createSecondData.Session.ID {
+		t.Fatalf("second widget sessions = %#v, want both terminal tabs", got)
+	}
+
 	deleteResp := performWorkbenchLayoutRequest(
 		t,
 		gw,
@@ -376,7 +394,22 @@ func TestGatewayWorkbenchTerminalSessionAPIs(t *testing.T) {
 		t.Fatalf("delete status = %d, body = %s", deleteResp.Code, deleteResp.Body.String())
 	}
 	deletedState := decodeWorkbenchLayoutResponse[workbenchlayout.WidgetState](t, deleteResp)
-	if deletedState.State.Kind != workbenchlayout.WidgetStateKindTerminal || len(deletedState.State.SessionIDs) != 0 {
-		t.Fatalf("deleted state = %#v, want empty terminal state", deletedState)
+	if deletedState.State.Kind != workbenchlayout.WidgetStateKindTerminal || len(deletedState.State.SessionIDs) != 1 || deletedState.State.SessionIDs[0] != createSecondData.Session.ID {
+		t.Fatalf("deleted state = %#v, want only second terminal tab", deletedState)
+	}
+
+	deleteLastResp := performWorkbenchLayoutRequest(
+		t,
+		gw,
+		http.MethodDelete,
+		"/_redeven_proxy/api/workbench/widgets/widget-terminal-1/terminal/sessions/"+createSecondData.Session.ID,
+		"",
+	)
+	if deleteLastResp.Code != http.StatusOK {
+		t.Fatalf("delete last status = %d, body = %s", deleteLastResp.Code, deleteLastResp.Body.String())
+	}
+	deletedLastState := decodeWorkbenchLayoutResponse[workbenchlayout.WidgetState](t, deleteLastResp)
+	if deletedLastState.State.Kind != workbenchlayout.WidgetStateKindTerminal || len(deletedLastState.State.SessionIDs) != 0 {
+		t.Fatalf("deleted last state = %#v, want empty terminal state", deletedLastState)
 	}
 }

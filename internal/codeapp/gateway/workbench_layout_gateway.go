@@ -150,12 +150,12 @@ func (g *Gateway) handleWorkbenchWidgetStateAPI(w http.ResponseWriter, r *http.R
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid session id"})
 			return true
 		}
-		if err := g.term.DeleteSession(sessionID); err != nil && !errors.Is(err, terminal.ErrSessionNotFound) {
+		state, err := g.layouts.RemoveTerminalSession(r.Context(), widgetID, sessionID)
+		if err != nil {
 			writeWorkbenchLayoutError(w, err)
 			return true
 		}
-		state, err := g.layouts.RemoveTerminalSession(r.Context(), widgetID, sessionID)
-		if err != nil {
+		if err := g.term.DeleteSessionForWidget(sessionID, widgetID); err != nil && !errors.Is(err, terminal.ErrSessionNotFound) {
 			writeWorkbenchLayoutError(w, err)
 			return true
 		}

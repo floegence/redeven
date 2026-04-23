@@ -152,16 +152,37 @@ export function fromWireTerminalNameUpdateNotify(payload: wire_terminal_name_upd
 
 export function fromWireTerminalSessionsChangedNotify(payload: wire_terminal_sessions_changed_notify): TerminalSessionsChangedEvent | null {
   const reasonRaw = String((payload as any)?.reason ?? '').trim();
-  const reason = reasonRaw === 'created' || reasonRaw === 'closed' || reasonRaw === 'deleted' ? reasonRaw : '';
+  const reason = reasonRaw === 'created'
+    || reasonRaw === 'closing'
+    || reasonRaw === 'closed'
+    || reasonRaw === 'deleted'
+    || reasonRaw === 'close_failed_hidden'
+    ? reasonRaw
+    : '';
   if (!reason) return null;
 
   const sessionId = typeof (payload as any)?.session_id === 'string' ? String((payload as any).session_id).trim() : '';
   const ts = (payload as any)?.timestamp_ms;
+  const lifecycleRaw = String((payload as any)?.lifecycle ?? '').trim();
+  const lifecycle = lifecycleRaw === 'open'
+    || lifecycleRaw === 'closing'
+    || lifecycleRaw === 'closed'
+    || lifecycleRaw === 'close_failed_hidden'
+    ? lifecycleRaw
+    : '';
+  const ownerWidgetId = typeof (payload as any)?.owner_widget_id === 'string' ? String((payload as any).owner_widget_id).trim() : '';
+  const failureCode = typeof (payload as any)?.failure_code === 'string' ? String((payload as any).failure_code).trim() : '';
+  const failureMessage = typeof (payload as any)?.failure_message === 'string' ? String((payload as any).failure_message).trim() : '';
 
   return {
     reason: reason as TerminalSessionsChangedEvent['reason'],
     sessionId: sessionId || undefined,
     timestampMs: typeof ts === 'number' ? ts : undefined,
+    lifecycle: lifecycle ? lifecycle as TerminalSessionsChangedEvent['lifecycle'] : undefined,
+    hidden: typeof (payload as any)?.hidden === 'boolean' ? Boolean((payload as any).hidden) : undefined,
+    ownerWidgetId: ownerWidgetId || undefined,
+    failureCode: failureCode || undefined,
+    failureMessage: failureMessage || undefined,
   };
 }
 

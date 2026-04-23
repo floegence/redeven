@@ -84,8 +84,19 @@ export type TerminalNameUpdateEvent = {
   workingDir: string;
 };
 
+export type TerminalSessionLifecycle =
+  | 'open'
+  | 'closing'
+  | 'closed'
+  | 'close_failed_hidden';
+
 export type TerminalSessionsChangedEvent = {
-  reason: 'created' | 'closed' | 'deleted';
+  reason: 'created' | 'closing' | 'closed' | 'deleted' | 'close_failed_hidden';
   sessionId?: string;
   timestampMs?: number;
+  lifecycle?: TerminalSessionLifecycle;
+  hidden?: boolean;
+  ownerWidgetId?: string;
+  failureCode?: string;
+  failureMessage?: string;
 };

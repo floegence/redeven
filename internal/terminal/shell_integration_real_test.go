@@ -197,13 +197,13 @@ func newShellLifecycleTestManagerWithRecorder(t *testing.T, root string, shellPa
 	shellInitBaseDir := filepath.Join(t.TempDir(), "shell-init")
 
 	manager := &Manager{
-		agentHomeAbs:    root,
-		log:             logger,
-		writers:         make(map[*rpc.Server]*sinkWriter),
-		byServer:        make(map[*rpc.Server]map[string]string),
-		bySession:       make(map[string]map[*rpc.Server]string),
-		closedSinks:     make(map[*rpc.Server]struct{}),
-		deleteRequested: make(map[string]struct{}),
+		agentHomeAbs:     root,
+		log:              logger,
+		writers:          make(map[*rpc.Server]*sinkWriter),
+		byServer:         make(map[*rpc.Server]map[string]string),
+		bySession:        make(map[string]map[*rpc.Server]string),
+		closedSinks:      make(map[*rpc.Server]struct{}),
+		sessionLifecycle: make(map[string]SessionLifecycleRecord),
 	}
 
 	manager.term = termgo.NewManager(termgo.ManagerConfig{
@@ -215,6 +215,7 @@ func newShellLifecycleTestManagerWithRecorder(t *testing.T, root string, shellPa
 		InitialResizeSuppressDuration: 10 * time.Millisecond,
 		ResizeSuppressDuration:        10 * time.Millisecond,
 	})
+	manager.deleteSessionFunc = manager.deleteSessionNow
 	recorder := &shellEventRecorder{delegate: &eventHandler{m: manager}}
 	manager.term.SetEventHandler(recorder)
 
