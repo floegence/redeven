@@ -99,7 +99,6 @@ export function App() {
         <>
           <DesktopThemeSync />
           <ProtocolProvider contract={redevenV1Contract}>
-            <TerminalSessionsLifecycleSync />
             <FileBrowserDragProvider>
               {renderChildren()}
             </FileBrowserDragProvider>
@@ -108,6 +107,7 @@ export function App() {
       )}
     >
       <>
+        <TerminalSessionsLifecycleSync />
         <EnvAppShell />
         <CommandPalette />
         <NotificationContainer />
