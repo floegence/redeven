@@ -231,6 +231,7 @@ vi.mock('./workbench/EnvWorkbenchPage', () => ({
   EnvWorkbenchPage: () => {
     const env = useContext(EnvContextMock);
     const filePreview = useContext(FilePreviewContextMock);
+    const fileBrowser = useContext(FileBrowserSurfaceContextMock);
     return (
       <div>
         <button
@@ -246,8 +247,26 @@ vi.mock('./workbench/EnvWorkbenchPage', () => ({
         >
           Open Workbench Preview
         </button>
+        <button
+          type="button"
+          data-testid="workbench-open-browser"
+          onClick={() => void fileBrowser.openBrowser({
+            path: '/workspace/app',
+            homePath: '/workspace',
+            title: 'App',
+          })}
+        >
+          Open Workbench Browser
+        </button>
         <div data-testid="workbench-preview-activation">
           {env.workbenchFilePreviewActivation?.()?.item?.path ?? ''}
+        </div>
+        <div data-testid="workbench-browser-activation">
+          {[
+            env.workbenchSurfaceActivation?.()?.fileBrowserPayload?.path ?? '',
+            env.workbenchSurfaceActivation?.()?.fileBrowserPayload?.title ?? '',
+            env.workbenchSurfaceActivation?.()?.openStrategy ?? '',
+          ].join('|')}
         </div>
       </div>
     );
@@ -489,6 +508,28 @@ describe('EnvAppShell desktop floating surfaces', () => {
 
       expect(filePreviewOpenPreviewMock).not.toHaveBeenCalled();
       expect(host.querySelector('[data-testid="workbench-preview-activation"]')?.textContent).toBe('/workspace/demo.txt');
+      expect(windowOpenMock).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('routes workbench file-browser FAB requests into a new Files widget', async () => {
+    desktopViewMode = 'workbench';
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushAsync();
+
+      (host.querySelector('[data-testid="workbench-open-browser"]') as HTMLButtonElement).click();
+      await flushAsync();
+
+      expect(host.querySelector('[data-testid="workbench-browser-activation"]')?.textContent).toBe('/workspace/app|App|create_new');
       expect(windowOpenMock).not.toHaveBeenCalled();
     } finally {
       dispose();
