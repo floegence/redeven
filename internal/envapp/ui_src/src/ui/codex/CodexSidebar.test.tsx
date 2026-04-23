@@ -1319,6 +1319,10 @@ describe('CodexSidebar', () => {
     expect(host.textContent).toContain('Backend audit');
     expect(host.textContent).toContain('Review the gateway wiring');
     expect(sidebarThreadIDs(host)).toEqual(['thread_1', 'thread_2']);
+    expect(host.querySelector('[data-testid="sidebar-content"]')?.className).toContain('flex h-full min-h-0 flex-col overflow-hidden');
+    expect(host.querySelector('[data-testid="codex-thread-scroll-region"]')?.className).toContain('overflow-y-auto');
+    expect(host.querySelector('[data-testid="codex-thread-scroll-region"]')?.className).toContain('overscroll-contain');
+    expect(host.querySelector('[data-testid="codex-thread-scroll-region"]')?.getAttribute('data-floe-canvas-wheel-interactive')).toBe('true');
     expect(host.textContent).not.toContain('Dedicated Codex chat shell with host-native runtime and independent thread state');
     expect(host.textContent).not.toContain('/usr/local/bin/codex');
 

@@ -72,9 +72,9 @@ vi.mock('@floegence/floe-webapp-core/loading', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/layout', () => ({
-  SidebarContent: (props: any) => <div data-testid="sidebar-content">{props.children}</div>,
+  SidebarContent: (props: any) => <div data-testid="sidebar-content" class={props.class}>{props.children}</div>,
   SidebarSection: (props: any) => (
-    <section data-testid="sidebar-section">
+    <section data-testid="sidebar-section" class={props.class}>
       <div>{props.title}</div>
       <div>{props.children}</div>
     </section>
@@ -242,5 +242,27 @@ describe('AIChatSidebar', () => {
     deleteButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(host.textContent).toContain('Delete ');
     expect(host.textContent).toContain('"Conversation"?');
+  });
+
+  it('keeps the threads rail actions fixed while the conversation list owns scrolling', () => {
+    aiContextStub.threads = makeThreadsResource([
+      makeThread({
+        thread_id: 'thread-scroll',
+      }),
+    ]);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <AIChatSidebar />, host);
+
+    const content = host.querySelector('[data-testid="sidebar-content"]');
+    const section = host.querySelector('[data-testid="sidebar-section"]');
+    const scrollRegion = host.querySelector('[data-testid="flower-thread-scroll-region"]');
+
+    expect(content?.className).toContain('flex h-full min-h-0 flex-col overflow-hidden');
+    expect(section?.className).toContain('min-h-0 flex-1 overflow-hidden');
+    expect(scrollRegion?.className).toContain('overflow-y-auto');
+    expect(scrollRegion?.className).toContain('overscroll-contain');
+    expect(scrollRegion?.getAttribute('data-floe-canvas-wheel-interactive')).toBe('true');
   });
 });

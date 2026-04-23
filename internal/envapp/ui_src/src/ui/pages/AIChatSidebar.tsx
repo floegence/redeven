@@ -12,6 +12,11 @@ import { Tooltip } from '../primitives/Tooltip';
 import { useAIChatContext, type ListThreadsResponse, type ThreadRunStatus, type ThreadView } from './AIChatContext';
 import { useEnvContext } from './EnvContext';
 import { hasRWXPermissions } from './aiPermissions';
+import { REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS } from '../workbench/surface/workbenchWheelInteractive';
+
+const THREAD_RAIL_CONTENT_CLASS = 'flex h-full min-h-0 flex-col overflow-hidden';
+const THREAD_RAIL_SECTION_CLASS = 'min-h-0 flex-1 overflow-hidden [&>div:last-child]:min-h-0 [&>div:last-child]:overflow-hidden';
+const THREAD_RAIL_SCROLL_CLASS = 'h-full min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] [touch-action:pan-y_pinch-zoom]';
 
 // Compact timestamp for the right side of each thread card.
 function fmtShortTime(ms: number): string {
@@ -522,93 +527,103 @@ export function AIChatSidebar() {
   const showThreadsError = createMemo(() => !!ctx.threads.error && !hasThreadSnapshot());
 
   return (
-    <SidebarContent>
-      {/* Top action buttons */}
-      <div class="px-1 pb-1 flex items-center gap-1">
-        <Button
-          variant="primary"
-          size="sm"
-          class="flex-1 justify-start gap-2 h-8 shadow-sm"
-          icon={Plus}
-          onClick={() => ctx.enterDraftChat()}
-          disabled={protocol.status() !== 'connected' || !canManageChats()}
-        >
-          New Chat
-        </Button>
-        <Tooltip content="Manage chats" placement="bottom" delay={0}>
+    <>
+      <SidebarContent class={THREAD_RAIL_CONTENT_CLASS}>
+        {/* Top action buttons */}
+        <div class="shrink-0 px-1 pb-1 flex items-center gap-1">
           <Button
-            variant="outline"
-            size="icon"
-            class="h-8 w-8 border-sidebar-border/60 bg-sidebar hover:bg-sidebar-accent/60 text-sidebar-foreground/80 hover:text-sidebar-foreground transition-all duration-150"
-            onClick={openManager}
+            variant="primary"
+            size="sm"
+            class="flex-1 justify-start gap-2 h-8 shadow-sm"
+            icon={Plus}
+            onClick={() => ctx.enterDraftChat()}
             disabled={protocol.status() !== 'connected' || !canManageChats()}
-            aria-label="Manage chats"
           >
-            <History class="w-3.5 h-3.5" />
+            New Chat
           </Button>
-        </Tooltip>
-      </div>
+          <Tooltip content="Manage chats" placement="bottom" delay={0}>
+            <Button
+              variant="outline"
+              size="icon"
+              class="h-8 w-8 border-sidebar-border/60 bg-sidebar hover:bg-sidebar-accent/60 text-sidebar-foreground/80 hover:text-sidebar-foreground transition-all duration-150"
+              onClick={openManager}
+              disabled={protocol.status() !== 'connected' || !canManageChats()}
+              aria-label="Manage chats"
+            >
+              <History class="w-3.5 h-3.5" />
+            </Button>
+          </Tooltip>
+        </div>
 
-      <Show
-        when={!showInitialLoading()}
-        fallback={
-          <div class="px-2.5 py-2 text-xs text-muted-foreground flex items-center gap-2">
-            <SnakeLoader size="sm" />
-            <span>Loading chats...</span>
-          </div>
-        }
-      >
-        <Show
-          when={!showThreadsError()}
-          fallback={
-            <div class="px-2.5 py-2 text-xs text-error">
-              {ctx.threads.error instanceof Error ? ctx.threads.error.message : String(ctx.threads.error)}
-            </div>
-          }
-        >
+        <div class="min-h-0 flex-1 overflow-hidden">
           <Show
-            when={threadList().length > 0}
-            fallback={<EmptyState />}
-          >
-            <SidebarSection title="Conversations">
-              <div class="flex flex-col gap-0.5">
-                <Index each={groupedThreads()}>
-                  {(groupAccessor) => {
-                    const group = () => groupAccessor();
-                    return (
-                      <>
-                        <Show when={showGroupHeaders()}>
-                          <div class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/40 px-2.5 pt-3 pb-1 select-none">
-                            {group().group}
-                          </div>
-                        </Show>
-                        <Index each={group().threads}>
-                          {(threadAccessor) => {
-                            const thread = () => threadAccessor();
-                            const threadID = () => thread().thread_id;
-                            return (
-                              <ThreadCard
-                                thread={thread()}
-                                active={threadID() === ctx.activeThreadId()}
-                                isRunning={ctx.isThreadRunning(threadID())}
-                                unread={ctx.isThreadUnread(threadID())}
-                                connected={protocol.status() === 'connected'}
-                                canDelete={canManageChats()}
-                                onClick={() => ctx.selectThreadId(threadID())}
-                                onDelete={() => openDelete(threadID(), thread().title)}
-                              />
-                            );
-                          }}
-                        </Index>
-                      </>
-                    );
-                  }}
-                </Index>
+            when={!showInitialLoading()}
+            fallback={
+              <div class="px-2.5 py-2 text-xs text-muted-foreground flex items-center gap-2">
+                <SnakeLoader size="sm" />
+                <span>Loading chats...</span>
               </div>
-            </SidebarSection>
+            }
+          >
+            <Show
+              when={!showThreadsError()}
+              fallback={
+                <div class="px-2.5 py-2 text-xs text-error">
+                  {ctx.threads.error instanceof Error ? ctx.threads.error.message : String(ctx.threads.error)}
+                </div>
+              }
+            >
+              <Show
+                when={threadList().length > 0}
+                fallback={<EmptyState />}
+              >
+                <SidebarSection title="Conversations" class={THREAD_RAIL_SECTION_CLASS}>
+                  <div
+                    {...REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS}
+                    data-testid="flower-thread-scroll-region"
+                    class={THREAD_RAIL_SCROLL_CLASS}
+                  >
+                    <div class="flex flex-col gap-0.5">
+                      <Index each={groupedThreads()}>
+                        {(groupAccessor) => {
+                          const group = () => groupAccessor();
+                          return (
+                            <>
+                              <Show when={showGroupHeaders()}>
+                                <div class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/40 px-2.5 pt-3 pb-1 select-none">
+                                  {group().group}
+                                </div>
+                              </Show>
+                              <Index each={group().threads}>
+                                {(threadAccessor) => {
+                                  const thread = () => threadAccessor();
+                                  const threadID = () => thread().thread_id;
+                                  return (
+                                    <ThreadCard
+                                      thread={thread()}
+                                      active={threadID() === ctx.activeThreadId()}
+                                      isRunning={ctx.isThreadRunning(threadID())}
+                                      unread={ctx.isThreadUnread(threadID())}
+                                      connected={protocol.status() === 'connected'}
+                                      canDelete={canManageChats()}
+                                      onClick={() => ctx.selectThreadId(threadID())}
+                                      onDelete={() => openDelete(threadID(), thread().title)}
+                                    />
+                                  );
+                                }}
+                              </Index>
+                            </>
+                          );
+                        }}
+                      </Index>
+                    </div>
+                  </div>
+                </SidebarSection>
+              </Show>
+            </Show>
           </Show>
-        </Show>
-      </Show>
+        </div>
+      </SidebarContent>
 
       {/* Chat manager dialog */}
       <Dialog
@@ -851,7 +866,7 @@ export function AIChatSidebar() {
           <p class="text-xs text-muted-foreground">This cannot be undone.</p>
         </div>
       </ConfirmDialog>
-    </SidebarContent>
+    </>
   );
 }
 
