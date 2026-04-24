@@ -1,8 +1,13 @@
 import { ErrorBoundary, For, Suspense, Show, createEffect, createMemo, createSignal, lazy, on } from 'solid-js';
 import type { CodeEditorApi, CodeEditorProps } from '@floegence/floe-webapp-core/editor';
 import type { FilePreviewDescriptor } from '../utils/filePreview';
+import { ensureMonacoPreviewRuntimeCompat } from './monacoPreviewRuntimeCompat';
 
-const CodeEditor = lazy(() => import('@floegence/floe-webapp-core/editor').then((module) => ({ default: module.CodeEditor })));
+const CodeEditor = lazy(async () => {
+  await ensureMonacoPreviewRuntimeCompat();
+  const module = await import('@floegence/floe-webapp-core/editor');
+  return { default: module.CodeEditor };
+});
 
 type CodeEditorOptions = NonNullable<CodeEditorProps['options']>;
 type CodeEditorRuntimeOptions = CodeEditorProps['runtimeOptions'];

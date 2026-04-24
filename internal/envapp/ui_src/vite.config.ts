@@ -5,6 +5,13 @@ import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
   plugins: [solid(), tailwindcss()],
+  optimizeDeps: {
+    exclude: [
+      '@floegence/floe-webapp-core',
+      '@floegence/floe-webapp-core/editor',
+      'monaco-editor',
+    ],
+  },
   // The Env App is served under /_redeven_proxy/env/ by the runtime.
   base: '/_redeven_proxy/env/',
   build: {
