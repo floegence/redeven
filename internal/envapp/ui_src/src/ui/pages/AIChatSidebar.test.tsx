@@ -258,10 +258,13 @@ describe('AIChatSidebar', () => {
     const content = host.querySelector('[data-testid="sidebar-content"]');
     const section = host.querySelector('[data-testid="sidebar-section"]');
     const scrollRegion = host.querySelector('[data-testid="flower-thread-scroll-region"]');
+    const railBody = section?.parentElement;
 
     expect(content?.className).toContain('flex h-full min-h-0 flex-col overflow-hidden');
-    expect(section?.className).toContain('min-h-0 flex-1 overflow-hidden');
-    expect(scrollRegion?.className).toContain('overflow-y-auto');
+    expect(railBody?.className).toContain('flex flex-1 flex-col overflow-hidden');
+    expect(section?.className).toContain('flex flex-1 flex-col overflow-hidden');
+    expect(section?.className).toContain('[&>div:last-child]:flex-1');
+    expect(scrollRegion?.className).toContain('flex-1 min-h-0 overflow-y-auto');
     expect(scrollRegion?.className).toContain('overscroll-contain');
     expect(scrollRegion?.getAttribute('data-floe-canvas-wheel-interactive')).toBe('true');
   });

@@ -171,6 +171,13 @@ git config --global merge.conflictstyle zdiff3
 - Do not ship controls that look clickable while still using the default arrow cursor.
 - Disabled controls are the exception and must use a clearly non-interactive cursor treatment.
 
+## Workbench Wheel Ownership
+
+- Inside Workbench, wheel / trackpad scrolling belongs to the canvas by default.
+- A widget may own wheel scrolling only when it is the **currently selected widget** and the pointer is inside a **real constrained local scroll viewport**.
+- Unselected widgets must never capture, consume, or block wheel scrolling. Hover state, visual scroll affordance, or embedded thread lists are not enough to transfer ownership.
+- If a selected widget looks scrollable but does not actually scroll, fix the layout, height chain, and `overflow` viewport structure instead of weakening wheel-routing rules for unselected widgets.
+
 ## Release
 
 ### Runtime Release

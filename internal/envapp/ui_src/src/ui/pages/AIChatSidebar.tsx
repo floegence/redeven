@@ -15,8 +15,8 @@ import { hasRWXPermissions } from './aiPermissions';
 import { REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 
 const THREAD_RAIL_CONTENT_CLASS = 'flex h-full min-h-0 flex-col overflow-hidden';
-const THREAD_RAIL_SECTION_CLASS = 'min-h-0 flex-1 overflow-hidden [&>div:last-child]:min-h-0 [&>div:last-child]:overflow-hidden';
-const THREAD_RAIL_SCROLL_CLASS = 'h-full min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] [touch-action:pan-y_pinch-zoom]';
+const THREAD_RAIL_SECTION_CLASS = 'min-h-0 flex flex-1 flex-col overflow-hidden [&>div:last-child]:flex [&>div:last-child]:min-h-0 [&>div:last-child]:flex-1 [&>div:last-child]:flex-col [&>div:last-child]:overflow-hidden';
+const THREAD_RAIL_SCROLL_CLASS = 'flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] [touch-action:pan-y_pinch-zoom]';
 
 // Compact timestamp for the right side of each thread card.
 function fmtShortTime(ms: number): string {
@@ -555,7 +555,7 @@ export function AIChatSidebar() {
           </Tooltip>
         </div>
 
-        <div class="min-h-0 flex-1 overflow-hidden">
+        <div class="min-h-0 flex flex-1 flex-col overflow-hidden">
           <Show
             when={!showInitialLoading()}
             fallback={
