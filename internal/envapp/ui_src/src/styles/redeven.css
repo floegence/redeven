@@ -617,7 +617,7 @@ html.dark .env-debug-console-switch[data-state='checked'] {
   flex: 1 1 auto;
   background: var(--flower-chat-surface);
   --flower-chat-transcript-overlay-edge-gap: 12px;
-  --flower-chat-transcript-overlay-bottom-inset: calc(6.75rem + env(safe-area-inset-bottom, 0px));
+  --flower-chat-transcript-overlay-bottom-inset: 12px;
 }
 
 .flower-chat-bottom-dock {

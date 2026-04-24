@@ -1156,7 +1156,7 @@ export function registerEnvAIPageSendTests() {
       }
     });
 
-    it('measures the bottom dock and writes transcript clearance so the floating composer cannot cover transcript output', async () => {
+    it('keeps transcript bottom spacing independent from the dock height', async () => {
       const { host, dispose } = await renderPage();
       try {
         const transcript = transcriptRegion(host);
@@ -1168,7 +1168,7 @@ export function registerEnvAIPageSendTests() {
         setElementRect(dock!, 164);
         notifyResizeObserver(dock!);
 
-        expect(transcript?.style.getPropertyValue('--flower-chat-transcript-overlay-bottom-inset')).toBe('176px');
+        expect(transcript?.style.getPropertyValue('--flower-chat-transcript-overlay-bottom-inset')).toBe('');
       } finally {
         dispose();
       }
