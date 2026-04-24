@@ -133,6 +133,13 @@ import {
   buildDesktopWindowChromeOptions,
   desktopWindowChromeSnapshotForWindow,
 } from './windowChrome';
+import {
+  buildConsoleMessageDetail,
+  buildPreloadErrorDetail,
+  buildRenderProcessGoneDetail,
+  buildWindowLifecycleContext,
+  shouldCaptureElectronBootstrapConsoleMessage,
+} from './windowLifecycleDiagnostics';
 import { performDesktopShellWindowCommand } from './desktopShellWindowCommands';
 import {
   CANCEL_DESKTOP_SETTINGS_CHANNEL,
@@ -1214,6 +1221,14 @@ function createBrowserWindow(args: CreateBrowserWindowArgs): DesktopTrackedWindo
     role: args.role,
     surface,
   });
+  const windowLifecycleContext = (): Record<string, unknown> => buildWindowLifecycleContext({
+    role: args.role,
+    surface,
+    stateKey: args.stateKey,
+    targetURL: args.targetURL,
+    preloadPath,
+    webContents: win.webContents,
+  });
 
   if (args.onWindowOpen) {
     win.webContents.setWindowOpenHandler(({ url, frameName }) => {
@@ -1251,6 +1266,33 @@ function createBrowserWindow(args: CreateBrowserWindowArgs): DesktopTrackedWindo
       validatedURL,
       isMainFrame,
     });
+  });
+  win.webContents.on('console-message', (event) => {
+    if (!shouldCaptureElectronBootstrapConsoleMessage(event)) {
+      return;
+    }
+    recordWindowLifecycle(
+      args.diagnostics,
+      'electron_bootstrap_console',
+      'browser window emitted Electron bootstrap console diagnostics',
+      buildConsoleMessageDetail(windowLifecycleContext(), event),
+    );
+  });
+  win.webContents.on('preload-error', (_event, failingPreloadPath, error) => {
+    recordWindowLifecycle(
+      args.diagnostics,
+      'preload_error',
+      error?.message || 'browser window preload failed',
+      buildPreloadErrorDetail(windowLifecycleContext(), failingPreloadPath, error),
+    );
+  });
+  win.webContents.on('render-process-gone', (_event, details) => {
+    recordWindowLifecycle(
+      args.diagnostics,
+      'render_process_gone',
+      'browser window renderer process exited unexpectedly',
+      buildRenderProcessGoneDetail(windowLifecycleContext(), details),
+    );
   });
 
   if (desktopDevToolsEnabled && !args.parent) {
