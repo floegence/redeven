@@ -2269,17 +2269,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
     void env.openFileBrowserAtPath(menu.workingDir, {
       homePath: menu.homePath,
-    });
-  };
-
-  const handleBrowseFilesInNewWindowFromTerminal = () => {
-    const menu = terminalAskMenu();
-    if (!menu || !menu.showBrowseFiles) return;
-    setTerminalAskMenu(null);
-
-    void env.openFileBrowserAtPath(menu.workingDir, {
-      homePath: menu.homePath,
-      openStrategy: 'create_new',
+      openStrategy: env.viewMode() === 'workbench' ? 'create_new' : undefined,
     });
   };
 
@@ -2364,15 +2354,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         icon: Folder,
         onSelect: handleBrowseFilesFromTerminal,
       });
-      if (env.viewMode() === 'workbench') {
-        items.push({
-          id: 'browse-files-new-window',
-          kind: 'action',
-          label: 'Open in New File Window',
-          icon: Folder,
-          onSelect: handleBrowseFilesInNewWindowFromTerminal,
-        });
-      }
     }
 
     items.push({

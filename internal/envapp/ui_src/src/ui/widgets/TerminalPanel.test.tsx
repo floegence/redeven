@@ -84,6 +84,9 @@ const terminalEnvPermissionsState = vi.hoisted(() => ({
   canRead: true,
   canExecute: true,
 }));
+const envContextState = vi.hoisted(() => ({
+  viewMode: 'activity' as 'activity' | 'deck' | 'workbench',
+}));
 
 const rpcFsMocks = vi.hoisted(() => ({
   getPathContext: vi.fn().mockResolvedValue({ agentHomePathAbs: '/workspace' }),
@@ -607,7 +610,7 @@ vi.mock('../pages/EnvContext', () => {
   return {
     useEnvContext: () => ({
       env: envAccessor,
-      viewMode: () => 'activity',
+      viewMode: () => envContextState.viewMode,
       openAskFlowerComposer: vi.fn(),
       openTerminalInDirectoryRequestSeq: () => 0,
       openTerminalInDirectoryRequest: () => null,
@@ -723,6 +726,7 @@ describe('TerminalPanel', () => {
     terminalViewportRectState.top = 24;
     terminalViewportRectState.width = 320;
     terminalViewportRectState.bottom = 320;
+    envContextState.viewMode = 'activity';
     terminalEnvPermissionsState.canRead = true;
     terminalEnvPermissionsState.canExecute = true;
     terminalSelectionState.text = '';
@@ -2002,6 +2006,48 @@ describe('TerminalPanel', () => {
 
     expect(openFileBrowserAtPathSpy).toHaveBeenCalledWith('/workspace', {
       homePath: '/workspace',
+    });
+  });
+
+  it('uses a fresh Files widget for workbench terminal browse-files handoffs', async () => {
+    envContextState.viewMode = 'workbench';
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
+    expect(terminalSurface).toBeTruthy();
+
+    terminalSurface?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 24,
+      clientY: 32,
+    }));
+    await settleTerminalPanel();
+
+    const menu = host.querySelector('[role="menu"]') as HTMLDivElement | null;
+    expect(menu).toBeTruthy();
+
+    const menuButtons = Array.from(menu?.querySelectorAll('button') ?? []);
+    expect(menuButtons.map((button) => button.textContent?.trim())).toEqual([
+      'Ask Flower',
+      'Browse files',
+      'Copy selection',
+    ]);
+
+    const browseButton = menuButtons.find((button) => button.textContent?.includes('Browse files'));
+    expect(browseButton).toBeTruthy();
+
+    browseButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await settleTerminalPanel();
+
+    expect(openFileBrowserAtPathSpy).toHaveBeenCalledWith('/workspace', {
+      homePath: '/workspace',
+      openStrategy: 'create_new',
     });
   });
 
