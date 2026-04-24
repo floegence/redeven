@@ -10,10 +10,6 @@ const editorRenderState = vi.hoisted(() => ({
   nextInstanceId: 0,
 }));
 
-vi.mock('./monacoPreviewRuntimeCompat', () => ({
-  ensureMonacoPreviewRuntimeCompat: vi.fn(async () => undefined),
-}));
-
 vi.mock('@floegence/floe-webapp-core/editor', () => ({
   CodeEditor: (props: any) => {
     if (editorRenderState.errorMessage) {
