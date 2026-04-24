@@ -3025,3 +3025,103 @@ a.chat-sources-cell-url:focus-visible {
     radial-gradient(circle at center, color-mix(in srgb, var(--background) 78%, transparent), transparent 48%),
     radial-gradient(circle at center, color-mix(in srgb, var(--primary) 8%, transparent), transparent 62%);
 }
+
+.workbench-surface[data-workbench-theme='default'] {
+  --redeven-workbench-default-canvas-bg: color-mix(in srgb, var(--background) 92%, var(--muted) 8%);
+  --redeven-workbench-default-grid-stroke: color-mix(in srgb, var(--border) 34%, transparent);
+  --redeven-workbench-default-grid-dot: color-mix(in srgb, var(--border) 48%, transparent);
+  --redeven-workbench-default-widget-bg: color-mix(in srgb, var(--card) 94%, white 6%);
+  --redeven-workbench-default-widget-border: color-mix(in srgb, var(--border) 88%, var(--foreground) 12%);
+  --redeven-workbench-default-widget-border-hover: color-mix(in srgb, var(--border) 70%, var(--foreground) 30%);
+  --redeven-workbench-default-widget-header-bg: color-mix(in srgb, var(--card) 84%, var(--muted) 16%);
+  --redeven-workbench-default-widget-header-border: color-mix(in srgb, var(--border) 76%, var(--foreground) 24%);
+  --redeven-workbench-default-widget-ring: color-mix(in srgb, var(--primary) 22%, transparent);
+  --redeven-workbench-default-widget-border-active: color-mix(in srgb, var(--primary) 68%, var(--border) 32%);
+  --redeven-workbench-default-widget-shadow:
+    0 1px 2px color-mix(in srgb, var(--foreground) 5%, transparent),
+    0 14px 32px -20px color-mix(in srgb, var(--foreground) 18%, transparent);
+  --redeven-workbench-default-widget-shadow-hover:
+    0 1px 2px color-mix(in srgb, var(--foreground) 6%, transparent),
+    0 18px 38px -22px color-mix(in srgb, var(--foreground) 22%, transparent);
+  --redeven-workbench-default-widget-shadow-active:
+    0 22px 48px -18px color-mix(in srgb, var(--primary) 18%, transparent),
+    0 2px 6px color-mix(in srgb, var(--foreground) 10%, transparent);
+  --redeven-workbench-default-body-surface: color-mix(in srgb, var(--card) 90%, var(--background) 10%);
+  --redeven-workbench-default-body-surface-soft: color-mix(in srgb, var(--card) 74%, var(--background) 26%);
+  --redeven-workbench-default-body-border: color-mix(in srgb, var(--border) 72%, transparent);
+  --redeven-workbench-default-rail-bg:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--sidebar) 86%, var(--card) 14%),
+      color-mix(in srgb, var(--sidebar) 94%, transparent)
+    );
+}
+
+.workbench-surface[data-workbench-theme='default'] .workbench-canvas {
+  background: var(--redeven-workbench-default-canvas-bg);
+}
+
+.workbench-surface[data-workbench-theme='default'] .workbench-canvas__grid {
+  background-image:
+    linear-gradient(to right, var(--redeven-workbench-default-grid-stroke) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--redeven-workbench-default-grid-stroke) 1px, transparent 1px),
+    radial-gradient(circle, var(--redeven-workbench-default-grid-dot) 0.9px, transparent 1px);
+  opacity: 0.52;
+}
+
+.workbench-surface[data-workbench-theme='default'] .workbench-widget {
+  background: var(--redeven-workbench-default-widget-bg);
+  border-color: var(--redeven-workbench-default-widget-border);
+  box-shadow: var(--redeven-workbench-default-widget-shadow);
+}
+
+.workbench-surface[data-workbench-theme='default'] .workbench-widget:hover {
+  border-color: var(--redeven-workbench-default-widget-border-hover);
+  box-shadow: var(--redeven-workbench-default-widget-shadow-hover);
+}
+
+.workbench-surface[data-workbench-theme='default'] .workbench-widget__header {
+  background: var(--redeven-workbench-default-widget-header-bg);
+  border-bottom-color: var(--redeven-workbench-default-widget-header-border);
+}
+
+.workbench-surface[data-workbench-theme='default'] .workbench-widget.is-selected,
+.workbench-surface[data-workbench-theme='default'] .workbench-widget.is-dragging,
+.workbench-surface[data-workbench-theme='default'] .workbench-widget.is-resizing {
+  border-color: var(--redeven-workbench-default-widget-border-active);
+  box-shadow:
+    0 0 0 2px var(--redeven-workbench-default-widget-ring),
+    var(--redeven-workbench-default-widget-shadow-active);
+}
+
+.redeven-workbench-body-surface {
+  background: var(--redeven-workbench-default-body-surface, var(--background));
+}
+
+.redeven-workbench-body-notice-card {
+  border: 1px solid var(--redeven-workbench-default-body-border, color-mix(in srgb, var(--border) 72%, transparent));
+  background: color-mix(in srgb, var(--redeven-workbench-default-body-surface, var(--background)) 96%, transparent);
+  box-shadow: 0 18px 40px -24px color-mix(in srgb, var(--foreground) 22%, transparent);
+}
+
+.redeven-workbench-conversation-shell {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--redeven-workbench-default-body-surface, var(--background)) 96%, var(--muted) 4%),
+      color-mix(in srgb, var(--redeven-workbench-default-body-surface-soft, var(--background)) 92%, transparent)
+    );
+}
+
+.redeven-workbench-conversation-shell__rail {
+  border-right: 1px solid var(--redeven-workbench-default-body-border, color-mix(in srgb, var(--border) 72%, transparent));
+  background: var(--redeven-workbench-default-rail-bg, var(--sidebar));
+}
+
+.redeven-workbench-conversation-shell__rail-header {
+  border-bottom: 1px solid color-mix(in srgb, var(--redeven-workbench-default-body-border, var(--border)) 86%, transparent);
+}
+
+.redeven-workbench-conversation-shell__rail-title {
+  color: color-mix(in srgb, var(--muted-foreground) 82%, transparent);
+}

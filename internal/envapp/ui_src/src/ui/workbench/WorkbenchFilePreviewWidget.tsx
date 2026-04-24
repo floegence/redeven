@@ -174,7 +174,7 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
   });
 
   return (
-    <div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+    <div class="redeven-workbench-body-surface flex h-full min-h-0 flex-col overflow-hidden">
       <Show when={pendingSyncedItem()}>
         {(item) => (
           <div class="shrink-0 border-b border-warning/25 bg-warning/10 px-3 py-2 text-xs text-foreground">

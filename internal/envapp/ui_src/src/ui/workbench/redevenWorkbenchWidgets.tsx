@@ -34,7 +34,7 @@ function WorkbenchBodyNotice(props: {
 }) {
   return (
     <div class="flex h-full min-h-0 items-center justify-center bg-[radial-gradient(circle_at_top,_color-mix(in_srgb,var(--primary)_8%,transparent),_transparent_52%)] p-4">
-      <div class="w-full max-w-md rounded-2xl border border-border/70 bg-background/92 p-5 shadow-[0_18px_40px_rgba(15,23,42,0.08)] backdrop-blur">
+      <div class="redeven-workbench-body-notice-card w-full max-w-md rounded-2xl p-5">
         <Show when={props.eyebrow}>
           <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">{props.eyebrow}</div>
         </Show>
@@ -51,7 +51,7 @@ function WorkbenchBodyNotice(props: {
 function FilesWidget(props: RedevenWorkbenchWidgetBodyProps) {
   const workbench = useEnvWorkbenchInstancesContext();
   return (
-    <div class="h-full min-h-0 bg-background">
+    <div class="redeven-workbench-body-surface h-full min-h-0">
       <RemoteFileBrowser
         widgetId={props.widgetId}
         persistenceTarget="workbench"
@@ -100,7 +100,7 @@ function MonitorWidget() {
 
 function CodespacesWidget() {
   return (
-    <div class="h-full min-h-0 overflow-auto bg-background">
+    <div class="redeven-workbench-body-surface h-full min-h-0 overflow-auto">
       <EnvCodespacesPage />
     </div>
   );
@@ -121,7 +121,7 @@ function PortsWidget() {
         />
       )}
     >
-      <div class="h-full min-h-0 overflow-auto bg-background">
+      <div class="redeven-workbench-body-surface h-full min-h-0 overflow-auto">
         <EnvPortForwardsPage />
       </div>
     </Show>
