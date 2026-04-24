@@ -309,23 +309,32 @@ vi.mock('./surface/RedevenWorkbenchSurface', () => ({
       return String(right.id).localeCompare(String(left.id));
     })[0]?.id ?? '');
     return (
-      <div
-        data-testid="env-workbench-surface"
-        data-widget-ids={props.state().widgets.map((widget: any) => widget.id).join(',')}
-        data-viewport-x={String(props.state().viewport.x)}
-        data-widget-x={String(props.state().widgets[0]?.x ?? '')}
-        data-selected-widget-id={String(props.state().selectedWidgetId ?? '')}
-        data-top-widget-id={topWidgetId()}
-      >
-        {props.state().widgets.map((widget: any) => {
-          const definition = props.widgetDefinitions.find((entry: any) => entry.type === widget.type);
-          const Body = definition?.body;
-          return Body ? (
-            <div data-testid={`widget-body-${widget.id}`}>
-              <Body widgetId={widget.id} title={widget.title} type={widget.type} />
-            </div>
-          ) : null;
-        })}
+      <div>
+        <div class="workbench-hud" data-testid="mock-workbench-hud">
+          <button type="button" class="workbench-hud__button" aria-label="Zoom out">-</button>
+          <div class="workbench-hud__scale">100%</div>
+          <button type="button" class="workbench-hud__button" aria-label="Zoom in">+</button>
+        </div>
+        <div
+          data-testid="env-workbench-surface"
+          data-widget-ids={props.state().widgets.map((widget: any) => widget.id).join(',')}
+          data-viewport-x={String(props.state().viewport.x)}
+          data-viewport-y={String(props.state().viewport.y)}
+          data-viewport-scale={String(props.state().viewport.scale)}
+          data-widget-x={String(props.state().widgets[0]?.x ?? '')}
+          data-selected-widget-id={String(props.state().selectedWidgetId ?? '')}
+          data-top-widget-id={topWidgetId()}
+        >
+          {props.state().widgets.map((widget: any) => {
+            const definition = props.widgetDefinitions.find((entry: any) => entry.type === widget.type);
+            const Body = definition?.body;
+            return Body ? (
+              <div data-testid={`widget-body-${widget.id}`}>
+                <Body widgetId={widget.id} title={widget.title} type={widget.type} />
+              </div>
+            ) : null;
+          })}
+        </div>
       </div>
     );
   },
@@ -383,6 +392,8 @@ describe('EnvWorkbenchPage', () => {
     surfaceApiMocks.ensureWidget.mockReset();
     surfaceApiMocks.createWidget.mockReset();
     surfaceApiMocks.focusWidget.mockReset();
+    surfaceApiMocks.fitWidget.mockReset();
+    surfaceApiMocks.unfocusWidget.mockReset();
     surfaceApiMocks.enterOverview.mockReset();
     surfaceApiMocks.findWidgetByType.mockReset();
     surfaceApiMocks.findWidgetByType.mockReturnValue(null);
@@ -527,6 +538,129 @@ describe('EnvWorkbenchPage', () => {
       expect.objectContaining({ type: 'redeven.files', singleton: false }),
       expect.objectContaining({ type: 'redeven.preview', singleton: false }),
     ]));
+  });
+
+  it('shows the global min-scale HUD action even without a selected widget', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    expect(document.querySelector('[aria-label="Scale canvas to minimum"]')).toBeTruthy();
+    expect(document.querySelector('[aria-label="Fit selected widget to viewport"]')).toBeNull();
+  });
+
+  it('scales the canvas to the minimum value without moving the viewport or clearing selection', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 100,
+      widgets: [
+        {
+          widget_id: 'widget-files-1',
+          widget_type: 'redeven.files',
+          x: 320,
+          y: 180,
+          width: 760,
+          height: 560,
+          z_index: 1,
+          created_at_unix_ms: 123,
+        },
+      ],
+      widget_states: [],
+    });
+    storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
+      if (key === 'workbench:env-123') {
+        return {
+          version: 1,
+          widgets: [],
+          viewport: { x: 180, y: 120, scale: 1.25 },
+          locked: false,
+          filters: {
+            'redeven.terminal': true,
+            'redeven.files': true,
+            'redeven.preview': true,
+          },
+          selectedWidgetId: 'widget-files-1',
+          theme: 'default',
+        };
+      }
+      return null;
+    }) as any);
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    const minButton = document.querySelector('[aria-label="Scale canvas to minimum"]') as HTMLButtonElement | null;
+    expect(minButton).toBeTruthy();
+
+    minButton!.click();
+    await flushMicrotasks();
+
+    const surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement;
+    expect(surface.dataset.viewportX).toBe('180');
+    expect(surface.dataset.viewportY).toBe('120');
+    expect(surface.dataset.viewportScale).toBe('0.45');
+    expect(surface.dataset.selectedWidgetId).toBe('widget-files-1');
+  });
+
+  it('shows the fit button only for a selected widget and routes it to fitWidget', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 100,
+      widgets: [
+        {
+          widget_id: 'widget-files-1',
+          widget_type: 'redeven.files',
+          x: 320,
+          y: 180,
+          width: 760,
+          height: 560,
+          z_index: 1,
+          created_at_unix_ms: 123,
+        },
+      ],
+      widget_states: [],
+    });
+    storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
+      if (key === 'workbench:env-123') {
+        return {
+          version: 1,
+          widgets: [],
+          viewport: { x: 180, y: 120, scale: 1.25 },
+          locked: false,
+          filters: {
+            'redeven.terminal': true,
+            'redeven.files': true,
+            'redeven.preview': true,
+          },
+          selectedWidgetId: 'widget-files-1',
+          theme: 'default',
+        };
+      }
+      return null;
+    }) as any);
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    const fitButton = document.querySelector('[aria-label="Fit selected widget to viewport"]') as HTMLButtonElement | null;
+    expect(fitButton).toBeTruthy();
+
+    fitButton!.click();
+
+    expect(surfaceApiMocks.fitWidget).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'widget-files-1',
+      type: 'redeven.files',
+    }));
   });
 
   it('enters overview mode when the shell issues a workbench overview request', async () => {

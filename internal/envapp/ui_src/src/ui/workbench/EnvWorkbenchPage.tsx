@@ -5,7 +5,9 @@ import {
   type WorkbenchState,
 } from '@floegence/floe-webapp-core/workbench';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
-import { batch, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
+import { Maximize, Minus } from '@floegence/floe-webapp-core/icons';
+import { batch, createEffect, createMemo, createSignal, onCleanup, Show } from 'solid-js';
+import { Portal } from 'solid-js/web';
 
 import { basenameFromAbsolutePath, normalizeAbsolutePath } from '../utils/askFlowerPath';
 import { envWidgetTypeForSurface } from '../envViewMode';
@@ -49,6 +51,7 @@ import {
   derivePersistedWorkbenchLocalState,
   extractRuntimeWorkbenchLayoutFromWorkbenchState,
   projectWorkbenchStateFromRuntimeLayout,
+  REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE,
   runtimeWorkbenchLayoutIsEmpty,
   runtimeWorkbenchLayoutWidgetsEqual,
   runtimeWorkbenchWidgetStateById,
@@ -72,6 +75,7 @@ import { WorkbenchEntryIntro } from './WorkbenchEntryIntro';
 const WORKBENCH_PERSIST_DELAY_MS = 120;
 const WORKBENCH_LAYOUT_FLUSH_DELAY_MS = 0;
 const WORKBENCH_LAYOUT_RECONNECT_DELAY_MS = 900;
+const WORKBENCH_MIN_SCALE_EPSILON = 0.0001;
 const EMPTY_TERMINAL_PANEL_STATE: RedevenWorkbenchTerminalPanelState = {
   sessionIds: [],
   activeSessionId: null,
@@ -79,6 +83,49 @@ const EMPTY_TERMINAL_PANEL_STATE: RedevenWorkbenchTerminalPanelState = {
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+function scaleAtMinimum(scale: number): boolean {
+  return Math.abs(scale - REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE) <= WORKBENCH_MIN_SCALE_EPSILON;
+}
+
+function RedevenWorkbenchHudActions(props: {
+  mount: () => HTMLDivElement | null;
+  selectedWidget: () => WorkbenchState['widgets'][number] | null;
+  onMinimizeCanvasScale: () => void;
+  onFitSelectedWidget: () => void;
+}) {
+  return (
+    <Show when={props.mount()}>
+      {(mount) => (
+        <Portal mount={mount()}>
+          <div class="workbench-hud__divider" aria-hidden="true" />
+          <button
+            type="button"
+            class="workbench-hud__button"
+            aria-label="Scale canvas to minimum"
+            title="Scale canvas to minimum"
+            data-floe-canvas-interactive="true"
+            onClick={() => props.onMinimizeCanvasScale()}
+          >
+            <Minus class="w-3.5 h-3.5" />
+          </button>
+          <Show when={props.selectedWidget()}>
+            <button
+              type="button"
+              class="workbench-hud__button"
+              aria-label="Fit selected widget to viewport"
+              title="Fit selected widget to viewport"
+              data-floe-canvas-interactive="true"
+              onClick={() => props.onFitSelectedWidget()}
+            >
+              <Maximize class="w-3.5 h-3.5" />
+            </button>
+          </Show>
+        </Portal>
+      )}
+    </Show>
+  );
 }
 
 function shouldTrackSurfaceOwnerHandoff(previous: WorkbenchState, next: WorkbenchState): boolean {
@@ -367,6 +414,7 @@ export function EnvWorkbenchPage() {
   const [widgetRemoveGuards, setWidgetRemoveGuards] = createSignal<Record<string, () => boolean>>({});
   const [localOwnerHandoffActive, setLocalOwnerHandoffActive] = createSignal(false);
   const [introSurfaceHost, setIntroSurfaceHost] = createSignal<HTMLDivElement>();
+  const [workbenchHudMount, setWorkbenchHudMount] = createSignal<HTMLDivElement | null>(null);
   const [introPreparing, setIntroPreparing] = createSignal(true);
   const [introVisible, setIntroVisible] = createSignal(false);
   const [introSequence, setIntroSequence] = createSignal(0);
@@ -392,6 +440,13 @@ export function EnvWorkbenchPage() {
     ...instanceState().previewItemsByWidgetId,
     ...runtimePreviewItemsByWidgetId(),
   }));
+  const selectedWidget = createMemo(() => {
+    const selectedWidgetId = compact(workbenchState().selectedWidgetId);
+    if (!selectedWidgetId) {
+      return null;
+    }
+    return workbenchState().widgets.find((widget) => widget.id === selectedWidgetId) ?? null;
+  });
 
   const applyRuntimeSnapshot = (snapshot: RuntimeWorkbenchLayoutSnapshot) => {
     const current = runtimeSnapshot();
@@ -456,6 +511,30 @@ export function EnvWorkbenchPage() {
     if (shouldStartOwnerHandoff) {
       beginLocalOwnerHandoff();
     }
+  };
+
+  const minimizeCanvasScale = () => {
+    setSurfaceWorkbenchState((previous) => {
+      if (scaleAtMinimum(previous.viewport.scale)) {
+        return previous;
+      }
+      return {
+        ...previous,
+        viewport: {
+          ...previous.viewport,
+          scale: REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE,
+        },
+      };
+    });
+  };
+
+  const fitSelectedWidgetToViewport = () => {
+    const widget = selectedWidget();
+    const api = surfaceApi();
+    if (!widget || !api) {
+      return;
+    }
+    api.fitWidget(widget);
   };
 
   const applyRuntimeWidgetState = (state: RuntimeWorkbenchWidgetState, eventSeq?: number) => {
@@ -862,6 +941,28 @@ export function EnvWorkbenchPage() {
 
     api.enterOverview();
     env.consumeWorkbenchOverviewEntry(requestId);
+  });
+
+  createEffect(() => {
+    const host = introSurfaceHost();
+    if (!host) {
+      setWorkbenchHudMount(null);
+      return;
+    }
+
+    const syncHudMount = () => {
+      const nextMount = host.querySelector('.workbench-hud');
+      setWorkbenchHudMount(nextMount instanceof HTMLDivElement ? nextMount : null);
+    };
+
+    syncHudMount();
+    if (typeof MutationObserver !== 'function') {
+      return;
+    }
+
+    const observer = new MutationObserver(() => syncHudMount());
+    observer.observe(host, { childList: true, subtree: true });
+    onCleanup(() => observer.disconnect());
   });
 
   createEffect(() => {
@@ -1465,6 +1566,12 @@ export function EnvWorkbenchPage() {
             }}
           />
         </div>
+        <RedevenWorkbenchHudActions
+          mount={workbenchHudMount}
+          selectedWidget={selectedWidget}
+          onMinimizeCanvasScale={minimizeCanvasScale}
+          onFitSelectedWidget={fitSelectedWidgetToViewport}
+        />
         {introVisible() ? (
           <WorkbenchEntryIntro
             state={workbenchState}
