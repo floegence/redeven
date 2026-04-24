@@ -35,6 +35,7 @@ vi.mock('@floegence/floe-webapp-core/editor', () => ({
         data-drop-into-editor={String(props.options.dropIntoEditor?.enabled)}
         data-paste-as={String(props.options.pasteAs?.enabled)}
         data-drag-and-drop={String(props.options.dragAndDrop)}
+        data-runtime-profile={String(props.runtimeOptions?.profile)}
         onClick={() => {
           props.onChange?.('changed from editor');
           props.onSelectionChange?.('selected from editor', {});
@@ -82,6 +83,7 @@ describe('TextFilePreviewPane', () => {
     expect(host.textContent).toContain('typescript:const value = 1;:ro');
     expect(editor?.dataset.lineNumbers).toBe('on');
     expect(editor?.dataset.lineNumbersMinChars).toBe('3');
+    expect(editor?.dataset.runtimeProfile).toBe('preview_basic');
     expect(onSelectionChange).not.toHaveBeenCalled();
   });
 
@@ -172,6 +174,7 @@ describe('TextFilePreviewPane', () => {
     expect(editor?.dataset.dropIntoEditor).toBe('false');
     expect(editor?.dataset.pasteAs).toBe('false');
     expect(editor?.dataset.dragAndDrop).toBe('false');
+    expect(editor?.dataset.runtimeProfile).toBe('preview_basic');
 
     editor?.click();
 
