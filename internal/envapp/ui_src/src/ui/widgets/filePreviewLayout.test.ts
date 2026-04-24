@@ -15,7 +15,6 @@ describe('file preview wiring', () => {
     const panelSrc = read('./FilePreviewPanel.tsx');
     const docxPaneSrc = read('./DocxPreviewPane.tsx');
     const textPaneSrc = read('./TextFilePreviewPane.tsx');
-    const monacoCompatSrc = read('./monacoPreviewRuntimeCompat.ts');
     const surfaceSrc = read('./FilePreviewSurface.tsx');
     const envAppLayersSrc = read('../utils/envAppLayers.ts');
     const previewWindowSrc = read('./PreviewWindow.tsx');
@@ -32,8 +31,6 @@ describe('file preview wiring', () => {
     expect(docxPaneSrc).toContain('Fit');
     expect(docxPaneSrc).toContain('Zoom in docx preview');
     expect(textPaneSrc).toContain("from '@floegence/floe-webapp-core/editor';");
-    expect(textPaneSrc).toContain("from './monacoPreviewRuntimeCompat';");
-    expect(textPaneSrc).toContain('ensureMonacoPreviewRuntimeCompat()');
     expect(textPaneSrc).toContain('ErrorBoundary');
     expect(textPaneSrc).toContain('CodeEditorApi, CodeEditorProps');
     expect(textPaneSrc).toContain('PREVIEW_MONACO_RUNTIME_OPTIONS');
@@ -56,13 +53,6 @@ describe('file preview wiring', () => {
     expect(textPaneSrc).toContain('Discard this edit session or try again later.');
     expect(textPaneSrc).toContain('queueMicrotask');
     expect(textPaneSrc).toContain('Loading editor...');
-    expect(monacoCompatSrc).toContain("import('monaco-editor/esm/vs/editor/edcore.main.js')");
-    expect(monacoCompatSrc).toContain("import('monaco-editor/esm/vs/editor/contrib/suggest/browser/suggestMemory.js')");
-    expect(monacoCompatSrc).toContain("import('monaco-editor/esm/vs/editor/contrib/codelens/browser/codeLensCache.js')");
-    expect(monacoCompatSrc).toContain("import('monaco-editor/esm/vs/editor/contrib/inlayHints/browser/inlayHintsContribution.js')");
-    expect(monacoCompatSrc).toContain("import('monaco-editor/esm/vs/editor/common/services/treeViewsDndService.js')");
-    expect(monacoCompatSrc).toContain("import('monaco-editor/esm/vs/platform/actionWidget/browser/actionWidget.js')");
-    expect(monacoCompatSrc).toContain('pendingMonacoPreviewRuntimeCompat');
     expect(textPaneSrc).toContain("profile: 'preview_basic'");
     expect(textPaneSrc).toContain("profile: 'editor_full'");
     expect(textPaneSrc).toContain('runtimeOptions={editorRuntimeOptions()}');
