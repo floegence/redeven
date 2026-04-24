@@ -88,7 +88,6 @@ import { FlowerMessageRunIndicator } from '../widgets/FlowerMessageRunIndicator'
 import { FlowerLiveAssistantSurface } from '../widgets/FlowerLiveAssistantSurface';
 import { createAIThreadRenderController } from './createAIThreadRenderController';
 import { createAIContextTelemetryController } from './createAIContextTelemetryController';
-import { createFlowerBottomDockLayoutController } from './flowerBottomDockLayout';
 import { CompactContextSummary } from './AIContextSummary';
 
 type ExecutionMode = 'act' | 'plan';
@@ -1414,7 +1413,6 @@ export function EnvAIPage() {
   const contextCompactions = contextTelemetryController.contextCompactions;
   const hasContextTelemetry = contextTelemetryController.hasContextTelemetry;
   const hasKnownContextRun = contextTelemetryController.hasKnownContextRun;
-  const bottomDockLayoutController = createFlowerBottomDockLayoutController();
   let lastFollowupsReq = 0;
   let nextSendIntent: SendIntent = 'default';
   const sendIntentByMessageId = new Map<string, SendIntent>();
@@ -1431,10 +1429,6 @@ export function EnvAIPage() {
   const [chatInputApi, setChatInputApi] = createSignal<AIChatInputApi | null>(null);
   let queuedAskFlowerIntents: AskFlowerIntent[] = [];
   let messageAreaRef: HTMLDivElement | undefined;
-
-  onCleanup(() => {
-    bottomDockLayoutController.dispose();
-  });
 
   // Working dir (draft-only; locked after thread creation)
   const [homePath, setHomePath] = createSignal<string | undefined>(undefined);
@@ -3750,7 +3744,6 @@ export function EnvAIPage() {
                     <div
                       ref={(element) => {
                         messageAreaRef = element;
-                        bottomDockLayoutController.setTranscriptElement(element);
                       }}
                       class="flower-chat-transcript-main"
                     >
@@ -3773,9 +3766,6 @@ export function EnvAIPage() {
                   </div>
 
                   <div
-                    ref={(element) => {
-                      bottomDockLayoutController.setDockElement(element);
-                    }}
                     class="flower-chat-bottom-dock"
                   >
                     <div class="flower-chat-bottom-dock-lane">
