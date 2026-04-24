@@ -340,7 +340,7 @@ func newTestRuntimeManager(t *testing.T) *RuntimeManager {
 
 func waitForActiveRuntimeDetection(t *testing.T, mgr *RuntimeManager, want RuntimeDetectionState) RuntimeStatus {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	last := RuntimeStatus{}
 	for time.Now().Before(deadline) {
 		status := mgr.Status(context.Background())
@@ -356,7 +356,7 @@ func waitForActiveRuntimeDetection(t *testing.T, mgr *RuntimeManager, want Runti
 
 func waitForOperationState(t *testing.T, mgr *RuntimeManager, want RuntimeOperationState) RuntimeStatus {
 	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(20 * time.Second)
 	last := RuntimeStatus{}
 	for time.Now().Before(deadline) {
 		status := mgr.Status(context.Background())

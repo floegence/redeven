@@ -22,6 +22,8 @@ const (
 	defaultInstallScriptURL         = "https://code-server.dev/install.sh"
 	installScriptURLOverrideEnv     = "REDEVEN_CODE_SERVER_INSTALL_SCRIPT_URL"
 	defaultInstallerDownloadTimeout = 2 * time.Minute
+	defaultRuntimeProbeTimeout      = 5 * time.Second
+	selectedRuntimeProbeTimeout     = 15 * time.Second
 	runtimeLogTailLimit             = 80
 )
 
@@ -216,32 +218,64 @@ func (m *RuntimeManager) Status(ctx context.Context) RuntimeStatus {
 			UpdatedAtUnixMs:            time.Now().UnixMilli(),
 		}
 	}
-	active, managed, selectionSource, selectionVersion, machineState := runtimeStatusSnapshot(ctx, m.stateDir, m.stateRoot)
-	installedVersions := installedVersionStatuses(ctx, m.stateRoot, machineState, selectionVersion)
-	snapshot := m.snapshot()
-	return RuntimeStatus{
-		ActiveRuntime:               runtimeTargetStatusFromDetection(active),
-		ManagedRuntime:              runtimeTargetStatusFromDetection(managed),
-		ManagedPrefix:               managedRuntimePrefix(m.stateDir),
-		SharedRuntimeRoot:           sharedRuntimeRoot(m.stateRoot),
-		EnvironmentSelectionVersion: selectionVersion,
-		EnvironmentSelectionSource:  selectionSource,
-		MachineDefaultVersion:       machineState.DefaultVersion,
-		InstalledVersions:           installedVersions,
-		InstallerScriptURL:          m.installScriptURL,
-		Operation: RuntimeOperationStatus{
-			Action:           snapshot.operationAction,
-			State:            snapshot.operationState,
-			Stage:            snapshot.operationStage,
-			TargetVersion:    snapshot.targetVersion,
-			LastError:        snapshot.lastError,
-			LastErrorCode:    snapshot.lastErrorCode,
-			StartedAtUnixMs:  snapshot.operationStartedAt.UnixMilli(),
-			FinishedAtUnixMs: snapshot.operationFinishedAt.UnixMilli(),
-			LogTail:          append([]string(nil), snapshot.logTail...),
-		},
-		UpdatedAtUnixMs: snapshot.updatedAt.UnixMilli(),
+	const maxConsistentStatusAttempts = 3
+	type statusParts struct {
+		active           runtimeDetection
+		managed          runtimeDetection
+		selectionSource  string
+		selectionVersion string
+		machineState     machineRuntimeState
+		installed        []RuntimeInstalledVersionStatus
+		snapshot         runtimeSnapshot
 	}
+
+	buildStatus := func(parts statusParts) RuntimeStatus {
+		return RuntimeStatus{
+			ActiveRuntime:               runtimeTargetStatusFromDetection(parts.active),
+			ManagedRuntime:              runtimeTargetStatusFromDetection(parts.managed),
+			ManagedPrefix:               managedRuntimePrefix(m.stateDir),
+			SharedRuntimeRoot:           sharedRuntimeRoot(m.stateRoot),
+			EnvironmentSelectionVersion: parts.selectionVersion,
+			EnvironmentSelectionSource:  parts.selectionSource,
+			MachineDefaultVersion:       parts.machineState.DefaultVersion,
+			InstalledVersions:           parts.installed,
+			InstallerScriptURL:          m.installScriptURL,
+			Operation: RuntimeOperationStatus{
+				Action:           parts.snapshot.operationAction,
+				State:            parts.snapshot.operationState,
+				Stage:            parts.snapshot.operationStage,
+				TargetVersion:    parts.snapshot.targetVersion,
+				LastError:        parts.snapshot.lastError,
+				LastErrorCode:    parts.snapshot.lastErrorCode,
+				StartedAtUnixMs:  parts.snapshot.operationStartedAt.UnixMilli(),
+				FinishedAtUnixMs: parts.snapshot.operationFinishedAt.UnixMilli(),
+				LogTail:          append([]string(nil), parts.snapshot.logTail...),
+			},
+			UpdatedAtUnixMs: parts.snapshot.updatedAt.UnixMilli(),
+		}
+	}
+
+	last := statusParts{}
+	for attempt := 0; attempt < maxConsistentStatusAttempts; attempt++ {
+		snapshotBefore := m.snapshot()
+		active, managed, selectionSource, selectionVersion, machineState := runtimeStatusSnapshot(ctx, m.stateDir, m.stateRoot)
+		installedVersions := installedVersionStatuses(ctx, m.stateRoot, machineState, selectionVersion)
+		snapshotAfter := m.snapshot()
+		last = statusParts{
+			active:           active,
+			managed:          managed,
+			selectionSource:  selectionSource,
+			selectionVersion: selectionVersion,
+			machineState:     machineState,
+			installed:        installedVersions,
+			snapshot:         snapshotAfter,
+		}
+		if snapshotBefore.updatedAt.Equal(snapshotAfter.updatedAt) {
+			return buildStatus(last)
+		}
+	}
+
+	return buildStatus(last)
 }
 
 func (m *RuntimeManager) StartInstall(ctx context.Context) RuntimeStatus {
@@ -907,7 +941,7 @@ func detectRuntimeCandidate(ctx context.Context, candidate binaryCandidate) runt
 		detection.present = true
 	}
 
-	version, err := probeRuntimeBinaryVersion(ctx, path)
+	version, err := probeRuntimeBinaryVersionWithTimeout(ctx, path, runtimeProbeTimeoutForSource(candidate.source))
 	if err != nil {
 		detection.state = RuntimeDetectionUnusable
 		detection.errorCode = "binary_unusable"
@@ -1019,11 +1053,15 @@ func explicitOverrideCandidates() []binaryCandidate {
 }
 
 func probeRuntimeBinary(ctx context.Context, binaryPath string) error {
-	_, err := probeRuntimeBinaryVersion(ctx, binaryPath)
+	_, err := probeRuntimeBinaryVersionWithTimeout(ctx, binaryPath, selectedRuntimeProbeTimeout)
 	return err
 }
 
 func probeRuntimeBinaryVersion(ctx context.Context, binaryPath string) (string, error) {
+	return probeRuntimeBinaryVersionWithTimeout(ctx, binaryPath, selectedRuntimeProbeTimeout)
+}
+
+func probeRuntimeBinaryVersionWithTimeout(ctx context.Context, binaryPath string, timeout time.Duration) (string, error) {
 	path := strings.TrimSpace(binaryPath)
 	if path == "" {
 		return "", errors.New("missing binary path")
@@ -1031,7 +1069,10 @@ func probeRuntimeBinaryVersion(ctx context.Context, binaryPath string) (string, 
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	if timeout <= 0 {
+		timeout = defaultRuntimeProbeTimeout
+	}
+	probeCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	execPath, prefixArgs, err := resolveCodeServerExec(path)
@@ -1054,6 +1095,15 @@ func probeRuntimeBinaryVersion(ctx context.Context, binaryPath string) (string, 
 		return "", fmt.Errorf("%w: %s", err, msg)
 	}
 	return strings.TrimSpace(strings.Split(strings.TrimSpace(out.String()), "\n")[0]), nil
+}
+
+func runtimeProbeTimeoutForSource(source string) time.Duration {
+	switch strings.TrimSpace(source) {
+	case "env_override", "managed":
+		return selectedRuntimeProbeTimeout
+	default:
+		return defaultRuntimeProbeTimeout
+	}
 }
 
 func removeIfExists(path string) error {
