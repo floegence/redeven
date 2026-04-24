@@ -72,10 +72,12 @@ function FilesWidget(props: RedevenWorkbenchWidgetBodyProps) {
 function TerminalWidget(props: RedevenWorkbenchWidgetBodyProps) {
   const workbench = useEnvWorkbenchInstancesContext();
   const panelState = () => workbench.terminalPanelState(props.widgetId);
+  const workbenchPresentationScale = () => props.surfaceMetrics?.()?.rect.viewportScale ?? 1;
 
   return (
     <TerminalPanel
       variant="workbench"
+      workbenchPresentationScale={workbenchPresentationScale()}
       openSessionRequest={workbench.terminalOpenRequest(props.widgetId)}
       onOpenSessionRequestHandled={workbench.consumeTerminalOpenRequest}
       sessionGroupState={panelState()}

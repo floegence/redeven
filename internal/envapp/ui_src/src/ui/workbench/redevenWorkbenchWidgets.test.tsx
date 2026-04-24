@@ -178,6 +178,31 @@ describe('redevenWorkbenchWidgets terminal behavior', () => {
     });
   });
 
+  it('forwards the current workbench surface scale into the live terminal panel', () => {
+    renderTerminalBody({
+      surfaceMetrics: () => ({
+        ready: true,
+        rect: {
+          widgetId: 'widget-terminal-1',
+          worldX: 0,
+          worldY: 0,
+          worldWidth: 840,
+          worldHeight: 500,
+          screenX: 0,
+          screenY: 0,
+          screenWidth: 1680,
+          screenHeight: 1000,
+          viewportScale: 2,
+        },
+      }),
+    });
+
+    expect(terminalPanelMocks.render).toHaveBeenCalledTimes(1);
+    expect(terminalPanelMocks.render.mock.calls[0]?.[0]).toMatchObject({
+      workbenchPresentationScale: 2,
+    });
+  });
+
   it('focuses the terminal input on the first click after switching workbench widgets', async () => {
     const terminalEntry = redevenWorkbenchWidgets.find((widget) => widget.type === 'redeven.terminal');
     expect(terminalEntry).toBeTruthy();

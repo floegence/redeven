@@ -98,6 +98,7 @@ export interface TerminalPanelProps {
   onSessionGroupStateChange?: (next: TerminalPanelSessionGroupState) => void;
   sessionOperations?: TerminalPanelSessionOperations;
   workbenchActivationSeq?: number;
+  workbenchPresentationScale?: number;
   onTitleChange?: (title: string) => void;
 }
 
@@ -201,6 +202,7 @@ type terminal_session_view_props = {
   themeName: () => TerminalThemeName;
   themeColors: () => Record<string, string>;
   fontSize: () => number;
+  presentationScale: () => number;
   fontFamily: () => string;
   agentHomePathAbs: () => string;
   canOpenFilePreview: () => boolean;
@@ -379,6 +381,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
   const sessionId = () => props.session.id;
   const colors = () => props.themeColors();
   const fontSize = () => props.fontSize();
+  const presentationScale = () => props.presentationScale();
   const fontFamily = () => props.fontFamily();
   const [loading, setLoading] = createSignal<session_loading_state>('initializing');
   const [error, setError] = createSignal<string | null>(null);
@@ -575,6 +578,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
       getDefaultTerminalConfig('dark', {
         cursorBlink: false,
         fontSize: fontSize(),
+        presentationScale: props.active() ? presentationScale() : 1,
         allowTransparency: false,
         theme: colors(),
         fontFamily: fontFamily(),
@@ -732,18 +736,24 @@ function TerminalSessionView(props: terminal_session_view_props) {
     if (!props.viewActive() || !props.active()) return;
     const core = term;
     if (!core) return;
-    requestAnimationFrame(() => {
-      core.setTheme(colors());
-      core.setFontSize(fontSize());
-      core.forceResize();
-      if (props.autoFocus()) core.focus();
+      requestAnimationFrame(() => {
+        core.setTheme(colors());
+        core.setFontSize(fontSize());
+        core.setPresentationScale(presentationScale());
+        core.forceResize();
+        if (props.autoFocus()) core.focus();
+      });
     });
-  });
 
   createEffect(() => {
     if (!term) return;
     term.setFontSize(fontSize());
     term.forceResize();
+  });
+
+  createEffect(() => {
+    if (!term) return;
+    term.setPresentationScale(props.active() ? presentationScale() : 1);
   });
 
   createEffect(() => {
@@ -985,6 +995,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const fontFamily = createMemo<string>(() => {
     return resolveTerminalFontFamily(fontFamilyId());
+  });
+  const workbenchPresentationScale = createMemo<number>(() => {
+    if (props.variant !== 'workbench') {
+      return 1;
+    }
+    const scale = Number(props.workbenchPresentationScale ?? 1);
+    return Number.isFinite(scale) && scale > 1.001 ? Math.min(scale, 4) : 1;
   });
 
   const isMobileLayout = () => layout.isMobile();
@@ -2678,6 +2695,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                         themeName={terminalThemeName}
                         themeColors={terminalThemeColors}
                         fontSize={fontSize}
+                        presentationScale={workbenchPresentationScale}
                         fontFamily={fontFamily}
                         agentHomePathAbs={agentHomePathAbs}
                         canOpenFilePreview={canBrowseFiles}
