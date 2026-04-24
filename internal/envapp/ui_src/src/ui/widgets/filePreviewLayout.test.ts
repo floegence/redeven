@@ -33,7 +33,6 @@ describe('file preview wiring', () => {
     expect(textPaneSrc).toContain("from '@floegence/floe-webapp-core/editor';");
     expect(textPaneSrc).toContain('ErrorBoundary');
     expect(textPaneSrc).toContain('CodeEditorApi, CodeEditorProps');
-    expect(textPaneSrc).toContain('PREVIEW_MONACO_RUNTIME_OPTIONS');
     expect(textPaneSrc).toContain('StaticTextPreviewPane');
     expect(textPaneSrc).toContain('!props.truncated && !monacoFailed()');
     expect(textPaneSrc).toContain("return props.descriptor.language;");
@@ -51,7 +50,7 @@ describe('file preview wiring', () => {
     expect(textPaneSrc).toContain('Discard this edit session or try again later.');
     expect(textPaneSrc).toContain('queueMicrotask');
     expect(textPaneSrc).toContain('Loading editor...');
-    expect(textPaneSrc).toContain('runtimeOptions={PREVIEW_MONACO_RUNTIME_OPTIONS}');
+    expect(textPaneSrc).not.toContain('runtimeOptions=');
     expect(contentSrc).toContain('Copy path');
     expect(contentSrc).toContain('Edit');
     expect(contentSrc).toContain('Save');

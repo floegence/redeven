@@ -5,7 +5,6 @@ import type { FilePreviewDescriptor } from '../utils/filePreview';
 const CodeEditor = lazy(() => import('@floegence/floe-webapp-core/editor').then((module) => ({ default: module.CodeEditor })));
 
 type CodeEditorOptions = NonNullable<CodeEditorProps['options']>;
-type CodeEditorRuntimeOptions = CodeEditorProps['runtimeOptions'];
 
 const PREVIEW_MONACO_INTERACTION_OPTIONS: CodeEditorOptions = {
   hover: { enabled: false, sticky: false },
@@ -18,16 +17,6 @@ const PREVIEW_MONACO_INTERACTION_OPTIONS: CodeEditorOptions = {
   dropIntoEditor: { enabled: false, showDropSelector: 'never' },
   pasteAs: { enabled: false, showPasteSelector: 'never' },
   dragAndDrop: false,
-};
-
-const PREVIEW_MONACO_RUNTIME_OPTIONS: CodeEditorRuntimeOptions = {
-  standaloneFeatures: {
-    suggestMemory: false,
-    codeLensCache: false,
-    inlayHintsCache: false,
-    treeViewsDnd: false,
-    actionWidget: false,
-  },
 };
 
 interface StaticTextPreviewPaneProps {
@@ -138,7 +127,6 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
       language={resolvedLanguage()}
       value={editorValue()}
       options={editorOptions()}
-      runtimeOptions={PREVIEW_MONACO_RUNTIME_OPTIONS}
       onChange={(value: string) => {
         if (!props.editing) return;
         props.onDraftChange?.(value);
