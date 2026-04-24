@@ -1116,6 +1116,17 @@ html.dark .env-debug-console-switch[data-state='checked'] {
   height: 88%;
 }
 
+.redeven-flower-soft-aura-workbench-glow {
+  inset: -1%;
+  filter: blur(4.5px);
+  opacity: 0.92;
+}
+
+.redeven-flower-soft-aura-workbench-svg {
+  width: 84%;
+  height: 84%;
+}
+
 .redeven-flower-soft-aura-avatar .redeven-flower-soft-aura-glow {
   inset: -6%;
   filter: blur(6px);
@@ -1141,6 +1152,51 @@ html.dark .redeven-flower-soft-aura-nav-glow,
 html.dark .redeven-flower-soft-aura-avatar .redeven-flower-soft-aura-glow {
   opacity: 0;
   filter: none;
+}
+
+html.dark .redeven-flower-soft-aura-workbench-glow {
+  opacity: 0.42;
+  filter: blur(4px);
+}
+
+.redeven-codex-workbench-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 24%;
+  border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--card, var(--background)) 92%, currentColor 8%),
+      color-mix(in srgb, var(--background) 88%, currentColor 12%)
+    );
+  box-shadow:
+    0 1px 0 color-mix(in srgb, white 34%, transparent) inset,
+    0 1px 2px color-mix(in srgb, black 10%, transparent);
+}
+
+.redeven-codex-workbench-icon__art {
+  width: 76%;
+  height: 76%;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+html.dark .redeven-codex-workbench-icon {
+  border-color: color-mix(in srgb, white 18%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--card, var(--background)) 84%, white 16%),
+      color-mix(in srgb, var(--background) 78%, white 22%)
+    );
+  box-shadow:
+    0 1px 0 color-mix(in srgb, white 16%, transparent) inset,
+    0 1px 2px color-mix(in srgb, black 24%, transparent);
 }
 
 @media (max-width: 640px) {

@@ -7,18 +7,30 @@ import codexOfficialIcon from './assets/codex-official.png?inline';
 
 let preferredCodexIconFailed = false;
 
-function CodexIconFallback(props: { class?: string; style?: JSX.CSSProperties }) {
+function CodexIconFallback(props: {
+  class?: string;
+  style?: JSX.CSSProperties;
+  mode?: 'standalone' | 'shell';
+}) {
   return (
     <span
       data-codex-icon-mode="fallback"
       aria-hidden="true"
       class={cn(
-        'inline-flex shrink-0 items-center justify-center rounded-[22%] border border-current/15 bg-current/5',
+        'inline-flex shrink-0 items-center justify-center',
+        props.mode === 'shell'
+          ? 'text-current'
+          : 'rounded-[22%] border border-current/15 bg-current/5',
         props.class,
       )}
       style={props.style}
     >
-      <svg viewBox="0 0 24 24" fill="none" class="h-[72%] w-[72%]" aria-hidden="true">
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        class={props.mode === 'shell' ? 'h-[78%] w-[78%]' : 'h-[72%] w-[72%]'}
+        aria-hidden="true"
+      >
         <rect x="3.5" y="3.5" width="17" height="17" rx="4.25" stroke="currentColor" stroke-width="1.5" opacity="0.22" />
         <path
           d="M14.75 8A4.75 4.75 0 1 0 14.75 16"
@@ -32,11 +44,24 @@ function CodexIconFallback(props: { class?: string; style?: JSX.CSSProperties })
   );
 }
 
-export function CodexIcon(props: { class?: string; style?: JSX.CSSProperties }) {
+function CodexArtwork(props: {
+  class?: string;
+  style?: JSX.CSSProperties;
+  fallbackMode?: 'standalone' | 'shell';
+}) {
   const [showFallback, setShowFallback] = createSignal(preferredCodexIconFailed);
 
   return (
-    <Show when={!showFallback()} fallback={<CodexIconFallback class={props.class} style={props.style} />}>
+    <Show
+      when={!showFallback()}
+      fallback={(
+        <CodexIconFallback
+          class={props.class}
+          style={props.style}
+          mode={props.fallbackMode ?? 'standalone'}
+        />
+      )}
+    >
       <img
         data-codex-icon-mode="preferred"
         src={codexOfficialIcon}
@@ -53,6 +78,10 @@ export function CodexIcon(props: { class?: string; style?: JSX.CSSProperties }) 
   );
 }
 
+export function CodexIcon(props: { class?: string; style?: JSX.CSSProperties }) {
+  return <CodexArtwork class={props.class} style={props.style} />;
+}
+
 export function CodexNavigationIcon(props: { class?: string }) {
   return (
     <CodexIcon
@@ -62,5 +91,20 @@ export function CodexNavigationIcon(props: { class?: string }) {
         height: '1.5rem',
       }}
     />
+  );
+}
+
+export function CodexWorkbenchIcon(props: { class?: string }) {
+  return (
+    <span
+      data-codex-icon-shell="workbench"
+      aria-hidden="true"
+      class={cn('redeven-codex-workbench-icon', props.class)}
+    >
+      <CodexArtwork
+        class="redeven-codex-workbench-icon__art"
+        fallbackMode="shell"
+      />
+    </span>
   );
 }

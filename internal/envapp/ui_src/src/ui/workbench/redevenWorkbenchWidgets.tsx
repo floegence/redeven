@@ -6,8 +6,8 @@ import type {
 import { Activity, Code, Files, Globe, Search, Terminal } from '@floegence/floe-webapp-core/icons';
 import { Show, type JSX } from 'solid-js';
 
-import { CodexNavigationIcon } from '../icons/CodexIcon';
-import { FlowerNavigationIcon } from '../icons/FlowerSoftAuraIcon';
+import { CodexWorkbenchIcon } from '../icons/CodexIcon';
+import { FlowerWorkbenchIcon } from '../icons/FlowerSoftAuraIcon';
 import { useEnvContext } from '../pages/EnvContext';
 import { EnvAIPage } from '../pages/EnvAIPage';
 import { AIChatSidebar } from '../pages/AIChatSidebar';
@@ -246,7 +246,7 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
   {
     type: 'redeven.ai',
     label: 'Flower',
-    icon: FlowerNavigationIcon,
+    icon: FlowerWorkbenchIcon,
     body: FlowerWidget,
     defaultTitle: 'Flower',
     defaultSize: { width: 980, height: 620 },
@@ -257,7 +257,7 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
   {
     type: 'redeven.codex',
     label: 'Codex',
-    icon: CodexNavigationIcon,
+    icon: CodexWorkbenchIcon,
     body: CodexWidget,
     defaultTitle: 'Codex',
     defaultSize: { width: 980, height: 620 },

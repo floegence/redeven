@@ -11,6 +11,8 @@ import {
 } from '@floegence/floe-webapp-core/workbench';
 import { WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
 
+import { CodexWorkbenchIcon } from '../icons/CodexIcon';
+import { FlowerWorkbenchIcon } from '../icons/FlowerSoftAuraIcon';
 import { RedevenWorkbenchSurface } from './surface/RedevenWorkbenchSurface';
 
 const workbenchMocks = vi.hoisted(() => ({
@@ -225,5 +227,23 @@ describe('redevenWorkbenchWidgets terminal behavior', () => {
         workbenchActivationSeq: 1,
       })
     );
+  });
+});
+
+describe('redevenWorkbenchWidgets assistant metadata', () => {
+  it('uses compact singleton icons for Flower and Codex workbench widgets', () => {
+    const flower = redevenWorkbenchWidgets.find((widget) => widget.type === 'redeven.ai');
+    const codex = redevenWorkbenchWidgets.find((widget) => widget.type === 'redeven.codex');
+
+    expect(flower).toMatchObject({
+      label: 'Flower',
+      singleton: true,
+      icon: FlowerWorkbenchIcon,
+    });
+    expect(codex).toMatchObject({
+      label: 'Codex',
+      singleton: true,
+      icon: CodexWorkbenchIcon,
+    });
   });
 });

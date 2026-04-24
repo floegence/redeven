@@ -74,6 +74,18 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('filter: none;');
   });
 
+  it('defines compact workbench icon support for Flower and Codex launcher slots', () => {
+    const src = readRedevenCss();
+
+    expect(src).toContain('.redeven-flower-soft-aura-workbench-glow {');
+    expect(src).toContain('.redeven-flower-soft-aura-workbench-svg {');
+    expect(src).toContain('html.dark .redeven-flower-soft-aura-workbench-glow {');
+    expect(src).toContain('.redeven-codex-workbench-icon {');
+    expect(src).toContain('border: 1px solid color-mix(in srgb, currentColor 12%, transparent);');
+    expect(src).toContain('.redeven-codex-workbench-icon__art {');
+    expect(src).toContain('html.dark .redeven-codex-workbench-icon {');
+  });
+
   it('keeps the terminal surface focus state free of an outer halo ring', () => {
     const src = readRedevenCss();
 

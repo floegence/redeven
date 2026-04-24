@@ -39,13 +39,17 @@ export function FlowerNavigationIcon(props: { class?: string }) {
   );
 }
 
-export function FlowerContextMenuIcon(props: { class?: string }) {
+export function FlowerWorkbenchIcon(props: { class?: string }) {
   return (
     <FlowerSoftAuraIcon
       class={props.class}
       tone="primary"
-      glowClass="redeven-flower-soft-aura-nav-glow"
-      iconClass="redeven-flower-soft-aura-nav-svg"
+      glowClass="redeven-flower-soft-aura-workbench-glow"
+      iconClass="redeven-flower-soft-aura-workbench-svg"
     />
   );
+}
+
+export function FlowerContextMenuIcon(props: { class?: string }) {
+  return <FlowerWorkbenchIcon class={props.class} />;
 }

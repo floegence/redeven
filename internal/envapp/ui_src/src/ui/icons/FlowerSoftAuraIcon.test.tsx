@@ -2,7 +2,7 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { render } from 'solid-js/web';
-import { FlowerContextMenuIcon, FlowerNavigationIcon } from './FlowerSoftAuraIcon';
+import { FlowerContextMenuIcon, FlowerNavigationIcon, FlowerWorkbenchIcon } from './FlowerSoftAuraIcon';
 
 describe('FlowerNavigationIcon', () => {
   afterEach(() => {
@@ -37,7 +37,7 @@ describe('FlowerContextMenuIcon', () => {
     document.body.innerHTML = '';
   });
 
-  it('reuses the navigation avatar styling without forcing a larger inline size', () => {
+  it('reuses the compact workbench styling without forcing a larger inline size', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -52,10 +52,38 @@ describe('FlowerContextMenuIcon', () => {
       expect(root?.className).toContain('h-3.5');
 
       const glow = root?.querySelector('.redeven-flower-soft-aura-glow') as HTMLElement | null;
-      expect(glow?.className).toContain('redeven-flower-soft-aura-nav-glow');
+      expect(glow?.className).toContain('redeven-flower-soft-aura-workbench-glow');
 
       const svg = root?.querySelector('svg') as SVGElement | null;
-      expect(svg?.getAttribute('class')).toContain('redeven-flower-soft-aura-nav-svg');
+      expect(svg?.getAttribute('class')).toContain('redeven-flower-soft-aura-workbench-svg');
+    } finally {
+      dispose();
+    }
+  });
+});
+
+describe('FlowerWorkbenchIcon', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('uses the compact workbench-specific aura tuning without forcing navigation size', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => <FlowerWorkbenchIcon class="h-[18px] w-[18px]" />, host);
+
+    try {
+      const root = host.firstElementChild as HTMLElement | null;
+      expect(root).toBeTruthy();
+      expect(root?.style.width).toBe('');
+      expect(root?.style.height).toBe('');
+
+      const glow = root?.querySelector('.redeven-flower-soft-aura-glow') as HTMLElement | null;
+      expect(glow?.className).toContain('redeven-flower-soft-aura-workbench-glow');
+
+      const svg = root?.querySelector('svg') as SVGElement | null;
+      expect(svg?.getAttribute('class')).toContain('redeven-flower-soft-aura-workbench-svg');
     } finally {
       dispose();
     }
