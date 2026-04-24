@@ -42,6 +42,9 @@ func (w *testResponseWriter) Write(body []byte) (int, error) {
 }
 
 func (w *testResponseWriter) Flush() {
+	if w.statusCode == 0 {
+		w.WriteHeader(http.StatusOK)
+	}
 	w.flushed = true
 }
 
@@ -105,6 +108,54 @@ func TestStatusWriterIgnoresDuplicateWriteHeader(t *testing.T) {
 	}
 	if raw.statusCode != http.StatusCreated {
 		t.Fatalf("raw.statusCode = %d, want %d", raw.statusCode, http.StatusCreated)
+	}
+	if raw.writeHeaderCalls != 1 {
+		t.Fatalf("writeHeaderCalls = %d, want 1", raw.writeHeaderCalls)
+	}
+}
+
+func TestStatusWriterFlushCommitsImplicitOKWithoutDuplicateHeaders(t *testing.T) {
+	t.Parallel()
+
+	raw := &testResponseWriter{}
+	wrapped := NewStatusWriter(raw)
+
+	wrapped.Flush()
+	if wrapped.StatusCode() != http.StatusOK {
+		t.Fatalf("StatusCode() after Flush = %d, want %d", wrapped.StatusCode(), http.StatusOK)
+	}
+	if raw.statusCode != http.StatusOK {
+		t.Fatalf("raw.statusCode after Flush = %d, want %d", raw.statusCode, http.StatusOK)
+	}
+	if raw.writeHeaderCalls != 1 {
+		t.Fatalf("writeHeaderCalls after Flush = %d, want 1", raw.writeHeaderCalls)
+	}
+
+	if _, err := wrapped.Write([]byte("stream")); err != nil {
+		t.Fatalf("Write() after Flush error = %v", err)
+	}
+	if got := raw.body.String(); got != "stream" {
+		t.Fatalf("body = %q, want %q", got, "stream")
+	}
+	if raw.writeHeaderCalls != 1 {
+		t.Fatalf("writeHeaderCalls after Flush+Write = %d, want 1", raw.writeHeaderCalls)
+	}
+}
+
+func TestStatusWriterFlushPreservesExplicitStatus(t *testing.T) {
+	t.Parallel()
+
+	raw := &testResponseWriter{}
+	wrapped := NewStatusWriter(raw)
+
+	wrapped.WriteHeader(http.StatusAccepted)
+	wrapped.Flush()
+
+	if wrapped.StatusCode() != http.StatusAccepted {
+		t.Fatalf("StatusCode() = %d, want %d", wrapped.StatusCode(), http.StatusAccepted)
+	}
+	if raw.statusCode != http.StatusAccepted {
+		t.Fatalf("raw.statusCode = %d, want %d", raw.statusCode, http.StatusAccepted)
 	}
 	if raw.writeHeaderCalls != 1 {
 		t.Fatalf("writeHeaderCalls = %d, want 1", raw.writeHeaderCalls)

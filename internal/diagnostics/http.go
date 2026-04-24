@@ -20,15 +20,22 @@ func NewStatusWriter(w http.ResponseWriter) *StatusWriter {
 	}
 }
 
-func (w *StatusWriter) WriteHeader(statusCode int) {
+func (w *StatusWriter) markCommitted(statusCode int) bool {
 	if w == nil || w.ResponseWriter == nil {
-		return
+		return false
 	}
 	if w.wroteHeader {
-		return
+		return false
 	}
 	w.statusCode = statusCode
 	w.wroteHeader = true
+	return true
+}
+
+func (w *StatusWriter) WriteHeader(statusCode int) {
+	if !w.markCommitted(statusCode) {
+		return
+	}
 	w.ResponseWriter.WriteHeader(statusCode)
 }
 
@@ -66,6 +73,7 @@ func (w *StatusWriter) Flush() {
 	if w == nil || w.ResponseWriter == nil {
 		return
 	}
+	w.markCommitted(http.StatusOK)
 	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
 		flusher.Flush()
 	}
