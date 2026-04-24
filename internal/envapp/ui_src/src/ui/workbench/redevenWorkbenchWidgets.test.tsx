@@ -1,15 +1,20 @@
 // @vitest-environment jsdom
 
-import { createSignal } from 'solid-js';
+import { createRoot, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createWorkbenchFilterState,
+  useWorkbenchModel,
   type WorkbenchState,
   WorkbenchWidgetBodyProps as RedevenWorkbenchWidgetBodyProps,
   type WorkbenchWidgetDefinition,
+  type WorkbenchWidgetItem,
 } from '@floegence/floe-webapp-core/workbench';
-import { WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
+import {
+  type InfiniteCanvasContextMenuEvent,
+  WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR,
+} from '@floegence/floe-webapp-core/ui';
 
 import { CodexWorkbenchIcon } from '../icons/CodexIcon';
 import { FlowerWorkbenchIcon } from '../icons/FlowerSoftAuraIcon';
@@ -108,6 +113,26 @@ function dispatchPointerDown(target: EventTarget): void {
     });
   }
   target.dispatchEvent(event);
+}
+
+function createContextMenuEvent(worldX = 480, worldY = 320): InfiniteCanvasContextMenuEvent {
+  return {
+    clientX: 16,
+    clientY: 24,
+    worldX,
+    worldY,
+  };
+}
+
+function createWorkbenchState(widgets: readonly WorkbenchWidgetItem[]): WorkbenchState {
+  return {
+    version: 1,
+    widgets: [...widgets],
+    viewport: { x: 0, y: 0, scale: 1 },
+    locked: false,
+    filters: createWorkbenchFilterState(redevenWorkbenchWidgets),
+    selectedWidgetId: null,
+  };
 }
 
 async function flushWorkbenchInteraction(): Promise<void> {
@@ -244,6 +269,54 @@ describe('redevenWorkbenchWidgets assistant metadata', () => {
       label: 'Codex',
       singleton: true,
       icon: CodexWorkbenchIcon,
+    });
+  });
+
+  it('shows Go to for existing singleton assistant widgets in the canvas context menu', () => {
+    createRoot((dispose) => {
+      const [state, setState] = createSignal<WorkbenchState>(createWorkbenchState([
+        {
+          id: 'widget-flower-1',
+          type: 'redeven.ai',
+          title: 'Flower',
+          x: 0,
+          y: 0,
+          width: 980,
+          height: 620,
+          z_index: 1,
+          created_at_unix_ms: 1,
+        },
+        {
+          id: 'widget-codex-1',
+          type: 'redeven.codex',
+          title: 'Codex',
+          x: 1040,
+          y: 0,
+          width: 980,
+          height: 620,
+          z_index: 2,
+          created_at_unix_ms: 2,
+        },
+      ]));
+
+      const model = useWorkbenchModel({
+        state,
+        setState,
+        onClose: vi.fn(),
+        widgetDefinitions: redevenWorkbenchWidgets,
+      });
+
+      model.canvas.openCanvasContextMenu(createContextMenuEvent());
+
+      const labels = model.contextMenu.items()
+        .filter((item) => item.kind === 'action')
+        .map((item) => item.label);
+
+      expect(labels).toContain('Go to Flower');
+      expect(labels).toContain('Go to Codex');
+      expect(labels).toContain('Add Terminal');
+
+      dispose();
     });
   });
 });
