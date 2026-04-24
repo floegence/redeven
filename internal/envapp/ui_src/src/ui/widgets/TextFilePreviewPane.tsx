@@ -24,6 +24,10 @@ const PREVIEW_MONACO_RUNTIME_OPTIONS: CodeEditorRuntimeOptions = {
   profile: 'preview_basic',
 };
 
+const EDITING_MONACO_RUNTIME_OPTIONS: CodeEditorRuntimeOptions = {
+  profile: 'editor_full',
+};
+
 interface StaticTextPreviewPaneProps {
   text: string;
   wrapText?: boolean;
@@ -99,6 +103,9 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
   });
   const shouldUseMonaco = createMemo(() => !props.truncated && !monacoFailed());
   const editorValue = createMemo(() => (props.editing ? props.draftText ?? props.text : props.text));
+  const editorRuntimeOptions = createMemo<CodeEditorRuntimeOptions>(() => (
+    props.editing ? EDITING_MONACO_RUNTIME_OPTIONS : PREVIEW_MONACO_RUNTIME_OPTIONS
+  ));
   const editorOptions = createMemo<CodeEditorOptions>(() => ({
     ...PREVIEW_MONACO_INTERACTION_OPTIONS,
     readOnly: !props.editing,
@@ -132,7 +139,7 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
       language={resolvedLanguage()}
       value={editorValue()}
       options={editorOptions()}
-      runtimeOptions={PREVIEW_MONACO_RUNTIME_OPTIONS}
+      runtimeOptions={editorRuntimeOptions()}
       onChange={(value: string) => {
         if (!props.editing) return;
         props.onDraftChange?.(value);

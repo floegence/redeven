@@ -174,7 +174,7 @@ describe('TextFilePreviewPane', () => {
     expect(editor?.dataset.dropIntoEditor).toBe('false');
     expect(editor?.dataset.pasteAs).toBe('false');
     expect(editor?.dataset.dragAndDrop).toBe('false');
-    expect(editor?.dataset.runtimeProfile).toBe('preview_basic');
+    expect(editor?.dataset.runtimeProfile).toBe('editor_full');
 
     editor?.click();
 
@@ -214,6 +214,7 @@ describe('TextFilePreviewPane', () => {
     const editingEditor = host.querySelector('[data-testid="mock-editor"]') as HTMLButtonElement | null;
     expect(editingEditor?.dataset.instanceId).toBe('2');
     expect(editingEditor?.dataset.readOnly).toBe('false');
+    expect(editingEditor?.dataset.runtimeProfile).toBe('editor_full');
 
     editingEditor?.click();
 
