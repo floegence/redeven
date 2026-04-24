@@ -220,6 +220,7 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
     group: 'observability',
     singleton: true,
     renderMode: FRONTABLE_WORKBENCH_RENDER_MODE,
+    projectedSurfaceScaleBehavior: 'settle_sharp_zoom',
   },
   {
     type: 'redeven.codespaces',
@@ -242,6 +243,7 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
     group: 'network',
     singleton: true,
     renderMode: FRONTABLE_WORKBENCH_RENDER_MODE,
+    projectedSurfaceScaleBehavior: 'settle_sharp_zoom',
   },
   {
     type: 'redeven.ai',
