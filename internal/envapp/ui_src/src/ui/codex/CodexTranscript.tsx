@@ -6,6 +6,8 @@ import { Tag } from '@floegence/floe-webapp-core/ui';
 import { MarkdownBlock } from '../chat/blocks/MarkdownBlock';
 import { ShellBlock } from '../chat/blocks/ShellBlock';
 import { useVirtualList } from '../chat/hooks/useVirtualList';
+import { resolveViewportAnchorScrollTop } from '../chat/message-list/scrollAnchor';
+import type { FollowBottomViewportAnchorResolver } from '../chat/scroll/createFollowBottomController';
 import { StreamingCursor } from '../chat/status/StreamingCursor';
 import { CodexIcon } from '../icons/CodexIcon';
 import { CodexFileChangeDiff } from './CodexFileChangeDiff';
@@ -20,6 +22,7 @@ import {
   statusTagVariant,
 } from './presentation';
 import type { CodexOptimisticUserTurn, CodexTranscriptItem } from './types';
+import type { FollowBottomMode } from '../chat/scroll/createFollowBottomController';
 
 type CodexTranscriptSurfaceMode = 'empty' | 'loading' | 'feed';
 type CodexTranscriptSurfaceName = 'empty-state' | 'loading-state';
@@ -753,10 +756,19 @@ function estimateTranscriptRowHeight(row: CodexTranscriptRenderRow): number {
   }
 }
 
+function normalizeTranscriptRowScopeKey(value: string | null | undefined): string {
+  const normalized = String(value ?? '').trim();
+  return normalized || 'codex-transcript';
+}
+
+function buildScopedTranscriptRowID(scopeKey: string, anchorId: string): string {
+  return `${scopeKey}::${anchorId}`;
+}
+
 function CodexTranscriptMeasuredRow(props: {
   row: Accessor<CodexTranscriptRenderRow | null>;
   reasoningExpandedByID: Accessor<Record<string, boolean>>;
-  onReasoningExpandedChange: (itemID: string, expanded: boolean) => void;
+  onReasoningExpandedChange: (rowID: string, expanded: boolean) => void;
   observeRow: (element: HTMLElement, rowID: string) => void;
   unobserveRow: (element: HTMLElement) => void;
 }) {
@@ -792,12 +804,10 @@ function CodexTranscriptMeasuredRow(props: {
                 item={() => row().item ?? null}
                 showAssistantAvatar={() => Boolean(row().showAssistantAvatar)}
                 reasoningExpanded={Boolean(
-                  row().item ? props.reasoningExpandedByID()[String(row().item?.id ?? '').trim()] : false,
+                  row().item ? props.reasoningExpandedByID()[row().id] : false,
                 )}
                 onReasoningExpandedChange={(expanded) => {
-                  const itemID = String(row().item?.id ?? '').trim();
-                  if (!itemID) return;
-                  props.onReasoningExpandedChange(itemID, expanded);
+                  props.onReasoningExpandedChange(row().id, expanded);
                 }}
               />
             </Show>
@@ -857,6 +867,9 @@ function TranscriptRow(props: {
 export function CodexTranscript(props: {
   rootRef?: (element: HTMLDivElement) => void;
   scrollContainer?: HTMLElement | null;
+  onViewportAnchorResolverChange?: (resolver: FollowBottomViewportAnchorResolver | null) => void;
+  followBottomMode?: () => FollowBottomMode;
+  threadKey?: string;
   items: readonly CodexTranscriptItem[];
   optimisticUserTurns?: readonly CodexOptimisticUserTurn[];
   showWorkingState?: boolean;
@@ -871,16 +884,20 @@ export function CodexTranscript(props: {
   const optimisticUserTurns = createMemo<readonly CodexOptimisticUserTurn[]>(() => props.optimisticUserTurns ?? []);
   const [reasoningExpandedByID, setReasoningExpandedByID] = createSignal<Record<string, boolean>>({});
   const [rowHeightsByID, setRowHeightsByID] = createSignal<Record<string, number>>({});
+  const transcriptRowScopeKey = createMemo(() => normalizeTranscriptRowScopeKey(
+    props.threadKey ?? optimisticUserTurns()[0]?.thread_id ?? null,
+  ));
   const itemRows = createMemo<readonly CodexTranscriptRenderRow[]>(() => {
     const rows: CodexTranscriptRenderRow[] = [];
     props.items.forEach((item, index) => {
       if (!shouldRenderTranscriptItem(item)) return;
       const itemID = String(item.id ?? '').trim();
       if (!itemID) return;
+      const anchorId = `item:${itemID}`;
       const seedRow: CodexTranscriptRenderRow = {
-        id: `item:${itemID}`,
+        id: buildScopedTranscriptRowID(transcriptRowScopeKey(), anchorId),
         kind: 'item',
-        anchorId: `item:${itemID}`,
+        anchorId,
         item,
         showAssistantAvatar: shouldShowAgentAvatar(props.items, index),
         estimatedHeightPx: CODEX_TRANSCRIPT_VIRTUAL_LIST.defaultItemHeight,
@@ -922,10 +939,11 @@ export function CodexTranscript(props: {
   const showStandaloneWorkingRow = createMemo(() => Boolean(props.showWorkingState) && !pendingAssistantState().show);
   const transcriptRows = createMemo<readonly CodexTranscriptRenderRow[]>(() => {
     const rows: CodexTranscriptRenderRow[] = optimisticUserTurns().map((turn) => {
+      const anchorId = `optimistic:${turn.id}`;
       const seedRow: CodexTranscriptRenderRow = {
-        id: `optimistic:${turn.id}`,
+        id: buildScopedTranscriptRowID(transcriptRowScopeKey(), anchorId),
         kind: 'optimistic',
-        anchorId: `optimistic:${turn.id}`,
+        anchorId,
         optimisticTurn: turn,
         estimatedHeightPx: CODEX_TRANSCRIPT_VIRTUAL_LIST.defaultItemHeight,
       };
@@ -938,10 +956,11 @@ export function CodexTranscript(props: {
     rows.push(...itemRows());
 
     if (pendingAssistantState().show) {
+      const anchorId = 'pending-assistant';
       const seedRow: CodexTranscriptRenderRow = {
-        id: 'pending-assistant',
+        id: buildScopedTranscriptRowID(transcriptRowScopeKey(), anchorId),
         kind: 'pending_assistant',
-        anchorId: 'pending-assistant',
+        anchorId,
         pendingAssistantState: pendingAssistantState(),
         estimatedHeightPx: CODEX_TRANSCRIPT_VIRTUAL_LIST.defaultItemHeight,
       };
@@ -952,10 +971,11 @@ export function CodexTranscript(props: {
     }
 
     if (showStandaloneWorkingRow()) {
+      const anchorId = 'working-state';
       const seedRow: CodexTranscriptRenderRow = {
-        id: 'working-state',
+        id: buildScopedTranscriptRowID(transcriptRowScopeKey(), anchorId),
         kind: 'working_state',
-        anchorId: 'working-state',
+        anchorId,
         workingPhaseLabel: pendingAssistantState().phaseLabel,
         showAssistantAvatar: shouldShowWorkingAvatar(props.items),
         estimatedHeightPx: CODEX_TRANSCRIPT_VIRTUAL_LIST.defaultItemHeight,
@@ -972,8 +992,12 @@ export function CodexTranscript(props: {
     transcriptRows().map((row) => [row.id, row]),
   ));
   const transcriptRowOrder = createMemo<string[]>(() => transcriptRows().map((row) => row.id));
+  const transcriptAnchorOrder = createMemo<string[]>(() => transcriptRows().map((row) => row.anchorId));
   const transcriptRowIndexByID = createMemo<Map<string, number>>(() => new Map(
     transcriptRowOrder().map((rowID, index) => [rowID, index]),
+  ));
+  const transcriptRowIndexByAnchorID = createMemo<Map<string, number>>(() => new Map(
+    transcriptRows().map((row, index) => [row.anchorId, index]),
   ));
   const virtualized = createMemo(() => Boolean(props.scrollContainer));
   const virtualList = useVirtualList({
@@ -994,6 +1018,56 @@ export function CodexTranscript(props: {
   });
   const paddingTopPx = createMemo(() => (virtualized() ? virtualList.paddingTop() : 0));
   const paddingBottomPx = createMemo(() => (virtualized() ? virtualList.paddingBottom() : 0));
+  const getTranscriptRowHeight = (index: number): number => {
+    const rowID = transcriptRowOrder()[index];
+    if (!rowID) return CODEX_TRANSCRIPT_VIRTUAL_LIST.defaultItemHeight;
+    return rowHeightsByID()[rowID]
+      ?? transcriptRowsByID()[rowID]?.estimatedHeightPx
+      ?? CODEX_TRANSCRIPT_VIRTUAL_LIST.defaultItemHeight;
+  };
+  const findViewportAnchorIndex = (scrollTop: number): number => {
+    const rowCount = transcriptRowOrder().length;
+    if (rowCount <= 0) return -1;
+
+    let low = 0;
+    let high = rowCount - 1;
+    let match = rowCount - 1;
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      const itemStart = virtualList.getItemOffset(mid);
+      const itemEnd = itemStart + Math.max(1, getTranscriptRowHeight(mid));
+      if (itemEnd > scrollTop + 0.5) {
+        match = mid;
+        high = mid - 1;
+      } else {
+        low = mid + 1;
+      }
+    }
+    return match;
+  };
+
+  const followBottomViewportAnchorResolver: FollowBottomViewportAnchorResolver = {
+    capture: () => {
+      const scrollContainer = props.scrollContainer ?? null;
+      if (!scrollContainer || !virtualized()) return null;
+      const anchorIndex = findViewportAnchorIndex(scrollContainer.scrollTop);
+      if (anchorIndex < 0) return null;
+      const anchorID = transcriptAnchorOrder()[anchorIndex];
+      if (!anchorID) return null;
+      return {
+        id: anchorID,
+        topOffsetPx: virtualList.getItemOffset(anchorIndex) - scrollContainer.scrollTop,
+      };
+    },
+    resolveScrollTop: (anchor) => resolveViewportAnchorScrollTop(
+      {
+        messageId: anchor.id,
+        offsetWithinItem: Math.max(0, -anchor.topOffsetPx),
+      },
+      transcriptRowIndexByAnchorID(),
+      virtualList.getItemOffset,
+    ),
+  };
 
   createEffect(() => {
     const element = props.scrollContainer ?? null;
@@ -1011,24 +1085,33 @@ export function CodexTranscript(props: {
   });
 
   createEffect(() => {
-    const visibleReasoningIDs = new Set<string>();
+    const onResolverChange = props.onViewportAnchorResolverChange;
+    if (!onResolverChange) return;
+    onResolverChange(virtualized() ? followBottomViewportAnchorResolver : null);
+    onCleanup(() => {
+      onResolverChange(null);
+    });
+  });
+
+  createEffect(() => {
+    const visibleReasoningRowIDs = new Set<string>();
     setReasoningExpandedByID((current) => {
       let next = current;
       let changed = false;
-      for (const item of props.items) {
-        if (item.type !== 'reasoning' && item.type !== 'plan') continue;
-        const itemID = String(item.id ?? '').trim();
-        if (!itemID) continue;
-        visibleReasoningIDs.add(itemID);
-        if (Object.prototype.hasOwnProperty.call(current, itemID)) continue;
+      for (const row of transcriptRows()) {
+        if (row.kind !== 'item') continue;
+        const item = row.item;
+        if (!item || (item.type !== 'reasoning' && item.type !== 'plan')) continue;
+        visibleReasoningRowIDs.add(row.id);
+        if (Object.prototype.hasOwnProperty.call(current, row.id)) continue;
         if (next === current) next = { ...current };
-        next[itemID] = false;
+        next[row.id] = false;
         changed = true;
       }
-      for (const itemID of Object.keys(current)) {
-        if (visibleReasoningIDs.has(itemID)) continue;
+      for (const rowID of Object.keys(current)) {
+        if (visibleReasoningRowIDs.has(rowID)) continue;
         if (next === current) next = { ...current };
-        delete next[itemID];
+        delete next[rowID];
         changed = true;
       }
       return changed ? next : current;
@@ -1064,6 +1147,11 @@ export function CodexTranscript(props: {
         updates.set(rowID, nextHeight);
       }
       if (updates.size === 0) return;
+      const scrollContainer = props.scrollContainer ?? null;
+      const keepViewportAnchor = virtualized() && props.followBottomMode?.() === 'paused' && !!scrollContainer;
+      const viewportAnchorBeforeResize = keepViewportAnchor
+        ? followBottomViewportAnchorResolver.capture()
+        : null;
       setRowHeightsByID((current) => {
         let next = current;
         let changed = false;
@@ -1081,6 +1169,17 @@ export function CodexTranscript(props: {
         const rowIndex = transcriptRowIndexByID().get(rowID);
         if (rowIndex === undefined) continue;
         virtualList.setItemHeight(rowIndex, nextHeight);
+      }
+      if (keepViewportAnchor && scrollContainer && viewportAnchorBeforeResize) {
+        const nextAnchorScrollTop = followBottomViewportAnchorResolver.resolveScrollTop(viewportAnchorBeforeResize);
+        if (
+          nextAnchorScrollTop !== null &&
+          Number.isFinite(nextAnchorScrollTop) &&
+          Math.abs(nextAnchorScrollTop - scrollContainer.scrollTop) > 0.5
+        ) {
+          scrollContainer.scrollTop = Math.max(0, nextAnchorScrollTop);
+          virtualList.onScroll();
+        }
       }
     });
 

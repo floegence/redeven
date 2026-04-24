@@ -181,6 +181,44 @@ describe('createFollowBottomController', () => {
     controller.dispose();
   });
 
+  it('dispatches a scroll event after programmatic follow sync so virtualized listeners can update', () => {
+    const observerRecords: ObserverRecord[] = [];
+    const controller = createFollowBottomController({
+      createResizeObserver: createObserverFactory(observerRecords),
+      requestAnimationFrame(callback) {
+        callback(16);
+        return 1;
+      },
+      cancelAnimationFrame() {
+        // No-op for test harness.
+      },
+    });
+
+    const scrollContainer = document.createElement('div');
+    const contentRoot = document.createElement('div');
+    scrollContainer.append(contentRoot);
+    document.body.append(scrollContainer);
+
+    defineElementSize(scrollContainer, {
+      scrollHeight: () => 360,
+      clientHeight: () => 120,
+    });
+    installContainerRect(scrollContainer, 100, 120);
+
+    let scrollEvents = 0;
+    scrollContainer.addEventListener('scroll', () => {
+      scrollEvents += 1;
+    });
+
+    controller.setScrollContainer(scrollContainer);
+    controller.setContentRoot(contentRoot);
+    controller.requestFollowBottom(followRequest(1, 'thread_switch'));
+
+    expect(scrollContainer.scrollTop).toBe(expectedBottomScrollTop(360));
+    expect(scrollEvents).toBeGreaterThan(0);
+    controller.dispose();
+  });
+
   it('pauses follow mode only after a recent user scroll intent', () => {
     const observerRecords: ObserverRecord[] = [];
     const controller = createFollowBottomController({
@@ -557,6 +595,141 @@ describe('createFollowBottomController', () => {
     expect(controller.mode()).toBe('paused');
     expect(scrollContainer.scrollTop).toBe(140);
     expect(controller.distanceToBottomPx()).toBe(80);
+    controller.dispose();
+  });
+
+  it('prefers a custom viewport anchor resolver for paused virtualized content', () => {
+    const observerRecords: ObserverRecord[] = [];
+    const raf = createRafHarness();
+    const controller = createFollowBottomController({
+      createResizeObserver: createObserverFactory(observerRecords),
+      requestAnimationFrame: raf.requestAnimationFrame,
+      cancelAnimationFrame: raf.cancelAnimationFrame,
+      followThresholdPx: 24,
+    });
+
+    const scrollContainer = document.createElement('div');
+    const contentRoot = document.createElement('div');
+    const row1 = document.createElement('div');
+    const row2 = document.createElement('div');
+    const row3 = document.createElement('div');
+    row1.setAttribute('data-follow-bottom-anchor-id', 'item:1');
+    row2.setAttribute('data-follow-bottom-anchor-id', 'item:2');
+    row3.setAttribute('data-follow-bottom-anchor-id', 'item:3');
+    contentRoot.append(row1, row2, row3);
+    scrollContainer.append(contentRoot);
+    document.body.append(scrollContainer);
+
+    let scrollHeight = 300;
+    const metrics = {
+      row1: { top: 0, height: 80 },
+      row2: { top: 80, height: 80 },
+      row3: { top: 160, height: 80 },
+    };
+
+    defineElementSize(scrollContainer, {
+      scrollHeight: () => scrollHeight,
+      clientHeight: () => 120,
+    });
+    installContainerRect(scrollContainer, 100, 120);
+    installRowRect(row1, scrollContainer, {
+      top: () => metrics.row1.top,
+      height: () => metrics.row1.height,
+    });
+    installRowRect(row2, scrollContainer, {
+      top: () => metrics.row2.top,
+      height: () => metrics.row2.height,
+    });
+    installRowRect(row3, scrollContainer, {
+      top: () => metrics.row3.top,
+      height: () => metrics.row3.height,
+    });
+
+    controller.setViewportAnchorResolver({
+      capture: () => ({
+        id: 'item:2',
+        topOffsetPx: -20,
+      }),
+      resolveScrollTop: (anchor) => (anchor.id === 'item:2' ? 180 : null),
+    });
+    controller.setScrollContainer(scrollContainer);
+    controller.setContentRoot(contentRoot);
+
+    scrollContainer.dispatchEvent(new Event('wheel'));
+    scrollContainer.scrollTop = 100;
+    controller.handleScroll();
+
+    expect(controller.mode()).toBe('paused');
+
+    metrics.row2.top += 8;
+    metrics.row3.top += 8;
+    scrollHeight = 308;
+
+    const contentObserver = observerRecords.find((record) => record.target === contentRoot);
+    contentObserver?.callback([], {} as ResizeObserver);
+    raf.flushAll();
+
+    expect(scrollContainer.scrollTop).toBe(180);
+    controller.dispose();
+  });
+
+  it('skips paused content-resize anchor restoration when external virtualized handling owns it', () => {
+    const observerRecords: ObserverRecord[] = [];
+    const raf = createRafHarness();
+    const controller = createFollowBottomController({
+      createResizeObserver: createObserverFactory(observerRecords),
+      requestAnimationFrame: raf.requestAnimationFrame,
+      cancelAnimationFrame: raf.cancelAnimationFrame,
+      followThresholdPx: 24,
+    });
+
+    const scrollContainer = document.createElement('div');
+    const contentRoot = document.createElement('div');
+    const row1 = document.createElement('div');
+    const row2 = document.createElement('div');
+    row1.setAttribute('data-follow-bottom-anchor-id', 'item:1');
+    row2.setAttribute('data-follow-bottom-anchor-id', 'item:2');
+    contentRoot.append(row1, row2);
+    scrollContainer.append(contentRoot);
+    document.body.append(scrollContainer);
+
+    let scrollHeight = 220;
+    const metrics = {
+      row1: { top: 0, height: 80 },
+      row2: { top: 80, height: 80 },
+    };
+
+    defineElementSize(scrollContainer, {
+      scrollHeight: () => scrollHeight,
+      clientHeight: () => 120,
+    });
+    installContainerRect(scrollContainer, 100, 120);
+    installRowRect(row1, scrollContainer, {
+      top: () => metrics.row1.top,
+      height: () => metrics.row1.height,
+    });
+    installRowRect(row2, scrollContainer, {
+      top: () => metrics.row2.top,
+      height: () => metrics.row2.height,
+    });
+
+    controller.setScrollContainer(scrollContainer);
+    controller.setContentRoot(contentRoot);
+    controller.setPausedContentAnchorRestoreEnabled(false);
+
+    scrollContainer.dispatchEvent(new Event('wheel'));
+    scrollContainer.scrollTop = 60;
+    controller.handleScroll();
+
+    metrics.row1.height += 24;
+    metrics.row2.top += 24;
+    scrollHeight += 24;
+
+    const contentObserver = observerRecords.find((record) => record.target === contentRoot);
+    contentObserver?.callback([], {} as ResizeObserver);
+    raf.flushAll();
+
+    expect(scrollContainer.scrollTop).toBe(60);
     controller.dispose();
   });
 });

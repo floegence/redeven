@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 
-import { createSignal } from 'solid-js';
+import { batch, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { FollowBottomViewportAnchorResolver } from '../chat/scroll/createFollowBottomController';
 import { CodexTranscript } from './CodexTranscript';
 import type { CodexOptimisticUserTurn, CodexTranscriptItem } from './types';
 
@@ -90,12 +91,16 @@ function renderTranscript(items: CodexTranscriptItem[], options?: {
   workingLabel?: string;
   workingFlags?: string[];
   scrollContainer?: HTMLElement | null;
+  onViewportAnchorResolverChange?: (resolver: FollowBottomViewportAnchorResolver | null) => void;
+  threadKey?: string;
 }) {
   const host = document.createElement('div');
   document.body.append(host);
   const dispose = render(() => (
     <CodexTranscript
       scrollContainer={options?.scrollContainer}
+      onViewportAnchorResolverChange={options?.onViewportAnchorResolverChange}
+      threadKey={options?.threadKey}
       items={items}
       optimisticUserTurns={options?.optimisticUserTurns}
       showWorkingState={options?.showWorkingState}
@@ -210,6 +215,104 @@ describe('CodexTranscript', () => {
 
     expect(host.querySelector('[data-codex-reasoning-row="true"]')?.getAttribute('data-codex-reasoning-expanded')).toBe('true');
     expect(host.textContent).toContain('Reasoning detail survives virtualization.');
+
+    dispose();
+  });
+
+  it('exposes a virtualized viewport anchor resolver that round-trips the current scroll position', async () => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(16);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    const scrollContainer = createVirtualScrollContainer(240);
+    const items: CodexTranscriptItem[] = Array.from({ length: 24 }, (_, index) => ({
+      id: `item_${index}`,
+      type: 'agentMessage',
+      text: `Transcript row ${index}`,
+      status: 'completed',
+      order: index,
+    }));
+
+    let resolver: FollowBottomViewportAnchorResolver | null = null;
+    const { dispose } = renderTranscript(items, {
+      scrollContainer,
+      onViewportAnchorResolverChange: (nextResolver) => {
+        resolver = nextResolver;
+      },
+    });
+
+    await flushAsync();
+
+    scrollContainer.scrollTop = 300;
+    scrollContainer.dispatchEvent(new Event('scroll'));
+    await flushAsync();
+
+    const currentResolver = resolver as FollowBottomViewportAnchorResolver | null;
+    const anchor = currentResolver?.capture() ?? null;
+    expect(anchor).not.toBeNull();
+    expect(anchor?.id).toBe('item:item_2');
+    expect(currentResolver?.resolveScrollTop(anchor!)).toBe(300);
+
+    dispose();
+  });
+
+  it('does not reuse virtual row heights across threads that share the same item ids', async () => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(16);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    const scrollContainer = createVirtualScrollContainer(240);
+
+    const buildItems = (variant: 'large' | 'small'): CodexTranscriptItem[] => Array.from({ length: 24 }, (_, index) => ({
+      id: `item_${index}`,
+      type: variant === 'large' ? 'fileChange' : 'userMessage',
+      text: `${variant} row ${index}`,
+      changes: variant === 'large' ? [] : undefined,
+      order: index,
+    }));
+
+    const host = document.createElement('div');
+    document.body.append(host);
+    const [threadKey, setThreadKey] = createSignal('thread-large');
+    const [items, setItems] = createSignal<CodexTranscriptItem[]>(buildItems('large'));
+
+    const dispose = render(() => (
+      <CodexTranscript
+        scrollContainer={scrollContainer}
+        threadKey={threadKey()}
+        items={items()}
+        emptyTitle="Empty"
+        emptyBody="Nothing yet."
+      />
+    ), host);
+
+    await flushAsync();
+
+    batch(() => {
+      setThreadKey('thread-small');
+      setItems(buildItems('small'));
+    });
+    await flushAsync();
+
+    scrollContainer.scrollTop = (24 * 92) - 240;
+    scrollContainer.dispatchEvent(new Event('scroll'));
+    await flushAsync();
+
+    const renderedText = Array.from(host.querySelectorAll<HTMLElement>('.codex-transcript-row'))
+      .map((row) => String(row.textContent ?? '').trim())
+      .filter(Boolean);
+    const spacerHeights = Array.from(host.querySelectorAll<HTMLElement>('[aria-hidden="true"]'))
+      .map((element) => {
+        const match = String(element.getAttribute('style') ?? '').match(/height:\s*([0-9.]+)px/);
+        return match ? Number(match[1]) : NaN;
+      })
+      .filter((value) => Number.isFinite(value));
+
+    expect(renderedText.some((text) => text.includes('small row 23'))).toBe(true);
+    expect(renderedText.some((text) => text.includes('small row 00'))).toBe(false);
+    expect(spacerHeights.length).toBeGreaterThan(0);
 
     dispose();
   });

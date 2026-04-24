@@ -105,6 +105,7 @@ export function useVirtualList(options: UseVirtualListOptions): UseVirtualListRe
   const [scrollTop, setScrollTop] = createSignal(0);
   const [containerHeight, setContainerHeight] = createSignal(0);
   const [atBottom, setAtBottom] = createSignal(true);
+  const [layoutVersion, setLayoutVersion] = createSignal(0);
 
   // Per-item height tracking
   let heights: number[] = [];
@@ -114,6 +115,10 @@ export function useVirtualList(options: UseVirtualListOptions): UseVirtualListRe
 
   // Pending rAF for batched updates
   let rafId: number | null = null;
+
+  function invalidateLayout(): void {
+    setLayoutVersion((version) => version + 1);
+  }
 
   /** Normalize observed heights to reduce sub-pixel measurement noise. */
   function normalizeHeight(height: number): number {
@@ -144,6 +149,7 @@ export function useVirtualList(options: UseVirtualListOptions): UseVirtualListRe
     heights = resolvedKeys.map((key, index) => heightByKey.get(key) ?? getItemHeight(index));
     bit = bitBuild(heights);
     prevCount = n;
+    invalidateLayout();
   }
 
   // React to count and key changes so cached heights stay aligned with item identity.
@@ -156,6 +162,7 @@ export function useVirtualList(options: UseVirtualListOptions): UseVirtualListRe
 
   // Compute the visible range with overscan
   const visibleRange = createMemo<{ start: number; end: number }>(() => {
+    layoutVersion();
     const n = count();
     if (n === 0) return { start: 0, end: 0 };
 
@@ -202,6 +209,7 @@ export function useVirtualList(options: UseVirtualListOptions): UseVirtualListRe
 
   // Total height of all items
   const totalHeight = createMemo(() => {
+    layoutVersion();
     const n = count();
     if (n === 0) return 0;
     ensureSize(n);
@@ -259,17 +267,12 @@ export function useVirtualList(options: UseVirtualListOptions): UseVirtualListRe
     const delta = normalizedHeight - oldHeight;
     heights[index] = normalizedHeight;
     bitUpdate(bit, index + 1, delta);
-
-    // Trigger reactivity by touching scrollTop (read + write same value via rAF)
-    if (rafId !== null) {
-      cancelAnimationFrame(rafId);
+    invalidateLayout();
+    if (scrollEl) {
+      const scrollHeight = scrollEl.scrollHeight;
+      const clientHeight = scrollEl.clientHeight;
+      setAtBottom(scrollHeight - scrollEl.scrollTop - clientHeight < 50);
     }
-    rafId = requestAnimationFrame(() => {
-      rafId = null;
-      if (scrollEl) {
-        setScrollTop(scrollEl.scrollTop);
-      }
-    });
   }
 
   function getItemOffset(index: number): number {

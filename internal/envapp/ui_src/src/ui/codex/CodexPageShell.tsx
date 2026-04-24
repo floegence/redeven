@@ -46,6 +46,8 @@ export function CodexPageShell() {
   const [transcriptOverlayTrackRef, setTranscriptOverlayTrackRef] = createSignal<HTMLDivElement>();
   const [transcriptScrollRegionRef, setTranscriptScrollRegionRef] = createSignal<HTMLDivElement>();
 
+  followBottomController.setPausedContentAnchorRestoreEnabled(false);
+
   onCleanup(() => {
     followBottomController.dispose();
   });
@@ -414,6 +416,9 @@ export function CodexPageShell() {
               <CodexTranscript
                 rootRef={followBottomController.setContentRoot}
                 scrollContainer={transcriptScrollRegionRef()}
+                onViewportAnchorResolverChange={followBottomController.setViewportAnchorResolver}
+                followBottomMode={followBottomController.mode}
+                threadKey={String(codex.displayedThreadID() ?? codex.activeThreadID() ?? '').trim() || 'new-thread'}
                 items={codex.transcriptItems()}
                 optimisticUserTurns={codex.activeOptimisticUserTurns()}
                 showWorkingState={shouldShowWorkingState()}

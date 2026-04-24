@@ -332,6 +332,10 @@
   flex-direction: column;
 }
 
+.codex-transcript-shell-feed > .codex-transcript-feed {
+  margin-top: auto;
+}
+
 .codex-page-chip {
   display: inline-flex;
   min-width: 0;

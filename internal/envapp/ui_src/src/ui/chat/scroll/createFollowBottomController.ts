@@ -16,6 +16,11 @@ export type FollowBottomViewportAnchor = Readonly<{
   topOffsetPx: number;
 }>;
 
+export type FollowBottomViewportAnchorResolver = Readonly<{
+  capture: () => FollowBottomViewportAnchor | null;
+  resolveScrollTop: (anchor: FollowBottomViewportAnchor) => number | null;
+}>;
+
 type ResizeObserverLike = Readonly<{
   observe: (target: Element) => void;
   disconnect: () => void;
@@ -30,6 +35,8 @@ type EventTargetLike = Readonly<{
 export type FollowBottomController = Readonly<{
   setScrollContainer: (element: HTMLElement | null | undefined) => void;
   setContentRoot: (element: HTMLElement | null | undefined) => void;
+  setViewportAnchorResolver: (resolver: FollowBottomViewportAnchorResolver | null | undefined) => void;
+  setPausedContentAnchorRestoreEnabled: (enabled: boolean) => void;
   handleScroll: () => void;
   requestFollowBottom: (request?: FollowBottomRequest | null) => void;
   mode: () => FollowBottomMode;
@@ -136,6 +143,8 @@ export function createFollowBottomController(
   let scrollContainerEl: HTMLElement | null = null;
   let contentRootEl: HTMLElement | null = null;
   let viewportAnchor: FollowBottomViewportAnchor | null = null;
+  let viewportAnchorResolver: FollowBottomViewportAnchorResolver | null = null;
+  let pausedContentAnchorRestoreEnabled = true;
   let prevScrollTop = 0;
   let lastHandledRequestSeq = 0;
   let remainingSyncPasses = 0;
@@ -227,6 +236,9 @@ export function createFollowBottomController(
   const syncProgrammaticScroll = (target: HTMLElement): void => {
     prevScrollTop = target.scrollTop;
     updateDistanceToBottom(target);
+    if (typeof Event === 'function') {
+      target.dispatchEvent(new Event('scroll'));
+    }
   };
 
   const cancelScheduledInstantFollow = (): void => {
@@ -280,7 +292,7 @@ export function createFollowBottomController(
     setFollowMotionMode('instant');
   };
 
-  const captureViewportAnchor = (): FollowBottomViewportAnchor | null => {
+  const captureViewportAnchorFromDOM = (): FollowBottomViewportAnchor | null => {
     if (!scrollContainerEl || !contentRootEl) return null;
     const containerRect = scrollContainerEl.getBoundingClientRect();
     for (const element of anchorElements(contentRootEl, anchorAttribute)) {
@@ -294,8 +306,24 @@ export function createFollowBottomController(
     return null;
   };
 
+  const captureViewportAnchor = (): FollowBottomViewportAnchor | null => {
+    if (viewportAnchorResolver) {
+      return viewportAnchorResolver.capture();
+    }
+    return captureViewportAnchorFromDOM();
+  };
+
   const restoreViewportAnchor = (): void => {
-    if (!scrollContainerEl || !contentRootEl || !viewportAnchor) return;
+    if (!scrollContainerEl || !viewportAnchor) return;
+    if (viewportAnchorResolver) {
+      const targetScrollTop = viewportAnchorResolver.resolveScrollTop(viewportAnchor);
+      if (targetScrollTop === null || !Number.isFinite(targetScrollTop)) return;
+      if (Math.abs(targetScrollTop - scrollContainerEl.scrollTop) <= 0.5) return;
+      scrollContainerEl.scrollTop = Math.max(0, targetScrollTop);
+      syncProgrammaticScroll(scrollContainerEl);
+      return;
+    }
+    if (!contentRootEl) return;
     const element = findAnchorElementByID(contentRootEl, anchorAttribute, viewportAnchor.id);
     if (!element) return;
     const containerRect = scrollContainerEl.getBoundingClientRect();
@@ -403,7 +431,9 @@ export function createFollowBottomController(
       scheduleFollowBottom(undefined, 1);
       return;
     }
-    restoreViewportAnchor();
+    if (pausedContentAnchorRestoreEnabled) {
+      restoreViewportAnchor();
+    }
     updateDistanceToBottom(scrollContainerEl);
   };
 
@@ -452,6 +482,16 @@ export function createFollowBottomController(
         scheduleFollowBottom(undefined, 1);
       }
     }
+  };
+
+  const setViewportAnchorResolver = (
+    resolver: FollowBottomViewportAnchorResolver | null | undefined,
+  ): void => {
+    viewportAnchorResolver = resolver ?? null;
+  };
+
+  const setPausedContentAnchorRestoreEnabled = (enabled: boolean): void => {
+    pausedContentAnchorRestoreEnabled = enabled;
   };
 
   const setContentRoot = (element: HTMLElement | null | undefined): void => {
@@ -514,6 +554,7 @@ export function createFollowBottomController(
     scrollContainerEl = null;
     contentRootEl = null;
     viewportAnchor = null;
+    viewportAnchorResolver = null;
     remainingSyncPasses = 0;
     clearUserScrollIntent();
   };
@@ -521,6 +562,8 @@ export function createFollowBottomController(
   return {
     setScrollContainer,
     setContentRoot,
+    setViewportAnchorResolver,
+    setPausedContentAnchorRestoreEnabled,
     handleScroll,
     requestFollowBottom,
     mode: () => currentMode,

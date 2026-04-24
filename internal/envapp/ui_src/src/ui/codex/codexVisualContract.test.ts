@@ -65,6 +65,12 @@ describe('Codex visual contract', () => {
     expect(src).not.toMatch(/@media \(max-width: 640px\) \{[\s\S]*\.codex-transcript-state \{[\s\S]*justify-content: flex-start;/);
   });
 
+  it('keeps short transcript feeds anchored to the composer edge without changing empty-state centering', () => {
+    const src = readCodexCss();
+
+    expect(src).toMatch(/\.codex-transcript-shell-feed > \.codex-transcript-feed \{[\s\S]*margin-top: auto;/);
+  });
+
   it('keeps header controls compact and wrap-friendly for narrow Codex layouts', () => {
     const src = readCodexCss();
 

@@ -50,6 +50,11 @@ function expectInsideRect(container: HTMLElement, button: HTMLButtonElement): vo
   expect(buttonBox.y + buttonBox.height).toBeLessThanOrEqual(viewportBox.y + viewportBox.height);
 }
 
+function lastTranscriptRow(host: HTMLElement): HTMLDivElement | null {
+  const rows = host.querySelectorAll('.codex-transcript-row');
+  return rows.length > 0 ? rows[rows.length - 1] as HTMLDivElement : null;
+}
+
 function TranscriptViewportHarness(props: Readonly<{
   initialRows: number;
   switchedRows?: number;
@@ -101,20 +106,28 @@ function TranscriptViewportHarness(props: Readonly<{
                 data-codex-transcript-scroll-region="true"
                 onScroll={followBottomController.handleScroll}
               >
-                <div ref={followBottomController.setContentRoot}>
-                  {Array.from({ length: rowCount() }, (_, index) => (
-                    <div
-                      class="codex-transcript-row"
-                      data-follow-bottom-anchor-id={`item:${index + 1}`}
-                      style={{
-                        height: '96px',
-                        'box-sizing': 'border-box',
-                        border: '1px solid transparent',
-                      }}
-                    >
-                      Row {index + 1}
+                <div
+                  ref={followBottomController.setContentRoot}
+                  class="codex-transcript-shell"
+                  data-codex-transcript-mode="feed"
+                >
+                  <div class="codex-transcript-shell-feed">
+                    <div class="codex-transcript-feed">
+                      {Array.from({ length: rowCount() }, (_, index) => (
+                        <div
+                          class="codex-transcript-row"
+                          data-follow-bottom-anchor-id={`item:${index + 1}`}
+                          style={{
+                            height: '96px',
+                            'box-sizing': 'border-box',
+                            border: '1px solid transparent',
+                          }}
+                        >
+                          Row {index + 1}
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  </div>
                 </div>
               </div>
               <div class="codex-page-transcript-overlay">
@@ -245,5 +258,37 @@ describe('CodexPageShell browser layout behavior', () => {
     const expectedBottom = scrollRegion!.scrollHeight - scrollRegion!.clientHeight;
     expect(expectedBottom).toBeGreaterThan(0);
     expect(Math.abs(scrollRegion!.scrollTop - expectedBottom)).toBeLessThanOrEqual(1);
+  });
+
+  it('keeps a short switched transcript pinned near the viewport bottom instead of leaving a blank tail gap', async () => {
+    const host = document.createElement('div');
+    host.style.position = 'fixed';
+    host.style.inset = '0';
+    document.body.appendChild(host);
+
+    render(() => (
+      <TranscriptViewportHarness initialRows={1} switchedRows={2} />
+    ), host);
+    await settle();
+
+    const scrollRegion = host.querySelector('[data-codex-transcript-scroll-region="true"]') as HTMLDivElement | null;
+    const switchButton = host.querySelector('[data-testid="switch-thread"]') as HTMLButtonElement | null;
+
+    expect(scrollRegion).toBeTruthy();
+    expect(switchButton).toBeTruthy();
+
+    switchButton!.click();
+    await settle();
+    await settle();
+
+    const lastRow = lastTranscriptRow(host);
+    expect(lastRow).toBeTruthy();
+
+    const scrollBox = scrollRegion!.getBoundingClientRect();
+    const rowBox = lastRow!.getBoundingClientRect();
+    const bottomGap = scrollBox.bottom - rowBox.bottom;
+
+    expect(bottomGap).toBeGreaterThanOrEqual(0);
+    expect(bottomGap).toBeLessThanOrEqual(24);
   });
 });
