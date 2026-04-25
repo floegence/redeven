@@ -76,6 +76,11 @@ const WORKBENCH_PERSIST_DELAY_MS = 120;
 const WORKBENCH_LAYOUT_FLUSH_DELAY_MS = 0;
 const WORKBENCH_LAYOUT_RECONNECT_DELAY_MS = 900;
 const WORKBENCH_MIN_SCALE_EPSILON = 0.0001;
+const WORKBENCH_SCALE_ANIMATION_DURATION_MS = 180;
+const WORKBENCH_HUD_SHORTCUT_GROUP_CLASS = 'redeven-workbench-hud-shortcuts ml-1 flex h-7 items-center gap-1 border-l border-border/50 pl-2';
+const WORKBENCH_HUD_SHORTCUT_BUTTON_BASE_CLASS = 'redeven-workbench-hud-shortcut border shadow-sm';
+const WORKBENCH_HUD_MINIMIZE_BUTTON_CLASS = `${WORKBENCH_HUD_SHORTCUT_BUTTON_BASE_CLASS} border-warning/30 bg-warning/10 text-warning hover:border-warning/50 hover:bg-warning/20 hover:text-warning`;
+const WORKBENCH_HUD_MAXIMIZE_BUTTON_CLASS = `${WORKBENCH_HUD_SHORTCUT_BUTTON_BASE_CLASS} border-success/30 bg-success/10 text-success hover:border-success/50 hover:bg-success/20 hover:text-success`;
 const EMPTY_TERMINAL_PANEL_STATE: RedevenWorkbenchTerminalPanelState = {
   sessionIds: [],
   activeSessionId: null,
@@ -89,6 +94,37 @@ function scaleAtMinimum(scale: number): boolean {
   return Math.abs(scale - REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE) <= WORKBENCH_MIN_SCALE_EPSILON;
 }
 
+function viewportForCenteredScale(
+  viewport: WorkbenchState['viewport'],
+  targetScale: number,
+  frameSize: Readonly<{ width: number; height: number }>,
+): WorkbenchState['viewport'] {
+  const frameWidth = Number(frameSize.width);
+  const frameHeight = Number(frameSize.height);
+  const currentScale = Number(viewport.scale);
+  if (!Number.isFinite(frameWidth) || frameWidth <= 0 || !Number.isFinite(frameHeight) || frameHeight <= 0 || !Number.isFinite(currentScale) || Math.abs(currentScale) <= WORKBENCH_MIN_SCALE_EPSILON) {
+    return {
+      ...viewport,
+      scale: targetScale,
+    };
+  }
+
+  const frameCenterX = frameWidth / 2;
+  const frameCenterY = frameHeight / 2;
+  const centerWorldX = (frameCenterX - Number(viewport.x)) / currentScale;
+  const centerWorldY = (frameCenterY - Number(viewport.y)) / currentScale;
+  return {
+    x: frameCenterX - centerWorldX * targetScale,
+    y: frameCenterY - centerWorldY * targetScale,
+    scale: targetScale,
+  };
+}
+
+function easeOutCubic(progress: number): number {
+  const clamped = Math.min(1, Math.max(0, progress));
+  return 1 - ((1 - clamped) ** 3);
+}
+
 function RedevenWorkbenchHudActions(props: {
   mount: () => HTMLDivElement | null;
   selectedWidget: () => WorkbenchState['widgets'][number] | null;
@@ -99,29 +135,32 @@ function RedevenWorkbenchHudActions(props: {
     <Show when={props.mount()}>
       {(mount) => (
         <Portal mount={mount()}>
-          <div class="workbench-hud__divider" aria-hidden="true" />
-          <button
-            type="button"
-            class="workbench-hud__button"
-            aria-label="Scale canvas to minimum"
-            title="Scale canvas to minimum"
-            data-floe-canvas-interactive="true"
-            onClick={() => props.onMinimizeCanvasScale()}
-          >
-            <Minus class="w-3.5 h-3.5" />
-          </button>
-          <Show when={props.selectedWidget()}>
+          <div class={WORKBENCH_HUD_SHORTCUT_GROUP_CLASS}>
             <button
               type="button"
-              class="workbench-hud__button"
-              aria-label="Fit selected widget to viewport"
-              title="Fit selected widget to viewport"
+              class={`workbench-hud__button ${WORKBENCH_HUD_MINIMIZE_BUTTON_CLASS}`}
+              aria-label="Scale canvas to minimum"
+              title="Scale canvas to minimum"
               data-floe-canvas-interactive="true"
-              onClick={() => props.onFitSelectedWidget()}
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => props.onMinimizeCanvasScale()}
             >
-              <Maximize class="w-3.5 h-3.5" />
+              <Minus class="w-3.5 h-3.5" />
             </button>
-          </Show>
+            <Show when={props.selectedWidget()}>
+              <button
+                type="button"
+                class={`workbench-hud__button ${WORKBENCH_HUD_MAXIMIZE_BUTTON_CLASS}`}
+                aria-label="Fit selected widget to viewport"
+                title="Fit selected widget to viewport"
+                data-floe-canvas-interactive="true"
+                onPointerDown={(event) => event.preventDefault()}
+                onClick={() => props.onFitSelectedWidget()}
+              >
+                <Maximize class="w-3.5 h-3.5" />
+              </button>
+            </Show>
+          </div>
         </Portal>
       )}
     </Show>
@@ -422,6 +461,8 @@ export function EnvWorkbenchPage() {
   let localOwnerHandoffToken = 0;
   let introStartFrame: number | undefined;
   let introStartSettleFrame: number | undefined;
+  let canvasScaleAnimationFrame: number | undefined;
+  let canvasScaleAnimationToken = 0;
 
   const runtimeWidgetStateById = createMemo(() => runtimeWorkbenchWidgetStateById(runtimeSnapshot().widget_states));
   const runtimeFilesWidgetStateById = createMemo<Record<string, RuntimeWorkbenchWidgetState>>(() => Object.fromEntries(
@@ -447,6 +488,19 @@ export function EnvWorkbenchPage() {
     }
     return workbenchState().widgets.find((widget) => widget.id === selectedWidgetId) ?? null;
   });
+
+  const resolveCanvasFrameSize = (): { width: number; height: number } => {
+    const host = introSurfaceHost();
+    const frame = host?.querySelector('[data-floe-workbench-canvas-frame="true"]') as HTMLElement | null;
+    const rect = frame?.getBoundingClientRect();
+    const hostRect = host?.getBoundingClientRect();
+    const width = rect?.width ?? hostRect?.width ?? 0;
+    const height = rect?.height ?? hostRect?.height ?? 0;
+    return {
+      width: Number.isFinite(width) ? width : 0,
+      height: Number.isFinite(height) ? height : 0,
+    };
+  };
 
   const applyRuntimeSnapshot = (snapshot: RuntimeWorkbenchLayoutSnapshot) => {
     const current = runtimeSnapshot();
@@ -502,6 +556,11 @@ export function EnvWorkbenchPage() {
   };
 
   const setSurfaceWorkbenchState = (updater: (previous: WorkbenchState) => WorkbenchState) => {
+    if (canvasScaleAnimationFrame !== undefined) {
+      canvasScaleAnimationToken += 1;
+      window.cancelAnimationFrame(canvasScaleAnimationFrame);
+      canvasScaleAnimationFrame = undefined;
+    }
     let shouldStartOwnerHandoff = false;
     setWorkbenchState((previous) => {
       const next = updater(previous);
@@ -513,19 +572,69 @@ export function EnvWorkbenchPage() {
     }
   };
 
-  const minimizeCanvasScale = () => {
-    setSurfaceWorkbenchState((previous) => {
-      if (scaleAtMinimum(previous.viewport.scale)) {
-        return previous;
-      }
-      return {
+  const cancelCanvasScaleAnimation = () => {
+    canvasScaleAnimationToken += 1;
+    if (canvasScaleAnimationFrame !== undefined) {
+      window.cancelAnimationFrame(canvasScaleAnimationFrame);
+      canvasScaleAnimationFrame = undefined;
+    }
+  };
+
+  const animateCanvasScaleTo = (targetScale: number) => {
+    const startViewport = workbenchState().viewport;
+    const startScale = startViewport.scale;
+    if (Math.abs(startScale - targetScale) <= WORKBENCH_MIN_SCALE_EPSILON) {
+      cancelCanvasScaleAnimation();
+      return;
+    }
+    const frameSize = resolveCanvasFrameSize();
+    const viewportAtScale = (scale: number) => viewportForCenteredScale(startViewport, scale, frameSize);
+
+    if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+      cancelCanvasScaleAnimation();
+      setWorkbenchState((previous) => ({
         ...previous,
-        viewport: {
-          ...previous.viewport,
-          scale: REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE,
-        },
-      };
-    });
+        viewport: viewportAtScale(targetScale),
+      }));
+      return;
+    }
+
+    cancelCanvasScaleAnimation();
+    const animationToken = ++canvasScaleAnimationToken;
+    const startTime = typeof performance !== 'undefined' && typeof performance.now === 'function'
+      ? performance.now()
+      : Date.now();
+
+    const step = (frameTime: number) => {
+      if (canvasScaleAnimationToken !== animationToken) {
+        return;
+      }
+      const elapsed = Math.max(0, frameTime - startTime);
+      const progress = Math.min(1, elapsed / WORKBENCH_SCALE_ANIMATION_DURATION_MS);
+      const easedProgress = easeOutCubic(progress);
+      const nextScale = startScale + ((targetScale - startScale) * easedProgress);
+
+      setWorkbenchState((previous) => ({
+        ...previous,
+        viewport: viewportAtScale(progress >= 1 ? targetScale : nextScale),
+      }));
+
+      if (progress >= 1) {
+        canvasScaleAnimationFrame = undefined;
+        return;
+      }
+
+      canvasScaleAnimationFrame = window.requestAnimationFrame(step);
+    };
+
+    canvasScaleAnimationFrame = window.requestAnimationFrame(step);
+  };
+
+  const minimizeCanvasScale = () => {
+    if (scaleAtMinimum(workbenchState().viewport.scale)) {
+      return;
+    }
+    animateCanvasScaleTo(REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE);
   };
 
   const fitSelectedWidgetToViewport = () => {
@@ -1536,6 +1645,7 @@ export function EnvWorkbenchPage() {
   } as const;
 
   onCleanup(() => {
+    cancelCanvasScaleAnimation();
     if (introStartFrame !== undefined) {
       window.cancelAnimationFrame(introStartFrame);
     }

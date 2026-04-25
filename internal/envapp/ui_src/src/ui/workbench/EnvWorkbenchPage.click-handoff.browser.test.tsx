@@ -314,4 +314,29 @@ describe('EnvWorkbenchPage click handoff', () => {
     expect(document.activeElement).toBe(filesInput);
     expect(filesInput!.dataset.selected).toBe('true');
   });
+
+  it('keeps widget input focus when the min-scale HUD shortcut is clicked', async () => {
+    const host = document.createElement('div');
+    host.style.position = 'fixed';
+    host.style.inset = '0';
+    document.body.appendChild(host);
+
+    render(() => <EnvWorkbenchPage />, host);
+    await flushWork();
+
+    const filesInput = host.querySelector('[data-testid="widget-files-input"]') as HTMLInputElement | null;
+    const minButton = document.querySelector('[aria-label="Scale canvas to minimum"]') as HTMLButtonElement | null;
+    expect(filesInput).toBeTruthy();
+    expect(minButton).toBeTruthy();
+
+    await page.elementLocator(filesInput!).click();
+    await flushWork();
+    expect(document.activeElement).toBe(filesInput);
+
+    await page.elementLocator(minButton!).click();
+    await flushWork();
+
+    expect(document.activeElement).toBe(filesInput);
+    expect(filesInput!.dataset.selected).toBe('true');
+  });
 });

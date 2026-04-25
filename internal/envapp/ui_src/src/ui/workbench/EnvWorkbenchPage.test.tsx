@@ -148,6 +148,39 @@ async function flushMicrotasks() {
   await Promise.resolve();
 }
 
+function setMockCanvasFrameRect(host: HTMLElement, width: number, height: number) {
+  const frame = host.querySelector('[data-floe-workbench-canvas-frame="true"]') as HTMLDivElement | null;
+  expect(frame).toBeTruthy();
+  Object.defineProperty(frame!, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => ({
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: width,
+      bottom: height,
+      width,
+      height,
+      toJSON: () => ({}),
+    }),
+  });
+}
+
+function ensureCSSEscape() {
+  const css = globalThis.CSS as { escape?: (value: string) => string } | undefined;
+  if (css && typeof css.escape === 'function') {
+    return;
+  }
+  Object.defineProperty(globalThis, 'CSS', {
+    configurable: true,
+    value: {
+      ...(css ?? {}),
+      escape: (value: string) => String(value),
+    },
+  });
+}
+
 function mount(ui: () => any, host: HTMLElement) {
   const dispose = render(ui, host);
   testDisposers.push(dispose);
@@ -316,24 +349,29 @@ vi.mock('./surface/RedevenWorkbenchSurface', () => ({
           <button type="button" class="workbench-hud__button" aria-label="Zoom in">+</button>
         </div>
         <div
-          data-testid="env-workbench-surface"
-          data-widget-ids={props.state().widgets.map((widget: any) => widget.id).join(',')}
-          data-viewport-x={String(props.state().viewport.x)}
-          data-viewport-y={String(props.state().viewport.y)}
-          data-viewport-scale={String(props.state().viewport.scale)}
-          data-widget-x={String(props.state().widgets[0]?.x ?? '')}
-          data-selected-widget-id={String(props.state().selectedWidgetId ?? '')}
-          data-top-widget-id={topWidgetId()}
+          data-floe-workbench-canvas-frame="true"
+          data-testid="mock-workbench-canvas-frame"
         >
-          {props.state().widgets.map((widget: any) => {
-            const definition = props.widgetDefinitions.find((entry: any) => entry.type === widget.type);
-            const Body = definition?.body;
-            return Body ? (
-              <div data-testid={`widget-body-${widget.id}`}>
-                <Body widgetId={widget.id} title={widget.title} type={widget.type} />
-              </div>
-            ) : null;
-          })}
+          <div
+            data-testid="env-workbench-surface"
+            data-widget-ids={props.state().widgets.map((widget: any) => widget.id).join(',')}
+            data-viewport-x={String(props.state().viewport.x)}
+            data-viewport-y={String(props.state().viewport.y)}
+            data-viewport-scale={String(props.state().viewport.scale)}
+            data-widget-x={String(props.state().widgets[0]?.x ?? '')}
+            data-selected-widget-id={String(props.state().selectedWidgetId ?? '')}
+            data-top-widget-id={topWidgetId()}
+          >
+            {props.state().widgets.map((widget: any) => {
+              const definition = props.widgetDefinitions.find((entry: any) => entry.type === widget.type);
+              const Body = definition?.body;
+              return Body ? (
+                <div data-testid={`widget-body-${widget.id}`}>
+                  <Body widgetId={widget.id} title={widget.title} type={widget.type} />
+                </div>
+              ) : null;
+            })}
+          </div>
         </div>
       </div>
     );
@@ -343,6 +381,7 @@ vi.mock('./surface/RedevenWorkbenchSurface', () => ({
 describe('EnvWorkbenchPage', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    ensureCSSEscape();
     setEnvId('env-123');
     setWorkbenchOverviewEntry(null);
     setWorkbenchOverviewEntrySeq(0);
@@ -551,7 +590,29 @@ describe('EnvWorkbenchPage', () => {
     expect(document.querySelector('[aria-label="Fit selected widget to viewport"]')).toBeNull();
   });
 
-  it('scales the canvas to the minimum value without moving the viewport or clearing selection', async () => {
+  it('renders the HUD shortcut group with semantic shortcut styling and prevents pointer focus steals', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    const minButton = document.querySelector('[aria-label="Scale canvas to minimum"]') as HTMLButtonElement | null;
+    expect(minButton).toBeTruthy();
+    expect(minButton?.className).toContain('bg-warning/10');
+    expect(minButton?.className).toContain('border-warning/30');
+    expect(minButton?.closest('.redeven-workbench-hud-shortcuts')).toBeTruthy();
+
+    const pointerDown = new Event('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+    });
+    minButton!.dispatchEvent(pointerDown);
+
+    expect(pointerDown.defaultPrevented).toBe(true);
+  });
+
+  it('animates the canvas scale down around the current viewport center without clearing selection', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -585,7 +646,7 @@ describe('EnvWorkbenchPage', () => {
             'redeven.files': true,
             'redeven.preview': true,
           },
-          selectedWidgetId: 'widget-files-1',
+          selectedWidgetId: null,
           theme: 'default',
         };
       }
@@ -594,18 +655,38 @@ describe('EnvWorkbenchPage', () => {
 
     mount(() => <EnvWorkbenchPage />, host);
     await flushMicrotasks();
+    setMockCanvasFrameRect(host, 1200, 800);
 
     const minButton = document.querySelector('[aria-label="Scale canvas to minimum"]') as HTMLButtonElement | null;
     expect(minButton).toBeTruthy();
 
+    const surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement;
+    expect(surface.dataset.viewportScale).toBe('1.25');
+    expect(Number(surface.dataset.viewportX)).toBeCloseTo(180, 6);
+    expect(Number(surface.dataset.viewportY)).toBeCloseTo(120, 6);
+
     minButton!.click();
     await flushMicrotasks();
 
-    const surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement;
-    expect(surface.dataset.viewportX).toBe('180');
-    expect(surface.dataset.viewportY).toBe('120');
-    expect(surface.dataset.viewportScale).toBe('0.45');
-    expect(surface.dataset.selectedWidgetId).toBe('widget-files-1');
+    expect(surface.dataset.viewportScale).toBe('1.25');
+
+    vi.advanceTimersByTime(90);
+    await flushMicrotasks();
+
+    expect(Number(surface.dataset.viewportScale)).toBeLessThan(1.25);
+    expect(Number(surface.dataset.viewportScale)).toBeGreaterThan(0.45);
+    expect(Number(surface.dataset.viewportX)).toBeGreaterThan(180);
+    expect(Number(surface.dataset.viewportX)).toBeLessThan(448.8);
+    expect(Number(surface.dataset.viewportY)).toBeGreaterThan(120);
+    expect(Number(surface.dataset.viewportY)).toBeLessThan(299.2);
+
+    vi.advanceTimersByTime(120);
+    await flushMicrotasks();
+
+    expect(Number(surface.dataset.viewportScale)).toBeCloseTo(0.45, 6);
+    expect(Number(surface.dataset.viewportX)).toBeCloseTo(448.8, 6);
+    expect(Number(surface.dataset.viewportY)).toBeCloseTo(299.2, 6);
+    expect(surface.dataset.selectedWidgetId).toBe('');
   });
 
   it('shows the fit button only for a selected widget and routes it to fitWidget', async () => {
@@ -654,6 +735,8 @@ describe('EnvWorkbenchPage', () => {
 
     const fitButton = document.querySelector('[aria-label="Fit selected widget to viewport"]') as HTMLButtonElement | null;
     expect(fitButton).toBeTruthy();
+    expect(fitButton?.className).toContain('bg-success/10');
+    expect(fitButton?.className).toContain('border-success/30');
 
     fitButton!.click();
 
