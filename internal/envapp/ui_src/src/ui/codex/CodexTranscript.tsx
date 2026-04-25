@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, type Accessor, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack, type Accessor, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { ChevronRight, Sparkles } from '@floegence/floe-webapp-core/icons';
 import { Tag } from '@floegence/floe-webapp-core/ui';
@@ -6,7 +6,11 @@ import { Tag } from '@floegence/floe-webapp-core/ui';
 import { MarkdownBlock } from '../chat/blocks/MarkdownBlock';
 import { ShellBlock } from '../chat/blocks/ShellBlock';
 import { useVirtualList } from '../chat/hooks/useVirtualList';
-import { resolveViewportAnchorScrollTop } from '../chat/message-list/scrollAnchor';
+import {
+  captureViewportAnchor,
+  resolveViewportAnchorScrollTop,
+  type ViewportAnchor,
+} from '../chat/message-list/scrollAnchor';
 import type { FollowBottomViewportAnchorResolver } from '../chat/scroll/createFollowBottomController';
 import { StreamingCursor } from '../chat/status/StreamingCursor';
 import { CodexIcon } from '../icons/CodexIcon';
@@ -66,7 +70,7 @@ const CODEX_TRANSCRIPT_ROW_HEIGHTS = {
   agentMessage: 128,
   reasoning: 112,
   plan: 112,
-  commandExecution: 176,
+  commandExecution: 76,
   fileChange: 232,
   webSearch: 96,
   evidence: 128,
@@ -1025,6 +1029,18 @@ export function CodexTranscript(props: {
       ?? transcriptRowsByID()[rowID]?.estimatedHeightPx
       ?? CODEX_TRANSCRIPT_VIRTUAL_LIST.defaultItemHeight;
   };
+  let pausedViewportAnchor: ViewportAnchor | null = null;
+
+  const captureTranscriptViewportAnchor = (scrollContainer: HTMLElement): void => {
+    pausedViewportAnchor = captureViewportAnchor({
+      messageIds: [...transcriptAnchorOrder()],
+      visibleRangeStart: virtualList.visibleRange().start,
+      scrollTop: scrollContainer.scrollTop,
+      getItemOffset: virtualList.getItemOffset,
+      getItemHeight: getTranscriptRowHeight,
+    });
+  };
+
   const findViewportAnchorIndex = (scrollTop: number): number => {
     const rowCount = transcriptRowOrder().length;
     if (rowCount <= 0) return -1;
@@ -1070,13 +1086,20 @@ export function CodexTranscript(props: {
   };
 
   createEffect(() => {
+    transcriptRowScopeKey();
+    pausedViewportAnchor = null;
+  });
+
+  createEffect(() => {
     const element = props.scrollContainer ?? null;
     virtualList.scrollRef(element);
     if (!element || !virtualized()) return;
     virtualList.containerRef(element);
     virtualList.onScroll();
+    untrack(() => captureTranscriptViewportAnchor(element));
     const handleScroll = () => {
       virtualList.onScroll();
+      captureTranscriptViewportAnchor(element);
     };
     element.addEventListener('scroll', handleScroll, { passive: true });
     onCleanup(() => {
@@ -1141,37 +1164,60 @@ export function CodexTranscript(props: {
       for (const entry of entries) {
         const rowID = rowResizeTargets.get(entry.target);
         if (!rowID) continue;
-        const rawHeight = entry.contentBoxSize?.[0]?.blockSize ?? entry.contentRect.height;
+        const borderBoxHeight = entry.borderBoxSize?.[0]?.blockSize;
+        const rectHeight = (entry.target as HTMLElement).getBoundingClientRect().height;
+        const rawHeight = borderBoxHeight ?? (rectHeight > 0 ? rectHeight : entry.contentRect.height);
         const nextHeight = Math.max(1, Math.round(rawHeight));
         if (nextHeight <= 0) continue;
         updates.set(rowID, nextHeight);
       }
       if (updates.size === 0) return;
+      const currentRowHeights = rowHeightsByID();
+      const pendingUpdates: Array<{
+        rowID: string;
+        nextHeight: number;
+      }> = [];
+      for (const [rowID, nextHeight] of updates) {
+        const fallbackHeight = transcriptRowsByID()[rowID]?.estimatedHeightPx ?? CODEX_TRANSCRIPT_VIRTUAL_LIST.defaultItemHeight;
+        const hasMeasuredHeight = Object.prototype.hasOwnProperty.call(currentRowHeights, rowID);
+        const currentHeight = hasMeasuredHeight
+          ? currentRowHeights[rowID]!
+          : fallbackHeight;
+        if (Math.abs(currentHeight - nextHeight) < 1) continue;
+        pendingUpdates.push({ rowID, nextHeight });
+      }
+      if (pendingUpdates.length === 0) return;
       const scrollContainer = props.scrollContainer ?? null;
-      const keepViewportAnchor = virtualized() && props.followBottomMode?.() === 'paused' && !!scrollContainer;
-      const viewportAnchorBeforeResize = keepViewportAnchor
-        ? followBottomViewportAnchorResolver.capture()
-        : null;
+      const keepViewportAnchor = (
+        virtualized() &&
+        props.followBottomMode?.() === 'paused' &&
+        !!scrollContainer &&
+        !!pausedViewportAnchor
+      );
       setRowHeightsByID((current) => {
         let next = current;
         let changed = false;
-        for (const [rowID, nextHeight] of updates) {
-          const fallbackHeight = transcriptRowsByID()[rowID]?.estimatedHeightPx ?? CODEX_TRANSCRIPT_VIRTUAL_LIST.defaultItemHeight;
-          const currentHeight = current[rowID] ?? fallbackHeight;
-          if (Math.abs(currentHeight - nextHeight) < 1) continue;
+        for (const update of pendingUpdates) {
+          const fallbackHeight = transcriptRowsByID()[update.rowID]?.estimatedHeightPx ?? CODEX_TRANSCRIPT_VIRTUAL_LIST.defaultItemHeight;
+          const currentHeight = current[update.rowID] ?? fallbackHeight;
+          if (Math.abs(currentHeight - update.nextHeight) < 1) continue;
           if (next === current) next = { ...current };
-          next[rowID] = nextHeight;
+          next[update.rowID] = update.nextHeight;
           changed = true;
         }
         return changed ? next : current;
       });
-      for (const [rowID, nextHeight] of updates) {
-        const rowIndex = transcriptRowIndexByID().get(rowID);
+      for (const update of pendingUpdates) {
+        const rowIndex = transcriptRowIndexByID().get(update.rowID);
         if (rowIndex === undefined) continue;
-        virtualList.setItemHeight(rowIndex, nextHeight);
+        virtualList.setItemHeight(rowIndex, update.nextHeight);
       }
-      if (keepViewportAnchor && scrollContainer && viewportAnchorBeforeResize) {
-        const nextAnchorScrollTop = followBottomViewportAnchorResolver.resolveScrollTop(viewportAnchorBeforeResize);
+      if (keepViewportAnchor && scrollContainer && pausedViewportAnchor) {
+        const nextAnchorScrollTop = resolveViewportAnchorScrollTop(
+          pausedViewportAnchor,
+          transcriptRowIndexByAnchorID(),
+          virtualList.getItemOffset,
+        );
         if (
           nextAnchorScrollTop !== null &&
           Number.isFinite(nextAnchorScrollTop) &&
@@ -1179,6 +1225,7 @@ export function CodexTranscript(props: {
         ) {
           scrollContainer.scrollTop = Math.max(0, nextAnchorScrollTop);
           virtualList.onScroll();
+          captureTranscriptViewportAnchor(scrollContainer);
         }
       }
     });

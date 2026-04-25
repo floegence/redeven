@@ -5,6 +5,7 @@ import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { FollowBottomViewportAnchorResolver } from '../chat/scroll/createFollowBottomController';
+import type { FollowBottomMode } from '../chat/scroll/createFollowBottomController';
 import { CodexTranscript } from './CodexTranscript';
 import type { CodexOptimisticUserTurn, CodexTranscriptItem } from './types';
 
@@ -91,6 +92,7 @@ function renderTranscript(items: CodexTranscriptItem[], options?: {
   workingLabel?: string;
   workingFlags?: string[];
   scrollContainer?: HTMLElement | null;
+  followBottomMode?: () => FollowBottomMode;
   onViewportAnchorResolverChange?: (resolver: FollowBottomViewportAnchorResolver | null) => void;
   threadKey?: string;
 }) {
@@ -99,6 +101,7 @@ function renderTranscript(items: CodexTranscriptItem[], options?: {
   const dispose = render(() => (
     <CodexTranscript
       scrollContainer={options?.scrollContainer}
+      followBottomMode={options?.followBottomMode}
       onViewportAnchorResolverChange={options?.onViewportAnchorResolverChange}
       threadKey={options?.threadKey}
       items={items}
@@ -119,8 +122,104 @@ function createVirtualScrollContainer(clientHeight = 240): HTMLDivElement {
     configurable: true,
     get: () => clientHeight,
   });
+  Object.defineProperty(element, 'scrollHeight', {
+    configurable: true,
+    get: () => 8_000,
+  });
   document.body.append(element);
   return element;
+}
+
+interface ResizeObserverRecord {
+  callback: ResizeObserverCallback;
+  targets: Set<Element>;
+}
+
+function installResizeObserverHarness() {
+  const records: ResizeObserverRecord[] = [];
+
+  class MockResizeObserver {
+    private readonly record: ResizeObserverRecord;
+
+    constructor(callback: ResizeObserverCallback) {
+      this.record = {
+        callback,
+        targets: new Set<Element>(),
+      };
+      records.push(this.record);
+    }
+
+    observe(target: Element) {
+      this.record.targets.add(target);
+    }
+
+    disconnect() {
+      this.record.targets.clear();
+    }
+
+    unobserve(target: Element) {
+      this.record.targets.delete(target);
+    }
+  }
+
+  vi.stubGlobal('ResizeObserver', MockResizeObserver as unknown as typeof ResizeObserver);
+
+  return {
+    notify(target: Element) {
+      for (const record of records) {
+        if (!record.targets.has(target)) continue;
+        const rect = target.getBoundingClientRect();
+        record.callback([
+          {
+            target,
+            contentRect: rect,
+            contentBoxSize: [{ inlineSize: rect.width, blockSize: rect.height }],
+          } as unknown as ResizeObserverEntry,
+        ], {} as ResizeObserver);
+      }
+    },
+  };
+}
+
+function installScrollContainerRect(container: HTMLElement, top: number, height: number): void {
+  container.getBoundingClientRect = () => ({
+    x: 0,
+    y: top,
+    width: 320,
+    height,
+    top,
+    bottom: top + height,
+    left: 0,
+    right: 320,
+    toJSON() {
+      return {};
+    },
+  } as DOMRect);
+}
+
+function installTranscriptRowRect(
+  row: HTMLElement,
+  container: HTMLElement,
+  metrics: Readonly<{ top: () => number; height: () => number }>,
+): void {
+  row.getBoundingClientRect = () => {
+    const containerRect = container.getBoundingClientRect();
+    const top = containerRect.top + metrics.top() - container.scrollTop;
+    const height = metrics.height();
+    return {
+      x: 0,
+      y: top,
+      width: 320,
+      height,
+      top,
+      bottom: top + height,
+      left: 0,
+      right: 320,
+      toJSON() {
+        return {};
+      },
+    } as DOMRect;
+  };
 }
 
 function flushAsync(): Promise<void> {
@@ -215,6 +314,80 @@ describe('CodexTranscript', () => {
 
     expect(host.querySelector('[data-codex-reasoning-row="true"]')?.getAttribute('data-codex-reasoning-expanded')).toBe('true');
     expect(host.textContent).toContain('Reasoning detail survives virtualization.');
+
+    dispose();
+  });
+
+  it('preserves a paused viewport when a shell row above it receives its first measurement', async () => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(16);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    const resizeObserverHarness = installResizeObserverHarness();
+    const scrollContainer = createVirtualScrollContainer(120);
+    installScrollContainerRect(scrollContainer, 100, 120);
+
+    const items: CodexTranscriptItem[] = [
+      {
+        id: 'item_command_1',
+        type: 'commandExecution',
+        command: 'npm run typecheck',
+        aggregated_output: 'done',
+        status: 'completed',
+        order: 0,
+      },
+      {
+        id: 'item_agent_1',
+        type: 'agentMessage',
+        text: 'Anchor row',
+        status: 'completed',
+        order: 1,
+      },
+      {
+        id: 'item_agent_2',
+        type: 'agentMessage',
+        text: 'Later row',
+        status: 'completed',
+        order: 2,
+      },
+    ];
+
+    const { host, dispose } = renderTranscript(items, {
+      scrollContainer,
+      followBottomMode: () => 'paused',
+      threadKey: 'paused-first-measurement',
+    });
+
+    await flushAsync();
+
+    const transcriptRows = Array.from(host.querySelectorAll<HTMLElement>('.codex-transcript-row'));
+    expect(transcriptRows).toHaveLength(3);
+
+    const rowMetricsByAnchorID = new Map<string, { top: number; height: number }>([
+      ['item:item_command_1', { top: 0, height: 144 }],
+      ['item:item_agent_1', { top: 144, height: 72 }],
+      ['item:item_agent_2', { top: 216, height: 72 }],
+    ]);
+
+    for (const row of transcriptRows) {
+      const anchorID = String(row.getAttribute('data-follow-bottom-anchor-id') ?? '').trim();
+      const metrics = rowMetricsByAnchorID.get(anchorID);
+      if (!metrics) continue;
+      installTranscriptRowRect(row, scrollContainer, {
+        top: () => metrics.top,
+        height: () => metrics.height,
+      });
+    }
+
+    scrollContainer.scrollTop = 90;
+    scrollContainer.dispatchEvent(new Event('scroll'));
+    await flushAsync();
+
+    resizeObserverHarness.notify(transcriptRows[0]!);
+    await flushAsync();
+
+    expect(scrollContainer.scrollTop).toBe(158);
 
     dispose();
   });
