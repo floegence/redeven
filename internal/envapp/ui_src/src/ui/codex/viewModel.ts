@@ -106,7 +106,8 @@ function codexStatusLabel(status: string | null | undefined): string {
   switch (normalized) {
     case 'notloaded':
     case 'not_loaded':
-      return 'not loaded';
+    case 'not loaded':
+      return 'idle';
     case 'systemerror':
     case 'system_error':
       return 'system error';

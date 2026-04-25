@@ -21,7 +21,7 @@ export function CodexHeaderBar(props: {
 }) {
   const shouldShowStatusTag = () => {
     const value = String(props.summary.statusLabel ?? '').trim().toLowerCase();
-    return value.length > 0 && value !== 'idle' && value !== 'ready';
+    return value.length > 0 && value !== 'idle' && value !== 'ready' && value !== 'not loaded';
   };
   const supplementalTag = () => {
     if (!props.summary.hostReady) {

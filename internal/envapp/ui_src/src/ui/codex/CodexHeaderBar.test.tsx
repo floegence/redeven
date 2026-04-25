@@ -80,7 +80,7 @@ describe('CodexHeaderBar', () => {
           threadTitle: 'New chat',
           workspaceLabel: '/workspace',
           modelLabel: 'GPT-5.4',
-          statusLabel: 'not loaded',
+          statusLabel: 'working',
           statusFlags: ['workspace dirty'],
           contextLabel: 'Workspace',
           contextDetail: '/workspace',
@@ -106,7 +106,7 @@ describe('CodexHeaderBar', () => {
 
     expect(host.querySelector('.codex-page-header-badges')).not.toBeNull();
     expect(host.querySelectorAll('.codex-page-header-tag').length).toBe(2);
-    expect(host.textContent).toContain('not loaded');
+    expect(host.textContent).toContain('working');
     expect(host.textContent).toContain('2 pending');
     expect(host.textContent).not.toContain('workspace dirty');
     expect(host.querySelector('.codex-page-header-actions')).not.toBeNull();
@@ -139,5 +139,30 @@ describe('CodexHeaderBar', () => {
     expect(host.textContent).toContain('Install required');
     expect(host.textContent).not.toContain('3 pending');
     expect(host.textContent).not.toContain('workspace dirty');
+  });
+
+  it('suppresses Codex bridge not-loaded lifecycle noise in the header', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <CodexHeaderBar
+        summary={{
+          threadTitle: 'Existing chat',
+          workspaceLabel: '/workspace',
+          modelLabel: 'GPT-5.4',
+          statusLabel: 'not loaded',
+          statusFlags: [],
+          contextLabel: '',
+          contextDetail: '',
+          hostReady: true,
+          pendingRequestCount: 0,
+        }}
+        actions={[]}
+      />
+    ), host);
+
+    expect(host.querySelector('.codex-page-header-badges')).toBeNull();
+    expect(host.textContent).not.toContain('not loaded');
   });
 });
