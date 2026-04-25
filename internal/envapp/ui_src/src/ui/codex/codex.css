@@ -1249,10 +1249,23 @@ button.codex-pending-input-card-main:focus-visible .codex-pending-input-card-pre
   padding: 0.5rem 0 0.875rem;
 }
 
+.codex-transcript-feed-virtualized {
+  display: block;
+  position: relative;
+  box-sizing: content-box;
+}
+
 .codex-transcript-row {
   width: 100%;
   overflow-anchor: none;
   padding: 0.4375rem clamp(0.625rem, 1.8vw, 1rem);
+}
+
+.codex-transcript-row-virtualized {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
 }
 
 .codex-chat-message-item {

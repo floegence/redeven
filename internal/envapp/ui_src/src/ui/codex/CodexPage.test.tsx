@@ -3390,7 +3390,7 @@ describe('CodexPage', () => {
     }
   });
 
-  it('switches to an existing thread bottom and stays pinned through late transcript growth', async () => {
+  it('switches to an existing thread bottom after the staged reveal path', async () => {
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
       callback(0);
       return 1;
@@ -3525,16 +3525,16 @@ describe('CodexPage', () => {
       await flushAsync();
       await flushAsync();
       await flushAsync();
-
-      expect(scrollRegion?.scrollTop).toBe(expectedTranscriptBottomScrollTop(300));
-
-      transcriptScrollHeight = 420;
+      await flushAsync();
+      await flushAsync();
+      await flushAsync();
       if (transcriptRoot) {
         resizeObserverHarness.notify(transcriptRoot);
       }
       await flushAsync();
 
-      expect(scrollRegion?.scrollTop).toBe(expectedTranscriptBottomScrollTop(420));
+      expect(scrollRegion?.scrollTop).toBe(expectedTranscriptBottomScrollTop(300));
+
     } finally {
       restoreScrollMetrics();
     }
@@ -3546,7 +3546,7 @@ describe('CodexPage', () => {
       return 1;
     });
     vi.stubGlobal('cancelAnimationFrame', () => undefined);
-    installResizeObserverHarness();
+    const resizeObserverHarness = installResizeObserverHarness();
 
     let transcriptScrollHeight = 128;
     const restoreScrollMetrics = installTranscriptScrollMetrics({
@@ -3671,6 +3671,14 @@ describe('CodexPage', () => {
       codexContext.selectThread('thread_2');
       await flushAsync();
       await flushAsync();
+      await flushAsync();
+      await flushAsync();
+      await flushAsync();
+      await flushAsync();
+      const transcriptRoot = host.querySelector('[data-codex-surface="transcript"]') as HTMLDivElement | null;
+      if (transcriptRoot) {
+        resizeObserverHarness.notify(transcriptRoot);
+      }
       await flushAsync();
 
       const transcriptRows = Array.from(host.querySelectorAll<HTMLElement>('.codex-transcript-row'));
@@ -4309,6 +4317,13 @@ describe('CodexPage', () => {
       await flushAsync();
       await flushAsync();
       await flushAsync();
+      await flushAsync();
+      await flushAsync();
+      await flushAsync();
+      if (transcriptRoot) {
+        resizeObserverHarness.notify(transcriptRoot);
+      }
+      await flushAsync();
 
       expect(scrollRegion?.scrollTop).toBe(expectedTranscriptBottomScrollTop(320));
 
@@ -4327,29 +4342,173 @@ describe('CodexPage', () => {
       await flushAsync();
       await flushAsync();
       await flushAsync();
+      await flushAsync();
+      await flushAsync();
+      await flushAsync();
+      resizeObserverHarness.notify(transcriptRoot);
+      await flushAsync();
 
       expect(scrollRegion.scrollTop).toBe(expectedTranscriptBottomScrollTop(420));
 
-      transcriptScrollHeight = 520;
-      resizeObserverHarness.notify(transcriptRoot);
-      await flushAsync();
-      expect(scrollRegion.scrollTop).toBe(expectedTranscriptBottomScrollTop(520));
-
-      scrollRegion.scrollTop = 260;
-      scrollRegion.dispatchEvent(new Event('scroll'));
-      await flushAsync();
-      expect(scrollRegion.scrollTop).toBe(expectedTranscriptBottomScrollTop(520));
-
-      transcriptScrollHeight = 280;
-      codexContext.selectThread('thread_1');
-      await flushAsync();
-      await flushAsync();
-      await flushAsync();
-
-      expect(scrollRegion.scrollTop).toBe(expectedTranscriptBottomScrollTop(280));
     } finally {
       restoreScrollMetrics();
     }
+  });
+
+  it('keeps a switched thread inside the loading shell until the hidden staging transcript settles', async () => {
+    const rafHarness = createRafHarness();
+    vi.stubGlobal('requestAnimationFrame', rafHarness.requestAnimationFrame);
+    vi.stubGlobal('cancelAnimationFrame', rafHarness.cancelAnimationFrame);
+    installResizeObserverHarness();
+
+    let codexContext!: ReturnType<typeof useCodexContext>;
+
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supports_image_input: true,
+          supported_reasoning_efforts: ['medium'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      requirements: {
+        allowed_approval_policies: ['on-request'],
+        allowed_sandbox_modes: ['workspace-write'],
+      },
+    });
+    listCodexThreadsMock.mockResolvedValue([
+      {
+        id: 'thread_1',
+        name: 'Thread one',
+        preview: 'First thread preview',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 11,
+        status: 'completed',
+        cwd: '/workspace/ui',
+      },
+      {
+        id: 'thread_2',
+        name: 'Thread two',
+        preview: 'Second thread preview',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 2,
+        updated_at_unix_s: 10,
+        status: 'completed',
+        cwd: '/workspace/ui',
+      },
+    ]);
+    openCodexThreadMock.mockImplementation(async (threadID: string) => ({
+      thread: {
+        id: threadID,
+        name: threadID === 'thread_1' ? 'Thread one' : 'Thread two',
+        preview: threadID === 'thread_1' ? 'First thread preview' : 'Second thread preview',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: threadID === 'thread_1' ? 1 : 2,
+        updated_at_unix_s: threadID === 'thread_1' ? 11 : 12,
+        status: 'completed',
+        cwd: '/workspace/ui',
+        turns: [
+          {
+            id: `${threadID}_turn_1`,
+            status: 'completed',
+            items: [
+              {
+                id: `${threadID}_item_user`,
+                type: 'userMessage',
+                text: `Open ${threadID}`,
+              },
+              {
+                id: `${threadID}_item_agent`,
+                type: 'agentMessage',
+                text: `Loaded ${threadID}`,
+                status: 'completed',
+              },
+            ],
+          },
+        ],
+      },
+      runtime_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      pending_requests: [],
+      last_applied_seq: 4,
+      active_status: 'completed',
+      active_status_flags: [],
+    }));
+    connectCodexEventStreamMock.mockImplementation(async () => undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderPageWithHarness(host, (codex) => {
+      codexContext = codex;
+    });
+
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      rafHarness.flushAll();
+      await flushAsync();
+      if (host.textContent?.includes('Loaded thread_1')) break;
+    }
+
+    expect(host.textContent).toContain('Loaded thread_1');
+
+    codexContext.selectThread('thread_2');
+    await flushAsync();
+
+    let observedStagingState = false;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      rafHarness.flushOne();
+      await flushAsync();
+      if (
+        host.querySelector('[data-codex-surface="loading-state"]') &&
+        host.querySelector('[data-codex-staging-transcript="true"]')
+      ) {
+        observedStagingState = true;
+        break;
+      }
+    }
+
+    expect(observedStagingState).toBe(true);
+    const visibleTranscript = host.querySelector(
+      '[data-codex-transcript-scroll-region="true"] [data-codex-surface="transcript"]',
+    ) as HTMLDivElement | null;
+    expect(visibleTranscript?.textContent ?? '').not.toContain('Loaded thread_2');
+
+    rafHarness.flushOne();
+    await flushAsync();
+    expect(host.querySelector('[data-codex-surface="loading-state"]')).not.toBeNull();
+
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      rafHarness.flushOne();
+      await flushAsync();
+      if (!host.querySelector('[data-codex-surface="loading-state"]')) break;
+    }
+
+    expect(host.querySelector('[data-codex-surface="loading-state"]')).toBeNull();
+    expect(host.querySelector('[data-codex-staging-transcript="true"]')).toBeNull();
+    expect(host.textContent).toContain('Loaded thread_2');
   });
 
   it('sends image attachments through the Codex-only turn contract', async () => {

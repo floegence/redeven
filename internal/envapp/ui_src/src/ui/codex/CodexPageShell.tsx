@@ -1,6 +1,9 @@
 import { Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 
-import { createFollowBottomController } from '../chat/scroll/createFollowBottomController';
+import {
+  createFollowBottomController,
+  type FollowBottomRequest,
+} from '../chat/scroll/createFollowBottomController';
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import { normalizeAbsolutePath, toHomeDisplayPath } from '../utils/askFlowerPath';
 import {
@@ -15,7 +18,7 @@ import { CodexHeaderBar, type CodexHeaderAction } from './CodexHeaderBar';
 import { CodexPendingRequestsPanel } from './CodexPendingRequestsPanel';
 import { CodexPendingInputsPanel } from './CodexPendingInputsPanel';
 import { CodexStatusBannerStack } from './CodexStatusBannerStack';
-import { CodexTranscript } from './CodexTranscript';
+import { CodexTranscript, type CodexTranscriptRowHeightCache } from './CodexTranscript';
 import { CodexWorkingDirPickerDialog } from './CodexWorkingDirPickerDialog';
 import type {
   CodexComposerControlOption,
@@ -38,17 +41,190 @@ import {
   resolveCodexWorkingDir,
 } from './viewModel';
 
+const THREAD_SWITCH_STAGING_MIN_WARMUP_FRAMES = 2;
+const THREAD_SWITCH_STAGING_STABLE_FRAMES = 3;
+const THREAD_SWITCH_STAGING_MAX_FRAMES = 12;
+const THREAD_SWITCH_POST_REVEAL_FOLLOW_WINDOW_MS = 350;
+
+function createCodexTranscriptRowHeightCache(): CodexTranscriptRowHeightCache {
+  const rowHeightsByID = new Map<string, number>();
+
+  return {
+    readHeights: (rowIDs) => {
+      if (rowIDs.length === 0) return {};
+      const nextHeights: Record<string, number> = {};
+      for (const rowID of rowIDs) {
+        const height = rowHeightsByID.get(rowID);
+        if (typeof height !== 'number' || !Number.isFinite(height) || height <= 0) continue;
+        nextHeights[rowID] = height;
+      }
+      return nextHeights;
+    },
+    writeHeight: (rowID, height) => {
+      const normalizedRowID = String(rowID ?? '').trim();
+      if (!normalizedRowID) return;
+      const normalizedHeight = Math.round(Number(height));
+      if (!Number.isFinite(normalizedHeight) || normalizedHeight <= 0) return;
+      rowHeightsByID.set(normalizedRowID, normalizedHeight);
+    },
+  };
+}
+
+function fallbackRequestAnimationFrame(callback: FrameRequestCallback): number {
+  callback(0);
+  return 0;
+}
+
+function fallbackCancelAnimationFrame(): void {
+  // No-op fallback for environments without rAF.
+}
+
 export function CodexPageShell() {
   const codex = useCodexContext();
   const rpc = useRedevenRpc();
   const followBottomController = createFollowBottomController();
+  const transcriptRowHeightCache = createCodexTranscriptRowHeightCache();
+  const requestFrame = globalThis.requestAnimationFrame ?? fallbackRequestAnimationFrame;
+  const cancelFrame = globalThis.cancelAnimationFrame ?? fallbackCancelAnimationFrame;
   const [workingDirPickerOpen, setWorkingDirPickerOpen] = createSignal(false);
   const [transcriptOverlayTrackRef, setTranscriptOverlayTrackRef] = createSignal<HTMLDivElement>();
   const [transcriptScrollRegionRef, setTranscriptScrollRegionRef] = createSignal<HTMLDivElement>();
+  const [visibleTranscriptRootRef, setVisibleTranscriptRootRef] = createSignal<HTMLDivElement>();
+  const [pendingThreadSwitchRequest, setPendingThreadSwitchRequest] = createSignal<FollowBottomRequest | null>(null);
+  const [pendingThreadSwitchOriginKey, setPendingThreadSwitchOriginKey] = createSignal('new-thread');
+  const [stagingTranscriptThreadKey, setStagingTranscriptThreadKey] = createSignal<string | null>(null);
+  const [stagingTranscriptMeasurementVersion, setStagingTranscriptMeasurementVersion] = createSignal(0);
+  const [postRevealFollowRequest, setPostRevealFollowRequest] = createSignal<FollowBottomRequest | null>(null);
+  let pendingRevealFrame: number | null = null;
+  let pendingFollowBottomDispatchTimeout: ReturnType<typeof globalThis.setTimeout> | null = null;
+  let pendingFollowBottomDispatchToken = 0;
+  let postRevealFollowTimeout: ReturnType<typeof globalThis.setTimeout> | null = null;
+  let lastRevealedTranscriptThreadKey = String(codex.displayedThreadID() ?? codex.activeThreadID() ?? '').trim() || 'new-thread';
 
   followBottomController.setPausedContentAnchorRestoreEnabled(false);
 
+  const cancelPendingRevealFrame = (): void => {
+    if (pendingRevealFrame === null) return;
+    cancelFrame(pendingRevealFrame);
+    pendingRevealFrame = null;
+  };
+
+  const cancelPendingFollowBottomDispatchFrame = (): void => {
+    pendingFollowBottomDispatchToken += 1;
+    if (pendingFollowBottomDispatchTimeout !== null) {
+      globalThis.clearTimeout(pendingFollowBottomDispatchTimeout);
+      pendingFollowBottomDispatchTimeout = null;
+    }
+  };
+
+  const clearPostRevealFollowRequest = (): void => {
+    if (postRevealFollowTimeout !== null) {
+      globalThis.clearTimeout(postRevealFollowTimeout);
+      postRevealFollowTimeout = null;
+    }
+    setPostRevealFollowRequest(null);
+  };
+
+  const clearThreadSwitchStaging = (): void => {
+    cancelPendingRevealFrame();
+    setStagingTranscriptThreadKey(null);
+    setStagingTranscriptMeasurementVersion(0);
+  };
+
+  const commitRevealedTranscriptThread = (threadKey: string | null | undefined): void => {
+    lastRevealedTranscriptThreadKey = String(threadKey ?? '').trim() || 'new-thread';
+  };
+
+  const queueFollowBottomDispatch = (request: FollowBottomRequest): void => {
+    cancelPendingFollowBottomDispatchFrame();
+    const token = pendingFollowBottomDispatchToken;
+    pendingFollowBottomDispatchTimeout = globalThis.setTimeout(() => {
+      pendingFollowBottomDispatchTimeout = null;
+      if (pendingFollowBottomDispatchToken !== token) return;
+      followBottomController.requestFollowBottom(request);
+    }, 0);
+  };
+
+  const armPostRevealFollowRequest = (request: FollowBottomRequest): void => {
+    clearPostRevealFollowRequest();
+    setPostRevealFollowRequest(request);
+    postRevealFollowTimeout = globalThis.setTimeout(() => {
+      postRevealFollowTimeout = null;
+      setPostRevealFollowRequest(null);
+    }, THREAD_SWITCH_POST_REVEAL_FOLLOW_WINDOW_MS);
+  };
+
+  const finishThreadSwitchStaging = (
+    threadKey: string,
+    request: FollowBottomRequest,
+  ): void => {
+    commitRevealedTranscriptThread(threadKey);
+    setPendingThreadSwitchRequest(null);
+    clearThreadSwitchStaging();
+    queueFollowBottomDispatch(request);
+    armPostRevealFollowRequest(request);
+  };
+
+  const displayedTranscriptThreadKey = createMemo(() => String(codex.displayedThreadID() ?? '').trim());
+  const liveTranscriptThreadKey = createMemo(() => (
+    displayedTranscriptThreadKey() ||
+    String(codex.activeThreadID() ?? '').trim() ||
+    'new-thread'
+  ));
+  const threadSwitchStagingActive = createMemo(() => Boolean(stagingTranscriptThreadKey()));
+  const stagingTranscriptReady = createMemo(() => {
+    const threadKey = stagingTranscriptThreadKey();
+    if (!threadKey) return false;
+    return !codex.threadLoading() && displayedTranscriptThreadKey() === threadKey;
+  });
+
+  const scheduleThreadSwitchReveal = (
+    threadKey: string,
+    request: FollowBottomRequest,
+  ): void => {
+    cancelPendingRevealFrame();
+    let warmupFrames = 0;
+    let stableFrames = 0;
+    let totalFrames = 0;
+    let lastMeasurementVersion = stagingTranscriptMeasurementVersion();
+
+    const tick = () => {
+      if (pendingThreadSwitchRequest()?.seq !== request.seq) return;
+      if (stagingTranscriptThreadKey() !== threadKey) return;
+      if (!stagingTranscriptReady()) {
+        pendingRevealFrame = requestFrame(tick);
+        return;
+      }
+
+      totalFrames += 1;
+      warmupFrames += 1;
+      const nextMeasurementVersion = stagingTranscriptMeasurementVersion();
+      if (nextMeasurementVersion !== lastMeasurementVersion) {
+        lastMeasurementVersion = nextMeasurementVersion;
+        stableFrames = 0;
+      } else {
+        stableFrames += 1;
+      }
+
+      const warmedUp = warmupFrames >= THREAD_SWITCH_STAGING_MIN_WARMUP_FRAMES;
+      if (
+        warmedUp &&
+        (stableFrames >= THREAD_SWITCH_STAGING_STABLE_FRAMES || totalFrames >= THREAD_SWITCH_STAGING_MAX_FRAMES)
+      ) {
+        pendingRevealFrame = null;
+        finishThreadSwitchStaging(threadKey, request);
+        return;
+      }
+
+      pendingRevealFrame = requestFrame(tick);
+    };
+
+    pendingRevealFrame = requestFrame(tick);
+  };
   onCleanup(() => {
+    cancelPendingRevealFrame();
+    cancelPendingFollowBottomDispatchFrame();
+    clearPostRevealFollowRequest();
     followBottomController.dispose();
   });
 
@@ -161,6 +337,24 @@ export function CodexPageShell() {
   ));
   const shouldShowWorkingState = createMemo(() => (
     summary().hostReady && hasActiveRun()
+  ));
+  const visibleTranscriptThreadKey = createMemo(() => stagingTranscriptThreadKey() ?? liveTranscriptThreadKey());
+  const visibleTranscriptItems = createMemo(() => (
+    threadSwitchStagingActive() ? [] : codex.transcriptItems()
+  ));
+  const visibleOptimisticUserTurns = createMemo(() => (
+    threadSwitchStagingActive() ? [] : codex.activeOptimisticUserTurns()
+  ));
+  const visibleShowWorkingState = createMemo(() => (
+    !threadSwitchStagingActive() && shouldShowWorkingState()
+  ));
+  const visibleTranscriptLoading = createMemo(() => (
+    codex.threadLoading() || threadSwitchStagingActive()
+  ));
+  const visibleTranscriptLoadingBody = createMemo(() => (
+    threadSwitchStagingActive()
+      ? 'Preparing the selected Codex thread.'
+      : 'Loading the selected Codex thread.'
   ));
   const activeInterruptTurnID = createMemo(() => String(codex.activeInterruptTurnID() ?? '').trim());
   const interruptPending = createMemo(() => (
@@ -372,7 +566,73 @@ export function CodexPageShell() {
   createEffect(() => {
     const request = codex.scrollToBottomRequest();
     if (!request) return;
+    if (request.reason === 'thread_switch') {
+      const originThreadKey = lastRevealedTranscriptThreadKey;
+      cancelPendingFollowBottomDispatchFrame();
+      clearPostRevealFollowRequest();
+      setPendingThreadSwitchOriginKey(originThreadKey);
+      setPendingThreadSwitchRequest(request);
+      return;
+    }
+    setPendingThreadSwitchOriginKey(lastRevealedTranscriptThreadKey);
+    setPendingThreadSwitchRequest(null);
+    clearPostRevealFollowRequest();
+    if (threadSwitchStagingActive()) {
+      commitRevealedTranscriptThread(liveTranscriptThreadKey());
+      clearThreadSwitchStaging();
+    }
     followBottomController.requestFollowBottom(request);
+  });
+
+  createEffect(() => {
+    if (threadSwitchStagingActive() || pendingThreadSwitchRequest()) return;
+    commitRevealedTranscriptThread(liveTranscriptThreadKey());
+  });
+
+  createEffect(() => {
+    const request = pendingThreadSwitchRequest();
+    if (!request) return;
+    const originThreadKey = pendingThreadSwitchOriginKey();
+    const threadKey = displayedTranscriptThreadKey();
+    if (!threadKey) {
+      if (!codex.threadLoading()) {
+        setPendingThreadSwitchRequest(null);
+        clearThreadSwitchStaging();
+        followBottomController.requestFollowBottom(request);
+      }
+      return;
+    }
+    if (threadKey === originThreadKey) {
+      return;
+    }
+    if (stagingTranscriptThreadKey() === threadKey) return;
+    cancelPendingRevealFrame();
+    setStagingTranscriptMeasurementVersion(0);
+    setStagingTranscriptThreadKey(threadKey);
+  });
+
+  createEffect(() => {
+    const root = visibleTranscriptRootRef();
+    const request = postRevealFollowRequest();
+    if (!root || !request || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      if (followBottomController.mode() !== 'following') {
+        clearPostRevealFollowRequest();
+        return;
+      }
+      queueFollowBottomDispatch(request);
+    });
+    observer.observe(root);
+    onCleanup(() => {
+      observer.disconnect();
+    });
+  });
+
+  createEffect(() => {
+    const request = pendingThreadSwitchRequest();
+    const threadKey = stagingTranscriptThreadKey();
+    if (!request || !threadKey || !stagingTranscriptReady()) return;
+    scheduleThreadSwitchReveal(threadKey, request);
   });
 
   createEffect(() => {
@@ -414,23 +674,49 @@ export function CodexPageShell() {
               onScroll={followBottomController.handleScroll}
             >
               <CodexTranscript
-                rootRef={followBottomController.setContentRoot}
+                rootRef={(element) => {
+                  followBottomController.setContentRoot(element);
+                  setVisibleTranscriptRootRef(element);
+                }}
                 scrollContainer={transcriptScrollRegionRef()}
                 onViewportAnchorResolverChange={followBottomController.setViewportAnchorResolver}
                 followBottomMode={followBottomController.mode}
-                threadKey={String(codex.displayedThreadID() ?? codex.activeThreadID() ?? '').trim() || 'new-thread'}
-                items={codex.transcriptItems()}
-                optimisticUserTurns={codex.activeOptimisticUserTurns()}
-                showWorkingState={shouldShowWorkingState()}
+                rowHeightCache={transcriptRowHeightCache}
+                threadKey={visibleTranscriptThreadKey()}
+                items={visibleTranscriptItems()}
+                optimisticUserTurns={visibleOptimisticUserTurns()}
+                showWorkingState={visibleShowWorkingState()}
                 workingLabel={codex.activeStatus() || summary().statusLabel || 'working'}
                 workingFlags={summary().statusFlags}
-                loading={codex.threadLoading()}
+                loading={visibleTranscriptLoading()}
                 loadingTitle={codex.threadTitle()}
-                loadingBody="Loading the selected Codex thread."
+                loadingBody={visibleTranscriptLoadingBody()}
                 emptyTitle={emptyStateTitle()}
                 emptyBody={emptyStateBody()}
               />
             </div>
+            <Show when={stagingTranscriptReady()}>
+              <div
+                aria-hidden="true"
+                data-codex-staging-transcript="true"
+                class="absolute inset-x-0 top-0 pointer-events-none invisible"
+              >
+                <CodexTranscript
+                  threadKey={stagingTranscriptThreadKey() ?? liveTranscriptThreadKey()}
+                  rowHeightCache={transcriptRowHeightCache}
+                  onMeasuredHeightsUpdated={() => {
+                    setStagingTranscriptMeasurementVersion((value) => value + 1);
+                  }}
+                  items={codex.transcriptItems()}
+                  optimisticUserTurns={codex.activeOptimisticUserTurns()}
+                  showWorkingState={shouldShowWorkingState()}
+                  workingLabel={codex.activeStatus() || summary().statusLabel || 'working'}
+                  workingFlags={summary().statusFlags}
+                  emptyTitle={emptyStateTitle()}
+                  emptyBody={emptyStateBody()}
+                />
+              </div>
+            </Show>
             <div class="codex-page-transcript-overlay">
               <div
                 ref={setTranscriptOverlayTrackRef}

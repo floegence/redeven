@@ -51,6 +51,10 @@ type CodexTranscriptSurfaceState = CodexTranscriptFallbackState | Readonly<{
   mode: 'feed';
   hasRows: true;
 }>;
+export type CodexTranscriptRowHeightCache = Readonly<{
+  readHeights: (rowIDs: readonly string[]) => Record<string, number>;
+  writeHeight: (rowID: string, height: number) => void;
+}>;
 
 const CODEX_TRANSCRIPT_VIRTUAL_LIST = {
   defaultItemHeight: 128,
@@ -743,12 +747,38 @@ function buildScopedTranscriptRowID(scopeKey: string, anchorId: string): string 
   return `${scopeKey}::${anchorId}`;
 }
 
+function filterMeasuredRowHeights(
+  rowIDs: readonly string[],
+  heightsByID: Readonly<Record<string, number>>,
+): Record<string, number> {
+  if (rowIDs.length === 0) return {};
+  const nextHeights: Record<string, number> = {};
+  for (const rowID of rowIDs) {
+    const height = heightsByID[rowID];
+    if (typeof height !== 'number' || !Number.isFinite(height) || height <= 0) continue;
+    nextHeights[rowID] = height;
+  }
+  return nextHeights;
+}
+
+function sameMeasuredRowHeights(
+  left: Readonly<Record<string, number>>,
+  right: Readonly<Record<string, number>>,
+): boolean {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) return false;
+  return leftKeys.every((key) => left[key] === right[key]);
+}
+
 function CodexTranscriptMeasuredRow(props: {
   row: Accessor<CodexTranscriptRenderRow | null>;
   reasoningExpandedByID: Accessor<Record<string, boolean>>;
   onReasoningExpandedChange: (rowID: string, expanded: boolean) => void;
   observeRow: (element: HTMLElement, rowID: string) => void;
   unobserveRow: (element: HTMLElement) => void;
+  class?: string;
+  style?: () => JSX.CSSProperties;
 }) {
   let rowEl: HTMLDivElement | undefined;
 
@@ -771,7 +801,8 @@ function CodexTranscriptMeasuredRow(props: {
             ref={(element) => {
               rowEl = element;
             }}
-            class="codex-transcript-row"
+            class={cn('codex-transcript-row', props.class)}
+            style={props.style?.()}
             data-follow-bottom-anchor-id={row().anchorId}
           >
             <Show when={row().kind === 'optimistic' && row().optimisticTurn}>
@@ -842,6 +873,8 @@ export function CodexTranscript(props: {
   scrollContainer?: HTMLElement | null;
   onViewportAnchorResolverChange?: (resolver: FollowBottomViewportAnchorResolver | null) => void;
   followBottomMode?: () => FollowBottomMode;
+  rowHeightCache?: CodexTranscriptRowHeightCache;
+  onMeasuredHeightsUpdated?: () => void;
   threadKey?: string;
   items: readonly CodexTranscriptItem[];
   optimisticUserTurns?: readonly CodexOptimisticUserTurn[];
@@ -856,7 +889,6 @@ export function CodexTranscript(props: {
 }) {
   const optimisticUserTurns = createMemo<readonly CodexOptimisticUserTurn[]>(() => props.optimisticUserTurns ?? []);
   const [reasoningExpandedByID, setReasoningExpandedByID] = createSignal<Record<string, boolean>>({});
-  const [rowHeightsByID, setRowHeightsByID] = createSignal<Record<string, number>>({});
   const transcriptRowScopeKey = createMemo(() => normalizeTranscriptRowScopeKey(
     props.threadKey ?? optimisticUserTurns()[0]?.thread_id ?? null,
   ));
@@ -971,6 +1003,14 @@ export function CodexTranscript(props: {
   const transcriptRowIndexByAnchorID = createMemo<Map<string, number>>(() => new Map(
     transcriptRows().map((row, index) => [row.anchorId, index]),
   ));
+  const readPersistedRowHeights = (rowIDs: readonly string[]): Record<string, number> => {
+    const cachedHeights = props.rowHeightCache?.readHeights(rowIDs);
+    if (!cachedHeights) return {};
+    return filterMeasuredRowHeights(rowIDs, cachedHeights);
+  };
+  const [rowHeightsByID, setRowHeightsByID] = createSignal<Record<string, number>>(
+    readPersistedRowHeights(transcriptRowOrder()),
+  );
   const virtualized = createMemo(() => Boolean(props.scrollContainer));
   const virtualList = useVirtualList({
     count: () => transcriptRowOrder().length,
@@ -988,8 +1028,12 @@ export function CodexTranscript(props: {
     const range = virtualList.visibleRange();
     return order.slice(range.start, range.end);
   });
-  const paddingTopPx = createMemo(() => (virtualized() ? virtualList.paddingTop() : 0));
-  const paddingBottomPx = createMemo(() => (virtualized() ? virtualList.paddingBottom() : 0));
+  const visibleVirtualItems = createMemo(() => (virtualized() ? virtualList.virtualItems() : []));
+  const visibleVirtualItemsByID = createMemo(() => new Map(
+    visibleVirtualItems().map((item) => [item.key, item]),
+  ));
+  const visibleVirtualRowIDs = createMemo(() => visibleVirtualItems().map((item) => item.key));
+  const virtualFeedHeightPx = createMemo(() => (virtualized() ? virtualList.totalHeight() : 0));
   const getTranscriptRowHeight = (index: number): number => {
     const rowID = transcriptRowOrder()[index];
     if (!rowID) return CODEX_TRANSCRIPT_VIRTUAL_LIST.defaultItemHeight;
@@ -999,7 +1043,7 @@ export function CodexTranscript(props: {
   };
   let pausedViewportAnchor: ViewportAnchor | null = null;
 
-  const captureTranscriptViewportAnchor = (scrollContainer: HTMLElement): void => {
+  const captureTranscriptViewportAnchor = (scrollContainer: HTMLElement): ViewportAnchor | null => {
     pausedViewportAnchor = captureViewportAnchor({
       messageIds: [...transcriptAnchorOrder()],
       visibleRangeStart: virtualList.visibleRange().start,
@@ -1007,6 +1051,7 @@ export function CodexTranscript(props: {
       getItemOffset: virtualList.getItemOffset,
       getItemHeight: getTranscriptRowHeight,
     });
+    return pausedViewportAnchor;
   };
 
   const findViewportAnchorIndex = (scrollTop: number): number => {
@@ -1056,6 +1101,22 @@ export function CodexTranscript(props: {
   createEffect(() => {
     transcriptRowScopeKey();
     pausedViewportAnchor = null;
+  });
+
+  createEffect(() => {
+    const rowOrder = transcriptRowOrder();
+    const cachedHeights = props.rowHeightCache?.readHeights(rowOrder);
+    const nextHeights = cachedHeights
+      ? filterMeasuredRowHeights(rowOrder, cachedHeights)
+      : filterMeasuredRowHeights(rowOrder, untrack(rowHeightsByID));
+    setRowHeightsByID((current) => {
+      return sameMeasuredRowHeights(current, nextHeights) ? current : nextHeights;
+    });
+    if (!virtualized()) return;
+    const heightUpdates = rowOrder
+      .map((rowID, index) => ({ index, height: nextHeights[rowID] ?? 0 }))
+      .filter((update) => update.height > 0);
+    virtualList.setItemHeights(heightUpdates);
   });
 
   createEffect(() => {
@@ -1109,21 +1170,6 @@ export function CodexTranscript(props: {
     });
   });
 
-  createEffect(() => {
-    const visibleRowIDs = new Set(transcriptRowOrder());
-    setRowHeightsByID((current) => {
-      let next = current;
-      let changed = false;
-      for (const rowID of Object.keys(current)) {
-        if (visibleRowIDs.has(rowID)) continue;
-        if (next === current) next = { ...current };
-        delete next[rowID];
-        changed = true;
-      }
-      return changed ? next : current;
-    });
-  });
-
   const rowResizeTargets = new Map<Element, string>();
   const rowResizeObserver = typeof ResizeObserver === 'undefined'
     ? null
@@ -1159,9 +1205,26 @@ export function CodexTranscript(props: {
       const keepViewportAnchor = (
         virtualized() &&
         props.followBottomMode?.() === 'paused' &&
-        !!scrollContainer &&
-        !!pausedViewportAnchor
+        !!scrollContainer
       );
+      const viewportAnchorBeforeResize = keepViewportAnchor && scrollContainer
+        ? pausedViewportAnchor ?? captureTranscriptViewportAnchor(scrollContainer)
+        : null;
+      let pausedScrollAdjustmentPx = 0;
+      if (keepViewportAnchor && scrollContainer) {
+        // Absolute-positioned virtual rows need an explicit scroll offset correction when
+        // a measured row above the paused viewport changes height.
+        const scrollTopBeforeResize = scrollContainer.scrollTop;
+        for (const update of pendingUpdates) {
+          const rowIndex = transcriptRowIndexByID().get(update.rowID);
+          if (rowIndex === undefined) continue;
+          const fallbackHeight = transcriptRowsByID()[update.rowID]?.estimatedHeightPx ?? CODEX_TRANSCRIPT_VIRTUAL_LIST.defaultItemHeight;
+          const oldHeight = currentRowHeights[update.rowID] ?? fallbackHeight;
+          const rowBottomBeforeResize = virtualList.getItemOffset(rowIndex) + Math.max(1, oldHeight);
+          if (rowBottomBeforeResize > scrollTopBeforeResize + 0.5) continue;
+          pausedScrollAdjustmentPx += update.nextHeight - oldHeight;
+        }
+      }
       setRowHeightsByID((current) => {
         let next = current;
         let changed = false;
@@ -1175,14 +1238,22 @@ export function CodexTranscript(props: {
         }
         return changed ? next : current;
       });
+      const virtualHeightUpdates: Array<{ index: number; height: number }> = [];
       for (const update of pendingUpdates) {
+        props.rowHeightCache?.writeHeight(update.rowID, update.nextHeight);
         const rowIndex = transcriptRowIndexByID().get(update.rowID);
         if (rowIndex === undefined) continue;
-        virtualList.setItemHeight(rowIndex, update.nextHeight);
+        virtualHeightUpdates.push({ index: rowIndex, height: update.nextHeight });
       }
-      if (keepViewportAnchor && scrollContainer && pausedViewportAnchor) {
+      virtualList.setItemHeights(virtualHeightUpdates);
+      props.onMeasuredHeightsUpdated?.();
+      if (keepViewportAnchor && scrollContainer && Math.abs(pausedScrollAdjustmentPx) > 0.5) {
+        scrollContainer.scrollTop = Math.max(0, scrollContainer.scrollTop + pausedScrollAdjustmentPx);
+        virtualList.onScroll();
+        captureTranscriptViewportAnchor(scrollContainer);
+      } else if (keepViewportAnchor && scrollContainer && viewportAnchorBeforeResize) {
         const nextAnchorScrollTop = resolveViewportAnchorScrollTop(
-          pausedViewportAnchor,
+          viewportAnchorBeforeResize,
           transcriptRowIndexByAnchorID(),
           virtualList.getItemOffset,
         );
@@ -1234,33 +1305,63 @@ export function CodexTranscript(props: {
         )}
       >
         <div class="codex-transcript-shell-feed">
-          <div class="codex-transcript-feed">
-            <Show when={paddingTopPx() > 0}>
-              <div aria-hidden="true" style={{ height: `${paddingTopPx()}px` }} />
-            </Show>
-            <For each={visibleRowIDs()}>
-              {(rowID) => (
-                <CodexTranscriptMeasuredRow
-                  row={() => transcriptRowsByID()[rowID] ?? null}
-                  reasoningExpandedByID={reasoningExpandedByID}
-                  onReasoningExpandedChange={(itemID, expanded) => {
-                    setReasoningExpandedByID((current) => {
-                      if (Boolean(current[itemID]) === expanded) return current;
-                      return {
-                        ...current,
-                        [itemID]: expanded,
-                      };
-                    });
-                  }}
-                  observeRow={observeRow}
-                  unobserveRow={unobserveRow}
-                />
-              )}
-            </For>
-            <Show when={paddingBottomPx() > 0}>
-              <div aria-hidden="true" style={{ height: `${paddingBottomPx()}px` }} />
-            </Show>
-          </div>
+          <Show
+            when={virtualized()}
+            fallback={(
+              <div class="codex-transcript-feed">
+                <For each={visibleRowIDs()}>
+                  {(rowID) => (
+                    <CodexTranscriptMeasuredRow
+                      row={() => transcriptRowsByID()[rowID] ?? null}
+                      reasoningExpandedByID={reasoningExpandedByID}
+                      onReasoningExpandedChange={(itemID, expanded) => {
+                        setReasoningExpandedByID((current) => {
+                          if (Boolean(current[itemID]) === expanded) return current;
+                          return {
+                            ...current,
+                            [itemID]: expanded,
+                          };
+                        });
+                      }}
+                      observeRow={observeRow}
+                      unobserveRow={unobserveRow}
+                    />
+                  )}
+                </For>
+              </div>
+            )}
+          >
+            <div
+              class="codex-transcript-feed codex-transcript-feed-virtualized"
+              data-codex-transcript-virtualized="true"
+              style={{ height: `${virtualFeedHeightPx()}px` }}
+            >
+              <For each={visibleVirtualRowIDs()}>
+                {(rowID) => {
+                  const rowOffsetPx = createMemo(() => visibleVirtualItemsByID().get(rowID)?.start ?? 0);
+                  return (
+                    <CodexTranscriptMeasuredRow
+                      row={() => transcriptRowsByID()[rowID] ?? null}
+                      class="codex-transcript-row-virtualized"
+                      style={() => ({ transform: `translateY(${rowOffsetPx()}px)` })}
+                      reasoningExpandedByID={reasoningExpandedByID}
+                      onReasoningExpandedChange={(itemID, expanded) => {
+                        setReasoningExpandedByID((current) => {
+                          if (Boolean(current[itemID]) === expanded) return current;
+                          return {
+                            ...current,
+                            [itemID]: expanded,
+                          };
+                        });
+                      }}
+                      observeRow={observeRow}
+                      unobserveRow={unobserveRow}
+                    />
+                  );
+                }}
+              </For>
+            </div>
+          </Show>
         </div>
       </Show>
     </div>

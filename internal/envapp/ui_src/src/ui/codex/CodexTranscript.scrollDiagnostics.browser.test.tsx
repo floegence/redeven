@@ -87,7 +87,7 @@ function buildCommandExecutionItems(count: number): CodexTranscriptItem[] {
     exit_code: 0,
     duration_ms: 950 + index,
     cwd: '/workspace/redeven/internal/envapp/ui_src',
-    command: `/bin/zsh -lc 'printf \"row ${index + 1}\\n\" && npm test -- src/ui/codex/CodexTranscript.test.tsx && npm run typecheck && npm run build'`,
+    command: `/bin/zsh -lc 'printf "row ${index + 1}\\n" && npm test -- src/ui/codex/CodexTranscript.test.tsx && npm run typecheck && npm run build'`,
     aggregated_output: `row ${index + 1}\ncompleted`,
   }));
 }

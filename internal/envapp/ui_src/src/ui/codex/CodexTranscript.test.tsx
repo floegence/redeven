@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { FollowBottomViewportAnchorResolver } from '../chat/scroll/createFollowBottomController';
 import type { FollowBottomMode } from '../chat/scroll/createFollowBottomController';
-import { CodexTranscript } from './CodexTranscript';
+import { CodexTranscript, type CodexTranscriptRowHeightCache } from './CodexTranscript';
 import type { CodexOptimisticUserTurn, CodexTranscriptItem } from './types';
 
 const openPreview = vi.fn(async () => undefined);
@@ -94,6 +94,8 @@ function renderTranscript(items: CodexTranscriptItem[], options?: {
   scrollContainer?: HTMLElement | null;
   followBottomMode?: () => FollowBottomMode;
   onViewportAnchorResolverChange?: (resolver: FollowBottomViewportAnchorResolver | null) => void;
+  rowHeightCache?: CodexTranscriptRowHeightCache;
+  onMeasuredHeightsUpdated?: () => void;
   threadKey?: string;
 }) {
   const host = document.createElement('div');
@@ -103,6 +105,8 @@ function renderTranscript(items: CodexTranscriptItem[], options?: {
       scrollContainer={options?.scrollContainer}
       followBottomMode={options?.followBottomMode}
       onViewportAnchorResolverChange={options?.onViewportAnchorResolverChange}
+      rowHeightCache={options?.rowHeightCache}
+      onMeasuredHeightsUpdated={options?.onMeasuredHeightsUpdated}
       threadKey={options?.threadKey}
       items={items}
       optimisticUserTurns={options?.optimisticUserTurns}
@@ -177,6 +181,24 @@ function installResizeObserverHarness() {
           } as unknown as ResizeObserverEntry,
         ], {} as ResizeObserver);
       }
+    },
+  };
+}
+
+function createMemoryRowHeightCache(): CodexTranscriptRowHeightCache {
+  const rowHeightsByID = new Map<string, number>();
+  return {
+    readHeights(rowIDs) {
+      const nextHeights: Record<string, number> = {};
+      for (const rowID of rowIDs) {
+        const height = rowHeightsByID.get(rowID);
+        if (typeof height !== 'number' || !Number.isFinite(height) || height <= 0) continue;
+        nextHeights[rowID] = height;
+      }
+      return nextHeights;
+    },
+    writeHeight(rowID, height) {
+      rowHeightsByID.set(rowID, Math.round(height));
     },
   };
 }
@@ -392,6 +414,58 @@ describe('CodexTranscript', () => {
     dispose();
   });
 
+  it('reports measured row-height batches to the caller', async () => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(16);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    const resizeObserverHarness = installResizeObserverHarness();
+    const onMeasuredHeightsUpdated = vi.fn();
+
+    const { host, dispose } = renderTranscript([
+      {
+        id: 'item_agent_measured',
+        type: 'agentMessage',
+        text: 'Measured row',
+        status: 'completed',
+        order: 0,
+      },
+    ], {
+      threadKey: 'measured-thread',
+      onMeasuredHeightsUpdated,
+    });
+
+    await flushAsync();
+
+    const row = host.querySelector('.codex-transcript-row') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    if (!row) {
+      throw new Error('row not rendered');
+    }
+
+    row.getBoundingClientRect = () => ({
+      x: 0,
+      y: 0,
+      width: 320,
+      height: 144,
+      top: 0,
+      bottom: 144,
+      left: 0,
+      right: 320,
+      toJSON() {
+        return {};
+      },
+    } as DOMRect);
+
+    resizeObserverHarness.notify(row);
+    await flushAsync();
+
+    expect(onMeasuredHeightsUpdated).toHaveBeenCalledTimes(1);
+
+    dispose();
+  });
+
   it('exposes a virtualized viewport anchor resolver that round-trips the current scroll position', async () => {
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
       callback(16);
@@ -437,6 +511,7 @@ describe('CodexTranscript', () => {
     });
     vi.stubGlobal('cancelAnimationFrame', () => undefined);
     const scrollContainer = createVirtualScrollContainer(240);
+    const rowHeightCache = createMemoryRowHeightCache();
 
     const buildItems = (variant: 'large' | 'small'): CodexTranscriptItem[] => Array.from({ length: 24 }, (_, index) => ({
       id: `item_${index}`,
@@ -454,6 +529,7 @@ describe('CodexTranscript', () => {
     const dispose = render(() => (
       <CodexTranscript
         scrollContainer={scrollContainer}
+        rowHeightCache={rowHeightCache}
         threadKey={threadKey()}
         items={items()}
         emptyTitle="Empty"
@@ -476,16 +552,109 @@ describe('CodexTranscript', () => {
     const renderedText = Array.from(host.querySelectorAll<HTMLElement>('.codex-transcript-row'))
       .map((row) => String(row.textContent ?? '').trim())
       .filter(Boolean);
-    const spacerHeights = Array.from(host.querySelectorAll<HTMLElement>('[aria-hidden="true"]'))
-      .map((element) => {
-        const match = String(element.getAttribute('style') ?? '').match(/height:\s*([0-9.]+)px/);
-        return match ? Number(match[1]) : NaN;
-      })
-      .filter((value) => Number.isFinite(value));
+    const virtualizedFeed = host.querySelector<HTMLElement>('[data-codex-transcript-virtualized="true"]');
+    const virtualizedFeedHeight = Number(
+      String(virtualizedFeed?.style.height ?? '').replace(/px$/, ''),
+    );
 
     expect(renderedText.some((text) => text.includes('small row 23'))).toBe(true);
     expect(renderedText.some((text) => text.includes('small row 00'))).toBe(false);
-    expect(spacerHeights.length).toBeGreaterThan(0);
+    expect(virtualizedFeedHeight).toBeGreaterThan(0);
+    expect(host.querySelector('[aria-hidden="true"][style*="height"]')).toBeNull();
+
+    dispose();
+  });
+
+  it('hydrates virtual row heights from the scoped cache before rendering a revisited thread', async () => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(16);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    const scrollContainer = createVirtualScrollContainer(240);
+    const rowHeightCache = createMemoryRowHeightCache();
+
+    const threadKey = 'thread-large';
+    const items: CodexTranscriptItem[] = Array.from({ length: 24 }, (_, index) => ({
+      id: `item_${index}`,
+      type: 'agentMessage',
+      text: `Large row ${index}`,
+      status: 'completed',
+      order: index,
+    }));
+
+    for (const item of items) {
+      rowHeightCache.writeHeight(`${threadKey}::item:${item.id}`, 92);
+    }
+
+    const { host, dispose } = renderTranscript(items, {
+      scrollContainer,
+      rowHeightCache,
+      threadKey,
+    });
+
+    await flushAsync();
+
+    scrollContainer.scrollTop = (items.length * 92) - 240;
+    scrollContainer.dispatchEvent(new Event('scroll'));
+    await flushAsync();
+
+    const renderedText = Array.from(host.querySelectorAll<HTMLElement>('.codex-transcript-row'))
+      .map((row) => String(row.textContent ?? '').trim())
+      .filter(Boolean);
+
+    expect(renderedText.some((text) => text.includes('Large row 23'))).toBe(true);
+    expect(renderedText.some((text) => text.includes('Large row 0'))).toBe(false);
+
+    dispose();
+  });
+
+  it('hydrates cached row heights when a staged thread is revealed after the transcript is already mounted', async () => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(16);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    const scrollContainer = createVirtualScrollContainer(240);
+    const rowHeightCache = createMemoryRowHeightCache();
+    const threadKey = 'thread-staged';
+    const items: CodexTranscriptItem[] = Array.from({ length: 24 }, (_, index) => ({
+      id: `item_${index}`,
+      type: 'agentMessage',
+      text: `Staged row ${index}`,
+      status: 'completed',
+      order: index,
+    }));
+
+    for (const item of items) {
+      rowHeightCache.writeHeight(`${threadKey}::item:${item.id}`, 92);
+    }
+
+    const host = document.createElement('div');
+    document.body.append(host);
+    const [visibleItems, setVisibleItems] = createSignal<CodexTranscriptItem[]>([]);
+
+    const dispose = render(() => (
+      <CodexTranscript
+        scrollContainer={scrollContainer}
+        rowHeightCache={rowHeightCache}
+        threadKey={threadKey}
+        items={visibleItems()}
+        emptyTitle="Empty"
+        emptyBody="Nothing yet."
+      />
+    ), host);
+
+    await flushAsync();
+    setVisibleItems(items);
+    await flushAsync();
+
+    const virtualizedFeed = host.querySelector<HTMLElement>('[data-codex-transcript-virtualized="true"]');
+    const virtualizedFeedHeight = Number(
+      String(virtualizedFeed?.style.height ?? '').replace(/px$/, ''),
+    );
+
+    expect(virtualizedFeedHeight).toBe(items.length * 92);
 
     dispose();
   });

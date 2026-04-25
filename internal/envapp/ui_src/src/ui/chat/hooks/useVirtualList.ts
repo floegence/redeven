@@ -10,6 +10,11 @@ export interface VirtualItem {
   key: string;
 }
 
+export interface VirtualItemHeightUpdate {
+  index: number;
+  height: number;
+}
+
 export interface UseVirtualListOptions {
   count: () => number;
   getItemKey: (index: number) => string;
@@ -30,6 +35,7 @@ export interface UseVirtualListReturn {
   isAtBottom: () => boolean;
   visibleRange: () => { start: number; end: number };
   setItemHeight: (index: number, height: number) => void;
+  setItemHeights: (updates: readonly VirtualItemHeightUpdate[]) => void;
   getItemOffset: (index: number) => number;
 }
 
@@ -255,27 +261,40 @@ export function useVirtualList(options: UseVirtualListOptions): UseVirtualListRe
     });
   }
 
-  // Update a single item height and propagate the delta to the BIT
-  function setItemHeight(index: number, height: number): void {
+  // Update item heights in one layout pass so cached measurements can hydrate offsets atomically.
+  function setItemHeights(updates: readonly VirtualItemHeightUpdate[]): void {
+    if (updates.length === 0) return;
     const n = count();
     ensureSize(n);
 
-    if (index < 0 || index >= n) return;
-    const normalizedHeight = normalizeHeight(height);
-    if (normalizedHeight <= 0) return;
+    let changed = false;
+    for (const update of updates) {
+      const index = update.index;
+      if (index < 0 || index >= n) continue;
+      const normalizedHeight = normalizeHeight(update.height);
+      if (normalizedHeight <= 0) continue;
 
-    const oldHeight = heights[index] ?? config.defaultItemHeight;
-    if (Math.abs(oldHeight - normalizedHeight) < 1) return;
+      const oldHeight = heights[index] ?? config.defaultItemHeight;
+      if (Math.abs(oldHeight - normalizedHeight) < 1) continue;
 
-    const delta = normalizedHeight - oldHeight;
-    heights[index] = normalizedHeight;
-    bitUpdate(bit, index + 1, delta);
+      const delta = normalizedHeight - oldHeight;
+      heights[index] = normalizedHeight;
+      bitUpdate(bit, index + 1, delta);
+      changed = true;
+    }
+
+    if (!changed) return;
     invalidateLayout();
     if (scrollEl) {
       const scrollHeight = scrollEl.scrollHeight;
       const clientHeight = scrollEl.clientHeight;
       setAtBottom(scrollHeight - scrollEl.scrollTop - clientHeight < 50);
     }
+  }
+
+  // Update a single item height and propagate the delta to the BIT
+  function setItemHeight(index: number, height: number): void {
+    setItemHeights([{ index, height }]);
   }
 
   function getItemOffset(index: number): number {
@@ -383,6 +402,7 @@ export function useVirtualList(options: UseVirtualListOptions): UseVirtualListRe
     isAtBottom: atBottom,
     visibleRange,
     setItemHeight,
+    setItemHeights,
     getItemOffset,
   };
 }
