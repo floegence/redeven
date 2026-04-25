@@ -341,6 +341,16 @@ function sessionContainsOptimisticTurn(
   ));
 }
 
+function sessionMaxItemOrder(
+  currentSession: { items_by_id: Record<string, CodexTranscriptItem> } | null | undefined,
+): number {
+  return Object.values(currentSession?.items_by_id ?? {}).reduce((maxOrder, item) => {
+    const nextOrder = Number(item.order);
+    if (!Number.isFinite(nextOrder)) return maxOrder;
+    return Math.max(maxOrder, nextOrder);
+  }, -1);
+}
+
 function buildOptimisticPlaceholderThread(args: {
   threadID: string;
   preview: string;
@@ -1890,11 +1900,15 @@ export function CodexProvider(props: ParentProps) {
 
       if (args.appendOptimisticUserTurn !== false) {
         optimisticTurnID = createDraftEntryID();
+        const optimisticAfterItemOrder = sessionMaxItemOrder(
+          threadController.sessionForThread(targetThreadID),
+        );
         appendOptimisticTurn({
           id: optimisticTurnID,
           thread_id: targetThreadID,
           text: args.prepared.text,
           inputs: args.prepared.optimisticInputs,
+          after_item_order: optimisticAfterItemOrder,
         });
       }
       threadController.markSessionWorking(targetThreadID);

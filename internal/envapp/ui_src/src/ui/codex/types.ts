@@ -100,6 +100,7 @@ export type CodexOptimisticUserTurn = Readonly<{
   thread_id: string;
   text: string;
   inputs: CodexUserInputEntry[];
+  after_item_order?: number;
 }>;
 
 export type CodexQueuedFollowupRuntimeConfig = Readonly<{

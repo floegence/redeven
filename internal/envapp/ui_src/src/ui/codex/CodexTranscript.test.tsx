@@ -505,16 +505,17 @@ describe('CodexTranscript', () => {
     expect(rows[0]?.querySelector('[data-codex-working-state="true"]')).toBeTruthy();
     expect(host.querySelector('[data-codex-pre-output="true"] [data-testid="streaming-cursor"]')).toBeTruthy();
     expect(preOutputRow).toBe(workingRow);
-    expect(preOutputRow?.classList.contains('codex-assistant-lead-aligned-row')).toBe(true);
-    expect(preOutputRow?.querySelector('.chat-message-content-wrapper')?.classList.contains('codex-assistant-lead-aligned-content-prelude')).toBe(true);
-    expect(preOutputRow?.querySelector('.chat-message-avatar')).toBeTruthy();
+    expect(preOutputRow?.classList.contains('codex-assistant-lead-aligned-row')).toBe(false);
+    expect(preOutputRow?.querySelector('.chat-message-content-wrapper')?.classList.contains('codex-assistant-lead-aligned-content-prelude')).toBe(false);
+    expect(preOutputRow?.querySelector('.chat-message-avatar')).toBeNull();
     expect(host.querySelector('[data-codex-working-state="true"]')).toBeTruthy();
     expect(host.textContent).toContain('Working...');
     expect(host.textContent).not.toContain('Codex is');
     expect(host.textContent).not.toContain('web search');
     expect(host.querySelector('.codex-message-run-indicator-graph')).toBeTruthy();
     expect(host.querySelector('[data-codex-working-state="true"] [data-testid="streaming-cursor"]')).toBeNull();
-    expect(workingRow?.querySelector('.chat-message-avatar')).toBeTruthy();
+    expect(workingRow?.querySelector('.chat-message-avatar')).toBeNull();
+    expect(host.querySelectorAll('.chat-message-avatar')).toHaveLength(0);
 
     dispose();
   });
@@ -538,10 +539,36 @@ describe('CodexTranscript', () => {
     expect(host.querySelector('[data-codex-pre-output="true"]')).toBeNull();
     expect(host.querySelector('[data-codex-item-type="agentMessage"] [data-markdown-streaming="true"]')).toBeTruthy();
     expect(host.querySelector('[data-codex-item-type="agentMessage"] [data-testid="streaming-cursor"]')).toBeTruthy();
-    expect(agentRow?.classList.contains('codex-assistant-lead-aligned-row')).toBe(true);
-    expect(agentRow?.querySelector('.chat-message-content-wrapper')?.classList.contains('codex-assistant-lead-aligned-content-markdown')).toBe(true);
+    expect(agentRow?.classList.contains('codex-assistant-lead-aligned-row')).toBe(false);
+    expect(agentRow?.querySelector('.chat-message-content-wrapper')?.classList.contains('codex-assistant-lead-aligned-content-markdown')).toBe(false);
     expect(host.querySelector('[data-codex-working-state="true"] [data-testid="streaming-cursor"]')).toBeNull();
     expect(workingRow?.querySelector('.chat-message-avatar')).toBeNull();
+    expect(host.querySelectorAll('.chat-message-avatar')).toHaveLength(0);
+
+    dispose();
+  });
+
+  it('keeps tool rows avatar-free together with the standalone working row', () => {
+    const { host, dispose } = renderTranscript([
+      {
+        id: 'item_command_live',
+        type: 'commandExecution',
+        command: 'npm test',
+        aggregated_output: 'PASS avatar-handoff',
+        status: 'inProgress',
+        order: 0,
+      },
+    ], {
+      showWorkingState: true,
+      workingLabel: 'working',
+    });
+    const rows = Array.from(host.querySelectorAll('.codex-transcript-row'));
+    const workingRow = host.querySelector('[data-codex-working-state="true"]')?.closest('.chat-message-item');
+
+    expect(host.querySelector('[data-codex-pre-output="true"]')).toBeNull();
+    expect(rows[0]?.querySelector('.chat-message-avatar')).toBeNull();
+    expect(workingRow?.querySelector('.chat-message-avatar')).toBeNull();
+    expect(host.querySelectorAll('.chat-message-avatar')).toHaveLength(0);
 
     dispose();
   });
@@ -622,6 +649,7 @@ describe('CodexTranscript', () => {
           thread_id: 'thread_1',
           text: 'Please continue.',
           inputs: [],
+          after_item_order: 1,
         },
       ],
       showWorkingState: true,
@@ -633,12 +661,74 @@ describe('CodexTranscript', () => {
     expect(host.querySelector('[data-codex-pre-output="true"]')?.closest('.chat-message-item')).toBe(
       host.querySelector('[data-codex-working-state="true"]')?.closest('.chat-message-item'),
     );
-    expect(host.querySelector('[data-codex-working-state="true"]')?.closest('.chat-message-item')?.querySelector('.chat-message-avatar')).toBeTruthy();
+    expect(host.querySelector('[data-codex-working-state="true"]')?.closest('.chat-message-item')?.querySelector('.chat-message-avatar')).toBeNull();
+    expect(host.querySelectorAll('.chat-message-avatar')).toHaveLength(0);
 
     dispose();
   });
 
-  it('shows the Codex avatar only on the first agent message until a user message resets the run', () => {
+  it('keeps tool rows avatar-free once output arrives for an unresolved optimistic turn', () => {
+    const { host, dispose } = renderTranscript([
+      {
+        id: 'item_user_previous',
+        type: 'userMessage',
+        text: 'Previous request.',
+        order: 0,
+      },
+      {
+        id: 'item_agent_previous',
+        type: 'agentMessage',
+        text: 'Previous assistant answer.',
+        order: 1,
+      },
+      {
+        id: 'item_web_search_live_1',
+        type: 'webSearch',
+        query: 'weather: Wuhan, Hubei, China',
+        action: {
+          type: 'search',
+          queries: ['weather: Wuhan, Hubei, China'],
+        },
+        status: 'completed',
+        order: 2,
+      },
+      {
+        id: 'item_web_search_live_2',
+        type: 'webSearch',
+        query: 'weather: Wuhan, Hubei, China',
+        action: {
+          type: 'search',
+          queries: ['weather: Wuhan, Hubei, China'],
+        },
+        status: 'completed',
+        order: 3,
+      },
+    ], {
+      optimisticUserTurns: [
+        {
+          id: 'optimistic_turn_2',
+          thread_id: 'thread_1',
+          text: 'Check Wuhan weather.',
+          inputs: [],
+          after_item_order: 1,
+        },
+      ],
+      showWorkingState: true,
+      workingLabel: 'working',
+    });
+    const webSearchRows = Array.from(host.querySelectorAll('[data-codex-item-type="webSearch"]'));
+    const workingRow = host.querySelector('[data-codex-working-state="true"]')?.closest('.chat-message-item');
+
+    expect(host.querySelector('[data-codex-pre-output="true"]')).toBeNull();
+    expect(webSearchRows[0]?.closest('.chat-message-item')?.querySelector('.chat-message-avatar')).toBeNull();
+    expect(webSearchRows[1]?.closest('.chat-message-item')?.querySelector('.chat-message-avatar')).toBeNull();
+    expect(workingRow?.querySelector('.chat-message-avatar')).toBeNull();
+    expect(host.querySelectorAll('.chat-message-avatar')).toHaveLength(0);
+
+    dispose();
+  });
+
+  it('keeps all assistant-owned transcript rows avatar-free across run boundaries', () => {
     const items: CodexTranscriptItem[] = [
       {
         id: 'item_reasoning_intro',
@@ -687,16 +777,15 @@ describe('CodexTranscript', () => {
 
     expect(rows).toHaveLength(6);
     expect(rows[0]?.querySelector('.chat-message-avatar')).toBeNull();
-    expect(rows[1]?.querySelector('.chat-message-avatar')).toBeTruthy();
-    expect(rows[1]?.querySelector('.chat-message-item')?.classList.contains('codex-assistant-lead-aligned-row')).toBe(true);
-    expect(rows[1]?.querySelector('.chat-message-content-wrapper')?.classList.contains('codex-assistant-lead-aligned-content-markdown')).toBe(true);
+    expect(rows[0]?.querySelector('.chat-message-item')?.classList.contains('codex-assistant-lead-aligned-row')).toBe(false);
+    expect(rows[1]?.querySelector('.chat-message-avatar')).toBeNull();
     expect(rows[2]?.querySelector('.chat-message-avatar')).toBeNull();
     expect(rows[3]?.querySelector('.chat-message-avatar')).toBeNull();
     expect(rows[3]?.querySelector('.chat-message-item')?.classList.contains('codex-assistant-lead-aligned-row')).toBe(false);
     expect(rows[4]?.querySelector('.chat-message-avatar')).toBeNull();
-    expect(rows[5]?.querySelector('.chat-message-avatar')).toBeTruthy();
-    expect(rows[5]?.querySelector('.chat-message-item')?.classList.contains('codex-assistant-lead-aligned-row')).toBe(true);
-    expect(host.querySelectorAll('.chat-message-avatar')).toHaveLength(2);
+    expect(rows[5]?.querySelector('.chat-message-avatar')).toBeNull();
+    expect(rows[5]?.querySelector('.chat-message-item')?.classList.contains('codex-assistant-lead-aligned-row')).toBe(false);
+    expect(host.querySelectorAll('.chat-message-avatar')).toHaveLength(0);
 
     dispose();
   });
@@ -814,7 +903,11 @@ describe('CodexTranscript', () => {
     expect(host.textContent).toContain('Page');
     expect(host.textContent).toContain('weather.com.cn/.../101250101.shtml');
     expect(host.textContent).not.toContain('No content.');
-    expect(host.querySelector('[data-codex-item-type="webSearch"] .chat-message-avatar')).toBeNull();
+    const webSearchRows = host.querySelectorAll('[data-codex-item-type="webSearch"]');
+
+    expect(webSearchRows[0]?.closest('.chat-message-item')?.querySelector('.chat-message-avatar')).toBeNull();
+    expect(webSearchRows[1]?.closest('.chat-message-item')?.querySelector('.chat-message-avatar')).toBeNull();
+    expect(host.querySelectorAll('.chat-message-avatar')).toHaveLength(0);
     expect(host.querySelector('[data-codex-item-type="webSearch"] .codex-chat-markdown-block')).toBeNull();
     expect(host.querySelector('[data-codex-item-type="webSearch"] .codex-chat-evidence-header')).toBeNull();
     expect(host.querySelector('[data-codex-item-type="webSearch"] .codex-chat-web-search-primary')).toBeTruthy();
