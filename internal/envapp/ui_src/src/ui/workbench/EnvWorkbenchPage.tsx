@@ -125,6 +125,36 @@ function easeOutCubic(progress: number): number {
   return 1 - ((1 - clamped) ** 3);
 }
 
+function eventTargetUsesTextEntry(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+  const interactiveTextTarget = target.closest('textarea, [contenteditable], [role="textbox"]');
+  if (interactiveTextTarget) {
+    return true;
+  }
+  const input = target.closest('input, select');
+  if (!(input instanceof HTMLInputElement || input instanceof HTMLSelectElement)) {
+    return false;
+  }
+  if (input instanceof HTMLSelectElement) {
+    return true;
+  }
+  const nonTextInputTypes = new Set([
+    'button',
+    'checkbox',
+    'color',
+    'file',
+    'hidden',
+    'image',
+    'radio',
+    'range',
+    'reset',
+    'submit',
+  ]);
+  return !nonTextInputTypes.has(String(input.type || '').toLowerCase());
+}
+
 function RedevenWorkbenchHudActions(props: {
   mount: () => HTMLDivElement | null;
   selectedWidget: () => WorkbenchState['widgets'][number] | null;
@@ -713,6 +743,34 @@ export function EnvWorkbenchPage() {
       return null;
     }
   };
+
+  createEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const handleWindowKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented
+        || event.isComposing
+        || event.key !== 'Escape'
+        || event.altKey
+        || event.ctrlKey
+        || event.metaKey
+        || event.shiftKey
+        || eventTargetUsesTextEntry(event.target)
+        || selectedWidget()
+        || scaleAtMinimum(workbenchState().viewport.scale)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      minimizeCanvasScale();
+    };
+    window.addEventListener('keydown', handleWindowKeyDown);
+    onCleanup(() => {
+      window.removeEventListener('keydown', handleWindowKeyDown);
+    });
+  });
 
   createEffect(() => {
     const key = storageKey();
