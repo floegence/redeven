@@ -38,7 +38,6 @@ type CodexTranscriptRenderRow = Readonly<{
   estimatedHeightPx: number;
   item?: CodexTranscriptItem;
   optimisticTurn?: CodexOptimisticUserTurn;
-  showAssistantAvatar?: boolean;
   pendingAssistantState?: PendingAssistantVisualState;
   workingPhaseLabel?: string;
 }>;
@@ -131,16 +130,18 @@ function CodexMessageLane(props: {
   contentClass?: string;
   children: JSX.Element;
 }) {
+  const showAvatar = props.role === 'assistant' ? false : Boolean(props.showAvatar);
   return (
     <div
       class={cn(
         'chat-message-item codex-chat-message-item',
         props.role === 'assistant' ? 'chat-message-item-assistant codex-chat-message-item-assistant' : 'chat-message-item-user codex-chat-message-item-user',
-        props.showAvatar ? 'chat-message-item-with-avatar' : 'chat-message-item-without-avatar',
+        showAvatar ? 'chat-message-item-with-avatar' : 'chat-message-item-without-avatar',
+        props.role === 'assistant' && 'codex-chat-message-item-assistant-avatarless',
         props.class,
       )}
     >
-      <Show when={props.showAvatar}>
+      <Show when={showAvatar}>
         <div class="chat-message-avatar chat-message-avatar-assistant codex-chat-message-avatar">
           <div class="chat-message-avatar-custom-wrapper">
             <CodexIcon class="block h-full w-full" />
@@ -543,39 +544,10 @@ function TranscriptEvidenceRow(props: { item: CodexTranscriptItem }) {
   );
 }
 
-type CodexAssistantLeadAlignmentVariant = 'markdown' | 'prelude';
-
-interface CodexAssistantLeadAlignment {
-  rowClass?: string;
-  contentClass?: string;
-}
-
-function assistantLeadAlignment(
-  variant: CodexAssistantLeadAlignmentVariant,
-  enabled: boolean,
-): CodexAssistantLeadAlignment {
-  if (!enabled) return {};
-  return {
-    rowClass: 'codex-assistant-lead-aligned-row',
-    contentClass: cn(
-      'codex-assistant-lead-aligned-content',
-      variant === 'markdown'
-        ? 'codex-assistant-lead-aligned-content-markdown'
-        : 'codex-assistant-lead-aligned-content-prelude',
-    ),
-  };
-}
-
-function AgentMessageRow(props: { item: CodexTranscriptItem; showAvatar?: boolean }) {
+function AgentMessageRow(props: { item: CodexTranscriptItem }) {
   const streaming = () => isWorkingStatus(props.item.status);
-  const alignment = assistantLeadAlignment('markdown', Boolean(props.showAvatar));
   return (
-    <CodexMessageLane
-      role="assistant"
-      showAvatar={props.showAvatar}
-      class={alignment.rowClass}
-      contentClass={alignment.contentClass}
-    >
+    <CodexMessageLane role="assistant">
       <div data-codex-item-type={props.item.type} class="chat-message-bubble chat-message-bubble-assistant codex-chat-message-bubble-assistant">
         <div class="codex-chat-message-surface codex-chat-message-surface-assistant">
           <MarkdownBlock
@@ -619,7 +591,6 @@ function OptimisticUserMessageRow(props: { turn: CodexOptimisticUserTurn }) {
 
 interface PendingAssistantVisualState {
   show: boolean;
-  showAvatar: boolean;
   showPrelude: boolean;
   showWorkingRail: boolean;
   phaseLabel: string;
@@ -655,14 +626,8 @@ function WorkingStatusRail(props: { phaseLabel: string; class?: string }) {
 }
 
 function PendingAssistantRow(props: { state: PendingAssistantVisualState }) {
-  const alignment = assistantLeadAlignment('prelude', Boolean(props.state.showAvatar));
   return (
-    <CodexMessageLane
-      role="assistant"
-      showAvatar={props.state.showAvatar}
-      class={alignment.rowClass}
-      contentClass={alignment.contentClass}
-    >
+    <CodexMessageLane role="assistant">
       <Show when={props.state.showPrelude}>
         <PendingAssistantPrelude />
       </Show>
@@ -673,12 +638,9 @@ function PendingAssistantRow(props: { state: PendingAssistantVisualState }) {
   );
 }
 
-function WorkingStateRow(props: {
-  phaseLabel: string;
-  showAvatar?: boolean;
-}) {
+function WorkingStateRow(props: { phaseLabel: string }) {
   return (
-    <CodexMessageLane role="assistant" showAvatar={props.showAvatar} class="codex-working-state-row">
+    <CodexMessageLane role="assistant" class="codex-working-state-row">
       <WorkingStatusRail phaseLabel={props.phaseLabel} />
     </CodexMessageLane>
   );
@@ -707,23 +669,35 @@ function shouldRenderTranscriptItem(item: CodexTranscriptItem): boolean {
   return true;
 }
 
-function hasAssistantMessageInCurrentRun(items: readonly CodexTranscriptItem[], beforeIndex: number): boolean {
+function isAssistantOwnedTranscriptItem(item: CodexTranscriptItem | null | undefined): boolean {
+  return Boolean(item && item.type !== 'userMessage');
+}
+
+function latestOptimisticBoundaryOrder(optimisticTurns: readonly CodexOptimisticUserTurn[]): number | null {
+  let boundaryOrder: number | null = null;
+  for (const optimisticTurn of optimisticTurns) {
+    const candidate = Number(optimisticTurn.after_item_order);
+    if (!Number.isFinite(candidate)) continue;
+    if (boundaryOrder === null || candidate > boundaryOrder) {
+      boundaryOrder = candidate;
+    }
+  }
+  return boundaryOrder;
+}
+
+function hasAssistantOutputInCurrentRun(
+  items: readonly CodexTranscriptItem[],
+  beforeIndex: number,
+  optimisticBoundaryOrder: number | null = null,
+): boolean {
   for (let cursor = beforeIndex - 1; cursor >= 0; cursor -= 1) {
     const previous = items[cursor];
     if (!shouldRenderTranscriptItem(previous)) continue;
+    if (optimisticBoundaryOrder !== null && Number(previous.order) <= optimisticBoundaryOrder) return false;
     if (previous.type === 'userMessage') return false;
-    if (previous.type === 'agentMessage') return true;
+    if (isAssistantOwnedTranscriptItem(previous)) return true;
   }
   return false;
-}
-
-function shouldShowAgentAvatar(items: readonly CodexTranscriptItem[], index: number): boolean {
-  const item = items[index];
-  return Boolean(item && item.type === 'agentMessage' && !hasAssistantMessageInCurrentRun(items, index));
-}
-
-function shouldShowWorkingAvatar(items: readonly CodexTranscriptItem[]): boolean {
-  return !hasAssistantMessageInCurrentRun(items, items.length);
 }
 
 function estimateTranscriptRowHeight(row: CodexTranscriptRenderRow): number {
@@ -806,7 +780,6 @@ function CodexTranscriptMeasuredRow(props: {
             <Show when={row().kind === 'item' && row().item}>
               <TranscriptRow
                 item={() => row().item ?? null}
-                showAssistantAvatar={() => Boolean(row().showAssistantAvatar)}
                 reasoningExpanded={Boolean(
                   row().item ? props.reasoningExpandedByID()[row().id] : false,
                 )}
@@ -819,10 +792,7 @@ function CodexTranscriptMeasuredRow(props: {
               <PendingAssistantRow state={row().pendingAssistantState!} />
             </Show>
             <Show when={row().kind === 'working_state' && row().workingPhaseLabel}>
-              <WorkingStateRow
-                phaseLabel={row().workingPhaseLabel!}
-                showAvatar={Boolean(row().showAssistantAvatar)}
-              />
+              <WorkingStateRow phaseLabel={row().workingPhaseLabel!} />
             </Show>
           </div>
         );
@@ -833,7 +803,6 @@ function CodexTranscriptMeasuredRow(props: {
 
 function TranscriptRow(props: {
   item: Accessor<CodexTranscriptItem | null>;
-  showAssistantAvatar: Accessor<boolean>;
   reasoningExpanded?: boolean;
   onReasoningExpandedChange?: (expanded: boolean) => void;
 }) {
@@ -845,7 +814,7 @@ function TranscriptRow(props: {
           return <UserMessageRow item={item()} />;
         }
         if (item().type === 'agentMessage') {
-          return <AgentMessageRow item={item()} showAvatar={props.showAssistantAvatar()} />;
+          return <AgentMessageRow item={item()} />;
         }
         if (item().type === 'commandExecution') {
           return <CommandExecutionRow item={item()} />;
@@ -893,7 +862,7 @@ export function CodexTranscript(props: {
   ));
   const itemRows = createMemo<readonly CodexTranscriptRenderRow[]>(() => {
     const rows: CodexTranscriptRenderRow[] = [];
-    props.items.forEach((item, index) => {
+    props.items.forEach((item) => {
       if (!shouldRenderTranscriptItem(item)) return;
       const itemID = String(item.id ?? '').trim();
       if (!itemID) return;
@@ -903,7 +872,6 @@ export function CodexTranscript(props: {
         kind: 'item',
         anchorId,
         item,
-        showAssistantAvatar: shouldShowAgentAvatar(props.items, index),
         estimatedHeightPx: CODEX_TRANSCRIPT_VIRTUAL_LIST.defaultItemHeight,
       };
       rows.push({
@@ -928,13 +896,14 @@ export function CodexTranscript(props: {
   });
   const pendingAssistantState = createMemo<PendingAssistantVisualState>(() => {
     const showWorkingRail = Boolean(props.showWorkingState);
-    const showPrelude = showWorkingRail && (
-      optimisticUserTurns().length > 0 ||
-      !hasAssistantMessageInCurrentRun(props.items, props.items.length)
+    const hasAssistantOutput = hasAssistantOutputInCurrentRun(
+      props.items,
+      props.items.length,
+      latestOptimisticBoundaryOrder(optimisticUserTurns()),
     );
+    const showPrelude = showWorkingRail && !hasAssistantOutput;
     return {
       show: showPrelude,
-      showAvatar: showPrelude,
       showPrelude,
       showWorkingRail: showPrelude && showWorkingRail,
       phaseLabel: workingPhaseLabel(String(props.workingLabel ?? '').trim() || 'working', props.workingFlags ?? []),
@@ -981,7 +950,6 @@ export function CodexTranscript(props: {
         kind: 'working_state',
         anchorId,
         workingPhaseLabel: pendingAssistantState().phaseLabel,
-        showAssistantAvatar: shouldShowWorkingAvatar(props.items),
         estimatedHeightPx: CODEX_TRANSCRIPT_VIRTUAL_LIST.defaultItemHeight,
       };
       rows.push({

@@ -1269,6 +1269,15 @@ button.codex-pending-input-card-main:focus-visible .codex-pending-input-card-pre
   width: min(100%, var(--codex-transcript-content-max-width));
 }
 
+.codex-chat-message-item-assistant-avatarless {
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: 0;
+}
+
+.codex-chat-message-item-assistant-avatarless .chat-message-content-wrapper {
+  grid-column: 1;
+}
+
 .codex-chat-message-avatar {
   width: 2.25rem;
   height: 2.25rem;
@@ -1297,23 +1306,6 @@ button.codex-pending-input-card-main:focus-visible .codex-pending-input-card-pre
 .codex-chat-command-content {
   width: min(100%, var(--codex-transcript-assistant-bubble-max-width));
   gap: 0;
-}
-
-.codex-assistant-lead-aligned-row .codex-chat-message-avatar {
-  margin-top: 0;
-}
-
-.codex-assistant-lead-aligned-content {
-  padding-top: calc((var(--chat-transcript-avatar-size) - var(--codex-assistant-lead-height)) / 2);
-}
-
-.codex-assistant-lead-aligned-content-prelude {
-  --codex-assistant-lead-height: var(--codex-assistant-prelude-lead-height);
-  gap: 0.1875rem;
-}
-
-.codex-assistant-lead-aligned-content-markdown {
-  --codex-assistant-lead-height: var(--codex-assistant-markdown-lead-height);
 }
 
 .codex-pending-assistant-prelude-surface {
