@@ -689,6 +689,135 @@ describe('EnvWorkbenchPage', () => {
     expect(surface.dataset.selectedWidgetId).toBe('');
   });
 
+  it('maps Escape to the global min-scale action when no widget is selected', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 100,
+      widgets: [
+        {
+          widget_id: 'widget-files-1',
+          widget_type: 'redeven.files',
+          x: 320,
+          y: 180,
+          width: 760,
+          height: 560,
+          z_index: 1,
+          created_at_unix_ms: 123,
+        },
+      ],
+      widget_states: [],
+    });
+    storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
+      if (key === 'workbench:env-123') {
+        return {
+          version: 1,
+          widgets: [],
+          viewport: { x: 180, y: 120, scale: 1.25 },
+          locked: false,
+          filters: {
+            'redeven.terminal': true,
+            'redeven.files': true,
+            'redeven.preview': true,
+          },
+          selectedWidgetId: null,
+          theme: 'default',
+        };
+      }
+      return null;
+    }) as any);
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+    setMockCanvasFrameRect(host, 1200, 800);
+
+    const surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement;
+    const escapeEvent = new KeyboardEvent('keydown', {
+      key: 'Escape',
+      bubbles: true,
+      cancelable: true,
+    });
+
+    window.dispatchEvent(escapeEvent);
+    await flushMicrotasks();
+
+    expect(escapeEvent.defaultPrevented).toBe(true);
+    expect(surface.dataset.viewportScale).toBe('1.25');
+
+    vi.advanceTimersByTime(210);
+    await flushMicrotasks();
+
+    expect(Number(surface.dataset.viewportScale)).toBeCloseTo(0.45, 6);
+    expect(Number(surface.dataset.viewportX)).toBeCloseTo(448.8, 6);
+    expect(Number(surface.dataset.viewportY)).toBeCloseTo(299.2, 6);
+  });
+
+  it('ignores Escape canvas minimize when a widget is selected', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 100,
+      widgets: [
+        {
+          widget_id: 'widget-files-1',
+          widget_type: 'redeven.files',
+          x: 320,
+          y: 180,
+          width: 760,
+          height: 560,
+          z_index: 1,
+          created_at_unix_ms: 123,
+        },
+      ],
+      widget_states: [],
+    });
+    storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
+      if (key === 'workbench:env-123') {
+        return {
+          version: 1,
+          widgets: [],
+          viewport: { x: 180, y: 120, scale: 1.25 },
+          locked: false,
+          filters: {
+            'redeven.terminal': true,
+            'redeven.files': true,
+            'redeven.preview': true,
+          },
+          selectedWidgetId: 'widget-files-1',
+          theme: 'default',
+        };
+      }
+      return null;
+    }) as any);
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+    setMockCanvasFrameRect(host, 1200, 800);
+
+    const surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement;
+    const escapeEvent = new KeyboardEvent('keydown', {
+      key: 'Escape',
+      bubbles: true,
+      cancelable: true,
+    });
+
+    window.dispatchEvent(escapeEvent);
+    await flushMicrotasks();
+    vi.advanceTimersByTime(210);
+    await flushMicrotasks();
+
+    expect(escapeEvent.defaultPrevented).toBe(false);
+    expect(Number(surface.dataset.viewportScale)).toBeCloseTo(1.25, 6);
+    expect(Number(surface.dataset.viewportX)).toBeCloseTo(180, 6);
+    expect(Number(surface.dataset.viewportY)).toBeCloseTo(120, 6);
+  });
+
   it('shows the fit button only for a selected widget and routes it to fitWidget', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
