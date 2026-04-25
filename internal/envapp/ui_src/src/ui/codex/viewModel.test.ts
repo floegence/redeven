@@ -128,6 +128,40 @@ describe('buildCodexWorkbenchSummary', () => {
     expect(summary.modelLabel).toBe('GPT-5.4');
     expect(summary.contextLabel).toBe('');
   });
+
+  it('maps bridge-only notLoaded state to idle for the user-facing header', () => {
+    const summary = buildCodexWorkbenchSummary({
+      thread: {
+        id: 'thread_1',
+        preview: 'Previously opened chat',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 10,
+        updated_at_unix_s: 20,
+        status: 'notLoaded',
+        active_flags: [],
+        cwd: '/workspace',
+      },
+      runtimeConfig: {
+        cwd: '/workspace',
+        model: 'gpt-5.4',
+      },
+      capabilities: null,
+      status: {
+        available: true,
+        ready: true,
+        agent_home_dir: '/workspace',
+      },
+      workingDirDraft: '',
+      modelDraft: '',
+      tokenUsage: null,
+      activeStatus: 'notLoaded',
+      activeStatusFlags: [],
+      pendingRequests: [],
+    });
+
+    expect(summary.statusLabel).toBe('idle');
+  });
 });
 
 describe('resolveCodexWorkingDir', () => {
