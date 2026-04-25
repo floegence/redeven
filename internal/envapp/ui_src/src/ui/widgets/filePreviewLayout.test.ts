@@ -14,6 +14,7 @@ describe('file preview wiring', () => {
     const contentSrc = read('./FilePreviewContent.tsx');
     const panelSrc = read('./FilePreviewPanel.tsx');
     const docxPaneSrc = read('./DocxPreviewPane.tsx');
+    const pdfPaneSrc = read('./PdfPreviewPane.tsx');
     const textPaneSrc = read('./TextFilePreviewPane.tsx');
     const surfaceSrc = read('./FilePreviewSurface.tsx');
     const envAppLayersSrc = read('../utils/envAppLayers.ts');
@@ -22,14 +23,23 @@ describe('file preview wiring', () => {
     const codePreviewPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), './CodePreviewPane.tsx');
 
     expect(contentSrc).toContain("import { DocxPreviewPane } from './DocxPreviewPane';");
+    expect(contentSrc).toContain("import { PdfPreviewPane } from './PdfPreviewPane';");
     expect(contentSrc).toContain("import { TextFilePreviewPane } from './TextFilePreviewPane';");
     expect(contentSrc).toContain('<DocxPreviewPane bytes={props.bytes} />');
+    expect(contentSrc).toContain('<PdfPreviewPane bytes={props.bytes} />');
     expect(contentSrc).toContain('<TextFilePreviewPane');
+    expect(contentSrc).not.toContain('<iframe src={props.objectUrl}');
     expect(docxPaneSrc).toContain("import('docx-preview')");
     expect(docxPaneSrc).toContain('ResizeObserver');
     expect(docxPaneSrc).toContain('inWrapper: true');
     expect(docxPaneSrc).toContain('Fit');
     expect(docxPaneSrc).toContain('Zoom in docx preview');
+    expect(pdfPaneSrc).toContain("import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';");
+    expect(pdfPaneSrc).toContain('loadPDFDocument');
+    expect(pdfPaneSrc).toContain('Zoom in PDF preview');
+    expect(pdfPaneSrc).toContain('Fit PDF preview to width');
+    expect(pdfPaneSrc).toContain('Loading PDF...');
+    expect(pdfPaneSrc).toContain('Rendering PDF...');
     expect(textPaneSrc).toContain("from '@floegence/floe-webapp-core/editor';");
     expect(textPaneSrc).toContain('ErrorBoundary');
     expect(textPaneSrc).toContain('CodeEditorApi, CodeEditorProps');

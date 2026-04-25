@@ -33,6 +33,10 @@ vi.mock('./DocxPreviewPane', () => ({
   DocxPreviewPane: () => <div data-testid="docx-preview-pane" />,
 }));
 
+vi.mock('./PdfPreviewPane', () => ({
+  PdfPreviewPane: () => <div data-testid="pdf-preview-pane" />,
+}));
+
 async function flushAsync(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
@@ -173,5 +177,21 @@ describe('FilePreviewContent', () => {
     expect(host.textContent).not.toContain('Edit');
     expect(host.querySelector('button[aria-label="Copy path"]')).toBeNull();
     expect(host.querySelector('[data-testid="text-preview-pane"]')?.textContent).toContain('/workspace/demo.ts');
+  });
+
+  it('routes PDF previews through the shared PDF pane', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <FilePreviewContent
+        item={{ id: '/workspace/demo.pdf', name: 'demo.pdf', path: '/workspace/demo.pdf', type: 'file' }}
+        descriptor={{ mode: 'pdf' }}
+        bytes={new Uint8Array([1, 2, 3])}
+      />
+    ), host);
+
+    expect(host.querySelector('[data-testid="pdf-preview-pane"]')).toBeTruthy();
+    expect(host.querySelector('iframe[title="PDF preview"]')).toBeNull();
   });
 });

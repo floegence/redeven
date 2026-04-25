@@ -296,16 +296,24 @@ export function createFilePreviewController(params: {
         }
       }
 
-      if (baseDescriptor.mode === 'image' || baseDescriptor.mode === 'pdf') {
+      if (baseDescriptor.mode === 'image') {
         if (truncated) {
           setPreviewDescriptor({ mode: 'unsupported' });
-          setPreviewMessage(baseDescriptor.mode === 'image' ? 'This image is too large to preview.' : 'This PDF is too large to preview.');
+          setPreviewMessage('This image is too large to preview.');
           return;
         }
 
         const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
         activeObjectUrl = url;
         setPreviewObjectUrl(url);
+        return;
+      }
+
+      if (baseDescriptor.mode === 'pdf') {
+        if (truncated) {
+          setPreviewDescriptor({ mode: 'unsupported' });
+          setPreviewMessage('This PDF is too large to preview.');
+        }
         return;
       }
 

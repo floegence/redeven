@@ -374,13 +374,13 @@ async function buildFileLikeContextPreview(params: {
     });
   }
 
-  if (descriptor.mode === 'image' || descriptor.mode === 'pdf') {
+  if (descriptor.mode === 'image') {
     if (truncated) {
       return contextPreviewStateForMessage({
         title: params.title,
         subtitle: params.subtitle,
         item: params.item,
-        message: descriptor.mode === 'image' ? 'This image is too large to preview.' : 'This PDF is too large to preview.',
+        message: 'This image is too large to preview.',
         helper: helperParts.join(' ') || undefined,
         actionLabel: params.actionLabel,
         onAction: params.onAction,
@@ -395,6 +395,32 @@ async function buildFileLikeContextPreview(params: {
       item: params.item,
       descriptor,
       objectUrl,
+      bytes: params.bytes,
+      truncated,
+      helper: helperParts.join(' ') || undefined,
+      actionLabel: params.actionLabel,
+      onAction: params.onAction,
+    };
+  }
+
+  if (descriptor.mode === 'pdf') {
+    if (truncated) {
+      return contextPreviewStateForMessage({
+        title: params.title,
+        subtitle: params.subtitle,
+        item: params.item,
+        message: 'This PDF is too large to preview.',
+        helper: helperParts.join(' ') || undefined,
+        actionLabel: params.actionLabel,
+        onAction: params.onAction,
+      });
+    }
+
+    return {
+      title: params.title,
+      subtitle: params.subtitle,
+      item: params.item,
+      descriptor,
       bytes: params.bytes,
       truncated,
       helper: helperParts.join(' ') || undefined,

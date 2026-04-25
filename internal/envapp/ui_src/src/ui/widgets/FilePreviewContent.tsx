@@ -5,6 +5,7 @@ import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import type { FilePreviewDescriptor } from '../utils/filePreview';
 import { DocxPreviewPane } from './DocxPreviewPane';
+import { PdfPreviewPane } from './PdfPreviewPane';
 import { TextFilePreviewPane } from './TextFilePreviewPane';
 
 export interface FilePreviewContentProps {
@@ -169,7 +170,7 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
         </Show>
 
         <Show when={props.descriptor.mode === 'pdf' && !resolvedError()}>
-          <iframe src={props.objectUrl} class="h-full w-full border-0" title="PDF preview" />
+          <PdfPreviewPane bytes={props.bytes} />
         </Show>
 
         <Show when={props.descriptor.mode === 'docx' && !resolvedError()}>
