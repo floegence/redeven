@@ -468,8 +468,9 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
       const index = messageIndexByRenderKey().get(messageId);
       if (index === undefined) continue;
 
-      const rawHeight =
-        entry.contentBoxSize?.[0]?.blockSize ?? entry.contentRect.height;
+      const borderBoxHeight = entry.borderBoxSize?.[0]?.blockSize;
+      const rectHeight = (entry.target as HTMLElement).getBoundingClientRect().height;
+      const rawHeight = borderBoxHeight ?? (rectHeight > 0 ? rectHeight : entry.contentRect.height);
       const height = Math.round(rawHeight);
       if (height <= 0) continue;
 

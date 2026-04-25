@@ -116,6 +116,14 @@ export function useVirtualList(options: UseVirtualListOptions): UseVirtualListRe
   // Pending rAF for batched updates
   let rafId: number | null = null;
 
+  function syncScrollState(target: HTMLElement): void {
+    const nextScrollTop = target.scrollTop;
+    setScrollTop(nextScrollTop);
+    const scrollHeight = target.scrollHeight;
+    const clientHeight = target.clientHeight;
+    setAtBottom(scrollHeight - nextScrollTop - clientHeight < 50);
+  }
+
   function invalidateLayout(): void {
     setLayoutVersion((version) => version + 1);
   }
@@ -234,6 +242,8 @@ export function useVirtualList(options: UseVirtualListOptions): UseVirtualListRe
   function onScroll(): void {
     if (!scrollEl) return;
 
+    syncScrollState(scrollEl);
+
     if (rafId !== null) {
       cancelAnimationFrame(rafId);
     }
@@ -241,14 +251,7 @@ export function useVirtualList(options: UseVirtualListOptions): UseVirtualListRe
     rafId = requestAnimationFrame(() => {
       rafId = null;
       if (!scrollEl) return;
-
-      const newScrollTop = scrollEl.scrollTop;
-      setScrollTop(newScrollTop);
-
-      // Check if at bottom (within 50px threshold)
-      const scrollHeight = scrollEl.scrollHeight;
-      const clientHeight = scrollEl.clientHeight;
-      setAtBottom(scrollHeight - newScrollTop - clientHeight < 50);
+      syncScrollState(scrollEl);
     });
   }
 
