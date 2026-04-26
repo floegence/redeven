@@ -167,6 +167,24 @@ function setMockCanvasFrameRect(host: HTMLElement, width: number, height: number
   });
 }
 
+function centerOfWidgets(widgets: readonly any[]): { x: number; y: number } {
+  const minX = Math.min(...widgets.map((widget) => widget.x));
+  const minY = Math.min(...widgets.map((widget) => widget.y));
+  const maxX = Math.max(...widgets.map((widget) => widget.x + widget.width));
+  const maxY = Math.max(...widgets.map((widget) => widget.y + widget.height));
+  return {
+    x: (minX + maxX) / 2,
+    y: (minY + maxY) / 2,
+  };
+}
+
+function widgetsOverlap(left: any, right: any): boolean {
+  return left.x < right.x + right.width
+    && left.x + left.width > right.x
+    && left.y < right.y + right.height
+    && left.y + left.height > right.y;
+}
+
 function ensureCSSEscape() {
   const css = globalThis.CSS as { escape?: (value: string) => string } | undefined;
   if (css && typeof css.escape === 'function') {
@@ -900,6 +918,98 @@ describe('EnvWorkbenchPage', () => {
       id: 'widget-files-1',
       type: 'redeven.files',
     }));
+  });
+
+  it('adds a canvas context-menu action that tidies widgets around the viewport center', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 100,
+      widgets: [
+        {
+          widget_id: 'widget-terminal-wide',
+          widget_type: 'redeven.terminal',
+          x: -1600,
+          y: 720,
+          width: 1320,
+          height: 340,
+          z_index: 1,
+          created_at_unix_ms: 123,
+        },
+        {
+          widget_id: 'widget-files-tall',
+          widget_type: 'redeven.files',
+          x: 980,
+          y: -860,
+          width: 520,
+          height: 940,
+          z_index: 2,
+          created_at_unix_ms: 124,
+        },
+        {
+          widget_id: 'widget-terminal-small',
+          widget_type: 'redeven.terminal',
+          x: 2400,
+          y: 1600,
+          width: 460,
+          height: 380,
+          z_index: 3,
+          created_at_unix_ms: 125,
+        },
+      ],
+      widget_states: [],
+    });
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+    setMockCanvasFrameRect(host, 1200, 800);
+
+    const closeMenu = vi.fn();
+    const menuItems = surfaceApiMocks.lastSurfaceProps.resolveContextMenuItems({
+      menu: {
+        clientX: 200,
+        clientY: 200,
+        worldX: 0,
+        worldY: 0,
+      },
+      items: [
+        {
+          id: 'add-redeven.terminal',
+          kind: 'action',
+          label: 'Add Terminal',
+          icon: () => null,
+          onSelect: vi.fn(),
+        },
+      ],
+      widgets: surfaceApiMocks.lastStateAccessor().widgets,
+      widget: null,
+      closeMenu,
+    });
+    const tidyItem = menuItems[0] as any;
+    expect(tidyItem).toMatchObject({
+      id: 'redeven-tidy-by-type',
+      label: 'Tidy by Type',
+      disabled: false,
+    });
+
+    tidyItem.onSelect();
+
+    const arrangedWidgets = surfaceApiMocks.lastStateAccessor().widgets;
+    expect(closeMenu).toHaveBeenCalledTimes(1);
+    expect(arrangedWidgets.map((widget: any) => [widget.id, widget.width, widget.height])).toEqual([
+      ['widget-terminal-wide', 1320, 340],
+      ['widget-files-tall', 520, 940],
+      ['widget-terminal-small', 460, 380],
+    ]);
+    expect(centerOfWidgets(arrangedWidgets)).toEqual({ x: 520, y: 340 });
+    for (let leftIndex = 0; leftIndex < arrangedWidgets.length; leftIndex += 1) {
+      for (let rightIndex = leftIndex + 1; rightIndex < arrangedWidgets.length; rightIndex += 1) {
+        expect(widgetsOverlap(arrangedWidgets[leftIndex], arrangedWidgets[rightIndex])).toBe(false);
+      }
+    }
   });
 
   it('enters overview mode when the shell issues a workbench overview request', async () => {

@@ -2,10 +2,11 @@ import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import {
   createDefaultWorkbenchState,
   sanitizeWorkbenchState,
+  type WorkbenchContextMenuItem,
   type WorkbenchState,
 } from '@floegence/floe-webapp-core/workbench';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
-import { Maximize, Minus } from '@floegence/floe-webapp-core/icons';
+import { LayoutDashboard, Maximize, Minus } from '@floegence/floe-webapp-core/icons';
 import { batch, createEffect, createMemo, createSignal, onCleanup, Show } from 'solid-js';
 import { Portal } from 'solid-js/web';
 
@@ -24,8 +25,13 @@ import {
   WorkbenchLayoutConflictError,
   WorkbenchWidgetStateConflictError,
 } from '../services/workbenchLayoutApi';
-import { RedevenWorkbenchSurface, type RedevenWorkbenchSurfaceApi } from './surface/RedevenWorkbenchSurface';
+import {
+  RedevenWorkbenchSurface,
+  type RedevenWorkbenchContextMenuItemsResolver,
+  type RedevenWorkbenchSurfaceApi,
+} from './surface/RedevenWorkbenchSurface';
 import { redevenWorkbenchFilterBarWidgetTypes, redevenWorkbenchWidgets } from './redevenWorkbenchWidgets';
+import { arrangeWorkbenchWidgetsByType } from './workbenchAutoArrange';
 import {
   EnvWorkbenchInstancesContext,
   type EnvWorkbenchInstancesContextValue,
@@ -121,6 +127,22 @@ function viewportForCenteredScale(
     x: frameCenterX - centerWorldX * targetScale,
     y: frameCenterY - centerWorldY * targetScale,
     scale: targetScale,
+  };
+}
+
+function resolveViewportWorldCenter(
+  viewport: WorkbenchState['viewport'],
+  frameSize: Readonly<{ width: number; height: number }>,
+): { x: number; y: number } | null {
+  const frameWidth = Number(frameSize.width);
+  const frameHeight = Number(frameSize.height);
+  const scale = Number(viewport.scale);
+  if (!Number.isFinite(frameWidth) || frameWidth <= 0 || !Number.isFinite(frameHeight) || frameHeight <= 0 || !Number.isFinite(scale) || Math.abs(scale) <= WORKBENCH_MIN_SCALE_EPSILON) {
+    return null;
+  }
+  return {
+    x: (frameWidth / 2 - Number(viewport.x)) / scale,
+    y: (frameHeight / 2 - Number(viewport.y)) / scale,
   };
 }
 
@@ -294,6 +316,23 @@ function sameInstanceState(
   }
 
   return true;
+}
+
+function sameWidgetPlacement(
+  left: readonly WorkbenchState['widgets'][number][],
+  right: readonly WorkbenchState['widgets'][number][],
+): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((widget, index) => {
+    const other = right[index];
+    return widget.id === other.id
+      && widget.x === other.x
+      && widget.y === other.y
+      && widget.width === other.width
+      && widget.height === other.height;
+  });
 }
 
 function filterRequestRecordByWidgetIds<T extends { widgetId: string }>(
@@ -696,6 +735,66 @@ export function EnvWorkbenchPage() {
       return;
     }
     api.fitWidget(widget);
+  };
+
+  const tidyWorkbenchWidgetsByType = () => {
+    const frameSize = resolveCanvasFrameSize();
+    setSurfaceWorkbenchState((previous) => {
+      if (previous.locked || previous.widgets.length <= 0) {
+        return previous;
+      }
+      const viewportCenter = resolveViewportWorldCenter(previous.viewport, frameSize);
+      const arrangedWidgets = arrangeWorkbenchWidgetsByType({
+        widgets: previous.widgets,
+        typeOrder: redevenWorkbenchFilterBarWidgetTypes,
+        centerX: viewportCenter?.x ?? NaN,
+        centerY: viewportCenter?.y ?? NaN,
+      });
+      if (sameWidgetPlacement(previous.widgets, arrangedWidgets)) {
+        return previous;
+      }
+      return {
+        ...previous,
+        widgets: arrangedWidgets,
+      };
+    });
+  };
+
+  const resolveWorkbenchContextMenuItems: RedevenWorkbenchContextMenuItemsResolver = (context) => {
+    const disabled = workbenchState().locked || context.widgets.length <= 0;
+    const tidyItem: WorkbenchContextMenuItem = {
+      id: 'redeven-tidy-by-type',
+      kind: 'action',
+      label: 'Tidy by Type',
+      icon: LayoutDashboard,
+      disabled,
+      onSelect: () => {
+        if (disabled) {
+          return;
+        }
+        tidyWorkbenchWidgetsByType();
+        context.closeMenu();
+      },
+    };
+    const separator: WorkbenchContextMenuItem = {
+      id: 'redeven-tidy-separator',
+      kind: 'separator',
+    };
+
+    if (!context.menu.widgetId) {
+      return [tidyItem, separator, ...context.items];
+    }
+
+    const deleteSeparatorIndex = context.items.findIndex((item) => item.id === 'separator-delete');
+    if (deleteSeparatorIndex < 0) {
+      return [...context.items, separator, tidyItem];
+    }
+    return [
+      ...context.items.slice(0, deleteSeparatorIndex),
+      tidyItem,
+      separator,
+      ...context.items.slice(deleteSeparatorIndex),
+    ];
   };
 
   const applyRuntimeWidgetState = (state: RuntimeWorkbenchWidgetState, eventSeq?: number) => {
@@ -1772,6 +1871,7 @@ export function EnvWorkbenchPage() {
             setState={setSurfaceWorkbenchState}
             widgetDefinitions={redevenWorkbenchWidgets}
             filterBarWidgetTypes={redevenWorkbenchFilterBarWidgetTypes}
+            resolveContextMenuItems={resolveWorkbenchContextMenuItems}
             onApiReady={setSurfaceApi}
             onRequestDelete={requestWidgetRemoval}
             onLayoutInteractionStart={() => {
