@@ -191,6 +191,7 @@ import {
   type DesktopLauncherActionResult,
   type DesktopLauncherActionSuccess,
   type DesktopLauncherSurface,
+  type DesktopWelcomeSnapshot,
   type DesktopWelcomeEntryReason,
   type DesktopWelcomeIssue,
 } from '../shared/desktopLauncherIPC';
@@ -369,6 +370,7 @@ const DESKTOP_STALE_WINDOW_MESSAGE = 'That window was already closed. Desktop re
 const pendingDesktopDeepLinks: string[] = [];
 let controlPlaneSyncPollTimer: NodeJS.Timeout | null = null;
 let welcomeRuntimePollTimer: NodeJS.Timeout | null = null;
+let desktopWelcomeSnapshotRevision = 0;
 
 installStdioBrokenPipeGuards();
 
@@ -1084,6 +1086,14 @@ async function buildCurrentDesktopWelcomeSnapshot(
   });
 }
 
+function stampDesktopWelcomeSnapshot(snapshot: DesktopWelcomeSnapshot): DesktopWelcomeSnapshot {
+  desktopWelcomeSnapshotRevision += 1;
+  return {
+    ...snapshot,
+    snapshot_revision: desktopWelcomeSnapshotRevision,
+  };
+}
+
 function liveUtilityWindow(kind: DesktopUtilityWindowKind): BrowserWindow | null {
   const windowRecord = utilityWindows.get(kind) ?? null;
   const win = liveTrackedBrowserWindow(windowRecord);
@@ -1133,7 +1143,7 @@ async function emitDesktopWelcomeSnapshot(kind: DesktopUtilityWindowKind): Promi
   if (!win || win.webContents.isDestroyed()) {
     return;
   }
-  const snapshot = await buildCurrentDesktopWelcomeSnapshot(kind);
+  const snapshot = stampDesktopWelcomeSnapshot(await buildCurrentDesktopWelcomeSnapshot(kind));
   win.webContents.send(DESKTOP_LAUNCHER_SNAPSHOT_UPDATED_CHANNEL, snapshot);
 }
 
@@ -5030,7 +5040,7 @@ if (!app.requestSingleInstanceLock()) {
     }
   });
   ipcMain.handle(DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL, async (event) => (
-    buildCurrentDesktopWelcomeSnapshot(senderUtilityWindowKind(event.sender.id))
+    stampDesktopWelcomeSnapshot(await buildCurrentDesktopWelcomeSnapshot(senderUtilityWindowKind(event.sender.id)))
   ));
   ipcMain.handle(DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL, async (_event, request): Promise<DesktopLauncherActionResult> => {
     const normalized = normalizeDesktopLauncherActionRequest(request);

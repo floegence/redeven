@@ -104,7 +104,7 @@ describe('environmentGuidanceSession', () => {
     }));
   });
 
-  it('reconciles away the session once the environment no longer exposes a guidance popover', () => {
+  it('settles the active session once the environment no longer exposes a guidance popover', () => {
     const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
       label: 'Demo Local Serve',
     });
@@ -121,8 +121,16 @@ describe('environmentGuidanceSession', () => {
     expect(providerEntry).toBeTruthy();
     expect(environmentSupportsGuidancePopover(providerEntry!)).toBe(false);
     expect(reconcileEnvironmentGuidanceSession(
-      openEnvironmentGuidanceSession(localServe.id),
+      startEnvironmentGuidanceIntent(null, providerEntry!.id, 'start_runtime'),
       snapshot.environments,
-    )).toBeNull();
+    )).toEqual({
+      environment_id: providerEntry!.id,
+      pending_intent: null,
+      feedback: {
+        tone: 'success',
+        title: 'Runtime ready',
+        detail: 'The environment window is open and ready to focus.',
+      },
+    });
   });
 });

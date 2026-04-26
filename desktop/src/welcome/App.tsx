@@ -159,7 +159,9 @@ import {
 import {
   completeEnvironmentGuidanceRefresh,
   failEnvironmentGuidanceIntent,
+  guidanceSessionKeepsPopoverOpen,
   guidanceSessionNotice,
+  guidanceSessionShouldAutoDismiss,
   isEnvironmentGuidancePendingIntent,
   openEnvironmentGuidanceSession,
   reconcileEnvironmentGuidanceSession,
@@ -293,6 +295,8 @@ const DESKTOP_SKIP_LINK_LABEL = 'Skip to Redeven Desktop content';
 const DESKTOP_TOP_BAR_LABEL = 'Redeven Desktop toolbar';
 const DESKTOP_COMMAND_PLACEHOLDER = 'Search desktop commands...';
 const ACTION_TOAST_TTL_MS = 4_000;
+const GUIDANCE_SUCCESS_DISMISS_MS = 720;
+const GUIDANCE_SESSION_CLEAR_MS = 220;
 
 function normalizePixelMeasurement(value: number): number {
   if (!Number.isFinite(value)) {
@@ -368,6 +372,23 @@ const ENVIRONMENT_CENTER_TABS: readonly Readonly<{ value: EnvironmentCenterTab; 
 
 function trimString(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+function desktopWelcomeSnapshotRevision(snapshot: DesktopWelcomeSnapshot): number {
+  const revision = Number(snapshot.snapshot_revision);
+  return Number.isFinite(revision) && revision > 0 ? revision : 0;
+}
+
+function nextDesktopWelcomeSnapshot(
+  current: DesktopWelcomeSnapshot,
+  next: DesktopWelcomeSnapshot,
+): DesktopWelcomeSnapshot {
+  const currentRevision = desktopWelcomeSnapshotRevision(current);
+  const nextRevision = desktopWelcomeSnapshotRevision(next);
+  if (currentRevision > 0 && nextRevision > 0 && nextRevision < currentRevision) {
+    return current;
+  }
+  return next;
 }
 
 function splitHostPortLoose(raw: string): Readonly<{ host: string; port: number }> | null {
@@ -874,7 +895,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   const unsubscribeSnapshot = props.runtime.launcher.subscribeSnapshot((nextSnapshot) => {
-    setSnapshot(nextSnapshot);
+    setSnapshot((current) => nextDesktopWelcomeSnapshot(current, nextSnapshot));
   });
   onCleanup(unsubscribeSnapshot);
 
@@ -921,8 +942,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   async function refreshSnapshot(): Promise<DesktopWelcomeSnapshot> {
     const nextSnapshot = await props.runtime.launcher.getSnapshot();
-    setSnapshot(nextSnapshot);
-    return nextSnapshot;
+    let acceptedSnapshot = nextSnapshot;
+    setSnapshot((current) => {
+      acceptedSnapshot = nextDesktopWelcomeSnapshot(current, nextSnapshot);
+      return acceptedSnapshot;
+    });
+    return acceptedSnapshot;
   }
 
   function dismissActionToast(toastID: number): void {
@@ -1745,7 +1770,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       }
 
       const nextEnvironment = await loadLatestEnvironmentEntry(environment.id);
-      if (!nextEnvironment || !reconcileEnvironmentGuidanceSession(currentSession, [nextEnvironment])) {
+      const reconciledSession = nextEnvironment
+        ? reconcileEnvironmentGuidanceSession(currentSession, [nextEnvironment])
+        : null;
+      if (reconciledSession?.feedback?.tone === 'success') {
+        return {
+          close_panel: false,
+          next_session: reconciledSession,
+        };
+      }
+      if (!nextEnvironment || !reconciledSession) {
         showActionToast(`Runtime started for ${environment.label}.`);
         return {
           close_panel: true,
@@ -1790,7 +1824,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       }
 
       const nextEnvironment = await loadLatestEnvironmentEntry(environment.id);
-      if (!nextEnvironment || !reconcileEnvironmentGuidanceSession(currentSession, [nextEnvironment])) {
+      const reconciledSession = nextEnvironment
+        ? reconcileEnvironmentGuidanceSession(currentSession, [nextEnvironment])
+        : null;
+      if (reconciledSession?.feedback?.tone === 'success') {
+        return {
+          close_panel: false,
+          next_session: reconciledSession,
+        };
+      }
+      if (!nextEnvironment || !reconciledSession) {
         return {
           close_panel: true,
           next_session: null,
@@ -2947,8 +2990,44 @@ function EnvironmentCardsPanel(props: Readonly<{
   }));
 
   createEffect(() => {
-    setActiveEnvironmentOverlayState((current) => reconcileEnvironmentLibraryOverlayState(current, props.entries));
+    setActiveEnvironmentOverlayState((current) => {
+      const session = guidanceSessionState();
+      if (
+        current.kind === 'primary_action_guidance'
+        && session?.environment_id === current.environment_id
+        && guidanceSessionKeepsPopoverOpen(session)
+      ) {
+        return current;
+      }
+      return reconcileEnvironmentLibraryOverlayState(current, props.entries);
+    });
     setGuidanceSessionState((current) => reconcileEnvironmentGuidanceSession(current, props.entries));
+  });
+
+  createEffect(() => {
+    const session = guidanceSessionState();
+    if (!guidanceSessionShouldAutoDismiss(session) || typeof window === 'undefined') {
+      return;
+    }
+    let clearHandle: number | undefined;
+    const handle = window.setTimeout(() => {
+      setActiveEnvironmentOverlayState((current) => (
+        session
+          ? closeEnvironmentLibraryOverlayState(current, 'primary_action_guidance', session.environment_id)
+          : current
+      ));
+      clearHandle = window.setTimeout(() => {
+        setGuidanceSessionState((current) => (
+          current?.environment_id === session?.environment_id ? null : current
+        ));
+      }, GUIDANCE_SESSION_CLEAR_MS);
+    }, GUIDANCE_SUCCESS_DISMISS_MS);
+    onCleanup(() => {
+      window.clearTimeout(handle);
+      if (clearHandle !== undefined) {
+        window.clearTimeout(clearHandle);
+      }
+    });
   });
 
   const setRuntimeMenuOpen = (environmentID: string, open: boolean) => {
@@ -3324,11 +3403,13 @@ function EnvironmentPrimaryActionPanel(props: Readonly<{
   session: EnvironmentGuidanceSessionState;
   onRunAction: (action: EnvironmentActionModel) => void;
 }>) {
-  const notice = createMemo(() => guidanceSessionNotice(props.session));
+  const notice = createMemo(() => (
+    props.overlay.actions.length > 0 ? guidanceSessionNotice(props.session) : null
+  ));
   const panelBusy = createMemo(() => props.session?.pending_intent !== null);
 
   return (
-    <div class="redeven-action-popover" tabIndex={-1}>
+    <div class="redeven-action-popover" data-tone={props.overlay.tone} tabIndex={-1}>
       <div class="redeven-action-popover__eyebrow">{props.overlay.eyebrow}</div>
       <div class="redeven-action-popover__title">{props.overlay.title}</div>
       <div class="redeven-action-popover__detail">{props.overlay.detail}</div>
@@ -3340,22 +3421,24 @@ function EnvironmentPrimaryActionPanel(props: Readonly<{
           </div>
         )}
       </Show>
-      <div class="redeven-action-popover__actions">
-        <For each={props.overlay.actions}>
-          {(item) => (
-            <Button
-              size="sm"
-              variant={item.emphasis === 'primary' ? 'default' : 'outline'}
-              class="w-full justify-center"
-              loading={isEnvironmentActionBusy(item.action, props.busyState, props.environmentID)}
-              disabled={panelBusy() && !isEnvironmentActionBusy(item.action, props.busyState, props.environmentID)}
-              onClick={() => props.onRunAction(item.action)}
-            >
-              {item.label}
-            </Button>
-          )}
-        </For>
-      </div>
+      <Show when={props.overlay.actions.length > 0}>
+        <div class="redeven-action-popover__actions">
+          <For each={props.overlay.actions}>
+            {(item) => (
+              <Button
+                size="sm"
+                variant={item.emphasis === 'primary' ? 'default' : 'outline'}
+                class="w-full justify-center"
+                loading={isEnvironmentActionBusy(item.action, props.busyState, props.environmentID)}
+                disabled={panelBusy() && !isEnvironmentActionBusy(item.action, props.busyState, props.environmentID)}
+                onClick={() => props.onRunAction(item.action)}
+              >
+                {item.label}
+              </Button>
+            )}
+          </For>
+        </div>
+      </Show>
     </div>
   );
 }
@@ -3374,7 +3457,22 @@ function EnvironmentSplitActionButton(props: Readonly<{
   onRunGuidanceAction: (action: EnvironmentActionModel) => void;
 }>) {
   const hasMenuActions = createMemo(() => props.presentation.menu_actions.length > 0);
-  const primaryActionOverlay = createMemo(() => props.presentation.primary_action_overlay);
+  const guidanceNotice = createMemo(() => guidanceSessionNotice(props.guidanceSession));
+  const sessionPopoverOverlay = createMemo<Extract<EnvironmentPrimaryActionOverlayModel, Readonly<{ kind: 'popover' }>> | undefined>(() => {
+    const notice = guidanceNotice();
+    if (!notice) {
+      return undefined;
+    }
+    return {
+      kind: 'popover',
+      tone: notice.tone === 'warning' ? 'warning' : 'neutral',
+      eyebrow: notice.tone === 'success' ? 'Ready' : notice.tone === 'error' ? 'Needs attention' : 'Working',
+      title: notice.title,
+      detail: notice.detail,
+      actions: [],
+    };
+  });
+  const primaryActionOverlay = createMemo(() => props.presentation.primary_action_overlay ?? sessionPopoverOverlay());
   const tooltipOverlay = createMemo<Extract<EnvironmentPrimaryActionOverlayModel, Readonly<{ kind: 'tooltip' }>> | undefined>(() => {
     const overlay = primaryActionOverlay();
     return overlay?.kind === 'tooltip' ? overlay : undefined;
@@ -3387,7 +3485,9 @@ function EnvironmentSplitActionButton(props: Readonly<{
     props.presentation.primary_action.enabled && props.loading
   ));
   const blockedPrimaryActionDisabled = createMemo(() => (
-    popoverOverlay() !== undefined && !props.presentation.primary_action.enabled
+    popoverOverlay() !== undefined
+    && popoverOverlay()!.actions.length > 0
+    && !props.presentation.primary_action.enabled
   ));
   const primaryButtonClass = createMemo(() => (
     cn('w-full justify-center', hasMenuActions() && 'rounded-r-none border-r-0')
@@ -3494,6 +3594,11 @@ function EnvironmentSplitActionButton(props: Readonly<{
                   aria-label={blockedPrimaryActionTriggerLabel(props.presentation.primary_action.label)}
                   onClick={() => {
                     closeMenu();
+                    if (props.presentation.primary_action.enabled && popoverOverlay()?.actions.length === 0) {
+                      props.onGuidanceOpenChange(false);
+                      props.onRunAction(props.presentation.primary_action);
+                      return;
+                    }
                     props.onGuidanceOpenChange(!props.guidanceOpen);
                   }}
                 >
@@ -3525,8 +3630,17 @@ function EnvironmentSplitActionButton(props: Readonly<{
           <ChevronDown class={cn('h-3.5 w-3.5 transition-transform duration-150', props.menuOpen && 'rotate-180')} />
         </button>
       </Show>
-      <Show when={props.menuOpen && hasMenuActions()}>
-        <div class="redeven-split-menu" role="menu" aria-label={props.presentation.menu_button_label}>
+      <Presence>
+        {props.menuOpen && hasMenuActions() && (
+        <Motion.div
+          class="redeven-split-menu"
+          role="menu"
+          aria-label={props.presentation.menu_button_label}
+          initial={{ opacity: 0, y: 6, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 4, scale: 0.98 }}
+          transition={{ duration: 0.16, easing: 'ease-out' }}
+        >
           <For each={props.presentation.menu_actions}>
             {(item: EnvironmentActionMenuItemModel) => (
               <button
@@ -3543,8 +3657,9 @@ function EnvironmentSplitActionButton(props: Readonly<{
               </button>
             )}
           </For>
-        </div>
-      </Show>
+        </Motion.div>
+        )}
+      </Presence>
     </div>
   );
 }

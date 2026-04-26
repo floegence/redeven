@@ -1,4 +1,4 @@
-import { Show, createEffect, onCleanup, type JSX } from 'solid-js';
+import { Show, createEffect, createSignal, onCleanup, type JSX } from 'solid-js';
 import { type DesktopOverlayPlacement } from './desktopOverlayPosition';
 import { DesktopAnchoredOverlaySurface } from './DesktopAnchoredOverlaySurface';
 
@@ -17,6 +17,8 @@ function cn(...values: Array<string | undefined | null | false>): string {
   return values.filter(Boolean).join(' ');
 }
 
+const ACTION_POPOVER_EXIT_MS = 180;
+
 function firstFocusableElement(root: HTMLElement | undefined): HTMLElement | null {
   if (!root) {
     return null;
@@ -28,6 +30,18 @@ export function DesktopActionPopover(props: DesktopActionPopoverProps) {
   let anchorRef: HTMLSpanElement | undefined;
   let popoverRef: HTMLDivElement | undefined;
   let focusFrame = 0;
+  let closeTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const [rendered, setRendered] = createSignal(props.open);
+  const [closing, setClosing] = createSignal(false);
+
+  const clearCloseTimer = () => {
+    if (!closeTimer) {
+      return;
+    }
+    clearTimeout(closeTimer);
+    closeTimer = null;
+  };
 
   const containsTarget = (target: EventTarget | null): boolean => {
     if (!(target instanceof Node)) {
@@ -39,6 +53,25 @@ export function DesktopActionPopover(props: DesktopActionPopoverProps) {
   const focusAnchor = () => {
     firstFocusableElement(anchorRef)?.focus();
   };
+
+  createEffect(() => {
+    if (props.open) {
+      clearCloseTimer();
+      setRendered(true);
+      setClosing(false);
+      return;
+    }
+    if (!rendered()) {
+      return;
+    }
+    setClosing(true);
+    clearCloseTimer();
+    closeTimer = setTimeout(() => {
+      closeTimer = null;
+      setRendered(false);
+      setClosing(false);
+    }, ACTION_POPOVER_EXIT_MS);
+  });
 
   createEffect(() => {
     if (!props.open) {
@@ -82,6 +115,7 @@ export function DesktopActionPopover(props: DesktopActionPopoverProps) {
   });
 
   onCleanup(() => {
+    clearCloseTimer();
     if (focusFrame) {
       cancelAnimationFrame(focusFrame);
       focusFrame = 0;
@@ -97,9 +131,9 @@ export function DesktopActionPopover(props: DesktopActionPopoverProps) {
     >
       {props.children}
 
-      <Show when={props.open}>
+      <Show when={rendered()}>
         <DesktopAnchoredOverlaySurface
-          open={props.open}
+          open={rendered()}
           anchorRef={anchorRef}
           placement={props.placement}
           role="dialog"
@@ -107,7 +141,8 @@ export function DesktopActionPopover(props: DesktopActionPopoverProps) {
           ariaLabel={props.popoverAriaLabel}
           interactive
           class={cn(
-            'z-[225] max-w-[min(22rem,calc(100vw-1rem))] rounded-md border border-border/80 bg-popover text-popover-foreground shadow-[0_14px_40px_-22px_rgba(0,0,0,0.55),0_24px_50px_-28px_rgba(0,0,0,0.28)]',
+            'redeven-action-popover-surface z-[225] max-w-[min(22rem,calc(100vw-1rem))] rounded-md border border-border/80 bg-popover text-popover-foreground shadow-[0_14px_40px_-22px_rgba(0,0,0,0.55),0_24px_50px_-28px_rgba(0,0,0,0.28)]',
+            closing() && 'redeven-action-popover-surface--closing',
             props.class,
           )}
           onOverlayRef={(element) => {

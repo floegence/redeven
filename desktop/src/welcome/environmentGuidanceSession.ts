@@ -100,6 +100,37 @@ function runtimeStillOfflineDetail(environment: DesktopEnvironmentEntry): string
   return 'The runtime is still offline on this device. Start it from its source, then try again.';
 }
 
+function runtimeReadyDetail(environment: DesktopEnvironmentEntry): string {
+  if (environment.window_state === 'open') {
+    return 'The environment window is open and ready to focus.';
+  }
+  if (environment.window_state === 'opening') {
+    return 'Desktop is preparing the environment window.';
+  }
+  if (environment.kind === 'ssh_environment') {
+    return 'The runtime is ready on this SSH host. Open is available now.';
+  }
+  return 'The runtime is ready. Open is available now.';
+}
+
+export function completeEnvironmentGuidanceSuccess(
+  state: EnvironmentGuidanceSessionState,
+  environment: DesktopEnvironmentEntry | null | undefined,
+): EnvironmentGuidanceSessionState {
+  if (!state) {
+    return state;
+  }
+  return {
+    ...state,
+    pending_intent: null,
+    feedback: {
+      tone: 'success',
+      title: 'Runtime ready',
+      detail: environment ? runtimeReadyDetail(environment) : 'The runtime is ready. Open is available now.',
+    },
+  };
+}
+
 export function completeEnvironmentGuidanceRefresh(
   state: EnvironmentGuidanceSessionState,
   environment: DesktopEnvironmentEntry | null | undefined,
@@ -107,8 +138,11 @@ export function completeEnvironmentGuidanceRefresh(
   if (!state) {
     return state;
   }
-  if (!environment || !environmentSupportsGuidancePopover(environment)) {
+  if (!environment) {
     return null;
+  }
+  if (!environmentSupportsGuidancePopover(environment)) {
+    return completeEnvironmentGuidanceSuccess(state, environment);
   }
   return {
     ...state,
@@ -119,6 +153,18 @@ export function completeEnvironmentGuidanceRefresh(
       detail: runtimeStillOfflineDetail(environment),
     },
   };
+}
+
+export function guidanceSessionKeepsPopoverOpen(
+  state: EnvironmentGuidanceSessionState,
+): boolean {
+  return Boolean(state?.pending_intent || state?.feedback);
+}
+
+export function guidanceSessionShouldAutoDismiss(
+  state: EnvironmentGuidanceSessionState,
+): boolean {
+  return state?.feedback?.tone === 'success';
 }
 
 export function guidanceSessionNotice(
@@ -159,8 +205,13 @@ export function reconcileEnvironmentGuidanceSession(
     return state;
   }
   const environment = entries.find((entry) => entry.id === state.environment_id);
-  if (!environment || !environmentSupportsGuidancePopover(environment)) {
+  if (!environment) {
     return null;
+  }
+  if (!environmentSupportsGuidancePopover(environment)) {
+    return guidanceSessionKeepsPopoverOpen(state)
+      ? completeEnvironmentGuidanceSuccess(state, environment)
+      : null;
   }
   return state;
 }

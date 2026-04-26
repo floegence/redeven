@@ -187,6 +187,7 @@ export type DesktopEnvironmentEntry = Readonly<{
 }>;
 
 export type DesktopWelcomeSnapshot = Readonly<{
+  snapshot_revision?: number;
   surface: DesktopLauncherSurface;
   entry_reason: DesktopWelcomeEntryReason;
   close_action_label: 'Quit' | 'Close Launcher';

@@ -541,6 +541,7 @@ body {
   font-weight: 600;
   letter-spacing: 0.04em;
   white-space: nowrap;
+  transition: color 180ms ease;
 }
 
 .redeven-status-indicator__dot {
@@ -549,12 +550,20 @@ body {
   border-radius: 9999px;
   background: currentColor;
   flex-shrink: 0;
+  transition:
+    box-shadow 180ms ease,
+    transform 180ms ease;
 }
 
 .redeven-status-indicator[data-tone='success'] { color: var(--success); }
 .redeven-status-indicator[data-tone='primary'] { color: var(--primary); }
 .redeven-status-indicator[data-tone='warning'] { color: var(--warning); }
 .redeven-status-indicator[data-tone='neutral'] { color: var(--muted-foreground); }
+
+.redeven-status-indicator[data-tone='success'] .redeven-status-indicator__dot {
+  box-shadow: 0 0 0 0.22rem color-mix(in srgb, var(--success) 12%, transparent);
+  transform: scale(1.04);
+}
 
 /* ── Status badges (bordered, used in provider shelf headers) ── */
 
@@ -808,6 +817,40 @@ body {
   opacity: 0.75;
 }
 
+.redeven-action-popover-surface {
+  animation: redeven-action-popover-enter 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transform-origin: var(--redeven-action-popover-origin, 50% 100%);
+}
+
+.redeven-action-popover-surface--closing {
+  animation: redeven-action-popover-exit 180ms cubic-bezier(0.4, 0, 1, 1) both;
+  pointer-events: none;
+}
+
+@keyframes redeven-action-popover-enter {
+  from {
+    opacity: 0;
+    transform: translateY(0.35rem) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes redeven-action-popover-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(0.25rem) scale(0.985);
+  }
+}
+
 .redeven-action-popover {
   display: grid;
   gap: 0.7rem;
@@ -815,6 +858,11 @@ body {
   padding: 0.85rem;
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--warning) 6%, var(--popover)), var(--popover));
+}
+
+.redeven-action-popover[data-tone='neutral'] {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--primary) 5%, var(--popover)), var(--popover));
 }
 
 .redeven-action-popover__eyebrow {
@@ -830,6 +878,12 @@ body {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: color-mix(in srgb, var(--warning) 76%, var(--foreground));
+}
+
+.redeven-action-popover[data-tone='neutral'] .redeven-action-popover__eyebrow {
+  border-color: color-mix(in srgb, var(--primary) 22%, var(--border));
+  background: color-mix(in srgb, var(--primary) 9%, transparent);
+  color: color-mix(in srgb, var(--primary) 72%, var(--foreground));
 }
 
 .redeven-action-popover__title {
@@ -1105,4 +1159,18 @@ code,
 pre,
 .font-mono {
   font-family: var(--font-mono);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .redeven-action-popover-surface,
+  .redeven-action-popover-surface--closing {
+    animation-duration: 1ms;
+    transform: none;
+  }
+
+  .redeven-environment-card,
+  .redeven-split-action-toggle,
+  .redeven-split-menu-item {
+    transition-duration: 1ms;
+  }
 }
