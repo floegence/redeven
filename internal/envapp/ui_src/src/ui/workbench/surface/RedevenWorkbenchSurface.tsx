@@ -1,5 +1,6 @@
 import {
   WorkbenchSurface,
+  type WorkbenchContextMenuItemsResolver,
   type WorkbenchSurfaceApi,
   type WorkbenchState,
   type WorkbenchWidgetDefinition,
@@ -18,6 +19,8 @@ export interface RedevenWorkbenchSurfaceApi extends WorkbenchSurfaceApi {
   enterOverview: () => void;
 }
 
+export type RedevenWorkbenchContextMenuItemsResolver = WorkbenchContextMenuItemsResolver;
+
 export interface RedevenWorkbenchSurfaceProps {
   state: () => WorkbenchState;
   setState: (updater: (prev: WorkbenchState) => WorkbenchState) => void;
@@ -26,6 +29,7 @@ export interface RedevenWorkbenchSurfaceProps {
   class?: string;
   widgetDefinitions?: readonly WorkbenchWidgetDefinition[];
   filterBarWidgetTypes?: readonly WorkbenchWidgetType[];
+  resolveContextMenuItems?: RedevenWorkbenchContextMenuItemsResolver;
   onApiReady?: (api: RedevenWorkbenchSurfaceApi | null) => void;
   onRequestDelete?: (widgetId: string) => void;
   onLayoutInteractionStart?: () => void;
@@ -86,6 +90,7 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
         widgetDefinitions={props.widgetDefinitions}
         launcherWidgetTypes={props.filterBarWidgetTypes}
         interactionAdapter={redevenWorkbenchInteractionAdapter}
+        resolveContextMenuItems={props.resolveContextMenuItems}
         onApiReady={(api) => props.onApiReady?.(api
           ? createRedevenWorkbenchSurfaceApi(api, {
             host: () => hostRef,

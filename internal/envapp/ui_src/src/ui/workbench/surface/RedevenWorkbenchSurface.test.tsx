@@ -130,6 +130,22 @@ describe('RedevenWorkbenchSurface', () => {
     );
   });
 
+  it('forwards the context-menu item resolver to the shared surface', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const resolveContextMenuItems = vi.fn((context: any) => context.items);
+
+    render(() => (
+      <RedevenWorkbenchSurface
+        state={() => createWorkbenchState()}
+        setState={() => {}}
+        resolveContextMenuItems={resolveContextMenuItems}
+      />
+    ), host);
+
+    expect(sharedSurfaceMocks.lastProps.resolveContextMenuItems).toBe(resolveContextMenuItems);
+  });
+
   it('maps the shared overview api to the local unfocusWidget alias', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
