@@ -46,6 +46,10 @@ import {
   type WorkbenchOpenTerminalRequest,
 } from './workbenchInstanceState';
 import {
+  recordWorkbenchFocus,
+  resolveWorkbenchFocusFallback,
+} from './workbenchFocusHistory';
+import {
   buildWorkbenchLocalStateStorageKey,
   createEmptyRuntimeWorkbenchLayoutSnapshot,
   derivePersistedWorkbenchLocalState,
@@ -480,6 +484,7 @@ export function EnvWorkbenchPage() {
   const [terminalOpenRequests, setTerminalOpenRequests] = createSignal<Record<string, WorkbenchOpenTerminalRequest>>({});
   const [fileBrowserOpenRequests, setFileBrowserOpenRequests] = createSignal<Record<string, WorkbenchOpenFileBrowserRequest>>({});
   const [previewOpenRequests, setPreviewOpenRequests] = createSignal<Record<string, WorkbenchOpenFilePreviewRequest>>({});
+  const [focusHistory, setFocusHistory] = createSignal<string[]>([]);
   const [widgetRemoveGuards, setWidgetRemoveGuards] = createSignal<Record<string, () => boolean>>({});
   const [localOwnerHandoffActive, setLocalOwnerHandoffActive] = createSignal(false);
   const [introSurfaceHost, setIntroSurfaceHost] = createSignal<HTMLDivElement>();
@@ -546,12 +551,29 @@ export function EnvWorkbenchPage() {
       return;
     }
     setRuntimeSnapshot(snapshot);
-    setWorkbenchState((previous) => projectWorkbenchStateFromRuntimeLayout({
-      snapshot,
-      localState: localState(),
-      existingState: previous,
-      widgetDefinitions: redevenWorkbenchWidgets,
-    }));
+    setWorkbenchState((previous) => {
+      const next = projectWorkbenchStateFromRuntimeLayout({
+        snapshot,
+        localState: localState(),
+        existingState: previous,
+        widgetDefinitions: redevenWorkbenchWidgets,
+      });
+      const previousSelectedWidgetId = compact(previous.selectedWidgetId);
+      if (previousSelectedWidgetId && !compact(next.selectedWidgetId)) {
+        const fallbackWidgetId = resolveWorkbenchFocusFallback(
+          focusHistory(),
+          next.widgets,
+          [previousSelectedWidgetId],
+        );
+        if (fallbackWidgetId) {
+          return {
+            ...next,
+            selectedWidgetId: fallbackWidgetId,
+          };
+        }
+      }
+      return next;
+    });
   };
 
   const beginLocalOwnerHandoff = () => {
@@ -794,6 +816,7 @@ export function EnvWorkbenchPage() {
     setTerminalOpenRequests({});
     setFileBrowserOpenRequests({});
     setPreviewOpenRequests({});
+    setFocusHistory([]);
     setWidgetRemoveGuards({});
     setLocalOwnerHandoffActive(false);
     localOwnerHandoffToken += 1;
@@ -1098,6 +1121,15 @@ export function EnvWorkbenchPage() {
   });
 
   createEffect(() => {
+    const widgets = workbenchState().widgets;
+    const selectedWidgetId = compact(workbenchState().selectedWidgetId);
+    setFocusHistory((previous) => {
+      const next = recordWorkbenchFocus(previous, widgets, selectedWidgetId);
+      return sameStringArray(previous, next) ? previous : next;
+    });
+  });
+
+  createEffect(() => {
     env.workbenchOverviewEntrySeq();
     const request = env.workbenchOverviewEntry();
     const requestId = compact(request?.requestId);
@@ -1359,11 +1391,27 @@ export function EnvWorkbenchPage() {
     if (!normalizedWidgetId) {
       return;
     }
-    setWorkbenchState((previous) => ({
-      ...previous,
-      widgets: previous.widgets.filter((widget) => widget.id !== normalizedWidgetId),
-      selectedWidgetId: previous.selectedWidgetId === normalizedWidgetId ? null : previous.selectedWidgetId,
-    }));
+    let shouldStartOwnerHandoff = false;
+    setWorkbenchState((previous) => {
+      const nextWidgets = previous.widgets.filter((widget) => widget.id !== normalizedWidgetId);
+      const previousSelectedWidgetId = compact(previous.selectedWidgetId);
+      const selectedWidgetId = previousSelectedWidgetId === normalizedWidgetId
+        ? resolveWorkbenchFocusFallback(
+          focusHistory(),
+          nextWidgets,
+          [normalizedWidgetId],
+        )
+        : previous.selectedWidgetId;
+      shouldStartOwnerHandoff = Boolean(selectedWidgetId && selectedWidgetId !== previousSelectedWidgetId);
+      return {
+        ...previous,
+        widgets: nextWidgets,
+        selectedWidgetId,
+      };
+    });
+    if (shouldStartOwnerHandoff) {
+      beginLocalOwnerHandoff();
+    }
   };
 
   const requestWidgetRemoval = (widgetId: string) => {

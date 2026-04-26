@@ -186,6 +186,33 @@ function mount(ui: () => any, host: HTMLElement) {
   testDisposers.push(dispose);
 }
 
+function runtimeWidget(widget_id: string, widget_type: string, z_index: number, created_at_unix_ms: number) {
+  return {
+    widget_id,
+    widget_type,
+    x: 80 + (z_index * 20),
+    y: 90 + (z_index * 20),
+    width: 360,
+    height: 240,
+    z_index,
+    created_at_unix_ms,
+  };
+}
+
+function persistedWidget(widget_id: string, widget_type: string, title: string, z_index: number, created_at_unix_ms: number) {
+  return {
+    id: widget_id,
+    type: widget_type,
+    title,
+    x: 80 + (z_index * 20),
+    y: 90 + (z_index * 20),
+    width: 360,
+    height: 240,
+    z_index,
+    created_at_unix_ms,
+  };
+}
+
 vi.mock('@floegence/floe-webapp-core/loading', () => ({
   LoadingOverlay: () => null,
 }));
@@ -1616,5 +1643,184 @@ describe('EnvWorkbenchPage', () => {
     expect(surfaceApiMocks.focusWidget).toHaveBeenCalledWith(existingWidget, { centerViewport: true });
     expect(surfaceApiMocks.updateWidgetTitle).toHaveBeenCalledWith(existingWidget.id, 'Preview · demo.txt');
     expect(contextMocks.consumeWorkbenchFilePreviewActivation).toHaveBeenCalledWith('request-preview-existing');
+  });
+
+  it('falls back to the previous focused widget when the selected widget is closed', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const filesWidget = persistedWidget('widget-files-1', 'redeven.files', 'Files', 1, 100);
+    const previewWidget = persistedWidget('widget-preview-1', 'redeven.preview', 'Preview', 2, 110);
+    storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
+      if (key === 'workbench:env-123') {
+        return {
+          version: 1,
+          widgets: [filesWidget, previewWidget],
+          viewport: { x: 80, y: 60, scale: 1 },
+          locked: false,
+          filters: {
+            'redeven.terminal': true,
+            'redeven.files': true,
+            'redeven.preview': true,
+          },
+          selectedWidgetId: filesWidget.id,
+          theme: 'default',
+        };
+      }
+      return null;
+    }) as any);
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 120,
+      widgets: [
+        runtimeWidget('widget-files-1', 'redeven.files', 1, 100),
+        runtimeWidget('widget-preview-1', 'redeven.preview', 2, 110),
+      ],
+      widget_states: [],
+    });
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    surfaceApiMocks.lastSetState((previous: any) => ({
+      ...previous,
+      selectedWidgetId: previewWidget.id,
+    }));
+    await flushMicrotasks();
+
+    surfaceApiMocks.lastSurfaceProps.onRequestDelete(previewWidget.id);
+    await flushMicrotasks();
+
+    const surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement | null;
+    expect(surface?.dataset.selectedWidgetId).toBe(filesWidget.id);
+    expect(surface?.dataset.widgetIds).toBe(filesWidget.id);
+    expect(surface?.dataset.viewportX).toBe('80');
+    expect(surface?.dataset.viewportY).toBe('60');
+    expect(surface?.dataset.viewportScale).toBe('1');
+  });
+
+  it('does not revive an older widget that was closed before the current widget', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const filesWidget = persistedWidget('widget-files-1', 'redeven.files', 'Files', 1, 100);
+    const previewWidget = persistedWidget('widget-preview-1', 'redeven.preview', 'Preview', 2, 110);
+    storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
+      if (key === 'workbench:env-123') {
+        return {
+          version: 1,
+          widgets: [filesWidget, previewWidget],
+          viewport: { x: 80, y: 60, scale: 1 },
+          locked: false,
+          filters: {
+            'redeven.terminal': true,
+            'redeven.files': true,
+            'redeven.preview': true,
+          },
+          selectedWidgetId: filesWidget.id,
+          theme: 'default',
+        };
+      }
+      return null;
+    }) as any);
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 120,
+      widgets: [
+        runtimeWidget('widget-files-1', 'redeven.files', 1, 100),
+        runtimeWidget('widget-preview-1', 'redeven.preview', 2, 110),
+      ],
+      widget_states: [],
+    });
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    surfaceApiMocks.lastSetState((previous: any) => ({
+      ...previous,
+      selectedWidgetId: previewWidget.id,
+    }));
+    await flushMicrotasks();
+
+    surfaceApiMocks.lastSurfaceProps.onRequestDelete(filesWidget.id);
+    await flushMicrotasks();
+
+    let surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement | null;
+    expect(surface?.dataset.selectedWidgetId).toBe(previewWidget.id);
+    expect(surface?.dataset.widgetIds).toBe(previewWidget.id);
+
+    surfaceApiMocks.lastSurfaceProps.onRequestDelete(previewWidget.id);
+    await flushMicrotasks();
+
+    surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement | null;
+    expect(surface?.dataset.selectedWidgetId).toBe('');
+    expect(surface?.dataset.widgetIds).toBe('');
+  });
+
+  it('uses focus history when a runtime layout projection removes the selected widget', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const filesWidget = persistedWidget('widget-files-1', 'redeven.files', 'Files', 1, 100);
+    const previewWidget = persistedWidget('widget-preview-1', 'redeven.preview', 'Preview', 2, 110);
+    storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
+      if (key === 'workbench:env-123') {
+        return {
+          version: 1,
+          widgets: [filesWidget, previewWidget],
+          viewport: { x: 80, y: 60, scale: 1 },
+          locked: false,
+          filters: {
+            'redeven.terminal': true,
+            'redeven.files': true,
+            'redeven.preview': true,
+          },
+          selectedWidgetId: filesWidget.id,
+          theme: 'default',
+        };
+      }
+      return null;
+    }) as any);
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 120,
+      widgets: [
+        runtimeWidget('widget-files-1', 'redeven.files', 1, 100),
+        runtimeWidget('widget-preview-1', 'redeven.preview', 2, 110),
+      ],
+      widget_states: [],
+    });
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    surfaceApiMocks.lastSetState((previous: any) => ({
+      ...previous,
+      selectedWidgetId: previewWidget.id,
+    }));
+    await flushMicrotasks();
+    vi.runOnlyPendingTimers();
+    await flushMicrotasks();
+
+    layoutApiMocks.lastStreamArgs.onEvent({
+      seq: 2,
+      type: 'layout.replaced',
+      created_at_unix_ms: 130,
+      payload: {
+        seq: 2,
+        revision: 2,
+        updated_at_unix_ms: 130,
+        widgets: [
+          runtimeWidget('widget-files-1', 'redeven.files', 1, 100),
+        ],
+        widget_states: [],
+      },
+    });
+    await flushMicrotasks();
+
+    const surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement | null;
+    expect(surface?.dataset.selectedWidgetId).toBe(filesWidget.id);
+    expect(surface?.dataset.viewportX).toBe('80');
+    expect(surface?.dataset.viewportY).toBe('60');
   });
 });
