@@ -83,6 +83,7 @@ function triggerResizeObservers() {
 }
 
 beforeEach(() => {
+  vi.stubGlobal("queueMicrotask", (callback: VoidFunction) => callback());
   mockGetCommitDetail.mockReset();
   mockGetBranchCompare.mockReset();
   mockListWorkspacePage.mockReset();

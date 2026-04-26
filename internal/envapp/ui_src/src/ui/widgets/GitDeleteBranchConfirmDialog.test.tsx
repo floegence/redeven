@@ -32,6 +32,7 @@ describe('GitDeleteBranchConfirmDialog', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
     vi.useFakeTimers();
+    vi.stubGlobal('queueMicrotask', (callback: VoidFunction) => callback());
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function mockRect(this: Element) {
       const element = this as HTMLElement;
       if (element.hasAttribute('data-redeven-tooltip-anchor')) return anchorRect;

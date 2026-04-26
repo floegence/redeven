@@ -13,7 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@floegence/flowersec-core": "^0.19.2"
+    "@floegence/flowersec-core": "^0.19.3"
   },
   "overrides": {
     "picomatch": "^4.0.4",

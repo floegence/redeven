@@ -72,6 +72,7 @@ async function clickDropdownMenuItem(trigger: HTMLButtonElement | null | undefin
 }
 
 beforeEach(() => {
+  vi.stubGlobal('queueMicrotask', (callback: VoidFunction) => callback());
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
     value: vi.fn().mockImplementation((query: string) => ({
@@ -123,6 +124,7 @@ beforeEach(() => {
 
 afterEach(() => {
   document.body.innerHTML = '';
+  vi.unstubAllGlobals();
 });
 
 function findGitTitleDot(container: ParentNode, label: string): HTMLSpanElement | null {

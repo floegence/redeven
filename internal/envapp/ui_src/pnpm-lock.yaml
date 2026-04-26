@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@floegence/flowersec-core': ^0.19.2
+  '@floegence/flowersec-core': ^0.19.3
   dompurify: ^3.4.0
   flatted: ^3.4.2
   lodash-es: ^4.18.1
@@ -23,20 +23,20 @@ importers:
         specifier: ^0.0.5
         version: 0.0.5
       '@floegence/floe-webapp-boot':
-        specifier: ^0.36.35
-        version: 0.36.35
+        specifier: ^0.36.36
+        version: 0.36.36
       '@floegence/floe-webapp-core':
-        specifier: ^0.36.35
-        version: 0.36.35(solid-js@1.9.11)
+        specifier: ^0.36.36
+        version: 0.36.36(solid-js@1.9.11)
       '@floegence/floe-webapp-protocol':
-        specifier: ^0.36.35
-        version: 0.36.35(solid-js@1.9.11)
+        specifier: ^0.36.36
+        version: 0.36.36(solid-js@1.9.11)
       '@floegence/floeterm-terminal-web':
         specifier: ^0.4.17
         version: 0.4.17(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@floegence/flowersec-core':
-        specifier: ^0.19.2
-        version: 0.19.2
+        specifier: ^0.19.3
+        version: 0.19.3
       '@fontsource/iosevka':
         specifier: ^5.2.5
         version: 5.2.5
@@ -474,16 +474,16 @@ packages:
   '@fast-csv/parse@4.3.6':
     resolution: {integrity: sha512-uRsLYksqpbDmWaSmzvJcuApSEe38+6NQZBUsuAyMZKqHxH0g1wcJgsKUvN3WC8tewaqFjBMMGrkHmC+T7k8LvA==}
 
-  '@floegence/floe-webapp-boot@0.36.35':
-    resolution: {integrity: sha512-2Hfep4ecMFlSSsgNNvt62QL2tLn38GEY06xHVHypgpRc8vHX8o6dZ5gq5fJOQY68iPln2gZw21a94z5tamPXhQ==}
+  '@floegence/floe-webapp-boot@0.36.36':
+    resolution: {integrity: sha512-HAHbDtbcDUJfMEu6/s7IJGq+HE4bWPWBHDQCtas9ckgyfj/GimYOLMD8uMcaXBDxNI0EsLlXZP/j6xX9qrZQ7w==}
 
-  '@floegence/floe-webapp-core@0.36.35':
-    resolution: {integrity: sha512-xmX3gRibCWZKoIc2DRP1o3FmK79s7tEJsg1YIjr9y0xBxL05m9VnRuH+E8iI5lwTD9eMMsLM9zNiY7JuxcrU5Q==}
+  '@floegence/floe-webapp-core@0.36.36':
+    resolution: {integrity: sha512-nCK35ftHntcc8ZsIxKeMsByd/gdTCAXXWthnqmqxV2IHYPOntPITw+OQnANc/gYnfKDXGhBDGMNocOW0BcHS1Q==}
     peerDependencies:
       solid-js: ^1.8.0
 
-  '@floegence/floe-webapp-protocol@0.36.35':
-    resolution: {integrity: sha512-/tm+H5/iP+G9e1rW2/mCtYOE33O40DNKu/bThYUe8egfN5jrY6wY6OHVfq7toWssjXOqOThF9xF4rv1Ud9kjYQ==}
+  '@floegence/floe-webapp-protocol@0.36.36':
+    resolution: {integrity: sha512-KZJa/vm9vLUM4RHnYiAGHH/krKYL4k5g0t1Ie6mESM/sDwNC8/KNcvNUuIgbwzKZt/kYvO9vlAVW2seK8Vj/rA==}
     peerDependencies:
       solid-js: ^1.8.0
 
@@ -493,8 +493,8 @@ packages:
       react: '>=18'
       react-dom: '>=18'
 
-  '@floegence/flowersec-core@0.19.2':
-    resolution: {integrity: sha512-s68vi00osgAlQZrk0AOhC+y8/Qm/6yhq0Q1A4LVtWMLc+Q4zrizblCf3jz3U5NR3th1XIdybsHI27ppXBOr8PA==}
+  '@floegence/flowersec-core@0.19.3':
+    resolution: {integrity: sha512-MrCGu6exR3I5lqPMfeyrUyNJD7F377BHa/zbDOO45cvhGOcMFX8Neb5Znp87D5bFCtLlVxpHidKhp9mLvRfGcg==}
     engines: {node: '>=24.0.0'}
 
   '@fontsource/iosevka@5.2.5':
@@ -3120,14 +3120,14 @@ snapshots:
       lodash.isundefined: 3.0.1
       lodash.uniq: 4.5.0
 
-  '@floegence/floe-webapp-boot@0.36.35':
+  '@floegence/floe-webapp-boot@0.36.36':
     dependencies:
-      '@floegence/flowersec-core': 0.19.2
+      '@floegence/flowersec-core': 0.19.3
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/floe-webapp-core@0.36.35(solid-js@1.9.11)':
+  '@floegence/floe-webapp-core@0.36.36(solid-js@1.9.11)':
     dependencies:
       clsx: 2.1.1
       diff: 8.0.3
@@ -3139,9 +3139,9 @@ snapshots:
       solid-motionone: 1.0.4(solid-js@1.9.11)
       tailwind-merge: 3.5.0
 
-  '@floegence/floe-webapp-protocol@0.36.35(solid-js@1.9.11)':
+  '@floegence/floe-webapp-protocol@0.36.36(solid-js@1.9.11)':
     dependencies:
-      '@floegence/flowersec-core': 0.19.2
+      '@floegence/flowersec-core': 0.19.3
       solid-js: 1.9.11
     transitivePeerDependencies:
       - bufferutil
@@ -3153,7 +3153,7 @@ snapshots:
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
-  '@floegence/flowersec-core@0.19.2':
+  '@floegence/flowersec-core@0.19.3':
     dependencies:
       '@noble/ciphers': 0.6.0
       '@noble/curves': 1.9.7

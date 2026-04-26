@@ -64,6 +64,7 @@ async function flush() {
 }
 
 beforeEach(() => {
+  vi.stubGlobal("queueMicrotask", (callback: VoidFunction) => callback());
   Object.defineProperty(window, "matchMedia", {
     writable: true,
     value: vi.fn().mockImplementation((query: string) => ({
@@ -108,6 +109,7 @@ beforeEach(() => {
 afterEach(() => {
   document.body.innerHTML = "";
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("GitDiffDialog", () => {
