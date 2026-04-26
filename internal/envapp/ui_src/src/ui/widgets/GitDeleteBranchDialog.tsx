@@ -14,6 +14,7 @@ export interface GitDeleteBranchDialogProps {
   previewError?: string;
   actionError?: string;
   state?: GitDeleteBranchDialogState;
+  worktreeMode?: boolean;
   onClose: () => void;
   onRetryPreview?: (branch: GitBranchSummary) => void;
   onConfirm?: (branch: GitBranchSummary, options: GitDeleteBranchDialogConfirmOptions) => void;
@@ -38,6 +39,7 @@ function formatPendingSummary(summary: GitWorkspaceSummary | null | undefined): 
 export function GitDeleteBranchDialog(props: GitDeleteBranchDialogProps) {
   const branchName = () => branchDisplayName(props.branch);
   const preview = () => props.preview ?? null;
+  const worktreeMode = () => props.worktreeMode ?? true;
   const linkedWorktree = () => preview()?.linkedWorktree;
   const requiresWorktreeRemoval = () => Boolean(preview()?.requiresWorktreeRemoval);
   const linkedWorktreePath = () => linkedWorktree()?.worktreePath || 'the linked worktree path';
@@ -59,11 +61,11 @@ export function GitDeleteBranchDialog(props: GitDeleteBranchDialogProps) {
       previewError={props.previewError}
       actionError={props.actionError}
       state={props.state}
-      description={`Delete ${branchName()} and its linked worktree.`}
-      safeConfirmLabel="Delete Branch and Worktree"
-      forceConfirmLabel="Force Delete Branch and Worktree"
-      dialogDesktopWidthClass="w-[min(34rem,94vw)]"
-      summaryNoteClass={cn('text-foreground', requiresWorktreeRemoval() ? 'border-error/20 bg-error/10' : '')}
+      description={worktreeMode() ? `Delete ${branchName()} and its linked worktree.` : `Delete ${branchName()} from this repository.`}
+      safeConfirmLabel={worktreeMode() ? 'Delete Branch and Worktree' : 'Delete Branch'}
+      forceConfirmLabel={worktreeMode() ? 'Force Delete Branch and Worktree' : 'Force Delete Branch'}
+      dialogDesktopWidthClass={worktreeMode() ? 'w-[min(34rem,94vw)]' : 'w-[min(36rem,94vw)]'}
+      summaryNoteClass={cn('text-foreground', worktreeMode() && requiresWorktreeRemoval() ? 'border-error/20 bg-error/10' : '')}
       safeSummary={(
         <div class="space-y-2">
           <div class="text-xs font-semibold text-foreground">This action will:</div>
@@ -71,12 +73,17 @@ export function GitDeleteBranchDialog(props: GitDeleteBranchDialogProps) {
             <li class="list-disc">
               Delete the local branch reference for <span class="font-medium text-foreground">{branchName()}</span>.
             </li>
-            <Show when={requiresWorktreeRemoval()}>
+            <Show when={worktreeMode() && requiresWorktreeRemoval()}>
               <li class="list-disc">
                 Remove the linked worktree at <span class="break-all font-medium text-foreground">{linkedWorktreePath()}</span>.
               </li>
             </Show>
-            <li class="list-disc">{changeImpact()}</li>
+            <Show
+              when={worktreeMode()}
+              fallback={<li class="list-disc">Leave your current worktree and uncommitted files untouched.</li>}
+            >
+              <li class="list-disc">{changeImpact()}</li>
+            </Show>
           </ul>
         </div>
       )}
@@ -85,10 +92,17 @@ export function GitDeleteBranchDialog(props: GitDeleteBranchDialogProps) {
           <li class="list-disc">
             The local branch reference for <span class="font-medium text-foreground">{branchName()}</span> will be permanently removed.
           </li>
-          <li class="list-disc">
-            The linked worktree at <span class="break-all font-medium text-foreground">{linkedWorktreePath()}</span> will be removed.
-          </li>
-          <li class="list-disc">{changeImpact()}</li>
+          <Show when={worktreeMode()}>
+            <li class="list-disc">
+              The linked worktree at <span class="break-all font-medium text-foreground">{linkedWorktreePath()}</span> will be removed.
+            </li>
+            <li class="list-disc">{changeImpact()}</li>
+          </Show>
+          <Show when={!worktreeMode()}>
+            <li class="list-disc">
+              Commits that are only reachable from this branch may become difficult to recover after the branch ref is deleted.
+            </li>
+          </Show>
           <li class="list-disc">
             Your current repository worktree at <span class="break-all font-medium text-foreground">{preview()?.repoRootPath || 'the current repository root'}</span> will not be modified.
           </li>

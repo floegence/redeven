@@ -112,7 +112,6 @@ import {
   gitChangedFilesRowClass,
   gitChangedFilesStickyCellClass,
 } from "./GitWorkbenchPrimitives";
-import { GitDeleteBranchConfirmDialog } from "./GitDeleteBranchConfirmDialog";
 import {
   GitDeleteBranchDialog,
   type GitDeleteBranchDialogConfirmOptions,
@@ -190,6 +189,7 @@ export interface GitBranchesPanelProps {
   onBrowseFiles?: (
     request: GitDirectoryShortcutRequest,
   ) => void | Promise<void>;
+  renderReviewDialogs?: boolean;
 }
 
 function formatAbsoluteTime(ms?: number): string {
@@ -1727,6 +1727,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     props.deleteReviewBranch ?? interactiveBranch() ?? selectedBranch() ?? null;
   const deletePreview = () => props.deletePreview ?? null;
   const deleteReviewState = () => props.deleteDialogState ?? "idle";
+  const shouldRenderReviewDialogs = () => props.renderReviewDialogs ?? true;
   const mergeAvailable = () =>
     Boolean(
       props.onMergeBranch &&
@@ -1747,12 +1748,6 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     if (deletePreview()?.requiresWorktreeRemoval) return true;
     return String(branch.worktreePath ?? "").trim() !== "";
   };
-  const plainDeleteDialog = () =>
-    Boolean(
-      props.deleteReviewOpen &&
-        deleteReviewBranch() &&
-        !linkedWorktreeDeleteDialog(),
-    );
   const checkoutDisabled = () =>
     Boolean(
       !interactiveBranch() ||
@@ -2925,48 +2920,37 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         emptyMessage="Select a branch status file to inspect its diff."
       />
 
-      <GitMergeBranchDialog
-        open={Boolean(props.mergeReviewOpen && mergeReviewBranch())}
-        branch={mergeReviewBranch()}
-        preview={mergePreview()}
-        previewError={props.mergePreviewError}
-        actionError={props.mergeActionError}
-        state={mergeReviewState()}
-        onClose={() => props.onCloseMergeReview?.()}
-        onRetryPreview={(branch) => props.onRetryMergePreview?.(branch)}
-        onOpenStash={(request) => props.onOpenStash?.(request)}
-        onConfirm={(branch, options) =>
-          props.onConfirmMergeBranch?.(branch, options)
-        }
-      />
+      <Show when={shouldRenderReviewDialogs()}>
+        <GitMergeBranchDialog
+          open={Boolean(props.mergeReviewOpen && mergeReviewBranch())}
+          branch={mergeReviewBranch()}
+          preview={mergePreview()}
+          previewError={props.mergePreviewError}
+          actionError={props.mergeActionError}
+          state={mergeReviewState()}
+          onClose={() => props.onCloseMergeReview?.()}
+          onRetryPreview={(branch) => props.onRetryMergePreview?.(branch)}
+          onOpenStash={(request) => props.onOpenStash?.(request)}
+          onConfirm={(branch, options) =>
+            props.onConfirmMergeBranch?.(branch, options)
+          }
+        />
 
-      <GitDeleteBranchConfirmDialog
-        open={plainDeleteDialog()}
-        branch={deleteReviewBranch()}
-        preview={deletePreview()}
-        previewError={props.deletePreviewError}
-        actionError={props.deleteActionError}
-        state={deleteReviewState()}
-        onClose={() => props.onCloseDeleteReview?.()}
-        onRetryPreview={(branch) => props.onRetryDeletePreview?.(branch)}
-        onConfirm={(branch, options) =>
-          props.onConfirmDeleteBranch?.(branch, options)
-        }
-      />
-
-      <GitDeleteBranchDialog
-        open={linkedWorktreeDeleteDialog()}
-        branch={deleteReviewBranch()}
-        preview={deletePreview()}
-        previewError={props.deletePreviewError}
-        actionError={props.deleteActionError}
-        state={deleteReviewState()}
-        onClose={() => props.onCloseDeleteReview?.()}
-        onRetryPreview={(branch) => props.onRetryDeletePreview?.(branch)}
-        onConfirm={(branch, options) =>
-          props.onConfirmDeleteBranch?.(branch, options)
-        }
-      />
+        <GitDeleteBranchDialog
+          open={Boolean(props.deleteReviewOpen && deleteReviewBranch())}
+          branch={deleteReviewBranch()}
+          preview={deletePreview()}
+          previewError={props.deletePreviewError}
+          actionError={props.deleteActionError}
+          state={deleteReviewState()}
+          worktreeMode={linkedWorktreeDeleteDialog()}
+          onClose={() => props.onCloseDeleteReview?.()}
+          onRetryPreview={(branch) => props.onRetryDeletePreview?.(branch)}
+          onConfirm={(branch, options) =>
+            props.onConfirmDeleteBranch?.(branch, options)
+          }
+        />
+      </Show>
     </div>
   );
 }

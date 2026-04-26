@@ -118,6 +118,8 @@ describe('GitDeleteBranchConfirmDialog', () => {
     ), host);
 
     try {
+      await flushPositioning();
+
       const dialog = document.body.querySelector('[role="dialog"]') as HTMLElement | null;
       expect(dialog).toBeTruthy();
       expect(dialog?.textContent).toContain('Force delete consequences');

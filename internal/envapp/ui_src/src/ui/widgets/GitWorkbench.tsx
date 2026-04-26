@@ -34,8 +34,8 @@ import { GitBranchesPanel } from './GitBranchesPanel';
 import { GitHistoryBrowser } from './GitHistoryBrowser';
 import { gitSubviewTone, gitToneHeaderActionButtonClass } from './GitChrome';
 import { GitLabelBlock, GitMetaPill, GitPrimaryTitle } from './GitWorkbenchPrimitives';
-import type { GitDeleteBranchDialogConfirmOptions, GitDeleteBranchDialogState } from './GitDeleteBranchDialog';
-import type { GitMergeBranchDialogConfirmOptions, GitMergeBranchDialogState } from './GitMergeBranchDialog';
+import { GitDeleteBranchDialog, type GitDeleteBranchDialogConfirmOptions, type GitDeleteBranchDialogState } from './GitDeleteBranchDialog';
+import { GitMergeBranchDialog, type GitMergeBranchDialogConfirmOptions, type GitMergeBranchDialogState } from './GitMergeBranchDialog';
 import { buildTabElementId, buildTabPanelElementId } from '../utils/tabNavigation';
 import type { GitAskFlowerRequest, GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
@@ -178,6 +178,14 @@ export function GitWorkbench(props: GitWorkbenchProps) {
   );
   const detachedHeadSummary = () => detachedHeadViewingSummary(props.repoSummary?.headCommit || props.repoInfo?.headCommit);
   const reattachSummary = () => detachedHeadReattachSummary(reattachBranch(), { compact: true });
+  const mergeReviewBranch = () => props.mergeReviewBranch ?? props.selectedBranch ?? null;
+  const deleteReviewBranch = () => props.deleteReviewBranch ?? props.selectedBranch ?? null;
+  const deleteReviewUsesWorktree = () => {
+    const branch = deleteReviewBranch();
+    if (!props.deleteReviewOpen || !branch) return false;
+    if (props.deletePreview?.requiresWorktreeRemoval) return true;
+    return String(branch.worktreePath ?? '').trim() !== '';
+  };
 
   return (
     <div class={cn('relative flex h-full min-h-0 flex-col bg-background', props.class)}>
@@ -410,6 +418,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               onAskFlower={(request) => props.onAskFlower?.(request)}
               onOpenInTerminal={props.onOpenInTerminal}
               onBrowseFiles={props.onBrowseFiles}
+              renderReviewDialogs={false}
             />
           </div>
         </Show>
@@ -436,6 +445,32 @@ export function GitWorkbench(props: GitWorkbenchProps) {
           </div>
         </Show>
       </div>
+
+      <GitMergeBranchDialog
+        open={Boolean(props.mergeReviewOpen && mergeReviewBranch())}
+        branch={mergeReviewBranch()}
+        preview={props.mergePreview ?? null}
+        previewError={props.mergePreviewError}
+        actionError={props.mergeActionError}
+        state={props.mergeDialogState ?? 'idle'}
+        onClose={() => props.onCloseMergeReview?.()}
+        onRetryPreview={(branch) => props.onRetryMergePreview?.(branch)}
+        onOpenStash={(request) => props.onOpenStash?.(request)}
+        onConfirm={(branch, options) => props.onConfirmMergeBranch?.(branch, options)}
+      />
+
+      <GitDeleteBranchDialog
+        open={Boolean(props.deleteReviewOpen && deleteReviewBranch())}
+        branch={deleteReviewBranch()}
+        preview={props.deletePreview ?? null}
+        previewError={props.deletePreviewError}
+        actionError={props.deleteActionError}
+        state={props.deleteDialogState ?? 'idle'}
+        worktreeMode={deleteReviewUsesWorktree()}
+        onClose={() => props.onCloseDeleteReview?.()}
+        onRetryPreview={(branch) => props.onRetryDeletePreview?.(branch)}
+        onConfirm={(branch, options) => props.onConfirmDeleteBranch?.(branch, options)}
+      />
     </div>
   );
 }

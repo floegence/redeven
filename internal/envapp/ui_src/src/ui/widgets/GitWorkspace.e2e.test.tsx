@@ -7,6 +7,7 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { redevenV1Contract } from '../protocol/redeven_v1';
+import { FLOE_DIALOG_SURFACE_HOST_ATTR } from '../workbench/surface/workbenchInputRouting';
 import { GitWorkspace } from './GitWorkspace';
 
 function mockMatchMedia(matches: boolean) {
@@ -23,6 +24,11 @@ function mockMatchMedia(matches: boolean) {
       dispatchEvent: () => false,
     })),
   });
+}
+
+async function settleDialog() {
+  await Promise.resolve();
+  await Promise.resolve();
 }
 
 beforeEach(() => {
@@ -387,6 +393,139 @@ describe('GitWorkspace interactions', () => {
       expect(host.querySelector('[data-testid="git-sidebar-scroll-region"]')).toBeTruthy();
       expect(host.textContent).toContain('Loading commit history...');
       expect(host.textContent).not.toContain('Preparing the active Git view...');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps branch delete review scoped to the widget while preview shape and git subview change', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const branch = {
+      name: 'feature/demo',
+      fullName: 'refs/heads/feature/demo',
+      kind: 'local' as const,
+      worktreePath: '',
+    };
+    const plainPreview = {
+      repoRootPath: '/workspace/repo',
+      name: 'feature/demo',
+      fullName: 'refs/heads/feature/demo',
+      kind: 'local' as const,
+      requiresWorktreeRemoval: false,
+      requiresDiscardConfirmation: false,
+      safeDeleteAllowed: true,
+      safeDeleteBaseRef: 'main',
+      forceDeleteAllowed: true,
+      forceDeleteRequiresConfirm: true,
+      planFingerprint: 'plain-plan',
+    };
+    const linkedPreview = {
+      ...plainPreview,
+      requiresWorktreeRemoval: true,
+      planFingerprint: 'linked-plan',
+      linkedWorktree: {
+        worktreePath: '/workspace/repo-linked',
+        accessible: true,
+        summary: {
+          stagedCount: 0,
+          unstagedCount: 0,
+          untrackedCount: 1,
+          conflictedCount: 0,
+        },
+        staged: [],
+        unstaged: [],
+        untracked: [],
+        conflicted: [],
+      },
+    };
+    let setSubview!: (view: 'changes' | 'branches' | 'history') => void;
+    let setPreview!: (preview: typeof plainPreview | typeof linkedPreview) => void;
+
+    const dispose = render(() => {
+      const [subview, updateSubview] = createSignal<'changes' | 'branches' | 'history'>('branches');
+      const [preview, updatePreview] = createSignal<typeof plainPreview | typeof linkedPreview>(plainPreview);
+      setSubview = (next) => updateSubview(next);
+      setPreview = (next) => updatePreview(() => next);
+
+      return (
+        <LayoutProvider>
+          <NotificationProvider>
+            <ProtocolProvider contract={redevenV1Contract}>
+              <div {...{ [FLOE_DIALOG_SURFACE_HOST_ATTR]: 'true' }} class="h-[620px]">
+                <GitWorkspace
+                  mode="git"
+                  onModeChange={() => {}}
+                  subview={subview()}
+                  onSubviewChange={updateSubview}
+                  width={280}
+                  open
+                  currentPath="/workspace/repo/src"
+                  repoInfo={{ available: true, repoRootPath: '/workspace/repo', headRef: 'main', headCommit: 'abc1234' }}
+                  repoSummary={{
+                    repoRootPath: '/workspace/repo',
+                    headRef: 'main',
+                    headCommit: 'abc1234',
+                    aheadCount: 0,
+                    behindCount: 0,
+                    workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                  }}
+                  workspace={{
+                    repoRootPath: '/workspace/repo',
+                    summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                    staged: [],
+                    unstaged: [],
+                    untracked: [],
+                    conflicted: [],
+                  }}
+                  branches={{
+                    repoRootPath: '/workspace/repo',
+                    currentRef: 'main',
+                    local: [
+                      { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
+                      branch,
+                    ],
+                    remote: [],
+                  }}
+                  selectedBranch={branch}
+                  deleteReviewOpen
+                  deleteReviewBranch={branch}
+                  deletePreview={preview()}
+                  onCloseDeleteReview={() => {}}
+                />
+              </div>
+            </ProtocolProvider>
+          </NotificationProvider>
+        </LayoutProvider>
+      );
+    }, host);
+
+    try {
+      await settleDialog();
+
+      const surfaceHost = host.querySelector(`[${FLOE_DIALOG_SURFACE_HOST_ATTR}="true"]`) as HTMLElement | null;
+      let dialog = surfaceHost?.querySelector('[role="dialog"]') as HTMLElement | null;
+      expect(dialog).toBeTruthy();
+      expect(dialog?.closest('[data-floe-dialog-mode]')?.getAttribute('data-floe-dialog-mode')).toBe('surface');
+      expect(dialog?.textContent).toContain('Delete Branch');
+      expect(dialog?.textContent).toContain('Leave your current worktree and uncommitted files untouched.');
+
+      setPreview(linkedPreview);
+      await settleDialog();
+
+      dialog = surfaceHost?.querySelector('[role="dialog"]') as HTMLElement | null;
+      expect(dialog).toBeTruthy();
+      expect(dialog?.textContent).toContain('Delete Branch and Worktree');
+      expect(dialog?.textContent).toContain('/workspace/repo-linked');
+
+      setSubview('changes');
+      await settleDialog();
+
+      dialog = surfaceHost?.querySelector('[role="dialog"]') as HTMLElement | null;
+      expect(dialog).toBeTruthy();
+      expect(dialog?.closest('[data-floe-dialog-mode]')?.getAttribute('data-floe-dialog-mode')).toBe('surface');
+      expect(dialog?.textContent).toContain('/workspace/repo-linked');
     } finally {
       dispose();
     }

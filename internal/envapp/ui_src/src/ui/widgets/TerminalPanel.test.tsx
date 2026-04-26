@@ -491,6 +491,7 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
     setTheme = vi.fn();
     forceResize = forceResizeSpy;
     getDimensions = vi.fn(() => ({ cols: 80, rows: 24 }));
+    setPresentationScale = vi.fn();
     startHistoryReplay = vi.fn();
     endHistoryReplay = vi.fn();
     write = vi.fn();

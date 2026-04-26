@@ -394,7 +394,7 @@ describe('GitChangesPanel interactions', () => {
     }
   });
 
-  it('opens the commit dialog and lists staged files there', () => {
+  it('opens the commit dialog and lists staged files there', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -430,6 +430,7 @@ describe('GitChangesPanel interactions', () => {
       const commitButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Commit...'));
       expect(commitButton).toBeTruthy();
       commitButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
 
       expect(document.body.textContent).toContain('Commit staged changes');
       expect(document.body.textContent).toContain('src/app.ts');
@@ -446,7 +447,7 @@ describe('GitChangesPanel interactions', () => {
     }
   });
 
-  it('describes partially loaded staged snapshots in the commit dialog', () => {
+  it('describes partially loaded staged snapshots in the commit dialog', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -496,6 +497,7 @@ describe('GitChangesPanel interactions', () => {
       const commitButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Commit...'));
       expect(commitButton).toBeTruthy();
       commitButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
 
       expect(document.body.textContent).toContain('More staged files are available.');
       expect(document.body.textContent).not.toContain('Loaded 2 of 40 staged files.');
@@ -593,7 +595,7 @@ describe('GitChangesPanel interactions', () => {
     }
   });
 
-  it('opens a discard confirmation for a pending file and emits the selected item on confirm', () => {
+  it('opens a discard confirmation for a pending file and emits the selected item on confirm', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const onDiscardSelected = vi.fn();
@@ -634,6 +636,7 @@ describe('GitChangesPanel interactions', () => {
       const discardButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Discard...');
       expect(discardButton).toBeTruthy();
       discardButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
 
       expect(document.body.textContent).toContain('Discard file changes');
       expect(document.body.textContent).toContain('src/next.ts');
@@ -1247,7 +1250,7 @@ describe('GitChangesPanel interactions', () => {
     }
   });
 
-  it('opens the diff dialog when the file name is clicked', () => {
+  it('opens the diff dialog when the file name is clicked', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -1290,6 +1293,7 @@ describe('GitChangesPanel interactions', () => {
       const fileButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('src/next.ts'));
       expect(fileButton).toBeTruthy();
       fileButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
 
       expect(document.body.textContent).toContain('Workspace Diff');
       expect(document.body.textContent).toContain('src/next.ts');
@@ -1305,7 +1309,7 @@ describe('GitChangesPanel interactions', () => {
     }
   });
 
-  it('renders untracked diff content when the file includes patch text', () => {
+  it('renders untracked diff content when the file includes patch text', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -1351,6 +1355,7 @@ describe('GitChangesPanel interactions', () => {
       const fileButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('global-control-plane.md'));
       expect(fileButton).toBeTruthy();
       fileButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
 
       expect(document.body.textContent).toContain('Workspace Diff');
       expect(document.body.textContent).toContain('Control Plane');

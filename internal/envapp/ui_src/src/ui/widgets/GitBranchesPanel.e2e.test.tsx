@@ -2656,6 +2656,8 @@ describe("GitBranchesPanel interactions", () => {
     );
 
     try {
+      await flush();
+
       expect(document.body.textContent).toContain("Force delete consequences");
       const confirmButton = Array.from(
         document.body.querySelectorAll("button"),
@@ -3238,6 +3240,8 @@ describe("GitBranchesPanel interactions", () => {
     );
 
     try {
+      await flush();
+
       expect(document.body.textContent).toContain("Force delete consequences");
       const confirmButton = Array.from(
         document.body.querySelectorAll("button"),

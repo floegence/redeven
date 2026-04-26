@@ -111,7 +111,7 @@ afterEach(() => {
 });
 
 describe("GitDiffDialog", () => {
-  it("renders through an elevated desktop window when requested", () => {
+  it("renders through an elevated desktop window when requested", async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
 
@@ -149,6 +149,8 @@ describe("GitDiffDialog", () => {
     );
 
     try {
+      await flush();
+
       const previewWindow = document.querySelector(
         '[data-testid="preview-window"]',
       ) as HTMLDivElement | null;
@@ -205,6 +207,8 @@ describe("GitDiffDialog", () => {
     );
 
     try {
+      await flush();
+
       expect(document.body.textContent).toContain("Patch");
       expect(document.body.textContent).toContain("Full Context");
       expect(document.body.textContent).toContain(
@@ -316,6 +320,8 @@ describe("GitDiffDialog", () => {
     );
 
     try {
+      await flush();
+
       expect(document.body.textContent).toContain("Merge Commit");
       expect(document.body.textContent).toContain(
         "Compared with first parent so the changed-file list and diff view stay aligned.",
@@ -397,6 +403,8 @@ describe("GitDiffDialog", () => {
     );
 
     try {
+      await flush();
+
       const fullContextButton = Array.from(
         document.querySelectorAll("button"),
       ).find((node) => node.textContent?.trim() === "Full Context");
@@ -495,6 +503,8 @@ describe("GitDiffDialog", () => {
     }, host);
 
     try {
+      await flush();
+
       const openButton = Array.from(document.querySelectorAll("button")).find(
         (node) => node.textContent?.trim() === "Open Diff",
       );
@@ -586,6 +596,8 @@ describe("GitDiffDialog", () => {
     }, host);
 
     try {
+      await flush();
+
       const openButton = Array.from(document.querySelectorAll("button")).find(
         (node) => node.textContent?.trim() === "Open Diff",
       );
@@ -632,7 +644,7 @@ describe("GitDiffDialog", () => {
     }
   });
 
-  it("keeps unavailable full-context mode visibly disabled with a non-clickable cursor affordance", () => {
+  it("keeps unavailable full-context mode visibly disabled with a non-clickable cursor affordance", async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
 
@@ -663,6 +675,8 @@ describe("GitDiffDialog", () => {
     );
 
     try {
+      await flush();
+
       const patchButton = Array.from(document.querySelectorAll("button")).find(
         (node) => node.textContent?.trim() === "Patch",
       );
@@ -746,6 +760,8 @@ describe("GitDiffDialog", () => {
     }, host);
 
     try {
+      await flush();
+
       const fullContextButton = Array.from(
         document.querySelectorAll("button"),
       ).find((node) => node.textContent?.includes("Full Context"));
@@ -815,6 +831,8 @@ describe("GitDiffDialog", () => {
     );
 
     try {
+      await flush();
+
       const fullContextButton = Array.from(
         document.querySelectorAll("button"),
       ).find((node) => node.textContent?.includes("Full Context"));
@@ -877,6 +895,8 @@ describe("GitDiffDialog", () => {
     );
 
     try {
+      await flush();
+
       const fullContextButton = Array.from(
         document.querySelectorAll("button"),
       ).find((node) => node.textContent?.trim() === "Full Context");
