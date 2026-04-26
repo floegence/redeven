@@ -2,7 +2,6 @@ import {
   DEFAULT_LOCAL_INTERACTION_SURFACE_SELECTOR,
   WORKBENCH_WIDGET_SHELL_ATTR,
   resolveSurfaceInteractionTargetRole,
-  resolveSurfaceWheelRouting,
   shouldActivateWorkbenchWidgetLocalTarget,
   resolveWorkbenchWidgetEventOwnership,
   type SurfaceInteractionTargetRole,
@@ -26,10 +25,11 @@ export const REDEVEN_WORKBENCH_WIDGET_ID_ATTR = 'data-redeven-workbench-widget-i
 export const FLOE_DIALOG_SURFACE_HOST_ATTR = 'data-floe-dialog-surface-host';
 export const REDEVEN_WORKBENCH_INTERACTIVE_SELECTOR = '[data-floe-canvas-interactive="true"]';
 export const REDEVEN_WORKBENCH_PAN_SURFACE_SELECTOR = '[data-floe-canvas-pan-surface="true"]';
+export const REDEVEN_TERMINAL_WHEEL_SURFACE_SELECTOR = '.redeven-terminal-surface';
 
 export { WORKBENCH_WIDGET_SHELL_ATTR };
 
-export type WorkbenchWheelLocalReason = SurfaceWheelLocalReason | 'selected_widget';
+export type WorkbenchWheelLocalReason = SurfaceWheelLocalReason;
 export type RedevenWorkbenchWidgetBodyActivation = WorkbenchWidgetBodyActivation;
 
 export const INITIAL_WORKBENCH_INPUT_OWNER: WorkbenchInputOwner = {
@@ -84,6 +84,73 @@ export function readWorkbenchWidgetId(el: Element | null): string | null {
   const widgetId = el?.getAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR) ?? '';
   const trimmed = widgetId.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+export function findRedevenTerminalWheelSurface(target: EventTarget | null): HTMLElement | null {
+  const element = resolveElement(target);
+  if (!element) return null;
+
+  const surface = element.closest(REDEVEN_TERMINAL_WHEEL_SURFACE_SELECTOR);
+  return surface instanceof HTMLElement ? surface : null;
+}
+
+export function redevenTerminalWheelSurfaceHasFocus(surface: HTMLElement | null): boolean {
+  if (!surface || typeof document === 'undefined') return false;
+
+  const active = document.activeElement;
+  return active instanceof Element && surface.contains(active);
+}
+
+function isWorkbenchWidgetRootWheelMarker(
+  element: Element,
+  selectedWidgetId: string | null | undefined,
+): boolean {
+  if (!(element instanceof HTMLElement)) return false;
+  if (element.getAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR) !== 'true') return false;
+  if (!selectedWidgetId) return false;
+  return readWorkbenchWidgetId(element) === selectedWidgetId;
+}
+
+function resolveWorkbenchWheelLocalReason(args: {
+  target: EventTarget | null;
+  selectedWidgetId?: string | null;
+  wheelInteractiveSelector: string;
+}): WorkbenchWheelLocalReason | null {
+  const element = resolveElement(args.target);
+  if (!element) return null;
+
+  if (isTypingElement(element)) {
+    return 'typing_element';
+  }
+
+  if (element.closest(DEFAULT_LOCAL_INTERACTION_SURFACE_SELECTOR) !== null) {
+    return 'local_interaction_surface';
+  }
+
+  const wheelSurface = element.closest(args.wheelInteractiveSelector);
+  if (wheelSurface && !isWorkbenchWidgetRootWheelMarker(wheelSurface, args.selectedWidgetId)) {
+    return 'wheel_interactive';
+  }
+
+  return null;
+}
+
+function createWorkbenchWheelRoutingDecision(args: {
+  target: EventTarget | null;
+  disablePanZoom: boolean;
+  selectedWidgetId?: string | null;
+  wheelInteractiveSelector: string;
+}): WorkbenchWheelRoutingDecision {
+  const localReason = resolveWorkbenchWheelLocalReason(args);
+  if (localReason) {
+    return { kind: 'local_surface', reason: localReason };
+  }
+
+  if (args.disablePanZoom) {
+    return { kind: 'ignore', reason: 'pan_zoom_disabled' };
+  }
+
+  return { kind: 'canvas_zoom' };
 }
 
 export function findWorkbenchWidgetElement(
@@ -167,11 +234,25 @@ export function resolveWorkbenchWheelRouting(args: {
   selectedWidgetId?: string | null;
   wheelInteractiveSelector?: string;
 }): WorkbenchWheelRoutingDecision {
+  const wheelInteractiveSelector =
+    args.wheelInteractiveSelector ?? REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_SELECTOR;
   const widgetRoot = findWorkbenchWidgetRoot(args.target);
   if (widgetRoot) {
     const ownerWidgetId = readWorkbenchWidgetId(widgetRoot);
     if (ownerWidgetId !== null && ownerWidgetId === args.selectedWidgetId) {
-      return { kind: 'local_surface', reason: 'selected_widget' };
+      const terminalSurface = findRedevenTerminalWheelSurface(args.target);
+      if (terminalSurface && !redevenTerminalWheelSurfaceHasFocus(terminalSurface)) {
+        return args.disablePanZoom
+          ? { kind: 'ignore', reason: 'pan_zoom_disabled' }
+          : { kind: 'canvas_zoom' };
+      }
+
+      return createWorkbenchWheelRoutingDecision({
+        target: args.target,
+        disablePanZoom: args.disablePanZoom,
+        selectedWidgetId: args.selectedWidgetId,
+        wheelInteractiveSelector,
+      });
     }
     if (args.disablePanZoom) {
       return { kind: 'ignore', reason: 'pan_zoom_disabled' };
@@ -179,12 +260,11 @@ export function resolveWorkbenchWheelRouting(args: {
     return { kind: 'canvas_zoom' };
   }
 
-  return resolveSurfaceWheelRouting({
+  return createWorkbenchWheelRoutingDecision({
     target: args.target,
     disablePanZoom: args.disablePanZoom,
-    localInteractionSurfaceSelector: DEFAULT_LOCAL_INTERACTION_SURFACE_SELECTOR,
-    wheelInteractiveSelector:
-      args.wheelInteractiveSelector ?? REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_SELECTOR,
+    selectedWidgetId: args.selectedWidgetId,
+    wheelInteractiveSelector,
   });
 }
 

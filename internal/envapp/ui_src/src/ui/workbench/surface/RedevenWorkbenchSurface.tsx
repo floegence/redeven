@@ -1,3 +1,4 @@
+import { createEffect, onCleanup } from 'solid-js';
 import {
   WorkbenchSurface,
   type WorkbenchContextMenuItemsResolver,
@@ -8,11 +9,18 @@ import {
   type WorkbenchWidgetType,
 } from '@floegence/floe-webapp-core/workbench';
 
-import { redevenWorkbenchInteractionAdapter } from './workbenchInputRouting';
+import {
+  findRedevenTerminalWheelSurface,
+  redevenWorkbenchInteractionAdapter,
+  resolveWorkbenchWheelRouting,
+} from './workbenchInputRouting';
 import {
   REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE,
   createWorkbenchOverviewViewport,
 } from '../runtimeWorkbenchLayout';
+
+const FORWARDED_CANVAS_WHEEL_EVENTS = new WeakSet<WheelEvent>();
+const WORKBENCH_CANVAS_SELECTOR = '.floe-infinite-canvas';
 
 export interface RedevenWorkbenchSurfaceApi extends WorkbenchSurfaceApi {
   unfocusWidget: (widget: WorkbenchWidgetItem) => WorkbenchWidgetItem;
@@ -76,8 +84,73 @@ function createRedevenWorkbenchSurfaceApi(
   };
 }
 
+function createForwardedCanvasWheelEvent(source: WheelEvent): WheelEvent {
+  return new WheelEvent('wheel', {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    deltaMode: source.deltaMode,
+    deltaX: source.deltaX,
+    deltaY: source.deltaY,
+    deltaZ: source.deltaZ,
+    screenX: source.screenX,
+    screenY: source.screenY,
+    clientX: source.clientX,
+    clientY: source.clientY,
+    ctrlKey: source.ctrlKey,
+    shiftKey: source.shiftKey,
+    altKey: source.altKey,
+    metaKey: source.metaKey,
+    button: source.button,
+    buttons: source.buttons,
+  });
+}
+
 export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
   let hostRef: HTMLDivElement | undefined;
+
+  createEffect(() => {
+    const host = hostRef;
+    if (!host) return;
+
+    const handleTerminalWheelCapture = (event: WheelEvent) => {
+      if (FORWARDED_CANVAS_WHEEL_EVENTS.has(event)) {
+        FORWARDED_CANVAS_WHEEL_EVENTS.delete(event);
+        return;
+      }
+
+      if (!findRedevenTerminalWheelSurface(event.target)) return;
+
+      const state = props.state();
+      const routing = resolveWorkbenchWheelRouting({
+        target: event.target,
+        disablePanZoom: state.locked,
+        selectedWidgetId: state.selectedWidgetId,
+      });
+      if (routing.kind === 'local_surface') return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (routing.kind !== 'canvas_zoom') return;
+
+      const canvas = host.querySelector(WORKBENCH_CANVAS_SELECTOR);
+      if (!(canvas instanceof HTMLElement)) return;
+
+      const forwarded = createForwardedCanvasWheelEvent(event);
+      FORWARDED_CANVAS_WHEEL_EVENTS.add(forwarded);
+      canvas.dispatchEvent(forwarded);
+    };
+
+    host.addEventListener('wheel', handleTerminalWheelCapture, {
+      capture: true,
+      passive: false,
+    });
+
+    onCleanup(() => {
+      host.removeEventListener('wheel', handleTerminalWheelCapture, true);
+    });
+  });
 
   return (
     <div ref={hostRef} class="h-full min-h-0">
