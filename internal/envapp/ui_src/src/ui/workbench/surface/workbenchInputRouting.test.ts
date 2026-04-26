@@ -25,7 +25,7 @@ describe('workbenchInputRouting', () => {
     document.body.innerHTML = '';
   });
 
-  it('routes the entire selected widget boundary to the widget', () => {
+  it('keeps selected widget bodies zoomable until they expose a local wheel viewport', () => {
     const widget = document.createElement('article');
     widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
     widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-files-1');
@@ -39,13 +39,13 @@ describe('workbenchInputRouting', () => {
       target: body,
       disablePanZoom: false,
       selectedWidgetId: 'widget-files-1',
-    })).toEqual({ kind: 'local_surface', reason: 'selected_widget' });
+    })).toEqual({ kind: 'canvas_zoom' });
 
     expect(resolveWorkbenchWheelRouting({
       target: body,
       disablePanZoom: true,
       selectedWidgetId: 'widget-files-1',
-    })).toEqual({ kind: 'local_surface', reason: 'selected_widget' });
+    })).toEqual({ kind: 'ignore', reason: 'pan_zoom_disabled' });
   });
 
   it('keeps ordinary widget regions zoomable until their widget is selected', () => {
@@ -105,7 +105,7 @@ describe('workbenchInputRouting', () => {
     })).toEqual({ kind: 'canvas_zoom' });
   });
 
-  it('keeps selected widgets local even without consulting wheel markers', () => {
+  it('does not treat the selected widget root marker as a real local wheel viewport', () => {
     const widget = document.createElement('article');
     widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
     widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-files-1');
@@ -120,7 +120,27 @@ describe('workbenchInputRouting', () => {
       target: body,
       disablePanZoom: false,
       selectedWidgetId: 'widget-files-1',
-    })).toEqual({ kind: 'local_surface', reason: 'selected_widget' });
+    })).toEqual({ kind: 'canvas_zoom' });
+  });
+
+  it('keeps explicit wheel viewports inside the selected widget local', () => {
+    const widget = document.createElement('article');
+    widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
+    widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-files-1');
+    widget.setAttribute(REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR, 'true');
+
+    const wheelViewport = document.createElement('div');
+    wheelViewport.setAttribute(REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR, 'true');
+    const row = document.createElement('div');
+    wheelViewport.appendChild(row);
+    widget.appendChild(wheelViewport);
+    document.body.appendChild(widget);
+
+    expect(resolveWorkbenchWheelRouting({
+      target: row,
+      disablePanZoom: false,
+      selectedWidgetId: 'widget-files-1',
+    })).toEqual({ kind: 'local_surface', reason: 'wheel_interactive' });
   });
 
   it('keeps explicit non-widget wheel consumers local', () => {
@@ -159,13 +179,55 @@ describe('workbenchInputRouting', () => {
       target: dialogAction,
       disablePanZoom: false,
       selectedWidgetId: 'widget-files-1',
-    })).toEqual({ kind: 'local_surface', reason: 'selected_widget' });
+    })).toEqual({ kind: 'local_surface', reason: 'local_interaction_surface' });
 
     expect(resolveWorkbenchWheelRouting({
       target: dialogAction,
       disablePanZoom: false,
       selectedWidgetId: null,
     })).toEqual({ kind: 'canvas_zoom' });
+  });
+
+  it('routes selected terminal wheels to canvas while terminal focus is elsewhere', () => {
+    const widget = document.createElement('article');
+    widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
+    widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-terminal-1');
+    widget.setAttribute(REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR, 'true');
+
+    const terminalSurface = document.createElement('div');
+    terminalSurface.className = 'redeven-terminal-surface';
+    terminalSurface.setAttribute(REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR, 'true');
+    widget.appendChild(terminalSurface);
+    document.body.appendChild(widget);
+
+    expect(resolveWorkbenchWheelRouting({
+      target: terminalSurface,
+      disablePanZoom: false,
+      selectedWidgetId: 'widget-terminal-1',
+    })).toEqual({ kind: 'canvas_zoom' });
+  });
+
+  it('keeps selected terminal wheels local only while focus is inside the terminal surface', () => {
+    const widget = document.createElement('article');
+    widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
+    widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-terminal-1');
+    widget.setAttribute(REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR, 'true');
+
+    const terminalSurface = document.createElement('div');
+    terminalSurface.className = 'redeven-terminal-surface';
+    terminalSurface.setAttribute(REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR, 'true');
+    const textarea = document.createElement('textarea');
+    terminalSurface.appendChild(textarea);
+    widget.appendChild(terminalSurface);
+    document.body.appendChild(widget);
+
+    textarea.focus();
+
+    expect(resolveWorkbenchWheelRouting({
+      target: terminalSurface,
+      disablePanZoom: false,
+      selectedWidgetId: 'widget-terminal-1',
+    })).toEqual({ kind: 'local_surface', reason: 'wheel_interactive' });
   });
 
   it('distinguishes shell-owned widget chrome from widget-local interaction surfaces', () => {
