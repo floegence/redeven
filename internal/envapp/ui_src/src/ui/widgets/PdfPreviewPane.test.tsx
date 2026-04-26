@@ -41,10 +41,21 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   ),
 }));
 
-function setViewportWidth(element: HTMLElement, width: number) {
+function setViewportSize(element: HTMLElement, width: number, height: number) {
   Object.defineProperty(element, 'clientWidth', {
     configurable: true,
     get: () => width,
+  });
+  Object.defineProperty(element, 'clientHeight', {
+    configurable: true,
+    get: () => height,
+  });
+}
+
+function setViewportScrollTop(element: HTMLElement, value: number) {
+  Object.defineProperty(element, 'scrollTop', {
+    configurable: true,
+    get: () => value,
   });
 }
 
@@ -83,6 +94,7 @@ function createMockPage(params: {
   renderPromise?: Promise<void>;
 }) {
   const cancel = vi.fn();
+  const cleanup = vi.fn(() => true);
   const render = vi.fn(({ viewport }: { viewport: { width: number; height: number } }) => ({
     promise: params.renderPromise ?? Promise.resolve(),
     cancel,
@@ -96,9 +108,11 @@ function createMockPage(params: {
         height: Number((params.height * scale).toFixed(2)),
       })),
       render,
+      cleanup,
     },
     render,
     cancel,
+    cleanup,
   };
 }
 
@@ -171,30 +185,29 @@ afterEach(() => {
 });
 
 describe('PdfPreviewPane', () => {
-  it('renders PDF pages and fits them to the available viewport width', async () => {
+  it('renders visible PDF pages and fits them to the available viewport width', async () => {
     const firstPage = createMockPage({ width: 860, height: 1260 });
     const secondPage = createMockPage({ width: 860, height: 1260 });
     const { document: pdfDocument } = mockPDFDocument({ pages: [firstPage, secondPage] });
 
     const host = document.createElement('div');
-    globalThis.document.body.appendChild(host);
+    document.body.appendChild(host);
 
     render(() => <PdfPreviewPane bytes={new Uint8Array([1, 2, 3])} />, host);
 
     const viewport = host.querySelector('.pdf-preview-pane') as HTMLDivElement | null;
     expect(viewport).toBeTruthy();
-    setViewportWidth(viewport!, 454);
+    setViewportSize(viewport!, 454, 900);
 
     triggerResizeObservers();
 
-    await waitFor(() => host.querySelectorAll('.pdf-preview-pane__page-frame').length === 2, 'PDF pages did not mount');
     await waitFor(
       () => firstPage.render.mock.calls.length > 0 && secondPage.render.mock.calls.length > 0,
       'PDF pages did not render',
     );
 
     expect(loadPDFDocumentMock).toHaveBeenCalledWith(new Uint8Array([1, 2, 3]));
-    expect(pdfDocument.getPage).toHaveBeenCalledTimes(2);
+    expect(pdfDocument.getPage).toHaveBeenCalledTimes(4);
     expect(host.textContent).toContain('2 pages');
     expect(host.textContent).toContain('50%');
 
@@ -204,6 +217,37 @@ describe('PdfPreviewPane', () => {
     expect(firstFrame?.style.height).toBe('630px');
     expect(firstCanvas?.style.width).toBe('430px');
     expect(firstCanvas?.style.height).toBe('630px');
+  });
+
+  it('renders only nearby pages and starts rendering newly visible pages after scrolling', async () => {
+    const pages = Array.from({ length: 6 }, () => createMockPage({ width: 860, height: 1260 }));
+    mockPDFDocument({ pages });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <PdfPreviewPane bytes={new Uint8Array([1, 2, 3])} />, host);
+
+    const viewport = host.querySelector('.pdf-preview-pane') as HTMLDivElement | null;
+    expect(viewport).toBeTruthy();
+    setViewportSize(viewport!, 454, 420);
+    setViewportScrollTop(viewport!, 0);
+
+    triggerResizeObservers();
+
+    await waitFor(() => pages[0]!.render.mock.calls.length > 0, 'First visible page did not render');
+    await waitFor(() => pages[1]!.render.mock.calls.length > 0, 'Second visible page did not render');
+
+    expect(pages[2]!.render).not.toHaveBeenCalled();
+    expect(pages[3]!.render).not.toHaveBeenCalled();
+
+    setViewportScrollTop(viewport!, 1500);
+    viewport!.dispatchEvent(new Event('scroll'));
+
+    await waitFor(() => pages[2]!.render.mock.calls.length > 0, 'Scrolled-into-view page did not render');
+    await waitFor(() => pages[4]!.render.mock.calls.length > 0, 'Overscanned page did not pre-render');
+
+    expect(pages[5]!.render).not.toHaveBeenCalled();
   });
 
   it('supports manual zoom and returns to fit mode on demand', async () => {
@@ -217,7 +261,7 @@ describe('PdfPreviewPane', () => {
 
     const viewport = host.querySelector('.pdf-preview-pane') as HTMLDivElement | null;
     expect(viewport).toBeTruthy();
-    setViewportWidth(viewport!, 454);
+    setViewportSize(viewport!, 454, 900);
 
     triggerResizeObservers();
 
@@ -238,6 +282,32 @@ describe('PdfPreviewPane', () => {
     expect(host.textContent).toContain('50%');
   });
 
+  it('shows per-page rendering feedback without keeping the full-pane loading overlay visible', async () => {
+    let releaseRender = () => {};
+    const renderPromise = new Promise<void>((resolve) => {
+      releaseRender = () => resolve();
+    });
+    const firstPage = createMockPage({ width: 860, height: 1260, renderPromise });
+    mockPDFDocument({ pages: [firstPage] });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <PdfPreviewPane bytes={new Uint8Array([1, 2, 3])} />, host);
+
+    const viewport = host.querySelector('.pdf-preview-pane') as HTMLDivElement | null;
+    expect(viewport).toBeTruthy();
+    setViewportSize(viewport!, 454, 900);
+
+    triggerResizeObservers();
+
+    await waitFor(() => host.textContent?.includes('Rendering page...') ?? false, 'Page-level rendering feedback did not appear');
+    expect(host.querySelector('[data-testid="loading-overlay"]')).toBeNull();
+
+    releaseRender();
+    await waitFor(() => (host.querySelector('.pdf-preview-pane__page-canvas') as HTMLCanvasElement | null)?.className.includes('opacity-100') ?? false, 'Rendered page did not settle');
+  });
+
   it('cancels in-flight rendering and destroys the loaded document on unmount', async () => {
     let releaseRender = () => {};
     const renderPromise = new Promise<void>((resolve) => {
@@ -256,7 +326,7 @@ describe('PdfPreviewPane', () => {
 
     const viewport = host.querySelector('.pdf-preview-pane') as HTMLDivElement | null;
     expect(viewport).toBeTruthy();
-    setViewportWidth(viewport!, 454);
+    setViewportSize(viewport!, 454, 900);
 
     triggerResizeObservers();
 

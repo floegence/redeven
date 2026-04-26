@@ -39,7 +39,8 @@ describe('file preview wiring', () => {
     expect(pdfPaneSrc).toContain('Zoom in PDF preview');
     expect(pdfPaneSrc).toContain('Fit PDF preview to width');
     expect(pdfPaneSrc).toContain('Loading PDF...');
-    expect(pdfPaneSrc).toContain('Rendering PDF...');
+    expect(pdfPaneSrc).toContain('Rendering page...');
+    expect(pdfPaneSrc).not.toContain('Rendering PDF...');
     expect(textPaneSrc).toContain("from '@floegence/floe-webapp-core/editor';");
     expect(textPaneSrc).toContain('ErrorBoundary');
     expect(textPaneSrc).toContain('CodeEditorApi, CodeEditorProps');
