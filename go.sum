@@ -12,6 +12,8 @@ github.com/floegence/floeterm/terminal-go v0.4.13 h1:h3EEr4uDzt8oZWd7KAJs5ZG0Xur
 github.com/floegence/floeterm/terminal-go v0.4.13/go.mod h1:5X4ybDfcS/lHIb0xNz4MZay8Vp+XcsebktBEMoftYaM=
 github.com/floegence/flowersec/flowersec-go v0.19.3 h1:DrSK2AzGcghF18pQDf+EDK4E3FdD8XhdQwTPYSc85Xc=
 github.com/floegence/flowersec/flowersec-go v0.19.3/go.mod h1:SwwGl1ClXu7bNHYo+Xu6/neUMZ0WTrwRmtD/gD8DE+Q=
+github.com/floegence/flowersec/flowersec-go v0.19.4 h1:Z8A0Qz21lsKuyvVbNgeI6B5FUEjX/Js8a/aorzQm11U=
+github.com/floegence/flowersec/flowersec-go v0.19.4/go.mod h1:SwwGl1ClXu7bNHYo+Xu6/neUMZ0WTrwRmtD/gD8DE+Q=
 github.com/go-ole/go-ole v1.2.6 h1:/Fpf6oFPoeFik9ty7siob0G6Ke8QvQEuVcuChpwXzpY=
 github.com/go-ole/go-ole v1.2.6/go.mod h1:pprOEPIfldk/42T2oK7lQ4v4JSDwmV0As9GaiUsvbm0=
 github.com/google/go-cmp v0.5.6/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
