@@ -17,12 +17,23 @@ import {
   shouldBypassWorkbenchGlobalHotkeys,
 } from './workbenchInputRouting';
 import {
+  REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS,
   REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR,
+  REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS,
+  REDEVEN_WORKBENCH_WHEEL_ROLE_ATTR,
+  REDEVEN_WORKBENCH_WHEEL_ROLE_LAYOUT_ONLY,
+  REDEVEN_WORKBENCH_WHEEL_ROLE_LOCAL_SCROLL_VIEWPORT,
 } from './workbenchWheelInteractive';
 
 describe('workbenchInputRouting', () => {
   afterEach(() => {
     document.body.innerHTML = '';
+  });
+
+  it('publishes explicit wheel viewport and layout-only marker props', () => {
+    expect(REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS[REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR]).toBe('true');
+    expect(REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS[REDEVEN_WORKBENCH_WHEEL_ROLE_ATTR]).toBe(REDEVEN_WORKBENCH_WHEEL_ROLE_LOCAL_SCROLL_VIEWPORT);
+    expect(REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS[REDEVEN_WORKBENCH_WHEEL_ROLE_ATTR]).toBe(REDEVEN_WORKBENCH_WHEEL_ROLE_LAYOUT_ONLY);
   });
 
   it('keeps selected widget bodies from zooming the canvas until they expose a local wheel viewport', () => {

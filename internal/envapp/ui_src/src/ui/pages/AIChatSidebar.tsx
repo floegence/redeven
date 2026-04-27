@@ -12,7 +12,7 @@ import { Tooltip } from '../primitives/Tooltip';
 import { useAIChatContext, type ListThreadsResponse, type ThreadRunStatus, type ThreadView } from './AIChatContext';
 import { useEnvContext } from './EnvContext';
 import { hasRWXPermissions } from './aiPermissions';
-import { REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS } from '../workbench/surface/workbenchWheelInteractive';
+import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 
 const THREAD_RAIL_CONTENT_CLASS = 'flex h-full min-h-0 flex-col overflow-hidden';
 const THREAD_RAIL_SECTION_CLASS = 'min-h-0 flex flex-1 flex-col overflow-hidden [&>div:last-child]:flex [&>div:last-child]:min-h-0 [&>div:last-child]:flex-1 [&>div:last-child]:flex-col [&>div:last-child]:overflow-hidden';
@@ -579,7 +579,7 @@ export function AIChatSidebar() {
               >
                 <SidebarSection title="Conversations" class={THREAD_RAIL_SECTION_CLASS}>
                   <div
-                    {...REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS}
+                    {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
                     data-testid="flower-thread-scroll-region"
                     class={THREAD_RAIL_SCROLL_CLASS}
                   >
@@ -721,7 +721,7 @@ export function AIChatSidebar() {
                     when={managerFilteredThreads().length > 0}
                     fallback={<div class="px-3 py-6 text-xs text-muted-foreground">No chats match this filter.</div>}
                   >
-                    <div class="h-full overflow-auto">
+                    <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="h-full overflow-auto">
                       <table class="w-full table-fixed text-xs">
                         <thead class="sticky top-0 bg-card/95 backdrop-blur-sm text-muted-foreground">
                           <tr class="text-left border-b border-border/70">

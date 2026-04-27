@@ -5,6 +5,11 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EnvContext } from '../pages/EnvContext';
+import {
+  REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR,
+  REDEVEN_WORKBENCH_WHEEL_ROLE_ATTR,
+  REDEVEN_WORKBENCH_WHEEL_ROLE_LOCAL_SCROLL_VIEWPORT,
+} from '../workbench/surface/workbenchWheelInteractive';
 import { CodexPage } from './CodexPage';
 import { CodexProvider } from './CodexProvider';
 import { CodexSidebar } from './CodexSidebar';
@@ -1330,7 +1335,8 @@ describe('CodexSidebar', () => {
     expect(scrollSection?.className).toContain('[&>div:last-child]:flex-1');
     expect(scrollRegion?.className).toContain('flex-1 min-h-0 overflow-y-auto');
     expect(scrollRegion?.className).toContain('overscroll-contain');
-    expect(scrollRegion?.getAttribute('data-floe-canvas-wheel-interactive')).toBe('true');
+    expect(scrollRegion?.getAttribute(REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR)).toBe('true');
+    expect(scrollRegion?.getAttribute(REDEVEN_WORKBENCH_WHEEL_ROLE_ATTR)).toBe(REDEVEN_WORKBENCH_WHEEL_ROLE_LOCAL_SCROLL_VIEWPORT);
     expect(host.textContent).not.toContain('Dedicated Codex chat shell with host-native runtime and independent thread state');
     expect(host.textContent).not.toContain('/usr/local/bin/codex');
 

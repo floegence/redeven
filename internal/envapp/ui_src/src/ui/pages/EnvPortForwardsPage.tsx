@@ -25,7 +25,7 @@ import { trustedLauncherOriginFromSandboxLocation } from '../services/sandboxOri
 import { registerSandboxWindow } from '../services/sandboxWindowRegistry';
 import { Tooltip } from '../primitives/Tooltip';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
-import { REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS } from '../workbench/surface/workbenchWheelInteractive';
+import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { useEnvContext } from './EnvContext';
 
 // ============================================================================
@@ -584,7 +584,7 @@ export function EnvPortForwardsPage() {
   });
 
   return (
-    <div {...REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS} class="h-full min-h-0 overflow-auto">
+    <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="h-full min-h-0 overflow-auto">
       <Panel class={cn('border rounded-md overflow-hidden', redevenSurfaceRoleClass('panelStrong'))} data-testid="port-forwards-panel">
         <PanelContent class="p-4 space-y-4">
           {/* Page header */}

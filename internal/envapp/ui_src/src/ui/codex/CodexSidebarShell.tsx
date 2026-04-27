@@ -4,7 +4,7 @@ import { Button, ProcessingIndicator, Tag } from '@floegence/floe-webapp-core/ui
 
 import { CodexIcon } from '../icons/CodexIcon';
 import { Tooltip } from '../primitives/Tooltip';
-import { REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS } from '../workbench/surface/workbenchWheelInteractive';
+import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { useCodexContext } from './CodexProvider';
 import {
   displayStatus,
@@ -264,7 +264,7 @@ export function CodexSidebarShell() {
           <Show when={hasThreads()} fallback={<EmptyState />}>
             <SidebarSection title="Conversations" class={THREAD_RAIL_SECTION_CLASS}>
               <div
-                {...REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS}
+                {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
                 data-testid="codex-thread-scroll-region"
                 class={THREAD_RAIL_SCROLL_CLASS}
               >

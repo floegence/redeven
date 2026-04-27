@@ -7,6 +7,7 @@ import type {
   GitRepoSummaryResponse,
 } from '../protocol/redeven_v1';
 import { branchDisplayName, branchStatusSummary, compareHeadline, describeGitHead, summarizeWorkspaceCount } from '../utils/gitWorkbench';
+import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { gitCompareTone } from './GitChrome';
 import { GitSection, GitStatStrip, GitSubtleNote } from './GitWorkbenchPrimitives';
 
@@ -28,7 +29,7 @@ function summaryValue(value: unknown, fallback = '—'): string {
 
 export function GitOverviewPanel(props: GitOverviewPanelProps) {
   return (
-    <div class="h-full min-h-0 overflow-auto px-3 py-3 sm:px-4 sm:py-4">
+    <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="h-full min-h-0 overflow-auto px-3 py-3 sm:px-4 sm:py-4">
       <Show when={!props.summaryLoading} fallback={<div class="text-xs text-muted-foreground">Loading repository summary...</div>}>
         <Show when={!props.summaryError} fallback={<div class="text-xs break-words text-error">{props.summaryError}</div>}>
           <Show when={props.repoSummary} fallback={<div class="text-xs text-muted-foreground">Repository summary is unavailable.</div>}>

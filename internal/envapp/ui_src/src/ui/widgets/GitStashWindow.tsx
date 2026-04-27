@@ -23,6 +23,7 @@ import {
 import { stashReviewMatchesTarget, type GitStashReviewState } from '../utils/gitStashReview';
 import { Tooltip } from '../primitives/Tooltip';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
+import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { gitChangePathClass, gitSelectedChipClass, gitSelectedSecondaryTextClass, gitToneActionButtonClass, gitToneSelectableCardClass, workspaceSectionTone } from './GitChrome';
 import { GitDiffDialog } from './GitDiffDialog';
 import { GitStashDeleteConfirmDialog } from './GitStashDeleteConfirmDialog';
@@ -324,8 +325,11 @@ export function GitStashWindow(props: GitStashWindowProps) {
 
                 <Show when={!props.stashesLoading} fallback={<GitStatePane loading message="Loading stash list..." surface class="h-full" />}>
                   <Show when={!props.stashesError} fallback={<GitStatePane tone="error" message={props.stashesError ?? 'Failed to load stashes.'} surface class="h-full" />}>
-                    <div class="flex h-full min-h-0 flex-col gap-3 overflow-auto xl:grid xl:grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)] xl:overflow-hidden">
-                      <div class={cn('min-h-0 overflow-auto rounded-md p-2', redevenSurfaceRoleClass('panelStrong'))}>
+                    <div
+                      {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
+                      class="flex h-full min-h-0 flex-col gap-3 overflow-auto xl:grid xl:grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)] xl:overflow-hidden"
+                    >
+                      <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class={cn('min-h-0 overflow-auto rounded-md p-2', redevenSurfaceRoleClass('panelStrong'))}>
                         <Show
                           when={props.stashes.length > 0}
                           fallback={<GitStatePane message="No stashes yet. Save a snapshot from the other tab to see it here." class="h-full" surface />}
@@ -362,7 +366,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
                         </Show>
                       </div>
 
-                      <div class="min-h-0 xl:overflow-auto">
+                      <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="min-h-0 xl:overflow-auto">
                         <Show
                           when={!props.stashDetailLoading}
                           fallback={<GitStatePane loading message="Loading stash detail..." surface class="h-full" />}
@@ -528,7 +532,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
             <div class="flex h-full min-h-0 flex-col overflow-hidden px-4 py-4">
               <Show when={!props.contextLoading} fallback={<GitStatePane loading message="Loading stash save context..." surface class="h-full" />}>
                 <Show when={!props.contextError} fallback={<GitStatePane tone="error" message={props.contextError ?? 'Failed to load stash context.'} surface class="h-full" />}>
-                  <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-auto">
+                  <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="flex min-h-0 flex-1 flex-col gap-3 overflow-auto">
                     <GitSection
                       label="Target Workspace"
                       tone={contextTone(props.workspaceSummary)}

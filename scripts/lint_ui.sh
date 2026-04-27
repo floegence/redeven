@@ -21,6 +21,7 @@ lint_envapp_ui() {
       ui_pkg_run_pnpm install --frozen-lockfile
     fi
     ui_pkg_run_pnpm lint
+    ui_pkg_run_pnpm check:workbench-wheel
   )
   ui_pkg_log "Env App UI: done."
 }

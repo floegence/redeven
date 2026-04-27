@@ -7,7 +7,11 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FileBrowserWorkspace } from './FileBrowserWorkspace';
-import { REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR } from '../workbench/surface/workbenchWheelInteractive';
+import {
+  REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR,
+  REDEVEN_WORKBENCH_WHEEL_ROLE_ATTR,
+  REDEVEN_WORKBENCH_WHEEL_ROLE_LOCAL_SCROLL_VIEWPORT,
+} from '../workbench/surface/workbenchWheelInteractive';
 import {
   FLOE_DIALOG_SURFACE_HOST_ATTR,
   REDEVEN_WORKBENCH_WIDGET_ID_ATTR,
@@ -1288,6 +1292,7 @@ describe('FileBrowserWorkspace interactions', () => {
       const contentRegion = host.querySelector('[data-testid="file-browser-content-scroll-region"]') as HTMLDivElement | null;
       expect(contentRegion).toBeTruthy();
       expect(contentRegion?.getAttribute(REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR)).toBe('true');
+      expect(contentRegion?.getAttribute(REDEVEN_WORKBENCH_WHEEL_ROLE_ATTR)).toBe(REDEVEN_WORKBENCH_WHEEL_ROLE_LOCAL_SCROLL_VIEWPORT);
 
       contentRegion!.dispatchEvent(new MouseEvent('contextmenu', {
         bubbles: true,
@@ -1337,6 +1342,7 @@ describe('FileBrowserWorkspace interactions', () => {
       const scrollRegion = host.querySelector('[data-testid="file-tree-scroll-region"]');
       expect(scrollRegion).toBeTruthy();
       expect(scrollRegion?.getAttribute(REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR)).toBe('true');
+      expect(scrollRegion?.getAttribute(REDEVEN_WORKBENCH_WHEEL_ROLE_ATTR)).toBe(REDEVEN_WORKBENCH_WHEEL_ROLE_LOCAL_SCROLL_VIEWPORT);
       expect(scrollRegion?.className).toContain('overflow-auto');
       expect(scrollRegion?.className).toContain('overflow-x-hidden');
       expect(scrollRegion?.className).toContain('overscroll-contain');

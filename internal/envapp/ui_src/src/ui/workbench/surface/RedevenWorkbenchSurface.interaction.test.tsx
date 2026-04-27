@@ -7,6 +7,7 @@ import { createWorkbenchFilterState, type WorkbenchState, type WorkbenchWidgetDe
 import { CANVAS_WHEEL_INTERACTIVE_ATTR } from '@floegence/floe-webapp-core/ui';
 
 import { RedevenWorkbenchSurface } from './RedevenWorkbenchSurface';
+import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from './workbenchWheelInteractive';
 
 vi.mock('solid-motionone', () => ({
   Motion: new Proxy(
@@ -287,8 +288,8 @@ describe('RedevenWorkbenchSurface interaction contract', () => {
           return (
             <div
               ref={terminalRef}
+              {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
               class="redeven-terminal-surface"
-              data-floe-canvas-wheel-interactive="true"
               data-testid="terminal-surface"
             >
               <textarea aria-label="Terminal input" data-testid="terminal-input" />
@@ -363,8 +364,8 @@ describe('RedevenWorkbenchSurface interaction contract', () => {
           return (
             <div
               ref={terminalRef}
+              {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
               class="redeven-terminal-surface"
-              data-floe-canvas-wheel-interactive="true"
               data-testid="terminal-surface"
             >
               <textarea aria-label="Terminal input" data-testid="terminal-input" />
@@ -439,8 +440,8 @@ describe('RedevenWorkbenchSurface interaction contract', () => {
           return (
             <div
               ref={terminalRef}
+              {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
               class="redeven-terminal-surface"
-              data-floe-canvas-wheel-interactive="true"
               data-testid="terminal-surface"
             >
               <textarea aria-label="Terminal input" data-testid="terminal-input" />

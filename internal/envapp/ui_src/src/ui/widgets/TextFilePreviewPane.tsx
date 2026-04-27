@@ -1,6 +1,7 @@
 import { ErrorBoundary, For, Suspense, Show, createEffect, createMemo, createSignal, lazy, on } from 'solid-js';
 import type { CodeEditorApi, CodeEditorProps } from '@floegence/floe-webapp-core/editor';
 import type { FilePreviewDescriptor } from '../utils/filePreview';
+import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 
 const CodeEditor = lazy(async () => {
   const module = await import('@floegence/floe-webapp-core/editor');
@@ -55,6 +56,7 @@ function StaticTextPreviewPane(props: StaticTextPreviewPaneProps) {
 
       <div
         data-testid="text-preview-fallback"
+        {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
         class="min-h-0 flex-1 overflow-auto font-mono text-xs leading-5 text-foreground"
       >
         <table class="min-w-full border-collapse">

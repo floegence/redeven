@@ -1,6 +1,7 @@
 import { Show, createEffect, createMemo, createUniqueId, onCleanup, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { cn } from '@floegence/floe-webapp-core';
+import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 
 const WINDOW_MODAL_FOCUSABLE_SELECTOR = [
   'a[href]',
@@ -148,7 +149,7 @@ export function WindowModal(props: WindowModalProps) {
             </div>
 
             <Show when={props.children}>
-              <div class={cn('min-h-0 flex-1 overflow-auto', props.bodyClass)}>
+              <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class={cn('min-h-0 flex-1 overflow-auto', props.bodyClass)}>
                 {props.children}
               </div>
             </Show>
