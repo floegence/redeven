@@ -1227,6 +1227,7 @@ function createBrowserWindow(args: CreateBrowserWindowArgs): DesktopTrackedWindo
       contextIsolation: true,
       nodeIntegration: false,
       spellcheck: false,
+      backgroundThrottling: false,
     },
   });
   const trackedWindow = trackBrowserWindow(win);
