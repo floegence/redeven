@@ -1,12 +1,14 @@
-import { Show, createEffect, createSignal, type JSX } from 'solid-js';
-import { cn, useLayout } from '@floegence/floe-webapp-core';
+import { Show, createEffect, createSignal, onCleanup, type JSX } from 'solid-js';
+import { cn, useLayout, useNotification } from '@floegence/floe-webapp-core';
+import { Check, Copy } from '@floegence/floe-webapp-core/icons';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import type { GitBranchSummary, GitPreviewDeleteBranchResponse } from '../protocol/redeven_v1';
 import { branchDisplayName } from '../utils/gitWorkbench';
+import { writeTextToClipboard } from '../utils/clipboard';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { GitDeleteBranchConfirmButton } from './GitDeleteBranchConfirmButton';
 import { GitStatePane, GitSubtleNote } from './GitWorkbenchPrimitives';
-import { resolveDeleteBranchReview, trimDeleteBranchReason, type GitDeleteBranchDialogConfirmOptions, type GitDeleteBranchDialogState } from './GitDeleteBranchReviewModel';
+import { expectedDeleteBranchName, resolveDeleteBranchReview, trimDeleteBranchReason, type GitDeleteBranchDialogConfirmOptions, type GitDeleteBranchDialogState } from './GitDeleteBranchReviewModel';
 
 export interface GitDeleteBranchReviewDialogProps {
   open: boolean;
@@ -29,11 +31,17 @@ export interface GitDeleteBranchReviewDialogProps {
 
 export function GitDeleteBranchReviewDialog(props: GitDeleteBranchReviewDialogProps) {
   const layout = useLayout();
+  const notification = useNotification();
   const [confirmBranchName, setConfirmBranchName] = createSignal('');
+  const [branchNameCopied, setBranchNameCopied] = createSignal(false);
   const outlineControlClass = redevenSurfaceRoleClass('control');
+  const confirmBranchInputId = 'git-delete-branch-confirm-name-input';
+  const confirmBranchLabelId = 'git-delete-branch-confirm-name-label';
+  let branchCopyResetTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
 
   const branchName = () => branchDisplayName(props.branch);
   const preview = () => props.preview ?? null;
+  const requiredBranchName = () => expectedDeleteBranchName(props.branch, preview()) || branchName();
   const blockingReason = () => trimDeleteBranchReason(preview()?.blockingReason);
   const forceDeleteReason = () => trimDeleteBranchReason(preview()?.forceDeleteReason);
   const state = () => props.state ?? 'idle';
@@ -61,16 +69,50 @@ export function GitDeleteBranchReviewDialog(props: GitDeleteBranchReviewDialogPr
     && review().canConfirm,
   );
 
+  const clearBranchNameCopied = () => {
+    if (branchCopyResetTimer !== undefined) {
+      globalThis.clearTimeout(branchCopyResetTimer);
+      branchCopyResetTimer = undefined;
+    }
+    setBranchNameCopied(false);
+  };
+
   createEffect(() => {
     void props.open;
+    void props.branch?.name;
     void props.branch?.fullName;
+    void requiredBranchName();
     void preview()?.planFingerprint;
     setConfirmBranchName('');
+    clearBranchNameCopied();
+  });
+
+  onCleanup(() => {
+    clearBranchNameCopied();
   });
 
   const confirmLabel = () => {
     if (deleting()) return 'Deleting...';
     return review().confirmMode === 'force' ? props.forceConfirmLabel : props.safeConfirmLabel;
+  };
+
+  const handleCopyBranchName = async () => {
+    const value = requiredBranchName();
+    if (!value) return;
+    try {
+      await writeTextToClipboard(value);
+    } catch (error) {
+      notification.error('Copy failed', error instanceof Error ? error.message : 'Failed to copy branch name.');
+      return;
+    }
+    setBranchNameCopied(true);
+    if (branchCopyResetTimer !== undefined) {
+      globalThis.clearTimeout(branchCopyResetTimer);
+    }
+    branchCopyResetTimer = globalThis.setTimeout(() => {
+      branchCopyResetTimer = undefined;
+      setBranchNameCopied(false);
+    }, 1600);
   };
 
   return (
@@ -153,14 +195,40 @@ export function GitDeleteBranchReviewDialog(props: GitDeleteBranchReviewDialogPr
                         {props.forceDeleteSummary}
                       </div>
                       <div class="space-y-1.5">
-                        <label class="block text-[11px] font-medium text-foreground">
-                          Type <span class="font-semibold">{review().expectedBranchName || branchName()}</span> to confirm force delete
-                        </label>
+                        <div id={confirmBranchLabelId} class="flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-foreground">
+                          <span>Type</span>
+                          <button
+                            type="button"
+                            class="inline-flex min-w-0 max-w-full cursor-pointer items-center rounded-md bg-background/70 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-foreground shadow-sm ring-1 ring-border/60 transition-colors duration-150 hover:bg-background hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+                            title={branchNameCopied() ? 'Branch name copied' : 'Copy branch name'}
+                            aria-label={`Copy branch name ${requiredBranchName()}`}
+                            onClick={() => void handleCopyBranchName()}
+                          >
+                            <span class="min-w-0 truncate">{requiredBranchName()}</span>
+                          </button>
+                          <button
+                            type="button"
+                            class={cn(
+                              'inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md border border-transparent transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70',
+                              branchNameCopied() ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-background hover:text-foreground',
+                            )}
+                            aria-label={branchNameCopied() ? 'Branch name copied' : 'Copy branch name'}
+                            title={branchNameCopied() ? 'Branch name copied' : 'Copy branch name'}
+                            onClick={() => void handleCopyBranchName()}
+                          >
+                            <Show when={branchNameCopied()} fallback={<Copy class="size-3.5" />}>
+                              <Check class="size-3.5" />
+                            </Show>
+                          </button>
+                          <span>to confirm force delete</span>
+                        </div>
                         <input
+                          id={confirmBranchInputId}
                           type="text"
                           class={cn('w-full rounded-md border bg-background px-3 py-2 text-xs text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/70', outlineControlClass)}
                           value={confirmBranchName()}
-                          placeholder={review().expectedBranchName || branchName()}
+                          placeholder={requiredBranchName()}
+                          aria-labelledby={confirmBranchLabelId}
                           onInput={(event) => setConfirmBranchName(event.currentTarget.value)}
                           autofocus
                         />

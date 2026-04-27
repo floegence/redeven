@@ -2,7 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
-import { LayoutProvider } from '@floegence/floe-webapp-core';
+import { LayoutProvider, NotificationProvider } from '@floegence/floe-webapp-core';
 import { GitDeleteBranchConfirmDialog } from './GitDeleteBranchConfirmDialog';
 
 function makeRect(left: number, top: number, width: number, height: number): DOMRect {
@@ -22,6 +22,11 @@ function makeRect(left: number, top: number, width: number, height: number): DOM
 async function flushPositioning() {
   await Promise.resolve();
   vi.runAllTimers();
+  await Promise.resolve();
+}
+
+async function flushMicrotasks() {
+  await Promise.resolve();
   await Promise.resolve();
 }
 
@@ -83,6 +88,7 @@ describe('GitDeleteBranchConfirmDialog', () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     vi.useRealTimers();
+    Reflect.deleteProperty(navigator, 'clipboard');
     document.body.innerHTML = '';
   });
 
@@ -93,28 +99,30 @@ describe('GitDeleteBranchConfirmDialog', () => {
 
     const dispose = render(() => (
       <LayoutProvider>
-        <GitDeleteBranchConfirmDialog
-          open
-          branch={{
-            name: 'backup/main-before-protocol-hardening-cleanup-20260308',
-            fullName: 'refs/heads/backup/main-before-protocol-hardening-cleanup-20260308',
-            kind: 'local',
-          }}
-          preview={{
-            repoRootPath: '/workspace/repo',
-            name: 'backup/main-before-protocol-hardening-cleanup-20260308',
-            fullName: 'refs/heads/backup/main-before-protocol-hardening-cleanup-20260308',
-            kind: 'local',
-            requiresWorktreeRemoval: false,
-            requiresDiscardConfirmation: false,
-            safeDeleteAllowed: false,
-            safeDeleteReason: blockedReason,
-            forceDeleteAllowed: true,
-            forceDeleteRequiresConfirm: true,
-            planFingerprint: 'plan-1',
-          }}
-          onClose={() => {}}
-        />
+        <NotificationProvider>
+          <GitDeleteBranchConfirmDialog
+            open
+            branch={{
+              name: 'backup/main-before-protocol-hardening-cleanup-20260308',
+              fullName: 'refs/heads/backup/main-before-protocol-hardening-cleanup-20260308',
+              kind: 'local',
+            }}
+            preview={{
+              repoRootPath: '/workspace/repo',
+              name: 'backup/main-before-protocol-hardening-cleanup-20260308',
+              fullName: 'refs/heads/backup/main-before-protocol-hardening-cleanup-20260308',
+              kind: 'local',
+              requiresWorktreeRemoval: false,
+              requiresDiscardConfirmation: false,
+              safeDeleteAllowed: false,
+              safeDeleteReason: blockedReason,
+              forceDeleteAllowed: true,
+              forceDeleteRequiresConfirm: true,
+              planFingerprint: 'plan-1',
+            }}
+            onClose={() => {}}
+          />
+        </NotificationProvider>
       </LayoutProvider>
     ), host);
 
@@ -143,6 +151,77 @@ describe('GitDeleteBranchConfirmDialog', () => {
       const tooltip = document.body.querySelector('[role="tooltip"]') as HTMLElement | null;
       expect(tooltip?.textContent).toContain('Type backup/main-before-protocol-hardening-cleanup-20260308 to enable force delete.');
       expect(dialog?.querySelector('[role="tooltip"]')).toBeNull();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('copies the exact force-delete branch name from the label affordances', async () => {
+    const blockedReason = 'Branch is not fully merged into HEAD.';
+    const branchName = 'backup/main-before-protocol-hardening-cleanup-20260308';
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <GitDeleteBranchConfirmDialog
+            open
+            branch={{
+              name: branchName,
+              fullName: `refs/heads/${branchName}`,
+              kind: 'local',
+            }}
+            preview={{
+              repoRootPath: '/workspace/repo',
+              name: branchName,
+              fullName: `refs/heads/${branchName}`,
+              kind: 'local',
+              requiresWorktreeRemoval: false,
+              requiresDiscardConfirmation: false,
+              safeDeleteAllowed: false,
+              safeDeleteReason: blockedReason,
+              forceDeleteAllowed: true,
+              forceDeleteRequiresConfirm: true,
+              planFingerprint: 'plan-1',
+            }}
+            onClose={() => {}}
+          />
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flushPositioning();
+
+      const branchNameButton = Array.from(document.body.querySelectorAll('button')).find(
+        (node) => node.getAttribute('aria-label') === `Copy branch name ${branchName}`,
+      ) as HTMLButtonElement | undefined;
+      expect(branchNameButton).toBeTruthy();
+
+      branchNameButton?.click();
+      await flushMicrotasks();
+
+      expect(writeText).toHaveBeenCalledWith(branchName);
+      expect(document.body.querySelector('button[aria-label="Branch name copied"]')).toBeTruthy();
+
+      vi.advanceTimersByTime(1600);
+      await flushMicrotasks();
+
+      const copyIconButton = document.body.querySelector('button[aria-label="Copy branch name"]') as HTMLButtonElement | null;
+      expect(copyIconButton).toBeTruthy();
+
+      copyIconButton?.click();
+      await flushMicrotasks();
+
+      expect(writeText).toHaveBeenCalledTimes(2);
+      expect(writeText).toHaveBeenLastCalledWith(branchName);
+      expect(document.body.querySelector('button[aria-label="Branch name copied"]')).toBeTruthy();
     } finally {
       dispose();
     }
