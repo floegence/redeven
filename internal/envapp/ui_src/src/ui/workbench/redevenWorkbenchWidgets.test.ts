@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
+import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(new URL('./redevenWorkbenchWidgets.tsx', import.meta.url), 'utf8');
+const source = readFileSync(path.join(process.cwd(), 'src/ui/workbench/redevenWorkbenchWidgets.tsx'), 'utf8');
 
 function widgetBlockOf(type: string): string {
   const match = source.match(
@@ -41,5 +42,10 @@ describe('redevenWorkbenchWidgets source contract', () => {
     for (const type of widgetTypes) {
       expectProjectedSurface(type);
     }
+  });
+
+  it('marks overflow-only projected wrappers as non-routing wheel surfaces', () => {
+    expect(source).toContain('REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS');
+    expect(source).toContain('{...REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS}');
   });
 });

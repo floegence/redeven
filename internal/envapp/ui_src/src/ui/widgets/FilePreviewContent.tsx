@@ -4,6 +4,7 @@ import { Check, Copy } from '@floegence/floe-webapp-core/icons';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import type { FilePreviewDescriptor } from '../utils/filePreview';
+import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { DocxPreviewPane } from './DocxPreviewPane';
 import { PdfPreviewPane } from './PdfPreviewPane';
 import { TextFilePreviewPane } from './TextFilePreviewPane';
@@ -143,6 +144,7 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
         ref={(element) => {
           props.contentRef?.(element);
         }}
+        {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
         class="relative flex-1 min-h-0 overflow-auto bg-background"
       >
         <Show when={props.descriptor.mode === 'text' && !resolvedError()}>

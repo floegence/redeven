@@ -18,7 +18,7 @@ import {
   getMonitorProcessMemoryUsagePresentation,
 } from '../utils/monitorProcessUsageTone';
 import { isPermissionDeniedError } from '../utils/permission';
-import { REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS } from '../workbench/surface/workbenchWheelInteractive';
+import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { FloatingContextMenu, type FloatingContextMenuItem } from './FloatingContextMenu';
 import { PermissionEmptyState } from './PermissionEmptyState';
 
@@ -536,7 +536,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
   const inactiveSortClass = 'text-muted-foreground hover:text-foreground hover:bg-muted/50';
 
   return (
-    <div {...REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS} class={containerClass()}>
+    <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class={containerClass()}>
       <Show
         when={!noExecute()}
         fallback={
@@ -641,7 +641,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
                 </div>
               </div>
 
-              <div class="flex-1 min-h-0 overflow-auto rounded border border-border bg-background">
+              <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="flex-1 min-h-0 overflow-auto rounded border border-border bg-background">
                 <table class="w-full text-xs relative">
                   <thead class="sticky top-0 bg-background z-10">
                     <tr class="border-b border-border/60">
@@ -728,7 +728,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
                 <div class="text-[11px] text-error break-words mb-2">{sessionsError()}</div>
               </Show>
 
-              <div class="flex-1 min-h-0 overflow-auto rounded border border-border bg-background">
+              <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="flex-1 min-h-0 overflow-auto rounded border border-border bg-background">
                 <table class="w-full text-xs relative">
                   <thead class="sticky top-0 bg-background z-10">
                     <tr class="border-b border-border/60">

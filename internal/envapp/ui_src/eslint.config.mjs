@@ -57,6 +57,24 @@ export default [
     rules: js.configs.recommended.rules,
   },
   {
+    files: ["scripts/**/*.mjs"],
+    languageOptions: {
+      ecmaVersion: "latest",
+      sourceType: "module",
+      globals: nodeGlobals,
+    },
+    rules: js.configs.recommended.rules,
+  },
+  {
+    files: ["scripts/**/*.test.mjs"],
+    languageOptions: {
+      globals: {
+        ...nodeGlobals,
+        ...vitestGlobals,
+      },
+    },
+  },
+  {
     files: ["*.config.ts"],
     languageOptions: {
       parser: tsParser,

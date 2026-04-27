@@ -6,6 +6,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AskFlowerComposerWindow } from './AskFlowerComposerWindow';
 import { setAskFlowerAttachmentSourcePath } from '../utils/askFlowerAttachmentMetadata';
+import {
+  REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR,
+  REDEVEN_WORKBENCH_WHEEL_ROLE_ATTR,
+  REDEVEN_WORKBENCH_WHEEL_ROLE_LOCAL_SCROLL_VIEWPORT,
+} from '../workbench/surface/workbenchWheelInteractive';
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Button: (props: any) => (
@@ -208,6 +213,8 @@ describe('AskFlowerComposerWindow', () => {
 
     expect(scrollRegion).toBeTruthy();
     expect(scrollRegion?.className).toContain('ask-flower-scroll-region');
+    expect(scrollRegion?.getAttribute(REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR)).toBe('true');
+    expect(scrollRegion?.getAttribute(REDEVEN_WORKBENCH_WHEEL_ROLE_ATTR)).toBe(REDEVEN_WORKBENCH_WHEEL_ROLE_LOCAL_SCROLL_VIEWPORT);
     expect(composerDock).toBeTruthy();
     expect(textarea && composerDock?.contains(textarea)).toBe(true);
     expect(textarea && scrollRegion?.contains(textarea)).toBe(false);

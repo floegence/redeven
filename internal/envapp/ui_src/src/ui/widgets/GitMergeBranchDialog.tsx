@@ -4,6 +4,7 @@ import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import type { GitBranchSummary, GitCommitFileSummary, GitPreviewMergeBranchResponse, GitWorkspaceSummary } from '../protocol/redeven_v1';
 import { branchDisplayName, changeSecondaryPath, gitDiffEntryIdentity, type GitStashWindowRequest } from '../utils/gitWorkbench';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
+import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { gitChangePathClass } from './GitChrome';
 import { GitDiffDialog } from './GitDiffDialog';
 import {
@@ -302,7 +303,7 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
                               </div>
                             )}
                           >
-                            <div class="min-h-0 flex-1 overflow-auto">
+                            <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="min-h-0 flex-1 overflow-auto">
                               <table class={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[46rem] md:min-w-0`}>
                                 <thead class={GIT_CHANGED_FILES_HEAD_CLASS}>
                                   <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>

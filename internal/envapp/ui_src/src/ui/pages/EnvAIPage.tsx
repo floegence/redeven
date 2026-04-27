@@ -89,6 +89,7 @@ import { FlowerLiveAssistantSurface } from '../widgets/FlowerLiveAssistantSurfac
 import { createAIThreadRenderController } from './createAIThreadRenderController';
 import { createAIContextTelemetryController } from './createAIContextTelemetryController';
 import { CompactContextSummary } from './AIContextSummary';
+import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 
 type ExecutionMode = 'act' | 'plan';
 
@@ -3745,6 +3746,7 @@ export function EnvAIPage() {
                       ref={(element) => {
                         messageAreaRef = element;
                       }}
+                      {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
                       class="flower-chat-transcript-main"
                     >
                       <MessageListWithEmptyState

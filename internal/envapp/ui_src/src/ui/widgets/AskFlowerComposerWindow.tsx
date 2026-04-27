@@ -26,6 +26,7 @@ import { PersistentFloatingWindow } from './PersistentFloatingWindow';
 import { PreviewWindow } from './PreviewWindow';
 import { RemoteFileBrowser } from './RemoteFileBrowser';
 import { ENV_APP_FLOATING_LAYER } from '../utils/envAppLayers';
+import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 
 const WINDOW_VIEWPORT_MARGIN_DESKTOP = 12;
 const WINDOW_VIEWPORT_MARGIN_MOBILE = 8;
@@ -952,7 +953,11 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
             )}
           >
             <div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
-              <div data-testid="ask-flower-scroll-region" class="ask-flower-scroll-region flex-1 min-h-0 overflow-y-auto px-2 py-2 sm:px-2.5 sm:py-2.5">
+              <div
+                {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
+                data-testid="ask-flower-scroll-region"
+                class="ask-flower-scroll-region flex-1 min-h-0 overflow-y-auto px-2 py-2 sm:px-2.5 sm:py-2.5"
+              >
                 <div class="mx-auto flex w-full max-w-[40rem] flex-col gap-2">
                   <div class="ask-flower-composer-message-row chat-message-item items-start">
                     <FlowerComposerAvatar />

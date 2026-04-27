@@ -12,6 +12,7 @@ import {
 import { hasMeaningfulGitPatchText } from '../utils/gitPatchText';
 import { changeDisplayPath, changeMetricsText } from '../utils/gitWorkbench';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
+import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { gitToneActionButtonClass } from './GitChrome';
 import { GitChangeStatusPill, GitMetaPill } from './GitWorkbenchPrimitives';
 
@@ -117,11 +118,14 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
                 fallback={<div class={cn('rounded-md border px-3 py-2 text-[11px] leading-5 text-muted-foreground', redevenSurfaceRoleClass('inset'))}>{unavailableMessage() || 'Binary file changed. Inline text diff is not available.'}</div>}
               >
                 <Show when={visiblePatchLines().length > 0} fallback={<div class={cn('rounded-md border px-3 py-2 text-[11px] leading-5 text-muted-foreground', redevenSurfaceRoleClass('inset'))}>No inline diff lines available for this file.</div>}>
-                  <div class={cn(
-                    'min-h-0 overflow-auto rounded-md border bg-background p-1 [-webkit-overflow-scrolling:touch] [touch-action:pan-x_pan-y_pinch-zoom]',
-                    redevenSurfaceRoleClass('control'),
-                    layout.isMobile() ? mobilePatchViewportClass() : desktopPatchViewportClass()
-                  )}>
+                  <div
+                    {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
+                    class={cn(
+                      'min-h-0 overflow-auto rounded-md border bg-background p-1 [-webkit-overflow-scrolling:touch] [touch-action:pan-x_pan-y_pinch-zoom]',
+                      redevenSurfaceRoleClass('control'),
+                      layout.isMobile() ? mobilePatchViewportClass() : desktopPatchViewportClass()
+                    )}
+                  >
                     <div class="inline-block min-w-full bg-muted/[0.20] p-px align-top">
                       <For each={visiblePatchLines()}>
                         {(line) => (

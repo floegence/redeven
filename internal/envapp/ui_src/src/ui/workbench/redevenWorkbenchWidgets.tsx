@@ -22,6 +22,7 @@ import { TerminalPanel } from '../widgets/TerminalPanel';
 import { useEnvWorkbenchInstancesContext } from './EnvWorkbenchInstancesContext';
 import { EnvWorkbenchConversationShell } from './EnvWorkbenchConversationShell';
 import { WorkbenchFilePreviewWidget } from './WorkbenchFilePreviewWidget';
+import { REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS } from './surface/workbenchWheelInteractive';
 import { buildWorkbenchFileBrowserStateScope } from './workbenchInstanceState';
 
 const FRONTABLE_WORKBENCH_RENDER_MODE = 'projected_surface';
@@ -102,7 +103,10 @@ function MonitorWidget() {
 
 function CodespacesWidget() {
   return (
-    <div class="redeven-workbench-body-surface h-full min-h-0 overflow-auto">
+    <div
+      {...REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS}
+      class="redeven-workbench-body-surface h-full min-h-0 overflow-auto"
+    >
       <EnvCodespacesPage />
     </div>
   );
@@ -123,7 +127,10 @@ function PortsWidget() {
         />
       )}
     >
-      <div class="redeven-workbench-body-surface h-full min-h-0 overflow-auto">
+      <div
+        {...REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS}
+        class="redeven-workbench-body-surface h-full min-h-0 overflow-auto"
+      >
         <EnvPortForwardsPage />
       </div>
     </Show>

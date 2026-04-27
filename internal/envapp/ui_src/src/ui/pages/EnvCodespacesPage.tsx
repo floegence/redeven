@@ -45,7 +45,7 @@ import { buildFilePathAskFlowerIntent } from "../utils/filePathAskFlower";
 import { canOpenDirectoryPathInTerminal, openDirectoryInTerminal } from "../utils/openDirectoryInTerminal";
 import { replacePickerChildren, sortPickerFolderItems, toPickerFolderItem, toPickerTreeAbsolutePath } from "../utils/directoryPickerTree";
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from "../utils/redevenSurfaceRoles";
-import { REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS } from "../workbench/surface/workbenchWheelInteractive";
+import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from "../workbench/surface/workbenchWheelInteractive";
 import { FloatingContextMenu, type FloatingContextMenuItem } from "../widgets/FloatingContextMenu";
 
 type SpaceStatus = Readonly<{
@@ -1309,7 +1309,7 @@ export function EnvCodespacesPage() {
   };
 
   return (
-    <div {...REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS} class="h-full min-h-0 overflow-auto">
+    <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="h-full min-h-0 overflow-auto">
       <Panel class={cn("border rounded-md overflow-hidden", redevenSurfaceRoleClass("panelStrong"))} data-testid="codespaces-panel">
         <PanelContent class="p-4 space-y-4">
           {/* Page header */}

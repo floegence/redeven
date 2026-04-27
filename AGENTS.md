@@ -179,6 +179,7 @@ git config --global merge.conflictstyle zdiff3
 - Unselected widgets must never capture, consume, or block wheel input. Hover state, visual scroll affordance, embedded lists, or transient focus do not grant wheel ownership.
 - Internal controls such as terminals that capture wheel early may consume wheel only when the selected widget and the control's own active/focused state allow local scrolling; otherwise they must suppress their own scroll without forwarding to canvas zoom.
 - If a selected widget looks scrollable but does not actually scroll, fix the layout, height chain, and `overflow` viewport structure instead of weakening wheel-routing rules for unselected widgets.
+- Production Workbench scroll viewports must use the exported wheel contract props from `workbenchWheelInteractive.ts`; do not hand-write raw wheel data attributes or bypass the static `check:workbench-wheel` gate.
 
 ## Release
 
