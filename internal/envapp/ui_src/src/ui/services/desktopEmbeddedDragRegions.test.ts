@@ -18,6 +18,15 @@ type FakeWindow = Window & {
   redevenDesktopEmbeddedDragRegions?: unknown;
 };
 
+type FakeSyncWindow = FakeWindow & {
+  requestAnimationFrame: (callback: FrameRequestCallback) => number;
+  cancelAnimationFrame: (id: number) => void;
+  setTimeout: Window['setTimeout'];
+  clearTimeout: Window['clearTimeout'];
+  addEventListener: Window['addEventListener'];
+  removeEventListener: Window['removeEventListener'];
+};
+
 function createFakeWindow(origin = window.location.origin): FakeWindow {
   const fake = {
     location: { origin },
@@ -25,6 +34,25 @@ function createFakeWindow(origin = window.location.origin): FakeWindow {
   fake.parent = fake;
   fake.top = fake;
   return fake;
+}
+
+function createFakeSyncWindow(origin = window.location.origin): {
+  currentWindow: FakeSyncWindow;
+  frameCallbacks: FrameRequestCallback[];
+} {
+  const frameCallbacks: FrameRequestCallback[] = [];
+  const currentWindow = Object.assign(createFakeWindow(origin), {
+    requestAnimationFrame: vi.fn((callback: FrameRequestCallback) => {
+      frameCallbacks.push(callback);
+      return frameCallbacks.length;
+    }),
+    cancelAnimationFrame: vi.fn(),
+    setTimeout: window.setTimeout.bind(window),
+    clearTimeout: window.clearTimeout.bind(window),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }) as FakeSyncWindow;
+  return { currentWindow, frameCallbacks };
 }
 
 function setWindowHierarchy(parent: Window, top: Window = parent): void {
@@ -56,6 +84,14 @@ function stubRect(
       toJSON: () => rect,
     }),
   });
+}
+
+function flushNextFrame(frameCallbacks: FrameRequestCallback[]): void {
+  const callback = frameCallbacks.shift();
+  if (!callback) {
+    throw new Error('Expected a scheduled animation frame');
+  }
+  callback(performance.now());
 }
 
 afterEach(() => {
@@ -145,5 +181,101 @@ describe('desktopEmbeddedDragRegions', () => {
 
     sync?.dispose();
     expect(clear).toHaveBeenCalled();
+  });
+
+  it('does not reconnect resize observers or republish identical snapshots during resize notifications', () => {
+    document.body.innerHTML = `
+      <div data-floe-shell-slot="top-bar">
+        <button id="left-action">Left</button>
+      </div>
+    `;
+
+    const topBar = document.querySelector('[data-floe-shell-slot="top-bar"]') as HTMLElement;
+    const leftAction = document.getElementById('left-action') as HTMLButtonElement;
+    stubRect(topBar, { x: 0, y: 0, width: 240, height: 40 });
+    stubRect(leftAction, { x: 0, y: 0, width: 64, height: 40 });
+
+    const setSnapshot = vi.fn();
+    const clear = vi.fn();
+    const { currentWindow, frameCallbacks } = createFakeSyncWindow();
+    currentWindow.redevenDesktopEmbeddedDragRegions = { setSnapshot, clear };
+
+    let resizeCallback: ResizeObserverCallback = () => undefined;
+    const observe = vi.fn();
+    const unobserve = vi.fn();
+    const disconnect = vi.fn();
+    const sync = installDesktopEmbeddedDragRegionSync({
+      currentWindow,
+      createResizeObserver: (callback) => {
+        resizeCallback = callback;
+        return { observe, unobserve, disconnect };
+      },
+    });
+    expect(sync).toBeTruthy();
+
+    flushNextFrame(frameCallbacks);
+    expect(setSnapshot).toHaveBeenCalledTimes(1);
+    expect(observe).toHaveBeenCalledTimes(2);
+    expect(disconnect).not.toHaveBeenCalled();
+
+    resizeCallback([] as ResizeObserverEntry[], {} as ResizeObserver);
+    flushNextFrame(frameCallbacks);
+
+    expect(setSnapshot).toHaveBeenCalledTimes(1);
+    expect(observe).toHaveBeenCalledTimes(2);
+    expect(unobserve).not.toHaveBeenCalled();
+    expect(disconnect).not.toHaveBeenCalled();
+
+    sync?.dispose();
+  });
+
+  it('unobserves removed drag targets without recreating the resize observer', () => {
+    document.body.innerHTML = `
+      <div data-floe-shell-slot="top-bar">
+        <button id="left-action">Left</button>
+      </div>
+    `;
+
+    const topBar = document.querySelector('[data-floe-shell-slot="top-bar"]') as HTMLElement;
+    const leftAction = document.getElementById('left-action') as HTMLButtonElement;
+    stubRect(topBar, { x: 0, y: 0, width: 240, height: 40 });
+    stubRect(leftAction, { x: 0, y: 0, width: 64, height: 40 });
+
+    const setSnapshot = vi.fn();
+    const clear = vi.fn();
+    const { currentWindow, frameCallbacks } = createFakeSyncWindow();
+    currentWindow.redevenDesktopEmbeddedDragRegions = { setSnapshot, clear };
+
+    const observe = vi.fn();
+    const unobserve = vi.fn();
+    const disconnect = vi.fn();
+    const sync = installDesktopEmbeddedDragRegionSync({
+      currentWindow,
+      createResizeObserver: () => ({ observe, unobserve, disconnect }),
+    });
+    expect(sync).toBeTruthy();
+
+    flushNextFrame(frameCallbacks);
+    expect(observe).toHaveBeenCalledTimes(2);
+    expect(setSnapshot).toHaveBeenCalledWith({
+      version: 1,
+      regions: [
+        { x: 64, y: 0, width: 176, height: 40 },
+      ],
+    });
+
+    leftAction.remove();
+    expect(sync?.refresh()).toEqual({
+      version: 1,
+      regions: [
+        { x: 0, y: 0, width: 240, height: 40 },
+      ],
+    });
+
+    expect(unobserve).toHaveBeenCalledWith(leftAction);
+    expect(observe).toHaveBeenCalledTimes(2);
+    expect(disconnect).not.toHaveBeenCalled();
+
+    sync?.dispose();
   });
 });

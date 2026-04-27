@@ -3355,3 +3355,10 @@ a.chat-sources-cell-url:focus-visible {
 .redeven-workbench-conversation-shell__rail-title {
   color: color-mix(in srgb, var(--muted-foreground) 82%, transparent);
 }
+
+/* Disable the upstream Live dot animation so Electron does not keep recalculating styles. */
+.runtime-monitor-panel .chart-monitoring-dot {
+  animation: none !important;
+  opacity: 1;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 14%, transparent);
+}

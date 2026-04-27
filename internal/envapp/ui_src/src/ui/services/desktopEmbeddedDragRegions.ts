@@ -16,6 +16,7 @@ export interface DesktopEmbeddedDragRegionSync {
 
 type ResizeObserverLike = Readonly<{
   observe: (target: Element) => void;
+  unobserve?: (target: Element) => void;
   disconnect: () => void;
 }>;
 
@@ -166,6 +167,38 @@ function coalesceDesktopEmbeddedDragRegionRects(
   return merged.map((rect) => ({ ...rect }));
 }
 
+function sameDesktopEmbeddedDragRegionRect(
+  left: DesktopEmbeddedDragRegionRect,
+  right: DesktopEmbeddedDragRegionRect,
+): boolean {
+  return left.x === right.x
+    && left.y === right.y
+    && left.width === right.width
+    && left.height === right.height;
+}
+
+function sameDesktopEmbeddedDragRegionSnapshot(
+  left: DesktopEmbeddedDragRegionSnapshot | null,
+  right: DesktopEmbeddedDragRegionSnapshot | null,
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right || left.version !== right.version || left.regions.length !== right.regions.length) {
+    return false;
+  }
+  return left.regions.every((rect, index) => sameDesktopEmbeddedDragRegionRect(rect, right.regions[index]));
+}
+
+function cloneDesktopEmbeddedDragRegionSnapshot(
+  snapshot: DesktopEmbeddedDragRegionSnapshot,
+): DesktopEmbeddedDragRegionSnapshot {
+  return {
+    version: snapshot.version,
+    regions: snapshot.regions.map((rect) => ({ ...rect })),
+  };
+}
+
 function rootContainsOtherDragRoot(
   dragRoot: Element,
   topBarRoots: readonly Element[],
@@ -246,6 +279,8 @@ export function installDesktopEmbeddedDragRegionSync(args: Readonly<{
   let disposed = false;
   let rafID = 0;
   let resizeObserver: ResizeObserverLike | null = null;
+  let observedElements = new Set<HTMLElement>();
+  let lastPublishedSnapshot: DesktopEmbeddedDragRegionSnapshot | null = null;
 
   const scheduleRefresh = () => {
     if (disposed || rafID !== 0) {
@@ -260,16 +295,61 @@ export function installDesktopEmbeddedDragRegionSync(args: Readonly<{
   };
 
   const syncObservedElements = () => {
-    resizeObserver?.disconnect();
-    resizeObserver = createResizeObserver(() => {
-      scheduleRefresh();
-    });
+    const nextElements = new Set(collectObservedElements(doc));
     if (!resizeObserver) {
+      resizeObserver = createResizeObserver(() => {
+        scheduleRefresh();
+      });
+    }
+    if (!resizeObserver) {
+      observedElements = nextElements;
       return;
     }
-    for (const element of collectObservedElements(doc)) {
-      resizeObserver.observe(element);
+
+    let needsFullReconnect = false;
+    for (const element of observedElements) {
+      if (nextElements.has(element)) {
+        continue;
+      }
+      if (resizeObserver.unobserve) {
+        resizeObserver.unobserve(element);
+      } else {
+        needsFullReconnect = true;
+        break;
+      }
     }
+
+    if (needsFullReconnect) {
+      resizeObserver.disconnect();
+      resizeObserver = createResizeObserver(() => {
+        scheduleRefresh();
+      });
+      observedElements = new Set<HTMLElement>();
+      if (!resizeObserver) {
+        observedElements = nextElements;
+        return;
+      }
+    }
+
+    for (const element of nextElements) {
+      if (!observedElements.has(element)) {
+        resizeObserver.observe(element);
+      }
+    }
+    observedElements = nextElements;
+  };
+
+  const publishSnapshot = (snapshot: DesktopEmbeddedDragRegionSnapshot | null) => {
+    if (sameDesktopEmbeddedDragRegionSnapshot(lastPublishedSnapshot, snapshot)) {
+      return;
+    }
+    if (!snapshot) {
+      bridge.clear();
+      lastPublishedSnapshot = null;
+      return;
+    }
+    bridge.setSnapshot(snapshot);
+    lastPublishedSnapshot = cloneDesktopEmbeddedDragRegionSnapshot(snapshot);
   };
 
   const refresh = (): DesktopEmbeddedDragRegionSnapshot | null => {
@@ -278,11 +358,11 @@ export function installDesktopEmbeddedDragRegionSync(args: Readonly<{
     }
     const snapshot = buildDesktopEmbeddedDragRegionSnapshot(doc);
     if (!snapshot) {
-      bridge.clear();
+      publishSnapshot(null);
       syncObservedElements();
       return null;
     }
-    bridge.setSnapshot(snapshot);
+    publishSnapshot(snapshot);
     syncObservedElements();
     return snapshot;
   };
@@ -321,10 +401,11 @@ export function installDesktopEmbeddedDragRegionSync(args: Readonly<{
       }
       mutationObserver?.disconnect();
       resizeObserver?.disconnect();
+      observedElements = new Set<HTMLElement>();
       currentWindow.removeEventListener('resize', scheduleRefresh);
       doc.removeEventListener('readystatechange', scheduleRefresh);
       currentWindow.removeEventListener('load', scheduleRefresh);
-      bridge.clear();
+      publishSnapshot(null);
     },
   };
 }

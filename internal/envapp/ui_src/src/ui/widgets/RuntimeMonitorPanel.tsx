@@ -514,8 +514,8 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
 
   const containerClass = () => (
     props.variant === 'deck' || props.variant === 'workbench'
-      ? 'h-full min-h-0 overflow-auto p-2'
-      : 'h-full min-h-0 overflow-auto p-3'
+      ? 'runtime-monitor-panel h-full min-h-0 overflow-auto p-2'
+      : 'runtime-monitor-panel h-full min-h-0 overflow-auto p-3'
   );
 
   const cpuSummary = () => {

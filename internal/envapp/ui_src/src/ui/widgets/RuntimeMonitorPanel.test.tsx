@@ -165,6 +165,15 @@ describe('RuntimeMonitorPanel', () => {
     vi.useRealTimers();
   });
 
+  it('scopes runtime monitor styles on the panel root', async () => {
+    rpcMocks.monitor.getSysMonitor.mockResolvedValue(makeSnapshot(1));
+
+    render(() => <RuntimeMonitorPanel variant="deck" />, host);
+    await flushPanel();
+
+    expect(host.firstElementChild?.className).toContain('runtime-monitor-panel');
+  });
+
   it('prevents overlapping polling requests while coalescing a trailing refresh', async () => {
     const first = createDeferred<ReturnType<typeof makeSnapshot>>();
 
