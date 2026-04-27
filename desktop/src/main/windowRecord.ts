@@ -5,10 +5,20 @@ export type DesktopTrackedWindow = Readonly<{
   webContentsID: number;
 }>;
 
+export type DesktopClosedWindowSnapshot = Readonly<{
+  webContentsID: number;
+}>;
+
 export function trackBrowserWindow(browserWindow: BrowserWindow): DesktopTrackedWindow {
   return {
     browserWindow,
     webContentsID: browserWindow.webContents.id,
+  };
+}
+
+export function closedWindowSnapshot(windowRecord: DesktopTrackedWindow): DesktopClosedWindowSnapshot {
+  return {
+    webContentsID: windowRecord.webContentsID,
   };
 }
 

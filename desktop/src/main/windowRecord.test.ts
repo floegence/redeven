@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { liveTrackedBrowserWindow, trackBrowserWindow } from './windowRecord';
+import { closedWindowSnapshot, liveTrackedBrowserWindow, trackBrowserWindow } from './windowRecord';
 import type { BrowserWindow } from 'electron';
 
 class FakeWindow {
@@ -37,5 +37,14 @@ describe('windowRecord', () => {
     expect(liveTrackedBrowserWindow(trackedWindow)).toBeNull();
     expect(liveTrackedBrowserWindow(null)).toBeNull();
     expect(liveTrackedBrowserWindow(undefined)).toBeNull();
+  });
+
+  it('creates closed-window snapshots without exposing the BrowserWindow object', () => {
+    const browserWindow = new FakeWindow();
+    const trackedWindow = trackBrowserWindow(asBrowserWindow(browserWindow));
+    const snapshot = closedWindowSnapshot(trackedWindow);
+
+    expect(snapshot).toEqual({ webContentsID: 17 });
+    expect('browserWindow' in snapshot).toBe(false);
   });
 });

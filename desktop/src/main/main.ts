@@ -126,7 +126,13 @@ import {
   attachDesktopWindowStatePersistence,
   restoreBrowserWindowBounds,
 } from './windowState';
-import { liveTrackedBrowserWindow, trackBrowserWindow, type DesktopTrackedWindow } from './windowRecord';
+import {
+  closedWindowSnapshot,
+  liveTrackedBrowserWindow,
+  trackBrowserWindow,
+  type DesktopClosedWindowSnapshot,
+  type DesktopTrackedWindow,
+} from './windowRecord';
 import { resolveDesktopWindowSpec } from './windowSpec';
 import {
   attachDesktopWindowChromeBroadcast,
@@ -327,7 +333,7 @@ type CreateBrowserWindowArgs = Readonly<{
     validatedURL: string;
     isMainFrame: boolean;
   }>) => void;
-  onClosed?: (win: DesktopTrackedWindow) => void;
+  onClosed?: (win: DesktopClosedWindowSnapshot) => void;
   presentOnReadyToShow?: boolean;
 }>;
 
@@ -858,9 +864,10 @@ async function confirmDesktopImpact(
 }
 
 async function requestFinalWindowClose(
-  win: BrowserWindow,
+  windowRecord: DesktopTrackedWindow,
 ): Promise<void> {
-  if (!win || win.isDestroyed()) {
+  const win = liveTrackedBrowserWindow(windowRecord);
+  if (!win) {
     return;
   }
 
@@ -879,11 +886,12 @@ async function requestFinalWindowClose(
     }
   }
 
-  if (win.isDestroyed()) {
+  const liveWindow = liveTrackedBrowserWindow(windowRecord);
+  if (!liveWindow) {
     return;
   }
-  confirmedFinalWindowCloseWebContentsIDs.add(win.webContents.id);
-  win.close();
+  confirmedFinalWindowCloseWebContentsIDs.add(windowRecord.webContentsID);
+  liveWindow.close();
 }
 
 async function requestQuit(
@@ -1320,7 +1328,7 @@ function createBrowserWindow(args: CreateBrowserWindowArgs): DesktopTrackedWindo
     recordWindowLifecycle(args.diagnostics, 'ready_to_show', 'browser window is ready to show', { role: args.role });
   });
   win.on('close', (event) => {
-    if (confirmedFinalWindowCloseWebContentsIDs.delete(win.webContents.id)) {
+    if (confirmedFinalWindowCloseWebContentsIDs.delete(trackedWindow.webContentsID)) {
       return;
     }
     if (quitPhase !== 'idle') {
@@ -1331,18 +1339,19 @@ function createBrowserWindow(args: CreateBrowserWindowArgs): DesktopTrackedWindo
     }
     if (process.platform === 'darwin') {
       event.preventDefault();
-      void requestFinalWindowClose(win);
+      void requestFinalWindowClose(trackedWindow);
       return;
     }
     event.preventDefault();
     void requestQuit('last_window_close', win);
   });
   win.on('closed', () => {
-    confirmedFinalWindowCloseWebContentsIDs.delete(win.webContents.id);
+    const closedWindow = closedWindowSnapshot(trackedWindow);
+    confirmedFinalWindowCloseWebContentsIDs.delete(closedWindow.webContentsID);
     disposeWindowChromeBroadcast();
     cleanupWindowStatePersistence(win);
     recordWindowLifecycle(args.diagnostics, 'window_closed', 'browser window closed', { role: args.role });
-    args.onClosed?.(trackedWindow);
+    args.onClosed?.(closedWindow);
   });
 
   void win.loadURL(args.targetURL);
