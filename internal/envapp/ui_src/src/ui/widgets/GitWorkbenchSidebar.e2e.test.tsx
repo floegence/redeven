@@ -370,13 +370,12 @@ describe('GitWorkbenchSidebar interactions', () => {
 
     try {
       await flushMicrotasks();
-      animationFrame.clearScheduledFrames();
 
       const scrollRegion = host.querySelector('[data-testid="git-sidebar-scroll-region"]') as HTMLDivElement | null;
       expect(scrollRegion).toBeTruthy();
       mockElementRect(scrollRegion!, { top: 0, bottom: 100 });
       scrollRegion!.scrollTop = 320;
-      mockElementRect(findBranchButton(host, targetBranchKey), { top: 40, bottom: 70 });
+      mockElementRect(findBranchButton(host, targetBranchKey), { top: 140, bottom: 170 });
 
       findBranchButton(host, targetBranchKey).dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flushMicrotasks();

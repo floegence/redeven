@@ -214,6 +214,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
   };
 
   const captureSelectionScrollAnchor = (branch: GitBranchSummary, element: HTMLButtonElement) => {
+    cancelScheduledBranchScroll();
     const key = branchIdentity(branch);
     const scrollRegion = scrollRegionElement;
     if (!key || !scrollRegion || !scrollRegion.contains(element)) {
