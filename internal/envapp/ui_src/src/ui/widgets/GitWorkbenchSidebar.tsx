@@ -1,4 +1,4 @@
-import { For, Show } from 'solid-js';
+import { For, Show, createEffect, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import type {
@@ -65,6 +65,31 @@ export interface GitWorkbenchSidebarProps {
   class?: string;
 }
 
+const SELECTED_BRANCH_REVEAL_PADDING = 8;
+
+type BranchRevealScrollInput = {
+  scrollTop: number;
+  viewportTop: number;
+  viewportBottom: number;
+  itemTop: number;
+  itemBottom: number;
+  padding?: number;
+};
+
+export function resolveGitSidebarRevealScrollTop(input: BranchRevealScrollInput): number {
+  const padding = Math.max(0, input.padding ?? SELECTED_BRANCH_REVEAL_PADDING);
+  const topLimit = input.viewportTop + padding;
+  const bottomLimit = input.viewportBottom - padding;
+
+  if (input.itemTop < topLimit) {
+    return Math.max(0, input.scrollTop - (topLimit - input.itemTop));
+  }
+  if (input.itemBottom > bottomLimit) {
+    return Math.max(0, input.scrollTop + (input.itemBottom - bottomLimit));
+  }
+  return input.scrollTop;
+}
+
 function normalizeSubview(view: GitWorkbenchSubview): GitWorkbenchSubview {
   return view === 'overview' ? 'changes' : view;
 }
@@ -100,10 +125,91 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
   const workspaceCount = () => summarizeWorkspaceCount(props.workspace?.summary ?? props.repoSummary?.workspaceSummary);
   const localBranchCount = () => props.branches?.local.length ?? 0;
   const remoteBranchCount = () => props.branches?.remote.length ?? 0;
+  const branchButtonRefs = new Map<string, HTMLButtonElement>();
+  let scrollRegionElement: HTMLDivElement | undefined;
+  let revealSelectedBranchFrame = 0;
+
+  const registerBranchButton = (branch: GitBranchSummary, element: HTMLButtonElement) => {
+    const key = branchIdentity(branch);
+    if (key) branchButtonRefs.set(key, element);
+  };
+
+  const cancelRevealSelectedBranch = () => {
+    if (!revealSelectedBranchFrame) return;
+    if (typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
+      window.cancelAnimationFrame(revealSelectedBranchFrame);
+    }
+    revealSelectedBranchFrame = 0;
+  };
+
+  const revealSelectedBranchIfNeeded = () => {
+    revealSelectedBranchFrame = 0;
+    const key = String(props.selectedBranchKey ?? '').trim();
+    const scrollRegion = scrollRegionElement;
+    const selectedButton = key ? branchButtonRefs.get(key) : undefined;
+    if (!scrollRegion || !selectedButton || !scrollRegion.contains(selectedButton)) return;
+
+    const viewportRect = scrollRegion.getBoundingClientRect();
+    const itemRect = selectedButton.getBoundingClientRect();
+    const nextScrollTop = resolveGitSidebarRevealScrollTop({
+      scrollTop: scrollRegion.scrollTop,
+      viewportTop: viewportRect.top,
+      viewportBottom: viewportRect.bottom,
+      itemTop: itemRect.top,
+      itemBottom: itemRect.bottom,
+    });
+    if (nextScrollTop !== scrollRegion.scrollTop) {
+      scrollRegion.scrollTop = nextScrollTop;
+    }
+  };
+
+  const scheduleRevealSelectedBranch = () => {
+    cancelRevealSelectedBranch();
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      revealSelectedBranchFrame = window.requestAnimationFrame(revealSelectedBranchIfNeeded);
+      return;
+    }
+    revealSelectedBranchIfNeeded();
+  };
+
+  createEffect(() => {
+    const branches = props.branches;
+    const validKeys = new Set([
+      ...(branches?.local ?? []).map(branchIdentity),
+      ...(branches?.remote ?? []).map(branchIdentity),
+    ].filter(Boolean));
+    for (const key of Array.from(branchButtonRefs.keys())) {
+      if (!validKeys.has(key)) branchButtonRefs.delete(key);
+    }
+  });
+
+  createEffect(() => {
+    const branches = props.branches;
+    const selectedBranchKey = String(props.selectedBranchKey ?? '').trim();
+    const branchKeys = [
+      ...(branches?.local ?? []).map(branchIdentity),
+      ...(branches?.remote ?? []).map(branchIdentity),
+    ].join('\u001f');
+    if (
+      activeSubview() !== 'branches'
+      || !selectedBranchKey
+      || props.branchesLoading
+      || props.branchesError
+      || !branchKeys
+    ) {
+      return;
+    }
+    scheduleRevealSelectedBranch();
+  });
+
+  onCleanup(cancelRevealSelectedBranch);
 
   return (
     <div class={cn('flex h-full min-h-0 flex-col', props.class)}>
       <div
+        ref={(element) => {
+          scrollRegionElement = element;
+        }}
         {...GIT_WORKBENCH_SCROLL_REGION_PROPS}
         data-testid="git-sidebar-scroll-region"
         class="min-h-0 flex-1 overflow-auto overscroll-contain [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] [touch-action:pan-y_pinch-zoom]"
@@ -209,7 +315,9 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                   const active = () => props.selectedBranchKey === branchIdentity(branch);
                                   return (
                                     <button
+                                      ref={(element) => registerBranchButton(branch, element)}
                                       type="button"
+                                      data-git-sidebar-branch-key={branchIdentity(branch)}
                                       class={cn('w-full rounded-lg px-3 py-2.5 text-left', gitToneSelectableCardClass(tone(), active()))}
                                       onClick={() => {
                                         props.onSelectBranch?.(branch);
@@ -239,7 +347,9 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                   const active = () => props.selectedBranchKey === branchIdentity(branch);
                                   return (
                                     <button
+                                      ref={(element) => registerBranchButton(branch, element)}
                                       type="button"
+                                      data-git-sidebar-branch-key={branchIdentity(branch)}
                                       class={cn('w-full rounded-lg px-3 py-2.5 text-left', gitToneSelectableCardClass('violet', active()))}
                                       onClick={() => {
                                         props.onSelectBranch?.(branch);

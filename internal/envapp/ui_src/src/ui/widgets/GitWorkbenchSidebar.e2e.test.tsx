@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
 import { LayoutProvider } from '@floegence/floe-webapp-core';
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { GitWorkbenchSidebar } from './GitWorkbenchSidebar';
+import { GitWorkbenchSidebar, resolveGitSidebarRevealScrollTop } from './GitWorkbenchSidebar';
 
 beforeEach(() => {
   Object.defineProperty(window, 'matchMedia', {
@@ -26,7 +27,53 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
+function flushMicrotasks(): Promise<void> {
+  return Promise.resolve();
+}
+
+function mockElementRect(element: Element, rect: { top: number; bottom: number }) {
+  Object.defineProperty(element, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => ({
+      x: 0,
+      y: rect.top,
+      width: 240,
+      height: rect.bottom - rect.top,
+      top: rect.top,
+      right: 240,
+      bottom: rect.bottom,
+      left: 0,
+      toJSON: () => ({}),
+    }),
+  });
+}
+
+function findBranchButton(host: HTMLElement, key: string): HTMLButtonElement {
+  const button = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-git-sidebar-branch-key]'))
+    .find((node) => node.dataset.gitSidebarBranchKey === key);
+  expect(button).toBeTruthy();
+  return button!;
+}
+
 describe('GitWorkbenchSidebar interactions', () => {
+  it('calculates the nearest selected-branch reveal offset', () => {
+    expect(resolveGitSidebarRevealScrollTop({
+      scrollTop: 320,
+      viewportTop: 0,
+      viewportBottom: 100,
+      itemTop: 140,
+      itemBottom: 170,
+    })).toBe(398);
+
+    expect(resolveGitSidebarRevealScrollTop({
+      scrollTop: 398,
+      viewportTop: 0,
+      viewportBottom: 100,
+      itemTop: 24,
+      itemBottom: 56,
+    })).toBe(398);
+  });
+
   it('uses section cards instead of file rows in changes mode', () => {
     let selectedSection = '';
     let closeCount = 0;
@@ -171,6 +218,110 @@ describe('GitWorkbenchSidebar interactions', () => {
       expect(selectedBranch).toBe('refs/heads/main');
     } finally {
       dispose();
+    }
+  });
+
+  it('reveals the selected branch after refreshed snapshots rerender the list', async () => {
+    const targetBranchKey = 'refs/heads/feature/24';
+    const featureBranches = Array.from({ length: 32 }, (_, index) => {
+      const name = `feature/${String(index).padStart(2, '0')}`;
+      return {
+        name,
+        fullName: `refs/heads/${name}`,
+        kind: 'local' as const,
+        subject: `Feature branch ${index}`,
+      };
+    });
+    const [selectedBranchKey, setSelectedBranchKey] = createSignal('refs/heads/main');
+    const [branches, setBranches] = createSignal({
+      repoRootPath: '/workspace/repo',
+      currentRef: 'main',
+      local: [
+        { name: 'main', fullName: 'refs/heads/main', kind: 'local' as const, current: true },
+        ...featureBranches,
+      ],
+      remote: [],
+    });
+
+    const originalRequestAnimationFrame = window.requestAnimationFrame;
+    const originalCancelAnimationFrame = window.cancelAnimationFrame;
+    const scheduledFrames = new Map<number, FrameRequestCallback>();
+    let nextFrameId = 1;
+    Object.defineProperty(window, 'requestAnimationFrame', {
+      configurable: true,
+      value: vi.fn((callback: FrameRequestCallback) => {
+        const id = nextFrameId;
+        nextFrameId += 1;
+        scheduledFrames.set(id, callback);
+        return id;
+      }),
+    });
+    Object.defineProperty(window, 'cancelAnimationFrame', {
+      configurable: true,
+      value: vi.fn((id: number) => {
+        scheduledFrames.delete(id);
+      }),
+    });
+    const runScheduledFrames = () => {
+      const callbacks = Array.from(scheduledFrames.values());
+      scheduledFrames.clear();
+      callbacks.forEach((callback) => callback(0));
+    };
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="relative h-[180px]">
+          <GitWorkbenchSidebar
+            subview="branches"
+            repoAvailable
+            branches={branches()}
+            selectedBranchKey={selectedBranchKey()}
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flushMicrotasks();
+      scheduledFrames.clear();
+
+      const scrollRegion = host.querySelector('[data-testid="git-sidebar-scroll-region"]') as HTMLDivElement | null;
+      expect(scrollRegion).toBeTruthy();
+      mockElementRect(scrollRegion!, { top: 0, bottom: 100 });
+      scrollRegion!.scrollTop = 320;
+
+      setSelectedBranchKey(targetBranchKey);
+      await flushMicrotasks();
+      mockElementRect(findBranchButton(host, targetBranchKey), { top: 140, bottom: 170 });
+      runScheduledFrames();
+      expect(scrollRegion!.scrollTop).toBe(398);
+
+      scrollRegion!.scrollTop = 398;
+      setBranches({
+        ...branches(),
+        local: branches().local.map((branch) => (
+          branch.fullName === targetBranchKey
+            ? { ...branch, subject: 'Feature branch 24 refreshed' }
+            : branch
+        )),
+      });
+      await flushMicrotasks();
+      mockElementRect(findBranchButton(host, targetBranchKey), { top: 24, bottom: 56 });
+      runScheduledFrames();
+      expect(scrollRegion!.scrollTop).toBe(398);
+    } finally {
+      dispose();
+      Object.defineProperty(window, 'requestAnimationFrame', {
+        configurable: true,
+        value: originalRequestAnimationFrame,
+      });
+      Object.defineProperty(window, 'cancelAnimationFrame', {
+        configurable: true,
+        value: originalCancelAnimationFrame,
+      });
     }
   });
 
