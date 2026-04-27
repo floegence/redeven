@@ -74,7 +74,30 @@ type BranchRevealScrollInput = {
   itemTop: number;
   itemBottom: number;
   padding?: number;
+  maxScrollTop?: number;
 };
+
+type BranchAnchorScrollInput = {
+  scrollTop: number;
+  viewportTop: number;
+  itemTop: number;
+  anchorItemTopOffset: number;
+  maxScrollTop?: number;
+};
+
+type BranchSelectionScrollAnchor = {
+  key: string;
+  branchesRef: GitListBranchesResponse | null | undefined;
+  branchListSignature: string;
+  scrollTop: number;
+  itemTopOffset: number;
+};
+
+function clampGitSidebarScrollTop(value: number, maxScrollTop?: number): number {
+  const minScrollTop = Math.max(0, value);
+  if (!Number.isFinite(maxScrollTop)) return minScrollTop;
+  return Math.min(minScrollTop, Math.max(0, Number(maxScrollTop)));
+}
 
 export function resolveGitSidebarRevealScrollTop(input: BranchRevealScrollInput): number {
   const padding = Math.max(0, input.padding ?? SELECTED_BRANCH_REVEAL_PADDING);
@@ -82,12 +105,40 @@ export function resolveGitSidebarRevealScrollTop(input: BranchRevealScrollInput)
   const bottomLimit = input.viewportBottom - padding;
 
   if (input.itemTop < topLimit) {
-    return Math.max(0, input.scrollTop - (topLimit - input.itemTop));
+    return clampGitSidebarScrollTop(
+      input.scrollTop - (topLimit - input.itemTop),
+      input.maxScrollTop,
+    );
   }
   if (input.itemBottom > bottomLimit) {
-    return Math.max(0, input.scrollTop + (input.itemBottom - bottomLimit));
+    return clampGitSidebarScrollTop(
+      input.scrollTop + (input.itemBottom - bottomLimit),
+      input.maxScrollTop,
+    );
   }
-  return input.scrollTop;
+  return clampGitSidebarScrollTop(input.scrollTop, input.maxScrollTop);
+}
+
+export function resolveGitSidebarAnchorScrollTop(input: BranchAnchorScrollInput): number {
+  const itemTopOffset = input.itemTop - input.viewportTop;
+  return clampGitSidebarScrollTop(
+    input.scrollTop + (itemTopOffset - input.anchorItemTopOffset),
+    input.maxScrollTop,
+  );
+}
+
+function gitSidebarBranchListSignature(branches: GitListBranchesResponse | null | undefined): string {
+  return [
+    'local',
+    ...(branches?.local ?? []).map(branchIdentity),
+    'remote',
+    ...(branches?.remote ?? []).map(branchIdentity),
+  ].join('\u001f');
+}
+
+function resolveElementMaxScrollTop(element: HTMLElement): number | undefined {
+  const maxScrollTop = element.scrollHeight - element.clientHeight;
+  return Number.isFinite(maxScrollTop) && maxScrollTop > 0 ? maxScrollTop : undefined;
 }
 
 function normalizeSubview(view: GitWorkbenchSubview): GitWorkbenchSubview {
@@ -127,23 +178,61 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
   const remoteBranchCount = () => props.branches?.remote.length ?? 0;
   const branchButtonRefs = new Map<string, HTMLButtonElement>();
   let scrollRegionElement: HTMLDivElement | undefined;
-  let revealSelectedBranchFrame = 0;
+  let scheduledBranchScrollFrame = 0;
+  let scheduledBranchScrollTask: (() => void) | null = null;
+  let previousBranchesRef: GitListBranchesResponse | null | undefined;
+  let pendingSelectionScrollAnchor: BranchSelectionScrollAnchor | null = null;
 
   const registerBranchButton = (branch: GitBranchSummary, element: HTMLButtonElement) => {
     const key = branchIdentity(branch);
     if (key) branchButtonRefs.set(key, element);
   };
 
-  const cancelRevealSelectedBranch = () => {
-    if (!revealSelectedBranchFrame) return;
+  const cancelScheduledBranchScroll = () => {
+    scheduledBranchScrollTask = null;
+    if (!scheduledBranchScrollFrame) return;
     if (typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
-      window.cancelAnimationFrame(revealSelectedBranchFrame);
+      window.cancelAnimationFrame(scheduledBranchScrollFrame);
     }
-    revealSelectedBranchFrame = 0;
+    scheduledBranchScrollFrame = 0;
+  };
+
+  const scheduleBranchScrollTask = (task: () => void) => {
+    cancelScheduledBranchScroll();
+    scheduledBranchScrollTask = () => {
+      scheduledBranchScrollFrame = 0;
+      scheduledBranchScrollTask = null;
+      task();
+    };
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      scheduledBranchScrollFrame = window.requestAnimationFrame(() => {
+        scheduledBranchScrollTask?.();
+      });
+      return;
+    }
+    scheduledBranchScrollTask();
+  };
+
+  const captureSelectionScrollAnchor = (branch: GitBranchSummary, element: HTMLButtonElement) => {
+    const key = branchIdentity(branch);
+    const scrollRegion = scrollRegionElement;
+    if (!key || !scrollRegion || !scrollRegion.contains(element)) {
+      pendingSelectionScrollAnchor = null;
+      return;
+    }
+
+    const viewportRect = scrollRegion.getBoundingClientRect();
+    const itemRect = element.getBoundingClientRect();
+    pendingSelectionScrollAnchor = {
+      key,
+      branchesRef: props.branches,
+      branchListSignature: gitSidebarBranchListSignature(props.branches),
+      scrollTop: scrollRegion.scrollTop,
+      itemTopOffset: itemRect.top - viewportRect.top,
+    };
   };
 
   const revealSelectedBranchIfNeeded = () => {
-    revealSelectedBranchFrame = 0;
     const key = String(props.selectedBranchKey ?? '').trim();
     const scrollRegion = scrollRegionElement;
     const selectedButton = key ? branchButtonRefs.get(key) : undefined;
@@ -157,6 +246,8 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
       viewportBottom: viewportRect.bottom,
       itemTop: itemRect.top,
       itemBottom: itemRect.bottom,
+      padding: 0,
+      maxScrollTop: resolveElementMaxScrollTop(scrollRegion),
     });
     if (nextScrollTop !== scrollRegion.scrollTop) {
       scrollRegion.scrollTop = nextScrollTop;
@@ -164,12 +255,43 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
   };
 
   const scheduleRevealSelectedBranch = () => {
-    cancelRevealSelectedBranch();
-    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
-      revealSelectedBranchFrame = window.requestAnimationFrame(revealSelectedBranchIfNeeded);
-      return;
+    scheduleBranchScrollTask(revealSelectedBranchIfNeeded);
+  };
+
+  const restoreSelectionScrollFromAnchor = (anchor: BranchSelectionScrollAnchor) => {
+    const scrollRegion = scrollRegionElement;
+    if (!scrollRegion) return;
+
+    const selectedButton = branchButtonRefs.get(anchor.key);
+    const nextSignature = gitSidebarBranchListSignature(props.branches);
+    const maxScrollTop = resolveElementMaxScrollTop(scrollRegion);
+    let nextScrollTop = clampGitSidebarScrollTop(anchor.scrollTop, maxScrollTop);
+
+    if (selectedButton && scrollRegion.contains(selectedButton) && nextSignature !== anchor.branchListSignature) {
+      const viewportRect = scrollRegion.getBoundingClientRect();
+      const itemRect = selectedButton.getBoundingClientRect();
+      const anchoredScrollTop = resolveGitSidebarAnchorScrollTop({
+        scrollTop: scrollRegion.scrollTop,
+        viewportTop: viewportRect.top,
+        itemTop: itemRect.top,
+        anchorItemTopOffset: anchor.itemTopOffset,
+        maxScrollTop,
+      });
+      const scrollDelta = anchoredScrollTop - scrollRegion.scrollTop;
+      nextScrollTop = resolveGitSidebarRevealScrollTop({
+        scrollTop: anchoredScrollTop,
+        viewportTop: viewportRect.top,
+        viewportBottom: viewportRect.bottom,
+        itemTop: itemRect.top - scrollDelta,
+        itemBottom: itemRect.bottom - scrollDelta,
+        padding: 0,
+        maxScrollTop,
+      });
     }
-    revealSelectedBranchIfNeeded();
+
+    if (nextScrollTop !== scrollRegion.scrollTop) {
+      scrollRegion.scrollTop = nextScrollTop;
+    }
   };
 
   createEffect(() => {
@@ -186,23 +308,41 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
   createEffect(() => {
     const branches = props.branches;
     const selectedBranchKey = String(props.selectedBranchKey ?? '').trim();
-    const branchKeys = [
-      ...(branches?.local ?? []).map(branchIdentity),
-      ...(branches?.remote ?? []).map(branchIdentity),
-    ].join('\u001f');
+    const branchKeys = gitSidebarBranchListSignature(branches);
+    const branchesRefChanged = branches !== previousBranchesRef;
+    previousBranchesRef = branches;
+
+    if (pendingSelectionScrollAnchor && selectedBranchKey !== pendingSelectionScrollAnchor.key) {
+      pendingSelectionScrollAnchor = null;
+    }
+
     if (
       activeSubview() !== 'branches'
       || !selectedBranchKey
       || props.branchesLoading
       || props.branchesError
-      || !branchKeys
+      || !branches
     ) {
       return;
     }
-    scheduleRevealSelectedBranch();
+
+    const pendingAnchor = pendingSelectionScrollAnchor;
+    if (
+      pendingAnchor
+      && branchesRefChanged
+      && branches !== pendingAnchor.branchesRef
+    ) {
+      pendingSelectionScrollAnchor = null;
+      scheduleBranchScrollTask(() => restoreSelectionScrollFromAnchor(pendingAnchor));
+      return;
+    }
+
+    if (branchesRefChanged && branchKeys) {
+      scheduleRevealSelectedBranch();
+    }
   });
 
-  onCleanup(cancelRevealSelectedBranch);
+  onCleanup(cancelScheduledBranchScroll);
 
   return (
     <div class={cn('flex h-full min-h-0 flex-col', props.class)}>
@@ -319,7 +459,8 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                       type="button"
                                       data-git-sidebar-branch-key={branchIdentity(branch)}
                                       class={cn('w-full rounded-lg px-3 py-2.5 text-left', gitToneSelectableCardClass(tone(), active()))}
-                                      onClick={() => {
+                                      onClick={(event) => {
+                                        captureSelectionScrollAnchor(branch, event.currentTarget);
                                         props.onSelectBranch?.(branch);
                                         closeAfterPick();
                                       }}
@@ -351,7 +492,8 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                       type="button"
                                       data-git-sidebar-branch-key={branchIdentity(branch)}
                                       class={cn('w-full rounded-lg px-3 py-2.5 text-left', gitToneSelectableCardClass('violet', active()))}
-                                      onClick={() => {
+                                      onClick={(event) => {
+                                        captureSelectionScrollAnchor(branch, event.currentTarget);
                                         props.onSelectBranch?.(branch);
                                         closeAfterPick();
                                       }}

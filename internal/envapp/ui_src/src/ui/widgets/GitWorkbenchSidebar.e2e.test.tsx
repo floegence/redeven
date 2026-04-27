@@ -5,7 +5,7 @@ import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { GitWorkbenchSidebar, resolveGitSidebarRevealScrollTop } from './GitWorkbenchSidebar';
+import { GitWorkbenchSidebar, resolveGitSidebarAnchorScrollTop, resolveGitSidebarRevealScrollTop } from './GitWorkbenchSidebar';
 
 beforeEach(() => {
   Object.defineProperty(window, 'matchMedia', {
@@ -55,6 +55,46 @@ function findBranchButton(host: HTMLElement, key: string): HTMLButtonElement {
   return button!;
 }
 
+function installAnimationFrameMock() {
+  const originalRequestAnimationFrame = window.requestAnimationFrame;
+  const originalCancelAnimationFrame = window.cancelAnimationFrame;
+  const scheduledFrames = new Map<number, FrameRequestCallback>();
+  let nextFrameId = 1;
+  Object.defineProperty(window, 'requestAnimationFrame', {
+    configurable: true,
+    value: vi.fn((callback: FrameRequestCallback) => {
+      const id = nextFrameId;
+      nextFrameId += 1;
+      scheduledFrames.set(id, callback);
+      return id;
+    }),
+  });
+  Object.defineProperty(window, 'cancelAnimationFrame', {
+    configurable: true,
+    value: vi.fn((id: number) => {
+      scheduledFrames.delete(id);
+    }),
+  });
+  return {
+    clearScheduledFrames: () => scheduledFrames.clear(),
+    runScheduledFrames: () => {
+      const callbacks = Array.from(scheduledFrames.values());
+      scheduledFrames.clear();
+      callbacks.forEach((callback) => callback(0));
+    },
+    restore: () => {
+      Object.defineProperty(window, 'requestAnimationFrame', {
+        configurable: true,
+        value: originalRequestAnimationFrame,
+      });
+      Object.defineProperty(window, 'cancelAnimationFrame', {
+        configurable: true,
+        value: originalCancelAnimationFrame,
+      });
+    },
+  };
+}
+
 describe('GitWorkbenchSidebar interactions', () => {
   it('calculates the nearest selected-branch reveal offset', () => {
     expect(resolveGitSidebarRevealScrollTop({
@@ -72,6 +112,13 @@ describe('GitWorkbenchSidebar interactions', () => {
       itemTop: 24,
       itemBottom: 56,
     })).toBe(398);
+
+    expect(resolveGitSidebarAnchorScrollTop({
+      scrollTop: 0,
+      viewportTop: 0,
+      itemTop: 100,
+      anchorItemTopOffset: 60,
+    })).toBe(40);
   });
 
   it('uses section cards instead of file rows in changes mode', () => {
@@ -221,7 +268,67 @@ describe('GitWorkbenchSidebar interactions', () => {
     }
   });
 
-  it('reveals the selected branch after refreshed snapshots rerender the list', async () => {
+  it('does not move the branch list just because the selected branch key changed', async () => {
+    const targetBranchKey = 'refs/heads/feature/24';
+    const featureBranches = Array.from({ length: 32 }, (_, index) => {
+      const name = `feature/${String(index).padStart(2, '0')}`;
+      return {
+        name,
+        fullName: `refs/heads/${name}`,
+        kind: 'local' as const,
+        subject: `Feature branch ${index}`,
+      };
+    });
+    const [selectedBranchKey, setSelectedBranchKey] = createSignal('refs/heads/main');
+    const [branches] = createSignal({
+      repoRootPath: '/workspace/repo',
+      currentRef: 'main',
+      local: [
+        { name: 'main', fullName: 'refs/heads/main', kind: 'local' as const, current: true },
+        ...featureBranches,
+      ],
+      remote: [],
+    });
+
+    const animationFrame = installAnimationFrameMock();
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="relative h-[180px]">
+          <GitWorkbenchSidebar
+            subview="branches"
+            repoAvailable
+            branches={branches()}
+            selectedBranchKey={selectedBranchKey()}
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flushMicrotasks();
+      animationFrame.clearScheduledFrames();
+
+      const scrollRegion = host.querySelector('[data-testid="git-sidebar-scroll-region"]') as HTMLDivElement | null;
+      expect(scrollRegion).toBeTruthy();
+      mockElementRect(scrollRegion!, { top: 0, bottom: 100 });
+      scrollRegion!.scrollTop = 320;
+
+      setSelectedBranchKey(targetBranchKey);
+      await flushMicrotasks();
+      mockElementRect(findBranchButton(host, targetBranchKey), { top: 140, bottom: 170 });
+      animationFrame.runScheduledFrames();
+      expect(scrollRegion!.scrollTop).toBe(320);
+    } finally {
+      dispose();
+      animationFrame.restore();
+    }
+  });
+
+  it('restores the exact branch list offset after a selection refresh with unchanged identities', async () => {
     const targetBranchKey = 'refs/heads/feature/24';
     const featureBranches = Array.from({ length: 32 }, (_, index) => {
       const name = `feature/${String(index).padStart(2, '0')}`;
@@ -242,31 +349,7 @@ describe('GitWorkbenchSidebar interactions', () => {
       ],
       remote: [],
     });
-
-    const originalRequestAnimationFrame = window.requestAnimationFrame;
-    const originalCancelAnimationFrame = window.cancelAnimationFrame;
-    const scheduledFrames = new Map<number, FrameRequestCallback>();
-    let nextFrameId = 1;
-    Object.defineProperty(window, 'requestAnimationFrame', {
-      configurable: true,
-      value: vi.fn((callback: FrameRequestCallback) => {
-        const id = nextFrameId;
-        nextFrameId += 1;
-        scheduledFrames.set(id, callback);
-        return id;
-      }),
-    });
-    Object.defineProperty(window, 'cancelAnimationFrame', {
-      configurable: true,
-      value: vi.fn((id: number) => {
-        scheduledFrames.delete(id);
-      }),
-    });
-    const runScheduledFrames = () => {
-      const callbacks = Array.from(scheduledFrames.values());
-      scheduledFrames.clear();
-      callbacks.forEach((callback) => callback(0));
-    };
+    const animationFrame = installAnimationFrameMock();
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -279,6 +362,7 @@ describe('GitWorkbenchSidebar interactions', () => {
             repoAvailable
             branches={branches()}
             selectedBranchKey={selectedBranchKey()}
+            onSelectBranch={(branch) => setSelectedBranchKey(branch.fullName || branch.name || '')}
           />
         </div>
       </LayoutProvider>
@@ -286,20 +370,20 @@ describe('GitWorkbenchSidebar interactions', () => {
 
     try {
       await flushMicrotasks();
-      scheduledFrames.clear();
+      animationFrame.clearScheduledFrames();
 
       const scrollRegion = host.querySelector('[data-testid="git-sidebar-scroll-region"]') as HTMLDivElement | null;
       expect(scrollRegion).toBeTruthy();
       mockElementRect(scrollRegion!, { top: 0, bottom: 100 });
       scrollRegion!.scrollTop = 320;
+      mockElementRect(findBranchButton(host, targetBranchKey), { top: 40, bottom: 70 });
 
-      setSelectedBranchKey(targetBranchKey);
+      findBranchButton(host, targetBranchKey).dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flushMicrotasks();
-      mockElementRect(findBranchButton(host, targetBranchKey), { top: 140, bottom: 170 });
-      runScheduledFrames();
-      expect(scrollRegion!.scrollTop).toBe(398);
+      animationFrame.runScheduledFrames();
+      expect(scrollRegion!.scrollTop).toBe(320);
 
-      scrollRegion!.scrollTop = 398;
+      scrollRegion!.scrollTop = 0;
       setBranches({
         ...branches(),
         local: branches().local.map((branch) => (
@@ -309,19 +393,85 @@ describe('GitWorkbenchSidebar interactions', () => {
         )),
       });
       await flushMicrotasks();
-      mockElementRect(findBranchButton(host, targetBranchKey), { top: 24, bottom: 56 });
-      runScheduledFrames();
-      expect(scrollRegion!.scrollTop).toBe(398);
+      mockElementRect(findBranchButton(host, targetBranchKey), { top: 180, bottom: 210 });
+      animationFrame.runScheduledFrames();
+      expect(scrollRegion!.scrollTop).toBe(320);
     } finally {
       dispose();
-      Object.defineProperty(window, 'requestAnimationFrame', {
-        configurable: true,
-        value: originalRequestAnimationFrame,
+      animationFrame.restore();
+    }
+  });
+
+  it('preserves the clicked branch viewport position after a selection refresh changes identities', async () => {
+    const targetBranchKey = 'refs/heads/feature/24';
+    const featureBranches = Array.from({ length: 32 }, (_, index) => {
+      const name = `feature/${String(index).padStart(2, '0')}`;
+      return {
+        name,
+        fullName: `refs/heads/${name}`,
+        kind: 'local' as const,
+        subject: `Feature branch ${index}`,
+      };
+    });
+    const [selectedBranchKey, setSelectedBranchKey] = createSignal('refs/heads/main');
+    const [branches, setBranches] = createSignal({
+      repoRootPath: '/workspace/repo',
+      currentRef: 'main',
+      local: [
+        { name: 'main', fullName: 'refs/heads/main', kind: 'local' as const, current: true },
+        ...featureBranches,
+      ],
+      remote: [],
+    });
+    const animationFrame = installAnimationFrameMock();
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="relative h-[180px]">
+          <GitWorkbenchSidebar
+            subview="branches"
+            repoAvailable
+            branches={branches()}
+            selectedBranchKey={selectedBranchKey()}
+            onSelectBranch={(branch) => setSelectedBranchKey(branch.fullName || branch.name || '')}
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flushMicrotasks();
+      animationFrame.clearScheduledFrames();
+
+      const scrollRegion = host.querySelector('[data-testid="git-sidebar-scroll-region"]') as HTMLDivElement | null;
+      expect(scrollRegion).toBeTruthy();
+      mockElementRect(scrollRegion!, { top: 0, bottom: 100 });
+      scrollRegion!.scrollTop = 220;
+      mockElementRect(findBranchButton(host, targetBranchKey), { top: 60, bottom: 90 });
+
+      findBranchButton(host, targetBranchKey).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flushMicrotasks();
+      animationFrame.runScheduledFrames();
+      expect(scrollRegion!.scrollTop).toBe(220);
+
+      scrollRegion!.scrollTop = 0;
+      setBranches({
+        ...branches(),
+        local: [
+          { name: 'feature/new', fullName: 'refs/heads/feature/new', kind: 'local' as const, subject: 'New feature branch' },
+          ...branches().local.map((branch) => ({ ...branch })),
+        ],
       });
-      Object.defineProperty(window, 'cancelAnimationFrame', {
-        configurable: true,
-        value: originalCancelAnimationFrame,
-      });
+      await flushMicrotasks();
+      mockElementRect(findBranchButton(host, targetBranchKey), { top: 100, bottom: 130 });
+      animationFrame.runScheduledFrames();
+      expect(scrollRegion!.scrollTop).toBe(40);
+    } finally {
+      dispose();
+      animationFrame.restore();
     }
   });
 
