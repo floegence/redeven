@@ -58,6 +58,21 @@ describe('launcherActionFeedback', () => {
     });
   });
 
+  it('shows Start Runtime failures as error toasts with a snapshot refresh', () => {
+    expect(launcherActionFailurePresentation({
+      ok: false,
+      code: 'runtime_start_failed',
+      scope: 'environment',
+      message: 'Start Runtime did not complete because the runtime process did not stay online.',
+      should_refresh_snapshot: true,
+    })).toEqual({
+      message: 'Start Runtime did not complete because the runtime process did not stay online.',
+      tone: 'error',
+      refresh_snapshot: true,
+      delivery: 'toast',
+    });
+  });
+
   it('keeps dialog-scoped validation failures inline', () => {
     expect(launcherActionFailurePresentation({
       ok: false,
