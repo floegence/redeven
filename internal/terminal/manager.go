@@ -51,6 +51,8 @@ type Manager struct {
 	bySession        map[string]map[*rpc.Server]string // session_id -> server -> conn_id
 	closedSinks      map[*rpc.Server]struct{}          // best-effort marker to avoid repeated work
 	sessionLifecycle map[string]SessionLifecycleRecord
+	lifecycleHooks   map[int]SessionLifecycleHook
+	nextLifecycleID  int
 }
 
 type SessionInfo struct {
@@ -112,6 +114,7 @@ func NewManager(shell string, agentHomeAbs string, log *slog.Logger) *Manager {
 		bySession:        make(map[string]map[*rpc.Server]string),
 		closedSinks:      make(map[*rpc.Server]struct{}),
 		sessionLifecycle: make(map[string]SessionLifecycleRecord),
+		lifecycleHooks:   make(map[int]SessionLifecycleHook),
 	}
 
 	m.term = termgo.NewManager(newTerminalGoManagerConfig(shell, log))
@@ -744,12 +747,14 @@ func (h *eventHandler) OnTerminalSessionCreated(session *termgo.Session) {
 	}
 	h.m.trackSessionOpen(sessionID)
 
-	h.m.broadcastSessionsChanged(terminalSessionsChangedPayload{
+	payload := terminalSessionsChangedPayload{
 		Reason:      "created",
 		SessionID:   sessionID,
 		TimestampMs: time.Now().UnixMilli(),
 		Lifecycle:   string(SessionLifecycleOpen),
-	})
+	}
+	h.m.broadcastSessionsChanged(payload)
+	h.m.emitSessionLifecycleEvent(sessionLifecycleEventFromPayload(payload))
 }
 
 func (h *eventHandler) OnTerminalSessionClosed(sessionID string) {
@@ -762,12 +767,14 @@ func (h *eventHandler) OnTerminalSessionClosed(sessionID string) {
 	}
 
 	reason := h.m.finalizeSessionClosed(sessionID)
-	h.m.broadcastSessionsChanged(terminalSessionsChangedPayload{
+	payload := terminalSessionsChangedPayload{
 		Reason:      reason,
 		SessionID:   sessionID,
 		TimestampMs: time.Now().UnixMilli(),
 		Lifecycle:   string(SessionLifecycleClosed),
-	})
+	}
+	h.m.broadcastSessionsChanged(payload)
+	h.m.emitSessionLifecycleEvent(sessionLifecycleEventFromPayload(payload))
 }
 
 func (h *eventHandler) OnTerminalError(sessionID string, err error) {

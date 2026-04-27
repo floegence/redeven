@@ -175,6 +175,39 @@ func TestDeleteSessionFailureStaysHiddenAndCanRetry(t *testing.T) {
 	waitForSessionGone(t, m, sess.ID, time.Second)
 }
 
+func TestSessionLifecycleHookReceivesHiddenDeleteEvent(t *testing.T) {
+	root := t.TempDir()
+	m := newQuietTestManager(t, root)
+	t.Cleanup(m.Cleanup)
+
+	events := make(chan SessionLifecycleEvent, 8)
+	removeHook := m.AddSessionLifecycleHook(func(event SessionLifecycleEvent) {
+		events <- event
+	})
+	defer removeHook()
+
+	sess, err := m.createSession("test", "")
+	if err != nil {
+		t.Fatalf("createSession() error = %v", err)
+	}
+
+	releaseDelete := make(chan struct{})
+	m.deleteSessionFunc = func(sessionID string) error {
+		<-releaseDelete
+		return m.deleteSessionNow(sessionID)
+	}
+	defer close(releaseDelete)
+
+	if err := m.DeleteSession(sess.ID); err != nil {
+		t.Fatalf("DeleteSession() error = %v", err)
+	}
+
+	event := waitForLifecycleEvent(t, events, sess.ID, SessionLifecycleClosing, time.Second)
+	if !event.Hidden {
+		t.Fatalf("hidden=%v, want true for closing event", event.Hidden)
+	}
+}
+
 func TestRedevenShellInitEnvProviderInjectsSentinelWhenPathPrependIsEmpty(t *testing.T) {
 	provider := redevenShellInitEnvProvider{base: termgo.DefaultEnvProvider{}}
 
@@ -292,6 +325,29 @@ func waitForSessionGone(t *testing.T, m *Manager, sessionID string, timeout time
 	}
 
 	t.Fatalf("timeout waiting for session %q to be removed", sessionID)
+}
+
+func waitForLifecycleEvent(
+	t *testing.T,
+	events <-chan SessionLifecycleEvent,
+	sessionID string,
+	lifecycle SessionLifecycle,
+	timeout time.Duration,
+) SessionLifecycleEvent {
+	t.Helper()
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	for {
+		select {
+		case event := <-events:
+			if event.SessionID == sessionID && event.Lifecycle == lifecycle {
+				return event
+			}
+		case <-timer.C:
+			t.Fatalf("timeout waiting for lifecycle event %q for session %q", lifecycle, sessionID)
+		}
+	}
 }
 
 func assertFileContains(t *testing.T, path string, needle string) {

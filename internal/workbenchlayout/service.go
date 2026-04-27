@@ -135,6 +135,30 @@ func (s *Service) RemoveTerminalSession(ctx context.Context, widgetID string, se
 	return state, nil
 }
 
+func (s *Service) PruneTerminalSessions(ctx context.Context, liveSessionIDs []string) ([]WidgetState, error) {
+	if s == nil || s.store == nil {
+		return nil, errors.New("workbench layout service not initialized")
+	}
+	states, events, err := s.store.pruneTerminalSessions(ctx, liveSessionIDs)
+	if err != nil {
+		return nil, err
+	}
+	s.broadcastEvents(events)
+	return states, nil
+}
+
+func (s *Service) RemoveTerminalSessionFromAllWidgets(ctx context.Context, sessionID string) ([]WidgetState, error) {
+	if s == nil || s.store == nil {
+		return nil, errors.New("workbench layout service not initialized")
+	}
+	states, events, err := s.store.removeTerminalSessionFromAllWidgets(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	s.broadcastEvents(events)
+	return states, nil
+}
+
 func (s *Service) removeSubscriber(id int) {
 	s.mu.Lock()
 	ch, ok := s.subscribers[id]
@@ -143,6 +167,12 @@ func (s *Service) removeSubscriber(id int) {
 		close(ch)
 	}
 	s.mu.Unlock()
+}
+
+func (s *Service) broadcastEvents(events []Event) {
+	for _, event := range events {
+		s.broadcast(event)
+	}
 }
 
 func (s *Service) broadcast(event Event) {
@@ -509,6 +539,93 @@ func (s *Store) removeTerminalSession(ctx context.Context, widgetID string, sess
 	return nextState, event, nil
 }
 
+func (s *Store) pruneTerminalSessions(ctx context.Context, liveSessionIDs []string) ([]WidgetState, []Event, error) {
+	live := sessionIDSet(liveSessionIDs)
+	return s.updateTerminalStates(ctx, func(sessionID string) bool {
+		_, ok := live[sessionID]
+		return ok
+	})
+}
+
+func (s *Store) removeTerminalSessionFromAllWidgets(ctx context.Context, sessionID string) ([]WidgetState, []Event, error) {
+	normalizedSessionIDs := normalizeSessionIDs([]string{sessionID})
+	if len(normalizedSessionIDs) != 1 {
+		return nil, nil, &ValidationError{Message: "session_id is required"}
+	}
+	sessionID = normalizedSessionIDs[0]
+	return s.updateTerminalStates(ctx, func(existing string) bool {
+		return existing != sessionID
+	})
+}
+
+func (s *Store) updateTerminalStates(ctx context.Context, keepSession func(string) bool) ([]WidgetState, []Event, error) {
+	nowUnixMs := time.Now().UnixMilli()
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	rows, err := tx.QueryContext(
+		ctx,
+		`SELECT widget_id, widget_type, revision, state_json, updated_at_unix_ms
+FROM workbench_widget_states
+WHERE widget_type = ?
+ORDER BY widget_id ASC`,
+		WidgetTypeTerminal,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+
+	currentStates := make([]WidgetState, 0)
+	for rows.Next() {
+		state, err := scanWidgetStateRow(rows)
+		if err != nil {
+			return nil, nil, err
+		}
+		if state.State.Kind != WidgetStateKindTerminal {
+			continue
+		}
+		currentStates = append(currentStates, state)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+
+	updatedStates := make([]WidgetState, 0)
+	events := make([]Event, 0)
+	for _, current := range currentStates {
+		nextSessionIDs := filterSessionIDs(current.State.SessionIDs, keepSession)
+		if sessionIDsEqual(current.State.SessionIDs, nextSessionIDs) {
+			continue
+		}
+		nextState := WidgetState{
+			WidgetID:        current.WidgetID,
+			WidgetType:      WidgetTypeTerminal,
+			Revision:        current.Revision + 1,
+			UpdatedAtUnixMs: nowUnixMs,
+			State: WidgetStateData{
+				Kind:       WidgetStateKindTerminal,
+				SessionIDs: nextSessionIDs,
+			},
+		}
+		event, err := upsertWidgetStateTx(ctx, tx, nextState)
+		if err != nil {
+			return nil, nil, err
+		}
+		updatedStates = append(updatedStates, nextState)
+		events = append(events, event)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, nil, err
+	}
+	return updatedStates, events, nil
+}
+
 func (s *Store) eventsAfter(ctx context.Context, afterSeq int64) ([]Event, error) {
 	rows, err := s.db.QueryContext(
 		ctx,
@@ -766,6 +883,41 @@ func updateSnapshotTimestampTx(ctx context.Context, tx *sql.Tx, seq int64, updat
 		return err
 	}
 	return updateSnapshotHeadTx(ctx, tx, currentRevision, seq, updatedAtUnixMs)
+}
+
+func sessionIDSet(values []string) map[string]struct{} {
+	normalized := normalizeSessionIDs(values)
+	out := make(map[string]struct{}, len(normalized))
+	for _, id := range normalized {
+		out[id] = struct{}{}
+	}
+	return out
+}
+
+func filterSessionIDs(values []string, keep func(string) bool) []string {
+	normalized := normalizeSessionIDs(values)
+	if len(normalized) == 0 {
+		return []string{}
+	}
+	next := make([]string, 0, len(normalized))
+	for _, sessionID := range normalized {
+		if keep == nil || keep(sessionID) {
+			next = append(next, sessionID)
+		}
+	}
+	return next
+}
+
+func sessionIDsEqual(left []string, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func deleteWidgetStatesTx(ctx context.Context, tx *sql.Tx, widgetIDs []string) error {

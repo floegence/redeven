@@ -408,3 +408,143 @@ func TestServiceTerminalSessionStateHelpers(t *testing.T) {
 		t.Fatalf("missing removal state = %#v, want unchanged %#v", missing, removed)
 	}
 }
+
+func TestServicePruneTerminalSessions(t *testing.T) {
+	t.Parallel()
+
+	svc := openTestService(t)
+	ctx := context.Background()
+
+	widgets := append([]WidgetLayout{}, sampleWidgets()...)
+	widgets = append(widgets, WidgetLayout{
+		WidgetID:        "widget-terminal-2",
+		WidgetType:      WidgetTypeTerminal,
+		X:               900,
+		Y:               240,
+		Width:           840,
+		Height:          500,
+		ZIndex:          3,
+		CreatedAtUnixMs: 1_700_000_000_300,
+	})
+	if _, err := svc.Replace(ctx, PutLayoutRequest{
+		BaseRevision: 0,
+		Widgets:      widgets,
+	}); err != nil {
+		t.Fatalf("Replace() error = %v", err)
+	}
+	if _, err := svc.AppendTerminalSession(ctx, "widget-terminal-1", "live-1"); err != nil {
+		t.Fatalf("AppendTerminalSession(live-1) error = %v", err)
+	}
+	if _, err := svc.AppendTerminalSession(ctx, "widget-terminal-1", "stale-1"); err != nil {
+		t.Fatalf("AppendTerminalSession(stale-1) error = %v", err)
+	}
+	if _, err := svc.AppendTerminalSession(ctx, "widget-terminal-2", "stale-2"); err != nil {
+		t.Fatalf("AppendTerminalSession(stale-2) error = %v", err)
+	}
+	if _, err := svc.AppendTerminalSession(ctx, "widget-terminal-2", "live-2"); err != nil {
+		t.Fatalf("AppendTerminalSession(live-2) error = %v", err)
+	}
+
+	updated, err := svc.PruneTerminalSessions(ctx, []string{"live-1", "live-2"})
+	if err != nil {
+		t.Fatalf("PruneTerminalSessions() error = %v", err)
+	}
+	if len(updated) != 2 {
+		t.Fatalf("updated states = %#v, want 2 terminal widgets", updated)
+	}
+
+	snapshot, err := svc.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("Snapshot() error = %v", err)
+	}
+	if got := terminalSessionIDsForWidget(t, snapshot, "widget-terminal-1"); !reflect.DeepEqual(got, []string{"live-1"}) {
+		t.Fatalf("widget-terminal-1 sessions = %#v, want live-1", got)
+	}
+	if got := terminalSessionIDsForWidget(t, snapshot, "widget-terminal-2"); !reflect.DeepEqual(got, []string{"live-2"}) {
+		t.Fatalf("widget-terminal-2 sessions = %#v, want live-2", got)
+	}
+	seqAfterPrune := snapshot.Seq
+
+	noOp, err := svc.PruneTerminalSessions(ctx, []string{"live-1", "live-2"})
+	if err != nil {
+		t.Fatalf("PruneTerminalSessions(no-op) error = %v", err)
+	}
+	if len(noOp) != 0 {
+		t.Fatalf("no-op updated states = %#v, want none", noOp)
+	}
+	afterNoOp, err := svc.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("Snapshot(no-op) error = %v", err)
+	}
+	if afterNoOp.Seq != seqAfterPrune {
+		t.Fatalf("no-op snapshot seq = %d, want unchanged %d", afterNoOp.Seq, seqAfterPrune)
+	}
+}
+
+func TestServiceRemoveTerminalSessionFromAllWidgets(t *testing.T) {
+	t.Parallel()
+
+	svc := openTestService(t)
+	ctx := context.Background()
+
+	widgets := append([]WidgetLayout{}, sampleWidgets()...)
+	widgets = append(widgets, WidgetLayout{
+		WidgetID:        "widget-terminal-2",
+		WidgetType:      WidgetTypeTerminal,
+		X:               900,
+		Y:               240,
+		Width:           840,
+		Height:          500,
+		ZIndex:          3,
+		CreatedAtUnixMs: 1_700_000_000_300,
+	})
+	if _, err := svc.Replace(ctx, PutLayoutRequest{
+		BaseRevision: 0,
+		Widgets:      widgets,
+	}); err != nil {
+		t.Fatalf("Replace() error = %v", err)
+	}
+	if _, err := svc.AppendTerminalSession(ctx, "widget-terminal-1", "shared-session"); err != nil {
+		t.Fatalf("AppendTerminalSession(widget-terminal-1/shared) error = %v", err)
+	}
+	if _, err := svc.AppendTerminalSession(ctx, "widget-terminal-1", "kept-1"); err != nil {
+		t.Fatalf("AppendTerminalSession(widget-terminal-1/kept) error = %v", err)
+	}
+	if _, err := svc.AppendTerminalSession(ctx, "widget-terminal-2", "shared-session"); err != nil {
+		t.Fatalf("AppendTerminalSession(widget-terminal-2/shared) error = %v", err)
+	}
+	if _, err := svc.AppendTerminalSession(ctx, "widget-terminal-2", "kept-2"); err != nil {
+		t.Fatalf("AppendTerminalSession(widget-terminal-2/kept) error = %v", err)
+	}
+
+	updated, err := svc.RemoveTerminalSessionFromAllWidgets(ctx, "shared-session")
+	if err != nil {
+		t.Fatalf("RemoveTerminalSessionFromAllWidgets() error = %v", err)
+	}
+	if len(updated) != 2 {
+		t.Fatalf("updated states = %#v, want 2 terminal widgets", updated)
+	}
+
+	snapshot, err := svc.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("Snapshot() error = %v", err)
+	}
+	if got := terminalSessionIDsForWidget(t, snapshot, "widget-terminal-1"); !reflect.DeepEqual(got, []string{"kept-1"}) {
+		t.Fatalf("widget-terminal-1 sessions = %#v, want kept-1", got)
+	}
+	if got := terminalSessionIDsForWidget(t, snapshot, "widget-terminal-2"); !reflect.DeepEqual(got, []string{"kept-2"}) {
+		t.Fatalf("widget-terminal-2 sessions = %#v, want kept-2", got)
+	}
+}
+
+func terminalSessionIDsForWidget(t *testing.T, snapshot Snapshot, widgetID string) []string {
+	t.Helper()
+
+	for _, state := range snapshot.WidgetStates {
+		if state.WidgetID == widgetID {
+			return state.State.SessionIDs
+		}
+	}
+	t.Fatalf("missing widget state %q in snapshot %#v", widgetID, snapshot.WidgetStates)
+	return nil
+}

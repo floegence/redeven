@@ -87,6 +87,8 @@ type Service struct {
 	codex   *codexbridge.Manager
 	reads   *threadreadstate.Store
 	gw      *gateway.Gateway
+
+	terminalLayoutCleanup func()
 }
 
 func New(ctx context.Context, opts Options) (*Service, error) {
@@ -255,6 +257,17 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = threadReadStateStore.Close()
 		return nil, err
 	}
+	if err := reconcileWorkbenchTerminalSessions(ctx, logger, workbenchLayoutSvc, opts.Terminal); err != nil {
+		_ = reg.Close()
+		_ = pfSvc.Close()
+		_ = notesSvc.Close()
+		_ = workbenchLayoutSvc.Close()
+		_ = aiSvc.Close()
+		_ = codexSvc.Close()
+		_ = threadReadStateStore.Close()
+		return nil, err
+	}
+	terminalLayoutCleanup := registerWorkbenchTerminalSessionCleanup(logger, workbenchLayoutSvc, opts.Terminal)
 
 	gw, err := gateway.New(gateway.Options{
 		Logger:                  logger,
@@ -276,6 +289,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		ListenAddr:              "127.0.0.1:0",
 	})
 	if err != nil {
+		terminalLayoutCleanup()
 		_ = reg.Close()
 		_ = pfSvc.Close()
 		_ = notesSvc.Close()
@@ -286,6 +300,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		return nil, err
 	}
 	if err := gw.Start(ctx); err != nil {
+		terminalLayoutCleanup()
 		_ = reg.Close()
 		_ = pfSvc.Close()
 		_ = notesSvc.Close()
@@ -301,6 +316,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	svc.ai = aiSvc
 	svc.codex = codexSvc
 	svc.reads = threadReadStateStore
+	svc.terminalLayoutCleanup = terminalLayoutCleanup
 
 	return svc, nil
 }
@@ -323,6 +339,9 @@ func (s *Service) Close() error {
 	}
 	if s.notes != nil {
 		_ = s.notes.Close()
+	}
+	if s.terminalLayoutCleanup != nil {
+		s.terminalLayoutCleanup()
 	}
 	if s.layouts != nil {
 		_ = s.layouts.Close()

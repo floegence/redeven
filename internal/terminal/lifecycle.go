@@ -26,8 +26,69 @@ type SessionLifecycleRecord struct {
 	FailureMessage     string           `json:"failure_message,omitempty"`
 }
 
+type SessionLifecycleEvent struct {
+	Reason        string           `json:"reason"`
+	SessionID     string           `json:"session_id"`
+	Lifecycle     SessionLifecycle `json:"lifecycle"`
+	OwnerWidgetID string           `json:"owner_widget_id,omitempty"`
+	Hidden        bool             `json:"hidden,omitempty"`
+	TimestampMs   int64            `json:"timestamp_ms"`
+}
+
+type SessionLifecycleHook func(SessionLifecycleEvent)
+
 func (r SessionLifecycleRecord) hiddenFromUI() bool {
 	return r.Lifecycle == SessionLifecycleClosing || r.Lifecycle == SessionLifecycleCloseFailedHidden
+}
+
+func (m *Manager) AddSessionLifecycleHook(hook SessionLifecycleHook) func() {
+	if m == nil || hook == nil {
+		return func() {}
+	}
+
+	m.mu.Lock()
+	if m.lifecycleHooks == nil {
+		m.lifecycleHooks = make(map[int]SessionLifecycleHook)
+	}
+	m.nextLifecycleID++
+	id := m.nextLifecycleID
+	m.lifecycleHooks[id] = hook
+	m.mu.Unlock()
+
+	return func() {
+		m.mu.Lock()
+		delete(m.lifecycleHooks, id)
+		m.mu.Unlock()
+	}
+}
+
+func (m *Manager) emitSessionLifecycleEvent(event SessionLifecycleEvent) {
+	if m == nil || strings.TrimSpace(event.SessionID) == "" {
+		return
+	}
+
+	var hooks []SessionLifecycleHook
+	m.mu.Lock()
+	if len(m.lifecycleHooks) > 0 {
+		hooks = make([]SessionLifecycleHook, 0, len(m.lifecycleHooks))
+		for _, hook := range m.lifecycleHooks {
+			if hook != nil {
+				hooks = append(hooks, hook)
+			}
+		}
+	}
+	m.mu.Unlock()
+
+	for _, hook := range hooks {
+		func() {
+			defer func() {
+				if recovered := recover(); recovered != nil && m.log != nil {
+					m.log.Error("terminal lifecycle hook panic", "panic", recovered)
+				}
+			}()
+			hook(event)
+		}()
+	}
 }
 
 func (m *Manager) trackSessionOpen(sessionID string) {
@@ -59,6 +120,19 @@ func (m *Manager) visibleSessionInfos() []termgo.TerminalSessionInfo {
 			continue
 		}
 		out = append(out, info.ToSessionInfo())
+	}
+	return out
+}
+
+func (m *Manager) VisibleSessionIDs() []string {
+	infos := m.visibleSessionInfos()
+	out := make([]string, 0, len(infos))
+	for _, info := range infos {
+		sessionID := strings.TrimSpace(info.ID)
+		if sessionID == "" {
+			continue
+		}
+		out = append(out, sessionID)
 	}
 	return out
 }
@@ -147,7 +221,9 @@ func (m *Manager) requestSessionDelete(sessionID string, widgetID string, strict
 	m.sessionLifecycle[sessionID] = record
 	m.mu.Unlock()
 
-	m.broadcastSessionsChanged(buildTerminalSessionsChangedPayload("closing", sessionID, record))
+	payload := buildTerminalSessionsChangedPayload("closing", sessionID, record)
+	m.broadcastSessionsChanged(payload)
+	m.emitSessionLifecycleEvent(sessionLifecycleEventFromPayload(payload))
 
 	go m.runAsyncDeleteSession(sessionID)
 	return nil
@@ -196,7 +272,9 @@ func (m *Manager) markSessionDeleteFailure(sessionID string, failureCode string,
 	m.sessionLifecycle[sessionID] = record
 	m.mu.Unlock()
 
-	m.broadcastSessionsChanged(buildTerminalSessionsChangedPayload("close_failed_hidden", sessionID, record))
+	payload := buildTerminalSessionsChangedPayload("close_failed_hidden", sessionID, record)
+	m.broadcastSessionsChanged(payload)
+	m.emitSessionLifecycleEvent(sessionLifecycleEventFromPayload(payload))
 }
 
 func (m *Manager) finalizeSessionClosed(sessionID string) string {
@@ -292,4 +370,15 @@ func buildTerminalSessionsChangedPayload(
 		payload.FailureMessage = message
 	}
 	return payload
+}
+
+func sessionLifecycleEventFromPayload(payload terminalSessionsChangedPayload) SessionLifecycleEvent {
+	return SessionLifecycleEvent{
+		Reason:        strings.TrimSpace(payload.Reason),
+		SessionID:     strings.TrimSpace(payload.SessionID),
+		Lifecycle:     SessionLifecycle(strings.TrimSpace(payload.Lifecycle)),
+		OwnerWidgetID: strings.TrimSpace(payload.OwnerWidgetID),
+		Hidden:        payload.Hidden,
+		TimestampMs:   payload.TimestampMs,
+	}
 }
