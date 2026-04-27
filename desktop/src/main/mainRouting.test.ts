@@ -102,9 +102,11 @@ describe('main routing', () => {
     expect(mainSrc).toContain('async function buildCurrentDesktopQuitImpact(): Promise<DesktopQuitImpact> {');
     expect(mainSrc).toContain('async function confirmDesktopImpact(');
     expect(mainSrc).toContain('async function requestFinalWindowClose(');
-    expect(mainSrc).toContain('confirmedFinalWindowCloseWebContentsIDs.add(win.webContents.id);');
+    expect(mainSrc).toContain('confirmedFinalWindowCloseWebContentsIDs.add(windowRecord.webContentsID);');
+    expect(mainSrc).toContain('confirmedFinalWindowCloseWebContentsIDs.delete(closedWindow.webContentsID);');
+    expect(mainSrc).not.toContain('confirmedFinalWindowCloseWebContentsIDs.delete(win.webContents.id);');
     expect(mainSrc).toContain('if (process.platform === \'darwin\') {');
-    expect(mainSrc).toContain('void requestFinalWindowClose(win);');
+    expect(mainSrc).toContain('void requestFinalWindowClose(trackedWindow);');
     expect(mainSrc).toContain("if (shouldConfirmDesktopQuit(impact, source)) {");
     expect(mainSrc).toContain('buildDesktopLastWindowCloseConfirmationModel(impact)');
     expect(mainSrc).toContain('buildDesktopQuitConfirmationModel(impact)');
