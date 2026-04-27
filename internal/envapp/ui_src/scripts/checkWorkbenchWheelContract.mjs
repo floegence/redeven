@@ -28,6 +28,7 @@ const allowedRawWheelAttrFiles = new Set([
 const localScrollViewportPropNames = new Set([
   'GIT_WORKBENCH_SCROLL_REGION_PROPS',
   'REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS',
+  'REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS',
   'REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS',
 ]);
 
@@ -171,7 +172,7 @@ function checkJsxNode(node, sourceFile, constants, errors) {
 
   const reason = classContractReason(node, sourceFile, constants);
   if (reason && !isContractedWheelNode(node, sourceFile)) {
-    errors.push(`${lineAndColumn(sourceFile, node)}: ${reason} must spread REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS, GIT_WORKBENCH_SCROLL_REGION_PROPS, or REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS.`);
+    errors.push(`${lineAndColumn(sourceFile, node)}: ${reason} must spread REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS, REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS, GIT_WORKBENCH_SCROLL_REGION_PROPS, or REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS.`);
   }
 }
 

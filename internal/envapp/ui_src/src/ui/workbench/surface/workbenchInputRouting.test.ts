@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LOCAL_INTERACTION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
 
 import {
@@ -24,6 +24,13 @@ import {
   REDEVEN_WORKBENCH_WHEEL_ROLE_LAYOUT_ONLY,
   REDEVEN_WORKBENCH_WHEEL_ROLE_LOCAL_SCROLL_VIEWPORT,
 } from './workbenchWheelInteractive';
+import {
+  ensureWorkbenchTextSelectionSurfaceContract,
+  REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS,
+  REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_ATTR,
+  REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_PROPS,
+  resolveWorkbenchTextSelectionSurfaceTarget,
+} from './workbenchTextSelectionSurface';
 
 describe('workbenchInputRouting', () => {
   afterEach(() => {
@@ -34,6 +41,70 @@ describe('workbenchInputRouting', () => {
     expect(REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS[REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR]).toBe('true');
     expect(REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS[REDEVEN_WORKBENCH_WHEEL_ROLE_ATTR]).toBe(REDEVEN_WORKBENCH_WHEEL_ROLE_LOCAL_SCROLL_VIEWPORT);
     expect(REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS[REDEVEN_WORKBENCH_WHEEL_ROLE_ATTR]).toBe(REDEVEN_WORKBENCH_WHEEL_ROLE_LAYOUT_ONLY);
+  });
+
+  it('publishes explicit text-selection marker props without granting wheel ownership by themselves', () => {
+    expect(REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_PROPS[LOCAL_INTERACTION_SURFACE_ATTR]).toBe('true');
+    expect(REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_PROPS[REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_ATTR]).toBe('true');
+    expect(REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS[REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR]).toBe('true');
+  });
+
+  it('projects native text labels into the text-selection contract without granting wheel ownership', () => {
+    const widget = document.createElement('article');
+    widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
+    widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-files-1');
+
+    const textBlock = document.createElement('div');
+    const textSpan = document.createElement('span');
+    textSpan.textContent = 'Top Processes';
+    textBlock.appendChild(textSpan);
+
+    const actionButton = document.createElement('button');
+    actionButton.type = 'button';
+    actionButton.textContent = 'Refresh';
+
+    widget.append(textBlock, actionButton);
+    document.body.appendChild(widget);
+
+    const originalGetComputedStyle = window.getComputedStyle.bind(window);
+    const getComputedStyleSpy = vi.spyOn(window, 'getComputedStyle').mockImplementation((element) => {
+      const style = originalGetComputedStyle(element);
+      Object.defineProperty(style, 'userSelect', {
+        configurable: true,
+        value: 'none',
+      });
+      return style;
+    });
+
+    expect(resolveWorkbenchTextSelectionSurfaceTarget({
+      target: textSpan,
+      widgetRoot: widget,
+    })).toBe(textSpan);
+    expect(resolveWorkbenchTextSelectionSurfaceTarget({
+      target: actionButton,
+      widgetRoot: widget,
+    })).toBe(actionButton);
+
+    expect(ensureWorkbenchTextSelectionSurfaceContract({
+      target: textSpan,
+      widgetRoot: widget,
+    })).toBe(textSpan);
+    expect(textSpan.getAttribute(LOCAL_INTERACTION_SURFACE_ATTR)).toBe('true');
+    expect(textSpan.getAttribute(REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_ATTR)).toBe('true');
+
+    expect(ensureWorkbenchTextSelectionSurfaceContract({
+      target: actionButton,
+      widgetRoot: widget,
+    })).toBe(actionButton);
+    expect(actionButton.getAttribute(LOCAL_INTERACTION_SURFACE_ATTR)).toBe('true');
+    expect(actionButton.getAttribute(REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_ATTR)).toBe('true');
+    expect(resolveWorkbenchWheelRouting({
+      target: actionButton,
+      disablePanZoom: false,
+      selectedWidgetId: 'widget-files-1',
+    })).toEqual({ kind: 'ignore', reason: 'selected_widget_boundary' });
+
+    getComputedStyleSpy.mockRestore();
   });
 
   it('keeps selected widget bodies from zooming the canvas until they expose a local wheel viewport', () => {
@@ -220,6 +291,59 @@ describe('workbenchInputRouting', () => {
 
     expect(resolveWorkbenchWheelRouting({
       target: dialogAction,
+      disablePanZoom: false,
+      selectedWidgetId: null,
+    })).toEqual({ kind: 'canvas_zoom' });
+  });
+
+  it('keeps selected text-selection surfaces inside the widget boundary when they are not real wheel viewports', () => {
+    const widget = document.createElement('article');
+    widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
+    widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-files-1');
+
+    const textSurface = document.createElement('div');
+    textSurface.setAttribute(LOCAL_INTERACTION_SURFACE_ATTR, 'true');
+    textSurface.setAttribute(REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_ATTR, 'true');
+    const textNode = document.createElement('span');
+    textSurface.appendChild(textNode);
+    widget.appendChild(textSurface);
+    document.body.appendChild(widget);
+
+    expect(resolveWorkbenchWheelRouting({
+      target: textNode,
+      disablePanZoom: false,
+      selectedWidgetId: 'widget-files-1',
+    })).toEqual({ kind: 'ignore', reason: 'selected_widget_boundary' });
+
+    expect(resolveWorkbenchWheelRouting({
+      target: textNode,
+      disablePanZoom: false,
+      selectedWidgetId: null,
+    })).toEqual({ kind: 'canvas_zoom' });
+  });
+
+  it('keeps selected text-selection scroll viewports local while preserving the same unselected canvas handoff', () => {
+    const widget = document.createElement('article');
+    widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
+    widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-files-1');
+
+    const textViewport = document.createElement('div');
+    textViewport.setAttribute(LOCAL_INTERACTION_SURFACE_ATTR, 'true');
+    textViewport.setAttribute(REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_ATTR, 'true');
+    textViewport.setAttribute(REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR, 'true');
+    const line = document.createElement('div');
+    textViewport.appendChild(line);
+    widget.appendChild(textViewport);
+    document.body.appendChild(widget);
+
+    expect(resolveWorkbenchWheelRouting({
+      target: line,
+      disablePanZoom: false,
+      selectedWidgetId: 'widget-files-1',
+    })).toEqual({ kind: 'local_surface', reason: 'wheel_interactive' });
+
+    expect(resolveWorkbenchWheelRouting({
+      target: line,
       disablePanZoom: false,
       selectedWidgetId: null,
     })).toEqual({ kind: 'canvas_zoom' });

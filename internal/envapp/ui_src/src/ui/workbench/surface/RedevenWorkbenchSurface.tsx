@@ -12,8 +12,10 @@ import {
 import {
   findRedevenTerminalWheelSurface,
   redevenWorkbenchInteractionAdapter,
+  REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR,
   resolveWorkbenchWheelRouting,
 } from './workbenchInputRouting';
+import { ensureWorkbenchTextSelectionSurfaceContract } from './workbenchTextSelectionSurface';
 import {
   REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE,
   createWorkbenchOverviewViewport,
@@ -113,6 +115,24 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
     const host = hostRef;
     if (!host) return;
 
+    const handleWidgetTextSelectionPointerDownCapture = (event: PointerEvent) => {
+      if (event.button !== 0) return;
+      if (event.pointerType === 'touch') return;
+
+      const target =
+        event.target instanceof Element
+          ? event.target
+          : event.target instanceof Node
+            ? event.target.parentElement
+            : null;
+      const widgetRoot = target?.closest(`[${REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR}="true"]`) ?? null;
+      if (!widgetRoot) return;
+
+      ensureWorkbenchTextSelectionSurfaceContract({
+        target: event.target,
+        widgetRoot,
+      });
+    };
     const handleTerminalWheelCapture = (event: WheelEvent) => {
       if (FORWARDED_CANVAS_WHEEL_EVENTS.has(event)) {
         FORWARDED_CANVAS_WHEEL_EVENTS.delete(event);
@@ -142,12 +162,17 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
       canvas.dispatchEvent(forwarded);
     };
 
+    host.addEventListener('pointerdown', handleWidgetTextSelectionPointerDownCapture, {
+      capture: true,
+      passive: true,
+    });
     host.addEventListener('wheel', handleTerminalWheelCapture, {
       capture: true,
       passive: false,
     });
 
     onCleanup(() => {
+      host.removeEventListener('pointerdown', handleWidgetTextSelectionPointerDownCapture, true);
       host.removeEventListener('wheel', handleTerminalWheelCapture, true);
     });
   });

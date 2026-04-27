@@ -18,6 +18,7 @@ import {
 } from '@floegence/floe-webapp-core/workbench';
 
 import { REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_SELECTOR } from './workbenchWheelInteractive';
+import { REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_SELECTOR } from './workbenchTextSelectionSurface';
 
 export const REDEVEN_WORKBENCH_SURFACE_ROOT_ATTR = 'data-redeven-workbench-surface-root';
 export const REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR = 'data-redeven-workbench-widget-root';
@@ -124,7 +125,9 @@ function resolveWorkbenchWheelLocalReason(args: {
     return 'typing_element';
   }
 
-  if (element.closest(DEFAULT_LOCAL_INTERACTION_SURFACE_SELECTOR) !== null) {
+  const textSelectionSurface = element.closest(REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_SELECTOR);
+  const localInteractionSurface = element.closest(DEFAULT_LOCAL_INTERACTION_SURFACE_SELECTOR);
+  if (localInteractionSurface !== null && localInteractionSurface !== textSelectionSurface) {
     return 'local_interaction_surface';
   }
 

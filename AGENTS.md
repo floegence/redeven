@@ -181,6 +181,17 @@ git config --global merge.conflictstyle zdiff3
 - If a selected widget looks scrollable but does not actually scroll, fix the layout, height chain, and `overflow` viewport structure instead of weakening wheel-routing rules for unselected widgets.
 - Production Workbench scroll viewports must use the exported wheel contract props from `workbenchWheelInteractive.ts`; do not hand-write raw wheel data attributes or bypass the static `check:workbench-wheel` gate.
 
+## Workbench Text Selection Ownership
+
+- Text selection and copy inside Workbench are a first-class interaction contract alongside wheel, typing, and activation. Do not rely on shell activation, transient focus, global shortcut hacks, or accidental browser defaults as the long-term mechanism.
+- For real text-bearing reading surfaces, drag-to-select must win over widget activation, canvas interaction, and shell focus reclaim. Building or extending a text selection must never trigger widget-body activation, canvas zoom, or terminal focus restoration as a side effect.
+- "Text-bearing reading surfaces" includes both explicitly marked viewers (for example preview/diff/terminal/editor surfaces) and ordinary DOM text regions inside widgets when that text is naturally selectable. Plain headings, labels, status lines, metadata blocks, and similar read-only text must not silently fall back to widget-body activation semantics.
+- A text-selection surface inside the selected widget may own pointer semantics for selection/copy without owning wheel semantics. Unless that same surface is also an explicitly marked real local scroll viewport, wheel must continue to follow the selected-widget guard and resolve to ignore/no-op rather than canvas zoom.
+- Unselected widgets may still become selected on an initial plain click inside a reading surface, but drag-to-select must not be broken by the selection flow. Do not require users to sacrifice native text selection, browser copy, or terminal/Monaco selection lifecycles just to select the widget first.
+- `Ctrl/Cmd+C` should defer to the browser, Monaco, terminal, and other controls that already copy from a real selection. Do not add product-level fallbacks that force copy with no verified local selection or that blanket-intercept every copy shortcut.
+- Any surface that needs special local pointer ownership for text selection must declare it through explicit exported marker/props contracts, and that contract must not silently broaden wheel ownership.
+- If a region looks like selectable text but cannot be selected, extended, or copied reliably, fix its marker contract, focus/activation routing, or DOM structure. Do not paper over the bug by weakening shell interaction globally, granting more power to unselected widgets, or adding scenario-specific shortcut exceptions.
+
 ## Release
 
 ### Runtime Release

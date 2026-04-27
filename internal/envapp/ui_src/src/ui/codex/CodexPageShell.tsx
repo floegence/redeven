@@ -40,7 +40,7 @@ import {
   codexSupportedReasoningEfforts,
   resolveCodexWorkingDir,
 } from './viewModel';
-import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
+import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
 
 const THREAD_SWITCH_STAGING_MIN_WARMUP_FRAMES = 2;
 const THREAD_SWITCH_STAGING_STABLE_FRAMES = 3;
@@ -670,7 +670,7 @@ export function CodexPageShell() {
                 followBottomController.setScrollContainer(element);
                 setTranscriptScrollRegionRef(element);
               }}
-              {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
+              {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
               class="codex-page-transcript-main"
               data-codex-transcript-scroll-region="true"
               onScroll={followBottomController.handleScroll}

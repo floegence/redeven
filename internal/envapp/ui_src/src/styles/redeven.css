@@ -263,6 +263,22 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
   user-select: none;
 }
 
+[data-redeven-workbench-text-selection-surface='true'] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+[data-redeven-workbench-text-selection-surface='true']:not(button, input, textarea, select, summary, a, [role='button'], [role='link'], [role='menuitem'], [role='option'], [role='switch'], [role='tab'], [role='checkbox'], [role='radio']) {
+  cursor: text;
+}
+
+[data-redeven-workbench-text-selection-surface='true'] :where(
+  :not(button, input, textarea, select, summary, a, [role='button'], [role='link'], [role='menuitem'], [role='option'], [role='switch'], [role='tab'], [role='checkbox'], [role='radio'])
+) {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 .git-browser-selection-surface {
   border-color: var(--git-browser-selection-border);
   background: var(--git-browser-selection-bg);

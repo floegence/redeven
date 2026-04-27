@@ -4,10 +4,17 @@ import { createEffect, createSignal, onCleanup } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createWorkbenchFilterState, type WorkbenchState, type WorkbenchWidgetDefinition } from '@floegence/floe-webapp-core/workbench';
-import { CANVAS_WHEEL_INTERACTIVE_ATTR } from '@floegence/floe-webapp-core/ui';
+import {
+  CANVAS_WHEEL_INTERACTIVE_ATTR,
+  WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR,
+} from '@floegence/floe-webapp-core/ui';
 
 import { RedevenWorkbenchSurface } from './RedevenWorkbenchSurface';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from './workbenchWheelInteractive';
+import {
+  REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_ATTR,
+  REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_PROPS,
+} from './workbenchTextSelectionSurface';
 
 vi.mock('solid-motionone', () => ({
   Motion: new Proxy(
@@ -553,5 +560,190 @@ describe('RedevenWorkbenchSurface interaction contract', () => {
     expect(pointerDown.defaultPrevented).toBe(false);
     expect(state().selectedWidgetId).toBe('widget-button-1');
     expect(clicks).toEqual([true]);
+  });
+
+  it('keeps selected text-selection surfaces from emitting widget-body activation while leaving explicit activation surfaces intact', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const activationDefinitions: readonly WorkbenchWidgetDefinition[] = [
+      {
+        type: 'redeven.text-panel',
+        label: 'Text Panel',
+        icon: () => null,
+        body: (props) => (
+          <div data-testid="activation-widget-body">
+            <div data-testid="activation-seq">{String(props.activation?.seq ?? 0)}</div>
+            <div
+              {...REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_PROPS}
+              data-testid="text-selection-surface"
+            >
+              Selectable output
+            </div>
+            <div
+              {...{ [WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR]: 'true' }}
+              data-testid="explicit-activation-surface"
+            >
+              Explicit activation
+            </div>
+          </div>
+        ),
+        defaultTitle: 'Text Panel',
+        defaultSize: { width: 320, height: 220 },
+      },
+    ];
+    const [state, setState] = createSignal<WorkbenchState>({
+      version: 1,
+      widgets: [
+        {
+          id: 'widget-text-1',
+          type: 'redeven.text-panel',
+          title: 'Text Panel',
+          x: 80,
+          y: 64,
+          width: 320,
+          height: 220,
+          z_index: 1,
+          created_at_unix_ms: 1,
+        },
+      ],
+      viewport: { x: 120, y: 72, scale: 1 },
+      locked: false,
+      filters: createWorkbenchFilterState(activationDefinitions),
+      selectedWidgetId: 'widget-text-1',
+      theme: 'default',
+    });
+
+    render(() => (
+      <RedevenWorkbenchSurface
+        state={state}
+        setState={setState}
+        widgetDefinitions={activationDefinitions}
+        filterBarWidgetTypes={[]}
+        enableKeyboard={false}
+      />
+    ), host);
+
+    await flushWorkbenchInteraction();
+
+    const textSelectionSurface = host.querySelector('[data-testid="text-selection-surface"]') as HTMLElement | null;
+    const explicitActivationSurface = host.querySelector('[data-testid="explicit-activation-surface"]') as HTMLElement | null;
+    const activationSeq = () => host.querySelector('[data-testid="activation-seq"]')?.textContent ?? '';
+
+    expect(textSelectionSurface).toBeTruthy();
+    expect(explicitActivationSurface).toBeTruthy();
+    expect(activationSeq()).toBe('0');
+
+    dispatchPrimaryClickSequence(textSelectionSurface!);
+    await flushWorkbenchInteraction();
+    expect(activationSeq()).toBe('0');
+
+    dispatchPrimaryClickSequence(explicitActivationSurface!);
+    await flushWorkbenchInteraction();
+    expect(activationSeq()).toBe('1');
+  });
+
+  it('projects native widget text into the text-selection contract before widget activation runs', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const originalGetComputedStyle = window.getComputedStyle.bind(window);
+    const getComputedStyleSpy = vi.spyOn(window, 'getComputedStyle').mockImplementation((element) => {
+      const style = originalGetComputedStyle(element);
+      Object.defineProperty(style, 'userSelect', {
+        configurable: true,
+        value: 'none',
+      });
+      return style;
+    });
+
+    const activationDefinitions: readonly WorkbenchWidgetDefinition[] = [
+      {
+        type: 'redeven.native-text-panel',
+        label: 'Native Text Panel',
+        icon: () => null,
+        body: (props) => (
+          <div data-testid="native-text-widget-body">
+            <div data-testid="activation-seq">{String(props.activation?.seq ?? 0)}</div>
+            <div data-testid="native-text-block">
+              <span data-testid="native-text-target">Top Processes</span>
+            </div>
+            <button type="button" data-testid="native-text-button">
+              Fetch
+            </button>
+            <button type="button" data-testid="nested-native-text-button">
+              <span data-testid="nested-native-text-target">History</span>
+            </button>
+          </div>
+        ),
+        defaultTitle: 'Native Text Panel',
+        defaultSize: { width: 320, height: 220 },
+      },
+    ];
+    const [state, setState] = createSignal<WorkbenchState>({
+      version: 1,
+      widgets: [
+        {
+          id: 'widget-native-text-1',
+          type: 'redeven.native-text-panel',
+          title: 'Native Text Panel',
+          x: 80,
+          y: 64,
+          width: 320,
+          height: 220,
+          z_index: 1,
+          created_at_unix_ms: 1,
+        },
+      ],
+      viewport: { x: 120, y: 72, scale: 1 },
+      locked: false,
+      filters: createWorkbenchFilterState(activationDefinitions),
+      selectedWidgetId: 'widget-native-text-1',
+      theme: 'default',
+    });
+
+    render(() => (
+      <RedevenWorkbenchSurface
+        state={state}
+        setState={setState}
+        widgetDefinitions={activationDefinitions}
+        filterBarWidgetTypes={[]}
+        enableKeyboard={false}
+      />
+    ), host);
+
+    await flushWorkbenchInteraction();
+
+    const nativeTextTarget = host.querySelector('[data-testid="native-text-target"]') as HTMLElement | null;
+    const nativeTextButton = host.querySelector('[data-testid="native-text-button"]') as HTMLElement | null;
+    const nestedNativeTextTarget = host.querySelector('[data-testid="nested-native-text-target"]') as HTMLElement | null;
+    const activationSeq = () => host.querySelector('[data-testid="activation-seq"]')?.textContent ?? '';
+
+    expect(nativeTextTarget).toBeTruthy();
+    expect(nativeTextButton).toBeTruthy();
+    expect(nestedNativeTextTarget).toBeTruthy();
+    expect(activationSeq()).toBe('0');
+
+    const pointerDown = dispatchPointerEvent('pointerdown', nativeTextTarget!, { pointerId: 17 });
+    await flushWorkbenchInteraction();
+
+    expect(pointerDown.defaultPrevented).toBe(false);
+    expect(activationSeq()).toBe('0');
+    expect(nativeTextTarget?.getAttribute(REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_ATTR)).toBe('true');
+    expect(nativeTextTarget?.getAttribute('data-floe-local-interaction-surface')).toBe('true');
+
+    const buttonPointerDown = dispatchPointerEvent('pointerdown', nativeTextButton!, { pointerId: 18 });
+    await flushWorkbenchInteraction();
+
+    expect(buttonPointerDown.defaultPrevented).toBe(false);
+    expect(activationSeq()).toBe('0');
+    expect(nativeTextButton?.getAttribute(REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_ATTR)).toBe('true');
+
+    const nestedPointerDown = dispatchPointerEvent('pointerdown', nestedNativeTextTarget!, { pointerId: 19 });
+    await flushWorkbenchInteraction();
+
+    expect(nestedPointerDown.defaultPrevented).toBe(false);
+    expect(activationSeq()).toBe('0');
+    expect(nestedNativeTextTarget?.getAttribute(REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_ATTR)).toBe('true');
+    getComputedStyleSpy.mockRestore();
   });
 });

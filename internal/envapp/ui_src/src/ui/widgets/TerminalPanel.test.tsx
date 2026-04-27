@@ -3,9 +3,10 @@
 import { For, Show, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
+import { LOCAL_INTERACTION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
 
 import { TerminalPanel } from './TerminalPanel';
+import { REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_ATTR } from '../workbench/surface/workbenchTextSelectionSurface';
 
 const layoutState = vi.hoisted(() => ({
   mobile: false,
@@ -253,6 +254,7 @@ vi.mock('@floegence/floe-webapp-core/loading', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
+  LOCAL_INTERACTION_SURFACE_ATTR: 'data-floe-local-interaction-surface',
   WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR: 'data-floe-workbench-widget-activation-surface',
   Button: (props: any) => (
     <button
@@ -1587,7 +1589,7 @@ describe('TerminalPanel', () => {
     expect(focusSpy).toHaveBeenCalled();
   });
 
-  it('marks the live terminal host as a shared activation surface in workbench mode', async () => {
+  it('marks the live terminal host as a text-selection surface in workbench mode', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -1596,7 +1598,44 @@ describe('TerminalPanel', () => {
 
     const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
     expect(terminalSurface).toBeTruthy();
-    expect(terminalSurface?.getAttribute(WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR)).toBe('true');
+    expect(terminalSurface?.getAttribute(LOCAL_INTERACTION_SURFACE_ATTR)).toBe('true');
+    expect(terminalSurface?.getAttribute(REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_ATTR)).toBe('true');
+  });
+
+  it('restores focus on plain click inside workbench terminal surfaces when no selection exists', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+    focusSpy.mockClear();
+
+    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
+    expect(terminalSurface).toBeTruthy();
+
+    terminalSurface?.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }));
+    await settleTerminalPanel();
+
+    expect(focusSpy).toHaveBeenCalled();
+  });
+
+  it('does not restore focus on workbench terminal clicks while the terminal already owns a selection', async () => {
+    terminalSelectionState.text = 'pnpm test';
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+    focusSpy.mockClear();
+
+    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
+    expect(terminalSurface).toBeTruthy();
+
+    terminalSurface?.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }));
+    await settleTerminalPanel();
+
+    expect(focusSpy).not.toHaveBeenCalled();
   });
 
   it('defaults to the Floe keyboard on mobile and sends payloads to the active session', async () => {

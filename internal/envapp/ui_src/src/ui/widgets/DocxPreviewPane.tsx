@@ -1,7 +1,7 @@
 import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { Button } from '@floegence/floe-webapp-core/ui';
 
-import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
+import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
 
 const DOCX_RENDER_CLASS_NAME = 'docx-preview-container';
 const DOCX_PREVIEW_INSET = 12;
@@ -310,7 +310,7 @@ export function DocxPreviewPane(props: DocxPreviewPaneProps) {
 
           <div
             ref={viewportEl}
-            {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
+            {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
             class="docx-preview-pane relative flex-1 min-h-0 overflow-auto bg-muted/30"
           >
             <div class="box-border min-h-full min-w-full p-3">

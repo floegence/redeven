@@ -2,7 +2,7 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount }
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { Button } from '@floegence/floe-webapp-core/ui';
 
-import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
+import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
 import {
   isPDFRenderCancelled,
   loadPDFDocument,
@@ -687,7 +687,7 @@ export function PdfPreviewPane(props: PdfPreviewPaneProps) {
 
       <div
         ref={viewportEl}
-        {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
+        {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
         class="pdf-preview-pane relative flex-1 min-h-0 overflow-auto bg-muted/20 p-3"
       >
         <Show

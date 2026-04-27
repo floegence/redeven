@@ -10,7 +10,6 @@ import {
   MobileKeyboard,
   Tabs,
   TabPanel,
-  WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR,
   type DropdownItem,
   type TabItem,
 } from '@floegence/floe-webapp-core/ui';
@@ -68,7 +67,7 @@ import { fileItemFromPath } from '../utils/filePreviewItem';
 import { createTerminalFileLinkProvider, type TerminalResolvedLinkTarget } from '../services/terminalLinkProvider';
 import { TerminalShellIntegrationParser, type TerminalShellIntegrationEvent } from '../services/terminalShellIntegration';
 import { createTerminalTabActivityTracker, type TerminalTabVisualState } from '../services/terminalTabActivity';
-import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
+import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
 import { FloatingContextMenu, type FloatingContextMenuItem } from './FloatingContextMenu';
 
 type session_loading_state = 'idle' | 'initializing' | 'attaching' | 'loading_history';
@@ -213,6 +212,7 @@ type terminal_session_view_props = {
   registerCore: (sessionId: string, core: TerminalCore | null) => void;
   registerSurfaceElement: (sessionId: string, surface: HTMLDivElement | null) => void;
   registerActions: (sessionId: string, actions: { reload: () => Promise<void> } | null) => void;
+  onSurfaceClick?: (event: MouseEvent) => void;
   onBell?: (sessionId: string) => void;
   onShellIntegrationEvent?: (sessionId: string, event: TerminalShellIntegrationEvent, source: 'history' | 'live') => void;
   onVisibleOutput?: (sessionId: string, source: 'history' | 'live', byteLength: number) => void;
@@ -789,9 +789,9 @@ function TerminalSessionView(props: terminal_session_view_props) {
           container = n;
           props.registerSurfaceElement(sessionId(), n);
         }}
-        {...{ [WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR]: props.variant === 'workbench' ? 'true' : undefined }}
-        {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
+        {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
         class="absolute top-2 left-2 right-0 bottom-0 redeven-terminal-surface"
+        onClick={(event) => props.onSurfaceClick?.(event)}
         style={{
           transition: 'opacity 0.15s ease-out',
           bottom: 'var(--terminal-bottom-inset)',
@@ -1455,6 +1455,25 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     requestAnimationFrame(() => {
       getActiveCore()?.focus();
     });
+  };
+
+  const activeTerminalHasSelection = () => {
+    const core = getActiveCore();
+    try {
+      return Boolean(core?.hasSelection?.() ?? false);
+    } catch {
+      return false;
+    }
+  };
+
+  const handleWorkbenchTerminalSurfaceClick = (event: MouseEvent) => {
+    if (variant !== 'workbench') return;
+    if (event.button !== 0) return;
+    if (event.defaultPrevented) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (!viewActive()) return;
+    if (activeTerminalHasSelection()) return;
+    restoreActiveTerminalFocus();
   };
 
   createEffect(() => {
@@ -2706,6 +2725,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                         registerCore={registerCore}
                         registerSurfaceElement={registerSurfaceElement}
                         registerActions={registerActions}
+                        onSurfaceClick={handleWorkbenchTerminalSurfaceClick}
                         onBell={handleSessionBell}
                         onShellIntegrationEvent={handleShellIntegrationEvent}
                         onVisibleOutput={handleVisibleOutput}
