@@ -373,11 +373,14 @@ const WELCOME_RUNTIME_POLL_INTERVAL_MS = 5_000;
 const DESKTOP_RUNTIME_PROBE_TIMEOUT_MS = 1_500;
 const DESKTOP_SESSION_INITIAL_LOAD_TIMEOUT_MS = 15_000;
 const DESKTOP_STALE_WINDOW_MESSAGE = 'That window was already closed. Desktop refreshed the environment list.';
+const DESKTOP_GPU_TILE_MEMORY_BUDGET_MB = 1024;
 const pendingDesktopDeepLinks: string[] = [];
 let controlPlaneSyncPollTimer: NodeJS.Timeout | null = null;
 let welcomeRuntimePollTimer: NodeJS.Timeout | null = null;
 let desktopWelcomeSnapshotRevision = 0;
 
+// Apply before Electron is ready so Chromium sizes compositor tile memory for desktop Workbench surfaces.
+app.commandLine.appendSwitch('force-gpu-mem-available-mb', String(DESKTOP_GPU_TILE_MEMORY_BUDGET_MB));
 installStdioBrokenPipeGuards();
 
 function compact(value: unknown): string {

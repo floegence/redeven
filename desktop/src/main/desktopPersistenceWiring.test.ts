@@ -70,6 +70,8 @@ describe('desktop persistence wiring', () => {
     expect(mainSrc).toContain('liveTrackedBrowserWindow');
     expect(mainSrc).toContain("const UTILITY_WINDOW_KINDS = ['launcher'] as const;");
     expect(mainSrc).toContain('const sessionKeyByWebContentsID = new Map<number, DesktopSessionKey>();');
+    expect(mainSrc).toContain('const DESKTOP_GPU_TILE_MEMORY_BUDGET_MB = 1024;');
+    expect(mainSrc).toContain("app.commandLine.appendSwitch('force-gpu-mem-available-mb', String(DESKTOP_GPU_TILE_MEMORY_BUDGET_MB));");
     expect(mainSrc).toContain("function windowSurfaceForRole(role: CreateBrowserWindowArgs['role']): DesktopWindowSurface {");
     expect(mainSrc).toContain("return role === 'launcher' ? 'utility' : 'session';");
     expect(mainSrc).toContain("const preloadPath = surface === 'utility'");
