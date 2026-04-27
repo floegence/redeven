@@ -113,6 +113,15 @@ function runtimeReadyDetail(environment: DesktopEnvironmentEntry): string {
   return 'The runtime is ready. Open is available now.';
 }
 
+function feedbackMatches(
+  feedback: EnvironmentGuidanceFeedback | null,
+  expected: EnvironmentGuidanceFeedback,
+): boolean {
+  return feedback?.tone === expected.tone
+    && feedback.title === expected.title
+    && feedback.detail === expected.detail;
+}
+
 export function completeEnvironmentGuidanceSuccess(
   state: EnvironmentGuidanceSessionState,
   environment: DesktopEnvironmentEntry | null | undefined,
@@ -120,14 +129,18 @@ export function completeEnvironmentGuidanceSuccess(
   if (!state) {
     return state;
   }
+  const feedback: EnvironmentGuidanceFeedback = {
+    tone: 'success',
+    title: 'Runtime ready',
+    detail: environment ? runtimeReadyDetail(environment) : 'The runtime is ready. Open is available now.',
+  };
+  if (state.pending_intent === null && feedbackMatches(state.feedback, feedback)) {
+    return state;
+  }
   return {
     ...state,
     pending_intent: null,
-    feedback: {
-      tone: 'success',
-      title: 'Runtime ready',
-      detail: environment ? runtimeReadyDetail(environment) : 'The runtime is ready. Open is available now.',
-    },
+    feedback,
   };
 }
 

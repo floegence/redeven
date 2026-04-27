@@ -133,4 +133,27 @@ describe('environmentGuidanceSession', () => {
       },
     });
   });
+
+  it('keeps settled success reconciliation referentially stable', () => {
+    const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
+      label: 'Demo Local Serve',
+    });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [testManagedLocalEnvironment('default'), localServe],
+      }),
+      openSessions: [
+        testManagedSession(localServe, 'http://127.0.0.1:24001/'),
+      ],
+    });
+    const providerEntry = snapshot.environments.find((entry) => entry.kind === 'provider_environment');
+
+    expect(providerEntry).toBeTruthy();
+    const settled = reconcileEnvironmentGuidanceSession(
+      startEnvironmentGuidanceIntent(null, providerEntry!.id, 'start_runtime'),
+      snapshot.environments,
+    );
+
+    expect(reconcileEnvironmentGuidanceSession(settled, snapshot.environments)).toBe(settled);
+  });
 });
