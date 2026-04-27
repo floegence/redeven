@@ -71,6 +71,13 @@ export function launcherActionFailurePresentation(
         refresh_snapshot: refreshSnapshot,
         delivery,
       };
+    case 'runtime_start_failed':
+      return {
+        message: failure.message,
+        tone: 'error',
+        refresh_snapshot: refreshSnapshot,
+        delivery,
+      };
     default:
       return {
         message: failure.message,

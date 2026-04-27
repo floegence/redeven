@@ -643,6 +643,37 @@ function launcherActionFailureFromUnexpectedError(error: unknown): DesktopLaunch
   );
 }
 
+function firstDisplayLine(value: unknown): string {
+  return String(value ?? '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean) ?? '';
+}
+
+function launcherActionFailureFromRuntimeStartError(
+  error: unknown,
+  options: Readonly<{
+    environmentID?: string;
+    providerOrigin?: string;
+    providerID?: string;
+    envPublicID?: string;
+  }> = {},
+): DesktopLauncherActionFailure {
+  const message = firstDisplayLine(error instanceof Error ? error.message : error);
+  return launcherActionFailure(
+    'runtime_start_failed',
+    'environment',
+    message || 'Start Runtime did not complete.',
+    {
+      environmentID: options.environmentID,
+      providerOrigin: options.providerOrigin,
+      providerID: options.providerID,
+      envPublicID: options.envPublicID,
+      shouldRefreshSnapshot: true,
+    },
+  );
+}
+
 function preferencesPaths() {
   return defaultDesktopPreferencesPaths(app.getPath('userData'));
 }
@@ -3472,13 +3503,6 @@ async function startEnvironmentRuntimeFromLauncher(
 
     const providerManagedEnvironment = providerEnvironmentAsManagedEnvironment(providerEnvironment);
     try {
-      const existingRuntime = await attachManagedEnvironmentRuntime(providerManagedEnvironment);
-      if (existingRuntime) {
-        resetLauncherIssueState();
-        broadcastDesktopWelcomeSnapshots();
-        return launcherActionSuccess('started_environment_runtime');
-      }
-
       const bootstrap = await resolveManagedEnvironmentBootstrap(preferences, providerManagedEnvironment);
       const prepared = await prepareManagedTarget({
         environment: providerManagedEnvironment,
@@ -3515,18 +3539,16 @@ async function startEnvironmentRuntimeFromLauncher(
           providerID: providerEnvironment.provider_id,
           envPublicID: providerEnvironment.env_public_id,
         })
-        ?? launcherActionFailureFromUnexpectedError(error);
+        ?? launcherActionFailureFromRuntimeStartError(error, {
+          environmentID: providerEnvironment.id,
+          providerOrigin: providerEnvironment.provider_origin,
+          providerID: providerEnvironment.provider_id,
+          envPublicID: providerEnvironment.env_public_id,
+        });
     }
   }
 
   try {
-    const existingRuntime = await attachManagedEnvironmentRuntime(environment);
-    if (existingRuntime) {
-      resetLauncherIssueState();
-      broadcastDesktopWelcomeSnapshots();
-      return launcherActionSuccess('started_environment_runtime');
-    }
-
     const bootstrap = await resolveManagedEnvironmentBootstrap(preferences, environment);
     const prepared = await prepareManagedTarget({
       environment,
@@ -3560,7 +3582,12 @@ async function startEnvironmentRuntimeFromLauncher(
         providerID: managedEnvironmentProviderID(environment),
         envPublicID: managedEnvironmentPublicID(environment),
       })
-      ?? launcherActionFailureFromUnexpectedError(error);
+      ?? launcherActionFailureFromRuntimeStartError(error, {
+        environmentID: environment.id,
+        providerOrigin: managedEnvironmentProviderOrigin(environment),
+        providerID: managedEnvironmentProviderID(environment),
+        envPublicID: managedEnvironmentPublicID(environment),
+      });
   }
 }
 

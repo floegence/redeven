@@ -63,6 +63,7 @@ export type DesktopLauncherActionFailureCode =
   | 'provider_sync_required'
   | 'provider_unreachable'
   | 'provider_invalid_response'
+  | 'runtime_start_failed'
   | 'action_invalid';
 export type DesktopLauncherActionKind =
   | 'open_managed_environment'

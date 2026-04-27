@@ -13,6 +13,8 @@ const STARTUP_REPORT_POLL_MS = 100;
 const DEFAULT_STARTUP_TIMEOUT_MS = 30_000;
 const DEFAULT_STOP_TIMEOUT_MS = 5_000;
 const DEFAULT_RUNTIME_ATTACH_TIMEOUT_MS = 1_500;
+const DEFAULT_RUNTIME_STABILITY_WINDOW_MS = 1_200;
+const DEFAULT_RUNTIME_STABILITY_POLL_MS = 250;
 const MAX_RECENT_LOG_CHARS = 8_000;
 
 type SpawnedRuntimeProcess = ChildProcessByStdio<Writable, Readable, Readable>;
@@ -35,6 +37,8 @@ export type StartManagedRuntimeArgs = Readonly<{
   stopTimeoutMs?: number;
   runtimeStateFile?: string;
   runtimeAttachTimeoutMs?: number;
+  runtimeStabilityWindowMs?: number;
+  runtimeStabilityPollMs?: number;
   passwordStdin?: string;
   onLog?: (stream: 'stdout' | 'stderr', chunk: string) => void;
 }>;
@@ -200,6 +204,102 @@ function processExists(pid: number): boolean {
   }
 }
 
+function runtimeExitedReadinessFailure(
+  child: SpawnedRuntimeProcess | null,
+  logs: RecentLogs,
+): Error | null {
+  if (!child) {
+    return null;
+  }
+  if (child.exitCode !== null) {
+    return readinessFailure(
+      `Redeven runtime exited during startup readiness checks (exit code: ${child.exitCode}).`,
+      logs,
+    );
+  }
+  if (child.signalCode) {
+    return readinessFailure(
+      `Redeven runtime exited during startup readiness checks (signal: ${child.signalCode}).`,
+      logs,
+    );
+  }
+  return null;
+}
+
+function runtimePIDExited(startup: StartupReport): boolean {
+  if (startup.desktop_managed !== true) {
+    return false;
+  }
+  const pid = Number(startup.pid ?? Number.NaN);
+  return Number.isInteger(pid) && pid > 0 && !processExists(pid);
+}
+
+function assertRuntimePIDAlive(startup: StartupReport, logs: RecentLogs): void {
+  if (!runtimePIDExited(startup)) {
+    return;
+  }
+  throw readinessFailure(
+    'Start Runtime found a stale desktop-managed runtime process.',
+    logs,
+  );
+}
+
+async function requireAttachableRuntimeReadiness(args: Readonly<{
+  runtimeStateFile: string;
+  probeTimeoutMs: number;
+  logs: RecentLogs;
+  unavailableMessage: string;
+}>): Promise<StartupReport> {
+  const attachedStartup = await loadAttachableRuntimeState(args.runtimeStateFile, args.probeTimeoutMs);
+  if (!attachedStartup) {
+    throw readinessFailure(args.unavailableMessage, args.logs);
+  }
+  assertRuntimePIDAlive(attachedStartup, args.logs);
+  return attachedStartup;
+}
+
+async function waitForStableRuntimeReadiness(args: Readonly<{
+  startup: StartupReport;
+  runtimeStateFile: string;
+  probeTimeoutMs: number;
+  stabilityWindowMs: number;
+  pollIntervalMs: number;
+  child: SpawnedRuntimeProcess | null;
+  logs: RecentLogs;
+  getSpawnError?: () => Error | null;
+}>): Promise<StartupReport> {
+  const stabilityWindowMs = Math.max(0, Math.floor(args.stabilityWindowMs));
+  const pollIntervalMs = Math.max(50, Math.floor(args.pollIntervalMs));
+  const requiredProbeCount = stabilityWindowMs > 0 ? 2 : 1;
+  const deadline = Date.now() + stabilityWindowMs;
+  let probeCount = 0;
+  let latestStartup = args.startup;
+
+  for (;;) {
+    const spawnError = args.getSpawnError?.() ?? null;
+    if (spawnError) {
+      throw readinessFailure(`Redeven runtime failed during startup readiness checks: ${spawnError.message}`, args.logs);
+    }
+    const exitFailure = runtimeExitedReadinessFailure(args.child, args.logs);
+    if (exitFailure) {
+      throw exitFailure;
+    }
+
+    latestStartup = await requireAttachableRuntimeReadiness({
+      runtimeStateFile: args.runtimeStateFile,
+      probeTimeoutMs: args.probeTimeoutMs,
+      logs: args.logs,
+      unavailableMessage: 'Start Runtime did not complete because the runtime process did not stay online.',
+    });
+    probeCount += 1;
+    if (Date.now() >= deadline && probeCount >= requiredProbeCount) {
+      return latestStartup;
+    }
+
+    await delay(pollIntervalMs);
+  }
+}
+
 async function stopAttachedProcess(pid: number, timeoutMs: number): Promise<void> {
   if (!Number.isInteger(pid) || pid <= 0 || !processExists(pid)) {
     return;
@@ -278,8 +378,11 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
   };
   const runtimeStateFile = String(args.runtimeStateFile ?? '').trim() || defaultRuntimeStatePath(mergedEnv);
   const runtimeAttachTimeoutMs = args.runtimeAttachTimeoutMs ?? DEFAULT_RUNTIME_ATTACH_TIMEOUT_MS;
+  const runtimeStabilityWindowMs = args.runtimeStabilityWindowMs ?? DEFAULT_RUNTIME_STABILITY_WINDOW_MS;
+  const runtimeStabilityPollMs = args.runtimeStabilityPollMs ?? DEFAULT_RUNTIME_STABILITY_POLL_MS;
   const existingRuntime = await loadAttachableRuntimeState(runtimeStateFile, runtimeAttachTimeoutMs);
   if (existingRuntime) {
+    assertRuntimePIDAlive(existingRuntime, { stdout: '', stderr: '' });
     return {
       kind: 'ready',
       managedRuntime: {
@@ -357,26 +460,12 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
     if (launchReport.status === 'attached') {
       await stopChildProcess(child, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS).catch(() => undefined);
       await fs.rm(reportDir, { recursive: true, force: true }).catch(() => undefined);
-      return {
-        kind: 'ready',
-        managedRuntime: {
-          child: null,
-          startup,
-          reportDir: null,
-          reportFile: null,
-          attached: true,
-          stop: attachedStop(startup, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS),
-        },
-        spawned: true,
-      };
-    }
-
-    if (spawnError || child.exitCode !== null || child.signalCode) {
-      const attachedStartup = await loadAttachableRuntimeState(runtimeStateFile, runtimeAttachTimeoutMs);
-      if (!attachedStartup) {
-        throw readinessFailure('redeven reported readiness but exited before Desktop could attach.', recentLogs);
-      }
-      await fs.rm(reportDir, { recursive: true, force: true }).catch(() => undefined);
+      const attachedStartup = await requireAttachableRuntimeReadiness({
+        runtimeStateFile,
+        probeTimeoutMs: runtimeAttachTimeoutMs,
+        logs: recentLogs,
+        unavailableMessage: 'Start Runtime did not complete because the attached runtime is no longer online.',
+      });
       return {
         kind: 'ready',
         managedRuntime: {
@@ -391,11 +480,45 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
       };
     }
 
+    if (spawnError || child.exitCode !== null || child.signalCode) {
+      const attachedStartup = await loadAttachableRuntimeState(runtimeStateFile, runtimeAttachTimeoutMs);
+      if (!attachedStartup) {
+        throw readinessFailure(
+          'Start Runtime did not complete because the runtime process exited before Desktop could attach.',
+          recentLogs,
+        );
+      }
+      await fs.rm(reportDir, { recursive: true, force: true }).catch(() => undefined);
+      assertRuntimePIDAlive(attachedStartup, recentLogs);
+      return {
+        kind: 'ready',
+        managedRuntime: {
+          child: null,
+          startup: attachedStartup,
+          reportDir: null,
+          reportFile: null,
+          attached: true,
+          stop: attachedStop(attachedStartup, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS),
+        },
+        spawned: true,
+      };
+    }
+
+    const stableStartup = await waitForStableRuntimeReadiness({
+      startup,
+      runtimeStateFile,
+      probeTimeoutMs: runtimeAttachTimeoutMs,
+      stabilityWindowMs: runtimeStabilityWindowMs,
+      pollIntervalMs: runtimeStabilityPollMs,
+      child,
+      logs: recentLogs,
+      getSpawnError: () => spawnError,
+    });
     return {
       kind: 'ready',
       managedRuntime: {
         child,
-        startup,
+        startup: stableStartup,
         reportDir,
         reportFile,
         attached: false,
@@ -409,7 +532,7 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
   } catch (error) {
     await stopChildProcess(child, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS).catch(() => undefined);
     await fs.rm(reportDir, { recursive: true, force: true }).catch(() => undefined);
-      throw error;
+    throw error;
   }
 }
 
