@@ -63,6 +63,12 @@ describe('main routing', () => {
     expect(mainSrc).not.toContain("throw new Error('That environment window is no longer open.')");
   });
 
+  it('keeps desktop windows unthrottled while the user works in other apps', () => {
+    const mainSrc = readMainSource();
+
+    expect(mainSrc).toContain('backgroundThrottling: false,');
+  });
+
   it('protects the default local environment from deletion and rejects duplicate auto-derived local names', () => {
     const mainSrc = readMainSource();
 
