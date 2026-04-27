@@ -88,6 +88,7 @@ import {
 import { GitChangesBreadcrumb } from "./GitChangesBreadcrumb";
 import { GitDiffDialog } from "./GitDiffDialog";
 import { GitVirtualTable } from "./GitVirtualTable";
+import { GIT_WORKBENCH_SCROLL_REGION_PROPS } from "./gitWorkbenchScrollRegion";
 import {
   GIT_CHANGED_FILES_CELL_CLASS,
   GIT_CHANGED_FILES_HEADER_CELL_CLASS,
@@ -896,7 +897,7 @@ function HistoryList(
                     }
                   >
                     <GitTableFrame class="flex min-h-0 flex-1 flex-col">
-                      <div class="min-h-0 flex-1 overflow-auto">
+                      <div {...GIT_WORKBENCH_SCROLL_REGION_PROPS} class="min-h-0 flex-1 overflow-auto">
                         <table class="w-full min-w-[42rem] text-xs md:min-w-0">
                           <thead class="sticky top-0 z-10 bg-muted/30 backdrop-blur">
                             <tr

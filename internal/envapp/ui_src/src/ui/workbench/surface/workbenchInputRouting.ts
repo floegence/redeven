@@ -26,6 +26,7 @@ export const FLOE_DIALOG_SURFACE_HOST_ATTR = 'data-floe-dialog-surface-host';
 export const REDEVEN_WORKBENCH_INTERACTIVE_SELECTOR = '[data-floe-canvas-interactive="true"]';
 export const REDEVEN_WORKBENCH_PAN_SURFACE_SELECTOR = '[data-floe-canvas-pan-surface="true"]';
 export const REDEVEN_TERMINAL_WHEEL_SURFACE_SELECTOR = '.redeven-terminal-surface';
+export const REDEVEN_SELECTED_WIDGET_BOUNDARY_WHEEL_REASON = 'selected_widget_boundary';
 
 export { WORKBENCH_WIDGET_SHELL_ATTR };
 
@@ -153,6 +154,19 @@ function createWorkbenchWheelRoutingDecision(args: {
   return { kind: 'canvas_zoom' };
 }
 
+function createSelectedWidgetWheelRoutingDecision(args: {
+  target: EventTarget | null;
+  selectedWidgetId?: string | null;
+  wheelInteractiveSelector: string;
+}): WorkbenchWheelRoutingDecision {
+  const localReason = resolveWorkbenchWheelLocalReason(args);
+  if (localReason) {
+    return { kind: 'local_surface', reason: localReason };
+  }
+
+  return { kind: 'ignore', reason: REDEVEN_SELECTED_WIDGET_BOUNDARY_WHEEL_REASON };
+}
+
 export function findWorkbenchWidgetElement(
   root: ParentNode | null | undefined,
   widgetId: string,
@@ -242,14 +256,11 @@ export function resolveWorkbenchWheelRouting(args: {
     if (ownerWidgetId !== null && ownerWidgetId === args.selectedWidgetId) {
       const terminalSurface = findRedevenTerminalWheelSurface(args.target);
       if (terminalSurface && !redevenTerminalWheelSurfaceHasFocus(terminalSurface)) {
-        return args.disablePanZoom
-          ? { kind: 'ignore', reason: 'pan_zoom_disabled' }
-          : { kind: 'canvas_zoom' };
+        return { kind: 'ignore', reason: REDEVEN_SELECTED_WIDGET_BOUNDARY_WHEEL_REASON };
       }
 
-      return createWorkbenchWheelRoutingDecision({
+      return createSelectedWidgetWheelRoutingDecision({
         target: args.target,
-        disablePanZoom: args.disablePanZoom,
         selectedWidgetId: args.selectedWidgetId,
         wheelInteractiveSelector,
       });

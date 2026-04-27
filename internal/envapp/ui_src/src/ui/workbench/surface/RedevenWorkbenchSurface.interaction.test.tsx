@@ -58,6 +58,7 @@ function createWorkbenchState(): WorkbenchState {
 
 function createTerminalWorkbenchState(
   definitions: readonly WorkbenchWidgetDefinition[],
+  selectedWidgetId: string | null = 'widget-terminal-1',
 ): WorkbenchState {
   return {
     version: 1,
@@ -77,7 +78,7 @@ function createTerminalWorkbenchState(
     viewport: { x: 120, y: 72, scale: 1 },
     locked: false,
     filters: createWorkbenchFilterState(definitions),
-    selectedWidgetId: 'widget-terminal-1',
+    selectedWidgetId,
     theme: 'default',
   };
 }
@@ -233,8 +234,11 @@ describe('RedevenWorkbenchSurface interaction contract', () => {
     expect(widgetRoot?.getAttribute(CANVAS_WHEEL_INTERACTIVE_ATTR)).toBe('true');
     expect(document.activeElement).toBe(widgetInput);
 
+    const selectedScale = readState().viewport.scale;
     const wheelWhileSelected = dispatchWheel(widgetBody!, -120);
-    expect(wheelWhileSelected.defaultPrevented).toBe(true);
+    expect(wheelWhileSelected.defaultPrevented).toBe(false);
+    await flushWorkbenchWheelCommit();
+    expect(readState().viewport.scale).toBe(selectedScale);
 
     dispatchPointerEvent('pointerdown', canvas!, { pointerId: 2 });
     dispatchPointerEvent('pointerup', canvas!, { pointerId: 2 });
@@ -244,11 +248,90 @@ describe('RedevenWorkbenchSurface interaction contract', () => {
     expect(widgetRoot?.getAttribute(CANVAS_WHEEL_INTERACTIVE_ATTR)).toBeNull();
     expect(document.activeElement).toBe(surfaceRoot);
 
+    const canvasScale = readState().viewport.scale;
     const wheelAfterCanvasHandoff = dispatchWheel(widgetBody!, -120);
     expect(wheelAfterCanvasHandoff.defaultPrevented).toBe(true);
+    await flushWorkbenchWheelCommit();
+    expect(readState().viewport.scale).toBeGreaterThan(canvasScale);
   });
 
-  it('forwards canvas-owned terminal wheel gestures before terminal capture handlers consume them', async () => {
+  it('forwards unselected terminal wheel gestures before terminal capture handlers consume them', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const terminalWheelCapture = vi.fn((event: WheelEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    const terminalDefinitions: readonly WorkbenchWidgetDefinition[] = [
+      {
+        type: 'redeven.terminal-panel',
+        label: 'Terminal',
+        icon: () => null,
+        body: () => {
+          let terminalRef: HTMLDivElement | undefined;
+
+          createEffect(() => {
+            const terminal = terminalRef;
+            if (!terminal) return;
+
+            terminal.addEventListener('wheel', terminalWheelCapture, {
+              capture: true,
+              passive: false,
+            });
+            onCleanup(() => {
+              terminal.removeEventListener('wheel', terminalWheelCapture, true);
+            });
+          });
+
+          return (
+            <div
+              ref={terminalRef}
+              class="redeven-terminal-surface"
+              data-floe-canvas-wheel-interactive="true"
+              data-testid="terminal-surface"
+            >
+              <textarea aria-label="Terminal input" data-testid="terminal-input" />
+            </div>
+          );
+        },
+        defaultTitle: 'Terminal',
+        defaultSize: { width: 420, height: 280 },
+      },
+    ];
+    const [state, setState] = createSignal(createTerminalWorkbenchState(terminalDefinitions, null));
+
+    render(() => (
+      <RedevenWorkbenchSurface
+        state={state}
+        setState={setState}
+        widgetDefinitions={terminalDefinitions}
+        filterBarWidgetTypes={[]}
+        enableKeyboard={false}
+      />
+    ), host);
+
+    await flushWorkbenchInteraction();
+
+    const canvas = host.querySelector('.floe-infinite-canvas') as HTMLElement | null;
+    const terminalSurface = host.querySelector('[data-testid="terminal-surface"]') as HTMLElement | null;
+
+    expect(canvas).toBeTruthy();
+    expect(terminalSurface).toBeTruthy();
+
+    mockCanvasRect(canvas!);
+
+    const wheel = dispatchWheel(terminalSurface!, -120);
+
+    expect(wheel.defaultPrevented).toBe(true);
+    expect(terminalWheelCapture).not.toHaveBeenCalled();
+
+    await flushWorkbenchWheelCommit();
+
+    expect(state().viewport.scale).toBeGreaterThan(1);
+  });
+
+  it('suppresses selected terminal wheel gestures while focus is outside the terminal', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -321,7 +404,7 @@ describe('RedevenWorkbenchSurface interaction contract', () => {
 
     await flushWorkbenchWheelCommit();
 
-    expect(state().viewport.scale).toBeGreaterThan(1);
+    expect(state().viewport.scale).toBe(1);
   });
 
   it('leaves terminal wheel gestures local while focus is inside the selected terminal', async () => {

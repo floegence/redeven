@@ -25,7 +25,7 @@ describe('workbenchInputRouting', () => {
     document.body.innerHTML = '';
   });
 
-  it('keeps selected widget bodies zoomable until they expose a local wheel viewport', () => {
+  it('keeps selected widget bodies from zooming the canvas until they expose a local wheel viewport', () => {
     const widget = document.createElement('article');
     widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
     widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-files-1');
@@ -39,13 +39,13 @@ describe('workbenchInputRouting', () => {
       target: body,
       disablePanZoom: false,
       selectedWidgetId: 'widget-files-1',
-    })).toEqual({ kind: 'canvas_zoom' });
+    })).toEqual({ kind: 'ignore', reason: 'selected_widget_boundary' });
 
     expect(resolveWorkbenchWheelRouting({
       target: body,
       disablePanZoom: true,
       selectedWidgetId: 'widget-files-1',
-    })).toEqual({ kind: 'ignore', reason: 'pan_zoom_disabled' });
+    })).toEqual({ kind: 'ignore', reason: 'selected_widget_boundary' });
   });
 
   it('keeps ordinary widget regions zoomable until their widget is selected', () => {
@@ -120,7 +120,7 @@ describe('workbenchInputRouting', () => {
       target: body,
       disablePanZoom: false,
       selectedWidgetId: 'widget-files-1',
-    })).toEqual({ kind: 'canvas_zoom' });
+    })).toEqual({ kind: 'ignore', reason: 'selected_widget_boundary' });
   });
 
   it('keeps explicit wheel viewports inside the selected widget local', () => {
@@ -141,6 +141,32 @@ describe('workbenchInputRouting', () => {
       disablePanZoom: false,
       selectedWidgetId: 'widget-files-1',
     })).toEqual({ kind: 'local_surface', reason: 'wheel_interactive' });
+  });
+
+  it('keeps git browser scroll regions local inside the selected files widget', () => {
+    const widget = document.createElement('article');
+    widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
+    widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-files-1');
+
+    const gitScrollViewport = document.createElement('div');
+    gitScrollViewport.setAttribute(REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR, 'true');
+    const row = document.createElement('button');
+    row.type = 'button';
+    gitScrollViewport.appendChild(row);
+    widget.appendChild(gitScrollViewport);
+    document.body.appendChild(widget);
+
+    expect(resolveWorkbenchWheelRouting({
+      target: row,
+      disablePanZoom: false,
+      selectedWidgetId: 'widget-files-1',
+    })).toEqual({ kind: 'local_surface', reason: 'wheel_interactive' });
+
+    expect(resolveWorkbenchWheelRouting({
+      target: row,
+      disablePanZoom: false,
+      selectedWidgetId: 'widget-terminal-1',
+    })).toEqual({ kind: 'canvas_zoom' });
   });
 
   it('keeps explicit non-widget wheel consumers local', () => {
@@ -188,7 +214,7 @@ describe('workbenchInputRouting', () => {
     })).toEqual({ kind: 'canvas_zoom' });
   });
 
-  it('routes selected terminal wheels to canvas while terminal focus is elsewhere', () => {
+  it('suppresses selected terminal wheels while terminal focus is elsewhere', () => {
     const widget = document.createElement('article');
     widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
     widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-terminal-1');
@@ -204,7 +230,7 @@ describe('workbenchInputRouting', () => {
       target: terminalSurface,
       disablePanZoom: false,
       selectedWidgetId: 'widget-terminal-1',
-    })).toEqual({ kind: 'canvas_zoom' });
+    })).toEqual({ kind: 'ignore', reason: 'selected_widget_boundary' });
   });
 
   it('keeps selected terminal wheels local only while focus is inside the terminal surface', () => {
