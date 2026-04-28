@@ -9,11 +9,14 @@ DESKTOP_DIR="$ROOT_DIR/desktop"
 source "$SCRIPT_DIR/ui_package_common.sh"
 
 OPEN_DEVTOOLS="${REDEVEN_DESKTOP_OPEN_DEVTOOLS:-1}"
+REMOTE_DEBUGGING_PORT="${REDEVEN_DESKTOP_REMOTE_DEBUGGING_PORT:-9222}"
+INSPECT_PORT="${REDEVEN_DESKTOP_INSPECT_PORT:-9230}"
 STOP_EXISTING=1
 STOP_ONLY=0
 DRY_RUN=0
 STOP_TIMEOUT_SECONDS="${REDEVEN_DESKTOP_STOP_TIMEOUT_SECONDS:-8}"
 ELECTRON_ARGS=()
+ELECTRON_DEBUG_ARGS=()
 COLLECTED_PIDS=()
 
 usage() {
@@ -28,11 +31,16 @@ Options:
   --no-stop                 Skip stopping existing Redeven Desktop/runtime processes.
   --stop-only               Stop existing Redeven Desktop/runtime processes, then exit.
   --stop-timeout <seconds>  Seconds to wait before force-stopping processes (default: 8).
+  --remote-debugging-port <port|0>
+                            Electron Chrome DevTools Protocol port (default: 9222, 0 disables).
+  --inspect-port <port|0>   Electron main-process inspector port (default: 9230, 0 disables).
   --dry-run                 Print the stop/start actions without changing processes.
   -h, --help                Show this help.
 
 Environment:
   REDEVEN_DESKTOP_OPEN_DEVTOOLS=0|1
+  REDEVEN_DESKTOP_REMOTE_DEBUGGING_PORT=<port|0>
+  REDEVEN_DESKTOP_INSPECT_PORT=<port|0>
   REDEVEN_DESKTOP_STOP_TIMEOUT_SECONDS=<seconds>
   REDEVEN_AGENT_FORCE_INSTALL=1
 USAGE
@@ -61,6 +69,80 @@ validate_stop_timeout() {
   esac
 }
 
+debug_port_disabled() {
+  case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -d ' \t\r\n')" in
+    ''|0|false|no|off|disabled)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+validate_debug_port() {
+  local label="$1"
+  local value="$2"
+
+  if debug_port_disabled "$value"; then
+    return 0
+  fi
+  case "$value" in
+    *[!0-9]*)
+      die_usage "$label must be a TCP port number, or 0 to disable it"
+      ;;
+  esac
+  if [ "$value" -lt 1 ] || [ "$value" -gt 65535 ]; then
+    die_usage "$label must be between 1 and 65535, or 0 to disable it"
+  fi
+}
+
+electron_args_include_switch() {
+  local switch_name="$1"
+  local arg
+
+  if [ "${#ELECTRON_ARGS[@]}" -eq 0 ]; then
+    return 1
+  fi
+  for arg in "${ELECTRON_ARGS[@]}"; do
+    if [ "$arg" = "$switch_name" ] || [[ "$arg" == "$switch_name="* ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+electron_args_include_inspect_switch() {
+  local arg
+
+  if [ "${#ELECTRON_ARGS[@]}" -eq 0 ]; then
+    return 1
+  fi
+  for arg in "${ELECTRON_ARGS[@]}"; do
+    case "$arg" in
+      --inspect|--inspect=*|--inspect-brk|--inspect-brk=*)
+        return 0
+        ;;
+    esac
+  done
+  return 1
+}
+
+build_electron_debug_args() {
+  ELECTRON_DEBUG_ARGS=()
+
+  if ! debug_port_disabled "$REMOTE_DEBUGGING_PORT" && ! electron_args_include_switch "--remote-debugging-port"; then
+    if ! electron_args_include_switch "--remote-debugging-address"; then
+      ELECTRON_DEBUG_ARGS+=("--remote-debugging-address=127.0.0.1")
+    fi
+    ELECTRON_DEBUG_ARGS+=("--remote-debugging-port=$REMOTE_DEBUGGING_PORT")
+  fi
+
+  if ! debug_port_disabled "$INSPECT_PORT" && ! electron_args_include_inspect_switch; then
+    ELECTRON_DEBUG_ARGS+=("--inspect=127.0.0.1:$INSPECT_PORT")
+  fi
+}
+
 print_command() {
   local arg
   for arg in "$@"; do
@@ -82,11 +164,13 @@ add_pid() {
     return 0
   fi
 
-  for existing in "${COLLECTED_PIDS[@]}"; do
-    if [ "$existing" = "$pid" ]; then
-      return 0
-    fi
-  done
+  if [ "${#COLLECTED_PIDS[@]}" -gt 0 ]; then
+    for existing in "${COLLECTED_PIDS[@]}"; do
+      if [ "$existing" = "$pid" ]; then
+        return 0
+      fi
+    done
+  fi
   COLLECTED_PIDS+=("$pid")
 }
 
@@ -174,7 +258,7 @@ collect_desktop_pids() {
 
 collect_runtime_pids() {
   reset_collected_pids
-  collect_pids_by_pattern '(^|/)redeven([[:space:]]|$).*([[:space:]]|^)run([[:space:]]|$)'
+  collect_pids_by_pattern 'redeven[[:space:]]run[[:space:]]'
 }
 
 pid_exists() {
@@ -258,7 +342,7 @@ ensure_desktop_workspace() {
 }
 
 start_desktop() {
-  local cmd=(npm run start)
+  local cmd=("./node_modules/.bin/electron")
 
   ui_pkg_log "Starting Redeven Desktop from the current checkout..."
   ui_pkg_log "ROOT_DIR: $ROOT_DIR"
@@ -268,12 +352,32 @@ start_desktop() {
   else
     ui_pkg_log "DevTools: disabled"
   fi
+  if electron_args_include_switch "--remote-debugging-port"; then
+    ui_pkg_log "CDP remote debugging: configured by explicit Electron args"
+  elif debug_port_disabled "$REMOTE_DEBUGGING_PORT"; then
+    ui_pkg_log "CDP remote debugging: disabled"
+  else
+    ui_pkg_log "CDP remote debugging: http://127.0.0.1:$REMOTE_DEBUGGING_PORT/json/version"
+  fi
+  if electron_args_include_inspect_switch; then
+    ui_pkg_log "Main-process inspector: configured by explicit Electron args"
+  elif debug_port_disabled "$INSPECT_PORT"; then
+    ui_pkg_log "Main-process inspector: disabled"
+  else
+    ui_pkg_log "Main-process inspector: 127.0.0.1:$INSPECT_PORT"
+  fi
 
+  if [ "${#ELECTRON_DEBUG_ARGS[@]}" -gt 0 ]; then
+    cmd+=("${ELECTRON_DEBUG_ARGS[@]}")
+  fi
+  cmd+=(.)
   if [ "${#ELECTRON_ARGS[@]}" -gt 0 ]; then
-    cmd+=(-- "${ELECTRON_ARGS[@]}")
+    cmd+=("${ELECTRON_ARGS[@]}")
   fi
 
   if [ "$DRY_RUN" -eq 1 ]; then
+    printf 'Would run in %q: npm run build\n' "$DESKTOP_DIR"
+    printf 'Would run in %q: npm run prepare:bundled-runtime\n' "$DESKTOP_DIR"
     printf 'Would run in %q: ' "$DESKTOP_DIR"
     print_command "${cmd[@]}"
     return 0
@@ -285,6 +389,8 @@ start_desktop() {
       npm ci
     fi
     export REDEVEN_DESKTOP_OPEN_DEVTOOLS="$OPEN_DEVTOOLS"
+    npm run build
+    npm run prepare:bundled-runtime
     exec "${cmd[@]}"
   )
 }
@@ -311,6 +417,20 @@ parse_args() {
         STOP_TIMEOUT_SECONDS="$2"
         shift 2
         ;;
+      --remote-debugging-port)
+        if [ "$#" -lt 2 ]; then
+          die_usage "--remote-debugging-port requires a value"
+        fi
+        REMOTE_DEBUGGING_PORT="$2"
+        shift 2
+        ;;
+      --inspect-port)
+        if [ "$#" -lt 2 ]; then
+          die_usage "--inspect-port requires a value"
+        fi
+        INSPECT_PORT="$2"
+        shift 2
+        ;;
       --dry-run)
         DRY_RUN=1
         shift 1
@@ -335,6 +455,9 @@ parse_args() {
 main() {
   parse_args "$@"
   validate_stop_timeout
+  validate_debug_port "--remote-debugging-port" "$REMOTE_DEBUGGING_PORT"
+  validate_debug_port "--inspect-port" "$INSPECT_PORT"
+  build_electron_debug_args
   stop_existing_processes
   if [ "$STOP_ONLY" -eq 1 ]; then
     return 0

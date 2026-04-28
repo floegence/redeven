@@ -33,8 +33,8 @@ importers:
         specifier: ^0.36.38
         version: 0.36.38(solid-js@1.9.11)
       '@floegence/floeterm-terminal-web':
-        specifier: ^0.4.19
-        version: 0.4.19(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: ^0.4.20
+        version: 0.4.20(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@floegence/flowersec-core':
         specifier: ^0.19.4
         version: 0.19.4
@@ -488,8 +488,8 @@ packages:
     peerDependencies:
       solid-js: ^1.8.0
 
-  '@floegence/floeterm-terminal-web@0.4.19':
-    resolution: {integrity: sha512-GEXC6Fl0/4Z9IdmcxVQyY1kNW+6NqjAeyeMO4WMOTCOczAvrMykJis3HnvmCg5AEZD6FjiGGG7UMeKNgNXr6Pw==}
+  '@floegence/floeterm-terminal-web@0.4.20':
+    resolution: {integrity: sha512-Yk9nt5jO/aX04H8tCxNHVBGpsX43XLjRz55GDQ91jsMIgwJwttENxRT7SpQrquCjp3cZR8YpMRuFOysEXfTqKA==}
     peerDependencies:
       react: '>=18'
       react-dom: '>=18'
@@ -3148,7 +3148,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/floeterm-terminal-web@0.4.19(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@floegence/floeterm-terminal-web@0.4.20(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       ghostty-web: 0.4.0-next.14.g6a1a50d
       react: 18.3.1
