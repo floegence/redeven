@@ -126,6 +126,15 @@ const transportMocks = vi.hoisted(() => ({
   resize: vi.fn().mockResolvedValue(undefined),
   attach: vi.fn().mockResolvedValue(undefined),
   history: vi.fn().mockResolvedValue([]),
+  historyPage: vi.fn().mockResolvedValue({
+    chunks: [],
+    nextStartSeq: 0,
+    hasMore: false,
+    firstSequence: 0,
+    lastSequence: 0,
+    coveredBytes: 0,
+    totalBytes: 0,
+  }),
   getSessionStats: vi.fn().mockResolvedValue({ history: { totalBytes: 0 } }),
   clear: vi.fn().mockResolvedValue(undefined),
 }));
@@ -250,7 +259,11 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/loading', () => ({
-  LoadingOverlay: (props: any) => (props.visible ? <div>{props.message}</div> : null),
+  LoadingOverlay: (props: any) => (
+    <Show when={props.visible}>
+      <div>{props.message}</div>
+    </Show>
+  ),
 }));
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
@@ -669,6 +682,34 @@ vi.mock('../utils/clipboard', () => ({
 
 const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
 const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
+
+type TestTerminalHistoryPage = {
+  chunks: Array<{ sequence: number; timestampMs: number; data: Uint8Array }>;
+  nextStartSeq: number;
+  hasMore: boolean;
+  firstSequence: number;
+  lastSequence: number;
+  coveredBytes: number;
+  totalBytes: number;
+};
+
+function makeTerminalHistoryPage(overrides: Partial<TestTerminalHistoryPage> = {}): TestTerminalHistoryPage {
+  return {
+    chunks: [],
+    nextStartSeq: 0,
+    hasMore: false,
+    firstSequence: 0,
+    lastSequence: 0,
+    coveredBytes: 0,
+    totalBytes: 0,
+    ...overrides,
+  };
+}
+
+function decodeTerminalWrite(value: unknown): string {
+  return value instanceof Uint8Array ? textDecoder.decode(value) : '';
+}
 
 async function settleTerminalPanel() {
   await Promise.resolve();
@@ -760,6 +801,15 @@ describe('TerminalPanel', () => {
     transportMocks.resize.mockResolvedValue(undefined);
     transportMocks.attach.mockResolvedValue(undefined);
     transportMocks.history.mockResolvedValue([]);
+    transportMocks.historyPage.mockResolvedValue({
+      chunks: [],
+      nextStartSeq: 0,
+      hasMore: false,
+      firstSequence: 0,
+      lastSequence: 0,
+      coveredBytes: 0,
+      totalBytes: 0,
+    });
     transportMocks.getSessionStats.mockResolvedValue({ history: { totalBytes: 0 } });
     transportMocks.clear.mockResolvedValue(undefined);
     Object.values(rpcFsMocks).forEach((mock) => {
@@ -1547,13 +1597,22 @@ describe('TerminalPanel', () => {
 
     const inactiveCore = terminalCoreInstances[1];
     inactiveCore?.write.mockClear();
-    transportMocks.history.mockClear();
-    transportMocks.history.mockResolvedValue([
-      {
-        sequence: 1,
-        data: textEncoder.encode('background output'),
-      },
-    ]);
+    transportMocks.historyPage.mockClear();
+    transportMocks.historyPage.mockResolvedValue({
+      chunks: [
+        {
+          sequence: 1,
+          timestampMs: 42,
+          data: textEncoder.encode('background output'),
+        },
+      ],
+      nextStartSeq: 0,
+      hasMore: false,
+      firstSequence: 1,
+      lastSequence: 1,
+      coveredBytes: 'background output'.length,
+      totalBytes: 'background output'.length,
+    });
 
     emitTerminalData('session-2', 'background output', 1);
     await settleTerminalPanel();
@@ -1566,9 +1625,123 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     const reloadedCore = terminalCoreInstances[terminalCoreInstances.length - 1];
-    expect(transportMocks.history).toHaveBeenCalledWith('session-2', 0, -1);
+    expect(transportMocks.historyPage).toHaveBeenCalledWith('session-2', 0, -1);
     const firstWrite = reloadedCore?.write.mock.calls[0]?.[0] as Uint8Array | undefined;
     expect(firstWrite ? new TextDecoder().decode(firstWrite) : '').toBe('background output');
+  });
+
+  it('replays terminal history page-by-page and shows progress while a later page is loading', async () => {
+    let releaseSecondPage: (page: TestTerminalHistoryPage) => void = () => {};
+    const secondPage = new Promise<TestTerminalHistoryPage>((resolve) => {
+      releaseSecondPage = resolve;
+    });
+    transportMocks.historyPage.mockReset();
+    transportMocks.historyPage
+      .mockResolvedValueOnce(makeTerminalHistoryPage({
+        chunks: [
+          {
+            sequence: 1,
+            timestampMs: 10,
+            data: textEncoder.encode('alpha'),
+          },
+        ],
+        nextStartSeq: 2,
+        hasMore: true,
+        firstSequence: 1,
+        lastSequence: 1,
+        coveredBytes: 5,
+        totalBytes: 10,
+      }))
+      .mockReturnValueOnce(secondPage);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await vi.waitFor(() => {
+      expect(transportMocks.historyPage).toHaveBeenCalledTimes(2);
+    });
+
+    await new Promise<void>((resolve) => setTimeout(resolve, 170));
+    expect(host.textContent).toContain('Loading history 5 B / 10 B');
+
+    const core = terminalCoreInstances[0];
+    expect(core?.clear).toHaveBeenCalled();
+    expect(core?.startHistoryReplay).toHaveBeenCalledWith(120_000);
+
+    releaseSecondPage(makeTerminalHistoryPage({
+      chunks: [
+        {
+          sequence: 2,
+          timestampMs: 20,
+          data: textEncoder.encode('omega'),
+        },
+      ],
+      hasMore: false,
+      firstSequence: 2,
+      lastSequence: 2,
+      coveredBytes: 5,
+      totalBytes: 10,
+    }));
+
+    await vi.waitFor(() => {
+      expect(core?.endHistoryReplay).toHaveBeenCalled();
+    });
+    await vi.waitFor(() => {
+      expect(core?.write).toHaveBeenCalledTimes(2);
+    });
+
+    expect(transportMocks.historyPage).toHaveBeenNthCalledWith(1, 'session-1', 0, -1);
+    expect(transportMocks.historyPage).toHaveBeenNthCalledWith(2, 'session-1', 2, -1);
+    expect(core?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toEqual(['alpha', 'omega']);
+  });
+
+  it('deduplicates live chunks buffered while terminal history pages replay', async () => {
+    let releaseHistoryPage: (page: TestTerminalHistoryPage) => void = () => {};
+    const historyPage = new Promise<TestTerminalHistoryPage>((resolve) => {
+      releaseHistoryPage = resolve;
+    });
+    transportMocks.historyPage.mockReset();
+    transportMocks.historyPage.mockReturnValueOnce(historyPage);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await vi.waitFor(() => {
+      expect(transportMocks.historyPage).toHaveBeenCalledTimes(1);
+    });
+
+    const core = terminalCoreInstances[0];
+    emitTerminalData('session-1', 'duplicate', 1);
+    emitTerminalData('session-1', 'fresh', 2);
+    await settleTerminalPanel();
+
+    expect(core?.write).not.toHaveBeenCalled();
+
+    releaseHistoryPage(makeTerminalHistoryPage({
+      chunks: [
+        {
+          sequence: 1,
+          timestampMs: 10,
+          data: textEncoder.encode('duplicate'),
+        },
+      ],
+      hasMore: false,
+      firstSequence: 1,
+      lastSequence: 1,
+      coveredBytes: 9,
+      totalBytes: 9,
+    }));
+
+    await vi.waitFor(() => {
+      expect(core?.endHistoryReplay).toHaveBeenCalled();
+    });
+    await vi.waitFor(() => {
+      expect(core?.write).toHaveBeenCalledTimes(2);
+    });
+
+    expect(core?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toEqual(['duplicate', 'fresh']);
   });
 
   it('does not recreate a session when the same open-session request id is replayed', async () => {

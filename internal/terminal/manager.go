@@ -36,6 +36,13 @@ const (
 	TypeID_TERMINAL_SESSIONS_CHANGED uint32 = 2012 // notify (agent -> client): terminal sessions list changed
 )
 
+const (
+	defaultTerminalHistoryPageChunks = 256
+	maxTerminalHistoryPageChunks     = 512
+	defaultTerminalHistoryPageBytes  = 384 * 1024
+	maxTerminalHistoryPageBytes      = 512 * 1024
+)
+
 var ErrSessionNotFound = errors.New("terminal session not found")
 
 type Manager struct {
@@ -269,25 +276,13 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 			return nil, &rpc.Error{Code: 404, Message: "terminal session not found"}
 		}
 
-		chunks, err := sess.GetHistoryFromSequence(req.StartSeq)
+		page, err := sess.GetHistoryPage(normalizeTerminalHistoryPageOptions(req))
 		if err != nil {
 			m.log.Warn("terminal history failed", "session_id", sessionID, "error", err)
 			return nil, &rpc.Error{Code: 500, Message: "failed to read history"}
 		}
 
-		endSeq := req.EndSeq
-		out := make([]terminalHistoryChunk, 0, len(chunks))
-		for _, c := range chunks {
-			if endSeq > 0 && c.Sequence > endSeq {
-				continue
-			}
-			out = append(out, terminalHistoryChunk{
-				Sequence:    c.Sequence,
-				TimestampMs: c.Timestamp,
-				DataB64:     base64.StdEncoding.EncodeToString(c.Data),
-			})
-		}
-		return &terminalHistoryResp{Chunks: out}, nil
+		return terminalHistoryRespFromPage(page), nil
 	})
 
 	// Session stats (history buffer size, etc.)
@@ -883,9 +878,11 @@ type terminalSessionsChangedPayload struct {
 }
 
 type terminalHistoryReq struct {
-	SessionID string `json:"session_id"`
-	StartSeq  int64  `json:"start_seq"`
-	EndSeq    int64  `json:"end_seq"`
+	SessionID   string `json:"session_id"`
+	StartSeq    int64  `json:"start_seq"`
+	EndSeq      int64  `json:"end_seq"`
+	LimitChunks int    `json:"limit_chunks,omitempty"`
+	MaxBytes    int    `json:"max_bytes,omitempty"`
 }
 
 type terminalHistoryChunk struct {
@@ -895,7 +892,66 @@ type terminalHistoryChunk struct {
 }
 
 type terminalHistoryResp struct {
-	Chunks []terminalHistoryChunk `json:"chunks"`
+	Chunks        []terminalHistoryChunk `json:"chunks"`
+	NextStartSeq  int64                  `json:"next_start_seq,omitempty"`
+	HasMore       bool                   `json:"has_more,omitempty"`
+	FirstSequence int64                  `json:"first_sequence,omitempty"`
+	LastSequence  int64                  `json:"last_sequence,omitempty"`
+	CoveredBytes  int64                  `json:"covered_bytes,omitempty"`
+	TotalBytes    int64                  `json:"total_bytes,omitempty"`
+}
+
+func normalizeTerminalHistoryPageOptions(req *terminalHistoryReq) termgo.HistoryPageOptions {
+	if req == nil {
+		return termgo.HistoryPageOptions{
+			LimitChunks: defaultTerminalHistoryPageChunks,
+			MaxBytes:    defaultTerminalHistoryPageBytes,
+		}
+	}
+
+	limitChunks := req.LimitChunks
+	if limitChunks <= 0 {
+		limitChunks = defaultTerminalHistoryPageChunks
+	}
+	if limitChunks > maxTerminalHistoryPageChunks {
+		limitChunks = maxTerminalHistoryPageChunks
+	}
+
+	maxBytes := req.MaxBytes
+	if maxBytes <= 0 {
+		maxBytes = defaultTerminalHistoryPageBytes
+	}
+	if maxBytes > maxTerminalHistoryPageBytes {
+		maxBytes = maxTerminalHistoryPageBytes
+	}
+
+	return termgo.HistoryPageOptions{
+		StartSeq:    req.StartSeq,
+		EndSeq:      req.EndSeq,
+		LimitChunks: limitChunks,
+		MaxBytes:    maxBytes,
+	}
+}
+
+func terminalHistoryRespFromPage(page termgo.HistoryPage) *terminalHistoryResp {
+	out := make([]terminalHistoryChunk, 0, len(page.Chunks))
+	for _, c := range page.Chunks {
+		out = append(out, terminalHistoryChunk{
+			Sequence:    c.Sequence,
+			TimestampMs: c.Timestamp,
+			DataB64:     base64.StdEncoding.EncodeToString(c.Data),
+		})
+	}
+
+	return &terminalHistoryResp{
+		Chunks:        out,
+		NextStartSeq:  page.NextStartSeq,
+		HasMore:       page.HasMore,
+		FirstSequence: page.FirstSequence,
+		LastSequence:  page.LastSequence,
+		CoveredBytes:  page.CoveredBytes,
+		TotalBytes:    page.TotalBytes,
+	}
 }
 
 type terminalStatsReq struct {

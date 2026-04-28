@@ -119,4 +119,81 @@ describe('terminalTransport', () => {
       rows: 30,
     });
   });
+
+  it('requests bounded terminal history pages with cursor metadata', async () => {
+    const chunk = { sequence: 2, timestampMs: 10, data: new Uint8Array([1, 2, 3]) };
+    const rpc = createRpcMock({
+      history: vi.fn().mockResolvedValue({
+        chunks: [chunk],
+        nextStartSeq: 3,
+        hasMore: true,
+        firstSequence: 2,
+        lastSequence: 2,
+        coveredBytes: 3,
+        totalBytes: 9,
+      }),
+    });
+    const transport = createRedevenTerminalTransport(rpc, 'conn-1');
+
+    const page = await transport.historyPage('session-1', 2, -1, {
+      limitChunks: 10,
+      maxBytes: 1024,
+    });
+
+    expect(rpc.terminal.history).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      startSeq: 2,
+      endSeq: -1,
+      limitChunks: 10,
+      maxBytes: 1024,
+    });
+    expect(page).toEqual({
+      chunks: [chunk],
+      nextStartSeq: 3,
+      hasMore: true,
+      firstSequence: 2,
+      lastSequence: 2,
+      coveredBytes: 3,
+      totalBytes: 9,
+    });
+  });
+
+  it('drains legacy terminal history through bounded pages', async () => {
+    const first = { sequence: 1, timestampMs: 10, data: new Uint8Array([1]) };
+    const second = { sequence: 2, timestampMs: 20, data: new Uint8Array([2]) };
+    const rpc = createRpcMock({
+      history: vi.fn()
+        .mockResolvedValueOnce({
+          chunks: [first],
+          nextStartSeq: 2,
+          hasMore: true,
+          firstSequence: 1,
+          lastSequence: 1,
+          coveredBytes: 1,
+          totalBytes: 2,
+        })
+        .mockResolvedValueOnce({
+          chunks: [second],
+          nextStartSeq: 0,
+          hasMore: false,
+          firstSequence: 2,
+          lastSequence: 2,
+          coveredBytes: 1,
+          totalBytes: 2,
+        }),
+    });
+    const transport = createRedevenTerminalTransport(rpc, 'conn-1');
+
+    await expect(transport.history('session-1', 0, -1)).resolves.toEqual([first, second]);
+    expect(rpc.terminal.history).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      sessionId: 'session-1',
+      startSeq: 0,
+      endSeq: -1,
+    }));
+    expect(rpc.terminal.history).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      sessionId: 'session-1',
+      startSeq: 2,
+      endSeq: -1,
+    }));
+  });
 });

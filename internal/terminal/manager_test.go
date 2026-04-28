@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"encoding/base64"
 	"errors"
 	"os"
 	"path/filepath"
@@ -102,6 +103,65 @@ func TestAttachSessionActivatesDormantSessionAndKeepsResizeWorking(t *testing.T)
 	}
 
 	waitForPTYSize(t, sess, 95, 29, 2*time.Second)
+}
+
+func TestNormalizeTerminalHistoryPageOptionsDefaultsAndClamps(t *testing.T) {
+	defaults := normalizeTerminalHistoryPageOptions(&terminalHistoryReq{
+		SessionID: "session-1",
+		StartSeq:  7,
+		EndSeq:    -1,
+	})
+	if defaults.StartSeq != 7 || defaults.EndSeq != -1 {
+		t.Fatalf("unexpected sequence bounds: %+v", defaults)
+	}
+	if defaults.LimitChunks != defaultTerminalHistoryPageChunks {
+		t.Fatalf("LimitChunks=%d, want default %d", defaults.LimitChunks, defaultTerminalHistoryPageChunks)
+	}
+	if defaults.MaxBytes != defaultTerminalHistoryPageBytes {
+		t.Fatalf("MaxBytes=%d, want default %d", defaults.MaxBytes, defaultTerminalHistoryPageBytes)
+	}
+
+	clamped := normalizeTerminalHistoryPageOptions(&terminalHistoryReq{
+		SessionID:   "session-1",
+		StartSeq:    3,
+		EndSeq:      9,
+		LimitChunks: maxTerminalHistoryPageChunks + 100,
+		MaxBytes:    maxTerminalHistoryPageBytes + 1024,
+	})
+	if clamped.LimitChunks != maxTerminalHistoryPageChunks {
+		t.Fatalf("LimitChunks=%d, want max %d", clamped.LimitChunks, maxTerminalHistoryPageChunks)
+	}
+	if clamped.MaxBytes != maxTerminalHistoryPageBytes {
+		t.Fatalf("MaxBytes=%d, want max %d", clamped.MaxBytes, maxTerminalHistoryPageBytes)
+	}
+}
+
+func TestTerminalHistoryRespFromPageIncludesCursorMetadata(t *testing.T) {
+	resp := terminalHistoryRespFromPage(termgo.HistoryPage{
+		Chunks: []termgo.TerminalDataChunk{
+			{Sequence: 4, Timestamp: 1000, Data: []byte("hello")},
+			{Sequence: 5, Timestamp: 1100, Data: []byte("world")},
+		},
+		FirstSequence: 4,
+		LastSequence:  5,
+		NextStartSeq:  6,
+		HasMore:       true,
+		CoveredBytes:  10,
+		TotalBytes:    32,
+	})
+
+	if len(resp.Chunks) != 2 {
+		t.Fatalf("len(resp.Chunks)=%d, want 2", len(resp.Chunks))
+	}
+	if resp.Chunks[0].DataB64 != base64.StdEncoding.EncodeToString([]byte("hello")) {
+		t.Fatalf("first chunk data_b64=%q", resp.Chunks[0].DataB64)
+	}
+	if !resp.HasMore || resp.NextStartSeq != 6 || resp.FirstSequence != 4 || resp.LastSequence != 5 {
+		t.Fatalf("unexpected cursor metadata: %+v", resp)
+	}
+	if resp.CoveredBytes != 10 || resp.TotalBytes != 32 {
+		t.Fatalf("unexpected byte metadata: %+v", resp)
+	}
 }
 
 func TestDeleteSessionHidesImmediatelyWhileCleanupRuns(t *testing.T) {

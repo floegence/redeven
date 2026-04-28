@@ -22,9 +22,34 @@ export function getOrCreateTerminalConnId(storageKey = 'redeven_terminal_conn_id
 
 export type TerminalSessionStats = { history: { totalBytes: number } };
 
+export type TerminalHistoryPage = Readonly<{
+  chunks: TerminalDataChunk[];
+  nextStartSeq: number;
+  hasMore: boolean;
+  firstSequence: number;
+  lastSequence: number;
+  coveredBytes: number;
+  totalBytes: number;
+}>;
+
+export type TerminalHistoryPageOptions = Readonly<{
+  limitChunks?: number;
+  maxBytes?: number;
+}>;
+
 export type RedevenTerminalTransport = TerminalTransport & {
+  historyPage: (
+    sessionId: string,
+    startSeq: number,
+    endSeq: number,
+    options?: TerminalHistoryPageOptions,
+  ) => Promise<TerminalHistoryPage>;
   getSessionStats: (sessionId: string) => Promise<TerminalSessionStats>;
 };
+
+const TERMINAL_HISTORY_PAGE_LIMIT_CHUNKS = 256;
+const TERMINAL_HISTORY_PAGE_MAX_BYTES = 384 * 1024;
+const TERMINAL_HISTORY_DRAIN_MAX_PAGES = 4096;
 
 type TerminalResizeDimensions = Readonly<{
   cols: number;
@@ -52,6 +77,12 @@ function normalizeTerminalResizeDimensions(cols: number, rows: number): Terminal
   if (!Number.isFinite(normalizedCols) || !Number.isFinite(normalizedRows)) return null;
   if (normalizedCols <= 0 || normalizedRows <= 0) return null;
   return { cols: normalizedCols, rows: normalizedRows };
+}
+
+function normalizePositiveInteger(value: unknown, fallback: number): number {
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return n;
 }
 
 function sameTerminalResizeDimensions(
@@ -216,6 +247,38 @@ export function createRedevenTerminalTransport(rpc: RedevenV1Rpc, connId: string
     await rpc.terminal.resize({ sessionId, connId, cols, rows });
   });
 
+  const requestHistoryPage = async (
+    sessionId: string,
+    startSeq: number,
+    endSeq: number,
+    options?: TerminalHistoryPageOptions,
+  ): Promise<TerminalHistoryPage> => {
+    const limitChunks = normalizePositiveInteger(options?.limitChunks, TERMINAL_HISTORY_PAGE_LIMIT_CHUNKS);
+    const maxBytes = normalizePositiveInteger(options?.maxBytes, TERMINAL_HISTORY_PAGE_MAX_BYTES);
+    const resp = await rpc.terminal.history({ sessionId, startSeq, endSeq, limitChunks, maxBytes });
+    const chunks: TerminalDataChunk[] = Array.isArray(resp?.chunks) ? resp.chunks : [];
+    const firstSequence = Number(resp?.firstSequence ?? 0);
+    const lastSequence = Number(resp?.lastSequence ?? 0);
+    const hasMore = Boolean(resp?.hasMore ?? false);
+    const fallbackNextStartSeq = lastSequence > 0
+      ? lastSequence + 1
+      : (chunks[chunks.length - 1]?.sequence ?? 0) + 1;
+    const nextStartSeq = Number(resp?.nextStartSeq ?? 0);
+    const normalizedNextStartSeq = Number.isFinite(nextStartSeq) && nextStartSeq > startSeq
+      ? nextStartSeq
+      : fallbackNextStartSeq;
+
+    return {
+      chunks,
+      nextStartSeq: normalizedNextStartSeq,
+      hasMore: hasMore && normalizedNextStartSeq > startSeq,
+      firstSequence,
+      lastSequence,
+      coveredBytes: Number(resp?.coveredBytes ?? 0),
+      totalBytes: Number(resp?.totalBytes ?? 0),
+    };
+  };
+
   return {
     attach: async (sessionId, cols, rows) => {
       await rpc.terminal.attach({ sessionId, connId, cols, rows });
@@ -243,10 +306,20 @@ export function createRedevenTerminalTransport(rpc: RedevenV1Rpc, connId: string
         throw e;
       }
     },
+    historyPage: requestHistoryPage,
     history: async (sessionId, startSeq, endSeq) => {
-      const resp = await rpc.terminal.history({ sessionId, startSeq, endSeq });
-      const chunks: TerminalDataChunk[] = Array.isArray(resp?.chunks) ? resp.chunks : [];
-      return chunks;
+      const chunks: TerminalDataChunk[] = [];
+      let cursor = startSeq;
+
+      for (let pageCount = 0; pageCount < TERMINAL_HISTORY_DRAIN_MAX_PAGES; pageCount += 1) {
+        const page = await requestHistoryPage(sessionId, cursor, endSeq);
+        chunks.push(...page.chunks);
+        if (!page.hasMore) return chunks;
+        if (endSeq > 0 && page.nextStartSeq > endSeq) return chunks;
+        cursor = page.nextStartSeq;
+      }
+
+      throw new Error('terminal history pagination did not converge');
     },
     clear: async (sessionId) => {
       await rpc.terminal.clear({ sessionId });

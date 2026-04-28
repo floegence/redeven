@@ -37,10 +37,18 @@ export type TerminalHistoryRequest = {
   sessionId: string;
   startSeq: number;
   endSeq: number;
+  limitChunks?: number;
+  maxBytes?: number;
 };
 
 export type TerminalHistoryResponse = {
   chunks: TerminalHistoryChunk[];
+  nextStartSeq: number;
+  hasMore: boolean;
+  firstSequence: number;
+  lastSequence: number;
+  coveredBytes: number;
+  totalBytes: number;
 };
 
 export type TerminalClearRequest = {
