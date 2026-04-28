@@ -150,6 +150,8 @@ function renderPreviewWidget() {
           latestWidgetIdByType: () => ({}),
           markLatestWidget: vi.fn(),
           terminalPanelState: () => ({ sessionIds: [], activeSessionId: null }),
+          terminalGeometryPreferences: () => ({ fontSize: 12, fontFamilyId: 'monaco' }),
+          updateTerminalGeometryPreferences: vi.fn(),
           updateTerminalPanelState: vi.fn(),
           createTerminalSession: vi.fn(async () => null),
           deleteTerminalSession: vi.fn(async () => undefined),

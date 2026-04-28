@@ -610,6 +610,8 @@ describe('runtimeWorkbenchLayout', () => {
           state: {
             kind: 'terminal',
             session_ids: ['session-1', 'session-1', ' session-2 '],
+            font_size: 99,
+            font_family_id: ' jetbrains ',
           },
         },
         {
@@ -633,6 +635,8 @@ describe('runtimeWorkbenchLayout', () => {
     expect(states['widget-terminal-1']?.state).toEqual({
       kind: 'terminal',
       session_ids: ['session-1', 'session-2'],
+      font_size: 20,
+      font_family_id: 'jetbrains',
     });
     expect(states['widget-preview-1']?.state).toEqual({
       kind: 'preview',
@@ -680,5 +684,9 @@ describe('runtimeWorkbenchLayout', () => {
       kind: 'files',
       current_path: '/workspace/src',
     })).toBe(false);
+    expect(runtimeWorkbenchWidgetStateDataEqual(
+      { kind: 'terminal', session_ids: ['session-1'], font_size: 12, font_family_id: 'monaco' },
+      { kind: 'terminal', session_ids: ['session-1'], font_size: 14, font_family_id: 'monaco' },
+    )).toBe(false);
   });
 });

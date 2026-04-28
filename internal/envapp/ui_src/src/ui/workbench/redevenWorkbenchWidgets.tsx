@@ -73,6 +73,7 @@ function FilesWidget(props: RedevenWorkbenchWidgetBodyProps) {
 function TerminalWidget(props: RedevenWorkbenchWidgetBodyProps) {
   const workbench = useEnvWorkbenchInstancesContext();
   const panelState = () => workbench.terminalPanelState(props.widgetId);
+  const geometryPreferences = () => workbench.terminalGeometryPreferences(props.widgetId);
   const workbenchPresentationScale = () => props.surfaceMetrics?.()?.rect.viewportScale ?? 1;
 
   return (
@@ -82,6 +83,22 @@ function TerminalWidget(props: RedevenWorkbenchWidgetBodyProps) {
       openSessionRequest={workbench.terminalOpenRequest(props.widgetId)}
       onOpenSessionRequestHandled={workbench.consumeTerminalOpenRequest}
       sessionGroupState={panelState()}
+      terminalGeometryPreferences={{
+        fontSize: geometryPreferences().fontSize,
+        fontFamilyId: geometryPreferences().fontFamilyId,
+        onFontSizeChange: (fontSize) => {
+          workbench.updateTerminalGeometryPreferences(props.widgetId, (previous) => ({
+            ...previous,
+            fontSize,
+          }));
+        },
+        onFontFamilyChange: (fontFamilyId) => {
+          workbench.updateTerminalGeometryPreferences(props.widgetId, (previous) => ({
+            ...previous,
+            fontFamilyId,
+          }));
+        },
+      }}
       onSessionGroupStateChange={(next) => {
         workbench.updateTerminalPanelState(props.widgetId, () => next);
       }}

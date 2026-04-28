@@ -16,6 +16,12 @@ import { useEnvContext } from '../pages/EnvContext';
 import { isDesktopStateStorageAvailable, readUIStorageJSON, writeUIStorageJSON } from '../services/uiStorage';
 import { resolveEnvAppStorageBinding } from '../services/uiPersistence';
 import {
+  DEFAULT_TERMINAL_FONT_FAMILY_ID,
+  DEFAULT_TERMINAL_FONT_SIZE,
+  normalizeTerminalFontFamilyId,
+  normalizeTerminalFontSize,
+} from '../services/terminalGeometry';
+import {
   connectWorkbenchLayoutEventStream,
   createWorkbenchTerminalSession,
   deleteWorkbenchTerminalSession,
@@ -46,6 +52,7 @@ import {
   reconcileWorkbenchInstanceState,
   sanitizeWorkbenchInstanceState,
   type RedevenWorkbenchInstanceState,
+  type RedevenWorkbenchTerminalGeometryPreferences,
   type RedevenWorkbenchTerminalPanelState,
   type WorkbenchOpenFileBrowserRequest,
   type WorkbenchOpenFilePreviewRequest,
@@ -94,6 +101,10 @@ const WORKBENCH_HUD_MAXIMIZE_BUTTON_CLASS = `${WORKBENCH_HUD_SHORTCUT_BUTTON_BAS
 const EMPTY_TERMINAL_PANEL_STATE: RedevenWorkbenchTerminalPanelState = {
   sessionIds: [],
   activeSessionId: null,
+};
+const DEFAULT_TERMINAL_GEOMETRY_PREFERENCES: RedevenWorkbenchTerminalGeometryPreferences = {
+  fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+  fontFamilyId: DEFAULT_TERMINAL_FONT_FAMILY_ID,
 };
 
 function compact(value: unknown): string {
@@ -264,6 +275,22 @@ function sameTerminalPanelState(
 ): boolean {
   return left.activeSessionId === right.activeSessionId
     && sameStringArray(left.sessionIds, right.sessionIds);
+}
+
+function normalizeWorkbenchTerminalGeometryPreferences(
+  value: Partial<RedevenWorkbenchTerminalGeometryPreferences> | null | undefined,
+): RedevenWorkbenchTerminalGeometryPreferences {
+  return {
+    fontSize: normalizeTerminalFontSize(value?.fontSize),
+    fontFamilyId: normalizeTerminalFontFamilyId(value?.fontFamilyId),
+  };
+}
+
+function sameTerminalGeometryPreferences(
+  left: RedevenWorkbenchTerminalGeometryPreferences,
+  right: RedevenWorkbenchTerminalGeometryPreferences,
+): boolean {
+  return left.fontSize === right.fontSize && left.fontFamilyId === right.fontFamilyId;
 }
 
 function samePreviewItem(left: FileItem | null | undefined, right: FileItem | null | undefined): boolean {
@@ -1544,6 +1571,62 @@ export function EnvWorkbenchPage() {
     return state.state.session_ids;
   };
 
+  const runtimeTerminalGeometryPreferences = (widgetId: string): RedevenWorkbenchTerminalGeometryPreferences => {
+    const state = runtimeWidgetStateById()[widgetId];
+    if (state?.widget_type !== 'redeven.terminal' || state.state.kind !== 'terminal') {
+      return DEFAULT_TERMINAL_GEOMETRY_PREFERENCES;
+    }
+    return normalizeWorkbenchTerminalGeometryPreferences({
+      fontSize: state.state.font_size,
+      fontFamilyId: state.state.font_family_id,
+    });
+  };
+
+  const putSharedTerminalState = async (
+    widgetId: string,
+    buildDesiredState: (
+      latest: Extract<RuntimeWorkbenchWidgetStateData, { kind: 'terminal' }>,
+    ) => Extract<RuntimeWorkbenchWidgetStateData, { kind: 'terminal' }>,
+    retry = true,
+  ): Promise<RuntimeWorkbenchWidgetState | null> => {
+    const normalizedWidgetId = compact(widgetId);
+    if (!normalizedWidgetId || !runtimeWidgetExists(normalizedWidgetId, 'redeven.terminal')) {
+      return null;
+    }
+    const current = runtimeWidgetStateById()[normalizedWidgetId];
+    const currentTerminalState: Extract<RuntimeWorkbenchWidgetStateData, { kind: 'terminal' }> =
+      current?.widget_type === 'redeven.terminal' && current.state.kind === 'terminal'
+        ? current.state
+        : { kind: 'terminal', session_ids: [] };
+    const desiredState = buildDesiredState(currentTerminalState);
+    if (current && runtimeWorkbenchWidgetStateDataEqual(current.state, desiredState)) {
+      return current;
+    }
+    try {
+      const next = await putWorkbenchWidgetState(normalizedWidgetId, {
+        base_revision: current?.revision ?? 0,
+        widget_type: 'redeven.terminal',
+        state: desiredState,
+      });
+      applyRuntimeWidgetState(next);
+      return next;
+    } catch (error) {
+      if (retry && error instanceof WorkbenchWidgetStateConflictError) {
+        const latestSnapshot = await getWorkbenchLayoutSnapshot();
+        applyRuntimeSnapshot(latestSnapshot);
+        const latest = latestSnapshot.widget_states.find((state) => state.widget_id === normalizedWidgetId);
+        if (latest?.widget_type === 'redeven.terminal' && latest.state.kind === 'terminal') {
+          const latestDesiredState = buildDesiredState(latest.state);
+          if (runtimeWorkbenchWidgetStateDataEqual(latest.state, latestDesiredState)) {
+            return latest;
+          }
+        }
+        return putSharedTerminalState(normalizedWidgetId, buildDesiredState, false);
+      }
+      throw error;
+    }
+  };
+
   const persistLocalTerminalPanelState = (
     widgetId: string,
     sessionIds: readonly string[],
@@ -1610,6 +1693,26 @@ export function EnvWorkbenchPage() {
         sessionIds,
         activeSessionId,
       };
+    },
+    terminalGeometryPreferences: (widgetId) => runtimeTerminalGeometryPreferences(compact(widgetId)),
+    updateTerminalGeometryPreferences: (widgetId, updater) => {
+      const normalizedWidgetId = compact(widgetId);
+      if (!normalizedWidgetId) {
+        return;
+      }
+      const currentPreferences = runtimeTerminalGeometryPreferences(normalizedWidgetId);
+      const nextPreferences = normalizeWorkbenchTerminalGeometryPreferences(updater(currentPreferences));
+      if (sameTerminalGeometryPreferences(currentPreferences, nextPreferences)) {
+        return;
+      }
+      void putSharedTerminalState(normalizedWidgetId, (latest) => ({
+        kind: 'terminal',
+        session_ids: latest.session_ids,
+        font_size: nextPreferences.fontSize,
+        font_family_id: nextPreferences.fontFamilyId,
+      })).catch((error) => {
+        console.warn('Failed to update workbench terminal geometry preferences:', error);
+      });
     },
     updateTerminalPanelState: (widgetId, updater) => {
       const normalizedWidgetId = compact(widgetId);
