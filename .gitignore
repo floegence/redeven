@@ -19,6 +19,7 @@ internal/codeapp/ui/dist/
 desktop/dist/
 desktop/release/
 desktop/.bundle/
+desktop/diagnostics/
 
 # Local agent blueprint draft (do not commit)
 .agent.md
