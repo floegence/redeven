@@ -756,6 +756,12 @@ describe('TerminalPanel', () => {
     Object.values(transportMocks).forEach((mock) => {
       if ('mockClear' in mock) mock.mockClear();
     });
+    transportMocks.sendInput.mockResolvedValue(undefined);
+    transportMocks.resize.mockResolvedValue(undefined);
+    transportMocks.attach.mockResolvedValue(undefined);
+    transportMocks.history.mockResolvedValue([]);
+    transportMocks.getSessionStats.mockResolvedValue({ history: { totalBytes: 0 } });
+    transportMocks.clear.mockResolvedValue(undefined);
     Object.values(rpcFsMocks).forEach((mock) => {
       if ('mockClear' in mock) mock.mockClear();
     });
@@ -1486,6 +1492,83 @@ describe('TerminalPanel', () => {
 
     expect(activeCore?.write).not.toHaveBeenCalled();
     expect(sessionsCoordinatorMocks.updateSessionMeta).toHaveBeenCalledWith('session-1', { workingDir: '/workspace/repo' });
+  });
+
+  it('coalesces same-frame live output before writing to the terminal surface', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await settleTerminalPanel();
+
+    const activeCore = terminalCoreInstances[0];
+    activeCore?.write.mockClear();
+
+    emitTerminalData('session-1', 'alpha ', 1);
+    emitTerminalData('session-1', 'beta ', 2);
+    emitTerminalData('session-1', 'gamma', 3);
+    await settleTerminalPanel();
+
+    expect(activeCore?.write).toHaveBeenCalledTimes(1);
+    const firstWrite = activeCore?.write.mock.calls[0]?.[0] as Uint8Array | undefined;
+    expect(firstWrite ? new TextDecoder().decode(firstWrite) : '').toBe('alpha beta gamma');
+  });
+
+  it('keeps inactive sessions from repainting live output until they are activated again', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await settleTerminalPanel();
+
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await settleTerminalPanel();
+    findTerminalTab(host, 'Terminal 1')?.click();
+    await settleTerminalPanel();
+
+    const inactiveCore = terminalCoreInstances[1];
+    inactiveCore?.write.mockClear();
+    transportMocks.history.mockClear();
+    transportMocks.history.mockResolvedValue([
+      {
+        sequence: 1,
+        data: textEncoder.encode('background output'),
+      },
+    ]);
+
+    emitTerminalData('session-2', 'background output', 1);
+    await settleTerminalPanel();
+
+    expect(inactiveCore?.write).not.toHaveBeenCalled();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).not.toBeNull();
+
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await settleTerminalPanel();
+    await settleTerminalPanel();
+
+    const reloadedCore = terminalCoreInstances[terminalCoreInstances.length - 1];
+    expect(transportMocks.history).toHaveBeenCalledWith('session-2', 0, -1);
+    const firstWrite = reloadedCore?.write.mock.calls[0]?.[0] as Uint8Array | undefined;
+    expect(firstWrite ? new TextDecoder().decode(firstWrite) : '').toBe('background output');
   });
 
   it('does not recreate a session when the same open-session request id is replayed', async () => {
