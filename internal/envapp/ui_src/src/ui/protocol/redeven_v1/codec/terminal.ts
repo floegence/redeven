@@ -50,6 +50,11 @@ function toTerminalSessionInfo(s: wire_terminal_session_info): TerminalSessionIn
   };
 }
 
+function positiveInteger(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return undefined;
+  return Math.floor(value);
+}
+
 export function toWireTerminalSessionCreateRequest(req: TerminalSessionCreateRequest): wire_terminal_session_create_req {
   return {
     name: req.name?.trim() ? req.name.trim() : undefined,
@@ -84,6 +89,8 @@ export function toWireTerminalHistoryRequest(req: TerminalHistoryRequest): wire_
     session_id: req.sessionId,
     start_seq: req.startSeq,
     end_seq: req.endSeq,
+    limit_chunks: positiveInteger(req.limitChunks),
+    max_bytes: positiveInteger(req.maxBytes),
   };
 }
 
@@ -97,6 +104,12 @@ export function fromWireTerminalHistoryResponse(resp: wire_terminal_history_resp
         data: bytesFromBase64(String(c?.data_b64 ?? '')),
       }))
       .filter((c) => c.data.length > 0),
+    nextStartSeq: Number(resp?.next_start_seq ?? 0),
+    hasMore: Boolean(resp?.has_more ?? false),
+    firstSequence: Number(resp?.first_sequence ?? 0),
+    lastSequence: Number(resp?.last_sequence ?? 0),
+    coveredBytes: Number(resp?.covered_bytes ?? 0),
+    totalBytes: Number(resp?.total_bytes ?? 0),
   };
 }
 

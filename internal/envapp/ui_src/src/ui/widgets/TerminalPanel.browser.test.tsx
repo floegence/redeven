@@ -26,6 +26,15 @@ const transportMocks = vi.hoisted(() => ({
   resize: vi.fn().mockResolvedValue(undefined),
   attach: vi.fn().mockResolvedValue(undefined),
   history: vi.fn().mockResolvedValue([]),
+  historyPage: vi.fn().mockResolvedValue({
+    chunks: [],
+    nextStartSeq: 0,
+    hasMore: false,
+    firstSequence: 0,
+    lastSequence: 0,
+    coveredBytes: 0,
+    totalBytes: 0,
+  }),
   getSessionStats: vi.fn().mockResolvedValue({ history: { totalBytes: 0 } }),
   clear: vi.fn().mockResolvedValue(undefined),
 }));

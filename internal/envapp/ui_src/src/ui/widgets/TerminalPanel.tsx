@@ -25,12 +25,12 @@ import {
   type TerminalResponsiveConfig,
   type TerminalSessionInfo,
   type TerminalThemeName,
-  type TerminalTransport,
 } from '@floegence/floeterm-terminal-web';
 import {
   createRedevenTerminalEventSource,
   createRedevenTerminalTransport,
   getOrCreateTerminalConnId,
+  type RedevenTerminalTransport,
 } from '../services/terminalTransport';
 import { disposeRedevenTerminalSessionsCoordinator, getRedevenTerminalSessionsCoordinator } from '../services/terminalSessions';
 import {
@@ -79,6 +79,8 @@ const TERMINAL_LIVE_FLUSH_MAX_BYTES = 256 * 1024;
 const TERMINAL_LIVE_FLUSH_INTERVAL_MS = 100;
 const TERMINAL_HISTORY_REPLAY_MAX_CHUNKS = 64;
 const TERMINAL_HISTORY_REPLAY_MAX_BYTES = 512 * 1024;
+const TERMINAL_HISTORY_REPLAY_MODE_MS = 120_000;
+const TERMINAL_HISTORY_REPLAY_MAX_PAGES = 4096;
 
 export type TerminalPanelSessionGroupState = Readonly<{
   sessionIds: string[];
@@ -255,7 +257,7 @@ type terminal_session_view_props = {
   canOpenFilePreview: () => boolean;
   bottomInsetPx: () => number;
   connId: string;
-  transport: TerminalTransport;
+  transport: RedevenTerminalTransport;
   eventSource: TerminalEventSource;
   registerCore: (sessionId: string, core: TerminalCore | null) => void;
   registerSurfaceElement: (sessionId: string, surface: HTMLDivElement | null) => void;
@@ -434,9 +436,23 @@ function TerminalSessionView(props: terminal_session_view_props) {
   const [loading, setLoading] = createSignal<session_loading_state>('initializing');
   const [error, setError] = createSignal<string | null>(null);
   const [readyOnce, setReadyOnce] = createSignal(false);
+  const [historyReplayProgress, setHistoryReplayProgress] = createSignal<{ loadedBytes: number; totalBytes: number } | null>(null);
 
   const [showLoading, setShowLoading] = createSignal(false);
   let loadingDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const loadingMessage = createMemo(() => {
+    if (loading() === 'initializing') return 'Initializing terminal...';
+    if (loading() === 'attaching') return 'Attaching terminal...';
+    if (loading() === 'loading_history') {
+      const progress = historyReplayProgress();
+      if (progress && progress.totalBytes > 0) {
+        return `Loading history ${formatBytes(Math.min(progress.loadedBytes, progress.totalBytes))} / ${formatBytes(progress.totalBytes)}`;
+      }
+      return 'Loading history...';
+    }
+    return undefined;
+  });
 
   createEffect(() => {
     const isLoading = loading() !== 'idle';
@@ -546,14 +562,11 @@ function TerminalSessionView(props: terminal_session_view_props) {
     unsubNameUpdate = null;
   };
 
-  const replayHistory = async (chunks: Uint8Array[]) => {
+  const writeHistoryChunks = async (chunks: Uint8Array[]) => {
     const core = term;
     if (!core) return;
 
-    core.clear();
     if (chunks.length === 0) return;
-
-    core.startHistoryReplay(5000);
 
     await new Promise<void>((resolve) => {
       const step = () => {
@@ -574,8 +587,6 @@ function TerminalSessionView(props: terminal_session_view_props) {
       };
       requestAnimationFrame(step);
     });
-
-    core.endHistoryReplay();
   };
 
   const consumeTerminalChunk = (data: Uint8Array, source: 'history' | 'live'): Uint8Array => {
@@ -587,6 +598,56 @@ function TerminalSessionView(props: terminal_session_view_props) {
       props.onVisibleOutput?.(sessionId(), source, result.displayData.byteLength);
     }
     return result.displayData;
+  };
+
+  const replayHistoryPages = async (id: string, seq: number) => {
+    const core = term;
+    if (!core) return;
+
+    core.clear();
+    setHistoryReplayProgress(null);
+    core.startHistoryReplay(TERMINAL_HISTORY_REPLAY_MODE_MS);
+
+    let cursor = 0;
+    let coveredBytes = 0;
+    let totalBytes = 0;
+
+    try {
+      for (let pageIndex = 0; pageIndex < TERMINAL_HISTORY_REPLAY_MAX_PAGES; pageIndex += 1) {
+        const page = await props.transport.historyPage(id, cursor, -1);
+        if (seq !== initSeq) return;
+
+        totalBytes = page.totalBytes > 0 ? page.totalBytes : totalBytes;
+        coveredBytes += Math.max(0, page.coveredBytes);
+        if (totalBytes > 0) {
+          setHistoryReplayProgress({
+            loadedBytes: Math.min(coveredBytes, totalBytes),
+            totalBytes,
+          });
+        }
+
+        if (page.lastSequence > historyMaxSeq) {
+          historyMaxSeq = page.lastSequence;
+        }
+
+        const sorted = [...page.chunks].sort((a, b) => a.sequence - b.sequence);
+        await writeHistoryChunks(sorted
+          .map((chunk) => consumeTerminalChunk(chunk.data, 'history'))
+          .filter((chunk) => chunk.byteLength > 0));
+        if (seq !== initSeq) return;
+
+        if (!page.hasMore) return;
+        if (page.nextStartSeq <= cursor) {
+          throw new Error('terminal history pagination did not advance');
+        }
+        cursor = page.nextStartSeq;
+      }
+
+      throw new Error('terminal history pagination did not converge');
+    } finally {
+      core.endHistoryReplay();
+      setHistoryReplayProgress(null);
+    }
   };
 
   let reloadSeq = 0;
@@ -779,15 +840,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
       if (seq !== initSeq) return;
 
       setLoading('loading_history');
-      const history = await props.transport.history(id, 0, -1);
-      if (seq !== initSeq) return;
-
-      const sorted = [...history].sort((a, b) => a.sequence - b.sequence);
-      historyMaxSeq = sorted.length > 0 ? sorted[sorted.length - 1]!.sequence : 0;
-
-      await replayHistory(sorted
-        .map((chunk) => consumeTerminalChunk(chunk.data, 'history'))
-        .filter((chunk) => chunk.byteLength > 0));
+      await replayHistoryPages(id, seq);
       if (seq !== initSeq) return;
 
       replaying = false;
@@ -822,6 +875,10 @@ function TerminalSessionView(props: terminal_session_view_props) {
       });
     } catch (e) {
       if (seq !== initSeq) return;
+      replaying = false;
+      bufferedLive = [];
+      queued = [];
+      cancelPendingLiveFlush();
       setLoading('idle');
       setError(e instanceof Error ? e.message : String(e));
       const el = container;
@@ -869,14 +926,14 @@ function TerminalSessionView(props: terminal_session_view_props) {
     if (!props.viewActive() || !props.active()) return;
     const core = term;
     if (!core) return;
-      requestAnimationFrame(() => {
-        core.setTheme(colors());
-        core.setFontSize(fontSize());
-        core.setPresentationScale(presentationScale());
-        core.forceResize();
-        if (props.autoFocus()) core.focus();
-      });
+    requestAnimationFrame(() => {
+      core.setTheme(colors());
+      core.setFontSize(fontSize());
+      core.setPresentationScale(presentationScale());
+      core.forceResize();
+      if (props.autoFocus()) core.focus();
     });
+  });
 
   createEffect(() => {
     if (!term) return;
@@ -934,12 +991,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
 
       <LoadingOverlay
         visible={showLoading()}
-        message={
-          loading() === 'initializing' ? 'Initializing terminal...' :
-          loading() === 'attaching' ? 'Attaching terminal...' :
-          loading() === 'loading_history' ? 'Loading history...' :
-          undefined
-        }
+        message={loadingMessage()}
       />
 
       <Show when={error()}>
