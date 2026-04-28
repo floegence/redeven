@@ -43,6 +43,8 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
 });
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
+  LOCAL_INTERACTION_SURFACE_ATTR: 'data-floe-local-interaction-surface',
+  WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR: 'data-floe-workbench-widget-activation-surface',
   Tag: (props: any) => <span class={props.class}>{props.children}</span>,
   Button: (props: any) => (
     <button class={props.class} type={props.type ?? 'button'} disabled={props.disabled} onClick={props.onClick}>
