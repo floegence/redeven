@@ -104,6 +104,7 @@ export interface TerminalPanelProps {
   sessionGroupState?: TerminalPanelSessionGroupState;
   onSessionGroupStateChange?: (next: TerminalPanelSessionGroupState) => void;
   sessionOperations?: TerminalPanelSessionOperations;
+  workbenchSelected?: boolean;
   workbenchActivationSeq?: number;
   workbenchPresentationScale?: number;
   onTitleChange?: (title: string) => void;
@@ -1077,12 +1078,14 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const connected = () => Boolean(protocol.client());
   const viewActive = () => view.active();
+  const workbenchSelected = () => variant !== 'workbench' || props.workbenchSelected !== false;
+  const terminalFocusOwner = () => viewActive() && workbenchSelected();
   const isInDeckWidget = Boolean(String(widgetId ?? '').trim());
   const permissionReady = () => env.env.state === 'ready';
   const canBrowseFiles = createMemo(() => connected() && permissionReady() && Boolean(env.env()?.permissions?.can_read));
 
   createEffect(() => {
-    if (viewActive()) return;
+    if (terminalFocusOwner()) return;
     // Reset focus state when the view becomes inactive to avoid stale focus affecting autoFocus decisions.
     setPanelHasFocus(false);
   });
@@ -1473,7 +1476,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       return false;
     }
 
-    return activeSessionId() !== normalizedSessionId || !viewActive();
+    return activeSessionId() !== normalizedSessionId || !terminalFocusOwner();
   };
 
   const handleShellIntegrationEvent = (
@@ -1591,7 +1594,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const shouldAutoFocus = () => {
-    return (!isInDeckWidget || panelHasFocus()) && shouldRestoreTerminalFocus();
+    return workbenchSelected() && (!isInDeckWidget || panelHasFocus()) && shouldRestoreTerminalFocus();
   };
 
   const blurActiveElement = () => {
@@ -1656,7 +1659,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (event.button !== 0) return;
     if (event.defaultPrevented) return;
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    if (!viewActive()) return;
+    if (!terminalFocusOwner()) return;
     if (activeTerminalHasSelection()) return;
     restoreActiveTerminalFocus();
   };
@@ -1665,7 +1668,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const activationSeq = props.workbenchActivationSeq ?? 0;
     if (variant !== 'workbench') return;
     if (activationSeq <= 0) return;
-    if (!viewActive()) return;
+    if (!terminalFocusOwner()) return;
     restoreActiveTerminalFocus();
   });
 
@@ -2044,7 +2047,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
 
   createEffect(() => {
-    if (!viewActive()) return;
+    if (!terminalFocusOwner()) return;
     const id = activeSessionId();
     if (!id) return;
     tabActivityTracker.clearUnread(id);

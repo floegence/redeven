@@ -89,6 +89,7 @@ function TerminalWidget(props: RedevenWorkbenchWidgetBodyProps) {
         createSession: (name, workingDir) => workbench.createTerminalSession(props.widgetId, name, workingDir),
         deleteSession: (sessionId) => workbench.deleteTerminalSession(props.widgetId, sessionId),
       }}
+      workbenchSelected={props.selected}
       workbenchActivationSeq={props.activation?.seq}
       onTitleChange={(title) => {
         workbench.updateWidgetTitle(props.widgetId, title);

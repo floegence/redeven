@@ -53,6 +53,7 @@ vi.mock('@floegence/floe-webapp-core/workbench', () => ({
     });
     return (
       <div data-testid="mock-workbench-surface">
+        <div class="workbench-canvas__projected-layer" data-testid="projected-layer" />
         <div
           data-floe-workbench-canvas-frame="true"
           ref={(el) => {
@@ -144,6 +145,29 @@ describe('RedevenWorkbenchSurface', () => {
     ), host);
 
     expect(sharedSurfaceMocks.lastProps.resolveContextMenuItems).toBe(resolveContextMenuItems);
+  });
+
+  it('keeps the projected layer anchored when browser focus scrolls it', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <RedevenWorkbenchSurface
+        state={() => createWorkbenchState()}
+        setState={() => {}}
+      />
+    ), host);
+    await Promise.resolve();
+
+    const layer = host.querySelector('[data-testid="projected-layer"]') as HTMLDivElement | null;
+    expect(layer).toBeTruthy();
+
+    layer!.scrollTop = 275;
+    layer!.scrollLeft = 19;
+    layer!.dispatchEvent(new Event('scroll'));
+
+    expect(layer!.scrollTop).toBe(0);
+    expect(layer!.scrollLeft).toBe(0);
   });
 
   it('maps the shared overview api to the local unfocusWidget alias', () => {

@@ -23,6 +23,7 @@ import {
 
 const FORWARDED_CANVAS_WHEEL_EVENTS = new WeakSet<WheelEvent>();
 const WORKBENCH_CANVAS_SELECTOR = '.floe-infinite-canvas';
+const WORKBENCH_PROJECTED_LAYER_SELECTOR = '.workbench-canvas__projected-layer';
 
 export interface RedevenWorkbenchSurfaceApi extends WorkbenchSurfaceApi {
   unfocusWidget: (widget: WorkbenchWidgetItem) => WorkbenchWidgetItem;
@@ -108,8 +109,72 @@ function createForwardedCanvasWheelEvent(source: WheelEvent): WheelEvent {
   });
 }
 
+function resetProjectedLayerScroll(layer: HTMLElement) {
+  if (layer.scrollTop !== 0) {
+    layer.scrollTop = 0;
+  }
+  if (layer.scrollLeft !== 0) {
+    layer.scrollLeft = 0;
+  }
+}
+
+function installProjectedLayerScrollGuard(host: HTMLElement): () => void {
+  const layerCleanups = new Map<HTMLElement, () => void>();
+
+  const guardLayer = (layer: HTMLElement) => {
+    if (layerCleanups.has(layer)) return;
+
+    const handleScroll = () => resetProjectedLayerScroll(layer);
+    resetProjectedLayerScroll(layer);
+    layer.addEventListener('scroll', handleScroll, { passive: true });
+    layerCleanups.set(layer, () => {
+      layer.removeEventListener('scroll', handleScroll);
+    });
+  };
+
+  const syncLayers = () => {
+    for (const [layer, cleanup] of layerCleanups) {
+      if (!host.contains(layer)) {
+        cleanup();
+        layerCleanups.delete(layer);
+      }
+    }
+
+    const layers = host.querySelectorAll(WORKBENCH_PROJECTED_LAYER_SELECTOR);
+    for (const layer of layers) {
+      if (layer instanceof HTMLElement) {
+        guardLayer(layer);
+      }
+    }
+  };
+
+  syncLayers();
+
+  let observer: MutationObserver | null = null;
+  if (typeof MutationObserver === 'function') {
+    observer = new MutationObserver(syncLayers);
+    observer.observe(host, { childList: true, subtree: true });
+  }
+
+  return () => {
+    observer?.disconnect();
+    for (const cleanup of layerCleanups.values()) {
+      cleanup();
+    }
+    layerCleanups.clear();
+  };
+}
+
 export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
   let hostRef: HTMLDivElement | undefined;
+
+  createEffect(() => {
+    const host = hostRef;
+    if (!host) return;
+
+    const dispose = installProjectedLayerScrollGuard(host);
+    onCleanup(dispose);
+  });
 
   createEffect(() => {
     const host = hostRef;

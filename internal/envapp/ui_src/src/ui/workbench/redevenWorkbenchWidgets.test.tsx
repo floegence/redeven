@@ -178,6 +178,17 @@ describe('redevenWorkbenchWidgets terminal behavior', () => {
     });
   });
 
+  it('forwards the current workbench selection state into the live terminal panel', () => {
+    renderTerminalBody({
+      selected: false,
+    });
+
+    expect(terminalPanelMocks.render).toHaveBeenCalledTimes(1);
+    expect(terminalPanelMocks.render.mock.calls[0]?.[0]).toMatchObject({
+      workbenchSelected: false,
+    });
+  });
+
   it('forwards the current workbench surface scale into the live terminal panel', () => {
     renderTerminalBody({
       surfaceMetrics: () => ({
