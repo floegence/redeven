@@ -1832,6 +1832,7 @@ describe('TerminalPanel', () => {
       return (
         <TerminalPanel
           variant="workbench"
+          workbenchSelected
           workbenchActivationSeq={activationSeq()}
         />
       );
@@ -1843,6 +1844,33 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     expect(focusSpy).toHaveBeenCalled();
+  });
+
+  it('does not restore focus when an unselected workbench terminal receives an activation update', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => {
+      const [activationSeq, setActivationSeq] = createSignal(0);
+      (host as HTMLElement & { bumpWorkbenchActivation?: () => void }).bumpWorkbenchActivation = () => {
+        setActivationSeq((value) => value + 1);
+      };
+
+      return (
+        <TerminalPanel
+          variant="workbench"
+          workbenchSelected={false}
+          workbenchActivationSeq={activationSeq()}
+        />
+      );
+    }, host);
+    await settleTerminalPanel();
+    focusSpy.mockClear();
+
+    (host as HTMLElement & { bumpWorkbenchActivation?: () => void }).bumpWorkbenchActivation?.();
+    await settleTerminalPanel();
+
+    expect(focusSpy).not.toHaveBeenCalled();
   });
 
   it('marks the live terminal host as a text-selection surface in workbench mode', async () => {
@@ -1862,7 +1890,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="workbench" />, host);
+    render(() => <TerminalPanel variant="workbench" workbenchSelected />, host);
     await settleTerminalPanel();
     focusSpy.mockClear();
 
@@ -1873,6 +1901,23 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     expect(focusSpy).toHaveBeenCalled();
+  });
+
+  it('does not restore focus on plain click inside an unselected workbench terminal', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" workbenchSelected={false} />, host);
+    await settleTerminalPanel();
+    focusSpy.mockClear();
+
+    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
+    expect(terminalSurface).toBeTruthy();
+
+    terminalSurface?.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }));
+    await settleTerminalPanel();
+
+    expect(focusSpy).not.toHaveBeenCalled();
   });
 
   it('does not restore focus on workbench terminal clicks while the terminal already owns a selection', async () => {
