@@ -20,6 +20,9 @@ const (
 	WidgetStateKindFiles    = "files"
 	WidgetStateKindTerminal = "terminal"
 	WidgetStateKindPreview  = "preview"
+
+	TerminalMinFontSize = 10
+	TerminalMaxFontSize = 20
 )
 
 type Snapshot struct {
@@ -62,10 +65,12 @@ type WidgetState struct {
 }
 
 type WidgetStateData struct {
-	Kind        string       `json:"kind"`
-	CurrentPath string       `json:"current_path,omitempty"`
-	SessionIDs  []string     `json:"session_ids,omitempty"`
-	Item        *PreviewItem `json:"item,omitempty"`
+	Kind         string       `json:"kind"`
+	CurrentPath  string       `json:"current_path,omitempty"`
+	SessionIDs   []string     `json:"session_ids,omitempty"`
+	FontSize     *int         `json:"font_size,omitempty"`
+	FontFamilyID string       `json:"font_family_id,omitempty"`
+	Item         *PreviewItem `json:"item,omitempty"`
 }
 
 type PreviewItem struct {
@@ -303,7 +308,12 @@ func normalizeWidgetStateData(widgetType string, state WidgetStateData) (WidgetS
 		}
 		return WidgetStateData{Kind: kind, CurrentPath: path}, nil
 	case WidgetStateKindTerminal:
-		return WidgetStateData{Kind: kind, SessionIDs: normalizeSessionIDs(state.SessionIDs)}, nil
+		return WidgetStateData{
+			Kind:         kind,
+			SessionIDs:   normalizeSessionIDs(state.SessionIDs),
+			FontSize:     normalizeTerminalFontSize(state.FontSize),
+			FontFamilyID: normalizeTerminalFontFamilyID(state.FontFamilyID),
+		}, nil
 	case WidgetStateKindPreview:
 		item, err := normalizePreviewItem(state.Item)
 		if err != nil {
@@ -330,6 +340,47 @@ func normalizeAbsolutePath(value string) string {
 		return ""
 	}
 	return path
+}
+
+func normalizeTerminalFontSize(value *int) *int {
+	if value == nil {
+		return nil
+	}
+	next := *value
+	if next < TerminalMinFontSize {
+		next = TerminalMinFontSize
+	}
+	if next > TerminalMaxFontSize {
+		next = TerminalMaxFontSize
+	}
+	return &next
+}
+
+func normalizeTerminalFontFamilyID(value string) string {
+	id := strings.TrimSpace(value)
+	if id == "" || len(id) > 64 {
+		return ""
+	}
+	for _, ch := range id {
+		if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '-' || ch == '_' {
+			continue
+		}
+		return ""
+	}
+	return id
+}
+
+func terminalStateData(sessionIDs []string, current *WidgetStateData) WidgetStateData {
+	next := WidgetStateData{
+		Kind:       WidgetStateKindTerminal,
+		SessionIDs: normalizeSessionIDs(sessionIDs),
+	}
+	if current == nil || current.Kind != WidgetStateKindTerminal {
+		return next
+	}
+	next.FontSize = normalizeTerminalFontSize(current.FontSize)
+	next.FontFamilyID = normalizeTerminalFontFamilyID(current.FontFamilyID)
+	return next
 }
 
 func normalizeSessionIDs(values []string) []string {
@@ -417,7 +468,10 @@ func snapshotsEqualWidgets(left Snapshot, right []WidgetLayout) bool {
 }
 
 func widgetStateDataEqual(left WidgetStateData, right WidgetStateData) bool {
-	if left.Kind != right.Kind || left.CurrentPath != right.CurrentPath {
+	if left.Kind != right.Kind || left.CurrentPath != right.CurrentPath || left.FontFamilyID != right.FontFamilyID {
+		return false
+	}
+	if !terminalFontSizesEqual(left.FontSize, right.FontSize) {
 		return false
 	}
 	if len(left.SessionIDs) != len(right.SessionIDs) {
@@ -429,6 +483,13 @@ func widgetStateDataEqual(left WidgetStateData, right WidgetStateData) bool {
 		}
 	}
 	return previewItemsEqual(left.Item, right.Item)
+}
+
+func terminalFontSizesEqual(left *int, right *int) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return *left == *right
 }
 
 func previewItemsEqual(left *PreviewItem, right *PreviewItem) bool {

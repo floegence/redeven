@@ -431,16 +431,17 @@ func (s *Store) appendTerminalSession(ctx context.Context, widgetID string, sess
 		nextSessionIDs = append(nextSessionIDs, sessionID)
 		nextRevision = current.Revision + 1
 	}
+	var currentState *WidgetStateData
+	if current != nil {
+		currentState = &current.State
+	}
 
 	nextState := WidgetState{
 		WidgetID:        widgetID,
 		WidgetType:      WidgetTypeTerminal,
 		Revision:        nextRevision,
 		UpdatedAtUnixMs: nowUnixMs,
-		State: WidgetStateData{
-			Kind:       WidgetStateKindTerminal,
-			SessionIDs: normalizeSessionIDs(nextSessionIDs),
-		},
+		State:           terminalStateData(nextSessionIDs, currentState),
 	}
 	event, err := upsertWidgetStateTx(ctx, tx, nextState)
 	if err != nil {
@@ -488,10 +489,7 @@ func (s *Store) removeTerminalSession(ctx context.Context, widgetID string, sess
 			WidgetType:      WidgetTypeTerminal,
 			Revision:        1,
 			UpdatedAtUnixMs: nowUnixMs,
-			State: WidgetStateData{
-				Kind:       WidgetStateKindTerminal,
-				SessionIDs: []string{},
-			},
+			State:           terminalStateData(nil, nil),
 		}
 		event, err := upsertWidgetStateTx(ctx, tx, nextState)
 		if err != nil {
@@ -524,10 +522,7 @@ func (s *Store) removeTerminalSession(ctx context.Context, widgetID string, sess
 		WidgetType:      WidgetTypeTerminal,
 		Revision:        current.Revision + 1,
 		UpdatedAtUnixMs: nowUnixMs,
-		State: WidgetStateData{
-			Kind:       WidgetStateKindTerminal,
-			SessionIDs: nextSessionIDs,
-		},
+		State:           terminalStateData(nextSessionIDs, &current.State),
 	}
 	event, err := upsertWidgetStateTx(ctx, tx, nextState)
 	if err != nil {
@@ -607,10 +602,7 @@ ORDER BY widget_id ASC`,
 			WidgetType:      WidgetTypeTerminal,
 			Revision:        current.Revision + 1,
 			UpdatedAtUnixMs: nowUnixMs,
-			State: WidgetStateData{
-				Kind:       WidgetStateKindTerminal,
-				SessionIDs: nextSessionIDs,
-			},
+			State:           terminalStateData(nextSessionIDs, &current.State),
 		}
 		event, err := upsertWidgetStateTx(ctx, tx, nextState)
 		if err != nil {

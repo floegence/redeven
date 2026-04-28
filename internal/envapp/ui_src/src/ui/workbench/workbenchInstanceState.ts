@@ -5,6 +5,7 @@ import type {
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 
 import { basenameFromAbsolutePath, normalizeAbsolutePath } from '../utils/askFlowerPath';
+import type { TerminalGeometryPreferences } from '../services/terminalGeometry';
 
 export type RedevenWorkbenchMultiInstanceWidgetType =
   | 'redeven.terminal'
@@ -15,6 +16,8 @@ export type RedevenWorkbenchTerminalPanelState = Readonly<{
   sessionIds: string[];
   activeSessionId: string | null;
 }>;
+
+export type RedevenWorkbenchTerminalGeometryPreferences = TerminalGeometryPreferences;
 
 export type RedevenWorkbenchInstanceState = Readonly<{
   version: 2;

@@ -7,6 +7,10 @@ import {
 } from '@floegence/floe-webapp-core/workbench';
 
 import { normalizeWorkbenchTheme } from './workbenchThemeMigration';
+import {
+  normalizeTerminalFontFamilyId,
+  normalizeTerminalFontSize,
+} from '../services/terminalGeometry';
 
 export const REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE = 0.45;
 
@@ -51,7 +55,7 @@ export type RuntimeWorkbenchPreviewItem = Readonly<{
 
 export type RuntimeWorkbenchWidgetStateData =
   | Readonly<{ kind: 'files'; current_path: string }>
-  | Readonly<{ kind: 'terminal'; session_ids: string[] }>
+  | Readonly<{ kind: 'terminal'; session_ids: string[]; font_size?: number; font_family_id?: string }>
   | Readonly<{ kind: 'preview'; item: RuntimeWorkbenchPreviewItem | null }>;
 
 export type RuntimeWorkbenchWidgetState = Readonly<{
@@ -203,7 +207,14 @@ function normalizeRuntimeWorkbenchWidgetStateData(
     const sessionIds = Array.isArray(value.session_ids)
       ? Array.from(new Set(value.session_ids.map((entry) => compact(entry)).filter(Boolean)))
       : [];
-    return { kind: 'terminal', session_ids: sessionIds };
+    const fontSize = 'font_size' in value ? normalizeTerminalFontSize(value.font_size) : undefined;
+    const fontFamilyId = 'font_family_id' in value ? normalizeTerminalFontFamilyId(value.font_family_id) : undefined;
+    return {
+      kind: 'terminal',
+      session_ids: sessionIds,
+      ...(typeof fontSize === 'number' ? { font_size: fontSize } : {}),
+      ...(fontFamilyId ? { font_family_id: fontFamilyId } : {}),
+    };
   }
   if (widgetType === 'redeven.preview' && (!kind || kind === 'preview')) {
     return { kind: 'preview', item: normalizePreviewItem(value.item) };
@@ -464,7 +475,9 @@ export function runtimeWorkbenchWidgetStateDataEqual(
   }
   if (left.kind === 'terminal' && right.kind === 'terminal') {
     return left.session_ids.length === right.session_ids.length
-      && left.session_ids.every((id, index) => right.session_ids[index] === id);
+      && left.session_ids.every((id, index) => right.session_ids[index] === id)
+      && left.font_size === right.font_size
+      && left.font_family_id === right.font_family_id;
   }
   if (left.kind === 'preview' && right.kind === 'preview') {
     const leftItem = left.item;

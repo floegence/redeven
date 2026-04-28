@@ -41,6 +41,11 @@ import {
   useTerminalPreferences,
 } from '../services/terminalPreferences';
 import {
+  normalizeTerminalFontFamilyId,
+  normalizeTerminalFontSize,
+  type TerminalGeometryPreferences,
+} from '../services/terminalGeometry';
+import {
   applyTerminalMobileKeyboardPayload,
   buildTerminalMobileKeyboardSuggestions,
   createEmptyTerminalMobileKeyboardDraftState,
@@ -92,6 +97,11 @@ export type TerminalPanelSessionOperations = Readonly<{
   deleteSession: (sessionId: string) => Promise<void>;
 }>;
 
+export type TerminalPanelGeometryPreferences = TerminalGeometryPreferences & Readonly<{
+  onFontSizeChange: (value: number) => void;
+  onFontFamilyChange: (id: string) => void;
+}>;
+
 export interface TerminalPanelProps {
   variant?: TerminalPanelVariant;
   openSessionRequest?: {
@@ -104,6 +114,7 @@ export interface TerminalPanelProps {
   sessionGroupState?: TerminalPanelSessionGroupState;
   onSessionGroupStateChange?: (next: TerminalPanelSessionGroupState) => void;
   sessionOperations?: TerminalPanelSessionOperations;
+  terminalGeometryPreferences?: TerminalPanelGeometryPreferences;
   workbenchSelected?: boolean;
   workbenchActivationSeq?: number;
   workbenchPresentationScale?: number;
@@ -749,6 +760,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
         cursorBlink: false,
         fontSize: fontSize(),
         presentationScale: props.active() ? presentationScale() : 1,
+        fit: props.variant === 'workbench' ? { scrollbarReservePx: 0 } : undefined,
         allowTransparency: false,
         theme: colors(),
         fontFamily: fontFamily(),
@@ -1177,8 +1189,21 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
 
   const userTheme = terminalPrefs.userTheme;
-  const fontSize = terminalPrefs.fontSize;
-  const fontFamilyId = terminalPrefs.fontFamilyId;
+  const sharedGeometryPreferences = createMemo(() => props.terminalGeometryPreferences ?? null);
+  const fontSize = createMemo(() => {
+    const shared = sharedGeometryPreferences();
+    if (shared) {
+      return normalizeTerminalFontSize(shared.fontSize);
+    }
+    return terminalPrefs.fontSize();
+  });
+  const fontFamilyId = createMemo(() => {
+    const shared = sharedGeometryPreferences();
+    if (shared) {
+      return normalizeTerminalFontFamilyId(shared.fontFamilyId);
+    }
+    return terminalPrefs.fontFamilyId();
+  });
   const mobileInputMode = terminalPrefs.mobileInputMode;
 
   const fontFamily = createMemo<string>(() => {
@@ -1195,10 +1220,20 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const isMobileLayout = () => layout.isMobile();
 
   const persistFontSize = (value: number) => {
+    const shared = sharedGeometryPreferences();
+    if (shared) {
+      shared.onFontSizeChange(normalizeTerminalFontSize(value));
+      return;
+    }
     terminalPrefs.setFontSize(value);
   };
 
   const persistFontFamily = (id: string) => {
+    const shared = sharedGeometryPreferences();
+    if (shared) {
+      shared.onFontFamilyChange(normalizeTerminalFontFamilyId(id));
+      return;
+    }
     terminalPrefs.setFontFamily(id);
   };
 
@@ -2990,6 +3025,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         fontSize={fontSize()}
         fontFamilyId={fontFamilyId()}
         mobileInputMode={mobileInputMode()}
+        fontScope={sharedGeometryPreferences() ? 'shared-workbench' : 'local'}
         minFontSize={TERMINAL_MIN_FONT_SIZE}
         maxFontSize={TERMINAL_MAX_FONT_SIZE}
         onOpenChange={handleSettingsOpenChange}

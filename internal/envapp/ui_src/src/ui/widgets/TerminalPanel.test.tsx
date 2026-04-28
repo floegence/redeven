@@ -985,6 +985,46 @@ describe('TerminalPanel', () => {
       emitResizeOnFocus: true,
       notifyResizeOnlyWhenFocused: true,
     });
+    expect(terminalConfigState.values[0]?.fit).toBeUndefined();
+  });
+
+  it('removes the terminal scrollbar reserve for workbench projected surfaces', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    expect(terminalConfigState.values.length).toBeGreaterThan(0);
+    expect(terminalConfigState.values[0]?.fit).toEqual({
+      scrollbarReservePx: 0,
+    });
+  });
+
+  it('uses shared workbench terminal geometry instead of local terminal preferences', async () => {
+    terminalPrefsState.fontSize = 18;
+    terminalPrefsState.fontFamilyId = 'iosevka';
+    const fontSizeChange = vi.fn();
+    const fontFamilyChange = vi.fn();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <TerminalPanel
+        variant="workbench"
+        terminalGeometryPreferences={{
+          fontSize: 14,
+          fontFamilyId: 'jetbrains',
+          onFontSizeChange: fontSizeChange,
+          onFontFamilyChange: fontFamilyChange,
+        }}
+      />
+    ), host);
+    await settleTerminalPanel();
+
+    expect(terminalConfigState.values[0]?.fontSize).toBe(14);
+    expect(terminalCoreInstances[0]?.setFontSize).toHaveBeenCalledWith(14);
+    expect(terminalCoreInstances[0]?.setFontFamily).toHaveBeenCalledWith(expect.stringContaining('JetBrains Mono'));
   });
 
   it('uses the explicit floeterm font-family API instead of mutating terminal internals directly', async () => {

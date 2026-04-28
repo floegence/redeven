@@ -25,8 +25,13 @@ const workbenchMocks = vi.hoisted(() => ({
     sessionIds: ['session-1', 'session-2'],
     activeSessionId: 'session-2',
   })),
+  terminalGeometryPreferences: vi.fn(() => ({
+    fontSize: 14,
+    fontFamilyId: 'jetbrains',
+  })),
   terminalOpenRequest: vi.fn(() => null),
   consumeTerminalOpenRequest: vi.fn(),
+  updateTerminalGeometryPreferences: vi.fn(),
   updateTerminalPanelState: vi.fn(),
   createTerminalSession: vi.fn(),
   deleteTerminalSession: vi.fn(),
@@ -162,7 +167,13 @@ describe('redevenWorkbenchWidgets terminal behavior', () => {
         sessionIds: ['session-1', 'session-2'],
         activeSessionId: 'session-2',
       },
+      terminalGeometryPreferences: {
+        fontSize: 14,
+        fontFamilyId: 'jetbrains',
+      },
     });
+    terminalPanelMocks.render.mock.calls[0]?.[0].terminalGeometryPreferences.onFontSizeChange(15);
+    expect(workbenchMocks.updateTerminalGeometryPreferences).toHaveBeenCalledWith('widget-terminal-1', expect.any(Function));
   });
 
   it('forwards the shared workbench activation sequence into the live terminal panel', () => {

@@ -50,6 +50,10 @@ func sampleWidgets() []WidgetLayout {
 	}
 }
 
+func intPtr(value int) *int {
+	return &value
+}
+
 func TestServiceSnapshotStartsEmpty(t *testing.T) {
 	t.Parallel()
 
@@ -376,28 +380,54 @@ func TestServiceTerminalSessionStateHelpers(t *testing.T) {
 		t.Fatalf("first state = %#v, want session-1 revision 1", first)
 	}
 
+	withGeometry, err := svc.PutWidgetState(ctx, "widget-terminal-1", PutWidgetStateRequest{
+		BaseRevision: first.Revision,
+		WidgetType:   WidgetTypeTerminal,
+		State: WidgetStateData{
+			Kind:         WidgetStateKindTerminal,
+			SessionIDs:   first.State.SessionIDs,
+			FontSize:     intPtr(14),
+			FontFamilyID: "jetbrains",
+		},
+	})
+	if err != nil {
+		t.Fatalf("PutWidgetState(terminal geometry) error = %v", err)
+	}
+	if withGeometry.State.FontSize == nil || *withGeometry.State.FontSize != 14 || withGeometry.State.FontFamilyID != "jetbrains" {
+		t.Fatalf("geometry state = %#v, want font size 14 and jetbrains", withGeometry.State)
+	}
+
 	duplicate, err := svc.AppendTerminalSession(ctx, "widget-terminal-1", "session-1")
 	if err != nil {
 		t.Fatalf("AppendTerminalSession(duplicate) error = %v", err)
 	}
-	if duplicate.Revision != first.Revision || !reflect.DeepEqual(duplicate.State.SessionIDs, first.State.SessionIDs) {
-		t.Fatalf("duplicate state = %#v, want unchanged %#v", duplicate, first)
+	if duplicate.Revision != withGeometry.Revision || !reflect.DeepEqual(duplicate.State.SessionIDs, withGeometry.State.SessionIDs) {
+		t.Fatalf("duplicate state = %#v, want unchanged %#v", duplicate, withGeometry)
+	}
+	if duplicate.State.FontSize == nil || *duplicate.State.FontSize != 14 || duplicate.State.FontFamilyID != "jetbrains" {
+		t.Fatalf("duplicate geometry = %#v, want preserved geometry", duplicate.State)
 	}
 
 	second, err := svc.AppendTerminalSession(ctx, "widget-terminal-1", "session-2")
 	if err != nil {
 		t.Fatalf("AppendTerminalSession(session-2) error = %v", err)
 	}
-	if second.Revision != 2 || !reflect.DeepEqual(second.State.SessionIDs, []string{"session-1", "session-2"}) {
-		t.Fatalf("second state = %#v, want both sessions revision 2", second)
+	if second.Revision != 3 || !reflect.DeepEqual(second.State.SessionIDs, []string{"session-1", "session-2"}) {
+		t.Fatalf("second state = %#v, want both sessions revision 3", second)
+	}
+	if second.State.FontSize == nil || *second.State.FontSize != 14 || second.State.FontFamilyID != "jetbrains" {
+		t.Fatalf("second geometry = %#v, want preserved geometry", second.State)
 	}
 
 	removed, err := svc.RemoveTerminalSession(ctx, "widget-terminal-1", "session-1")
 	if err != nil {
 		t.Fatalf("RemoveTerminalSession(session-1) error = %v", err)
 	}
-	if removed.Revision != 3 || !reflect.DeepEqual(removed.State.SessionIDs, []string{"session-2"}) {
-		t.Fatalf("removed state = %#v, want session-2 revision 3", removed)
+	if removed.Revision != 4 || !reflect.DeepEqual(removed.State.SessionIDs, []string{"session-2"}) {
+		t.Fatalf("removed state = %#v, want session-2 revision 4", removed)
+	}
+	if removed.State.FontSize == nil || *removed.State.FontSize != 14 || removed.State.FontFamilyID != "jetbrains" {
+		t.Fatalf("removed geometry = %#v, want preserved geometry", removed.State)
 	}
 
 	missing, err := svc.RemoveTerminalSession(ctx, "widget-terminal-1", "missing")

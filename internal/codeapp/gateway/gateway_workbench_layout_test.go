@@ -365,6 +365,28 @@ func TestGatewayWorkbenchTerminalSessionAPIs(t *testing.T) {
 		t.Fatalf("widget_state = %#v, want one terminal session", createData.WidgetState)
 	}
 
+	geometryBody, err := json.Marshal(map[string]any{
+		"base_revision": createData.WidgetState.Revision,
+		"widget_type":   workbenchlayout.WidgetTypeTerminal,
+		"state": map[string]any{
+			"kind":           workbenchlayout.WidgetStateKindTerminal,
+			"session_ids":    createData.WidgetState.State.SessionIDs,
+			"font_size":      14,
+			"font_family_id": "jetbrains",
+		},
+	})
+	if err != nil {
+		t.Fatalf("json.Marshal(geometryBody) error = %v", err)
+	}
+	geometryResp := performWorkbenchLayoutRequest(t, gw, http.MethodPut, "/_redeven_proxy/api/workbench/widgets/widget-terminal-1/state", string(geometryBody))
+	if geometryResp.Code != http.StatusOK {
+		t.Fatalf("geometry put status = %d, body = %s", geometryResp.Code, geometryResp.Body.String())
+	}
+	geometryState := decodeWorkbenchLayoutResponse[workbenchlayout.WidgetState](t, geometryResp)
+	if geometryState.State.FontSize == nil || *geometryState.State.FontSize != 14 || geometryState.State.FontFamilyID != "jetbrains" {
+		t.Fatalf("geometry state = %#v, want font size 14 and jetbrains", geometryState.State)
+	}
+
 	createSecondResp := performWorkbenchLayoutRequest(t, gw, http.MethodPost, "/_redeven_proxy/api/workbench/widgets/widget-terminal-1/terminal/sessions", `{
   "name": "server",
   "working_dir": ""
@@ -382,6 +404,9 @@ func TestGatewayWorkbenchTerminalSessionAPIs(t *testing.T) {
 	if got := createSecondData.WidgetState.State.SessionIDs; len(got) != 2 || got[0] != createData.Session.ID || got[1] != createSecondData.Session.ID {
 		t.Fatalf("second widget sessions = %#v, want both terminal tabs", got)
 	}
+	if createSecondData.WidgetState.State.FontSize == nil || *createSecondData.WidgetState.State.FontSize != 14 || createSecondData.WidgetState.State.FontFamilyID != "jetbrains" {
+		t.Fatalf("second widget geometry = %#v, want preserved terminal geometry", createSecondData.WidgetState.State)
+	}
 
 	deleteResp := performWorkbenchLayoutRequest(
 		t,
@@ -397,6 +422,9 @@ func TestGatewayWorkbenchTerminalSessionAPIs(t *testing.T) {
 	if deletedState.State.Kind != workbenchlayout.WidgetStateKindTerminal || len(deletedState.State.SessionIDs) != 1 || deletedState.State.SessionIDs[0] != createSecondData.Session.ID {
 		t.Fatalf("deleted state = %#v, want only second terminal tab", deletedState)
 	}
+	if deletedState.State.FontSize == nil || *deletedState.State.FontSize != 14 || deletedState.State.FontFamilyID != "jetbrains" {
+		t.Fatalf("deleted geometry = %#v, want preserved terminal geometry", deletedState.State)
+	}
 
 	deleteLastResp := performWorkbenchLayoutRequest(
 		t,
@@ -411,5 +439,8 @@ func TestGatewayWorkbenchTerminalSessionAPIs(t *testing.T) {
 	deletedLastState := decodeWorkbenchLayoutResponse[workbenchlayout.WidgetState](t, deleteLastResp)
 	if deletedLastState.State.Kind != workbenchlayout.WidgetStateKindTerminal || len(deletedLastState.State.SessionIDs) != 0 {
 		t.Fatalf("deleted last state = %#v, want empty terminal state", deletedLastState)
+	}
+	if deletedLastState.State.FontSize == nil || *deletedLastState.State.FontSize != 14 || deletedLastState.State.FontFamilyID != "jetbrains" {
+		t.Fatalf("deleted last geometry = %#v, want preserved terminal geometry", deletedLastState.State)
 	}
 }

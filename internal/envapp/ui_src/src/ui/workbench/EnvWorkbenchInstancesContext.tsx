@@ -3,6 +3,7 @@ import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type { WorkbenchWidgetType } from '@floegence/floe-webapp-core/workbench';
 
 import type {
+  RedevenWorkbenchTerminalGeometryPreferences,
   RedevenWorkbenchTerminalPanelState,
   WorkbenchOpenFileBrowserRequest,
   WorkbenchOpenFilePreviewRequest,
@@ -14,6 +15,13 @@ export type EnvWorkbenchInstancesContextValue = Readonly<{
   latestWidgetIdByType: Accessor<Partial<Record<WorkbenchWidgetType, string>>>;
   markLatestWidget: (type: WorkbenchWidgetType, widgetId: string) => void;
   terminalPanelState: (widgetId: string) => RedevenWorkbenchTerminalPanelState;
+  terminalGeometryPreferences: (widgetId: string) => RedevenWorkbenchTerminalGeometryPreferences;
+  updateTerminalGeometryPreferences: (
+    widgetId: string,
+    updater: (
+      previous: RedevenWorkbenchTerminalGeometryPreferences,
+    ) => RedevenWorkbenchTerminalGeometryPreferences,
+  ) => void;
   updateTerminalPanelState: (
     widgetId: string,
     updater: (

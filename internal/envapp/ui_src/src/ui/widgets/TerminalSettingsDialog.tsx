@@ -56,6 +56,7 @@ type TerminalSettingsDialogProps = {
   fontSize: number;
   fontFamilyId: string;
   mobileInputMode: TerminalMobileInputMode;
+  fontScope?: 'local' | 'shared-workbench';
   minFontSize: number;
   maxFontSize: number;
   onOpenChange: (open: boolean) => void;
@@ -186,7 +187,9 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
       <section class="space-y-3">
         <SectionTitle
           title="Font"
-          description="Pick the terminal font family and adjust the global font size."
+          description={props.fontScope === 'shared-workbench'
+            ? 'Pick the shared font family and size for this workbench terminal.'
+            : 'Pick the terminal font family and adjust the global font size.'}
         />
         <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <For each={TERMINAL_FONT_OPTIONS}>
