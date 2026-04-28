@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FilePreviewContent } from './FilePreviewContent';
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
+  LOCAL_INTERACTION_SURFACE_ATTR: 'data-floe-local-interaction-surface',
+  WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR: 'data-floe-workbench-widget-activation-surface',
   Button: (props: any) => (
     <button
       type="button"
