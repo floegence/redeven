@@ -21,6 +21,7 @@ import {
   getDefaultTerminalConfig,
   getThemeColors,
   type Logger,
+  type TerminalAppearance,
   type TerminalEventSource,
   type TerminalResponsiveConfig,
   type TerminalSessionInfo,
@@ -263,10 +264,8 @@ type terminal_session_view_props = {
   protocolClient: () => unknown;
   viewActive: () => boolean;
   autoFocus: () => boolean;
-  themeName: () => TerminalThemeName;
   themeColors: () => Record<string, string>;
   fontSize: () => number;
-  presentationScale: () => number;
   fontFamily: () => string;
   agentHomePathAbs: () => string;
   canOpenFilePreview: () => boolean;
@@ -464,7 +463,6 @@ function TerminalSessionView(props: terminal_session_view_props) {
   const sessionId = () => props.session.id;
   const colors = () => props.themeColors();
   const fontSize = () => props.fontSize();
-  const presentationScale = () => props.presentationScale();
   const fontFamily = () => props.fontFamily();
   const [loading, setLoading] = createSignal<session_loading_state>('initializing');
   const [error, setError] = createSignal<string | null>(null);
@@ -512,8 +510,65 @@ function TerminalSessionView(props: terminal_session_view_props) {
   let term: TerminalCore | null = null;
   let unsubData: (() => void) | null = null;
   let unsubNameUpdate: (() => void) | null = null;
+  let appearanceRaf: number | null = null;
+  let activationRaf: number | null = null;
 
-  let didApplyTheme = false;
+  const buildTerminalAppearance = (): TerminalAppearance => ({
+    theme: colors(),
+    fontSize: fontSize(),
+    fontFamily: fontFamily(),
+  });
+
+  const applyTerminalAppearance = (
+    core: TerminalCore,
+    appearance: TerminalAppearance = buildTerminalAppearance(),
+    opts?: { forceResize?: boolean; focus?: boolean },
+  ) => {
+    core.setAppearance(appearance);
+    if (opts?.forceResize) {
+      core.forceResize();
+    }
+    if (opts?.focus && props.viewActive() && props.active() && props.autoFocus()) {
+      core.focus();
+    }
+  };
+
+  const cancelPendingAppearanceApply = () => {
+    if (appearanceRaf !== null) {
+      cancelAnimationFrame(appearanceRaf);
+      appearanceRaf = null;
+    }
+  };
+
+  const cancelPendingActivationRefresh = () => {
+    if (activationRaf !== null) {
+      cancelAnimationFrame(activationRaf);
+      activationRaf = null;
+    }
+  };
+
+  const scheduleTerminalAppearanceApply = (appearance: TerminalAppearance) => {
+    cancelPendingAppearanceApply();
+    appearanceRaf = requestAnimationFrame(() => {
+      appearanceRaf = null;
+      const core = term;
+      if (!core) return;
+      applyTerminalAppearance(core, appearance);
+    });
+  };
+
+  const scheduleTerminalActivationRefresh = () => {
+    cancelPendingActivationRefresh();
+    activationRaf = requestAnimationFrame(() => {
+      activationRaf = null;
+      const core = term;
+      if (!core) return;
+      applyTerminalAppearance(core, buildTerminalAppearance(), {
+        forceResize: true,
+        focus: true,
+      });
+    });
+  };
 
   let historyMaxSeq = 0;
   let replaying = false;
@@ -686,6 +741,8 @@ function TerminalSessionView(props: terminal_session_view_props) {
   let reloadSeq = 0;
   const disposeTerminal = () => {
     clearOutputSubscription();
+    cancelPendingAppearanceApply();
+    cancelPendingActivationRefresh();
     term?.dispose();
     term = null;
     queued = [];
@@ -780,7 +837,8 @@ function TerminalSessionView(props: terminal_session_view_props) {
       getDefaultTerminalConfig('dark', {
         cursorBlink: false,
         fontSize: fontSize(),
-        presentationScale: props.active() ? presentationScale() : 1,
+        // Workbench zoom is an outer visual transform; terminal geometry stays stable.
+        presentationScale: 1,
         fit: props.variant === 'workbench' ? { scrollbarReservePx: 0 } : undefined,
         allowTransparency: false,
         theme: colors(),
@@ -838,8 +896,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
       // After core.initialize(), the underlying terminal instance is ready: re-register to keep the outer registry consistent.
       props.registerCore(id, core);
 
-      core.setTheme(colors());
-      core.forceResize();
+      applyTerminalAppearance(core, buildTerminalAppearance(), { forceResize: true });
 
       clearOutputSubscription();
       historyMaxSeq = 0;
@@ -946,43 +1003,15 @@ function TerminalSessionView(props: terminal_session_view_props) {
   });
 
   createEffect(() => {
-    void props.themeName();
-    if (!didApplyTheme) {
-      didApplyTheme = true;
-      return;
-    }
+    const appearance = buildTerminalAppearance();
     if (!term) return;
-
-    untrack(() => void reload({ fadeOut: true }));
+    scheduleTerminalAppearanceApply(appearance);
   });
 
   createEffect(() => {
     if (!props.viewActive() || !props.active()) return;
-    const core = term;
-    if (!core) return;
-    requestAnimationFrame(() => {
-      core.setTheme(colors());
-      core.setFontSize(fontSize());
-      core.setPresentationScale(presentationScale());
-      core.forceResize();
-      if (props.autoFocus()) core.focus();
-    });
-  });
-
-  createEffect(() => {
     if (!term) return;
-    term.setFontSize(fontSize());
-    term.forceResize();
-  });
-
-  createEffect(() => {
-    if (!term) return;
-    term.setPresentationScale(props.active() ? presentationScale() : 1);
-  });
-
-  createEffect(() => {
-    if (!term) return;
-    term.setFontFamily?.(fontFamily());
+    scheduleTerminalActivationRefresh();
   });
 
   onCleanup(() => {
@@ -1230,13 +1259,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const fontFamily = createMemo<string>(() => {
     return resolveTerminalFontFamily(fontFamilyId());
   });
-  const workbenchPresentationScale = createMemo<number>(() => {
-    if (props.variant !== 'workbench') {
-      return 1;
-    }
-    const scale = Number(props.workbenchPresentationScale ?? 1);
-    return Number.isFinite(scale) && scale > 1.001 ? Math.min(scale, 4) : 1;
-  });
 
   const isMobileLayout = () => layout.isMobile();
 
@@ -1345,6 +1367,19 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [surfaceRegistrySeq, setSurfaceRegistrySeq] = createSignal(0);
   let mobileKeyboardInsetSyncRaf: number | null = null;
 
+  const buildRegisteredTerminalAppearance = (): TerminalAppearance => ({
+    theme: terminalThemeColors(),
+    fontSize: fontSize(),
+    fontFamily: fontFamily(),
+  });
+
+  const applyRegisteredTerminalAppearance = (
+    core: TerminalCore,
+    appearance: TerminalAppearance = buildRegisteredTerminalAppearance(),
+  ) => {
+    core.setAppearance(appearance);
+  };
+
   const updateSessionGroupState = (
     updater: (previous: TerminalPanelSessionGroupState) => TerminalPanelSessionGroupState,
   ): boolean => {
@@ -1426,9 +1461,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (!id) return;
     if (core) {
       coreRegistry.set(id, core);
-      core.setTheme(terminalThemeColors());
-      core.setFontSize(fontSize());
-      core.setFontFamily?.(fontFamily());
+      applyRegisteredTerminalAppearance(core);
       setCoreRegistrySeq((v) => v + 1);
       return;
     }
@@ -1525,16 +1558,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
 
   createEffect(() => {
-    const size = fontSize();
+    const appearance = buildRegisteredTerminalAppearance();
+    void coreRegistrySeq();
     for (const core of coreRegistry.values()) {
-      core.setFontSize(size);
-    }
-  });
-
-  createEffect(() => {
-    const family = fontFamily();
-    for (const core of coreRegistry.values()) {
-      core.setFontFamily?.(family);
+      applyRegisteredTerminalAppearance(core, appearance);
     }
   });
 
@@ -3019,10 +3046,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                         protocolClient={() => protocol.client()}
                         viewActive={viewActive}
                         autoFocus={shouldAutoFocus}
-                        themeName={terminalThemeName}
                         themeColors={terminalThemeColors}
                         fontSize={fontSize}
-                        presentationScale={workbenchPresentationScale}
                         fontFamily={fontFamily}
                         agentHomePathAbs={agentHomePathAbs}
                         canOpenFilePreview={canBrowseFiles}

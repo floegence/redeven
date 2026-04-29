@@ -148,9 +148,37 @@ describe('bootstrapDesktopThemeBridge', () => {
     expect(document.body.style.getPropertyValue('background-color')).toBe('var(--background, #f0eeea)');
     expect(listener).toHaveBeenLastCalledWith(lightSnapshot());
 
+    updatedListener?.({}, lightSnapshot());
+    expect(listener).toHaveBeenCalledTimes(2);
+
     unsubscribe();
     updatedListener?.({}, darkSnapshot());
     expect(listener).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not notify subscribers when the desktop theme snapshot is unchanged', async () => {
+    const { bootstrapDesktopThemeBridge } = await import('./windowTheme');
+
+    bootstrapDesktopThemeBridge();
+
+    const bridge = exposedBridge<{
+      setSource: (source: string) => unknown;
+      subscribe: (listener: (snapshot: unknown) => void) => () => void;
+    }>('redevenDesktopTheme');
+    const listener = vi.fn();
+    bridge.subscribe(listener);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    updatedListener?.({}, darkSnapshot());
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    bridge.setSource('system');
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    bridge.setSource('light');
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(listener).toHaveBeenLastCalledWith(lightSnapshot());
   });
 
   it('sets the shell theme source synchronously through the bridge', async () => {

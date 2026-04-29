@@ -511,6 +511,25 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
     forceResize = forceResizeSpy;
     getDimensions = vi.fn(() => ({ cols: 80, rows: 24 }));
     setPresentationScale = vi.fn();
+    setAppearance = vi.fn((appearance: {
+      theme?: Record<string, unknown>;
+      fontSize?: number;
+      fontFamily?: string;
+      presentationScale?: number;
+    }) => {
+      if (appearance.theme) {
+        this.setTheme(appearance.theme);
+      }
+      if (typeof appearance.fontSize === 'number') {
+        this.setFontSize(appearance.fontSize);
+      }
+      if (typeof appearance.fontFamily === 'string') {
+        this.setFontFamily(appearance.fontFamily);
+      }
+      if (typeof appearance.presentationScale === 'number') {
+        this.setPresentationScale(appearance.presentationScale);
+      }
+    });
     startHistoryReplay = vi.fn();
     endHistoryReplay = vi.fn();
     write = vi.fn();
@@ -1008,6 +1027,29 @@ describe('TerminalPanel', () => {
     expect(terminalConfigState.values[0]?.fit).toEqual({
       scrollbarReservePx: 0,
     });
+  });
+
+  it('keeps workbench zoom out of terminal render scale and hot appearance updates', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const [scale, setScale] = createSignal(2);
+
+    render(() => <TerminalPanel variant="workbench" workbenchPresentationScale={scale()} />, host);
+    await settleTerminalPanel();
+
+    const core = terminalCoreInstances[0];
+    expect(terminalConfigState.values[0]?.presentationScale).toBe(1);
+    expect(core?.setAppearance).toHaveBeenCalled();
+    expect(core?.setPresentationScale).not.toHaveBeenCalled();
+
+    core?.setAppearance.mockClear();
+    core?.setPresentationScale.mockClear();
+
+    setScale(3);
+    await settleTerminalPanel();
+
+    expect(core?.setAppearance).not.toHaveBeenCalled();
+    expect(core?.setPresentationScale).not.toHaveBeenCalled();
   });
 
   it('keeps the terminal work indicator at a consistent screen thickness across workbench scale', async () => {
