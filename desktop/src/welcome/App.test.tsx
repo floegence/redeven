@@ -526,6 +526,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Refresh runtime statuses');
     expect(appSrc).toContain('primary_action_overlay');
     expect(appSrc).toContain('<DesktopActionPopover');
+    expect(appSrc).toContain('<DesktopAnchoredOverlaySurface');
     expect(appSrc).toContain('const blockedPrimaryActionDisabled = createMemo(() => (');
     expect(appSrc).toContain('redeven-split-action-trigger__content');
     expect(appSrc).toContain('<Lock class="redeven-split-action-trigger__icon h-3.5 w-3.5" />');
@@ -543,6 +544,13 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('environment={projectedEnvironment(environmentID)}');
     expect(appSrc).toContain('guidanceOpen={props.primaryActionGuidanceOpen}');
     expect(appSrc).toContain('props.presentation.menu_button_label');
+    expect(appSrc).toContain('menuContainsTarget');
+    expect(appSrc).toContain('menuRef?.contains(target)');
+    expect(appSrc).toContain('firstEnabledMenuItem(menuRef)?.focus();');
+    expect(appSrc).toContain('anchorRef={rootRef}');
+    expect(appSrc).toContain('role="menu"');
+    expect(appSrc).toContain('ariaLabel={props.presentation.menu_button_label}');
+    expect(appSrc).not.toContain("document.addEventListener('focusin', handleFocusIn);");
     expect(appSrc).toContain('startEnvironmentRuntime');
     expect(appSrc).toContain('stopEnvironmentRuntime');
     expect(appSrc).toContain("case 'start_runtime':");
@@ -562,6 +570,7 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain(".redeven-split-action-trigger--blocked[aria-expanded='true']");
     expect(styles).toContain('.redeven-split-action-toggle');
     expect(styles).toContain('.redeven-split-menu');
+    expect(styles).not.toContain('bottom: calc(100% + 0.5rem);');
     expect(styles).toContain('.redeven-split-menu-item');
     expect(styles).toContain('.redeven-action-popover');
     expect(styles).toContain('.redeven-action-popover__actions');
