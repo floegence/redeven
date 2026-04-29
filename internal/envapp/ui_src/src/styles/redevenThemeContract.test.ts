@@ -95,6 +95,49 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).not.toContain('0 0 0 2px color-mix(in srgb, var(--ring) 72%, transparent)');
   });
 
+  it('defines a non-interactive terminal work indicator with reduced-motion support', () => {
+    const src = readRedevenCss();
+
+    expect(src).toContain('.redeven-terminal-work-indicator {');
+    expect(src).toContain('pointer-events: none;');
+    expect(src).toContain("--redeven-terminal-work-indicator-size: 3.5px;");
+    expect(src).toContain('inset: calc(-1 * var(--redeven-terminal-work-indicator-outset));');
+    expect(src).toContain('--redeven-terminal-work-indicator-outset: calc(var(--redeven-terminal-work-indicator-size) * 0.28);');
+    expect(src).toContain('--redeven-terminal-work-sky: #47a7ff;');
+    expect(src).toContain('--redeven-terminal-work-emerald: #35f28c;');
+    expect(src).toContain('--redeven-terminal-work-aqua: #38ffe2;');
+    expect(src).toContain('--redeven-terminal-work-bright: #dcfff7;');
+    expect(src).toContain('--redeven-terminal-work-running-line: #7bdc5f;');
+    expect(src).toContain(".redeven-terminal-work-indicator[data-terminal-work-theme='light'] {");
+    expect(src).toContain('--redeven-terminal-work-sky: #1a73e8;');
+    expect(src).toContain('--redeven-terminal-work-mint: #7eadff;');
+    expect(src).toContain('--redeven-terminal-work-bright: #d2e3fc;');
+    expect(src).toContain('--redeven-terminal-work-running-line: #00e000;');
+    expect(src).toContain('--redeven-terminal-work-running-opacity-low: 0.84;');
+    expect(src).toContain(".redeven-terminal-work-indicator[data-terminal-work-state='active'] {");
+    expect(src).toContain(".redeven-terminal-work-indicator[data-terminal-work-state='running'] {");
+    expect(src).toContain('box-shadow:');
+    expect(src).toContain(".redeven-terminal-work-indicator[data-terminal-work-state='active']::before {");
+    expect(src).toContain(".redeven-terminal-work-indicator[data-terminal-work-state='running']::before {");
+    expect(src).toContain('@property --redeven-terminal-work-flow-angle {');
+    expect(src).toContain('conic-gradient(');
+    expect(src).toContain('@keyframes redeven-terminal-work-indicator-flow {');
+    expect(src).toContain('@keyframes redeven-terminal-work-indicator-breathe {');
+    expect(src).toContain('--redeven-terminal-work-flow-angle: 360deg;');
+    expect(src).toContain('background: var(--redeven-terminal-work-running-line);');
+    expect(src).toContain('will-change: background;');
+    expect(src).toContain('@media (prefers-reduced-motion: reduce) {');
+
+    const indicatorCss = src.slice(src.indexOf('.redeven-terminal-work-indicator {'), src.indexOf(':root {'));
+    expect(indicatorCss).not.toContain('transform: rotate');
+    expect(indicatorCss).toContain('drop-shadow(0 0 calc(var(--redeven-terminal-work-indicator-size) * 0.8)');
+    expect(indicatorCss).toContain('inset 0 0 calc(var(--redeven-terminal-work-indicator-size) * 0.85) var(--redeven-terminal-work-track-glow)');
+    expect(indicatorCss).not.toContain('drop-shadow(0 0 10px');
+    expect(indicatorCss).not.toContain('drop-shadow(0 0 16px');
+    expect(indicatorCss).not.toContain('drop-shadow(0 0 24px');
+    expect(indicatorCss).not.toContain('drop-shadow(0 0 28px');
+  });
+
   it('defines reusable semantic surface and divider classes for local Env App consumers', () => {
     const src = readRedevenCss();
 

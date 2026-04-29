@@ -4,6 +4,244 @@
   box-shadow: none !important;
 }
 
+@property --redeven-terminal-work-flow-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.redeven-terminal-work-indicator {
+  position: absolute;
+  inset: calc(-1 * var(--redeven-terminal-work-indicator-outset));
+  z-index: 12;
+  pointer-events: none;
+  overflow: visible;
+  isolation: isolate;
+  border-radius: inherit;
+  opacity: 0;
+  transition:
+    opacity 180ms ease-out,
+    box-shadow 180ms ease-out;
+  --redeven-terminal-work-cyan: #2bd4ff;
+  --redeven-terminal-work-sky: #47a7ff;
+  --redeven-terminal-work-teal: #20e6bf;
+  --redeven-terminal-work-emerald: #35f28c;
+  --redeven-terminal-work-aqua: #38ffe2;
+  --redeven-terminal-work-mint: #8af5dd;
+  --redeven-terminal-work-bright: #dcfff7;
+  --redeven-terminal-work-running-line: #7bdc5f;
+  --redeven-terminal-work-track-opacity-active: 0.96;
+  --redeven-terminal-work-track-opacity-running: 0.84;
+  --redeven-terminal-work-flow-opacity-active: 1;
+  --redeven-terminal-work-flow-opacity-running: 0;
+  --redeven-terminal-work-running-opacity-low: 0.7;
+  --redeven-terminal-work-running-opacity-high: 1;
+  --redeven-terminal-work-track-outline: color-mix(in srgb, var(--redeven-terminal-work-cyan) 74%, transparent);
+  --redeven-terminal-work-track-glow: color-mix(in srgb, var(--redeven-terminal-work-aqua) 40%, transparent);
+  --redeven-terminal-work-track-shine: color-mix(in srgb, var(--redeven-terminal-work-bright) 58%, transparent);
+  --redeven-terminal-work-flow-glow: color-mix(in srgb, var(--redeven-terminal-work-aqua) 86%, transparent);
+  --redeven-terminal-work-flow-spread: color-mix(in srgb, var(--redeven-terminal-work-sky) 60%, transparent);
+  --redeven-terminal-work-active-outer-stroke: color-mix(in srgb, var(--redeven-terminal-work-cyan) 34%, transparent);
+  --redeven-terminal-work-active-outer-glow: color-mix(in srgb, var(--redeven-terminal-work-teal) 46%, transparent);
+  --redeven-terminal-work-active-inner-glow: color-mix(in srgb, var(--redeven-terminal-work-cyan) 18%, transparent);
+  --redeven-terminal-work-running-outer-stroke: color-mix(in srgb, var(--redeven-terminal-work-running-line) 28%, transparent);
+  --redeven-terminal-work-running-outer-glow: color-mix(in srgb, var(--redeven-terminal-work-running-line) 30%, transparent);
+  --redeven-terminal-work-running-inner-glow: color-mix(in srgb, var(--redeven-terminal-work-running-line) 14%, transparent);
+  --redeven-terminal-work-indicator-size: 3.5px;
+  --redeven-terminal-work-indicator-outset: calc(var(--redeven-terminal-work-indicator-size) * 0.28);
+}
+
+.redeven-terminal-work-indicator[data-terminal-work-theme='light'] {
+  --redeven-terminal-work-cyan: #4285f4;
+  --redeven-terminal-work-sky: #1a73e8;
+  --redeven-terminal-work-teal: #4285f4;
+  --redeven-terminal-work-emerald: #0b57d0;
+  --redeven-terminal-work-aqua: #5f9bf6;
+  --redeven-terminal-work-mint: #7eadff;
+  --redeven-terminal-work-bright: #d2e3fc;
+  --redeven-terminal-work-running-line: #00e000;
+  --redeven-terminal-work-track-opacity-active: 1;
+  --redeven-terminal-work-track-opacity-running: 0.96;
+  --redeven-terminal-work-running-opacity-low: 0.84;
+  --redeven-terminal-work-track-outline: color-mix(in srgb, #1a73e8 90%, #0b2f6f 10%);
+  --redeven-terminal-work-track-glow: color-mix(in srgb, var(--redeven-terminal-work-aqua) 60%, transparent);
+  --redeven-terminal-work-track-shine: color-mix(in srgb, var(--redeven-terminal-work-bright) 74%, white 26%);
+  --redeven-terminal-work-flow-glow: color-mix(in srgb, var(--redeven-terminal-work-aqua) 82%, transparent);
+  --redeven-terminal-work-flow-spread: color-mix(in srgb, var(--redeven-terminal-work-sky) 52%, transparent);
+  --redeven-terminal-work-active-outer-stroke: color-mix(in srgb, #1a73e8 70%, transparent);
+  --redeven-terminal-work-active-outer-glow: color-mix(in srgb, var(--redeven-terminal-work-aqua) 50%, transparent);
+  --redeven-terminal-work-active-inner-glow: color-mix(in srgb, #4285f4 24%, transparent);
+  --redeven-terminal-work-running-outer-stroke: color-mix(in srgb, var(--redeven-terminal-work-running-line) 44%, transparent);
+  --redeven-terminal-work-running-outer-glow: color-mix(in srgb, var(--redeven-terminal-work-running-line) 36%, transparent);
+  --redeven-terminal-work-running-inner-glow: color-mix(in srgb, var(--redeven-terminal-work-running-line) 16%, transparent);
+}
+
+.redeven-terminal-work-indicator::before,
+.redeven-terminal-work-indicator::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: var(--redeven-terminal-work-indicator-size);
+  border-radius: inherit;
+  box-sizing: border-box;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+.redeven-terminal-work-indicator::before {
+  z-index: 1;
+  --redeven-terminal-work-flow-angle: 0deg;
+  background: conic-gradient(
+    from var(--redeven-terminal-work-flow-angle),
+    transparent 0deg,
+    color-mix(in srgb, var(--redeven-terminal-work-sky) 18%, transparent) 36deg,
+    color-mix(in srgb, var(--redeven-terminal-work-aqua) 36%, transparent) 62deg,
+    color-mix(in srgb, var(--redeven-terminal-work-mint) 18%, transparent) 90deg,
+    transparent 116deg,
+    transparent 154deg,
+    color-mix(in srgb, var(--redeven-terminal-work-sky) 20%, transparent) 180deg,
+    color-mix(in srgb, var(--redeven-terminal-work-cyan) 48%, transparent) 208deg,
+    color-mix(in srgb, var(--redeven-terminal-work-aqua) 76%, transparent) 238deg,
+    var(--redeven-terminal-work-teal) 264deg,
+    var(--redeven-terminal-work-emerald) 286deg,
+    var(--redeven-terminal-work-mint) 306deg,
+    var(--redeven-terminal-work-bright) 324deg,
+    var(--redeven-terminal-work-cyan) 338deg,
+    color-mix(in srgb, var(--redeven-terminal-work-sky) 68%, transparent) 350deg,
+    transparent 360deg
+  );
+  filter:
+    drop-shadow(0 0 calc(var(--redeven-terminal-work-indicator-size) * 0.8) var(--redeven-terminal-work-flow-glow))
+    drop-shadow(0 0 calc(var(--redeven-terminal-work-indicator-size) * 1.35) var(--redeven-terminal-work-flow-spread));
+  opacity: 0;
+  will-change: background;
+}
+
+.redeven-terminal-work-indicator::after {
+  z-index: 0;
+  box-shadow:
+    inset 0 0 0 calc(var(--redeven-terminal-work-indicator-size) * 0.1) var(--redeven-terminal-work-track-outline),
+    inset 0 0 calc(var(--redeven-terminal-work-indicator-size) * 0.85) var(--redeven-terminal-work-track-glow),
+    inset 0 0 calc(var(--redeven-terminal-work-indicator-size) * 0.38) var(--redeven-terminal-work-track-shine);
+  filter: drop-shadow(0 0 calc(var(--redeven-terminal-work-indicator-size) * 0.9) var(--redeven-terminal-work-track-glow));
+  opacity: 0;
+}
+
+.redeven-terminal-work-indicator[data-terminal-work-state='active']::after {
+  background: conic-gradient(
+    from 0deg,
+    var(--redeven-terminal-work-sky),
+    var(--redeven-terminal-work-cyan),
+    var(--redeven-terminal-work-teal),
+    var(--redeven-terminal-work-emerald),
+    var(--redeven-terminal-work-mint),
+    var(--redeven-terminal-work-sky)
+  );
+}
+
+.redeven-terminal-work-indicator[data-terminal-work-state='running']::after {
+  background: var(--redeven-terminal-work-running-line);
+}
+
+.redeven-terminal-work-indicator[data-terminal-work-state='active'],
+.redeven-terminal-work-indicator[data-terminal-work-state='running'] {
+  opacity: 1;
+}
+
+.redeven-terminal-work-indicator[data-terminal-work-state='active'] {
+  box-shadow:
+    0 0 0 calc(var(--redeven-terminal-work-indicator-size) * 0.12) var(--redeven-terminal-work-active-outer-stroke),
+    0 0 calc(var(--redeven-terminal-work-indicator-size) * 1.35) var(--redeven-terminal-work-active-outer-glow),
+    inset 0 0 calc(var(--redeven-terminal-work-indicator-size) * 0.8) var(--redeven-terminal-work-active-inner-glow);
+}
+
+.redeven-terminal-work-indicator[data-terminal-work-state='running'] {
+  animation: redeven-terminal-work-indicator-breathe 6.2s ease-in-out infinite;
+  box-shadow:
+    0 0 0 calc(var(--redeven-terminal-work-indicator-size) * 0.12) var(--redeven-terminal-work-running-outer-stroke),
+    0 0 calc(var(--redeven-terminal-work-indicator-size) * 1.8) var(--redeven-terminal-work-running-outer-glow),
+    inset 0 0 calc(var(--redeven-terminal-work-indicator-size) * 1) var(--redeven-terminal-work-running-inner-glow);
+}
+
+.redeven-terminal-work-indicator[data-terminal-work-state='active']::before {
+  animation: redeven-terminal-work-indicator-flow 4.2s linear infinite;
+  opacity: var(--redeven-terminal-work-flow-opacity-active);
+}
+
+.redeven-terminal-work-indicator[data-terminal-work-state='active']::after {
+  opacity: var(--redeven-terminal-work-track-opacity-active);
+}
+
+.redeven-terminal-work-indicator[data-terminal-work-state='running']::before {
+  animation: none;
+  opacity: var(--redeven-terminal-work-flow-opacity-running);
+}
+
+.redeven-terminal-work-indicator[data-terminal-work-state='running']::after {
+  animation: redeven-terminal-work-indicator-track-breathe 6.2s ease-in-out infinite;
+  opacity: var(--redeven-terminal-work-track-opacity-running);
+}
+
+@keyframes redeven-terminal-work-indicator-flow {
+  from {
+    --redeven-terminal-work-flow-angle: 0deg;
+  }
+
+  to {
+    --redeven-terminal-work-flow-angle: 360deg;
+  }
+}
+
+@keyframes redeven-terminal-work-indicator-breathe {
+  0%,
+  100% {
+    opacity: var(--redeven-terminal-work-running-opacity-low);
+    box-shadow:
+      0 0 0 calc(var(--redeven-terminal-work-indicator-size) * 0.1) var(--redeven-terminal-work-running-outer-stroke),
+      0 0 calc(var(--redeven-terminal-work-indicator-size) * 1.3) var(--redeven-terminal-work-running-outer-glow),
+      inset 0 0 calc(var(--redeven-terminal-work-indicator-size) * 0.8) var(--redeven-terminal-work-running-inner-glow);
+  }
+
+  45% {
+    opacity: var(--redeven-terminal-work-running-opacity-high);
+    box-shadow:
+      0 0 0 calc(var(--redeven-terminal-work-indicator-size) * 0.2) var(--redeven-terminal-work-running-outer-stroke),
+      0 0 calc(var(--redeven-terminal-work-indicator-size) * 2.6) var(--redeven-terminal-work-running-outer-glow),
+      inset 0 0 calc(var(--redeven-terminal-work-indicator-size) * 1.5) var(--redeven-terminal-work-running-inner-glow);
+  }
+}
+
+@keyframes redeven-terminal-work-indicator-track-breathe {
+  0%,
+  100% {
+    filter:
+      drop-shadow(0 0 calc(var(--redeven-terminal-work-indicator-size) * 0.9) var(--redeven-terminal-work-track-glow))
+      saturate(1.02)
+      brightness(0.92);
+  }
+
+  45% {
+    filter:
+      drop-shadow(0 0 calc(var(--redeven-terminal-work-indicator-size) * 2.4) var(--redeven-terminal-work-track-glow))
+      saturate(1.35)
+      brightness(1.18);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .redeven-terminal-work-indicator[data-terminal-work-state='running'],
+  .redeven-terminal-work-indicator[data-terminal-work-state='running']::after,
+  .redeven-terminal-work-indicator::before {
+    animation: none !important;
+  }
+}
+
 :root {
   /* Keep the Env App panel surface contract at root scope so body portals inherit it too. */
   --redeven-surface-panel: rgb(246, 245, 244);

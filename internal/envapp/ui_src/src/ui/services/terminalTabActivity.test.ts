@@ -46,9 +46,13 @@ describe('createTerminalTabActivityTracker', () => {
 
   it('lets a quiet command fall back to none after the grace window when no unread state is pending', () => {
     const published: string[] = [];
+    const workStates: string[] = [];
     const tracker = createTerminalTabActivityTracker({
       publishVisualState: (_sessionId, state) => {
         published.push(state);
+      },
+      publishWorkState: (_sessionId, state) => {
+        workStates.push(state);
       },
       outputActivityGraceMs: 10,
       outputActivityQuietMs: 25,
@@ -56,9 +60,42 @@ describe('createTerminalTabActivityTracker', () => {
 
     tracker.handleCommandStart('session-1');
     expect(published).toEqual(['running']);
+    expect(workStates).toEqual(['active']);
 
     vi.advanceTimersByTime(10);
     expect(published).toEqual(['running', 'none']);
+    expect(workStates).toEqual(['active', 'running']);
+
+    tracker.handleCommandFinish('session-1', false);
+    expect(published).toEqual(['running', 'none']);
+    expect(workStates).toEqual(['active', 'running', 'idle']);
+
+    tracker.dispose();
+  });
+
+  it('publishes brief active work for live output even when shell lifecycle markers are unavailable', () => {
+    const published: string[] = [];
+    const workStates: string[] = [];
+    const tracker = createTerminalTabActivityTracker({
+      publishVisualState: (_sessionId, state) => {
+        published.push(state);
+      },
+      publishWorkState: (_sessionId, state) => {
+        workStates.push(state);
+      },
+      outputActivityGraceMs: 10,
+      outputActivityQuietMs: 25,
+    });
+
+    tracker.handleVisibleOutput('session-1', { source: 'live', byteLength: 8, shouldMarkUnread: false });
+
+    expect(published).toEqual([]);
+    expect(workStates).toEqual(['active']);
+
+    vi.advanceTimersByTime(25);
+
+    expect(published).toEqual([]);
+    expect(workStates).toEqual(['active', 'idle']);
 
     tracker.dispose();
   });
