@@ -5,7 +5,11 @@ import { ProtocolProvider } from '@floegence/floe-webapp-protocol';
 import { EnvAppShell } from './EnvAppShell';
 import { redevenV1Contract } from './protocol/redeven_v1';
 import { createUIStorageAdapter, isDesktopStateStorageAvailable } from './services/uiStorage';
-import { createDesktopThemeStorageAdapter, desktopThemeBridge } from './services/desktopTheme';
+import {
+  createDesktopThemeStorageAdapter,
+  desktopThemeBridge,
+  type DesktopThemeSnapshot,
+} from './services/desktopTheme';
 import { installDesktopEmbeddedDragRegionSync } from './services/desktopEmbeddedDragRegions';
 import { installDesktopWindowChromeDocumentSync } from './services/desktopWindowChrome';
 import { resolveEnvAppStorageBinding } from './services/uiPersistence';
@@ -66,19 +70,86 @@ function buildFloeConfig() {
   } as const;
 }
 
+function desktopThemeSnapshotKey(snapshot: DesktopThemeSnapshot): string {
+  return [
+    snapshot.source,
+    snapshot.resolvedTheme,
+    snapshot.window.backgroundColor,
+    snapshot.window.symbolColor,
+  ].join(':');
+}
+
 function DesktopThemeSync() {
   const theme = useTheme();
   const shellTheme = desktopThemeBridge();
 
   if (shellTheme) {
-    const applyShellTheme = (next: Readonly<{ source: 'system' | 'light' | 'dark' }>) => {
+    let clearThemeSwitchingFrame: number | null = null;
+    let removeThemeSwitchingFrame: number | null = null;
+    let lastThemeSnapshotKey = desktopThemeSnapshotKey(shellTheme.getSnapshot());
+
+    const requestFrame = (callback: FrameRequestCallback): number => {
+      if (typeof window.requestAnimationFrame === 'function') {
+        return window.requestAnimationFrame(callback);
+      }
+      return window.setTimeout(() => callback(window.performance?.now() ?? Date.now()), 16);
+    };
+
+    const cancelFrame = (handle: number) => {
+      if (typeof window.cancelAnimationFrame === 'function') {
+        window.cancelAnimationFrame(handle);
+        return;
+      }
+      window.clearTimeout(handle);
+    };
+
+    const clearThemeSwitching = () => {
+      if (clearThemeSwitchingFrame !== null) {
+        cancelFrame(clearThemeSwitchingFrame);
+        clearThemeSwitchingFrame = null;
+      }
+      if (removeThemeSwitchingFrame !== null) {
+        cancelFrame(removeThemeSwitchingFrame);
+        removeThemeSwitchingFrame = null;
+      }
+      delete document.documentElement.dataset.themeSwitching;
+    };
+
+    const markThemeSwitching = () => {
+      document.documentElement.dataset.themeSwitching = 'true';
+      if (clearThemeSwitchingFrame !== null) {
+        cancelFrame(clearThemeSwitchingFrame);
+        clearThemeSwitchingFrame = null;
+      }
+      if (removeThemeSwitchingFrame !== null) {
+        cancelFrame(removeThemeSwitchingFrame);
+        removeThemeSwitchingFrame = null;
+      }
+      clearThemeSwitchingFrame = requestFrame(() => {
+        clearThemeSwitchingFrame = null;
+        removeThemeSwitchingFrame = requestFrame(() => {
+          removeThemeSwitchingFrame = null;
+          delete document.documentElement.dataset.themeSwitching;
+        });
+      });
+    };
+
+    const applyShellTheme = (next: DesktopThemeSnapshot) => {
+      const nextThemeSnapshotKey = desktopThemeSnapshotKey(next);
+      if (nextThemeSnapshotKey !== lastThemeSnapshotKey) {
+        lastThemeSnapshotKey = nextThemeSnapshotKey;
+        markThemeSwitching();
+      }
       if (theme.theme() !== next.source) {
         theme.setTheme(next.source);
       }
     };
     applyShellTheme(shellTheme.getSnapshot());
     const unsubscribe = shellTheme.subscribe(applyShellTheme);
-    onCleanup(unsubscribe);
+    onCleanup(() => {
+      unsubscribe();
+      clearThemeSwitching();
+    });
   }
 
   return null;

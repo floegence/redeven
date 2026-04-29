@@ -10,6 +10,7 @@ import {
 } from '../shared/desktopThemeIPC';
 import {
   normalizeDesktopThemeSource,
+  sameDesktopThemeSnapshot,
   type DesktopThemeSnapshot,
   type DesktopThemeSource,
 } from '../shared/desktopTheme';
@@ -130,6 +131,9 @@ function syncCurrentDocument(snapshot: DesktopThemeSnapshot, windowChromeSnapsho
 }
 
 function updateDesktopThemeSnapshot(snapshot: DesktopThemeSnapshot): DesktopThemeSnapshot {
+  if (sameDesktopThemeSnapshot(currentSnapshot, snapshot)) {
+    return currentSnapshot;
+  }
   currentSnapshot = snapshot;
   syncCurrentDocument(snapshot, currentWindowChromeSnapshot);
   for (const listener of Array.from(listeners)) {
