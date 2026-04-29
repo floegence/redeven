@@ -1,6 +1,7 @@
 export type TerminalCommandPhase = 'idle' | 'running';
 export type TerminalProgramActivityPhase = 'unknown' | 'busy' | 'idle';
 export type TerminalTabVisualState = 'none' | 'running' | 'unread';
+export type TerminalSessionWorkState = 'idle' | 'running' | 'active';
 type TerminalRecentActivityPhase = 'inactive' | 'grace' | 'output';
 
 export type TerminalSessionActivityRuntime = {
@@ -10,10 +11,12 @@ export type TerminalSessionActivityRuntime = {
   recentActivityPhase: TerminalRecentActivityPhase;
   activityTimer: ReturnType<typeof setTimeout> | null;
   visualState: TerminalTabVisualState;
+  workState: TerminalSessionWorkState;
 };
 
 export interface TerminalTabActivityTrackerOptions {
   publishVisualState: (sessionId: string, state: TerminalTabVisualState) => void;
+  publishWorkState?: (sessionId: string, state: TerminalSessionWorkState) => void;
   outputActivityGraceMs?: number;
   outputActivityQuietMs?: number;
   scheduleTimeout?: typeof setTimeout;
@@ -43,6 +46,7 @@ function createEmptyRuntime(): TerminalSessionActivityRuntime {
     recentActivityPhase: 'inactive',
     activityTimer: null,
     visualState: 'none',
+    workState: 'idle',
   };
 }
 
@@ -59,6 +63,19 @@ function computeVisualState(runtime: TerminalSessionActivityRuntime): TerminalTa
   return 'none';
 }
 
+function computeWorkState(runtime: TerminalSessionActivityRuntime): TerminalSessionWorkState {
+  if (runtime.programActivityPhase === 'busy') {
+    return 'active';
+  }
+  if (runtime.commandPhase === 'running') {
+    return runtime.recentActivityPhase === 'inactive' ? 'running' : 'active';
+  }
+  if (runtime.recentActivityPhase === 'output') {
+    return 'active';
+  }
+  return 'idle';
+}
+
 export function createTerminalTabActivityTracker(
   options: TerminalTabActivityTrackerOptions,
 ): TerminalTabActivityTracker {
@@ -70,11 +87,16 @@ export function createTerminalTabActivityTracker(
 
   const publishIfNeeded = (sessionId: string, runtime: TerminalSessionActivityRuntime) => {
     const nextState = computeVisualState(runtime);
-    if (nextState === runtime.visualState) {
-      return;
+    if (nextState !== runtime.visualState) {
+      runtime.visualState = nextState;
+      options.publishVisualState(sessionId, nextState);
     }
-    runtime.visualState = nextState;
-    options.publishVisualState(sessionId, nextState);
+
+    const nextWorkState = computeWorkState(runtime);
+    if (nextWorkState !== runtime.workState) {
+      runtime.workState = nextWorkState;
+      options.publishWorkState?.(sessionId, nextWorkState);
+    }
   };
 
   const clearActivityTimer = (runtime: TerminalSessionActivityRuntime) => {
@@ -238,7 +260,7 @@ export function createTerminalTabActivityTracker(
         scheduleRecentActivity(normalizedSessionId, runtime, 'output', quietMs);
         return;
       }
-      publishIfNeeded(normalizedSessionId, runtime);
+      scheduleRecentActivity(normalizedSessionId, runtime, 'output', quietMs);
     },
 
     pruneSessions(activeSessionIds: Set<string>) {

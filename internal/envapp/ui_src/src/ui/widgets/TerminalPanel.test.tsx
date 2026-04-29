@@ -21,6 +21,10 @@ const viewActivationState = vi.hoisted(() => ({
   active: true,
 }));
 
+const themeState = vi.hoisted(() => ({
+  resolvedTheme: 'dark' as 'light' | 'dark',
+}));
+
 const terminalPrefsState = vi.hoisted(() => ({
   userTheme: 'system',
   fontSize: 12,
@@ -228,7 +232,7 @@ vi.mock('@floegence/floe-webapp-core', () => ({
     },
   }),
   useTheme: () => ({
-    resolvedTheme: () => 'dark',
+    resolvedTheme: () => themeState.resolvedTheme,
   }),
   useViewActivation: () => {
     if (viewActivationState.missing) {
@@ -744,9 +748,14 @@ function findTerminalTabStatus(host: HTMLElement, label: string, status: 'runnin
   return findTerminalTab(host, label)?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? null;
 }
 
+function findTerminalWorkIndicator(host: HTMLElement): HTMLElement | null {
+  return host.querySelector('.redeven-terminal-work-indicator');
+}
+
 describe('TerminalPanel', () => {
   beforeEach(() => {
     terminalPrefsState.userTheme = 'system';
+    themeState.resolvedTheme = 'dark';
     terminalPrefsState.fontSize = 12;
     terminalPrefsState.fontFamilyId = 'iosevka';
     terminalPrefsState.mobileInputMode = 'floe';
@@ -999,6 +1008,61 @@ describe('TerminalPanel', () => {
     expect(terminalConfigState.values[0]?.fit).toEqual({
       scrollbarReservePx: 0,
     });
+  });
+
+  it('keeps the terminal work indicator at a consistent screen thickness across workbench scale', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" workbenchPresentationScale={0.3} />, host);
+    await settleTerminalPanel();
+
+    const indicator = findTerminalWorkIndicator(host);
+    expect(indicator?.style.getPropertyValue('--redeven-terminal-work-indicator-size')).toBe('11.5px');
+
+    const zoomedHost = document.createElement('div');
+    document.body.appendChild(zoomedHost);
+
+    render(() => <TerminalPanel variant="workbench" workbenchPresentationScale={2} />, zoomedHost);
+    await settleTerminalPanel();
+
+    const zoomedIndicator = findTerminalWorkIndicator(zoomedHost);
+    expect(zoomedIndicator?.style.getPropertyValue('--redeven-terminal-work-indicator-size')).toBe('2px');
+  });
+
+  it('marks the terminal work indicator with the app theme contrast mode', async () => {
+    themeState.resolvedTheme = 'light';
+    terminalPrefsState.userTheme = 'dark';
+    const lightHost = document.createElement('div');
+    document.body.appendChild(lightHost);
+
+    render(() => <TerminalPanel variant="deck" />, lightHost);
+    await settleTerminalPanel();
+
+    expect(findTerminalWorkIndicator(lightHost)?.dataset.terminalWorkTheme).toBe('light');
+
+    themeState.resolvedTheme = 'dark';
+    terminalPrefsState.userTheme = 'light';
+    const darkHost = document.createElement('div');
+    document.body.appendChild(darkHost);
+
+    render(() => <TerminalPanel variant="deck" />, darkHost);
+    await settleTerminalPanel();
+
+    expect(findTerminalWorkIndicator(darkHost)?.dataset.terminalWorkTheme).toBe('dark');
+  });
+
+  it('keeps the terminal work indicator idle in the activity panel even when a command is running', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await settleTerminalPanel();
+
+    emitTerminalData('session-1', '\x1b]633;B\u0007', 1);
+    await settleTerminalPanel();
+
+    expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
   });
 
   it('uses shared workbench terminal geometry instead of local terminal preferences', async () => {
@@ -1374,6 +1438,7 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     expect(notificationMocks.info).not.toHaveBeenCalled();
+    expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
     const terminal2Tab = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Terminal 2'));
     expect(terminal2Tab?.querySelector('[data-terminal-tab-status="unread"]')).not.toBeNull();
     expect(host.textContent).not.toContain('! Terminal 2');
@@ -1422,6 +1487,7 @@ describe('TerminalPanel', () => {
 
     let terminal2Tab = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Terminal 2'));
     expect(terminal2Tab?.querySelector('[data-terminal-tab-status="running"]')).not.toBeNull();
+    expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
 
     emitTerminalData('session-2', '\x1b]633;D;0\u0007', 2);
     await settleTerminalPanel();
@@ -1429,6 +1495,7 @@ describe('TerminalPanel', () => {
     terminal2Tab = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Terminal 2'));
     expect(terminal2Tab?.querySelector('[data-terminal-tab-status="running"]')).toBeNull();
     expect(terminal2Tab?.querySelector('[data-terminal-tab-status="unread"]')).not.toBeNull();
+    expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
   });
 
   it('switches a background interactive session from running spinner to an unread dot after output goes quiet', async () => {
@@ -1500,7 +1567,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
     findTerminalTab(host, 'Terminal 2')?.click();
@@ -1513,12 +1580,19 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
+    expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('active');
 
     await new Promise<void>((resolve) => setTimeout(resolve, 1_700));
     await settleTerminalPanel();
 
     expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
     expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).toBeNull();
+    expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('running');
+
+    emitTerminalData('session-2', '\x1b]633;D;0\u0007', 2);
+    await settleTerminalPanel();
+
+    expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
   });
 
   it('lets explicit program activity markers override the tab spinner and fall back to unread when the tool goes idle', async () => {
@@ -1558,12 +1632,14 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
+    expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
 
     emitTerminalData('session-2', '\x1b]633;P;RedevenActivity=idle\u0007', 3);
     await settleTerminalPanel();
 
     expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
     expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).not.toBeNull();
+    expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
   });
 
   it('consumes cwd shell-integration markers without writing them to the terminal surface', async () => {

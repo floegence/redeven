@@ -71,7 +71,7 @@ import { useFilePreviewContext } from './FilePreviewContext';
 import { fileItemFromPath } from '../utils/filePreviewItem';
 import { createTerminalFileLinkProvider, type TerminalResolvedLinkTarget } from '../services/terminalLinkProvider';
 import { TerminalShellIntegrationParser, type TerminalShellIntegrationEvent } from '../services/terminalShellIntegration';
-import { createTerminalTabActivityTracker, type TerminalTabVisualState } from '../services/terminalTabActivity';
+import { createTerminalTabActivityTracker, type TerminalSessionWorkState, type TerminalTabVisualState } from '../services/terminalTabActivity';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
 import { FloatingContextMenu, type FloatingContextMenuItem } from './FloatingContextMenu';
 
@@ -86,6 +86,9 @@ const TERMINAL_HISTORY_REPLAY_MAX_CHUNKS = 64;
 const TERMINAL_HISTORY_REPLAY_MAX_BYTES = 512 * 1024;
 const TERMINAL_HISTORY_REPLAY_MODE_MS = 120_000;
 const TERMINAL_HISTORY_REPLAY_MAX_PAGES = 4096;
+const TERMINAL_WORK_INDICATOR_BASE_THICKNESS_PX = 3.5;
+const TERMINAL_WORK_INDICATOR_SCREEN_THICKNESS_PX = 3.5;
+const TERMINAL_WORK_INDICATOR_MAX_THICKNESS_PX = 38;
 
 export type TerminalPanelSessionGroupState = Readonly<{
   sessionIds: string[];
@@ -292,6 +295,7 @@ const TERMINAL_INPUT_SELECTOR = 'textarea[aria-label="Terminal input"], textarea
 const MOBILE_TERMINAL_TOUCH_SCROLL_LINE_HEIGHT_FALLBACK_PX = 20;
 const MOBILE_TERMINAL_TOUCH_SCROLL_MIN_LINE_HEIGHT_PX = 12;
 type TerminalSessionTabVisualStateMap = Record<string, TerminalTabVisualState>;
+type TerminalSessionWorkStateMap = Record<string, TerminalSessionWorkState>;
 
 type terminal_touch_scroll_target = {
   scrollLines?: (amount: number) => void;
@@ -358,6 +362,23 @@ function buildTerminalPanelTitle(session: TerminalSessionInfo | null): string {
   }
 
   return 'Terminal';
+}
+
+function mergeTerminalSessionWorkStates(
+  sessions: readonly TerminalSessionInfo[],
+  workStateBySession: TerminalSessionWorkStateMap,
+): TerminalSessionWorkState {
+  let hasRunning = false;
+  for (const session of sessions) {
+    const state = workStateBySession[session.id] ?? 'idle';
+    if (state === 'active') {
+      return 'active';
+    }
+    if (state === 'running') {
+      hasRunning = true;
+    }
+  }
+  return hasRunning ? 'running' : 'idle';
 }
 
 const TerminalTabStatusIcon = (props: { state: 'none' | 'running' | 'unread' }) => {
@@ -1249,6 +1270,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return selected as TerminalThemeName;
   });
 
+  const terminalWorkIndicatorTheme = createMemo(() => {
+    return theme.resolvedTheme() === 'light' ? 'light' : 'dark';
+  });
+
   const terminalThemeColors = createMemo<Record<string, string>>(() => {
     // Unify and slightly brighten selection colors to keep readability consistent across themes.
     return {
@@ -1276,6 +1301,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [mobileKeyboardPathEntries, setMobileKeyboardPathEntries] = createSignal<TerminalMobileKeyboardPathEntry[]>([]);
   const [mobileKeyboardPackageScripts, setMobileKeyboardPackageScripts] = createSignal<TerminalMobileKeyboardScript[]>([]);
   const [tabVisualStateBySession, setTabVisualStateBySession] = createSignal<TerminalSessionTabVisualStateMap>({});
+  const [workStateBySession, setWorkStateBySession] = createSignal<TerminalSessionWorkStateMap>({});
 
   const handleExecuteDenied = (e: unknown): boolean => {
     if (!isPermissionDeniedError(e, 'execute')) return false;
@@ -1293,6 +1319,17 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const tabActivityTracker = createTerminalTabActivityTracker({
     publishVisualState: (sessionId, state) => {
       setTabVisualStateBySession((prev) => {
+        if (prev[sessionId] === state) {
+          return prev;
+        }
+        return {
+          ...prev,
+          [sessionId]: state,
+        };
+      });
+    },
+    publishWorkState: (sessionId, state) => {
+      setWorkStateBySession((prev) => {
         if (prev[sessionId] === state) {
           return prev;
         }
@@ -1618,6 +1655,30 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const terminalViewportInsetPx = createMemo(() => {
     if (!shouldUseFloeMobileKeyboard() || !mobileKeyboardVisible()) return 0;
     return mobileKeyboardInsetPx();
+  });
+
+  const panelWorkState = createMemo<TerminalSessionWorkState>(() => {
+    return mergeTerminalSessionWorkStates(sessions(), workStateBySession());
+  });
+
+  const terminalWorkIndicatorState = createMemo<TerminalSessionWorkState>(() => {
+    return variant === 'workbench' ? panelWorkState() : 'idle';
+  });
+
+  const terminalWorkIndicatorThicknessPx = createMemo(() => {
+    if (variant !== 'workbench') {
+      return TERMINAL_WORK_INDICATOR_BASE_THICKNESS_PX;
+    }
+    const rawScale = Number(props.workbenchPresentationScale ?? 1);
+    if (!Number.isFinite(rawScale) || rawScale <= 0) {
+      return TERMINAL_WORK_INDICATOR_BASE_THICKNESS_PX;
+    }
+    const scaledThickness = TERMINAL_WORK_INDICATOR_SCREEN_THICKNESS_PX / rawScale;
+    const clampedThickness = Math.min(
+      TERMINAL_WORK_INDICATOR_MAX_THICKNESS_PX,
+      scaledThickness,
+    );
+    return Math.round(clampedThickness * 2) / 2;
   });
 
   const showTerminalStatusBar = createMemo(() => {
@@ -2105,6 +2166,19 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     setTabVisualStateBySession((prev) => {
       let changed = false;
       const next: TerminalSessionTabVisualStateMap = {};
+      for (const [id, state] of Object.entries(prev)) {
+        if (ids.has(id)) {
+          next[id] = state;
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+
+    setWorkStateBySession((prev) => {
+      let changed = false;
+      const next: TerminalSessionWorkStateMap = {};
       for (const [id, state] of Object.entries(prev)) {
         if (ids.has(id)) {
           next[id] = state;
@@ -2874,8 +2948,19 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         <div
           ref={setTerminalContextMenuHostEl}
           data-testid="terminal-content"
+          data-terminal-work-state={terminalWorkIndicatorState()}
+          data-terminal-work-theme={terminalWorkIndicatorTheme()}
           class="flex-1 min-h-0 relative"
         >
+          <div
+            class="redeven-terminal-work-indicator"
+            data-terminal-work-state={terminalWorkIndicatorState()}
+            data-terminal-work-theme={terminalWorkIndicatorTheme()}
+            style={{
+              '--redeven-terminal-work-indicator-size': `${terminalWorkIndicatorThicknessPx()}px`,
+            }}
+            aria-hidden="true"
+          />
           <Show when={searchOpen()}>
             <div class="absolute top-2 right-2 z-20 flex items-center gap-1 rounded-md border border-white/15 bg-[#0b0f14]/95 px-2 py-1 shadow-md backdrop-blur">
               <Input
