@@ -3008,8 +3008,14 @@ describe('RemoteFileBrowser persistence', () => {
       backgroundButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
 
-      expect(envActionSpies.openTerminalInDirectory).toHaveBeenNthCalledWith(1, '/workspace/repo/src', { preferredName: 'src' });
-      expect(envActionSpies.openTerminalInDirectory).toHaveBeenNthCalledWith(2, '/workspace/repo/src', { preferredName: 'src' });
+      expect(envActionSpies.openTerminalInDirectory).toHaveBeenNthCalledWith(1, '/workspace/repo/src', {
+        preferredName: 'src',
+        workbenchAnchor: { clientX: 24, clientY: 32 },
+      });
+      expect(envActionSpies.openTerminalInDirectory).toHaveBeenNthCalledWith(2, '/workspace/repo/src', {
+        preferredName: 'src',
+        workbenchAnchor: { clientX: 16, clientY: 24 },
+      });
     } finally {
       dispose();
     }

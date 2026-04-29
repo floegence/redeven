@@ -8,7 +8,7 @@ export function EnvTerminalPage() {
   return (
     <div class="h-full min-h-0 overflow-hidden relative">
       <TerminalPanel
-        variant="deck"
+        variant="panel"
         openSessionRequest={env.openTerminalInDirectoryRequest()}
         onOpenSessionRequestHandled={env.consumeOpenTerminalInDirectoryRequest}
       />

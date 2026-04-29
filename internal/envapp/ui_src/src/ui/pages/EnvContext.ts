@@ -8,6 +8,7 @@ import type {
   EnvSurfaceId,
   EnvTerminalSurfacePayload,
   EnvViewMode,
+  EnvWorkbenchHandoffAnchor,
   EnvWorkbenchSurfaceOpenStrategy,
 } from '../envViewMode';
 
@@ -51,6 +52,7 @@ export type EnvWorkbenchSurfaceActivationRequest = {
   ensureVisible?: boolean;
   centerViewport?: boolean;
   openStrategy?: EnvWorkbenchSurfaceOpenStrategy;
+  workbenchAnchor?: EnvWorkbenchHandoffAnchor;
   terminalPayload?: EnvTerminalSurfacePayload;
   fileBrowserPayload?: EnvFileBrowserSurfacePayload;
 };
@@ -128,6 +130,7 @@ export type EnvContextValue = {
     options?: {
       preferredName?: string;
       openStrategy?: EnvWorkbenchSurfaceOpenStrategy;
+      workbenchAnchor?: EnvWorkbenchHandoffAnchor;
     },
   ) => void;
   openFileBrowserAtPath: (

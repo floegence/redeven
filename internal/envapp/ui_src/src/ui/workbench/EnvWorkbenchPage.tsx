@@ -11,7 +11,7 @@ import { batch, createEffect, createMemo, createSignal, onCleanup, Show } from '
 import { Portal } from 'solid-js/web';
 
 import { basenameFromAbsolutePath, normalizeAbsolutePath } from '../utils/askFlowerPath';
-import { envWidgetTypeForSurface } from '../envViewMode';
+import { envWidgetTypeForSurface, type EnvWorkbenchHandoffAnchor } from '../envViewMode';
 import { useEnvContext } from '../pages/EnvContext';
 import { isDesktopStateStorageAvailable, readUIStorageJSON, writeUIStorageJSON } from '../services/uiStorage';
 import { resolveEnvAppStorageBinding } from '../services/uiPersistence';
@@ -442,6 +442,19 @@ function filterPreviewItemRecordByWidgetIds(
   return changed ? next : values;
 }
 
+function filterStringSetByWidgetIds(values: ReadonlySet<string>, widgetIds: ReadonlySet<string>): ReadonlySet<string> {
+  let changed = false;
+  const next = new Set<string>();
+  for (const value of values) {
+    if (!widgetIds.has(value)) {
+      changed = true;
+      continue;
+    }
+    next.add(value);
+  }
+  return changed ? next : values;
+}
+
 function runtimePreviewItemToFileItem(item: RuntimeWorkbenchPreviewItem): FileItem {
   return {
     id: compact(item.id) || item.path,
@@ -548,6 +561,8 @@ export function EnvWorkbenchPage() {
   const [pendingSyncedPreviewItems, setPendingSyncedPreviewItems] = createSignal<Record<string, RuntimeWorkbenchPreviewItem>>({});
   const [surfaceApi, setSurfaceApi] = createSignal<RedevenWorkbenchSurfaceApi | null>(null);
   const [terminalOpenRequests, setTerminalOpenRequests] = createSignal<Record<string, WorkbenchOpenTerminalRequest>>({});
+  const [pendingTerminalOpenRequests, setPendingTerminalOpenRequests] = createSignal<Record<string, WorkbenchOpenTerminalRequest>>({});
+  const [confirmedRuntimeTerminalWidgetIds, setConfirmedRuntimeTerminalWidgetIds] = createSignal<ReadonlySet<string>>(new Set());
   const [fileBrowserOpenRequests, setFileBrowserOpenRequests] = createSignal<Record<string, WorkbenchOpenFileBrowserRequest>>({});
   const [previewOpenRequests, setPreviewOpenRequests] = createSignal<Record<string, WorkbenchOpenFilePreviewRequest>>({});
   const [focusHistory, setFocusHistory] = createSignal<string[]>([]);
@@ -590,6 +605,74 @@ export function EnvWorkbenchPage() {
     return workbenchState().widgets.find((widget) => widget.id === selectedWidgetId) ?? null;
   });
 
+  const runtimeWidgetExists = (widgetId: string, widgetType?: string): boolean => {
+    const normalizedWidgetId = compact(widgetId);
+    if (!normalizedWidgetId) {
+      return false;
+    }
+    return runtimeSnapshot().widgets.some((widget) => (
+      widget.widget_id === normalizedWidgetId
+      && (!widgetType || widget.widget_type === widgetType)
+    ));
+  };
+
+  const confirmRuntimeTerminalWidgets = (snapshot: RuntimeWorkbenchLayoutSnapshot) => {
+    const terminalWidgetIds = snapshot.widgets
+      .filter((widget) => widget.widget_type === 'redeven.terminal')
+      .map((widget) => compact(widget.widget_id))
+      .filter(Boolean);
+    if (terminalWidgetIds.length === 0) {
+      return;
+    }
+    setConfirmedRuntimeTerminalWidgetIds((previous) => {
+      let changed = false;
+      const next = new Set(previous);
+      for (const widgetId of terminalWidgetIds) {
+        if (!next.has(widgetId)) {
+          changed = true;
+          next.add(widgetId);
+        }
+      }
+      return changed ? next : previous;
+    });
+  };
+
+  const runtimeTerminalWidgetReady = (widgetId: string): boolean => {
+    const normalizedWidgetId = compact(widgetId);
+    return Boolean(
+      normalizedWidgetId
+      && (
+        runtimeWidgetExists(normalizedWidgetId, 'redeven.terminal')
+        || confirmedRuntimeTerminalWidgetIds().has(normalizedWidgetId)
+      ),
+    );
+  };
+
+  const queueTerminalOpenRequest = (request: WorkbenchOpenTerminalRequest) => {
+    const normalizedWidgetId = compact(request.widgetId);
+    const workingDir = normalizeAbsolutePath(request.workingDir);
+    if (!normalizedWidgetId || !workingDir) {
+      return;
+    }
+    const normalizedRequest: WorkbenchOpenTerminalRequest = {
+      ...request,
+      widgetId: normalizedWidgetId,
+      workingDir,
+      preferredName: compact(request.preferredName) || undefined,
+    };
+    if (runtimeTerminalWidgetReady(normalizedWidgetId)) {
+      setTerminalOpenRequests((previous) => ({
+        ...previous,
+        [normalizedWidgetId]: normalizedRequest,
+      }));
+      return;
+    }
+    setPendingTerminalOpenRequests((previous) => ({
+      ...previous,
+      [normalizedWidgetId]: normalizedRequest,
+    }));
+  };
+
   const resolveCanvasFrameSize = (): { width: number; height: number } => {
     const host = introSurfaceHost();
     const frame = host?.querySelector('[data-floe-workbench-canvas-frame="true"]') as HTMLElement | null;
@@ -603,7 +686,31 @@ export function EnvWorkbenchPage() {
     };
   };
 
+  const resolveWorkbenchAnchorWorldPoint = (
+    anchor?: EnvWorkbenchHandoffAnchor,
+  ): { worldX: number; worldY: number } | null => {
+    const clientX = Number(anchor?.clientX);
+    const clientY = Number(anchor?.clientY);
+    if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) {
+      return null;
+    }
+
+    const host = introSurfaceHost();
+    const frame = host?.querySelector('[data-floe-workbench-canvas-frame="true"]') as HTMLElement | null;
+    const rect = frame?.getBoundingClientRect();
+    const scale = Number(workbenchState().viewport.scale);
+    if (!rect || !Number.isFinite(scale) || Math.abs(scale) <= WORKBENCH_MIN_SCALE_EPSILON) {
+      return null;
+    }
+
+    return {
+      worldX: (clientX - rect.left - Number(workbenchState().viewport.x)) / scale,
+      worldY: (clientY - rect.top - Number(workbenchState().viewport.y)) / scale,
+    };
+  };
+
   const applyRuntimeSnapshot = (snapshot: RuntimeWorkbenchLayoutSnapshot) => {
+    confirmRuntimeTerminalWidgets(snapshot);
     const current = runtimeSnapshot();
     if (
       snapshot.seq < current.seq
@@ -658,6 +765,7 @@ export function EnvWorkbenchPage() {
   };
 
   const applyRemoteRuntimeSnapshotWhenReady = (snapshot: RuntimeWorkbenchLayoutSnapshot) => {
+    confirmRuntimeTerminalWidgets(snapshot);
     if (submitQueued() || submitInFlight() || localOwnerHandoffActive()) {
       bufferRuntimeSnapshot(snapshot);
       return;
@@ -666,6 +774,7 @@ export function EnvWorkbenchPage() {
   };
 
   const applyLocalRuntimeSnapshotWhenReady = (snapshot: RuntimeWorkbenchLayoutSnapshot) => {
+    confirmRuntimeTerminalWidgets(snapshot);
     if (localOwnerHandoffActive()) {
       bufferRuntimeSnapshot(snapshot);
       return;
@@ -940,6 +1049,8 @@ export function EnvWorkbenchPage() {
     setPendingSyncedPreviewItems({});
     setInstanceState(readPersistedWorkbenchInstanceState(key, legacyWorkbenchState));
     setTerminalOpenRequests({});
+    setPendingTerminalOpenRequests({});
+    setConfirmedRuntimeTerminalWidgetIds(new Set<string>());
     setFileBrowserOpenRequests({});
     setPreviewOpenRequests({});
     setFocusHistory([]);
@@ -1150,12 +1261,42 @@ export function EnvWorkbenchPage() {
       return sameInstanceState(previous, next) ? previous : next;
     });
     setTerminalOpenRequests((previous) => filterRequestRecordByWidgetIds(previous, widgetIds));
+    setPendingTerminalOpenRequests((previous) => filterRequestRecordByWidgetIds(previous, widgetIds));
+    setConfirmedRuntimeTerminalWidgetIds((previous) => filterStringSetByWidgetIds(previous, widgetIds));
     setFileBrowserOpenRequests((previous) => filterRequestRecordByWidgetIds(previous, widgetIds));
     setPreviewOpenRequests((previous) => filterRequestRecordByWidgetIds(previous, widgetIds));
     setWidgetRemoveGuards((previous) => filterGuardRecordByWidgetIds(previous, widgetIds));
     setFileBrowserCommittedPaths((previous) => filterStringRecordByWidgetIds(previous, widgetIds));
     setAppliedRemoteFileStateRevisions((previous) => filterNumberRecordByWidgetIds(previous, widgetIds));
     setPendingSyncedPreviewItems((previous) => filterPreviewItemRecordByWidgetIds(previous, widgetIds));
+  });
+
+  createEffect(() => {
+    const pending = pendingTerminalOpenRequests();
+    const readyRequests: Record<string, WorkbenchOpenTerminalRequest> = {};
+    const nextPending: Record<string, WorkbenchOpenTerminalRequest> = {};
+    let changed = false;
+
+    for (const [widgetId, request] of Object.entries(pending)) {
+      if (runtimeTerminalWidgetReady(widgetId)) {
+        readyRequests[widgetId] = request;
+        changed = true;
+      } else {
+        nextPending[widgetId] = request;
+      }
+    }
+
+    if (!changed) {
+      return;
+    }
+
+    batch(() => {
+      setPendingTerminalOpenRequests(nextPending);
+      setTerminalOpenRequests((previous) => ({
+        ...previous,
+        ...readyRequests,
+      }));
+    });
   });
 
   createEffect(() => {
@@ -1328,6 +1469,11 @@ export function EnvWorkbenchPage() {
 
     const widgetType = envWidgetTypeForSurface(request.surfaceId);
     const centerViewport = request.centerViewport ?? request.ensureVisible ?? true;
+    const anchorPoint = resolveWorkbenchAnchorWorldPoint(request.workbenchAnchor);
+    const createWidgetOptions = {
+      centerViewport,
+      ...(anchorPoint ? anchorPoint : {}),
+    };
     let widget = null;
 
     if (isRedevenWorkbenchMultiInstanceWidgetType(widgetType)) {
@@ -1341,7 +1487,7 @@ export function EnvWorkbenchPage() {
       if (preferredWidget && preferredWidget.type === widgetType) {
         widget = preferredWidget;
       } else if (openStrategy === 'create_new') {
-        widget = api.createWidget(widgetType, { centerViewport });
+        widget = api.createWidget(widgetType, createWidgetOptions);
       } else {
         const latestWidget = latestWidgetId ? api.findWidgetById(latestWidgetId) : null;
         widget = latestWidget?.type === widgetType
@@ -1349,15 +1495,13 @@ export function EnvWorkbenchPage() {
           : pickLatestWorkbenchWidget(workbenchState().widgets, widgetType, normalizedRequestedWidgetId);
 
         if (!widget) {
-          widget = api.createWidget(widgetType, { centerViewport });
+          widget = api.createWidget(widgetType, createWidgetOptions);
         }
       }
     } else {
       widget = api.ensureWidget(
         widgetType,
-        {
-          centerViewport,
-        },
+        createWidgetOptions,
       );
     }
 
@@ -1378,15 +1522,12 @@ export function EnvWorkbenchPage() {
     if (widget?.type === 'redeven.terminal') {
       const workingDir = normalizeAbsolutePath(request.terminalPayload?.workingDir ?? '');
       if (workingDir) {
-        setTerminalOpenRequests((previous) => ({
-          ...previous,
-          [widget.id]: {
-            requestId,
-            widgetId: widget.id,
-            workingDir,
-            preferredName: compact(request.terminalPayload?.preferredName) || undefined,
-          },
-        }));
+        queueTerminalOpenRequest({
+          requestId,
+          widgetId: widget.id,
+          workingDir,
+          preferredName: compact(request.terminalPayload?.preferredName) || undefined,
+        });
       }
     }
 
@@ -1552,17 +1693,6 @@ export function EnvWorkbenchPage() {
     removeWidget(normalizedWidgetId);
   };
 
-  const runtimeWidgetExists = (widgetId: string, widgetType?: string): boolean => {
-    const normalizedWidgetId = compact(widgetId);
-    if (!normalizedWidgetId) {
-      return false;
-    }
-    return runtimeSnapshot().widgets.some((widget) => (
-      widget.widget_id === normalizedWidgetId
-      && (!widgetType || widget.widget_type === widgetType)
-    ));
-  };
-
   const runtimeTerminalSessionIds = (widgetId: string): string[] => {
     const state = runtimeWidgetStateById()[widgetId];
     if (state?.widget_type !== 'redeven.terminal' || state.state.kind !== 'terminal') {
@@ -1590,7 +1720,7 @@ export function EnvWorkbenchPage() {
     retry = true,
   ): Promise<RuntimeWorkbenchWidgetState | null> => {
     const normalizedWidgetId = compact(widgetId);
-    if (!normalizedWidgetId || !runtimeWidgetExists(normalizedWidgetId, 'redeven.terminal')) {
+    if (!normalizedWidgetId || !runtimeTerminalWidgetReady(normalizedWidgetId)) {
       return null;
     }
     const current = runtimeWidgetStateById()[normalizedWidgetId];
@@ -1729,7 +1859,7 @@ export function EnvWorkbenchPage() {
     },
     createTerminalSession: async (widgetId, name, workingDir) => {
       const normalizedWidgetId = compact(widgetId);
-      if (!normalizedWidgetId || !runtimeWidgetExists(normalizedWidgetId, 'redeven.terminal')) {
+      if (!normalizedWidgetId || !runtimeTerminalWidgetReady(normalizedWidgetId)) {
         return null;
       }
       try {
@@ -1754,7 +1884,7 @@ export function EnvWorkbenchPage() {
     deleteTerminalSession: async (widgetId, sessionId) => {
       const normalizedWidgetId = compact(widgetId);
       const normalizedSessionId = compact(sessionId);
-      if (!normalizedWidgetId || !normalizedSessionId || !runtimeWidgetExists(normalizedWidgetId, 'redeven.terminal')) {
+      if (!normalizedWidgetId || !normalizedSessionId || !runtimeTerminalWidgetReady(normalizedWidgetId)) {
         return;
       }
       try {
@@ -1773,16 +1903,25 @@ export function EnvWorkbenchPage() {
     },
     terminalOpenRequest: (widgetId) => terminalOpenRequests()[compact(widgetId)] ?? null,
     dispatchTerminalOpenRequest: (request) => {
-      setTerminalOpenRequests((previous) => ({
-        ...previous,
-        [request.widgetId]: request,
-      }));
+      queueTerminalOpenRequest(request);
     },
     consumeTerminalOpenRequest: (requestId) => {
       const normalizedRequestId = compact(requestId);
       if (!normalizedRequestId) {
         return;
       }
+      setPendingTerminalOpenRequests((previous) => {
+        let changed = false;
+        const next: Record<string, WorkbenchOpenTerminalRequest> = {};
+        for (const [widgetId, request] of Object.entries(previous)) {
+          if (request.requestId === normalizedRequestId) {
+            changed = true;
+            continue;
+          }
+          next[widgetId] = request;
+        }
+        return changed ? next : previous;
+      });
       setTerminalOpenRequests((previous) => {
         let changed = false;
         const next: Record<string, WorkbenchOpenTerminalRequest> = {};

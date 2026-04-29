@@ -1235,6 +1235,7 @@ export function EnvCodespacesPage() {
     openDirectoryInTerminal({
       path: menu.space.workspace_path,
       preferredName: menu.space.name || menu.space.code_space_id,
+      workbenchAnchor: { clientX: menu.x, clientY: menu.y },
       openTerminalInDirectory: env.openTerminalInDirectory,
       onInvalidDirectory: () => {
         notification.error("Invalid directory", "Could not resolve a terminal working directory.");

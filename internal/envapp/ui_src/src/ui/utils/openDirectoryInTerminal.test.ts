@@ -22,6 +22,23 @@ describe('openDirectoryInTerminal', () => {
     expect(openTerminal).toHaveBeenCalledWith('/workspace/demo', { preferredName: 'Demo Space' });
   });
 
+  it('forwards an optional workbench anchor to the terminal opener', () => {
+    const openTerminal = vi.fn();
+
+    const ok = openDirectoryInTerminal({
+      path: '/workspace/demo',
+      preferredName: 'Demo Space',
+      workbenchAnchor: { clientX: 240, clientY: 320 },
+      openTerminalInDirectory: openTerminal,
+    });
+
+    expect(ok).toBe(true);
+    expect(openTerminal).toHaveBeenCalledWith('/workspace/demo', {
+      preferredName: 'Demo Space',
+      workbenchAnchor: { clientX: 240, clientY: 320 },
+    });
+  });
+
   it('reports invalid directories without dispatching the terminal opener', () => {
     const openTerminal = vi.fn();
     const onInvalidDirectory = vi.fn();
