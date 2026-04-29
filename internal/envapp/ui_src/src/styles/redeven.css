@@ -4,6 +4,29 @@
   box-shadow: none !important;
 }
 
+.redeven-terminal-surface {
+  contain: paint;
+}
+
+.redeven-terminal-surface[data-redeven-terminal-freeze='true'] {
+  isolation: isolate;
+}
+
+.redeven-terminal-freeze-snapshot {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.redeven-workbench-page[data-redeven-workbench-layout-interacting='true'] .redeven-terminal-work-indicator {
+  opacity: 0 !important;
+  transition: none !important;
+}
+
 @property --redeven-terminal-work-flow-angle {
   syntax: '<angle>';
   inherits: false;

@@ -92,6 +92,7 @@ import { WorkbenchEntryIntro } from './WorkbenchEntryIntro';
 const WORKBENCH_PERSIST_DELAY_MS = 120;
 const WORKBENCH_LAYOUT_FLUSH_DELAY_MS = 0;
 const WORKBENCH_LAYOUT_RECONNECT_DELAY_MS = 900;
+const WORKBENCH_LAYOUT_VISUAL_SETTLE_MS = 90;
 const WORKBENCH_MIN_SCALE_EPSILON = 0.0001;
 const WORKBENCH_SCALE_ANIMATION_DURATION_MS = 180;
 const WORKBENCH_HUD_SHORTCUT_GROUP_CLASS = 'redeven-workbench-hud-shortcuts ml-1 flex h-7 items-center gap-1 border-l border-border/50 pl-2';
@@ -113,6 +114,15 @@ function compact(value: unknown): string {
 
 function scaleAtMinimum(scale: number): boolean {
   return Math.abs(scale - REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE) <= WORKBENCH_MIN_SCALE_EPSILON;
+}
+
+function workbenchViewportChanged(
+  previous: WorkbenchState['viewport'],
+  next: WorkbenchState['viewport'],
+): boolean {
+  return Math.abs(Number(previous.x) - Number(next.x)) > WORKBENCH_MIN_SCALE_EPSILON
+    || Math.abs(Number(previous.y) - Number(next.y)) > WORKBENCH_MIN_SCALE_EPSILON
+    || Math.abs(Number(previous.scale) - Number(next.scale)) > WORKBENCH_MIN_SCALE_EPSILON;
 }
 
 function viewportForCenteredScale(
@@ -555,6 +565,7 @@ export function EnvWorkbenchPage() {
   const [submitQueued, setSubmitQueued] = createSignal(false);
   const [submitInFlight, setSubmitInFlight] = createSignal(false);
   const [activeLayoutInteractions, setActiveLayoutInteractions] = createSignal(0);
+  const [layoutInteractionVisualActive, setLayoutInteractionVisualActive] = createSignal(false);
   const [pendingRemoteSnapshot, setPendingRemoteSnapshot] = createSignal<RuntimeWorkbenchLayoutSnapshot | null>(null);
   const [fileBrowserCommittedPaths, setFileBrowserCommittedPaths] = createSignal<Record<string, string>>({});
   const [appliedRemoteFileStateRevisions, setAppliedRemoteFileStateRevisions] = createSignal<Record<string, number>>({});
@@ -579,6 +590,7 @@ export function EnvWorkbenchPage() {
   let introStartSettleFrame: number | undefined;
   let canvasScaleAnimationFrame: number | undefined;
   let canvasScaleAnimationToken = 0;
+  let layoutInteractionVisualSettleTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
 
   const runtimeWidgetStateById = createMemo(() => runtimeWorkbenchWidgetStateById(runtimeSnapshot().widget_states));
   const runtimeFilesWidgetStateById = createMemo<Record<string, RuntimeWorkbenchWidgetState>>(() => Object.fromEntries(
@@ -789,11 +801,16 @@ export function EnvWorkbenchPage() {
       canvasScaleAnimationFrame = undefined;
     }
     let shouldStartOwnerHandoff = false;
+    let shouldPulseLayoutVisual = false;
     setWorkbenchState((previous) => {
       const next = updater(previous);
       shouldStartOwnerHandoff = shouldTrackSurfaceOwnerHandoff(previous, next);
+      shouldPulseLayoutVisual = shouldPulseLayoutVisual || workbenchViewportChanged(previous.viewport, next.viewport);
       return next;
     });
+    if (shouldPulseLayoutVisual) {
+      pulseLayoutInteractionVisual();
+    }
     if (shouldStartOwnerHandoff) {
       beginLocalOwnerHandoff();
     }
@@ -805,6 +822,53 @@ export function EnvWorkbenchPage() {
       window.cancelAnimationFrame(canvasScaleAnimationFrame);
       canvasScaleAnimationFrame = undefined;
     }
+  };
+
+  const cancelLayoutInteractionVisualSettle = () => {
+    if (layoutInteractionVisualSettleTimer === undefined) {
+      return;
+    }
+    globalThis.clearTimeout(layoutInteractionVisualSettleTimer);
+    layoutInteractionVisualSettleTimer = undefined;
+  };
+
+  const scheduleLayoutInteractionVisualSettle = () => {
+    cancelLayoutInteractionVisualSettle();
+    layoutInteractionVisualSettleTimer = globalThis.setTimeout(() => {
+      layoutInteractionVisualSettleTimer = undefined;
+      if (activeLayoutInteractions() === 0) {
+        setLayoutInteractionVisualActive(false);
+      }
+    }, WORKBENCH_LAYOUT_VISUAL_SETTLE_MS);
+  };
+
+  const pulseLayoutInteractionVisual = () => {
+    cancelLayoutInteractionVisualSettle();
+    setLayoutInteractionVisualActive(true);
+    if (activeLayoutInteractions() === 0) {
+      scheduleLayoutInteractionVisualSettle();
+    }
+  };
+
+  const beginLayoutInteraction = () => {
+    cancelLayoutInteractionVisualSettle();
+    setLayoutInteractionVisualActive(true);
+    setActiveLayoutInteractions((count) => count + 1);
+  };
+
+  const endLayoutInteraction = () => {
+    let reachedIdle = false;
+    setActiveLayoutInteractions((count) => {
+      const next = Math.max(0, count - 1);
+      reachedIdle = next === 0;
+      return next;
+    });
+
+    if (!reachedIdle) {
+      return;
+    }
+
+    scheduleLayoutInteractionVisualSettle();
   };
 
   const animateCanvasScaleTo = (targetScale: number) => {
@@ -2093,6 +2157,7 @@ export function EnvWorkbenchPage() {
 
   onCleanup(() => {
     cancelCanvasScaleAnimation();
+    cancelLayoutInteractionVisualSettle();
     if (introStartFrame !== undefined) {
       window.cancelAnimationFrame(introStartFrame);
     }
@@ -2103,7 +2168,11 @@ export function EnvWorkbenchPage() {
 
   return (
     <EnvWorkbenchInstancesContext.Provider value={workbenchInstancesContextValue}>
-      <div class="relative h-full min-h-0 overflow-hidden">
+      <div
+        class={`redeven-workbench-page relative h-full min-h-0 overflow-hidden${layoutInteractionVisualActive() ? ' is-layout-interacting' : ''}`}
+        data-testid="redeven-workbench-page"
+        data-redeven-workbench-layout-interacting={layoutInteractionVisualActive() ? 'true' : 'false'}
+      >
         <div
           ref={setIntroSurfaceHost}
           class={`h-full min-h-0${introPreparing() ? ' redeven-workbench-intro-preparing' : ''}`}
@@ -2116,12 +2185,11 @@ export function EnvWorkbenchPage() {
             resolveContextMenuItems={resolveWorkbenchContextMenuItems}
             onApiReady={setSurfaceApi}
             onRequestDelete={requestWidgetRemoval}
-            onLayoutInteractionStart={() => {
-              setActiveLayoutInteractions((count) => count + 1);
-            }}
-            onLayoutInteractionEnd={() => {
-              setActiveLayoutInteractions((count) => Math.max(0, count - 1));
-            }}
+            onLayoutInteractionStart={beginLayoutInteraction}
+            onLayoutInteractionEnd={endLayoutInteraction}
+            onViewportInteractionPulse={pulseLayoutInteractionVisual}
+            onViewportInteractionStart={beginLayoutInteraction}
+            onViewportInteractionEnd={endLayoutInteraction}
           />
         </div>
         <RedevenWorkbenchHudActions

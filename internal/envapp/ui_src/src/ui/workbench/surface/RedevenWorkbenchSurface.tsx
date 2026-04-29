@@ -12,7 +12,10 @@ import {
 import {
   findRedevenTerminalWheelSurface,
   redevenWorkbenchInteractionAdapter,
+  REDEVEN_WORKBENCH_INTERACTIVE_SELECTOR,
+  REDEVEN_WORKBENCH_PAN_SURFACE_SELECTOR,
   REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR,
+  resolveWorkbenchSurfaceTargetRole,
   resolveWorkbenchWheelRouting,
 } from './workbenchInputRouting';
 import { ensureWorkbenchTextSelectionSurfaceContract } from './workbenchTextSelectionSurface';
@@ -24,6 +27,11 @@ import {
 const FORWARDED_CANVAS_WHEEL_EVENTS = new WeakSet<WheelEvent>();
 const WORKBENCH_CANVAS_SELECTOR = '.floe-infinite-canvas';
 const WORKBENCH_PROJECTED_LAYER_SELECTOR = '.workbench-canvas__projected-layer';
+const WORKBENCH_VIEWPORT_PAN_START_DISTANCE_PX = 3;
+const WORKBENCH_VIEWPORT_WHEEL_SETTLE_MS = 180;
+const TERMINAL_SURFACE_SELECTOR = '.redeven-terminal-surface';
+const TERMINAL_FREEZE_ATTR = 'data-redeven-terminal-freeze';
+const TERMINAL_FREEZE_SNAPSHOT_CLASS = 'redeven-terminal-freeze-snapshot';
 
 export interface RedevenWorkbenchSurfaceApi extends WorkbenchSurfaceApi {
   unfocusWidget: (widget: WorkbenchWidgetItem) => WorkbenchWidgetItem;
@@ -45,6 +53,9 @@ export interface RedevenWorkbenchSurfaceProps {
   onRequestDelete?: (widgetId: string) => void;
   onLayoutInteractionStart?: () => void;
   onLayoutInteractionEnd?: () => void;
+  onViewportInteractionPulse?: () => void;
+  onViewportInteractionStart?: () => void;
+  onViewportInteractionEnd?: () => void;
 }
 
 function createRedevenWorkbenchSurfaceApi(
@@ -118,6 +129,133 @@ function resetProjectedLayerScroll(layer: HTMLElement) {
   }
 }
 
+function resolveEventElement(target: EventTarget | null): Element | null {
+  if (target instanceof Element) {
+    return target;
+  }
+  if (target instanceof Node) {
+    return target.parentElement;
+  }
+  return null;
+}
+
+function isWorkbenchCanvasEventTarget(host: HTMLElement, target: EventTarget | null): boolean {
+  const element = resolveEventElement(target);
+  if (!element) {
+    return false;
+  }
+
+  const canvas = element.closest(WORKBENCH_CANVAS_SELECTOR);
+  if (!(canvas instanceof HTMLElement) || !host.contains(canvas)) {
+    return false;
+  }
+
+  const role = resolveWorkbenchSurfaceTargetRole({
+    target,
+    interactiveSelector: REDEVEN_WORKBENCH_INTERACTIVE_SELECTOR,
+    panSurfaceSelector: REDEVEN_WORKBENCH_PAN_SURFACE_SELECTOR,
+  });
+  return role === 'canvas' || role === 'pan_surface';
+}
+
+function isVisibleTerminalSurface(rect: DOMRect): boolean {
+  if (rect.width <= 2 || rect.height <= 2) {
+    return false;
+  }
+  if (typeof window === 'undefined') {
+    return true;
+  }
+  return rect.right >= -64
+    && rect.bottom >= -64
+    && rect.left <= window.innerWidth + 64
+    && rect.top <= window.innerHeight + 64;
+}
+
+function removeTerminalFreezeSnapshot(surface: HTMLElement) {
+  const snapshot = surface.querySelector(`.${TERMINAL_FREEZE_SNAPSHOT_CLASS}`);
+  snapshot?.remove();
+  surface.removeAttribute(TERMINAL_FREEZE_ATTR);
+}
+
+function captureTerminalSurfaceSnapshot(surface: HTMLElement) {
+  const rect = surface.getBoundingClientRect();
+  if (!isVisibleTerminalSurface(rect)) {
+    removeTerminalFreezeSnapshot(surface);
+    return;
+  }
+
+  const sourceCanvases = Array.from(surface.querySelectorAll('canvas'))
+    .filter((canvas): canvas is HTMLCanvasElement => (
+      canvas instanceof HTMLCanvasElement
+        && !canvas.classList.contains(TERMINAL_FREEZE_SNAPSHOT_CLASS)
+    ));
+  if (sourceCanvases.length === 0) {
+    removeTerminalFreezeSnapshot(surface);
+    return;
+  }
+
+  const cssWidth = surface.clientWidth || rect.width;
+  const cssHeight = surface.clientHeight || rect.height;
+  if (cssWidth <= 2 || cssHeight <= 2) {
+    removeTerminalFreezeSnapshot(surface);
+    return;
+  }
+
+  const dpr = 1;
+  const snapshot = document.createElement('canvas');
+  snapshot.className = TERMINAL_FREEZE_SNAPSHOT_CLASS;
+  snapshot.setAttribute('aria-hidden', 'true');
+  snapshot.width = Math.max(1, Math.round(cssWidth * dpr));
+  snapshot.height = Math.max(1, Math.round(cssHeight * dpr));
+  snapshot.style.width = `${cssWidth}px`;
+  snapshot.style.height = `${cssHeight}px`;
+
+  const ctx = snapshot.getContext('2d', { alpha: false });
+  if (!ctx) {
+    return;
+  }
+
+  ctx.scale(dpr, dpr);
+  ctx.fillStyle = getComputedStyle(surface).backgroundColor || '#000';
+  ctx.fillRect(0, 0, cssWidth, cssHeight);
+
+  const scaleX = rect.width > 0 ? cssWidth / rect.width : 1;
+  const scaleY = rect.height > 0 ? cssHeight / rect.height : 1;
+  for (const source of sourceCanvases) {
+    const sourceRect = source.getBoundingClientRect();
+    const targetX = (sourceRect.left - rect.left) * scaleX;
+    const targetY = (sourceRect.top - rect.top) * scaleY;
+    const targetWidth = sourceRect.width * scaleX;
+    const targetHeight = sourceRect.height * scaleY;
+    if (targetWidth <= 0 || targetHeight <= 0) {
+      continue;
+    }
+    ctx.drawImage(source, 0, 0, source.width, source.height, targetX, targetY, targetWidth, targetHeight);
+  }
+
+  removeTerminalFreezeSnapshot(surface);
+  surface.append(snapshot);
+  surface.setAttribute(TERMINAL_FREEZE_ATTR, 'true');
+}
+
+function captureTerminalFreezeSnapshots(host: HTMLElement) {
+  const surfaces = host.querySelectorAll(TERMINAL_SURFACE_SELECTOR);
+  for (const surface of surfaces) {
+    if (surface instanceof HTMLElement) {
+      captureTerminalSurfaceSnapshot(surface);
+    }
+  }
+}
+
+function clearTerminalFreezeSnapshots(host: HTMLElement) {
+  const surfaces = host.querySelectorAll(`[${TERMINAL_FREEZE_ATTR}="true"]`);
+  for (const surface of surfaces) {
+    if (surface instanceof HTMLElement) {
+      removeTerminalFreezeSnapshot(surface);
+    }
+  }
+}
+
 function installProjectedLayerScrollGuard(host: HTMLElement): () => void {
   const layerCleanups = new Map<HTMLElement, () => void>();
 
@@ -180,6 +318,81 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
     const host = hostRef;
     if (!host) return;
 
+    let viewportPanCandidate: {
+      pointerId: number;
+      startClientX: number;
+      startClientY: number;
+    } | null = null;
+    let viewportInteractionActive = false;
+    let viewportWheelSettleTimer: number | undefined;
+    let terminalFreezeClearFrame: number | undefined;
+    let terminalFreezeRefreshToken = 0;
+
+    const cancelViewportWheelSettle = () => {
+      if (viewportWheelSettleTimer === undefined) {
+        return;
+      }
+      window.clearTimeout(viewportWheelSettleTimer);
+      viewportWheelSettleTimer = undefined;
+    };
+
+    const cancelTerminalFreezeClear = () => {
+      if (terminalFreezeClearFrame === undefined) {
+        return;
+      }
+      window.cancelAnimationFrame(terminalFreezeClearFrame);
+      terminalFreezeClearFrame = undefined;
+    };
+
+    const scheduleTerminalFreezeRefresh = () => {
+      const token = ++terminalFreezeRefreshToken;
+      const enqueue = typeof queueMicrotask === 'function'
+        ? queueMicrotask
+        : (callback: () => void) => { void Promise.resolve().then(callback); };
+      enqueue(() => {
+        if (token !== terminalFreezeRefreshToken || !viewportInteractionActive) {
+          return;
+        }
+        captureTerminalFreezeSnapshots(host);
+      });
+    };
+
+    const scheduleTerminalFreezeClear = () => {
+      cancelTerminalFreezeClear();
+      terminalFreezeClearFrame = window.requestAnimationFrame(() => {
+        terminalFreezeClearFrame = window.requestAnimationFrame(() => {
+          terminalFreezeClearFrame = undefined;
+          clearTerminalFreezeSnapshots(host);
+        });
+      });
+    };
+
+    const beginViewportInteraction = (opts?: { captureNow?: boolean; refreshAfterEvent?: boolean }) => {
+      cancelTerminalFreezeClear();
+      if (!viewportInteractionActive) {
+        if (opts?.captureNow !== false) {
+          captureTerminalFreezeSnapshots(host);
+        }
+        viewportInteractionActive = true;
+        props.onViewportInteractionStart?.();
+      }
+      if (opts?.refreshAfterEvent) {
+        scheduleTerminalFreezeRefresh();
+      }
+      props.onViewportInteractionPulse?.();
+    };
+
+    const endViewportInteraction = () => {
+      cancelViewportWheelSettle();
+      if (!viewportInteractionActive) {
+        return;
+      }
+      viewportInteractionActive = false;
+      terminalFreezeRefreshToken += 1;
+      props.onViewportInteractionEnd?.();
+      scheduleTerminalFreezeClear();
+    };
+
     const handleWidgetTextSelectionPointerDownCapture = (event: PointerEvent) => {
       if (event.button !== 0) return;
       if (event.pointerType === 'touch') return;
@@ -197,6 +410,38 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
         target: event.target,
         widgetRoot,
       });
+    };
+    const handleCanvasViewportPointerDownCapture = (event: PointerEvent) => {
+      if (event.button !== 0) return;
+      if (event.pointerType === 'touch') return;
+      if (!isWorkbenchCanvasEventTarget(host, event.target)) return;
+
+      viewportPanCandidate = {
+        pointerId: event.pointerId,
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+      };
+      beginViewportInteraction({ captureNow: false, refreshAfterEvent: true });
+    };
+    const handleCanvasViewportPointerMoveCapture = (event: PointerEvent) => {
+      const candidate = viewportPanCandidate;
+      if (!candidate || event.pointerId !== candidate.pointerId) return;
+
+      const deltaX = event.clientX - candidate.startClientX;
+      const deltaY = event.clientY - candidate.startClientY;
+      if (
+        Math.abs(deltaX) <= WORKBENCH_VIEWPORT_PAN_START_DISTANCE_PX
+        && Math.abs(deltaY) <= WORKBENCH_VIEWPORT_PAN_START_DISTANCE_PX
+      ) {
+        return;
+      }
+      props.onViewportInteractionPulse?.();
+    };
+    const handleCanvasViewportPointerEndCapture = (event: PointerEvent) => {
+      const candidate = viewportPanCandidate;
+      if (!candidate || event.pointerId !== candidate.pointerId) return;
+      viewportPanCandidate = null;
+      endViewportInteraction();
     };
     const handleTerminalWheelCapture = (event: WheelEvent) => {
       if (FORWARDED_CANVAS_WHEEL_EVENTS.has(event)) {
@@ -226,8 +471,41 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
       FORWARDED_CANVAS_WHEEL_EVENTS.add(forwarded);
       canvas.dispatchEvent(forwarded);
     };
+    const handleCanvasViewportWheelCapture = (event: WheelEvent) => {
+      const state = props.state();
+      const routing = resolveWorkbenchWheelRouting({
+        target: event.target,
+        disablePanZoom: state.locked,
+        selectedWidgetId: state.selectedWidgetId,
+      });
+      if (routing.kind !== 'canvas_zoom') return;
+      if (!isWorkbenchCanvasEventTarget(host, event.target)) return;
+
+      beginViewportInteraction({ captureNow: true });
+      cancelViewportWheelSettle();
+      viewportWheelSettleTimer = window.setTimeout(() => {
+        viewportWheelSettleTimer = undefined;
+        endViewportInteraction();
+      }, WORKBENCH_VIEWPORT_WHEEL_SETTLE_MS);
+    };
 
     host.addEventListener('pointerdown', handleWidgetTextSelectionPointerDownCapture, {
+      capture: true,
+      passive: true,
+    });
+    host.addEventListener('pointerdown', handleCanvasViewportPointerDownCapture, {
+      capture: true,
+      passive: true,
+    });
+    window.addEventListener('pointermove', handleCanvasViewportPointerMoveCapture, {
+      capture: true,
+      passive: true,
+    });
+    window.addEventListener('pointerup', handleCanvasViewportPointerEndCapture, {
+      capture: true,
+      passive: true,
+    });
+    window.addEventListener('pointercancel', handleCanvasViewportPointerEndCapture, {
       capture: true,
       passive: true,
     });
@@ -235,10 +513,24 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
       capture: true,
       passive: false,
     });
+    host.addEventListener('wheel', handleCanvasViewportWheelCapture, {
+      capture: true,
+      passive: true,
+    });
 
     onCleanup(() => {
+      viewportPanCandidate = null;
+      terminalFreezeRefreshToken += 1;
+      cancelViewportWheelSettle();
+      cancelTerminalFreezeClear();
+      clearTerminalFreezeSnapshots(host);
       host.removeEventListener('pointerdown', handleWidgetTextSelectionPointerDownCapture, true);
+      host.removeEventListener('pointerdown', handleCanvasViewportPointerDownCapture, true);
+      window.removeEventListener('pointermove', handleCanvasViewportPointerMoveCapture, true);
+      window.removeEventListener('pointerup', handleCanvasViewportPointerEndCapture, true);
+      window.removeEventListener('pointercancel', handleCanvasViewportPointerEndCapture, true);
       host.removeEventListener('wheel', handleTerminalWheelCapture, true);
+      host.removeEventListener('wheel', handleCanvasViewportWheelCapture, true);
     });
   });
 
