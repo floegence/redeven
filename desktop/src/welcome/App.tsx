@@ -145,6 +145,7 @@ import {
 } from './actionToastModel';
 import { normalizeDesktopLocalEnvironmentName } from '../shared/desktopManagedEnvironment';
 import { DesktopActionPopover } from './DesktopActionPopover';
+import { DesktopAnchoredOverlaySurface } from './DesktopAnchoredOverlaySurface';
 import {
   closeEnvironmentLibraryOverlayState,
   closedEnvironmentLibraryOverlayState,
@@ -3443,6 +3444,10 @@ function EnvironmentPrimaryActionPanel(props: Readonly<{
   );
 }
 
+function firstEnabledMenuItem(root: HTMLElement | undefined): HTMLElement | null {
+  return root?.querySelector<HTMLElement>('[role="menuitem"]:not([disabled])') ?? null;
+}
+
 function EnvironmentSplitActionButton(props: Readonly<{
   presentation: Extract<EnvironmentActionPresentation, Readonly<{ kind: 'split_button' }>>;
   environmentID: string;
@@ -3493,17 +3498,37 @@ function EnvironmentSplitActionButton(props: Readonly<{
     cn('w-full justify-center', hasMenuActions() && 'rounded-r-none border-r-0')
   ));
   let rootRef: HTMLDivElement | undefined;
+  let menuRef: HTMLDivElement | undefined;
+  let menuFocusFrame = 0;
 
   const closeMenu = () => props.onMenuOpenChange(false);
+  const clearMenuFocusFrame = () => {
+    if (!menuFocusFrame) {
+      return;
+    }
+    cancelAnimationFrame(menuFocusFrame);
+    menuFocusFrame = 0;
+  };
+  const menuContainsTarget = (target: EventTarget | null): boolean => {
+    if (!(target instanceof Node)) {
+      return false;
+    }
+    return rootRef?.contains(target) === true || menuRef?.contains(target) === true;
+  };
 
   createEffect(() => {
     if (!props.menuOpen) {
+      clearMenuFocusFrame();
       return;
     }
 
+    menuFocusFrame = requestAnimationFrame(() => {
+      menuFocusFrame = 0;
+      firstEnabledMenuItem(menuRef)?.focus();
+    });
+
     const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node) || !rootRef?.contains(target)) {
+      if (!menuContainsTarget(event.target)) {
         closeMenu();
       }
     };
@@ -3512,13 +3537,18 @@ function EnvironmentSplitActionButton(props: Readonly<{
         closeMenu();
       }
     };
-
     document.addEventListener('mousedown', handlePointerDown);
     document.addEventListener('keydown', handleKeyDown);
     onCleanup(() => {
+      clearMenuFocusFrame();
       document.removeEventListener('mousedown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
     });
+  });
+
+  onCleanup(() => {
+    clearMenuFocusFrame();
+    menuRef = undefined;
   });
 
   const primaryButton = (
@@ -3630,16 +3660,18 @@ function EnvironmentSplitActionButton(props: Readonly<{
           <ChevronDown class={cn('h-3.5 w-3.5 transition-transform duration-150', props.menuOpen && 'rotate-180')} />
         </button>
       </Show>
-      <Presence>
-        {props.menuOpen && hasMenuActions() && (
-        <Motion.div
-          class="redeven-split-menu"
+      <Show when={props.menuOpen && hasMenuActions()}>
+        <DesktopAnchoredOverlaySurface
+          open={props.menuOpen && hasMenuActions()}
+          anchorRef={rootRef}
+          placement="top"
           role="menu"
-          aria-label={props.presentation.menu_button_label}
-          initial={{ opacity: 0, y: 6, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 4, scale: 0.98 }}
-          transition={{ duration: 0.16, easing: 'ease-out' }}
+          ariaLabel={props.presentation.menu_button_label}
+          interactive
+          class="redeven-split-menu z-[230] max-w-[min(16rem,calc(100vw-1rem))]"
+          onOverlayRef={(element) => {
+            menuRef = element;
+          }}
         >
           <For each={props.presentation.menu_actions}>
             {(item: EnvironmentActionMenuItemModel) => (
@@ -3657,9 +3689,8 @@ function EnvironmentSplitActionButton(props: Readonly<{
               </button>
             )}
           </For>
-        </Motion.div>
-        )}
-      </Presence>
+        </DesktopAnchoredOverlaySurface>
+      </Show>
     </div>
   );
 }
