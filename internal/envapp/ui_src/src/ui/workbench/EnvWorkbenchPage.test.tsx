@@ -1437,6 +1437,95 @@ describe('EnvWorkbenchPage', () => {
     });
   });
 
+  it('marks the workbench as layout-interacting until the visual settle window ends', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    const page = host.querySelector('[data-testid="redeven-workbench-page"]') as HTMLElement | null;
+    expect(page).toBeTruthy();
+    expect(page?.dataset.redevenWorkbenchLayoutInteracting).toBe('false');
+
+    surfaceApiMocks.lastSurfaceProps.onLayoutInteractionStart();
+    await flushMicrotasks();
+
+    expect(page?.dataset.redevenWorkbenchLayoutInteracting).toBe('true');
+    expect(page?.classList.contains('is-layout-interacting')).toBe(true);
+
+    surfaceApiMocks.lastSurfaceProps.onLayoutInteractionEnd();
+    await flushMicrotasks();
+
+    expect(page?.dataset.redevenWorkbenchLayoutInteracting).toBe('true');
+
+    vi.advanceTimersByTime(89);
+    await flushMicrotasks();
+    expect(page?.dataset.redevenWorkbenchLayoutInteracting).toBe('true');
+
+    vi.advanceTimersByTime(1);
+    await flushMicrotasks();
+    expect(page?.dataset.redevenWorkbenchLayoutInteracting).toBe('false');
+    expect(page?.classList.contains('is-layout-interacting')).toBe(false);
+  });
+
+  it('marks the workbench as layout-interacting when the canvas viewport changes', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    const page = host.querySelector('[data-testid="redeven-workbench-page"]') as HTMLElement | null;
+    expect(page).toBeTruthy();
+    expect(page?.dataset.redevenWorkbenchLayoutInteracting).toBe('false');
+
+    surfaceApiMocks.lastSetState((previous: any) => ({
+      ...previous,
+      viewport: {
+        ...previous.viewport,
+        x: previous.viewport.x + 24,
+      },
+    }));
+    await flushMicrotasks();
+
+    expect(page?.dataset.redevenWorkbenchLayoutInteracting).toBe('true');
+    expect(page?.classList.contains('is-layout-interacting')).toBe(true);
+
+    vi.advanceTimersByTime(89);
+    await flushMicrotasks();
+    expect(page?.dataset.redevenWorkbenchLayoutInteracting).toBe('true');
+
+    vi.advanceTimersByTime(1);
+    await flushMicrotasks();
+    expect(page?.dataset.redevenWorkbenchLayoutInteracting).toBe('false');
+    expect(page?.classList.contains('is-layout-interacting')).toBe(false);
+  });
+
+  it('marks the workbench as layout-interacting when the surface reports a viewport interaction pulse', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    const page = host.querySelector('[data-testid="redeven-workbench-page"]') as HTMLElement | null;
+    expect(page).toBeTruthy();
+    expect(page?.dataset.redevenWorkbenchLayoutInteracting).toBe('false');
+
+    surfaceApiMocks.lastSurfaceProps.onViewportInteractionPulse();
+    await flushMicrotasks();
+
+    expect(page?.dataset.redevenWorkbenchLayoutInteracting).toBe('true');
+    expect(page?.classList.contains('is-layout-interacting')).toBe(true);
+
+    vi.advanceTimersByTime(90);
+    await flushMicrotasks();
+
+    expect(page?.dataset.redevenWorkbenchLayoutInteracting).toBe('false');
+    expect(page?.classList.contains('is-layout-interacting')).toBe(false);
+  });
+
   it('applies shared file paths and persists only committed path changes', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
