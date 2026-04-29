@@ -144,6 +144,7 @@ import {
   type EnvOpenSurfaceOptions,
   type EnvSurfaceId,
   type EnvViewMode,
+  type EnvWorkbenchHandoffAnchor,
 } from './envViewMode';
 import { EnvWorkbenchPage } from './workbench/EnvWorkbenchPage';
 
@@ -152,6 +153,7 @@ const DESKTOP_VIEW_MODE_STORAGE_KEY = 'redeven_envapp_desktop_view_mode';
 const ACTIVE_THREAD_STORAGE_KEY = 'redeven_ai_active_thread_id';
 const EXECUTION_MODE_STORAGE_KEY = 'redeven_ai_execution_mode';
 const ACCESS_RESUME_TIMEOUT_MS = 15_000;
+const WORKBENCH_HANDOFF_ANCHOR_MAX_AGE_MS = 1_500;
 const NOTES_OVERLAY_KEYBIND = 'mod+.';
 type CreateThreadResponse = Readonly<{
   thread: Readonly<{
@@ -187,6 +189,23 @@ function getErrorMessage(error: unknown): string {
 
 function trimString(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+function envAppNowMs(): number {
+  if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+    return performance.now();
+  }
+  return Date.now();
+}
+
+function normalizeWorkbenchHandoffAnchor(value: unknown): EnvWorkbenchHandoffAnchor | null {
+  const candidate = value as { clientX?: unknown; clientY?: unknown } | null;
+  const clientX = Number(candidate?.clientX);
+  const clientY = Number(candidate?.clientY);
+  if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) {
+    return null;
+  }
+  return { clientX, clientY };
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
@@ -570,6 +589,47 @@ export function EnvAppShell() {
   const [settingsFocusSection, setSettingsFocusSection] = createSignal<EnvSettingsSection | null>(null);
   const [aiThreadFocusSeq, setAIThreadFocusSeq] = createSignal(0);
   const [aiThreadFocusId, setAIThreadFocusId] = createSignal<string | null>(null);
+  let lastWorkbenchPointerAnchor: (EnvWorkbenchHandoffAnchor & { observedAtMs: number }) | null = null;
+
+  const recordWorkbenchPointerAnchor = (event: MouseEvent | PointerEvent) => {
+    const anchor = normalizeWorkbenchHandoffAnchor(event);
+    if (!anchor) return;
+    lastWorkbenchPointerAnchor = {
+      ...anchor,
+      observedAtMs: envAppNowMs(),
+    };
+  };
+
+  const resolveWorkbenchHandoffAnchor = (
+    explicitAnchor?: EnvWorkbenchHandoffAnchor,
+  ): EnvWorkbenchHandoffAnchor | undefined => {
+    const normalizedExplicit = normalizeWorkbenchHandoffAnchor(explicitAnchor);
+    if (normalizedExplicit) {
+      return normalizedExplicit;
+    }
+
+    const observed = lastWorkbenchPointerAnchor;
+    if (!observed) {
+      return undefined;
+    }
+    if (envAppNowMs() - observed.observedAtMs > WORKBENCH_HANDOFF_ANCHOR_MAX_AGE_MS) {
+      return undefined;
+    }
+    return {
+      clientX: observed.clientX,
+      clientY: observed.clientY,
+    };
+  };
+
+  onMount(() => {
+    window.addEventListener('pointerdown', recordWorkbenchPointerAnchor, true);
+    window.addEventListener('contextmenu', recordWorkbenchPointerAnchor, true);
+  });
+
+  onCleanup(() => {
+    window.removeEventListener('pointerdown', recordWorkbenchPointerAnchor, true);
+    window.removeEventListener('contextmenu', recordWorkbenchPointerAnchor, true);
+  });
 
   createEffect(() => {
     const anchor = notesViewportAnchor();
@@ -696,6 +756,7 @@ export function EnvAppShell() {
     options?: {
       preferredName?: string;
       openStrategy?: 'focus_latest_or_create' | 'create_new';
+      workbenchAnchor?: EnvWorkbenchHandoffAnchor;
     },
   ) => {
     const normalizedWorkingDir = normalizeAbsolutePath(workingDir);
@@ -706,6 +767,9 @@ export function EnvAppShell() {
 
     const preferredName = String(options?.preferredName ?? '').trim();
     const targetMode = viewMode();
+    const workbenchAnchor = targetMode === 'workbench'
+      ? resolveWorkbenchHandoffAnchor(options?.workbenchAnchor)
+      : undefined;
     if (targetMode !== 'workbench') {
       setOpenTerminalInDirectoryRequest({
         requestId: createClientId(),
@@ -718,8 +782,10 @@ export function EnvAppShell() {
     openSurface('terminal', {
       reason: 'handoff_open_terminal',
       focus: true,
-      ensureVisible: true,
-      openStrategy: options?.openStrategy,
+      ensureVisible: workbenchAnchor ? false : true,
+      centerViewport: workbenchAnchor ? false : undefined,
+      openStrategy: options?.openStrategy ?? (targetMode === 'workbench' ? 'create_new' : undefined),
+      workbenchAnchor,
       terminalPayload: {
         workingDir: normalizedWorkingDir,
         preferredName: preferredName || basenameFromAbsolutePath(normalizedWorkingDir),
@@ -1831,8 +1897,9 @@ export function EnvAppShell() {
       surfaceId,
       focus: options?.focus ?? true,
       ensureVisible: options?.ensureVisible ?? true,
-      centerViewport: options?.ensureVisible ?? true,
+      centerViewport: options?.centerViewport ?? options?.ensureVisible ?? true,
       openStrategy: options?.openStrategy,
+      workbenchAnchor: options?.workbenchAnchor,
       terminalPayload: options?.terminalPayload,
       fileBrowserPayload: options?.fileBrowserPayload,
     });

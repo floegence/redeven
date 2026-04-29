@@ -634,7 +634,10 @@ describe('EnvCodespacesPage', () => {
     await flushPage();
 
     expect(envContextMocks.openTerminalInDirectory).toHaveBeenCalledTimes(1);
-    expect(envContextMocks.openTerminalInDirectory).toHaveBeenCalledWith('/workspace/demo', { preferredName: 'Demo Space' });
+    expect(envContextMocks.openTerminalInDirectory).toHaveBeenCalledWith('/workspace/demo', {
+      preferredName: 'Demo Space',
+      workbenchAnchor: { clientX: 40, clientY: 56 },
+    });
   });
 
   it('keeps the codespace context menu inside the local surface host', async () => {

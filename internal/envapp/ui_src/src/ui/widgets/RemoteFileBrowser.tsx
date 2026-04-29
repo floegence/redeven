@@ -4281,6 +4281,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     openDirectoryInTerminal({
       path: directory.path,
       preferredName: directory.preferredName,
+      workbenchAnchor: event ? { clientX: event.x, clientY: event.y } : undefined,
       openTerminalInDirectory: ctx.openTerminalInDirectory,
       onInvalidDirectory: () => {
         notification.error('Invalid directory', 'Could not resolve a terminal working directory.');

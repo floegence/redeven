@@ -1,4 +1,5 @@
 import { normalizeAbsolutePath } from './askFlowerPath';
+import type { EnvWorkbenchHandoffAnchor } from '../envViewMode';
 
 export function canOpenDirectoryPathInTerminal(path: string): boolean {
   return Boolean(normalizeAbsolutePath(path));
@@ -7,7 +8,14 @@ export function canOpenDirectoryPathInTerminal(path: string): boolean {
 export function openDirectoryInTerminal(params: {
   path: string;
   preferredName?: string;
-  openTerminalInDirectory: (workingDir: string, options?: { preferredName?: string }) => void;
+  workbenchAnchor?: EnvWorkbenchHandoffAnchor;
+  openTerminalInDirectory: (
+    workingDir: string,
+    options?: {
+      preferredName?: string;
+      workbenchAnchor?: EnvWorkbenchHandoffAnchor;
+    },
+  ) => void;
   onInvalidDirectory?: () => void;
 }): boolean {
   const workingDir = normalizeAbsolutePath(params.path);
@@ -16,6 +24,15 @@ export function openDirectoryInTerminal(params: {
     return false;
   }
 
-  params.openTerminalInDirectory(workingDir, { preferredName: params.preferredName });
+  const options: {
+    preferredName?: string;
+    workbenchAnchor?: EnvWorkbenchHandoffAnchor;
+  } = {
+    preferredName: params.preferredName,
+  };
+  if (params.workbenchAnchor) {
+    options.workbenchAnchor = params.workbenchAnchor;
+  }
+  params.openTerminalInDirectory(workingDir, options);
   return true;
 }

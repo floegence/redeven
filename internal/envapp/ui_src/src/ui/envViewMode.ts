@@ -25,6 +25,11 @@ export type EnvWorkbenchSurfaceOpenStrategy =
   | 'focus_latest_or_create'
   | 'create_new';
 
+export type EnvWorkbenchHandoffAnchor = {
+  clientX: number;
+  clientY: number;
+};
+
 export type EnvTerminalSurfacePayload = {
   workingDir?: string;
   preferredName?: string;
@@ -40,7 +45,9 @@ export type EnvOpenSurfaceOptions = {
   reason?: EnvSurfaceOpenReason;
   focus?: boolean;
   ensureVisible?: boolean;
+  centerViewport?: boolean;
   openStrategy?: EnvWorkbenchSurfaceOpenStrategy;
+  workbenchAnchor?: EnvWorkbenchHandoffAnchor;
   terminalPayload?: EnvTerminalSurfacePayload;
   fileBrowserPayload?: EnvFileBrowserSurfacePayload;
 };

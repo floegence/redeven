@@ -119,6 +119,7 @@ const widgetBodyMocks = vi.hoisted(() => ({
 
 const contextProbeState = vi.hoisted(() => ({
   fileOpenRequest: null as any,
+  terminalOpenRequest: null as any,
   terminalPanelState: null as any,
   previewItem: null as any,
 }));
@@ -495,6 +496,7 @@ describe('EnvWorkbenchPage', () => {
     widgetBodyMocks.renderTerminalBody = null;
     widgetBodyMocks.renderPreviewBody = null;
     contextProbeState.fileOpenRequest = null;
+    contextProbeState.terminalOpenRequest = null;
     contextProbeState.terminalPanelState = null;
     contextProbeState.previewItem = null;
   });
@@ -1591,6 +1593,81 @@ describe('EnvWorkbenchPage', () => {
       sessionIds: ['session-1', 'session-2', 'session-3'],
       activeSessionId: 'session-1',
     });
+  });
+
+  it('creates anchored terminal widgets and waits for runtime layout ack before opening a tab', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const terminalWidget = persistedWidget('widget-terminal-new', 'redeven.terminal', 'Terminal', 5, 500);
+    surfaceApiMocks.createWidget.mockImplementation((_type: string, _options?: any) => {
+      surfaceApiMocks.lastSetState((previous: any) => ({
+        ...previous,
+        widgets: [...previous.widgets, terminalWidget],
+        selectedWidgetId: terminalWidget.id,
+      }));
+      return terminalWidget;
+    });
+    surfaceApiMocks.focusWidget.mockImplementation((widget: any) => widget);
+    widgetBodyMocks.renderTerminalBody = (bodyProps: any) => {
+      const workbench = useEnvWorkbenchInstancesContext();
+      createEffect(() => {
+        contextProbeState.terminalOpenRequest = workbench.terminalOpenRequest(bodyProps.widgetId);
+      });
+      return null;
+    };
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+    setMockCanvasFrameRect(host, 1000, 720);
+
+    setWorkbenchSurfaceActivation({
+      requestId: 'request-terminal-new',
+      surfaceId: 'terminal',
+      focus: true,
+      ensureVisible: false,
+      centerViewport: false,
+      openStrategy: 'create_new',
+      workbenchAnchor: { clientX: 260, clientY: 340 },
+      terminalPayload: {
+        workingDir: '/workspace/repo',
+        preferredName: 'repo',
+      },
+    });
+    setWorkbenchSurfaceActivationSeq((value) => value + 1);
+    await flushMicrotasks();
+
+    expect(surfaceApiMocks.createWidget).toHaveBeenCalledWith('redeven.terminal', {
+      centerViewport: false,
+      worldX: 180,
+      worldY: 280,
+    });
+    expect(surfaceApiMocks.focusWidget).toHaveBeenCalledWith(terminalWidget, { centerViewport: false });
+    expect(contextProbeState.terminalOpenRequest).toBeNull();
+
+    layoutApiMocks.lastStreamArgs.onEvent({
+      seq: 2,
+      type: 'layout.replaced',
+      created_at_unix_ms: 600,
+      payload: {
+        seq: 2,
+        revision: 2,
+        updated_at_unix_ms: 600,
+        widgets: [
+          runtimeWidget('widget-terminal-new', 'redeven.terminal', 5, 500),
+        ],
+        widget_states: [],
+      },
+    });
+    await flushMicrotasks();
+
+    expect(contextProbeState.terminalOpenRequest).toMatchObject({
+      requestId: 'request-terminal-new',
+      widgetId: 'widget-terminal-new',
+      workingDir: '/workspace/repo',
+      preferredName: 'repo',
+    });
+    expect(contextMocks.consumeWorkbenchSurfaceActivation).toHaveBeenCalledWith('request-terminal-new');
   });
 
   it('applies shared preview items without changing layout state', async () => {

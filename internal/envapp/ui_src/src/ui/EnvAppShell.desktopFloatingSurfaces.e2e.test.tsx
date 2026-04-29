@@ -258,6 +258,16 @@ vi.mock('./workbench/EnvWorkbenchPage', () => ({
         >
           Open Workbench Browser
         </button>
+        <button
+          type="button"
+          data-testid="workbench-open-terminal"
+          onClick={() => env.openTerminalInDirectory?.('/workspace/app', {
+            preferredName: 'App',
+            workbenchAnchor: { clientX: 240, clientY: 320 },
+          })}
+        >
+          Open Workbench Terminal
+        </button>
         <div data-testid="workbench-preview-activation">
           {env.workbenchFilePreviewActivation?.()?.item?.path ?? ''}
         </div>
@@ -266,6 +276,16 @@ vi.mock('./workbench/EnvWorkbenchPage', () => ({
             env.workbenchSurfaceActivation?.()?.fileBrowserPayload?.path ?? '',
             env.workbenchSurfaceActivation?.()?.fileBrowserPayload?.title ?? '',
             env.workbenchSurfaceActivation?.()?.openStrategy ?? '',
+          ].join('|')}
+        </div>
+        <div data-testid="workbench-terminal-activation">
+          {[
+            env.workbenchSurfaceActivation?.()?.terminalPayload?.workingDir ?? '',
+            env.workbenchSurfaceActivation?.()?.terminalPayload?.preferredName ?? '',
+            env.workbenchSurfaceActivation?.()?.openStrategy ?? '',
+            String(env.workbenchSurfaceActivation?.()?.centerViewport ?? ''),
+            env.workbenchSurfaceActivation?.()?.workbenchAnchor?.clientX ?? '',
+            env.workbenchSurfaceActivation?.()?.workbenchAnchor?.clientY ?? '',
           ].join('|')}
         </div>
       </div>
@@ -530,6 +550,28 @@ describe('EnvAppShell desktop floating surfaces', () => {
       await flushAsync();
 
       expect(host.querySelector('[data-testid="workbench-browser-activation"]')?.textContent).toBe('/workspace/app|App|create_new');
+      expect(windowOpenMock).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('routes workbench terminal handoffs into an anchored new Terminal widget', async () => {
+    desktopViewMode = 'workbench';
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushAsync();
+
+      (host.querySelector('[data-testid="workbench-open-terminal"]') as HTMLButtonElement).click();
+      await flushAsync();
+
+      expect(host.querySelector('[data-testid="workbench-terminal-activation"]')?.textContent).toBe('/workspace/app|App|create_new|false|240|320');
       expect(windowOpenMock).not.toHaveBeenCalled();
     } finally {
       dispose();
