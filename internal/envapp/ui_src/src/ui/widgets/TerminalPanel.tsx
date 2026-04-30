@@ -1255,6 +1255,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return terminalPrefs.fontFamilyId();
   });
   const mobileInputMode = terminalPrefs.mobileInputMode;
+  const workIndicatorEnabled = terminalPrefs.workIndicatorEnabled;
 
   const fontFamily = createMemo<string>(() => {
     return resolveTerminalFontFamily(fontFamilyId());
@@ -1689,6 +1690,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
 
   const terminalWorkIndicatorState = createMemo<TerminalSessionWorkState>(() => {
+    if (!workIndicatorEnabled()) {
+      return 'idle';
+    }
     return variant === 'workbench' ? panelWorkState() : 'idle';
   });
 
@@ -2979,15 +2983,17 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
           data-terminal-work-theme={terminalWorkIndicatorTheme()}
           class="flex-1 min-h-0 relative"
         >
-          <div
-            class="redeven-terminal-work-indicator"
-            data-terminal-work-state={terminalWorkIndicatorState()}
-            data-terminal-work-theme={terminalWorkIndicatorTheme()}
-            style={{
-              '--redeven-terminal-work-indicator-size': `${terminalWorkIndicatorThicknessPx()}px`,
-            }}
-            aria-hidden="true"
-          />
+          <Show when={workIndicatorEnabled()}>
+            <div
+              class="redeven-terminal-work-indicator"
+              data-terminal-work-state={terminalWorkIndicatorState()}
+              data-terminal-work-theme={terminalWorkIndicatorTheme()}
+              style={{
+                '--redeven-terminal-work-indicator-size': `${terminalWorkIndicatorThicknessPx()}px`,
+              }}
+              aria-hidden="true"
+            />
+          </Show>
           <Show when={searchOpen()}>
             <div class="absolute top-2 right-2 z-20 flex items-center gap-1 rounded-md border border-white/15 bg-[#0b0f14]/95 px-2 py-1 shadow-md backdrop-blur">
               <Input
@@ -3135,6 +3141,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         fontSize={fontSize()}
         fontFamilyId={fontFamilyId()}
         mobileInputMode={mobileInputMode()}
+        workIndicatorEnabled={workIndicatorEnabled()}
         fontScope={sharedGeometryPreferences() ? 'shared-workbench' : 'local'}
         minFontSize={TERMINAL_MIN_FONT_SIZE}
         maxFontSize={TERMINAL_MAX_FONT_SIZE}
@@ -3143,6 +3150,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         onFontSizeChange={persistFontSize}
         onFontFamilyChange={persistFontFamily}
         onMobileInputModeChange={(value) => handleMobileInputModeChange(value, { focusTerminal: false })}
+        onWorkIndicatorEnabledChange={terminalPrefs.setWorkIndicatorEnabled}
       />
 
       <Show when={error()}>

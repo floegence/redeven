@@ -30,6 +30,7 @@ const terminalPrefsState = vi.hoisted(() => ({
   fontSize: 12,
   fontFamilyId: 'iosevka',
   mobileInputMode: 'floe' as 'floe' | 'system',
+  workIndicatorEnabled: true,
 }));
 
 const focusSpy = vi.hoisted(() => vi.fn());
@@ -283,6 +284,17 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     >
       {props.children}
     </button>
+  ),
+  Checkbox: (props: any) => (
+    <label>
+      <input
+        type="checkbox"
+        checked={props.checked}
+        aria-label={props.label}
+        onChange={(event) => props.onChange?.((event.currentTarget as HTMLInputElement).checked)}
+      />
+      {props.label}
+    </label>
   ),
   Dropdown: (props: any) => (
     <div data-testid="dropdown">
@@ -620,6 +632,7 @@ vi.mock('../services/terminalPreferences', () => ({
     fontSize: () => terminalPrefsState.fontSize,
     fontFamilyId: () => terminalPrefsState.fontFamilyId,
     mobileInputMode: () => terminalPrefsState.mobileInputMode,
+    workIndicatorEnabled: () => terminalPrefsState.workIndicatorEnabled,
     setUserTheme: (value: string) => {
       terminalPrefsState.userTheme = value;
     },
@@ -631,6 +644,9 @@ vi.mock('../services/terminalPreferences', () => ({
     },
     setMobileInputMode: (value: 'floe' | 'system') => {
       terminalPrefsState.mobileInputMode = value;
+    },
+    setWorkIndicatorEnabled: (value: boolean) => {
+      terminalPrefsState.workIndicatorEnabled = value;
     },
   }),
 }));
@@ -778,6 +794,7 @@ describe('TerminalPanel', () => {
     terminalPrefsState.fontSize = 12;
     terminalPrefsState.fontFamilyId = 'iosevka';
     terminalPrefsState.mobileInputMode = 'floe';
+    terminalPrefsState.workIndicatorEnabled = true;
     widgetState.currentWidgetId = null;
     viewActivationState.missing = false;
     viewActivationState.active = true;
@@ -1070,6 +1087,21 @@ describe('TerminalPanel', () => {
 
     const zoomedIndicator = findTerminalWorkIndicator(zoomedHost);
     expect(zoomedIndicator?.style.getPropertyValue('--redeven-terminal-work-indicator-size')).toBe('2px');
+  });
+
+  it('hides the terminal work indicator when the global activity border preference is disabled', async () => {
+    terminalPrefsState.workIndicatorEnabled = false;
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    emitTerminalData('session-1', '\x1b]633;B\u0007', 1);
+    await settleTerminalPanel();
+
+    expect(host.querySelector('[data-testid="terminal-content"]')?.getAttribute('data-terminal-work-state')).toBe('idle');
+    expect(findTerminalWorkIndicator(host)).toBeNull();
   });
 
   it('marks the terminal work indicator with the app theme contrast mode', async () => {
