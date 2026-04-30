@@ -95,14 +95,17 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).not.toContain('0 0 0 2px color-mix(in srgb, var(--ring) 72%, transparent)');
   });
 
-  it('freezes terminal visuals during active workbench layout interactions', () => {
+  it('keeps workbench layout interaction visuals lightweight', () => {
     const src = readRedevenCss();
 
     expect(src).toContain('.redeven-terminal-surface {');
     expect(src).toContain('contain: paint;');
-    expect(src).toContain(".redeven-terminal-surface[data-redeven-terminal-freeze='true'] {");
-    expect(src).toContain('.redeven-terminal-freeze-snapshot {');
-    expect(src).toContain('pointer-events: none;');
+    expect(src).not.toContain('redeven-terminal-freeze-snapshot');
+    expect(src).not.toContain("data-redeven-terminal-freeze");
+    expect(src).toContain(".redeven-workbench-page[data-redeven-workbench-layout-interacting='true'] .workbench-widget {");
+    expect(src).toContain('scale 120ms ease-out');
+    expect(src).toContain(".workbench-widget[data-redeven-workbench-widget-closing='true'] {");
+    expect(src).toContain('scale: 0.985;');
     expect(src).toContain(".redeven-workbench-page[data-redeven-workbench-layout-interacting='true'] .redeven-terminal-work-indicator {");
     expect(src).toContain('transition: none !important;');
   });

@@ -108,6 +108,12 @@ function TerminalWidget(props: RedevenWorkbenchWidgetBodyProps) {
       }}
       workbenchSelected={props.selected}
       workbenchActivationSeq={props.activation?.seq}
+      onWorkbenchTerminalCoreChange={(sessionId, core) => {
+        workbench.registerTerminalCore(props.widgetId, sessionId, core);
+      }}
+      onWorkbenchTerminalSurfaceChange={(sessionId, surface) => {
+        workbench.registerTerminalSurface(props.widgetId, sessionId, surface);
+      }}
       onTitleChange={(title) => {
         workbench.updateWidgetTitle(props.widgetId, title);
       }}

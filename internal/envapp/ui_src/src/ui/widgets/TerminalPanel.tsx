@@ -122,6 +122,8 @@ export interface TerminalPanelProps {
   workbenchSelected?: boolean;
   workbenchActivationSeq?: number;
   workbenchPresentationScale?: number;
+  onWorkbenchTerminalCoreChange?: (sessionId: string, core: TerminalCore | null) => void;
+  onWorkbenchTerminalSurfaceChange?: (sessionId: string, surface: HTMLDivElement | null) => void;
   onTitleChange?: (title: string) => void;
 }
 
@@ -1463,10 +1465,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (core) {
       coreRegistry.set(id, core);
       applyRegisteredTerminalAppearance(core);
+      props.onWorkbenchTerminalCoreChange?.(id, core);
       setCoreRegistrySeq((v) => v + 1);
       return;
     }
     coreRegistry.delete(id);
+    props.onWorkbenchTerminalCoreChange?.(id, null);
     setCoreRegistrySeq((v) => v + 1);
   };
 
@@ -1474,10 +1478,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (!id) return;
     if (surface) {
       surfaceRegistry.set(id, surface);
+      props.onWorkbenchTerminalSurfaceChange?.(id, surface);
       setSurfaceRegistrySeq((v) => v + 1);
       return;
     }
     surfaceRegistry.delete(id);
+    props.onWorkbenchTerminalSurfaceChange?.(id, null);
     setSurfaceRegistrySeq((v) => v + 1);
   };
 

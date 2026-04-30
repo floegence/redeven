@@ -87,6 +87,7 @@ const surfaceApiMocks = vi.hoisted(() => ({
   findWidgetByType: vi.fn(() => null),
   findWidgetById: vi.fn(() => null),
   updateWidgetTitle: vi.fn(),
+  viewportTransitionReleases: [] as Array<() => void>,
   lastWidgetDefinitions: null as any,
   lastStateAccessor: null as any,
   lastSetState: null as any,
@@ -151,6 +152,11 @@ async function flushMicrotasks() {
   await Promise.resolve();
 }
 
+async function advanceTimersByTimeAndFlush(ms: number) {
+  vi.advanceTimersByTime(ms);
+  await flushMicrotasks();
+}
+
 function setMockCanvasFrameRect(host: HTMLElement, width: number, height: number) {
   const frame = host.querySelector('[data-floe-workbench-canvas-frame="true"]') as HTMLDivElement | null;
   expect(frame).toBeTruthy();
@@ -191,7 +197,7 @@ function widgetsOverlap(left: any, right: any): boolean {
 function ensureCSSEscape() {
   const css = globalThis.CSS as { escape?: (value: string) => string } | undefined;
   if (css && typeof css.escape === 'function') {
-    return;
+    return ensureDOMMatrix();
   }
   Object.defineProperty(globalThis, 'CSS', {
     configurable: true,
@@ -199,6 +205,54 @@ function ensureCSSEscape() {
       ...(css ?? {}),
       escape: (value: string) => String(value),
     },
+  });
+  ensureDOMMatrix();
+}
+
+function ensureDOMMatrix() {
+  if (typeof globalThis.DOMMatrix === 'function') {
+    return;
+  }
+  class TestDOMMatrix {
+    a = 1;
+    b = 0;
+    c = 0;
+    d = 1;
+    e = 0;
+    f = 0;
+    is2D = true;
+
+    translateSelf(x = 0, y = 0) {
+      this.e += Number(x) || 0;
+      this.f += Number(y) || 0;
+      return this;
+    }
+
+    rotateSelf() {
+      return this;
+    }
+
+    scaleSelf(scaleX = 1, scaleY = scaleX) {
+      this.a *= Number(scaleX) || 1;
+      this.d *= Number(scaleY) || 1;
+      return this;
+    }
+
+    inverse() {
+      return new TestDOMMatrix();
+    }
+
+    multiply() {
+      return this;
+    }
+
+    toString() {
+      return `matrix(${this.a}, ${this.b}, ${this.c}, ${this.d}, ${this.e}, ${this.f})`;
+    }
+  }
+  Object.defineProperty(globalThis, 'DOMMatrix', {
+    configurable: true,
+    value: TestDOMMatrix,
   });
 }
 
@@ -414,7 +468,10 @@ vi.mock('./surface/RedevenWorkbenchSurface', () => ({
               const definition = props.widgetDefinitions.find((entry: any) => entry.type === widget.type);
               const Body = definition?.body;
               return Body ? (
-                <div data-testid={`widget-body-${widget.id}`}>
+                <div
+                  data-testid={`widget-body-${widget.id}`}
+                  data-redeven-workbench-widget-id={widget.id}
+                >
                   <Body widgetId={widget.id} title={widget.title} type={widget.type} />
                 </div>
               ) : null;
@@ -489,6 +546,7 @@ describe('EnvWorkbenchPage', () => {
     surfaceApiMocks.findWidgetById.mockReset();
     surfaceApiMocks.findWidgetById.mockReturnValue(null);
     surfaceApiMocks.updateWidgetTitle.mockReset();
+    surfaceApiMocks.viewportTransitionReleases = [];
     surfaceApiMocks.lastWidgetDefinitions = null;
     surfaceApiMocks.lastStateAccessor = null;
     surfaceApiMocks.lastSetState = null;
@@ -1477,6 +1535,169 @@ describe('EnvWorkbenchPage', () => {
     expect(page?.classList.contains('is-layout-interacting')).toBe(false);
   });
 
+  it('suspends registered workbench terminal cores during layout interactions', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const suspendHandle = { dispose: vi.fn() };
+    const beginVisualSuspend = vi.fn(() => suspendHandle);
+
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 2,
+      revision: 1,
+      updated_at_unix_ms: 100,
+      widgets: [
+        {
+          widget_id: 'widget-terminal-1',
+          widget_type: 'redeven.terminal',
+          x: 320,
+          y: 180,
+          width: 760,
+          height: 560,
+          z_index: 1,
+          created_at_unix_ms: 123,
+        },
+      ],
+      widget_states: [
+        {
+          widget_id: 'widget-terminal-1',
+          widget_type: 'redeven.terminal',
+          revision: 1,
+          updated_at_unix_ms: 120,
+          state: {
+            kind: 'terminal',
+            session_ids: ['session-1'],
+          },
+        },
+      ],
+    });
+    widgetBodyMocks.renderTerminalBody = (bodyProps: any) => {
+      const workbench = useEnvWorkbenchInstancesContext();
+      createEffect(() => {
+        const surface = document.createElement('div');
+        Object.defineProperty(surface, 'getBoundingClientRect', {
+          configurable: true,
+          value: () => ({
+            x: 0,
+            y: 0,
+            top: 0,
+            left: 0,
+            right: 320,
+            bottom: 180,
+            width: 320,
+            height: 180,
+            toJSON: () => ({}),
+          }),
+        });
+        document.body.appendChild(surface);
+        workbench.registerTerminalSurface(bodyProps.widgetId, 'session-1', surface);
+        workbench.registerTerminalCore(bodyProps.widgetId, 'session-1', { beginVisualSuspend } as any);
+      });
+      return null;
+    };
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    surfaceApiMocks.lastSurfaceProps.onLayoutInteractionStart('widget_drag');
+    await flushMicrotasks();
+
+    expect(beginVisualSuspend).toHaveBeenCalledWith({ reason: 'workbench_widget_drag' });
+    expect(suspendHandle.dispose).not.toHaveBeenCalled();
+
+    surfaceApiMocks.lastSurfaceProps.onLayoutInteractionEnd('widget_drag');
+    await flushMicrotasks();
+
+    expect(suspendHandle.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps overlapping terminal visual interactions isolated by their release handle', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const suspendHandle = { dispose: vi.fn() };
+    const beginVisualSuspend = vi.fn(() => suspendHandle);
+
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 2,
+      revision: 1,
+      updated_at_unix_ms: 100,
+      widgets: [
+        {
+          widget_id: 'widget-terminal-1',
+          widget_type: 'redeven.terminal',
+          x: 320,
+          y: 180,
+          width: 760,
+          height: 560,
+          z_index: 1,
+          created_at_unix_ms: 123,
+        },
+      ],
+      widget_states: [
+        {
+          widget_id: 'widget-terminal-1',
+          widget_type: 'redeven.terminal',
+          revision: 1,
+          updated_at_unix_ms: 120,
+          state: {
+            kind: 'terminal',
+            session_ids: ['session-1'],
+          },
+        },
+      ],
+    });
+    widgetBodyMocks.renderTerminalBody = (bodyProps: any) => {
+      const workbench = useEnvWorkbenchInstancesContext();
+      createEffect(() => {
+        const surface = document.createElement('div');
+        Object.defineProperty(surface, 'getBoundingClientRect', {
+          configurable: true,
+          value: () => ({
+            x: 0,
+            y: 0,
+            top: 0,
+            left: 0,
+            right: 320,
+            bottom: 180,
+            width: 320,
+            height: 180,
+            toJSON: () => ({}),
+          }),
+        });
+        document.body.appendChild(surface);
+        workbench.registerTerminalSurface(bodyProps.widgetId, 'session-1', surface);
+        workbench.registerTerminalCore(bodyProps.widgetId, 'session-1', { beginVisualSuspend } as any);
+      });
+      return null;
+    };
+    surfaceApiMocks.runViewportTransition.mockImplementation((action: () => unknown) => {
+      surfaceApiMocks.lastSurfaceProps.onViewportInteractionStart('widget_maximize');
+      surfaceApiMocks.viewportTransitionReleases.push(() => {
+        surfaceApiMocks.lastSurfaceProps.onViewportInteractionEnd('widget_maximize');
+      });
+      return action();
+    });
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    surfaceApiMocks.lastSurfaceProps.onLayoutInteractionStart('widget_drag');
+    stableSurfaceApi.runViewportTransition(() => undefined, { interactionKind: 'widget_maximize' });
+    await flushMicrotasks();
+
+    expect(beginVisualSuspend).toHaveBeenCalledWith({ reason: 'workbench_widget_drag' });
+    expect(beginVisualSuspend).toHaveBeenCalledTimes(1);
+
+    surfaceApiMocks.viewportTransitionReleases.pop()?.();
+    await flushMicrotasks();
+
+    expect(suspendHandle.dispose).not.toHaveBeenCalled();
+
+    surfaceApiMocks.lastSurfaceProps.onLayoutInteractionEnd('widget_drag');
+    await flushMicrotasks();
+
+    expect(suspendHandle.dispose).toHaveBeenCalledTimes(1);
+  });
+
   it('marks the workbench as layout-interacting when the canvas viewport changes', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -1741,6 +1962,20 @@ describe('EnvWorkbenchPage', () => {
     });
     expect(surfaceApiMocks.focusWidget).toHaveBeenCalledWith(terminalWidget, { centerViewport: false });
     expect(contextProbeState.terminalOpenRequest).toBeNull();
+    await advanceTimersByTimeAndFlush(16);
+    if (layoutApiMocks.putWorkbenchLayout.mock.calls.length === 0) {
+      await advanceTimersByTimeAndFlush(16);
+    }
+
+    expect(layoutApiMocks.putWorkbenchLayout).toHaveBeenCalledWith({
+      base_revision: 0,
+      widgets: [
+        expect.objectContaining({
+          widget_id: 'widget-terminal-new',
+          widget_type: 'redeven.terminal',
+        }),
+      ],
+    });
 
     layoutApiMocks.lastStreamArgs.onEvent({
       seq: 2,
@@ -1976,6 +2211,11 @@ describe('EnvWorkbenchPage', () => {
     await flushMicrotasks();
 
     const surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement | null;
+    expect(surface?.dataset.selectedWidgetId).toBe(previewWidget.id);
+    expect(surface?.dataset.widgetIds).toBe(`${filesWidget.id},${previewWidget.id}`);
+    vi.advanceTimersByTime(48);
+    await flushMicrotasks();
+
     expect(surface?.dataset.selectedWidgetId).toBe(filesWidget.id);
     expect(surface?.dataset.widgetIds).toBe(filesWidget.id);
     expect(surface?.dataset.viewportX).toBe('80');
@@ -2030,6 +2270,10 @@ describe('EnvWorkbenchPage', () => {
     await flushMicrotasks();
 
     let surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement | null;
+    expect(surface?.dataset.widgetIds).toBe(`${filesWidget.id},${previewWidget.id}`);
+    vi.advanceTimersByTime(48);
+    await flushMicrotasks();
+
     expect(surface?.dataset.selectedWidgetId).toBe(previewWidget.id);
     expect(surface?.dataset.widgetIds).toBe(previewWidget.id);
 
@@ -2037,6 +2281,10 @@ describe('EnvWorkbenchPage', () => {
     await flushMicrotasks();
 
     surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement | null;
+    expect(surface?.dataset.widgetIds).toBe(previewWidget.id);
+    vi.advanceTimersByTime(48);
+    await flushMicrotasks();
+
     expect(surface?.dataset.selectedWidgetId).toBe('');
     expect(surface?.dataset.widgetIds).toBe('');
   });

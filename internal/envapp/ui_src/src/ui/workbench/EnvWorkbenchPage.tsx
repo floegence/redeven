@@ -63,6 +63,10 @@ import {
   resolveWorkbenchFocusFallback,
 } from './workbenchFocusHistory';
 import {
+  createWorkbenchTerminalVisualCoordinator,
+  type WorkbenchTerminalInteractionKind,
+} from './workbenchTerminalVisualCoordinator';
+import {
   buildWorkbenchLocalStateStorageKey,
   createEmptyRuntimeWorkbenchLayoutSnapshot,
   derivePersistedWorkbenchLocalState,
@@ -90,9 +94,11 @@ import {
 import { WorkbenchEntryIntro } from './WorkbenchEntryIntro';
 
 const WORKBENCH_PERSIST_DELAY_MS = 120;
-const WORKBENCH_LAYOUT_FLUSH_DELAY_MS = 0;
+const WORKBENCH_LAYOUT_FLUSH_DELAY_MS = 160;
+const WORKBENCH_LAYOUT_FAST_FLUSH_DELAY_MS = 16;
 const WORKBENCH_LAYOUT_RECONNECT_DELAY_MS = 900;
 const WORKBENCH_LAYOUT_VISUAL_SETTLE_MS = 90;
+const WORKBENCH_WIDGET_CLOSE_DEFER_MS = 48;
 const WORKBENCH_MIN_SCALE_EPSILON = 0.0001;
 const WORKBENCH_SCALE_ANIMATION_DURATION_MS = 180;
 const WORKBENCH_HUD_SHORTCUT_GROUP_CLASS = 'redeven-workbench-hud-shortcuts ml-1 flex h-7 items-center gap-1 border-l border-border/50 pl-2';
@@ -260,6 +266,11 @@ function requestPostInteractionFrame(callback: () => void): void {
     }
     globalThis.setTimeout(() => callback(), 0);
   });
+}
+
+function escapeWorkbenchWidgetIdSelectorValue(value: string): string {
+  const escape = globalThis.CSS?.escape;
+  return typeof escape === 'function' ? escape(value) : value.replace(/["\\]/g, '\\$&');
 }
 
 function shouldReplaceBufferedSnapshot(
@@ -591,6 +602,13 @@ export function EnvWorkbenchPage() {
   let canvasScaleAnimationFrame: number | undefined;
   let canvasScaleAnimationToken = 0;
   let layoutInteractionVisualSettleTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
+  const pendingWidgetRemovalTimers = new Map<string, {
+    releaseInteraction: () => void;
+    timer: ReturnType<typeof globalThis.setTimeout>;
+  }>();
+  const terminalVisualCoordinator = createWorkbenchTerminalVisualCoordinator();
+  const surfaceLayoutInteractionReleases: Array<() => void> = [];
+  let surfaceViewportInteractionRelease: (() => void) | null = null;
 
   const runtimeWidgetStateById = createMemo(() => runtimeWorkbenchWidgetStateById(runtimeSnapshot().widget_states));
   const runtimeFilesWidgetStateById = createMemo<Record<string, RuntimeWorkbenchWidgetState>>(() => Object.fromEntries(
@@ -615,6 +633,10 @@ export function EnvWorkbenchPage() {
       return null;
     }
     return workbenchState().widgets.find((widget) => widget.id === selectedWidgetId) ?? null;
+  });
+
+  createEffect(() => {
+    terminalVisualCoordinator.setSelectedWidgetId(workbenchState().selectedWidgetId);
   });
 
   const runtimeWidgetExists = (widgetId: string, widgetType?: string): boolean => {
@@ -812,7 +834,9 @@ export function EnvWorkbenchPage() {
       pulseLayoutInteractionVisual();
     }
     if (shouldStartOwnerHandoff) {
+      const release = terminalVisualCoordinator.beginInteraction('widget_layer_switch');
       beginLocalOwnerHandoff();
+      requestPostInteractionFrame(() => release.end());
     }
   };
 
@@ -850,25 +874,62 @@ export function EnvWorkbenchPage() {
     }
   };
 
-  const beginLayoutInteraction = () => {
+  const beginLayoutInteractionHandle = (kind: WorkbenchTerminalInteractionKind = 'widget_drag') => {
     cancelLayoutInteractionVisualSettle();
     setLayoutInteractionVisualActive(true);
     setActiveLayoutInteractions((count) => count + 1);
+    const terminalVisualToken = terminalVisualCoordinator.beginInteraction(kind);
+    let released = false;
+    return () => {
+      if (released) {
+        return;
+      }
+      released = true;
+      terminalVisualToken.end();
+      let reachedIdle = false;
+      setActiveLayoutInteractions((count) => {
+        const next = Math.max(0, count - 1);
+        reachedIdle = next === 0;
+        return next;
+      });
+
+      if (!reachedIdle) {
+        return;
+      }
+
+      scheduleLayoutInteractionVisualSettle();
+    };
   };
 
-  const endLayoutInteraction = () => {
-    let reachedIdle = false;
-    setActiveLayoutInteractions((count) => {
-      const next = Math.max(0, count - 1);
-      reachedIdle = next === 0;
-      return next;
-    });
-
-    if (!reachedIdle) {
-      return;
+  const runTerminalVisualInteractionPulse = (
+    kind: WorkbenchTerminalInteractionKind,
+    settleMs: number,
+    action?: () => void,
+  ) => {
+    const releaseInteraction = beginLayoutInteractionHandle(kind);
+    try {
+      action?.();
+    } finally {
+      globalThis.setTimeout(releaseInteraction, Math.max(0, settleMs));
     }
+  };
 
-    scheduleLayoutInteractionVisualSettle();
+  const beginSurfaceLayoutInteraction = (kind: WorkbenchTerminalInteractionKind = 'widget_drag') => {
+    surfaceLayoutInteractionReleases.push(beginLayoutInteractionHandle(kind));
+  };
+
+  const endSurfaceLayoutInteraction = () => {
+    surfaceLayoutInteractionReleases.pop()?.();
+  };
+
+  const beginSurfaceViewportInteraction = (kind: WorkbenchTerminalInteractionKind) => {
+    surfaceViewportInteractionRelease?.();
+    surfaceViewportInteractionRelease = beginLayoutInteractionHandle(kind);
+  };
+
+  const endSurfaceViewportInteraction = () => {
+    surfaceViewportInteractionRelease?.();
+    surfaceViewportInteractionRelease = null;
   };
 
   const animateCanvasScaleTo = (targetScale: number) => {
@@ -928,12 +989,17 @@ export function EnvWorkbenchPage() {
     const runTransition = surfaceApi()?.runViewportTransition;
     const animate = () => animateCanvasScaleTo(REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE);
     if (!runTransition) {
-      animate();
+      runTerminalVisualInteractionPulse(
+        'widget_minimize',
+        WORKBENCH_SCALE_ANIMATION_DURATION_MS + WORKBENCH_LAYOUT_VISUAL_SETTLE_MS,
+        animate,
+      );
       return;
     }
     runTransition(animate, {
       reason: 'hud_control',
       settleMs: WORKBENCH_SCALE_ANIMATION_DURATION_MS + WORKBENCH_LAYOUT_VISUAL_SETTLE_MS,
+      interactionKind: 'widget_minimize',
     });
   };
 
@@ -1264,6 +1330,8 @@ export function EnvWorkbenchPage() {
     }
 
     setSubmitQueued(true);
+    const addedWidgets = desiredLayout.widgets.length > currentSnapshot.widgets.length;
+    const delayMs = addedWidgets ? WORKBENCH_LAYOUT_FAST_FLUSH_DELAY_MS : WORKBENCH_LAYOUT_FLUSH_DELAY_MS;
     const timer = globalThis.setTimeout(async () => {
       const nextDesiredLayout = extractRuntimeWorkbenchLayoutFromWorkbenchState(workbenchState());
       if (runtimeWorkbenchLayoutWidgetsEqual(runtimeSnapshot().widgets, nextDesiredLayout.widgets)) {
@@ -1293,7 +1361,7 @@ export function EnvWorkbenchPage() {
         setSubmitQueued(false);
         setSubmitInFlight(false);
       }
-    }, WORKBENCH_LAYOUT_FLUSH_DELAY_MS);
+    }, delayMs);
 
     onCleanup(() => {
       globalThis.clearTimeout(timer);
@@ -1543,8 +1611,9 @@ export function EnvWorkbenchPage() {
     const widgetType = envWidgetTypeForSurface(request.surfaceId);
     const centerViewport = request.centerViewport ?? request.ensureVisible ?? true;
     const anchorPoint = resolveWorkbenchAnchorWorldPoint(request.workbenchAnchor);
+    const shouldFocusWidget = request.focus !== false;
     const createWidgetOptions = {
-      centerViewport,
+      centerViewport: shouldFocusWidget ? false : centerViewport,
       ...(anchorPoint ? anchorPoint : {}),
     };
     let widget = null;
@@ -1560,7 +1629,12 @@ export function EnvWorkbenchPage() {
       if (preferredWidget && preferredWidget.type === widgetType) {
         widget = preferredWidget;
       } else if (openStrategy === 'create_new') {
-        widget = api.createWidget(widgetType, createWidgetOptions);
+        const release = terminalVisualCoordinator.beginInteraction('widget_create');
+        try {
+          widget = api.createWidget(widgetType, createWidgetOptions);
+        } finally {
+          requestPostInteractionFrame(() => release.end());
+        }
       } else {
         const latestWidget = latestWidgetId ? api.findWidgetById(latestWidgetId) : null;
         widget = latestWidget?.type === widgetType
@@ -1568,17 +1642,30 @@ export function EnvWorkbenchPage() {
           : pickLatestWorkbenchWidget(workbenchState().widgets, widgetType, normalizedRequestedWidgetId);
 
         if (!widget) {
-          widget = api.createWidget(widgetType, createWidgetOptions);
+          const release = terminalVisualCoordinator.beginInteraction('widget_create');
+          try {
+            widget = api.createWidget(widgetType, createWidgetOptions);
+          } finally {
+            requestPostInteractionFrame(() => release.end());
+          }
         }
       }
     } else {
-      widget = api.ensureWidget(
-        widgetType,
-        createWidgetOptions,
-      );
+      const hadWidget = Boolean(api.findWidgetByType(widgetType));
+      const release = hadWidget ? null : terminalVisualCoordinator.beginInteraction('widget_create');
+      try {
+        widget = api.ensureWidget(
+          widgetType,
+          createWidgetOptions,
+        );
+      } finally {
+        if (release) {
+          requestPostInteractionFrame(() => release.end());
+        }
+      }
     }
 
-    if (widget && request.focus !== false) {
+    if (widget && shouldFocusWidget) {
       api.focusWidget(widget, { centerViewport });
     }
 
@@ -1669,7 +1756,12 @@ export function EnvWorkbenchPage() {
           : pickLatestWorkbenchWidget(workbenchState().widgets, 'redeven.preview') ?? api.findWidgetByType('redeven.preview');
       }
       if (!widget) {
-        widget = api.createWidget('redeven.preview', { centerViewport });
+        const release = terminalVisualCoordinator.beginInteraction('widget_create');
+        try {
+          widget = api.createWidget('redeven.preview', { centerViewport });
+        } finally {
+          requestPostInteractionFrame(() => release.end());
+        }
       }
     }
 
@@ -1726,11 +1818,14 @@ export function EnvWorkbenchPage() {
     }));
   };
 
-  const removeWidget = (widgetId: string) => {
+  const removeWidget = (widgetId: string, options?: { ownVisualInteraction?: boolean }) => {
     const normalizedWidgetId = compact(widgetId);
     if (!normalizedWidgetId) {
       return;
     }
+    const release = options?.ownVisualInteraction === false
+      ? null
+      : terminalVisualCoordinator.beginInteraction('widget_close');
     let shouldStartOwnerHandoff = false;
     setWorkbenchState((previous) => {
       const nextWidgets = previous.widgets.filter((widget) => widget.id !== normalizedWidgetId);
@@ -1752,6 +1847,9 @@ export function EnvWorkbenchPage() {
     if (shouldStartOwnerHandoff) {
       beginLocalOwnerHandoff();
     }
+    if (release) {
+      requestPostInteractionFrame(() => release.end());
+    }
   };
 
   const requestWidgetRemoval = (widgetId: string) => {
@@ -1759,11 +1857,28 @@ export function EnvWorkbenchPage() {
     if (!normalizedWidgetId) {
       return;
     }
+    if (pendingWidgetRemovalTimers.has(normalizedWidgetId)) {
+      return;
+    }
     const guard = widgetRemoveGuards()[normalizedWidgetId];
     if (guard && !guard()) {
       return;
     }
-    removeWidget(normalizedWidgetId);
+    const host = introSurfaceHost();
+    const widgetElement = host?.querySelector(
+      `[data-redeven-workbench-widget-id="${escapeWorkbenchWidgetIdSelectorValue(normalizedWidgetId)}"]`,
+    );
+    if (widgetElement instanceof HTMLElement) {
+      widgetElement.setAttribute('data-redeven-workbench-widget-closing', 'true');
+      widgetElement.style.pointerEvents = 'none';
+    }
+    const releaseInteraction = beginLayoutInteractionHandle('widget_close');
+    const timer = globalThis.setTimeout(() => {
+      pendingWidgetRemovalTimers.delete(normalizedWidgetId);
+      removeWidget(normalizedWidgetId, { ownVisualInteraction: false });
+      releaseInteraction();
+    }, WORKBENCH_WIDGET_CLOSE_DEFER_MS);
+    pendingWidgetRemovalTimers.set(normalizedWidgetId, { releaseInteraction, timer });
   };
 
   const runtimeTerminalSessionIds = (widgetId: string): string[] => {
@@ -1974,6 +2089,12 @@ export function EnvWorkbenchPage() {
         console.warn('Failed to delete workbench terminal session:', error);
       }
     },
+    registerTerminalCore: (widgetId, sessionId, core) => {
+      terminalVisualCoordinator.registerCore(widgetId, sessionId, core);
+    },
+    registerTerminalSurface: (widgetId, sessionId, surface) => {
+      terminalVisualCoordinator.registerSurface(widgetId, sessionId, surface);
+    },
     terminalOpenRequest: (widgetId) => terminalOpenRequests()[compact(widgetId)] ?? null,
     dispatchTerminalOpenRequest: (request) => {
       queueTerminalOpenRequest(request);
@@ -2167,6 +2288,17 @@ export function EnvWorkbenchPage() {
   onCleanup(() => {
     cancelCanvasScaleAnimation();
     cancelLayoutInteractionVisualSettle();
+    while (surfaceLayoutInteractionReleases.length > 0) {
+      surfaceLayoutInteractionReleases.pop()?.();
+    }
+    surfaceViewportInteractionRelease?.();
+    surfaceViewportInteractionRelease = null;
+    terminalVisualCoordinator.dispose();
+    for (const pendingRemoval of pendingWidgetRemovalTimers.values()) {
+      globalThis.clearTimeout(pendingRemoval.timer);
+      pendingRemoval.releaseInteraction();
+    }
+    pendingWidgetRemovalTimers.clear();
     if (introStartFrame !== undefined) {
       window.cancelAnimationFrame(introStartFrame);
     }
@@ -2194,11 +2326,11 @@ export function EnvWorkbenchPage() {
             resolveContextMenuItems={resolveWorkbenchContextMenuItems}
             onApiReady={setSurfaceApi}
             onRequestDelete={requestWidgetRemoval}
-            onLayoutInteractionStart={beginLayoutInteraction}
-            onLayoutInteractionEnd={endLayoutInteraction}
+            onLayoutInteractionStart={beginSurfaceLayoutInteraction}
+            onLayoutInteractionEnd={endSurfaceLayoutInteraction}
             onViewportInteractionPulse={pulseLayoutInteractionVisual}
-            onViewportInteractionStart={beginLayoutInteraction}
-            onViewportInteractionEnd={endLayoutInteraction}
+            onViewportInteractionStart={beginSurfaceViewportInteraction}
+            onViewportInteractionEnd={endSurfaceViewportInteraction}
           />
         </div>
         <RedevenWorkbenchHudActions
