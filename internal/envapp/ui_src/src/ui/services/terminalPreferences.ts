@@ -16,6 +16,7 @@ export const TERMINAL_THEME_PERSIST_KEY = 'terminal:theme';
 export const TERMINAL_FONT_SIZE_PERSIST_KEY = 'terminal:font_size';
 export const TERMINAL_FONT_FAMILY_PERSIST_KEY = 'terminal:font_family';
 export const TERMINAL_MOBILE_INPUT_MODE_PERSIST_KEY = 'terminal:mobile_input_mode';
+export const TERMINAL_WORK_INDICATOR_ENABLED_PERSIST_KEY = 'terminal:work_indicator_enabled';
 
 export type TerminalMobileInputMode = 'floe' | 'system';
 export const DEFAULT_TERMINAL_THEME = 'dark';
@@ -26,6 +27,7 @@ export {
   TERMINAL_MIN_FONT_SIZE,
 };
 export const DEFAULT_TERMINAL_MOBILE_INPUT_MODE: TerminalMobileInputMode = 'floe';
+export const DEFAULT_TERMINAL_WORK_INDICATOR_ENABLED = true;
 
 let initialized = false;
 let persistRef: PersistApi | null = null;
@@ -34,10 +36,22 @@ const normalizeTerminalMobileInputMode = (value: unknown): TerminalMobileInputMo
   return String(value ?? '').trim() === 'system' ? 'system' : 'floe';
 };
 
+const normalizeTerminalWorkIndicatorEnabled = (value: unknown): boolean => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (!normalized) {
+    return DEFAULT_TERMINAL_WORK_INDICATOR_ENABLED;
+  }
+  return !['false', '0', 'off', 'no'].includes(normalized);
+};
+
 const [terminalUserTheme, setTerminalUserTheme] = createSignal<string>(DEFAULT_TERMINAL_THEME);
 const [terminalFontSize, setTerminalFontSize] = createSignal<number>(DEFAULT_TERMINAL_FONT_SIZE);
 const [terminalFontFamilyId, setTerminalFontFamilyId] = createSignal<string>(DEFAULT_TERMINAL_FONT_FAMILY_ID);
 const [terminalMobileInputMode, setTerminalMobileInputMode] = createSignal<TerminalMobileInputMode>(DEFAULT_TERMINAL_MOBILE_INPUT_MODE);
+const [terminalWorkIndicatorEnabled, setTerminalWorkIndicatorEnabled] = createSignal<boolean>(DEFAULT_TERMINAL_WORK_INDICATOR_ENABLED);
 
 export function ensureTerminalPreferencesInitialized(persist: PersistApi) {
   if (initialized) return;
@@ -55,6 +69,12 @@ export function ensureTerminalPreferencesInitialized(persist: PersistApi) {
 
   const loadedMobileInputMode = persist.load<TerminalMobileInputMode>(TERMINAL_MOBILE_INPUT_MODE_PERSIST_KEY, DEFAULT_TERMINAL_MOBILE_INPUT_MODE);
   setTerminalMobileInputMode(normalizeTerminalMobileInputMode(loadedMobileInputMode));
+
+  const loadedWorkIndicatorEnabled = persist.load<boolean>(
+    TERMINAL_WORK_INDICATOR_ENABLED_PERSIST_KEY,
+    DEFAULT_TERMINAL_WORK_INDICATOR_ENABLED,
+  );
+  setTerminalWorkIndicatorEnabled(normalizeTerminalWorkIndicatorEnabled(loadedWorkIndicatorEnabled));
 }
 
 export function useTerminalPreferences() {
@@ -82,14 +102,22 @@ export function useTerminalPreferences() {
     persistRef?.debouncedSave(TERMINAL_MOBILE_INPUT_MODE_PERSIST_KEY, next);
   };
 
+  const setWorkIndicatorEnabled = (value: boolean) => {
+    const next = normalizeTerminalWorkIndicatorEnabled(value);
+    setTerminalWorkIndicatorEnabled(next);
+    persistRef?.debouncedSave(TERMINAL_WORK_INDICATOR_ENABLED_PERSIST_KEY, next);
+  };
+
   return {
     userTheme: terminalUserTheme,
     fontSize: terminalFontSize,
     fontFamilyId: terminalFontFamilyId,
     mobileInputMode: terminalMobileInputMode,
+    workIndicatorEnabled: terminalWorkIndicatorEnabled,
     setUserTheme,
     setFontSize,
     setFontFamily,
     setMobileInputMode,
+    setWorkIndicatorEnabled,
   };
 }

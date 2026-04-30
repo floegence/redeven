@@ -27,6 +27,17 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       {props.children}
     </button>
   ),
+  Checkbox: (props: any) => (
+    <label>
+      <input
+        type="checkbox"
+        checked={props.checked}
+        aria-label={props.label}
+        onChange={(event) => props.onChange((event.currentTarget as HTMLInputElement).checked)}
+      />
+      {props.label}
+    </label>
+  ),
   Dialog: (props: any) => (
     props.open ? (
       <div data-testid="dialog" class={props.class}>
@@ -58,6 +69,7 @@ describe('TerminalSettingsDialog', () => {
     const onFontSizeChange = vi.fn();
     const onFontFamilyChange = vi.fn();
     const onMobileInputModeChange = vi.fn();
+    const onWorkIndicatorEnabledChange = vi.fn();
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -69,6 +81,7 @@ describe('TerminalSettingsDialog', () => {
         fontSize={12}
         fontFamilyId="iosevka"
         mobileInputMode="floe"
+        workIndicatorEnabled
         minFontSize={10}
         maxFontSize={20}
         onOpenChange={onOpenChange}
@@ -76,6 +89,7 @@ describe('TerminalSettingsDialog', () => {
         onFontSizeChange={onFontSizeChange}
         onFontFamilyChange={onFontFamilyChange}
         onMobileInputModeChange={onMobileInputModeChange}
+        onWorkIndicatorEnabledChange={onWorkIndicatorEnabledChange}
       />
     ), host);
 
@@ -85,9 +99,13 @@ describe('TerminalSettingsDialog', () => {
     expect(host.textContent).toContain('Terminal settings');
     expect(host.textContent).toContain('System Theme');
     expect(host.textContent).toContain('JetBrains Mono');
+    expect(host.textContent).toContain('Activity border');
 
     Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Dark'))?.click();
     Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('JetBrains Mono'))?.click();
+    const activityBorderInput = host.querySelector('input[aria-label="Shown"]') as HTMLInputElement | null;
+    activityBorderInput!.checked = false;
+    activityBorderInput!.dispatchEvent(new Event('change', { bubbles: true }));
     const fontSizeInput = host.querySelector('[data-testid="font-size-input"]') as HTMLInputElement | null;
     fontSizeInput!.value = '15';
     fontSizeInput!.dispatchEvent(new InputEvent('input', { bubbles: true }));
@@ -97,6 +115,7 @@ describe('TerminalSettingsDialog', () => {
     expect(onFontFamilyChange).toHaveBeenCalledWith('jetbrains');
     expect(onFontSizeChange).toHaveBeenCalledWith(15);
     expect(onMobileInputModeChange).not.toHaveBeenCalled();
+    expect(onWorkIndicatorEnabledChange).toHaveBeenCalledWith(false);
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
@@ -115,6 +134,7 @@ describe('TerminalSettingsDialog', () => {
         fontSize={12}
         fontFamilyId="iosevka"
         mobileInputMode="floe"
+        workIndicatorEnabled
         minFontSize={10}
         maxFontSize={20}
         onOpenChange={() => undefined}
@@ -122,6 +142,7 @@ describe('TerminalSettingsDialog', () => {
         onFontSizeChange={() => undefined}
         onFontFamilyChange={() => undefined}
         onMobileInputModeChange={onMobileInputModeChange}
+        onWorkIndicatorEnabledChange={() => undefined}
       />
     ), host);
 

@@ -13,6 +13,7 @@ const terminalPrefsState = vi.hoisted(() => ({
   fontSize: 12,
   fontFamilyId: 'iosevka',
   mobileInputMode: 'floe' as 'floe' | 'system',
+  workIndicatorEnabled: true,
 }));
 
 const rpcFsMocks = vi.hoisted(() => ({
@@ -236,6 +237,7 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
     initialize = vi.fn().mockResolvedValue(undefined);
     dispose = vi.fn();
     setTheme = vi.fn();
+    setAppearance = vi.fn();
     forceResize = vi.fn();
     getDimensions = vi.fn(() => ({ cols: 80, rows: 24 }));
     startHistoryReplay = vi.fn();
@@ -306,10 +308,12 @@ vi.mock('../services/terminalPreferences', () => ({
     fontSize: () => terminalPrefsState.fontSize,
     fontFamilyId: () => terminalPrefsState.fontFamilyId,
     mobileInputMode: () => terminalPrefsState.mobileInputMode,
+    workIndicatorEnabled: () => terminalPrefsState.workIndicatorEnabled,
     setUserTheme: vi.fn(),
     setFontSize: vi.fn(),
     setFontFamily: vi.fn(),
     setMobileInputMode: vi.fn(),
+    setWorkIndicatorEnabled: vi.fn(),
   }),
 }));
 
@@ -412,6 +416,7 @@ beforeEach(() => {
   terminalPrefsState.fontSize = 12;
   terminalPrefsState.fontFamilyId = 'iosevka';
   terminalPrefsState.mobileInputMode = 'floe';
+  terminalPrefsState.workIndicatorEnabled = true;
   terminalEventSourceState.dataHandlers = new Map();
   terminalEventSourceState.nameHandlers = new Map();
   terminalSessionsState.sessions = [

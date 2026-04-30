@@ -542,6 +542,80 @@ describe('RedevenWorkbenchSurface interaction contract', () => {
     getContextSpy.mockRestore();
   });
 
+  it('freezes terminal visuals while shared widget viewport controls settle', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const mockContext = {
+      scale: vi.fn(),
+      fillRect: vi.fn(),
+      drawImage: vi.fn(),
+    };
+    const getContextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockImplementation(() => mockContext as unknown as CanvasRenderingContext2D);
+
+    const terminalDefinitions: readonly WorkbenchWidgetDefinition[] = [
+      {
+        type: 'redeven.terminal-panel',
+        label: 'Terminal',
+        icon: () => null,
+        body: () => (
+          <div class="redeven-terminal-surface" data-testid="terminal-surface">
+            <canvas data-testid="terminal-canvas" />
+          </div>
+        ),
+        defaultTitle: 'Terminal',
+        defaultSize: { width: 420, height: 280 },
+      },
+    ];
+
+    render(() => {
+      const [state, setState] = createSignal(createTerminalWorkbenchState(terminalDefinitions));
+
+      return (
+        <RedevenWorkbenchSurface
+          state={state}
+          setState={setState}
+          widgetDefinitions={terminalDefinitions}
+          filterBarWidgetTypes={[]}
+          enableKeyboard={false}
+        />
+      );
+    }, host);
+
+    await flushWorkbenchInteraction();
+
+    const terminalSurface = host.querySelector('[data-testid="terminal-surface"]') as HTMLElement | null;
+    const terminalCanvas = host.querySelector('[data-testid="terminal-canvas"]') as HTMLCanvasElement | null;
+    const fitButton = host.querySelector('button[aria-label="Zoom widget to fit viewport"]') as HTMLButtonElement | null;
+
+    expect(terminalSurface).toBeTruthy();
+    expect(terminalCanvas).toBeTruthy();
+    expect(fitButton).toBeTruthy();
+
+    mockElementRect(terminalSurface!, { left: 80, top: 80, width: 320, height: 160 });
+    mockElementRect(terminalCanvas!, { left: 88, top: 92, width: 300, height: 130 });
+    terminalCanvas!.width = 600;
+    terminalCanvas!.height = 260;
+
+    fitButton!.click();
+    await flushWorkbenchInteraction();
+
+    expect(terminalSurface!.getAttribute('data-redeven-terminal-freeze')).toBe('true');
+    expect(terminalSurface!.querySelector('.redeven-terminal-freeze-snapshot')).toBeTruthy();
+    expect(mockContext.drawImage).toHaveBeenCalled();
+
+    await new Promise<void>((resolve) => window.setTimeout(() => resolve(), 320));
+    await flushWorkbenchInteraction();
+    await flushWorkbenchInteraction();
+
+    expect(terminalSurface!.getAttribute('data-redeven-terminal-freeze')).toBeNull();
+    expect(terminalSurface!.querySelector('.redeven-terminal-freeze-snapshot')).toBeNull();
+
+    getContextSpy.mockRestore();
+  });
+
   it('forwards unselected terminal wheel gestures before terminal capture handlers consume them', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

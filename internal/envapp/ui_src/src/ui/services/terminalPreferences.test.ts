@@ -6,8 +6,10 @@ describe('terminalPreferences defaults', () => {
     const {
       DEFAULT_TERMINAL_FONT_FAMILY_ID,
       DEFAULT_TERMINAL_THEME,
+      DEFAULT_TERMINAL_WORK_INDICATOR_ENABLED,
       TERMINAL_FONT_FAMILY_PERSIST_KEY,
       TERMINAL_THEME_PERSIST_KEY,
+      TERMINAL_WORK_INDICATOR_ENABLED_PERSIST_KEY,
       ensureTerminalPreferencesInitialized,
       useTerminalPreferences,
     } = await import('./terminalPreferences');
@@ -33,7 +35,16 @@ describe('terminalPreferences defaults', () => {
     const prefs = useTerminalPreferences();
     expect(loadSpy).toHaveBeenCalledWith(TERMINAL_THEME_PERSIST_KEY, DEFAULT_TERMINAL_THEME);
     expect(loadSpy).toHaveBeenCalledWith(TERMINAL_FONT_FAMILY_PERSIST_KEY, DEFAULT_TERMINAL_FONT_FAMILY_ID);
+    expect(loadSpy).toHaveBeenCalledWith(
+      TERMINAL_WORK_INDICATOR_ENABLED_PERSIST_KEY,
+      DEFAULT_TERMINAL_WORK_INDICATOR_ENABLED,
+    );
     expect(prefs.userTheme()).toBe(DEFAULT_TERMINAL_THEME);
     expect(prefs.fontFamilyId()).toBe(DEFAULT_TERMINAL_FONT_FAMILY_ID);
+    expect(prefs.workIndicatorEnabled()).toBe(DEFAULT_TERMINAL_WORK_INDICATOR_ENABLED);
+
+    prefs.setWorkIndicatorEnabled(false);
+    expect(prefs.workIndicatorEnabled()).toBe(false);
+    expect(debouncedSave).toHaveBeenCalledWith(TERMINAL_WORK_INDICATOR_ENABLED_PERSIST_KEY, false);
   });
 });

@@ -29,6 +29,15 @@ const WORKBENCH_CANVAS_SELECTOR = '.floe-infinite-canvas';
 const WORKBENCH_PROJECTED_LAYER_SELECTOR = '.workbench-canvas__projected-layer';
 const WORKBENCH_VIEWPORT_PAN_START_DISTANCE_PX = 3;
 const WORKBENCH_VIEWPORT_WHEEL_SETTLE_MS = 180;
+const WORKBENCH_VIEWPORT_PROGRAMMATIC_SETTLE_MS = 260;
+const WORKBENCH_WIDGET_VIEWPORT_CONTROL_SELECTOR = [
+  '.workbench-widget__traffic-dot--min',
+  '.workbench-widget__traffic-dot--max',
+  '.workbench-widget__window-control--min',
+  '.workbench-widget__window-control--max',
+  'button[aria-label="Minimize widget to overview"]',
+  'button[aria-label="Zoom widget to fit viewport"]',
+].join(',');
 const TERMINAL_SURFACE_SELECTOR = '.redeven-terminal-surface';
 const TERMINAL_FREEZE_ATTR = 'data-redeven-terminal-freeze';
 const TERMINAL_FREEZE_SNAPSHOT_CLASS = 'redeven-terminal-freeze-snapshot';
@@ -36,9 +45,19 @@ const TERMINAL_FREEZE_SNAPSHOT_CLASS = 'redeven-terminal-freeze-snapshot';
 export interface RedevenWorkbenchSurfaceApi extends WorkbenchSurfaceApi {
   unfocusWidget: (widget: WorkbenchWidgetItem) => WorkbenchWidgetItem;
   enterOverview: () => void;
+  runViewportTransition: <T>(action: () => T, options?: RedevenWorkbenchViewportTransitionOptions) => T;
 }
 
 export type RedevenWorkbenchContextMenuItemsResolver = WorkbenchContextMenuItemsResolver;
+export type RedevenWorkbenchViewportTransitionReason =
+  | 'programmatic'
+  | 'widget_control'
+  | 'hud_control';
+
+export type RedevenWorkbenchViewportTransitionOptions = {
+  reason?: RedevenWorkbenchViewportTransitionReason;
+  settleMs?: number;
+};
 
 export interface RedevenWorkbenchSurfaceProps {
   state: () => WorkbenchState;
@@ -63,6 +82,10 @@ function createRedevenWorkbenchSurfaceApi(
   options: Readonly<{
     host: () => HTMLDivElement | undefined;
     commitState: (updater: (prev: WorkbenchState) => WorkbenchState) => void;
+    runViewportTransition: <T>(
+      action: () => T,
+      transitionOptions?: RedevenWorkbenchViewportTransitionOptions,
+    ) => T;
   }>,
 ): RedevenWorkbenchSurfaceApi {
   const resolveCanvasFrameSize = (): { width: number; height: number } => {
@@ -76,25 +99,39 @@ function createRedevenWorkbenchSurfaceApi(
 
   return {
     ...api,
-    unfocusWidget: (widget) => api.overviewWidget(widget),
+    fitWidget: (widget) => options.runViewportTransition(
+      () => api.fitWidget(widget),
+      { reason: 'hud_control' },
+    ),
+    overviewWidget: (widget) => options.runViewportTransition(
+      () => api.overviewWidget(widget),
+      { reason: 'hud_control' },
+    ),
+    unfocusWidget: (widget) => options.runViewportTransition(
+      () => api.overviewWidget(widget),
+      { reason: 'hud_control' },
+    ),
     enterOverview: () => {
-      api.clearSelection();
-      const frameSize = resolveCanvasFrameSize();
-      options.commitState((previous) => ({
-        ...previous,
-        viewport: createWorkbenchOverviewViewport({
-          widgets: previous.widgets,
-          frameWidth: frameSize.width,
-          frameHeight: frameSize.height,
-          fallbackViewport: {
-            x: 0,
-            y: 0,
-            scale: REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE,
-          },
-        }),
-        selectedWidgetId: null,
-      }));
+      options.runViewportTransition(() => {
+        api.clearSelection();
+        const frameSize = resolveCanvasFrameSize();
+        options.commitState((previous) => ({
+          ...previous,
+          viewport: createWorkbenchOverviewViewport({
+            widgets: previous.widgets,
+            frameWidth: frameSize.width,
+            frameHeight: frameSize.height,
+            fallbackViewport: {
+              x: 0,
+              y: 0,
+              scale: REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE,
+            },
+          }),
+          selectedWidgetId: null,
+        }));
+      }, { reason: 'hud_control' });
     },
+    runViewportTransition: options.runViewportTransition,
   };
 }
 
@@ -156,6 +193,12 @@ function isWorkbenchCanvasEventTarget(host: HTMLElement, target: EventTarget | n
     panSurfaceSelector: REDEVEN_WORKBENCH_PAN_SURFACE_SELECTOR,
   });
   return role === 'canvas' || role === 'pan_surface';
+}
+
+function isWorkbenchWidgetViewportControlTarget(host: HTMLElement, target: EventTarget | null): boolean {
+  const element = resolveEventElement(target);
+  const control = element?.closest(WORKBENCH_WIDGET_VIEWPORT_CONTROL_SELECTOR);
+  return Boolean(control instanceof HTMLElement && host.contains(control));
 }
 
 function isVisibleTerminalSurface(rect: DOMRect): boolean {
@@ -305,6 +348,12 @@ function installProjectedLayerScrollGuard(host: HTMLElement): () => void {
 
 export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
   let hostRef: HTMLDivElement | undefined;
+  let viewportInteractionActive = false;
+  let viewportInteractionHolds = 0;
+  let viewportWheelRelease: (() => void) | null = null;
+  let terminalFreezeClearFrame: number | undefined;
+  let terminalFreezeRefreshToken = 0;
+  const programmaticViewportReleaseTimers = new Set<number>();
 
   createEffect(() => {
     const host = hostRef;
@@ -322,11 +371,9 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
       pointerId: number;
       startClientX: number;
       startClientY: number;
+      release: () => void;
     } | null = null;
-    let viewportInteractionActive = false;
     let viewportWheelSettleTimer: number | undefined;
-    let terminalFreezeClearFrame: number | undefined;
-    let terminalFreezeRefreshToken = 0;
 
     const cancelViewportWheelSettle = () => {
       if (viewportWheelSettleTimer === undefined) {
@@ -336,61 +383,10 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
       viewportWheelSettleTimer = undefined;
     };
 
-    const cancelTerminalFreezeClear = () => {
-      if (terminalFreezeClearFrame === undefined) {
-        return;
-      }
-      window.cancelAnimationFrame(terminalFreezeClearFrame);
-      terminalFreezeClearFrame = undefined;
-    };
-
-    const scheduleTerminalFreezeRefresh = () => {
-      const token = ++terminalFreezeRefreshToken;
-      const enqueue = typeof queueMicrotask === 'function'
-        ? queueMicrotask
-        : (callback: () => void) => { void Promise.resolve().then(callback); };
-      enqueue(() => {
-        if (token !== terminalFreezeRefreshToken || !viewportInteractionActive) {
-          return;
-        }
-        captureTerminalFreezeSnapshots(host);
-      });
-    };
-
-    const scheduleTerminalFreezeClear = () => {
-      cancelTerminalFreezeClear();
-      terminalFreezeClearFrame = window.requestAnimationFrame(() => {
-        terminalFreezeClearFrame = window.requestAnimationFrame(() => {
-          terminalFreezeClearFrame = undefined;
-          clearTerminalFreezeSnapshots(host);
-        });
-      });
-    };
-
-    const beginViewportInteraction = (opts?: { captureNow?: boolean; refreshAfterEvent?: boolean }) => {
-      cancelTerminalFreezeClear();
-      if (!viewportInteractionActive) {
-        if (opts?.captureNow !== false) {
-          captureTerminalFreezeSnapshots(host);
-        }
-        viewportInteractionActive = true;
-        props.onViewportInteractionStart?.();
-      }
-      if (opts?.refreshAfterEvent) {
-        scheduleTerminalFreezeRefresh();
-      }
-      props.onViewportInteractionPulse?.();
-    };
-
-    const endViewportInteraction = () => {
+    const releaseWheelInteraction = () => {
       cancelViewportWheelSettle();
-      if (!viewportInteractionActive) {
-        return;
-      }
-      viewportInteractionActive = false;
-      terminalFreezeRefreshToken += 1;
-      props.onViewportInteractionEnd?.();
-      scheduleTerminalFreezeClear();
+      viewportWheelRelease?.();
+      viewportWheelRelease = null;
     };
 
     const handleWidgetTextSelectionPointerDownCapture = (event: PointerEvent) => {
@@ -420,8 +416,8 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
         pointerId: event.pointerId,
         startClientX: event.clientX,
         startClientY: event.clientY,
+        release: beginViewportInteraction({ captureNow: false, refreshAfterEvent: true }),
       };
-      beginViewportInteraction({ captureNow: false, refreshAfterEvent: true });
     };
     const handleCanvasViewportPointerMoveCapture = (event: PointerEvent) => {
       const candidate = viewportPanCandidate;
@@ -441,7 +437,15 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
       const candidate = viewportPanCandidate;
       if (!candidate || event.pointerId !== candidate.pointerId) return;
       viewportPanCandidate = null;
-      endViewportInteraction();
+      candidate.release();
+    };
+    const handleWidgetViewportControlClickCapture = (event: MouseEvent) => {
+      if (event.button !== 0) return;
+      if (!isWorkbenchWidgetViewportControlTarget(host, event.target)) return;
+      runViewportTransition(() => undefined, {
+        reason: 'widget_control',
+        settleMs: WORKBENCH_VIEWPORT_PROGRAMMATIC_SETTLE_MS,
+      });
     };
     const handleTerminalWheelCapture = (event: WheelEvent) => {
       if (FORWARDED_CANVAS_WHEEL_EVENTS.has(event)) {
@@ -481,11 +485,15 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
       if (routing.kind !== 'canvas_zoom') return;
       if (!isWorkbenchCanvasEventTarget(host, event.target)) return;
 
-      beginViewportInteraction({ captureNow: true });
+      if (!viewportWheelRelease) {
+        viewportWheelRelease = beginViewportInteraction({ captureNow: true });
+      } else {
+        props.onViewportInteractionPulse?.();
+      }
       cancelViewportWheelSettle();
       viewportWheelSettleTimer = window.setTimeout(() => {
         viewportWheelSettleTimer = undefined;
-        endViewportInteraction();
+        releaseWheelInteraction();
       }, WORKBENCH_VIEWPORT_WHEEL_SETTLE_MS);
     };
 
@@ -509,6 +517,10 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
       capture: true,
       passive: true,
     });
+    host.addEventListener('click', handleWidgetViewportControlClickCapture, {
+      capture: true,
+      passive: true,
+    });
     host.addEventListener('wheel', handleTerminalWheelCapture, {
       capture: true,
       passive: false,
@@ -519,19 +531,124 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
     });
 
     onCleanup(() => {
+      viewportPanCandidate?.release();
       viewportPanCandidate = null;
       terminalFreezeRefreshToken += 1;
-      cancelViewportWheelSettle();
-      cancelTerminalFreezeClear();
+      releaseWheelInteraction();
       clearTerminalFreezeSnapshots(host);
       host.removeEventListener('pointerdown', handleWidgetTextSelectionPointerDownCapture, true);
       host.removeEventListener('pointerdown', handleCanvasViewportPointerDownCapture, true);
       window.removeEventListener('pointermove', handleCanvasViewportPointerMoveCapture, true);
       window.removeEventListener('pointerup', handleCanvasViewportPointerEndCapture, true);
       window.removeEventListener('pointercancel', handleCanvasViewportPointerEndCapture, true);
+      host.removeEventListener('click', handleWidgetViewportControlClickCapture, true);
       host.removeEventListener('wheel', handleTerminalWheelCapture, true);
       host.removeEventListener('wheel', handleCanvasViewportWheelCapture, true);
     });
+  });
+
+  const cancelTerminalFreezeClear = () => {
+    if (terminalFreezeClearFrame === undefined) {
+      return;
+    }
+    window.cancelAnimationFrame(terminalFreezeClearFrame);
+    terminalFreezeClearFrame = undefined;
+  };
+
+  const scheduleTerminalFreezeRefresh = (host: HTMLElement) => {
+    const token = ++terminalFreezeRefreshToken;
+    const enqueue = typeof queueMicrotask === 'function'
+      ? queueMicrotask
+      : (callback: () => void) => { void Promise.resolve().then(callback); };
+    enqueue(() => {
+      if (token !== terminalFreezeRefreshToken || !viewportInteractionActive) {
+        return;
+      }
+      captureTerminalFreezeSnapshots(host);
+    });
+  };
+
+  const scheduleTerminalFreezeClear = (host: HTMLElement) => {
+    cancelTerminalFreezeClear();
+    terminalFreezeClearFrame = window.requestAnimationFrame(() => {
+      terminalFreezeClearFrame = window.requestAnimationFrame(() => {
+        terminalFreezeClearFrame = undefined;
+        clearTerminalFreezeSnapshots(host);
+      });
+    });
+  };
+
+  const beginViewportInteraction = (
+    opts?: { captureNow?: boolean; refreshAfterEvent?: boolean },
+  ): (() => void) => {
+    const host = hostRef;
+    if (!host) {
+      return () => undefined;
+    }
+
+    cancelTerminalFreezeClear();
+    viewportInteractionHolds += 1;
+    if (!viewportInteractionActive) {
+      if (opts?.captureNow !== false) {
+        captureTerminalFreezeSnapshots(host);
+      }
+      viewportInteractionActive = true;
+      props.onViewportInteractionStart?.();
+    }
+    if (opts?.refreshAfterEvent) {
+      scheduleTerminalFreezeRefresh(host);
+    }
+    props.onViewportInteractionPulse?.();
+
+    let released = false;
+    return () => {
+      if (released) {
+        return;
+      }
+      released = true;
+      viewportInteractionHolds = Math.max(0, viewportInteractionHolds - 1);
+      if (viewportInteractionHolds > 0 || !viewportInteractionActive) {
+        return;
+      }
+      viewportInteractionActive = false;
+      terminalFreezeRefreshToken += 1;
+      props.onViewportInteractionEnd?.();
+      scheduleTerminalFreezeClear(host);
+    };
+  };
+
+  const runViewportTransition = <T,>(
+    action: () => T,
+    options?: RedevenWorkbenchViewportTransitionOptions,
+  ): T => {
+    const release = beginViewportInteraction({ captureNow: true });
+    try {
+      return action();
+    } finally {
+      const settleMs = Math.max(0, options?.settleMs ?? WORKBENCH_VIEWPORT_PROGRAMMATIC_SETTLE_MS);
+      const timer = window.setTimeout(() => {
+        programmaticViewportReleaseTimers.delete(timer);
+        release();
+      }, settleMs);
+      programmaticViewportReleaseTimers.add(timer);
+    }
+  };
+
+  onCleanup(() => {
+    for (const timer of programmaticViewportReleaseTimers) {
+      window.clearTimeout(timer);
+    }
+    programmaticViewportReleaseTimers.clear();
+    viewportWheelRelease?.();
+    viewportWheelRelease = null;
+    viewportInteractionHolds = 0;
+    viewportInteractionActive = false;
+    terminalFreezeRefreshToken += 1;
+    cancelTerminalFreezeClear();
+    const host = hostRef;
+    if (host) {
+      clearTerminalFreezeSnapshots(host);
+    }
   });
 
   return (
@@ -550,6 +667,7 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
           ? createRedevenWorkbenchSurfaceApi(api, {
             host: () => hostRef,
             commitState: props.setState,
+            runViewportTransition,
           })
           : null)}
         onRequestDelete={props.onRequestDelete}

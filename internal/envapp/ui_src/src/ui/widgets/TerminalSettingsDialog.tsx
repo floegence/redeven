@@ -1,6 +1,6 @@
 import { For, Show } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
-import { Button, Dialog, NumberInput } from '@floegence/floe-webapp-core/ui';
+import { Button, Checkbox, Dialog, NumberInput } from '@floegence/floe-webapp-core/ui';
 import {
   DEFAULT_TERMINAL_FONT_FAMILY_ID,
   type TerminalMobileInputMode,
@@ -56,6 +56,7 @@ type TerminalSettingsDialogProps = {
   fontSize: number;
   fontFamilyId: string;
   mobileInputMode: TerminalMobileInputMode;
+  workIndicatorEnabled: boolean;
   fontScope?: 'local' | 'shared-workbench';
   minFontSize: number;
   maxFontSize: number;
@@ -64,6 +65,7 @@ type TerminalSettingsDialogProps = {
   onFontSizeChange: (value: number) => void;
   onFontFamilyChange: (value: string) => void;
   onMobileInputModeChange: (value: TerminalMobileInputMode) => void;
+  onWorkIndicatorEnabledChange: (value: boolean) => void;
 };
 
 function SectionTitle(props: { title: string; description: string }) {
@@ -181,6 +183,29 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
               </Button>
             )}
           </For>
+        </div>
+      </section>
+
+      <section class="space-y-3">
+        <SectionTitle
+          title="Activity border"
+          description="Control the animated border that highlights active workbench terminal activity."
+        />
+        <div class="rounded-md border border-border/70 bg-muted/[0.14] p-3">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div class="space-y-1">
+              <div class="text-xs font-medium text-foreground">Show running and active border</div>
+              <p class="text-xs text-muted-foreground">
+                Keeps session, tab, and unread status tracking unchanged.
+              </p>
+            </div>
+            <Checkbox
+              checked={props.workIndicatorEnabled}
+              onChange={props.onWorkIndicatorEnabledChange}
+              label={props.workIndicatorEnabled ? 'Shown' : 'Hidden'}
+              size="sm"
+            />
+          </div>
         </div>
       </section>
 

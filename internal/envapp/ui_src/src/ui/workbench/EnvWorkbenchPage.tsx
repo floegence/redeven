@@ -925,7 +925,16 @@ export function EnvWorkbenchPage() {
     if (scaleAtMinimum(workbenchState().viewport.scale)) {
       return;
     }
-    animateCanvasScaleTo(REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE);
+    const runTransition = surfaceApi()?.runViewportTransition;
+    const animate = () => animateCanvasScaleTo(REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE);
+    if (!runTransition) {
+      animate();
+      return;
+    }
+    runTransition(animate, {
+      reason: 'hud_control',
+      settleMs: WORKBENCH_SCALE_ANIMATION_DURATION_MS + WORKBENCH_LAYOUT_VISUAL_SETTLE_MS,
+    });
   };
 
   const fitSelectedWidgetToViewport = () => {

@@ -82,6 +82,7 @@ const surfaceApiMocks = vi.hoisted(() => ({
   fitWidget: vi.fn(),
   unfocusWidget: vi.fn(),
   enterOverview: vi.fn(),
+  runViewportTransition: vi.fn((action: () => unknown, _options?: unknown) => action()),
   clearSelection: vi.fn(),
   findWidgetByType: vi.fn(() => null),
   findWidgetById: vi.fn(() => null),
@@ -99,6 +100,7 @@ const stableSurfaceApi = vi.hoisted(() => ({
   fitWidget: (widget: any) => surfaceApiMocks.fitWidget(widget),
   unfocusWidget: (widget: any) => surfaceApiMocks.unfocusWidget(widget),
   enterOverview: () => surfaceApiMocks.enterOverview(),
+  runViewportTransition: (action: () => unknown, options?: any) => surfaceApiMocks.runViewportTransition(action, options),
   clearSelection: () => surfaceApiMocks.clearSelection(),
   findWidgetByType: (type: any) => (surfaceApiMocks.findWidgetByType as any)(type),
   findWidgetById: (widgetId: any) => (surfaceApiMocks.findWidgetById as any)(widgetId),
@@ -480,6 +482,8 @@ describe('EnvWorkbenchPage', () => {
     surfaceApiMocks.fitWidget.mockReset();
     surfaceApiMocks.unfocusWidget.mockReset();
     surfaceApiMocks.enterOverview.mockReset();
+    surfaceApiMocks.runViewportTransition.mockReset();
+    surfaceApiMocks.runViewportTransition.mockImplementation((action: () => unknown) => action());
     surfaceApiMocks.findWidgetByType.mockReset();
     surfaceApiMocks.findWidgetByType.mockReturnValue(null);
     surfaceApiMocks.findWidgetById.mockReset();
@@ -715,6 +719,10 @@ describe('EnvWorkbenchPage', () => {
     minButton!.click();
     await flushMicrotasks();
 
+    expect(surfaceApiMocks.runViewportTransition).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({ reason: 'hud_control' }),
+    );
     expect(surface.dataset.viewportScale).toBe('1.25');
 
     vi.advanceTimersByTime(90);
