@@ -27,7 +27,7 @@ export {
   TERMINAL_MIN_FONT_SIZE,
 };
 export const DEFAULT_TERMINAL_MOBILE_INPUT_MODE: TerminalMobileInputMode = 'floe';
-export const DEFAULT_TERMINAL_WORK_INDICATOR_ENABLED = true;
+export const DEFAULT_TERMINAL_WORK_INDICATOR_ENABLED = false;
 
 let initialized = false;
 let persistRef: PersistApi | null = null;

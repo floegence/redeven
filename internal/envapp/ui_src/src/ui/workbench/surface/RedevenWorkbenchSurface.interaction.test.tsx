@@ -177,26 +177,6 @@ function mockCanvasRect(canvas: HTMLElement): void {
   });
 }
 
-function mockElementRect(
-  element: HTMLElement,
-  rect: { left: number; top: number; width: number; height: number },
-): void {
-  Object.defineProperty(element, 'getBoundingClientRect', {
-    configurable: true,
-    value: () => ({
-      left: rect.left,
-      top: rect.top,
-      right: rect.left + rect.width,
-      bottom: rect.top + rect.height,
-      width: rect.width,
-      height: rect.height,
-      x: rect.left,
-      y: rect.top,
-      toJSON: () => undefined,
-    }),
-  });
-}
-
 function appendPanSurfaceTarget(canvas: HTMLElement): HTMLElement {
   const target = document.createElement('div');
   target.setAttribute('data-floe-canvas-pan-surface', 'true');
@@ -337,6 +317,7 @@ describe('RedevenWorkbenchSurface interaction contract', () => {
     await flushWorkbenchInteraction();
 
     expect(onViewportInteractionStart).toHaveBeenCalledTimes(1);
+    expect(onViewportInteractionStart).toHaveBeenLastCalledWith('viewport_pan');
     expect(onViewportInteractionEnd).not.toHaveBeenCalled();
     expect(onViewportInteractionPulse).toHaveBeenCalledTimes(1);
 
@@ -360,6 +341,11 @@ describe('RedevenWorkbenchSurface interaction contract', () => {
     expect(onViewportInteractionEnd).not.toHaveBeenCalled();
     expect(onViewportInteractionPulse).toHaveBeenCalledTimes(2);
 
+    await new Promise<void>((resolve) => window.setTimeout(() => resolve(), 260));
+    await flushWorkbenchInteraction();
+
+    expect(onViewportInteractionEnd).not.toHaveBeenCalled();
+
     dispatchPointerEvent('pointerup', window, {
       pointerId: 71,
       clientX: 106,
@@ -368,6 +354,7 @@ describe('RedevenWorkbenchSurface interaction contract', () => {
     await flushWorkbenchInteraction();
 
     expect(onViewportInteractionEnd).toHaveBeenCalledTimes(1);
+    expect(onViewportInteractionEnd).toHaveBeenLastCalledWith('viewport_pan');
 
     dispatchPointerEvent('pointerdown', widgetBody!, {
       pointerId: 72,
@@ -425,6 +412,7 @@ describe('RedevenWorkbenchSurface interaction contract', () => {
     await flushWorkbenchInteraction();
 
     expect(onViewportInteractionStart).toHaveBeenCalledTimes(1);
+    expect(onViewportInteractionStart).toHaveBeenLastCalledWith('viewport_zoom');
     expect(onViewportInteractionEnd).not.toHaveBeenCalled();
     expect(onViewportInteractionPulse).toHaveBeenCalledTimes(1);
 
@@ -432,20 +420,15 @@ describe('RedevenWorkbenchSurface interaction contract', () => {
     await flushWorkbenchInteraction();
 
     expect(onViewportInteractionEnd).toHaveBeenCalledTimes(1);
+    expect(onViewportInteractionEnd).toHaveBeenLastCalledWith('viewport_zoom');
   });
 
-  it('freezes terminal visuals from the pan-surface pointerdown until release', async () => {
+  it('keeps terminal visual suspension owned by the viewport interaction lifecycle', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    const mockContext = {
-      scale: vi.fn(),
-      fillRect: vi.fn(),
-      drawImage: vi.fn(),
-    };
-    const getContextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockImplementation(() => mockContext as unknown as CanvasRenderingContext2D);
+    const onViewportInteractionStart = vi.fn();
+    const onViewportInteractionEnd = vi.fn();
 
     const terminalDefinitions: readonly WorkbenchWidgetDefinition[] = [
       {
@@ -472,6 +455,8 @@ describe('RedevenWorkbenchSurface interaction contract', () => {
           widgetDefinitions={terminalDefinitions}
           filterBarWidgetTypes={[]}
           enableKeyboard={false}
+          onViewportInteractionStart={onViewportInteractionStart}
+          onViewportInteractionEnd={onViewportInteractionEnd}
         />
       );
     }, host);
@@ -480,43 +465,24 @@ describe('RedevenWorkbenchSurface interaction contract', () => {
 
     const canvas = host.querySelector('.floe-infinite-canvas') as HTMLElement | null;
     const terminalSurface = host.querySelector('[data-testid="terminal-surface"]') as HTMLElement | null;
-    const terminalCanvas = host.querySelector('[data-testid="terminal-canvas"]') as HTMLCanvasElement | null;
 
     expect(canvas).toBeTruthy();
     expect(terminalSurface).toBeTruthy();
-    expect(terminalCanvas).toBeTruthy();
 
     mockCanvasRect(canvas!);
     const panSurface = appendPanSurfaceTarget(canvas!);
     expect(panSurface.matches(REDEVEN_WORKBENCH_PAN_SURFACE_SELECTOR)).toBe(true);
-    mockElementRect(terminalSurface!, { left: 80, top: 80, width: 320, height: 160 });
-    mockElementRect(terminalCanvas!, { left: 88, top: 92, width: 300, height: 130 });
-    terminalCanvas!.width = 600;
-    terminalCanvas!.height = 260;
 
     dispatchPointerEvent('pointerdown', panSurface!, {
       pointerId: 73,
       clientX: 120,
       clientY: 120,
     });
-    await flushWorkbenchInteraction();
+    await Promise.resolve();
 
-    const snapshot = terminalSurface!.querySelector('.redeven-terminal-freeze-snapshot') as HTMLCanvasElement | null;
-    expect(terminalSurface!.getAttribute('data-redeven-terminal-freeze')).toBe('true');
-    expect(snapshot).toBeTruthy();
-    expect(snapshot!.style.width).toBe('320px');
-    expect(snapshot!.style.height).toBe('160px');
-    expect(mockContext.drawImage).toHaveBeenCalledWith(
-      terminalCanvas,
-      0,
-      0,
-      600,
-      260,
-      expect.any(Number),
-      expect.any(Number),
-      expect.any(Number),
-      expect.any(Number),
-    );
+    expect(onViewportInteractionStart).toHaveBeenCalledWith('viewport_pan');
+    expect(terminalSurface!.querySelector('.redeven-terminal-freeze-snapshot')).toBeNull();
+    expect(terminalSurface!.getAttribute('data-redeven-terminal-freeze')).toBeNull();
 
     dispatchPointerEvent('pointermove', window, {
       pointerId: 73,
@@ -525,8 +491,8 @@ describe('RedevenWorkbenchSurface interaction contract', () => {
     });
     await flushWorkbenchInteraction();
 
-    expect(terminalSurface!.getAttribute('data-redeven-terminal-freeze')).toBe('true');
-    expect(terminalSurface!.querySelector('.redeven-terminal-freeze-snapshot')).toBeTruthy();
+    expect(onViewportInteractionEnd).not.toHaveBeenCalled();
+    expect(terminalSurface!.querySelector('.redeven-terminal-freeze-snapshot')).toBeNull();
 
     dispatchPointerEvent('pointerup', window, {
       pointerId: 73,
@@ -534,26 +500,16 @@ describe('RedevenWorkbenchSurface interaction contract', () => {
       clientY: 120,
     });
     await flushWorkbenchInteraction();
-    await flushWorkbenchInteraction();
 
-    expect(terminalSurface!.getAttribute('data-redeven-terminal-freeze')).toBeNull();
-    expect(terminalSurface!.querySelector('.redeven-terminal-freeze-snapshot')).toBeNull();
-
-    getContextSpy.mockRestore();
+    expect(onViewportInteractionEnd).toHaveBeenCalledWith('viewport_pan');
   });
 
-  it('freezes terminal visuals while shared widget viewport controls settle', async () => {
+  it('reports shared widget viewport controls as a widget maximize interaction', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    const mockContext = {
-      scale: vi.fn(),
-      fillRect: vi.fn(),
-      drawImage: vi.fn(),
-    };
-    const getContextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockImplementation(() => mockContext as unknown as CanvasRenderingContext2D);
+    const onViewportInteractionStart = vi.fn();
+    const onViewportInteractionEnd = vi.fn();
 
     const terminalDefinitions: readonly WorkbenchWidgetDefinition[] = [
       {
@@ -580,6 +536,8 @@ describe('RedevenWorkbenchSurface interaction contract', () => {
           widgetDefinitions={terminalDefinitions}
           filterBarWidgetTypes={[]}
           enableKeyboard={false}
+          onViewportInteractionStart={onViewportInteractionStart}
+          onViewportInteractionEnd={onViewportInteractionEnd}
         />
       );
     }, host);
@@ -587,33 +545,21 @@ describe('RedevenWorkbenchSurface interaction contract', () => {
     await flushWorkbenchInteraction();
 
     const terminalSurface = host.querySelector('[data-testid="terminal-surface"]') as HTMLElement | null;
-    const terminalCanvas = host.querySelector('[data-testid="terminal-canvas"]') as HTMLCanvasElement | null;
     const fitButton = host.querySelector('button[aria-label="Zoom widget to fit viewport"]') as HTMLButtonElement | null;
 
     expect(terminalSurface).toBeTruthy();
-    expect(terminalCanvas).toBeTruthy();
     expect(fitButton).toBeTruthy();
-
-    mockElementRect(terminalSurface!, { left: 80, top: 80, width: 320, height: 160 });
-    mockElementRect(terminalCanvas!, { left: 88, top: 92, width: 300, height: 130 });
-    terminalCanvas!.width = 600;
-    terminalCanvas!.height = 260;
 
     fitButton!.click();
     await flushWorkbenchInteraction();
 
-    expect(terminalSurface!.getAttribute('data-redeven-terminal-freeze')).toBe('true');
-    expect(terminalSurface!.querySelector('.redeven-terminal-freeze-snapshot')).toBeTruthy();
-    expect(mockContext.drawImage).toHaveBeenCalled();
+    expect(onViewportInteractionStart).toHaveBeenCalledWith('widget_maximize');
+    expect(terminalSurface!.querySelector('.redeven-terminal-freeze-snapshot')).toBeNull();
 
     await new Promise<void>((resolve) => window.setTimeout(() => resolve(), 320));
     await flushWorkbenchInteraction();
-    await flushWorkbenchInteraction();
 
-    expect(terminalSurface!.getAttribute('data-redeven-terminal-freeze')).toBeNull();
-    expect(terminalSurface!.querySelector('.redeven-terminal-freeze-snapshot')).toBeNull();
-
-    getContextSpy.mockRestore();
+    expect(onViewportInteractionEnd).toHaveBeenCalledWith('widget_maximize');
   });
 
   it('forwards unselected terminal wheel gestures before terminal capture handlers consume them', async () => {

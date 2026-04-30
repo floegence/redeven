@@ -8,18 +8,17 @@
   contain: paint;
 }
 
-.redeven-terminal-surface[data-redeven-terminal-freeze='true'] {
-  isolation: isolate;
+.redeven-workbench-page[data-redeven-workbench-layout-interacting='true'] .workbench-widget {
+  transition:
+    opacity 120ms ease-out,
+    scale 120ms ease-out,
+    border-color 120ms ease-out !important;
 }
 
-.redeven-terminal-freeze-snapshot {
-  position: absolute;
-  inset: 0;
-  z-index: 30;
-  width: 100%;
-  height: 100%;
-  border-radius: inherit;
-  pointer-events: none;
+.workbench-widget[data-redeven-workbench-widget-closing='true'] {
+  opacity: 0;
+  scale: 0.985;
+  pointer-events: none !important;
 }
 
 .redeven-workbench-page[data-redeven-workbench-layout-interacting='true'] .redeven-terminal-work-indicator {
