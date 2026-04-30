@@ -180,7 +180,7 @@ Notes:
 - Frontend `dist` assets are not checked into git. The tracked exception is `internal/knowledge/dist/*`, which stays committed as verifiable knowledge bundle release metadata.
 - `./scripts/lint_ui.sh` validates the machine workspace and browser IDE source packages before asset bundling.
 - `./scripts/check_desktop.sh` validates the Electron desktop shell package.
-- `./scripts/dev_desktop.sh` stops any existing Redeven Desktop/runtime processes, then starts Desktop from the current checkout or worktree with a freshly bundled runtime.
+- `./scripts/dev_desktop.sh` stops any existing Redeven Desktop/runtime processes, then starts Desktop from the current checkout or worktree with a freshly bundled runtime. For SSH Host bootstrap, it exports `REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG` from the latest local `v*` release tag unless you set that variable explicitly.
 - `cd desktop && npm run start` and `cd desktop && npm run package` prepare `desktop/.bundle/<goos>-<goarch>/redeven` from the current repository before Electron starts or packages the desktop shell.
 
 </details>

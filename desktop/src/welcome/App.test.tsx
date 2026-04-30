@@ -577,6 +577,25 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('.redeven-action-popover__notice');
   });
 
+  it('keeps SSH runtime bootstrap progress visible outside dismissible popovers', () => {
+    const appSrc = readWelcomeSource();
+    const styles = readWelcomeStyles();
+
+    expect(appSrc).toContain('const activeActionProgress = createMemo(() => snapshot().action_progress);');
+    expect(appSrc).toContain('<SSHRuntimeActivityOverlay');
+    expect(appSrc).toContain('progressItems={sshRuntimeProgressItems()}');
+    expect(appSrc).toContain('actionProgress={props.actionProgress}');
+    expect(appSrc).toContain('activeProgressForEnvironment(props.environment.id, props.busyState, props.actionProgress)');
+    expect(appSrc).toContain('function SSHRuntimeActivityOverlay');
+    expect(appSrc).toContain('<Portal>');
+    expect(appSrc).toContain('Starting SSH Runtime');
+    expect(appSrc).not.toContain('function SSHRuntimeProgressPanel');
+    expect(styles).toContain('.redeven-ssh-runtime-activity');
+    expect(styles).toContain('position: fixed;');
+    expect(styles).toContain('.redeven-ssh-runtime-activity__item');
+    expect(styles).not.toContain('.redeven-ssh-runtime-progress');
+  });
+
   it('includes Control Plane management copy inside the launcher source', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
@@ -683,6 +702,12 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Desktop reuses shared release artifacts on that host, but each Environment Instance stays isolated unless you explicitly reuse its Instance ID.');
     expect(appSrc).toContain('Desktop reuses only the exact Desktop-managed Redeven release on that host, installs it on demand when needed, and keeps runtime state isolated per Environment Instance.');
     expect(appSrc).toContain('Bootstrap Delivery');
+    expect(appSrc).toContain('Authentication');
+    expect(appSrc).toContain("label: 'Key / agent'");
+    expect(appSrc).toContain("label: 'Password prompt'");
+    expect(appSrc).toContain('does not store the SSH password');
+    expect(appSrc).toContain("const showCreateConnectAction = createMemo(() => isCreate() && connectionKind() !== 'ssh_environment');");
+    expect(appSrc).toContain('<Show when={showCreateConnectAction()}>');
     expect(appSrc).toContain("label: 'Automatic'");
     expect(appSrc).toContain("label: 'Desktop Upload'");
     expect(appSrc).toContain("label: 'Remote Install'");

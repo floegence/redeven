@@ -8,6 +8,7 @@ import {
   buildManagedSSHRemoteInstallScript,
   buildManagedSSHRuntimeProbeScript,
   buildManagedSSHStartScript,
+  buildManagedSSHStopScript,
   buildManagedSSHUploadedInstallScript,
   buildManagedSSHReportReadScript,
   describeManagedSSHRuntimeProbeResult,
@@ -22,6 +23,7 @@ describe('sshRuntime', () => {
   it('builds remote install, upload-install, runtime-probe, and report scripts around the managed install root', () => {
     expect(buildManagedSSHRemoteInstallScript()).toContain('REDEVEN_INSTALL_MODE=upgrade');
     expect(buildManagedSSHStartScript()).toContain('--state-root "$state_root"');
+    expect(buildManagedSSHStartScript()).toContain('--mode desktop');
     expect(buildManagedSSHStartScript()).toContain('--startup-report-file "$report_path"');
     expect(buildManagedSSHStartScript()).toContain('instance_root="${install_root%/}/instances/${instance_id}"');
     expect(buildManagedSSHRuntimeProbeScript()).toContain("printf 'status=%s\\n' \"$probe_status\"");
@@ -30,11 +32,14 @@ describe('sshRuntime', () => {
     expect(buildManagedSSHUploadedInstallScript()).toContain('archive_path="$3"');
     expect(buildManagedSSHUploadedInstallScript()).toContain('uploaded Redeven archive did not contain redeven');
     expect(buildManagedSSHUploadedInstallScript()).toContain('write_runtime_stamp "desktop_upload"');
-    expect(buildManagedSSHRemoteInstallScript()).toContain('install_root="${XDG_CACHE_HOME:-$HOME/.cache}/redeven-desktop/runtime"');
+    expect(buildManagedSSHRemoteInstallScript()).toContain('if [ -z "$cache_base" ] && [ -n "${HOME:-}" ] && [ -d "$HOME" ] && [ -w "$HOME" ]; then');
+    expect(buildManagedSSHRemoteInstallScript()).toContain('install_root="${remote_tmp_dir%/}/redeven-desktop-runtime-${remote_user}"');
     expect(buildManagedSSHRemoteInstallScript()).toContain('release_root="${install_root%/}/releases/${release_tag}"');
     expect(buildManagedSSHRemoteInstallScript()).toContain('if ! runtime_is_compatible; then');
     expect(buildManagedSSHRemoteInstallScript()).toContain('write_runtime_stamp "remote_install"');
     expect(buildManagedSSHReportReadScript()).toContain('instances/${instance_id}/sessions/${session_token}/startup-report.json');
+    expect(buildManagedSSHStopScript()).toContain('kill "$pid"');
+    expect(buildManagedSSHStopScript()).toContain('kill -KILL "$pid"');
   });
 
   it('parses structured probe results and normalizes reported release tags', () => {
@@ -78,6 +83,16 @@ describe('sshRuntime', () => {
     const source = readSSHRuntimeSource();
 
     expect(source).toContain("'-O', 'check',");
+    expect(source).toContain("authMode === 'key_agent'");
+    expect(source).toContain("'BatchMode=yes'");
+    expect(source).toContain("'BatchMode=no'");
+    expect(source).toContain("'-T'");
+    expect(source).toContain("'-x'");
+    expect(source).toContain("'ForwardX11=no'");
+    expect(source).toContain("'RequestTTY=no'");
+    expect(source).toContain('SSH_ASKPASS_REQUIRE');
+    expect(source).toContain("'force'");
+    expect(source).toContain('createSSHAskPassScript(tempDir, target.auth_mode)');
     expect(source).toContain('async function probeRemoteRuntimeCompatibility(');
     expect(source).toContain('async function probeRemotePlatform(');
     expect(source).toContain('function resolveDesktopSSHReleaseFetchPolicy(');
@@ -89,5 +104,16 @@ describe('sshRuntime', () => {
     expect(source).toMatch(/if \(args\.target\.bootstrap_strategy === 'auto'\) \{\s*break;\s*\}\s*continue;/);
     expect(source).toContain('async function waitForForwardedLocalUI(');
     expect(source).toContain('const forwardedStartup = await waitForForwardedLocalUI(');
+    expect(source).toContain('onProgress?: (progress: DesktopSSHRuntimeProgress) => void;');
+    expect(source).toContain("'ssh_connecting'");
+    expect(source).toContain("'ssh_uploading_archive'");
+    expect(source).toContain("'ssh_waiting_report'");
+    expect(source).toContain("'ssh_verifying_tunnel'");
+    expect(source).toContain('const result = await runSSHOnce(');
+    expect(source).toContain('parseLaunchReport(result.stdout)');
+    expect(source).toContain('formatBlockedLaunchDiagnostics(launchReport)');
+    expect(source).toContain('async function stopRemoteRuntimeProcess(');
+    expect(source).toContain('remoteRuntimePID = remoteStartup.pid ?? null;');
+    expect(source).toContain('Remote Redeven stopped before reporting readiness (${exitReason}).');
   });
 });

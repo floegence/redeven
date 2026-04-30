@@ -54,6 +54,7 @@ export type SSHDesktopTarget = Readonly<{
   label: string;
   ssh_destination: string;
   ssh_port: number | null;
+  auth_mode: DesktopSSHEnvironmentDetails['auth_mode'];
   remote_install_dir: string;
   bootstrap_strategy: DesktopSSHEnvironmentDetails['bootstrap_strategy'];
   release_base_url: string;
@@ -179,6 +180,7 @@ export function buildSSHDesktopTarget(
     label: compact(options.label) || defaultSavedSSHEnvironmentLabel(details),
     ssh_destination: details.ssh_destination,
     ssh_port: details.ssh_port,
+    auth_mode: details.auth_mode,
     remote_install_dir: details.remote_install_dir,
     bootstrap_strategy: details.bootstrap_strategy,
     release_base_url: details.release_base_url,

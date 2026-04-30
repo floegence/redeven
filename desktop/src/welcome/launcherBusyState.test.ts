@@ -2,10 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import {
   busyStateForLauncherRequest,
+  activeProgressForEnvironment,
+  busyStateMatchesActionProgress,
   busyStateMatchesAction,
   busyStateMatchesAnyAction,
   busyStateMatchesControlPlane,
   busyStateMatchesEnvironment,
+  busyStateWithActionProgress,
+  environmentMatchesActionProgress,
   IDLE_LAUNCHER_BUSY_STATE,
 } from './launcherBusyState';
 
@@ -22,6 +26,7 @@ describe('launcherBusyState', () => {
       environment_id: 'env_demo',
       provider_origin: '',
       provider_id: '',
+      progress: null,
     });
     expect(busyStateMatchesEnvironment(state, 'env_demo')).toBe(true);
     expect(busyStateMatchesEnvironment(state, 'env_other')).toBe(false);
@@ -40,6 +45,7 @@ describe('launcherBusyState', () => {
       environment_id: 'managed_demo',
       provider_origin: '',
       provider_id: '',
+      progress: null,
     });
 
     expect(busyStateForLauncherRequest({
@@ -50,6 +56,7 @@ describe('launcherBusyState', () => {
       environment_id: 'saved_demo',
       provider_origin: '',
       provider_id: '',
+      progress: null,
     });
   });
 
@@ -99,5 +106,64 @@ describe('launcherBusyState', () => {
       'set_saved_environment_pinned',
     ])).toBe(true);
     expect(busyStateMatchesAnyAction(IDLE_LAUNCHER_BUSY_STATE, ['set_provider_environment_pinned'])).toBe(false);
+  });
+
+  it('attaches matching action progress to the active busy state', () => {
+    const state = busyStateForLauncherRequest({
+      kind: 'start_environment_runtime',
+      environment_id: 'ssh-1',
+      ssh_destination: 'devbox',
+    });
+
+    expect(busyStateWithActionProgress(state, {
+      action: 'start_environment_runtime',
+      environment_id: 'ssh-1',
+      phase: 'ssh_starting_runtime',
+      title: 'Starting remote runtime',
+      detail: 'Waiting for the startup report.',
+    })).toEqual({
+      ...state,
+      progress: {
+        action: 'start_environment_runtime',
+        environment_id: 'ssh-1',
+        phase: 'ssh_starting_runtime',
+        title: 'Starting remote runtime',
+        detail: 'Waiting for the startup report.',
+      },
+    });
+
+    expect(busyStateWithActionProgress(state, {
+      action: 'refresh_environment_runtime',
+      environment_id: 'ssh-1',
+      phase: 'ignored',
+      title: 'Ignored',
+      detail: '',
+    })).toBe(state);
+  });
+
+  it('matches persisted SSH runtime progress by environment id and operation key', () => {
+    const state = busyStateForLauncherRequest({
+      kind: 'start_environment_runtime',
+      environment_id: 'ssh:%64evbox:default:key_agent:remote_default:envinst_demo',
+      ssh_destination: 'devbox',
+    });
+    const progress = {
+      action: 'start_environment_runtime' as const,
+      environment_id: 'ssh:%64evbox:default:key_agent:remote_default:envinst_demo',
+      operation_key: 'ssh:%64evbox:default:key_agent:remote_default:envinst_demo',
+      phase: 'ssh_remote_installing',
+      title: 'Installing remote runtime',
+      detail: 'Running the remote installer.',
+    };
+
+    expect(environmentMatchesActionProgress(progress.environment_id, progress)).toBe(true);
+    expect(busyStateMatchesActionProgress(state, progress)).toBe(true);
+    expect(activeProgressForEnvironment(progress.environment_id, state, [])).toBeNull();
+
+    const stateWithProgress = busyStateWithActionProgress(state, progress);
+    expect(activeProgressForEnvironment(progress.environment_id, stateWithProgress, [])).toBe(progress);
+    expect(activeProgressForEnvironment('other', stateWithProgress, [progress])).toBeNull();
+    expect(activeProgressForEnvironment(progress.environment_id, IDLE_LAUNCHER_BUSY_STATE, [progress])).toBe(progress);
+    expect(activeProgressForEnvironment(progress.operation_key, IDLE_LAUNCHER_BUSY_STATE, [progress])).toBe(progress);
   });
 });

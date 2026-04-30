@@ -35,6 +35,13 @@ export function launcherActionFailurePresentation(
         refresh_snapshot: refreshSnapshot,
         delivery,
       };
+    case 'runtime_not_started':
+      return {
+        message: failure.message || 'Start the runtime first, then open this environment.',
+        tone: 'warning',
+        refresh_snapshot: refreshSnapshot,
+        delivery,
+      };
     case 'environment_status_stale':
       return {
         message: 'Remote status is stale. Refresh the provider to confirm the latest state.',

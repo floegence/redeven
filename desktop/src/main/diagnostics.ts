@@ -56,6 +56,10 @@ export type DesktopRequestFailure = Readonly<{
   error: string;
 }>;
 
+export type DesktopDiagnosticsRuntimeOptions = Readonly<{
+  stateDirOverride?: string;
+}>;
+
 function normalizeURLPath(rawURL: string): string {
   try {
     return new URL(rawURL).pathname || '/';
@@ -255,10 +259,16 @@ export class DesktopDiagnosticsRecorder {
   private inFlight = new Map<number, InFlightRequest>();
   private writeQueue: Promise<void> = Promise.resolve();
 
-  async configureRuntime(startup: StartupReport, allowedBaseURL: string): Promise<void> {
+  async configureRuntime(
+    startup: StartupReport,
+    allowedBaseURL: string,
+    options: DesktopDiagnosticsRuntimeOptions = {},
+  ): Promise<void> {
     this.inFlight.clear();
     this.allowedOrigin = normalizeOrigin(allowedBaseURL);
-    this.stateDir = String(startup.state_dir ?? '').trim();
+    const startupStateDir = String(startup.state_dir ?? '').trim();
+    const stateDirOverride = String(options.stateDirOverride ?? '').trim();
+    this.stateDir = stateDirOverride || startupStateDir;
     this.enabled = Boolean(startup.diagnostics_enabled) && this.stateDir !== '' && this.allowedOrigin !== '';
     await this.recordLifecycle(
       'runtime_configured',
@@ -267,6 +277,9 @@ export class DesktopDiagnosticsRecorder {
         allowed_origin: this.allowedOrigin,
         effective_run_mode: startup.effective_run_mode ?? '',
         diagnostics_enabled: this.enabled,
+        startup_state_dir: startupStateDir,
+        desktop_state_dir: this.stateDir,
+        state_dir_source: stateDirOverride ? 'desktop_override' : 'startup_report',
       },
     );
   }

@@ -69,6 +69,44 @@ describe('main routing', () => {
     expect(mainSrc).toContain('backgroundThrottling: false,');
   });
 
+  it('lets dev SSH bootstrap use an explicit runtime release tag without changing the bundled runtime version', () => {
+    const mainSrc = readMainSource();
+
+    expect(mainSrc).toContain('process.env.REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG');
+    expect(mainSrc.indexOf('process.env.REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG')).toBeLessThan(
+      mainSrc.indexOf('process.env.REDEVEN_DESKTOP_BUNDLE_VERSION'),
+    );
+    expect(mainSrc).toContain('Set REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG for dev SSH bootstrap');
+  });
+
+  it('forwards SSH runtime bootstrap progress to the launcher renderer', () => {
+    const mainSrc = readMainSource();
+
+    expect(mainSrc).toContain('DESKTOP_LAUNCHER_ACTION_PROGRESS_CHANNEL');
+    expect(mainSrc).toContain('function emitLauncherActionProgress(');
+    expect(mainSrc).toContain('pendingLauncherActionProgressByKey.set(operationKey, persistedProgress);');
+    expect(mainSrc).toContain('actionProgress: [...pendingLauncherActionProgressByKey.values()]');
+    expect(mainSrc).toContain('const pendingStart = pendingSSHRuntimeStartByKey.get(runtimeKey) ?? null;');
+    expect(mainSrc).toContain('return pendingStart.task;');
+    expect(mainSrc).toContain("phase: 'ssh_preparing_start'");
+    expect(mainSrc).toContain("action: 'start_environment_runtime'");
+    expect(mainSrc).toContain('environment_label: label');
+    expect(mainSrc).toContain('phase: progress.phase');
+    expect(mainSrc).toContain('detail: progress.detail');
+    expect(mainSrc).toContain('clearLauncherActionProgress(runtimeKey);');
+    expect(mainSrc).toContain('function friendlyRuntimeStartErrorMessage(');
+    expect(mainSrc).toContain('The SSH host resolved its runtime directory to /root');
+  });
+
+  it('keeps desktop diagnostics for SSH and external sessions in local userData', () => {
+    const mainSrc = readMainSource();
+
+    expect(mainSrc).toContain('function desktopDiagnosticsStateDirForTarget(target: DesktopSessionTarget, startup: StartupReport): string');
+    expect(mainSrc).toContain("target.kind === 'managed_environment'");
+    expect(mainSrc).toContain("app.getPath('userData'), 'session-diagnostics'");
+    expect(mainSrc).toContain('stateDirOverride: desktopDiagnosticsStateDirForTarget(target, startup)');
+  });
+
   it('protects the default local environment from deletion and rejects duplicate auto-derived local names', () => {
     const mainSrc = readMainSource();
 

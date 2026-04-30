@@ -114,7 +114,7 @@ It does not introduce a second SSH-native file or terminal protocol. Instead, El
    - `desktop_upload`
    - `remote_install`
    - `auto`
-6. Starts `redeven run --mode local --local-ui-bind 127.0.0.1:0` remotely with its mutable runtime state rooted at `instances/<environment_instance_id>/state/`.
+6. Starts `redeven run --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0` remotely with its mutable runtime state rooted at `instances/<environment_instance_id>/state/`.
 7. Waits for the remote startup report under `instances/<environment_instance_id>/sessions/<session_token>/startup-report.json`.
 8. Creates a local SSH port forward to that remote Local UI port.
 9. Opens the forwarded `127.0.0.1:<port>` origin as a normal Desktop session.
@@ -148,11 +148,12 @@ SSH bootstrap is intentionally transport-light and runtime-heavy:
 - Desktop-side release downloads use explicit timeouts so restricted-network failures stay bounded and diagnosable.
 - `auto` prefers desktop upload for restricted networks, then falls back to the remote installer path only when desktop-side asset preparation fails before upload/install begins.
 - After Desktop starts uploading or installing the tarball over SSH, later failures stay first-class errors instead of silently degrading into `remote_install`.
+- Development builds may set `REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG` to choose the remote runtime release tag used for SSH Host bootstrap. `scripts/dev_desktop.sh` fills this from the latest local `v*` tag when the variable is unset.
 - The forwarded localhost URL is session-ephemeral and only used as the live session origin.
-- Session identity is derived from SSH destination, SSH port, remote install directory, and `environment_instance_id` so reconnecting does not create duplicates just because the forwarded local port changed.
+- Session identity is derived from SSH destination, SSH port, authentication mode, remote install directory, and `environment_instance_id` so reconnecting does not create duplicates just because the forwarded local port changed.
 - Closing the Desktop session window does not stop the SSH-owned remote runtime.
 - SSH runtime stop is an explicit launcher/runtime-menu action. Desktop may reuse an existing live forward or recreate it on the next `Open`.
-- SSH bootstrap still assumes non-interactive SSH authentication (`BatchMode=yes`), so missing keys or host-key trust issues surface as actionable launcher errors instead of prompting through Desktop UI.
+- SSH bootstrap supports key/agent authentication and a Desktop-owned password prompt mode. Key/agent mode keeps `BatchMode=yes` so missing keys or host-key trust issues surface as actionable launcher errors. Password prompt mode disables batch auth, asks through the OS askpass flow only while starting the runtime, and does not store the SSH password.
 
 ### Launch Outcomes
 

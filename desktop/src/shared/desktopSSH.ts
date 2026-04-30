@@ -1,15 +1,18 @@
 export const DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR = 'remote_default';
 export const DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR_LABEL = 'Remote user cache';
 export const DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY = 'auto';
+export const DEFAULT_DESKTOP_SSH_AUTH_MODE = 'key_agent';
 export const DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL = '';
 export const DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL_LABEL = 'Public GitHub Releases';
 export const DEFAULT_DESKTOP_SSH_ENVIRONMENT_INSTANCE_ID_PREFIX = 'envinst_';
 
 export type DesktopSSHBootstrapStrategy = 'auto' | 'desktop_upload' | 'remote_install';
+export type DesktopSSHAuthMode = 'key_agent' | 'password';
 
 export type DesktopSSHHostAccessDetails = Readonly<{
   ssh_destination: string;
   ssh_port: number | null;
+  auth_mode: DesktopSSHAuthMode;
   remote_install_dir: string;
   bootstrap_strategy: DesktopSSHBootstrapStrategy;
   release_base_url: string;
@@ -80,6 +83,22 @@ export function normalizeDesktopSSHBootstrapStrategy(value: unknown): DesktopSSH
   }
 }
 
+export function normalizeDesktopSSHAuthMode(value: unknown): DesktopSSHAuthMode {
+  const text = compact(value).toLowerCase();
+  switch (text) {
+    case '':
+    case DEFAULT_DESKTOP_SSH_AUTH_MODE:
+    case 'key':
+    case 'agent':
+    case 'key_or_agent':
+      return DEFAULT_DESKTOP_SSH_AUTH_MODE;
+    case 'password':
+      return 'password';
+    default:
+      throw new Error('SSH authentication must use Key / agent or Password prompt.');
+  }
+}
+
 export function normalizeDesktopSSHReleaseBaseURL(value: unknown): string {
   const text = compact(value);
   if (text === '') {
@@ -130,6 +149,7 @@ export function normalizeDesktopSSHHostAccessDetails(
   value: Readonly<{
     ssh_destination: unknown;
     ssh_port: unknown;
+    auth_mode?: unknown;
     remote_install_dir: unknown;
     bootstrap_strategy: unknown;
     release_base_url: unknown;
@@ -138,6 +158,7 @@ export function normalizeDesktopSSHHostAccessDetails(
   return {
     ssh_destination: normalizeDesktopSSHDestination(value.ssh_destination),
     ssh_port: normalizeDesktopSSHPort(value.ssh_port),
+    auth_mode: normalizeDesktopSSHAuthMode(value.auth_mode),
     remote_install_dir: normalizeDesktopSSHRemoteInstallDir(value.remote_install_dir),
     bootstrap_strategy: normalizeDesktopSSHBootstrapStrategy(value.bootstrap_strategy),
     release_base_url: normalizeDesktopSSHReleaseBaseURL(value.release_base_url),
@@ -148,6 +169,7 @@ export function normalizeDesktopSSHEnvironmentDetails(
   value: Readonly<{
     ssh_destination: unknown;
     ssh_port: unknown;
+    auth_mode?: unknown;
     remote_install_dir: unknown;
     bootstrap_strategy: unknown;
     release_base_url: unknown;
@@ -170,7 +192,7 @@ export function desktopSSHAuthority(value: DesktopSSHHostAccessDetails): string 
 
 export function desktopSSHEnvironmentID(value: DesktopSSHEnvironmentDetails): `ssh:${string}` {
   const normalized = normalizeDesktopSSHEnvironmentDetails(value);
-  return `ssh:${encodeURIComponent(normalized.ssh_destination)}:${normalized.ssh_port ?? 'default'}:${encodeURIComponent(normalized.remote_install_dir)}:${encodeURIComponent(normalized.environment_instance_id)}`;
+  return `ssh:${encodeURIComponent(normalized.ssh_destination)}:${normalized.ssh_port ?? 'default'}:${encodeURIComponent(normalized.auth_mode)}:${encodeURIComponent(normalized.remote_install_dir)}:${encodeURIComponent(normalized.environment_instance_id)}`;
 }
 
 export function defaultSavedSSHEnvironmentLabel(value: DesktopSSHHostAccessDetails): string {
