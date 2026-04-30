@@ -6,6 +6,7 @@ import {
   desktopSSHAuthority,
   desktopSSHEnvironmentID,
   normalizeDesktopSSHEnvironmentInstanceID,
+  normalizeDesktopSSHAuthMode,
   normalizeDesktopSSHBootstrapStrategy,
   normalizeDesktopSSHEnvironmentDetails,
   normalizeDesktopSSHPort,
@@ -18,6 +19,7 @@ describe('desktopSSH', () => {
     expect(normalizeDesktopSSHEnvironmentDetails({
       ssh_destination: '  devbox  ',
       ssh_port: normalizeDesktopSSHPort(''),
+      auth_mode: '',
       remote_install_dir: '',
       bootstrap_strategy: '',
       release_base_url: '',
@@ -25,6 +27,7 @@ describe('desktopSSH', () => {
     })).toEqual(expect.objectContaining({
       ssh_destination: 'devbox',
       ssh_port: null,
+      auth_mode: 'key_agent',
       remote_install_dir: DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
       bootstrap_strategy: DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
       release_base_url: '',
@@ -35,6 +38,7 @@ describe('desktopSSH', () => {
     expect(desktopSSHAuthority({
       ssh_destination: 'user@example.internal',
       ssh_port: 2222,
+      auth_mode: 'key_agent',
       remote_install_dir: DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
       bootstrap_strategy: DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
       release_base_url: '',
@@ -43,11 +47,12 @@ describe('desktopSSH', () => {
     expect(desktopSSHEnvironmentID({
       ssh_destination: 'user@example.internal',
       ssh_port: 2222,
+      auth_mode: 'password',
       remote_install_dir: '/opt/redeven',
       bootstrap_strategy: DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
       release_base_url: '',
       environment_instance_id: 'envinst_demo001',
-    })).toBe('ssh:user%40example.internal:2222:%2Fopt%2Fredeven:envinst_demo001');
+    })).toBe('ssh:user%40example.internal:2222:password:%2Fopt%2Fredeven:envinst_demo001');
   });
 
   it('requires custom remote install directories to be absolute paths', () => {
@@ -58,6 +63,8 @@ describe('desktopSSH', () => {
 
   it('normalizes bootstrap delivery and release base URL inputs', () => {
     expect(normalizeDesktopSSHBootstrapStrategy(' desktop_upload ')).toBe('desktop_upload');
+    expect(normalizeDesktopSSHAuthMode(' password ')).toBe('password');
+    expect(normalizeDesktopSSHAuthMode('')).toBe('key_agent');
     expect(normalizeDesktopSSHReleaseBaseURL('https://mirror.example.invalid/releases/')).toBe(
       'https://mirror.example.invalid/releases',
     );

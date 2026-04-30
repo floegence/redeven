@@ -35,6 +35,18 @@ describe('launcherActionFeedback', () => {
   it('keeps provider and control-plane failures toast-oriented', () => {
     expect(launcherActionFailurePresentation({
       ok: false,
+      code: 'environment_offline',
+      scope: 'environment',
+      message: 'This environment is currently offline in the provider.',
+    })).toEqual({
+      message: 'This environment is currently offline in the provider.',
+      tone: 'warning',
+      refresh_snapshot: false,
+      delivery: 'toast',
+    });
+
+    expect(launcherActionFailurePresentation({
+      ok: false,
       code: 'control_plane_missing',
       scope: 'control_plane',
       message: 'This provider is no longer saved in Desktop.',
@@ -53,6 +65,20 @@ describe('launcherActionFeedback', () => {
     })).toEqual({
       message: 'Desktop could not finish opening https://env.example.invalid: ERR_CONNECTION_REFUSED',
       tone: 'error',
+      refresh_snapshot: false,
+      delivery: 'toast',
+    });
+  });
+
+  it('keeps local and SSH runtime-not-started failures source-specific', () => {
+    expect(launcherActionFailurePresentation({
+      ok: false,
+      code: 'runtime_not_started',
+      scope: 'environment',
+      message: 'Start the SSH runtime first, then open this environment.',
+    })).toEqual({
+      message: 'Start the SSH runtime first, then open this environment.',
+      tone: 'warning',
       refresh_snapshot: false,
       delivery: 'toast',
     });

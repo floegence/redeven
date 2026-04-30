@@ -280,10 +280,11 @@ describe('desktopPreferences', () => {
         ],
         saved_ssh_environments: [
           {
-            id: 'ssh:devbox:2222:remote_default:envinst_demo001',
+            id: 'ssh:devbox:2222:key_agent:remote_default:envinst_demo001',
             label: 'SSH Lab',
             ssh_destination: 'devbox',
             ssh_port: 2222,
+            auth_mode: 'key_agent',
             remote_install_dir: 'remote_default',
             bootstrap_strategy: 'desktop_upload',
             release_base_url: 'https://mirror.example.invalid/releases',
@@ -334,6 +335,7 @@ describe('desktopPreferences', () => {
         label: 'SSH Lab',
         ssh_destination: 'devbox',
         ssh_port: 2222,
+        auth_mode: 'key_agent',
         remote_install_dir: 'remote_default',
         bootstrap_strategy: 'desktop_upload',
         release_base_url: 'https://mirror.example.invalid/releases',
@@ -342,7 +344,7 @@ describe('desktopPreferences', () => {
       }));
       expect(loaded.saved_ssh_environments[0].environment_instance_id).toMatch(/^envinst_[a-f0-9]{20}$/u);
       expect(loaded.saved_ssh_environments[0].id).toBe(
-        `ssh:devbox:2222:remote_default:${loaded.saved_ssh_environments[0].environment_instance_id}`,
+        `ssh:devbox:2222:key_agent:remote_default:${loaded.saved_ssh_environments[0].environment_instance_id}`,
       );
 
       const rewrittenFiles = await fs.readdir(connectionsDir);
@@ -707,6 +709,7 @@ describe('desktopPreferences', () => {
     const remembered = rememberRecentSSHEnvironmentTarget(defaultDesktopPreferences(), {
       ssh_destination: 'devbox',
       ssh_port: 2222,
+      auth_mode: 'key_agent',
       remote_install_dir: 'remote_default',
       bootstrap_strategy: 'auto',
       release_base_url: '',
@@ -716,10 +719,11 @@ describe('desktopPreferences', () => {
 
     expect(remembered.saved_ssh_environments).toEqual([
       {
-        id: 'ssh:devbox:2222:remote_default:envinst_demo001',
+        id: 'ssh:devbox:2222:key_agent:remote_default:envinst_demo001',
         label: 'Lab',
         ssh_destination: 'devbox',
         ssh_port: 2222,
+        auth_mode: 'key_agent',
         remote_install_dir: 'remote_default',
         bootstrap_strategy: 'auto',
         release_base_url: '',
@@ -735,6 +739,7 @@ describe('desktopPreferences', () => {
       label: 'SSH Lab',
       ssh_destination: 'devbox',
       ssh_port: 2222,
+      auth_mode: 'key_agent',
       remote_install_dir: 'remote_default',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example.invalid/releases',
@@ -743,7 +748,7 @@ describe('desktopPreferences', () => {
       last_used_at_ms: 500,
     });
 
-    expect(deleteSavedSSHEnvironment(saved, 'ssh:devbox:2222:remote_default:envinst_demo001').saved_ssh_environments).toEqual([]);
+    expect(deleteSavedSSHEnvironment(saved, 'ssh:devbox:2222:key_agent:remote_default:envinst_demo001').saved_ssh_environments).toEqual([]);
   });
 
   it('persists pin state for managed, URL, and SSH environments', () => {
@@ -758,10 +763,11 @@ describe('desktopPreferences', () => {
         last_used_at_ms: 20,
       }],
       saved_ssh_environments: [{
-        id: 'ssh:devbox:2222:remote_default:envinst_demo001',
+        id: 'ssh:devbox:2222:key_agent:remote_default:envinst_demo001',
         label: 'SSH Lab',
         ssh_destination: 'devbox',
         ssh_port: 2222,
+        auth_mode: 'key_agent',
         remote_install_dir: 'remote_default',
         bootstrap_strategy: 'desktop_upload',
         release_base_url: '',
@@ -780,11 +786,12 @@ describe('desktopPreferences', () => {
       pinned: true,
     });
     const sshPinned = setSavedSSHEnvironmentPinned(urlPinned, {
-      environment_id: 'ssh:devbox:2222:remote_default:envinst_demo001',
+      environment_id: 'ssh:devbox:2222:key_agent:remote_default:envinst_demo001',
       label: 'SSH Lab',
       pinned: true,
       ssh_destination: 'devbox',
       ssh_port: 2222,
+      auth_mode: 'key_agent',
       remote_install_dir: 'remote_default',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: '',

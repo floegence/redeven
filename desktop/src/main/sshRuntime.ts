@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessByStdio } from 'node:child_process';
+import { spawn, type ChildProcessByStdio, type SpawnOptions } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import fs from 'node:fs/promises';
@@ -16,10 +16,12 @@ import {
 } from './sshReleaseAssets';
 import { loadExternalLocalUIStartup } from './runtimeState';
 import type { DesktopSessionRuntimeHandle } from './sessionRuntime';
-import { parseStartupReport, type StartupReport } from './startup';
+import type { StartupReport } from './startup';
+import { formatBlockedLaunchDiagnostics, parseLaunchReport } from './launchReport';
 import {
   DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
   normalizeDesktopSSHEnvironmentDetails,
+  type DesktopSSHAuthMode,
   type DesktopSSHBootstrapStrategy,
   type DesktopSSHEnvironmentDetails,
 } from '../shared/desktopSSH';
@@ -37,6 +39,10 @@ type SpawnedSSHProcess = ChildProcessByStdio<Writable | null, Readable | null, R
 type RemoteInstallStrategy = 'desktop_upload' | 'remote_install';
 type PreparedDesktopSSHUploadAsset = Readonly<{
   archiveData: Buffer;
+}>;
+type SSHCommandAuthContext = Readonly<{
+  mode: DesktopSSHAuthMode;
+  askPassScriptPath?: string;
 }>;
 export type DesktopSSHRemoteRuntimeStamp = Readonly<{
   schema_version: typeof MANAGED_SSH_RUNTIME_STAMP_SCHEMA_VERSION;
@@ -60,6 +66,26 @@ export type DesktopSSHRemoteRuntimeProbeResult = Readonly<{
   binary_path: string;
   stamp_path: string;
   reason: string;
+}>;
+export type DesktopSSHRuntimeProgressPhase =
+  | 'ssh_connecting'
+  | 'ssh_control_ready'
+  | 'ssh_checking_runtime'
+  | 'ssh_runtime_ready'
+  | 'ssh_detecting_platform'
+  | 'ssh_preparing_upload'
+  | 'ssh_remote_installing'
+  | 'ssh_creating_upload_dir'
+  | 'ssh_uploading_archive'
+  | 'ssh_installing_upload'
+  | 'ssh_starting_runtime'
+  | 'ssh_waiting_report'
+  | 'ssh_opening_tunnel'
+  | 'ssh_verifying_tunnel';
+export type DesktopSSHRuntimeProgress = Readonly<{
+  phase: DesktopSSHRuntimeProgressPhase;
+  title: string;
+  detail: string;
 }>;
 
 type RecentLogs = Readonly<{
@@ -109,6 +135,7 @@ export type StartManagedSSHRuntimeArgs = Readonly<{
   connectTimeoutSeconds?: number;
   probeTimeoutMs?: number;
   onLog?: (stream: 'master_stderr' | 'control_stdout' | 'control_stderr' | 'forward_stderr', chunk: string) => void;
+  onProgress?: (progress: DesktopSSHRuntimeProgress) => void;
 }>;
 
 function compact(value: unknown): string {
@@ -154,10 +181,25 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function emitSSHRuntimeProgress(
+  onProgress: StartManagedSSHRuntimeArgs['onProgress'],
+  phase: DesktopSSHRuntimeProgressPhase,
+  title: string,
+  detail: string,
+): void {
+  onProgress?.({
+    phase,
+    title,
+    detail,
+  });
+}
+
 function normalizeRuntimeReleaseTag(raw: string): string {
   const clean = compact(raw);
   if (clean === '') {
-    throw new Error('Redeven runtime release tag is required for SSH bootstrap.');
+    throw new Error(
+      'Desktop could not resolve the SSH runtime release tag for SSH bootstrap. Set REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG when running Desktop from source.',
+    );
   }
   return clean.startsWith('v') ? clean : `v${clean}`;
 }
@@ -187,21 +229,109 @@ function sshTargetArgs(target: DesktopSSHEnvironmentDetails): string[] {
   return args;
 }
 
-function sshSharedArgs(controlSocketPath: string, connectTimeoutSeconds: number): string[] {
+function shellQuote(value: string): string {
+  if (value === '') {
+    return "''";
+  }
+  return `'${value.replace(/'/gu, `'\\''`)}'`;
+}
+
+function remoteShellCommand(script: string, marker: string, scriptArgs: readonly string[] = []): string {
   return [
-    '-o', 'BatchMode=yes',
+    'sh',
+    '-c',
+    shellQuote(script),
+    shellQuote(marker),
+    ...scriptArgs.map(shellQuote),
+  ].join(' ');
+}
+
+function sshSharedArgs(controlSocketPath: string, connectTimeoutSeconds: number, authMode: DesktopSSHAuthMode): string[] {
+  const args = [
+    '-T',
+    '-x',
     '-o', `ConnectTimeout=${connectTimeoutSeconds}`,
+    '-o', 'RequestTTY=no',
+    '-o', 'ForwardX11=no',
+    '-o', 'ForwardX11Trusted=no',
+    '-o', 'ForwardAgent=no',
     '-o', 'ServerAliveInterval=15',
     '-o', 'ServerAliveCountMax=3',
     '-S', controlSocketPath,
   ];
+  if (authMode === 'key_agent') {
+    args.unshift('-o', 'BatchMode=yes');
+  } else {
+    args.unshift('-o', 'BatchMode=no', '-o', 'NumberOfPasswordPrompts=3');
+  }
+  return args;
+}
+
+function sshSpawnOptions(auth: SSHCommandAuthContext): SpawnOptions {
+  if (auth.mode !== 'password' || !auth.askPassScriptPath) {
+    return {};
+  }
+  return {
+    env: {
+      ...process.env,
+      DISPLAY: process.env.DISPLAY || ':0',
+      SSH_ASKPASS: auth.askPassScriptPath,
+      SSH_ASKPASS_REQUIRE: 'force',
+    },
+  };
+}
+
+function shouldPipeSSHStdin(auth: SSHCommandAuthContext, stdinData?: Buffer): boolean {
+  return Boolean(stdinData) || auth.mode !== 'password';
+}
+
+function sshStdioForAuth(auth: SSHCommandAuthContext, stdinData?: Buffer): ['pipe' | 'ignore', 'pipe', 'pipe'] {
+  return [
+    shouldPipeSSHStdin(auth, stdinData) ? 'pipe' : 'ignore',
+    'pipe',
+    'pipe',
+  ];
+}
+
+function spawnSSHProcess(
+  sshBinary: string,
+  args: readonly string[],
+  auth: SSHCommandAuthContext,
+  stdinData?: Buffer,
+): SpawnedSSHProcess {
+  return spawn(sshBinary, args, {
+    ...sshSpawnOptions(auth),
+    stdio: sshStdioForAuth(auth, stdinData),
+  }) as SpawnedSSHProcess;
 }
 
 function buildRemoteInstallRootShell(): string {
   return [
     'install_root_raw="$1"',
     `if [ "$install_root_raw" = "${DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR}" ]; then`,
-    '  install_root="${XDG_CACHE_HOME:-$HOME/.cache}/redeven-desktop/runtime"',
+    '  remote_tmp_dir="${TMPDIR:-/tmp}"',
+    '  remote_user="${USER:-}"',
+    '  if [ -z "$remote_user" ] && command -v id >/dev/null 2>&1; then',
+    '    remote_user="$(id -u 2>/dev/null || true)"',
+    '  fi',
+    '  if [ -z "$remote_user" ]; then',
+    '    remote_user="user"',
+    '  fi',
+    '  cache_base=""',
+    '  if [ -n "${XDG_CACHE_HOME:-}" ]; then',
+    '    xdg_parent="$(dirname "$XDG_CACHE_HOME")"',
+    '    if [ -d "$XDG_CACHE_HOME" ] || { [ -d "$xdg_parent" ] && [ -w "$xdg_parent" ]; }; then',
+    '      cache_base="$XDG_CACHE_HOME"',
+    '    fi',
+    '  fi',
+    '  if [ -z "$cache_base" ] && [ -n "${HOME:-}" ] && [ -d "$HOME" ] && [ -w "$HOME" ]; then',
+    '    cache_base="${HOME%/}/.cache"',
+    '  fi',
+    '  if [ -n "$cache_base" ]; then',
+    '    install_root="${cache_base%/}/redeven-desktop/runtime"',
+    '  else',
+    '    install_root="${remote_tmp_dir%/}/redeven-desktop-runtime-${remote_user}"',
+    '  fi',
     'else',
     '  install_root="$install_root_raw"',
     'fi',
@@ -410,7 +540,7 @@ export function buildManagedSSHStartScript(): string {
     '  echo "Redeven runtime is not installed at ${binary}" >&2',
     '  exit 1',
     'fi',
-    'exec "$binary" run --state-root "$state_root" --mode local --desktop-managed --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path"',
+    'exec "$binary" run --state-root "$state_root" --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path"',
   ].join('\n');
 }
 
@@ -425,6 +555,31 @@ export function buildManagedSSHReportReadScript(): string {
     '  exit 1',
     'fi',
     'cat "$report_path"',
+  ].join('\n');
+}
+
+export function buildManagedSSHStopScript(): string {
+  return [
+    'set -eu',
+    'pid="$1"',
+    'if [ -z "$pid" ]; then',
+    '  exit 0',
+    'fi',
+    'case "$pid" in',
+    '  *[!0-9]*) exit 0 ;;',
+    'esac',
+    'if ! kill -0 "$pid" 2>/dev/null; then',
+    '  exit 0',
+    'fi',
+    'kill "$pid" 2>/dev/null || true',
+    'deadline=$(( $(date +%s) + 5 ))',
+    'while kill -0 "$pid" 2>/dev/null; do',
+    '  if [ "$(date +%s)" -ge "$deadline" ]; then',
+    '    kill -KILL "$pid" 2>/dev/null || true',
+    '    break',
+    '  fi',
+    '  sleep 0.1',
+    'done',
   ].join('\n');
 }
 
@@ -589,18 +744,43 @@ async function stopChildProcess(child: SpawnedSSHProcess | null, timeoutMs: numb
   }
 }
 
+function buildSSHAskPassScript(): string {
+  return [
+    '#!/bin/sh',
+    'set -eu',
+    'prompt="${1:-SSH password}"',
+    'if command -v osascript >/dev/null 2>&1; then',
+    '  osascript -e \'display dialog prompt default answer "" with hidden answer buttons {"Cancel", "OK"} default button "OK" cancel button "Cancel"\' -e \'text returned of result\' -- "$prompt"',
+    '  exit 0',
+    'fi',
+    'if command -v ssh-askpass >/dev/null 2>&1; then',
+    '  exec ssh-askpass "$prompt"',
+    'fi',
+    'echo "Redeven Desktop could not open a password prompt for SSH authentication." >&2',
+    'exit 1',
+  ].join('\n');
+}
+
+async function createSSHAskPassScript(tempDir: string, authMode: DesktopSSHAuthMode): Promise<string | undefined> {
+  if (authMode !== 'password') {
+    return undefined;
+  }
+  const scriptPath = path.join(tempDir, 'redeven-ssh-askpass.sh');
+  await fs.writeFile(scriptPath, buildSSHAskPassScript(), { mode: 0o700 });
+  return scriptPath;
+}
+
 async function runSSHOnce(
   sshBinary: string,
   args: readonly string[],
+  auth: SSHCommandAuthContext,
   logs: MutableRecentLogs,
   key: keyof MutableRecentLogs,
   onLog: StartManagedSSHRuntimeArgs['onLog'],
   stdinData?: Buffer,
 ): Promise<SSHCommandResult> {
   return new Promise<SSHCommandResult>((resolve, reject) => {
-    const child = spawn(sshBinary, args, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+    const child = spawnSSHProcess(sshBinary, args, auth, stdinData);
     let stdout = '';
     let stderr = '';
     let spawnError: Error | null = null;
@@ -609,10 +789,12 @@ async function runSSHOnce(
       spawnError = error instanceof Error ? error : new Error(String(error));
     });
 
-    if (stdinData) {
-      child.stdin?.end(stdinData);
-    } else {
-      child.stdin?.end();
+    if (shouldPipeSSHStdin(auth, stdinData)) {
+      if (stdinData) {
+        child.stdin?.end(stdinData);
+      } else {
+        child.stdin?.end();
+      }
     }
 
     if (child.stdout) {
@@ -649,14 +831,45 @@ async function runSSHOnce(
   });
 }
 
+async function stopRemoteRuntimeProcess(args: Readonly<{
+  sshBinary: string;
+  target: DesktopSSHEnvironmentDetails;
+  controlSocketPath: string;
+  connectTimeoutSeconds: number;
+  auth: SSHCommandAuthContext;
+  pid: number;
+  logs: MutableRecentLogs;
+  onLog: StartManagedSSHRuntimeArgs['onLog'];
+}>): Promise<void> {
+  if (!Number.isInteger(args.pid) || args.pid <= 0) {
+    return;
+  }
+  await runSSHOnce(
+    args.sshBinary,
+    [
+      ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds, args.auth.mode),
+      ...sshTargetArgs(args.target),
+      remoteShellCommand(buildManagedSSHStopScript(), 'redeven-ssh-stop', [
+        String(args.pid),
+      ]),
+    ],
+    args.auth,
+    args.logs,
+    'control_stderr',
+    args.onLog,
+  );
+}
+
 async function waitForMasterReady(args: Readonly<{
   sshBinary: string;
   target: DesktopSSHEnvironmentDetails;
   controlSocketPath: string;
   connectTimeoutSeconds: number;
+  auth: SSHCommandAuthContext;
   startupTimeoutMs: number;
   logs: MutableRecentLogs;
   onLog: StartManagedSSHRuntimeArgs['onLog'];
+  onProgress: StartManagedSSHRuntimeArgs['onProgress'];
   getMasterProcess: () => SpawnedSSHProcess | null;
 }>): Promise<void> {
   const deadline = Date.now() + args.startupTimeoutMs;
@@ -672,15 +885,22 @@ async function waitForMasterReady(args: Readonly<{
     const result = await runSSHOnce(
       args.sshBinary,
       [
-        ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds),
+        ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds, args.auth.mode),
         '-O', 'check',
         ...sshTargetArgs(args.target),
       ],
+      args.auth,
       args.logs,
       'master_stderr',
       args.onLog,
     );
     if (result.exit_code === 0) {
+      emitSSHRuntimeProgress(
+        args.onProgress,
+        'ssh_control_ready',
+        'SSH control connection is ready',
+        'Desktop established the reusable SSH control socket.',
+      );
       return;
     }
     if (Date.now() >= deadline) {
@@ -695,19 +915,29 @@ async function probeRemoteRuntimeCompatibility(args: Readonly<{
   target: DesktopSSHEnvironmentDetails;
   controlSocketPath: string;
   connectTimeoutSeconds: number;
+  auth: SSHCommandAuthContext;
   runtimeReleaseTag: string;
   logs: MutableRecentLogs;
   onLog: StartManagedSSHRuntimeArgs['onLog'];
+  onProgress: StartManagedSSHRuntimeArgs['onProgress'];
 }>): Promise<DesktopSSHRemoteRuntimeProbeResult> {
+  emitSSHRuntimeProgress(
+    args.onProgress,
+    'ssh_checking_runtime',
+    'Checking remote runtime',
+    `Looking for a Desktop-managed Redeven ${args.runtimeReleaseTag} runtime on the SSH host.`,
+  );
   const result = await runSSHOnce(
     args.sshBinary,
     [
-      ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds),
+      ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds, args.auth.mode),
       ...sshTargetArgs(args.target),
-      'sh', '-lc', buildManagedSSHRuntimeProbeScript(), 'redeven-ssh-runtime-probe',
-      args.target.remote_install_dir,
-      args.runtimeReleaseTag,
+      remoteShellCommand(buildManagedSSHRuntimeProbeScript(), 'redeven-ssh-runtime-probe', [
+        args.target.remote_install_dir,
+        args.runtimeReleaseTag,
+      ]),
     ],
+    args.auth,
     args.logs,
     'control_stderr',
     args.onLog,
@@ -716,7 +946,16 @@ async function probeRemoteRuntimeCompatibility(args: Readonly<{
     throw readinessFailure('Desktop could not probe the managed Redeven runtime over SSH.', args.logs);
   }
   try {
-    return parseManagedSSHRuntimeProbeResult(result.stdout);
+    const probe = parseManagedSSHRuntimeProbeResult(result.stdout);
+    if (probe.status === 'ready') {
+      emitSSHRuntimeProgress(
+        args.onProgress,
+        'ssh_runtime_ready',
+        'Remote runtime is ready',
+        describeManagedSSHRuntimeProbeResult(probe),
+      );
+    }
+    return probe;
   } catch (error) {
     throw readinessFailure(
       error instanceof Error ? error.message : 'Desktop received an invalid SSH runtime probe result.',
@@ -730,16 +969,25 @@ async function probeRemotePlatform(args: Readonly<{
   target: DesktopSSHEnvironmentDetails;
   controlSocketPath: string;
   connectTimeoutSeconds: number;
+  auth: SSHCommandAuthContext;
   logs: MutableRecentLogs;
   onLog: StartManagedSSHRuntimeArgs['onLog'];
+  onProgress: StartManagedSSHRuntimeArgs['onProgress'];
 }>): Promise<DesktopSSHRemotePlatform> {
+  emitSSHRuntimeProgress(
+    args.onProgress,
+    'ssh_detecting_platform',
+    'Detecting remote platform',
+    'Desktop is checking the remote OS and CPU architecture before choosing a runtime package.',
+  );
   const result = await runSSHOnce(
     args.sshBinary,
     [
-      ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds),
+      ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds, args.auth.mode),
       ...sshTargetArgs(args.target),
-      'sh', '-lc', 'set -eu\nuname -s\nuname -m',
+      remoteShellCommand('set -eu\nuname -s\nuname -m', 'redeven-ssh-probe-platform'),
     ],
+    args.auth,
     args.logs,
     'control_stderr',
     args.onLog,
@@ -762,16 +1010,25 @@ async function createRemoteTempDir(args: Readonly<{
   target: DesktopSSHEnvironmentDetails;
   controlSocketPath: string;
   connectTimeoutSeconds: number;
+  auth: SSHCommandAuthContext;
   logs: MutableRecentLogs;
   onLog: StartManagedSSHRuntimeArgs['onLog'];
+  onProgress: StartManagedSSHRuntimeArgs['onProgress'];
 }>): Promise<string> {
+  emitSSHRuntimeProgress(
+    args.onProgress,
+    'ssh_creating_upload_dir',
+    'Preparing remote upload directory',
+    'Desktop is creating a private temporary directory on the SSH host.',
+  );
   const result = await runSSHOnce(
     args.sshBinary,
     [
-      ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds),
+      ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds, args.auth.mode),
       ...sshTargetArgs(args.target),
-      'sh', '-lc', 'set -eu\numask 077\nmktemp -d "${TMPDIR:-/tmp}/redeven-ssh-upload.XXXXXX"',
+      remoteShellCommand('set -eu\numask 077\nmktemp -d "${TMPDIR:-/tmp}/redeven-ssh-upload.XXXXXX"', 'redeven-ssh-create-upload-dir'),
     ],
+    args.auth,
     args.logs,
     'control_stderr',
     args.onLog,
@@ -791,6 +1048,7 @@ async function removeRemotePath(args: Readonly<{
   target: DesktopSSHEnvironmentDetails;
   controlSocketPath: string;
   connectTimeoutSeconds: number;
+  auth: SSHCommandAuthContext;
   remotePath: string;
   logs: MutableRecentLogs;
   onLog: StartManagedSSHRuntimeArgs['onLog'];
@@ -801,11 +1059,13 @@ async function removeRemotePath(args: Readonly<{
   await runSSHOnce(
     args.sshBinary,
     [
-      ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds),
+      ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds, args.auth.mode),
       ...sshTargetArgs(args.target),
-      'sh', '-lc', 'set -eu\nrm -rf "$1"', 'redeven-ssh-cleanup-path',
-      args.remotePath,
+      remoteShellCommand('set -eu\nrm -rf "$1"', 'redeven-ssh-cleanup-path', [
+        args.remotePath,
+      ]),
     ],
+    args.auth,
     args.logs,
     'control_stderr',
     args.onLog,
@@ -837,21 +1097,31 @@ async function installRemoteRuntimeViaRemoteInstall(args: Readonly<{
   target: DesktopSSHEnvironmentDetails;
   controlSocketPath: string;
   connectTimeoutSeconds: number;
+  auth: SSHCommandAuthContext;
   runtimeReleaseTag: string;
   installScriptURL: string;
   logs: MutableRecentLogs;
   onLog: StartManagedSSHRuntimeArgs['onLog'];
+  onProgress: StartManagedSSHRuntimeArgs['onProgress'];
 }>): Promise<void> {
+  emitSSHRuntimeProgress(
+    args.onProgress,
+    'ssh_remote_installing',
+    'Installing runtime on SSH host',
+    `The host is downloading and installing Redeven ${args.runtimeReleaseTag}. This can take a minute on first connection.`,
+  );
   const result = await runSSHOnce(
     args.sshBinary,
     [
-      ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds),
+      ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds, args.auth.mode),
       ...sshTargetArgs(args.target),
-      'sh', '-lc', buildManagedSSHRemoteInstallScript(), 'redeven-ssh-remote-install',
-      args.target.remote_install_dir,
-      args.runtimeReleaseTag,
-      args.installScriptURL,
+      remoteShellCommand(buildManagedSSHRemoteInstallScript(), 'redeven-ssh-remote-install', [
+        args.target.remote_install_dir,
+        args.runtimeReleaseTag,
+        args.installScriptURL,
+      ]),
     ],
+    args.auth,
     args.logs,
     'control_stderr',
     args.onLog,
@@ -867,8 +1137,15 @@ async function prepareDesktopSSHUploadAsset(args: Readonly<{
   assetCacheRoot: string;
   platform: DesktopSSHRemotePlatform;
   fetchPolicy: DesktopSSHReleaseFetchPolicy;
+  onProgress: StartManagedSSHRuntimeArgs['onProgress'];
 }>): Promise<PreparedDesktopSSHUploadAsset> {
   try {
+    emitSSHRuntimeProgress(
+      args.onProgress,
+      'ssh_preparing_upload',
+      'Preparing local runtime package',
+      `Desktop is locating the ${args.platform.platform_label} Redeven ${args.runtimeReleaseTag} archive for upload.`,
+    );
     const asset = await ensureDesktopSSHReleaseAsset({
       releaseTag: args.runtimeReleaseTag,
       releaseBaseURL: args.target.release_base_url,
@@ -891,24 +1168,34 @@ async function installRemoteRuntimeViaDesktopUpload(args: Readonly<{
   target: DesktopSSHEnvironmentDetails;
   controlSocketPath: string;
   connectTimeoutSeconds: number;
+  auth: SSHCommandAuthContext;
   runtimeReleaseTag: string;
   platform: DesktopSSHRemotePlatform;
   archiveData: Buffer;
   logs: MutableRecentLogs;
   onLog: StartManagedSSHRuntimeArgs['onLog'];
+  onProgress: StartManagedSSHRuntimeArgs['onProgress'];
 }>): Promise<void> {
   const remoteTempDir = await createRemoteTempDir(args);
   const remoteArchivePath = `${remoteTempDir}/redeven.tar.gz`;
 
   try {
+    emitSSHRuntimeProgress(
+      args.onProgress,
+      'ssh_uploading_archive',
+      'Uploading runtime package',
+      `Desktop is sending the ${args.platform.release_package_name} archive to the SSH host.`,
+    );
     const uploadResult = await runSSHOnce(
       args.sshBinary,
       [
-        ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds),
+        ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds, args.auth.mode),
         ...sshTargetArgs(args.target),
-        'sh', '-lc', 'set -eu\ncat > "$1"', 'redeven-ssh-upload-archive',
-        remoteArchivePath,
+        remoteShellCommand('set -eu\ncat > "$1"', 'redeven-ssh-upload-archive', [
+          remoteArchivePath,
+        ]),
       ],
+      args.auth,
       args.logs,
       'control_stderr',
       args.onLog,
@@ -921,17 +1208,25 @@ async function installRemoteRuntimeViaDesktopUpload(args: Readonly<{
       );
     }
 
+    emitSSHRuntimeProgress(
+      args.onProgress,
+      'ssh_installing_upload',
+      'Installing uploaded runtime',
+      `The SSH host is unpacking Redeven ${args.runtimeReleaseTag} and writing the Desktop runtime stamp.`,
+    );
     const installResult = await runSSHOnce(
       args.sshBinary,
       [
-        ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds),
+        ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds, args.auth.mode),
         ...sshTargetArgs(args.target),
-        'sh', '-lc', buildManagedSSHUploadedInstallScript(), 'redeven-ssh-upload-install',
-        args.target.remote_install_dir,
-        args.runtimeReleaseTag,
-        remoteArchivePath,
-        remoteTempDir,
+        remoteShellCommand(buildManagedSSHUploadedInstallScript(), 'redeven-ssh-upload-install', [
+          args.target.remote_install_dir,
+          args.runtimeReleaseTag,
+          remoteArchivePath,
+          remoteTempDir,
+        ]),
       ],
+      args.auth,
       args.logs,
       'control_stderr',
       args.onLog,
@@ -955,12 +1250,14 @@ async function ensureRemoteRuntimeInstalled(args: Readonly<{
   target: DesktopSSHEnvironmentDetails;
   controlSocketPath: string;
   connectTimeoutSeconds: number;
+  auth: SSHCommandAuthContext;
   runtimeReleaseTag: string;
   installScriptURL: string;
   assetCacheRoot: string;
   fetchPolicy: DesktopSSHReleaseFetchPolicy;
   logs: MutableRecentLogs;
   onLog: StartManagedSSHRuntimeArgs['onLog'];
+  onProgress: StartManagedSSHRuntimeArgs['onProgress'];
 }>): Promise<void> {
   const initialProbe = await probeRemoteRuntimeCompatibility(args);
   if (initialProbe.status === 'ready') {
@@ -982,6 +1279,7 @@ async function ensureRemoteRuntimeInstalled(args: Readonly<{
             assetCacheRoot: args.assetCacheRoot,
             platform,
             fetchPolicy: args.fetchPolicy,
+            onProgress: args.onProgress,
           });
         } catch (error) {
           if (args.target.bootstrap_strategy === 'auto' && error instanceof DesktopSSHUploadAssetPreparationError) {
@@ -995,11 +1293,13 @@ async function ensureRemoteRuntimeInstalled(args: Readonly<{
           target: args.target,
           controlSocketPath: args.controlSocketPath,
           connectTimeoutSeconds: args.connectTimeoutSeconds,
+          auth: args.auth,
           runtimeReleaseTag: args.runtimeReleaseTag,
           platform,
           archiveData: preparedUpload.archiveData,
           logs: args.logs,
           onLog: args.onLog,
+          onProgress: args.onProgress,
         });
         const uploadProbe = await probeRemoteRuntimeCompatibility(args);
         if (uploadProbe.status === 'ready') {
@@ -1038,47 +1338,65 @@ async function waitForRemoteStartupReport(args: Readonly<{
   target: DesktopSSHEnvironmentDetails;
   controlSocketPath: string;
   connectTimeoutSeconds: number;
+  auth: SSHCommandAuthContext;
   environmentInstanceID: string;
   sessionToken: string;
   startupTimeoutMs: number;
   logs: MutableRecentLogs;
   onLog: StartManagedSSHRuntimeArgs['onLog'];
+  onProgress: StartManagedSSHRuntimeArgs['onProgress'];
   getControlProcess: () => SpawnedSSHProcess | null;
 }>): Promise<StartupReport> {
   const deadline = Date.now() + args.startupTimeoutMs;
   const script = buildManagedSSHReportReadScript();
+  emitSSHRuntimeProgress(
+    args.onProgress,
+    'ssh_waiting_report',
+    'Waiting for runtime readiness',
+    'Redeven is starting on the SSH host and writing its startup report.',
+  );
   for (;;) {
     const controlProcess = args.getControlProcess();
     if (!controlProcess) {
       throw readinessFailure('Desktop lost the SSH runtime bootstrap session before Redeven reported readiness.', args.logs);
     }
-    if (controlProcess.exitCode !== null || controlProcess.signalCode) {
-      throw readinessFailure('Remote Redeven stopped before reporting readiness.', args.logs);
-    }
 
     const result = await runSSHOnce(
       args.sshBinary,
       [
-        ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds),
+        ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds, args.auth.mode),
         ...sshTargetArgs(args.target),
-        'sh', '-lc', script, 'redeven-ssh-read-report',
-        args.target.remote_install_dir,
-        args.environmentInstanceID,
-        args.sessionToken,
+        remoteShellCommand(script, 'redeven-ssh-read-report', [
+          args.target.remote_install_dir,
+          args.environmentInstanceID,
+          args.sessionToken,
+        ]),
       ],
+      args.auth,
       args.logs,
       'control_stderr',
       args.onLog,
     );
     if (result.exit_code === 0) {
       try {
-        return parseStartupReport(result.stdout);
+        const launchReport = parseLaunchReport(result.stdout);
+        if (launchReport.status === 'blocked') {
+          throw new Error(`Remote Redeven could not start:\n${formatBlockedLaunchDiagnostics(launchReport)}`);
+        }
+        return launchReport.startup;
       } catch (error) {
         throw readinessFailure(
           error instanceof Error ? error.message : 'Remote Redeven startup report was invalid.',
           args.logs,
         );
       }
+    }
+
+    if (controlProcess.exitCode !== null || controlProcess.signalCode) {
+      const exitReason = controlProcess.exitCode !== null
+        ? `exit code ${controlProcess.exitCode}`
+        : `signal ${controlProcess.signalCode}`;
+      throw readinessFailure(`Remote Redeven stopped before reporting readiness (${exitReason}).`, args.logs);
     }
 
     if (Date.now() >= deadline) {
@@ -1109,17 +1427,25 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
   const tempDir = await fs.mkdtemp(path.join(tempRoot, 'rdv-ssh-'));
   const controlSocketPath = path.join(tempDir, 'm.sock');
   const sessionToken = randomBytes(8).toString('hex');
+  const auth: SSHCommandAuthContext = {
+    mode: target.auth_mode,
+    askPassScriptPath: await createSSHAskPassScript(tempDir, target.auth_mode),
+  };
 
-  const masterProcess = spawn(sshBinary, [
-    ...sshSharedArgs(controlSocketPath, connectTimeoutSeconds),
+  emitSSHRuntimeProgress(
+    args.onProgress,
+    'ssh_connecting',
+    'Opening SSH control connection',
+    `Connecting to ${target.ssh_destination} with ${target.auth_mode === 'password' ? 'password prompt' : 'SSH key or agent'} authentication.`,
+  );
+  const masterProcess = spawnSSHProcess(sshBinary, [
+    ...sshSharedArgs(controlSocketPath, connectTimeoutSeconds, auth.mode),
     '-M',
     '-N',
     '-o', 'ControlMaster=yes',
     '-o', 'ControlPersist=no',
     ...sshTargetArgs(target),
-  ], {
-    stdio: ['ignore', 'ignore', 'pipe'],
-  });
+  ], auth);
   let masterSpawnError: Error | null = null;
   masterProcess.once('error', (error) => {
     masterSpawnError = error instanceof Error ? error : new Error(String(error));
@@ -1128,9 +1454,24 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
 
   let controlProcess: SpawnedSSHProcess | null = null;
   let forwardProcess: SpawnedSSHProcess | null = null;
+  let remoteRuntimePID: number | null = null;
+  let remoteStopAttempted = false;
 
   const cleanup = async () => {
     await stopChildProcess(forwardProcess, stopTimeoutMs).catch(() => undefined);
+    if (!remoteStopAttempted && remoteRuntimePID !== null) {
+      remoteStopAttempted = true;
+      await stopRemoteRuntimeProcess({
+        sshBinary,
+        target,
+        controlSocketPath,
+        connectTimeoutSeconds,
+        auth,
+        pid: remoteRuntimePID,
+        logs,
+        onLog: args.onLog,
+      }).catch(() => undefined);
+    }
     await stopChildProcess(controlProcess, stopTimeoutMs).catch(() => undefined);
     await stopChildProcess(masterProcess, stopTimeoutMs).catch(() => undefined);
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
@@ -1145,9 +1486,11 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       target,
       controlSocketPath,
       connectTimeoutSeconds,
+      auth,
       startupTimeoutMs,
       logs,
       onLog: args.onLog,
+      onProgress: args.onProgress,
       getMasterProcess: () => masterProcess,
     });
 
@@ -1156,25 +1499,32 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       target,
       controlSocketPath,
       connectTimeoutSeconds,
+      auth,
       runtimeReleaseTag,
       installScriptURL,
       assetCacheRoot,
       fetchPolicy: releaseFetchPolicy,
       logs,
       onLog: args.onLog,
+      onProgress: args.onProgress,
     });
 
-    controlProcess = spawn(sshBinary, [
-      ...sshSharedArgs(controlSocketPath, connectTimeoutSeconds),
+    emitSSHRuntimeProgress(
+      args.onProgress,
+      'ssh_starting_runtime',
+      'Starting remote runtime',
+      'Desktop is launching Redeven on the SSH host.',
+    );
+    controlProcess = spawnSSHProcess(sshBinary, [
+      ...sshSharedArgs(controlSocketPath, connectTimeoutSeconds, auth.mode),
       ...sshTargetArgs(target),
-      'sh', '-lc', buildManagedSSHStartScript(), 'redeven-ssh-start',
-      target.remote_install_dir,
-      runtimeReleaseTag,
-      target.environment_instance_id,
-      sessionToken,
-    ], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+      remoteShellCommand(buildManagedSSHStartScript(), 'redeven-ssh-start', [
+        target.remote_install_dir,
+        runtimeReleaseTag,
+        target.environment_instance_id,
+        sessionToken,
+      ]),
+    ], auth);
     let controlSpawnError: Error | null = null;
     controlProcess.once('error', (error) => {
       controlSpawnError = error instanceof Error ? error : new Error(String(error));
@@ -1190,25 +1540,32 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       target,
       controlSocketPath,
       connectTimeoutSeconds,
+      auth,
       environmentInstanceID: target.environment_instance_id,
       sessionToken,
       startupTimeoutMs,
       logs,
       onLog: args.onLog,
+      onProgress: args.onProgress,
       getControlProcess: () => controlProcess,
     });
+    remoteRuntimePID = remoteStartup.pid ?? null;
 
     const localPort = await allocateLocalForwardPort();
     const remotePort = remotePortFromStartup(remoteStartup);
-    forwardProcess = spawn(sshBinary, [
-      ...sshSharedArgs(controlSocketPath, connectTimeoutSeconds),
+    emitSSHRuntimeProgress(
+      args.onProgress,
+      'ssh_opening_tunnel',
+      'Opening local tunnel',
+      `Forwarding 127.0.0.1:${localPort} to the remote Redeven port ${remotePort}.`,
+    );
+    forwardProcess = spawnSSHProcess(sshBinary, [
+      ...sshSharedArgs(controlSocketPath, connectTimeoutSeconds, auth.mode),
       '-o', 'ExitOnForwardFailure=yes',
       '-N',
       '-L', `127.0.0.1:${localPort}:127.0.0.1:${remotePort}`,
       ...sshTargetArgs(target),
-    ], {
-      stdio: ['ignore', 'ignore', 'pipe'],
-    });
+    ], auth);
     let forwardSpawnError: Error | null = null;
     forwardProcess.once('error', (error) => {
       forwardSpawnError = error instanceof Error ? error : new Error(String(error));
@@ -1219,6 +1576,12 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
     }
 
     const forwardedURL = localForwardURL(localPort);
+    emitSSHRuntimeProgress(
+      args.onProgress,
+      'ssh_verifying_tunnel',
+      'Verifying forwarded Local UI',
+      `Checking ${forwardedURL} before opening the environment window.`,
+    );
     const forwardedStartup = await waitForForwardedLocalUI(
       forwardedURL,
       args.probeTimeoutMs ?? startupTimeoutMs,

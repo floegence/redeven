@@ -34,6 +34,7 @@ describe('bootstrapDesktopLauncherBridge', () => {
     const [, bridge] = exposeInMainWorld.mock.calls[0] ?? [];
     expect(typeof bridge.getSnapshot).toBe('function');
     expect(typeof bridge.performAction).toBe('function');
+    expect(typeof bridge.subscribeActionProgress).toBe('function');
     expect(typeof bridge.subscribeSnapshot).toBe('function');
 
     await bridge.getSnapshot();
@@ -43,6 +44,7 @@ describe('bootstrapDesktopLauncherBridge', () => {
       environment_id: 'env-1',
       label: 'Work laptop',
     });
+    const unsubscribeProgress = bridge.subscribeActionProgress(() => undefined);
     const unsubscribe = bridge.subscribeSnapshot(() => undefined);
 
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(1, 'redeven-desktop:launcher-get-snapshot');
@@ -54,12 +56,21 @@ describe('bootstrapDesktopLauncherBridge', () => {
     });
     expect(ipcRendererInvoke).toHaveBeenCalledTimes(2);
     expect(ipcRendererOn).toHaveBeenCalledWith(
+      'redeven-desktop:launcher-action-progress',
+      expect.any(Function),
+    );
+    expect(ipcRendererOn).toHaveBeenCalledWith(
       'redeven-desktop:launcher-snapshot-updated',
       expect.any(Function),
     );
 
+    unsubscribeProgress();
     unsubscribe();
 
+    expect(ipcRendererRemoveListener).toHaveBeenCalledWith(
+      'redeven-desktop:launcher-action-progress',
+      expect.any(Function),
+    );
     expect(ipcRendererRemoveListener).toHaveBeenCalledWith(
       'redeven-desktop:launcher-snapshot-updated',
       expect.any(Function),

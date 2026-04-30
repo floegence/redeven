@@ -85,6 +85,39 @@ describe("DesktopDiagnosticsRecorder", () => {
     }
   });
 
+  it("can store desktop diagnostics under a local override instead of the runtime state dir", async () => {
+    const root = await fs.mkdtemp(
+      path.join(os.tmpdir(), "redeven-desktop-diagnostics-override-"),
+    );
+    const runtimeStateDir = path.join(root, "remote-runtime-state");
+    const desktopStateDir = path.join(root, "desktop-session-state");
+    try {
+      const recorder = new DesktopDiagnosticsRecorder();
+      await recorder.configureRuntime(
+        {
+          local_ui_url: "http://127.0.0.1:23998/",
+          local_ui_urls: ["http://127.0.0.1:23998/"],
+          state_dir: runtimeStateDir,
+          diagnostics_enabled: true,
+        },
+        "http://127.0.0.1:23998/",
+        { stateDirOverride: desktopStateDir },
+      );
+
+      await recorder.recordLifecycle("opened", "desktop opened a session");
+
+      await expect(
+        fs.readFile(
+          path.join(desktopStateDir, "diagnostics", "desktop-events.jsonl"),
+          "utf8",
+        ),
+      ).resolves.toContain('"state_dir_source":"desktop_override"');
+      await expect(fs.stat(runtimeStateDir)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("skips diagnostics API requests to avoid self-observation noise", async () => {
     const stateDir = await fs.mkdtemp(
       path.join(os.tmpdir(), "redeven-desktop-diagnostics-self-requests-"),

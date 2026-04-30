@@ -157,6 +157,7 @@ describe('buildEnvironmentCardModel', () => {
             label: 'Prod SSH',
             ssh_destination: 'ops@example.internal',
             ssh_port: 2222,
+            auth_mode: 'key_agent',
             remote_install_dir: '/opt/redeven-desktop/runtime',
             bootstrap_strategy: 'desktop_upload',
             release_base_url: '',
@@ -182,11 +183,12 @@ describe('buildEnvironmentCardModel', () => {
           },
         },
         {
-          session_key: 'ssh:ops@example.internal:2222:/opt/redeven-desktop/runtime:envinst_demo001',
+          session_key: 'ssh:ops@example.internal:2222:key_agent:/opt/redeven-desktop/runtime:envinst_demo001',
           target: buildSSHDesktopTarget(
             {
               ssh_destination: 'ops@example.internal',
               ssh_port: 2222,
+              auth_mode: 'key_agent',
               remote_install_dir: '/opt/redeven-desktop/runtime',
               bootstrap_strategy: 'desktop_upload',
               release_base_url: '',
@@ -318,6 +320,7 @@ describe('buildEnvironmentCardModel', () => {
           label: 'Prod SSH',
           ssh_destination: 'ops@example.internal',
           ssh_port: 2222,
+          auth_mode: 'key_agent',
           remote_install_dir: '/opt/redeven-desktop/runtime',
           bootstrap_strategy: 'desktop_upload',
           release_base_url: '',

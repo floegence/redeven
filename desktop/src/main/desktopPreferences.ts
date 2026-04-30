@@ -13,6 +13,7 @@ import type { DesktopSavedEnvironmentSource } from '../shared/desktopConnectionT
 import { DEFAULT_DESKTOP_AUTO_LOOPBACK_BIND } from '../shared/desktopAccessModel';
 import {
   defaultSavedSSHEnvironmentLabel,
+  normalizeDesktopSSHAuthMode,
   desktopSSHEnvironmentID,
   normalizeDesktopSSHBootstrapStrategy,
   normalizeDesktopSSHEnvironmentDetails,
@@ -182,6 +183,7 @@ type DesktopSavedSSHEnvironmentFile = Readonly<{
   label?: unknown;
   ssh_destination?: unknown;
   ssh_port?: unknown;
+  auth_mode?: unknown;
   remote_install_dir?: unknown;
   bootstrap_strategy?: unknown;
   release_base_url?: unknown;
@@ -257,6 +259,7 @@ type DesktopConnectionCatalogFile = Readonly<{
   local_ui_url?: unknown;
   ssh_destination?: unknown;
   ssh_port?: unknown;
+  auth_mode?: unknown;
   remote_install_dir?: unknown;
   bootstrap_strategy?: unknown;
   release_base_url?: unknown;
@@ -917,6 +920,7 @@ function normalizeSavedSSHEnvironmentCandidate(
     details = normalizeDesktopSSHEnvironmentDetails({
       ssh_destination: normalizeDesktopSSHDestination(candidate.ssh_destination),
       ssh_port: normalizeDesktopSSHPort(candidate.ssh_port),
+      auth_mode: normalizeDesktopSSHAuthMode(candidate.auth_mode),
       remote_install_dir: normalizeDesktopSSHRemoteInstallDir(candidate.remote_install_dir),
       bootstrap_strategy: normalizeDesktopSSHBootstrapStrategy(candidate.bootstrap_strategy),
       release_base_url: normalizeDesktopSSHReleaseBaseURL(candidate.release_base_url),
@@ -937,6 +941,7 @@ function normalizeSavedSSHEnvironmentCandidate(
       label,
       ssh_destination: details.ssh_destination,
       ssh_port: details.ssh_port,
+      auth_mode: details.auth_mode,
       remote_install_dir: details.remote_install_dir,
       bootstrap_strategy: details.bootstrap_strategy,
       release_base_url: details.release_base_url,
@@ -2168,6 +2173,7 @@ export function upsertSavedSSHEnvironment(
     || (
       environment.ssh_destination === details.ssh_destination
       && environment.ssh_port === details.ssh_port
+      && environment.auth_mode === details.auth_mode
       && environment.remote_install_dir === details.remote_install_dir
       && environment.environment_instance_id === details.environment_instance_id
     )
@@ -2182,6 +2188,7 @@ export function upsertSavedSSHEnvironment(
     label,
     ssh_destination: details.ssh_destination,
     ssh_port: details.ssh_port,
+    auth_mode: details.auth_mode,
     remote_install_dir: details.remote_install_dir,
     bootstrap_strategy: details.bootstrap_strategy,
     release_base_url: details.release_base_url,
@@ -2198,6 +2205,7 @@ export function upsertSavedSSHEnvironment(
       && (
         environment.ssh_destination !== details.ssh_destination
         || environment.ssh_port !== details.ssh_port
+        || environment.auth_mode !== details.auth_mode
         || environment.remote_install_dir !== details.remote_install_dir
         || environment.environment_instance_id !== details.environment_instance_id
       )
@@ -2295,6 +2303,7 @@ export function setSavedSSHEnvironmentPinned(
     label: input.label,
     ssh_destination: input.ssh_destination,
     ssh_port: input.ssh_port,
+    auth_mode: input.auth_mode,
     remote_install_dir: input.remote_install_dir,
     bootstrap_strategy: input.bootstrap_strategy,
     release_base_url: input.release_base_url,
@@ -2462,6 +2471,7 @@ export function rememberRecentSSHEnvironmentTarget(
     label: compact(input.label),
     ssh_destination: input.ssh_destination,
     ssh_port: input.ssh_port,
+    auth_mode: input.auth_mode,
     remote_install_dir: input.remote_install_dir,
     bootstrap_strategy: input.bootstrap_strategy,
     release_base_url: input.release_base_url,
@@ -2969,6 +2979,7 @@ function serializeSavedSSHEnvironmentCatalog(environment: DesktopSavedSSHEnviron
     label: environment.label,
     ssh_destination: environment.ssh_destination,
     ssh_port: environment.ssh_port,
+    auth_mode: environment.auth_mode,
     remote_install_dir: environment.remote_install_dir,
     bootstrap_strategy: environment.bootstrap_strategy,
     release_base_url: environment.release_base_url,

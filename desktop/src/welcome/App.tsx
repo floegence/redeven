@@ -18,6 +18,7 @@ import {
   Settings,
   Shield,
   Sun,
+  Terminal,
   Trash,
 } from '@floegence/floe-webapp-core/icons';
 import { BottomBarItem, StatusIndicator, TopBarIconButton } from '@floegence/floe-webapp-core/layout';
@@ -43,6 +44,7 @@ import type {
 } from '../shared/desktopSettingsSurface';
 import type {
   DesktopEnvironmentEntry,
+  DesktopLauncherActionProgress,
   DesktopLauncherActionResult,
   DesktopLauncherActionRequest,
   DesktopLauncherSurface,
@@ -67,10 +69,12 @@ import {
 } from '../shared/settingsIPC';
 import {
   createDesktopSSHEnvironmentInstanceID,
+  DEFAULT_DESKTOP_SSH_AUTH_MODE,
   DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
   DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
   DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR_LABEL,
   DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL_LABEL,
+  type DesktopSSHAuthMode,
   type DesktopSSHBootstrapStrategy,
   type DesktopSSHEnvironmentDetails,
 } from '../shared/desktopSSH';
@@ -171,10 +175,13 @@ import {
 } from './environmentGuidanceSession';
 import {
   busyStateForLauncherRequest,
+  busyStateWithActionProgress,
+  activeProgressForEnvironment,
   busyStateMatchesAction,
   busyStateMatchesAnyAction,
   busyStateMatchesControlPlane,
   busyStateMatchesEnvironment,
+  environmentMatchesActionProgress,
   IDLE_LAUNCHER_BUSY_STATE,
   type DesktopLauncherBusyState,
 } from './launcherBusyState';
@@ -182,6 +189,7 @@ import {
 type DesktopLauncherBridge = Readonly<{
   getSnapshot: () => Promise<DesktopWelcomeSnapshot>;
   performAction: (request: DesktopLauncherActionRequest) => Promise<DesktopLauncherActionResult>;
+  subscribeActionProgress?: (listener: (progress: DesktopLauncherActionProgress) => void) => (() => void);
   subscribeSnapshot: (listener: (snapshot: DesktopWelcomeSnapshot) => void) => (() => void);
 }>;
 
@@ -238,6 +246,7 @@ type SSHConnectionDialogState = Readonly<{
   label: string;
   ssh_destination: string;
   ssh_port: string;
+  auth_mode: DesktopSSHAuthMode;
   remote_install_dir: string;
   bootstrap_strategy: DesktopSSHBootstrapStrategy;
   release_base_url: string;
@@ -579,6 +588,7 @@ function createSSHConnectionDialogState(
     label: trimString(overrides.label),
     ssh_destination: trimString(overrides.ssh_destination),
     ssh_port: trimString(overrides.ssh_port),
+    auth_mode: (trimString(overrides.auth_mode) as DesktopSSHAuthMode) || DEFAULT_DESKTOP_SSH_AUTH_MODE,
     remote_install_dir: trimString(overrides.remote_install_dir),
     bootstrap_strategy: (trimString(overrides.bootstrap_strategy) as DesktopSSHBootstrapStrategy) || DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
     release_base_url: trimString(overrides.release_base_url),
@@ -866,6 +876,18 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return target.kind === 'managed_environment'
       || target.kind === 'provider_environment';
   });
+  const activeActionProgress = createMemo(() => snapshot().action_progress);
+  const sshRuntimeProgressItems = createMemo(() => (
+    activeActionProgress()
+      .filter((progress) => (
+        progress.action === 'start_environment_runtime'
+        && (
+          trimString(progress.phase).startsWith('ssh_')
+          || trimString(progress.operation_key).startsWith('ssh:')
+        )
+      ))
+      .sort((left, right) => (left.started_at_unix_ms ?? 0) - (right.started_at_unix_ms ?? 0))
+  ));
 
   createEffect(() => {
     const activeSourceFilter = librarySourceFilter();
@@ -899,6 +921,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setSnapshot((current) => nextDesktopWelcomeSnapshot(current, nextSnapshot));
   });
   onCleanup(unsubscribeSnapshot);
+  const unsubscribeActionProgress = props.runtime.launcher.subscribeActionProgress?.((progress) => {
+    setBusyState((current) => busyStateWithActionProgress(current, progress));
+  });
+  if (unsubscribeActionProgress) {
+    onCleanup(unsubscribeActionProgress);
+  }
 
   createEffect(() => {
     setSettingsDraftSession((current) => reconcileDesktopSettingsDraftSession(
@@ -1103,6 +1131,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       environment_id: environmentID,
       provider_origin: '',
       provider_id: '',
+      progress: null,
     });
     void props.runtime.launcher.performAction({ kind: 'open_environment_settings', environment_id: environmentID })
       .catch((error) => {
@@ -1198,6 +1227,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         label: environment.label,
         ssh_destination: environment.ssh_details?.ssh_destination ?? '',
         ssh_port: environment.ssh_details?.ssh_port == null ? '' : String(environment.ssh_details.ssh_port),
+        auth_mode: environment.ssh_details?.auth_mode ?? DEFAULT_DESKTOP_SSH_AUTH_MODE,
         remote_install_dir: environment.ssh_details?.remote_install_dir === DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR
           ? ''
           : (environment.ssh_details?.remote_install_dir ?? ''),
@@ -1297,7 +1327,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function updateConnectionDialogField(
-    name: 'label' | 'environment_name' | 'local_ui_bind' | 'local_ui_password' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'remote_install_dir' | 'release_base_url' | 'environment_instance_id',
+    name: 'label' | 'environment_name' | 'local_ui_bind' | 'local_ui_password' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'remote_install_dir' | 'release_base_url' | 'environment_instance_id',
     value: string,
   ): void {
     setConnectionDialogState((current) => {
@@ -1525,6 +1555,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       label: environment.label,
       ssh_destination: environment.ssh_details.ssh_destination,
       ssh_port: environment.ssh_details.ssh_port,
+      auth_mode: environment.ssh_details.auth_mode,
       remote_install_dir: environment.ssh_details.remote_install_dir,
       bootstrap_strategy: environment.ssh_details.bootstrap_strategy,
       release_base_url: environment.ssh_details.release_base_url,
@@ -1639,6 +1670,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       label: environment?.label,
       ssh_destination: details.ssh_destination,
       ssh_port: details.ssh_port,
+      auth_mode: details.auth_mode,
       remote_install_dir: details.remote_install_dir,
       bootstrap_strategy: details.bootstrap_strategy,
       release_base_url: details.release_base_url,
@@ -1977,6 +2009,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       environment_id: '',
       provider_origin: '',
       provider_id: '',
+      progress: null,
     });
     try {
       const result = await props.runtime.settings.save(draft());
@@ -2020,6 +2053,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       environment_id: trimString(request.environment_id),
       provider_origin: '',
       provider_id: '',
+      progress: null,
     });
     try {
       await props.runtime.launcher.performAction({
@@ -2054,6 +2088,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       environment_id: trimString(request.environment_id),
       provider_origin: '',
       provider_id: '',
+      progress: null,
     });
     try {
       await props.runtime.launcher.performAction({
@@ -2062,6 +2097,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         label: trimString(request.label),
         ssh_destination: request.details.ssh_destination,
         ssh_port: request.details.ssh_port,
+        auth_mode: request.details.auth_mode,
         remote_install_dir: request.details.remote_install_dir,
         bootstrap_strategy: request.details.bootstrap_strategy,
         release_base_url: request.details.release_base_url,
@@ -2160,6 +2196,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         details: {
           ssh_destination: state.ssh_destination,
           ssh_port: trimString(state.ssh_port) === '' ? null : Number.parseInt(state.ssh_port, 10),
+          auth_mode: state.auth_mode,
           remote_install_dir: trimString(state.remote_install_dir) || DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
           bootstrap_strategy: state.bootstrap_strategy,
           release_base_url: trimString(state.release_base_url),
@@ -2224,6 +2261,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       await openSSHEnvironment({
         ssh_destination: state.ssh_destination,
         ssh_port: trimString(state.ssh_port) === '' ? null : Number.parseInt(state.ssh_port, 10),
+        auth_mode: state.auth_mode,
         remote_install_dir: trimString(state.remote_install_dir) || DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
         bootstrap_strategy: state.bootstrap_strategy,
         release_base_url: trimString(state.release_base_url),
@@ -2274,6 +2312,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         pinned: nextPinned,
         ssh_destination: details.ssh_destination,
         ssh_port: details.ssh_port,
+        auth_mode: details.auth_mode,
         remote_install_dir: details.remote_install_dir,
         bootstrap_strategy: details.bootstrap_strategy,
         release_base_url: details.release_base_url,
@@ -2312,6 +2351,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       environment_id: target.id,
       provider_origin: '',
       provider_id: '',
+      progress: null,
     });
     try {
       await props.runtime.launcher.performAction({
@@ -2411,6 +2451,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         <ConnectEnvironmentSurface
           snapshot={snapshot()}
           busyState={busyState()}
+          actionProgress={activeActionProgress()}
           activeTab={activeCenterTab()}
           setActiveTab={setActiveCenterTab}
           librarySourceFilter={librarySourceFilter()}
@@ -2445,6 +2486,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       <DesktopActionToastViewport
         toasts={actionToasts()}
         dismissToast={dismissActionToast}
+      />
+      <SSHRuntimeActivityOverlay
+        snapshot={snapshot()}
+        progressItems={sshRuntimeProgressItems()}
       />
 
       <LocalEnvironmentSettingsDialog
@@ -2612,6 +2657,7 @@ function DesktopActionToastViewport(props: Readonly<{
 function ConnectEnvironmentSurface(props: Readonly<{
   snapshot: DesktopWelcomeSnapshot;
   busyState: DesktopLauncherBusyState;
+  actionProgress: readonly DesktopLauncherActionProgress[];
   activeTab: EnvironmentCenterTab;
   setActiveTab: (value: EnvironmentCenterTab) => void;
   librarySourceFilter: string;
@@ -2920,6 +2966,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 visibleCardCount={visibleEnvironmentCardCount()}
                 layoutReferenceCardCount={layoutReferenceEnvironmentCardCount()}
                 busyState={props.busyState}
+                actionProgress={props.actionProgress}
                 openCreateConnectionDialog={props.openCreateConnectionDialog}
                 openEnvironment={props.openEnvironment}
                 runManagedEnvironmentAction={props.runManagedEnvironmentAction}
@@ -2945,6 +2992,7 @@ function EnvironmentCardsPanel(props: Readonly<{
   visibleCardCount: number;
   layoutReferenceCardCount: number;
   busyState: DesktopLauncherBusyState;
+  actionProgress: readonly DesktopLauncherActionProgress[];
   openCreateConnectionDialog: (message?: string, preferredKind?: 'managed_environment' | 'external_local_ui' | 'ssh_environment') => void;
   openEnvironment: (
     environment: DesktopEnvironmentEntry,
@@ -3123,6 +3171,7 @@ function EnvironmentCardsPanel(props: Readonly<{
                   <EnvironmentConnectionCard
                     environment={projectedEnvironment(environmentID)}
                     busyState={props.busyState}
+                    actionProgress={props.actionProgress}
                     runtimeMenuOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'runtime_menu', environmentID)}
                     onRuntimeMenuOpenChange={(open) => setRuntimeMenuOpen(environmentID, open)}
                     primaryActionGuidanceOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'primary_action_guidance', environmentID)}
@@ -3152,6 +3201,7 @@ function EnvironmentCardsPanel(props: Readonly<{
                   <EnvironmentConnectionCard
                     environment={projectedEnvironment(environmentID)}
                     busyState={props.busyState}
+                    actionProgress={props.actionProgress}
                     runtimeMenuOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'runtime_menu', environmentID)}
                     onRuntimeMenuOpenChange={(open) => setRuntimeMenuOpen(environmentID, open)}
                     primaryActionGuidanceOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'primary_action_guidance', environmentID)}
@@ -3391,6 +3441,64 @@ function isEnvironmentActionBusy(
     default:
       return false;
   }
+}
+
+function sshRuntimeActivityLabel(
+  progress: DesktopLauncherActionProgress,
+  environments: readonly DesktopEnvironmentEntry[],
+): string {
+  const explicitLabel = trimString(progress.environment_label);
+  if (explicitLabel !== '') {
+    return explicitLabel;
+  }
+  const progressEnvironmentID = trimString(progress.environment_id);
+  const environment = environments.find((entry) => (
+    (progressEnvironmentID !== '' && entry.id === progressEnvironmentID)
+    || environmentMatchesActionProgress(entry.id, progress)
+  ));
+  return environment?.label ?? progressEnvironmentID ?? 'SSH Environment';
+}
+
+function SSHRuntimeActivityOverlay(props: Readonly<{
+  snapshot: DesktopWelcomeSnapshot;
+  progressItems: readonly DesktopLauncherActionProgress[];
+}>) {
+  return (
+    <Portal>
+      <Show when={props.progressItems.length > 0}>
+        <section class="redeven-ssh-runtime-activity" aria-live="polite" aria-label="SSH runtime activity">
+          <div class="redeven-ssh-runtime-activity__header">
+            <div class="redeven-ssh-runtime-activity__title">
+              <Terminal class="h-3.5 w-3.5" />
+              <span>Starting SSH Runtime</span>
+            </div>
+            <span class="redeven-ssh-runtime-activity__count">
+              {props.progressItems.length === 1 ? '1 active task' : `${props.progressItems.length} active tasks`}
+            </span>
+          </div>
+          <div class="redeven-ssh-runtime-activity__list">
+            <For each={props.progressItems}>
+              {(progress) => (
+                <div class="redeven-ssh-runtime-activity__item">
+                  <div class="redeven-ssh-runtime-activity__item-header">
+                    <span class="redeven-ssh-runtime-activity__label">
+                      {sshRuntimeActivityLabel(progress, props.snapshot.environments)}
+                    </span>
+                    <span class="redeven-ssh-runtime-activity__phase">
+                      {progress.title}
+                    </span>
+                  </div>
+                  <div class="redeven-ssh-runtime-activity__detail">
+                    {progress.detail}
+                  </div>
+                </div>
+              )}
+            </For>
+          </div>
+        </section>
+      </Show>
+    </Portal>
+  );
 }
 
 function blockedPrimaryActionTriggerLabel(label: string): string {
@@ -3731,6 +3839,7 @@ function QuickCreateConnectionCard(props: Readonly<{
 function EnvironmentConnectionCard(props: Readonly<{
   environment: DesktopEnvironmentEntry;
   busyState: DesktopLauncherBusyState;
+  actionProgress: readonly DesktopLauncherActionProgress[];
   runtimeMenuOpen: boolean;
   onRuntimeMenuOpenChange: (open: boolean) => void;
   primaryActionGuidanceOpen: boolean;
@@ -3783,6 +3892,7 @@ function EnvironmentConnectionCard(props: Readonly<{
       'refresh_environment_runtime',
     ])
     || busyStateMatchesAction(props.busyState, 'refresh_all_environment_runtimes')
+    || activeProgressForEnvironment(props.environment.id, props.busyState, props.actionProgress)?.action === 'start_environment_runtime'
   ));
   const isPinBusy = createMemo(() => (
     busyStateMatchesEnvironment(props.busyState, props.environment.id, [
@@ -4752,7 +4862,7 @@ function ConnectionDialog(props: Readonly<{
   busyState: DesktopLauncherBusyState;
   onOpenChange: (open: boolean) => void;
   updateField: (
-    name: 'label' | 'environment_name' | 'local_ui_bind' | 'local_ui_password' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'remote_install_dir' | 'release_base_url' | 'environment_instance_id',
+    name: 'label' | 'environment_name' | 'local_ui_bind' | 'local_ui_password' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'remote_install_dir' | 'release_base_url' | 'environment_instance_id',
     value: string,
   ) => void;
   switchKind: (kind: 'managed_environment' | 'external_local_ui' | 'ssh_environment') => void;
@@ -4791,6 +4901,7 @@ function ConnectionDialog(props: Readonly<{
         return 'Auto';
     }
   });
+  const showCreateConnectAction = createMemo(() => isCreate() && connectionKind() !== 'ssh_environment');
   const connectionKindDescription = createMemo<JSX.Element>(() => {
     switch (connectionKind()) {
       case 'external_local_ui':
@@ -4838,7 +4949,7 @@ function ConnectionDialog(props: Readonly<{
             <Save class="mr-1 h-3.5 w-3.5" />
             {compactSaveActionLabel()}
           </Button>
-          <Show when={isCreate()}>
+          <Show when={showCreateConnectAction()}>
             <Button
               size="sm"
               variant="default"
@@ -5082,6 +5193,21 @@ function ConnectionDialog(props: Readonly<{
                   ]}
                   size="sm"
                 />
+              </div>
+              <div class="space-y-1.5">
+                <label class="block text-xs font-medium text-foreground">Authentication</label>
+                <SegmentedControl
+                  value={props.state?.connection_kind === 'ssh_environment' ? props.state.auth_mode : DEFAULT_DESKTOP_SSH_AUTH_MODE}
+                  onChange={(value) => props.updateField('auth_mode', value)}
+                  options={[
+                    { value: 'key_agent', label: 'Key / agent' },
+                    { value: 'password', label: 'Password prompt' },
+                  ]}
+                  size="sm"
+                />
+                <div class="text-[11px] leading-5 text-muted-foreground">
+                  Key / agent uses your existing SSH configuration. Password prompt asks only when starting the runtime and does not store the SSH password.
+                </div>
               </div>
               <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_9rem]">
                 <div class="space-y-1.5">

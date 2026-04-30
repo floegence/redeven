@@ -1,4 +1,4 @@
-import type { DesktopLauncherActionRequest } from '../shared/desktopLauncherIPC';
+import type { DesktopLauncherActionProgress, DesktopLauncherActionRequest } from '../shared/desktopLauncherIPC';
 
 export type BusyAction =
   | ''
@@ -31,6 +31,7 @@ export type DesktopLauncherBusyState = Readonly<{
   environment_id: string;
   provider_origin: string;
   provider_id: string;
+  progress: DesktopLauncherActionProgress | null;
 }>;
 
 export const IDLE_LAUNCHER_BUSY_STATE: DesktopLauncherBusyState = {
@@ -38,6 +39,7 @@ export const IDLE_LAUNCHER_BUSY_STATE: DesktopLauncherBusyState = {
   environment_id: '',
   provider_origin: '',
   provider_id: '',
+  progress: null,
 };
 
 export function busyStateForLauncherRequest(
@@ -53,6 +55,7 @@ export function busyStateForLauncherRequest(
         environment_id: request.environment_id ?? '',
         provider_origin: '',
         provider_id: '',
+        progress: null,
       };
     case 'delete_managed_environment':
     case 'delete_saved_environment':
@@ -62,6 +65,7 @@ export function busyStateForLauncherRequest(
         environment_id: request.environment_id,
         provider_origin: '',
         provider_id: '',
+        progress: null,
       };
     case 'refresh_control_plane':
     case 'delete_control_plane':
@@ -70,6 +74,7 @@ export function busyStateForLauncherRequest(
         environment_id: '',
         provider_origin: request.provider_origin,
         provider_id: request.provider_id,
+        progress: null,
       };
     case 'start_control_plane_connect':
       return {
@@ -77,6 +82,7 @@ export function busyStateForLauncherRequest(
         environment_id: '',
         provider_origin: request.provider_origin,
         provider_id: '',
+        progress: null,
       };
     default:
       return {
@@ -84,8 +90,70 @@ export function busyStateForLauncherRequest(
         environment_id: 'environment_id' in request ? request.environment_id ?? '' : '',
         provider_origin: '',
         provider_id: '',
+        progress: null,
       };
   }
+}
+
+export function busyStateWithActionProgress(
+  state: DesktopLauncherBusyState,
+  progress: DesktopLauncherActionProgress,
+): DesktopLauncherBusyState {
+  if (state.action !== progress.action) {
+    return state;
+  }
+  const progressEnvironmentID = String(progress.environment_id ?? '').trim();
+  if (state.environment_id !== '' && progressEnvironmentID !== '' && state.environment_id !== progressEnvironmentID) {
+    return state;
+  }
+  return {
+    ...state,
+    progress,
+  };
+}
+
+export function environmentMatchesActionProgress(
+  environmentID: string,
+  progress: DesktopLauncherActionProgress | null | undefined,
+): boolean {
+  if (!progress) {
+    return false;
+  }
+  const cleanEnvironmentID = String(environmentID ?? '').trim();
+  const progressEnvironmentID = String(progress.environment_id ?? '').trim();
+  const operationKey = String(progress.operation_key ?? '').trim();
+  return cleanEnvironmentID !== '' && (
+    progressEnvironmentID === cleanEnvironmentID
+    || operationKey === cleanEnvironmentID
+  );
+}
+
+export function busyStateMatchesActionProgress(
+  state: DesktopLauncherBusyState,
+  progress: DesktopLauncherActionProgress | null | undefined,
+): boolean {
+  if (!progress || state.action !== progress.action) {
+    return false;
+  }
+  if (state.environment_id === '') {
+    return false;
+  }
+  return environmentMatchesActionProgress(state.environment_id, progress);
+}
+
+export function activeProgressForEnvironment(
+  environmentID: string,
+  busyState: DesktopLauncherBusyState,
+  progressItems: readonly DesktopLauncherActionProgress[],
+): DesktopLauncherActionProgress | null {
+  if (
+    busyState.progress
+    && busyStateMatchesActionProgress(busyState, busyState.progress)
+    && environmentMatchesActionProgress(environmentID, busyState.progress)
+  ) {
+    return busyState.progress;
+  }
+  return progressItems.find((progress) => environmentMatchesActionProgress(environmentID, progress)) ?? null;
 }
 
 export function busyStateMatchesAction(

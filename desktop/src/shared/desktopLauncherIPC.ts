@@ -18,6 +18,7 @@ import type {
 export const DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL = 'redeven-desktop:launcher-get-snapshot';
 export const DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL = 'redeven-desktop:launcher-perform-action';
 export const DESKTOP_LAUNCHER_SNAPSHOT_UPDATED_CHANNEL = 'redeven-desktop:launcher-snapshot-updated';
+export const DESKTOP_LAUNCHER_ACTION_PROGRESS_CHANNEL = 'redeven-desktop:launcher-action-progress';
 
 export type DesktopTargetKind = 'managed_environment' | 'external_local_ui' | 'ssh_environment';
 export type DesktopWelcomeEntryReason = 'app_launch' | 'switch_environment' | 'connect_failed' | 'blocked';
@@ -55,6 +56,7 @@ export type DesktopLauncherActionFailureCode =
   | 'environment_route_unavailable'
   | 'environment_offline'
   | 'environment_status_stale'
+  | 'runtime_not_started'
   | 'control_plane_missing'
   | 'control_plane_environment_missing'
   | 'provider_environment_removed'
@@ -195,6 +197,7 @@ export type DesktopWelcomeSnapshot = Readonly<{
   open_windows: readonly DesktopOpenEnvironmentWindow[];
   environments: readonly DesktopEnvironmentEntry[];
   control_planes: readonly DesktopControlPlaneSummary[];
+  action_progress: readonly DesktopLauncherActionProgress[];
   suggested_remote_url: string;
   issue: DesktopWelcomeIssue | null;
   settings_surface: DesktopSettingsSurfaceSnapshot;
@@ -347,6 +350,17 @@ export type DesktopLauncherActionFailure = Readonly<{
 
 export type DesktopLauncherActionResult = DesktopLauncherActionSuccess | DesktopLauncherActionFailure;
 
+export type DesktopLauncherActionProgress = Readonly<{
+  action: DesktopLauncherActionKind;
+  environment_id?: string;
+  environment_label?: string;
+  operation_key?: string;
+  started_at_unix_ms?: number;
+  phase: string;
+  title: string;
+  detail: string;
+}>;
+
 export function isDesktopLauncherActionFailure(
   result: DesktopLauncherActionResult | null | undefined,
 ): result is DesktopLauncherActionFailure {
@@ -374,6 +388,7 @@ function normalizeDesktopLauncherRuntimeTarget(
   const label = compact(candidate.label);
   const sshDestination = compact(candidate.ssh_destination);
   const sshPortText = compact(candidate.ssh_port);
+  const sshAuthMode = compact(candidate.auth_mode);
   const remoteInstallDir = compact(candidate.remote_install_dir);
   const bootstrapStrategy = compact(candidate.bootstrap_strategy);
   const releaseBaseURL = compact(candidate.release_base_url);
@@ -403,6 +418,7 @@ function normalizeDesktopLauncherRuntimeTarget(
             : Number.parseInt(sshPortText, 10),
         }
       : {}),
+    ...(sshAuthMode !== '' ? { auth_mode: sshAuthMode as DesktopSSHEnvironmentDetails['auth_mode'] } : {}),
     ...(remoteInstallDir !== '' ? { remote_install_dir: remoteInstallDir } : {}),
     ...(bootstrapStrategy !== '' ? { bootstrap_strategy: bootstrapStrategy as DesktopSSHEnvironmentDetails['bootstrap_strategy'] } : {}),
     ...(releaseBaseURL !== '' ? { release_base_url: releaseBaseURL } : {}),
@@ -485,6 +501,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         ssh_port: (candidate as { ssh_port?: unknown }).ssh_port == null || sshPortText === ''
           ? null
           : Number.parseInt(sshPortText, 10),
+        auth_mode: compact((candidate as { auth_mode?: unknown }).auth_mode) as DesktopSSHEnvironmentDetails['auth_mode'],
         remote_install_dir: compact((candidate as { remote_install_dir?: unknown }).remote_install_dir),
         bootstrap_strategy: compact((candidate as { bootstrap_strategy?: unknown }).bootstrap_strategy) as DesktopSSHEnvironmentDetails['bootstrap_strategy'],
         release_base_url: compact((candidate as { release_base_url?: unknown }).release_base_url),
@@ -558,6 +575,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           ssh_port: (candidate as { ssh_port?: unknown }).ssh_port == null || sshPortText === ''
             ? null
             : Number.parseInt(sshPortText, 10),
+          auth_mode: compact((candidate as { auth_mode?: unknown }).auth_mode) as DesktopSSHEnvironmentDetails['auth_mode'],
           remote_install_dir: compact((candidate as { remote_install_dir?: unknown }).remote_install_dir),
           bootstrap_strategy: compact((candidate as { bootstrap_strategy?: unknown }).bootstrap_strategy) as DesktopSSHEnvironmentDetails['bootstrap_strategy'],
           release_base_url: compact((candidate as { release_base_url?: unknown }).release_base_url),
@@ -634,6 +652,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         ssh_port: (candidate as { ssh_port?: unknown }).ssh_port == null || sshPortText === ''
           ? null
           : Number.parseInt(sshPortText, 10),
+        auth_mode: compact((candidate as { auth_mode?: unknown }).auth_mode) as DesktopSSHEnvironmentDetails['auth_mode'],
         remote_install_dir: compact((candidate as { remote_install_dir?: unknown }).remote_install_dir),
         bootstrap_strategy: compact((candidate as { bootstrap_strategy?: unknown }).bootstrap_strategy) as DesktopSSHEnvironmentDetails['bootstrap_strategy'],
         release_base_url: compact((candidate as { release_base_url?: unknown }).release_base_url),

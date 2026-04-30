@@ -186,9 +186,11 @@ import {
   type DesktopShellOpenExternalURLResponse,
 } from '../shared/desktopShellExternalURLIPC';
 import {
+  DESKTOP_LAUNCHER_ACTION_PROGRESS_CHANNEL,
   DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL,
   DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL,
   DESKTOP_LAUNCHER_SNAPSHOT_UPDATED_CHANNEL,
+  type DesktopLauncherActionProgress,
   normalizeDesktopLauncherActionRequest,
   type DesktopLauncherActionFailure,
   type DesktopLauncherActionFailureCode,
@@ -289,6 +291,18 @@ type SSHEnvironmentRuntimeRecord = Readonly<{
   stop: () => Promise<void>;
 }>;
 
+type PendingLauncherActionProgress = DesktopLauncherActionProgress & Readonly<{
+  operation_key: string;
+  started_at_unix_ms: number;
+}>;
+
+type PendingSSHRuntimeStart = Readonly<{
+  runtime_key: `ssh:${string}`;
+  environment_id: string;
+  label: string;
+  task: Promise<SSHEnvironmentRuntimeRecord>;
+}>;
+
 type PreparedExternalTargetResult = Readonly<
   | {
       ok: true;
@@ -363,6 +377,8 @@ const controlPlaneSyncTaskByKey = new Map<string, Promise<Readonly<{
 }>>>();
 const managedEnvironmentRuntimeByID = new Map<string, ManagedEnvironmentRuntimeRecord>();
 const sshEnvironmentRuntimeByKey = new Map<`ssh:${string}`, SSHEnvironmentRuntimeRecord>();
+const pendingSSHRuntimeStartByKey = new Map<`ssh:${string}`, PendingSSHRuntimeStart>();
+const pendingLauncherActionProgressByKey = new Map<string, PendingLauncherActionProgress>();
 const desktopDevToolsEnabled = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.REDEVEN_DESKTOP_OPEN_DEVTOOLS ?? '').trim().toLowerCase(),
 );
@@ -650,6 +666,15 @@ function firstDisplayLine(value: unknown): string {
     .find(Boolean) ?? '';
 }
 
+function friendlyRuntimeStartErrorMessage(error: unknown): string {
+  const rawMessage = error instanceof Error ? error.message : String(error);
+  const message = firstDisplayLine(rawMessage);
+  if (/ENOENT: no such file or directory, mkdir '\/root'/u.test(message)) {
+    return 'The SSH host resolved its runtime directory to /root, but that directory is not available. Desktop will avoid inherited SSH X11 setup and use a writable default runtime directory on the next start; if this persists, set Remote install dir to a writable path such as /tmp/redeven-desktop-runtime.';
+  }
+  return message;
+}
+
 function launcherActionFailureFromRuntimeStartError(
   error: unknown,
   options: Readonly<{
@@ -659,7 +684,7 @@ function launcherActionFailureFromRuntimeStartError(
     envPublicID?: string;
   }> = {},
 ): DesktopLauncherActionFailure {
-  const message = firstDisplayLine(error instanceof Error ? error.message : error);
+  const message = friendlyRuntimeStartErrorMessage(error);
   return launcherActionFailure(
     'runtime_start_failed',
     'environment',
@@ -1121,6 +1146,8 @@ async function buildCurrentDesktopWelcomeSnapshot(
     openSessions,
     savedExternalRuntimeHealth,
     savedSSHRuntimeHealth,
+    actionProgress: [...pendingLauncherActionProgressByKey.values()]
+      .sort((left, right) => left.started_at_unix_ms - right.started_at_unix_ms),
     surface: state.surface,
     entryReason: overrides.entryReason ?? state.entryReason,
     issue: overrides.issue ?? state.issue,
@@ -1193,6 +1220,31 @@ function broadcastDesktopWelcomeSnapshots(): void {
   for (const kind of UTILITY_WINDOW_KINDS) {
     void emitDesktopWelcomeSnapshot(kind);
   }
+}
+
+function emitLauncherActionProgress(progress: DesktopLauncherActionProgress): void {
+  const operationKey = compact(progress.operation_key)
+    || `${progress.action}:${compact(progress.environment_id) || compact(progress.phase)}`;
+  const persistedProgress = {
+    ...progress,
+    operation_key: operationKey,
+    started_at_unix_ms: pendingLauncherActionProgressByKey.get(operationKey)?.started_at_unix_ms ?? Date.now(),
+  };
+  pendingLauncherActionProgressByKey.set(operationKey, persistedProgress);
+  const launcher = liveUtilityWindow('launcher');
+  if (launcher && !launcher.webContents.isDestroyed()) {
+    launcher.webContents.send(DESKTOP_LAUNCHER_ACTION_PROGRESS_CHANNEL, persistedProgress);
+  }
+  void emitDesktopWelcomeSnapshot('launcher');
+}
+
+function clearLauncherActionProgress(operationKey: string): void {
+  const cleanOperationKey = compact(operationKey);
+  if (cleanOperationKey === '') {
+    return;
+  }
+  pendingLauncherActionProgressByKey.delete(cleanOperationKey);
+  void emitDesktopWelcomeSnapshot('launcher');
 }
 
 function setLauncherViewState(options: OpenDesktopWelcomeOptions = {}): DesktopUtilityWindowState {
@@ -1557,6 +1609,13 @@ function createSessionRootWindow(
   });
 }
 
+function desktopDiagnosticsStateDirForTarget(target: DesktopSessionTarget, startup: StartupReport): string {
+  if (target.kind === 'managed_environment') {
+    return compact(startup.state_dir);
+  }
+  return path.join(app.getPath('userData'), 'session-diagnostics', desktopSessionStateKeyFragment(target.session_key));
+}
+
 async function createSessionRecord(
   target: DesktopSessionTarget,
   startup: StartupReport,
@@ -1568,7 +1627,9 @@ async function createSessionRecord(
   }> = {},
 ): Promise<DesktopSessionRecord> {
   const diagnostics = new DesktopDiagnosticsRecorder();
-  await diagnostics.configureRuntime(startup, startup.local_ui_url);
+  await diagnostics.configureRuntime(startup, startup.local_ui_url, {
+    stateDirOverride: desktopDiagnosticsStateDirForTarget(target, startup),
+  });
   const initialLoad = createInitialLoadDeferred();
   let sessionRecord!: DesktopSessionRecord;
   const rootWindow = createSessionRootWindow(target.session_key, startup.local_ui_url, diagnostics, {
@@ -2091,10 +2152,17 @@ function resolveManagedRestartBindOverride(environment: DesktopManagedEnvironmen
 }
 
 function resolveSSHRuntimeReleaseTag(): string {
-  const appVersion = String(process.env.REDEVEN_DESKTOP_VERSION ?? '').trim() || app.getVersion();
-  const clean = String(appVersion ?? '').trim();
+  const versionCandidates = [
+    process.env.REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG,
+    process.env.REDEVEN_DESKTOP_BUNDLE_VERSION,
+    process.env.REDEVEN_DESKTOP_VERSION,
+    app.getVersion(),
+  ];
+  const clean = versionCandidates
+    .map((value) => String(value ?? '').trim())
+    .find((value) => value !== '') ?? '';
   if (clean === '') {
-    throw new Error('Desktop could not resolve the bundled runtime release tag for SSH bootstrap.');
+    throw new Error('Desktop could not resolve the SSH runtime release tag. Set REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG for dev SSH bootstrap, or use a packaged Desktop build with a release version.');
   }
   return clean.startsWith('v') ? clean : `v${clean}`;
 }
@@ -2111,6 +2179,7 @@ async function rememberRecentSSHTarget(
   await persistDesktopPreferences(rememberRecentSSHEnvironmentTarget(preferences, {
     ssh_destination: input.ssh_destination,
     ssh_port: input.ssh_port,
+    auth_mode: input.auth_mode,
     remote_install_dir: input.remote_install_dir,
     bootstrap_strategy: input.bootstrap_strategy,
     release_base_url: input.release_base_url,
@@ -2128,6 +2197,8 @@ async function startSSHEnvironmentRuntimeRecord(
   }> = {},
 ): Promise<SSHEnvironmentRuntimeRecord> {
   const runtimeKey = sshDesktopSessionKey(sshDetails);
+  const environmentID = compact(options.environmentID) || runtimeKey;
+  const label = compact(options.label) || defaultSavedSSHEnvironmentLabel(sshDetails);
   const existingRecord = sshEnvironmentRuntimeByKey.get(runtimeKey) ?? null;
   if (existingRecord) {
     try {
@@ -2153,31 +2224,70 @@ async function startSSHEnvironmentRuntimeRecord(
     sshEnvironmentRuntimeByKey.delete(runtimeKey);
   }
 
-  const managedSSHRuntime = await startManagedSSHRuntime({
-    target: sshDetails,
-    runtimeReleaseTag: resolveSSHRuntimeReleaseTag(),
-    tempRoot: app.getPath('temp'),
-    assetCacheRoot: path.join(app.getPath('userData'), 'ssh-runtime-cache'),
-    onLog: (stream, chunk) => {
-      const text = String(chunk ?? '').trim();
-      if (!text) {
-        return;
-      }
-      console.log(`[redeven:${stream}] ${text}`);
-    },
-  });
-  const runtimeRecord: SSHEnvironmentRuntimeRecord = {
+  const pendingStart = pendingSSHRuntimeStartByKey.get(runtimeKey) ?? null;
+  if (pendingStart) {
+    return pendingStart.task;
+  }
+
+  const task = (async () => {
+    try {
+      emitLauncherActionProgress({
+        action: 'start_environment_runtime',
+        environment_id: environmentID,
+        environment_label: label,
+        operation_key: runtimeKey,
+        phase: 'ssh_preparing_start',
+        title: 'Preparing SSH runtime',
+        detail: 'Desktop is preparing the SSH bootstrap task and will keep this progress visible until it finishes.',
+      });
+      const managedSSHRuntime = await startManagedSSHRuntime({
+        target: sshDetails,
+        runtimeReleaseTag: resolveSSHRuntimeReleaseTag(),
+        tempRoot: app.getPath('temp'),
+        assetCacheRoot: path.join(app.getPath('userData'), 'ssh-runtime-cache'),
+        onLog: (stream, chunk) => {
+          const text = String(chunk ?? '').trim();
+          if (!text) {
+            return;
+          }
+          console.log(`[redeven:${stream}] ${text}`);
+        },
+        onProgress: (progress) => {
+          emitLauncherActionProgress({
+            action: 'start_environment_runtime',
+            environment_id: environmentID,
+            environment_label: label,
+            operation_key: runtimeKey,
+            phase: progress.phase,
+            title: progress.title,
+            detail: progress.detail,
+          });
+        },
+      });
+      const runtimeRecord: SSHEnvironmentRuntimeRecord = {
+        runtime_key: runtimeKey,
+        environment_id: environmentID,
+        label,
+        details: sshDetails,
+        startup: managedSSHRuntime.startup,
+        local_forward_url: managedSSHRuntime.local_forward_url,
+        runtime_handle: managedSSHRuntime.runtime_handle,
+        stop: managedSSHRuntime.stop,
+      };
+      sshEnvironmentRuntimeByKey.set(runtimeKey, runtimeRecord);
+      return runtimeRecord;
+    } finally {
+      pendingSSHRuntimeStartByKey.delete(runtimeKey);
+      clearLauncherActionProgress(runtimeKey);
+    }
+  })();
+  pendingSSHRuntimeStartByKey.set(runtimeKey, {
     runtime_key: runtimeKey,
-    environment_id: compact(options.environmentID) || runtimeKey,
-    label: compact(options.label) || defaultSavedSSHEnvironmentLabel(sshDetails),
-    details: sshDetails,
-    startup: managedSSHRuntime.startup,
-    local_forward_url: managedSSHRuntime.local_forward_url,
-    runtime_handle: managedSSHRuntime.runtime_handle,
-    stop: managedSSHRuntime.stop,
-  };
-  sshEnvironmentRuntimeByKey.set(runtimeKey, runtimeRecord);
-  return runtimeRecord;
+    environment_id: environmentID,
+    label,
+    task,
+  });
+  return task;
 }
 
 function savedControlPlaneByIdentity(
@@ -2994,7 +3104,7 @@ async function openManagedEnvironmentRecord(
   const runtimeRecord = await attachManagedEnvironmentRuntime(environment);
   if (!runtimeRecord) {
     return launcherActionFailure(
-      'environment_offline',
+      'runtime_not_started',
       'environment',
       'Serve the runtime first.',
       {
@@ -3058,7 +3168,7 @@ async function openProviderLocalEnvironmentRecord(
   const runtimeRecord = await attachManagedEnvironmentRuntime(managedEnvironment);
   if (!runtimeRecord) {
     return launcherActionFailure(
-      'environment_offline',
+      'runtime_not_started',
       'environment',
       'Start the local runtime first.',
       {
@@ -3339,6 +3449,7 @@ async function openSSHEnvironmentFromLauncher(
   const sshDetails = normalizeDesktopSSHEnvironmentDetails({
     ssh_destination: request.ssh_destination,
     ssh_port: request.ssh_port,
+    auth_mode: request.auth_mode,
     remote_install_dir: request.remote_install_dir,
     bootstrap_strategy: request.bootstrap_strategy,
     release_base_url: request.release_base_url,
@@ -3373,9 +3484,9 @@ async function openSSHEnvironmentFromLauncher(
   const runtimeRecord = sshEnvironmentRuntimeByKey.get(optimisticSessionKey) ?? null;
   if (!runtimeRecord) {
     return launcherActionFailure(
-      'environment_offline',
+      'runtime_not_started',
       'environment',
-      'Serve the runtime first.',
+      'Start the SSH runtime first, then open this environment.',
       {
         environmentID: request.environment_id,
       },
@@ -3452,6 +3563,7 @@ async function startEnvironmentRuntimeFromLauncher(
     ? normalizeDesktopSSHEnvironmentDetails({
       ssh_destination: request.ssh_destination,
       ssh_port: request.ssh_port,
+      auth_mode: request.auth_mode,
       remote_install_dir: request.remote_install_dir,
       bootstrap_strategy: request.bootstrap_strategy,
       release_base_url: request.release_base_url,
@@ -3473,15 +3585,9 @@ async function startEnvironmentRuntimeFromLauncher(
       broadcastDesktopWelcomeSnapshots();
       return launcherActionSuccess('started_environment_runtime');
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return launcherActionFailure(
-        'action_invalid',
-        'environment',
-        message || 'Desktop could not start that SSH runtime.',
-        {
-          environmentID: request.environment_id,
-        },
-      );
+      return launcherActionFailureFromRuntimeStartError(error, {
+        environmentID: request.environment_id,
+      });
     }
   }
 
@@ -3609,6 +3715,7 @@ async function stopEnvironmentRuntimeFromLauncher(
     const sshDetails = normalizeDesktopSSHEnvironmentDetails({
       ssh_destination: request.ssh_destination,
       ssh_port: request.ssh_port,
+      auth_mode: request.auth_mode,
       remote_install_dir: request.remote_install_dir,
       bootstrap_strategy: request.bootstrap_strategy,
       release_base_url: request.release_base_url,
@@ -4323,6 +4430,7 @@ async function upsertSavedSSHEnvironmentFromWelcome(
     label,
     ssh_destination: details.ssh_destination,
     ssh_port: details.ssh_port,
+    auth_mode: details.auth_mode,
     remote_install_dir: details.remote_install_dir,
     bootstrap_strategy: details.bootstrap_strategy,
     release_base_url: details.release_base_url,
@@ -4381,6 +4489,7 @@ async function setSavedSSHEnvironmentPinnedFromWelcome(
     last_used_at_ms: existing?.last_used_at_ms ?? Date.now(),
     ssh_destination: details.ssh_destination,
     ssh_port: details.ssh_port,
+    auth_mode: details.auth_mode,
     remote_install_dir: details.remote_install_dir,
     bootstrap_strategy: details.bootstrap_strategy,
     release_base_url: details.release_base_url,
@@ -4504,6 +4613,7 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
         {
           ssh_destination: request.ssh_destination,
           ssh_port: request.ssh_port,
+          auth_mode: request.auth_mode,
           remote_install_dir: request.remote_install_dir,
           bootstrap_strategy: request.bootstrap_strategy,
           release_base_url: request.release_base_url,
@@ -4572,6 +4682,7 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       await upsertSavedSSHEnvironmentFromWelcome(request.environment_id, request.label, {
         ssh_destination: request.ssh_destination,
         ssh_port: request.ssh_port,
+        auth_mode: request.auth_mode,
         remote_install_dir: request.remote_install_dir,
         bootstrap_strategy: request.bootstrap_strategy,
         release_base_url: request.release_base_url,

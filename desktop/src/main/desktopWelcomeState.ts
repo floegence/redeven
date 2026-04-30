@@ -61,6 +61,7 @@ export type BuildDesktopWelcomeSnapshotArgs = Readonly<{
   openSessions?: readonly DesktopSessionSummary[];
   savedExternalRuntimeHealth?: Readonly<Record<string, DesktopRuntimeHealth>>;
   savedSSHRuntimeHealth?: Readonly<Record<string, DesktopRuntimeHealth>>;
+  actionProgress?: DesktopWelcomeSnapshot['action_progress'];
   surface?: DesktopLauncherSurface;
   entryReason?: DesktopWelcomeEntryReason;
   issue?: DesktopWelcomeIssue | null;
@@ -111,6 +112,7 @@ export function buildSSHConnectionIssue(
       `message: ${message}`,
       `ssh destination: ${details.ssh_destination}`,
       `ssh port: ${details.ssh_port ?? 'default'}`,
+      `ssh auth mode: ${details.auth_mode}`,
       `environment instance id: ${details.environment_instance_id}`,
       `remote install dir: ${details.remote_install_dir}`,
       `bootstrap strategy: ${details.bootstrap_strategy}`,
@@ -993,6 +995,7 @@ function buildEnvironmentEntries(
       || (
         environment.ssh_destination === target.ssh_destination
         && environment.ssh_port === target.ssh_port
+        && environment.auth_mode === target.auth_mode
         && environment.remote_install_dir === target.remote_install_dir
         && environment.environment_instance_id === target.environment_instance_id
       )
@@ -1012,6 +1015,7 @@ function buildEnvironmentEntries(
       ssh_details: {
         ssh_destination: target.ssh_destination,
         ssh_port: target.ssh_port,
+        auth_mode: target.auth_mode,
         remote_install_dir: target.remote_install_dir,
         bootstrap_strategy: target.bootstrap_strategy,
         release_base_url: target.release_base_url,
@@ -1116,6 +1120,7 @@ function buildSavedSSHEnvironmentEntry(
     ssh_details: {
       ssh_destination: environment.ssh_destination,
       ssh_port: environment.ssh_port,
+      auth_mode: environment.auth_mode,
       remote_install_dir: environment.remote_install_dir,
       bootstrap_strategy: environment.bootstrap_strategy,
       release_base_url: environment.release_base_url,
@@ -1227,6 +1232,7 @@ export function buildDesktopWelcomeSnapshot(
     open_windows: buildOpenEnvironmentWindows(openSessions),
     environments,
     control_planes: controlPlanes,
+    action_progress: args.actionProgress ?? [],
     suggested_remote_url: suggestedRemoteURL(issue, openSessions, environments),
     issue,
     settings_surface: buildDesktopSettingsSurfaceSnapshot('environment_settings', desktopPreferencesToDraft(preferences, selectedSettingsState.environment_id), selectedSettingsState),

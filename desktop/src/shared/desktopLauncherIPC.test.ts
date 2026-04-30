@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DESKTOP_LAUNCHER_ACTION_PROGRESS_CHANNEL,
   isDesktopLauncherActionFailure,
   isDesktopLauncherActionSuccess,
   normalizeDesktopLauncherActionRequest,
@@ -152,6 +153,7 @@ describe('desktopLauncherIPC', () => {
       label: ' SSH lab ',
       ssh_destination: ' devbox ',
       ssh_port: ' 2222 ',
+      auth_mode: ' password ',
       remote_install_dir: ' /opt/redeven ',
       bootstrap_strategy: ' desktop_upload ',
       release_base_url: ' https://mirror.example.invalid/releases/ ',
@@ -162,6 +164,7 @@ describe('desktopLauncherIPC', () => {
       label: 'SSH lab',
       ssh_destination: 'devbox',
       ssh_port: 2222,
+      auth_mode: 'password',
       remote_install_dir: '/opt/redeven',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example.invalid/releases/',
@@ -173,6 +176,7 @@ describe('desktopLauncherIPC', () => {
       label: ' SSH lab ',
       ssh_destination: ' devbox ',
       ssh_port: '',
+      auth_mode: ' ',
       remote_install_dir: ' ',
       bootstrap_strategy: ' ',
       release_base_url: ' ',
@@ -183,6 +187,7 @@ describe('desktopLauncherIPC', () => {
       label: 'SSH lab',
       ssh_destination: 'devbox',
       ssh_port: null,
+      auth_mode: '',
       remote_install_dir: '',
       bootstrap_strategy: '',
       release_base_url: '',
@@ -202,6 +207,7 @@ describe('desktopLauncherIPC', () => {
       pinned: true,
       ssh_destination: ' devbox ',
       ssh_port: ' 2222 ',
+      auth_mode: ' key_agent ',
       remote_install_dir: ' /opt/redeven ',
       bootstrap_strategy: ' desktop_upload ',
       release_base_url: ' https://mirror.example.invalid/releases/ ',
@@ -213,6 +219,7 @@ describe('desktopLauncherIPC', () => {
       pinned: true,
       ssh_destination: 'devbox',
       ssh_port: 2222,
+      auth_mode: 'key_agent',
       remote_install_dir: '/opt/redeven',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example.invalid/releases/',
@@ -238,6 +245,7 @@ describe('desktopLauncherIPC', () => {
   });
 
   it('distinguishes structured launcher success and failure payloads', () => {
+    expect(DESKTOP_LAUNCHER_ACTION_PROGRESS_CHANNEL).toBe('redeven-desktop:launcher-action-progress');
     expect(isDesktopLauncherActionSuccess({
       ok: true,
       outcome: 'opened_environment_window',

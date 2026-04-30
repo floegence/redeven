@@ -119,6 +119,7 @@ describe('desktopWelcomeState', () => {
     expect(snapshot.surface).toBe('connect_environment');
     expect(snapshot.entry_reason).toBe('switch_environment');
     expect(snapshot.close_action_label).toBe('Close Launcher');
+    expect(snapshot.action_progress).toEqual([]);
     expect(snapshot.open_windows).toEqual([
       expect.objectContaining({
         session_key: 'env:local%3Adefault:local_host',
@@ -207,6 +208,36 @@ describe('desktopWelcomeState', () => {
     expect(snapshot.suggested_remote_url).toBe('http://192.168.1.99:24000/');
     expect(snapshot.issue?.title).toBe('Unable to open that Environment');
     expect(snapshot.settings_surface.window_title).toBe('Local Default Environment Settings');
+  });
+
+  it('carries active launcher action progress in the welcome snapshot', () => {
+    const managedLocal = testManagedLocalEnvironment('default');
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [managedLocal],
+      }),
+      actionProgress: [{
+        action: 'start_environment_runtime',
+        environment_id: 'ssh:devbox:default:key_agent:remote_default:envinst_demo',
+        environment_label: 'devbox',
+        operation_key: 'ssh:devbox:default:key_agent:remote_default:envinst_demo',
+        started_at_unix_ms: 100,
+        phase: 'ssh_remote_installing',
+        title: 'Installing remote runtime',
+        detail: 'Running the remote installer.',
+      }],
+    });
+
+    expect(snapshot.action_progress).toEqual([{
+      action: 'start_environment_runtime',
+      environment_id: 'ssh:devbox:default:key_agent:remote_default:envinst_demo',
+      environment_label: 'devbox',
+      operation_key: 'ssh:devbox:default:key_agent:remote_default:envinst_demo',
+      started_at_unix_ms: 100,
+      phase: 'ssh_remote_installing',
+      title: 'Installing remote runtime',
+      detail: 'Running the remote installer.',
+    }]);
   });
 
   it('keeps the default local environment protected while leaving other local environments deletable', () => {
@@ -330,10 +361,11 @@ describe('desktopWelcomeState', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         saved_ssh_environments: [{
-          id: 'ssh:devbox:2222:remote_default:envinst_demo001',
+          id: 'ssh:devbox:2222:key_agent:remote_default:envinst_demo001',
           label: 'SSH Lab',
           ssh_destination: 'devbox',
           ssh_port: 2222,
+          auth_mode: 'key_agent',
           remote_install_dir: 'remote_default',
           bootstrap_strategy: 'desktop_upload',
           release_base_url: 'https://mirror.example.invalid/releases',
@@ -345,10 +377,11 @@ describe('desktopWelcomeState', () => {
       }),
       openSessions: [
         {
-          session_key: 'ssh:devbox:2222:remote_default:envinst_demo001',
+          session_key: 'ssh:devbox:2222:key_agent:remote_default:envinst_demo001',
           target: buildSSHDesktopTarget({
             ssh_destination: 'devbox',
             ssh_port: 2222,
+            auth_mode: 'key_agent',
             remote_install_dir: 'remote_default',
             bootstrap_strategy: 'desktop_upload',
             release_base_url: 'https://mirror.example.invalid/releases',
@@ -367,6 +400,7 @@ describe('desktopWelcomeState', () => {
       issue: buildSSHConnectionIssue({
         ssh_destination: 'devbox',
         ssh_port: 2222,
+        auth_mode: 'key_agent',
         remote_install_dir: 'remote_default',
         bootstrap_strategy: 'desktop_upload',
         release_base_url: 'https://mirror.example.invalid/releases',
@@ -376,7 +410,7 @@ describe('desktopWelcomeState', () => {
 
     expect(snapshot.environments).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        id: 'ssh:devbox:2222:remote_default:envinst_demo001',
+        id: 'ssh:devbox:2222:key_agent:remote_default:envinst_demo001',
         kind: 'ssh_environment',
         label: 'SSH Lab',
         secondary_text: 'devbox:2222',
@@ -391,6 +425,7 @@ describe('desktopWelcomeState', () => {
     expect(snapshot.issue?.ssh_details).toEqual({
       ssh_destination: 'devbox',
       ssh_port: 2222,
+      auth_mode: 'key_agent',
       remote_install_dir: 'remote_default',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example.invalid/releases',

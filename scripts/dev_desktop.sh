@@ -42,6 +42,7 @@ Environment:
   REDEVEN_DESKTOP_REMOTE_DEBUGGING_PORT=<port|0>
   REDEVEN_DESKTOP_INSPECT_PORT=<port|0>
   REDEVEN_DESKTOP_STOP_TIMEOUT_SECONDS=<seconds>
+  REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG=<vX.Y.Z>
   REDEVEN_AGENT_FORCE_INSTALL=1
 USAGE
 }
@@ -140,6 +141,25 @@ build_electron_debug_args() {
 
   if ! debug_port_disabled "$INSPECT_PORT" && ! electron_args_include_inspect_switch; then
     ELECTRON_DEBUG_ARGS+=("--inspect=127.0.0.1:$INSPECT_PORT")
+  fi
+}
+
+latest_release_tag() {
+  git -C "$ROOT_DIR" tag --list 'v*' --sort=-v:refname | head -n 1
+}
+
+resolve_ssh_runtime_release_tag() {
+  local explicit_tag="${REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG:-}"
+  local latest_tag
+
+  if [ -n "$explicit_tag" ]; then
+    printf '%s\n' "$explicit_tag"
+    return 0
+  fi
+
+  latest_tag="$(latest_release_tag)"
+  if [ -n "$latest_tag" ]; then
+    printf '%s\n' "$latest_tag"
   fi
 }
 
@@ -343,10 +363,18 @@ ensure_desktop_workspace() {
 
 start_desktop() {
   local cmd=("./node_modules/.bin/electron")
+  local ssh_runtime_release_tag
 
   ui_pkg_log "Starting Redeven Desktop from the current checkout..."
   ui_pkg_log "ROOT_DIR: $ROOT_DIR"
   ui_pkg_log "DESKTOP_DIR: $DESKTOP_DIR"
+  ssh_runtime_release_tag="$(resolve_ssh_runtime_release_tag)"
+  if [ -n "$ssh_runtime_release_tag" ]; then
+    ui_pkg_log "SSH runtime release tag: $ssh_runtime_release_tag"
+  else
+    ui_pkg_log "SSH runtime release tag: unset"
+    ui_pkg_log "Set REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG to test SSH Host bootstrap."
+  fi
   if is_enabled "$OPEN_DEVTOOLS"; then
     ui_pkg_log "DevTools: enabled"
   else
@@ -389,6 +417,9 @@ start_desktop() {
       npm ci
     fi
     export REDEVEN_DESKTOP_OPEN_DEVTOOLS="$OPEN_DEVTOOLS"
+    if [ -n "$ssh_runtime_release_tag" ]; then
+      export REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG="$ssh_runtime_release_tag"
+    fi
     npm run build
     npm run prepare:bundled-runtime
     exec "${cmd[@]}"
