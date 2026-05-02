@@ -1535,11 +1535,10 @@ describe('EnvWorkbenchPage', () => {
     expect(page?.classList.contains('is-layout-interacting')).toBe(false);
   });
 
-  it('suspends registered workbench terminal cores during layout interactions', async () => {
+  it('keeps registered workbench terminal cores live during layout interactions', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
-    const suspendHandle = { dispose: vi.fn() };
-    const beginVisualSuspend = vi.fn(() => suspendHandle);
+    const beginVisualSuspend = vi.fn(() => ({ dispose: vi.fn() }));
 
     layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
       seq: 2,
@@ -1601,20 +1600,18 @@ describe('EnvWorkbenchPage', () => {
     surfaceApiMocks.lastSurfaceProps.onLayoutInteractionStart('widget_drag');
     await flushMicrotasks();
 
-    expect(beginVisualSuspend).toHaveBeenCalledWith({ reason: 'workbench_widget_drag' });
-    expect(suspendHandle.dispose).not.toHaveBeenCalled();
+    expect(beginVisualSuspend).not.toHaveBeenCalled();
 
     surfaceApiMocks.lastSurfaceProps.onLayoutInteractionEnd('widget_drag');
     await flushMicrotasks();
 
-    expect(suspendHandle.dispose).toHaveBeenCalledTimes(1);
+    expect(beginVisualSuspend).not.toHaveBeenCalled();
   });
 
-  it('keeps overlapping terminal visual interactions isolated by their release handle', async () => {
+  it('keeps overlapping terminal layout interactions isolated without suspending live terminals', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
-    const suspendHandle = { dispose: vi.fn() };
-    const beginVisualSuspend = vi.fn(() => suspendHandle);
+    const beginVisualSuspend = vi.fn(() => ({ dispose: vi.fn() }));
 
     layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
       seq: 2,
@@ -1684,18 +1681,24 @@ describe('EnvWorkbenchPage', () => {
     stableSurfaceApi.runViewportTransition(() => undefined, { interactionKind: 'widget_maximize' });
     await flushMicrotasks();
 
-    expect(beginVisualSuspend).toHaveBeenCalledWith({ reason: 'workbench_widget_drag' });
-    expect(beginVisualSuspend).toHaveBeenCalledTimes(1);
+    expect(beginVisualSuspend).not.toHaveBeenCalled();
+    const page = host.querySelector('[data-testid="redeven-workbench-page"]') as HTMLElement | null;
+    expect(page?.dataset.redevenWorkbenchLayoutInteracting).toBe('true');
 
     surfaceApiMocks.viewportTransitionReleases.pop()?.();
     await flushMicrotasks();
 
-    expect(suspendHandle.dispose).not.toHaveBeenCalled();
+    expect(page?.dataset.redevenWorkbenchLayoutInteracting).toBe('true');
 
     surfaceApiMocks.lastSurfaceProps.onLayoutInteractionEnd('widget_drag');
     await flushMicrotasks();
 
-    expect(suspendHandle.dispose).toHaveBeenCalledTimes(1);
+    expect(page?.dataset.redevenWorkbenchLayoutInteracting).toBe('true');
+    vi.advanceTimersByTime(90);
+    await flushMicrotasks();
+
+    expect(page?.dataset.redevenWorkbenchLayoutInteracting).toBe('false');
+    expect(beginVisualSuspend).not.toHaveBeenCalled();
   });
 
   it('marks the workbench as layout-interacting when the canvas viewport changes', async () => {

@@ -1,161 +1,117 @@
 // @vitest-environment jsdom
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createWorkbenchTerminalVisualCoordinator } from './workbenchTerminalVisualCoordinator';
 
-type FakeSuspendHandle = {
-  id: number;
-  reason: string;
-  dispose: ReturnType<typeof vi.fn>;
-};
-
 function createFakeCore() {
-  const handles: FakeSuspendHandle[] = [];
   return {
-    handles,
-    core: {
-      beginVisualSuspend: vi.fn((options?: { reason?: string }) => {
-        const handle = {
-          id: handles.length + 1,
-          reason: options?.reason ?? 'external',
-          dispose: vi.fn(),
-        };
-        handles.push(handle);
-        return handle;
-      }),
-    },
+    beginVisualSuspend: vi.fn(() => ({ dispose: vi.fn() })),
   };
 }
 
-function createSurface(rect: { left: number; top: number; width: number; height: number }): HTMLDivElement {
+function createSurface(): HTMLDivElement {
   const surface = document.createElement('div');
-  Object.defineProperty(surface, 'getBoundingClientRect', {
-    configurable: true,
-    value: () => ({
-      left: rect.left,
-      top: rect.top,
-      right: rect.left + rect.width,
-      bottom: rect.top + rect.height,
-      width: rect.width,
-      height: rect.height,
-      x: rect.left,
-      y: rect.top,
-      toJSON: () => undefined,
-    }),
-  });
   document.body.appendChild(surface);
   return surface;
 }
 
 describe('workbench terminal visual coordinator', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => (
-      window.setTimeout(() => callback(Date.now()), 0)
-    ));
-    vi.stubGlobal('cancelAnimationFrame', (id: number) => window.clearTimeout(id));
-  });
-
   afterEach(() => {
-    vi.useRealTimers();
-    vi.unstubAllGlobals();
     document.body.replaceChildren();
   });
 
-  it('suspends registered terminals during an interaction and resumes visible terminals immediately', async () => {
+  it('keeps registered terminals live during workbench interactions', () => {
     const coordinator = createWorkbenchTerminalVisualCoordinator();
-    const terminal = createFakeCore();
-    const surface = createSurface({ left: 10, top: 10, width: 320, height: 160 });
+    const core = createFakeCore();
+    const surface = createSurface();
 
-    coordinator.registerCore('widget-1', 'session-1', terminal.core as any);
+    coordinator.registerCore('widget-1', 'session-1', core as any);
     coordinator.registerSurface('widget-1', 'session-1', surface);
 
     const token = coordinator.beginInteraction('viewport_pan');
 
-    expect(terminal.core.beginVisualSuspend).toHaveBeenCalledWith({ reason: 'workbench_pan' });
-    expect(terminal.handles[0]?.dispose).not.toHaveBeenCalled();
+    expect(token.kind).toBe('viewport_pan');
+    expect(core.beginVisualSuspend).not.toHaveBeenCalled();
+    expect(coordinator.getDiagnostics()).toMatchObject({
+      activeInteractionCount: 1,
+      registeredTerminalCount: 1,
+    });
 
     token.end();
 
-    expect(terminal.handles[0]?.dispose).toHaveBeenCalledTimes(1);
+    expect(core.beginVisualSuspend).not.toHaveBeenCalled();
+    expect(coordinator.getDiagnostics()).toMatchObject({
+      activeInteractionCount: 0,
+      registeredTerminalCount: 1,
+    });
   });
 
-  it('waits for the last nested interaction before resuming', () => {
+  it('tracks nested interaction release handles without touching terminal rendering', () => {
     const coordinator = createWorkbenchTerminalVisualCoordinator();
-    const terminal = createFakeCore();
-    const surface = createSurface({ left: 10, top: 10, width: 320, height: 160 });
+    const core = createFakeCore();
 
-    coordinator.registerCore('widget-1', 'session-1', terminal.core as any);
-    coordinator.registerSurface('widget-1', 'session-1', surface);
+    coordinator.registerCore('widget-1', 'session-1', core as any);
 
-    const first = coordinator.beginInteraction('viewport_pan');
-    const second = coordinator.beginInteraction('viewport_zoom');
+    const first = coordinator.beginInteraction('widget_drag');
+    const second = coordinator.beginInteraction('widget_maximize');
 
-    expect(terminal.core.beginVisualSuspend).toHaveBeenCalledTimes(1);
+    expect(coordinator.getDiagnostics().activeInteractionCount).toBe(2);
+    expect(core.beginVisualSuspend).not.toHaveBeenCalled();
 
     first.end();
-    expect(terminal.handles[0]?.dispose).not.toHaveBeenCalled();
+    expect(coordinator.getDiagnostics().activeInteractionCount).toBe(1);
 
     second.end();
-    expect(terminal.handles[0]?.dispose).toHaveBeenCalledTimes(1);
+    expect(coordinator.getDiagnostics().activeInteractionCount).toBe(0);
+    expect(core.beginVisualSuspend).not.toHaveBeenCalled();
   });
 
-  it('resumes background terminals through the deferred queue', async () => {
+  it('ignores duplicate token endings', () => {
     const coordinator = createWorkbenchTerminalVisualCoordinator();
-    const terminal = createFakeCore();
-    const surface = createSurface({ left: -5000, top: -5000, width: 320, height: 160 });
-
-    coordinator.registerCore('widget-1', 'session-1', terminal.core as any);
-    coordinator.registerSurface('widget-1', 'session-1', surface);
-
-    const token = coordinator.beginInteraction('viewport_zoom');
-    token.end();
-
-    expect(terminal.handles[0]?.dispose).not.toHaveBeenCalled();
-
-    await vi.runOnlyPendingTimersAsync();
-
-    expect(terminal.handles[0]?.dispose).toHaveBeenCalledTimes(1);
-  });
-
-  it('cancels a pending background resume when a new interaction starts', async () => {
-    const coordinator = createWorkbenchTerminalVisualCoordinator();
-    const terminal = createFakeCore();
-    const surface = createSurface({ left: -5000, top: -5000, width: 320, height: 160 });
-
-    coordinator.registerCore('widget-1', 'session-1', terminal.core as any);
-    coordinator.registerSurface('widget-1', 'session-1', surface);
-
-    const first = coordinator.beginInteraction('viewport_zoom');
-    first.end();
-    const second = coordinator.beginInteraction('viewport_pan');
-
-    await vi.runOnlyPendingTimersAsync();
-
-    expect(terminal.handles[0]?.dispose).not.toHaveBeenCalled();
-    expect(terminal.core.beginVisualSuspend).toHaveBeenCalledTimes(1);
-
-    second.end();
-    await vi.runOnlyPendingTimersAsync();
-
-    expect(terminal.handles[0]?.dispose).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not bounce suspension when the same core is registered twice', () => {
-    const coordinator = createWorkbenchTerminalVisualCoordinator();
-    const terminal = createFakeCore();
-    const surface = createSurface({ left: 10, top: 10, width: 320, height: 160 });
-
-    coordinator.registerCore('widget-1', 'session-1', terminal.core as any);
-    coordinator.registerSurface('widget-1', 'session-1', surface);
-    const token = coordinator.beginInteraction('widget_drag');
-
-    coordinator.registerCore('widget-1', 'session-1', terminal.core as any);
-
-    expect(terminal.handles[0]?.dispose).not.toHaveBeenCalled();
-    expect(terminal.core.beginVisualSuspend).toHaveBeenCalledTimes(1);
+    const token = coordinator.beginInteraction('widget_resize');
 
     token.end();
-    expect(terminal.handles[0]?.dispose).toHaveBeenCalledTimes(1);
+    token.end();
+
+    expect(coordinator.getDiagnostics().activeInteractionCount).toBe(0);
+  });
+
+  it('removes registrations after both the core and surface detach', () => {
+    const coordinator = createWorkbenchTerminalVisualCoordinator();
+    const core = createFakeCore();
+    const surface = createSurface();
+
+    coordinator.registerCore('widget-1', 'session-1', core as any);
+    coordinator.registerSurface('widget-1', 'session-1', surface);
+    expect(coordinator.getDiagnostics().registeredTerminalCount).toBe(1);
+
+    coordinator.registerCore('widget-1', 'session-1', null);
+    expect(coordinator.getDiagnostics().registeredTerminalCount).toBe(1);
+
+    coordinator.registerSurface('widget-1', 'session-1', null);
+    expect(coordinator.getDiagnostics().registeredTerminalCount).toBe(0);
+  });
+
+  it('tracks the selected widget only as diagnostics metadata', () => {
+    const coordinator = createWorkbenchTerminalVisualCoordinator();
+
+    coordinator.setSelectedWidgetId(' widget-2 ');
+
+    expect(coordinator.getDiagnostics().selectedWidgetId).toBe('widget-2');
+  });
+
+  it('clears registrations and interaction state on dispose', () => {
+    const coordinator = createWorkbenchTerminalVisualCoordinator();
+    coordinator.registerCore('widget-1', 'session-1', createFakeCore() as any);
+    coordinator.setSelectedWidgetId('widget-1');
+    coordinator.beginInteraction('widget_drag');
+
+    coordinator.dispose();
+
+    expect(coordinator.getDiagnostics()).toEqual({
+      activeInteractionCount: 0,
+      registeredTerminalCount: 0,
+      selectedWidgetId: '',
+    });
   });
 });
