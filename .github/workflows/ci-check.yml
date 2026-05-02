@@ -57,6 +57,7 @@ jobs:
           sh -n scripts/install.sh
           sh -n scripts/generate_release_notes.sh
           bash -n scripts/test_generate_release_notes.sh
+          bash -n scripts/check_runtime_compatibility_contract.sh
           bash -n scripts/lint_ui.sh
           bash -n scripts/build_desktop_bundled_runtime.sh
           bash -n scripts/build_desktop_bundled_agent.sh
@@ -86,6 +87,9 @@ jobs:
 
       - name: Release notes generator check
         run: ./scripts/test_generate_release_notes.sh
+
+      - name: Runtime compatibility contract check
+        run: ./scripts/check_runtime_compatibility_contract.sh --source-only
 
       - name: UI lint
         run: ./scripts/lint_ui.sh

@@ -7,6 +7,7 @@ import (
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/accessgate"
+	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -52,6 +53,13 @@ type RestartResponse struct {
 	Message string `json:"message,omitempty"`
 }
 
+type RuntimeServiceWorkload = runtimeservice.Workload
+type RuntimeServiceSnapshot = runtimeservice.Snapshot
+
+type RuntimeServiceSnapshotProvider interface {
+	CurrentRuntimeServiceSnapshot() RuntimeServiceSnapshot
+}
+
 type Options struct {
 	AgentInstanceID    string
 	ProcessStartedAtMs int64
@@ -61,6 +69,7 @@ type Options struct {
 	Upgrader           Upgrader
 	Restarter          Restarter
 	Maintenance        MaintenanceSnapshotProvider
+	RuntimeService     RuntimeServiceSnapshotProvider
 }
 
 type Service struct {
@@ -73,6 +82,8 @@ type Service struct {
 	upgrader    Upgrader
 	restarter   Restarter
 	maintenance MaintenanceSnapshotProvider
+
+	runtimeService RuntimeServiceSnapshotProvider
 }
 
 func NewService(opts Options) *Service {
@@ -85,6 +96,7 @@ func NewService(opts Options) *Service {
 		upgrader:           opts.Upgrader,
 		restarter:          opts.Restarter,
 		maintenance:        opts.Maintenance,
+		runtimeService:     opts.RuntimeService,
 	}
 }
 
@@ -102,6 +114,11 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if s.maintenance != nil {
 			maintenance = s.maintenance.CurrentMaintenanceSnapshot()
 		}
+		var runtimeService *RuntimeServiceSnapshot
+		if s.runtimeService != nil {
+			snapshot := runtimeservice.NormalizeSnapshot(s.runtimeService.CurrentRuntimeServiceSnapshot())
+			runtimeService = &snapshot
+		}
 		return &pingResp{
 			ServerTimeMs:       time.Now().UnixMilli(),
 			AgentInstanceID:    s.agentInstanceID,
@@ -110,6 +127,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 			Commit:             s.commit,
 			BuildTime:          s.buildTime,
 			Maintenance:        maintenance,
+			RuntimeService:     runtimeService,
 		}, nil
 	})
 
@@ -143,13 +161,14 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 type pingReq struct{}
 
 type pingResp struct {
-	ServerTimeMs       int64                `json:"server_time_ms,omitempty"`
-	AgentInstanceID    string               `json:"agent_instance_id,omitempty"`
-	ProcessStartedAtMs int64                `json:"process_started_at_ms,omitempty"`
-	Version            string               `json:"version,omitempty"`
-	Commit             string               `json:"commit,omitempty"`
-	BuildTime          string               `json:"build_time,omitempty"`
-	Maintenance        *MaintenanceSnapshot `json:"maintenance,omitempty"`
+	ServerTimeMs       int64                   `json:"server_time_ms,omitempty"`
+	AgentInstanceID    string                  `json:"agent_instance_id,omitempty"`
+	ProcessStartedAtMs int64                   `json:"process_started_at_ms,omitempty"`
+	Version            string                  `json:"version,omitempty"`
+	Commit             string                  `json:"commit,omitempty"`
+	BuildTime          string                  `json:"build_time,omitempty"`
+	Maintenance        *MaintenanceSnapshot    `json:"maintenance,omitempty"`
+	RuntimeService     *RuntimeServiceSnapshot `json:"runtime_service,omitempty"`
 }
 
 const (

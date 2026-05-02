@@ -201,6 +201,18 @@ git config --global merge.conflictstyle zdiff3
 - Pushing the tag triggers `.github/workflows/release.yml`.
 - GitHub Release artifacts and signing files must remain aligned with the release tag.
 
+### Runtime/Desktop Compatibility Release Contract
+
+- `internal/runtimeservice/compatibility_contract.json` is the single source of truth for the Runtime Service protocol compatibility window.
+- Before pushing any `vX.Y.Z` release tag, update that contract so `release_review.release_version` equals the exact tag that will be pushed.
+- Run `./scripts/check_runtime_compatibility_contract.sh vX.Y.Z` before tagging. The release workflow runs the same check and must stay green before artifacts are trusted.
+- If a new release keeps the same protocol version, compatibility epoch, minimum Desktop version, and minimum Runtime version as the previous release, treat that as a challenged decision:
+  - fill `release_review.same_window_rationale` with the explicit reason the old compatibility window is still safe;
+  - keep `release_review.checked_surfaces` broad enough to cover Desktop attach/start, Local UI health, startup reports, `sys.ping`, Env App maintenance UI, and SSH runtime bootstrap when touched;
+  - do not tag until the rationale and reviewed surfaces explain why no compatibility window change is needed.
+- If the Runtime Service protocol contract changes, bump `compatibility_epoch` or the relevant minimum version fields instead of relying on ad hoc UI checks.
+- Do not use release notes, installer metadata, or Desktop-only conditionals as the compatibility source of truth; they may describe the policy, but they must not replace the contract file.
+
 ### Public Installer Contract
 
 - `scripts/install.sh` is the source of truth for the public installer.
@@ -216,10 +228,12 @@ Run the CI-aligned local checks before integration:
 - `bash -n scripts/lint_ui.sh`
 - `bash -n scripts/build_desktop_bundled_agent.sh`
 - `bash -n scripts/check_desktop.sh`
+- `bash -n scripts/check_runtime_compatibility_contract.sh`
 - `bash -n scripts/ui_package_common.sh`
 - `bash -n scripts/open_source_hygiene_check.sh`
 - `bash -n scripts/install_git_hooks.sh`
 - `./scripts/lint_ui.sh`
+- `./scripts/check_runtime_compatibility_contract.sh --source-only`
 - `./scripts/check_desktop.sh`
 - `./scripts/open_source_hygiene_check.sh --staged`
 - `./scripts/open_source_hygiene_check.sh --all`

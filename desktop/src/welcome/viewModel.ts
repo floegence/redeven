@@ -8,6 +8,7 @@ import { desktopControlPlaneKey, type DesktopControlPlaneSummary } from '../shar
 import {
   type DesktopControlPlaneSyncState,
 } from '../shared/providerEnvironmentState';
+import { formatRuntimeServiceWorkload, type RuntimeServiceSnapshot } from '../shared/runtimeService';
 
 export type DesktopWelcomeShellViewModel = Readonly<{
   shell_title: 'Redeven Desktop';
@@ -51,7 +52,6 @@ export type EnvironmentCardModel = Readonly<{
   kind_label: 'Local' | 'Provider' | 'Redeven URL' | 'SSH Host';
   status_label: string;
   status_tone: EnvironmentCardTone;
-  source_label: string;
   target_primary: string;
   target_secondary: string;
   target_primary_monospace: boolean;
@@ -322,10 +322,6 @@ function sshBootstrapSummary(environment: DesktopEnvironmentEntry): string {
   }
 }
 
-function externalLocalUISourceLabel(environment: DesktopEnvironmentEntry): string {
-  return environmentSourceLabel(environment);
-}
-
 function normalizeIPAddressHost(value: string): string {
   return value.trim().toLowerCase().replace(/^\[(.*)\]$/, '$1');
 }
@@ -403,11 +399,12 @@ function buildPlaceholderEnvironmentCardFact(
 
 const ENVIRONMENT_CARD_FACT_ORDER = [
   'RUNS ON',
+  'RUNTIME SERVICE',
+  'VERSION',
+  'ACTIVE WORK',
   'PROVIDER',
   'SOURCE ENV',
-  'SOURCE',
   'BOOTSTRAP',
-  'WINDOW',
 ] as const;
 
 function orderEnvironmentCardFacts(
@@ -421,17 +418,6 @@ function orderEnvironmentCardFacts(
 
 function controlPlaneDisplayLabel(environment: DesktopEnvironmentEntry): string {
   return environment.control_plane_label || environment.provider_origin || '';
-}
-
-function environmentWindowLabel(environment: DesktopEnvironmentEntry): string {
-  switch (environment.window_state) {
-    case 'open':
-      return 'Open';
-    case 'opening':
-      return 'Opening';
-    default:
-      return 'Closed';
-  }
 }
 
 function environmentRunsOnLabel(environment: DesktopEnvironmentEntry): string {
@@ -453,22 +439,77 @@ function environmentRunsOnLabel(environment: DesktopEnvironmentEntry): string {
   return externalLocalUINetworkLabel(environment);
 }
 
+function environmentRuntimeService(environment: DesktopEnvironmentEntry): RuntimeServiceSnapshot | undefined {
+  if (environment.runtime_service) {
+    return environment.runtime_service;
+  }
+  if (environment.kind === 'managed_environment') {
+    return environment.managed_runtime_service;
+  }
+  if (environment.kind === 'provider_environment') {
+    return environment.provider_runtime_service;
+  }
+  return undefined;
+}
+
+function runtimeServiceLabel(snapshot: RuntimeServiceSnapshot | undefined): string {
+  if (!snapshot) {
+    return 'Unknown';
+  }
+  switch (snapshot.compatibility) {
+    case 'update_available':
+      return 'Update ready';
+    case 'restart_recommended':
+      return 'Restart recommended';
+    case 'update_required':
+      return 'Needs update';
+    case 'desktop_update_required':
+      return 'Update Desktop';
+    case 'managed_elsewhere':
+      return 'Managed elsewhere';
+    default:
+      break;
+  }
+  if (snapshot.service_owner === 'desktop' || snapshot.desktop_managed) {
+    return 'Running';
+  }
+  if (snapshot.service_owner === 'external') {
+    return 'External service';
+  }
+  return 'Unknown';
+}
+
+function runtimeServiceVersionLabel(snapshot: RuntimeServiceSnapshot | undefined): string {
+  return compact(snapshot?.runtime_version) || 'Unknown';
+}
+
+function runtimeServiceFacts(environment: DesktopEnvironmentEntry): readonly EnvironmentCardFactModel[] {
+  const snapshot = environmentRuntimeService(environment);
+  if (!snapshot) {
+    return [];
+  }
+  return [
+    buildEnvironmentCardFact('RUNTIME SERVICE', runtimeServiceLabel(snapshot)),
+    buildEnvironmentCardFact('VERSION', runtimeServiceVersionLabel(snapshot)),
+    buildEnvironmentCardFact('ACTIVE WORK', formatRuntimeServiceWorkload(snapshot)),
+  ];
+}
+
 export function buildEnvironmentCardFactsModel(
   environment: DesktopEnvironmentEntry,
 ): readonly EnvironmentCardFactModel[] {
   if (environment.kind === 'managed_environment') {
     return orderEnvironmentCardFacts([
       buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment)),
+      ...runtimeServiceFacts(environment),
       buildPlaceholderEnvironmentCardFact('PROVIDER'),
-      buildEnvironmentCardFact('SOURCE', environmentSourceLabel(environment)),
-      buildEnvironmentCardFact('WINDOW', environmentWindowLabel(environment)),
     ]);
   }
 
   if (environment.kind === 'provider_environment') {
     return orderEnvironmentCardFacts([
-      buildEnvironmentCardFact('WINDOW', environmentWindowLabel(environment)),
       buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment)),
+      ...runtimeServiceFacts(environment),
       buildEnvironmentCardFact('PROVIDER', controlPlaneDisplayLabel(environment) || 'Unavailable'),
       buildEnvironmentCardFact('SOURCE ENV', environment.env_public_id ?? 'Unknown'),
     ]);
@@ -477,15 +518,14 @@ export function buildEnvironmentCardFactsModel(
   if (environment.kind === 'ssh_environment') {
     return orderEnvironmentCardFacts([
       buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment)),
-      buildEnvironmentCardFact('WINDOW', environmentWindowLabel(environment)),
+      ...runtimeServiceFacts(environment),
       buildEnvironmentCardFact('BOOTSTRAP', sshBootstrapSummary(environment) || 'Automatic bootstrap'),
     ]);
   }
 
   return orderEnvironmentCardFacts([
-    buildEnvironmentCardFact('SOURCE', externalLocalUISourceLabel(environment)),
     buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment)),
-    buildEnvironmentCardFact('WINDOW', environmentWindowLabel(environment)),
+    ...runtimeServiceFacts(environment),
   ]);
 }
 
@@ -1008,7 +1048,6 @@ export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry):
       kind_label: environmentKindLabel(environment),
       status_label: environmentStatusLabel(environment),
       status_tone: environmentStatusTone(environment),
-      source_label: 'Desktop-managed',
       target_primary: targetPrimary,
       target_secondary: '',
       target_primary_monospace: shouldUseMonospaceEndpoint(targetPrimary),
@@ -1029,7 +1068,6 @@ export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry):
       kind_label: 'Provider',
       status_label: environmentStatusLabel(environment),
       status_tone: environmentStatusTone(environment),
-      source_label: environmentSourceLabel(environment),
       target_primary: targetPrimary,
       target_secondary: localEndpoint !== '' && remoteEndpoint !== '' && remoteEndpoint !== targetPrimary
         ? remoteEndpoint
@@ -1045,7 +1083,6 @@ export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry):
       kind_label: 'SSH Host',
       status_label: environmentStatusLabel(environment),
       status_tone: environmentStatusTone(environment),
-      source_label: environmentSourceLabel(environment),
       target_primary: environment.secondary_text,
       target_secondary: environment.local_ui_url,
       target_primary_monospace: true,
@@ -1058,7 +1095,6 @@ export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry):
     kind_label: 'Redeven URL',
     status_label: environmentStatusLabel(environment),
     status_tone: environmentStatusTone(environment),
-    source_label: environmentSourceLabel(environment),
     target_primary: environment.local_ui_url || environment.secondary_text,
     target_secondary: '',
     target_primary_monospace: true,

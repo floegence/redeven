@@ -7,6 +7,7 @@ import { isAllowedAppNavigation } from './navigation';
 import { parseStartupReport, type StartupReport } from './startup';
 import { normalizeLocalUIBaseURL } from './localUIURL';
 import { defaultManagedStateLayout } from './statePaths';
+import { normalizeRuntimeServiceSnapshot, type RuntimeServiceSnapshot } from '../shared/runtimeService';
 
 const DEFAULT_RUNTIME_PROBE_TIMEOUT_MS = 1_500;
 
@@ -18,6 +19,7 @@ type RuntimeProbeResponse = Readonly<{
 type RuntimeProbeStatus = Readonly<{
   status: 'online';
   password_required: boolean;
+  runtime_service?: RuntimeServiceSnapshot;
 }>;
 
 function candidateStartupURLs(startup: StartupReport): string[] {
@@ -79,6 +81,7 @@ function parseLocalRuntimeHealthResponse(raw: string): RuntimeProbeStatus | null
     return {
       status: 'online',
       password_required: data.password_required,
+      ...(data.runtime_service ? { runtime_service: normalizeRuntimeServiceSnapshot(data.runtime_service) } : {}),
     };
   } catch {
     return null;
@@ -110,6 +113,7 @@ export async function loadExternalLocalUIStartup(
     local_ui_url: normalizedBaseURL,
     local_ui_urls: [normalizedBaseURL],
     password_required: status.password_required,
+    ...(status.runtime_service ? { runtime_service: status.runtime_service } : {}),
   };
 }
 
@@ -158,6 +162,7 @@ export async function loadAttachableRuntimeState(
           local_ui_url: candidateURL,
         }),
         password_required: status.password_required,
+        ...(status.runtime_service ? { runtime_service: status.runtime_service } : {}),
       };
     }
   }

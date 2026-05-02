@@ -250,6 +250,7 @@ func New(opts Options) (*Agent, error) {
 		Upgrader:           upgrader,
 		Restarter:          &sysRestarter{a: a},
 		Maintenance:        a,
+		RuntimeService:     a,
 	})
 
 	codeSvc, err := codeapp.New(context.Background(), codeapp.Options{

@@ -29,6 +29,7 @@ import (
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
 	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
+	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/gorilla/websocket"
 )
@@ -245,6 +246,7 @@ func (s *Server) Start(ctx context.Context) error {
 		StateDir:           s.stateDir,
 		DiagnosticsEnabled: s.diag != nil && s.diag.Enabled(),
 		PID:                os.Getpid(),
+		RuntimeService:     s.runtimeServiceSnapshot(),
 	}); err != nil {
 		_ = s.Close()
 		return fmt.Errorf("write local runtime state: %w", err)
@@ -321,8 +323,9 @@ type accessStatusResp struct {
 }
 
 type runtimeHealthResp struct {
-	Status           string `json:"status"`
-	PasswordRequired bool   `json:"password_required"`
+	Status           string                  `json:"status"`
+	PasswordRequired bool                    `json:"password_required"`
+	RuntimeService   runtimeservice.Snapshot `json:"runtime_service"`
 }
 
 type accessUnlockReq struct {
@@ -588,6 +591,7 @@ func (s *Server) handleRuntimeHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, apiResp{OK: true, Data: runtimeHealthResp{
 		Status:           "online",
 		PasswordRequired: s.accessEnabled(),
+		RuntimeService:   s.runtimeServiceSnapshot(),
 	}})
 }
 
@@ -774,12 +778,13 @@ func localUIDiagnosticsRouteKind(path string) string {
 }
 
 type runtimeResp struct {
-	Mode             string `json:"mode"`
-	EnvPublicID      string `json:"env_public_id"`
-	DirectWSURL      string `json:"direct_ws_url"`
-	DesktopManaged   bool   `json:"desktop_managed,omitempty"`
-	EffectiveRunMode string `json:"effective_run_mode,omitempty"`
-	RemoteEnabled    bool   `json:"remote_enabled,omitempty"`
+	Mode             string                  `json:"mode"`
+	EnvPublicID      string                  `json:"env_public_id"`
+	DirectWSURL      string                  `json:"direct_ws_url"`
+	DesktopManaged   bool                    `json:"desktop_managed,omitempty"`
+	EffectiveRunMode string                  `json:"effective_run_mode,omitempty"`
+	RemoteEnabled    bool                    `json:"remote_enabled,omitempty"`
+	RuntimeService   runtimeservice.Snapshot `json:"runtime_service"`
 }
 
 func (s *Server) handleRuntime(w http.ResponseWriter, r *http.Request) {
@@ -801,7 +806,19 @@ func (s *Server) handleRuntime(w http.ResponseWriter, r *http.Request) {
 		DesktopManaged:   s.desktopManaged,
 		EffectiveRunMode: s.resolvedEffectiveRunMode(),
 		RemoteEnabled:    s.remoteEnabled,
+		RuntimeService:   s.runtimeServiceSnapshot(),
 	})
+}
+
+func (s *Server) runtimeServiceSnapshot() runtimeservice.Snapshot {
+	if s == nil {
+		return runtimeservice.UnknownSnapshot()
+	}
+	snapshot := runtimeservice.UnknownSnapshot()
+	if s.a != nil {
+		snapshot = s.a.RuntimeServiceSnapshot()
+	}
+	return runtimeservice.NormalizeSnapshotForEndpoint(snapshot, s.desktopManaged, s.resolvedEffectiveRunMode(), s.remoteEnabled)
 }
 
 func (s *Server) directWSURLFromRequest(r *http.Request) (string, error) {

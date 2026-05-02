@@ -8,6 +8,7 @@ import { EnvSettingsPage } from './EnvSettingsPage';
 const notificationMocks = vi.hoisted(() => ({
   success: vi.fn(),
   error: vi.fn(),
+  info: vi.fn(),
 }));
 
 const protocolMocks = vi.hoisted(() => ({
@@ -45,6 +46,7 @@ const runtimeUpdateMocks = vi.hoisted(() => ({
     latestMetaLoading: vi.fn(() => false),
     latestMetaError: vi.fn(() => null),
     preferredTargetVersion: vi.fn(() => ''),
+    runtimeService: vi.fn(() => undefined),
     currentVersion: vi.fn(() => 'v1.0.0'),
     refetchLatestVersion: vi.fn(async () => undefined),
   },
@@ -290,6 +292,7 @@ describe('EnvSettingsPage', () => {
   let host: HTMLDivElement;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     host = document.createElement('div');
     document.body.appendChild(host);
   });
@@ -340,5 +343,40 @@ describe('EnvSettingsPage', () => {
     const aiGroup = host.querySelector('[data-settings-group="ai_extensions"]');
     const aiGroupSections = Array.from(aiGroup?.querySelectorAll('[data-settings-section]') ?? []).map((node) => node.getAttribute('data-settings-section'));
     expect(aiGroupSections).toEqual(['ai', 'skills', 'codex']);
+  });
+
+  it('renders Runtime Service identity and live-work rows in Runtime Status', async () => {
+    (runtimeUpdateMocks.version.runtimeService as any).mockReturnValue({
+      runtimeVersion: 'v1.4.2',
+      runtimeCommit: 'abc123',
+      runtimeBuildTime: '2026-05-02T00:00:00Z',
+      protocolVersion: 'redeven-runtime-v1',
+      serviceOwner: 'desktop',
+      desktopManaged: true,
+      effectiveRunMode: 'hybrid',
+      remoteEnabled: true,
+      compatibility: 'restart_recommended',
+      compatibilityMessage: 'Restart when your work is idle.',
+      activeWorkload: {
+        terminalCount: 3,
+        sessionCount: 2,
+        taskCount: 1,
+        portForwardCount: 4,
+      },
+    });
+
+    render(() => <EnvSettingsPage />, host);
+    await flushPage();
+
+    const runtimeStatus = host.querySelector('[data-settings-card="Runtime Status"]');
+    expect(runtimeStatus?.textContent).toContain('Service owner');
+    expect(runtimeStatus?.textContent).toContain('Redeven Desktop');
+    expect(runtimeStatus?.textContent).toContain('Compatibility');
+    expect(runtimeStatus?.textContent).toContain('Restart recommended');
+    expect(runtimeStatus?.textContent).toContain('Restart when your work is idle.');
+    expect(runtimeStatus?.textContent).toContain('Active work');
+    expect(runtimeStatus?.textContent).toContain('3 terminals, 2 sessions, 1 task, 4 port forwards');
+    expect(runtimeStatus?.textContent).toContain('Runtime protocol');
+    expect(runtimeStatus?.textContent).toContain('redeven-runtime-v1');
   });
 });

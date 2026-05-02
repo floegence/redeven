@@ -1,0 +1,97 @@
+import { describe, expect, it } from 'vitest';
+
+import { fromWireSysPingResponse } from './sys';
+
+describe('sys codec', () => {
+  it('decodes runtime service identity and active workload from ping responses', () => {
+    expect(fromWireSysPingResponse({
+      server_time_ms: 42,
+      version: 'v1.4.2',
+      runtime_service: {
+        runtime_version: 'v1.4.2',
+        runtime_commit: 'abc123',
+        runtime_build_time: '2026-05-02T00:00:00Z',
+        protocol_version: 'redeven-runtime-v1',
+        compatibility_epoch: 1,
+        service_owner: 'desktop',
+        desktop_managed: true,
+        effective_run_mode: 'hybrid',
+        remote_enabled: true,
+        compatibility: 'restart_recommended',
+        compatibility_message: 'Restart when your work is idle.',
+        minimum_desktop_version: 'v1.4.0',
+        minimum_runtime_version: 'v1.4.0',
+        compatibility_review_id: 'runtime-service-maintenance-v1',
+        active_workload: {
+          terminal_count: 3,
+          session_count: 2,
+          task_count: 1,
+          port_forward_count: 4,
+        },
+      },
+    })).toMatchObject({
+      serverTimeMs: 42,
+      version: 'v1.4.2',
+      runtimeService: {
+        runtimeVersion: 'v1.4.2',
+        runtimeCommit: 'abc123',
+        runtimeBuildTime: '2026-05-02T00:00:00Z',
+        protocolVersion: 'redeven-runtime-v1',
+        compatibilityEpoch: 1,
+        serviceOwner: 'desktop',
+        desktopManaged: true,
+        effectiveRunMode: 'hybrid',
+        remoteEnabled: true,
+        compatibility: 'restart_recommended',
+        compatibilityMessage: 'Restart when your work is idle.',
+        minimumDesktopVersion: 'v1.4.0',
+        minimumRuntimeVersion: 'v1.4.0',
+        compatibilityReviewId: 'runtime-service-maintenance-v1',
+        activeWorkload: {
+          terminalCount: 3,
+          sessionCount: 2,
+          taskCount: 1,
+          portForwardCount: 4,
+        },
+      },
+    });
+  });
+
+  it('normalizes partial runtime service snapshots defensively', () => {
+    expect(fromWireSysPingResponse({
+      server_time_ms: 0,
+      runtime_service: {
+        desktop_managed: true,
+        service_owner: 'surprise-owner',
+        compatibility: 'surprise-state',
+        active_workload: {
+          terminal_count: -1,
+          session_count: 2.9,
+          task_count: Number.NaN,
+          port_forward_count: 1,
+        },
+      },
+    }).runtimeService).toEqual({
+      runtimeVersion: undefined,
+      runtimeCommit: undefined,
+      runtimeBuildTime: undefined,
+      protocolVersion: 'redeven-runtime-v1',
+      compatibilityEpoch: undefined,
+      serviceOwner: 'desktop',
+      desktopManaged: true,
+      effectiveRunMode: undefined,
+      remoteEnabled: false,
+      compatibility: 'unknown',
+      compatibilityMessage: undefined,
+      minimumDesktopVersion: undefined,
+      minimumRuntimeVersion: undefined,
+      compatibilityReviewId: undefined,
+      activeWorkload: {
+        terminalCount: 0,
+        sessionCount: 2,
+        taskCount: 0,
+        portForwardCount: 1,
+      },
+    });
+  });
+});

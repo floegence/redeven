@@ -42,7 +42,14 @@ async function flushUntil(predicate: () => boolean, maxTurns: number = 8): Promi
   }
 }
 
-function createCoordinatorHarness() {
+function createCoordinatorHarness(options: Readonly<{
+  latestMeta?: {
+    latest_version: string;
+    recommended_version: string;
+    upgrade_policy: 'self_upgrade' | 'manual' | 'desktop_release';
+    cache_ttl_ms: number;
+  };
+}> = {}) {
   const [envId] = createSignal('env_prompt');
   const [isLocalMode] = createSignal(false);
   const [accessGateVisible] = createSignal(false);
@@ -55,7 +62,7 @@ function createCoordinatorHarness() {
     recommended_version: string;
     upgrade_policy: 'self_upgrade' | 'manual' | 'desktop_release';
     cache_ttl_ms: number;
-  }>({
+  }>(options.latestMeta ?? {
     latest_version: 'v1.1.0',
     recommended_version: 'v1.1.0',
     upgrade_policy: 'self_upgrade' as const,
@@ -86,6 +93,7 @@ function createCoordinatorHarness() {
         currentPing: () => null,
         currentPingLoading: () => false,
         currentProcessStartedAtMs: () => null,
+        runtimeService: () => undefined,
         currentVersion,
         currentVersionValid: () => true,
         latestMeta,
@@ -141,66 +149,59 @@ beforeEach(() => {
 });
 
 describe('createRuntimeUpdatePromptCoordinator', () => {
-  it('opens when a recommended update is available and closes after upgrade success', async () => {
+  it('emits a toast notice when a recommended update is available', async () => {
     const harness = createCoordinatorHarness();
     try {
-      await flushUntil(() => harness.coordinator.visible());
+      let notice: ReturnType<typeof harness.coordinator.consumeNotice> = null;
+      await flushUntil(() => {
+        notice = harness.coordinator.consumeNotice();
+        return notice !== null;
+      });
 
       expect(harness.refetchLatestVersion).toHaveBeenCalled();
-      expect(harness.coordinator.visible()).toBe(true);
-      expect(harness.coordinator.mode()).toBe('available');
-
-      await harness.coordinator.startRecommendedUpgrade();
-      await flushAsync();
-
-      expect(harness.startUpgrade).toHaveBeenCalledWith('v1.1.0');
-      expect(harness.coordinator.mode()).toBe('updating');
-
-      harness.setMaintenanceKind(null);
-      harness.setMaintenanceStage(null);
-      harness.setCurrentVersion('v1.1.0');
-      await flushAsync();
-
-      expect(harness.coordinator.open()).toBe(false);
-      expect(harness.coordinator.visible()).toBe(false);
+      expect(notice).toEqual({
+        id: 'update-available:env_prompt:v1.1.0',
+        title: 'Runtime update ready',
+        message: 'Runtime Service v1.1.0 is ready. Open Runtime Status when your work is idle.',
+      });
+      expect(harness.startUpgrade).not.toHaveBeenCalled();
+      expect(harness.coordinator.consumeNotice()).toBeNull();
     } finally {
       harness.dispose();
     }
   });
 
-  it('re-enters failed mode when the shared maintenance controller reports an error', async () => {
+  it('does not re-emit the optional update notice after it was shown for the day', async () => {
     const harness = createCoordinatorHarness();
     try {
-      await flushAsync();
-      await harness.coordinator.startRecommendedUpgrade();
+      let notice: ReturnType<typeof harness.coordinator.consumeNotice> = null;
+      await flushUntil(() => {
+        notice = harness.coordinator.consumeNotice();
+        return notice !== null;
+      });
+      expect(notice).not.toBeNull();
 
-      harness.setMaintenanceKind(null);
-      harness.setMaintenanceStage(null);
-      harness.setMaintenanceError('Upgrade rejected.');
+      harness.setCurrentVersion('v1.0.1');
       await flushAsync();
-
-      expect(harness.coordinator.visible()).toBe(true);
-      expect(harness.coordinator.mode()).toBe('failed');
-      expect(harness.coordinator.error()).toBe('Upgrade rejected.');
+      expect(harness.coordinator.consumeNotice()).toBeNull();
     } finally {
       harness.dispose();
     }
   });
 
   it('suppresses the prompt when the latest metadata does not allow self-upgrade', async () => {
-    const harness = createCoordinatorHarness();
-    try {
-      harness.setLatestMeta({
+    const harness = createCoordinatorHarness({
+      latestMeta: {
         latest_version: 'v1.1.0',
         recommended_version: 'v1.1.0',
         upgrade_policy: 'manual',
         cache_ttl_ms: 300_000,
-      });
-
+      },
+    });
+    try {
       await flushAsync();
 
-      expect(harness.coordinator.visible()).toBe(false);
-      expect(harness.coordinator.open()).toBe(false);
+      expect(harness.coordinator.consumeNotice()).toBeNull();
     } finally {
       harness.dispose();
     }

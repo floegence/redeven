@@ -306,7 +306,6 @@ vi.mock('./pages/EnvSettingsPage', () => ({ EnvSettingsPage: () => <div /> }));
 vi.mock('./pages/aiPermissions', () => ({ hasRWXPermissions: () => true }));
 vi.mock('./deck/redevenDeckWidgets', () => ({ redevenDeckWidgets: [] }));
 vi.mock('./widgets/AuditLogDialog', () => ({ AuditLogDialog: () => <div /> }));
-vi.mock('./widgets/RuntimeUpdateFloatingPrompt', () => ({ RuntimeUpdateFloatingPrompt: () => <div /> }));
 vi.mock('./widgets/FilePreviewHost', () => ({ FilePreviewHost: () => <div data-testid="file-preview-host" /> }));
 vi.mock('./widgets/FileBrowserSurfaceHost', () => ({ FileBrowserSurfaceHost: () => <div data-testid="file-browser-host" /> }));
 vi.mock('./debugConsole/DebugConsoleWindow', () => ({
@@ -325,22 +324,13 @@ vi.mock('./maintenance/createAgentMaintenanceController', () => ({
 }));
 vi.mock('./maintenance/createRuntimeUpdatePromptCoordinator', () => ({
   createRuntimeUpdatePromptCoordinator: () => ({
-    visible: () => false,
-    mode: () => 'recommended',
-    currentVersion: () => '',
-    targetVersion: () => '',
-    latestMessage: () => '',
-    stage: () => '',
-    error: () => null,
-    dismiss: vi.fn(),
-    startRecommendedUpgrade: vi.fn(),
-    retry: vi.fn(),
-    skipCurrentVersion: vi.fn(),
+    consumeNotice: () => null,
   }),
 }));
 vi.mock('./maintenance/createAgentVersionModel', () => ({
   createAgentVersionModel: () => ({
     currentProcessStartedAtMs: () => 0,
+    runtimeService: () => undefined,
     currentVersion: () => 'v1.0.0',
     refetchCurrentVersion: vi.fn(async () => undefined),
   }),

@@ -7,6 +7,41 @@ export type SysMaintenanceSnapshot = {
   updatedAtMs?: number;
 };
 
+export type RuntimeServiceOwner = 'desktop' | 'external' | 'unknown';
+export type RuntimeServiceCompatibility =
+  | 'compatible'
+  | 'update_available'
+  | 'restart_recommended'
+  | 'update_required'
+  | 'desktop_update_required'
+  | 'managed_elsewhere'
+  | 'unknown';
+
+export type RuntimeServiceWorkload = {
+  terminalCount: number;
+  sessionCount: number;
+  taskCount: number;
+  portForwardCount: number;
+};
+
+export type RuntimeServiceSnapshot = {
+  runtimeVersion?: string;
+  runtimeCommit?: string;
+  runtimeBuildTime?: string;
+  protocolVersion?: string;
+  compatibilityEpoch?: number;
+  serviceOwner: RuntimeServiceOwner;
+  desktopManaged: boolean;
+  effectiveRunMode?: string;
+  remoteEnabled: boolean;
+  compatibility: RuntimeServiceCompatibility;
+  compatibilityMessage?: string;
+  minimumDesktopVersion?: string;
+  minimumRuntimeVersion?: string;
+  compatibilityReviewId?: string;
+  activeWorkload: RuntimeServiceWorkload;
+};
+
 export type SysPingResponse = {
   serverTimeMs: number;
   agentInstanceId?: string;
@@ -15,6 +50,7 @@ export type SysPingResponse = {
   commit?: string;
   buildTime?: string;
   maintenance?: SysMaintenanceSnapshot;
+  runtimeService?: RuntimeServiceSnapshot;
 };
 
 export type SysUpgradeRequest = {

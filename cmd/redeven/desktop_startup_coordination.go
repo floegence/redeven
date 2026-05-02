@@ -7,6 +7,7 @@ import (
 	"time"
 
 	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
+	"github.com/floegence/redeven/internal/runtimeservice"
 )
 
 const (
@@ -31,6 +32,7 @@ func writeDesktopReadyLaunchReport(reportPath string, startup runtimeStartupRepo
 		StateDir:           startup.StateDir,
 		DiagnosticsEnabled: startup.DiagnosticsEnabled,
 		PID:                startup.PID,
+		RuntimeService:     startup.RuntimeService,
 	})
 }
 
@@ -44,6 +46,7 @@ type runtimeStartupReport struct {
 	StateDir           string
 	DiagnosticsEnabled bool
 	PID                int
+	RuntimeService     runtimeservice.Snapshot
 }
 
 func buildRuntimeStartupReport(state *localuiruntime.Snapshot) runtimeStartupReport {
@@ -57,7 +60,12 @@ func buildRuntimeStartupReport(state *localuiruntime.Snapshot) runtimeStartupRep
 		StateDir:           state.StateDir,
 		DiagnosticsEnabled: state.DiagnosticsEnabled,
 		PID:                state.PID,
+		RuntimeService:     state.RuntimeService,
 	}
+}
+
+func normalizeLaunchRuntimeServiceSnapshot(snapshot runtimeservice.Snapshot, desktopManaged bool, effectiveRunMode string, remoteEnabled bool) runtimeservice.Snapshot {
+	return runtimeservice.NormalizeSnapshotForEndpoint(snapshot, desktopManaged, effectiveRunMode, remoteEnabled)
 }
 
 func handleDesktopLockConflict(reportPath string, lockPath string, configPath string) (handled bool, exitCode int, err error) {

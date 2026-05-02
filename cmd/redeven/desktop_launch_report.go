@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/floegence/redeven/internal/runtimeservice"
 )
 
 type desktopLaunchStatus string
@@ -42,15 +44,16 @@ type desktopLaunchReport struct {
 	Code    string              `json:"code,omitempty"`
 	Message string              `json:"message,omitempty"`
 
-	LocalUIURL         string   `json:"local_ui_url,omitempty"`
-	LocalUIURLs        []string `json:"local_ui_urls,omitempty"`
-	PasswordRequired   bool     `json:"password_required"`
-	EffectiveRunMode   string   `json:"effective_run_mode,omitempty"`
-	RemoteEnabled      bool     `json:"remote_enabled"`
-	DesktopManaged     bool     `json:"desktop_managed"`
-	StateDir           string   `json:"state_dir,omitempty"`
-	DiagnosticsEnabled bool     `json:"diagnostics_enabled"`
-	PID                int      `json:"pid,omitempty"`
+	LocalUIURL         string                  `json:"local_ui_url,omitempty"`
+	LocalUIURLs        []string                `json:"local_ui_urls,omitempty"`
+	PasswordRequired   bool                    `json:"password_required"`
+	EffectiveRunMode   string                  `json:"effective_run_mode,omitempty"`
+	RemoteEnabled      bool                    `json:"remote_enabled"`
+	DesktopManaged     bool                    `json:"desktop_managed"`
+	StateDir           string                  `json:"state_dir,omitempty"`
+	DiagnosticsEnabled bool                    `json:"diagnostics_enabled"`
+	PID                int                     `json:"pid,omitempty"`
+	RuntimeService     runtimeservice.Snapshot `json:"runtime_service"`
 
 	LockOwner   *desktopLaunchLockOwner   `json:"lock_owner,omitempty"`
 	Diagnostics *desktopLaunchDiagnostics `json:"diagnostics,omitempty"`
@@ -77,6 +80,12 @@ func writeDesktopLaunchReport(path string, report desktopLaunchReport) error {
 			report.LocalUIURLs = []string{report.LocalUIURL}
 		}
 		report.EffectiveRunMode = strings.TrimSpace(report.EffectiveRunMode)
+		report.RuntimeService = normalizeLaunchRuntimeServiceSnapshot(
+			report.RuntimeService,
+			report.DesktopManaged,
+			report.EffectiveRunMode,
+			report.RemoteEnabled,
+		)
 	case desktopLaunchStatusBlocked:
 		if report.Code == "" {
 			return errors.New("missing blocked code")

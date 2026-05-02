@@ -60,6 +60,20 @@ describe('desktopWelcomeRuntimeState', () => {
           data: {
             status: 'online',
             password_required: false,
+            runtime_service: {
+              runtime_version: 'v1.4.0',
+              service_owner: 'desktop',
+              desktop_managed: true,
+              effective_run_mode: 'desktop',
+              remote_enabled: true,
+              compatibility: 'compatible',
+              active_workload: {
+                terminal_count: 3,
+                session_count: 1,
+                task_count: 0,
+                port_forward_count: 0,
+              },
+            },
           },
         }));
         return;
@@ -113,6 +127,28 @@ describe('desktopWelcomeRuntimeState', () => {
         password_required: false,
         diagnostics_enabled: false,
         pid: 5252,
+        runtime_service: {
+          runtime_version: 'v1.4.0',
+          runtime_commit: undefined,
+          runtime_build_time: undefined,
+          protocol_version: 'redeven-runtime-v1',
+          compatibility_epoch: undefined,
+          service_owner: 'desktop',
+          desktop_managed: true,
+          effective_run_mode: 'desktop',
+          remote_enabled: true,
+          compatibility: 'compatible',
+          compatibility_message: undefined,
+          minimum_desktop_version: undefined,
+          minimum_runtime_version: undefined,
+          compatibility_review_id: undefined,
+          active_workload: {
+            terminal_count: 3,
+            session_count: 1,
+            task_count: 0,
+            port_forward_count: 0,
+          },
+        },
       });
     } finally {
       await new Promise<void>((resolve, reject) => {

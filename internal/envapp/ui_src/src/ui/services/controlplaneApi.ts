@@ -56,6 +56,7 @@ export type LocalRuntimeInfo = {
   desktop_managed?: boolean;
   effective_run_mode?: 'local' | 'hybrid' | 'remote';
   remote_enabled?: boolean;
+  runtime_service?: unknown;
 };
 
 export type LocalAccessStatus = {
@@ -335,6 +336,7 @@ function normalizeLocalRuntimeInfo(raw: unknown): LocalRuntimeInfo {
     desktop_managed: Boolean(data.desktop_managed),
     effective_run_mode: effectiveRunMode,
     remote_enabled: typeof data.remote_enabled === 'boolean' ? data.remote_enabled : undefined,
+    runtime_service: data.runtime_service,
   };
 }
 

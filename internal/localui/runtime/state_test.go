@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/floegence/redeven/internal/runtimeservice"
 )
 
 func TestWriteState(t *testing.T) {
@@ -21,6 +23,19 @@ func TestWriteState(t *testing.T) {
 		StateDir:           "/Users/tester/.redeven",
 		DiagnosticsEnabled: true,
 		PID:                42,
+		RuntimeService: runtimeservice.Snapshot{
+			RuntimeVersion:   "v1.2.3",
+			ProtocolVersion:  runtimeservice.ProtocolVersion,
+			ServiceOwner:     runtimeservice.OwnerDesktop,
+			DesktopManaged:   true,
+			EffectiveRunMode: "hybrid",
+			RemoteEnabled:    true,
+			Compatibility:    runtimeservice.CompatibilityCompatible,
+			ActiveWorkload: runtimeservice.Workload{
+				TerminalCount: 2,
+				SessionCount:  1,
+			},
+		},
 	})
 	if err != nil {
 		t.Fatalf("WriteState() error = %v", err)
@@ -50,6 +65,9 @@ func TestWriteState(t *testing.T) {
 	if state.StateDir != "/Users/tester/.redeven" || !state.DiagnosticsEnabled {
 		t.Fatalf("unexpected diagnostics state: %#v", state)
 	}
+	if state.RuntimeService.RuntimeVersion != "v1.2.3" || state.RuntimeService.ActiveWorkload.TerminalCount != 2 {
+		t.Fatalf("unexpected runtime service state: %#v", state.RuntimeService)
+	}
 }
 
 func TestWriteStateRejectsMissingLocalURL(t *testing.T) {
@@ -67,7 +85,7 @@ func TestLoadAttachable(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok":true,"data":{"status":"online","password_required":true}}`))
+		_, _ = w.Write([]byte(`{"ok":true,"data":{"status":"online","password_required":true,"runtime_service":{"runtime_version":"v9.9.9","protocol_version":"redeven-runtime-v1","service_owner":"desktop","desktop_managed":true,"effective_run_mode":"hybrid","remote_enabled":true,"compatibility":"compatible","active_workload":{"terminal_count":4,"session_count":2,"task_count":1,"port_forward_count":3}}}}`))
 	}))
 
 	runtimePath := filepath.Join(t.TempDir(), "runtime", "local-ui.json")
@@ -101,6 +119,9 @@ func TestLoadAttachable(t *testing.T) {
 	}
 	if state.StateDir != "/tmp/redeven" || !state.DiagnosticsEnabled {
 		t.Fatalf("unexpected diagnostics metadata: %#v", state)
+	}
+	if state.RuntimeService.RuntimeVersion != "v9.9.9" || state.RuntimeService.ActiveWorkload.PortForwardCount != 3 {
+		t.Fatalf("unexpected probed runtime service metadata: %#v", state.RuntimeService)
 	}
 }
 

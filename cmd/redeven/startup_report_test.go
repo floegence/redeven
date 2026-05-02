@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/floegence/redeven/internal/runtimeservice"
 )
 
 func TestWriteDesktopLaunchReportReady(t *testing.T) {
@@ -17,6 +19,18 @@ func TestWriteDesktopLaunchReportReady(t *testing.T) {
 		EffectiveRunMode: "hybrid",
 		RemoteEnabled:    true,
 		DesktopManaged:   true,
+		RuntimeService: runtimeservice.Snapshot{
+			RuntimeVersion:   "v1.2.3",
+			ProtocolVersion:  runtimeservice.ProtocolVersion,
+			ServiceOwner:     runtimeservice.OwnerDesktop,
+			DesktopManaged:   true,
+			EffectiveRunMode: "hybrid",
+			RemoteEnabled:    true,
+			Compatibility:    runtimeservice.CompatibilityCompatible,
+			ActiveWorkload: runtimeservice.Workload{
+				TerminalCount: 1,
+			},
+		},
 	})
 	if err != nil {
 		t.Fatalf("writeDesktopLaunchReport() error = %v", err)
@@ -45,6 +59,9 @@ func TestWriteDesktopLaunchReportReady(t *testing.T) {
 	}
 	if !report.RemoteEnabled || !report.DesktopManaged || report.EffectiveRunMode != "hybrid" {
 		t.Fatalf("unexpected report: %#v", report)
+	}
+	if report.RuntimeService.RuntimeVersion != "v1.2.3" || report.RuntimeService.ActiveWorkload.TerminalCount != 1 {
+		t.Fatalf("unexpected runtime service report: %#v", report.RuntimeService)
 	}
 }
 

@@ -1,3 +1,5 @@
+import type { RuntimeServiceSnapshot } from './runtimeService';
+
 export type DesktopRuntimeStatus = 'online' | 'offline';
 export type DesktopRuntimeControlCapability = 'start_stop' | 'observe_only';
 export type DesktopRuntimeOfflineReasonCode =
@@ -22,6 +24,7 @@ export type DesktopRuntimeHealth = Readonly<{
   checked_at_unix_ms: number;
   source: DesktopRuntimeHealthSource;
   local_ui_url?: string;
+  runtime_service?: RuntimeServiceSnapshot;
   offline_reason_code?: DesktopRuntimeOfflineReasonCode;
   offline_reason?: string;
 }>;
