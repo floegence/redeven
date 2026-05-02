@@ -24,8 +24,11 @@ export const AI_PROVIDER_PRESET_CATALOG: Record<AIProviderType, AIProviderPreset
     name: 'OpenAI',
     default_base_url: 'https://api.openai.com/v1',
     models: [
-      { model_name: 'gpt-5.2', context_window: 400000, max_output_tokens: 128000, note: 'Latest flagship model' },
-      { model_name: 'gpt-5.4', context_window: 400000, max_output_tokens: 128000, note: 'Additional GPT-5.4 preset' },
+      { model_name: 'gpt-5.5', context_window: 1050000, max_output_tokens: 128000, note: 'Latest frontier model for complex reasoning and coding' },
+      { model_name: 'gpt-5.4', context_window: 1050000, max_output_tokens: 128000, note: 'Affordable frontier model for professional work' },
+      { model_name: 'gpt-5.4-mini', context_window: 400000, max_output_tokens: 128000, note: 'Fast, cost-effective GPT-5.4 variant' },
+      { model_name: 'gpt-5.4-nano', context_window: 400000, max_output_tokens: 128000, note: 'Low-cost option for simple high-volume tasks' },
+      { model_name: 'gpt-5.2', context_window: 400000, max_output_tokens: 128000, note: 'Previous flagship model' },
       { model_name: 'gpt-5.2-mini', context_window: 400000, max_output_tokens: 128000, note: 'Cost-effective flagship variant' },
       { model_name: 'gpt-5', context_window: 400000, max_output_tokens: 128000, note: 'Stable flagship' },
       { model_name: 'gpt-5-mini', context_window: 400000, max_output_tokens: 128000, note: 'Stable lightweight option' },
@@ -36,9 +39,9 @@ export const AI_PROVIDER_PRESET_CATALOG: Record<AIProviderType, AIProviderPreset
     name: 'Anthropic',
     default_base_url: 'https://api.anthropic.com/v1',
     models: [
-      { model_name: 'claude-opus-4-1-20250805', context_window: 200000, note: 'Highest quality flagship' },
-      { model_name: 'claude-sonnet-4-5-20250929', context_window: 200000, note: 'General-purpose flagship (1M context beta available)' },
-      { model_name: 'claude-haiku-4-5-20251001', context_window: 200000, note: 'Fast and lower-cost option (1M context beta available)' },
+      { model_name: 'claude-opus-4-7', context_window: 1000000, max_output_tokens: 128000, note: 'Most capable Claude model for complex agentic coding' },
+      { model_name: 'claude-sonnet-4-6', context_window: 1000000, max_output_tokens: 64000, note: 'Best balance of speed and intelligence' },
+      { model_name: 'claude-haiku-4-5-20251001', context_window: 200000, max_output_tokens: 64000, note: 'Fastest current Claude model' },
     ],
   },
   moonshot: {
@@ -46,18 +49,17 @@ export const AI_PROVIDER_PRESET_CATALOG: Record<AIProviderType, AIProviderPreset
     name: 'Moonshot',
     default_base_url: 'https://api.moonshot.cn/v1',
     models: [
-      { model_name: 'kimi-k2.5', context_window: 256000, note: 'Current all-round Kimi flagship' },
-      { model_name: 'kimi-k2-0905-preview', context_window: 256000, note: 'Agent and coding enhanced preview' },
-      { model_name: 'kimi-k2-thinking', context_window: 256000, note: 'Long-thinking model' },
-      { model_name: 'kimi-k2-thinking-turbo', context_window: 256000, note: 'Long-thinking model, faster output' },
+      { model_name: 'kimi-k2.6', context_window: 256000, note: 'Latest multimodal Kimi flagship for agents and coding' },
+      { model_name: 'kimi-k2.5', context_window: 256000, note: 'Previous all-round Kimi flagship' },
     ],
   },
   chatglm: {
     type: 'chatglm',
     name: 'ChatGLM',
-    default_base_url: 'https://open.bigmodel.cn/api/paas/v4/',
+    default_base_url: 'https://api.z.ai/api/paas/v4/',
     models: [
-      { model_name: 'glm-5', context_window: 200000, max_output_tokens: 128000, note: 'Latest flagship model' },
+      { model_name: 'glm-5.1', context_window: 200000, max_output_tokens: 128000, note: 'Latest flagship model for long-horizon agentic coding' },
+      { model_name: 'glm-5', context_window: 200000, max_output_tokens: 128000, note: 'Previous flagship model' },
       { model_name: 'glm-4.7', context_window: 200000, max_output_tokens: 16000, note: 'Stable flagship-level model' },
       { model_name: 'glm-4.5-air', context_window: 128000, max_output_tokens: 16000, note: 'Balanced quality and speed' },
       { model_name: 'glm-4.5-flash', context_window: 128000, max_output_tokens: 16000, note: 'Fast and low-latency option' },
@@ -68,8 +70,8 @@ export const AI_PROVIDER_PRESET_CATALOG: Record<AIProviderType, AIProviderPreset
     name: 'DeepSeek',
     default_base_url: 'https://api.deepseek.com',
     models: [
-      { model_name: 'deepseek-chat', context_window: 128000, max_output_tokens: 64000, note: 'Maps to DeepSeek-V3.2-Exp' },
-      { model_name: 'deepseek-reasoner', context_window: 128000, max_output_tokens: 64000, note: 'Maps to DeepSeek-R1-0528' },
+      { model_name: 'deepseek-v4-pro', context_window: 1000000, max_output_tokens: 384000, note: 'Latest flagship V4 model' },
+      { model_name: 'deepseek-v4-flash', context_window: 1000000, max_output_tokens: 384000, note: 'Latest V4 fast model' },
     ],
   },
   qwen: {
