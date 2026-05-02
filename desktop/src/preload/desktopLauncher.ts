@@ -12,10 +12,18 @@ import {
   type DesktopLauncherActionRequest,
   type DesktopWelcomeSnapshot,
 } from '../shared/desktopLauncherIPC';
+import {
+  DESKTOP_LAUNCHER_GET_SSH_CONFIG_HOSTS_CHANNEL,
+  normalizeDesktopSSHConfigHosts,
+  type DesktopSSHConfigHost,
+} from '../shared/desktopSSHConfig';
 
 export function bootstrapDesktopLauncherBridge(): void {
   contextBridge.exposeInMainWorld('redevenDesktopLauncher', {
     getSnapshot: (): Promise<DesktopWelcomeSnapshot> => ipcRenderer.invoke(DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL),
+    getSSHConfigHosts: async (): Promise<readonly DesktopSSHConfigHost[]> => (
+      normalizeDesktopSSHConfigHosts(await ipcRenderer.invoke(DESKTOP_LAUNCHER_GET_SSH_CONFIG_HOSTS_CHANNEL))
+    ),
     performAction: (request: DesktopLauncherActionRequest): Promise<DesktopLauncherActionResult> =>
       ipcRenderer.invoke(DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL, request),
     subscribeActionProgress: (listener: (progress: DesktopLauncherActionProgress) => void): (() => void) => {

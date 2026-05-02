@@ -25,6 +25,11 @@ describe('sshRuntime', () => {
     expect(buildManagedSSHStartScript()).toContain('--state-root "$state_root"');
     expect(buildManagedSSHStartScript()).toContain('--mode desktop');
     expect(buildManagedSSHStartScript()).toContain('--startup-report-file "$report_path"');
+    expect(buildManagedSSHStartScript()).toContain('setsid "$binary" run');
+    expect(buildManagedSSHStartScript()).toContain('nohup "$binary" run');
+    expect(buildManagedSSHStartScript()).toContain('printf "%s\\n" "$!" > "${session_dir}/launcher.pid"');
+    expect(buildManagedSSHStartScript()).not.toContain('exec "$binary" run');
+    expect(buildManagedSSHStartScript()).not.toContain('trap cleanup');
     expect(buildManagedSSHStartScript()).toContain('instance_root="${install_root%/}/instances/${instance_id}"');
     expect(buildManagedSSHRuntimeProbeScript()).toContain("printf 'status=%s\\n' \"$probe_status\"");
     expect(buildManagedSSHRuntimeProbeScript()).toContain(`stamp_path="${'${release_root}'}/${MANAGED_SSH_RUNTIME_STAMP_FILENAME}"`);
@@ -114,6 +119,6 @@ describe('sshRuntime', () => {
     expect(source).toContain('formatBlockedLaunchDiagnostics(launchReport)');
     expect(source).toContain('async function stopRemoteRuntimeProcess(');
     expect(source).toContain('remoteRuntimePID = remoteStartup.pid ?? null;');
-    expect(source).toContain('Remote Redeven stopped before reporting readiness (${exitReason}).');
+    expect(source).toContain('Remote Redeven launcher failed before reporting readiness (${exitReason}).');
   });
 });

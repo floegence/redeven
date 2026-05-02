@@ -203,6 +203,7 @@ import {
   type DesktopWelcomeEntryReason,
   type DesktopWelcomeIssue,
 } from '../shared/desktopLauncherIPC';
+import { DESKTOP_LAUNCHER_GET_SSH_CONFIG_HOSTS_CHANNEL } from '../shared/desktopSSHConfig';
 import { DESKTOP_SESSION_CONTEXT_GET_CHANNEL } from '../shared/desktopSessionContextIPC';
 import {
   desktopControlPlaneKey,
@@ -223,6 +224,7 @@ import {
   type DesktopProviderRemoteRouteState,
 } from '../shared/providerEnvironmentState';
 import type { RuntimeServiceSnapshot } from '../shared/runtimeService';
+import { loadDesktopSSHConfigHosts } from './sshConfigHosts';
 
 type OpenDesktopWelcomeOptions = Readonly<{
   surface?: DesktopLauncherSurface;
@@ -289,6 +291,7 @@ type SSHEnvironmentRuntimeRecord = Readonly<{
   startup: StartupReport;
   local_forward_url: string;
   runtime_handle: DesktopSessionRuntimeHandle;
+  disconnect: () => Promise<void>;
   stop: () => Promise<void>;
 }>;
 
@@ -1101,7 +1104,7 @@ async function collectSavedSSHRuntimeHealth(
     try {
       const startup = await loadExternalLocalUIStartup(runtimeRecord.local_forward_url, DESKTOP_RUNTIME_PROBE_TIMEOUT_MS);
       if (!startup) {
-        await runtimeRecord.stop().catch(() => undefined);
+        await runtimeRecord.disconnect().catch(() => undefined);
         sshEnvironmentRuntimeByKey.delete(runtimeKey);
         return [
           environment.id,
@@ -1121,7 +1124,7 @@ async function collectSavedSSHRuntimeHealth(
       });
       return [environment.id, onlineRuntimeHealth('ssh_runtime_probe', startup.local_ui_url, startup.runtime_service ?? runtimeRecord.startup.runtime_service)] as const;
     } catch {
-      await runtimeRecord.stop().catch(() => undefined);
+      await runtimeRecord.disconnect().catch(() => undefined);
       sshEnvironmentRuntimeByKey.delete(runtimeKey);
       return [
         environment.id,
@@ -2224,7 +2227,7 @@ async function startSSHEnvironmentRuntimeRecord(
     } catch {
       // Restart below if the cached runtime is no longer reachable.
     }
-    await existingRecord.stop().catch(() => undefined);
+    await existingRecord.disconnect().catch(() => undefined);
     sshEnvironmentRuntimeByKey.delete(runtimeKey);
   }
 
@@ -2276,6 +2279,7 @@ async function startSSHEnvironmentRuntimeRecord(
         startup: managedSSHRuntime.startup,
         local_forward_url: managedSSHRuntime.local_forward_url,
         runtime_handle: managedSSHRuntime.runtime_handle,
+        disconnect: managedSSHRuntime.disconnect,
         stop: managedSSHRuntime.stop,
       };
       sshEnvironmentRuntimeByKey.set(runtimeKey, runtimeRecord);
@@ -4800,6 +4804,8 @@ async function restoreBestAvailableWindow(options?: Readonly<{ stealAppFocus?: b
 
 async function shutdownDesktopWindowsAndSessions(): Promise<void> {
   const sessionClosePromises = [...sessionsByKey.keys()].map((sessionKey) => finalizeSessionClosure(sessionKey));
+  const sshDisconnectPromises = [...sshEnvironmentRuntimeByKey.values()].map((runtimeRecord) => runtimeRecord.disconnect());
+  sshEnvironmentRuntimeByKey.clear();
   for (const kind of UTILITY_WINDOW_KINDS) {
     const windowRecord = utilityWindows.get(kind) ?? null;
     const win = liveTrackedBrowserWindow(windowRecord);
@@ -4818,6 +4824,7 @@ async function shutdownDesktopWindowsAndSessions(): Promise<void> {
   }
   await Promise.allSettled(sessionClosePromises);
   await Promise.allSettled([...sessionCloseTasks.values()]);
+  await Promise.allSettled(sshDisconnectPromises);
 }
 
 type DesktopDeepLinkRequest =
@@ -5196,6 +5203,9 @@ if (!app.requestSingleInstanceLock()) {
   });
   ipcMain.handle(DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL, async (event) => (
     stampDesktopWelcomeSnapshot(await buildCurrentDesktopWelcomeSnapshot(senderUtilityWindowKind(event.sender.id)))
+  ));
+  ipcMain.handle(DESKTOP_LAUNCHER_GET_SSH_CONFIG_HOSTS_CHANNEL, async () => (
+    loadDesktopSSHConfigHosts()
   ));
   ipcMain.handle(DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL, async (_event, request): Promise<DesktopLauncherActionResult> => {
     const normalized = normalizeDesktopLauncherActionRequest(request);

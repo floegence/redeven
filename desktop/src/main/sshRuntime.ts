@@ -15,7 +15,7 @@ import {
   type DesktopSSHReleaseFetchPolicy,
 } from './sshReleaseAssets';
 import { loadExternalLocalUIStartup } from './runtimeState';
-import type { DesktopSessionRuntimeHandle } from './sessionRuntime';
+import type { DesktopSessionRuntimeHandle, DesktopSessionRuntimeLaunchMode } from './sessionRuntime';
 import type { StartupReport } from './startup';
 import { formatBlockedLaunchDiagnostics, parseLaunchReport } from './launchReport';
 import {
@@ -120,7 +120,13 @@ export type ManagedSSHRuntime = Readonly<{
   startup: StartupReport;
   local_forward_url: string;
   runtime_handle: DesktopSessionRuntimeHandle;
+  disconnect: () => Promise<void>;
   stop: () => Promise<void>;
+}>;
+
+type ManagedSSHRemoteStartup = Readonly<{
+  startup: StartupReport;
+  launch_mode: DesktopSessionRuntimeLaunchMode;
 }>;
 
 export type StartManagedSSHRuntimeArgs = Readonly<{
@@ -533,14 +539,20 @@ export function buildManagedSSHStartScript(): string {
     'session_token="$4"',
     'session_dir="${instance_root}/sessions/${session_token}"',
     'report_path="${session_dir}/startup-report.json"',
-    'cleanup() { rm -rf "$session_dir"; }',
-    'trap cleanup EXIT INT TERM',
-    'mkdir -p "$state_root" "$session_dir"',
+    'log_dir="${instance_root}/logs"',
+    'log_path="${log_dir}/runtime-${session_token}.log"',
+    'mkdir -p "$state_root" "$session_dir" "$log_dir"',
+    'rm -f "$report_path"',
     'if [ ! -x "$binary" ]; then',
     '  echo "Redeven runtime is not installed at ${binary}" >&2',
     '  exit 1',
     'fi',
-    'exec "$binary" run --state-root "$state_root" --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path"',
+    'if command -v setsid >/dev/null 2>&1; then',
+    '  setsid "$binary" run --state-root "$state_root" --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path" >>"$log_path" 2>&1 </dev/null &',
+    'else',
+    '  nohup "$binary" run --state-root "$state_root" --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path" >>"$log_path" 2>&1 </dev/null &',
+    'fi',
+    'printf "%s\\n" "$!" > "${session_dir}/launcher.pid"',
   ].join('\n');
 }
 
@@ -1346,7 +1358,7 @@ async function waitForRemoteStartupReport(args: Readonly<{
   onLog: StartManagedSSHRuntimeArgs['onLog'];
   onProgress: StartManagedSSHRuntimeArgs['onProgress'];
   getControlProcess: () => SpawnedSSHProcess | null;
-}>): Promise<StartupReport> {
+}>): Promise<ManagedSSHRemoteStartup> {
   const deadline = Date.now() + args.startupTimeoutMs;
   const script = buildManagedSSHReportReadScript();
   emitSSHRuntimeProgress(
@@ -1383,7 +1395,10 @@ async function waitForRemoteStartupReport(args: Readonly<{
         if (launchReport.status === 'blocked') {
           throw new Error(`Remote Redeven could not start:\n${formatBlockedLaunchDiagnostics(launchReport)}`);
         }
-        return launchReport.startup;
+        return {
+          startup: launchReport.startup,
+          launch_mode: launchReport.status === 'attached' ? 'attached' : 'spawned',
+        };
       } catch (error) {
         throw readinessFailure(
           error instanceof Error ? error.message : 'Remote Redeven startup report was invalid.',
@@ -1393,10 +1408,17 @@ async function waitForRemoteStartupReport(args: Readonly<{
     }
 
     if (controlProcess.exitCode !== null || controlProcess.signalCode) {
+      if (controlProcess.exitCode === 0 && !controlProcess.signalCode) {
+        if (Date.now() >= deadline) {
+          throw readinessFailure('Timed out waiting for remote Redeven to report readiness over SSH.', args.logs);
+        }
+        await delay(DEFAULT_SSH_POLL_INTERVAL_MS);
+        continue;
+      }
       const exitReason = controlProcess.exitCode !== null
         ? `exit code ${controlProcess.exitCode}`
         : `signal ${controlProcess.signalCode}`;
-      throw readinessFailure(`Remote Redeven stopped before reporting readiness (${exitReason}).`, args.logs);
+      throw readinessFailure(`Remote Redeven launcher failed before reporting readiness (${exitReason}).`, args.logs);
     }
 
     if (Date.now() >= deadline) {
@@ -1456,25 +1478,37 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
   let forwardProcess: SpawnedSSHProcess | null = null;
   let remoteRuntimePID: number | null = null;
   let remoteStopAttempted = false;
+  let transportDisconnected = false;
 
-  const cleanup = async () => {
-    await stopChildProcess(forwardProcess, stopTimeoutMs).catch(() => undefined);
-    if (!remoteStopAttempted && remoteRuntimePID !== null) {
-      remoteStopAttempted = true;
-      await stopRemoteRuntimeProcess({
-        sshBinary,
-        target,
-        controlSocketPath,
-        connectTimeoutSeconds,
-        auth,
-        pid: remoteRuntimePID,
-        logs,
-        onLog: args.onLog,
-      }).catch(() => undefined);
+  const disconnect = async () => {
+    if (transportDisconnected) {
+      return;
     }
+    transportDisconnected = true;
+    await stopChildProcess(forwardProcess, stopTimeoutMs).catch(() => undefined);
     await stopChildProcess(controlProcess, stopTimeoutMs).catch(() => undefined);
     await stopChildProcess(masterProcess, stopTimeoutMs).catch(() => undefined);
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+  };
+
+  const stop = async () => {
+    try {
+      if (!remoteStopAttempted && remoteRuntimePID !== null) {
+        remoteStopAttempted = true;
+        await stopRemoteRuntimeProcess({
+          sshBinary,
+          target,
+          controlSocketPath,
+          connectTimeoutSeconds,
+          auth,
+          pid: remoteRuntimePID,
+          logs,
+          onLog: args.onLog,
+        });
+      }
+    } finally {
+      await disconnect();
+    }
   };
 
   try {
@@ -1535,7 +1569,7 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       throw controlSpawnError;
     }
 
-    const remoteStartup = await waitForRemoteStartupReport({
+    const remoteLaunch = await waitForRemoteStartupReport({
       sshBinary,
       target,
       controlSocketPath,
@@ -1549,6 +1583,7 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       onProgress: args.onProgress,
       getControlProcess: () => controlProcess,
     });
+    const remoteStartup = remoteLaunch.startup;
     remoteRuntimePID = remoteStartup.pid ?? null;
 
     const localPort = await allocateLocalForwardPort();
@@ -1596,22 +1631,20 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       local_ui_urls: forwardedStartup.local_ui_urls,
       password_required: forwardedStartup.password_required,
     };
-    const stop = async () => {
-      await cleanup();
-    };
     return {
       startup,
       local_forward_url: forwardedURL,
       runtime_handle: {
         runtime_kind: 'ssh',
-        lifecycle_owner: 'desktop',
-        launch_mode: 'spawned',
+        lifecycle_owner: 'external',
+        launch_mode: remoteLaunch.launch_mode,
         stop,
       },
+      disconnect,
       stop,
     };
   } catch (error) {
-    await cleanup();
+    await disconnect();
     const nodeError = error as NodeJS.ErrnoException;
     if (nodeError?.code === 'ENOENT') {
       throw missingSSHBinaryError(logs);

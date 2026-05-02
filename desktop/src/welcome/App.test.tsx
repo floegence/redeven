@@ -712,6 +712,11 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("label: 'Desktop Upload'");
     expect(appSrc).toContain("label: 'Remote Install'");
     expect(appSrc).toContain('SSH Destination');
+    expect(appSrc).toContain('function SSHDestinationCombobox');
+    expect(appSrc).toContain('sm:grid-cols-[minmax(0,1fr)_7.5rem]');
+    expect(appSrc).toContain("props.updateField('ssh_destination', host.alias);");
+    expect(appSrc).toContain("props.updateField('ssh_port', host.port == null ? '' : String(host.port));");
+    expect(appSrc).toContain('getSSHConfigHosts');
     expect(appSrc).toContain('Environment Instance ID');
     expect(appSrc).toContain('Remote Install Directory');
     expect(appSrc).toContain('Release Base URL');
