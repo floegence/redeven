@@ -78,7 +78,7 @@ Example:
       "require_user_approval": false,
       "block_dangerous_commands": false
     },
-    "current_model_id": "openai/gpt-5-mini",
+    "current_model_id": "openai/gpt-5.5",
     "providers": [
       {
         "id": "openai",
@@ -86,8 +86,8 @@ Example:
         "name": "OpenAI",
         "base_url": "https://api.openai.com/v1",
         "models": [
-          { "model_name": "gpt-5-mini" },
-          { "model_name": "gpt-5" }
+          { "model_name": "gpt-5.5", "context_window": 1050000, "max_output_tokens": 128000 },
+          { "model_name": "gpt-5.4-mini", "context_window": 400000, "max_output_tokens": 128000 }
         ]
       },
       {
@@ -96,7 +96,9 @@ Example:
         "name": "Anthropic",
         "base_url": "https://api.anthropic.com/v1",
         "models": [
-          { "model_name": "claude-3-5-sonnet-latest" }
+          { "model_name": "claude-opus-4-7", "context_window": 1000000, "max_output_tokens": 128000 },
+          { "model_name": "claude-sonnet-4-6", "context_window": 1000000, "max_output_tokens": 64000 },
+          { "model_name": "claude-haiku-4-5-20251001", "context_window": 200000, "max_output_tokens": 64000 }
         ]
       }
     ]
