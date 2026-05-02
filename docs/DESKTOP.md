@@ -114,7 +114,7 @@ It does not introduce a second SSH-native file or terminal protocol. Instead, El
    - `desktop_upload`
    - `remote_install`
    - `auto`
-6. Starts `redeven run --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0` remotely with its mutable runtime state rooted at `instances/<environment_instance_id>/state/`.
+6. Starts `redeven run --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0` as a detached background process on the SSH host with its mutable runtime state rooted at `instances/<environment_instance_id>/state/`.
 7. Waits for the remote startup report under `instances/<environment_instance_id>/sessions/<session_token>/startup-report.json`.
 8. Creates a local SSH port forward to that remote Local UI port.
 9. Opens the forwarded `127.0.0.1:<port>` origin as a normal Desktop session.
@@ -149,10 +149,13 @@ SSH bootstrap is intentionally transport-light and runtime-heavy:
 - `auto` prefers desktop upload for restricted networks, then falls back to the remote installer path only when desktop-side asset preparation fails before upload/install begins.
 - After Desktop starts uploading or installing the tarball over SSH, later failures stay first-class errors instead of silently degrading into `remote_install`.
 - Development builds may set `REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG` to choose the remote runtime release tag used for SSH Host bootstrap. `scripts/dev_desktop.sh` fills this from the latest local `v*` tag when the variable is unset.
+- The remote runtime process is intentionally independent from the SSH control command that launched it. Desktop owns the SSH control socket and local port forward, not the remote runtime lifecycle.
 - The forwarded localhost URL is session-ephemeral and only used as the live session origin.
+- SSH Host data traffic goes through the local SSH tunnel: Desktop opens `127.0.0.1:<local_forward>` and SSH forwards it to the remote runtime's loopback-only Local UI port. No public or LAN-facing host port is required for the Local UI.
 - Session identity is derived from SSH destination, SSH port, authentication mode, remote install directory, and `environment_instance_id` so reconnecting does not create duplicates just because the forwarded local port changed.
-- Closing the Desktop session window does not stop the SSH-owned remote runtime.
-- SSH runtime stop is an explicit launcher/runtime-menu action. Desktop may reuse an existing live forward or recreate it on the next `Open`.
+- Closing the Desktop session window, losing the local forward, or quitting Desktop disconnects only the SSH transport. The SSH-hosted runtime keeps running until the user explicitly stops it or the remote host/process exits.
+- SSH runtime stop is an explicit launcher/runtime-menu action. Desktop may reuse an existing live forward or recreate the forward on the next `Open`.
+- `SSH Destination` accepts either a direct `user@host` target or a Host alias from the user's local SSH config. When a selected Host has a configured `Port`, Desktop fills the Port field while still allowing the user to edit or clear that override.
 - SSH bootstrap supports key/agent authentication and a Desktop-owned password prompt mode. Key/agent mode keeps `BatchMode=yes` so missing keys or host-key trust issues surface as actionable launcher errors. Password prompt mode disables batch auth, asks through the OS askpass flow only while starting the runtime, and does not store the SSH password.
 
 ### Launch Outcomes
@@ -244,8 +247,8 @@ Interaction rules:
   - Desktop never creates a second visible card just because that provider environment also has an on-device local runtime
 - SSH Host mode keeps the same compact launcher shell but adds:
   - `Name`
-  - `SSH Destination`
-  - optional `Port`
+  - `SSH Destination`, as a free-entry combobox backed by concrete Host aliases from the user's local SSH config
+  - optional `Port`, displayed beside `SSH Destination` and auto-filled when the selected Host alias defines one
   - `Bootstrap Delivery`
   - compact `Advanced` section for:
     - `Environment Instance ID`

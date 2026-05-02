@@ -23,21 +23,44 @@ describe('bootstrapDesktopLauncherBridge', () => {
     ipcRendererInvoke.mockReset();
     ipcRendererOn.mockReset();
     ipcRendererRemoveListener.mockReset();
-    ipcRendererInvoke.mockResolvedValue({ ok: true, outcome: 'opened_environment_window' });
+    ipcRendererInvoke.mockImplementation((channel: string) => {
+      if (channel === 'redeven-desktop:launcher-get-ssh-config-hosts') {
+        return Promise.resolve([
+          {
+            alias: 'devbox',
+            host_name: 'devbox.internal',
+            user: 'ops',
+            port: 2222,
+            source_path: '/Users/tester/.ssh/config',
+          },
+        ]);
+      }
+      return Promise.resolve({ ok: true, outcome: 'opened_environment_window' });
+    });
   });
 
-  it('exposes snapshot loading, action dispatch, and snapshot subscriptions to the renderer', async () => {
+  it('exposes snapshot loading, SSH config hosts, action dispatch, and snapshot subscriptions to the renderer', async () => {
     const { bootstrapDesktopLauncherBridge } = await import('./desktopLauncher');
 
     bootstrapDesktopLauncherBridge();
 
     const [, bridge] = exposeInMainWorld.mock.calls[0] ?? [];
     expect(typeof bridge.getSnapshot).toBe('function');
+    expect(typeof bridge.getSSHConfigHosts).toBe('function');
     expect(typeof bridge.performAction).toBe('function');
     expect(typeof bridge.subscribeActionProgress).toBe('function');
     expect(typeof bridge.subscribeSnapshot).toBe('function');
 
     await bridge.getSnapshot();
+    await expect(bridge.getSSHConfigHosts()).resolves.toEqual([
+      {
+        alias: 'devbox',
+        host_name: 'devbox.internal',
+        user: 'ops',
+        port: 2222,
+        source_path: '/Users/tester/.ssh/config',
+      },
+    ]);
     await bridge.performAction({
       kind: 'open_remote_environment',
       external_local_ui_url: 'http://192.168.1.11:24000/',
@@ -48,13 +71,14 @@ describe('bootstrapDesktopLauncherBridge', () => {
     const unsubscribe = bridge.subscribeSnapshot(() => undefined);
 
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(1, 'redeven-desktop:launcher-get-snapshot');
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(2, 'redeven-desktop:launcher-perform-action', {
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(2, 'redeven-desktop:launcher-get-ssh-config-hosts');
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(3, 'redeven-desktop:launcher-perform-action', {
       kind: 'open_remote_environment',
       external_local_ui_url: 'http://192.168.1.11:24000/',
       environment_id: 'env-1',
       label: 'Work laptop',
     });
-    expect(ipcRendererInvoke).toHaveBeenCalledTimes(2);
+    expect(ipcRendererInvoke).toHaveBeenCalledTimes(3);
     expect(ipcRendererOn).toHaveBeenCalledWith(
       'redeven-desktop:launcher-action-progress',
       expect.any(Function),

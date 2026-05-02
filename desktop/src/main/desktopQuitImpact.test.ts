@@ -17,7 +17,7 @@ describe('desktopQuitImpact', () => {
         { id: 'managed-a', label: 'Alpha', lifecycle_owner: 'external' },
       ],
       ssh_runtimes: [
-        { id: 'ssh-a', label: 'SSH Lab', lifecycle_owner: 'desktop' },
+        { id: 'ssh-a', label: 'SSH Lab', lifecycle_owner: 'external' },
       ],
     });
 
@@ -25,9 +25,8 @@ describe('desktopQuitImpact', () => {
       environment_window_count: 2,
       desktop_owned_runtimes: [
         { id: 'managed-b', label: 'Bravo', kind: 'managed_environment' },
-        { id: 'ssh-a', label: 'SSH Lab', kind: 'ssh_environment' },
       ],
-      external_runtime_count: 1,
+      external_runtime_count: 2,
     });
   });
 
@@ -79,15 +78,15 @@ describe('desktopQuitImpact', () => {
         { id: 'managed-a', label: 'Alpha', lifecycle_owner: 'desktop' },
       ],
       ssh_runtimes: [
-        { id: 'ssh-a', label: 'SSH Lab', lifecycle_owner: 'desktop' },
+        { id: 'ssh-a', label: 'SSH Lab', lifecycle_owner: 'external' },
         { id: 'ssh-b', label: 'Shared Bastion', lifecycle_owner: 'external' },
       ],
     }));
 
     expect(model).toEqual({
       title: 'Quit Redeven Desktop?',
-      message: 'This will stop 2 Desktop-managed runtimes and close 2 environment windows.',
-      detail: '1 externally managed runtime will keep running.',
+      message: 'This will stop 1 Desktop-managed runtime and close 2 environment windows.',
+      detail: '2 externally managed runtimes will keep running.',
       confirm_label: 'Quit',
       cancel_label: 'Cancel',
       confirm_tone: 'danger',

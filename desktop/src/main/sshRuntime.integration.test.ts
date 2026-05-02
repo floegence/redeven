@@ -479,7 +479,7 @@ describe('sshRuntime integration', () => {
       expect(runtime.startup.pid).toBe(4242);
       expect(runtime.runtime_handle).toEqual(expect.objectContaining({
         runtime_kind: 'ssh',
-        lifecycle_owner: 'desktop',
+        lifecycle_owner: 'external',
         launch_mode: 'spawned',
       }));
 
@@ -492,7 +492,7 @@ describe('sshRuntime integration', () => {
         },
       });
     } finally {
-      await runtime?.stop();
+      await runtime?.disconnect();
     }
 
     const events = await readFakeSSHEvents(fixture);
@@ -507,6 +507,7 @@ describe('sshRuntime integration', () => {
       'control_terminated',
       'master_terminated',
     ]));
+    expect(events.map((event) => event.event)).not.toContain('stop_runtime');
     expect(events.some((event) => event.event === 'remote_install' || event.event === 'upload_install')).toBe(false);
     const runtimeProbe = events.find((event) => event.event === 'probe_runtime');
     expect(runtimeProbe?.data).toEqual(expect.objectContaining({
@@ -520,6 +521,30 @@ describe('sshRuntime integration', () => {
       disables_x11: true,
       disables_tty: true,
     }));
+    await removeFakeSSHFixture(fixture);
+  });
+
+  it('stops the remote runtime only when the user explicitly stops the SSH runtime', async () => {
+    const fixture = await createFakeSSHFixture('ready');
+    let runtime: ManagedSSHRuntime | null = null;
+    try {
+      runtime = await startWithFakeSSH(fixture, 'auto');
+      await withFakeSSHEnv(fixture, () => runtime!.stop());
+      runtime = null;
+    } finally {
+      await runtime?.disconnect();
+    }
+
+    const events = await readFakeSSHEvents(fixture);
+    expect(events.map((event) => event.event)).toEqual(expect.arrayContaining([
+      'stop_runtime',
+      'forward_terminated',
+      'control_terminated',
+      'master_terminated',
+    ]));
+    expect(events.find((event) => event.event === 'stop_runtime')?.data).toEqual({
+      pid: '4242',
+    });
     await removeFakeSSHFixture(fixture);
   });
 

@@ -78,6 +78,7 @@ import {
   type DesktopSSHBootstrapStrategy,
   type DesktopSSHEnvironmentDetails,
 } from '../shared/desktopSSH';
+import type { DesktopSSHConfigHost } from '../shared/desktopSSHConfig';
 import {
   applyDesktopAccessAutoPortToDraft,
   applyDesktopAccessFixedPortToDraft,
@@ -188,6 +189,7 @@ import {
 
 type DesktopLauncherBridge = Readonly<{
   getSnapshot: () => Promise<DesktopWelcomeSnapshot>;
+  getSSHConfigHosts?: () => Promise<readonly DesktopSSHConfigHost[]>;
   performAction: (request: DesktopLauncherActionRequest) => Promise<DesktopLauncherActionResult>;
   subscribeActionProgress?: (listener: (progress: DesktopLauncherActionProgress) => void) => (() => void);
   subscribeSnapshot: (listener: (snapshot: DesktopWelcomeSnapshot) => void) => (() => void);
@@ -805,6 +807,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [busyState, setBusyState] = createSignal<DesktopLauncherBusyState>(IDLE_LAUNCHER_BUSY_STATE);
   const [settingsDraftSession, setSettingsDraftSession] = createSignal(createDesktopSettingsDraftSession(props.snapshot.settings_surface));
   const [connectionDialogState, setConnectionDialogState] = createSignal<ConnectionDialogState>(null);
+  const [sshConfigHosts, setSSHConfigHosts] = createSignal<readonly DesktopSSHConfigHost[]>([]);
+  const [sshConfigHostsLoaded, setSSHConfigHostsLoaded] = createSignal(false);
   const [controlPlaneDialogState, setControlPlaneDialogState] = createSignal<ControlPlaneDialogState>(null);
   const [deleteTarget, setDeleteTarget] = createSignal<DesktopEnvironmentEntry | null>(null);
   const [deleteControlPlaneTarget, setDeleteControlPlaneTarget] = createSignal<DesktopControlPlaneSummary | null>(null);
@@ -814,6 +818,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const actionToastTimers = new Map<number, number>();
   let nextActionToastID = 0;
   let settingsErrorRef: HTMLElement | undefined;
+  let sshConfigHostsLoading = false;
 
   const visibleSurface = createMemo<DesktopLauncherSurface>(() => snapshot().surface);
   const status = createMemo(() => shellStatus(snapshot()));
@@ -978,6 +983,28 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
     return acceptedSnapshot;
   }
+
+  async function refreshSSHConfigHosts(): Promise<void> {
+    if (sshConfigHostsLoading || !props.runtime.launcher.getSSHConfigHosts) {
+      return;
+    }
+    sshConfigHostsLoading = true;
+    try {
+      setSSHConfigHosts(await props.runtime.launcher.getSSHConfigHosts());
+      setSSHConfigHostsLoaded(true);
+    } catch {
+      setSSHConfigHosts([]);
+      setSSHConfigHostsLoaded(true);
+    } finally {
+      sshConfigHostsLoading = false;
+    }
+  }
+
+  createEffect(() => {
+    if (connectionDialogState()?.connection_kind === 'ssh_environment' && !sshConfigHostsLoaded()) {
+      void refreshSSHConfigHosts();
+    }
+  });
 
   function dismissActionToast(toastID: number): void {
     const handle = actionToastTimers.get(toastID);
@@ -2513,6 +2540,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
       <ConnectionDialog
         state={connectionDialogState()}
+        sshConfigHosts={sshConfigHosts()}
         error={connectionDialogError()}
         busyState={busyState()}
         onOpenChange={(open) => {
@@ -4856,8 +4884,172 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
   );
 }
 
+function sshConfigHostSearchText(host: DesktopSSHConfigHost): string {
+  return [
+    host.alias,
+    host.host_name,
+    host.user,
+    host.port == null ? '' : String(host.port),
+  ].join(' ').toLowerCase();
+}
+
+function sshConfigHostEndpointLabel(host: DesktopSSHConfigHost): string {
+  const endpoint = host.host_name || host.alias;
+  return host.user ? `${host.user}@${endpoint}` : endpoint;
+}
+
+function SSHDestinationCombobox(props: Readonly<{
+  value: string;
+  hosts: readonly DesktopSSHConfigHost[];
+  autofocus: boolean;
+  onInput: (value: string) => void;
+  onSelectHost: (host: DesktopSSHConfigHost) => void;
+}>) {
+  const [open, setOpen] = createSignal(false);
+  const [highlightedIndex, setHighlightedIndex] = createSignal(0);
+  let closeTimer: number | undefined;
+
+  const filteredHosts = createMemo(() => {
+    const query = trimString(props.value).toLowerCase();
+    const hosts = query === ''
+      ? props.hosts
+      : props.hosts.filter((host) => sshConfigHostSearchText(host).includes(query));
+    return hosts.slice(0, 8);
+  });
+
+  createEffect(() => {
+    const hostCount = filteredHosts().length;
+    if (hostCount <= 0) {
+      setHighlightedIndex(0);
+      return;
+    }
+    if (highlightedIndex() >= hostCount) {
+      setHighlightedIndex(hostCount - 1);
+    }
+  });
+
+  onCleanup(() => {
+    if (closeTimer !== undefined) {
+      window.clearTimeout(closeTimer);
+    }
+  });
+
+  function openMenu(): void {
+    if (closeTimer !== undefined) {
+      window.clearTimeout(closeTimer);
+      closeTimer = undefined;
+    }
+    setOpen(true);
+  }
+
+  function closeMenuSoon(): void {
+    closeTimer = window.setTimeout(() => setOpen(false), 100);
+  }
+
+  function selectHost(host: DesktopSSHConfigHost): void {
+    props.onSelectHost(host);
+    setOpen(false);
+  }
+
+  function moveHighlight(delta: number): void {
+    const hostCount = filteredHosts().length;
+    if (hostCount <= 0) {
+      return;
+    }
+    setHighlightedIndex((current) => (current + delta + hostCount) % hostCount);
+  }
+
+  return (
+    <div class="relative">
+      <Input
+        id="environment-ssh-destination"
+        value={props.value}
+        onInput={(event) => {
+          props.onInput(event.currentTarget.value);
+          openMenu();
+        }}
+        onFocus={openMenu}
+        onBlur={closeMenuSoon}
+        onKeyDown={(event) => {
+          if (!open() && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+            setOpen(true);
+          }
+          if (!open() || filteredHosts().length <= 0) {
+            return;
+          }
+          if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            moveHighlight(1);
+          } else if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            moveHighlight(-1);
+          } else if (event.key === 'Enter') {
+            event.preventDefault();
+            const host = filteredHosts()[highlightedIndex()];
+            if (host) {
+              selectHost(host);
+            }
+          } else if (event.key === 'Escape') {
+            event.preventDefault();
+            setOpen(false);
+          }
+        }}
+        placeholder="user@host or ssh-config-alias"
+        size="sm"
+        class="w-full font-mono"
+        spellcheck={false}
+        autofocus={props.autofocus}
+        role="combobox"
+        aria-expanded={open() && filteredHosts().length > 0 ? 'true' : 'false'}
+        aria-controls="environment-ssh-destination-options"
+        aria-autocomplete="list"
+      />
+      <Show when={open() && filteredHosts().length > 0}>
+        <div
+          id="environment-ssh-destination-options"
+          class="absolute left-0 right-0 z-50 mt-1 max-h-56 overflow-auto rounded-md border border-border bg-popover p-1 shadow-xl"
+          role="listbox"
+        >
+          <For each={filteredHosts()}>
+            {(host, index) => (
+              <button
+                type="button"
+                id={`environment-ssh-host-option-${index()}`}
+                class={cn(
+                  'flex w-full cursor-pointer items-center justify-between gap-3 rounded px-2.5 py-2 text-left transition-colors',
+                  highlightedIndex() === index()
+                    ? 'bg-accent text-accent-foreground'
+                    : 'text-foreground hover:bg-accent/70 hover:text-accent-foreground',
+                )}
+                role="option"
+                aria-selected={highlightedIndex() === index() ? 'true' : 'false'}
+                onMouseEnter={() => setHighlightedIndex(index())}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  selectHost(host);
+                }}
+              >
+                <span class="min-w-0">
+                  <span class="block truncate font-mono text-xs">{host.alias}</span>
+                  <span class="block truncate text-[11px] text-muted-foreground">{sshConfigHostEndpointLabel(host)}</span>
+                </span>
+                <Show when={host.port !== null}>
+                  <Tag variant="neutral" tone="soft" size="sm" class="shrink-0 cursor-default whitespace-nowrap">
+                    Port {host.port}
+                  </Tag>
+                </Show>
+              </button>
+            )}
+          </For>
+        </div>
+      </Show>
+    </div>
+  );
+}
+
 function ConnectionDialog(props: Readonly<{
   state: ConnectionDialogState;
+  sshConfigHosts: readonly DesktopSSHConfigHost[];
   error: string;
   busyState: DesktopLauncherBusyState;
   onOpenChange: (open: boolean) => void;
@@ -5168,31 +5360,53 @@ function ConnectionDialog(props: Readonly<{
               Desktop reuses only the exact Desktop-managed Redeven release on that host, installs it on demand when needed, and keeps runtime state isolated per Environment Instance.
             </div>
             <div class="mt-3 space-y-3">
-              <div class="space-y-1.5">
-                <label for="environment-ssh-destination" class="block text-xs font-medium text-foreground">SSH Destination</label>
-                <Input
-                  id="environment-ssh-destination"
-                  value={props.state?.connection_kind === 'ssh_environment' ? props.state.ssh_destination : ''}
-                  onInput={(event) => props.updateField('ssh_destination', event.currentTarget.value)}
-                  placeholder="user@host or ssh-config-alias"
-                  size="sm"
-                  class="w-full font-mono"
-                  spellcheck={false}
-                  autofocus={props.state?.mode === 'create'}
-                />
+              <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7.5rem]">
+                <div class="space-y-1.5">
+                  <label for="environment-ssh-destination" class="block text-xs font-medium text-foreground">SSH Destination</label>
+                  <SSHDestinationCombobox
+                    value={props.state?.connection_kind === 'ssh_environment' ? props.state.ssh_destination : ''}
+                    hosts={props.sshConfigHosts}
+                    autofocus={props.state?.mode === 'create'}
+                    onInput={(value) => props.updateField('ssh_destination', value)}
+                    onSelectHost={(host) => {
+                      props.updateField('ssh_destination', host.alias);
+                      props.updateField('ssh_port', host.port == null ? '' : String(host.port));
+                    }}
+                  />
+                </div>
+                <div class="space-y-1.5">
+                  <label for="environment-ssh-port" class="block text-xs font-medium text-foreground">Port</label>
+                  <Input
+                    id="environment-ssh-port"
+                    value={props.state?.connection_kind === 'ssh_environment' ? props.state.ssh_port : ''}
+                    onInput={(event) => props.updateField('ssh_port', event.currentTarget.value)}
+                    placeholder="22"
+                    inputMode="numeric"
+                    size="sm"
+                    class="w-full font-mono"
+                  />
+                </div>
               </div>
-              <div class="space-y-1.5">
-                <label class="block text-xs font-medium text-foreground">Bootstrap Delivery</label>
-                <SegmentedControl
-                  value={sshBootstrapStrategy()}
-                  onChange={(value) => props.switchBootstrapStrategy(value as DesktopSSHBootstrapStrategy)}
-                  options={[
-                    { value: 'auto', label: 'Automatic' },
-                    { value: 'desktop_upload', label: 'Desktop Upload' },
-                    { value: 'remote_install', label: 'Remote Install' },
-                  ]}
-                  size="sm"
-                />
+              <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_9rem]">
+                <div class="space-y-1.5">
+                  <label class="block text-xs font-medium text-foreground">Bootstrap Delivery</label>
+                  <SegmentedControl
+                    value={sshBootstrapStrategy()}
+                    onChange={(value) => props.switchBootstrapStrategy(value as DesktopSSHBootstrapStrategy)}
+                    options={[
+                      { value: 'auto', label: 'Automatic' },
+                      { value: 'desktop_upload', label: 'Desktop Upload' },
+                      { value: 'remote_install', label: 'Remote Install' },
+                    ]}
+                    size="sm"
+                  />
+                </div>
+                <div class="space-y-1.5">
+                  <label class="block text-xs font-medium text-foreground">Source</label>
+                  <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                    {sshBootstrapSummaryLabel()}
+                  </Tag>
+                </div>
               </div>
               <div class="space-y-1.5">
                 <label class="block text-xs font-medium text-foreground">Authentication</label>
@@ -5207,26 +5421,6 @@ function ConnectionDialog(props: Readonly<{
                 />
                 <div class="text-[11px] leading-5 text-muted-foreground">
                   Key / agent uses your existing SSH configuration. Password prompt asks only when starting the runtime and does not store the SSH password.
-                </div>
-              </div>
-              <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_9rem]">
-                <div class="space-y-1.5">
-                  <label for="environment-ssh-port" class="block text-xs font-medium text-foreground">Port</label>
-                  <Input
-                    id="environment-ssh-port"
-                    value={props.state?.connection_kind === 'ssh_environment' ? props.state.ssh_port : ''}
-                    onInput={(event) => props.updateField('ssh_port', event.currentTarget.value)}
-                    placeholder="22"
-                    inputMode="numeric"
-                    size="sm"
-                    class="w-full font-mono"
-                  />
-                </div>
-                <div class="space-y-1.5">
-                  <label class="block text-xs font-medium text-foreground">Source</label>
-                  <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                    {sshBootstrapSummaryLabel()}
-                  </Tag>
                 </div>
               </div>
               <div class="overflow-hidden rounded-md border border-border/70 bg-background/80">
