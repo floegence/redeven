@@ -34,6 +34,7 @@ function runtimeStateFromStartup(
     password_required: startup.password_required === true,
     diagnostics_enabled: startup.diagnostics_enabled === true,
     pid: Number.isInteger(pid) && pid > 0 ? pid : 0,
+    ...(startup.runtime_service ? { runtime_service: startup.runtime_service } : {}),
   };
 }
 
@@ -110,6 +111,7 @@ function withCurrentRuntime(
     && (existingRuntime?.remote_enabled ?? false) === (currentRuntime?.remote_enabled ?? false)
     && (existingRuntime?.diagnostics_enabled ?? false) === (currentRuntime?.diagnostics_enabled ?? false)
     && (existingRuntime?.pid ?? 0) === (currentRuntime?.pid ?? 0)
+    && JSON.stringify(existingRuntime?.runtime_service ?? null) === JSON.stringify(currentRuntime?.runtime_service ?? null)
   ) {
     return environment;
   }
@@ -140,6 +142,7 @@ function withCurrentRuntimeForProviderEnvironment(
     && (existingRuntime?.remote_enabled ?? false) === (currentRuntime?.remote_enabled ?? false)
     && (existingRuntime?.diagnostics_enabled ?? false) === (currentRuntime?.diagnostics_enabled ?? false)
     && (existingRuntime?.pid ?? 0) === (currentRuntime?.pid ?? 0)
+    && JSON.stringify(existingRuntime?.runtime_service ?? null) === JSON.stringify(currentRuntime?.runtime_service ?? null)
   ) {
     return environment;
   }

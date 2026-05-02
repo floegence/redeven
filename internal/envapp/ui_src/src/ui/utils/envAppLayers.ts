@@ -1,5 +1,4 @@
 export const ENV_APP_FLOATING_LAYER = {
-  runtimeUpdatePrompt: 140,
   fileBrowserSurface: 144,
   debugConsole: 145,
   previewWindow: 150,

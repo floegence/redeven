@@ -152,6 +152,21 @@ describe('runtimeProcess', () => {
       state_dir: '/Users/tester/.redeven',
       diagnostics_enabled: true,
       pid: 4242,
+      runtime_service: {
+        runtime_version: 'v1.2.3',
+        protocol_version: 'redeven-runtime-v1',
+        service_owner: 'desktop',
+        desktop_managed: true,
+        effective_run_mode: 'hybrid',
+        remote_enabled: true,
+        compatibility: 'compatible',
+        active_workload: {
+          terminal_count: 2,
+          session_count: 1,
+          task_count: 0,
+          port_forward_count: 3,
+        },
+      },
     }))).toEqual({
       local_ui_url: 'http://127.0.0.1:43123/',
       local_ui_urls: ['http://127.0.0.1:43123/'],
@@ -162,6 +177,28 @@ describe('runtimeProcess', () => {
       state_dir: '/Users/tester/.redeven',
       diagnostics_enabled: true,
       pid: 4242,
+      runtime_service: {
+        runtime_version: 'v1.2.3',
+        runtime_commit: undefined,
+        runtime_build_time: undefined,
+        protocol_version: 'redeven-runtime-v1',
+        compatibility_epoch: undefined,
+        service_owner: 'desktop',
+        desktop_managed: true,
+        effective_run_mode: 'hybrid',
+        remote_enabled: true,
+        compatibility: 'compatible',
+        compatibility_message: undefined,
+        minimum_desktop_version: undefined,
+        minimum_runtime_version: undefined,
+        compatibility_review_id: undefined,
+        active_workload: {
+          terminal_count: 2,
+          session_count: 1,
+          task_count: 0,
+          port_forward_count: 3,
+        },
+      },
     });
   });
 

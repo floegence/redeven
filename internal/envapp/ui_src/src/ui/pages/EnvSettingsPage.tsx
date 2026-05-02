@@ -20,6 +20,7 @@ import { useRuntimeUpdateContext } from '../maintenance/RuntimeUpdateContext';
 import { resolveAgentUpgradeState } from '../maintenance/agentUpgradeState';
 import { isReleaseVersion } from '../maintenance/agentVersion';
 import { formatAgentStatusLabel, formatUnknownError } from '../maintenance/shared';
+import type { RuntimeServiceSnapshot } from '../protocol/redeven_v1/sdk/sys';
 import { manageDesktopUpdate, openExternalURLInDesktopShell } from '../services/desktopShellBridge';
 import { fetchGatewayJSON } from '../services/gatewayApi';
 import {
@@ -296,6 +297,60 @@ function normalizeRepoInput(raw: string): string {
     .replace(/^\/+|\/+$/g, '');
 }
 
+function formatRuntimeServiceOwner(snapshot: RuntimeServiceSnapshot | undefined): string {
+  if (!snapshot) return 'Unknown';
+  if (snapshot.serviceOwner === 'desktop' || snapshot.desktopManaged) return 'Redeven Desktop';
+  if (snapshot.serviceOwner === 'external') return 'External service';
+  return 'Unknown';
+}
+
+function formatRuntimeServiceCompatibility(snapshot: RuntimeServiceSnapshot | undefined): string {
+  const value = String(snapshot?.compatibility ?? 'unknown').trim();
+  switch (value) {
+    case 'compatible':
+      return 'Compatible';
+    case 'update_available':
+      return 'Update available';
+    case 'restart_recommended':
+      return 'Restart recommended';
+    case 'update_required':
+      return 'Update required';
+    case 'desktop_update_required':
+      return 'Desktop update required';
+    case 'managed_elsewhere':
+      return 'Managed elsewhere';
+    default:
+      return 'Unknown';
+  }
+}
+
+function runtimeServiceCompatibilityTone(snapshot: RuntimeServiceSnapshot | undefined): 'default' | 'warning' | 'success' {
+  switch (snapshot?.compatibility) {
+    case 'compatible':
+      return 'success';
+    case 'update_available':
+    case 'restart_recommended':
+    case 'update_required':
+    case 'desktop_update_required':
+    case 'managed_elsewhere':
+      return 'warning';
+    default:
+      return 'default';
+  }
+}
+
+function formatRuntimeServiceWorkload(snapshot: RuntimeServiceSnapshot | undefined): string {
+  const workload = snapshot?.activeWorkload;
+  if (!workload) return 'No active work';
+  const parts = [
+    workload.terminalCount > 0 ? `${workload.terminalCount} ${workload.terminalCount === 1 ? 'terminal' : 'terminals'}` : '',
+    workload.sessionCount > 0 ? `${workload.sessionCount} ${workload.sessionCount === 1 ? 'session' : 'sessions'}` : '',
+    workload.taskCount > 0 ? `${workload.taskCount} ${workload.taskCount === 1 ? 'task' : 'tasks'}` : '',
+    workload.portForwardCount > 0 ? `${workload.portForwardCount} ${workload.portForwardCount === 1 ? 'port forward' : 'port forwards'}` : '',
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(', ') : 'No active work';
+}
+
 // ============================================================================
 // Main Component
 // ============================================================================
@@ -388,6 +443,8 @@ export function EnvSettingsPage() {
   const maintaining = createMemo(() => runtimeUpdate.maintenance.maintaining());
   const isUpgrading = createMemo(() => runtimeUpdate.maintenance.isUpgrading());
   const isRestarting = createMemo(() => runtimeUpdate.maintenance.isRestarting());
+  const runtimeService = createMemo(() => runtimeUpdate.version.runtimeService());
+  const activeWorkSummary = createMemo(() => formatRuntimeServiceWorkload(runtimeService()));
 
   createEffect(() => {
     if (codeRuntimeStatus()?.operation.state !== 'running') return;
@@ -2748,6 +2805,32 @@ export function EnvSettingsPage() {
                     </SettingsTableCell>
                     <SettingsTableCell class="text-[11px] text-muted-foreground">Current status as observed by the maintenance controller.</SettingsTableCell>
                   </SettingsTableRow>
+                  <SettingsTableRow>
+                    <SettingsTableCell class="font-medium text-muted-foreground">Service owner</SettingsTableCell>
+                    <SettingsTableCell>{formatRuntimeServiceOwner(runtimeService())}</SettingsTableCell>
+                    <SettingsTableCell class="text-[11px] text-muted-foreground">Lifecycle owner for this persistent Runtime Service.</SettingsTableCell>
+                  </SettingsTableRow>
+                  <SettingsTableRow>
+                    <SettingsTableCell class="font-medium text-muted-foreground">Compatibility</SettingsTableCell>
+                    <SettingsTableCell>
+                      <SettingsPill tone={runtimeServiceCompatibilityTone(runtimeService())}>
+                        {formatRuntimeServiceCompatibility(runtimeService())}
+                      </SettingsPill>
+                    </SettingsTableCell>
+                    <SettingsTableCell class="text-[11px] text-muted-foreground">
+                      {runtimeService()?.compatibilityMessage || 'Desktop and Runtime Service compatibility state.'}
+                    </SettingsTableCell>
+                  </SettingsTableRow>
+                  <SettingsTableRow>
+                    <SettingsTableCell class="font-medium text-muted-foreground">Active work</SettingsTableCell>
+                    <SettingsTableCell>{activeWorkSummary()}</SettingsTableCell>
+                    <SettingsTableCell class="text-[11px] text-muted-foreground">Live work that may be interrupted by maintenance.</SettingsTableCell>
+                  </SettingsTableRow>
+                  <SettingsTableRow>
+                    <SettingsTableCell class="font-medium text-muted-foreground">Runtime protocol</SettingsTableCell>
+                    <SettingsTableCell class="font-mono text-[11px]">{runtimeService()?.protocolVersion || '—'}</SettingsTableCell>
+                    <SettingsTableCell class="text-[11px] text-muted-foreground">Service identity protocol reported by the runtime.</SettingsTableCell>
+                  </SettingsTableRow>
                   <Show when={upgradeState().allowsUpgradeAction && upgradeState().policy !== 'desktop_release'}>
                     <SettingsTableRow>
                       <SettingsTableCell class="font-medium text-muted-foreground">Target version</SettingsTableCell>
@@ -3832,7 +3915,7 @@ export function EnvSettingsPage() {
       <ConfirmDialog
         open={upgradeOpen()}
         onOpenChange={(open) => setUpgradeOpen(open)}
-        title={upgradeState().policy === 'desktop_release' ? 'Manage in Desktop' : 'Update Redeven'}
+        title={upgradeState().policy === 'desktop_release' ? 'Update Redeven Desktop?' : 'Update Runtime Service?'}
         confirmText={upgradeState().policy === 'desktop_release' ? 'Continue' : 'Update'}
         loading={isUpgrading()}
         onConfirm={() => void startUpgrade()}
@@ -3842,7 +3925,8 @@ export function EnvSettingsPage() {
             when={upgradeState().policy === 'desktop_release'}
             fallback={(
               <>
-                <p class="text-sm">This will restart the runtime and terminate all running activities. Continue?</p>
+                <p class="text-sm">This Runtime Service is persistent and may have live work.</p>
+                <p class="text-xs text-muted-foreground">Active work: {activeWorkSummary()}.</p>
                 <p class="text-xs text-muted-foreground">You will reconnect automatically after the runtime comes back online.</p>
                 <p class="text-xs text-muted-foreground">If the secure session needs to be verified again, this page will ask for the access password without a manual refresh.</p>
                 <p class="text-xs text-muted-foreground">
@@ -3854,7 +3938,8 @@ export function EnvSettingsPage() {
               </>
             )}
           >
-            <p class="text-sm">This runtime is managed by Redeven Desktop.</p>
+            <p class="text-sm">This Runtime Service is managed by Redeven Desktop.</p>
+            <p class="text-xs text-muted-foreground">Active work: {activeWorkSummary()}.</p>
             <p class="text-xs text-muted-foreground">Desktop will explain whether this update only rebinds this managed runtime or requires installing a newer desktop release first.</p>
             <p class="text-xs text-muted-foreground">If Desktop cannot complete the update directly, it will open the matching release page for this host.</p>
           </Show>
@@ -3865,13 +3950,14 @@ export function EnvSettingsPage() {
       <ConfirmDialog
         open={restartOpen()}
         onOpenChange={(open) => setRestartOpen(open)}
-        title="Restart runtime"
+        title="Restart Runtime Service?"
         confirmText="Restart"
         loading={isRestarting()}
         onConfirm={() => void startRestart()}
       >
         <div class="space-y-3">
-          <p class="text-sm">This will restart the runtime and terminate all running activities. Continue?</p>
+          <p class="text-sm">This Runtime Service is persistent and may have live work.</p>
+          <p class="text-xs text-muted-foreground">Active work: {activeWorkSummary()}.</p>
           <p class="text-xs text-muted-foreground">You will reconnect automatically after the runtime comes back online.</p>
           <p class="text-xs text-muted-foreground">If the secure session needs to be verified again, this page will ask for the access password without a manual refresh.</p>
         </div>

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { createContext } from 'solid-js';
+import { createContext, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -16,21 +16,30 @@ const mintEnvProxyEntryTicketMock = vi.fn();
 const mintEnvEntryTicketForAppMock = vi.fn();
 const connectArtifactEntryMock = vi.fn();
 const getEnvPublicIDFromSessionMock = vi.fn(() => 'env_remote');
+const notificationMocks = vi.hoisted(() => ({
+  error: vi.fn(),
+  success: vi.fn(),
+  info: vi.fn(),
+}));
 
 let protocolStatus: 'connected' | 'disconnected' | 'connecting' | 'error' = 'disconnected';
 let protocolClient: unknown = null;
+const [protocolRevision, setProtocolRevision] = createSignal(0);
 
 const connectMock = vi.fn(async () => {
   protocolStatus = 'connected';
   protocolClient = { id: 'client-1' };
+  setProtocolRevision((revision) => revision + 1);
 });
 const reconnectMock = vi.fn(async () => {
   protocolStatus = 'connected';
   protocolClient = { id: 'client-2' };
+  setProtocolRevision((revision) => revision + 1);
 });
 const disconnectMock = vi.fn(() => {
   protocolStatus = 'disconnected';
   protocolClient = null;
+  setProtocolRevision((revision) => revision + 1);
 });
 const accessStatusMock = vi.fn(async () => ({ passwordRequired: false, unlocked: true }));
 const accessResumeMock = vi.fn(async () => undefined);
@@ -45,7 +54,7 @@ vi.mock('@floegence/floe-webapp-core', () => ({
     setSidebarActiveTab: vi.fn(),
     setSidebarCollapsed: vi.fn(),
   }),
-  useNotification: () => ({ error: vi.fn(), success: vi.fn(), info: vi.fn() }),
+  useNotification: () => notificationMocks,
   useTheme: () => ({
     resolvedTheme: () => 'dark',
     toggleTheme: vi.fn(),
@@ -145,8 +154,14 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
 
 vi.mock('@floegence/floe-webapp-protocol', () => ({
   useProtocol: () => ({
-    status: () => protocolStatus,
-    client: () => protocolClient,
+    status: () => {
+      protocolRevision();
+      return protocolStatus;
+    },
+    client: () => {
+      protocolRevision();
+      return protocolClient;
+    },
     connect: connectMock,
     reconnect: reconnectMock,
     disconnect: disconnectMock,
@@ -208,7 +223,6 @@ vi.mock('./pages/aiPermissions', () => ({ hasRWXPermissions: () => true }));
 vi.mock('./deck/redevenDeckWidgets', () => ({ redevenDeckWidgets: [] }));
 vi.mock('./widgets/AuditLogDialog', () => ({ AuditLogDialog: () => <div /> }));
 vi.mock('./widgets/AskFlowerComposerWindow', () => ({ AskFlowerComposerWindow: () => <div /> }));
-vi.mock('./widgets/RuntimeUpdateFloatingPrompt', () => ({ RuntimeUpdateFloatingPrompt: () => <div /> }));
 vi.mock('./widgets/FileBrowserSurfaceHost', () => ({ FileBrowserSurfaceHost: () => <div /> }));
 vi.mock('./widgets/FilePreviewHost', () => ({ FilePreviewHost: () => <div /> }));
 vi.mock('./utils/askFlowerContextTemplate', () => ({ buildAskFlowerDraftMarkdown: () => '' }));
@@ -271,6 +285,8 @@ afterEach(() => {
 beforeEach(() => {
   vi.resetModules();
   vi.clearAllMocks();
+  localStorage.clear();
+  sessionStorage.clear();
   protocolStatus = 'disconnected';
   protocolClient = null;
 
@@ -327,6 +343,33 @@ describe('EnvAppShell update prompt orchestration', () => {
         cache_ttl_ms: 300_000,
       });
       await flushAsync();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('announces optional runtime updates through toast notifications', async () => {
+    getAgentLatestVersionMock.mockResolvedValue({
+      latest_version: 'v1.1.0',
+      recommended_version: 'v1.1.0',
+      upgrade_policy: 'self_upgrade',
+      cache_ttl_ms: 300_000,
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushUntil(() => notificationMocks.info.mock.calls.length > 0);
+
+      expect(notificationMocks.info).toHaveBeenCalledWith(
+        'Runtime update ready',
+        'Runtime Service v1.1.0 is ready. Open Runtime Status when your work is idle.',
+      );
+      expect(host.textContent).not.toContain('Update available');
     } finally {
       dispose();
     }

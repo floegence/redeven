@@ -171,8 +171,40 @@ describe('buildEnvironmentCardModel', () => {
       }),
       controlPlanes: [controlPlane],
       openSessions: [
-        testManagedSession(managedLocal, 'http://localhost:23998/'),
-        testManagedSession(localServe, 'http://127.0.0.1:24001/'),
+        testManagedSession(managedLocal, 'http://localhost:23998/', 'open', {
+          runtime_service: {
+            runtime_version: 'v1.4.2',
+            protocol_version: 'redeven-runtime-v1',
+            service_owner: 'desktop',
+            desktop_managed: true,
+            effective_run_mode: 'desktop',
+            remote_enabled: true,
+            compatibility: 'compatible',
+            active_workload: {
+              terminal_count: 2,
+              session_count: 1,
+              task_count: 0,
+              port_forward_count: 1,
+            },
+          },
+        }),
+        testManagedSession(localServe, 'http://127.0.0.1:24001/', 'open', {
+          runtime_service: {
+            runtime_version: 'v1.4.2',
+            protocol_version: 'redeven-runtime-v1',
+            service_owner: 'desktop',
+            desktop_managed: true,
+            effective_run_mode: 'hybrid',
+            remote_enabled: true,
+            compatibility: 'compatible',
+            active_workload: {
+              terminal_count: 1,
+              session_count: 1,
+              task_count: 0,
+              port_forward_count: 0,
+            },
+          },
+        }),
         {
           session_key: 'url:http://192.168.1.12:24000/',
           target: buildExternalLocalUIDesktopTarget('http://192.168.1.12:24000/', { label: 'Staging' }),
@@ -180,6 +212,21 @@ describe('buildEnvironmentCardModel', () => {
           startup: {
             local_ui_url: 'http://192.168.1.12:24000/',
             local_ui_urls: ['http://192.168.1.12:24000/'],
+            runtime_service: {
+              runtime_version: 'v1.4.1',
+              protocol_version: 'redeven-runtime-v1',
+              service_owner: 'external',
+              desktop_managed: false,
+              effective_run_mode: 'standalone',
+              remote_enabled: true,
+              compatibility: 'compatible',
+              active_workload: {
+                terminal_count: 0,
+                session_count: 1,
+                task_count: 0,
+                port_forward_count: 0,
+              },
+            },
           },
         },
         {
@@ -204,6 +251,21 @@ describe('buildEnvironmentCardModel', () => {
           startup: {
             local_ui_url: 'http://127.0.0.1:24111/',
             local_ui_urls: ['http://127.0.0.1:24111/'],
+            runtime_service: {
+              runtime_version: 'v1.4.0',
+              protocol_version: 'redeven-runtime-v1',
+              service_owner: 'desktop',
+              desktop_managed: true,
+              effective_run_mode: 'desktop',
+              remote_enabled: false,
+              compatibility: 'compatible',
+              active_workload: {
+                terminal_count: 1,
+                session_count: 1,
+                task_count: 0,
+                port_forward_count: 0,
+              },
+            },
           },
         },
       ],
@@ -229,14 +291,12 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildEnvironmentCardModel(providerEntry!)).toEqual(expect.objectContaining({
       kind_label: 'Provider',
       status_label: 'RUNTIME ONLINE',
-      source_label: 'Provider',
       target_primary: 'http://127.0.0.1:24001/',
       target_secondary: 'https://cp.example.invalid/env/env_demo',
     }));
     expect(buildEnvironmentCardModel(urlEntry!)).toEqual(expect.objectContaining({
       kind_label: 'Redeven URL',
       status_label: 'RUNTIME ONLINE',
-      source_label: 'Saved',
     }));
     expect(buildEnvironmentCardModel(sshEntry!)).toEqual(expect.objectContaining({
       kind_label: 'SSH Host',
@@ -247,25 +307,31 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(buildEnvironmentCardFactsModel(localEntry!)).toEqual([
       defaultFact('RUNS ON', 'This device'),
+      defaultFact('RUNTIME SERVICE', 'Running'),
+      defaultFact('VERSION', 'v1.4.2'),
+      defaultFact('ACTIVE WORK', '2 terminals, 1 session, 1 port forward'),
       placeholderFact('PROVIDER'),
-      defaultFact('SOURCE', 'Desktop-managed'),
-      defaultFact('WINDOW', 'Open'),
     ]);
     expect(buildEnvironmentCardFactsModel(providerEntry!)).toEqual([
       defaultFact('RUNS ON', 'This device'),
+      defaultFact('RUNTIME SERVICE', 'Running'),
+      defaultFact('VERSION', 'v1.4.2'),
+      defaultFact('ACTIVE WORK', '1 terminal, 1 session'),
       defaultFact('PROVIDER', 'Demo Portal'),
       defaultFact('SOURCE ENV', 'env_demo'),
-      defaultFact('WINDOW', 'Open'),
     ]);
     expect(buildEnvironmentCardFactsModel(urlEntry!)).toEqual([
       defaultFact('RUNS ON', 'LAN host'),
-      defaultFact('SOURCE', 'Saved'),
-      defaultFact('WINDOW', 'Open'),
+      defaultFact('RUNTIME SERVICE', 'External service'),
+      defaultFact('VERSION', 'v1.4.1'),
+      defaultFact('ACTIVE WORK', '1 session'),
     ]);
     expect(buildEnvironmentCardFactsModel(sshEntry!)).toEqual([
       defaultFact('RUNS ON', 'ops@example.internal:2222'),
+      defaultFact('RUNTIME SERVICE', 'Running'),
+      defaultFact('VERSION', 'v1.4.0'),
+      defaultFact('ACTIVE WORK', '1 terminal, 1 session'),
       defaultFact('BOOTSTRAP', 'Desktop upload'),
-      defaultFact('WINDOW', 'Open'),
     ]);
 
     expect(buildEnvironmentCardEndpointsModel(providerEntry!)).toEqual([
@@ -345,6 +411,46 @@ describe('buildEnvironmentCardModel', () => {
       desktopControlPlaneKey('https://cp.example.invalid', 'redeven_portal'),
     ).map((environment) => environment.kind)).toEqual([
       'provider_environment',
+    ]);
+  });
+
+  it('shows runtime maintenance state in the stable card fact slot', () => {
+    const managedLocal = testManagedLocalEnvironment('default');
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [managedLocal],
+      }),
+      openSessions: [
+        testManagedSession(managedLocal, 'http://localhost:23998/', 'open', {
+          runtime_service: {
+            runtime_version: 'v1.4.3',
+            protocol_version: 'redeven-runtime-v1',
+            service_owner: 'desktop',
+            desktop_managed: true,
+            effective_run_mode: 'desktop',
+            remote_enabled: true,
+            compatibility: 'update_available',
+            active_workload: {
+              terminal_count: 1,
+              session_count: 0,
+              task_count: 0,
+              port_forward_count: 0,
+            },
+          },
+        }),
+      ],
+    });
+    const localEntry = snapshot.environments.find((environment) => (
+      environment.kind === 'managed_environment' && environment.managed_environment_kind === 'local'
+    ));
+
+    expect(localEntry).toBeTruthy();
+    expect(buildEnvironmentCardFactsModel(localEntry!)).toEqual([
+      defaultFact('RUNS ON', 'This device'),
+      defaultFact('RUNTIME SERVICE', 'Update ready'),
+      defaultFact('VERSION', 'v1.4.3'),
+      defaultFact('ACTIVE WORK', '1 terminal'),
+      placeholderFact('PROVIDER'),
     ]);
   });
 

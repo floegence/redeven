@@ -14,6 +14,7 @@ export type AgentVersionModel = Readonly<{
   currentPing: Accessor<SysPingResponse | null>;
   currentPingLoading: Accessor<boolean>;
   currentProcessStartedAtMs: Accessor<number | null>;
+  runtimeService: Accessor<SysPingResponse['runtimeService']>;
   currentVersion: Accessor<string>;
   currentVersionValid: Accessor<boolean>;
   latestMeta: Accessor<AgentLatestVersion | null>;
@@ -143,6 +144,7 @@ export function createAgentVersionModel(args: CreateAgentVersionModelArgs): Agen
     currentPing,
     currentPingLoading: () => currentPingResource.loading,
     currentProcessStartedAtMs,
+    runtimeService: () => currentPing()?.runtimeService,
     currentVersion,
     currentVersionValid: () => isReleaseVersion(currentVersion()),
     latestMeta,

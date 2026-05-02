@@ -276,22 +276,32 @@ Interaction rules:
 - pinning an open unsaved Redeven URL or SSH Host entry implicitly promotes it into the saved Environment Library
 - Local environment cards surface:
   - `RUNS ON`
+  - `RUNTIME SERVICE`
+  - `VERSION`
+  - `ACTIVE WORK`
   - `CONTROL PLANE`
-  - `SOURCE`
-  - `WINDOW`
 - Provider environment cards surface:
   - `RUNS ON`
+  - `RUNTIME SERVICE`
+  - `VERSION`
+  - `ACTIVE WORK`
   - `CONTROL PLANE`
   - `SOURCE ENV`
-  - `WINDOW`
 - Redeven URL cards surface:
-  - `SOURCE`
   - `RUNS ON`
-  - `WINDOW`
+  - `RUNTIME SERVICE`
+  - `VERSION`
+  - `ACTIVE WORK`
 - SSH Host cards surface:
   - `RUNS ON`
-  - `WINDOW`
+  - `RUNTIME SERVICE`
+  - `VERSION`
+  - `ACTIVE WORK`
   - `BOOTSTRAP`
+Runtime Service rows render only after Desktop has a runtime snapshot for that
+card. They use the same stable fact slots across local, provider, Redeven URL,
+and SSH Host runtimes; window state stays in action/status chrome instead of
+duplicating as a low-value fact row.
 - Provider shelves still keep the raw provider runtime details (`status`, `lifecycle_status`, `last_seen_at`) visible in the detail rows, but the primary badge stays consistent with the Environment Library.
 - Provider-backed state is freshness-aware instead of being treated as timeless cache:
   - Desktop marks provider catalogs as `fresh`, `stale`, or `unknown`
@@ -468,7 +478,18 @@ Desktop semantics:
 - A provider environment may also have an optional Desktop-owned local runtime on this device. That local runtime is persisted inside the same provider environment record instead of as a second launcher card.
 - If Desktop attaches to a runtime that was started by standalone runtime / CLI mode, that attached runtime stays externally owned: closing the Desktop session only detaches, and restart/update stay delegated to the host process that owns that runtime.
 - Launcher runtime ownership is explicit on the environment card: externally owned runtimes surface as attachable local runtimes, while Desktop-owned runtimes surface as Desktop-managed local runtimes.
+- Launcher Runtime Service details are stable card facts, not banners. When a runtime snapshot is available, all runtime types can show service state, runtime version, and active work counts in the existing fact grid.
 - Standalone runtime / CLI and Desktop sessions stay interoperable because both read and write the same scope-first runtime layout.
+
+Runtime Service snapshots are carried through the same attach and startup paths that already describe Local UI:
+
+- `runtime/local-ui.json`
+- `--startup-report-file`
+- `/api/local/runtime/health`
+- `/api/local/runtime`
+- `sys.ping` after Env App connects
+
+The snapshot is intentionally non-secret and uses snake_case fields such as `runtime_version`, `protocol_version`, `service_owner`, `desktop_managed`, `effective_run_mode`, `remote_enabled`, `compatibility`, and `active_workload`. Desktop treats it as service identity and maintenance context, not as a second runtime protocol.
 
 Target validation rules:
 
@@ -663,7 +684,7 @@ Desktop-specific outcomes from this implementation:
 
 ## Env App Behavior
 
-- Desktop-managed Local UI exposes `desktop_managed`, `effective_run_mode`, and `remote_enabled` through local runtime/version endpoints.
+- Desktop-managed Local UI exposes `desktop_managed`, `effective_run_mode`, `remote_enabled`, and the normalized Runtime Service snapshot through local runtime/version endpoints.
 - When the runtime reports a desktop-owned release policy, Env App turns `Update Redeven` into `Manage in Desktop`.
 - Env App keeps `Restart runtime` only for Desktop-owned managed runtimes.
 - When Desktop is attached to an externally owned local runtime, restart and update hand off to the owning host process instead of trying to stop that runtime from Electron, and Desktop quit warnings do not claim that external runtime as a Desktop-owned shutdown.

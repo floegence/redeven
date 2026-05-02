@@ -294,6 +294,55 @@ describe('desktopWelcomeState', () => {
     ]));
   });
 
+  it('preserves probed saved URL runtime service metadata before a window is open', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        saved_environments: [{
+          id: 'http://192.168.1.20:24000/',
+          label: 'Team Host',
+          local_ui_url: 'http://192.168.1.20:24000/',
+          source: 'saved',
+          pinned: false,
+          last_used_at_ms: 200,
+        }],
+      }),
+      savedExternalRuntimeHealth: {
+        'http://192.168.1.20:24000/': {
+          status: 'online',
+          checked_at_unix_ms: 1000,
+          source: 'external_local_ui_probe',
+          local_ui_url: 'http://192.168.1.20:24000/',
+          runtime_service: {
+            runtime_version: 'v1.7.0',
+            protocol_version: 'redeven-runtime-v1',
+            service_owner: 'external',
+            desktop_managed: false,
+            remote_enabled: true,
+            compatibility: 'compatible',
+            active_workload: {
+              terminal_count: 0,
+              session_count: 1,
+              task_count: 0,
+              port_forward_count: 0,
+            },
+          },
+        },
+      },
+    });
+
+    expect(snapshot.environments).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'http://192.168.1.20:24000/',
+        kind: 'external_local_ui',
+        is_open: false,
+        runtime_service: expect.objectContaining({
+          runtime_version: 'v1.7.0',
+          service_owner: 'external',
+        }),
+      }),
+    ]));
+  });
+
   it('adds transient open remote environments when they are not yet saved', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences(),
@@ -431,6 +480,62 @@ describe('desktopWelcomeState', () => {
       release_base_url: 'https://mirror.example.invalid/releases',
       environment_instance_id: 'envinst_demo001',
     });
+  });
+
+  it('preserves probed SSH runtime service metadata before a window is open', () => {
+    const sshID = 'ssh:devbox:2222:key_agent:remote_default:envinst_demo001';
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        saved_ssh_environments: [{
+          id: sshID,
+          label: 'SSH Lab',
+          ssh_destination: 'devbox',
+          ssh_port: 2222,
+          auth_mode: 'key_agent',
+          remote_install_dir: 'remote_default',
+          bootstrap_strategy: 'desktop_upload',
+          release_base_url: '',
+          environment_instance_id: 'envinst_demo001',
+          source: 'saved',
+          pinned: false,
+          last_used_at_ms: 100,
+        }],
+      }),
+      savedSSHRuntimeHealth: {
+        [sshID]: {
+          status: 'online',
+          checked_at_unix_ms: 1000,
+          source: 'ssh_runtime_probe',
+          local_ui_url: 'http://127.0.0.1:40111/',
+          runtime_service: {
+            runtime_version: 'v1.8.0',
+            protocol_version: 'redeven-runtime-v1',
+            service_owner: 'desktop',
+            desktop_managed: true,
+            remote_enabled: false,
+            compatibility: 'compatible',
+            active_workload: {
+              terminal_count: 1,
+              session_count: 0,
+              task_count: 0,
+              port_forward_count: 0,
+            },
+          },
+        },
+      },
+    });
+
+    expect(snapshot.environments).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: sshID,
+        kind: 'ssh_environment',
+        is_open: false,
+        runtime_service: expect.objectContaining({
+          runtime_version: 'v1.8.0',
+          service_owner: 'desktop',
+        }),
+      }),
+    ]));
   });
 
   it('builds a dedicated settings snapshot when requested by the desktop shell', () => {

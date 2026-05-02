@@ -10,18 +10,21 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/floegence/redeven/internal/runtimeservice"
 )
 
 type State struct {
-	LocalUIURL         string   `json:"local_ui_url,omitempty"`
-	LocalUIURLs        []string `json:"local_ui_urls,omitempty"`
-	PasswordRequired   bool     `json:"password_required"`
-	EffectiveRunMode   string   `json:"effective_run_mode,omitempty"`
-	RemoteEnabled      bool     `json:"remote_enabled"`
-	DesktopManaged     bool     `json:"desktop_managed"`
-	StateDir           string   `json:"state_dir,omitempty"`
-	DiagnosticsEnabled bool     `json:"diagnostics_enabled"`
-	PID                int      `json:"pid,omitempty"`
+	LocalUIURL         string                  `json:"local_ui_url,omitempty"`
+	LocalUIURLs        []string                `json:"local_ui_urls,omitempty"`
+	PasswordRequired   bool                    `json:"password_required"`
+	EffectiveRunMode   string                  `json:"effective_run_mode,omitempty"`
+	RemoteEnabled      bool                    `json:"remote_enabled"`
+	DesktopManaged     bool                    `json:"desktop_managed"`
+	StateDir           string                  `json:"state_dir,omitempty"`
+	DiagnosticsEnabled bool                    `json:"diagnostics_enabled"`
+	PID                int                     `json:"pid,omitempty"`
+	RuntimeService     runtimeservice.Snapshot `json:"runtime_service"`
 }
 
 type Snapshot struct {
@@ -34,6 +37,7 @@ type Snapshot struct {
 	StateDir           string
 	DiagnosticsEnabled bool
 	PID                int
+	RuntimeService     runtimeservice.Snapshot
 }
 
 func RuntimeStatePath(configPath string) string {
@@ -62,6 +66,7 @@ func WriteState(path string, state State) error {
 		state.LocalUIURLs = []string{state.LocalUIURL}
 	}
 	state.EffectiveRunMode = strings.TrimSpace(state.EffectiveRunMode)
+	state.RuntimeService = normalizeRuntimeServiceSnapshot(state.RuntimeService, state.DesktopManaged, state.EffectiveRunMode, state.RemoteEnabled)
 
 	dir := filepath.Dir(cleanPath)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -142,6 +147,7 @@ func parseState(raw []byte) (*Snapshot, error) {
 	if len(state.LocalUIURLs) == 0 {
 		state.LocalUIURLs = []string{state.LocalUIURL}
 	}
+	state.RuntimeService = normalizeRuntimeServiceSnapshot(state.RuntimeService, state.DesktopManaged, state.EffectiveRunMode, state.RemoteEnabled)
 	return &Snapshot{
 		LocalUIURL:         state.LocalUIURL,
 		LocalUIURLs:        append([]string(nil), state.LocalUIURLs...),
@@ -152,6 +158,7 @@ func parseState(raw []byte) (*Snapshot, error) {
 		StateDir:           strings.TrimSpace(state.StateDir),
 		DiagnosticsEnabled: state.DiagnosticsEnabled,
 		PID:                state.PID,
+		RuntimeService:     state.RuntimeService,
 	}, nil
 }
 
@@ -179,8 +186,9 @@ type localRuntimeHealthEnvelope struct {
 }
 
 type localRuntimeHealthPayload struct {
-	Status           *string `json:"status"`
-	PasswordRequired *bool   `json:"password_required"`
+	Status           *string                  `json:"status"`
+	PasswordRequired *bool                    `json:"password_required"`
+	RuntimeService   *runtimeservice.Snapshot `json:"runtime_service"`
 }
 
 func probeURL(rawURL string, timeout time.Duration) (*localRuntimeHealthPayload, bool) {
@@ -251,10 +259,17 @@ func LoadAttachable(path string, timeout time.Duration) (*Snapshot, error) {
 			snapshot.LocalUIURL = candidateURL
 			snapshot.LocalUIURLs = compactStrings(append([]string{candidateURL}, snapshot.LocalUIURLs...))
 			snapshot.PasswordRequired = status.PasswordRequired != nil && *status.PasswordRequired
+			if status.RuntimeService != nil {
+				snapshot.RuntimeService = runtimeservice.NormalizeSnapshot(*status.RuntimeService)
+			}
 			return snapshot, nil
 		}
 	}
 	return nil, nil
+}
+
+func normalizeRuntimeServiceSnapshot(snapshot runtimeservice.Snapshot, desktopManaged bool, effectiveRunMode string, remoteEnabled bool) runtimeservice.Snapshot {
+	return runtimeservice.NormalizeSnapshotForEndpoint(snapshot, desktopManaged, effectiveRunMode, remoteEnabled)
 }
 
 func WaitForAttachable(path string, timeout time.Duration, pollInterval time.Duration, probeTimeout time.Duration) (*Snapshot, error) {

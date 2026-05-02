@@ -557,6 +557,13 @@ func TestServer_handleRuntime_reportsDesktopManagedMetadata(t *testing.T) {
 	if !body.DesktopManaged || body.EffectiveRunMode != "hybrid" || !body.RemoteEnabled {
 		t.Fatalf("unexpected runtime body: %#v", body)
 	}
+	if body.RuntimeService.ProtocolVersion != "redeven-runtime-v1" ||
+		body.RuntimeService.ServiceOwner != "desktop" ||
+		!body.RuntimeService.DesktopManaged ||
+		body.RuntimeService.EffectiveRunMode != "hybrid" ||
+		!body.RuntimeService.RemoteEnabled {
+		t.Fatalf("unexpected runtime service body: %#v", body.RuntimeService)
+	}
 }
 
 func TestServer_DiagnosticsAddsTraceHeaderForRuntime(t *testing.T) {

@@ -1,3 +1,5 @@
+import { normalizeRuntimeServiceSnapshot, type RuntimeServiceSnapshot } from '../shared/runtimeService';
+
 export type StartupReport = Readonly<{
   local_ui_url: string;
   local_ui_urls: string[];
@@ -8,6 +10,7 @@ export type StartupReport = Readonly<{
   state_dir?: string;
   diagnostics_enabled?: boolean;
   pid?: number;
+  runtime_service?: RuntimeServiceSnapshot;
 }>;
 
 export function parseStartupReport(raw: string): StartupReport {
@@ -31,5 +34,10 @@ export function parseStartupReport(raw: string): StartupReport {
     state_dir: String(parsed.state_dir ?? '').trim() || undefined,
     diagnostics_enabled: typeof parsed.diagnostics_enabled === 'boolean' ? parsed.diagnostics_enabled : undefined,
     pid: Number.isInteger(parsed.pid) && Number(parsed.pid) > 0 ? Number(parsed.pid) : undefined,
+    ...(parsed.runtime_service ? { runtime_service: normalizeRuntimeServiceSnapshot(parsed.runtime_service, {
+      desktopManaged: typeof parsed.desktop_managed === 'boolean' ? parsed.desktop_managed : undefined,
+      effectiveRunMode: String(parsed.effective_run_mode ?? '').trim(),
+      remoteEnabled: typeof parsed.remote_enabled === 'boolean' ? parsed.remote_enabled : undefined,
+    }) } : {}),
   };
 }

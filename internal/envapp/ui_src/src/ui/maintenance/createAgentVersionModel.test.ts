@@ -101,4 +101,59 @@ describe('createAgentVersionModel', () => {
       dispose();
     }
   });
+
+  it('exposes the runtime service snapshot from the current ping', async () => {
+    const getLatestVersionMock = vi.mocked(getAgentLatestVersion);
+    getLatestVersionMock.mockReset();
+    getLatestVersionMock.mockResolvedValue(null);
+
+    const [envId] = createSignal('env_local');
+    const [currentPingSource] = createSignal<unknown | null>({});
+    const ping = vi.fn(async () => ({
+      serverTimeMs: Date.now(),
+      version: 'v1.0.0',
+      runtimeService: {
+        runtimeVersion: 'v1.0.0',
+        protocolVersion: 'redeven-runtime-v1',
+        serviceOwner: 'desktop' as const,
+        desktopManaged: true,
+        effectiveRunMode: 'hybrid',
+        remoteEnabled: true,
+        compatibility: 'compatible' as const,
+        activeWorkload: {
+          terminalCount: 2,
+          sessionCount: 1,
+          taskCount: 0,
+          portForwardCount: 1,
+        },
+      },
+    }));
+
+    let model!: ReturnType<typeof createAgentVersionModel>;
+    const dispose = createRoot((disposeRoot) => {
+      model = createAgentVersionModel({
+        envId,
+        currentPingSource,
+        rpc: { sys: { ping } },
+      });
+      return disposeRoot;
+    });
+
+    try {
+      await flushUntil(() => model.runtimeService()?.activeWorkload.terminalCount === 2);
+
+      expect(model.runtimeService()).toMatchObject({
+        runtimeVersion: 'v1.0.0',
+        serviceOwner: 'desktop',
+        desktopManaged: true,
+        activeWorkload: {
+          terminalCount: 2,
+          sessionCount: 1,
+          portForwardCount: 1,
+        },
+      });
+    } finally {
+      dispose();
+    }
+  });
 });

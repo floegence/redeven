@@ -27,6 +27,8 @@ Key points:
   - `Security`: `Permission Policy`
   - `AI & Extensions`: `Flower`, `Skills`, `Codex`
   - `Diagnostics`: `Debug Console`
+- Runtime Settings -> `Overview` -> `Runtime Status` is the stable maintenance surface for the persistent Runtime Service. It shows service owner, compatibility, active work, and runtime protocol as table rows instead of injecting page banners.
+- Optional Runtime Service update notices use toasts only. Risky actions such as restart or update always go through confirmation dialogs that summarize active terminals, sessions, tasks, and port forwards before the user continues.
 - Codex is a separate optional AI runtime with its own activity-bar entry and gateway namespace; it is not implemented as a Flower mode, provider, or sub-page.
 - Runtime Settings -> `AI & Extensions` -> Codex is a read-only host/runtime status panel. Redeven does not persist Codex approval, sandbox, model, or binary configuration in runtime settings.
 - The Codex sidebar/page use floe-webapp layout and form primitives for visual consistency, but Codex state, icon assets, thread navigation, transcript projection, and request handling stay implemented as a separate surface rather than as Flower extensions.
@@ -139,7 +141,7 @@ Deck and Workbench reuse released floe-webapp layout/workbench primitives, and R
 - Workbench terminal close is lifecycle-managed by the runtime instead of PTY-bound by the foreground request. The widget `session_ids` list is updated first, the terminal manager marks the target session `closing`, hides it from normal `listSessions` results, rejects attach/input/resize/history/clear/stats for that hidden session, and then cleans up the PTY asynchronously. If cleanup fails, the session stays hidden as `close_failed_hidden`; Env App surfaces a diagnostic notification without restoring the tab to the foreground.
 - Workbench Files windows use runtime-shared `current_path` plus local widget-scoped view preferences, so each Files widget stays on the same directory across windows while `show_hidden`, `page_mode`, and `git_subview` remain local to the current client.
 - Workbench Preview widgets share only the current preview target. Clean previews follow the synced file immediately, while dirty previews keep the local unsaved draft and show an explicit pending synced file prompt before switching.
-- App-owned floating surfaces such as Preview, File Browser, Ask Flower, stash confirmations, runtime update prompts, and Debug Console must use the centralized `ENV_APP_FLOATING_LAYER` contract instead of raw per-file `z-index` literals.
+- App-owned floating surfaces such as Preview, File Browser, Ask Flower, stash confirmations, and Debug Console must use the centralized `ENV_APP_FLOATING_LAYER` contract instead of raw per-file `z-index` literals. Runtime update prompts are intentionally toast-driven and must not use an app-owned floating window.
 
 ## Accessibility baseline
 

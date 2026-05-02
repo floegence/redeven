@@ -633,6 +633,7 @@ func (c *cli) runCmd(args []string) int {
 				StateDir:           stateLayout.StateDir,
 				DiagnosticsEnabled: a.DiagnosticsEnabled(),
 				PID:                os.Getpid(),
+				RuntimeService:     a.RuntimeServiceSnapshot(),
 			}, desktopLaunchStatusReady); err != nil {
 				fmt.Fprintf(c.stderr, "failed to write desktop launch report: %v\n", err)
 				return 1

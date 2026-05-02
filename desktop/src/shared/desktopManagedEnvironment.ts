@@ -1,5 +1,6 @@
 import { DEFAULT_DESKTOP_LOCAL_UI_BIND } from './desktopAccessModel';
 import { normalizeControlPlaneOrigin } from './controlPlaneProvider';
+import { normalizeRuntimeServiceSnapshot, type RuntimeServiceSnapshot } from './runtimeService';
 
 export type DesktopManagedEnvironmentAccess = Readonly<{
   local_ui_bind: string;
@@ -36,6 +37,7 @@ export type DesktopManagedEnvironmentRuntimeState = Readonly<{
   password_required: boolean;
   diagnostics_enabled: boolean;
   pid: number;
+  runtime_service?: RuntimeServiceSnapshot;
 }>;
 
 export type DesktopManagedEnvironmentLocalHosting = Readonly<{
@@ -191,6 +193,11 @@ function normalizeRuntimeState(
     password_required: value.password_required === true,
     diagnostics_enabled: value.diagnostics_enabled === true,
     pid: Number.isInteger(pid) && pid > 0 ? pid : 0,
+    ...(value.runtime_service ? { runtime_service: normalizeRuntimeServiceSnapshot(value.runtime_service, {
+      desktopManaged: value.desktop_managed === true,
+      effectiveRunMode: value.effective_run_mode,
+      remoteEnabled: value.remote_enabled === true,
+    }) } : {}),
   };
 }
 

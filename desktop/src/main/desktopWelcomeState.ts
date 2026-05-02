@@ -54,6 +54,7 @@ import {
   type DesktopProviderRemoteRouteState,
 } from '../shared/providerEnvironmentState';
 import type { DesktopRuntimeHealth } from '../shared/desktopRuntimeHealth';
+import type { RuntimeServiceSnapshot } from '../shared/runtimeService';
 
 export type BuildDesktopWelcomeSnapshotArgs = Readonly<{
   preferences: DesktopPreferences;
@@ -239,12 +240,14 @@ function environmentWindowState(
 function onlineRuntimeHealth(
   source: DesktopRuntimeHealth['source'],
   localUIURL: string,
+  runtimeService?: RuntimeServiceSnapshot,
 ): DesktopRuntimeHealth {
   return {
     status: 'online',
     checked_at_unix_ms: Date.now(),
     source,
     local_ui_url: compact(localUIURL) || undefined,
+    ...(runtimeService ? { runtime_service: runtimeService } : {}),
   };
 }
 
@@ -424,6 +427,27 @@ function managedLocalRuntimeURL(
   return compact(environment.local_hosting?.current_runtime?.local_ui_url);
 }
 
+function managedRuntimeService(
+  environment: DesktopManagedEnvironment,
+  localSession: DesktopSessionSummary | null,
+): DesktopEnvironmentEntry['managed_runtime_service'] {
+  if (localSession?.target.kind === 'managed_environment' && localSession.target.route === 'local_host') {
+    return localSession.startup?.runtime_service;
+  }
+  return environment.local_hosting?.current_runtime?.runtime_service;
+}
+
+function runtimeServiceFromHealth(health: DesktopRuntimeHealth | undefined): RuntimeServiceSnapshot | undefined {
+  return health?.runtime_service;
+}
+
+function preferredRuntimeService(
+  primary: RuntimeServiceSnapshot | undefined,
+  health: DesktopRuntimeHealth | null | undefined,
+): RuntimeServiceSnapshot | undefined {
+  return primary ?? runtimeServiceFromHealth(health ?? undefined);
+}
+
 function managedLocalCloseBehavior(
   environment: DesktopManagedEnvironment,
   runtimeState: DesktopManagedLocalRuntimeState,
@@ -437,9 +461,10 @@ function managedLocalCloseBehavior(
 function managedEnvironmentRuntimeHealth(
   runtimeState: DesktopManagedLocalRuntimeState,
   localRuntimeURL: string,
+  runtimeService?: RuntimeServiceSnapshot,
 ): DesktopRuntimeHealth {
   if (runtimeState === 'running_desktop' || runtimeState === 'running_external') {
-    return onlineRuntimeHealth('local_runtime_probe', localRuntimeURL);
+    return onlineRuntimeHealth('local_runtime_probe', localRuntimeURL, runtimeService);
   }
   return offlineRuntimeHealth('local_runtime_probe', 'not_started', 'Serve the runtime first');
 }
@@ -568,8 +593,9 @@ function buildManagedEnvironmentEntry(
   const envPublicID = managedEnvironmentPublicID(environment);
   const localRuntimeState = managedLocalRuntimeState(environment, localSession);
   const localRuntimeURL = managedLocalRuntimeURL(environment, localSession);
+  const runtimeService = managedRuntimeService(environment, localSession);
   const localCloseBehavior = managedLocalCloseBehavior(environment, localRuntimeState);
-  const runtimeHealth = managedEnvironmentRuntimeHealth(localRuntimeState, localRuntimeURL);
+  const runtimeHealth = managedEnvironmentRuntimeHealth(localRuntimeState, localRuntimeURL, runtimeService);
   const localRouteState = managedLocalRouteState(environment, localSession);
   const remoteRoute = kind === 'controlplane'
     ? managedRemoteRouteDetails(environment, controlPlanes)
@@ -601,6 +627,7 @@ function buildManagedEnvironmentEntry(
     managed_local_owner: environment.local_hosting?.owner,
     managed_local_runtime_state: localRuntimeState,
     managed_local_runtime_url: localRuntimeURL || undefined,
+    managed_runtime_service: runtimeService,
     managed_local_close_behavior: localCloseBehavior,
     managed_has_local_hosting: true,
     managed_has_remote_desktop: false,
@@ -632,6 +659,7 @@ function buildManagedEnvironmentEntry(
     is_open: isOpen,
     is_opening: isOpening,
     runtime_health: runtimeHealth,
+    runtime_service: runtimeService,
     runtime_control_capability: 'start_stop',
     open_session_key: localSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(localSession),
@@ -775,6 +803,16 @@ function providerLocalRuntimeURL(
   return compact(environment.local_runtime?.current_runtime?.local_ui_url);
 }
 
+function providerRuntimeService(
+  environment: DesktopProviderEnvironmentRecord,
+  localSession: DesktopSessionSummary | null,
+): DesktopEnvironmentEntry['provider_runtime_service'] {
+  if (localSession?.target.kind === 'managed_environment' && localSession.target.route === 'local_host') {
+    return localSession.startup?.runtime_service;
+  }
+  return environment.local_runtime?.current_runtime?.runtime_service;
+}
+
 function providerLocalCloseBehavior(
   environment: DesktopProviderEnvironmentRecord,
   runtimeState: DesktopManagedLocalRuntimeState,
@@ -820,10 +858,11 @@ function buildProviderEnvironmentEntry(
   const localAccess = providerEnvironmentLocalAccess(environment);
   const localRuntimeState = providerLocalRuntimeState(environment, localSession);
   const localRuntimeURL = providerLocalRuntimeURL(environment, localSession);
+  const runtimeService = providerRuntimeService(environment, localSession);
   const localCloseBehavior = providerLocalCloseBehavior(environment, localRuntimeState);
   const localRouteState = providerLocalRouteState(environment, localSession);
   const localRuntimeHealth = environment.local_runtime
-    ? managedEnvironmentRuntimeHealth(localRuntimeState, localRuntimeURL)
+    ? managedEnvironmentRuntimeHealth(localRuntimeState, localRuntimeURL, runtimeService)
     : null;
   const remoteRuntimeHealth = routeDetails.providerEnvironment
     ? providerEnvironmentRuntimeHealth(routeDetails.providerEnvironment)
@@ -883,6 +922,7 @@ function buildProviderEnvironmentEntry(
     provider_local_runtime_configured: Boolean(environment.local_runtime),
     provider_local_runtime_state: localRuntimeState,
     provider_local_runtime_url: localRuntimeURL || undefined,
+    provider_runtime_service: preferredRuntimeService(runtimeService, localRuntimeHealth),
     provider_local_close_behavior: localCloseBehavior,
     provider_origin: environment.provider_origin,
     provider_id: environment.provider_id,
@@ -904,6 +944,7 @@ function buildProviderEnvironmentEntry(
     is_open: effectiveWindowState === 'open',
     is_opening: effectiveWindowState === 'opening',
     runtime_health: runtimeHealth,
+    runtime_service: preferredRuntimeService(runtimeService, localRuntimeHealth),
     runtime_control_capability: environment.local_runtime ? 'start_stop' : 'observe_only',
     open_session_key: effectiveSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(effectiveSession),
@@ -973,7 +1014,8 @@ function buildEnvironmentEntries(
       window_state: environmentWindowState(session),
       is_open: isOpen,
       is_opening: isOpening,
-      runtime_health: onlineRuntimeHealth('external_local_ui_probe', localUIURL),
+      runtime_health: onlineRuntimeHealth('external_local_ui_probe', localUIURL, session.startup?.runtime_service),
+      runtime_service: session.startup?.runtime_service,
       runtime_control_capability: 'observe_only',
       open_session_key: session.session_key,
       open_session_lifecycle: session.lifecycle,
@@ -1027,7 +1069,8 @@ function buildEnvironmentEntries(
       window_state: environmentWindowState(session),
       is_open: isOpen,
       is_opening: isOpening,
-      runtime_health: onlineRuntimeHealth('ssh_runtime_probe', session.entry_url ?? session.startup?.local_ui_url ?? ''),
+      runtime_health: onlineRuntimeHealth('ssh_runtime_probe', session.entry_url ?? session.startup?.local_ui_url ?? '', session.startup?.runtime_service),
+      runtime_service: session.startup?.runtime_service,
       runtime_control_capability: 'start_stop',
       open_session_key: session.session_key,
       open_session_lifecycle: session.lifecycle,
@@ -1065,7 +1108,7 @@ function buildSavedEnvironmentEntry(
   const isOpen = sessionIsOpen(openSession);
   const isOpening = sessionIsOpening(openSession);
   const runtimeHealth = isOpen || isOpening
-    ? onlineRuntimeHealth('external_local_ui_probe', openSession?.entry_url ?? openSession?.startup?.local_ui_url ?? environment.local_ui_url)
+    ? onlineRuntimeHealth('external_local_ui_probe', openSession?.entry_url ?? openSession?.startup?.local_ui_url ?? environment.local_ui_url, openSession?.startup?.runtime_service)
     : savedRuntimeHealth ?? offlineRuntimeHealth(
       'external_local_ui_probe',
       'external_unreachable',
@@ -1084,6 +1127,7 @@ function buildSavedEnvironmentEntry(
     is_open: isOpen,
     is_opening: isOpening,
     runtime_health: runtimeHealth,
+    runtime_service: openSession?.startup?.runtime_service ?? runtimeServiceFromHealth(savedRuntimeHealth),
     runtime_control_capability: 'observe_only',
     open_session_key: openSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(openSession),
@@ -1103,7 +1147,7 @@ function buildSavedSSHEnvironmentEntry(
   const isOpen = sessionIsOpen(openSession);
   const isOpening = sessionIsOpening(openSession);
   const runtimeHealth = isOpen || isOpening
-    ? onlineRuntimeHealth('ssh_runtime_probe', openSession?.entry_url ?? openSession?.startup?.local_ui_url ?? '')
+    ? onlineRuntimeHealth('ssh_runtime_probe', openSession?.entry_url ?? openSession?.startup?.local_ui_url ?? '', openSession?.startup?.runtime_service)
     : savedRuntimeHealth ?? offlineRuntimeHealth(
       'ssh_runtime_probe',
       'not_started',
@@ -1133,6 +1177,7 @@ function buildSavedSSHEnvironmentEntry(
     is_open: isOpen,
     is_opening: isOpening,
     runtime_health: runtimeHealth,
+    runtime_service: openSession?.startup?.runtime_service ?? runtimeServiceFromHealth(savedRuntimeHealth),
     runtime_control_capability: 'start_stop',
     open_session_key: openSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(openSession),

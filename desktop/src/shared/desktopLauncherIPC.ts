@@ -14,6 +14,7 @@ import type {
   DesktopRuntimeControlCapability,
   DesktopRuntimeHealth,
 } from './desktopRuntimeHealth';
+import type { RuntimeServiceSnapshot } from './runtimeService';
 
 export const DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL = 'redeven-desktop:launcher-get-snapshot';
 export const DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL = 'redeven-desktop:launcher-perform-action';
@@ -139,6 +140,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   managed_local_owner?: 'desktop' | 'agent' | 'unknown';
   managed_local_runtime_state?: DesktopManagedLocalRuntimeState;
   managed_local_runtime_url?: string;
+  managed_runtime_service?: RuntimeServiceSnapshot;
   managed_local_close_behavior?: DesktopManagedLocalCloseBehavior;
   managed_has_local_hosting?: boolean;
   managed_has_remote_desktop?: boolean;
@@ -157,6 +159,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   provider_local_runtime_configured?: boolean;
   provider_local_runtime_state?: DesktopManagedLocalRuntimeState;
   provider_local_runtime_url?: string;
+  provider_runtime_service?: RuntimeServiceSnapshot;
   provider_local_close_behavior?: DesktopManagedLocalCloseBehavior;
   provider_origin?: string;
   provider_id?: string;
@@ -179,6 +182,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   is_open: boolean;
   is_opening: boolean;
   runtime_health: DesktopRuntimeHealth;
+  runtime_service?: RuntimeServiceSnapshot;
   runtime_control_capability: DesktopRuntimeControlCapability;
   open_session_key: string;
   open_session_lifecycle?: DesktopLauncherSessionLifecycle;

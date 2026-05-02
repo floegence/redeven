@@ -222,6 +222,7 @@ import {
   type DesktopControlPlaneSyncState,
   type DesktopProviderRemoteRouteState,
 } from '../shared/providerEnvironmentState';
+import type { RuntimeServiceSnapshot } from '../shared/runtimeService';
 
 type OpenDesktopWelcomeOptions = Readonly<{
   surface?: DesktopLauncherSurface;
@@ -1029,12 +1030,14 @@ function openSessionSummaries(): readonly DesktopSessionSummary[] {
 function onlineRuntimeHealth(
   source: DesktopRuntimeHealth['source'],
   localUIURL: string,
+  runtimeService?: RuntimeServiceSnapshot,
 ): DesktopRuntimeHealth {
   return {
     status: 'online',
     checked_at_unix_ms: Date.now(),
     source,
     local_ui_url: localUIURL,
+    ...(runtimeService ? { runtime_service: runtimeService } : {}),
   };
 }
 
@@ -1068,7 +1071,7 @@ async function collectSavedExternalRuntimeHealth(
           ),
         ] as const;
       }
-      return [environment.id, onlineRuntimeHealth('external_local_ui_probe', startup.local_ui_url)] as const;
+      return [environment.id, onlineRuntimeHealth('external_local_ui_probe', startup.local_ui_url, startup.runtime_service)] as const;
     } catch {
       return [
         environment.id,
@@ -1112,10 +1115,11 @@ async function collectSavedSSHRuntimeHealth(
           local_ui_url: startup.local_ui_url,
           local_ui_urls: startup.local_ui_urls,
           password_required: startup.password_required,
+          runtime_service: startup.runtime_service ?? runtimeRecord.startup.runtime_service,
         },
         local_forward_url: startup.local_ui_url,
       });
-      return [environment.id, onlineRuntimeHealth('ssh_runtime_probe', startup.local_ui_url)] as const;
+      return [environment.id, onlineRuntimeHealth('ssh_runtime_probe', startup.local_ui_url, startup.runtime_service ?? runtimeRecord.startup.runtime_service)] as const;
     } catch {
       await runtimeRecord.stop().catch(() => undefined);
       sshEnvironmentRuntimeByKey.delete(runtimeKey);

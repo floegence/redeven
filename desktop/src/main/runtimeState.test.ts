@@ -27,6 +27,20 @@ describe('runtimeState', () => {
           data: {
             status: 'online',
             password_required: true,
+            runtime_service: {
+              runtime_version: 'v1.2.3',
+              service_owner: 'desktop',
+              desktop_managed: true,
+              effective_run_mode: 'hybrid',
+              remote_enabled: true,
+              compatibility: 'compatible',
+              active_workload: {
+                terminal_count: 4,
+                session_count: 2,
+                task_count: 0,
+                port_forward_count: 1,
+              },
+            },
           },
         }));
         return;
@@ -55,6 +69,20 @@ describe('runtimeState', () => {
         remote_enabled: true,
         desktop_managed: true,
         pid: 4242,
+        runtime_service: {
+          runtime_version: 'v1.2.0',
+          service_owner: 'desktop',
+          desktop_managed: true,
+          effective_run_mode: 'hybrid',
+          remote_enabled: true,
+          compatibility: 'unknown',
+          active_workload: {
+            terminal_count: 1,
+            session_count: 1,
+            task_count: 0,
+            port_forward_count: 0,
+          },
+        },
       }), 'utf8');
 
       const startup = await loadAttachableRuntimeState(runtimeStateFile);
@@ -66,6 +94,28 @@ describe('runtimeState', () => {
         remote_enabled: true,
         desktop_managed: true,
         pid: 4242,
+        runtime_service: {
+          runtime_version: 'v1.2.3',
+          runtime_commit: undefined,
+          runtime_build_time: undefined,
+          protocol_version: 'redeven-runtime-v1',
+          compatibility_epoch: undefined,
+          service_owner: 'desktop',
+          desktop_managed: true,
+          effective_run_mode: 'hybrid',
+          remote_enabled: true,
+          compatibility: 'compatible',
+          compatibility_message: undefined,
+          minimum_desktop_version: undefined,
+          minimum_runtime_version: undefined,
+          compatibility_review_id: undefined,
+          active_workload: {
+            terminal_count: 4,
+            session_count: 2,
+            task_count: 0,
+            port_forward_count: 1,
+          },
+        },
       });
     } finally {
       await new Promise<void>((resolve, reject) => {
@@ -100,6 +150,19 @@ describe('runtimeState', () => {
           data: {
             status: 'online',
             password_required: false,
+            runtime_service: {
+              runtime_version: 'v2.0.0',
+              service_owner: 'external',
+              desktop_managed: false,
+              remote_enabled: false,
+              compatibility: 'managed_elsewhere',
+              active_workload: {
+                terminal_count: 1,
+                session_count: 0,
+                task_count: 0,
+                port_forward_count: 0,
+              },
+            },
           },
         }));
         return;
@@ -123,6 +186,28 @@ describe('runtimeState', () => {
         local_ui_url: `http://127.0.0.1:${address.port}/`,
         local_ui_urls: [`http://127.0.0.1:${address.port}/`],
         password_required: false,
+        runtime_service: {
+          runtime_version: 'v2.0.0',
+          runtime_commit: undefined,
+          runtime_build_time: undefined,
+          protocol_version: 'redeven-runtime-v1',
+          compatibility_epoch: undefined,
+          service_owner: 'external',
+          desktop_managed: false,
+          effective_run_mode: undefined,
+          remote_enabled: false,
+          compatibility: 'managed_elsewhere',
+          compatibility_message: undefined,
+          minimum_desktop_version: undefined,
+          minimum_runtime_version: undefined,
+          compatibility_review_id: undefined,
+          active_workload: {
+            terminal_count: 1,
+            session_count: 0,
+            task_count: 0,
+            port_forward_count: 0,
+          },
+        },
       });
     } finally {
       await new Promise<void>((resolve, reject) => {

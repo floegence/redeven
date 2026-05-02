@@ -82,7 +82,6 @@ import {
 import { createDebugConsoleController } from './debugConsole/createDebugConsoleController';
 import { DebugConsoleWindow } from './debugConsole/DebugConsoleWindow';
 import { AuditLogDialog } from './widgets/AuditLogDialog';
-import { RuntimeUpdateFloatingPrompt } from './widgets/RuntimeUpdateFloatingPrompt';
 import { AskFlowerComposerWindow } from './widgets/AskFlowerComposerWindow';
 import { TopBarBrandButton } from './TopBarBrandButton';
 import { Tooltip } from './primitives/Tooltip';
@@ -1271,6 +1270,12 @@ export function EnvAppShell() {
     envStatus: controlplaneStatus,
     version: agentVersionModel,
     maintenance: agentMaintenanceController,
+  });
+
+  createEffect(() => {
+    const notice = runtimeUpdatePrompt.consumeNotice();
+    if (!notice) return;
+    notify.info(notice.title, notice.message);
   });
 
   const reconnectFailure = createMemo(() => reconnectController.failure());
@@ -2720,19 +2725,6 @@ export function EnvAppShell() {
       <AuditLogDialog open={auditOpen()} envId={envId()} onClose={() => setAuditOpen(false)} />
       <FilePreviewHost />
       <FileBrowserSurfaceHost />
-      <RuntimeUpdateFloatingPrompt
-        open={runtimeUpdatePrompt.visible()}
-        mode={runtimeUpdatePrompt.mode()}
-        currentVersion={runtimeUpdatePrompt.currentVersion()}
-        targetVersion={runtimeUpdatePrompt.targetVersion()}
-        latestMessage={runtimeUpdatePrompt.latestMessage()}
-        stage={runtimeUpdatePrompt.stage()}
-        error={runtimeUpdatePrompt.error()}
-        onClose={runtimeUpdatePrompt.dismiss}
-        onUpdateNow={runtimeUpdatePrompt.startRecommendedUpgrade}
-        onRetry={runtimeUpdatePrompt.retry}
-        onSkip={runtimeUpdatePrompt.skipCurrentVersion}
-      />
       <DebugConsoleWindow controller={debugConsole} />
     </Shell>
   );

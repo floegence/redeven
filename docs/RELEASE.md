@@ -15,6 +15,21 @@ The binary release workflow is `.github/workflows/release.yml`.
 
 It runs automatically when a tag that matches `v*` is pushed.
 
+Before pushing a public release tag, update
+`internal/runtimeservice/compatibility_contract.json` so
+`release_review.release_version` equals the exact tag. The release workflow runs
+`./scripts/check_runtime_compatibility_contract.sh "${GITHUB_REF_NAME}"` before
+building artifacts; a tag must not be considered releasable until that
+compatibility contract check passes.
+
+If the new release keeps the same runtime protocol version, compatibility epoch,
+minimum Desktop version, and minimum Runtime version as the previous release,
+the unchanged compatibility window is treated as a challenged release decision:
+`release_review.same_window_rationale` must explain why the old window is still
+safe, and `release_review.checked_surfaces` must cover the attach/start,
+Local UI health, startup report, `sys.ping`, Env App maintenance, and SSH
+bootstrap surfaces that could be affected.
+
 ## GitHub Release notes quality baseline
 
 Each GitHub Release must include both:
@@ -104,7 +119,7 @@ The installer script source of truth is in this repository:
 - Latest version resolved via GitHub Releases API unless `REDEVEN_VERSION` is explicitly provided
 - Installer script can be fetched directly from this repository (for example via raw GitHub content)
 - The public install worker endpoint is `https://redeven.com/install.sh`
-- Runtime self-upgrade resolves latest-version metadata from `https://version.agent.redeven.com/v1/manifest.json`
+- Runtime self-upgrade resolves latest-version metadata from `https://version.agent.redeven.com/v1/manifest.json`. Desktop-managed runtimes surface this through Desktop/Env App maintenance UX rather than silently replacing a persistent service that may own live terminal work.
 - Manifest contract:
   - `latest` must always be a valid release tag
   - `recommended` may be omitted, but if present it must also be a valid release tag
