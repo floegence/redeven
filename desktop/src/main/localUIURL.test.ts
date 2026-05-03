@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildLocalUIEnvAppEntryURL,
   isLoopbackHost,
   isSupportedLocalHostname,
+  LOCAL_UI_ENV_APP_ENTRY_PATH,
   normalizeLocalUIBaseURL,
 } from './localUIURL';
 
@@ -21,6 +23,12 @@ describe('localUIURL', () => {
   it('normalizes a Local UI base URL to its origin root', () => {
     expect(normalizeLocalUIBaseURL('http://192.168.1.11:24000/_redeven_proxy/env/?foo=bar')).toBe('http://192.168.1.11:24000/');
     expect(normalizeLocalUIBaseURL('https://127.0.0.1:24000')).toBe('https://127.0.0.1:24000/');
+  });
+
+  it('builds the canonical Env App entry URL from any Local UI URL', () => {
+    expect(LOCAL_UI_ENV_APP_ENTRY_PATH).toBe('/_redeven_proxy/env/');
+    expect(buildLocalUIEnvAppEntryURL('http://192.168.1.11:24000/?ignored=1#x')).toBe('http://192.168.1.11:24000/_redeven_proxy/env/');
+    expect(buildLocalUIEnvAppEntryURL('https://127.0.0.1:24000/_redeven_proxy/env/assets/')).toBe('https://127.0.0.1:24000/_redeven_proxy/env/');
   });
 
   it('rejects unsupported hosts and malformed URLs', () => {

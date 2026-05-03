@@ -42,6 +42,13 @@ export function launcherActionFailurePresentation(
         refresh_snapshot: refreshSnapshot,
         delivery,
       };
+    case 'runtime_not_ready':
+      return {
+        message: failure.message || 'Runtime is preparing this environment. Try again once it is ready.',
+        tone: 'warning',
+        refresh_snapshot: refreshSnapshot,
+        delivery,
+      };
     case 'environment_status_stale':
       return {
         message: 'Remote status is stale. Refresh the provider to confirm the latest state.',

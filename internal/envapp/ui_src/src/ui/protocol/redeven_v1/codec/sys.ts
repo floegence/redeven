@@ -1,4 +1,4 @@
-import type { RuntimeServiceCompatibility, RuntimeServiceOwner, RuntimeServiceSnapshot, SysMaintenanceSnapshot, SysPingResponse, SysRestartResponse, SysUpgradeRequest, SysUpgradeResponse } from '../sdk/sys';
+import type { RuntimeServiceCompatibility, RuntimeServiceOpenReadiness, RuntimeServiceOwner, RuntimeServiceSnapshot, SysMaintenanceSnapshot, SysPingResponse, SysRestartResponse, SysUpgradeRequest, SysUpgradeResponse } from '../sdk/sys';
 import type { wire_sys_ping_resp, wire_sys_restart_req, wire_sys_restart_resp, wire_sys_upgrade_req, wire_sys_upgrade_resp } from '../wire/sys';
 
 function fromWireSysMaintenanceSnapshot(resp: wire_sys_ping_resp['maintenance']): SysMaintenanceSnapshot | undefined {
@@ -41,6 +41,19 @@ function normalizeCount(value: unknown): number {
   return Math.max(0, Math.floor(count));
 }
 
+function fromWireRuntimeServiceOpenReadiness(value: unknown): RuntimeServiceOpenReadiness | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const record = value as { state?: unknown; reason_code?: unknown; message?: unknown };
+  const state = String(record.state ?? '').trim();
+  if (state !== 'starting' && state !== 'openable' && state !== 'blocked') return undefined;
+  if (state === 'openable') return { state };
+  return {
+    state,
+    reasonCode: String(record.reason_code ?? '').trim() || undefined,
+    message: String(record.message ?? '').trim() || undefined,
+  };
+}
+
 function fromWireRuntimeServiceSnapshot(resp: wire_sys_ping_resp['runtime_service']): RuntimeServiceSnapshot | undefined {
   if (!resp) return undefined;
   const workload = resp.active_workload ?? {};
@@ -60,6 +73,7 @@ function fromWireRuntimeServiceSnapshot(resp: wire_sys_ping_resp['runtime_servic
     minimumDesktopVersion: resp.minimum_desktop_version ? String(resp.minimum_desktop_version) : undefined,
     minimumRuntimeVersion: resp.minimum_runtime_version ? String(resp.minimum_runtime_version) : undefined,
     compatibilityReviewId: resp.compatibility_review_id ? String(resp.compatibility_review_id) : undefined,
+    openReadiness: fromWireRuntimeServiceOpenReadiness(resp.open_readiness),
     activeWorkload: {
       terminalCount: normalizeCount(workload.terminal_count),
       sessionCount: normalizeCount(workload.session_count),

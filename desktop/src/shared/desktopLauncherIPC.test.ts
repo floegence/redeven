@@ -25,11 +25,13 @@ describe('desktopLauncherIPC', () => {
       environment_id: 'local:default',
     });
     expect(normalizeDesktopLauncherActionRequest({
-      kind: 'stop_environment_runtime',
+      kind: 'start_environment_runtime',
       environment_id: ' cp:https%3A%2F%2Fcp.example.invalid:env:env_demo ',
+      force_runtime_update: true,
     })).toEqual({
-      kind: 'stop_environment_runtime',
+      kind: 'start_environment_runtime',
       environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      force_runtime_update: true,
     });
     expect(normalizeDesktopLauncherActionRequest({ kind: 'close_launcher_or_quit' })).toEqual({ kind: 'close_launcher_or_quit' });
     expect(normalizeDesktopLauncherActionRequest({

@@ -107,6 +107,18 @@ describe('main routing', () => {
     expect(mainSrc).toContain('stateDirOverride: desktopDiagnosticsStateDirForTarget(target, startup)');
   });
 
+  it('opens Local UI sessions at the canonical Env App entry while keeping the origin root as the navigation boundary', () => {
+    const mainSrc = readMainSource();
+
+    expect(mainSrc).toContain('function desktopSessionEntryURL(target: DesktopSessionTarget, startup: StartupReport): string');
+    expect(mainSrc).toContain("target.kind === 'managed_environment' && target.route === 'remote_desktop'");
+    expect(mainSrc).toContain('return buildLocalUIEnvAppEntryURL(startup.local_ui_url);');
+    expect(mainSrc).toContain('const entryURL = desktopSessionEntryURL(target, startup);');
+    expect(mainSrc).toContain('const rootWindow = createSessionRootWindow(target.session_key, entryURL, diagnostics');
+    expect(mainSrc).toContain('allowed_base_url: startup.local_ui_url');
+    expect(mainSrc).toContain('await rootWindow.loadURL(sessionRecord.entry_url);');
+  });
+
   it('protects the default local environment from deletion and rejects duplicate auto-derived local names', () => {
     const mainSrc = readMainSource();
 

@@ -8,6 +8,7 @@ import type { Readable, Writable } from 'node:stream';
 import { parseLaunchReport, type LaunchBlockedReport, type LaunchReport } from './launchReport';
 import { defaultRuntimeStatePath, loadAttachableRuntimeState } from './runtimeState';
 import { type StartupReport } from './startup';
+import { runtimeServiceOpenReadinessLabel, runtimeServiceIsOpenable } from '../shared/runtimeService';
 
 const STARTUP_REPORT_POLL_MS = 100;
 const DEFAULT_STARTUP_TIMEOUT_MS = 30_000;
@@ -244,17 +245,40 @@ function assertRuntimePIDAlive(startup: StartupReport, logs: RecentLogs): void {
   );
 }
 
+function runtimeOpenReadinessFailure(startup: StartupReport, logs: RecentLogs): Error | null {
+  if (runtimeServiceIsOpenable(startup.runtime_service)) {
+    return null;
+  }
+  const readiness = startup.runtime_service?.open_readiness;
+  const message = runtimeServiceOpenReadinessLabel(startup.runtime_service);
+  if (readiness?.state === 'blocked') {
+    return readinessFailure(`Redeven runtime is not openable: ${message}`, logs);
+  }
+  return readinessFailure(`Redeven runtime is not ready to open yet: ${message}`, logs);
+}
+
+function assertRuntimeOpenable(startup: StartupReport, logs: RecentLogs): void {
+  const failure = runtimeOpenReadinessFailure(startup, logs);
+  if (failure) {
+    throw failure;
+  }
+}
+
 async function requireAttachableRuntimeReadiness(args: Readonly<{
   runtimeStateFile: string;
   probeTimeoutMs: number;
   logs: RecentLogs;
   unavailableMessage: string;
+  requireOpenable?: boolean;
 }>): Promise<StartupReport> {
   const attachedStartup = await loadAttachableRuntimeState(args.runtimeStateFile, args.probeTimeoutMs);
   if (!attachedStartup) {
     throw readinessFailure(args.unavailableMessage, args.logs);
   }
   assertRuntimePIDAlive(attachedStartup, args.logs);
+  if (args.requireOpenable !== false) {
+    assertRuntimeOpenable(attachedStartup, args.logs);
+  }
   return attachedStartup;
 }
 
@@ -262,17 +286,18 @@ async function waitForStableRuntimeReadiness(args: Readonly<{
   startup: StartupReport;
   runtimeStateFile: string;
   probeTimeoutMs: number;
+  openTimeoutMs: number;
   stabilityWindowMs: number;
   pollIntervalMs: number;
   child: SpawnedRuntimeProcess | null;
   logs: RecentLogs;
   getSpawnError?: () => Error | null;
 }>): Promise<StartupReport> {
+  const openTimeoutMs = Math.max(0, Math.floor(args.openTimeoutMs));
   const stabilityWindowMs = Math.max(0, Math.floor(args.stabilityWindowMs));
   const pollIntervalMs = Math.max(50, Math.floor(args.pollIntervalMs));
-  const requiredProbeCount = stabilityWindowMs > 0 ? 2 : 1;
-  const deadline = Date.now() + stabilityWindowMs;
-  let probeCount = 0;
+  const openDeadline = Date.now() + openTimeoutMs;
+  let stableSince: number | null = null;
   let latestStartup = args.startup;
 
   for (;;) {
@@ -290,9 +315,21 @@ async function waitForStableRuntimeReadiness(args: Readonly<{
       probeTimeoutMs: args.probeTimeoutMs,
       logs: args.logs,
       unavailableMessage: 'Start Runtime did not complete because the runtime process did not stay online.',
+      requireOpenable: false,
     });
-    probeCount += 1;
-    if (Date.now() >= deadline && probeCount >= requiredProbeCount) {
+    const openReadinessFailure = runtimeOpenReadinessFailure(latestStartup, args.logs);
+    const now = Date.now();
+    if (openReadinessFailure) {
+      stableSince = null;
+      if (latestStartup.runtime_service?.open_readiness?.state === 'blocked' || now >= openDeadline) {
+        throw openReadinessFailure;
+      }
+      await delay(pollIntervalMs);
+      continue;
+    }
+
+    stableSince ??= now;
+    if (now - stableSince >= stabilityWindowMs) {
       return latestStartup;
     }
 
@@ -383,6 +420,7 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
   const existingRuntime = await loadAttachableRuntimeState(runtimeStateFile, runtimeAttachTimeoutMs);
   if (existingRuntime) {
     assertRuntimePIDAlive(existingRuntime, { stdout: '', stderr: '' });
+    assertRuntimeOpenable(existingRuntime, { stdout: '', stderr: '' });
     return {
       kind: 'ready',
       managedRuntime: {
@@ -508,6 +546,7 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
       startup,
       runtimeStateFile,
       probeTimeoutMs: runtimeAttachTimeoutMs,
+      openTimeoutMs: args.startupTimeoutMs ?? DEFAULT_STARTUP_TIMEOUT_MS,
       stabilityWindowMs: runtimeStabilityWindowMs,
       pollIntervalMs: runtimeStabilityPollMs,
       child,

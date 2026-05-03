@@ -12,6 +12,8 @@ import {
 } from '../testSupport/desktopTestHelpers';
 import { hydrateWelcomeManagedEnvironmentRuntimeState } from './desktopWelcomeRuntimeState';
 
+const validEnvAppShellHTML = '<!doctype html><html><body><div id="root"></div><script type="module" src="/_redeven_proxy/env/assets/index.js"></script></body></html>';
+
 describe('desktopWelcomeRuntimeState', () => {
   it('hydrates local runtime ownership from an open external managed session', async () => {
     const environment = testManagedLocalEnvironment('default');
@@ -48,6 +50,16 @@ describe('desktopWelcomeRuntimeState', () => {
       password_required: true,
       diagnostics_enabled: false,
       pid: 4242,
+      runtime_service: expect.objectContaining({
+        open_readiness: { state: 'openable' },
+      }),
+    });
+    expect(hydrated.managed_environments[0]?.local_hosting?.current_runtime?.runtime_service).toMatchObject({
+      service_owner: 'external',
+      desktop_managed: false,
+      effective_run_mode: 'local',
+      remote_enabled: false,
+      open_readiness: { state: 'openable' },
     });
   });
 
@@ -67,6 +79,7 @@ describe('desktopWelcomeRuntimeState', () => {
               effective_run_mode: 'desktop',
               remote_enabled: true,
               compatibility: 'compatible',
+              open_readiness: { state: 'openable' },
               active_workload: {
                 terminal_count: 3,
                 session_count: 1,
@@ -76,6 +89,16 @@ describe('desktopWelcomeRuntimeState', () => {
             },
           },
         }));
+        return;
+      }
+      if (request.url === '/_redeven_proxy/env/') {
+        response.writeHead(200, { 'Content-Type': 'text/html' });
+        response.end(validEnvAppShellHTML);
+        return;
+      }
+      if (request.url === '/_redeven_proxy/env/assets/index.js') {
+        response.writeHead(200, { 'Content-Type': 'application/javascript' });
+        response.end(request.method === 'HEAD' ? undefined : 'console.log("env");');
         return;
       }
       response.writeHead(404);
@@ -142,6 +165,7 @@ describe('desktopWelcomeRuntimeState', () => {
           minimum_desktop_version: undefined,
           minimum_runtime_version: undefined,
           compatibility_review_id: undefined,
+          open_readiness: { state: 'openable' },
           active_workload: {
             terminal_count: 3,
             session_count: 1,

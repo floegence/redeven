@@ -54,7 +54,10 @@ import {
   type DesktopProviderRemoteRouteState,
 } from '../shared/providerEnvironmentState';
 import type { DesktopRuntimeHealth } from '../shared/desktopRuntimeHealth';
-import type { RuntimeServiceSnapshot } from '../shared/runtimeService';
+import {
+  normalizeRuntimeServiceSnapshot,
+  type RuntimeServiceSnapshot,
+} from '../shared/runtimeService';
 
 export type BuildDesktopWelcomeSnapshotArgs = Readonly<{
   preferences: DesktopPreferences;
@@ -240,14 +243,14 @@ function environmentWindowState(
 function onlineRuntimeHealth(
   source: DesktopRuntimeHealth['source'],
   localUIURL: string,
-  runtimeService?: RuntimeServiceSnapshot,
+  runtimeService?: RuntimeServiceSnapshot | null,
 ): DesktopRuntimeHealth {
   return {
     status: 'online',
     checked_at_unix_ms: Date.now(),
     source,
     local_ui_url: compact(localUIURL) || undefined,
-    ...(runtimeService ? { runtime_service: runtimeService } : {}),
+    runtime_service: normalizeRuntimeServiceSnapshot(runtimeService ?? {}),
   };
 }
 
@@ -438,14 +441,15 @@ function managedRuntimeService(
 }
 
 function runtimeServiceFromHealth(health: DesktopRuntimeHealth | undefined): RuntimeServiceSnapshot | undefined {
-  return health?.runtime_service;
+  return health?.runtime_service ? normalizeRuntimeServiceSnapshot(health.runtime_service) : undefined;
 }
 
 function preferredRuntimeService(
   primary: RuntimeServiceSnapshot | undefined,
   health: DesktopRuntimeHealth | null | undefined,
 ): RuntimeServiceSnapshot | undefined {
-  return primary ?? runtimeServiceFromHealth(health ?? undefined);
+  const snapshot = primary ?? runtimeServiceFromHealth(health ?? undefined);
+  return snapshot ? normalizeRuntimeServiceSnapshot(snapshot) : undefined;
 }
 
 function managedLocalCloseBehavior(
@@ -593,7 +597,7 @@ function buildManagedEnvironmentEntry(
   const envPublicID = managedEnvironmentPublicID(environment);
   const localRuntimeState = managedLocalRuntimeState(environment, localSession);
   const localRuntimeURL = managedLocalRuntimeURL(environment, localSession);
-  const runtimeService = managedRuntimeService(environment, localSession);
+  const runtimeService = preferredRuntimeService(managedRuntimeService(environment, localSession), undefined);
   const localCloseBehavior = managedLocalCloseBehavior(environment, localRuntimeState);
   const runtimeHealth = managedEnvironmentRuntimeHealth(localRuntimeState, localRuntimeURL, runtimeService);
   const localRouteState = managedLocalRouteState(environment, localSession);
@@ -1015,7 +1019,7 @@ function buildEnvironmentEntries(
       is_open: isOpen,
       is_opening: isOpening,
       runtime_health: onlineRuntimeHealth('external_local_ui_probe', localUIURL, session.startup?.runtime_service),
-      runtime_service: session.startup?.runtime_service,
+      runtime_service: preferredRuntimeService(session.startup?.runtime_service, null),
       runtime_control_capability: 'observe_only',
       open_session_key: session.session_key,
       open_session_lifecycle: session.lifecycle,
@@ -1070,7 +1074,7 @@ function buildEnvironmentEntries(
       is_open: isOpen,
       is_opening: isOpening,
       runtime_health: onlineRuntimeHealth('ssh_runtime_probe', session.entry_url ?? session.startup?.local_ui_url ?? '', session.startup?.runtime_service),
-      runtime_service: session.startup?.runtime_service,
+      runtime_service: preferredRuntimeService(session.startup?.runtime_service, null),
       runtime_control_capability: 'start_stop',
       open_session_key: session.session_key,
       open_session_lifecycle: session.lifecycle,
@@ -1127,7 +1131,7 @@ function buildSavedEnvironmentEntry(
     is_open: isOpen,
     is_opening: isOpening,
     runtime_health: runtimeHealth,
-    runtime_service: openSession?.startup?.runtime_service ?? runtimeServiceFromHealth(savedRuntimeHealth),
+    runtime_service: preferredRuntimeService(openSession?.startup?.runtime_service, savedRuntimeHealth),
     runtime_control_capability: 'observe_only',
     open_session_key: openSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(openSession),
@@ -1157,7 +1161,7 @@ function buildSavedSSHEnvironmentEntry(
     id: environment.id,
     kind: 'ssh_environment',
     label: environment.label,
-    local_ui_url: openSession?.entry_url ?? openSession?.startup?.local_ui_url ?? '',
+    local_ui_url: openSession?.entry_url ?? openSession?.startup?.local_ui_url ?? runtimeHealth.local_ui_url ?? '',
     secondary_text: environment.ssh_port === null
       ? environment.ssh_destination
       : `${environment.ssh_destination}:${environment.ssh_port}`,
@@ -1177,7 +1181,7 @@ function buildSavedSSHEnvironmentEntry(
     is_open: isOpen,
     is_opening: isOpening,
     runtime_health: runtimeHealth,
-    runtime_service: openSession?.startup?.runtime_service ?? runtimeServiceFromHealth(savedRuntimeHealth),
+    runtime_service: preferredRuntimeService(openSession?.startup?.runtime_service, savedRuntimeHealth),
     runtime_control_capability: 'start_stop',
     open_session_key: openSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(openSession),

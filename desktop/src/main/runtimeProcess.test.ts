@@ -8,6 +8,8 @@ import { describe, expect, it } from 'vitest';
 import { launchStartedFreshManagedRuntime, startManagedRuntime } from './runtimeProcess';
 import { parseStartupReport } from './startup';
 
+const validEnvAppShellHTML = '<!doctype html><html><body><div id="root"></div><script type="module" src="/_redeven_proxy/env/assets/index.js"></script></body></html>';
+
 async function writeJSONFile(file: string, value: unknown): Promise<void> {
   await fs.mkdir(path.dirname(file), { recursive: true });
   await fs.writeFile(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
@@ -23,6 +25,16 @@ function runtimeStatePayload(baseURL: string, pid: number = process.pid): Record
     desktop_managed: true,
     diagnostics_enabled: true,
     pid,
+    runtime_service: {
+      protocol_version: 'redeven-runtime-v1',
+      service_owner: 'desktop',
+      desktop_managed: true,
+      effective_run_mode: 'local',
+      remote_enabled: false,
+      compatibility: 'compatible',
+      open_readiness: { state: 'openable' },
+      active_workload: {},
+    },
   };
 }
 
@@ -30,23 +42,55 @@ async function writeRuntimeState(runtimeStateFile: string, baseURL: string): Pro
   await writeJSONFile(runtimeStateFile, runtimeStatePayload(baseURL));
 }
 
-function startHealthServer(): Promise<Readonly<{
+function startHealthServer(options: Readonly<{
+  readinessStates?: readonly ('starting' | 'openable' | 'blocked')[];
+}> = {}): Promise<Readonly<{
   baseURL: string;
   close: () => Promise<void>;
   healthRequests: () => number;
 }>> {
   return new Promise((resolve, reject) => {
     let healthRequests = 0;
+    const readinessStates = [...(options.readinessStates ?? ['openable'])];
     const server = http.createServer((request, response) => {
       if (request.url === '/api/local/runtime/health') {
         healthRequests += 1;
+        const readinessState = readinessStates[Math.min(healthRequests - 1, readinessStates.length - 1)] ?? 'openable';
         response.writeHead(200, { 'content-type': 'application/json' });
         response.end(JSON.stringify({
           data: {
             status: 'online',
             password_required: false,
+            runtime_service: {
+              protocol_version: 'redeven-runtime-v1',
+              service_owner: 'desktop',
+              desktop_managed: true,
+              effective_run_mode: 'local',
+              remote_enabled: false,
+              compatibility: 'compatible',
+              open_readiness: readinessState === 'openable'
+                ? { state: 'openable' }
+                : {
+                    state: readinessState,
+                    reason_code: readinessState === 'blocked' ? 'runtime_update_required' : 'env_app_gateway_starting',
+                    message: readinessState === 'blocked'
+                      ? 'Update the runtime before opening this environment.'
+                      : 'Env App gateway is starting.',
+                  },
+              active_workload: {},
+            },
           },
         }));
+        return;
+      }
+      if (request.url === '/_redeven_proxy/env/') {
+        response.writeHead(200, { 'content-type': 'text/html' });
+        response.end(validEnvAppShellHTML);
+        return;
+      }
+      if (request.url === '/_redeven_proxy/env/assets/index.js') {
+        response.writeHead(200, { 'content-type': 'application/javascript' });
+        response.end(request.method === 'HEAD' ? undefined : 'console.log("env");');
         return;
       }
       response.writeHead(200, { 'content-type': 'application/json' });
@@ -97,13 +141,39 @@ let healthRequests = 0;
 const server = http.createServer((request, response) => {
   if (request.url === '/api/local/runtime/health') {
     healthRequests += 1;
+    const readinessState = mode === 'starting_then_openable' && healthRequests < 3 ? 'starting' : 'openable';
     response.writeHead(200, { 'content-type': 'application/json' });
-    response.end(JSON.stringify({ data: { status: 'online', password_required: false } }));
+    response.end(JSON.stringify({ data: {
+      status: 'online',
+      password_required: false,
+      runtime_service: {
+        protocol_version: 'redeven-runtime-v1',
+        service_owner: 'desktop',
+        desktop_managed: true,
+        effective_run_mode: 'local',
+        remote_enabled: false,
+        compatibility: 'compatible',
+        open_readiness: readinessState === 'openable'
+          ? { state: 'openable' }
+          : { state: 'starting', reason_code: 'env_app_gateway_starting', message: 'Env App gateway is starting.' },
+        active_workload: {},
+      },
+    } }));
     if (mode === 'exit_after_first_health' && healthRequests === 1) {
       setImmediate(() => {
         server.close(() => process.exit(0));
       });
     }
+    return;
+  }
+  if (request.url === '/_redeven_proxy/env/') {
+    response.writeHead(200, { 'content-type': 'text/html' });
+    response.end('${validEnvAppShellHTML}');
+    return;
+  }
+  if (request.url === '/_redeven_proxy/env/assets/index.js') {
+    response.writeHead(200, { 'content-type': 'application/javascript' });
+    response.end(request.method === 'HEAD' ? undefined : 'console.log("env");');
     return;
   }
   response.writeHead(200, { 'content-type': 'application/json' });
@@ -123,6 +193,16 @@ server.listen(0, '127.0.0.1', () => {
     desktop_managed: true,
     diagnostics_enabled: true,
     pid: process.pid,
+    runtime_service: {
+      protocol_version: 'redeven-runtime-v1',
+      service_owner: 'desktop',
+      desktop_managed: true,
+      effective_run_mode: 'local',
+      remote_enabled: false,
+      compatibility: 'compatible',
+      open_readiness: { state: mode === 'starting_then_openable' ? 'starting' : 'openable', reason_code: mode === 'starting_then_openable' ? 'env_app_gateway_starting' : undefined },
+      active_workload: {},
+    },
   };
   writeJSON(runtimeStateFile, payload);
   writeJSON(reportFile, payload);
@@ -160,6 +240,7 @@ describe('runtimeProcess', () => {
         effective_run_mode: 'hybrid',
         remote_enabled: true,
         compatibility: 'compatible',
+        open_readiness: { state: 'openable' },
         active_workload: {
           terminal_count: 2,
           session_count: 1,
@@ -192,6 +273,7 @@ describe('runtimeProcess', () => {
         minimum_desktop_version: undefined,
         minimum_runtime_version: undefined,
         compatibility_review_id: undefined,
+        open_readiness: { state: 'openable' },
         active_workload: {
           terminal_count: 2,
           session_count: 1,
@@ -298,6 +380,57 @@ describe('runtimeProcess', () => {
         runtimeStabilityPollMs: 40,
       })).rejects.toThrow(/did not stay online|exited during startup readiness checks/);
     } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('waits for a spawned runtime to become openable after Local UI health is online', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-'));
+    const runtimeStateFile = path.join(dir, 'runtime', 'local-ui.json');
+    const scriptPath = await writeFakeRuntimeScript(dir);
+    try {
+      const launch = await startManagedRuntime({
+        executablePath: process.execPath,
+        runtimeArgs: [scriptPath],
+        env: {
+          REDEVEN_TEST_RUNTIME_STATE_FILE: runtimeStateFile,
+          REDEVEN_TEST_RUNTIME_MODE: 'starting_then_openable',
+        },
+        runtimeStateFile,
+        tempRoot: dir,
+        runtimeAttachTimeoutMs: 120,
+        runtimeStabilityWindowMs: 80,
+        runtimeStabilityPollMs: 40,
+      });
+
+      expect(launch.kind).toBe('ready');
+      if (launch.kind !== 'ready') {
+        return;
+      }
+      expect(launch.managedRuntime.startup.runtime_service?.open_readiness).toEqual({ state: 'openable' });
+      await launch.managedRuntime.stop();
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not attach an existing runtime until the runtime service says it is openable', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-'));
+    const runtimeStateFile = path.join(dir, 'runtime', 'local-ui.json');
+    const server = await startHealthServer({ readinessStates: ['starting'] });
+    try {
+      await writeRuntimeState(runtimeStateFile, server.baseURL);
+
+      await expect(startManagedRuntime({
+        executablePath: process.execPath,
+        runtimeArgs: ['-e', 'process.exit(42)'],
+        runtimeStateFile,
+        runtimeAttachTimeoutMs: 200,
+        runtimeStabilityWindowMs: 0,
+        runtimeStabilityPollMs: 30,
+      })).rejects.toThrow(/not ready to open yet|Env App gateway is starting/);
+    } finally {
+      await server.close();
       await fs.rm(dir, { recursive: true, force: true });
     }
   });

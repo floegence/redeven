@@ -14,6 +14,7 @@ INSPECT_PORT="${REDEVEN_DESKTOP_INSPECT_PORT:-9230}"
 STOP_EXISTING=1
 STOP_ONLY=0
 DRY_RUN=0
+STOP_RUNTIMES=0
 STOP_TIMEOUT_SECONDS="${REDEVEN_DESKTOP_STOP_TIMEOUT_SECONDS:-8}"
 ELECTRON_ARGS=()
 ELECTRON_DEBUG_ARGS=()
@@ -28,8 +29,9 @@ is built from the same uncommitted source tree before Electron starts.
 
 Options:
   --no-devtools             Do not open Desktop DevTools automatically.
-  --no-stop                 Skip stopping existing Redeven Desktop/runtime processes.
-  --stop-only               Stop existing Redeven Desktop/runtime processes, then exit.
+  --no-stop                 Skip stopping existing Redeven Desktop processes.
+  --stop-only               Stop existing Redeven Desktop processes, then exit.
+  --stop-runtimes           Also stop Redeven runtime processes (interrupts active work).
   --stop-timeout <seconds>  Seconds to wait before force-stopping processes (default: 8).
   --remote-debugging-port <port|0>
                             Electron Chrome DevTools Protocol port (default: 9222, 0 disables).
@@ -42,7 +44,8 @@ Environment:
   REDEVEN_DESKTOP_REMOTE_DEBUGGING_PORT=<port|0>
   REDEVEN_DESKTOP_INSPECT_PORT=<port|0>
   REDEVEN_DESKTOP_STOP_TIMEOUT_SECONDS=<seconds>
-  REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG=<vX.Y.Z>
+  REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG=<vX.Y.Z|v0.0.0-dev>
+  REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT=<redeven-checkout>
   REDEVEN_AGENT_FORCE_INSTALL=1
 USAGE
 }
@@ -144,23 +147,15 @@ build_electron_debug_args() {
   fi
 }
 
-latest_release_tag() {
-  git -C "$ROOT_DIR" tag --list 'v*' --sort=-v:refname | head -n 1
-}
-
 resolve_ssh_runtime_release_tag() {
   local explicit_tag="${REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG:-}"
-  local latest_tag
 
   if [ -n "$explicit_tag" ]; then
     printf '%s\n' "$explicit_tag"
     return 0
   fi
 
-  latest_tag="$(latest_release_tag)"
-  if [ -n "$latest_tag" ]; then
-    printf '%s\n' "$latest_tag"
-  fi
+  printf '%s\n' "${REDEVEN_DESKTOP_BUNDLE_VERSION:-${REDEVEN_DESKTOP_VERSION:-v0.0.0-dev}}"
 }
 
 print_command() {
@@ -344,12 +339,17 @@ stop_existing_processes() {
     return 0
   fi
 
-  ui_pkg_log "Stopping any existing Redeven Desktop/runtime before launch..."
+  ui_pkg_log "Stopping any existing Redeven Desktop process before launch..."
   request_macos_desktop_quit
   collect_desktop_pids
   terminate_collected_pids "Redeven Desktop"
-  collect_runtime_pids
-  terminate_collected_pids "Redeven runtime"
+  if [ "$STOP_RUNTIMES" -eq 1 ]; then
+    ui_pkg_log "Stopping Redeven runtime processes because --stop-runtimes was provided. This can interrupt active work."
+    collect_runtime_pids
+    terminate_collected_pids "Redeven runtime"
+  else
+    ui_pkg_log "Leaving existing Redeven runtime processes running."
+  fi
 }
 
 ensure_desktop_workspace() {
@@ -419,7 +419,9 @@ start_desktop() {
     export REDEVEN_DESKTOP_OPEN_DEVTOOLS="$OPEN_DEVTOOLS"
     if [ -n "$ssh_runtime_release_tag" ]; then
       export REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG="$ssh_runtime_release_tag"
+      export REDEVEN_DESKTOP_BUNDLE_VERSION="${REDEVEN_DESKTOP_BUNDLE_VERSION:-$ssh_runtime_release_tag}"
     fi
+    export REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT="${REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT:-$ROOT_DIR}"
     npm run build
     npm run prepare:bundled-runtime
     exec "${cmd[@]}"
@@ -439,6 +441,10 @@ parse_args() {
         ;;
       --stop-only)
         STOP_ONLY=1
+        shift 1
+        ;;
+      --stop-runtimes)
+        STOP_RUNTIMES=1
         shift 1
         ;;
       --stop-timeout)

@@ -9,6 +9,14 @@ export type RuntimeServiceCompatibility =
   | 'managed_elsewhere'
   | 'unknown';
 
+export type RuntimeServiceOpenReadinessState = 'starting' | 'openable' | 'blocked';
+
+export type RuntimeServiceOpenReadiness = Readonly<{
+  state: RuntimeServiceOpenReadinessState;
+  reason_code?: string;
+  message?: string;
+}>;
+
 export type RuntimeServiceWorkload = Readonly<{
   terminal_count: number;
   session_count: number;
@@ -31,10 +39,12 @@ export type RuntimeServiceSnapshot = Readonly<{
   minimum_desktop_version?: string;
   minimum_runtime_version?: string;
   compatibility_review_id?: string;
+  open_readiness?: RuntimeServiceOpenReadiness;
   active_workload: RuntimeServiceWorkload;
 }>;
 
 export const RUNTIME_SERVICE_PROTOCOL_VERSION = 'redeven-runtime-v1';
+export const RUNTIME_SERVICE_ENV_APP_SHELL_UNAVAILABLE_REASON = 'env_app_shell_unavailable';
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -72,6 +82,79 @@ function normalizeCompatibility(value: unknown): RuntimeServiceCompatibility {
   }
 }
 
+function openReadinessFromCompatibility(
+  compatibility: RuntimeServiceCompatibility,
+  compatibilityMessage: string | undefined,
+): RuntimeServiceOpenReadiness {
+  switch (compatibility) {
+    case 'update_required':
+      return {
+        state: 'blocked',
+        reason_code: 'runtime_update_required',
+        message: compatibilityMessage || 'Update the runtime before opening this environment.',
+      };
+    case 'desktop_update_required':
+      return {
+        state: 'blocked',
+        reason_code: 'desktop_update_required',
+        message: compatibilityMessage || 'Update Desktop before opening this environment.',
+      };
+    case 'managed_elsewhere':
+      return {
+        state: 'blocked',
+        reason_code: 'runtime_managed_elsewhere',
+        message: compatibilityMessage || 'This runtime is managed by another Desktop instance.',
+      };
+    default:
+      return { state: 'openable' };
+  }
+}
+
+function missingOpenReadinessFromCompatibility(
+  compatibility: RuntimeServiceCompatibility,
+  compatibilityMessage: string | undefined,
+): RuntimeServiceOpenReadiness {
+  const inferred = openReadinessFromCompatibility(compatibility, compatibilityMessage);
+  if (inferred.state === 'blocked') {
+    return inferred;
+  }
+  return {
+    state: 'blocked',
+    reason_code: 'runtime_open_readiness_unavailable',
+    message: 'This running runtime is older than this Desktop. Install the update, then restart the runtime when it is safe to interrupt active work.',
+  };
+}
+
+export function envAppShellUnavailableOpenReadiness(): RuntimeServiceOpenReadiness {
+  return {
+    state: 'blocked',
+    reason_code: RUNTIME_SERVICE_ENV_APP_SHELL_UNAVAILABLE_REASON,
+    message: 'The Environment App shell is not available in this runtime build. Install the update, then restart the runtime when it is safe to interrupt active work.',
+  };
+}
+
+function normalizeOpenReadiness(
+  value: unknown,
+  compatibility: RuntimeServiceCompatibility,
+  compatibilityMessage: string | undefined,
+): RuntimeServiceOpenReadiness {
+  const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const state = compact(record.state);
+  if (state === 'openable') {
+    return { state: 'openable' };
+  }
+  if (state === 'starting' || state === 'blocked') {
+    return {
+      state,
+      reason_code: compact(record.reason_code) || (
+        state === 'starting' ? 'runtime_service_starting' : 'runtime_service_blocked'
+      ),
+      message: compact(record.message) || undefined,
+    };
+  }
+  return missingOpenReadinessFromCompatibility(compatibility, compatibilityMessage);
+}
+
 export function normalizeRuntimeServiceSnapshot(
   value: unknown,
   fallback: Readonly<{
@@ -87,6 +170,8 @@ export function normalizeRuntimeServiceSnapshot(
   const desktopManaged = typeof record.desktop_managed === 'boolean'
     ? record.desktop_managed
     : fallback.desktopManaged === true;
+  const compatibility = normalizeCompatibility(record.compatibility);
+  const compatibilityMessage = compact(record.compatibility_message) || undefined;
   return {
     runtime_version: compact(record.runtime_version) || undefined,
     runtime_commit: compact(record.runtime_commit) || undefined,
@@ -99,11 +184,12 @@ export function normalizeRuntimeServiceSnapshot(
     remote_enabled: typeof record.remote_enabled === 'boolean'
       ? record.remote_enabled
       : fallback.remoteEnabled === true,
-    compatibility: normalizeCompatibility(record.compatibility),
-    compatibility_message: compact(record.compatibility_message) || undefined,
+    compatibility,
+    compatibility_message: compatibilityMessage,
     minimum_desktop_version: compact(record.minimum_desktop_version) || undefined,
     minimum_runtime_version: compact(record.minimum_runtime_version) || undefined,
     compatibility_review_id: compact(record.compatibility_review_id) || undefined,
+    open_readiness: normalizeOpenReadiness(record.open_readiness, compatibility, compatibilityMessage),
     active_workload: {
       terminal_count: normalizeCount(workload.terminal_count),
       session_count: normalizeCount(workload.session_count),
@@ -111,6 +197,42 @@ export function normalizeRuntimeServiceSnapshot(
       port_forward_count: normalizeCount(workload.port_forward_count),
     },
   };
+}
+
+export function runtimeServiceIsOpenable(snapshot: RuntimeServiceSnapshot | null | undefined): boolean {
+  if (!snapshot) {
+    return false;
+  }
+  return snapshot.open_readiness?.state === 'openable';
+}
+
+export function runtimeServiceNeedsRuntimeUpdate(snapshot: RuntimeServiceSnapshot | null | undefined): boolean {
+  if (!snapshot) {
+    return false;
+  }
+  const reasonCode = compact(snapshot.open_readiness?.reason_code);
+  return snapshot.compatibility === 'update_required'
+    || reasonCode === 'runtime_update_required'
+    || reasonCode === 'runtime_open_readiness_unavailable'
+    || reasonCode === RUNTIME_SERVICE_ENV_APP_SHELL_UNAVAILABLE_REASON;
+}
+
+export function runtimeServiceOpenReadinessLabel(snapshot: RuntimeServiceSnapshot | null | undefined): string {
+  if (!snapshot) {
+    return 'Runtime readiness is not available yet.';
+  }
+  const readiness = snapshot.open_readiness ?? missingOpenReadinessFromCompatibility(
+    snapshot.compatibility,
+    snapshot.compatibility_message,
+  );
+  if (readiness.state === 'openable') {
+    return 'Runtime is ready to open.';
+  }
+  return compact(readiness.message) || (
+    readiness.state === 'blocked'
+      ? 'Runtime cannot open this environment yet.'
+      : 'Runtime is preparing the environment app.'
+  );
 }
 
 export function runtimeServiceHasActiveWork(snapshot: RuntimeServiceSnapshot | null | undefined): boolean {

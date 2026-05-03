@@ -53,6 +53,7 @@ describe('desktop persistence wiring', () => {
     expect(mainSrc).toContain('ipcMain.on(DESKTOP_STATE_REMOVE_CHANNEL');
     expect(mainSrc).toContain('ipcMain.on(DESKTOP_STATE_KEYS_CHANNEL');
     expect(mainSrc).toContain('ipcMain.on(DESKTOP_SESSION_CONTEXT_GET_CHANNEL');
+    expect(mainSrc).toContain('ipcMain.on(DESKTOP_SESSION_APP_READY_CHANNEL');
     expect(mainSrc).toContain('DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL');
     expect(mainSrc).toContain('DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL');
     expect(mainSrc).toContain('DESKTOP_LAUNCHER_SNAPSHOT_UPDATED_CHANNEL');
