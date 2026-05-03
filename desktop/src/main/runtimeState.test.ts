@@ -12,7 +12,7 @@ const validEnvAppShellHTML = '<!doctype html><html><body><div id="root"></div><s
 describe('runtimeState', () => {
   it('uses the standard runtime state path under the redeven home directory', () => {
     expect(defaultRuntimeStatePath({ HOME: '/Users/tester' }, () => '/ignored')).toBe(
-      '/Users/tester/.redeven/scopes/local/default/runtime/local-ui.json',
+      '/Users/tester/.redeven/machine/runtime/local-ui.json',
     );
   });
 

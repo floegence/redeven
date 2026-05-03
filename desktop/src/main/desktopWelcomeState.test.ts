@@ -122,10 +122,10 @@ describe('desktopWelcomeState', () => {
     expect(snapshot.action_progress).toEqual([]);
     expect(snapshot.open_windows).toEqual([
       expect.objectContaining({
-        session_key: 'env:local%3Adefault:local_host',
+        session_key: 'env:machine:local_host',
         target_kind: 'managed_environment',
-        environment_id: 'local:default',
-        label: 'Local Default Environment',
+        environment_id: 'machine',
+        label: 'Local Machine',
         local_ui_url: 'http://localhost:23998/',
       }),
       expect.objectContaining({
@@ -137,9 +137,9 @@ describe('desktopWelcomeState', () => {
     ]);
     expect(snapshot.environments).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        id: 'local:default',
+        id: 'machine',
         kind: 'managed_environment',
-        label: 'Local Default Environment',
+        label: 'Local Machine',
         pinned: false,
         tag: 'Open',
         category: 'managed',
@@ -149,7 +149,7 @@ describe('desktopWelcomeState', () => {
         can_delete: false,
         can_save: false,
         managed_environment_kind: 'local',
-        managed_environment_name: 'default',
+        managed_environment_name: 'machine',
         managed_local_ui_bind: '0.0.0.0:24000',
         managed_local_runtime_state: 'running_desktop',
         managed_local_runtime_url: 'http://localhost:23998/',
@@ -207,7 +207,7 @@ describe('desktopWelcomeState', () => {
     ]);
     expect(snapshot.suggested_remote_url).toBe('http://192.168.1.99:24000/');
     expect(snapshot.issue?.title).toBe('Unable to open that Environment');
-    expect(snapshot.settings_surface.window_title).toBe('Local Default Environment Settings');
+    expect(snapshot.settings_surface.window_title).toBe('Local Machine Settings');
   });
 
   it('carries active launcher action progress in the welcome snapshot', () => {
@@ -218,9 +218,9 @@ describe('desktopWelcomeState', () => {
       }),
       actionProgress: [{
         action: 'start_environment_runtime',
-        environment_id: 'ssh:devbox:default:key_agent:remote_default:envinst_demo',
+        environment_id: 'ssh:devbox:default:key_agent:remote_default',
         environment_label: 'devbox',
-        operation_key: 'ssh:devbox:default:key_agent:remote_default:envinst_demo',
+        operation_key: 'ssh:devbox:default:key_agent:remote_default',
         started_at_unix_ms: 100,
         phase: 'ssh_remote_installing',
         title: 'Installing remote runtime',
@@ -230,9 +230,9 @@ describe('desktopWelcomeState', () => {
 
     expect(snapshot.action_progress).toEqual([{
       action: 'start_environment_runtime',
-      environment_id: 'ssh:devbox:default:key_agent:remote_default:envinst_demo',
+      environment_id: 'ssh:devbox:default:key_agent:remote_default',
       environment_label: 'devbox',
-      operation_key: 'ssh:devbox:default:key_agent:remote_default:envinst_demo',
+      operation_key: 'ssh:devbox:default:key_agent:remote_default',
       started_at_unix_ms: 100,
       phase: 'ssh_remote_installing',
       title: 'Installing remote runtime',
@@ -240,26 +240,20 @@ describe('desktopWelcomeState', () => {
     }]);
   });
 
-  it('keeps the default local environment protected while leaving other local environments deletable', () => {
+  it('keeps the single local machine protected', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [
-          testManagedLocalEnvironment('default'),
-          testManagedLocalEnvironment('lab', { label: 'Lab' }),
-        ],
+        managed_environments: [testManagedLocalEnvironment('default')],
       }),
     });
 
-    expect(snapshot.environments).toEqual(expect.arrayContaining([
+    expect(snapshot.environments.filter((environment) => environment.id === 'machine')).toEqual([
       expect.objectContaining({
-        id: 'local:default',
+        id: 'machine',
+        label: 'Local Machine',
         can_delete: false,
       }),
-      expect.objectContaining({
-        id: 'local:lab',
-        can_delete: true,
-      }),
-    ]));
+    ]);
   });
 
   it('marks a discovered external local runtime as online before a Desktop session is open', () => {
@@ -294,7 +288,7 @@ describe('desktopWelcomeState', () => {
 
     expect(snapshot.environments).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        id: 'local:default',
+        id: 'machine',
         local_ui_url: 'http://127.0.0.1:24001/',
         managed_local_runtime_state: 'running_external',
         managed_local_runtime_url: 'http://127.0.0.1:24001/',
@@ -383,7 +377,7 @@ describe('desktopWelcomeState', () => {
     });
 
     expect(snapshot.environments).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'local:default', kind: 'managed_environment' }),
+      expect.objectContaining({ id: 'machine', kind: 'managed_environment' }),
       expect.objectContaining({
         id: 'http://192.168.1.77:24000/',
         kind: 'external_local_ui',
@@ -433,7 +427,7 @@ describe('desktopWelcomeState', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         saved_ssh_environments: [{
-          id: 'ssh:devbox:2222:key_agent:remote_default:envinst_demo001',
+          id: 'ssh:devbox:2222:key_agent:remote_default',
           label: 'SSH Lab',
           ssh_destination: 'devbox',
           ssh_port: 2222,
@@ -441,7 +435,6 @@ describe('desktopWelcomeState', () => {
           remote_install_dir: 'remote_default',
           bootstrap_strategy: 'desktop_upload',
           release_base_url: 'https://mirror.example.invalid/releases',
-          environment_instance_id: 'envinst_demo001',
           source: 'saved',
           pinned: true,
           last_used_at_ms: 100,
@@ -449,7 +442,7 @@ describe('desktopWelcomeState', () => {
       }),
       openSessions: [
         {
-          session_key: 'ssh:devbox:2222:key_agent:remote_default:envinst_demo001',
+          session_key: 'ssh:devbox:2222:key_agent:remote_default',
           target: buildSSHDesktopTarget({
             ssh_destination: 'devbox',
             ssh_port: 2222,
@@ -457,7 +450,6 @@ describe('desktopWelcomeState', () => {
             remote_install_dir: 'remote_default',
             bootstrap_strategy: 'desktop_upload',
             release_base_url: 'https://mirror.example.invalid/releases',
-            environment_instance_id: 'envinst_demo001',
           }, {
             label: 'SSH Lab',
             forwardedLocalUIURL: 'http://127.0.0.1:40111/',
@@ -476,13 +468,12 @@ describe('desktopWelcomeState', () => {
         remote_install_dir: 'remote_default',
         bootstrap_strategy: 'desktop_upload',
         release_base_url: 'https://mirror.example.invalid/releases',
-        environment_instance_id: 'envinst_demo001',
       }, 'ssh_target_unreachable', 'Desktop could not reach that SSH target.'),
     });
 
     expect(snapshot.environments).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        id: 'ssh:devbox:2222:key_agent:remote_default:envinst_demo001',
+        id: 'ssh:devbox:2222:key_agent:remote_default',
         kind: 'ssh_environment',
         label: 'SSH Lab',
         secondary_text: 'devbox:2222',
@@ -501,12 +492,11 @@ describe('desktopWelcomeState', () => {
       remote_install_dir: 'remote_default',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example.invalid/releases',
-      environment_instance_id: 'envinst_demo001',
     });
   });
 
   it('preserves probed SSH runtime service metadata before a window is open', () => {
-    const sshID = 'ssh:devbox:2222:key_agent:remote_default:envinst_demo001';
+    const sshID = 'ssh:devbox:2222:key_agent:remote_default';
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         saved_ssh_environments: [{
@@ -518,7 +508,6 @@ describe('desktopWelcomeState', () => {
           remote_install_dir: 'remote_default',
           bootstrap_strategy: 'desktop_upload',
           release_base_url: '',
-          environment_instance_id: 'envinst_demo001',
           source: 'saved',
           pinned: false,
           last_used_at_ms: 100,
@@ -582,8 +571,8 @@ describe('desktopWelcomeState', () => {
 
     expect(snapshot.surface).toBe('environment_settings');
     expect(snapshot.close_action_label).toBe('Quit');
-    expect(snapshot.settings_surface.window_title).toBe('Local Default Environment Settings');
-    expect(snapshot.settings_surface.save_label).toBe('Save Local Default Environment Settings');
+    expect(snapshot.settings_surface.window_title).toBe('Local Machine Settings');
+    expect(snapshot.settings_surface.save_label).toBe('Save Local Machine Settings');
     expect(snapshot.settings_surface.access_mode).toBe('local_only');
     expect(snapshot.settings_surface.summary_items).toEqual(expect.arrayContaining([
       expect.objectContaining({
@@ -918,7 +907,7 @@ describe('desktopWelcomeState', () => {
     ]));
   });
 
-  it('keeps dual-route entries visible when remote access is removed and marks their local scope as controlplane', () => {
+  it('keeps dual-route entries visible when remote access is removed and marks their machine state as controlplane', () => {
     const freshSyncAt = Date.now();
     expect(testProvider).toBeTruthy();
     if (!testProvider) {

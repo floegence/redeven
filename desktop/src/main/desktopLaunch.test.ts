@@ -6,7 +6,6 @@ import {
   buildDesktopRuntimeEnvironment,
   buildDesktopRuntimeLaunchPlan,
   buildDesktopRuntimeSpawnPlan,
-  ENV_TOKEN_ENV_NAME,
 } from './desktopLaunch';
 import {
   testManagedAccess,
@@ -35,7 +34,7 @@ describe('desktopLaunch', () => {
     ]);
   });
 
-  it('adds one-shot environment bootstrap args and secret env vars to the spawn plan', () => {
+  it('adds one-shot bootstrap ticket args and secret env vars to the spawn plan', () => {
     const environment = testManagedControlPlaneEnvironment(
       'https://region.example.invalid',
       'env_123',
@@ -54,10 +53,10 @@ describe('desktopLaunch', () => {
       { HOME: '/Users/tester' },
       {
         bootstrap: {
-          kind: 'env_token',
+          kind: 'bootstrap_ticket',
           controlplane_url: 'https://region.example.invalid',
           env_id: 'env_123',
-          env_token: 'token-123',
+          bootstrap_ticket: 'ticket-123',
         },
       },
     );
@@ -69,28 +68,28 @@ describe('desktopLaunch', () => {
       '--local-ui-bind',
       '127.0.0.1:0',
       '--config-path',
-      '/Users/tester/.redeven/scopes/controlplane/https__region.example.invalid/env_123/config.json',
+      '/Users/tester/.redeven/machine/config.json',
       '--password-stdin',
       '--controlplane',
       'https://region.example.invalid',
       '--env-id',
       'env_123',
-      '--env-token-env',
-      ENV_TOKEN_ENV_NAME,
+      '--bootstrap-ticket-env',
+      BOOTSTRAP_TICKET_ENV_NAME,
       '--startup-report-file',
       '/tmp/startup.json',
     ]);
     expect(plan.password_stdin).toBe('secret');
-    expect(plan.env[ENV_TOKEN_ENV_NAME]).toBe('token-123');
+    expect(plan.env[BOOTSTRAP_TICKET_ENV_NAME]).toBe('ticket-123');
     expect(plan.state_layout).toEqual(expect.objectContaining({
-      scopeKey: 'controlplane/https__region.example.invalid/env_123',
-      configPath: '/Users/tester/.redeven/scopes/controlplane/https__region.example.invalid/env_123/config.json',
-      stateDir: '/Users/tester/.redeven/scopes/controlplane/https__region.example.invalid/env_123',
-      runtimeStateFile: '/Users/tester/.redeven/scopes/controlplane/https__region.example.invalid/env_123/runtime/local-ui.json',
+      scopeKey: 'machine',
+      configPath: '/Users/tester/.redeven/machine/config.json',
+      stateDir: '/Users/tester/.redeven/machine',
+      runtimeStateFile: '/Users/tester/.redeven/machine/runtime/local-ui.json',
     }));
   });
 
-  it('adds one-shot bootstrap ticket env vars without keeping stale environment tokens', () => {
+  it('adds one-shot bootstrap ticket env vars', () => {
     const environment = testManagedControlPlaneEnvironment('https://region.example.invalid', 'env_123', {
       access: testManagedAccess({
         local_ui_bind: '127.0.0.1:0',
@@ -99,7 +98,6 @@ describe('desktopLaunch', () => {
 
     const env = buildDesktopRuntimeEnvironment(environment, {
       HOME: '/Users/tester',
-      [ENV_TOKEN_ENV_NAME]: 'old-token',
     }, {
       bootstrap: {
         kind: 'bootstrap_ticket',
@@ -109,11 +107,10 @@ describe('desktopLaunch', () => {
       },
     });
 
-    expect(env[ENV_TOKEN_ENV_NAME]).toBeUndefined();
     expect(env[BOOTSTRAP_TICKET_ENV_NAME]).toBe('ticket-123');
   });
 
-  it('removes stale secret env vars when the current settings do not use them', () => {
+  it('removes stale bootstrap ticket env vars when the current settings do not use them', () => {
     const environment = testManagedLocalEnvironment('default', {
       access: testManagedAccess({
         local_ui_bind: '127.0.0.1:0',
@@ -122,16 +119,14 @@ describe('desktopLaunch', () => {
 
     const env = buildDesktopRuntimeEnvironment(environment, {
       HOME: '/Users/tester',
-      [ENV_TOKEN_ENV_NAME]: 'old-token',
       [BOOTSTRAP_TICKET_ENV_NAME]: 'old-ticket',
     });
 
-    expect(env[ENV_TOKEN_ENV_NAME]).toBeUndefined();
     expect(env[BOOTSTRAP_TICKET_ENV_NAME]).toBeUndefined();
     expect(env.HOME).toBe('/Users/tester');
   });
 
-  it('builds a launch plan with the local default scope when no bootstrap target is provided', () => {
+  it('builds a launch plan with the machine scope when no bootstrap target is provided', () => {
     const environment = testManagedLocalEnvironment('default', {
       access: testManagedAccess({
         local_ui_bind: '127.0.0.1:0',
@@ -147,13 +142,13 @@ describe('desktopLaunch', () => {
       '--local-ui-bind',
       '127.0.0.1:0',
       '--config-path',
-      '/Users/tester/.redeven/scopes/local/default/config.json',
+      '/Users/tester/.redeven/machine/config.json',
     ]);
     expect(plan.state_layout).toEqual(expect.objectContaining({
-      scopeKey: 'local/default',
-      configPath: '/Users/tester/.redeven/scopes/local/default/config.json',
-      stateDir: '/Users/tester/.redeven/scopes/local/default',
-      runtimeStateFile: '/Users/tester/.redeven/scopes/local/default/runtime/local-ui.json',
+      scopeKey: 'machine',
+      configPath: '/Users/tester/.redeven/machine/config.json',
+      stateDir: '/Users/tester/.redeven/machine',
+      runtimeStateFile: '/Users/tester/.redeven/machine/runtime/local-ui.json',
     }));
   });
 });

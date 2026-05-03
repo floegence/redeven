@@ -20,25 +20,27 @@ func readCatalogEnvironmentFile(t *testing.T, path string) environmentCatalogFil
 	return file
 }
 
-func TestWriteEnvironmentCatalogRecordWritesNamedProviderHostedEnvironment(t *testing.T) {
+func TestWriteEnvironmentCatalogRecordWritesMachineProviderBinding(t *testing.T) {
 	stateRoot := t.TempDir()
-	layout, err := NamedStateLayout("dev-a", stateRoot)
+	layout, err := MachineStateLayout(stateRoot)
 	if err != nil {
-		t.Fatalf("NamedStateLayout() error = %v", err)
+		t.Fatalf("MachineStateLayout() error = %v", err)
 	}
 
 	cfg := &Config{
 		ControlplaneBaseURL:    "https://dev.redeven.test",
 		ControlplaneProviderID: "redeven_portal",
 		EnvironmentID:          "env_demo",
+		MachinePublicID:        "mach_demo",
+		BindingGeneration:      1,
 	}
 	if err := WriteEnvironmentCatalogRecord(layout, cfg, "localhost:23998", true); err != nil {
 		t.Fatalf("WriteEnvironmentCatalogRecord() error = %v", err)
 	}
 
-	recordPath := filepath.Join(stateRoot, "catalog", "environments", sanitizeStateScopeID("named:dev-a")+".json")
+	recordPath := filepath.Join(stateRoot, "catalog", "environments", sanitizeStateScopeID("machine")+".json")
 	record := readCatalogEnvironmentFile(t, recordPath)
-	if record.ID != "named:dev-a" {
+	if record.ID != "machine" {
 		t.Fatalf("ID = %q", record.ID)
 	}
 	if record.Identity.Kind != "provider" {
@@ -47,11 +49,14 @@ func TestWriteEnvironmentCatalogRecordWritesNamedProviderHostedEnvironment(t *te
 	if record.Identity.ProviderOrigin != "https://dev.redeven.test" {
 		t.Fatalf("Identity.ProviderOrigin = %q", record.Identity.ProviderOrigin)
 	}
-	if record.LocalHosting.Scope.Kind != string(ScopeKindNamed) {
+	if record.LocalHosting.Scope.Kind != string(ScopeKindMachine) {
 		t.Fatalf("LocalHosting.Scope.Kind = %q", record.LocalHosting.Scope.Kind)
 	}
-	if record.LocalHosting.Scope.Name != "dev-a" {
+	if record.LocalHosting.Scope.Name != DefaultMachineScopeName {
 		t.Fatalf("LocalHosting.Scope.Name = %q", record.LocalHosting.Scope.Name)
+	}
+	if record.LocalHosting.ScopeKey != "machine" {
+		t.Fatalf("LocalHosting.ScopeKey = %q", record.LocalHosting.ScopeKey)
 	}
 	if record.LocalHosting.Owner != "agent" {
 		t.Fatalf("LocalHosting.Owner = %q", record.LocalHosting.Owner)
@@ -75,20 +80,22 @@ func TestWriteEnvironmentCatalogRecordWritesNamedProviderHostedEnvironment(t *te
 
 func TestWriteEnvironmentCatalogRecordFallsBackToProviderKeyWhenCanonicalProviderIDIsUnavailable(t *testing.T) {
 	stateRoot := t.TempDir()
-	layout, err := NamedStateLayout("dev-a", stateRoot)
+	layout, err := MachineStateLayout(stateRoot)
 	if err != nil {
-		t.Fatalf("NamedStateLayout() error = %v", err)
+		t.Fatalf("MachineStateLayout() error = %v", err)
 	}
 
 	cfg := &Config{
 		ControlplaneBaseURL: "https://dev.redeven.test",
 		EnvironmentID:       "env_demo",
+		MachinePublicID:     "mach_demo",
+		BindingGeneration:   1,
 	}
 	if err := WriteEnvironmentCatalogRecord(layout, cfg, "localhost:23998", true); err != nil {
 		t.Fatalf("WriteEnvironmentCatalogRecord() error = %v", err)
 	}
 
-	recordPath := filepath.Join(stateRoot, "catalog", "environments", sanitizeStateScopeID("named:dev-a")+".json")
+	recordPath := filepath.Join(stateRoot, "catalog", "environments", sanitizeStateScopeID("machine")+".json")
 	record := readCatalogEnvironmentFile(t, recordPath)
 	if record.ProviderBinding == nil {
 		t.Fatalf("ProviderBinding = nil")
@@ -98,23 +105,22 @@ func TestWriteEnvironmentCatalogRecordFallsBackToProviderKeyWhenCanonicalProvide
 	}
 }
 
-func TestWriteEnvironmentCatalogRecordReusesExistingProviderRecordID(t *testing.T) {
+func TestWriteEnvironmentCatalogRecordReusesExistingMachineRecordProperties(t *testing.T) {
 	stateRoot := t.TempDir()
-	layout, err := NamedStateLayout("dev-a", stateRoot)
+	layout, err := MachineStateLayout(stateRoot)
 	if err != nil {
-		t.Fatalf("NamedStateLayout() error = %v", err)
+		t.Fatalf("MachineStateLayout() error = %v", err)
 	}
 
-	recordID := "cp:https%3A%2F%2Fdev.redeven.test:env:env_demo"
-	recordPath := filepath.Join(stateRoot, "catalog", "environments", sanitizeStateScopeID(recordID)+".json")
+	recordPath := filepath.Join(stateRoot, "catalog", "environments", sanitizeStateScopeID("machine")+".json")
 	if err := os.MkdirAll(filepath.Dir(recordPath), 0o700); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
 	seed := environmentCatalogFile{
 		SchemaVersion: 1,
 		RecordKind:    "environment",
-		ID:            recordID,
-		Label:         "Existing Env",
+		ID:            "machine",
+		Label:         "Existing Machine",
 		Pinned:        true,
 		CreatedAtMS:   123,
 		UpdatedAtMS:   456,
@@ -152,16 +158,18 @@ func TestWriteEnvironmentCatalogRecordReusesExistingProviderRecordID(t *testing.
 	cfg := &Config{
 		ControlplaneBaseURL: "https://dev.redeven.test",
 		EnvironmentID:       "env_demo",
+		MachinePublicID:     "mach_demo",
+		BindingGeneration:   1,
 	}
 	if err := WriteEnvironmentCatalogRecord(layout, cfg, "127.0.0.1:24000", false); err != nil {
 		t.Fatalf("WriteEnvironmentCatalogRecord() error = %v", err)
 	}
 
 	record := readCatalogEnvironmentFile(t, recordPath)
-	if record.ID != recordID {
+	if record.ID != "machine" {
 		t.Fatalf("ID = %q", record.ID)
 	}
-	if record.Label != "Existing Env" {
+	if record.Label != "Existing Machine" {
 		t.Fatalf("Label = %q", record.Label)
 	}
 	if !record.Pinned {

@@ -73,7 +73,6 @@ import {
   type RuntimeServiceSnapshot,
 } from '../shared/runtimeService';
 import {
-  createDesktopSSHEnvironmentInstanceID,
   DEFAULT_DESKTOP_SSH_AUTH_MODE,
   DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
   DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
@@ -153,7 +152,7 @@ import {
   type DesktopActionToast,
   type DesktopActionToastTone,
 } from './actionToastModel';
-import { normalizeDesktopLocalEnvironmentName } from '../shared/desktopManagedEnvironment';
+import { DEFAULT_LOCAL_ENVIRONMENT_NAME } from '../shared/desktopManagedEnvironment';
 import { DesktopActionPopover } from './DesktopActionPopover';
 import { DesktopAnchoredOverlaySurface } from './DesktopAnchoredOverlaySurface';
 import {
@@ -257,7 +256,6 @@ type SSHConnectionDialogState = Readonly<{
   remote_install_dir: string;
   bootstrap_strategy: DesktopSSHBootstrapStrategy;
   release_base_url: string;
-  environment_instance_id: string;
 }>;
 
 const LOCAL_UI_BIND_TOOLTIP_PATTERNS: ReadonlyArray<{
@@ -455,24 +453,6 @@ function bindConflictsWithSuggestedLoopback(rawBind: string, port: number): bool
     || host.startsWith('127.');
 }
 
-function deriveManagedEnvironmentScopeNameFromName(value: string): string {
-  const clean = trimString(value);
-  return clean === '' ? '' : normalizeDesktopLocalEnvironmentName(clean);
-}
-
-function shouldAutoSyncManagedEnvironmentScopeName(state: ManagedEnvironmentConnectionDialogState): boolean {
-  return state.mode === 'create'
-    && trimString(state.environment_id) === '';
-}
-
-function managedEnvironmentScopePreview(state: ManagedEnvironmentConnectionDialogState | null | undefined): string {
-  if (!state) {
-    return '';
-  }
-  const scopeName = trimString(state.environment_name) || deriveManagedEnvironmentScopeNameFromName(state.label);
-  return scopeName === '' ? '' : `local/${scopeName}`;
-}
-
 function defaultLocalUIPasswordMode(configured: boolean): DesktopLocalUIPasswordMode {
   return configured ? 'keep' : 'replace';
 }
@@ -587,11 +567,7 @@ function createManagedEnvironmentConnectionDialogState(
     connection_kind: 'managed_environment',
     environment_id: trimString(overrides.environment_id),
     label,
-    environment_name: environmentName !== ''
-      ? environmentName
-      : (mode === 'create'
-        ? deriveManagedEnvironmentScopeNameFromName(label)
-        : ''),
+    environment_name: environmentName || DEFAULT_LOCAL_ENVIRONMENT_NAME,
     local_ui_bind: trimString(overrides.local_ui_bind) || EMPTY_SETTINGS_DRAFT.local_ui_bind || 'localhost:23998',
     local_ui_password: trimString(overrides.local_ui_password),
     local_ui_password_mode: normalizeDesktopLocalUIPasswordMode(
@@ -617,8 +593,6 @@ function createSSHConnectionDialogState(
     remote_install_dir: trimString(overrides.remote_install_dir),
     bootstrap_strategy: (trimString(overrides.bootstrap_strategy) as DesktopSSHBootstrapStrategy) || DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
     release_base_url: trimString(overrides.release_base_url),
-    environment_instance_id: trimString(overrides.environment_instance_id)
-      || (mode === 'create' ? createDesktopSSHEnvironmentInstanceID() : ''),
   };
 }
 
@@ -1290,7 +1264,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           : (environment.ssh_details?.remote_install_dir ?? ''),
         bootstrap_strategy: environment.ssh_details?.bootstrap_strategy ?? DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
         release_base_url: environment.ssh_details?.release_base_url ?? '',
-        environment_instance_id: environment.ssh_details?.environment_instance_id ?? '',
       }));
     } else {
       setConnectionDialogState(createExternalURLConnectionDialogState('edit', {
@@ -1384,7 +1357,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function updateConnectionDialogField(
-    name: 'label' | 'environment_name' | 'local_ui_bind' | 'local_ui_password' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'remote_install_dir' | 'release_base_url' | 'environment_instance_id',
+    name: 'label' | 'environment_name' | 'local_ui_bind' | 'local_ui_password' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'remote_install_dir' | 'release_base_url',
     value: string,
   ): void {
     setConnectionDialogState((current) => {
@@ -1396,15 +1369,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           ...current,
           local_ui_password: value,
           local_ui_password_mode: passwordModeForInput(value, current.local_ui_password_configured),
-        };
-      }
-      if (name === 'label' && current.connection_kind === 'managed_environment') {
-        return {
-          ...current,
-          label: value,
-          environment_name: shouldAutoSyncManagedEnvironmentScopeName(current)
-            ? deriveManagedEnvironmentScopeNameFromName(value)
-            : current.environment_name,
         };
       }
       return {
@@ -1620,7 +1584,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       remote_install_dir: environment.ssh_details.remote_install_dir,
       bootstrap_strategy: environment.ssh_details.bootstrap_strategy,
       release_base_url: environment.ssh_details.release_base_url,
-      environment_instance_id: environment.ssh_details.environment_instance_id,
       ...(options.forceRuntimeUpdate ? { force_runtime_update: true } : {}),
     };
   }
@@ -1756,7 +1719,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       remote_install_dir: details.remote_install_dir,
       bootstrap_strategy: details.bootstrap_strategy,
       release_base_url: details.release_base_url,
-      environment_instance_id: details.environment_instance_id,
     }, errorTarget);
     const opened = result?.outcome === 'opened_environment_window' || result?.outcome === 'focused_environment_window';
     if (opened && errorTarget === 'dialog') {
@@ -2207,7 +2169,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         remote_install_dir: request.details.remote_install_dir,
         bootstrap_strategy: request.details.bootstrap_strategy,
         release_base_url: request.details.release_base_url,
-        environment_instance_id: request.details.environment_instance_id,
       });
       await refreshSnapshot();
       showActionToast(request.successMessage);
@@ -2259,15 +2220,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     errorTarget: 'connect' | 'dialog',
   ): Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'upsert_managed_environment' }>> | null {
     const displayName = trimString(state.label);
-    const localEnvironmentName = trimString(state.environment_name)
-      || (shouldAutoSyncManagedEnvironmentScopeName(state)
-        ? deriveManagedEnvironmentScopeNameFromName(displayName)
-        : '');
+    const localEnvironmentName = DEFAULT_LOCAL_ENVIRONMENT_NAME;
     if (displayName === '') {
-      setErrorMessage(errorTarget, 'Name is required.');
-      return null;
-    }
-    if (localEnvironmentName === '' && !(state.mode === 'edit' && trimString(state.environment_id) !== '')) {
       setErrorMessage(errorTarget, 'Name is required.');
       return null;
     }
@@ -2306,7 +2260,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           remote_install_dir: trimString(state.remote_install_dir) || DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
           bootstrap_strategy: state.bootstrap_strategy,
           release_base_url: trimString(state.release_base_url),
-          environment_instance_id: trimString(state.environment_instance_id),
         },
         errorTarget: 'dialog',
         successMessage: state.mode === 'edit'
@@ -2371,7 +2324,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         remote_install_dir: trimString(state.remote_install_dir) || DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
         bootstrap_strategy: state.bootstrap_strategy,
         release_base_url: trimString(state.release_base_url),
-        environment_instance_id: trimString(state.environment_instance_id),
       }, 'dialog');
       return;
     }
@@ -2422,7 +2374,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         remote_install_dir: details.remote_install_dir,
         bootstrap_strategy: details.bootstrap_strategy,
         release_base_url: details.release_base_url,
-        environment_instance_id: details.environment_instance_id,
       }, 'connect');
       if (result?.outcome === 'saved_environment') {
         showActionToast(successMessage);
@@ -4829,7 +4780,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Access &amp; Security</div>
-            <div class="mt-1 text-sm text-foreground">This environment keeps its own local scope on this machine.</div>
+            <div class="mt-1 text-sm text-foreground">This machine keeps one local runtime state for the current binding.</div>
           </div>
           <div class="flex flex-wrap items-center gap-1.5">
             <Tag variant={passwordStateTagVariant(accessModel().password_state_tone)} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
@@ -5172,7 +5123,7 @@ function ConnectionDialog(props: Readonly<{
   busyState: DesktopLauncherBusyState;
   onOpenChange: (open: boolean) => void;
   updateField: (
-    name: 'label' | 'environment_name' | 'local_ui_bind' | 'local_ui_password' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'remote_install_dir' | 'release_base_url' | 'environment_instance_id',
+    name: 'label' | 'environment_name' | 'local_ui_bind' | 'local_ui_password' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'remote_install_dir' | 'release_base_url',
     value: string,
   ) => void;
   switchKind: (kind: 'managed_environment' | 'external_local_ui' | 'ssh_environment') => void;
@@ -5223,7 +5174,7 @@ function ConnectionDialog(props: Readonly<{
           </>
         );
       case 'ssh_environment':
-        return 'Deploy a Desktop-managed environment to a machine you can reach over SSH. Desktop reuses shared release artifacts on that host, but each Environment Instance stays isolated unless you explicitly reuse its Instance ID.';
+        return 'Deploy a Desktop-managed environment to a machine you can reach over SSH. Desktop reuses shared release artifacts on that host and keeps one runtime state set per host.';
       case 'managed_environment':
       default:
         return 'Run a Desktop-managed Redeven environment on this device. Local environments are created independently and are not bound directly to a provider environment.';
@@ -5319,33 +5270,19 @@ function ConnectionDialog(props: Readonly<{
                   when={managedEnvironmentState()?.mode === 'edit'}
                   fallback={(
                     <>
-                      Desktop will store local state under an automatic
+                      Desktop will use this device&apos;s single machine state at
                       {' '}
-                      <span class="font-mono text-foreground">local/&lt;name&gt;</span>
-                      {' '}
-                      scope derived from Name.
-                      <Show when={managedEnvironmentScopePreview(managedEnvironmentState()) !== ''}>
-                        <span>
-                          {' '}
-                          Next scope:
-                          {' '}
-                          <span class="font-mono text-foreground">{managedEnvironmentScopePreview(managedEnvironmentState())}</span>
-                          .
-                        </span>
-                      </Show>
+                      <span class="font-mono text-foreground">~/.redeven/machine</span>
+                      .
                     </>
                   )}
                 >
                   Renaming this environment only changes how it appears in Desktop.
-                  <Show when={managedEnvironmentScopePreview(managedEnvironmentState()) !== ''}>
-                    <span>
-                      {' '}
-                      Local state stays under
-                      {' '}
-                      <span class="font-mono text-foreground">{managedEnvironmentScopePreview(managedEnvironmentState())}</span>
-                      .
-                    </span>
-                  </Show>
+                  {' '}
+                  Runtime state stays under
+                  {' '}
+                  <span class="font-mono text-foreground">~/.redeven/machine</span>
+                  .
                 </Show>
               </div>
               <div class="space-y-1.5">
@@ -5475,7 +5412,7 @@ function ConnectionDialog(props: Readonly<{
         <Show when={connectionKind() === 'ssh_environment'}>
           <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-3">
             <div class="text-xs leading-5 text-muted-foreground">
-              Desktop reuses only the exact Desktop-managed Redeven release on that host, installs it on demand when needed, and keeps runtime state isolated per Environment Instance.
+              Desktop reuses only the exact Desktop-managed Redeven release on that host, installs it on demand when needed, and stores runtime state in that host's single machine profile.
             </div>
             <div class="mt-3 space-y-3">
               <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7.5rem]">
@@ -5550,7 +5487,7 @@ function ConnectionDialog(props: Readonly<{
                   <div>
                     <div class="text-xs font-medium text-foreground">Advanced</div>
                     <div class="mt-1 text-[11px] text-muted-foreground">
-                      Default behavior creates an isolated Environment Instance on that host. Reuse the same Instance ID only when you intentionally want another Desktop to attach the same remote environment state.
+                      Configure the remote install location and release mirror used by this SSH host.
                     </div>
                   </div>
                   <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
@@ -5560,21 +5497,6 @@ function ConnectionDialog(props: Readonly<{
                 <Show when={showSSHAdvanced()}>
                   <div class="border-t border-border/70 px-3 py-3">
                     <div class="space-y-3">
-                      <div class="space-y-1.5">
-                        <label for="environment-ssh-instance-id" class="block text-xs font-medium text-foreground">Environment Instance ID</label>
-                        <Input
-                          id="environment-ssh-instance-id"
-                          value={props.state?.connection_kind === 'ssh_environment' ? props.state.environment_instance_id : ''}
-                          onInput={(event) => props.updateField('environment_instance_id', event.currentTarget.value)}
-                          placeholder="envinst_..."
-                          size="sm"
-                          class="w-full font-mono"
-                          spellcheck={false}
-                        />
-                        <div class="text-[11px] text-muted-foreground">
-                          Desktop generates a new isolated instance by default. Use the same ID on another Desktop only when you intentionally want to open the same remote environment state.
-                        </div>
-                      </div>
                       <div class="space-y-1.5">
                         <label for="environment-ssh-install-dir" class="block text-xs font-medium text-foreground">Remote Install Directory</label>
                         <Input

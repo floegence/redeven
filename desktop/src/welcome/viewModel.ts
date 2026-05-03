@@ -1112,11 +1112,6 @@ function environmentCardMeta(environment: DesktopEnvironmentEntry): readonly Env
   if (environment.kind === 'ssh_environment') {
     return [
       {
-        label: 'Instance ID',
-        value: environment.ssh_details?.environment_instance_id ?? '',
-        monospace: true,
-      },
-      {
         label: 'Install root',
         value: environment.ssh_details?.remote_install_dir ?? '',
         monospace: true,
@@ -1225,7 +1220,6 @@ export function environmentMatchesLibrarySearch(
     environment.ssh_details?.remote_install_dir ?? '',
     environment.ssh_details?.release_base_url ?? '',
     environment.ssh_details?.bootstrap_strategy ?? '',
-    environment.ssh_details?.environment_instance_id ?? '',
   ].some((value) => value.toLowerCase().includes(clean));
 }
 

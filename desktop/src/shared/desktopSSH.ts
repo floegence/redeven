@@ -4,7 +4,6 @@ export const DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY = 'auto';
 export const DEFAULT_DESKTOP_SSH_AUTH_MODE = 'key_agent';
 export const DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL = '';
 export const DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL_LABEL = 'Public GitHub Releases';
-export const DEFAULT_DESKTOP_SSH_ENVIRONMENT_INSTANCE_ID_PREFIX = 'envinst_';
 
 export type DesktopSSHBootstrapStrategy = 'auto' | 'desktop_upload' | 'remote_install';
 export type DesktopSSHAuthMode = 'key_agent' | 'password';
@@ -18,9 +17,7 @@ export type DesktopSSHHostAccessDetails = Readonly<{
   release_base_url: string;
 }>;
 
-export type DesktopSSHEnvironmentDetails = Readonly<DesktopSSHHostAccessDetails & {
-  environment_instance_id: string;
-}>;
+export type DesktopSSHEnvironmentDetails = DesktopSSHHostAccessDetails;
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -118,33 +115,6 @@ export function normalizeDesktopSSHReleaseBaseURL(value: unknown): string {
   return parsed.toString().replace(/\/$/u, '');
 }
 
-function randomHex(bytes: number): string {
-  const buffer = new Uint8Array(bytes);
-  if (typeof globalThis.crypto?.getRandomValues === 'function') {
-    globalThis.crypto.getRandomValues(buffer);
-  } else {
-    for (let index = 0; index < buffer.length; index += 1) {
-      buffer[index] = Math.floor(Math.random() * 256);
-    }
-  }
-  return Array.from(buffer, (value) => value.toString(16).padStart(2, '0')).join('');
-}
-
-export function createDesktopSSHEnvironmentInstanceID(): string {
-  return `${DEFAULT_DESKTOP_SSH_ENVIRONMENT_INSTANCE_ID_PREFIX}${randomHex(10)}`;
-}
-
-export function normalizeDesktopSSHEnvironmentInstanceID(value: unknown): string {
-  const text = compact(value).toLowerCase();
-  if (text === '') {
-    return createDesktopSSHEnvironmentInstanceID();
-  }
-  if (!/^[a-z0-9][a-z0-9_-]{5,63}$/u.test(text)) {
-    throw new Error('Environment instance ID must use 6-64 lowercase letters, numbers, "_" or "-".');
-  }
-  return text;
-}
-
 export function normalizeDesktopSSHHostAccessDetails(
   value: Readonly<{
     ssh_destination: unknown;
@@ -173,13 +143,9 @@ export function normalizeDesktopSSHEnvironmentDetails(
     remote_install_dir: unknown;
     bootstrap_strategy: unknown;
     release_base_url: unknown;
-    environment_instance_id: unknown;
   }>,
 ): DesktopSSHEnvironmentDetails {
-  return {
-    ...normalizeDesktopSSHHostAccessDetails(value),
-    environment_instance_id: normalizeDesktopSSHEnvironmentInstanceID(value.environment_instance_id),
-  };
+  return normalizeDesktopSSHHostAccessDetails(value);
 }
 
 export function desktopSSHAuthority(value: DesktopSSHHostAccessDetails): string {
@@ -192,7 +158,7 @@ export function desktopSSHAuthority(value: DesktopSSHHostAccessDetails): string 
 
 export function desktopSSHEnvironmentID(value: DesktopSSHEnvironmentDetails): `ssh:${string}` {
   const normalized = normalizeDesktopSSHEnvironmentDetails(value);
-  return `ssh:${encodeURIComponent(normalized.ssh_destination)}:${normalized.ssh_port ?? 'default'}:${encodeURIComponent(normalized.auth_mode)}:${encodeURIComponent(normalized.remote_install_dir)}:${encodeURIComponent(normalized.environment_instance_id)}`;
+  return `ssh:${encodeURIComponent(normalized.ssh_destination)}:${normalized.ssh_port ?? 'default'}:${encodeURIComponent(normalized.auth_mode)}:${encodeURIComponent(normalized.remote_install_dir)}`;
 }
 
 export function defaultSavedSSHEnvironmentLabel(value: DesktopSSHHostAccessDetails): string {

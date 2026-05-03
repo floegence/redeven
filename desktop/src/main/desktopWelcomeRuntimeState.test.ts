@@ -63,7 +63,7 @@ describe('desktopWelcomeRuntimeState', () => {
     });
   });
 
-  it('probes a managed runtime from the local scope state file', async () => {
+  it('probes a managed runtime from the machine state file', async () => {
     const server = http.createServer((request, response) => {
       if (request.url === '/api/local/runtime/health') {
         response.writeHead(200, { 'Content-Type': 'application/json' });

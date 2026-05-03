@@ -180,7 +180,7 @@ async function waitForHostText(host: HTMLElement, text: string, attempts = 20): 
 
 function makeRuntimeStatus(overrides: any = {}): any {
   const sharedRoot = '/Users/test/.redeven/shared/code-server/darwin-arm64';
-  const managedPrefix = '/Users/test/.redeven/scopes/controlplane/dev/env_1/apps/code/runtime/managed';
+  const managedPrefix = '/Users/test/.redeven/machine/apps/code/runtime/managed';
   return {
     active_runtime: {
       detection_state: 'ready',

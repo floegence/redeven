@@ -113,7 +113,6 @@ export function testManagedControlPlaneEnvironment(
   options: TestManagedControlPlaneEnvironmentOptions = {},
 ): DesktopManagedControlPlaneEnvironment {
   const layout = controlPlaneManagedStateLayout(providerOrigin, envPublicID);
-  const scopeParts = layout.scopeKey.split('/');
   return createManagedControlPlaneEnvironment(providerOrigin, envPublicID, {
     providerID: options.providerID ?? 'redeven_portal',
     label: options.label,
@@ -126,10 +125,8 @@ export function testManagedControlPlaneEnvironment(
       ? undefined
       : createManagedEnvironmentLocalHosting(
         {
-          kind: 'controlplane',
-          provider_origin: providerOrigin,
-          provider_key: scopeParts[1] ?? 'redeven_portal',
-          env_public_id: envPublicID,
+          kind: 'machine',
+          name: 'machine',
         },
         {
           access: testManagedAccess(options.access),

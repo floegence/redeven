@@ -70,7 +70,7 @@ The browser-side Codex UI uses an explicit controller split so thread switching,
 
 ## Host-managed runtime
 
-There is **no** `config.codex` block in the runtime scope config (for example `~/.redeven/scopes/local/default/config.json`).
+There is **no** `config.codex` block in the runtime machine config (for example `~/.redeven/machine/config.json`).
 
 Redeven resolves `codex` like this:
 

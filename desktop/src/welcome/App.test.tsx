@@ -94,7 +94,7 @@ describe('DesktopWelcomeShell', () => {
       surface_title: 'Connect Environment',
       connect_heading: 'Connect Environment',
       primary_action_label: 'Open Environment',
-      settings_save_label: 'Save Local Default Environment Settings',
+      settings_save_label: 'Save Local Machine Settings',
     });
     expect(shellStatus(snapshot)).toEqual({
       tone: 'disconnected',
@@ -123,9 +123,9 @@ describe('DesktopWelcomeShell', () => {
       surface_title: 'Environment Settings',
       connect_heading: 'Connect Environment',
       primary_action_label: 'Open Environment',
-      settings_save_label: 'Save Local Default Environment Settings',
+      settings_save_label: 'Save Local Machine Settings',
     });
-    expect(snapshot.settings_surface.window_title).toBe('Local Default Environment Settings');
+    expect(snapshot.settings_surface.window_title).toBe('Local Machine Settings');
     expect(snapshot.settings_surface.access_mode).toBe('shared_local_network');
     expect(snapshot.settings_surface.password_state_label).toBe('Password configured');
     expect(snapshot.settings_surface.draft.local_ui_password).toBe('');
@@ -221,7 +221,7 @@ describe('DesktopWelcomeShell', () => {
 
     expect(filterEnvironmentLibrary(snapshot, '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)).toEqual([
       expect.objectContaining({
-        id: 'local:default',
+        id: 'machine',
         category: 'managed',
         managed_environment_kind: 'local',
       }),
@@ -710,8 +710,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Connect straight to a Redeven runtime that already exposes its own Environment URL');
     expect(appSrc).toContain('This is not the Provider URL.');
     expect(appSrc).toContain('Deploy a Desktop-managed environment to a machine you can reach over SSH.');
-    expect(appSrc).toContain('Desktop reuses shared release artifacts on that host, but each Environment Instance stays isolated unless you explicitly reuse its Instance ID.');
-    expect(appSrc).toContain('Desktop reuses only the exact Desktop-managed Redeven release on that host, installs it on demand when needed, and keeps runtime state isolated per Environment Instance.');
+    expect(appSrc).toContain('Desktop reuses shared release artifacts on that host and keeps one runtime state set per host.');
+    expect(appSrc).toContain("Desktop reuses only the exact Desktop-managed Redeven release on that host, installs it on demand when needed, and stores runtime state in that host's single machine profile.");
     expect(appSrc).toContain('Bootstrap Delivery');
     expect(appSrc).toContain('Authentication');
     expect(appSrc).toContain("label: 'Key / agent'");
@@ -728,31 +728,30 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("props.updateField('ssh_destination', host.alias);");
     expect(appSrc).toContain("props.updateField('ssh_port', host.port == null ? '' : String(host.port));");
     expect(appSrc).toContain('getSSHConfigHosts');
-    expect(appSrc).toContain('Environment Instance ID');
     expect(appSrc).toContain('Remote Install Directory');
     expect(appSrc).toContain('Release Base URL');
     expect(appSrc).toContain('Set an internal release mirror when this desktop cannot use GitHub directly.');
-    expect(appSrc).toContain('Default behavior creates an isolated Environment Instance on that host.');
     expect(appSrc).toContain('Leave blank to use the default remote user cache:');
   });
 
-  it('explains local scope behavior separately from the single visible Name field', () => {
+  it('explains machine state behavior separately from the single visible Name field', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain('Desktop will store local state under an automatic');
-    expect(appSrc).toContain('scope derived from Name.');
-    expect(appSrc).toContain('Next scope:');
+    expect(appSrc).toContain("Desktop will use this device&apos;s single machine state at");
+    expect(appSrc).toContain('~/.redeven/machine');
+    expect(appSrc).not.toContain('scope derived from Name.');
+    expect(appSrc).not.toContain('Next scope:');
     expect(appSrc).toContain('Renaming this environment only changes how it appears in Desktop.');
-    expect(appSrc).toContain('Local state stays under');
+    expect(appSrc).toContain('Runtime state stays under');
   });
 
-  it('keeps managed edit saves from rejecting a filled display name just because the hidden local scope field is blank', () => {
+  it('keeps managed saves pinned to the single machine environment name', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain("localEnvironmentName === '' && !(state.mode === 'edit' && trimString(state.environment_id) !== '')");
+    expect(appSrc).toContain('const localEnvironmentName = DEFAULT_LOCAL_ENVIRONMENT_NAME;');
     expect(appSrc).toContain("environment_name: localEnvironmentName || undefined");
-    expect(appSrc).toContain("environment_name: shouldAutoSyncManagedEnvironmentScopeName(current)");
-    expect(appSrc).toContain("? deriveManagedEnvironmentScopeNameFromName(value)");
+    expect(appSrc).not.toContain("environment_name: shouldAutoSyncManagedEnvironmentScopeName(current)");
+    expect(appSrc).not.toContain('? deriveManagedEnvironmentScopeNameFromName(value)');
   });
 
   it('keeps the managed environment dialog focused on local-environment creation only', () => {
@@ -784,10 +783,10 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Use a password if other devices can reach this address.');
   });
 
-  it('includes scope-first Local Environment Settings copy inside the source', () => {
+  it('includes machine-first Local Environment Settings copy inside the source', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain('This environment keeps its own local scope on this machine.');
+    expect(appSrc).toContain('Next start');
     expect(appSrc).toContain('Visibility');
     expect(appSrc).toContain('Details');
     expect(appSrc).toContain('Runtime');

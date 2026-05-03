@@ -4,7 +4,6 @@ export type SSHConnectionDialogStateSnapshot = Readonly<{
   environment_id: string;
   remote_install_dir?: string;
   release_base_url?: string;
-  environment_instance_id?: string;
 }> | null;
 
 export type SSHConnectionDialogAdvancedState = Readonly<{
@@ -20,10 +19,7 @@ export function sshConnectionDialogStateKey(state: SSHConnectionDialogStateSnaps
   if (!state) {
     return 'closed';
   }
-  const sshCreateInstanceKey = state.connection_kind === 'ssh_environment' && state.mode === 'create'
-    ? `:${compact(state.environment_instance_id)}`
-    : '';
-  return `${state.mode}:${state.connection_kind}:${state.environment_id}${sshCreateInstanceKey}`;
+  return `${state.mode}:${state.connection_kind}:${state.environment_id}`;
 }
 
 export function defaultSSHConnectionDialogAdvancedOpen(state: SSHConnectionDialogStateSnapshot): boolean {

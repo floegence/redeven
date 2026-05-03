@@ -22,9 +22,8 @@ func TestRunCLIHelp(t *testing.T) {
 		assertContainsAll(t, stdout,
 			"Redeven runtime and Local UI launcher.",
 			"Quick start:",
-			"redeven bootstrap --controlplane https://region.example.invalid --env-id env_123 --env-token <token>",
+			"redeven bootstrap --controlplane https://region.example.invalid --env-id env_123 --bootstrap-ticket <bootstrap-ticket>",
 			"redeven run --mode local",
-			"redeven run --mode local --scope named/dev-a",
 		)
 	})
 
@@ -39,14 +38,12 @@ func TestRunCLIHelp(t *testing.T) {
 		assertContainsAll(t, stdout,
 			"redeven run",
 			"Modes:",
-			"Scope selection rules:",
+			"Machine state rules:",
 			"Local UI bind rules:",
 			"Always start the Local UI. Connect to the control plane only when bootstrap config is already valid.",
-			"--scope <selector>",
 			"--state-root <path>",
 			"--config-path <path>",
 			"Accepted examples: localhost:23998, 127.0.0.1:24000, 127.0.0.1:0, 0.0.0.0:24000, 192.168.1.11:24000",
-			"redeven run --mode local --scope named/dev-a",
 		)
 	})
 
@@ -62,13 +59,10 @@ func TestRunCLIHelp(t *testing.T) {
 			"Required flags:",
 			"--controlplane <url>",
 			"--env-id <env_public_id>",
-			"--env-token <token>",
-			"--env-token-env <env_name>",
 			"--bootstrap-ticket <ticket>",
 			"--bootstrap-ticket-env <env_name>",
-			"--scope <selector>",
 			"--state-root <path>",
-			"redeven bootstrap --controlplane https://region.example.invalid --env-id env_123 --env-token <token>",
+			"redeven bootstrap --controlplane https://region.example.invalid --env-id env_123 --bootstrap-ticket <bootstrap-ticket>",
 		)
 	})
 
@@ -125,8 +119,8 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 			t.Fatalf("exit code = %d, want 2", code)
 		}
 		assertContainsAll(t, stderr,
-			"missing required flags for `redeven bootstrap`: --controlplane, --env-id, one bootstrap credential (--env-token/--env-token-env or --bootstrap-ticket/--bootstrap-ticket-env)",
-			"Example: redeven bootstrap --controlplane https://region.example.invalid --env-id env_123 --env-token <token>",
+			"missing required flags for `redeven bootstrap`: --controlplane, --env-id, one bootstrap ticket (--bootstrap-ticket or --bootstrap-ticket-env)",
+			"Example: redeven bootstrap --controlplane https://region.example.invalid --env-id env_123 --bootstrap-ticket <bootstrap-ticket>",
 		)
 	})
 
@@ -136,20 +130,9 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 			t.Fatalf("exit code = %d, want 2", code)
 		}
 		assertContainsAll(t, stderr,
-			"incomplete bootstrap flags for `redeven run`: missing flag one bootstrap credential (--env-token/--env-token-env or --bootstrap-ticket/--bootstrap-ticket-env)",
-			"Hint: provide --controlplane, --env-id, and exactly one bootstrap credential together, or run `redeven bootstrap` first.",
+			"incomplete bootstrap flags for `redeven run`: missing flag one bootstrap ticket (--bootstrap-ticket or --bootstrap-ticket-env)",
+			"Hint: provide --controlplane, --env-id, and exactly one bootstrap ticket together, or run `redeven bootstrap` first.",
 		)
-	})
-
-	t.Run("env token env can satisfy inline bootstrap requirements", func(t *testing.T) {
-		t.Setenv("REDEVEN_ENV_TOKEN", "token-123")
-		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--controlplane", "https://region.example.invalid", "--env-id", "env_123", "--env-token-env", "REDEVEN_ENV_TOKEN")
-		if code != 1 {
-			t.Fatalf("exit code = %d, want 1", code)
-		}
-		if strings.Contains(stderr, "invalid environment token flags") {
-			t.Fatalf("stderr = %q, want no env token flag error", stderr)
-		}
 	})
 
 	t.Run("invalid mode includes allowed values", func(t *testing.T) {
@@ -254,25 +237,24 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		)
 	})
 
-	t.Run("multiple env token sources explain the conflict", func(t *testing.T) {
-		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--env-token", "token-1", "--env-token-env", "REDEVEN_ENV_TOKEN")
+	t.Run("env token flags are no longer supported", func(t *testing.T) {
+		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--env-token", "token-1")
 		if code != 2 {
 			t.Fatalf("exit code = %d, want 2", code)
 		}
 		assertContainsAll(t, stderr,
-			"invalid environment token flags: use only one of --env-token or --env-token-env",
-			"Hint: choose a single environment token source for `redeven run`.",
+			"unknown flag for `redeven run`: --env-token",
 		)
 	})
 
-	t.Run("multiple bootstrap credential types explain the conflict", func(t *testing.T) {
-		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--env-token", "token-1", "--bootstrap-ticket", "ticket-1")
+	t.Run("multiple bootstrap ticket sources explain the conflict", func(t *testing.T) {
+		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--bootstrap-ticket", "ticket-1", "--bootstrap-ticket-env", "REDEVEN_BOOTSTRAP_TICKET")
 		if code != 2 {
 			t.Fatalf("exit code = %d, want 2", code)
 		}
 		assertContainsAll(t, stderr,
-			"invalid bootstrap flags for `redeven run`: choose either an environment token or a bootstrap ticket",
-			"Hint: use exactly one bootstrap credential source for each run command.",
+			"invalid bootstrap ticket flags: use only one of --bootstrap-ticket or --bootstrap-ticket-env",
+			"Hint: choose a single bootstrap ticket source for `redeven run`.",
 		)
 	})
 
@@ -284,17 +266,6 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		assertContainsAll(t, stderr,
 			"invalid bootstrap ticket flags: bootstrap ticket env var \"REDEVEN_BOOTSTRAP_TICKET\" is not set",
 			"Hint: export REDEVEN_BOOTSTRAP_TICKET with a non-empty ticket before running `redeven run`.",
-		)
-	})
-
-	t.Run("missing env token env gives export guidance", func(t *testing.T) {
-		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--env-token-env", "REDEVEN_ENV_TOKEN")
-		if code != 2 {
-			t.Fatalf("exit code = %d, want 2", code)
-		}
-		assertContainsAll(t, stderr,
-			"invalid environment token flags: environment token env var \"REDEVEN_ENV_TOKEN\" is not set",
-			"Hint: export REDEVEN_ENV_TOKEN with a non-empty token before running `redeven run`.",
 		)
 	})
 
@@ -322,9 +293,9 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		}
 		assertContainsAll(t, stderr,
 			"runtime is not bootstrapped for remote or hybrid mode:",
-			"Hint: run `redeven bootstrap` first, or pass --controlplane, --env-id, and exactly one bootstrap credential directly to `redeven run`.",
-			"redeven bootstrap --controlplane https://region.example.invalid --env-id env_123 --env-token <token>",
-			"redeven run --mode hybrid --controlplane https://region.example.invalid --env-id env_123 --env-token <token>",
+			"Hint: run `redeven bootstrap` first, or pass --controlplane, --env-id, and a one-time bootstrap ticket directly to `redeven run`.",
+			"redeven bootstrap --controlplane https://region.example.invalid --env-id env_123 --bootstrap-ticket <bootstrap-ticket>",
+			"redeven run --mode hybrid --controlplane https://region.example.invalid --env-id env_123 --bootstrap-ticket <bootstrap-ticket>",
 			"REDEVEN_BOOTSTRAP_TICKET=<bootstrap-ticket> redeven run --mode desktop --desktop-managed --controlplane https://region.example.invalid --env-id env_123 --bootstrap-ticket-env REDEVEN_BOOTSTRAP_TICKET",
 		)
 	})
@@ -334,7 +305,7 @@ func TestResolveRunStateLayoutUsesExplicitConfigPath(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "custom", "config.json")
 
-	layout, err := resolveRunStateLayout(configPath, "", nil, "", "", false)
+	layout, err := resolveRunStateLayout(configPath, "")
 	if err != nil {
 		t.Fatalf("resolveRunStateLayout() error = %v", err)
 	}
@@ -346,45 +317,38 @@ func TestResolveRunStateLayoutUsesExplicitConfigPath(t *testing.T) {
 	}
 }
 
-func TestResolveRunStateLayoutDefaultsToLocalScope(t *testing.T) {
+func TestResolveRunStateLayoutDefaultsToMachineScope(t *testing.T) {
 	stateRoot := t.TempDir()
 
-	layout, err := resolveRunStateLayout("", stateRoot, nil, "", "", false)
+	layout, err := resolveRunStateLayout("", stateRoot)
 	if err != nil {
 		t.Fatalf("resolveRunStateLayout() error = %v", err)
 	}
-	if layout.ScopeKey != "local/default" {
+	if layout.ScopeKey != "machine" {
 		t.Fatalf("ScopeKey = %q", layout.ScopeKey)
 	}
-	if layout.ConfigPath != filepath.Join(stateRoot, "scopes", "local", "default", "config.json") {
+	if layout.ConfigPath != filepath.Join(stateRoot, "machine", "config.json") {
 		t.Fatalf("ConfigPath = %q", layout.ConfigPath)
 	}
 }
 
-func TestResolveRunStateLayoutUsesInlineBootstrapControlPlaneScope(t *testing.T) {
+func TestResolveRunStateLayoutUsesMachineScopeForInlineBootstrap(t *testing.T) {
 	stateRoot := t.TempDir()
 
-	layout, err := resolveRunStateLayout("", stateRoot, nil, "https://region.example.invalid", "env_123", true)
+	layout, err := resolveRunStateLayout("", stateRoot)
 	if err != nil {
 		t.Fatalf("resolveRunStateLayout() error = %v", err)
 	}
-	if layout.ScopeKey != "controlplane/https__region.example.invalid/env_123" {
+	if layout.ScopeKey != "machine" {
 		t.Fatalf("ScopeKey = %q", layout.ScopeKey)
 	}
-	if layout.ConfigPath != filepath.Join(stateRoot, "scopes", "controlplane", "https__region.example.invalid", "env_123", "config.json") {
+	if layout.ConfigPath != filepath.Join(stateRoot, "machine", "config.json") {
 		t.Fatalf("ConfigPath = %q", layout.ConfigPath)
 	}
 }
 
-func TestValidateStateLayoutSelectionRejectsConfigPathWithScopeOrStateRoot(t *testing.T) {
-	scopeRef := &config.ScopeRef{Kind: config.ScopeKindNamed, Name: "dev-a"}
-
-	err := validateStateLayoutSelection("/tmp/config.json", scopeRef, "")
-	if err == nil || !strings.Contains(err.Error(), "`--config-path` cannot be combined with `--scope`") {
-		t.Fatalf("validateStateLayoutSelection() error = %v", err)
-	}
-
-	err = validateStateLayoutSelection("/tmp/config.json", nil, "/tmp/state")
+func TestValidateStateLayoutSelectionRejectsConfigPathWithStateRoot(t *testing.T) {
+	err := validateStateLayoutSelection("/tmp/config.json", "/tmp/state")
 	if err == nil || !strings.Contains(err.Error(), "`--config-path` cannot be combined with `--state-root`") {
 		t.Fatalf("validateStateLayoutSelection() error = %v", err)
 	}

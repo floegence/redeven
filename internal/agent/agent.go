@@ -21,6 +21,7 @@ import (
 	"github.com/floegence/flowersec/flowersec-go/endpoint"
 	"github.com/floegence/flowersec/flowersec-go/endpoint/serve"
 	controlv1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/controlplane/v1"
+	directv1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/direct/v1"
 	"github.com/floegence/flowersec/flowersec-go/origin"
 	fsproxy "github.com/floegence/flowersec/flowersec-go/proxy"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
@@ -45,9 +46,10 @@ import (
 )
 
 const (
-	controlRPCTypeRegister    uint32 = 41001
-	controlRPCTypeHeartbeat   uint32 = 41002
-	controlRPCTypeGrantServer uint32 = 41003 // notify
+	controlRPCTypeRegister        uint32 = 41001
+	controlRPCTypeHeartbeat       uint32 = 41002
+	controlRPCTypeGrantServer     uint32 = 41003 // notify
+	controlRPCTypeCredentialRenew uint32 = 41004
 )
 
 // Floe app ids.
@@ -111,6 +113,7 @@ type Agent struct {
 	buildTime string
 
 	agentHomeAbs       string
+	configPath         string
 	runtimeStatePath   string
 	processStartedAtMs int64
 
@@ -206,6 +209,7 @@ func New(opts Options) (*Agent, error) {
 		commit:                strings.TrimSpace(opts.Commit),
 		buildTime:             strings.TrimSpace(opts.BuildTime),
 		agentHomeAbs:          agentHomeAbs,
+		configPath:            cfgPathAbs,
 		runtimeStatePath:      localuiruntime.RuntimeStatePath(cfgPathAbs),
 		processStartedAtMs:    time.Now().UnixMilli(),
 		term:                  terminal.NewManager(shell, agentHomeAbs, logger),
@@ -413,15 +417,17 @@ func (a *Agent) runControlOnce(ctx context.Context) error {
 
 	// Register (best-effort; required for server-side online state).
 	_, err = rpcutil.CallJSON[registerReq, registerResp](ctx, rpcC, controlRPCTypeRegister, &registerReq{
-		EnvPublicID:      a.cfg.EnvironmentID,
-		AgentInstanceID:  a.cfg.AgentInstanceID,
-		Version:          a.version,
-		OS:               runtime.GOOS,
-		Arch:             runtime.GOARCH,
-		Hostname:         hostnameBestEffort(),
-		DesktopManaged:   a.desktopManaged,
-		EffectiveRunMode: normalizeEffectiveRunMode(a.effectiveRunMode),
-		RemoteEnabled:    a.remoteEnabled,
+		EnvPublicID:       a.cfg.EnvironmentID,
+		MachinePublicID:   a.cfg.MachinePublicID,
+		BindingGeneration: a.cfg.BindingGeneration,
+		AgentInstanceID:   a.cfg.AgentInstanceID,
+		Version:           a.version,
+		OS:                runtime.GOOS,
+		Arch:              runtime.GOARCH,
+		Hostname:          hostnameBestEffort(),
+		DesktopManaged:    a.desktopManaged,
+		EffectiveRunMode:  normalizeEffectiveRunMode(a.effectiveRunMode),
+		RemoteEnabled:     a.remoteEnabled,
 	})
 	if err != nil {
 		return err
@@ -442,6 +448,12 @@ func (a *Agent) runControlOnce(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-t.C:
+			if shouldRenewDirectCredentials(a.cfg.Direct, time.Now()) {
+				if err := a.renewDirectCredentials(ctx, rpcC); err != nil {
+					return err
+				}
+				return errors.New("control credentials renewed; reconnecting")
+			}
 			_, err := rpcutil.CallJSON[heartbeatReq, heartbeatResp](ctx, rpcC, controlRPCTypeHeartbeat, &heartbeatReq{
 				NowUnixMs: time.Now().UnixMilli(),
 			})
@@ -450,6 +462,53 @@ func (a *Agent) runControlOnce(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+func shouldRenewDirectCredentials(direct *directv1.DirectConnectInfo, now time.Time) bool {
+	if direct == nil || direct.ChannelInitExpireAtUnixS <= 0 {
+		return false
+	}
+	expireAt := time.Unix(direct.ChannelInitExpireAtUnixS, 0)
+	return now.Add(5 * time.Minute).After(expireAt)
+}
+
+func (a *Agent) renewDirectCredentials(ctx context.Context, rpcC *rpc.Client) error {
+	if a == nil || a.cfg == nil {
+		return errors.New("missing config")
+	}
+	req := &credentialRenewReq{
+		EnvPublicID:       a.cfg.EnvironmentID,
+		MachinePublicID:   a.cfg.MachinePublicID,
+		BindingGeneration: a.cfg.BindingGeneration,
+		AgentInstanceID:   a.cfg.AgentInstanceID,
+		NowUnixMs:         time.Now().UnixMilli(),
+	}
+	resp, err := rpcutil.CallJSON[credentialRenewReq, credentialRenewResp](ctx, rpcC, controlRPCTypeCredentialRenew, req)
+	if err != nil {
+		return fmt.Errorf("renew control credentials: %w", err)
+	}
+	if resp == nil {
+		return errors.New("renew control credentials: empty response")
+	}
+	if resp.Direct == nil ||
+		strings.TrimSpace(resp.Direct.WsUrl) == "" ||
+		strings.TrimSpace(resp.Direct.ChannelId) == "" ||
+		strings.TrimSpace(resp.Direct.E2eePskB64u) == "" ||
+		resp.Direct.ChannelInitExpireAtUnixS <= 0 {
+		return errors.New("renew control credentials: invalid direct")
+	}
+	if resp.BindingGeneration <= a.cfg.BindingGeneration {
+		return errors.New("renew control credentials: stale binding generation")
+	}
+	next := *a.cfg
+	next.Direct = resp.Direct
+	next.BindingGeneration = resp.BindingGeneration
+	if err := config.Save(a.configPath, &next); err != nil {
+		return fmt.Errorf("persist renewed control credentials: %w", err)
+	}
+	a.cfg = &next
+	a.log.Info("control credentials renewed", "environment_id", next.EnvironmentID, "machine_public_id", next.MachinePublicID, "binding_generation", next.BindingGeneration)
+	return nil
 }
 
 func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) {
@@ -1077,15 +1136,17 @@ func originWithChannelLabel(baseOrigin string, channelID string) (string, error)
 // --- control channel types (wire JSON) ---
 
 type registerReq struct {
-	EnvPublicID      string `json:"env_public_id,omitempty"`
-	AgentInstanceID  string `json:"agent_instance_id,omitempty"`
-	Version          string `json:"version,omitempty"`
-	OS               string `json:"os,omitempty"`
-	Arch             string `json:"arch,omitempty"`
-	Hostname         string `json:"hostname,omitempty"`
-	DesktopManaged   bool   `json:"desktop_managed,omitempty"`
-	EffectiveRunMode string `json:"effective_run_mode,omitempty"`
-	RemoteEnabled    bool   `json:"remote_enabled,omitempty"`
+	EnvPublicID       string `json:"env_public_id,omitempty"`
+	MachinePublicID   string `json:"machine_public_id,omitempty"`
+	BindingGeneration int64  `json:"binding_generation,omitempty"`
+	AgentInstanceID   string `json:"agent_instance_id,omitempty"`
+	Version           string `json:"version,omitempty"`
+	OS                string `json:"os,omitempty"`
+	Arch              string `json:"arch,omitempty"`
+	Hostname          string `json:"hostname,omitempty"`
+	DesktopManaged    bool   `json:"desktop_managed,omitempty"`
+	EffectiveRunMode  string `json:"effective_run_mode,omitempty"`
+	RemoteEnabled     bool   `json:"remote_enabled,omitempty"`
 }
 
 type registerResp struct {
@@ -1098,6 +1159,19 @@ type heartbeatReq struct {
 
 type heartbeatResp struct {
 	OK bool `json:"ok"`
+}
+
+type credentialRenewReq struct {
+	EnvPublicID       string `json:"env_public_id,omitempty"`
+	MachinePublicID   string `json:"machine_public_id,omitempty"`
+	BindingGeneration int64  `json:"binding_generation,omitempty"`
+	AgentInstanceID   string `json:"agent_instance_id,omitempty"`
+	NowUnixMs         int64  `json:"now_unix_ms,omitempty"`
+}
+
+type credentialRenewResp struct {
+	Direct            *directv1.DirectConnectInfo `json:"direct"`
+	BindingGeneration int64                       `json:"binding_generation"`
 }
 
 // --- helper: backoff ---

@@ -43,7 +43,6 @@ import {
   controlPlaneManagedStateLayout,
   controlPlaneProviderKeyForOrigin,
   localManagedStateLayout,
-  namedManagedStateLayout,
   resolveStateRoot,
 } from './statePaths';
 import {
@@ -56,10 +55,10 @@ import {
   defaultLocalManagedEnvironmentLabel,
   desktopManagedControlPlaneEnvironmentID,
   desktopManagedLocalEnvironmentID,
+  isDefaultLocalManagedEnvironment,
   managedEnvironmentLocalAccess,
   managedEnvironmentSortKey,
   normalizeDesktopLocalEnvironmentName,
-  normalizeDesktopNamedEnvironmentName,
   normalizeDesktopProviderEnvironmentID,
   type DesktopManagedEnvironment,
   type DesktopManagedEnvironmentAccess,
@@ -187,7 +186,6 @@ type DesktopSavedSSHEnvironmentFile = Readonly<{
   remote_install_dir?: unknown;
   bootstrap_strategy?: unknown;
   release_base_url?: unknown;
-  environment_instance_id?: unknown;
   source?: unknown;
   pinned?: unknown;
   last_used_at_ms?: unknown;
@@ -263,7 +261,6 @@ type DesktopConnectionCatalogFile = Readonly<{
   remote_install_dir?: unknown;
   bootstrap_strategy?: unknown;
   release_base_url?: unknown;
-  environment_instance_id?: unknown;
   source?: unknown;
   pinned?: unknown;
   last_used_at_ms?: unknown;
@@ -609,7 +606,6 @@ function sortSavedSSHEnvironmentsByLastUsed(
     || left.ssh_destination.localeCompare(right.ssh_destination)
     || String(left.ssh_port ?? '').localeCompare(String(right.ssh_port ?? ''))
     || left.remote_install_dir.localeCompare(right.remote_install_dir)
-    || left.environment_instance_id.localeCompare(right.environment_instance_id)
   ));
 }
 
@@ -671,16 +667,8 @@ function resolveManagedEnvironmentStateDir(input: Readonly<{
   providerOrigin?: string;
   envPublicID?: string;
 }>, stateRootOverride?: string): string {
-  const envPublicID = compact(input.envPublicID);
-  const providerOrigin = compact(input.providerOrigin);
-  if (providerOrigin !== '' && envPublicID !== '') {
-    return controlPlaneManagedStateLayout(providerOrigin, envPublicID, process.env, os.homedir, stateRootOverride).stateDir;
-  }
-  const name = compact(input.name);
-  if (name !== '') {
-    return localManagedStateLayout(name, process.env, os.homedir, stateRootOverride).stateDir;
-  }
-  return '';
+  void input;
+  return localManagedStateLayout('machine', process.env, os.homedir, stateRootOverride).stateDir;
 }
 
 function normalizeManagedEnvironmentAccess(
@@ -752,17 +740,14 @@ function normalizeManagedEnvironmentCandidate(
         os.homedir,
         stateRootOverride,
       );
-      const scopeParts = layout.scopeKey.split('/');
       return createManagedControlPlaneEnvironment(
         providerOrigin,
         envPublicID,
         {
           localHosting: createManagedEnvironmentLocalHosting(
             {
-              kind: 'controlplane',
-              provider_origin: providerOrigin,
-              provider_key: scopeParts[1] ?? '',
-              env_public_id: envPublicID,
+              kind: 'machine',
+              name: 'machine',
             },
             {
               access: normalizeManagedEnvironmentAccess(candidate.local_ui_bind, localUIPassword),
@@ -924,7 +909,6 @@ function normalizeSavedSSHEnvironmentCandidate(
       remote_install_dir: normalizeDesktopSSHRemoteInstallDir(candidate.remote_install_dir),
       bootstrap_strategy: normalizeDesktopSSHBootstrapStrategy(candidate.bootstrap_strategy),
       release_base_url: normalizeDesktopSSHReleaseBaseURL(candidate.release_base_url),
-      environment_instance_id: candidate.environment_instance_id,
     });
   } catch {
     return {
@@ -945,13 +929,11 @@ function normalizeSavedSSHEnvironmentCandidate(
       remote_install_dir: details.remote_install_dir,
       bootstrap_strategy: details.bootstrap_strategy,
       release_base_url: details.release_base_url,
-      environment_instance_id: details.environment_instance_id,
       source: normalizeSavedEnvironmentSource(candidate.source, 'saved'),
       pinned: normalizePinned(candidate.pinned),
       last_used_at_ms: normalizeLastUsedAtMS(candidate.last_used_at_ms, fallbackLastUsedAtMS),
     },
-    didCanonicalize: compact(candidate.id) !== environmentID
-      || compact(candidate.environment_instance_id) !== details.environment_instance_id,
+    didCanonicalize: compact(candidate.id) !== environmentID,
   };
 }
 
@@ -1835,18 +1817,11 @@ function localHostingForManagedEnvironment(
   existing: DesktopManagedEnvironment | null,
   stateRootOverride?: string,
 ): ReturnType<typeof createManagedEnvironmentLocalHosting> {
-  const existingLocalName = existing?.local_hosting?.scope.kind === 'local'
-    ? existing.local_hosting.scope.name
-    : '';
-  const name = normalizeDesktopLocalEnvironmentName(input.name || existingLocalName);
-  const existingStateDir = (
-    existing?.local_hosting?.scope.kind === 'local'
-    && existing.local_hosting.scope.name === name
-  )
-    ? existing.local_hosting.state_dir
-    : resolveManagedEnvironmentStateDir({ name }, stateRootOverride);
+  const name = normalizeDesktopLocalEnvironmentName(input.name || 'machine');
+  const existingStateDir = existing?.local_hosting?.state_dir
+    || resolveManagedEnvironmentStateDir({ name }, stateRootOverride);
   return createManagedEnvironmentLocalHosting(
-    { kind: 'local', name },
+    { kind: 'machine', name: 'machine' },
     {
       access,
       owner: existing?.local_hosting?.owner ?? 'desktop',
@@ -1870,9 +1845,7 @@ export function upsertManagedEnvironment(
   );
   const name = normalizeDesktopLocalEnvironmentName(
     compact(input.name)
-    || (existing?.local_hosting?.scope.kind === 'local'
-      ? existing.local_hosting.scope.name
-      : ''),
+    || 'machine',
   );
   const environmentID = existing?.id || desktopManagedLocalEnvironmentID(name);
   const nextEnvironment = createManagedEnvironment({
@@ -2175,7 +2148,6 @@ export function upsertSavedSSHEnvironment(
       && environment.ssh_port === details.ssh_port
       && environment.auth_mode === details.auth_mode
       && environment.remote_install_dir === details.remote_install_dir
-      && environment.environment_instance_id === details.environment_instance_id
     )
   ));
   const label = compact(input.label) || existing?.label || defaultSavedSSHEnvironmentLabel(details);
@@ -2192,7 +2164,6 @@ export function upsertSavedSSHEnvironment(
     remote_install_dir: details.remote_install_dir,
     bootstrap_strategy: details.bootstrap_strategy,
     release_base_url: details.release_base_url,
-    environment_instance_id: details.environment_instance_id,
     source,
     pinned: input.pinned ?? existing?.pinned ?? false,
     last_used_at_ms: normalizeLastUsedAtMS(input.last_used_at_ms, Date.now()),
@@ -2207,7 +2178,6 @@ export function upsertSavedSSHEnvironment(
         || environment.ssh_port !== details.ssh_port
         || environment.auth_mode !== details.auth_mode
         || environment.remote_install_dir !== details.remote_install_dir
-        || environment.environment_instance_id !== details.environment_instance_id
       )
     )),
   ]).slice(0, MAX_SAVED_SSH_ENVIRONMENTS);
@@ -2307,7 +2277,6 @@ export function setSavedSSHEnvironmentPinned(
     remote_install_dir: input.remote_install_dir,
     bootstrap_strategy: input.bootstrap_strategy,
     release_base_url: input.release_base_url,
-    environment_instance_id: input.environment_instance_id,
     source: 'saved',
     pinned: input.pinned,
     last_used_at_ms: input.last_used_at_ms,
@@ -2320,7 +2289,7 @@ export function deleteManagedEnvironment(
 ): DeleteManagedEnvironmentResult {
   const cleanEnvironmentID = compact(environmentID);
   const existing = findManagedEnvironmentByID(preferences, cleanEnvironmentID);
-  if (!existing || !existing.local_hosting) {
+  if (!existing || !existing.local_hosting || isDefaultLocalManagedEnvironment(existing)) {
     return {
       preferences,
       deleted_environment: null,
@@ -2475,7 +2444,6 @@ export function rememberRecentSSHEnvironmentTarget(
     remote_install_dir: input.remote_install_dir,
     bootstrap_strategy: input.bootstrap_strategy,
     release_base_url: input.release_base_url,
-    environment_instance_id: input.environment_instance_id,
     source: 'recent_auto',
     last_used_at_ms: Date.now(),
   });
@@ -2736,51 +2704,16 @@ function normalizeManagedEnvironmentCatalogCandidate(
       ? candidate.local_hosting.owner
       : 'unknown';
     try {
-      if (scope.kind === 'named') {
-        const name = normalizeDesktopNamedEnvironmentName(scope.name);
-        return createManagedEnvironmentLocalHosting(
-          { kind: 'named', name },
-          {
-            access,
-            owner,
-            stateDir: compact(candidate.local_hosting.state_dir)
-              || namedManagedStateLayout(name, process.env, os.homedir, stateRootOverride).stateDir,
-          },
-        );
+      if (scope.kind !== 'machine') {
+        return null;
       }
-      if (scope.kind === 'controlplane') {
-        const providerOrigin = compact(scope.provider_origin) || providerBinding?.provider_origin || '';
-        const envPublicID = compact(scope.env_public_id) || providerBinding?.env_public_id || '';
-        const layout = controlPlaneManagedStateLayout(
-          providerOrigin,
-          envPublicID,
-          process.env,
-          os.homedir,
-          stateRootOverride,
-        );
-        const scopeParts = layout.scopeKey.split('/');
-        return createManagedEnvironmentLocalHosting(
-          {
-            kind: 'controlplane',
-            provider_origin: providerOrigin,
-            provider_key: compact(scope.provider_key) || scopeParts[1] || '',
-            env_public_id: envPublicID,
-          },
-          {
-            access,
-            owner,
-            stateDir: compact(candidate.local_hosting.state_dir) || layout.stateDir,
-          },
-        );
-      }
-      const name = normalizeDesktopLocalEnvironmentName(scope.name);
       return createManagedEnvironmentLocalHosting(
-        { kind: 'local', name },
+        { kind: 'machine', name: 'machine' },
         {
           access,
           owner,
           stateDir: compact(candidate.local_hosting.state_dir)
-            || localManagedStateLayout(name, process.env, os.homedir, stateRootOverride).stateDir,
+            || localManagedStateLayout('machine', process.env, os.homedir, stateRootOverride).stateDir,
         },
       );
     } catch {
@@ -2983,7 +2916,6 @@ function serializeSavedSSHEnvironmentCatalog(environment: DesktopSavedSSHEnviron
     remote_install_dir: environment.remote_install_dir,
     bootstrap_strategy: environment.bootstrap_strategy,
     release_base_url: environment.release_base_url,
-    environment_instance_id: environment.environment_instance_id,
     source: environment.source,
     pinned: environment.pinned,
     last_used_at_ms: environment.last_used_at_ms,

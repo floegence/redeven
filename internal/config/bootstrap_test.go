@@ -21,19 +21,25 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 		case r.Method != http.MethodPost:
 			t.Fatalf("method = %s, want POST", r.Method)
 		}
-		if got := r.Header.Get("Authorization"); got != "Bearer token-123" {
-			t.Fatalf("Authorization = %q, want %q", got, "Bearer token-123")
+		if r.URL.Path != "/api/rcpp/v1/runtime/bootstrap/exchange" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer ticket-123" {
+			t.Fatalf("Authorization = %q, want %q", got, "Bearer ticket-123")
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
-  "success": true,
-  "data": {
-    "direct": {
-      "ws_url": "wss://region.example.invalid/control/ws",
-      "channel_id": "ch_123",
-      "e2ee_psk_b64u": "cHNr",
-      "channel_init_expire_at_unix_s": 4102444800
-    }
+  "direct": {
+    "ws_url": "wss://region.example.invalid/control/ws",
+    "channel_id": "ch_123",
+    "e2ee_psk_b64u": "cHNr",
+    "channel_init_expire_at_unix_s": 4102444800
+  },
+  "machine_binding": {
+    "machine_public_id": "mach_existing",
+    "env_public_id": "env_123",
+    "generation": 7,
+    "status": "active"
   }
 }`))
 	}))
@@ -43,6 +49,7 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 	if err := Save(cfgPath, &Config{
 		ControlplaneBaseURL: "https://old.example.invalid",
 		EnvironmentID:       "env_old",
+		MachinePublicID:     "mach_existing",
 		AgentInstanceID:     "ai_existing",
 		LogFormat:           "json",
 		LogLevel:            "debug",
@@ -56,7 +63,7 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 	writtenPath, err := BootstrapConfig(ctx, BootstrapArgs{
 		ControlplaneBaseURL: server.URL,
 		EnvironmentID:       "env_123",
-		EnvironmentToken:    "token-123",
+		BootstrapTicket:     "ticket-123",
 		ConfigPath:          cfgPath,
 		LogLevel:            "info",
 	})
@@ -76,6 +83,12 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 	}
 	if cfg.AgentInstanceID != "ai_existing" {
 		t.Fatalf("AgentInstanceID = %q, want %q", cfg.AgentInstanceID, "ai_existing")
+	}
+	if cfg.MachinePublicID != "mach_existing" {
+		t.Fatalf("MachinePublicID = %q, want %q", cfg.MachinePublicID, "mach_existing")
+	}
+	if cfg.BindingGeneration != 7 {
+		t.Fatalf("BindingGeneration = %d, want 7", cfg.BindingGeneration)
 	}
 	if cfg.EnvironmentID != "env_123" {
 		t.Fatalf("EnvironmentID = %q, want %q", cfg.EnvironmentID, "env_123")
@@ -104,6 +117,19 @@ func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
 		if got := r.Header.Get("Authorization"); got != "Bearer ticket-123" {
 			t.Fatalf("Authorization = %q, want %q", got, "Bearer ticket-123")
 		}
+		var payload bootstrapTicketExchangeRequest
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("Decode(request) error = %v", err)
+		}
+		if payload.EnvPublicID != "env_123" {
+			t.Fatalf("EnvPublicID = %q", payload.EnvPublicID)
+		}
+		if payload.MachinePublicID == "" {
+			t.Fatalf("MachinePublicID is empty")
+		}
+		if payload.AgentInstanceID == "" {
+			t.Fatalf("AgentInstanceID is empty")
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
   "direct": {
@@ -111,6 +137,12 @@ func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
     "channel_id": "ch_ticket",
     "e2ee_psk_b64u": "cHNr",
     "channel_init_expire_at_unix_s": 4102444800
+  },
+  "machine_binding": {
+    "machine_public_id": "` + payload.MachinePublicID + `",
+    "env_public_id": "env_123",
+    "generation": 3,
+    "status": "active"
   }
 }`))
 	}))
@@ -143,6 +175,12 @@ func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
 	if cfg.Direct == nil || cfg.Direct.ChannelId != "ch_ticket" {
 		t.Fatalf("Direct = %#v", cfg.Direct)
 	}
+	if cfg.MachinePublicID == "" {
+		t.Fatalf("MachinePublicID is empty")
+	}
+	if cfg.BindingGeneration != 3 {
+		t.Fatalf("BindingGeneration = %d, want 3", cfg.BindingGeneration)
+	}
 }
 
 func TestBootstrapConfigWritesScopeMetadataWithProviderIdentity(t *testing.T) {
@@ -153,6 +191,10 @@ func TestBootstrapConfigWritesScopeMetadataWithProviderIdentity(t *testing.T) {
 			_, _ = w.Write([]byte(`{"provider_id":"redeven_portal"}`))
 			return
 		case r.Method == http.MethodPost && r.URL.Path == "/api/rcpp/v1/runtime/bootstrap/exchange":
+			var payload bootstrapTicketExchangeRequest
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("Decode(request) error = %v", err)
+			}
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{
   "direct": {
@@ -160,6 +202,12 @@ func TestBootstrapConfigWritesScopeMetadataWithProviderIdentity(t *testing.T) {
     "channel_id": "ch_ticket",
     "e2ee_psk_b64u": "cHNr",
     "channel_init_expire_at_unix_s": 4102444800
+  },
+  "machine_binding": {
+    "machine_public_id": "` + payload.MachinePublicID + `",
+    "env_public_id": "env_123",
+    "generation": 2,
+    "status": "active"
   }
 }`))
 			return
@@ -207,18 +255,16 @@ func TestBootstrapConfigWritesScopeMetadataWithProviderIdentity(t *testing.T) {
 	}
 }
 
-func TestBootstrapConfigRejectsMultipleCredentials(t *testing.T) {
+func TestBootstrapConfigRejectsMissingBootstrapTicket(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	_, err := BootstrapConfig(ctx, BootstrapArgs{
 		ControlplaneBaseURL: "https://region.example.invalid",
 		EnvironmentID:       "env_123",
-		EnvironmentToken:    "token-123",
-		BootstrapTicket:     "ticket-123",
 		ConfigPath:          filepath.Join(t.TempDir(), "config.json"),
 	})
-	if err == nil || err.Error() != "provide only one of environment token or bootstrap ticket" {
+	if err == nil || err.Error() != "missing bootstrap ticket" {
 		t.Fatalf("BootstrapConfig() error = %v", err)
 	}
 }

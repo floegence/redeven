@@ -543,13 +543,12 @@ export function buildManagedSSHStartScript(): string {
     'set -eu',
     buildRemoteInstallRootShell(),
     buildManagedSSHRuntimePathShell(),
-    'instance_id="$3"',
-    'instance_root="${install_root%/}/instances/${instance_id}"',
-    'state_root="${instance_root}/state"',
-    'session_token="$4"',
-    'session_dir="${instance_root}/sessions/${session_token}"',
+    'machine_root="${install_root%/}/machine"',
+    'state_root="${machine_root}/state"',
+    'session_token="$3"',
+    'session_dir="${machine_root}/sessions/${session_token}"',
     'report_path="${session_dir}/startup-report.json"',
-    'log_dir="${instance_root}/logs"',
+    'log_dir="${machine_root}/logs"',
     'log_path="${log_dir}/runtime-${session_token}.log"',
     'mkdir -p "$state_root" "$session_dir" "$log_dir"',
     'rm -f "$report_path"',
@@ -570,9 +569,8 @@ export function buildManagedSSHReportReadScript(): string {
   return [
     'set -eu',
     buildRemoteInstallRootShell(),
-    'instance_id="$2"',
-    'session_token="$3"',
-    'report_path="${install_root%/}/instances/${instance_id}/sessions/${session_token}/startup-report.json"',
+    'session_token="$2"',
+    'report_path="${install_root%/}/machine/sessions/${session_token}/startup-report.json"',
     'if [ ! -f "$report_path" ]; then',
     '  exit 1',
     'fi',
@@ -1543,7 +1541,6 @@ async function waitForRemoteStartupReport(args: Readonly<{
   controlSocketPath: string;
   connectTimeoutSeconds: number;
   auth: SSHCommandAuthContext;
-  environmentInstanceID: string;
   sessionToken: string;
   startupTimeoutMs: number;
   logs: MutableRecentLogs;
@@ -1572,7 +1569,6 @@ async function waitForRemoteStartupReport(args: Readonly<{
         ...sshTargetArgs(args.target),
         remoteShellCommand(script, 'redeven-ssh-read-report', [
           args.target.remote_install_dir,
-          args.environmentInstanceID,
           args.sessionToken,
         ]),
       ],
@@ -1749,7 +1745,6 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       remoteShellCommand(buildManagedSSHStartScript(), 'redeven-ssh-start', [
         target.remote_install_dir,
         runtimeReleaseTag,
-        target.environment_instance_id,
         sessionToken,
       ]),
     ], auth);
@@ -1769,7 +1764,6 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       controlSocketPath,
       connectTimeoutSeconds,
       auth,
-      environmentInstanceID: target.environment_instance_id,
       sessionToken,
       startupTimeoutMs,
       logs,

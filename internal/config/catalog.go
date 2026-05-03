@@ -2,8 +2,6 @@ package config
 
 import (
 	"encoding/json"
-	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -118,76 +116,16 @@ func readCatalogEnvironmentRecords(environmentsDir string) ([]environmentCatalog
 }
 
 func catalogDefaultEnvironmentID(layout StateLayout) string {
-	switch layout.Scope.Kind {
-	case ScopeKindControlPlane:
-		baseURL := strings.TrimSpace(layout.Scope.ControlplaneBaseURL)
-		if baseURL == "" {
-			baseURL = controlplaneBaseURLFromLayout(layout)
-		}
-		return fmt.Sprintf(
-			"cp:%s:env:%s",
-			url.QueryEscape(strings.TrimSpace(baseURL)),
-			url.QueryEscape(strings.TrimSpace(layout.Scope.EnvironmentID)),
-		)
-	case ScopeKindNamed:
-		return fmt.Sprintf("named:%s", url.QueryEscape(strings.TrimSpace(layout.Scope.Name)))
-	default:
-		name := strings.TrimSpace(layout.Scope.Name)
-		if name == "" {
-			name = DefaultLocalScopeName
-		}
-		return fmt.Sprintf("local:%s", url.QueryEscape(name))
-	}
-}
-
-func controlplaneBaseURLFromLayout(layout StateLayout) string {
-	if strings.TrimSpace(layout.Scope.ControlplaneBaseURL) != "" {
-		return strings.TrimSpace(layout.Scope.ControlplaneBaseURL)
-	}
-	if layout.Scope.Kind == ScopeKindControlPlane {
-		return fmt.Sprintf("https://%s", strings.TrimSpace(layout.Scope.ProviderKey))
-	}
-	return ""
+	_ = layout
+	return string(ScopeKindMachine)
 }
 
 func defaultCatalogEnvironmentLabel(layout StateLayout, binding *catalogEnvironmentBinding) string {
 	if binding != nil && strings.TrimSpace(binding.EnvPublicID) != "" {
 		return strings.TrimSpace(binding.EnvPublicID)
 	}
-	switch layout.Scope.Kind {
-	case ScopeKindNamed:
-		return titleizeScopeName(layout.Scope.Name, "Named Environment")
-	default:
-		name := strings.TrimSpace(layout.Scope.Name)
-		if name == "" || name == DefaultLocalScopeName {
-			return "Local Environment"
-		}
-		return titleizeScopeName(name, "Local Environment")
-	}
-}
-
-func titleizeScopeName(name string, fallback string) string {
-	clean := strings.TrimSpace(name)
-	if clean == "" {
-		return fallback
-	}
-	segments := strings.FieldsFunc(clean, func(r rune) bool {
-		return r == '-' || r == '_' || r == '.'
-	})
-	if len(segments) == 0 {
-		return fallback
-	}
-	out := make([]string, 0, len(segments))
-	for _, segment := range segments {
-		if segment == "" {
-			continue
-		}
-		out = append(out, strings.ToUpper(segment[:1])+segment[1:])
-	}
-	if len(out) == 0 {
-		return fallback
-	}
-	return strings.Join(out, " ")
+	_ = layout
+	return "Local Machine"
 }
 
 func bindingForConfig(cfg *Config) (*catalogEnvironmentBinding, error) {
@@ -219,22 +157,8 @@ func bindingForConfig(cfg *Config) (*catalogEnvironmentBinding, error) {
 }
 
 func chooseCatalogEnvironmentID(layout StateLayout, binding *catalogEnvironmentBinding, existing []environmentCatalogRecordRef) string {
-	for _, record := range existing {
-		if strings.TrimSpace(record.File.LocalHosting.ScopeKey) == strings.TrimSpace(layout.ScopeKey) {
-			return strings.TrimSpace(record.File.ID)
-		}
-	}
-	if binding != nil {
-		for _, record := range existing {
-			provider := record.File.ProviderBinding
-			if provider == nil {
-				continue
-			}
-			if strings.TrimSpace(provider.ProviderOrigin) == binding.ProviderOrigin && strings.TrimSpace(provider.EnvPublicID) == binding.EnvPublicID {
-				return strings.TrimSpace(record.File.ID)
-			}
-		}
-	}
+	_ = binding
+	_ = existing
 	return catalogDefaultEnvironmentID(layout)
 }
 
@@ -252,35 +176,14 @@ func findCatalogEnvironmentRecord(records []environmentCatalogRecordRef, id stri
 }
 
 func catalogScopeForLayout(layout StateLayout, binding *catalogEnvironmentBinding) environmentCatalogScope {
-	switch layout.Scope.Kind {
-	case ScopeKindControlPlane:
-		providerOrigin := strings.TrimSpace(layout.Scope.ControlplaneBaseURL)
-		if providerOrigin == "" && binding != nil {
-			providerOrigin = binding.ProviderOrigin
-		}
-		providerKey := strings.TrimSpace(layout.Scope.ProviderKey)
-		if providerKey == "" && binding != nil {
-			providerKey = binding.ProviderID
-		}
-		envPublicID := strings.TrimSpace(layout.Scope.EnvironmentID)
-		if envPublicID == "" && binding != nil {
-			envPublicID = binding.EnvPublicID
-		}
-		return environmentCatalogScope{
-			Kind:           string(ScopeKindControlPlane),
-			ProviderOrigin: providerOrigin,
-			ProviderKey:    providerKey,
-			EnvPublicID:    envPublicID,
-		}
-	case ScopeKindNamed:
-		return environmentCatalogScope{Kind: string(ScopeKindNamed), Name: strings.TrimSpace(layout.Scope.Name)}
-	default:
-		name := strings.TrimSpace(layout.Scope.Name)
-		if name == "" {
-			name = DefaultLocalScopeName
-		}
-		return environmentCatalogScope{Kind: string(ScopeKindLocal), Name: name}
+	_ = layout
+	scope := environmentCatalogScope{Kind: string(ScopeKindMachine), Name: DefaultMachineScopeName}
+	if binding != nil {
+		scope.ProviderOrigin = binding.ProviderOrigin
+		scope.ProviderKey = binding.ProviderID
+		scope.EnvPublicID = binding.EnvPublicID
 	}
+	return scope
 }
 
 func WriteEnvironmentCatalogRecord(layout StateLayout, cfg *Config, localUIBind string, passwordConfigured bool) error {
@@ -349,13 +252,9 @@ func WriteEnvironmentCatalogRecord(layout StateLayout, cfg *Config, localUIBind 
 			RemoteDesktopSupported: true,
 		}
 	} else {
-		localName := strings.TrimSpace(layout.Scope.Name)
-		if localName == "" {
-			localName = DefaultLocalScopeName
-		}
 		record.Identity = environmentCatalogIdentity{
-			Kind:      "provisional_local",
-			LocalName: localName,
+			Kind:      "machine",
+			LocalName: DefaultMachineScopeName,
 		}
 	}
 

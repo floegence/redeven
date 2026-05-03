@@ -135,7 +135,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   local_ui_url: string;
   secondary_text: string;
   managed_environment_kind?: 'local' | 'controlplane';
-  managed_local_scope_kind?: 'local' | 'named' | 'controlplane';
+  managed_local_scope_kind?: 'machine';
   managed_environment_name?: string;
   managed_local_ui_bind?: string;
   managed_local_ui_password_configured?: boolean;
@@ -398,7 +398,6 @@ function normalizeDesktopLauncherRuntimeTarget(
   const remoteInstallDir = compact(candidate.remote_install_dir);
   const bootstrapStrategy = compact(candidate.bootstrap_strategy);
   const releaseBaseURL = compact(candidate.release_base_url);
-  const environmentInstanceID = compact(candidate.environment_instance_id);
 
   let providerOrigin = '';
   if (providerOriginRaw !== '') {
@@ -428,7 +427,6 @@ function normalizeDesktopLauncherRuntimeTarget(
     ...(remoteInstallDir !== '' ? { remote_install_dir: remoteInstallDir } : {}),
     ...(bootstrapStrategy !== '' ? { bootstrap_strategy: bootstrapStrategy as DesktopSSHEnvironmentDetails['bootstrap_strategy'] } : {}),
     ...(releaseBaseURL !== '' ? { release_base_url: releaseBaseURL } : {}),
-    ...(environmentInstanceID !== '' ? { environment_instance_id: environmentInstanceID } : {}),
     ...(candidate.force_runtime_update === true ? { force_runtime_update: true } : {}),
   };
 
@@ -512,7 +510,6 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         remote_install_dir: compact((candidate as { remote_install_dir?: unknown }).remote_install_dir),
         bootstrap_strategy: compact((candidate as { bootstrap_strategy?: unknown }).bootstrap_strategy) as DesktopSSHEnvironmentDetails['bootstrap_strategy'],
         release_base_url: compact((candidate as { release_base_url?: unknown }).release_base_url),
-        environment_instance_id: compact((candidate as { environment_instance_id?: unknown }).environment_instance_id),
       };
       }
     case 'start_control_plane_connect':
@@ -586,7 +583,6 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           remote_install_dir: compact((candidate as { remote_install_dir?: unknown }).remote_install_dir),
           bootstrap_strategy: compact((candidate as { bootstrap_strategy?: unknown }).bootstrap_strategy) as DesktopSSHEnvironmentDetails['bootstrap_strategy'],
           release_base_url: compact((candidate as { release_base_url?: unknown }).release_base_url),
-          environment_instance_id: compact((candidate as { environment_instance_id?: unknown }).environment_instance_id),
         };
       }
     case 'upsert_managed_environment': {
@@ -663,7 +659,6 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         remote_install_dir: compact((candidate as { remote_install_dir?: unknown }).remote_install_dir),
         bootstrap_strategy: compact((candidate as { bootstrap_strategy?: unknown }).bootstrap_strategy) as DesktopSSHEnvironmentDetails['bootstrap_strategy'],
         release_base_url: compact((candidate as { release_base_url?: unknown }).release_base_url),
-        environment_instance_id: compact((candidate as { environment_instance_id?: unknown }).environment_instance_id),
       };
       }
     case 'delete_managed_environment':

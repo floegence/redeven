@@ -161,7 +161,6 @@ describe('buildEnvironmentCardModel', () => {
             remote_install_dir: '/opt/redeven-desktop/runtime',
             bootstrap_strategy: 'desktop_upload',
             release_base_url: '',
-            environment_instance_id: 'envinst_demo001',
             source: 'saved',
             pinned: false,
             last_used_at_ms: 30,
@@ -233,7 +232,7 @@ describe('buildEnvironmentCardModel', () => {
           },
         },
         {
-          session_key: 'ssh:ops@example.internal:2222:key_agent:/opt/redeven-desktop/runtime:envinst_demo001',
+          session_key: 'ssh:ops@example.internal:2222:key_agent:/opt/redeven-desktop/runtime',
           target: buildSSHDesktopTarget(
             {
               ssh_destination: 'ops@example.internal',
@@ -242,7 +241,6 @@ describe('buildEnvironmentCardModel', () => {
               remote_install_dir: '/opt/redeven-desktop/runtime',
               bootstrap_strategy: 'desktop_upload',
               release_base_url: '',
-              environment_instance_id: 'envinst_demo001',
             },
             {
               environmentID: 'ssh_saved',
@@ -394,7 +392,6 @@ describe('buildEnvironmentCardModel', () => {
           remote_install_dir: '/opt/redeven-desktop/runtime',
           bootstrap_strategy: 'desktop_upload',
           release_base_url: '',
-          environment_instance_id: 'envinst_demo001',
           source: 'saved',
           pinned: false,
           last_used_at_ms: 30,
@@ -471,7 +468,6 @@ describe('buildEnvironmentCardModel', () => {
           remote_install_dir: '/opt/redeven-desktop/runtime',
           bootstrap_strategy: 'desktop_upload',
           release_base_url: '',
-          environment_instance_id: 'envinst_demo001',
           source: 'saved',
           pinned: false,
           last_used_at_ms: 30,
@@ -601,7 +597,6 @@ describe('buildEnvironmentCardModel', () => {
           remote_install_dir: '/opt/redeven-desktop/runtime',
           bootstrap_strategy: 'desktop_upload',
           release_base_url: '',
-          environment_instance_id: 'envinst_demo001',
           source: 'saved',
           pinned: false,
           last_used_at_ms: 30,
@@ -1223,12 +1218,10 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(splitPinnedEnvironmentEntries(snapshot.environments)).toEqual({
       pinned_entries: expect.arrayContaining([
-        expect.objectContaining({ id: 'local:default' }),
+        expect.objectContaining({ id: 'machine' }),
         expect.objectContaining({ id: 'http://192.168.1.12:24000/' }),
       ]),
-      regular_entries: expect.arrayContaining([
-        expect.objectContaining({ id: 'local:lab' }),
-      ]),
+      regular_entries: [],
     });
   });
 

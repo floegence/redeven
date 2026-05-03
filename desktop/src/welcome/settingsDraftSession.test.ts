@@ -11,12 +11,13 @@ import {
 function surface(
   environmentID: string,
   localUIBind: string,
+  environmentKind: DesktopSettingsSurfaceSnapshot['environment_kind'] = 'local',
 ): DesktopSettingsSurfaceSnapshot {
   return {
     mode: 'environment_settings',
     environment_id: environmentID,
     environment_label: environmentID,
-    environment_kind: 'local',
+    environment_kind: environmentKind,
     window_title: `${environmentID} Settings`,
     save_label: `Save ${environmentID} Settings`,
     access_mode: localUIBind.startsWith('0.0.0.0:') ? 'shared_local_network' : 'local_only',
@@ -41,15 +42,15 @@ function surface(
 
 describe('settingsDraftSession', () => {
   it('keys the editable settings session by dialog identity', () => {
-    expect(desktopSettingsDraftSessionKey(surface('local:default', 'localhost:23998')))
-      .toBe('environment_settings:local:local:default');
+    expect(desktopSettingsDraftSessionKey(surface('machine', 'localhost:23998')))
+      .toBe('environment_settings:local:machine');
   });
 
   it('keeps an idle open dialog aligned with the latest snapshot draft', () => {
-    const session = createDesktopSettingsDraftSession(surface('local:default', 'localhost:23998'));
+    const session = createDesktopSettingsDraftSession(surface('machine', 'localhost:23998'));
     const reconciled = reconcileDesktopSettingsDraftSession(
       session,
-      surface('local:default', 'localhost:24000'),
+      surface('machine', 'localhost:24000'),
       true,
     );
 
@@ -59,7 +60,7 @@ describe('settingsDraftSession', () => {
 
   it('preserves user edits from same-environment runtime refresh snapshots', () => {
     const session = updateDesktopSettingsDraftSessionDraft(
-      createDesktopSettingsDraftSession(surface('local:default', 'localhost:23998')),
+      createDesktopSettingsDraftSession(surface('machine', 'localhost:23998')),
       (draft) => ({
         ...draft,
         local_ui_bind: '0.0.0.0:23998',
@@ -70,7 +71,7 @@ describe('settingsDraftSession', () => {
 
     const reconciled = reconcileDesktopSettingsDraftSession(
       session,
-      surface('local:default', 'localhost:23998'),
+      surface('machine', 'localhost:23998'),
       true,
     );
 
@@ -81,7 +82,7 @@ describe('settingsDraftSession', () => {
 
   it('reinitializes edits when the selected environment changes', () => {
     const session = updateDesktopSettingsDraftSessionDraft(
-      createDesktopSettingsDraftSession(surface('local:default', 'localhost:23998')),
+      createDesktopSettingsDraftSession(surface('machine', 'localhost:23998')),
       (draft) => ({
         ...draft,
         local_ui_bind: '0.0.0.0:23998',
@@ -90,18 +91,18 @@ describe('settingsDraftSession', () => {
 
     const reconciled = reconcileDesktopSettingsDraftSession(
       session,
-      surface('local:lab', 'localhost:25000'),
+      surface('cp:https%3A%2F%2Fcp.example.invalid:env:env_demo', 'localhost:25000', 'controlplane'),
       true,
     );
 
     expect(reconciled.dirty).toBe(false);
-    expect(reconciled.identity_key).toBe('environment_settings:local:local:lab');
+    expect(reconciled.identity_key).toBe('environment_settings:controlplane:cp:https%3A%2F%2Fcp.example.invalid:env:env_demo');
     expect(reconciled.draft.local_ui_bind).toBe('localhost:25000');
   });
 
   it('resets closed dialogs to the latest canonical snapshot', () => {
     const session = updateDesktopSettingsDraftSessionDraft(
-      createDesktopSettingsDraftSession(surface('local:default', 'localhost:23998')),
+      createDesktopSettingsDraftSession(surface('machine', 'localhost:23998')),
       (draft) => ({
         ...draft,
         local_ui_bind: '0.0.0.0:23998',
@@ -110,7 +111,7 @@ describe('settingsDraftSession', () => {
 
     const reconciled = reconcileDesktopSettingsDraftSession(
       session,
-      surface('local:default', 'localhost:24000'),
+      surface('machine', 'localhost:24000'),
       false,
     );
 

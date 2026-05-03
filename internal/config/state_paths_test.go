@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestDefaultStateLayout(t *testing.T) {
+func TestDefaultStateLayoutUsesMachineScope(t *testing.T) {
 	restoreHome := stubUserHomeDir("/Users/tester", nil)
 	restoreEnv := stubLookupEnv("", false)
 	defer restoreHome()
@@ -18,30 +18,34 @@ func TestDefaultStateLayout(t *testing.T) {
 		t.Fatalf("DefaultStateLayout() error = %v", err)
 	}
 
+	wantStateDir := filepath.Clean("/Users/tester/.redeven/machine")
 	if layout.StateRoot != filepath.Clean("/Users/tester/.redeven") {
 		t.Fatalf("StateRoot = %q", layout.StateRoot)
 	}
-	if layout.ScopeKey != "local/default" {
+	if layout.ScopeKey != "machine" {
 		t.Fatalf("ScopeKey = %q", layout.ScopeKey)
 	}
-	if layout.ConfigPath != filepath.Clean("/Users/tester/.redeven/scopes/local/default/config.json") {
+	if layout.Scope.Kind != ScopeKindMachine {
+		t.Fatalf("Scope.Kind = %q", layout.Scope.Kind)
+	}
+	if layout.ConfigPath != filepath.Join(wantStateDir, "config.json") {
 		t.Fatalf("ConfigPath = %q", layout.ConfigPath)
 	}
-	if layout.StateDir != filepath.Clean("/Users/tester/.redeven/scopes/local/default") {
+	if layout.StateDir != wantStateDir {
 		t.Fatalf("StateDir = %q", layout.StateDir)
 	}
-	if layout.RuntimeStatePath != filepath.Clean("/Users/tester/.redeven/scopes/local/default/runtime/local-ui.json") {
+	if layout.RuntimeStatePath != filepath.Join(wantStateDir, "runtime", "local-ui.json") {
 		t.Fatalf("RuntimeStatePath = %q", layout.RuntimeStatePath)
 	}
-	if layout.DiagnosticsDir != filepath.Clean("/Users/tester/.redeven/scopes/local/default/diagnostics") {
+	if layout.DiagnosticsDir != filepath.Join(wantStateDir, "diagnostics") {
 		t.Fatalf("DiagnosticsDir = %q", layout.DiagnosticsDir)
 	}
-	if layout.ScopeMetadataPath != filepath.Clean("/Users/tester/.redeven/scopes/local/default/scope.json") {
+	if layout.ScopeMetadataPath != filepath.Join(wantStateDir, "scope.json") {
 		t.Fatalf("ScopeMetadataPath = %q", layout.ScopeMetadataPath)
 	}
 }
 
-func TestControlPlaneStateLayoutSanitizesIdentifiers(t *testing.T) {
+func TestControlPlaneStateLayoutReturnsMachineScope(t *testing.T) {
 	restoreHome := stubUserHomeDir("/Users/tester", nil)
 	restoreEnv := stubLookupEnv("", false)
 	defer restoreHome()
@@ -52,14 +56,11 @@ func TestControlPlaneStateLayoutSanitizesIdentifiers(t *testing.T) {
 		t.Fatalf("ControlPlaneStateLayout() error = %v", err)
 	}
 
-	if layout.ScopeKey != "controlplane/https__region.example.invalid/env_bad_id" {
+	if layout.ScopeKey != "machine" {
 		t.Fatalf("ScopeKey = %q", layout.ScopeKey)
 	}
-	if layout.ConfigPath != filepath.Clean("/Users/tester/.redeven/scopes/controlplane/https__region.example.invalid/env_bad_id/config.json") {
+	if layout.ConfigPath != filepath.Clean("/Users/tester/.redeven/machine/config.json") {
 		t.Fatalf("ConfigPath = %q", layout.ConfigPath)
-	}
-	if layout.StateDir != filepath.Clean("/Users/tester/.redeven/scopes/controlplane/https__region.example.invalid/env_bad_id") {
-		t.Fatalf("StateDir = %q", layout.StateDir)
 	}
 }
 
@@ -78,39 +79,17 @@ func TestResolveStateRootUsesEnvOverride(t *testing.T) {
 	}
 }
 
-func TestParseScopeRefSupportsLocalNamedAndControlPlane(t *testing.T) {
-	tests := []struct {
-		name string
-		raw  string
-		want ScopeRef
-	}{
-		{
-			name: "local default",
-			raw:  "local",
-			want: ScopeRef{Kind: ScopeKindLocal, Name: DefaultLocalScopeName},
-		},
-		{
-			name: "named",
-			raw:  "named/dev-a",
-			want: ScopeRef{Kind: ScopeKindNamed, Name: "dev-a"},
-		},
-		{
-			name: "controlplane",
-			raw:  "controlplane/https__dev.redeven.test/env_123",
-			want: ScopeRef{Kind: ScopeKindControlPlane, ProviderKey: "https__dev.redeven.test", EnvironmentID: "env_123"},
-		},
+func TestParseScopeRefSupportsMachineOnly(t *testing.T) {
+	got, err := ParseScopeRef("machine")
+	if err != nil {
+		t.Fatalf("ParseScopeRef() error = %v", err)
+	}
+	if got != (ScopeRef{Kind: ScopeKindMachine, Name: DefaultMachineScopeName}) {
+		t.Fatalf("ParseScopeRef() = %#v", got)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := ParseScopeRef(tt.raw)
-			if err != nil {
-				t.Fatalf("ParseScopeRef() error = %v", err)
-			}
-			if got != tt.want {
-				t.Fatalf("ParseScopeRef() = %#v, want %#v", got, tt.want)
-			}
-		})
+	if _, err := ParseScopeRef("named/dev-a"); err == nil {
+		t.Fatalf("ParseScopeRef(named/dev-a) error = nil, want error")
 	}
 }
 
@@ -153,57 +132,6 @@ func TestStateLayoutForConfigPathNormalizesRelativePath(t *testing.T) {
 	}
 	if layout.ScopeMetadataPath != filepath.Join(expectedStateDir, "scope.json") {
 		t.Fatalf("ScopeMetadataPath = %q", layout.ScopeMetadataPath)
-	}
-}
-
-func TestStateLayoutForScopeMigratesLegacyRootEntries(t *testing.T) {
-	stateRoot := t.TempDir()
-	legacyConfigPath := filepath.Join(stateRoot, "config.json")
-	if err := os.WriteFile(legacyConfigPath, []byte("{}\n"), 0o600); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
-
-	layout, err := LocalStateLayout(DefaultLocalScopeName, stateRoot)
-	if err != nil {
-		t.Fatalf("LocalStateLayout() error = %v", err)
-	}
-
-	if pathExists(legacyConfigPath) {
-		t.Fatalf("legacy config still exists at %q", legacyConfigPath)
-	}
-	if !pathExists(layout.ConfigPath) {
-		t.Fatalf("expected migrated config at %q", layout.ConfigPath)
-	}
-}
-
-func TestStateLayoutForScopeMigratesLegacyEnvironmentDirs(t *testing.T) {
-	stateRoot := t.TempDir()
-	legacyEnvDir := filepath.Join(stateRoot, "envs", "env_legacy")
-	if err := os.MkdirAll(legacyEnvDir, 0o700); err != nil {
-		t.Fatalf("MkdirAll() error = %v", err)
-	}
-	if err := Save(filepath.Join(legacyEnvDir, "config.json"), &Config{
-		ControlplaneBaseURL: "https://dev.redeven.test",
-		EnvironmentID:       "env_legacy",
-	}); err != nil {
-		t.Fatalf("Save() error = %v", err)
-	}
-
-	layout, err := LocalStateLayout(DefaultLocalScopeName, stateRoot)
-	if err != nil {
-		t.Fatalf("LocalStateLayout() error = %v", err)
-	}
-	_ = layout
-
-	expectedControlPlaneLayout, err := ControlPlaneStateLayout("https://dev.redeven.test", "env_legacy", stateRoot)
-	if err != nil {
-		t.Fatalf("ControlPlaneStateLayout() error = %v", err)
-	}
-	if pathExists(legacyEnvDir) {
-		t.Fatalf("legacy env dir still exists at %q", legacyEnvDir)
-	}
-	if !pathExists(expectedControlPlaneLayout.ConfigPath) {
-		t.Fatalf("expected migrated config at %q", expectedControlPlaneLayout.ConfigPath)
 	}
 }
 

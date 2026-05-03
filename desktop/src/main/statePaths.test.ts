@@ -11,40 +11,40 @@ import {
 } from './statePaths';
 
 describe('statePaths', () => {
-  it('resolves the default managed state layout under the local default scope', () => {
+  it('resolves the default managed state layout under the single machine scope', () => {
     expect(defaultManagedStateLayout({ HOME: '/Users/tester' }, () => '/ignored')).toEqual({
       stateRoot: '/Users/tester/.redeven',
-      scope: { kind: 'local', name: 'default' },
-      scopeKey: 'local/default',
-      scopeDir: '/Users/tester/.redeven/scopes/local/default',
-      scopeMetadataFile: '/Users/tester/.redeven/scopes/local/default/scope.json',
-      configPath: '/Users/tester/.redeven/scopes/local/default/config.json',
-      secretsFile: '/Users/tester/.redeven/scopes/local/default/secrets.json',
-      lockFile: '/Users/tester/.redeven/scopes/local/default/agent.lock',
-      stateDir: '/Users/tester/.redeven/scopes/local/default',
-      runtimeStateFile: '/Users/tester/.redeven/scopes/local/default/runtime/local-ui.json',
-      diagnosticsDir: '/Users/tester/.redeven/scopes/local/default/diagnostics',
-      auditDir: '/Users/tester/.redeven/scopes/local/default/audit',
-      appsDir: '/Users/tester/.redeven/scopes/local/default/apps',
-      gatewayDir: '/Users/tester/.redeven/scopes/local/default/gateway',
+      scope: { kind: 'machine', name: 'machine' },
+      scopeKey: 'machine',
+      scopeDir: '/Users/tester/.redeven/machine',
+      scopeMetadataFile: '/Users/tester/.redeven/machine/scope.json',
+      configPath: '/Users/tester/.redeven/machine/config.json',
+      secretsFile: '/Users/tester/.redeven/machine/secrets.json',
+      lockFile: '/Users/tester/.redeven/machine/agent.lock',
+      stateDir: '/Users/tester/.redeven/machine',
+      runtimeStateFile: '/Users/tester/.redeven/machine/runtime/local-ui.json',
+      diagnosticsDir: '/Users/tester/.redeven/machine/diagnostics',
+      auditDir: '/Users/tester/.redeven/machine/audit',
+      appsDir: '/Users/tester/.redeven/machine/apps',
+      gatewayDir: '/Users/tester/.redeven/machine/gateway',
     });
   });
 
-  it('resolves a named managed state layout', () => {
+  it('maps a named managed state layout to the same machine scope', () => {
     expect(namedManagedStateLayout('dev-a', { HOME: '/Users/tester' }, () => '/ignored')).toEqual(expect.objectContaining({
-      scopeKey: 'named/dev-a',
-      configPath: '/Users/tester/.redeven/scopes/named/dev-a/config.json',
-      stateDir: '/Users/tester/.redeven/scopes/named/dev-a',
-      runtimeStateFile: '/Users/tester/.redeven/scopes/named/dev-a/runtime/local-ui.json',
+      scopeKey: 'machine',
+      configPath: '/Users/tester/.redeven/machine/config.json',
+      stateDir: '/Users/tester/.redeven/machine',
+      runtimeStateFile: '/Users/tester/.redeven/machine/runtime/local-ui.json',
     }));
   });
 
-  it('resolves a control-plane managed state layout with a derived provider key', () => {
+  it('maps a control-plane managed state layout to the same machine scope', () => {
     expect(controlPlaneManagedStateLayout('https://Region.Example.invalid/path', 'env:bad/id', { HOME: '/Users/tester' }, () => '/ignored')).toEqual(expect.objectContaining({
-      scopeKey: 'controlplane/https__region.example.invalid/env_bad_id',
-      configPath: '/Users/tester/.redeven/scopes/controlplane/https__region.example.invalid/env_bad_id/config.json',
-      stateDir: '/Users/tester/.redeven/scopes/controlplane/https__region.example.invalid/env_bad_id',
-      runtimeStateFile: '/Users/tester/.redeven/scopes/controlplane/https__region.example.invalid/env_bad_id/runtime/local-ui.json',
+      scopeKey: 'machine',
+      configPath: '/Users/tester/.redeven/machine/config.json',
+      stateDir: '/Users/tester/.redeven/machine',
+      runtimeStateFile: '/Users/tester/.redeven/machine/runtime/local-ui.json',
     }));
   });
 

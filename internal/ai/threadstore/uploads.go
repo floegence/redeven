@@ -68,12 +68,12 @@ type SQLitePageStats struct {
 }
 
 type SQLiteCompactionPlan struct {
-	ShouldCompact bool
+	ShouldCompact  bool
 	UseIncremental bool
-	PageSize      int64
-	PageCount     int64
-	FreelistCount int64
-	FreeBytes     int64
+	PageSize       int64
+	PageCount      int64
+	FreelistCount  int64
+	FreeBytes      int64
 	PagesToRelease int64
 }
 

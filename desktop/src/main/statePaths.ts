@@ -1,9 +1,10 @@
 import os from 'node:os';
 import path from 'node:path';
 
-const DEFAULT_LOCAL_SCOPE_NAME = 'default';
+const MACHINE_SCOPE_KEY = 'machine';
 
 export type DesktopManagedScopeRef =
+  | Readonly<{ kind: 'machine'; name?: string }>
   | Readonly<{ kind: 'local'; name?: string }>
   | Readonly<{ kind: 'named'; name: string }>
   | Readonly<{ kind: 'controlplane'; provider_origin?: string; provider_key?: string; env_public_id: string }>;
@@ -29,10 +30,6 @@ function sanitizeStateScopeID(value: string): string {
   return String(value ?? '').trim().replace(/[^A-Za-z0-9_.-]/g, '_');
 }
 
-function normalizeLocalScopeName(value: string | undefined): string {
-  return sanitizeStateScopeID(String(value ?? '').trim() || DEFAULT_LOCAL_SCOPE_NAME) || DEFAULT_LOCAL_SCOPE_NAME;
-}
-
 function normalizeControlPlaneOrigin(rawURL: string): string {
   const value = String(rawURL ?? '').trim();
   if (!value) {
@@ -56,14 +53,6 @@ export function controlPlaneProviderKeyForOrigin(providerOrigin: string): string
   return sanitizeStateScopeID(`${parsed.protocol.replace(/:$/u, '').toLowerCase()}__${parsed.host.toLowerCase()}`);
 }
 
-function controlPlaneProviderKey(scope: Extract<DesktopManagedScopeRef, { kind: 'controlplane' }>): string {
-  const explicitProviderKey = sanitizeStateScopeID(String(scope.provider_key ?? '').trim());
-  if (explicitProviderKey) {
-    return explicitProviderKey;
-  }
-  return controlPlaneProviderKeyForOrigin(String(scope.provider_origin ?? '').trim());
-}
-
 export function resolveStateRoot(
   env: NodeJS.ProcessEnv = process.env,
   homedir: () => string = os.homedir,
@@ -81,37 +70,8 @@ export function resolveStateRoot(
 }
 
 function stateLayoutForScope(scope: DesktopManagedScopeRef, stateRoot: string): DesktopManagedStateLayout {
-  let scopeKey = '';
-  let scopeDir = '';
-  switch (scope.kind) {
-    case 'local': {
-      const name = normalizeLocalScopeName(scope.name);
-      scopeKey = `local/${name}`;
-      scopeDir = path.join(stateRoot, 'scopes', 'local', name);
-      break;
-    }
-    case 'named': {
-      const name = sanitizeStateScopeID(scope.name);
-      if (!name) {
-        throw new Error('missing named scope');
-      }
-      scopeKey = `named/${name}`;
-      scopeDir = path.join(stateRoot, 'scopes', 'named', name);
-      break;
-    }
-    case 'controlplane': {
-      const providerKey = controlPlaneProviderKey(scope);
-      const envPublicID = sanitizeStateScopeID(String(scope.env_public_id ?? '').trim());
-      if (!envPublicID) {
-        throw new Error('missing environment id');
-      }
-      scopeKey = `controlplane/${providerKey}/${envPublicID}`;
-      scopeDir = path.join(stateRoot, 'scopes', 'controlplane', providerKey, envPublicID);
-      break;
-    }
-    default:
-      throw new Error('unsupported scope kind');
-  }
+  const scopeKey = MACHINE_SCOPE_KEY;
+  const scopeDir = path.join(stateRoot, MACHINE_SCOPE_KEY);
 
   return {
     stateRoot,
@@ -162,36 +122,33 @@ export function defaultManagedStateLayout(
   homedir: () => string = os.homedir,
   override?: string,
 ): DesktopManagedStateLayout {
-  return localManagedStateLayout(DEFAULT_LOCAL_SCOPE_NAME, env, homedir, override);
+  return stateLayoutForScope({ kind: 'machine', name: MACHINE_SCOPE_KEY }, resolveStateRoot(env, homedir, override));
 }
 
 export function localManagedStateLayout(
-  name: string,
+  _name: string,
   env: NodeJS.ProcessEnv = process.env,
   homedir: () => string = os.homedir,
   override?: string,
 ): DesktopManagedStateLayout {
-  return stateLayoutForScope({ kind: 'local', name }, resolveStateRoot(env, homedir, override));
+  return defaultManagedStateLayout(env, homedir, override);
 }
 
 export function namedManagedStateLayout(
-  name: string,
+  _name: string,
   env: NodeJS.ProcessEnv = process.env,
   homedir: () => string = os.homedir,
   override?: string,
 ): DesktopManagedStateLayout {
-  return stateLayoutForScope({ kind: 'named', name }, resolveStateRoot(env, homedir, override));
+  return defaultManagedStateLayout(env, homedir, override);
 }
 
 export function controlPlaneManagedStateLayout(
-  providerOrigin: string,
-  envPublicID: string,
+  _providerOrigin: string,
+  _envPublicID: string,
   env: NodeJS.ProcessEnv = process.env,
   homedir: () => string = os.homedir,
   override?: string,
 ): DesktopManagedStateLayout {
-  return stateLayoutForScope(
-    { kind: 'controlplane', provider_origin: providerOrigin, env_public_id: envPublicID },
-    resolveStateRoot(env, homedir, override),
-  );
+  return defaultManagedStateLayout(env, homedir, override);
 }

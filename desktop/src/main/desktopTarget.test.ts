@@ -19,12 +19,12 @@ describe('desktopTarget', () => {
   it('builds the managed local session target with a stable per-environment key', () => {
     expect(buildManagedEnvironmentDesktopTarget(testManagedLocalEnvironment())).toEqual({
       kind: 'managed_environment',
-      session_key: 'env:local%3Adefault:local_host',
-      environment_id: 'local:default',
-      label: 'Local Default Environment',
+      session_key: 'env:machine:local_host',
+      environment_id: 'machine',
+      label: 'Local Machine',
       route: 'local_host',
       managed_environment_kind: 'local',
-      local_environment_name: 'default',
+      local_environment_name: 'machine',
       provider_origin: undefined,
       provider_id: undefined,
       env_public_id: undefined,
@@ -80,7 +80,7 @@ describe('desktopTarget', () => {
       provider_origin: 'https://cp.example.invalid',
       env_public_id: 'env_demo',
       label: 'Demo Environment',
-      local_environment_name: undefined,
+      local_environment_name: 'machine',
       has_local_hosting: true,
       has_remote_desktop: true,
     });
@@ -94,15 +94,14 @@ describe('desktopTarget', () => {
       remote_install_dir: 'remote_default',
       bootstrap_strategy: 'auto',
       release_base_url: '',
-      environment_instance_id: 'envinst_demo001',
     } as const;
     const passwordTarget = {
       ...keyAgentTarget,
       auth_mode: 'password',
     } as const;
 
-    expect(sshDesktopSessionKey(keyAgentTarget)).toBe('ssh:devbox:2222:key_agent:remote_default:envinst_demo001');
-    expect(sshDesktopSessionKey(passwordTarget)).toBe('ssh:devbox:2222:password:remote_default:envinst_demo001');
+    expect(sshDesktopSessionKey(keyAgentTarget)).toBe('ssh:devbox:2222:key_agent:remote_default');
+    expect(sshDesktopSessionKey(passwordTarget)).toBe('ssh:devbox:2222:password:remote_default');
     expect(desktopSSHEnvironmentID(keyAgentTarget)).not.toBe(desktopSSHEnvironmentID(passwordTarget));
 
     expect(buildSSHDesktopTarget({
@@ -112,14 +111,13 @@ describe('desktopTarget', () => {
       remote_install_dir: 'remote_default',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example.invalid/releases',
-      environment_instance_id: 'envinst_demo001',
     }, {
       forwardedLocalUIURL: 'http://127.0.0.1:41111/',
       label: 'SSH Lab',
     })).toEqual({
       kind: 'ssh_environment',
-      session_key: 'ssh:devbox:2222:key_agent:remote_default:envinst_demo001',
-      environment_id: 'ssh:devbox:2222:key_agent:remote_default:envinst_demo001',
+      session_key: 'ssh:devbox:2222:key_agent:remote_default',
+      environment_id: 'ssh:devbox:2222:key_agent:remote_default',
       label: 'SSH Lab',
       ssh_destination: 'devbox',
       ssh_port: 2222,
@@ -127,7 +125,6 @@ describe('desktopTarget', () => {
       remote_install_dir: 'remote_default',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example.invalid/releases',
-      environment_instance_id: 'envinst_demo001',
       forwarded_local_ui_url: 'http://127.0.0.1:41111/',
     });
   });

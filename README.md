@@ -90,12 +90,12 @@ Redeven Desktop keeps environment entry simple on purpose: one launcher, one car
 redeven bootstrap \
   --controlplane https://<redeven-environment-host> \
   --env-id <env_public_id> \
-  --env-token <env_token>
+  --bootstrap-ticket <bootstrap_ticket>
 ```
 
-Bootstrap writes the control-plane scoped config to `~/.redeven/scopes/controlplane/<provider_key>/<env_public_id>/config.json` by default.
+Bootstrap writes the machine config to `~/.redeven/machine/config.json` by default. A machine is bound to one environment for the signed-in user at a time; running bootstrap again with a fresh one-time ticket rebinds that machine.
 
-Desktop and browser-assisted flows can also use one-time `bootstrap_ticket` credentials instead of a long-lived `env_token`. The desktop/runtime exchange contract is described in [`docs/DESKTOP.md`](docs/DESKTOP.md).
+Desktop and browser-assisted flows use the same one-time `bootstrap_ticket` contract. The desktop/runtime exchange contract is described in [`docs/DESKTOP.md`](docs/DESKTOP.md).
 
 ### 3. Run the endpoint
 
@@ -190,17 +190,13 @@ Notes:
 
 ### Common local files
 
-- `~/.redeven/scopes/local/default/config.json`
-- `~/.redeven/scopes/local/default/secrets.json`
-- `~/.redeven/scopes/local/default/agent.lock`
-- `~/.redeven/scopes/local/default/audit/events.jsonl`
-- `~/.redeven/scopes/local/default/diagnostics/agent-events.jsonl`
-- `~/.redeven/scopes/local/default/diagnostics/desktop-events.jsonl`
-- `~/.redeven/scopes/local/default/apps/code/...`
-
-Derived control-plane scopes use isolated state per environment:
-
-- `~/.redeven/scopes/controlplane/<provider_key>/<env_public_id>/config.json`
+- `~/.redeven/machine/config.json`
+- `~/.redeven/machine/secrets.json`
+- `~/.redeven/machine/agent.lock`
+- `~/.redeven/machine/audit/events.jsonl`
+- `~/.redeven/machine/diagnostics/agent-events.jsonl`
+- `~/.redeven/machine/diagnostics/desktop-events.jsonl`
+- `~/.redeven/machine/apps/code/...`
 
 Desktop and standalone runtime mode also share one environment catalog under:
 
