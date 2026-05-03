@@ -616,6 +616,8 @@ Behavior:
 - When a desktop-managed remote session renders Env App through a same-origin iframe, the embedded document resolves desktop theme, session context, state storage, and window chrome from its host session window instead of falling back to plain browser semantics.
 - In that same-origin iframe case, safe-area styling and native drag ownership are intentionally split:
   - the embedded Env App computes the final draggable rectangles from the shared desktop titlebar drag/no-drag hooks;
+  - app-owned floating surfaces mark their geometry root and visible panel with `[data-redeven-desktop-titlebar-no-drag='true']`, so the drag-region bridge subtracts them from any overlapping titlebar drag rectangle even when the surface is rendered through a body portal rather than inside the top bar subtree;
+  - app-owned floating surfaces also consume the desktop titlebar height as a shared `FloatingWindow` viewport inset, so default placement, restored persisted geometry, drag, resize, maximize, and restore all avoid the native titlebar safe area through one geometry contract;
   - the session preload running in the top-level Desktop document turns those rectangles into transparent top-level `app-region: drag` overlays;
   - Electron window movement always stays owned by the top-level session document, never by iframe DOM alone.
 - The drag-overlay bridge is exposed only from the top-level session document. Electron loads the same preload into same-window iframes too, so subframes must publish drag intent upward instead of trying to own native drag hit-testing themselves.

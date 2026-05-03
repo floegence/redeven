@@ -5,6 +5,7 @@ import {
 } from '../../../../../../desktop/src/shared/desktopEmbeddedDragRegions';
 import {
   DESKTOP_WINDOW_CHROME_DRAG_ROOT_SELECTORS,
+  DESKTOP_WINDOW_CHROME_NO_DRAG_SELECTOR,
   DESKTOP_WINDOW_CHROME_NO_DRAG_TARGET_SELECTORS,
 } from '../../../../../../desktop/src/shared/windowChromeContract';
 import { readDesktopHostBridge } from './desktopHostWindow';
@@ -220,6 +221,20 @@ function collectNoDragRects(root: HTMLElement): DesktopEmbeddedDragRegionRect[] 
     .filter((rect): rect is DesktopEmbeddedDragRegionRect => rect !== null);
 }
 
+function collectGlobalNoDragBlockerElements(doc: Document): HTMLElement[] {
+  return Array.from(doc.querySelectorAll<HTMLElement>(DESKTOP_WINDOW_CHROME_NO_DRAG_SELECTOR));
+}
+
+function collectGlobalNoDragBlockerRects(
+  doc: Document,
+  root: HTMLElement,
+): DesktopEmbeddedDragRegionRect[] {
+  return collectGlobalNoDragBlockerElements(doc)
+    .filter((element) => element !== root && !root.contains(element) && !element.contains(root))
+    .map((element) => normalizeRect(element.getBoundingClientRect()))
+    .filter((rect): rect is DesktopEmbeddedDragRegionRect => rect !== null);
+}
+
 function collectObservedElements(doc: Document): HTMLElement[] {
   const roots = collectDragRootElements(doc);
   const observed = new Set<HTMLElement>(roots);
@@ -227,6 +242,9 @@ function collectObservedElements(doc: Document): HTMLElement[] {
     for (const element of Array.from(root.querySelectorAll<HTMLElement>(NO_DRAG_TARGET_SELECTOR))) {
       observed.add(element);
     }
+  }
+  for (const element of collectGlobalNoDragBlockerElements(doc)) {
+    observed.add(element);
   }
   return [...observed];
 }
@@ -244,7 +262,11 @@ export function buildDesktopEmbeddedDragRegionSnapshot(
       return [];
     }
     let currentRects = [rootRect];
-    for (const exclusion of collectNoDragRects(root)) {
+    const exclusions = [
+      ...collectNoDragRects(root),
+      ...collectGlobalNoDragBlockerRects(doc, root),
+    ];
+    for (const exclusion of exclusions) {
       currentRects = currentRects.flatMap((rect) => subtractDesktopEmbeddedDragRegionRect(rect, exclusion));
       if (currentRects.length === 0) {
         return [];

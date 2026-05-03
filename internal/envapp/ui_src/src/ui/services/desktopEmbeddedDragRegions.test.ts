@@ -142,6 +142,95 @@ describe('desktopEmbeddedDragRegions', () => {
     });
   });
 
+  it('subtracts global no-drag blockers even when they are outside the drag root subtree', () => {
+    document.body.innerHTML = `
+      <div data-floe-shell-slot="top-bar">
+        <div id="center"></div>
+      </div>
+      <div id="floating-window" data-redeven-desktop-titlebar-no-drag="true"></div>
+    `;
+
+    const topBar = document.querySelector('[data-floe-shell-slot="top-bar"]') as HTMLElement;
+    const floatingWindow = document.getElementById('floating-window') as HTMLElement;
+
+    stubRect(topBar, { x: 0, y: 0, width: 320, height: 40 });
+    stubRect(floatingWindow, { x: 240, y: 0, width: 120, height: 80 });
+
+    expect(buildDesktopEmbeddedDragRegionSnapshot()).toEqual({
+      version: 1,
+      regions: [
+        { x: 0, y: 0, width: 240, height: 40 },
+      ],
+    });
+  });
+
+  it('ignores global no-drag blockers that do not intersect any drag root', () => {
+    document.body.innerHTML = `
+      <div data-floe-shell-slot="top-bar"></div>
+      <div id="floating-window" data-redeven-desktop-titlebar-no-drag="true"></div>
+    `;
+
+    const topBar = document.querySelector('[data-floe-shell-slot="top-bar"]') as HTMLElement;
+    const floatingWindow = document.getElementById('floating-window') as HTMLElement;
+
+    stubRect(topBar, { x: 0, y: 0, width: 320, height: 40 });
+    stubRect(floatingWindow, { x: 40, y: 80, width: 120, height: 80 });
+
+    expect(buildDesktopEmbeddedDragRegionSnapshot()).toEqual({
+      version: 1,
+      regions: [
+        { x: 0, y: 0, width: 320, height: 40 },
+      ],
+    });
+  });
+
+  it('does not treat an ancestor no-drag marker as an overlay blocker for its own drag root', () => {
+    document.body.innerHTML = `
+      <div data-redeven-desktop-titlebar-no-drag="true" id="ancestor">
+        <div data-floe-shell-slot="top-bar" id="top-bar"></div>
+      </div>
+    `;
+
+    const ancestor = document.getElementById('ancestor') as HTMLElement;
+    const topBar = document.getElementById('top-bar') as HTMLElement;
+
+    stubRect(ancestor, { x: 0, y: 0, width: 320, height: 120 });
+    stubRect(topBar, { x: 0, y: 0, width: 320, height: 40 });
+
+    expect(buildDesktopEmbeddedDragRegionSnapshot()).toEqual({
+      version: 1,
+      regions: [
+        { x: 0, y: 0, width: 320, height: 40 },
+      ],
+    });
+  });
+
+  it('subtracts one global no-drag blocker from every drag root it overlaps', () => {
+    document.body.innerHTML = `
+      <div data-floe-shell-slot="top-bar" id="top-bar"></div>
+      <div data-redeven-desktop-titlebar-drag-region="true" id="secondary-drag"></div>
+      <div id="floating-window" data-redeven-desktop-titlebar-no-drag="true"></div>
+    `;
+
+    const topBar = document.getElementById('top-bar') as HTMLElement;
+    const secondaryDrag = document.getElementById('secondary-drag') as HTMLElement;
+    const floatingWindow = document.getElementById('floating-window') as HTMLElement;
+
+    stubRect(topBar, { x: 0, y: 0, width: 320, height: 40 });
+    stubRect(secondaryDrag, { x: 0, y: 48, width: 320, height: 40 });
+    stubRect(floatingWindow, { x: 120, y: 0, width: 80, height: 88 });
+
+    expect(buildDesktopEmbeddedDragRegionSnapshot()).toEqual({
+      version: 1,
+      regions: [
+        { x: 0, y: 0, width: 120, height: 40 },
+        { x: 200, y: 0, width: 120, height: 40 },
+        { x: 0, y: 48, width: 120, height: 40 },
+        { x: 200, y: 48, width: 120, height: 40 },
+      ],
+    });
+  });
+
   it('publishes and clears drag snapshots through a same-origin parent bridge', () => {
     document.body.innerHTML = `
       <div data-floe-shell-slot="top-bar">
@@ -273,6 +362,64 @@ describe('desktopEmbeddedDragRegions', () => {
     });
 
     expect(unobserve).toHaveBeenCalledWith(leftAction);
+    expect(observe).toHaveBeenCalledTimes(2);
+    expect(disconnect).not.toHaveBeenCalled();
+
+    sync?.dispose();
+  });
+
+  it('observes moved and removed global no-drag blockers without recreating the resize observer', () => {
+    document.body.innerHTML = `
+      <div data-floe-shell-slot="top-bar"></div>
+      <div id="floating-window" data-redeven-desktop-titlebar-no-drag="true"></div>
+    `;
+
+    const topBar = document.querySelector('[data-floe-shell-slot="top-bar"]') as HTMLElement;
+    const floatingWindow = document.getElementById('floating-window') as HTMLElement;
+    stubRect(topBar, { x: 0, y: 0, width: 240, height: 40 });
+    stubRect(floatingWindow, { x: 180, y: 0, width: 80, height: 40 });
+
+    const setSnapshot = vi.fn();
+    const clear = vi.fn();
+    const { currentWindow, frameCallbacks } = createFakeSyncWindow();
+    currentWindow.redevenDesktopEmbeddedDragRegions = { setSnapshot, clear };
+
+    const observe = vi.fn();
+    const unobserve = vi.fn();
+    const disconnect = vi.fn();
+    const sync = installDesktopEmbeddedDragRegionSync({
+      currentWindow,
+      createResizeObserver: () => ({ observe, unobserve, disconnect }),
+    });
+    expect(sync).toBeTruthy();
+
+    flushNextFrame(frameCallbacks);
+    expect(observe).toHaveBeenCalledTimes(2);
+    expect(setSnapshot).toHaveBeenCalledWith({
+      version: 1,
+      regions: [
+        { x: 0, y: 0, width: 180, height: 40 },
+      ],
+    });
+
+    stubRect(floatingWindow, { x: 80, y: 0, width: 40, height: 40 });
+    expect(sync?.refresh()).toEqual({
+      version: 1,
+      regions: [
+        { x: 0, y: 0, width: 80, height: 40 },
+        { x: 120, y: 0, width: 120, height: 40 },
+      ],
+    });
+
+    floatingWindow.remove();
+    expect(sync?.refresh()).toEqual({
+      version: 1,
+      regions: [
+        { x: 0, y: 0, width: 240, height: 40 },
+      ],
+    });
+
+    expect(unobserve).toHaveBeenCalledWith(floatingWindow);
     expect(observe).toHaveBeenCalledTimes(2);
     expect(disconnect).not.toHaveBeenCalled();
 

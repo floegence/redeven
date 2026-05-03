@@ -4,12 +4,15 @@ import {
   normalizeDesktopWindowChromeSnapshot,
   type DesktopWindowChromeSnapshot,
 } from '../../../../../../desktop/src/shared/windowChromeContract';
+import type { FloatingWindowViewportInsets } from '@floegence/floe-webapp-core/ui';
 import { readDesktopHostBridge } from './desktopHostWindow';
 
 export interface DesktopWindowChromeBridge {
   getSnapshot: () => DesktopWindowChromeSnapshot;
   subscribe?: (listener: (snapshot: DesktopWindowChromeSnapshot) => void) => () => void;
 }
+
+export type DesktopFloatingWindowSafeArea = Readonly<Required<FloatingWindowViewportInsets>>;
 
 declare global {
   interface Window {
@@ -18,6 +21,12 @@ declare global {
 }
 
 const subscribedDocuments = new WeakSet<Document>();
+const EMPTY_DESKTOP_FLOATING_WINDOW_SAFE_AREA: DesktopFloatingWindowSafeArea = Object.freeze({
+  top: 0,
+  right: 0,
+  bottom: 0,
+  left: 0,
+});
 
 function isDesktopWindowChromeBridge(candidate: unknown): candidate is DesktopWindowChromeBridge {
   if (!candidate || typeof candidate !== 'object') {
@@ -41,6 +50,52 @@ export function readDesktopWindowChromeSnapshot(): DesktopWindowChromeSnapshot |
   } catch {
     return null;
   }
+}
+
+export function desktopFloatingWindowSafeAreaFromSnapshot(
+  snapshot: DesktopWindowChromeSnapshot | null,
+): DesktopFloatingWindowSafeArea {
+  if (!snapshot) {
+    return EMPTY_DESKTOP_FLOATING_WINDOW_SAFE_AREA;
+  }
+  return {
+    top: snapshot.titleBarHeight,
+    right: 0,
+    bottom: 0,
+    left: 0,
+  };
+}
+
+export function sameDesktopFloatingWindowSafeArea(
+  left: DesktopFloatingWindowSafeArea,
+  right: DesktopFloatingWindowSafeArea,
+): boolean {
+  return left.top === right.top
+    && left.right === right.right
+    && left.bottom === right.bottom
+    && left.left === right.left;
+}
+
+export function readDesktopFloatingWindowSafeArea(): DesktopFloatingWindowSafeArea {
+  if (typeof window === 'undefined') {
+    return EMPTY_DESKTOP_FLOATING_WINDOW_SAFE_AREA;
+  }
+  return desktopFloatingWindowSafeAreaFromSnapshot(readDesktopWindowChromeSnapshot());
+}
+
+export function subscribeDesktopFloatingWindowSafeArea(
+  listener: (safeArea: DesktopFloatingWindowSafeArea) => void,
+): () => void {
+  if (typeof window === 'undefined') {
+    return () => undefined;
+  }
+  const bridge = desktopWindowChromeBridge();
+  if (!bridge?.subscribe) {
+    return () => undefined;
+  }
+  return bridge.subscribe((snapshot) => {
+    listener(desktopFloatingWindowSafeAreaFromSnapshot(normalizeDesktopWindowChromeSnapshot(snapshot)));
+  });
 }
 
 function applyDesktopWindowChromeSnapshotToDocument(

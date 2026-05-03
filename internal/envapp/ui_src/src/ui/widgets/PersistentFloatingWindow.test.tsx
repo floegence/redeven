@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createUIStorageAdapter, readUIStorageJSON, removeUIStorageItem, writeUIStorageJSON } from '../services/uiStorage';
 import { PersistentFloatingWindow, floatingWindowStorageKey } from './PersistentFloatingWindow';
 import { LOCAL_INTERACTION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
+import { DESKTOP_WINDOW_CHROME_NO_DRAG_ATTR } from '../../../../../../desktop/src/shared/windowChromeContract';
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
@@ -22,6 +23,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
         data-default-y={String(props.defaultPosition?.y ?? '')}
         data-default-width={String(props.defaultSize?.width ?? '')}
         data-default-height={String(props.defaultSize?.height ?? '')}
+        data-viewport-insets={JSON.stringify(props.viewportInsets ?? null)}
         style={{
           transform: `translate3d(${props.defaultPosition?.x ?? 0}px, ${props.defaultPosition?.y ?? 0}px, 0)`,
           width: `${props.defaultSize?.width ?? 400}px`,
@@ -49,6 +51,7 @@ function adapterKeys(): string[] {
 }
 
 afterEach(() => {
+  delete window.redevenDesktopWindowChrome;
   vi.useRealTimers();
   vi.unstubAllGlobals();
   for (const key of adapterKeys()) {
@@ -163,7 +166,7 @@ describe('PersistentFloatingWindow', () => {
     expect(surfaceRef).toHaveBeenCalledWith(root);
   });
 
-  it('marks both the geometry root and the visible floating surface as local interaction surfaces', async () => {
+  it('marks both the geometry root and the visible floating surface as local input surfaces', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -181,5 +184,42 @@ describe('PersistentFloatingWindow', () => {
     const surface = host.querySelector('[data-testid="floating-surface"]') as HTMLDivElement | null;
     expect(root?.getAttribute(LOCAL_INTERACTION_SURFACE_ATTR)).toBe('true');
     expect(surface?.getAttribute(LOCAL_INTERACTION_SURFACE_ATTR)).toBe('true');
+    expect(root?.getAttribute(DESKTOP_WINDOW_CHROME_NO_DRAG_ATTR)).toBe('true');
+    expect(surface?.getAttribute(DESKTOP_WINDOW_CHROME_NO_DRAG_ATTR)).toBe('true');
+  });
+
+  it('passes desktop window chrome safe area to the shared floating window', () => {
+    window.redevenDesktopWindowChrome = {
+      getSnapshot: () => ({
+        mode: 'hidden-inset',
+        controlsSide: 'right',
+        titleBarHeight: 52,
+        contentInsetStart: 16,
+        contentInsetEnd: 144,
+      }),
+      subscribe: () => () => undefined,
+    };
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <PersistentFloatingWindow
+        open
+        onOpenChange={() => undefined}
+        title="Demo"
+        viewportInsets={{ top: 20, right: 12, bottom: 8, left: 4 }}
+      >
+        <div>content</div>
+      </PersistentFloatingWindow>
+    ), host);
+
+    const root = host.querySelector('[data-testid="floating-root"]') as HTMLDivElement | null;
+    expect(root?.dataset.viewportInsets).toBe(JSON.stringify({
+      top: 52,
+      right: 12,
+      bottom: 8,
+      left: 4,
+    }));
   });
 });

@@ -1,10 +1,17 @@
-import { createEffect, createMemo, createUniqueId, onCleanup, type JSX } from 'solid-js';
+import { createEffect, createMemo, createSignal, createUniqueId, onCleanup, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import {
   FloatingWindow,
   LOCAL_INTERACTION_SURFACE_ATTR,
   type FloatingWindowProps,
 } from '@floegence/floe-webapp-core/ui';
+import { DESKTOP_WINDOW_CHROME_NO_DRAG_ATTR } from '../../../../../../desktop/src/shared/windowChromeContract';
+import {
+  readDesktopFloatingWindowSafeArea,
+  sameDesktopFloatingWindowSafeArea,
+  subscribeDesktopFloatingWindowSafeArea,
+  type DesktopFloatingWindowSafeArea,
+} from '../services/desktopWindowChrome';
 import { readUIStorageJSON, writeUIStorageJSON } from '../services/uiStorage';
 
 type PersistentFloatingWindowRect = Readonly<{
@@ -112,6 +119,8 @@ type PersistentFloatingWindowDomBinding = Readonly<{
   interactionSurface: HTMLElement | null;
 }>;
 
+type FloatingWindowViewportInsets = NonNullable<FloatingWindowProps['viewportInsets']>;
+
 function findInteractionSurfaceForMarker(markerClass: string): HTMLElement | null {
   const marker = document.querySelector(`.${markerClass}`);
   return marker instanceof HTMLElement ? marker : null;
@@ -124,9 +133,27 @@ function resolvePersistentFloatingWindowDomBinding(markerClass: string): Persist
   };
 }
 
-function applyLocalInteractionSurfaceContract(binding: PersistentFloatingWindowDomBinding): void {
+function normalizeViewportInset(value: unknown): number {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
+}
+
+function mergeFloatingWindowViewportInsets(
+  desktopSafeArea: DesktopFloatingWindowSafeArea,
+  appInsets: FloatingWindowProps['viewportInsets'],
+): FloatingWindowViewportInsets {
+  return {
+    top: Math.max(desktopSafeArea.top, normalizeViewportInset(appInsets?.top)),
+    right: Math.max(desktopSafeArea.right, normalizeViewportInset(appInsets?.right)),
+    bottom: Math.max(desktopSafeArea.bottom, normalizeViewportInset(appInsets?.bottom)),
+    left: Math.max(desktopSafeArea.left, normalizeViewportInset(appInsets?.left)),
+  };
+}
+
+function applyFloatingWindowInputSurfaceContracts(binding: PersistentFloatingWindowDomBinding): void {
   for (const element of [binding.geometryRoot, binding.interactionSurface]) {
     element?.setAttribute(LOCAL_INTERACTION_SURFACE_ATTR, 'true');
+    element?.setAttribute(DESKTOP_WINDOW_CHROME_NO_DRAG_ATTR, 'true');
   }
 }
 
@@ -139,6 +166,12 @@ export interface PersistentFloatingWindowProps extends FloatingWindowProps {
 
 export function PersistentFloatingWindow(props: PersistentFloatingWindowProps): JSX.Element {
   const markerClass = `redeven-persistent-floating-window-${createUniqueId()}`;
+  const [desktopSafeArea, setDesktopSafeArea] = createSignal(readDesktopFloatingWindowSafeArea(), {
+    equals: sameDesktopFloatingWindowSafeArea,
+  });
+  const floatingWindowViewportInsets = createMemo(() => (
+    mergeFloatingWindowViewportInsets(desktopSafeArea(), props.viewportInsets)
+  ));
   const persistenceKey = () => compact(props.persistenceKey);
   const persistedRect = createMemo(() => {
     const key = persistenceKey();
@@ -146,6 +179,16 @@ export function PersistentFloatingWindow(props: PersistentFloatingWindowProps): 
       return null;
     }
     return readPersistentRect(key);
+  });
+
+  createEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    setDesktopSafeArea(readDesktopFloatingWindowSafeArea());
+    const unsubscribe = subscribeDesktopFloatingWindowSafeArea(setDesktopSafeArea);
+    onCleanup(unsubscribe);
   });
 
   createEffect(() => {
@@ -167,7 +210,7 @@ export function PersistentFloatingWindow(props: PersistentFloatingWindowProps): 
         return;
       }
 
-      applyLocalInteractionSurfaceContract(binding);
+      applyFloatingWindowInputSurfaceContracts(binding);
     };
 
     bindSurfaceContract();
@@ -340,6 +383,7 @@ export function PersistentFloatingWindow(props: PersistentFloatingWindowProps): 
       resizable={props.resizable}
       draggable={props.draggable}
       class={cn(markerClass, props.class)}
+      viewportInsets={floatingWindowViewportInsets()}
       zIndex={props.zIndex}
     >
       {props.children}

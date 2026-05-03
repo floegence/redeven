@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   buildDesktopWindowChromeStyleText,
   desktopWindowChromeCSSVariables,
+  DESKTOP_WINDOW_CHROME_NO_DRAG_ATTR,
+  DESKTOP_WINDOW_CHROME_NO_DRAG_SELECTOR,
   normalizeDesktopWindowChromeSnapshot,
 } from './windowChromeContract';
 
@@ -52,7 +54,8 @@ describe('windowChromeContract', () => {
     expect(styleText).toContain("--redeven-desktop-titlebar-balance-inset: 144px;");
     expect(styleText).toContain("[data-floe-shell-slot='top-bar']");
     expect(styleText).toContain("[data-redeven-desktop-window-titlebar='true']");
-    expect(styleText).toContain("[data-redeven-desktop-titlebar-no-drag='true']");
+    expect(styleText).toContain(DESKTOP_WINDOW_CHROME_NO_DRAG_SELECTOR);
+    expect(DESKTOP_WINDOW_CHROME_NO_DRAG_ATTR).toBe('data-redeven-desktop-titlebar-no-drag');
     expect(styleText).toContain("grid-template-columns: minmax(0, 1fr) 4.5rem minmax(0, 24rem) 4.5rem minmax(0, 1fr);");
     expect(styleText).toContain("grid-column: 3;");
   });

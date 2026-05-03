@@ -121,6 +121,7 @@ function WorkbenchFloatingWindowHarness() {
 }
 
 afterEach(() => {
+  delete window.redevenDesktopWindowChrome;
   document.body.innerHTML = '';
   window.localStorage.clear();
 });
@@ -130,6 +131,44 @@ beforeEach(async () => {
 });
 
 describe('PersistentFloatingWindow browser behavior', () => {
+  it('keeps desktop floating windows below the native titlebar safe area', async () => {
+    window.redevenDesktopWindowChrome = {
+      getSnapshot: () => ({
+        mode: 'hidden-inset',
+        controlsSide: 'right',
+        titleBarHeight: 72,
+        contentInsetStart: 16,
+        contentInsetEnd: 144,
+      }),
+      subscribe: () => () => undefined,
+    };
+    const host = document.createElement('div');
+    host.style.position = 'fixed';
+    host.style.inset = '0';
+    document.body.appendChild(host);
+
+    render(() => (
+      <Providers>
+        <PersistentFloatingWindow
+          open
+          onOpenChange={() => undefined}
+          title="Desktop safe area helper"
+          persistenceKey="desktop-safe-area-floating-window-browser-test"
+          defaultPosition={{ x: 112, y: 0 }}
+          defaultSize={{ width: 360, height: 260 }}
+          minSize={{ width: 320, height: 220 }}
+        >
+          <button type="button">Focusable floating action</button>
+        </PersistentFloatingWindow>
+      </Providers>
+    ), host);
+    await settle();
+
+    const floatingRoot = document.querySelector('[data-floe-geometry-surface="floating-window"]') as HTMLElement | null;
+    expect(floatingRoot).toBeTruthy();
+    expect(Math.round(floatingRoot!.getBoundingClientRect().top)).toBeGreaterThanOrEqual(72);
+  });
+
   it('keeps the floating window clickable above a workbench canvas', async () => {
     const host = document.createElement('div');
     host.style.position = 'fixed';
