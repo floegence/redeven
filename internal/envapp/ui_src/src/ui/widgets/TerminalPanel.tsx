@@ -838,6 +838,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
       target,
       getDefaultTerminalConfig('dark', {
         cursorBlink: false,
+        rendererType: 'webgl',
         fontSize: fontSize(),
         // Workbench zoom is an outer visual transform; terminal geometry stays stable.
         presentationScale: 1,

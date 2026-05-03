@@ -1022,6 +1022,7 @@ describe('TerminalPanel', () => {
 
     expect(terminalConfigState.values.length).toBeGreaterThan(0);
     expect(terminalConfigState.values[0]?.cursorBlink).toBe(false);
+    expect(terminalConfigState.values[0]?.rendererType).toBe('webgl');
     expect(terminalConfigState.values[0]?.clipboard).toEqual({
       copyOnSelect: false,
     });

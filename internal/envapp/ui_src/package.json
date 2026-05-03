@@ -19,7 +19,7 @@
     "@floegence/floe-webapp-boot": "^0.36.42",
     "@floegence/floe-webapp-core": "^0.36.42",
     "@floegence/floe-webapp-protocol": "^0.36.42",
-    "@floegence/floeterm-terminal-web": "^0.5.0",
+    "@floegence/floeterm-terminal-web": "^0.5.1",
     "@floegence/flowersec-core": "^0.19.4",
     "@fontsource/iosevka": "^5.2.5",
     "@solidjs/router": "^0.15.3",
@@ -81,6 +81,7 @@
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.2",
     "vite": "^6.4.2",
+    "vite-plugin-wasm": "^3.6.0",
     "vite-plugin-solid": "^2.11.0",
     "vitest": "^3.2.4"
   }

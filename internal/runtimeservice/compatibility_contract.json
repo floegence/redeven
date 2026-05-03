@@ -1,18 +1,18 @@
 {
   "schema_version": 1,
   "release_review": {
-    "release_version": "v0.5.9",
-    "previous_release": "v0.5.8",
-    "reviewed_at": "2026-05-02",
-    "review_id": "runtime-service-maintenance-v1",
-    "summary": "Introduces the first explicit Desktop and Runtime Service compatibility contract for the v0.5.9 release.",
-    "same_window_rationale": "The v0.5.9 release adds explicit service identity and maintenance metadata on existing Runtime Service carriers, but it does not change the wire protocol semantics required by v0.5.8 Desktop or Runtime binaries. Older clients can ignore the additive snapshot fields, and the release gate now records the compatibility window for future challenged reviews.",
+    "release_version": "v0.5.10",
+    "previous_release": "v0.5.9",
+    "reviewed_at": "2026-05-03",
+    "review_id": "envapp-terminal-webgl-renderer-v1",
+    "summary": "Upgrades the Env App terminal dependency to the released floeterm WebGL renderer path and keeps the Runtime Service protocol window unchanged.",
+    "same_window_rationale": "The v0.5.10 release changes only the packaged Env App terminal frontend: it consumes the published floeterm WebGL renderer, adds Vite WASM handling, and selects the WebGL renderer in TerminalPanel. No Runtime Service request, response, startup report, session, or attach protocol fields changed, so v0.5.8 remains the minimum compatible Desktop and Runtime window.",
     "checked_surfaces": [
-      "startup report and local-ui runtime state carriers",
-      "no-unlock local runtime health probe",
-      "Env App sys.ping runtime service payload",
-      "Desktop launcher runtime service facts",
-      "SSH-managed runtime bootstrap and attach flow"
+      "Env App TerminalPanel attach and resize lifecycle",
+      "floeterm published npm dependency and lockfile policy",
+      "Env App WASM production build with Beamterm assets",
+      "Workbench terminal visual coordinator no-suspend contract",
+      "desktop bundled runtime startup with local UI terminal sessions"
     ]
   },
   "runtime_protocol_version": "redeven-runtime-v1",
