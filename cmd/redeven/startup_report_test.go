@@ -63,6 +63,9 @@ func TestWriteDesktopLaunchReportReady(t *testing.T) {
 	if report.RuntimeService.RuntimeVersion != "v1.2.3" || report.RuntimeService.ActiveWorkload.TerminalCount != 1 {
 		t.Fatalf("unexpected runtime service report: %#v", report.RuntimeService)
 	}
+	if report.RuntimeService.OpenReadiness.State != runtimeservice.OpenReadinessOpenable {
+		t.Fatalf("OpenReadiness.State = %q", report.RuntimeService.OpenReadiness.State)
+	}
 }
 
 func TestWriteDesktopLaunchReportBlocked(t *testing.T) {

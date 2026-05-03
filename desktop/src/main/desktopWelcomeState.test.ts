@@ -268,6 +268,21 @@ describe('desktopWelcomeState', () => {
         local_ui_url: 'http://127.0.0.1:24001/',
         desktop_managed: false,
         effective_run_mode: 'local',
+        runtime_service: {
+          protocol_version: 'redeven-runtime-v1',
+          service_owner: 'external',
+          desktop_managed: false,
+          effective_run_mode: 'local',
+          remote_enabled: false,
+          compatibility: 'compatible',
+          open_readiness: { state: 'openable' },
+          active_workload: {
+            terminal_count: 0,
+            session_count: 0,
+            task_count: 0,
+            port_forward_count: 0,
+          },
+        },
       },
     });
 
@@ -289,6 +304,12 @@ describe('desktopWelcomeState', () => {
         runtime_control_capability: 'start_stop',
         runtime_health: expect.objectContaining({
           status: 'online',
+          runtime_service: expect.objectContaining({
+            open_readiness: { state: 'openable' },
+          }),
+        }),
+        runtime_service: expect.objectContaining({
+          open_readiness: { state: 'openable' },
         }),
       }),
     ]));
@@ -319,6 +340,7 @@ describe('desktopWelcomeState', () => {
             desktop_managed: false,
             remote_enabled: true,
             compatibility: 'compatible',
+            open_readiness: { state: 'openable' },
             active_workload: {
               terminal_count: 0,
               session_count: 1,
@@ -338,6 +360,7 @@ describe('desktopWelcomeState', () => {
         runtime_service: expect.objectContaining({
           runtime_version: 'v1.7.0',
           service_owner: 'external',
+          open_readiness: { state: 'openable' },
         }),
       }),
     ]));
@@ -514,6 +537,7 @@ describe('desktopWelcomeState', () => {
             desktop_managed: true,
             remote_enabled: false,
             compatibility: 'compatible',
+            open_readiness: { state: 'openable' },
             active_workload: {
               terminal_count: 1,
               session_count: 0,
@@ -533,6 +557,7 @@ describe('desktopWelcomeState', () => {
         runtime_service: expect.objectContaining({
           runtime_version: 'v1.8.0',
           service_owner: 'desktop',
+          open_readiness: { state: 'openable' },
         }),
       }),
     ]));

@@ -22,6 +22,11 @@ describe('sys codec', () => {
         minimum_desktop_version: 'v1.4.0',
         minimum_runtime_version: 'v1.4.0',
         compatibility_review_id: 'runtime-service-maintenance-v1',
+        open_readiness: {
+          state: 'starting',
+          reason_code: 'env_app_gateway_starting',
+          message: 'Env App gateway is starting.',
+        },
         active_workload: {
           terminal_count: 3,
           session_count: 2,
@@ -47,6 +52,11 @@ describe('sys codec', () => {
         minimumDesktopVersion: 'v1.4.0',
         minimumRuntimeVersion: 'v1.4.0',
         compatibilityReviewId: 'runtime-service-maintenance-v1',
+        openReadiness: {
+          state: 'starting',
+          reasonCode: 'env_app_gateway_starting',
+          message: 'Env App gateway is starting.',
+        },
         activeWorkload: {
           terminalCount: 3,
           sessionCount: 2,
@@ -86,6 +96,7 @@ describe('sys codec', () => {
       minimumDesktopVersion: undefined,
       minimumRuntimeVersion: undefined,
       compatibilityReviewId: undefined,
+      openReadiness: undefined,
       activeWorkload: {
         terminalCount: 0,
         sessionCount: 2,

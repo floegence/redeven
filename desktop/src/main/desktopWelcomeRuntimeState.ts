@@ -9,6 +9,7 @@ import type {
   DesktopManagedEnvironmentRuntimeState,
 } from '../shared/desktopManagedEnvironment';
 import type { DesktopProviderEnvironmentRecord } from '../shared/desktopProviderEnvironment';
+import { normalizeRuntimeServiceSnapshot, type RuntimeServiceOwner } from '../shared/runtimeService';
 
 const DEFAULT_WELCOME_RUNTIME_PROBE_TIMEOUT_MS = 200;
 
@@ -20,12 +21,14 @@ function runtimeStateFromStartup(
   startup: StartupReport,
   desktopManaged: boolean,
   localUIURLOverride?: string,
+  serviceOwner?: RuntimeServiceOwner,
 ): DesktopManagedEnvironmentRuntimeState | undefined {
   const localUIURL = compact(localUIURLOverride) || compact(startup.local_ui_url);
   if (localUIURL === '') {
     return undefined;
   }
   const pid = Number(startup.pid);
+  const serviceDesktopManaged = startup.runtime_service?.desktop_managed ?? desktopManaged;
   return {
     local_ui_url: localUIURL,
     effective_run_mode: compact(startup.effective_run_mode),
@@ -34,7 +37,11 @@ function runtimeStateFromStartup(
     password_required: startup.password_required === true,
     diagnostics_enabled: startup.diagnostics_enabled === true,
     pid: Number.isInteger(pid) && pid > 0 ? pid : 0,
-    ...(startup.runtime_service ? { runtime_service: startup.runtime_service } : {}),
+    runtime_service: normalizeRuntimeServiceSnapshot(startup.runtime_service ?? { service_owner: serviceOwner }, {
+      desktopManaged: serviceDesktopManaged,
+      effectiveRunMode: startup.effective_run_mode,
+      remoteEnabled: startup.remote_enabled === true,
+    }),
   };
 }
 
@@ -65,6 +72,7 @@ function currentRuntimeFromLocalSession(
     session.startup,
     session.runtime_lifecycle_owner === 'desktop' || session.startup.desktop_managed === true,
     session.entry_url,
+    session.runtime_lifecycle_owner,
   );
 }
 

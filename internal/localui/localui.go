@@ -818,7 +818,12 @@ func (s *Server) runtimeServiceSnapshot() runtimeservice.Snapshot {
 	if s.a != nil {
 		snapshot = s.a.RuntimeServiceSnapshot()
 	}
-	return runtimeservice.NormalizeSnapshotForEndpoint(snapshot, s.desktopManaged, s.resolvedEffectiveRunMode(), s.remoteEnabled)
+	snapshot = runtimeservice.NormalizeSnapshotForEndpoint(snapshot, s.desktopManaged, s.resolvedEffectiveRunMode(), s.remoteEnabled)
+	if snapshot.OpenReadiness.State == runtimeservice.OpenReadinessOpenable && (s.gw == nil || !s.gw.EnvAppShellReady()) {
+		snapshot.OpenReadiness = runtimeservice.EnvAppShellUnavailableReadiness()
+		return runtimeservice.NormalizeSnapshot(snapshot)
+	}
+	return snapshot
 }
 
 func (s *Server) directWSURLFromRequest(r *http.Request) (string, error) {

@@ -180,6 +180,7 @@ describe('buildEnvironmentCardModel', () => {
             effective_run_mode: 'desktop',
             remote_enabled: true,
             compatibility: 'compatible',
+            open_readiness: { state: 'openable' },
             active_workload: {
               terminal_count: 2,
               session_count: 1,
@@ -197,6 +198,7 @@ describe('buildEnvironmentCardModel', () => {
             effective_run_mode: 'hybrid',
             remote_enabled: true,
             compatibility: 'compatible',
+            open_readiness: { state: 'openable' },
             active_workload: {
               terminal_count: 1,
               session_count: 1,
@@ -220,6 +222,7 @@ describe('buildEnvironmentCardModel', () => {
               effective_run_mode: 'standalone',
               remote_enabled: true,
               compatibility: 'compatible',
+              open_readiness: { state: 'openable' },
               active_workload: {
                 terminal_count: 0,
                 session_count: 1,
@@ -259,6 +262,7 @@ describe('buildEnvironmentCardModel', () => {
               effective_run_mode: 'desktop',
               remote_enabled: false,
               compatibility: 'compatible',
+              open_readiness: { state: 'openable' },
               active_workload: {
                 terminal_count: 1,
                 session_count: 1,
@@ -285,22 +289,22 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(buildEnvironmentCardModel(localEntry!)).toEqual(expect.objectContaining({
       kind_label: 'Local',
-      status_label: 'RUNTIME ONLINE',
+      status_label: 'RUNTIME READY',
       target_primary: 'http://localhost:23998/',
     }));
     expect(buildEnvironmentCardModel(providerEntry!)).toEqual(expect.objectContaining({
       kind_label: 'Provider',
-      status_label: 'RUNTIME ONLINE',
+      status_label: 'RUNTIME READY',
       target_primary: 'http://127.0.0.1:24001/',
       target_secondary: 'https://cp.example.invalid/env/env_demo',
     }));
     expect(buildEnvironmentCardModel(urlEntry!)).toEqual(expect.objectContaining({
       kind_label: 'Redeven URL',
-      status_label: 'RUNTIME ONLINE',
+      status_label: 'RUNTIME READY',
     }));
     expect(buildEnvironmentCardModel(sshEntry!)).toEqual(expect.objectContaining({
       kind_label: 'SSH Host',
-      status_label: 'RUNTIME ONLINE',
+      status_label: 'RUNTIME READY',
       target_primary: 'ops@example.internal:2222',
       target_secondary: 'http://127.0.0.1:24111/',
     }));
@@ -430,6 +434,7 @@ describe('buildEnvironmentCardModel', () => {
             effective_run_mode: 'desktop',
             remote_enabled: true,
             compatibility: 'update_available',
+            open_readiness: { state: 'openable' },
             active_workload: {
               terminal_count: 1,
               session_count: 0,
@@ -452,6 +457,201 @@ describe('buildEnvironmentCardModel', () => {
       defaultFact('ACTIVE WORK', '1 terminal'),
       placeholderFact('PROVIDER'),
     ]);
+  });
+
+  it('keeps an online SSH runtime visible but blocks Open when the running runtime needs an update', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        saved_ssh_environments: [{
+          id: 'ssh_saved',
+          label: 'Prod SSH',
+          ssh_destination: 'ops@example.internal',
+          ssh_port: 2222,
+          auth_mode: 'key_agent',
+          remote_install_dir: '/opt/redeven-desktop/runtime',
+          bootstrap_strategy: 'desktop_upload',
+          release_base_url: '',
+          environment_instance_id: 'envinst_demo001',
+          source: 'saved',
+          pinned: false,
+          last_used_at_ms: 30,
+        }],
+      }),
+      savedSSHRuntimeHealth: {
+        ssh_saved: {
+          status: 'online',
+          checked_at_unix_ms: Date.now(),
+          source: 'ssh_runtime_probe',
+          local_ui_url: 'http://127.0.0.1:24111/',
+          runtime_service: {
+            runtime_version: 'v0.5.9',
+            protocol_version: 'redeven-runtime-v1',
+            service_owner: 'desktop',
+            desktop_managed: true,
+            effective_run_mode: 'desktop',
+            remote_enabled: false,
+            compatibility: 'compatible',
+            open_readiness: {
+              state: 'blocked',
+              reason_code: 'runtime_open_readiness_unavailable',
+              message: 'This running runtime is older than this Desktop. Install the update, then restart the runtime when it is safe to interrupt active work.',
+            },
+            active_workload: {
+              terminal_count: 1,
+              session_count: 1,
+              task_count: 0,
+              port_forward_count: 1,
+            },
+          },
+        },
+      },
+    });
+    const entry = snapshot.environments.find((environment) => environment.kind === 'ssh_environment');
+
+    expect(entry).toBeTruthy();
+    expect(buildEnvironmentCardModel(entry!)).toEqual(expect.objectContaining({
+      kind_label: 'SSH Host',
+      status_label: 'RUNTIME NEEDS UPDATE',
+      status_tone: 'warning',
+      target_secondary: 'http://127.0.0.1:24111/',
+    }));
+    expect(buildEnvironmentCardFactsModel(entry!)).toEqual([
+      defaultFact('RUNS ON', 'ops@example.internal:2222'),
+      defaultFact('RUNTIME SERVICE', 'Needs update'),
+      defaultFact('VERSION', 'v0.5.9'),
+      defaultFact('ACTIVE WORK', '1 terminal, 1 session, 1 port forward'),
+      defaultFact('BOOTSTRAP', 'Desktop upload'),
+    ]);
+    expect(buildProviderBackedEnvironmentActionModel(entry!)).toEqual({
+      status_label: 'RUNTIME NEEDS UPDATE',
+      status_tone: 'warning',
+      action_presentation: {
+        kind: 'split_button',
+        primary_action: {
+          intent: 'open',
+          label: 'Open',
+          enabled: false,
+          variant: 'default',
+        },
+        primary_action_overlay: {
+          kind: 'popover',
+          tone: 'warning',
+          eyebrow: 'Runtime blocked',
+          title: 'Runtime update required',
+          detail: 'SSH is connected, but the running runtime on this host needs an update before it can open the Environment App. Open will stay locked until the runtime is updated and restarted when active work can be interrupted.',
+          actions: [
+            {
+              label: 'Restart after update…',
+              emphasis: 'primary',
+              action: {
+                intent: 'restart_runtime',
+                label: 'Restart after update…',
+                enabled: true,
+                variant: 'outline',
+              },
+            },
+            {
+              label: 'Refresh status',
+              emphasis: 'secondary',
+              action: {
+                intent: 'refresh_runtime',
+                label: 'Refresh runtime status',
+                enabled: true,
+                variant: 'outline',
+              },
+            },
+          ],
+        },
+        menu_button_label: 'Runtime actions',
+        menu_actions: [
+          {
+            id: 'stop_runtime',
+            label: 'Stop runtime',
+            action: {
+              intent: 'stop_runtime',
+              label: 'Stop runtime',
+              enabled: true,
+              variant: 'outline',
+            },
+          },
+          {
+            id: 'refresh_runtime',
+            label: 'Refresh runtime status',
+            action: {
+              intent: 'refresh_runtime',
+              label: 'Refresh runtime status',
+              enabled: true,
+              variant: 'outline',
+            },
+          },
+        ],
+      },
+    });
+  });
+
+  it('treats a missing Env App shell as an update-required SSH runtime block', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        saved_ssh_environments: [{
+          id: 'ssh_saved',
+          label: 'Dev SSH',
+          ssh_destination: 'dev@example.internal',
+          ssh_port: 22,
+          auth_mode: 'key_agent',
+          remote_install_dir: '/opt/redeven-desktop/runtime',
+          bootstrap_strategy: 'desktop_upload',
+          release_base_url: '',
+          environment_instance_id: 'envinst_demo001',
+          source: 'saved',
+          pinned: false,
+          last_used_at_ms: 30,
+        }],
+      }),
+      savedSSHRuntimeHealth: {
+        ssh_saved: {
+          status: 'online',
+          checked_at_unix_ms: Date.now(),
+          source: 'ssh_runtime_probe',
+          local_ui_url: 'http://127.0.0.1:24111/',
+          runtime_service: {
+            runtime_version: 'v0.0.0-dev',
+            protocol_version: 'redeven-runtime-v1',
+            service_owner: 'desktop',
+            desktop_managed: true,
+            effective_run_mode: 'desktop',
+            remote_enabled: false,
+            compatibility: 'compatible',
+            open_readiness: {
+              state: 'blocked',
+              reason_code: 'env_app_shell_unavailable',
+              message: 'The Environment App shell is not available in this runtime build. Install the update, then restart the runtime when it is safe to interrupt active work.',
+            },
+            active_workload: {
+              terminal_count: 0,
+              session_count: 0,
+              task_count: 0,
+              port_forward_count: 0,
+            },
+          },
+        },
+      },
+    });
+    const entry = snapshot.environments.find((environment) => environment.kind === 'ssh_environment');
+
+    expect(entry).toBeTruthy();
+    expect(buildEnvironmentCardModel(entry!)).toMatchObject({
+      status_label: 'RUNTIME NEEDS UPDATE',
+      status_tone: 'warning',
+    });
+    expect(buildEnvironmentCardFactsModel(entry!)).toContainEqual(defaultFact('RUNTIME SERVICE', 'Needs update'));
+    expect(buildProviderBackedEnvironmentActionModel(entry!).action_presentation.primary_action).toMatchObject({
+      intent: 'open',
+      enabled: false,
+    });
+    expect(buildProviderBackedEnvironmentActionModel(entry!).action_presentation.primary_action_overlay).toMatchObject({
+      kind: 'popover',
+      title: 'Runtime update required',
+    });
   });
 
   it('builds provider-card actions around runtime availability and external runtime control', () => {
@@ -628,7 +828,7 @@ describe('buildEnvironmentCardModel', () => {
     const openLocalServeProviderEntry = openLocalServeSnapshot.environments.find((environment) => environment.kind === 'provider_environment');
     expect(openLocalServeProviderEntry?.provider_local_runtime_state).toBe('running_desktop');
     expect(buildProviderBackedEnvironmentActionModel(openLocalServeProviderEntry!)).toEqual({
-      status_label: 'RUNTIME ONLINE',
+      status_label: 'RUNTIME READY',
       status_tone: 'success',
       action_presentation: {
         kind: 'split_button',
@@ -678,17 +878,21 @@ describe('buildEnvironmentCardModel', () => {
     });
     const readyEntry = readySnapshot.environments.find((environment) => environment.kind === 'provider_environment');
     expect(buildProviderBackedEnvironmentActionModel(readyEntry!)).toEqual({
-      status_label: 'RUNTIME ONLINE',
-      status_tone: 'success',
+      status_label: 'RUNTIME PREPARING',
+      status_tone: 'warning',
       action_presentation: {
         kind: 'split_button',
         primary_action: {
           intent: 'open',
-          label: 'Open',
-          enabled: true,
+          label: 'Preparing…',
+          enabled: false,
           variant: 'default',
         },
-        primary_action_overlay: undefined,
+        primary_action_overlay: {
+          kind: 'tooltip',
+          tone: 'warning',
+          message: 'Runtime readiness is not available yet.',
+        },
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
@@ -724,6 +928,21 @@ describe('buildEnvironmentCardModel', () => {
             currentRuntime: {
               local_ui_url: 'http://127.0.0.1:24001/',
               desktop_managed: false,
+              runtime_service: {
+                protocol_version: 'redeven-runtime-v1',
+                service_owner: 'external',
+                desktop_managed: false,
+                effective_run_mode: 'local',
+                remote_enabled: false,
+                compatibility: 'compatible',
+                open_readiness: { state: 'openable' },
+                active_workload: {
+                  terminal_count: 0,
+                  session_count: 0,
+                  task_count: 0,
+                  port_forward_count: 0,
+                },
+              },
             },
           }),
         ],
@@ -736,7 +955,7 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(attachableLocalServe).toBeTruthy();
     expect(buildProviderBackedEnvironmentActionModel(attachableLocalServe!)).toEqual({
-      status_label: 'RUNTIME ONLINE',
+      status_label: 'RUNTIME READY',
       status_tone: 'success',
       action_presentation: {
         kind: 'split_button',
@@ -790,7 +1009,7 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(focusableLocalServe).toBeTruthy();
     expect(buildProviderBackedEnvironmentActionModel(focusableLocalServe!)).toEqual({
-      status_label: 'RUNTIME ONLINE',
+      status_label: 'RUNTIME READY',
       status_tone: 'success',
       action_presentation: {
         kind: 'split_button',
@@ -859,7 +1078,7 @@ describe('buildEnvironmentCardModel', () => {
     }));
 
     expect(buildProviderBackedEnvironmentActionModel(entry!)).toEqual({
-      status_label: 'RUNTIME ONLINE',
+      status_label: 'RUNTIME READY',
       status_tone: 'success',
       action_presentation: {
         kind: 'split_button',
@@ -893,6 +1112,58 @@ describe('buildEnvironmentCardModel', () => {
             },
           },
         ],
+      },
+    });
+  });
+
+  it('keeps Open disabled while an online runtime is still preparing Env App readiness', () => {
+    const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_preparing', {
+      currentRuntime: {
+        local_ui_url: 'http://127.0.0.1:24001/',
+        desktop_managed: true,
+        runtime_service: {
+          protocol_version: 'redeven-runtime-v1',
+          service_owner: 'desktop',
+          desktop_managed: true,
+          effective_run_mode: 'desktop',
+          remote_enabled: false,
+          compatibility: 'compatible',
+          open_readiness: {
+            state: 'starting',
+            reason_code: 'env_app_gateway_starting',
+            message: 'Env App gateway is starting.',
+          },
+          active_workload: {
+            terminal_count: 0,
+            session_count: 0,
+            task_count: 0,
+            port_forward_count: 0,
+          },
+        },
+      },
+    });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [localServe],
+      }),
+    });
+    const entry = snapshot.environments.find((environment) => environment.id === localServe.id);
+
+    expect(entry).toBeTruthy();
+    expect(buildProviderBackedEnvironmentActionModel(entry!)).toMatchObject({
+      status_label: 'RUNTIME PREPARING',
+      status_tone: 'warning',
+      action_presentation: {
+        primary_action: {
+          intent: 'open',
+          label: 'Preparing…',
+          enabled: false,
+        },
+        primary_action_overlay: {
+          kind: 'tooltip',
+          tone: 'warning',
+          message: 'Env App gateway is starting.',
+        },
       },
     });
   });

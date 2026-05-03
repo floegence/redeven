@@ -133,6 +133,7 @@ import {
   type LocalRuntimeInfo,
 } from './services/controlplaneApi';
 import { desktopThemeBridge, toggleDesktopTheme } from './services/desktopTheme';
+import { notifyDesktopSessionAppReady } from './services/desktopSessionContext';
 import { portalOriginFromSandboxLocation } from './services/sandboxOrigins';
 import { readUIStorageItem, writeEnvironmentOwnedUIStorageItem, writeUIStorageItem } from './services/uiStorage';
 import {
@@ -1223,6 +1224,26 @@ export function EnvAppShell() {
     envId,
     currentPingSource,
     rpc,
+  });
+
+  let lastDesktopReadyState = '';
+  createEffect(() => {
+    const nextReadyState = accessGateVisible()
+      ? (
+          accessGatePhase() === 'unlock_required' || accessGatePhase() === 'resume_blocked'
+            ? 'access_gate_interactive'
+            : ''
+        )
+      : (
+          protocol.status() === 'connected'
+            ? 'runtime_connected'
+            : ''
+        );
+    if (!nextReadyState || nextReadyState === lastDesktopReadyState) {
+      return;
+    }
+    lastDesktopReadyState = nextReadyState;
+    notifyDesktopSessionAppReady(nextReadyState);
   });
 
   const startRuntimeRestart = async () => {

@@ -24,6 +24,24 @@ const (
 	CompatibilityUnknown               Compatibility = "unknown"
 )
 
+type OpenReadinessState string
+
+const (
+	OpenReadinessStarting OpenReadinessState = "starting"
+	OpenReadinessOpenable OpenReadinessState = "openable"
+	OpenReadinessBlocked  OpenReadinessState = "blocked"
+)
+
+const (
+	OpenReadinessReasonEnvAppShellUnavailable = "env_app_shell_unavailable"
+)
+
+type OpenReadiness struct {
+	State      OpenReadinessState `json:"state"`
+	ReasonCode string             `json:"reason_code,omitempty"`
+	Message    string             `json:"message,omitempty"`
+}
+
 type Workload struct {
 	TerminalCount    int `json:"terminal_count"`
 	SessionCount     int `json:"session_count"`
@@ -46,6 +64,7 @@ type Snapshot struct {
 	MinimumDesktopVersion string        `json:"minimum_desktop_version,omitempty"`
 	MinimumRuntimeVersion string        `json:"minimum_runtime_version,omitempty"`
 	CompatibilityReviewID string        `json:"compatibility_review_id,omitempty"`
+	OpenReadiness         OpenReadiness `json:"open_readiness"`
 	ActiveWorkload        Workload      `json:"active_workload"`
 }
 
@@ -69,6 +88,19 @@ func UnknownSnapshot() Snapshot {
 		ProtocolVersion: ProtocolVersion,
 		ServiceOwner:    OwnerUnknown,
 		Compatibility:   CompatibilityUnknown,
+		OpenReadiness: OpenReadiness{
+			State:      OpenReadinessStarting,
+			ReasonCode: "runtime_service_unknown",
+			Message:    "Runtime Service readiness is not available yet.",
+		},
+	}
+}
+
+func EnvAppShellUnavailableReadiness() OpenReadiness {
+	return OpenReadiness{
+		State:      OpenReadinessBlocked,
+		ReasonCode: OpenReadinessReasonEnvAppShellUnavailable,
+		Message:    "The Environment App shell is not available in this runtime build. Install the update, then restart the runtime when it is safe to interrupt active work.",
 	}
 }
 
@@ -110,11 +142,77 @@ func NormalizeSnapshot(snapshot Snapshot) Snapshot {
 	snapshot.MinimumDesktopVersion = strings.TrimSpace(snapshot.MinimumDesktopVersion)
 	snapshot.MinimumRuntimeVersion = strings.TrimSpace(snapshot.MinimumRuntimeVersion)
 	snapshot.CompatibilityReviewID = strings.TrimSpace(snapshot.CompatibilityReviewID)
+	snapshot.OpenReadiness = NormalizeOpenReadiness(snapshot.OpenReadiness, snapshot)
 	snapshot.ActiveWorkload.TerminalCount = normalizeCount(snapshot.ActiveWorkload.TerminalCount)
 	snapshot.ActiveWorkload.SessionCount = normalizeCount(snapshot.ActiveWorkload.SessionCount)
 	snapshot.ActiveWorkload.TaskCount = normalizeCount(snapshot.ActiveWorkload.TaskCount)
 	snapshot.ActiveWorkload.PortForwardCount = normalizeCount(snapshot.ActiveWorkload.PortForwardCount)
 	return snapshot
+}
+
+func NormalizeOpenReadiness(readiness OpenReadiness, snapshot Snapshot) OpenReadiness {
+	readiness.State = OpenReadinessState(strings.TrimSpace(string(readiness.State)))
+	readiness.ReasonCode = strings.TrimSpace(readiness.ReasonCode)
+	readiness.Message = strings.TrimSpace(readiness.Message)
+
+	switch readiness.State {
+	case OpenReadinessStarting, OpenReadinessOpenable, OpenReadinessBlocked:
+	default:
+		readiness = inferredOpenReadiness(snapshot)
+	}
+	if readiness.State == OpenReadinessOpenable {
+		readiness.ReasonCode = ""
+		readiness.Message = ""
+	}
+	if readiness.State == OpenReadinessStarting && readiness.ReasonCode == "" {
+		readiness.ReasonCode = "runtime_service_starting"
+	}
+	if readiness.State == OpenReadinessBlocked && readiness.ReasonCode == "" {
+		readiness.ReasonCode = "runtime_service_blocked"
+	}
+	return readiness
+}
+
+func inferredOpenReadiness(snapshot Snapshot) OpenReadiness {
+	if strings.TrimSpace(snapshot.ProtocolVersion) == "" {
+		return OpenReadiness{
+			State:      OpenReadinessStarting,
+			ReasonCode: "runtime_protocol_missing",
+			Message:    "Runtime Service protocol metadata is not available yet.",
+		}
+	}
+	switch snapshot.Compatibility {
+	case CompatibilityUpdateRequired:
+		return OpenReadiness{
+			State:      OpenReadinessBlocked,
+			ReasonCode: "runtime_update_required",
+			Message:    firstNonEmpty(snapshot.CompatibilityMessage, "Update the runtime before opening this environment."),
+		}
+	case CompatibilityDesktopUpdateRequired:
+		return OpenReadiness{
+			State:      OpenReadinessBlocked,
+			ReasonCode: "desktop_update_required",
+			Message:    firstNonEmpty(snapshot.CompatibilityMessage, "Update Desktop before opening this environment."),
+		}
+	case CompatibilityManagedElsewhere:
+		return OpenReadiness{
+			State:      OpenReadinessBlocked,
+			ReasonCode: "runtime_managed_elsewhere",
+			Message:    firstNonEmpty(snapshot.CompatibilityMessage, "This runtime is managed by another Desktop instance."),
+		}
+	default:
+		return OpenReadiness{State: OpenReadinessOpenable}
+	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func normalizeCount(value int) int {

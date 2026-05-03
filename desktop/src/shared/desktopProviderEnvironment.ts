@@ -102,11 +102,11 @@ function normalizeRuntimeState(
     password_required: value.password_required === true,
     diagnostics_enabled: value.diagnostics_enabled === true,
     pid: Number.isInteger(pid) && pid > 0 ? pid : 0,
-    ...(value.runtime_service ? { runtime_service: normalizeRuntimeServiceSnapshot(value.runtime_service, {
+    runtime_service: normalizeRuntimeServiceSnapshot(value.runtime_service ?? {}, {
       desktopManaged: value.desktop_managed === true,
       effectiveRunMode: value.effective_run_mode,
       remoteEnabled: value.remote_enabled === true,
-    }) } : {}),
+    }),
   };
 }
 

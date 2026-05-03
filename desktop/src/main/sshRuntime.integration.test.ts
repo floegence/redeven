@@ -24,6 +24,8 @@ import type { DesktopSSHBootstrapStrategy, DesktopSSHEnvironmentDetails } from '
 
 type FakeSSHScenario =
   | 'ready'
+  | 'forwarded_blocked_readiness'
+  | 'forwarded_invalid_env_shell'
   | 'remote_install'
   | 'desktop_upload'
   | 'no_report'
@@ -221,6 +223,43 @@ function startForward() {
   const parts = spec.split(':');
   const localPort = Number(parts[1]);
   const remotePort = Number(parts[3]);
+  const runtimeService = scenario === 'forwarded_blocked_readiness'
+    ? {
+        runtime_version: 'v0.5.9',
+        protocol_version: 'redeven-runtime-v1',
+        service_owner: 'desktop',
+        desktop_managed: true,
+        effective_run_mode: 'desktop',
+        remote_enabled: false,
+        compatibility: 'compatible',
+        open_readiness: {
+          state: 'blocked',
+          reason_code: 'runtime_open_readiness_unavailable',
+          message: 'This running runtime is older than this Desktop. Install the update, then restart the runtime when it is safe to interrupt active work.',
+        },
+        active_workload: {
+          terminal_count: 1,
+          session_count: 1,
+          task_count: 0,
+          port_forward_count: 1,
+        },
+      }
+    : {
+        runtime_version: 'v1.2.3',
+        protocol_version: 'redeven-runtime-v1',
+        service_owner: 'desktop',
+        desktop_managed: true,
+        effective_run_mode: 'desktop',
+        remote_enabled: false,
+        compatibility: 'compatible',
+        open_readiness: { state: 'openable' },
+        active_workload: {
+          terminal_count: 0,
+          session_count: 0,
+          task_count: 0,
+          port_forward_count: 0,
+        },
+      };
   const server = http.createServer((request, response) => {
     if (request.url === '/api/local/runtime/health') {
       response.writeHead(200, { 'content-type': 'application/json' });
@@ -229,8 +268,21 @@ function startForward() {
         data: {
           status: 'online',
           password_required: false,
+          runtime_service: runtimeService,
         },
       }));
+      return;
+    }
+    if (request.url === '/_redeven_proxy/env/') {
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end(scenario === 'forwarded_invalid_env_shell'
+        ? '<pre><a href="favicon.svg">favicon.svg</a><a href="logo.png">logo.png</a></pre>'
+        : '<!doctype html><html><body><div id="root"></div><script type="module" src="/_redeven_proxy/env/assets/index.js"></script></body></html>');
+      return;
+    }
+    if (request.url === '/_redeven_proxy/env/assets/index.js') {
+      response.writeHead(200, { 'content-type': 'application/javascript' });
+      response.end(request.method === 'HEAD' ? undefined : 'console.log("env");');
       return;
     }
     response.writeHead(404);
@@ -368,6 +420,8 @@ async function createFakeSSHFixture(scenario: FakeSSHScenario): Promise<FakeSSHF
   await fs.writeFile(sshBinary, FAKE_SSH_SCRIPT, { mode: 0o755 });
   await fs.writeFile(statePath, JSON.stringify({
     installed: scenario === 'ready'
+      || scenario === 'forwarded_blocked_readiness'
+      || scenario === 'forwarded_invalid_env_shell'
       || scenario === 'no_report'
       || scenario === 'quick_exit_report'
       || scenario === 'blocked_report',
@@ -443,12 +497,16 @@ async function startWithFakeSSH(
     startupTimeoutMs?: number;
     probeTimeoutMs?: number;
     target?: DesktopSSHEnvironmentDetails;
+    sourceRuntimeRoot?: string;
+    forceRuntimeUpdate?: boolean;
   }> = {},
 ): Promise<ManagedSSHRuntime> {
   return withFakeSSHEnv(fixture, () => startManagedSSHRuntime({
     target: options.target ?? targetFor(strategy),
     runtimeReleaseTag: 'v1.2.3',
     sshBinary: fixture.sshBinary,
+    sourceRuntimeRoot: options.sourceRuntimeRoot,
+    forceRuntimeUpdate: options.forceRuntimeUpdate,
     tempRoot: fixture.root,
     assetCacheRoot: path.join(fixture.root, 'asset-cache'),
     startupTimeoutMs: options.startupTimeoutMs ?? 2_500,
@@ -456,6 +514,35 @@ async function startWithFakeSSH(
     stopTimeoutMs: 500,
     connectTimeoutSeconds: 1,
   }));
+}
+
+async function createFakeSourceRuntimeRoot(root: string): Promise<Readonly<{
+  sourceRoot: string;
+  binDir: string;
+}>> {
+  const sourceRoot = path.join(root, 'source-runtime');
+  const binDir = path.join(root, 'fake-bin');
+  await fs.mkdir(path.join(sourceRoot, 'cmd', 'redeven'), { recursive: true });
+  await fs.mkdir(path.join(sourceRoot, 'scripts'), { recursive: true });
+  await fs.mkdir(binDir, { recursive: true });
+  await fs.writeFile(path.join(sourceRoot, 'scripts', 'build_assets.sh'), `#!/bin/sh
+set -eu
+printf 'ready\\n' > .assets-built
+`, { mode: 0o755 });
+  const fakeGo = path.join(binDir, 'go');
+  await fs.writeFile(fakeGo, `#!/usr/bin/env node
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+const outputIndex = args.indexOf('-o');
+if (args[0] !== 'build' || outputIndex < 0 || !args[outputIndex + 1]) {
+  process.exit(2);
+}
+if (!fs.existsSync('.assets-built')) {
+  process.exit(3);
+}
+fs.writeFileSync(args[outputIndex + 1], '#!/bin/sh\\necho fake redeven\\n');
+`, { mode: 0o755 });
+  return { sourceRoot, binDir };
 }
 
 async function removeFakeSSHFixture(fixture: FakeSSHFixture): Promise<void> {
@@ -484,11 +571,16 @@ describe('sshRuntime integration', () => {
       }));
 
       const response = await fetch(new URL('/api/local/runtime/health', runtime.local_forward_url));
-      await expect(response.json()).resolves.toEqual({
+      await expect(response.json()).resolves.toMatchObject({
         success: true,
         data: {
           status: 'online',
           password_required: false,
+          runtime_service: {
+            open_readiness: {
+              state: 'openable',
+            },
+          },
         },
       });
     } finally {
@@ -548,6 +640,77 @@ describe('sshRuntime integration', () => {
     await removeFakeSSHFixture(fixture);
   });
 
+  it('keeps the SSH tunnel attached when the forwarded Local UI reports blocked open-readiness', async () => {
+    const fixture = await createFakeSSHFixture('forwarded_blocked_readiness');
+    let runtime: ManagedSSHRuntime | null = null;
+    try {
+      runtime = await startWithFakeSSH(fixture, 'auto');
+      expect(runtime.startup.local_ui_url).toBe(runtime.local_forward_url);
+      expect(runtime.runtime_handle.launch_mode).toBe('spawned');
+      expect(runtime.startup.runtime_service).toMatchObject({
+        runtime_version: 'v0.5.9',
+        open_readiness: {
+          state: 'blocked',
+          reason_code: 'runtime_open_readiness_unavailable',
+        },
+        active_workload: {
+          terminal_count: 1,
+          session_count: 1,
+          port_forward_count: 1,
+        },
+      });
+    } finally {
+      await runtime?.disconnect();
+    }
+
+    const events = await readFakeSSHEvents(fixture);
+    const eventNames = events.map((event) => event.event);
+    expect(eventNames).toEqual(expect.arrayContaining([
+      'master_start',
+      'start_runtime',
+      'read_report',
+      'forward_start',
+      'forward_terminated',
+      'control_terminated',
+      'master_terminated',
+    ]));
+    expect(eventNames).not.toContain('stop_runtime');
+    await removeFakeSSHFixture(fixture);
+  });
+
+  it('keeps the SSH tunnel attached but blocks Open when the forwarded Env App shell is invalid', async () => {
+    const fixture = await createFakeSSHFixture('forwarded_invalid_env_shell');
+    let runtime: ManagedSSHRuntime | null = null;
+    try {
+      runtime = await startWithFakeSSH(fixture, 'auto');
+      expect(runtime.startup.local_ui_url).toBe(runtime.local_forward_url);
+      expect(runtime.runtime_handle.launch_mode).toBe('spawned');
+      expect(runtime.startup.runtime_service).toMatchObject({
+        runtime_version: 'v1.2.3',
+        open_readiness: {
+          state: 'blocked',
+          reason_code: 'env_app_shell_unavailable',
+        },
+      });
+    } finally {
+      await runtime?.disconnect();
+    }
+
+    const events = await readFakeSSHEvents(fixture);
+    const eventNames = events.map((event) => event.event);
+    expect(eventNames).toEqual(expect.arrayContaining([
+      'master_start',
+      'start_runtime',
+      'read_report',
+      'forward_start',
+      'forward_terminated',
+      'control_terminated',
+      'master_terminated',
+    ]));
+    expect(eventNames).not.toContain('stop_runtime');
+    await removeFakeSSHFixture(fixture);
+  });
+
   it('uses a readiness report even when the remote start command exits quickly', async () => {
     const fixture = await createFakeSSHFixture('quick_exit_report');
     let runtime: ManagedSSHRuntime | null = null;
@@ -580,10 +743,10 @@ describe('sshRuntime integration', () => {
     const events = await readFakeSSHEvents(fixture);
     const eventNames = events.map((event) => event.event);
     expect(eventNames).toEqual(expect.arrayContaining([
-      'start_runtime',
       'read_report',
     ]));
     expect(eventNames).not.toContain('forward_start');
+    expect(eventNames).not.toContain('stop_runtime');
     await removeFakeSSHFixture(fixture);
   });
 
@@ -606,6 +769,29 @@ describe('sshRuntime integration', () => {
     ]));
     expect(eventNames.filter((event) => event === 'probe_runtime')).toHaveLength(2);
     expect(String(events.find((event) => event.event === 'remote_install')?.data?.install_script_url ?? '')).toMatch(/\/install\.sh$/u);
+    await removeFakeSSHFixture(fixture);
+  });
+
+  it('reinstalls a release runtime when the user explicitly requests an update before restart', async () => {
+    const fixture = await createFakeSSHFixture('ready');
+    let runtime: ManagedSSHRuntime | null = null;
+    try {
+      runtime = await startWithFakeSSH(fixture, 'remote_install', {
+        forceRuntimeUpdate: true,
+      });
+    } finally {
+      await runtime?.stop();
+    }
+
+    const events = await readFakeSSHEvents(fixture);
+    const eventNames = events.map((event) => event.event);
+    expect(eventNames).toEqual(expect.arrayContaining([
+      'probe_runtime',
+      'remote_install',
+      'start_runtime',
+      'forward_start',
+    ]));
+    expect(eventNames.filter((event) => event === 'remote_install')).toHaveLength(1);
     await removeFakeSSHFixture(fixture);
   });
 
@@ -676,6 +862,75 @@ describe('sshRuntime integration', () => {
       'forward_start',
     ]));
     expect(events.find((event) => event.event === 'upload_archive')?.data?.bytes).toBe(Buffer.byteLength('fake archive'));
+    await removeFakeSSHFixture(fixture);
+  });
+
+  it('builds and uploads the current checkout runtime for source-dev SSH bootstrap', async () => {
+    const fixture = await createFakeSSHFixture('desktop_upload');
+    const source = await createFakeSourceRuntimeRoot(fixture.root);
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${source.binDir}${path.delimiter}${previousPath ?? ''}`;
+
+    let runtime: ManagedSSHRuntime | null = null;
+    try {
+      runtime = await startWithFakeSSH(fixture, 'desktop_upload', {
+        sourceRuntimeRoot: source.sourceRoot,
+      });
+    } finally {
+      if (previousPath === undefined) {
+        delete process.env.PATH;
+      } else {
+        process.env.PATH = previousPath;
+      }
+      await runtime?.stop();
+    }
+
+    const events = await readFakeSSHEvents(fixture);
+    expect(sshReleaseAssetMocks.ensureDesktopSSHReleaseAsset).not.toHaveBeenCalled();
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        event: 'upload_archive',
+        data: expect.objectContaining({
+          bytes: expect.any(Number),
+        }),
+      }),
+      expect.objectContaining({ event: 'upload_install' }),
+      expect.objectContaining({ event: 'start_runtime' }),
+    ]));
+    expect(Number(events.find((event) => event.event === 'upload_archive')?.data?.bytes ?? 0)).toBeGreaterThan(0);
+    await removeFakeSSHFixture(fixture);
+  });
+
+  it('rebuilds and uploads source-dev runtime even when the remote tag already looks installed', async () => {
+    const fixture = await createFakeSSHFixture('ready');
+    const source = await createFakeSourceRuntimeRoot(fixture.root);
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${source.binDir}${path.delimiter}${previousPath ?? ''}`;
+
+    let runtime: ManagedSSHRuntime | null = null;
+    try {
+      runtime = await startWithFakeSSH(fixture, 'auto', {
+        sourceRuntimeRoot: source.sourceRoot,
+      });
+    } finally {
+      if (previousPath === undefined) {
+        delete process.env.PATH;
+      } else {
+        process.env.PATH = previousPath;
+      }
+      await runtime?.stop();
+    }
+
+    const events = await readFakeSSHEvents(fixture);
+    const eventNames = events.map((event) => event.event);
+    expect(eventNames).toEqual(expect.arrayContaining([
+      'probe_runtime',
+      'probe_platform',
+      'upload_archive',
+      'upload_install',
+      'start_runtime',
+    ]));
+    expect(sshReleaseAssetMocks.ensureDesktopSSHReleaseAsset).not.toHaveBeenCalled();
     await removeFakeSSHFixture(fixture);
   });
 

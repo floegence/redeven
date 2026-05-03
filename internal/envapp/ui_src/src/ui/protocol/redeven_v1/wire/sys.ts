@@ -30,6 +30,11 @@ export type wire_sys_ping_resp = {
     minimum_desktop_version?: string;
     minimum_runtime_version?: string;
     compatibility_review_id?: string;
+    open_readiness?: {
+      state?: string;
+      reason_code?: string;
+      message?: string;
+    };
     active_workload?: {
       terminal_count?: number;
       session_count?: number;

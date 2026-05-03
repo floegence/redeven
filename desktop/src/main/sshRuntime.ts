@@ -6,6 +6,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import type { Readable, Writable } from 'node:stream';
+import { gzipSync } from 'node:zlib';
 
 import {
   DEFAULT_DESKTOP_SSH_RELEASE_FETCH_TIMEOUT_MS,
@@ -25,6 +26,7 @@ import {
   type DesktopSSHBootstrapStrategy,
   type DesktopSSHEnvironmentDetails,
 } from '../shared/desktopSSH';
+import { runtimeServiceIsOpenable } from '../shared/runtimeService';
 
 const PUBLIC_INSTALL_SCRIPT_URL = 'https://redeven.com/install.sh';
 const DEFAULT_SSH_STARTUP_TIMEOUT_MS = 45_000;
@@ -109,6 +111,11 @@ type SSHCommandResult = Readonly<{
   stderr: string;
 }>;
 
+type LocalCommandResult = Readonly<{
+  stdout: string;
+  stderr: string;
+}>;
+
 class DesktopSSHUploadAssetPreparationError extends Error {
   constructor(message: string) {
     super(message);
@@ -134,8 +141,10 @@ export type StartManagedSSHRuntimeArgs = Readonly<{
   runtimeReleaseTag: string;
   sshBinary?: string;
   installScriptURL?: string;
+  sourceRuntimeRoot?: string;
   tempRoot?: string;
   assetCacheRoot?: string;
+  forceRuntimeUpdate?: boolean;
   startupTimeoutMs?: number;
   stopTimeoutMs?: number;
   connectTimeoutSeconds?: number;
@@ -478,6 +487,7 @@ export function buildManagedSSHRemoteInstallScript(): string {
     buildRemoteInstallRootShell(),
     buildManagedSSHRuntimePathShell(),
     'install_script_url="$3"',
+    'force_install="${4:-0}"',
     buildManagedSSHRuntimeProbeShell(),
     buildManagedSSHRuntimeStampShell(),
     'install_runtime() {',
@@ -490,7 +500,7 @@ export function buildManagedSSHRemoteInstallScript(): string {
     '  fi',
     '  rm -f "$script_path"',
     '}',
-    'if ! runtime_is_compatible; then',
+    'if [ "$force_install" = "1" ] || ! runtime_is_compatible; then',
     '  install_runtime',
     '  write_runtime_stamp "remote_install"',
     'fi',
@@ -705,15 +715,22 @@ function localForwardURL(port: number): string {
   return `http://127.0.0.1:${port}/`;
 }
 
-async function waitForForwardedLocalUI(url: string, timeoutMs: number): Promise<StartupReport | null> {
+async function waitForForwardedLocalUIOpenable(url: string, timeoutMs: number): Promise<StartupReport | null> {
   const deadline = Date.now() + timeoutMs;
+  let latestStartup: StartupReport | null = null;
   for (;;) {
     const startup = await loadExternalLocalUIStartup(url, Math.min(timeoutMs, DEFAULT_SSH_POLL_INTERVAL_MS));
     if (startup) {
-      return startup;
+      latestStartup = startup;
+      if (runtimeServiceIsOpenable(startup.runtime_service)) {
+        return startup;
+      }
+      if (startup.runtime_service?.open_readiness?.state === 'blocked') {
+        return startup;
+      }
     }
     if (Date.now() >= deadline) {
-      return null;
+      return latestStartup;
     }
     await delay(DEFAULT_SSH_POLL_INTERVAL_MS);
   }
@@ -839,6 +856,47 @@ async function runSSHOnce(
         stdout,
         stderr,
       });
+    });
+  });
+}
+
+async function runLocalCommand(
+  command: string,
+  args: readonly string[],
+  options: Readonly<{
+    cwd: string;
+    env?: NodeJS.ProcessEnv;
+  }>,
+): Promise<LocalCommandResult> {
+  return new Promise<LocalCommandResult>((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: options.cwd,
+      env: {
+        ...process.env,
+        ...options.env,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout?.setEncoding('utf8');
+    child.stdout?.on('data', (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr?.setEncoding('utf8');
+    child.stderr?.on('data', (chunk: string) => {
+      stderr += chunk;
+    });
+    child.once('error', reject);
+    child.once('close', (exitCode, signal) => {
+      if (exitCode === 0 && !signal) {
+        resolve({ stdout, stderr });
+        return;
+      }
+      const reason = signal ? `signal ${signal}` : `exit code ${exitCode ?? 'unknown'}`;
+      const details = [stdout.trim(), stderr.trim()].filter(Boolean).join('\n');
+      reject(new Error(details ? `${command} failed with ${reason}:\n${details}` : `${command} failed with ${reason}`));
     });
   });
 }
@@ -1112,6 +1170,7 @@ async function installRemoteRuntimeViaRemoteInstall(args: Readonly<{
   auth: SSHCommandAuthContext;
   runtimeReleaseTag: string;
   installScriptURL: string;
+  forceRuntimeUpdate?: boolean;
   logs: MutableRecentLogs;
   onLog: StartManagedSSHRuntimeArgs['onLog'];
   onProgress: StartManagedSSHRuntimeArgs['onProgress'];
@@ -1131,6 +1190,7 @@ async function installRemoteRuntimeViaRemoteInstall(args: Readonly<{
         args.target.remote_install_dir,
         args.runtimeReleaseTag,
         args.installScriptURL,
+        args.forceRuntimeUpdate === true ? '1' : '0',
       ]),
     ],
     args.auth,
@@ -1143,10 +1203,126 @@ async function installRemoteRuntimeViaRemoteInstall(args: Readonly<{
   }
 }
 
+function writeTarOctal(header: Buffer, value: number, offset: number, length: number): void {
+  const text = Math.max(0, Math.floor(value)).toString(8).padStart(length - 1, '0').slice(-(length - 1));
+  header.write(text, offset, length - 1, 'ascii');
+  header[offset + length - 1] = 0;
+}
+
+function createSingleFileTarGzip(fileName: string, data: Buffer, mode: number): Buffer {
+  const header = Buffer.alloc(512, 0);
+  header.write(fileName, 0, Math.min(Buffer.byteLength(fileName), 100), 'ascii');
+  writeTarOctal(header, mode, 100, 8);
+  writeTarOctal(header, 0, 108, 8);
+  writeTarOctal(header, 0, 116, 8);
+  writeTarOctal(header, data.length, 124, 12);
+  writeTarOctal(header, Math.floor(Date.now() / 1_000), 136, 12);
+  header.fill(0x20, 148, 156);
+  header.write('0', 156, 1, 'ascii');
+  header.write('ustar', 257, 5, 'ascii');
+  header[262] = 0;
+  header.write('00', 263, 2, 'ascii');
+
+  let checksum = 0;
+  for (const byte of header) {
+    checksum += byte;
+  }
+  const checksumText = checksum.toString(8).padStart(6, '0').slice(-6);
+  header.write(checksumText, 148, 6, 'ascii');
+  header[154] = 0;
+  header[155] = 0x20;
+
+  const paddingLength = (512 - (data.length % 512)) % 512;
+  return gzipSync(Buffer.concat([
+    header,
+    data,
+    Buffer.alloc(paddingLength, 0),
+    Buffer.alloc(1024, 0),
+  ]));
+}
+
+async function readSourceRuntimeCommit(sourceRoot: string): Promise<string> {
+  const envCommit = compact(process.env.REDEVEN_DESKTOP_BUNDLE_COMMIT);
+  if (envCommit !== '') {
+    return envCommit;
+  }
+  try {
+    const result = await runLocalCommand('git', ['rev-parse', '--short=12', 'HEAD'], { cwd: sourceRoot });
+    return compact(result.stdout) || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+async function buildSourceRuntimeAssets(sourceRoot: string): Promise<void> {
+  const scriptPath = path.join(sourceRoot, 'scripts', 'build_assets.sh');
+  const scriptStat = await fs.stat(scriptPath).catch(() => null);
+  if (!scriptStat?.isFile()) {
+    throw new Error(`Redeven asset build script is missing: ${scriptPath}`);
+  }
+  await runLocalCommand(scriptPath, [], { cwd: sourceRoot });
+}
+
+async function prepareSourceRuntimeUploadAsset(args: Readonly<{
+  sourceRuntimeRoot: string;
+  runtimeReleaseTag: string;
+  assetCacheRoot: string;
+  platform: DesktopSSHRemotePlatform;
+}>): Promise<PreparedDesktopSSHUploadAsset | null> {
+  const sourceRoot = compact(args.sourceRuntimeRoot);
+  if (sourceRoot === '') {
+    return null;
+  }
+  const commandRoot = path.join(sourceRoot, 'cmd', 'redeven');
+  const commandRootStat = await fs.stat(commandRoot).catch(() => null);
+  if (!commandRootStat?.isDirectory()) {
+    throw new DesktopSSHUploadAssetPreparationError(
+      `Desktop SSH source runtime root is not a Redeven checkout: ${sourceRoot}`,
+    );
+  }
+
+  await fs.mkdir(args.assetCacheRoot, { recursive: true });
+  const buildRoot = await fs.mkdtemp(path.join(args.assetCacheRoot, 'source-runtime-'));
+  try {
+    const binaryPath = path.join(buildRoot, 'redeven');
+    const buildTime = compact(process.env.REDEVEN_DESKTOP_BUNDLE_BUILD_TIME)
+      || new Date().toISOString().replace(/\.\d{3}Z$/u, 'Z');
+    const commit = await readSourceRuntimeCommit(sourceRoot);
+    await buildSourceRuntimeAssets(sourceRoot);
+    await runLocalCommand('go', [
+      'build',
+      '-trimpath',
+      '-ldflags',
+      `-s -w -X main.Version=${args.runtimeReleaseTag} -X main.Commit=${commit} -X main.BuildTime=${buildTime}`,
+      '-o',
+      binaryPath,
+      './cmd/redeven',
+    ], {
+      cwd: sourceRoot,
+      env: {
+        GOOS: args.platform.goos,
+        GOARCH: args.platform.goarch,
+        CGO_ENABLED: '0',
+      },
+    });
+
+    return {
+      archiveData: createSingleFileTarGzip('redeven', await fs.readFile(binaryPath), 0o755),
+    };
+  } catch (error) {
+    throw new DesktopSSHUploadAssetPreparationError(
+      `Desktop could not build a ${args.platform.platform_label} Redeven runtime from the current checkout: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  } finally {
+    await fs.rm(buildRoot, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
 async function prepareDesktopSSHUploadAsset(args: Readonly<{
   target: DesktopSSHEnvironmentDetails;
   runtimeReleaseTag: string;
   assetCacheRoot: string;
+  sourceRuntimeRoot?: string;
   platform: DesktopSSHRemotePlatform;
   fetchPolicy: DesktopSSHReleaseFetchPolicy;
   onProgress: StartManagedSSHRuntimeArgs['onProgress'];
@@ -1158,6 +1334,15 @@ async function prepareDesktopSSHUploadAsset(args: Readonly<{
       'Preparing local runtime package',
       `Desktop is locating the ${args.platform.platform_label} Redeven ${args.runtimeReleaseTag} archive for upload.`,
     );
+    const sourceAsset = await prepareSourceRuntimeUploadAsset({
+      sourceRuntimeRoot: args.sourceRuntimeRoot ?? '',
+      runtimeReleaseTag: args.runtimeReleaseTag,
+      assetCacheRoot: args.assetCacheRoot,
+      platform: args.platform,
+    });
+    if (sourceAsset) {
+      return sourceAsset;
+    }
     const asset = await ensureDesktopSSHReleaseAsset({
       releaseTag: args.runtimeReleaseTag,
       releaseBaseURL: args.target.release_base_url,
@@ -1266,18 +1451,24 @@ async function ensureRemoteRuntimeInstalled(args: Readonly<{
   runtimeReleaseTag: string;
   installScriptURL: string;
   assetCacheRoot: string;
+  sourceRuntimeRoot?: string;
+  forceRuntimeUpdate?: boolean;
   fetchPolicy: DesktopSSHReleaseFetchPolicy;
   logs: MutableRecentLogs;
   onLog: StartManagedSSHRuntimeArgs['onLog'];
   onProgress: StartManagedSSHRuntimeArgs['onProgress'];
 }>): Promise<void> {
   const initialProbe = await probeRemoteRuntimeCompatibility(args);
-  if (initialProbe.status === 'ready') {
+  const sourceRuntimeRoot = compact(args.sourceRuntimeRoot);
+  const shouldForceInstall = args.forceRuntimeUpdate === true || sourceRuntimeRoot !== '';
+  if (initialProbe.status === 'ready' && !shouldForceInstall) {
     return;
   }
 
   const failures: string[] = [
-    `existing runtime: ${describeManagedSSHRuntimeProbeResult(initialProbe)}`,
+    shouldForceInstall
+      ? `existing runtime will be replaced: ${describeManagedSSHRuntimeProbeResult(initialProbe)}`
+      : `existing runtime: ${describeManagedSSHRuntimeProbeResult(initialProbe)}`,
   ];
   for (const strategy of installStrategyOrder(args.target.bootstrap_strategy)) {
     try {
@@ -1289,6 +1480,7 @@ async function ensureRemoteRuntimeInstalled(args: Readonly<{
             target: args.target,
             runtimeReleaseTag: args.runtimeReleaseTag,
             assetCacheRoot: args.assetCacheRoot,
+            sourceRuntimeRoot: args.sourceRuntimeRoot,
             platform,
             fetchPolicy: args.fetchPolicy,
             onProgress: args.onProgress,
@@ -1537,6 +1729,8 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       runtimeReleaseTag,
       installScriptURL,
       assetCacheRoot,
+      sourceRuntimeRoot: args.sourceRuntimeRoot,
+      forceRuntimeUpdate: args.forceRuntimeUpdate,
       fetchPolicy: releaseFetchPolicy,
       logs,
       onLog: args.onLog,
@@ -1617,19 +1811,19 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       'Verifying forwarded Local UI',
       `Checking ${forwardedURL} before opening the environment window.`,
     );
-    const forwardedStartup = await waitForForwardedLocalUI(
+    const forwardedStartup = await waitForForwardedLocalUIOpenable(
       forwardedURL,
       args.probeTimeoutMs ?? startupTimeoutMs,
     );
     if (!forwardedStartup) {
       throw readinessFailure('Desktop created the SSH port forward but could not reach the forwarded Redeven Local UI.', logs);
     }
-
     const startup: StartupReport = {
       ...remoteStartup,
       local_ui_url: forwardedStartup.local_ui_url,
       local_ui_urls: forwardedStartup.local_ui_urls,
       password_required: forwardedStartup.password_required,
+      runtime_service: forwardedStartup.runtime_service ?? remoteStartup.runtime_service,
     };
     return {
       startup,

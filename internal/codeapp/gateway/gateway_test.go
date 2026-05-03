@@ -7,6 +7,7 @@ import (
 	"encoding/base32"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -585,6 +586,88 @@ func TestGateway_DistRoutes_AreIsolated(t *testing.T) {
 		if rr.Code != http.StatusNotFound {
 			t.Fatalf("other.txt status = %d, want %d", rr.Code, http.StatusNotFound)
 		}
+	}
+}
+
+func TestGateway_DistRoutes_DoNotExposeEnvAppDirectoryListings(t *testing.T) {
+	t.Parallel()
+
+	dist := fstest.MapFS{
+		"env/index.html":       {Data: []byte("<html>env</html>")},
+		"env/favicon.svg":      {Data: []byte("<svg>icon</svg>")},
+		"env/assets/index.js":  {Data: []byte("console.log('env');")},
+		"env/assets/index.css": {Data: []byte("body{}")},
+	}
+	gw, err := New(Options{
+		Backend:            &stubBackend{},
+		DistFS:             dist,
+		ListenAddr:         "127.0.0.1:0",
+		ConfigPath:         writeTestConfig(t),
+		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	request := func(target string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, target, nil)
+		req.Header.Set("Origin", "https://env-123.example.com")
+		req.Header.Set("Accept", "text/html")
+		rr := httptest.NewRecorder()
+		gw.serveHTTP(rr, req)
+		return rr
+	}
+
+	if rr := request("/_redeven_proxy/env/assets/"); rr.Code != http.StatusNotFound {
+		t.Fatalf("assets directory status = %d, want %d; body=%q", rr.Code, http.StatusNotFound, rr.Body.String())
+	}
+	if rr := request("/_redeven_proxy/env/assets"); rr.Code != http.StatusNotFound {
+		t.Fatalf("assets directory without slash status = %d, want %d; body=%q", rr.Code, http.StatusNotFound, rr.Body.String())
+	}
+	if rr := request("/_redeven_proxy/env/missing.js"); rr.Code != http.StatusNotFound {
+		t.Fatalf("missing asset status = %d, want %d; body=%q", rr.Code, http.StatusNotFound, rr.Body.String())
+	}
+	if rr := request("/_redeven_proxy/env/workbench"); rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), "env") {
+		t.Fatalf("SPA fallback status/body = %d/%q, want index.html", rr.Code, rr.Body.String())
+	}
+}
+
+func TestGateway_EnvAppShellReadiness(t *testing.T) {
+	t.Parallel()
+
+	newGateway := func(t *testing.T, dist fs.FS) *Gateway {
+		t.Helper()
+		gw, err := New(Options{
+			Backend:            &stubBackend{},
+			DistFS:             dist,
+			ListenAddr:         "127.0.0.1:0",
+			ConfigPath:         writeTestConfig(t),
+			ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
+		})
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		return gw
+	}
+
+	validShell := []byte(`<!doctype html><html><body><div id="root"></div><script type="module" src="/_redeven_proxy/env/assets/index.js"></script></body></html>`)
+	if gw := newGateway(t, fstest.MapFS{
+		"env/index.html":      {Data: validShell},
+		"env/assets/index.js": {Data: []byte("console.log('env');")},
+	}); !gw.EnvAppShellReady() {
+		t.Fatalf("EnvAppShellReady() = false, want true: %v", gw.EnvAppShellReadinessError())
+	}
+
+	if gw := newGateway(t, fstest.MapFS{
+		"env/favicon.svg": {Data: []byte("<svg></svg>")},
+		"env/logo.png":    {Data: []byte("png")},
+	}); gw.EnvAppShellReady() {
+		t.Fatalf("EnvAppShellReady() = true, want false for missing shell")
+	}
+
+	if gw := newGateway(t, fstest.MapFS{
+		"env/index.html": {Data: validShell},
+	}); gw.EnvAppShellReady() {
+		t.Fatalf("EnvAppShellReady() = true, want false for missing asset")
 	}
 }
 

@@ -162,6 +162,13 @@ ipcMain.on('redeven-desktop:window-chrome-get-snapshot', (event) => {
   };
 });
 
+ipcMain.on('redeven-desktop:session-context-get', (event) => {
+  event.returnValue = {
+    managed_environment_id: 'env_demo',
+    environment_storage_scope_id: 'env_demo',
+  };
+});
+
 function snapshotBridgeState() {
   return JSON.stringify({
     hasDesktopLauncherBridge: typeof window.redevenDesktopLauncher === 'object'
@@ -171,7 +178,8 @@ function snapshotBridgeState() {
       && typeof window.redevenDesktopSettings?.save === 'function'
       && typeof window.redevenDesktopSettings?.cancel === 'function',
     hasDesktopSessionContextBridge: typeof window.redevenDesktopSessionContext === 'object'
-      && typeof window.redevenDesktopSessionContext?.getSnapshot === 'function',
+      && typeof window.redevenDesktopSessionContext?.getSnapshot === 'function'
+      && typeof window.redevenDesktopSessionContext?.notifyAppReady === 'function',
     hasDesktopEmbeddedDragBridge: typeof window.redevenDesktopEmbeddedDragRegions === 'object'
       && typeof window.redevenDesktopEmbeddedDragRegions?.setSnapshot === 'function'
       && typeof window.redevenDesktopEmbeddedDragRegions?.clear === 'function',

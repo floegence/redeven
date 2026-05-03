@@ -236,6 +236,14 @@ export function testManagedSession(
   }> = {},
 ): DesktopSessionSummary {
   const target = buildManagedEnvironmentDesktopTarget(environment);
+  const desktopManaged = startupOverrides.desktop_managed !== false;
+  const effectiveRunMode = String(startupOverrides.effective_run_mode ?? 'desktop');
+  const remoteEnabled = startupOverrides.remote_enabled === true;
+  const serviceOwner = options.runtimeLifecycleOwner === 'external'
+    ? 'external'
+    : desktopManaged
+      ? 'desktop'
+      : 'unknown';
   return {
     session_key: target.session_key,
     target,
@@ -244,6 +252,21 @@ export function testManagedSession(
     startup: {
       local_ui_url: localUIURL,
       local_ui_urls: [localUIURL],
+      runtime_service: {
+        protocol_version: 'redeven-runtime-v1',
+        service_owner: serviceOwner,
+        desktop_managed: desktopManaged,
+        effective_run_mode: effectiveRunMode,
+        remote_enabled: remoteEnabled,
+        compatibility: 'compatible',
+        open_readiness: { state: 'openable' },
+        active_workload: {
+          terminal_count: 0,
+          session_count: 0,
+          task_count: 0,
+          port_forward_count: 0,
+        },
+      },
       ...startupOverrides,
     },
     runtime_lifecycle_owner: options.runtimeLifecycleOwner,

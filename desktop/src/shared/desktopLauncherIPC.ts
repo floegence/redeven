@@ -58,6 +58,7 @@ export type DesktopLauncherActionFailureCode =
   | 'environment_offline'
   | 'environment_status_stale'
   | 'runtime_not_started'
+  | 'runtime_not_ready'
   | 'control_plane_missing'
   | 'control_plane_environment_missing'
   | 'provider_environment_removed'
@@ -122,6 +123,7 @@ export type DesktopLauncherRuntimeTarget = Readonly<
     env_public_id: string;
     external_local_ui_url: string;
     label: string;
+    force_runtime_update: boolean;
   }>
   & Partial<DesktopSSHEnvironmentDetails>
 >;
@@ -427,6 +429,7 @@ function normalizeDesktopLauncherRuntimeTarget(
     ...(bootstrapStrategy !== '' ? { bootstrap_strategy: bootstrapStrategy as DesktopSSHEnvironmentDetails['bootstrap_strategy'] } : {}),
     ...(releaseBaseURL !== '' ? { release_base_url: releaseBaseURL } : {}),
     ...(environmentInstanceID !== '' ? { environment_instance_id: environmentInstanceID } : {}),
+    ...(candidate.force_runtime_update === true ? { force_runtime_update: true } : {}),
   };
 
   if (

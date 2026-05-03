@@ -7,6 +7,7 @@ export interface DesktopSessionContextSnapshot {
 
 export interface DesktopSessionContextBridge {
   getSnapshot: () => DesktopSessionContextSnapshot | null;
+  notifyAppReady?: (payload: { state: 'access_gate_interactive' | 'runtime_connected' }) => void;
 }
 
 declare global {
@@ -61,4 +62,17 @@ export function desktopManagedEnvironmentStorageScopeID(): string {
 
 export function resolveEnvironmentStorageScopeID(fallback: string): string {
   return desktopManagedEnvironmentStorageScopeID() || compact(fallback);
+}
+
+export function notifyDesktopSessionAppReady(state: 'access_gate_interactive' | 'runtime_connected'): boolean {
+  const bridge = readDesktopHostBridge('redevenDesktopSessionContext', isDesktopSessionContextBridge);
+  if (!bridge || typeof bridge.notifyAppReady !== 'function') {
+    return false;
+  }
+  try {
+    bridge.notifyAppReady({ state });
+    return true;
+  } catch {
+    return false;
+  }
 }

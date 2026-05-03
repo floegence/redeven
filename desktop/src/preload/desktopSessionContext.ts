@@ -3,12 +3,15 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 import {
+  DESKTOP_SESSION_APP_READY_CHANNEL,
   DESKTOP_SESSION_CONTEXT_GET_CHANNEL,
+  type DesktopSessionAppReadyPayload,
   type DesktopSessionContextSnapshot,
 } from '../shared/desktopSessionContextIPC';
 
 export interface DesktopSessionContextBridge {
   getSnapshot: () => DesktopSessionContextSnapshot | null;
+  notifyAppReady: (payload: DesktopSessionAppReadyPayload) => void;
 }
 
 declare global {
@@ -34,6 +37,13 @@ export function bootstrapDesktopSessionContextBridge(): void {
         managed_environment_id: managedEnvironmentID,
         environment_storage_scope_id: environmentStorageScopeID,
       };
+    },
+    notifyAppReady: (payload) => {
+      const state = String(payload?.state ?? '').trim();
+      if (state !== 'access_gate_interactive' && state !== 'runtime_connected') {
+        return;
+      }
+      ipcRenderer.send(DESKTOP_SESSION_APP_READY_CHANNEL, { state });
     },
   };
 

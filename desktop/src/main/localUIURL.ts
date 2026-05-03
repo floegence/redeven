@@ -1,5 +1,7 @@
 import net from 'node:net';
 
+export const LOCAL_UI_ENV_APP_ENTRY_PATH = '/_redeven_proxy/env/';
+
 export function isLoopbackHost(hostname: string): boolean {
   const host = String(hostname ?? '').trim().toLowerCase();
   return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
@@ -34,6 +36,14 @@ export function normalizeLocalUIBaseURL(rawURL: string): string {
   }
 
   parsed.pathname = '/';
+  parsed.search = '';
+  parsed.hash = '';
+  return parsed.toString();
+}
+
+export function buildLocalUIEnvAppEntryURL(rawURL: string): string {
+  const parsed = new URL(normalizeLocalUIBaseURL(rawURL));
+  parsed.pathname = LOCAL_UI_ENV_APP_ENTRY_PATH;
   parsed.search = '';
   parsed.hash = '';
   return parsed.toString();

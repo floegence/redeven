@@ -7,6 +7,7 @@ import (
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/rpcutil"
+	"github.com/floegence/redeven/internal/runtimeservice"
 )
 
 type staticMaintenanceProvider struct {
@@ -135,6 +136,9 @@ func TestServicePingReportsRuntimeServiceSnapshot(t *testing.T) {
 				EffectiveRunMode: "hybrid",
 				RemoteEnabled:    true,
 				Compatibility:    "compatible",
+				OpenReadiness: runtimeservice.OpenReadiness{
+					State: runtimeservice.OpenReadinessOpenable,
+				},
 				ActiveWorkload: RuntimeServiceWorkload{
 					TerminalCount:    2,
 					SessionCount:     1,
@@ -161,5 +165,8 @@ func TestServicePingReportsRuntimeServiceSnapshot(t *testing.T) {
 	}
 	if resp.RuntimeService.RuntimeVersion != "v1.2.3" || resp.RuntimeService.ActiveWorkload.PortForwardCount != 3 {
 		t.Fatalf("unexpected runtime service snapshot: %#v", resp.RuntimeService)
+	}
+	if resp.RuntimeService.OpenReadiness.State != runtimeservice.OpenReadinessOpenable {
+		t.Fatalf("OpenReadiness.State = %q", resp.RuntimeService.OpenReadiness.State)
 	}
 }

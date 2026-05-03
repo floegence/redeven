@@ -7,6 +7,8 @@ import { describe, expect, it } from 'vitest';
 
 import { defaultRuntimeStatePath, loadAttachableRuntimeState, loadExternalLocalUIStartup } from './runtimeState';
 
+const validEnvAppShellHTML = '<!doctype html><html><body><div id="root"></div><script type="module" src="/_redeven_proxy/env/assets/index.js"></script></body></html>';
+
 describe('runtimeState', () => {
   it('uses the standard runtime state path under the redeven home directory', () => {
     expect(defaultRuntimeStatePath({ HOME: '/Users/tester' }, () => '/ignored')).toBe(
@@ -34,6 +36,7 @@ describe('runtimeState', () => {
               effective_run_mode: 'hybrid',
               remote_enabled: true,
               compatibility: 'compatible',
+              open_readiness: { state: 'openable' },
               active_workload: {
                 terminal_count: 4,
                 session_count: 2,
@@ -43,6 +46,16 @@ describe('runtimeState', () => {
             },
           },
         }));
+        return;
+      }
+      if (request.url === '/_redeven_proxy/env/') {
+        response.writeHead(200, { 'Content-Type': 'text/html' });
+        response.end(validEnvAppShellHTML);
+        return;
+      }
+      if (request.url === '/_redeven_proxy/env/assets/index.js') {
+        response.writeHead(200, { 'Content-Type': 'application/javascript' });
+        response.end(request.method === 'HEAD' ? undefined : 'console.log("env");');
         return;
       }
       response.writeHead(404);
@@ -68,6 +81,8 @@ describe('runtimeState', () => {
         effective_run_mode: 'hybrid',
         remote_enabled: true,
         desktop_managed: true,
+        state_dir: undefined,
+        diagnostics_enabled: undefined,
         pid: 4242,
         runtime_service: {
           runtime_version: 'v1.2.0',
@@ -109,6 +124,7 @@ describe('runtimeState', () => {
           minimum_desktop_version: undefined,
           minimum_runtime_version: undefined,
           compatibility_review_id: undefined,
+          open_readiness: { state: 'openable' },
           active_workload: {
             terminal_count: 4,
             session_count: 2,
@@ -201,6 +217,11 @@ describe('runtimeState', () => {
           minimum_desktop_version: undefined,
           minimum_runtime_version: undefined,
           compatibility_review_id: undefined,
+          open_readiness: {
+            state: 'blocked',
+            reason_code: 'runtime_managed_elsewhere',
+            message: 'This runtime is managed by another Desktop instance.',
+          },
           active_workload: {
             terminal_count: 1,
             session_count: 0,
@@ -224,6 +245,145 @@ describe('runtimeState', () => {
 
   it('rejects external Local UI startup for unsupported hosts', async () => {
     await expect(loadExternalLocalUIStartup('https://example.com/')).rejects.toThrow('Redeven URL must use localhost or an IP literal.');
+  });
+
+  it('blocks open-readiness when an openable runtime serves an invalid Env App shell', async () => {
+    const server = http.createServer((request, response) => {
+      if (request.url === '/api/local/runtime/health') {
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({
+          ok: true,
+          data: {
+            status: 'online',
+            password_required: false,
+            runtime_service: {
+              runtime_version: 'v0.0.0-dev',
+              service_owner: 'desktop',
+              desktop_managed: true,
+              remote_enabled: false,
+              compatibility: 'compatible',
+              open_readiness: { state: 'openable' },
+              active_workload: {
+                terminal_count: 0,
+                session_count: 0,
+                task_count: 0,
+                port_forward_count: 0,
+              },
+            },
+          },
+        }));
+        return;
+      }
+      if (request.url === '/_redeven_proxy/env/') {
+        response.writeHead(200, { 'Content-Type': 'text/html' });
+        response.end('<pre><a href="favicon.svg">favicon.svg</a><a href="logo.png">logo.png</a></pre>');
+        return;
+      }
+      response.writeHead(404);
+      response.end('not found');
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      server.listen(0, '127.0.0.1', () => resolve());
+      server.once('error', reject);
+    });
+
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('expected a TCP server address');
+      }
+
+      await expect(loadExternalLocalUIStartup(`http://127.0.0.1:${address.port}/`)).resolves.toMatchObject({
+        local_ui_url: `http://127.0.0.1:${address.port}/`,
+        password_required: false,
+        runtime_service: {
+          runtime_version: 'v0.0.0-dev',
+          open_readiness: {
+            state: 'blocked',
+            reason_code: 'env_app_shell_unavailable',
+          },
+        },
+      });
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      });
+    }
+  });
+
+  it('blocks open-readiness when an Env App shell references missing assets', async () => {
+    const server = http.createServer((request, response) => {
+      if (request.url === '/api/local/runtime/health') {
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({
+          ok: true,
+          data: {
+            status: 'online',
+            password_required: false,
+            runtime_service: {
+              runtime_version: 'v0.0.0-dev',
+              service_owner: 'desktop',
+              desktop_managed: true,
+              remote_enabled: false,
+              compatibility: 'compatible',
+              open_readiness: { state: 'openable' },
+              active_workload: {
+                terminal_count: 0,
+                session_count: 0,
+                task_count: 0,
+                port_forward_count: 0,
+              },
+            },
+          },
+        }));
+        return;
+      }
+      if (request.url === '/_redeven_proxy/env/') {
+        response.writeHead(200, { 'Content-Type': 'text/html' });
+        response.end(validEnvAppShellHTML);
+        return;
+      }
+      response.writeHead(404);
+      response.end('not found');
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      server.listen(0, '127.0.0.1', () => resolve());
+      server.once('error', reject);
+    });
+
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('expected a TCP server address');
+      }
+
+      await expect(loadExternalLocalUIStartup(`http://127.0.0.1:${address.port}/`)).resolves.toMatchObject({
+        runtime_service: {
+          open_readiness: {
+            state: 'blocked',
+            reason_code: 'env_app_shell_unavailable',
+          },
+        },
+      });
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      });
+    }
   });
 
   it('rejects a local target that responds with non-Redeven access status payloads', async () => {

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -110,18 +111,29 @@ func (b localUITestCodeSpaceBackend) ResolveCodeServerPort(context.Context, stri
 
 func newTestGateway(t *testing.T, cfgPath string) *gatewaypkg.Gateway {
 	t.Helper()
-	return newTestGatewayWithBackend(t, cfgPath, localUITestBackend{})
+	return newTestGatewayWithBackendAndDist(t, cfgPath, localUITestBackend{}, fstest.MapFS{
+		"env/index.html":      {Data: []byte("<html>env</html>")},
+		"env/favicon.svg":     {Data: []byte("<svg>icon</svg>")},
+		"env/logo.png":        {Data: []byte("png")},
+		"env/assets/index.js": {Data: []byte("console.log('env');")},
+	})
 }
 
 func newTestGatewayWithBackend(t *testing.T, cfgPath string, backend gatewaypkg.Backend) *gatewaypkg.Gateway {
 	t.Helper()
+	return newTestGatewayWithBackendAndDist(t, cfgPath, backend, fstest.MapFS{
+		"env/index.html":      {Data: []byte("<html>env</html>")},
+		"env/favicon.svg":     {Data: []byte("<svg>icon</svg>")},
+		"env/logo.png":        {Data: []byte("png")},
+		"env/assets/index.js": {Data: []byte("console.log('env');")},
+	})
+}
+
+func newTestGatewayWithBackendAndDist(t *testing.T, cfgPath string, backend gatewaypkg.Backend, dist fs.FS) *gatewaypkg.Gateway {
+	t.Helper()
 	gw, err := gatewaypkg.New(gatewaypkg.Options{
-		Backend: backend,
-		DistFS: fstest.MapFS{
-			"env/index.html":  {Data: []byte("<html>env</html>")},
-			"env/favicon.svg": {Data: []byte("<svg>icon</svg>")},
-			"env/logo.png":    {Data: []byte("png")},
-		},
+		Backend:            backend,
+		DistFS:             dist,
 		ConfigPath:         cfgPath,
 		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
 	})
@@ -224,6 +236,21 @@ func TestServer_handleGateway_allowsEnvAppShellWhenLocked(t *testing.T) {
 	}
 }
 
+func TestServer_handleGateway_rejectsEnvAppDirectoryListingWhenLocked(t *testing.T) {
+	gate := accessgate.New(accessgate.Options{Password: "secret"})
+	s := newTestServer(t, gate)
+
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/_redeven_proxy/env/assets/", nil)
+	res := httptest.NewRecorder()
+	s.handleGateway(res, req)
+	if res.Result().StatusCode != http.StatusNotFound {
+		t.Fatalf("env assets directory status = %d, want %d; body=%q", res.Result().StatusCode, http.StatusNotFound, res.Body.String())
+	}
+	if strings.Contains(res.Body.String(), "index.js") {
+		t.Fatalf("env assets directory exposed listing: %q", res.Body.String())
+	}
+}
+
 func TestServer_handleRuntimeHealth_reportsOnlineWithoutUnlock(t *testing.T) {
 	gate := accessgate.New(accessgate.Options{Password: "secret"})
 	s := newTestServer(t, gate)
@@ -241,6 +268,11 @@ func TestServer_handleRuntimeHealth_reportsOnlineWithoutUnlock(t *testing.T) {
 		Data struct {
 			Status           string `json:"status"`
 			PasswordRequired bool   `json:"password_required"`
+			RuntimeService   struct {
+				OpenReadiness struct {
+					State string `json:"state"`
+				} `json:"open_readiness"`
+			} `json:"runtime_service"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(res.Body.Bytes(), &payload); err != nil {
@@ -254,6 +286,56 @@ func TestServer_handleRuntimeHealth_reportsOnlineWithoutUnlock(t *testing.T) {
 	}
 	if !payload.Data.PasswordRequired {
 		t.Fatalf("password_required = false, want true")
+	}
+	if payload.Data.RuntimeService.OpenReadiness.State != "starting" {
+		t.Fatalf("open_readiness.state = %q, want starting", payload.Data.RuntimeService.OpenReadiness.State)
+	}
+}
+
+func TestServer_handleRuntimeHealth_blocksOpenWhenEnvAppShellUnavailable(t *testing.T) {
+	cfgPath := writeTestConfig(t)
+	gw := newTestGatewayWithBackendAndDist(t, cfgPath, localUITestBackend{}, fstest.MapFS{
+		"env/favicon.svg": {Data: []byte("<svg>icon</svg>")},
+		"env/logo.png":    {Data: []byte("png")},
+	})
+	s := newTestServerWithGateway(t, nil, gw, cfgPath)
+	s.a = &agent.Agent{}
+
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/api/local/runtime/health", nil)
+	res := httptest.NewRecorder()
+	s.handleRuntimeHealth(res, req)
+
+	if res.Result().StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Result().StatusCode, http.StatusOK)
+	}
+
+	var payload struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			RuntimeService struct {
+				OpenReadiness struct {
+					State      string `json:"state"`
+					ReasonCode string `json:"reason_code"`
+					Message    string `json:"message"`
+				} `json:"open_readiness"`
+			} `json:"runtime_service"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if !payload.OK {
+		t.Fatalf("ok = false, want true")
+	}
+	readiness := payload.Data.RuntimeService.OpenReadiness
+	if readiness.State != "blocked" {
+		t.Fatalf("open_readiness.state = %q, want blocked", readiness.State)
+	}
+	if readiness.ReasonCode != "env_app_shell_unavailable" {
+		t.Fatalf("open_readiness.reason_code = %q, want env_app_shell_unavailable", readiness.ReasonCode)
+	}
+	if !strings.Contains(readiness.Message, "Environment App shell") {
+		t.Fatalf("open_readiness.message = %q, want Env App shell detail", readiness.Message)
 	}
 }
 
@@ -563,6 +645,9 @@ func TestServer_handleRuntime_reportsDesktopManagedMetadata(t *testing.T) {
 		body.RuntimeService.EffectiveRunMode != "hybrid" ||
 		!body.RuntimeService.RemoteEnabled {
 		t.Fatalf("unexpected runtime service body: %#v", body.RuntimeService)
+	}
+	if body.RuntimeService.OpenReadiness.State != "starting" {
+		t.Fatalf("OpenReadiness.State = %q", body.RuntimeService.OpenReadiness.State)
 	}
 }
 

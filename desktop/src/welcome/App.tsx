@@ -68,6 +68,11 @@ import {
   type SaveDesktopSettingsResult,
 } from '../shared/settingsIPC';
 import {
+  formatRuntimeServiceWorkload,
+  runtimeServiceHasActiveWork,
+  type RuntimeServiceSnapshot,
+} from '../shared/runtimeService';
+import {
   createDesktopSSHEnvironmentInstanceID,
   DEFAULT_DESKTOP_SSH_AUTH_MODE,
   DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
@@ -503,6 +508,24 @@ function controlPlaneName(controlPlane: DesktopControlPlaneSummary): string {
   return trimString(controlPlane.display_label) || controlPlane.provider.display_name;
 }
 
+function environmentRuntimeServiceSnapshot(
+  environment: DesktopEnvironmentEntry | null | undefined,
+): RuntimeServiceSnapshot | undefined {
+  if (!environment) {
+    return undefined;
+  }
+  if (environment.runtime_service) {
+    return environment.runtime_service;
+  }
+  if (environment.kind === 'managed_environment') {
+    return environment.managed_runtime_service;
+  }
+  if (environment.kind === 'provider_environment') {
+    return environment.provider_runtime_service;
+  }
+  return undefined;
+}
+
 function controlPlaneFilterValue(controlPlane: DesktopControlPlaneSummary): string {
   return desktopControlPlaneKey(
     controlPlane.provider.provider_origin,
@@ -811,6 +834,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [sshConfigHostsLoaded, setSSHConfigHostsLoaded] = createSignal(false);
   const [controlPlaneDialogState, setControlPlaneDialogState] = createSignal<ControlPlaneDialogState>(null);
   const [deleteTarget, setDeleteTarget] = createSignal<DesktopEnvironmentEntry | null>(null);
+  const [stopRuntimeTarget, setStopRuntimeTarget] = createSignal<DesktopEnvironmentEntry | null>(null);
+  const [restartRuntimeAfterStop, setRestartRuntimeAfterStop] = createSignal(false);
   const [deleteControlPlaneTarget, setDeleteControlPlaneTarget] = createSignal<DesktopControlPlaneSummary | null>(null);
   const [librarySourceFilter, setLibrarySourceFilter] = createSignal('');
   const [libraryQuery, setLibraryQuery] = createSignal('');
@@ -881,6 +906,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return target.kind === 'managed_environment'
       || target.kind === 'provider_environment';
   });
+  const stopRuntimeSnapshot = createMemo<RuntimeServiceSnapshot | undefined>(() => (
+    environmentRuntimeServiceSnapshot(stopRuntimeTarget())
+  ));
+  const stopRuntimeActiveWorkLabel = createMemo(() => formatRuntimeServiceWorkload(stopRuntimeSnapshot()));
+  const stopRuntimeHasActiveWork = createMemo(() => runtimeServiceHasActiveWork(stopRuntimeSnapshot()));
   const activeActionProgress = createMemo(() => snapshot().action_progress);
   const sshRuntimeProgressItems = createMemo(() => (
     activeActionProgress()
@@ -1550,12 +1580,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   function runtimeActionRequest(
     environment: DesktopEnvironmentEntry,
     kind: 'start_environment_runtime' | 'stop_environment_runtime' | 'refresh_environment_runtime',
+    options: Readonly<{ forceRuntimeUpdate?: boolean }> = {},
   ): DesktopLauncherActionRequest | null {
     if (environment.kind === 'managed_environment') {
       return {
         kind,
         environment_id: environment.id,
         label: environment.label,
+        ...(options.forceRuntimeUpdate ? { force_runtime_update: true } : {}),
       };
     }
     if (environment.kind === 'provider_environment') {
@@ -1563,6 +1595,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         kind,
         environment_id: environment.id,
         label: environment.label,
+        ...(options.forceRuntimeUpdate ? { force_runtime_update: true } : {}),
       };
     }
     if (environment.kind === 'external_local_ui') {
@@ -1571,6 +1604,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         environment_id: environment.id,
         external_local_ui_url: environment.local_ui_url,
         label: environment.label,
+        ...(options.forceRuntimeUpdate ? { force_runtime_update: true } : {}),
       };
     }
     if (!environment.ssh_details) {
@@ -1587,6 +1621,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       bootstrap_strategy: environment.ssh_details.bootstrap_strategy,
       release_base_url: environment.ssh_details.release_base_url,
       environment_instance_id: environment.ssh_details.environment_instance_id,
+      ...(options.forceRuntimeUpdate ? { force_runtime_update: true } : {}),
     };
   }
 
@@ -1598,9 +1633,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function startEnvironmentRuntime(
     environment: DesktopEnvironmentEntry,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
-    options: Readonly<{ announceSuccess?: boolean }> = {},
+    options: Readonly<{ announceSuccess?: boolean; forceRuntimeUpdate?: boolean }> = {},
   ): Promise<boolean> {
-    const request = runtimeActionRequest(environment, 'start_environment_runtime');
+    const request = runtimeActionRequest(environment, 'start_environment_runtime', {
+      forceRuntimeUpdate: options.forceRuntimeUpdate,
+    });
     if (!request) {
       setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', 'Desktop could not resolve that runtime target.');
       return false;
@@ -1628,6 +1665,24 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       showActionToast(`Runtime stopped for ${environment.label}.`);
     }
     return stopped;
+  }
+
+  async function confirmStopRuntime(): Promise<void> {
+    const target = stopRuntimeTarget();
+    if (!target) {
+      return;
+    }
+    const shouldRestart = restartRuntimeAfterStop();
+    const stopped = await stopEnvironmentRuntime(target, 'connect');
+    if (!stopped) {
+      return;
+    }
+    setStopRuntimeTarget(null);
+    setRestartRuntimeAfterStop(false);
+    if (shouldRestart) {
+      const latestTarget = await loadLatestEnvironmentEntry(target.id) ?? target;
+      await startEnvironmentRuntime(latestTarget, 'connect', { forceRuntimeUpdate: true });
+    }
   }
 
   async function refreshEnvironmentRuntime(
@@ -1748,7 +1803,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       case 'start_runtime':
         return startEnvironmentRuntime(environment, errorTarget);
       case 'stop_runtime':
-        return stopEnvironmentRuntime(environment, errorTarget);
+        setRestartRuntimeAfterStop(false);
+        setStopRuntimeTarget(environment);
+        return true;
+      case 'restart_runtime':
+        setRestartRuntimeAfterStop(true);
+        setStopRuntimeTarget(environment);
+        return true;
       case 'refresh_runtime':
         return refreshEnvironmentRuntime(environment, errorTarget);
       case 'serve_runtime_locally':
@@ -1807,6 +1868,24 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return {
         close_panel: false,
         next_session: nextSession,
+      };
+    }
+
+    if (action.intent === 'stop_runtime') {
+      setRestartRuntimeAfterStop(false);
+      setStopRuntimeTarget(environment);
+      return {
+        close_panel: true,
+        next_session: null,
+      };
+    }
+
+    if (action.intent === 'restart_runtime') {
+      setRestartRuntimeAfterStop(true);
+      setStopRuntimeTarget(environment);
+      return {
+        close_panel: true,
+        next_session: null,
       };
     }
 
@@ -2623,6 +2702,45 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             Remove <span class="font-semibold">{deleteControlPlaneTarget() ? controlPlaneName(deleteControlPlaneTarget()!) : ''}</span> from Desktop?
           </p>
           <p class="text-xs text-muted-foreground">Desktop will revoke the saved authorization, then remove the local account snapshot and cached environment list.</p>
+        </div>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={stopRuntimeTarget() !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setStopRuntimeTarget(null);
+            setRestartRuntimeAfterStop(false);
+          }
+        }}
+        title={restartRuntimeAfterStop() ? 'Restart Runtime' : 'Stop Runtime'}
+        confirmText={restartRuntimeAfterStop() ? 'Stop and Restart' : 'Stop Runtime'}
+        variant="destructive"
+        loading={busyStateMatchesAction(busyState(), 'stop_environment_runtime')}
+        onConfirm={() => void confirmStopRuntime()}
+      >
+        <div class="space-y-2">
+          <p class="text-sm">
+            <Show
+              when={restartRuntimeAfterStop()}
+              fallback={(
+                <>Stop the runtime for <span class="font-semibold">{stopRuntimeTarget()?.label}</span>?</>
+              )}
+            >
+              Stop and restart the runtime for <span class="font-semibold">{stopRuntimeTarget()?.label}</span>?
+            </Show>
+          </p>
+          <p class="text-xs text-muted-foreground">
+            This interrupts the background runtime service for this environment. Open terminals, sessions, tasks, and port forwards may be disconnected.
+          </p>
+          <Show when={restartRuntimeAfterStop()}>
+            <p class="text-xs text-muted-foreground">
+              Desktop will start the managed runtime again after the current process stops, so the newly installed runtime can take effect.
+            </p>
+          </Show>
+          <p class="text-xs text-muted-foreground">
+            Active work: <span class={cn('font-medium', stopRuntimeHasActiveWork() ? 'text-foreground' : 'text-muted-foreground')}>{stopRuntimeActiveWorkLabel()}</span>
+          </p>
         </div>
       </ConfirmDialog>
     </>

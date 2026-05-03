@@ -17,6 +17,14 @@ export type RuntimeServiceCompatibility =
   | 'managed_elsewhere'
   | 'unknown';
 
+export type RuntimeServiceOpenReadinessState = 'starting' | 'openable' | 'blocked';
+
+export type RuntimeServiceOpenReadiness = {
+  state: RuntimeServiceOpenReadinessState;
+  reasonCode?: string;
+  message?: string;
+};
+
 export type RuntimeServiceWorkload = {
   terminalCount: number;
   sessionCount: number;
@@ -39,6 +47,7 @@ export type RuntimeServiceSnapshot = {
   minimumDesktopVersion?: string;
   minimumRuntimeVersion?: string;
   compatibilityReviewId?: string;
+  openReadiness?: RuntimeServiceOpenReadiness;
   activeWorkload: RuntimeServiceWorkload;
 };
 

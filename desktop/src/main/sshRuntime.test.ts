@@ -40,7 +40,8 @@ describe('sshRuntime', () => {
     expect(buildManagedSSHRemoteInstallScript()).toContain('if [ -z "$cache_base" ] && [ -n "${HOME:-}" ] && [ -d "$HOME" ] && [ -w "$HOME" ]; then');
     expect(buildManagedSSHRemoteInstallScript()).toContain('install_root="${remote_tmp_dir%/}/redeven-desktop-runtime-${remote_user}"');
     expect(buildManagedSSHRemoteInstallScript()).toContain('release_root="${install_root%/}/releases/${release_tag}"');
-    expect(buildManagedSSHRemoteInstallScript()).toContain('if ! runtime_is_compatible; then');
+    expect(buildManagedSSHRemoteInstallScript()).toContain('force_install="${4:-0}"');
+    expect(buildManagedSSHRemoteInstallScript()).toContain('if [ "$force_install" = "1" ] || ! runtime_is_compatible; then');
     expect(buildManagedSSHRemoteInstallScript()).toContain('write_runtime_stamp "remote_install"');
     expect(buildManagedSSHReportReadScript()).toContain('instances/${instance_id}/sessions/${session_token}/startup-report.json');
     expect(buildManagedSSHStopScript()).toContain('kill "$pid"');
@@ -107,8 +108,13 @@ describe('sshRuntime', () => {
     expect(source).toContain("if (args.target.bootstrap_strategy === 'auto' && error instanceof DesktopSSHUploadAssetPreparationError)");
     expect(source).toContain('const uploadProbe = await probeRemoteRuntimeCompatibility(args);');
     expect(source).toMatch(/if \(args\.target\.bootstrap_strategy === 'auto'\) \{\s*break;\s*\}\s*continue;/);
-    expect(source).toContain('async function waitForForwardedLocalUI(');
-    expect(source).toContain('const forwardedStartup = await waitForForwardedLocalUI(');
+    expect(source).toContain("path.join(sourceRoot, 'scripts', 'build_assets.sh')");
+    expect(source).toContain('await buildSourceRuntimeAssets(sourceRoot);');
+    expect(source).toContain('async function waitForForwardedLocalUIOpenable(');
+    expect(source).toContain('const forwardedStartup = await waitForForwardedLocalUIOpenable(');
+    expect(source).toContain('runtimeServiceIsOpenable(startup.runtime_service)');
+    expect(source).not.toContain('Desktop reached the forwarded Redeven Local UI, but the runtime is not ready to open yet');
+    expect(source).toContain('runtime_service: forwardedStartup.runtime_service ?? remoteStartup.runtime_service');
     expect(source).toContain('onProgress?: (progress: DesktopSSHRuntimeProgress) => void;');
     expect(source).toContain("'ssh_connecting'");
     expect(source).toContain("'ssh_uploading_archive'");

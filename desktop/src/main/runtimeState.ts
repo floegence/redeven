@@ -7,12 +7,18 @@ import { isAllowedAppNavigation } from './navigation';
 import { parseStartupReport, type StartupReport } from './startup';
 import { normalizeLocalUIBaseURL } from './localUIURL';
 import { defaultManagedStateLayout } from './statePaths';
-import { normalizeRuntimeServiceSnapshot, type RuntimeServiceSnapshot } from '../shared/runtimeService';
+import {
+  envAppShellUnavailableOpenReadiness,
+  normalizeRuntimeServiceSnapshot,
+  runtimeServiceIsOpenable,
+  type RuntimeServiceSnapshot,
+} from '../shared/runtimeService';
 
 const DEFAULT_RUNTIME_PROBE_TIMEOUT_MS = 1_500;
 
 type RuntimeProbeResponse = Readonly<{
   statusCode: number | null;
+  headers: http.IncomingHttpHeaders;
   body: string;
 }>;
 
@@ -21,6 +27,16 @@ type RuntimeProbeStatus = Readonly<{
   password_required: boolean;
   runtime_service?: RuntimeServiceSnapshot;
 }>;
+
+type EnvAppShellValidation = Readonly<{
+  ok: boolean;
+  assetPaths: readonly string[];
+}>;
+
+type EnvAppShellProbeResult = 'ready' | 'invalid' | 'unavailable';
+
+const ENV_APP_ROOT_MOUNT_PATTERN = /<div\b[^>]*\bid\s*=\s*["']root["'][^>]*>/iu;
+const ENV_APP_ASSET_REF_PATTERN = /\b(?:src|href)\s*=\s*["'](\/_redeven_proxy\/env\/assets\/[^"']+)["']/giu;
 
 function candidateStartupURLs(startup: StartupReport): string[] {
   const seen = new Set<string>();
@@ -37,30 +53,46 @@ function candidateStartupURLs(startup: StartupReport): string[] {
   return out;
 }
 
-function request(url: URL, timeoutMs: number): Promise<RuntimeProbeResponse> {
+function request(
+  url: URL,
+  timeoutMs: number,
+  options: Readonly<{
+    method?: 'GET' | 'HEAD';
+    accept?: string;
+  }> = {},
+): Promise<RuntimeProbeResponse> {
   return new Promise((resolve) => {
-    const requestImpl = url.protocol === 'https:' ? https.get : http.get;
+    const requestImpl = url.protocol === 'https:' ? https.request : http.request;
     const request = requestImpl(url, {
+      method: options.method ?? 'GET',
       timeout: timeoutMs,
       headers: {
-        Accept: 'application/json;q=1.0,text/html;q=0.8,*/*;q=0.5',
+        Accept: options.accept ?? 'application/json;q=1.0,text/html;q=0.8,*/*;q=0.5',
       },
     }, (response) => {
       const statusCode = typeof response.statusCode === 'number' ? response.statusCode : null;
+      if (options.method === 'HEAD') {
+        response.resume();
+        response.on('end', () => {
+          resolve({ statusCode, headers: response.headers, body: '' });
+        });
+        return;
+      }
       response.setEncoding('utf8');
       let body = '';
       response.on('data', (chunk: string) => {
         body += chunk;
       });
       response.on('end', () => {
-        resolve({ statusCode, body });
+        resolve({ statusCode, headers: response.headers, body });
       });
     });
 
     request.on('timeout', () => {
       request.destroy(new Error('request timed out'));
     });
-    request.on('error', () => resolve({ statusCode: null, body: '' }));
+    request.on('error', () => resolve({ statusCode: null, headers: {}, body: '' }));
+    request.end();
   });
 }
 
@@ -97,7 +129,106 @@ async function probeRedevenLocalUI(baseURL: string, timeoutMs: number): Promise<
   if (response.statusCode !== 200) {
     return null;
   }
-  return parseLocalRuntimeHealthResponse(response.body);
+  const status = parseLocalRuntimeHealthResponse(response.body);
+  if (!status) {
+    return null;
+  }
+  return await applyEnvAppShellReadiness(baseURL, status, timeoutMs);
+}
+
+function validateEnvAppShellHTML(body: string): EnvAppShellValidation {
+  if (!ENV_APP_ROOT_MOUNT_PATTERN.test(body)) {
+    return { ok: false, assetPaths: [] };
+  }
+  const assetPaths = [...body.matchAll(ENV_APP_ASSET_REF_PATTERN)]
+    .map((match) => String(match[1] ?? '').trim())
+    .filter((value) => value !== '');
+  return {
+    ok: assetPaths.length > 0,
+    assetPaths: [...new Set(assetPaths)],
+  };
+}
+
+function contentTypeAllowsHTML(headers: http.IncomingHttpHeaders): boolean {
+  const value = String(headers['content-type'] ?? '').trim().toLowerCase();
+  return value === '' || value.includes('text/html');
+}
+
+function invalidEnvAppShellStatus(status: RuntimeProbeStatus): RuntimeProbeStatus {
+  if (!status.runtime_service) {
+    return status;
+  }
+  return {
+    ...status,
+    runtime_service: normalizeRuntimeServiceSnapshot({
+      ...status.runtime_service,
+      open_readiness: envAppShellUnavailableOpenReadiness(),
+    }),
+  };
+}
+
+function startingEnvAppShellStatus(status: RuntimeProbeStatus): RuntimeProbeStatus {
+  if (!status.runtime_service) {
+    return status;
+  }
+  return {
+    ...status,
+    runtime_service: normalizeRuntimeServiceSnapshot({
+      ...status.runtime_service,
+      open_readiness: {
+        state: 'starting',
+        reason_code: 'env_app_shell_unreachable',
+        message: 'Environment App shell is not reachable yet.',
+      },
+    }),
+  };
+}
+
+async function probeEnvAppShell(baseURL: string, timeoutMs: number): Promise<EnvAppShellProbeResult> {
+  const shellResponse = await request(new URL('/_redeven_proxy/env/', baseURL), timeoutMs, {
+    accept: 'text/html;q=1.0,*/*;q=0.5',
+  });
+  if (shellResponse.statusCode === null) {
+    return 'unavailable';
+  }
+  if (shellResponse.statusCode !== 200 || !contentTypeAllowsHTML(shellResponse.headers)) {
+    return 'invalid';
+  }
+  const validation = validateEnvAppShellHTML(shellResponse.body);
+  if (!validation.ok) {
+    return 'invalid';
+  }
+  for (const assetPath of validation.assetPaths) {
+    const assetURL = new URL(assetPath, baseURL);
+    const assetResponse = await request(assetURL, timeoutMs, {
+      method: 'HEAD',
+      accept: '*/*',
+    });
+    if (assetResponse.statusCode === null) {
+      return 'unavailable';
+    }
+    if (assetResponse.statusCode !== 200) {
+      return 'invalid';
+    }
+  }
+  return 'ready';
+}
+
+async function applyEnvAppShellReadiness(
+  baseURL: string,
+  status: RuntimeProbeStatus,
+  timeoutMs: number,
+): Promise<RuntimeProbeStatus> {
+  if (!runtimeServiceIsOpenable(status.runtime_service)) {
+    return status;
+  }
+  const shellProbe = await probeEnvAppShell(baseURL, timeoutMs);
+  if (shellProbe === 'ready') {
+    return status;
+  }
+  return shellProbe === 'invalid'
+    ? invalidEnvAppShellStatus(status)
+    : startingEnvAppShellStatus(status);
 }
 
 export async function loadExternalLocalUIStartup(

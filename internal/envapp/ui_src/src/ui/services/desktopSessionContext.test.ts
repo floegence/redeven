@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   desktopManagedEnvironmentStorageScopeID,
+  notifyDesktopSessionAppReady,
   readDesktopSessionContextSnapshot,
   resolveEnvironmentStorageScopeID,
 } from './desktopSessionContext';
@@ -59,5 +60,27 @@ describe('desktopSessionContext', () => {
     expect(readDesktopSessionContextSnapshot()).toBeNull();
     expect(desktopManagedEnvironmentStorageScopeID()).toBe('');
     expect(resolveEnvironmentStorageScopeID('env_demo')).toBe('env_demo');
+  });
+
+  it('notifies Desktop when the environment app becomes interactive', () => {
+    const readyStates: string[] = [];
+    const parentWindow = {
+      location: { origin: window.location.origin },
+      redevenDesktopSessionContext: {
+        getSnapshot: () => ({
+          managed_environment_id: 'env_demo',
+          environment_storage_scope_id: 'env_demo',
+        }),
+        notifyAppReady: (payload: { state: string }) => {
+          readyStates.push(payload.state);
+        },
+      },
+    } as unknown as Window;
+
+    setWindowHierarchy(parentWindow);
+
+    expect(notifyDesktopSessionAppReady('access_gate_interactive')).toBe(true);
+    expect(notifyDesktopSessionAppReady('runtime_connected')).toBe(true);
+    expect(readyStates).toEqual(['access_gate_interactive', 'runtime_connected']);
   });
 });

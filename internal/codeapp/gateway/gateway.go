@@ -17,7 +17,9 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -166,12 +168,16 @@ type Gateway struct {
 	threadReadState    *threadreadstate.Store
 
 	distFS fs.FS
-	dist   http.Handler
 
 	ln   net.Listener
 	srv  *http.Server
 	addr string
 }
+
+var (
+	envAppShellRootPattern     = regexp.MustCompile(`(?i)<div\b[^>]*\bid\s*=\s*["']root["'][^>]*>`)
+	envAppShellAssetRefPattern = regexp.MustCompile(`(?i)\b(?:src|href)\s*=\s*["']/_redeven_proxy/env/assets/([^"']+)["']`)
+)
 
 type localUIRouteKind int
 
@@ -239,12 +245,6 @@ func New(opts Options) (*Gateway, error) {
 		addr = "127.0.0.1:0"
 	}
 
-	// /_redeven_proxy/* is mapped to dist/*.
-	//
-	// Note: use the prefix without a trailing slash, so the stripped path keeps a
-	// leading "/" (avoids FileServer canonicalization redirects).
-	dist := http.StripPrefix("/_redeven_proxy", http.FileServer(http.FS(opts.DistFS)))
-
 	secrets := opts.SecretsStore
 	if secrets == nil {
 		// Keep user-managed secrets in the same state dir as config.json.
@@ -278,7 +278,6 @@ func New(opts Options) (*Gateway, error) {
 		secrets:                 secrets,
 		threadReadState:         opts.ThreadReadStateStore,
 		distFS:                  opts.DistFS,
-		dist:                    dist,
 		addr:                    addr,
 	}, nil
 }
@@ -347,6 +346,20 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	g.serveHTTP(w, r)
 }
 
+// EnvAppShellReadinessError validates that the embedded Env App shell can be
+// opened by Desktop before the runtime advertises open-readiness.
+func (g *Gateway) EnvAppShellReadinessError() error {
+	if g == nil {
+		return errors.New("gateway not ready")
+	}
+	return validateEnvAppShellFS(g.distFS)
+}
+
+// EnvAppShellReady reports whether the embedded Env App shell is complete.
+func (g *Gateway) EnvAppShellReady() bool {
+	return g.EnvAppShellReadinessError() == nil
+}
+
 func (g *Gateway) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	if g == nil || r == nil {
 		http.Error(w, "gateway not ready", http.StatusServiceUnavailable)
@@ -405,7 +418,14 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
-		g.dist.ServeHTTP(w, r)
+		switch {
+		case strings.HasPrefix(p, "/_redeven_proxy/env"):
+			g.serveEnvAppDist(w, r)
+		case p == "/_redeven_proxy/inject.js":
+			g.serveDistFile(w, r, "inject.js")
+		default:
+			http.Error(w, "not found", http.StatusNotFound)
+		}
 		return
 	}
 
@@ -439,6 +459,149 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
+}
+
+func (g *Gateway) serveEnvAppDist(w http.ResponseWriter, r *http.Request) {
+	if g == nil || r == nil {
+		http.Error(w, "gateway not ready", http.StatusServiceUnavailable)
+		return
+	}
+	if !isDistRequestMethod(r.Method) {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	p := strings.TrimSpace(r.URL.Path)
+	if p == "/_redeven_proxy/env" {
+		target := "/_redeven_proxy/env/"
+		if rawQuery := strings.TrimSpace(r.URL.RawQuery); rawQuery != "" {
+			target += "?" + rawQuery
+		}
+		http.Redirect(w, r, target, http.StatusMovedPermanently)
+		return
+	}
+	if p == "/_redeven_proxy/env/" || p == "/_redeven_proxy/env/index.html" {
+		g.serveDistFile(w, r, "env/index.html")
+		return
+	}
+	if !strings.HasPrefix(p, "/_redeven_proxy/env/") {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
+	distPath := strings.TrimPrefix(p, "/_redeven_proxy/")
+	if info, err := fs.Stat(g.distFS, distPath); err == nil {
+		if info.IsDir() {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		g.serveDistFile(w, r, distPath)
+		return
+	}
+	if shouldServeEnvAppShellForMissingPath(r, distPath) {
+		g.serveDistFile(w, r, "env/index.html")
+		return
+	}
+	http.Error(w, "not found", http.StatusNotFound)
+}
+
+func shouldServeEnvAppShellForMissingPath(r *http.Request, distPath string) bool {
+	if r == nil {
+		return false
+	}
+	if !isDistRequestMethod(r.Method) {
+		return false
+	}
+	cleanPath := cleanDistPath(distPath)
+	if cleanPath == "" || cleanPath == "env/assets" || strings.HasPrefix(cleanPath, "env/assets/") {
+		return false
+	}
+	base := path.Base(cleanPath)
+	if strings.Contains(base, ".") {
+		return false
+	}
+	accept := strings.TrimSpace(r.Header.Get("Accept"))
+	return accept == "" || strings.Contains(accept, "text/html") || strings.Contains(accept, "*/*")
+}
+
+func (g *Gateway) serveDistFile(w http.ResponseWriter, r *http.Request, distPath string) {
+	if g == nil || r == nil {
+		http.Error(w, "gateway not ready", http.StatusServiceUnavailable)
+		return
+	}
+	if !isDistRequestMethod(r.Method) {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	cleanPath := cleanDistPath(distPath)
+	if cleanPath == "" {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	info, err := fs.Stat(g.distFS, cleanPath)
+	if err != nil || info.IsDir() {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	data, err := fs.ReadFile(g.distFS, cleanPath)
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	http.ServeContent(w, r, path.Base(cleanPath), info.ModTime(), bytes.NewReader(data))
+}
+
+func cleanDistPath(raw string) string {
+	cleanPath := strings.TrimPrefix(path.Clean("/"+strings.TrimSpace(raw)), "/")
+	if cleanPath == "." || cleanPath == "" || !fs.ValidPath(cleanPath) {
+		return ""
+	}
+	return cleanPath
+}
+
+func isDistRequestMethod(method string) bool {
+	return method == http.MethodGet || method == http.MethodHead
+}
+
+func validateEnvAppShellFS(distFS fs.FS) error {
+	if distFS == nil {
+		return errors.New("missing dist filesystem")
+	}
+	info, err := fs.Stat(distFS, "env/index.html")
+	if err != nil {
+		return fmt.Errorf("missing Env App shell: %w", err)
+	}
+	if info.IsDir() {
+		return errors.New("Env App shell points to a directory")
+	}
+	data, err := fs.ReadFile(distFS, "env/index.html")
+	if err != nil {
+		return fmt.Errorf("read Env App shell: %w", err)
+	}
+	if !envAppShellRootPattern.Match(data) {
+		return errors.New("Env App shell is missing its root mount")
+	}
+	matches := envAppShellAssetRefPattern.FindAllSubmatch(data, -1)
+	if len(matches) == 0 {
+		return errors.New("Env App shell is missing bundled asset references")
+	}
+	for _, match := range matches {
+		if len(match) < 2 {
+			continue
+		}
+		assetPath := cleanDistPath("env/assets/" + string(match[1]))
+		if assetPath == "" || !strings.HasPrefix(assetPath, "env/assets/") {
+			return fmt.Errorf("Env App shell references an invalid asset path: %q", string(match[1]))
+		}
+		assetInfo, err := fs.Stat(distFS, assetPath)
+		if err != nil {
+			return fmt.Errorf("Env App shell references a missing asset %q: %w", assetPath, err)
+		}
+		if assetInfo.IsDir() {
+			return fmt.Errorf("Env App shell asset %q points to a directory", assetPath)
+		}
+	}
+	return nil
 }
 
 type apiResp struct {

@@ -8,7 +8,13 @@ import { desktopControlPlaneKey, type DesktopControlPlaneSummary } from '../shar
 import {
   type DesktopControlPlaneSyncState,
 } from '../shared/providerEnvironmentState';
-import { formatRuntimeServiceWorkload, type RuntimeServiceSnapshot } from '../shared/runtimeService';
+import {
+  formatRuntimeServiceWorkload,
+  runtimeServiceOpenReadinessLabel,
+  runtimeServiceIsOpenable,
+  runtimeServiceNeedsRuntimeUpdate,
+  type RuntimeServiceSnapshot,
+} from '../shared/runtimeService';
 
 export type DesktopWelcomeShellViewModel = Readonly<{
   shell_title: 'Redeven Desktop';
@@ -65,6 +71,7 @@ export type EnvironmentActionIntent =
   | 'opening'
   | 'start_runtime'
   | 'stop_runtime'
+  | 'restart_runtime'
   | 'refresh_runtime'
   | 'serve_runtime_locally'
   | 'focus_local_serve'
@@ -456,6 +463,15 @@ function runtimeServiceLabel(snapshot: RuntimeServiceSnapshot | undefined): stri
   if (!snapshot) {
     return 'Unknown';
   }
+  if (snapshot.open_readiness?.state === 'blocked') {
+    if (runtimeServiceNeedsRuntimeUpdate(snapshot)) {
+      return 'Needs update';
+    }
+    return 'Blocked';
+  }
+  if (snapshot.open_readiness?.state === 'starting') {
+    return 'Preparing';
+  }
   switch (snapshot.compatibility) {
     case 'update_available':
       return 'Update ready';
@@ -612,11 +628,25 @@ export function splitPinnedEnvironmentEntries(
 }
 
 function runtimeStatusLabel(environment: DesktopEnvironmentEntry): string {
-  return environment.runtime_health.status === 'online' ? 'RUNTIME ONLINE' : 'RUNTIME OFFLINE';
+  if (environment.runtime_health.status !== 'online') {
+    return 'RUNTIME OFFLINE';
+  }
+  const snapshot = environmentRuntimeService(environment);
+  if (runtimeServiceIsOpenable(snapshot)) {
+    return 'RUNTIME READY';
+  }
+  if (snapshot?.open_readiness?.state === 'blocked') {
+    return runtimeServiceNeedsRuntimeUpdate(snapshot)
+      ? 'RUNTIME NEEDS UPDATE'
+      : 'RUNTIME BLOCKED';
+  }
+  return 'RUNTIME PREPARING';
 }
 
 function runtimeStatusTone(environment: DesktopEnvironmentEntry): EnvironmentCardTone {
-  return environment.runtime_health.status === 'online' ? 'success' : 'warning';
+  return environment.runtime_health.status === 'online' && runtimeServiceIsOpenable(environmentRuntimeService(environment))
+    ? 'success'
+    : 'warning';
 }
 
 function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentActionModel {
@@ -636,10 +666,14 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
       variant: 'default',
     };
   }
+  const snapshot = environmentRuntimeService(environment);
+  const blocked = snapshot?.open_readiness?.state === 'blocked';
   return {
     intent: 'open',
-    label: 'Open',
-    enabled: environment.runtime_health.status === 'online',
+    label: environment.runtime_health.status === 'online' && !runtimeServiceIsOpenable(snapshot)
+      ? blocked ? 'Open' : 'Preparing…'
+      : 'Open',
+    enabled: environment.runtime_health.status === 'online' && runtimeServiceIsOpenable(snapshot),
     variant: 'default',
   };
 }
@@ -851,6 +885,53 @@ function blockedPrimaryActionRefreshGuidanceAction(
   };
 }
 
+function blockedRuntimePrimaryActionGuidanceActions(
+  menuActions: readonly EnvironmentActionMenuItemModel[],
+): readonly EnvironmentGuidanceActionModel[] {
+  const restartSource = menuActions.find((item) => item.action.intent === 'stop_runtime');
+  const refreshSource = menuActions.find((item) => item.action.intent === 'refresh_runtime');
+  return [
+    restartSource
+      ? {
+          label: 'Restart after update…',
+          emphasis: 'primary',
+          action: {
+            ...restartSource.action,
+            intent: 'restart_runtime' as const,
+            label: 'Restart after update…',
+          },
+        }
+      : null,
+    refreshSource
+      ? {
+          label: 'Refresh status',
+          emphasis: 'secondary',
+          action: refreshSource.action,
+        }
+      : null,
+  ].filter((item): item is EnvironmentGuidanceActionModel => item !== null);
+}
+
+function blockedRuntimePrimaryActionTitle(
+  snapshot: RuntimeServiceSnapshot | undefined,
+): string {
+  return runtimeServiceNeedsRuntimeUpdate(snapshot)
+    ? 'Runtime update required'
+    : 'Runtime cannot open yet';
+}
+
+function blockedRuntimePrimaryActionDetail(
+  environment: DesktopEnvironmentEntry,
+  snapshot: RuntimeServiceSnapshot | undefined,
+): string {
+  if (runtimeServiceNeedsRuntimeUpdate(snapshot)) {
+    return environment.kind === 'ssh_environment'
+      ? 'SSH is connected, but the running runtime on this host needs an update before it can open the Environment App. Open will stay locked until the runtime is updated and restarted when active work can be interrupted.'
+      : 'This running runtime needs an update before it can open the Environment App. Open will stay locked until the runtime is updated and restarted when active work can be interrupted.';
+  }
+  return runtimeServiceOpenReadinessLabel(snapshot);
+}
+
 function blockedPrimaryActionTitle(
   environment: DesktopEnvironmentEntry,
   action: EnvironmentActionModel,
@@ -879,8 +960,29 @@ function primaryActionOverlay(
   environment: DesktopEnvironmentEntry,
   menuActions: readonly EnvironmentActionMenuItemModel[],
 ): EnvironmentPrimaryActionOverlayModel | undefined {
-  if (environment.window_state !== 'closed' || environment.runtime_health.status === 'online') {
+  if (environment.window_state !== 'closed') {
     return undefined;
+  }
+  if (environment.runtime_health.status === 'online') {
+    const snapshot = environmentRuntimeService(environment);
+    if (runtimeServiceIsOpenable(snapshot)) {
+      return undefined;
+    }
+    if (snapshot?.open_readiness?.state === 'blocked') {
+      return {
+        kind: 'popover',
+        tone: 'warning',
+        eyebrow: 'Runtime blocked',
+        title: blockedRuntimePrimaryActionTitle(snapshot),
+        detail: blockedRuntimePrimaryActionDetail(environment, snapshot),
+        actions: blockedRuntimePrimaryActionGuidanceActions(menuActions),
+      };
+    }
+    return {
+      kind: 'tooltip',
+      tone: 'warning',
+      message: runtimeServiceOpenReadinessLabel(snapshot),
+    };
   }
 
   const recoveryAction = blockedPrimaryActionGuidanceAction(environment, menuActions);
