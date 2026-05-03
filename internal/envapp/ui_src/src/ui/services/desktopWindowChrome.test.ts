@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  desktopFloatingWindowSafeAreaFromSnapshot,
   installDesktopWindowChromeDocumentSync,
+  readDesktopFloatingWindowSafeArea,
   readDesktopWindowChromeSnapshot,
+  subscribeDesktopFloatingWindowSafeArea,
 } from './desktopWindowChrome';
 
 const originalParent = window.parent;
@@ -83,6 +86,58 @@ describe('desktopWindowChrome', () => {
     expect(document.getElementById('redeven-desktop-window-chrome')?.textContent).toContain(
       "[data-redeven-desktop-titlebar-no-drag='true']",
     );
+  });
+
+  it('derives floating window safe area from desktop titlebar chrome', () => {
+    expect(desktopFloatingWindowSafeAreaFromSnapshot(null)).toEqual({
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+    });
+
+    window.redevenDesktopWindowChrome = {
+      getSnapshot: () => chromeSnapshot(),
+      subscribe: () => () => undefined,
+    };
+
+    expect(readDesktopFloatingWindowSafeArea()).toEqual({
+      top: 40,
+      right: 0,
+      bottom: 0,
+      left: 0,
+    });
+  });
+
+  it('notifies subscribers when desktop floating window safe area changes', () => {
+    let listener: ((snapshot: ChromeSnapshot) => void) | null = null;
+    window.redevenDesktopWindowChrome = {
+      getSnapshot: () => chromeSnapshot(),
+      subscribe: (nextListener: (snapshot: ChromeSnapshot) => void) => {
+        listener = nextListener;
+        return () => {
+          listener = null;
+        };
+      },
+    };
+    const safeAreaListener = vi.fn();
+
+    const unsubscribe = subscribeDesktopFloatingWindowSafeArea(safeAreaListener);
+    const currentListener = listener as ((snapshot: ChromeSnapshot) => void) | null;
+    currentListener?.({
+      ...chromeSnapshot(),
+      titleBarHeight: 56,
+    });
+
+    expect(safeAreaListener).toHaveBeenCalledWith({
+      top: 56,
+      right: 0,
+      bottom: 0,
+      left: 0,
+    });
+
+    unsubscribe();
+    expect(listener).toBeNull();
   });
 
   it('updates the document when the host window broadcasts a new chrome snapshot', () => {

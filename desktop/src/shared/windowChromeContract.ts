@@ -5,6 +5,9 @@ export const DESKTOP_WINDOW_CHROME_DRAG_ROOT_SELECTORS = [
   "[data-redeven-desktop-titlebar-drag-region='true']",
 ] as const;
 
+export const DESKTOP_WINDOW_CHROME_NO_DRAG_ATTR = 'data-redeven-desktop-titlebar-no-drag';
+export const DESKTOP_WINDOW_CHROME_NO_DRAG_SELECTOR = `[${DESKTOP_WINDOW_CHROME_NO_DRAG_ATTR}='true']`;
+
 export const DESKTOP_WINDOW_CHROME_NO_DRAG_TARGET_SELECTORS = [
   'button',
   'a',
@@ -12,7 +15,7 @@ export const DESKTOP_WINDOW_CHROME_NO_DRAG_TARGET_SELECTORS = [
   'textarea',
   'select',
   "[role='button']",
-  "[data-redeven-desktop-titlebar-no-drag='true']",
+  DESKTOP_WINDOW_CHROME_NO_DRAG_SELECTOR,
 ] as const;
 
 export type DesktopWindowChromeMode = 'hidden-inset' | 'overlay';
