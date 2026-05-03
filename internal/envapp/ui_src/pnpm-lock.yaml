@@ -33,8 +33,8 @@ importers:
         specifier: ^0.36.42
         version: 0.36.42(solid-js@1.9.11)
       '@floegence/floeterm-terminal-web':
-        specifier: ^0.5.0
-        version: 0.5.0
+        specifier: ^0.5.1
+        version: 0.5.1
       '@floegence/flowersec-core':
         specifier: ^0.19.4
         version: 0.19.4
@@ -129,6 +129,9 @@ importers:
       vite-plugin-solid:
         specifier: ^2.11.0
         version: 2.11.10(solid-js@1.9.11)(vite@6.4.2(@types/node@20.19.30)(jiti@2.6.1)(lightningcss@1.30.2))
+      vite-plugin-wasm:
+        specifier: ^3.6.0
+        version: 3.6.0(vite@6.4.2(@types/node@20.19.30)(jiti@2.6.1)(lightningcss@1.30.2))
       vitest:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@20.19.30)(@vitest/browser@3.2.4)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)
@@ -225,6 +228,10 @@ packages:
   '@babel/types@7.29.0':
     resolution: {integrity: sha512-LwdZHpScM4Qz8Xw2iKSzS+cfglZzJGvofQICy7W7v4caru4EaAmyUuO6BGrbyQ2mYV11W0U8j5mBhd14dd3B0A==}
     engines: {node: '>=6.9.0'}
+
+  '@beamterm/renderer@1.0.0':
+    resolution: {integrity: sha512-Uct8zOjj8aR/63D+fl3Hv9D01HFCMzIvAqtkZk+lgAendUMid5loccrhtQkEjqUWDUMgu54SDLhnROnUj8sCFw==}
+    engines: {node: '>=16.0.0'}
 
   '@braintree/sanitize-url@7.1.2':
     resolution: {integrity: sha512-jigsZK+sMF/cuiB7sERuo9V7N9jx+dhmHHnQyDSVdpZwVutaBu7WvNYqMDLSgFgfB30n452TP3vjDAvFC973mA==}
@@ -488,8 +495,8 @@ packages:
     peerDependencies:
       solid-js: ^1.8.0
 
-  '@floegence/floeterm-terminal-web@0.5.0':
-    resolution: {integrity: sha512-+2Jbqn3i6jRI6j6W53qRyLXtpbgL3lI6oCj1Wp9dAHvl3QxH7aRCaxttXzpORC4J6NQMBN+5tLrNO+9fEG7QQg==}
+  '@floegence/floeterm-terminal-web@0.5.1':
+    resolution: {integrity: sha512-G8A6RaOMsiuDtSR/XnWqSPjh8igUKm1epbdnUAVeXaOsx16ZmxodblzQutYeXU16ero4VJiKY/RSWgKd85ArBg==}
 
   '@floegence/flowersec-core@0.19.4':
     resolution: {integrity: sha512-b0n2iGaOeO69fWIPHtbDv8cf50dy6kXryJ8zNjfEZQLoAACtAeaJYJIvoMw2FwE+q6Ordj4k4sK+n02Z+TJhyA==}
@@ -2639,6 +2646,11 @@ packages:
       '@testing-library/jest-dom':
         optional: true
 
+  vite-plugin-wasm@3.6.0:
+    resolution: {integrity: sha512-mL/QPziiIA4RAA6DkaZZzOstdwbW5jO4Vz7Zenj0wieKWBlNvIvX5L5ljum9lcUX0ShNfBgCNLKTjNkRVVqcsw==}
+    peerDependencies:
+      vite: ^2 || ^3 || ^4 || ^5 || ^6 || ^7 || ^8
+
   vite@6.4.2:
     resolution: {integrity: sha512-2N/55r4JDJ4gdrCvGgINMy+HH3iRpNIz8K6SFwVsA+JbQScLiC+clmAxBgwiSPgcG9U15QmvqCGWzMbqda5zGQ==}
     engines: {node: ^18.0.0 || ^20.0.0 || >=22.0.0}
@@ -2934,6 +2946,8 @@ snapshots:
       '@babel/helper-string-parser': 7.27.1
       '@babel/helper-validator-identifier': 7.28.5
 
+  '@beamterm/renderer@1.0.0': {}
+
   '@braintree/sanitize-url@7.1.2': {}
 
   '@chenglou/pretext@0.0.5': {}
@@ -3145,8 +3159,9 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/floeterm-terminal-web@0.5.0':
+  '@floegence/floeterm-terminal-web@0.5.1':
     dependencies:
+      '@beamterm/renderer': 1.0.0
       ghostty-web: 0.4.0-next.14.g6a1a50d
 
   '@floegence/flowersec-core@0.19.4':
@@ -5411,6 +5426,10 @@ snapshots:
       vitefu: 1.1.1(vite@6.4.2(@types/node@20.19.30)(jiti@2.6.1)(lightningcss@1.30.2))
     transitivePeerDependencies:
       - supports-color
+
+  vite-plugin-wasm@3.6.0(vite@6.4.2(@types/node@20.19.30)(jiti@2.6.1)(lightningcss@1.30.2)):
+    dependencies:
+      vite: 6.4.2(@types/node@20.19.30)(jiti@2.6.1)(lightningcss@1.30.2)
 
   vite@6.4.2(@types/node@20.19.30)(jiti@2.6.1)(lightningcss@1.30.2):
     dependencies:
