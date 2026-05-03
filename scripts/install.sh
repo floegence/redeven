@@ -42,7 +42,7 @@ REDEVEN_DOCS_URL="${REDEVEN_DOCS_URL:-https://docs.example.invalid}"
 RG_VERSION="14.1.1"
 RG_GITHUB_RELEASES_URL="https://github.com/BurntSushi/ripgrep/releases"
 
-# Redeven home directory - default runtime state lives under ~/.redeven/scopes/local/default/
+# Redeven home directory - default runtime state lives under ~/.redeven/machine/
 REDEVEN_HOME="${HOME}/.redeven"
 REDEVEN_TOOLS_DIR="${REDEVEN_HOME}/tools"
 

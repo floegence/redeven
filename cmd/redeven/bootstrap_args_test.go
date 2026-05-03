@@ -12,11 +12,11 @@ func TestBuildRunBootstrapArgs(t *testing.T) {
 			"/tmp/redeven/envs/env_123/config.json",
 			"https://region.example.invalid",
 			"env_123",
-			"token-123",
-			"",
+			"ticket-123",
 			"",
 			runModeDesktop,
 			true,
+			"dev",
 		)
 
 		if got.LogLevel != "info" {
@@ -30,11 +30,11 @@ func TestBuildRunBootstrapArgs(t *testing.T) {
 			"/tmp/redeven/config.json",
 			"https://region.example.invalid",
 			"env_123",
-			"token-123",
-			"",
+			"ticket-123",
 			"execute_read",
 			runModeHybrid,
 			false,
+			"dev",
 		)
 
 		if got.LogLevel != "" {
@@ -51,16 +51,13 @@ func TestBuildRunBootstrapArgs(t *testing.T) {
 			"/tmp/redeven/envs/env_123/config.json",
 			"https://region.example.invalid",
 			"env_123",
-			"",
 			"ticket-123",
 			"",
 			runModeDesktop,
 			false,
+			"dev",
 		)
 
-		if got.EnvironmentToken != "" {
-			t.Fatalf("EnvironmentToken = %q, want empty", got.EnvironmentToken)
-		}
 		if got.BootstrapTicket != "ticket-123" {
 			t.Fatalf("BootstrapTicket = %q, want %q", got.BootstrapTicket, "ticket-123")
 		}
@@ -75,10 +72,10 @@ func assertRunBootstrapArgsCore(t *testing.T, got config.BootstrapArgs) {
 	if got.EnvironmentID != "env_123" {
 		t.Fatalf("EnvironmentID = %q", got.EnvironmentID)
 	}
-	if got.EnvironmentToken != "token-123" {
-		t.Fatalf("EnvironmentToken = %q", got.EnvironmentToken)
+	if got.BootstrapTicket != "ticket-123" {
+		t.Fatalf("BootstrapTicket = %q, want %q", got.BootstrapTicket, "ticket-123")
 	}
-	if got.BootstrapTicket != "" {
-		t.Fatalf("BootstrapTicket = %q, want empty", got.BootstrapTicket)
+	if got.RuntimeVersion != "dev" {
+		t.Fatalf("RuntimeVersion = %q, want dev", got.RuntimeVersion)
 	}
 }

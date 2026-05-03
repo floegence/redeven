@@ -11,7 +11,6 @@ import (
 const (
 	exampleControlplaneURL = "https://region.example.invalid"
 	exampleEnvID           = "env_123"
-	exampleEnvToken        = "<token>"
 	exampleBootstrapTicket = "<bootstrap-ticket>"
 	examplePasswordEnv     = "REDEVEN_LOCAL_UI_PASSWORD"
 	exampleBootstrapEnv    = "REDEVEN_BOOTSTRAP_TICKET"
@@ -28,7 +27,7 @@ Usage:
   redeven help [command]
 
 Commands:
-  bootstrap   Exchange an environment token for local runtime config.
+  bootstrap   Bind this machine to a control-plane environment.
   run         Start the runtime in remote, hybrid, local, or desktop mode.
   search      Run web search using configured provider credentials.
   knowledge   Build or verify embedded knowledge bundle assets.
@@ -36,47 +35,41 @@ Commands:
   help        Show detailed help and startup examples.
 
 Quick start:
-  Bootstrap once into a control-plane scope, then run:
-    redeven bootstrap --controlplane %[1]s --env-id %[2]s --env-token %[3]s
+  Bind this machine once, then run:
+    redeven bootstrap --controlplane %[1]s --env-id %[2]s --bootstrap-ticket %[3]s
     redeven run --mode hybrid
 
   Local-only mode on this machine:
     redeven run --mode local
 
-  Local-only mode in a reusable named scope:
-    redeven run --mode local --scope named/dev-a
-
   Expose Local UI to another machine on a trusted network:
     %[4]s=replace-with-a-long-password \
     redeven run --mode hybrid --local-ui-bind 0.0.0.0:24000 --password-env %[4]s
 
-  One-shot run without a separate bootstrap step:
-    redeven run --mode hybrid --controlplane %[1]s --env-id %[2]s --env-token %[3]s
+  One-shot machine rebind without a separate bootstrap step:
+    redeven run --mode hybrid --controlplane %[1]s --env-id %[2]s --bootstrap-ticket %[3]s
 
 Run %[5]s for detailed usage.
-`, exampleControlplaneURL, exampleEnvID, exampleEnvToken, examplePasswordEnv, "`redeven help <command>`"), "\n")
+`, exampleControlplaneURL, exampleEnvID, exampleBootstrapTicket, examplePasswordEnv, "`redeven help <command>`"), "\n")
 }
 
 func bootstrapHelpText() string {
 	return strings.TrimLeft(fmt.Sprintf(`
 redeven bootstrap
 
-Exchange an environment token for local runtime config.
+Bind this machine to a control-plane environment.
 
 Usage:
-  redeven bootstrap --controlplane <url> --env-id <env_public_id> [credential flags] [flags]
+  redeven bootstrap --controlplane <url> --env-id <env_public_id> [ticket flags] [flags]
 
 Required flags:
   --controlplane <url>              Controlplane base URL.
   --env-id <env_public_id>          Environment public ID.
-  One bootstrap credential:
-    --env-token <token>               Environment token. "Bearer <token>" is also accepted.
-    --env-token-env <env_name>        Read the environment token from an environment variable.
+  One bootstrap ticket:
     --bootstrap-ticket <ticket>       One-time bootstrap ticket. "Bearer <ticket>" is also accepted.
     --bootstrap-ticket-env <env_name> Read the bootstrap ticket from an environment variable.
 
 Optional flags:
-  --scope <selector>               Scope selector: local, local/<name>, named/<name>, or controlplane/<provider_key>/<env_id>.
   --state-root <path>              State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
   --config-path <path>             Config path override (advanced).
   --agent-home-dir <path>           Runtime home dir for filesystem-facing features.
@@ -87,32 +80,29 @@ Optional flags:
                                     Log level override.
   --timeout <duration>              Bootstrap request timeout (default: 15s).
 
-Scope selection:
-  - Default target: scopes/controlplane/<provider_key>/<env_id>/ derived from --controlplane and --env-id.
-  - Use --scope for reusable local or named scopes when you want the config written elsewhere.
-  - Use --config-path only when you need a fully explicit file path.
+Machine state:
+  - Default target: ~/.redeven/machine/config.json.
+  - Rebinding this machine replaces the current control-plane environment binding.
+  - Use --config-path only for development or tests that need a fully explicit file path.
 
 Writes by default:
-  ~/.redeven/scopes/controlplane/<provider_key>/<env_id>/config.json
-  ~/.redeven/scopes/controlplane/<provider_key>/<env_id>/scope.json
+  ~/.redeven/machine/config.json
+  ~/.redeven/machine/scope.json
 
 Examples:
   Minimal bootstrap:
-    redeven bootstrap --controlplane %[1]s --env-id %[2]s --env-token %[3]s
+    redeven bootstrap --controlplane %[1]s --env-id %[2]s --bootstrap-ticket %[3]s
 
   Bootstrap from a one-time desktop handoff ticket:
-    redeven bootstrap --controlplane %[1]s --env-id %[2]s --bootstrap-ticket %[4]s
+    redeven bootstrap --controlplane %[1]s --env-id %[2]s --bootstrap-ticket %[3]s
 
   Bootstrap with a stricter permission preset:
-    redeven bootstrap --controlplane %[1]s --env-id %[2]s --env-token %[3]s --permission-policy read_only
-
-  Bootstrap into a reusable named scope under a custom state root:
-    redeven bootstrap --scope named/dev-a --state-root /tmp/redeven-state --controlplane %[1]s --env-id %[2]s --env-token %[3]s
+    redeven bootstrap --controlplane %[1]s --env-id %[2]s --bootstrap-ticket %[3]s --permission-policy read_only
 
   Bootstrap, then start the runtime:
-    redeven bootstrap --controlplane %[1]s --env-id %[2]s --env-token %[3]s
+    redeven bootstrap --controlplane %[1]s --env-id %[2]s --bootstrap-ticket %[3]s
     redeven run --mode hybrid
-`, exampleControlplaneURL, exampleEnvID, exampleEnvToken, exampleBootstrapTicket), "\n")
+`, exampleControlplaneURL, exampleEnvID, exampleBootstrapTicket), "\n")
 }
 
 func runHelpText() string {
@@ -131,14 +121,13 @@ Modes:
   desktop   Always start the Local UI. Connect to the control plane only when bootstrap config is already valid.
 
 Bootstrap rules:
-  - Recommended flow: run %[5]s once into a control-plane scope, then use %[6]s.
-  - One-shot flow: pass --controlplane, --env-id, and exactly one bootstrap credential to %[6]s.
+  - Recommended flow: run %[4]s once, then use %[5]s.
+  - One-shot flow: pass --controlplane, --env-id, and a one-time bootstrap ticket to %[5]s.
 
-Scope selection rules:
-  - Without --config-path, --scope, or inline bootstrap flags, redeven uses the local/default scope.
-  - With inline bootstrap flags and no --scope, redeven uses a derived control-plane scope.
-  - Use --scope for reusable local or named scopes.
-  - Use --state-root to relocate the entire scope tree, including desktop-managed SSH runtimes.
+Machine state rules:
+  - Without --config-path, redeven uses the single machine state at ~/.redeven/machine.
+  - Inline bootstrap flags rebind the same machine state before startup.
+  - Use --state-root to relocate the whole machine state root, including desktop-managed SSH runtimes.
 
 Local UI bind rules:
   - Default bind: localhost:23998
@@ -156,8 +145,6 @@ Flags:
   --local-ui-bind <host:port>       Local UI bind address (default: localhost:23998).
   --controlplane <url>              Controlplane base URL for one-shot bootstrap.
   --env-id <env_public_id>          Environment public ID for one-shot bootstrap.
-  --env-token <token>               Environment token for one-shot bootstrap.
-  --env-token-env <env_name>        Read the environment token from an environment variable.
   --bootstrap-ticket <ticket>       One-time bootstrap ticket for one-shot bootstrap.
   --bootstrap-ticket-env <env_name> Read the bootstrap ticket from an environment variable.
   --permission-policy <preset>      Local permission policy when bootstrapping inline.
@@ -165,7 +152,6 @@ Flags:
   --password-stdin                  Read the Local UI password from stdin.
   --password-env <env_name>         Read the Local UI password from an environment variable.
   --password-file <path>            Read the Local UI password from a file.
-  --scope <selector>                Scope selector: local, local/<name>, named/<name>, or controlplane/<provider_key>/<env_id>.
   --state-root <path>               State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
   --config-path <path>              Config path override.
   --desktop-managed                 Disable CLI self-upgrade for desktop-managed Local UI runs.
@@ -181,22 +167,19 @@ Examples:
   Local-only mode:
     redeven run --mode local
 
-  Local-only mode in a reusable named scope:
-    redeven run --mode local --scope named/dev-a
-
   Desktop shell mode:
     redeven run --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0
 
   Hybrid mode exposed to another machine on a trusted network:
-    %[8]s=replace-with-a-long-password \
-    redeven run --mode hybrid --local-ui-bind 0.0.0.0:24000 --password-env %[8]s
+    %[7]s=replace-with-a-long-password \
+    redeven run --mode hybrid --local-ui-bind 0.0.0.0:24000 --password-env %[7]s
 
   One-shot hybrid run without a separate bootstrap step:
-    redeven run --mode hybrid --controlplane %[1]s --env-id %[2]s --env-token %[3]s
+    redeven run --mode hybrid --controlplane %[1]s --env-id %[2]s --bootstrap-ticket %[3]s
 
   One-shot desktop handoff run with a bootstrap ticket:
-    %[7]s=%[4]s redeven run --mode desktop --desktop-managed --controlplane %[1]s --env-id %[2]s --bootstrap-ticket-env %[7]s
-`, exampleControlplaneURL, exampleEnvID, exampleEnvToken, exampleBootstrapTicket, "`redeven bootstrap`", "`redeven run`", exampleBootstrapEnv, examplePasswordEnv), "\n")
+    %[6]s=%[3]s redeven run --mode desktop --desktop-managed --controlplane %[1]s --env-id %[2]s --bootstrap-ticket-env %[6]s
+`, exampleControlplaneURL, exampleEnvID, exampleBootstrapTicket, "`redeven bootstrap`", "`redeven run`", exampleBootstrapEnv, examplePasswordEnv), "\n")
 }
 
 func searchHelpText() string {
@@ -212,7 +195,6 @@ Flags:
   --provider <name>                 Web search provider (default: brave).
   --count <n>                       Number of results to return (default: 5, max: 10).
   --format <json|text>              Output format (default: json).
-  --scope <selector>                Scope selector: local, local/<name>, named/<name>, or controlplane/<provider_key>/<env_id>.
   --state-root <path>               State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
   --config-path <path>              Config path override.
   --secrets-path <path>             Secrets path override.
@@ -466,24 +448,6 @@ func translatePasswordOptionError(err error) (string, []string) {
 		}
 	}
 	return fmt.Sprintf("invalid password flags: %v", err), nil
-}
-
-func translateEnvTokenOptionError(err error, command string) (string, []string) {
-	var optErr *envTokenOptionError
-	if errors.As(err, &optErr) {
-		switch optErr.kind {
-		case envTokenOptionErrorMultipleSources:
-			return "invalid environment token flags: use only one of --env-token or --env-token-env",
-				[]string{fmt.Sprintf("Hint: choose a single environment token source for `%s`.", command)}
-		case envTokenOptionErrorEnvNotSet:
-			return fmt.Sprintf("invalid environment token flags: environment token env var %q is not set", optErr.envName),
-				[]string{fmt.Sprintf("Hint: export %s with a non-empty token before running `%s`.", optErr.envName, command)}
-		case envTokenOptionErrorEnvEmpty:
-			return fmt.Sprintf("invalid environment token flags: environment token env var %q is empty", optErr.envName),
-				[]string{fmt.Sprintf("Hint: set %s to a non-empty token and retry.", optErr.envName)}
-		}
-	}
-	return fmt.Sprintf("invalid environment token flags: %v", err), nil
 }
 
 func translateBootstrapTicketOptionError(err error, command string) (string, []string) {

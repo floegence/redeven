@@ -355,7 +355,7 @@ if (args.includes('-M') && args.includes('-N')) {
       process.exit(0);
       break;
     case 'redeven-ssh-start':
-      appendLog('start_runtime', { instance_id: remoteScriptArgs()[2] || args[args.length - 2] || '' });
+      appendLog('start_runtime', { session_token: remoteScriptArgs()[2] || args[args.length - 1] || '' });
       if (scenario === 'blocked_report') {
         process.exit(1);
       }
@@ -479,7 +479,6 @@ function targetFor(strategy: DesktopSSHBootstrapStrategy): DesktopSSHEnvironment
     remote_install_dir: 'remote_default',
     bootstrap_strategy: strategy,
     release_base_url: '',
-    environment_instance_id: 'envinst_demo001',
   };
 }
 

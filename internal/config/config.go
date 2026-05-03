@@ -18,6 +18,8 @@ type Config struct {
 	ControlplaneBaseURL    string                      `json:"controlplane_base_url"`
 	ControlplaneProviderID string                      `json:"controlplane_provider_id,omitempty"`
 	EnvironmentID          string                      `json:"environment_id"`
+	MachinePublicID        string                      `json:"machine_public_id"`
+	BindingGeneration      int64                       `json:"binding_generation,omitempty"`
 	AgentInstanceID        string                      `json:"agent_instance_id"`
 	Direct                 *directv1.DirectConnectInfo `json:"direct"`
 
@@ -83,6 +85,12 @@ func (c *Config) ValidateRemoteStrict() error {
 	}
 	if strings.TrimSpace(c.EnvironmentID) == "" {
 		return errors.New("missing environment_id")
+	}
+	if strings.TrimSpace(c.MachinePublicID) == "" {
+		return errors.New("missing machine_public_id")
+	}
+	if c.BindingGeneration <= 0 {
+		return errors.New("missing binding_generation")
 	}
 	if strings.TrimSpace(c.AgentInstanceID) == "" {
 		return errors.New("missing agent_instance_id")

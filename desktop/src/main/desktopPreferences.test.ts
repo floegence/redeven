@@ -25,7 +25,6 @@ import {
   createPlaintextSecretCodec,
   deleteManagedEnvironment,
   deleteProviderEnvironmentLocalRuntime,
-  describeManagedEnvironmentLocalBindConflict,
   type DesktopPreferences,
   defaultDesktopPreferences,
   defaultDesktopPreferencesPaths,
@@ -150,9 +149,9 @@ describe('desktopPreferences', () => {
     }))).toThrow('Non-loopback Local UI binds require a Local UI password.');
   });
 
-  it('detects local bind conflicts across managed environments', () => {
+  it('does not report bind conflicts across collapsed machine records', () => {
     const primary = testManagedLocalEnvironment('default', {
-      label: 'Local Default Environment',
+      label: 'Local Machine',
       access: testManagedAccess({
         local_ui_bind: 'localhost:23998',
       }),
@@ -167,17 +166,7 @@ describe('desktopPreferences', () => {
       managed_environments: [primary, lab],
     });
 
-    expect(findManagedEnvironmentLocalBindConflict(preferences, lab.id)).toEqual({
-      environment_id: lab.id,
-      label: 'Lab',
-      local_ui_bind: '127.0.0.1:23998',
-      conflicting_environment_id: primary.id,
-      conflicting_label: 'Local Default Environment',
-      conflicting_local_ui_bind: 'localhost:23998',
-    });
-    expect(describeManagedEnvironmentLocalBindConflict(findManagedEnvironmentLocalBindConflict(preferences, lab.id)!)).toBe(
-      'Lab cannot use 127.0.0.1:23998 because "Local Default Environment" is already configured for localhost:23998. Choose a different Local UI bind or update that environment first.',
-    );
+    expect(findManagedEnvironmentLocalBindConflict(preferences, lab.id)).toBeNull();
   });
 
   it('does not treat dynamic local binds as conflicts', () => {
@@ -198,7 +187,7 @@ describe('desktopPreferences', () => {
     expect(findManagedEnvironmentLocalBindConflict(preferences, lab.id)).toBeNull();
   });
 
-  it('preserves the existing local scope name when editing a local-only environment without resending it', () => {
+  it('preserves the existing machine state name when editing a local-only environment without resending it', () => {
     const existing = testManagedLocalEnvironment('lab', {
       label: 'Lab',
       access: testManagedAccess({
@@ -222,8 +211,8 @@ describe('desktopPreferences', () => {
       label: 'Renamed Lab',
     }));
     expect(updated?.local_hosting?.scope).toEqual({
-      kind: 'local',
-      name: 'lab',
+      kind: 'machine',
+      name: 'machine',
     });
     expect(updated?.local_hosting?.access.local_ui_bind).toBe('localhost:24000');
   });
@@ -280,7 +269,7 @@ describe('desktopPreferences', () => {
         ],
         saved_ssh_environments: [
           {
-            id: 'ssh:devbox:2222:key_agent:remote_default:envinst_demo001',
+            id: 'ssh:devbox:2222:key_agent:remote_default',
             label: 'SSH Lab',
             ssh_destination: 'devbox',
             ssh_port: 2222,
@@ -288,7 +277,6 @@ describe('desktopPreferences', () => {
             remote_install_dir: 'remote_default',
             bootstrap_strategy: 'desktop_upload',
             release_base_url: 'https://mirror.example.invalid/releases',
-            environment_instance_id: 'envinst_demo001',
             source: 'saved',
             pinned: false,
             last_used_at_ms: 90,
@@ -302,7 +290,7 @@ describe('desktopPreferences', () => {
     });
   });
 
-  it('migrates legacy SSH catalog records onto isolated environment instance ids', async () => {
+  it('canonicalizes legacy SSH catalog records onto host-scoped machine ids', async () => {
     await withTempPreferencesDir(async (root) => {
       const paths = defaultDesktopPreferencesPaths(root);
       const codec = createPlaintextSecretCodec();
@@ -342,10 +330,7 @@ describe('desktopPreferences', () => {
         source: 'saved',
         pinned: false,
       }));
-      expect(loaded.saved_ssh_environments[0].environment_instance_id).toMatch(/^envinst_[a-f0-9]{20}$/u);
-      expect(loaded.saved_ssh_environments[0].id).toBe(
-        `ssh:devbox:2222:key_agent:remote_default:${loaded.saved_ssh_environments[0].environment_instance_id}`,
-      );
+      expect(loaded.saved_ssh_environments[0].id).toBe('ssh:devbox:2222:key_agent:remote_default');
 
       const rewrittenFiles = await fs.readdir(connectionsDir);
       expect(rewrittenFiles).toHaveLength(1);
@@ -426,10 +411,10 @@ describe('desktopPreferences', () => {
       }));
       expect(loaded.managed_environments).toEqual([
         expect.objectContaining({
-          id: 'local:default',
-          identity: { kind: 'provisional_local', local_name: 'default' },
+          id: 'machine',
+          identity: { kind: 'provisional_local', local_name: 'machine' },
           local_hosting: expect.objectContaining({
-            scope: { kind: 'local', name: 'default' },
+            scope: { kind: 'machine', name: 'machine' },
           }),
         }),
       ]);
@@ -493,11 +478,11 @@ describe('desktopPreferences', () => {
       }));
       expect(loaded.managed_environments).toEqual([
         expect.objectContaining({
-          id: 'local:default',
-          label: 'Local Default Environment',
-          identity: { kind: 'provisional_local', local_name: 'default' },
+          id: 'machine',
+          label: 'Local Machine',
+          identity: { kind: 'provisional_local', local_name: 'machine' },
           local_hosting: expect.objectContaining({
-            scope: { kind: 'local', name: 'default' },
+            scope: { kind: 'machine', name: 'machine' },
             access: {
               local_ui_bind: '0.0.0.0:24000',
               local_ui_password: 'super-secret',
@@ -524,11 +509,11 @@ describe('desktopPreferences', () => {
       }));
       expect(loaded.managed_environments).toEqual([
         expect.objectContaining({
-          id: 'local:default',
-          label: 'Local Default Environment',
-          identity: { kind: 'provisional_local', local_name: 'default' },
+          id: 'machine',
+          label: 'Local Machine',
+          identity: { kind: 'provisional_local', local_name: 'machine' },
           local_hosting: expect.objectContaining({
-            scope: { kind: 'local', name: 'default' },
+            scope: { kind: 'machine', name: 'machine' },
             access: {
               local_ui_bind: 'localhost:23998',
               local_ui_password: '',
@@ -559,10 +544,10 @@ describe('desktopPreferences', () => {
       }));
       expect(loaded.managed_environments).toEqual([
         expect.objectContaining({
-          id: 'local:default',
-          identity: { kind: 'provisional_local', local_name: 'default' },
+          id: 'machine',
+          identity: { kind: 'provisional_local', local_name: 'machine' },
           local_hosting: expect.objectContaining({
-            scope: { kind: 'local', name: 'default' },
+            scope: { kind: 'machine', name: 'machine' },
             access: {
               local_ui_bind: '127.0.0.1:0',
               local_ui_password: '',
@@ -612,10 +597,10 @@ describe('desktopPreferences', () => {
       }));
       expect(loaded.managed_environments).toEqual([
         expect.objectContaining({
-          id: 'local:default',
-          identity: { kind: 'provisional_local', local_name: 'default' },
+          id: 'machine',
+          identity: { kind: 'provisional_local', local_name: 'machine' },
           local_hosting: expect.objectContaining({
-            scope: { kind: 'local', name: 'default' },
+            scope: { kind: 'machine', name: 'machine' },
             access: {
               local_ui_bind: 'localhost:23998',
               local_ui_password: '',
@@ -713,13 +698,12 @@ describe('desktopPreferences', () => {
       remote_install_dir: 'remote_default',
       bootstrap_strategy: 'auto',
       release_base_url: '',
-      environment_instance_id: 'envinst_demo001',
       label: 'Lab',
     });
 
     expect(remembered.saved_ssh_environments).toEqual([
       {
-        id: 'ssh:devbox:2222:key_agent:remote_default:envinst_demo001',
+        id: 'ssh:devbox:2222:key_agent:remote_default',
         label: 'Lab',
         ssh_destination: 'devbox',
         ssh_port: 2222,
@@ -727,7 +711,6 @@ describe('desktopPreferences', () => {
         remote_install_dir: 'remote_default',
         bootstrap_strategy: 'auto',
         release_base_url: '',
-        environment_instance_id: 'envinst_demo001',
         source: 'recent_auto',
         pinned: false,
         last_used_at_ms: expect.any(Number),
@@ -743,12 +726,11 @@ describe('desktopPreferences', () => {
       remote_install_dir: 'remote_default',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example.invalid/releases',
-      environment_instance_id: 'envinst_demo001',
       source: 'saved',
       last_used_at_ms: 500,
     });
 
-    expect(deleteSavedSSHEnvironment(saved, 'ssh:devbox:2222:key_agent:remote_default:envinst_demo001').saved_ssh_environments).toEqual([]);
+    expect(deleteSavedSSHEnvironment(saved, 'ssh:devbox:2222:key_agent:remote_default').saved_ssh_environments).toEqual([]);
   });
 
   it('persists pin state for managed, URL, and SSH environments', () => {
@@ -763,7 +745,7 @@ describe('desktopPreferences', () => {
         last_used_at_ms: 20,
       }],
       saved_ssh_environments: [{
-        id: 'ssh:devbox:2222:key_agent:remote_default:envinst_demo001',
+        id: 'ssh:devbox:2222:key_agent:remote_default',
         label: 'SSH Lab',
         ssh_destination: 'devbox',
         ssh_port: 2222,
@@ -771,14 +753,13 @@ describe('desktopPreferences', () => {
         remote_install_dir: 'remote_default',
         bootstrap_strategy: 'desktop_upload',
         release_base_url: '',
-        environment_instance_id: 'envinst_demo001',
         source: 'saved',
         pinned: false,
         last_used_at_ms: 10,
       }],
     });
 
-    const managedPinned = setManagedEnvironmentPinned(base, 'local:default', true);
+    const managedPinned = setManagedEnvironmentPinned(base, 'machine', true);
     const urlPinned = setSavedEnvironmentPinned(managedPinned, {
       environment_id: 'http://192.168.1.12:24000/',
       label: 'Staging',
@@ -786,7 +767,7 @@ describe('desktopPreferences', () => {
       pinned: true,
     });
     const sshPinned = setSavedSSHEnvironmentPinned(urlPinned, {
-      environment_id: 'ssh:devbox:2222:key_agent:remote_default:envinst_demo001',
+      environment_id: 'ssh:devbox:2222:key_agent:remote_default',
       label: 'SSH Lab',
       pinned: true,
       ssh_destination: 'devbox',
@@ -795,7 +776,6 @@ describe('desktopPreferences', () => {
       remote_install_dir: 'remote_default',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: '',
-      environment_instance_id: 'envinst_demo001',
     });
 
     expect(sshPinned.managed_environments[0]).toEqual(expect.objectContaining({ pinned: true }));
@@ -880,7 +860,7 @@ describe('desktopPreferences', () => {
 
     expect(next.managed_environments).toEqual([
       expect.objectContaining({
-        id: 'local:default',
+        id: 'machine',
       }),
     ]);
     expect(next.provider_environments).toEqual([
@@ -997,7 +977,7 @@ describe('desktopPreferences', () => {
     }));
     expect(next.managed_environments).toEqual([
       expect.objectContaining({
-        id: 'local:default',
+        id: 'machine',
       }),
     ]);
   });
@@ -1054,7 +1034,7 @@ describe('desktopPreferences', () => {
     expect(next.managed_environments.some((environment) => environment.id === existingRemoteOnly.id)).toBe(false);
   });
 
-  it('keeps the existing local scope when editing a local-only environment label', () => {
+  it('keeps the existing machine state when editing a local-only environment label', () => {
     const existing = testManagedLocalEnvironment('lab', {
       label: 'Lab',
       stateDir: '/tmp/redeven-lab',
@@ -1075,8 +1055,8 @@ describe('desktopPreferences', () => {
         label: 'Renamed Lab',
         local_hosting: expect.objectContaining({
           scope: expect.objectContaining({
-            kind: 'local',
-            name: 'lab',
+            kind: 'machine',
+            name: 'machine',
           }),
           state_dir: '/tmp/redeven-lab',
         }),
@@ -1084,7 +1064,7 @@ describe('desktopPreferences', () => {
     ]));
   });
 
-  it('deletes a local-only managed environment and returns its local state directory', () => {
+  it('keeps the local machine record when deletion is requested directly', () => {
     const removable = testManagedLocalEnvironment('lab');
 
     const result = deleteManagedEnvironment(testDesktopPreferences({
@@ -1094,9 +1074,9 @@ describe('desktopPreferences', () => {
       ],
     }), removable.id);
 
-    expect(result.deleted_environment?.id).toBe(removable.id);
-    expect(result.deleted_state_dir).toBe(removable.local_hosting?.state_dir);
-    expect(result.preferences.managed_environments.some((environment) => environment.id === removable.id)).toBe(false);
+    expect(result.deleted_environment).toBeNull();
+    expect(result.deleted_state_dir).toBe('');
+    expect(result.preferences.managed_environments.some((environment) => environment.id === removable.id)).toBe(true);
   });
 
   it('deleting a provider local runtime removes only the local route state', () => {
@@ -1121,7 +1101,7 @@ describe('desktopPreferences', () => {
 
     expect(result.deleted_environment?.id).toBe(localServe.id);
     expect(result.deleted_state_dir).toBe(localServe.local_runtime?.scope.state_dir);
-    expect(result.preferences.managed_environments.map((environment) => environment.id)).toEqual(['local:default']);
+    expect(result.preferences.managed_environments.map((environment) => environment.id)).toEqual(['machine']);
     expect(result.preferences.provider_environments).toEqual([
       expect.objectContaining({
         id: localServe.id,
@@ -1275,7 +1255,7 @@ describe('desktopPreferences', () => {
       }),
     ]);
     expect(next.managed_environments.map((environment) => environment.id)).toEqual([
-      'local:default',
+      'machine',
     ]);
   });
 
@@ -1296,7 +1276,7 @@ describe('desktopPreferences', () => {
 
     expect(pinned.managed_environments).toEqual([
       expect.objectContaining({
-        id: 'local:default',
+        id: 'machine',
       }),
     ]);
     expect(pinned.provider_environments).toEqual([
@@ -1326,7 +1306,7 @@ describe('desktopPreferences', () => {
 
     expect(next.managed_environments).toEqual([
       expect.objectContaining({
-        id: 'local:default',
+        id: 'machine',
       }),
     ]);
     expect(next.provider_environments.filter((environment) => environment.id === 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo')).toEqual([
@@ -1342,7 +1322,7 @@ describe('desktopPreferences', () => {
     ]);
   });
 
-  it('canonicalizes legacy provider ids when loading catalog-backed preferences and rewrites the catalog', async () => {
+  it('loads current provider catalog data without reviving legacy managed provider routes', async () => {
     await withTempPreferencesDir(async (root) => {
       const paths = defaultDesktopPreferencesPaths(root);
       const codec = createPlaintextSecretCodec();
@@ -1454,19 +1434,13 @@ describe('desktopPreferences', () => {
 
       expect(repaired).toEqual(expect.objectContaining({
         id: environmentID,
-        label: 'Desktop Label',
-        preferred_open_route: 'local_host',
-        local_runtime: expect.objectContaining({
-          scope: expect.objectContaining({
-            provider_origin: provider.provider_origin,
-            provider_key: providerKey,
-            env_public_id: 'env_demo',
-          }),
-        }),
+        label: 'Demo Environment',
+        preferred_open_route: 'auto',
         provider_origin: provider.provider_origin,
         provider_id: provider.provider_id,
         env_public_id: 'env_demo',
       }));
+      expect(repaired?.local_runtime).toBeUndefined();
 
       const providerEnvironmentsDir = path.join(paths.stateRoot, 'catalog', 'provider-environments');
       const rewrittenEnvironmentCatalog = JSON.parse(
@@ -1478,7 +1452,7 @@ describe('desktopPreferences', () => {
         };
       };
       expect(rewrittenEnvironmentCatalog.provider_id).toBe(provider.provider_id);
-      expect(rewrittenEnvironmentCatalog.local_runtime?.state_scope?.provider_key).toBe(providerKey);
+      expect(rewrittenEnvironmentCatalog.local_runtime).toBeUndefined();
       await expect(fs.stat(path.join(environmentsDir, `${encodeURIComponent(environmentID)}.json`))).rejects.toThrow();
     });
   });

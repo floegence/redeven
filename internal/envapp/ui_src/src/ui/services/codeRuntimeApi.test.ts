@@ -25,7 +25,7 @@ function makeStatus(state: CodeRuntimeStatus['operation']['state']): CodeRuntime
       binary_path: '/Users/test/.redeven/shared/code-server/darwin-arm64/versions/4.109.1/bin/code-server',
       version: '4.109.1',
     },
-    managed_prefix: '/Users/test/.redeven/scopes/controlplane/dev/env_1/apps/code/runtime/managed',
+    managed_prefix: '/Users/test/.redeven/machine/apps/code/runtime/managed',
     shared_runtime_root: '/Users/test/.redeven/shared/code-server/darwin-arm64',
     environment_selection_version: '4.109.1',
     environment_selection_source: 'environment',

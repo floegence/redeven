@@ -6,28 +6,19 @@ import {
   type DesktopManagedEnvironment,
 } from '../shared/desktopManagedEnvironment';
 import {
-  controlPlaneManagedStateLayout,
-  localManagedStateLayout,
-  namedManagedStateLayout,
+  defaultManagedStateLayout,
   type DesktopManagedStateLayout,
 } from './statePaths';
 
-export const ENV_TOKEN_ENV_NAME = 'REDEVEN_DESKTOP_ENV_TOKEN';
 export const BOOTSTRAP_TICKET_ENV_NAME = 'REDEVEN_DESKTOP_BOOTSTRAP_TICKET';
 
 export type DesktopRuntimeBootstrap = Readonly<
-  | {
-      kind: 'env_token';
-      controlplane_url: string;
-      env_id: string;
-      env_token: string;
-    }
-  | {
-      kind: 'bootstrap_ticket';
-      controlplane_url: string;
-      env_id: string;
-      bootstrap_ticket: string;
-    }
+  {
+    kind: 'bootstrap_ticket';
+    controlplane_url: string;
+    env_id: string;
+    bootstrap_ticket: string;
+  }
 >;
 
 export type DesktopRuntimeSpawnPlan = Readonly<{
@@ -83,11 +74,7 @@ export function buildDesktopRuntimeArgs(
     }
   }
   if (bootstrap) {
-    if (bootstrap.kind === 'bootstrap_ticket') {
-      args.push('--bootstrap-ticket-env', BOOTSTRAP_TICKET_ENV_NAME);
-    } else {
-      args.push('--env-token-env', ENV_TOKEN_ENV_NAME);
-    }
+    args.push('--bootstrap-ticket-env', BOOTSTRAP_TICKET_ENV_NAME);
   }
 
   return args;
@@ -103,14 +90,9 @@ export function buildDesktopRuntimeEnvironment(
   };
 
   const bootstrap = resolvedRuntimeBootstrap(options?.bootstrap);
-  if (bootstrap?.kind === 'bootstrap_ticket') {
+  if (bootstrap) {
     env[BOOTSTRAP_TICKET_ENV_NAME] = bootstrap.bootstrap_ticket;
-    delete env[ENV_TOKEN_ENV_NAME];
-  } else if (bootstrap?.kind === 'env_token') {
-    env[ENV_TOKEN_ENV_NAME] = bootstrap.env_token;
-    delete env[BOOTSTRAP_TICKET_ENV_NAME];
   } else {
-    delete env[ENV_TOKEN_ENV_NAME];
     delete env[BOOTSTRAP_TICKET_ENV_NAME];
   }
 
@@ -172,25 +154,8 @@ export function buildDesktopRuntimeSpawnPlan(
 }
 
 export function resolveDesktopManagedStateLayout(
-  environment: DesktopManagedEnvironment,
+  _environment: DesktopManagedEnvironment,
   baseEnv: NodeJS.ProcessEnv = process.env,
 ): DesktopManagedStateLayout {
-  const scope = environment.local_hosting?.scope;
-  if (scope?.kind === 'controlplane') {
-    return controlPlaneManagedStateLayout(scope.provider_origin, scope.env_public_id, baseEnv);
-  }
-  if (scope?.kind === 'named') {
-    return namedManagedStateLayout(scope.name, baseEnv);
-  }
-  if (scope?.kind === 'local') {
-    return localManagedStateLayout(scope.name, baseEnv);
-  }
-  if (environment.provider_binding) {
-    return controlPlaneManagedStateLayout(
-      managedEnvironmentProviderOrigin(environment),
-      managedEnvironmentPublicID(environment),
-      baseEnv,
-    );
-  }
-  return localManagedStateLayout('default', baseEnv);
+  return defaultManagedStateLayout(baseEnv);
 }

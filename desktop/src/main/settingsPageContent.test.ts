@@ -14,7 +14,7 @@ function draft(overrides: Partial<DesktopSettingsDraft>): DesktopSettingsDraft {
 
 function settingsOptions(overrides: Partial<Parameters<typeof buildDesktopSettingsSurfaceSnapshot>[2]> = {}) {
   return {
-    environment_id: 'local:default',
+    environment_id: 'machine',
     environment_label: 'Local Environment',
     environment_kind: 'local' as const,
     ...overrides,

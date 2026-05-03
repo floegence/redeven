@@ -12,8 +12,8 @@ import (
 var ErrHomeDirUnavailable = errors.New("user home directory is unavailable")
 
 const (
-	DefaultLocalScopeName = "default"
-	stateRootEnvName      = "REDEVEN_STATE_ROOT"
+	DefaultMachineScopeName = "machine"
+	stateRootEnvName        = "REDEVEN_STATE_ROOT"
 )
 
 var (
@@ -24,9 +24,7 @@ var (
 type ScopeKind string
 
 const (
-	ScopeKindLocal        ScopeKind = "local"
-	ScopeKindNamed        ScopeKind = "named"
-	ScopeKindControlPlane ScopeKind = "controlplane"
+	ScopeKindMachine ScopeKind = "machine"
 )
 
 type ScopeRef struct {
@@ -62,25 +60,19 @@ func DefaultConfigPath() (string, error) {
 	return layout.ConfigPath, nil
 }
 
-// DefaultStateLayout returns the default local scope layout rooted under the resolved state root.
+// DefaultStateLayout returns the single machine layout rooted under the resolved state root.
 func DefaultStateLayout() (StateLayout, error) {
-	return LocalStateLayout(DefaultLocalScopeName, "")
+	return MachineStateLayout("")
 }
 
-func LocalStateLayout(name string, stateRoot string) (StateLayout, error) {
-	return StateLayoutForScope(ScopeRef{Kind: ScopeKindLocal, Name: name}, stateRoot)
-}
-
-func NamedStateLayout(name string, stateRoot string) (StateLayout, error) {
-	return StateLayoutForScope(ScopeRef{Kind: ScopeKindNamed, Name: name}, stateRoot)
+func MachineStateLayout(stateRoot string) (StateLayout, error) {
+	return StateLayoutForScope(ScopeRef{Kind: ScopeKindMachine, Name: DefaultMachineScopeName}, stateRoot)
 }
 
 func ControlPlaneStateLayout(controlplaneBaseURL string, envID string, stateRoot string) (StateLayout, error) {
-	return StateLayoutForScope(ScopeRef{
-		Kind:                ScopeKindControlPlane,
-		ControlplaneBaseURL: controlplaneBaseURL,
-		EnvironmentID:       envID,
-	}, stateRoot)
+	_ = controlplaneBaseURL
+	_ = envID
+	return MachineStateLayout(stateRoot)
 }
 
 func ParseScopeRef(raw string) (ScopeRef, error) {
@@ -88,24 +80,10 @@ func ParseScopeRef(raw string) (ScopeRef, error) {
 	switch {
 	case value == "":
 		return ScopeRef{}, errors.New("missing scope")
-	case value == "local":
-		return ScopeRef{Kind: ScopeKindLocal, Name: DefaultLocalScopeName}, nil
-	case strings.HasPrefix(value, "local/"):
-		return ScopeRef{Kind: ScopeKindLocal, Name: strings.TrimSpace(strings.TrimPrefix(value, "local/"))}, nil
-	case strings.HasPrefix(value, "named/"):
-		return ScopeRef{Kind: ScopeKindNamed, Name: strings.TrimSpace(strings.TrimPrefix(value, "named/"))}, nil
-	case strings.HasPrefix(value, "controlplane/"):
-		parts := strings.Split(strings.TrimPrefix(value, "controlplane/"), "/")
-		if len(parts) != 2 {
-			return ScopeRef{}, fmt.Errorf("invalid scope %q (want controlplane/<provider_key>/<env_id>)", value)
-		}
-		return ScopeRef{
-			Kind:          ScopeKindControlPlane,
-			ProviderKey:   strings.TrimSpace(parts[0]),
-			EnvironmentID: strings.TrimSpace(parts[1]),
-		}, nil
+	case value == string(ScopeKindMachine):
+		return ScopeRef{Kind: ScopeKindMachine, Name: DefaultMachineScopeName}, nil
 	default:
-		return ScopeRef{}, fmt.Errorf("invalid scope %q (supported: local, local/<name>, named/<name>, controlplane/<provider_key>/<env_id>)", value)
+		return ScopeRef{}, fmt.Errorf("invalid scope %q (supported: machine)", value)
 	}
 }
 
@@ -138,9 +116,6 @@ func ResolveStateRoot(override string) (string, error) {
 func StateLayoutForScope(scope ScopeRef, stateRoot string) (StateLayout, error) {
 	root, err := ResolveStateRoot(stateRoot)
 	if err != nil {
-		return StateLayout{}, err
-	}
-	if err := migrateLegacyStateRoot(root); err != nil {
 		return StateLayout{}, err
 	}
 	return stateLayoutForScopeResolvedRoot(scope, root)
@@ -182,16 +157,9 @@ func stateLayoutForScopeResolvedRoot(scope ScopeRef, stateRoot string) (StateLay
 	var scopeKey string
 	var scopeDir string
 	switch normalizedScope.Kind {
-	case ScopeKindLocal:
-		scopeKey = fmt.Sprintf("local/%s", normalizeScopeSegment(normalizedScope.Name))
-		scopeDir = filepath.Join(stateRoot, "scopes", "local", normalizeScopeSegment(normalizedScope.Name))
-	case ScopeKindNamed:
-		scopeKey = fmt.Sprintf("named/%s", normalizeScopeSegment(normalizedScope.Name))
-		scopeDir = filepath.Join(stateRoot, "scopes", "named", normalizeScopeSegment(normalizedScope.Name))
-	case ScopeKindControlPlane:
-		envSegment := normalizeScopeSegment(normalizedScope.EnvironmentID)
-		scopeKey = fmt.Sprintf("controlplane/%s/%s", normalizedScope.ProviderKey, envSegment)
-		scopeDir = filepath.Join(stateRoot, "scopes", "controlplane", normalizedScope.ProviderKey, envSegment)
+	case ScopeKindMachine:
+		scopeKey = string(ScopeKindMachine)
+		scopeDir = filepath.Join(stateRoot, string(ScopeKindMachine))
 	default:
 		return StateLayout{}, fmt.Errorf("unsupported scope kind %q", normalizedScope.Kind)
 	}
@@ -216,45 +184,12 @@ func stateLayoutForScopeResolvedRoot(scope ScopeRef, stateRoot string) (StateLay
 
 func normalizeScopeRef(scope ScopeRef) (ScopeRef, error) {
 	switch scope.Kind {
-	case ScopeKindLocal:
-		name, err := normalizeScopeName(scope.Name, DefaultLocalScopeName)
+	case ScopeKindMachine, "":
+		name, err := normalizeScopeName(scope.Name, DefaultMachineScopeName)
 		if err != nil {
 			return ScopeRef{}, err
 		}
-		return ScopeRef{Kind: ScopeKindLocal, Name: name}, nil
-	case ScopeKindNamed:
-		name, err := normalizeScopeName(scope.Name, "")
-		if err != nil {
-			return ScopeRef{}, err
-		}
-		return ScopeRef{Kind: ScopeKindNamed, Name: name}, nil
-	case ScopeKindControlPlane:
-		providerKey := normalizeScopeSegment(scope.ProviderKey)
-		controlplaneBaseURL := strings.TrimSpace(scope.ControlplaneBaseURL)
-		if controlplaneBaseURL != "" {
-			var err error
-			controlplaneBaseURL, err = normalizeControlplaneBaseURL(controlplaneBaseURL)
-			if err != nil {
-				return ScopeRef{}, err
-			}
-			providerKey, err = controlPlaneProviderKey(controlplaneBaseURL)
-			if err != nil {
-				return ScopeRef{}, err
-			}
-		}
-		if providerKey == "" {
-			return ScopeRef{}, errors.New("missing controlplane provider key")
-		}
-		envID := strings.TrimSpace(scope.EnvironmentID)
-		if envID == "" {
-			return ScopeRef{}, errors.New("missing environment id")
-		}
-		return ScopeRef{
-			Kind:                ScopeKindControlPlane,
-			ProviderKey:         providerKey,
-			ControlplaneBaseURL: controlplaneBaseURL,
-			EnvironmentID:       envID,
-		}, nil
+		return ScopeRef{Kind: ScopeKindMachine, Name: name}, nil
 	default:
 		return ScopeRef{}, fmt.Errorf("unsupported scope kind %q", scope.Kind)
 	}
@@ -308,128 +243,6 @@ func controlPlaneProviderKey(controlplaneBaseURL string) (string, error) {
 		return "", err
 	}
 	return sanitizeStateScopeID(strings.ToLower(parsedURL.Scheme + "__" + parsedURL.Host)), nil
-}
-
-var legacyRootStateEntries = []string{
-	"config.json",
-	"secrets.json",
-	"agent.lock",
-	"runtime",
-	"diagnostics",
-	"audit",
-	"apps",
-	"gateway",
-	"ai",
-	"skills_state.json",
-	"skills_sources.json",
-}
-
-func migrateLegacyStateRoot(stateRoot string) error {
-	cleanRoot := filepath.Clean(strings.TrimSpace(stateRoot))
-	if cleanRoot == "" {
-		return nil
-	}
-
-	localLayout, err := stateLayoutForScopeResolvedRoot(
-		ScopeRef{Kind: ScopeKindLocal, Name: DefaultLocalScopeName},
-		cleanRoot,
-	)
-	if err != nil {
-		return err
-	}
-	for _, name := range legacyRootStateEntries {
-		srcPath := filepath.Join(cleanRoot, name)
-		dstPath := filepath.Join(localLayout.ScopeDir, name)
-		if err := moveLegacyPath(srcPath, dstPath); err != nil {
-			return err
-		}
-	}
-
-	legacyEnvRoot := filepath.Join(cleanRoot, "envs")
-	entries, err := os.ReadDir(legacyEnvRoot)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
-		return err
-	}
-	for _, entry := range entries {
-		if entry == nil || !entry.IsDir() {
-			continue
-		}
-		srcDir := filepath.Join(legacyEnvRoot, entry.Name())
-		targetLayout, err := legacyEnvTargetLayout(srcDir, cleanRoot)
-		if err != nil {
-			return err
-		}
-		if err := moveLegacyDirIntoScope(srcDir, targetLayout.ScopeDir); err != nil {
-			return err
-		}
-	}
-	_ = os.Remove(legacyEnvRoot)
-	return nil
-}
-
-func moveLegacyPath(srcPath string, dstPath string) error {
-	if !pathExists(srcPath) || pathExists(dstPath) {
-		return nil
-	}
-	if err := os.MkdirAll(filepath.Dir(dstPath), 0o700); err != nil {
-		return err
-	}
-	return os.Rename(srcPath, dstPath)
-}
-
-func moveLegacyDirIntoScope(srcDir string, dstDir string) error {
-	if !pathExists(srcDir) {
-		return nil
-	}
-	if !pathExists(dstDir) {
-		if err := os.MkdirAll(filepath.Dir(dstDir), 0o700); err != nil {
-			return err
-		}
-		return os.Rename(srcDir, dstDir)
-	}
-
-	entries, err := os.ReadDir(srcDir)
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		if entry == nil {
-			continue
-		}
-		srcPath := filepath.Join(srcDir, entry.Name())
-		dstPath := filepath.Join(dstDir, entry.Name())
-		if err := moveLegacyPath(srcPath, dstPath); err != nil {
-			return err
-		}
-	}
-	_ = os.Remove(srcDir)
-	return nil
-}
-
-func legacyEnvTargetLayout(srcDir string, stateRoot string) (StateLayout, error) {
-	cfgPath := filepath.Join(srcDir, "config.json")
-	cfg, err := Load(cfgPath)
-	if err == nil && strings.TrimSpace(cfg.ControlplaneBaseURL) != "" && strings.TrimSpace(cfg.EnvironmentID) != "" {
-		return stateLayoutForScopeResolvedRoot(ScopeRef{
-			Kind:                ScopeKindControlPlane,
-			ControlplaneBaseURL: cfg.ControlplaneBaseURL,
-			EnvironmentID:       cfg.EnvironmentID,
-		}, stateRoot)
-	}
-	return stateLayoutForScopeResolvedRoot(ScopeRef{
-		Kind: ScopeKindNamed,
-		Name: "legacy-env-" + filepath.Base(srcDir),
-	}, stateRoot)
-}
-
-func pathExists(path string) bool {
-	if _, err := os.Stat(path); err == nil {
-		return true
-	}
-	return false
 }
 
 func sanitizeStateScopeID(raw string) string {

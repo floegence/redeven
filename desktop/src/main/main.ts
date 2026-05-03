@@ -431,10 +431,8 @@ function providerEnvironmentAsManagedEnvironment(
   const localHosting = environment.local_runtime
     ? createManagedEnvironmentLocalHosting(
       {
-        kind: 'controlplane',
-        provider_origin: environment.local_runtime.scope.provider_origin,
-        provider_key: environment.local_runtime.scope.provider_key,
-        env_public_id: environment.local_runtime.scope.env_public_id,
+        kind: 'machine',
+        name: 'machine',
       },
       {
         access: environment.local_runtime.access,
@@ -2249,7 +2247,6 @@ async function rememberRecentSSHTarget(
     remote_install_dir: input.remote_install_dir,
     bootstrap_strategy: input.bootstrap_strategy,
     release_base_url: input.release_base_url,
-    environment_instance_id: input.environment_instance_id,
     label: input.label,
     environment_id: input.environmentID,
   }));
@@ -3580,7 +3577,6 @@ async function openSSHEnvironmentFromLauncher(
     remote_install_dir: request.remote_install_dir,
     bootstrap_strategy: request.bootstrap_strategy,
     release_base_url: request.release_base_url,
-    environment_instance_id: request.environment_instance_id,
   });
   const optimisticSessionKey = sshDesktopSessionKey(sshDetails);
   const optimisticSession = liveSession(optimisticSessionKey);
@@ -3699,7 +3695,6 @@ async function startEnvironmentRuntimeFromLauncher(
       remote_install_dir: request.remote_install_dir,
       bootstrap_strategy: request.bootstrap_strategy,
       release_base_url: request.release_base_url,
-      environment_instance_id: request.environment_instance_id,
     })
     : null;
   if (normalizedSSHTarget) {
@@ -3852,7 +3847,6 @@ async function stopEnvironmentRuntimeFromLauncher(
       remote_install_dir: request.remote_install_dir,
       bootstrap_strategy: request.bootstrap_strategy,
       release_base_url: request.release_base_url,
-      environment_instance_id: request.environment_instance_id,
     });
     const runtimeKey = sshDesktopSessionKey(sshDetails);
     const runtimeRecord = sshEnvironmentRuntimeByKey.get(runtimeKey) ?? null;
@@ -4420,7 +4414,7 @@ async function manageDesktopUpdateFromShell(webContentsID: number): Promise<Desk
     : 'Local environment';
   const detail = sessionRecord.target.managed_environment_kind === 'controlplane'
     ? 'Desktop will keep this environment in the same provider-backed scope and may need a newer desktop release before redeploying the managed runtime.'
-    : 'Desktop will keep this environment in the same local scope and may need a newer desktop release before restarting the managed runtime.';
+    : 'Desktop will keep this environment on the same machine state and may need a newer desktop release before restarting the managed runtime.';
   const dialogOptions: MessageBoxOptions = {
     type: 'info',
     buttons: ['Open release page', 'Later'],
@@ -4475,16 +4469,8 @@ async function upsertManagedEnvironmentFromWelcome(
   const existing = request.environment_id ? findManagedEnvironmentByID(preferences, request.environment_id) : null;
   const existingAccess = existing ? managedEnvironmentLocalAccess(existing) : null;
   const requestedEnvironmentName = compact(request.environment_name)
-    || (existing?.local_hosting?.scope.kind === 'local'
-      ? existing.local_hosting.scope.name
-      : compact(options.label));
-  if (
-    !request.environment_id
-    && requestedEnvironmentName !== ''
-    && findManagedEnvironmentByID(preferences, desktopManagedLocalEnvironmentID(requestedEnvironmentName))
-  ) {
-    throw new Error('An environment with this name already exists. Choose a different name.');
-  }
+    || compact(options.label)
+    || 'machine';
   const access = validateDesktopSettingsDraft(draft, {
     currentLocalUIPassword: existingAccess?.local_ui_password ?? '',
     currentLocalUIPasswordConfigured: existingAccess?.local_ui_password_configured === true,
@@ -4568,7 +4554,6 @@ async function upsertSavedSSHEnvironmentFromWelcome(
     remote_install_dir: details.remote_install_dir,
     bootstrap_strategy: details.bootstrap_strategy,
     release_base_url: details.release_base_url,
-    environment_instance_id: details.environment_instance_id,
     source: 'saved',
     last_used_at_ms: existing?.last_used_at_ms ?? Date.now(),
   });
@@ -4627,7 +4612,6 @@ async function setSavedSSHEnvironmentPinnedFromWelcome(
     remote_install_dir: details.remote_install_dir,
     bootstrap_strategy: details.bootstrap_strategy,
     release_base_url: details.release_base_url,
-    environment_instance_id: details.environment_instance_id,
   }));
 }
 
@@ -4751,7 +4735,6 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
           remote_install_dir: request.remote_install_dir,
           bootstrap_strategy: request.bootstrap_strategy,
           release_base_url: request.release_base_url,
-          environment_instance_id: request.environment_instance_id,
         },
         request.pinned,
       );
@@ -4820,7 +4803,6 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
         remote_install_dir: request.remote_install_dir,
         bootstrap_strategy: request.bootstrap_strategy,
         release_base_url: request.release_base_url,
-        environment_instance_id: request.environment_instance_id,
       });
       return launcherActionSuccess('saved_environment');
     case 'delete_managed_environment':

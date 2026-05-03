@@ -117,7 +117,6 @@ export function buildSSHConnectionIssue(
       `ssh destination: ${details.ssh_destination}`,
       `ssh port: ${details.ssh_port ?? 'default'}`,
       `ssh auth mode: ${details.auth_mode}`,
-      `environment instance id: ${details.environment_instance_id}`,
       `remote install dir: ${details.remote_install_dir}`,
       `bootstrap strategy: ${details.bootstrap_strategy}`,
       `release base url: ${details.release_base_url || 'default'}`,
@@ -308,7 +307,6 @@ function openSessionBySSHEnvironment(
         session.target.ssh_destination === environment.ssh_destination
         && session.target.ssh_port === environment.ssh_port
         && session.target.remote_install_dir === environment.remote_install_dir
-        && session.target.environment_instance_id === environment.environment_instance_id
       )
     )
   )) ?? null;
@@ -970,11 +968,22 @@ function buildEnvironmentEntries(
   savedExternalRuntimeHealth: Readonly<Record<string, DesktopRuntimeHealth>>,
   savedSSHRuntimeHealth: Readonly<Record<string, DesktopRuntimeHealth>>,
 ): readonly DesktopEnvironmentEntry[] {
+  const localManagedEnvironments = (() => {
+    const seen = new Set<string>();
+    const items: DesktopManagedEnvironment[] = [];
+    for (const environment of preferences.managed_environments) {
+      if (managedEnvironmentKind(environment) !== 'local' || seen.has(environment.id)) {
+        continue;
+      }
+      seen.add(environment.id);
+      items.push(environment);
+    }
+    return items;
+  })();
   const openRemoteSessions = openSessions.filter((session) => session.target.kind === 'external_local_ui');
   const openSSHSessions = openSessions.filter((session) => session.target.kind === 'ssh_environment');
   const entries: DesktopEnvironmentEntry[] = [
-    ...preferences.managed_environments
-      .filter((environment) => managedEnvironmentKind(environment) === 'local')
+    ...localManagedEnvironments
       .map((environment) => (
         buildManagedEnvironmentEntry(
           environment,
@@ -1043,7 +1052,6 @@ function buildEnvironmentEntries(
         && environment.ssh_port === target.ssh_port
         && environment.auth_mode === target.auth_mode
         && environment.remote_install_dir === target.remote_install_dir
-        && environment.environment_instance_id === target.environment_instance_id
       )
     ))) {
       continue;
@@ -1065,7 +1073,6 @@ function buildEnvironmentEntries(
         remote_install_dir: target.remote_install_dir,
         bootstrap_strategy: target.bootstrap_strategy,
         release_base_url: target.release_base_url,
-        environment_instance_id: target.environment_instance_id,
       },
       pinned: false,
       tag: isOpen ? 'Open' : '',
@@ -1172,7 +1179,6 @@ function buildSavedSSHEnvironmentEntry(
       remote_install_dir: environment.remote_install_dir,
       bootstrap_strategy: environment.bootstrap_strategy,
       release_base_url: environment.release_base_url,
-      environment_instance_id: environment.environment_instance_id,
     },
     pinned: environment.pinned,
     tag: isOpen ? 'Open' : environment.source === 'recent_auto' ? 'Recent' : 'Saved',

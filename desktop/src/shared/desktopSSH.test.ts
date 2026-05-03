@@ -5,7 +5,6 @@ import {
   DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
   desktopSSHAuthority,
   desktopSSHEnvironmentID,
-  normalizeDesktopSSHEnvironmentInstanceID,
   normalizeDesktopSSHAuthMode,
   normalizeDesktopSSHBootstrapStrategy,
   normalizeDesktopSSHEnvironmentDetails,
@@ -23,7 +22,6 @@ describe('desktopSSH', () => {
       remote_install_dir: '',
       bootstrap_strategy: '',
       release_base_url: '',
-      environment_instance_id: '',
     })).toEqual(expect.objectContaining({
       ssh_destination: 'devbox',
       ssh_port: null,
@@ -51,8 +49,7 @@ describe('desktopSSH', () => {
       remote_install_dir: '/opt/redeven',
       bootstrap_strategy: DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
       release_base_url: '',
-      environment_instance_id: 'envinst_demo001',
-    })).toBe('ssh:user%40example.internal:2222:password:%2Fopt%2Fredeven:envinst_demo001');
+    })).toBe('ssh:user%40example.internal:2222:password:%2Fopt%2Fredeven');
   });
 
   it('requires custom remote install directories to be absolute paths', () => {
@@ -68,6 +65,5 @@ describe('desktopSSH', () => {
     expect(normalizeDesktopSSHReleaseBaseURL('https://mirror.example.invalid/releases/')).toBe(
       'https://mirror.example.invalid/releases',
     );
-    expect(normalizeDesktopSSHEnvironmentInstanceID(' EnvInst_Demo001 ')).toBe('envinst_demo001');
   });
 });

@@ -22,9 +22,9 @@ func TestWriteAndReadAgentLockMetadata(t *testing.T) {
 		true,
 		true,
 		config.StateLayout{
-			ScopeKey:         "local/default",
-			ConfigPath:       "/Users/tester/.redeven/scopes/local/default/config.json",
-			RuntimeStatePath: "/Users/tester/.redeven/scopes/local/default/runtime/local-ui.json",
+			ScopeKey:         "machine",
+			ConfigPath:       "/Users/tester/.redeven/machine/config.json",
+			RuntimeStatePath: "/Users/tester/.redeven/machine/runtime/local-ui.json",
 		},
 	)
 	if err := writeAgentLockMetadata(lk, metadata); err != nil {
@@ -41,13 +41,13 @@ func TestWriteAndReadAgentLockMetadata(t *testing.T) {
 	if got.Mode != "desktop" || !got.DesktopManaged || !got.LocalUIEnabled {
 		t.Fatalf("unexpected metadata: %#v", got)
 	}
-	if got.ScopeKey != "local/default" {
+	if got.ScopeKey != "machine" {
 		t.Fatalf("ScopeKey = %q", got.ScopeKey)
 	}
-	if got.ConfigPath != "/Users/tester/.redeven/scopes/local/default/config.json" {
+	if got.ConfigPath != "/Users/tester/.redeven/machine/config.json" {
 		t.Fatalf("ConfigPath = %q", got.ConfigPath)
 	}
-	if got.StateDir != "/Users/tester/.redeven/scopes/local/default" {
+	if got.StateDir != "/Users/tester/.redeven/machine" {
 		t.Fatalf("StateDir = %q", got.StateDir)
 	}
 }

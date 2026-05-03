@@ -125,7 +125,7 @@ export function createDesktopProviderEnvironmentLocalRuntime(
       provider_origin: normalizedOrigin,
       provider_key: providerKey,
       env_public_id: normalizedEnvPublicID,
-      scope_key: `controlplane/${providerKey}/${normalizedEnvPublicID}`,
+      scope_key: 'machine',
       state_dir: compact(options.stateDir),
     },
     current_runtime: normalizeRuntimeState(options.currentRuntime),

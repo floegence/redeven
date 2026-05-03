@@ -34,35 +34,33 @@ This document describes the **Code App** implementation in the Redeven runtime:
 
 The Code App stores all code space data on the user's machine (not on Redeven servers).
 
-By default, the local scope config is `~/.redeven/scopes/local/default/config.json`, so the state directory is:
+By default, the machine config is `~/.redeven/machine/config.json`, so the state directory is:
 
-- `state_dir = ~/.redeven/scopes/local/default/`
+- `state_dir = ~/.redeven/machine/`
 - `state_root = ~/.redeven/`
 
-Environment-scoped Code App data:
+Machine-scoped Code App data:
 
 ```
 ~/.redeven/
-  scopes/
-    local/
-      default/
-        config.json
-        apps/
-          code/
-            runtime/
-              current.json
-              managed -> ~/.redeven/shared/code-server/<os>-<arch>/versions/<version>/
-            registry.sqlite
-            spaces/
-              <code_space_id>/
-                codeserver/
-                  user-data/
-                  extensions/
-                  xdg-config/
-                  xdg-cache/
-                  xdg-data/
-                  stdout.log
-                  stderr.log
+  machine/
+    config.json
+    apps/
+      code/
+        runtime/
+          current.json
+          managed -> ~/.redeven/shared/code-server/<os>-<arch>/versions/<version>/
+        registry.sqlite
+        spaces/
+          <code_space_id>/
+            codeserver/
+              user-data/
+              extensions/
+              xdg-config/
+              xdg-cache/
+              xdg-data/
+              stdout.log
+              stderr.log
 ```
 
 Machine-scoped shared managed runtime data:

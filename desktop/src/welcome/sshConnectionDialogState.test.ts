@@ -14,8 +14,7 @@ describe('sshConnectionDialogState', () => {
       environment_id: 'new-ssh',
       remote_install_dir: '',
       release_base_url: '',
-      environment_instance_id: 'envinst_demo001',
-    })).toBe('create:ssh_environment:new-ssh:envinst_demo001');
+    })).toBe('create:ssh_environment:new-ssh');
   });
 
   it('defaults the advanced section open only when existing SSH state needs to stay visible', () => {
@@ -25,7 +24,6 @@ describe('sshConnectionDialogState', () => {
       environment_id: 'new-ssh',
       remote_install_dir: '',
       release_base_url: '',
-      environment_instance_id: 'envinst_demo001',
     })).toBe(false);
 
     expect(defaultSSHConnectionDialogAdvancedOpen({
@@ -34,7 +32,6 @@ describe('sshConnectionDialogState', () => {
       environment_id: 'saved-ssh',
       remote_install_dir: '',
       release_base_url: '',
-      environment_instance_id: 'envinst_demo001',
     })).toBe(true);
 
     expect(defaultSSHConnectionDialogAdvancedOpen({
@@ -43,7 +40,6 @@ describe('sshConnectionDialogState', () => {
       environment_id: 'mirror-ssh',
       remote_install_dir: '',
       release_base_url: 'https://mirror.example.invalid/releases',
-      environment_instance_id: 'envinst_demo001',
     })).toBe(true);
   });
 
@@ -56,13 +52,12 @@ describe('sshConnectionDialogState', () => {
         environment_id: 'new-ssh',
         remote_install_dir: '',
         release_base_url: '',
-        environment_instance_id: 'envinst_demo001',
       },
     );
 
     expect(initialized).toEqual({
       open: false,
-      initialized_for_state_key: 'create:ssh_environment:new-ssh:envinst_demo001',
+      initialized_for_state_key: 'create:ssh_environment:new-ssh',
     });
 
     const userOpened = {
@@ -75,7 +70,6 @@ describe('sshConnectionDialogState', () => {
       environment_id: 'new-ssh',
       remote_install_dir: '',
       release_base_url: 'https://mirror.example.invalid/releases',
-      environment_instance_id: 'envinst_demo001',
     })).toEqual(userOpened);
   });
 
@@ -83,7 +77,7 @@ describe('sshConnectionDialogState', () => {
     expect(syncSSHConnectionDialogAdvancedState(
       {
         open: true,
-        initialized_for_state_key: 'create:ssh_environment:new-ssh:envinst_demo001',
+        initialized_for_state_key: 'create:ssh_environment:new-ssh',
       },
       {
         mode: 'edit',
@@ -91,7 +85,6 @@ describe('sshConnectionDialogState', () => {
         environment_id: 'saved-ssh',
         remote_install_dir: '',
         release_base_url: '',
-        environment_instance_id: 'envinst_demo002',
       },
     )).toEqual({
       open: true,

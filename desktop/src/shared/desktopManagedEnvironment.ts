@@ -10,24 +10,12 @@ export type DesktopManagedEnvironmentAccess = Readonly<{
 
 export type DesktopManagedEnvironmentPreferredOpenRoute = 'auto' | 'local_host' | 'remote_desktop';
 export type DesktopManagedEnvironmentLocalOwner = 'desktop' | 'agent' | 'unknown';
-export type DesktopManagedEnvironmentLocalScopeKind = 'local' | 'named' | 'controlplane';
+export type DesktopManagedEnvironmentLocalScopeKind = 'machine';
 
-export type DesktopManagedEnvironmentLocalScope = Readonly<
-  | {
-      kind: 'local';
-      name: string;
-    }
-  | {
-      kind: 'named';
-      name: string;
-    }
-  | {
-      kind: 'controlplane';
-      provider_origin: string;
-      provider_key: string;
-      env_public_id: string;
-    }
->;
+export type DesktopManagedEnvironmentLocalScope = Readonly<{
+  kind: 'machine';
+  name: string;
+}>;
 
 export type DesktopManagedEnvironmentRuntimeState = Readonly<{
   local_ui_url: string;
@@ -85,38 +73,24 @@ export type DesktopManagedEnvironment = Readonly<{
 export type DesktopManagedLocalEnvironment = DesktopManagedEnvironment;
 export type DesktopManagedControlPlaneEnvironment = DesktopManagedEnvironment;
 
-export const DEFAULT_LOCAL_ENVIRONMENT_NAME = 'default';
+export const DEFAULT_LOCAL_ENVIRONMENT_NAME = 'machine';
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
 function sanitizeIDFragment(value: string): string {
-  return compact(value).replace(/[^A-Za-z0-9_.-]+/g, '-').replace(/-+/g, '-').replace(/^[-.]+|[-.]+$/g, '');
-}
-
-function titleizeSegments(value: string, fallback: string): string {
-  return value.split(/[-_.]+/).filter(Boolean).map((segment) => (
-    segment.slice(0, 1).toUpperCase() + segment.slice(1)
-  )).join(' ') || fallback;
+	return compact(value).replace(/[^A-Za-z0-9_.-]+/g, '-').replace(/-+/g, '-').replace(/^[-.]+|[-.]+$/g, '');
 }
 
 export function normalizeDesktopLocalEnvironmentName(value: unknown): string {
-  const normalized = sanitizeIDFragment(compact(value).toLowerCase());
-  return normalized || DEFAULT_LOCAL_ENVIRONMENT_NAME;
-}
-
-export function normalizeDesktopNamedEnvironmentName(value: unknown): string {
-  const normalized = sanitizeIDFragment(compact(value).toLowerCase());
-  if (normalized === '') {
-    throw new Error('Named scope is required.');
-  }
-  return normalized;
+	const normalized = sanitizeIDFragment(compact(value).toLowerCase());
+	return normalized || DEFAULT_LOCAL_ENVIRONMENT_NAME;
 }
 
 export function normalizeDesktopProviderEnvironmentID(value: unknown): string {
-  const normalized = sanitizeIDFragment(compact(value));
-  if (normalized === '') {
+	const normalized = sanitizeIDFragment(compact(value));
+	if (normalized === '') {
     throw new Error('Environment ID is required.');
   }
   return normalized;
@@ -131,27 +105,19 @@ export function normalizeDesktopProviderKey(value: unknown): string {
 }
 
 export function desktopManagedLocalEnvironmentID(name: string): string {
-  return `local:${encodeURIComponent(normalizeDesktopLocalEnvironmentName(name))}`;
-}
-
-export function desktopManagedNamedEnvironmentID(name: string): string {
-  return `named:${encodeURIComponent(normalizeDesktopNamedEnvironmentName(name))}`;
+	void name;
+	return 'machine';
 }
 
 export function desktopManagedControlPlaneEnvironmentID(providerOrigin: string, envPublicID: string): string {
-  const normalizedOrigin = normalizeControlPlaneOrigin(providerOrigin);
-  const normalizedEnvPublicID = normalizeDesktopProviderEnvironmentID(envPublicID);
-  return `cp:${encodeURIComponent(normalizedOrigin)}:env:${encodeURIComponent(normalizedEnvPublicID)}`;
+	const normalizedOrigin = normalizeControlPlaneOrigin(providerOrigin);
+	const normalizedEnvPublicID = normalizeDesktopProviderEnvironmentID(envPublicID);
+	return `cp:${encodeURIComponent(normalizedOrigin)}:env:${encodeURIComponent(normalizedEnvPublicID)}`;
 }
 
 export function desktopManagedEnvironmentIDForScope(scope: DesktopManagedEnvironmentLocalScope): string {
-  if (scope.kind === 'local') {
-    return desktopManagedLocalEnvironmentID(scope.name);
-  }
-  if (scope.kind === 'named') {
-    return desktopManagedNamedEnvironmentID(scope.name);
-  }
-  return desktopManagedControlPlaneEnvironmentID(scope.provider_origin, scope.env_public_id);
+	void scope;
+	return 'machine';
 }
 
 export function defaultDesktopManagedEnvironmentAccess(): DesktopManagedEnvironmentAccess {
@@ -163,15 +129,8 @@ export function defaultDesktopManagedEnvironmentAccess(): DesktopManagedEnvironm
 }
 
 export function defaultLocalManagedEnvironmentLabel(name: string): string {
-  const normalizedName = normalizeDesktopLocalEnvironmentName(name);
-  if (normalizedName === DEFAULT_LOCAL_ENVIRONMENT_NAME) {
-    return 'Local Default Environment';
-  }
-  return titleizeSegments(normalizedName, 'Local Environment');
-}
-
-export function defaultNamedManagedEnvironmentLabel(name: string): string {
-  return titleizeSegments(normalizeDesktopNamedEnvironmentName(name), 'Named Environment');
+	void name;
+	return 'Local Machine';
 }
 
 function normalizeRuntimeState(
@@ -209,50 +168,20 @@ type CreateManagedEnvironmentLocalHostingOptions = Readonly<{
 }>;
 
 export function createManagedEnvironmentLocalHosting(
-  scope: DesktopManagedEnvironmentLocalScope,
-  options: CreateManagedEnvironmentLocalHostingOptions = {},
+	scope: DesktopManagedEnvironmentLocalScope,
+	options: CreateManagedEnvironmentLocalHostingOptions = {},
 ): DesktopManagedEnvironmentLocalHosting {
-  const normalizedScope = (() => {
-    if (scope.kind === 'local') {
-      const name = normalizeDesktopLocalEnvironmentName(scope.name);
-      return {
-        scope: {
-          kind: 'local',
-          name,
-        } as const,
-        scope_key: `local/${name}`,
-      };
-    }
-    if (scope.kind === 'named') {
-      const name = normalizeDesktopNamedEnvironmentName(scope.name);
-      return {
-        scope: {
-          kind: 'named',
-          name,
-        } as const,
-        scope_key: `named/${name}`,
-      };
-    }
-    const providerOrigin = normalizeControlPlaneOrigin(scope.provider_origin);
-    const providerKey = normalizeDesktopProviderKey(scope.provider_key);
-    const envPublicID = normalizeDesktopProviderEnvironmentID(scope.env_public_id);
-    return {
-      scope: {
-        kind: 'controlplane',
-        provider_origin: providerOrigin,
-        provider_key: providerKey,
-        env_public_id: envPublicID,
-      } as const,
-      scope_key: `controlplane/${providerKey}/${envPublicID}`,
-    };
-  })();
+	void scope;
 
-  return {
-    scope: normalizedScope.scope,
-    scope_key: normalizedScope.scope_key,
-    state_dir: compact(options.stateDir),
-    owner: options.owner ?? 'desktop',
-    access: options.access ?? defaultDesktopManagedEnvironmentAccess(),
+	return {
+		scope: {
+			kind: 'machine',
+			name: DEFAULT_LOCAL_ENVIRONMENT_NAME,
+		},
+		scope_key: 'machine',
+		state_dir: compact(options.stateDir),
+		owner: options.owner ?? 'desktop',
+		access: options.access ?? defaultDesktopManagedEnvironmentAccess(),
     current_runtime: normalizeRuntimeState(options.currentRuntime),
   };
 }
@@ -304,9 +233,7 @@ function normalizeManagedEnvironmentIdentity(
       env_public_id: normalizeDesktopProviderEnvironmentID(value.env_public_id),
     };
   }
-  const localName = localHosting?.scope.kind === 'controlplane'
-    ? localHosting.scope.env_public_id
-    : localHosting?.scope.name;
+  const localName = localHosting?.scope.name;
   return {
     kind: 'provisional_local',
     local_name: normalizeDesktopLocalEnvironmentName(value?.kind === 'provisional_local' ? value.local_name : localName),
@@ -349,9 +276,7 @@ export function createManagedEnvironment(options: CreateManagedEnvironmentOption
 
   const fallbackLabel = providerBinding
     ? compact(providerBinding.env_public_id)
-    : localHosting?.scope.kind === 'named'
-      ? defaultNamedManagedEnvironmentLabel(localHosting.scope.name)
-      : defaultLocalManagedEnvironmentLabel(localHosting?.scope.kind === 'local' ? localHosting.scope.name : DEFAULT_LOCAL_ENVIRONMENT_NAME);
+    : defaultLocalManagedEnvironmentLabel(localHosting?.scope.name ?? DEFAULT_LOCAL_ENVIRONMENT_NAME);
 
   return {
     id: environmentID,
@@ -388,7 +313,7 @@ export function createManagedLocalEnvironment(
 ): DesktopManagedEnvironment {
   const normalizedName = normalizeDesktopLocalEnvironmentName(name);
   const localHosting = createManagedEnvironmentLocalHosting(
-    { kind: 'local', name: normalizedName },
+    { kind: 'machine', name: DEFAULT_LOCAL_ENVIRONMENT_NAME },
     {
       access: options.access,
       owner: options.owner,
@@ -405,7 +330,7 @@ export function createManagedLocalEnvironment(
       ? undefined
       : {
           kind: 'provisional_local',
-          local_name: normalizedName,
+          local_name: DEFAULT_LOCAL_ENVIRONMENT_NAME,
         },
     localHosting,
     providerBinding: options.providerBinding,
@@ -431,30 +356,30 @@ type CreateManagedNamedEnvironmentOptions = Readonly<{
 }>;
 
 export function createManagedNamedEnvironment(
-  name: string,
-  options: CreateManagedNamedEnvironmentOptions = {},
+	name: string,
+	options: CreateManagedNamedEnvironmentOptions = {},
 ): DesktopManagedEnvironment {
-  const normalizedName = normalizeDesktopNamedEnvironmentName(name);
-  const localHosting = createManagedEnvironmentLocalHosting(
-    { kind: 'named', name: normalizedName },
-    {
-      access: options.access,
-      owner: options.owner,
+	const normalizedName = normalizeDesktopLocalEnvironmentName(name);
+	const localHosting = createManagedEnvironmentLocalHosting(
+		{ kind: 'machine', name: DEFAULT_LOCAL_ENVIRONMENT_NAME },
+		{
+			access: options.access,
+			owner: options.owner,
       stateDir: options.stateDir,
       currentRuntime: options.currentRuntime,
     },
   );
-  return createManagedEnvironment({
-    environmentID: options.environmentID,
-    label: options.label || defaultNamedManagedEnvironmentLabel(normalizedName),
-    pinned: options.pinned,
-    preferredOpenRoute: options.preferredOpenRoute,
-    identity: options.providerBinding
-      ? undefined
-      : {
-          kind: 'provisional_local',
-          local_name: normalizedName,
-        },
+	return createManagedEnvironment({
+		environmentID: options.environmentID,
+		label: options.label || defaultLocalManagedEnvironmentLabel(normalizedName),
+		pinned: options.pinned,
+		preferredOpenRoute: options.preferredOpenRoute,
+		identity: options.providerBinding
+			? undefined
+			: {
+					kind: 'provisional_local',
+					local_name: DEFAULT_LOCAL_ENVIRONMENT_NAME,
+				},
     localHosting,
     providerBinding: options.providerBinding,
     createdAtMS: options.createdAtMS,
@@ -487,7 +412,7 @@ export function createManagedControlPlaneEnvironment(
     remoteDesktopSupported: options.remoteDesktopSupported,
   });
   return createManagedEnvironment({
-    environmentID: options.localHosting ? undefined : desktopManagedControlPlaneEnvironmentID(providerOrigin, envPublicID),
+    environmentID: desktopManagedControlPlaneEnvironmentID(providerOrigin, envPublicID),
     label: compact(options.label) || providerBinding.env_public_id,
     pinned: options.pinned,
     preferredOpenRoute: options.preferredOpenRoute,
@@ -517,12 +442,12 @@ export function managedEnvironmentKind(environment: DesktopManagedEnvironment): 
 
 export function isDefaultLocalManagedEnvironment(environment: DesktopManagedEnvironment | null | undefined): boolean {
   const scope = environment?.local_hosting?.scope;
-  return scope?.kind === 'local' && scope.name === DEFAULT_LOCAL_ENVIRONMENT_NAME;
+  return scope?.kind === 'machine' && scope.name === DEFAULT_LOCAL_ENVIRONMENT_NAME;
 }
 
 export function managedEnvironmentLocalName(environment: DesktopManagedEnvironment): string | undefined {
   const scope = environment.local_hosting?.scope;
-  if (!scope || scope.kind === 'controlplane') {
+  if (!scope) {
     return undefined;
   }
   return scope.name;

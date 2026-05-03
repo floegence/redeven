@@ -11,18 +11,18 @@ describe('desktopLauncherIPC', () => {
   it('normalizes launcher actions and trims Environment inputs', () => {
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'open_managed_environment',
-      environment_id: ' local:default ',
+      environment_id: ' machine ',
     })).toEqual({
       kind: 'open_managed_environment',
-      environment_id: 'local:default',
+      environment_id: 'machine',
       route: 'auto',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'open_environment_settings',
-      environment_id: ' local:default ',
+      environment_id: ' machine ',
     })).toEqual({
       kind: 'open_environment_settings',
-      environment_id: 'local:default',
+      environment_id: 'machine',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'start_environment_runtime',
@@ -36,7 +36,7 @@ describe('desktopLauncherIPC', () => {
     expect(normalizeDesktopLauncherActionRequest({ kind: 'close_launcher_or_quit' })).toEqual({ kind: 'close_launcher_or_quit' });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'upsert_managed_environment',
-      environment_id: ' local:default ',
+      environment_id: ' machine ',
       environment_name: ' dev-a ',
       label: ' Local Dev ',
       local_ui_bind: ' localhost:23998 ',
@@ -44,7 +44,7 @@ describe('desktopLauncherIPC', () => {
       local_ui_password_mode: ' replace ',
     })).toEqual({
       kind: 'upsert_managed_environment',
-      environment_id: 'local:default',
+      environment_id: 'machine',
       environment_name: 'dev-a',
       label: 'Local Dev',
       local_ui_bind: 'localhost:23998',
@@ -97,10 +97,10 @@ describe('desktopLauncherIPC', () => {
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'delete_managed_environment',
-      environment_id: ' local:default ',
+      environment_id: ' machine ',
     })).toEqual({
       kind: 'delete_managed_environment',
-      environment_id: 'local:default',
+      environment_id: 'machine',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'delete_saved_environment',
@@ -120,11 +120,11 @@ describe('desktopLauncherIPC', () => {
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'set_managed_environment_pinned',
-      environment_id: ' local:default ',
+      environment_id: ' machine ',
       pinned: true,
     })).toEqual({
       kind: 'set_managed_environment_pinned',
-      environment_id: 'local:default',
+      environment_id: 'machine',
       pinned: true,
     });
     expect(normalizeDesktopLauncherActionRequest({
@@ -159,7 +159,6 @@ describe('desktopLauncherIPC', () => {
       remote_install_dir: ' /opt/redeven ',
       bootstrap_strategy: ' desktop_upload ',
       release_base_url: ' https://mirror.example.invalid/releases/ ',
-      environment_instance_id: ' envinst_demo001 ',
     })).toEqual({
       kind: 'open_ssh_environment',
       environment_id: 'ssh-1',
@@ -170,7 +169,6 @@ describe('desktopLauncherIPC', () => {
       remote_install_dir: '/opt/redeven',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example.invalid/releases/',
-      environment_instance_id: 'envinst_demo001',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'upsert_saved_ssh_environment',
@@ -182,7 +180,6 @@ describe('desktopLauncherIPC', () => {
       remote_install_dir: ' ',
       bootstrap_strategy: ' ',
       release_base_url: ' ',
-      environment_instance_id: ' envinst_demo002 ',
     })).toEqual({
       kind: 'upsert_saved_ssh_environment',
       environment_id: 'ssh-1',
@@ -193,7 +190,6 @@ describe('desktopLauncherIPC', () => {
       remote_install_dir: '',
       bootstrap_strategy: '',
       release_base_url: '',
-      environment_instance_id: 'envinst_demo002',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'delete_saved_ssh_environment',
@@ -213,7 +209,6 @@ describe('desktopLauncherIPC', () => {
       remote_install_dir: ' /opt/redeven ',
       bootstrap_strategy: ' desktop_upload ',
       release_base_url: ' https://mirror.example.invalid/releases/ ',
-      environment_instance_id: ' envinst_demo001 ',
     })).toEqual({
       kind: 'set_saved_ssh_environment_pinned',
       environment_id: 'ssh-1',
@@ -225,7 +220,6 @@ describe('desktopLauncherIPC', () => {
       remote_install_dir: '/opt/redeven',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example.invalid/releases/',
-      environment_instance_id: 'envinst_demo001',
     });
   });
 
