@@ -3,10 +3,8 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
-  controlPlaneManagedStateLayout,
-  controlPlaneProviderKeyForOrigin,
   defaultManagedStateLayout,
-  namedManagedStateLayout,
+  localEnvironmentManagedStateLayout,
   stateLayoutForConfigPath,
 } from './statePaths';
 
@@ -30,26 +28,13 @@ describe('statePaths', () => {
     });
   });
 
-  it('maps a named managed state layout to the same Local Environment scope', () => {
-    expect(namedManagedStateLayout('dev-a', { HOME: '/Users/tester' }, () => '/ignored')).toEqual(expect.objectContaining({
+  it('resolves the explicit Local Environment layout helper to the same single scope', () => {
+    expect(localEnvironmentManagedStateLayout({ HOME: '/Users/tester' }, () => '/ignored')).toEqual(expect.objectContaining({
       scopeKey: 'local_environment',
       configPath: '/Users/tester/.redeven/local-environment/config.json',
       stateDir: '/Users/tester/.redeven/local-environment',
       runtimeStateFile: '/Users/tester/.redeven/local-environment/runtime/local-ui.json',
     }));
-  });
-
-  it('maps a control-plane managed state layout to the same Local Environment scope', () => {
-    expect(controlPlaneManagedStateLayout('https://Region.Example.invalid/path', 'env:bad/id', { HOME: '/Users/tester' }, () => '/ignored')).toEqual(expect.objectContaining({
-      scopeKey: 'local_environment',
-      configPath: '/Users/tester/.redeven/local-environment/config.json',
-      stateDir: '/Users/tester/.redeven/local-environment',
-      runtimeStateFile: '/Users/tester/.redeven/local-environment/runtime/local-ui.json',
-    }));
-  });
-
-  it('derives the same provider key from a control-plane origin for catalog repair', () => {
-    expect(controlPlaneProviderKeyForOrigin('https://Region.Example.invalid/path')).toBe('https__region.example.invalid');
   });
 
   it('normalizes an explicit config path to an absolute layout', () => {

@@ -18,11 +18,8 @@ type environmentCatalogIdentity struct {
 }
 
 type environmentCatalogScope struct {
-	Kind           string `json:"kind"`
-	Name           string `json:"name,omitempty"`
-	ProviderOrigin string `json:"provider_origin,omitempty"`
-	ProviderKey    string `json:"provider_key,omitempty"`
-	EnvPublicID    string `json:"env_public_id,omitempty"`
+	Kind string `json:"kind"`
+	Name string `json:"name,omitempty"`
 }
 
 type environmentCatalogFile struct {
@@ -141,13 +138,9 @@ func bindingForConfig(cfg *Config) (*catalogEnvironmentBinding, error) {
 	if err != nil {
 		return nil, err
 	}
-	providerKey, err := controlPlaneProviderKey(normalizedBaseURL)
-	if err != nil {
-		return nil, err
-	}
 	providerID := strings.TrimSpace(cfg.ControlplaneProviderID)
 	if providerID == "" {
-		providerID = providerKey
+		return nil, nil
 	}
 	return &catalogEnvironmentBinding{
 		ProviderOrigin: normalizedBaseURL,
@@ -175,15 +168,9 @@ func findCatalogEnvironmentRecord(records []environmentCatalogRecordRef, id stri
 	return nil
 }
 
-func catalogScopeForLayout(layout StateLayout, binding *catalogEnvironmentBinding) environmentCatalogScope {
+func catalogScopeForLayout(layout StateLayout) environmentCatalogScope {
 	_ = layout
-	scope := environmentCatalogScope{Kind: string(ScopeKindLocalEnvironment), Name: DefaultLocalEnvironmentScopeName}
-	if binding != nil {
-		scope.ProviderOrigin = binding.ProviderOrigin
-		scope.ProviderKey = binding.ProviderID
-		scope.EnvPublicID = binding.EnvPublicID
-	}
-	return scope
+	return environmentCatalogScope{Kind: string(ScopeKindLocalEnvironment), Name: DefaultLocalEnvironmentScopeName}
 }
 
 func WriteEnvironmentCatalogRecord(layout StateLayout, cfg *Config, localUIBind string, passwordConfigured bool) error {
@@ -258,7 +245,7 @@ func WriteEnvironmentCatalogRecord(layout StateLayout, cfg *Config, localUIBind 
 		}
 	}
 
-	record.LocalHosting.Scope = catalogScopeForLayout(layout, binding)
+	record.LocalHosting.Scope = catalogScopeForLayout(layout)
 	record.LocalHosting.ScopeKey = strings.TrimSpace(layout.ScopeKey)
 	record.LocalHosting.StateDir = strings.TrimSpace(layout.StateDir)
 	record.LocalHosting.Owner = "agent"

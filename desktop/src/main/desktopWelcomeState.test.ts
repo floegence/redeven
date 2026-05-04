@@ -15,8 +15,6 @@ import {
   buildRemoteConnectionIssue,
   buildSSHConnectionIssue,
 } from './desktopWelcomeState';
-import { upsertSavedControlPlane } from './desktopPreferences';
-import { controlPlaneProviderKeyForOrigin } from './statePaths';
 import {
   buildManagedEnvironmentDesktopTarget,
   buildExternalLocalUIDesktopTarget,
@@ -776,72 +774,6 @@ describe('desktopWelcomeState', () => {
         provider_last_seen_at_unix_ms: 456,
       }),
     ]));
-  });
-
-  it('keeps a repaired legacy dual-route environment on one provider card after control-plane connect', () => {
-    expect(testProvider).toBeTruthy();
-    if (!testProvider) {
-      throw new Error('Expected normalized test provider.');
-    }
-
-    const legacyEnvironment = testManagedControlPlaneEnvironment(testProvider.provider_origin, 'env_demo', {
-      providerID: controlPlaneProviderKeyForOrigin(testProvider.provider_origin),
-      label: 'Desktop Label',
-      preferredOpenRoute: 'local_host',
-    });
-    const preferences = upsertSavedControlPlane(testDesktopPreferences({
-      managed_environments: [legacyEnvironment],
-    }), {
-      provider: testProvider,
-      account: {
-        provider_id: testProvider.provider_id,
-        provider_origin: testProvider.provider_origin,
-        display_name: testProvider.display_name,
-        user_public_id: 'user_demo',
-        user_display_name: 'Demo User',
-        authorization_expires_at_unix_ms: 1000,
-      },
-      environments: [{
-        provider_id: testProvider.provider_id,
-        provider_origin: testProvider.provider_origin,
-        env_public_id: 'env_demo',
-        label: 'Demo Environment',
-        description: 'team sandbox',
-        namespace_public_id: 'ns_demo',
-        namespace_name: 'Demo Team',
-        status: 'online',
-        lifecycle_status: 'active',
-        last_seen_at_unix_ms: 456,
-      }],
-      refresh_token: 'refresh-123',
-      display_label: 'Demo Portal',
-      last_synced_at_ms: 500,
-    });
-    const snapshot = buildDesktopWelcomeSnapshot({
-      preferences,
-    });
-
-    const providerEntry = snapshot.environments.find((entry) => (
-      entry.kind === 'provider_environment'
-      && entry.provider_origin === testProvider.provider_origin
-      && entry.env_public_id === 'env_demo'
-    ));
-
-    expect(snapshot.environments.find((entry) => (
-      entry.kind === 'managed_environment'
-      && entry.provider_origin === testProvider.provider_origin
-      && entry.env_public_id === 'env_demo'
-    ))).toBeUndefined();
-    expect(providerEntry).toEqual(expect.objectContaining({
-      id: legacyEnvironment.id,
-      label: 'Demo Environment',
-      provider_id: testProvider.provider_id,
-      category: 'provider',
-      provider_local_runtime_configured: true,
-      provider_local_runtime_state: 'not_running',
-      can_edit: true,
-      can_delete: false,
-    }));
   });
 
   it('projects normalized route state and sync freshness into control-plane-managed entries', () => {

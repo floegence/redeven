@@ -5,10 +5,7 @@ const LOCAL_ENVIRONMENT_SCOPE_KEY = 'local_environment';
 const LOCAL_ENVIRONMENT_SCOPE_DIR = 'local-environment';
 
 export type DesktopManagedScopeRef =
-  | Readonly<{ kind: 'local_environment'; name?: string }>
-  | Readonly<{ kind: 'local'; name?: string }>
-  | Readonly<{ kind: 'named'; name: string }>
-  | Readonly<{ kind: 'controlplane'; provider_origin?: string; provider_key?: string; env_public_id: string }>;
+  Readonly<{ kind: 'local_environment'; name?: string }>;
 
 export type DesktopManagedStateLayout = Readonly<{
   stateRoot: string;
@@ -26,33 +23,6 @@ export type DesktopManagedStateLayout = Readonly<{
   appsDir: string;
   gatewayDir: string;
 }>;
-
-function sanitizeStateScopeID(value: string): string {
-  return String(value ?? '').trim().replace(/[^A-Za-z0-9_.-]/g, '_');
-}
-
-function normalizeControlPlaneOrigin(rawURL: string): string {
-  const value = String(rawURL ?? '').trim();
-  if (!value) {
-    throw new Error('missing controlplane url');
-  }
-  const parsed = new URL(value);
-  if (!parsed.protocol || !parsed.host) {
-    throw new Error('invalid controlplane url');
-  }
-  parsed.username = '';
-  parsed.password = '';
-  parsed.pathname = '/';
-  parsed.search = '';
-  parsed.hash = '';
-  return `${parsed.protocol.toLowerCase()}//${parsed.host.toLowerCase()}`;
-}
-
-export function controlPlaneProviderKeyForOrigin(providerOrigin: string): string {
-  const normalizedOrigin = normalizeControlPlaneOrigin(String(providerOrigin ?? '').trim());
-  const parsed = new URL(normalizedOrigin);
-  return sanitizeStateScopeID(`${parsed.protocol.replace(/:$/u, '').toLowerCase()}__${parsed.host.toLowerCase()}`);
-}
 
 export function resolveStateRoot(
   env: NodeJS.ProcessEnv = process.env,
@@ -126,27 +96,7 @@ export function defaultManagedStateLayout(
   return stateLayoutForScope({ kind: 'local_environment', name: 'local' }, resolveStateRoot(env, homedir, override));
 }
 
-export function localManagedStateLayout(
-  _name: string,
-  env: NodeJS.ProcessEnv = process.env,
-  homedir: () => string = os.homedir,
-  override?: string,
-): DesktopManagedStateLayout {
-  return defaultManagedStateLayout(env, homedir, override);
-}
-
-export function namedManagedStateLayout(
-  _name: string,
-  env: NodeJS.ProcessEnv = process.env,
-  homedir: () => string = os.homedir,
-  override?: string,
-): DesktopManagedStateLayout {
-  return defaultManagedStateLayout(env, homedir, override);
-}
-
-export function controlPlaneManagedStateLayout(
-  _providerOrigin: string,
-  _envPublicID: string,
+export function localEnvironmentManagedStateLayout(
   env: NodeJS.ProcessEnv = process.env,
   homedir: () => string = os.homedir,
   override?: string,

@@ -36,7 +36,7 @@ This document describes the public Electron desktop shell that ships with each `
   - `~/.redeven/catalog/environments/*.json`
   - `~/.redeven/catalog/connections/*.json`
   - `~/.redeven/catalog/providers/*.json`
-- In the shared catalog, `identity.provider_id` and `provider_binding.provider_id` always mean the canonical discovery `provider_id`; they must not be rewritten to the local `provider_key`.
+- In the shared catalog, `identity.provider_id` and `provider_binding.provider_id` always mean the canonical discovery `provider_id`.
 - Saved Redeven URL and SSH Host entries are connection records only. SSH Host entries persist host-access details and do not own an additional Desktop-private local runtime state directory.
 - Desktop and standalone runtime / CLI mode resolve the same Local Environment state directory. Desktop does not invent a second local runtime state root.
 - The provider / control-plane model remains environment-first. Whether a provider Environment is linked to the Local Environment on this device is a local runtime/Desktop fact, not a provider-side device resource.
@@ -411,7 +411,7 @@ Rules:
 
 ## Desktop Preferences
 
-Desktop keeps one persisted preference model for desktop-managed environments and saved remote connections:
+Desktop keeps one current persisted preference model for desktop-managed environments and saved remote connections. The Electron user-data `desktop-preferences.json` file is only a lightweight version marker; the durable current schema lives in the shared catalog and secrets files:
 
 - `managed_environments`
 - `provider_environments`
@@ -423,6 +423,7 @@ Desktop keeps one persisted preference model for desktop-managed environments an
 
 Semantics:
 
+- Loading preferences reads only the current catalog schema. Root-level pre-catalog fields are ignored instead of migrated.
 - Desktop does not persist a remembered current target for the next launch.
 - Open Environment windows are runtime-only desktop session state.
 - Runtime health is a separate launcher snapshot concern. Window closure alone must not be used as a proxy for stopping a runtime.
@@ -439,7 +440,7 @@ Semantics:
 - Desktop never sends the stored Local UI password plaintext back to the renderer. The shell UI edits only a write-only replacement draft plus explicit keep/replace/remove intent.
 - `saved_environments` stores user-visible labels, normalized Local UI URLs, an origin marker (`saved` vs `recent_auto`), pin state, and `last_used_at_ms`.
 - `saved_ssh_environments` stores user-visible labels, normalized SSH destination data, the remote install directory, the SSH bootstrap delivery mode, the optional release mirror base URL, an origin marker (`saved` vs `recent_auto`), pin state, and `last_used_at_ms`.
-- `recent_external_local_ui_urls` remains a normalized compatibility bridge derived from `saved_environments`.
+- `recent_external_local_ui_urls` is a normalized derived summary from `saved_environments`.
 - `control_plane_refresh_tokens` stores per-provider opaque refresh tokens in the local secrets file, separate from visible provider/account metadata.
 - `control_planes` stores normalized provider discovery data, the desktop-owned display label, the desktop account snapshot, the cached environment list, and the last sync time.
 - Provider refresh reconciles canonical provider identity across `provider_environments`, but does not materialize remote-only provider environments into `managed_environments`.

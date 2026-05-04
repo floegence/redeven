@@ -235,7 +235,7 @@ func resolveBootstrapStateLayout(args BootstrapArgs) (StateLayout, error) {
 	if args.ScopeRef != nil {
 		return StateLayoutForScope(*args.ScopeRef, args.StateRoot)
 	}
-	return ControlPlaneStateLayout(args.ControlplaneBaseURL, args.EnvironmentID, args.StateRoot)
+	return LocalEnvironmentStateLayout(args.StateRoot)
 }
 
 func exchangeBootstrapTicket(ctx context.Context, baseURL string, envID string, bootstrapTicket string, exchange bootstrapTicketExchangeRequest) (*bootstrapResponse, error) {
