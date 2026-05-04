@@ -30,12 +30,18 @@ export function bootstrapDesktopSessionContextBridge(): void {
       const candidate = value as Partial<DesktopSessionContextSnapshot>;
       const managedEnvironmentID = String(candidate.managed_environment_id ?? '').trim();
       const environmentStorageScopeID = String(candidate.environment_storage_scope_id ?? '').trim();
+      const providerOrigin = String(candidate.provider_origin ?? '').trim();
+      const providerID = String(candidate.provider_id ?? '').trim();
+      const envPublicID = String(candidate.env_public_id ?? '').trim();
       if (managedEnvironmentID === '' || environmentStorageScopeID === '') {
         return null;
       }
       return {
         managed_environment_id: managedEnvironmentID,
         environment_storage_scope_id: environmentStorageScopeID,
+        ...(providerOrigin !== '' ? { provider_origin: providerOrigin } : {}),
+        ...(providerID !== '' ? { provider_id: providerID } : {}),
+        ...(envPublicID !== '' ? { env_public_id: envPublicID } : {}),
       };
     },
     notifyAppReady: (payload) => {

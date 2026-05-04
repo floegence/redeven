@@ -38,8 +38,8 @@ const (
 type RuntimeOperationAction string
 
 const (
-	RuntimeOperationActionInstall              RuntimeOperationAction = "install"
-	RuntimeOperationActionRemoveMachineVersion RuntimeOperationAction = "remove_machine_version"
+	RuntimeOperationActionInstall                       RuntimeOperationAction = "install"
+	RuntimeOperationActionRemoveLocalEnvironmentVersion RuntimeOperationAction = "remove_local_environment_version"
 )
 
 type RuntimeOperationState string
@@ -98,17 +98,17 @@ type RuntimeOperationStatus struct {
 }
 
 type RuntimeStatus struct {
-	ActiveRuntime               RuntimeTargetStatus             `json:"active_runtime"`
-	ManagedRuntime              RuntimeTargetStatus             `json:"managed_runtime"`
-	ManagedPrefix               string                          `json:"managed_prefix"`
-	SharedRuntimeRoot           string                          `json:"shared_runtime_root"`
-	EnvironmentSelectionVersion string                          `json:"environment_selection_version,omitempty"`
-	EnvironmentSelectionSource  string                          `json:"environment_selection_source"`
-	MachineDefaultVersion       string                          `json:"machine_default_version,omitempty"`
-	InstalledVersions           []RuntimeInstalledVersionStatus `json:"installed_versions,omitempty"`
-	InstallerScriptURL          string                          `json:"installer_script_url"`
-	Operation                   RuntimeOperationStatus          `json:"operation"`
-	UpdatedAtUnixMs             int64                           `json:"updated_at_unix_ms"`
+	ActiveRuntime                  RuntimeTargetStatus             `json:"active_runtime"`
+	ManagedRuntime                 RuntimeTargetStatus             `json:"managed_runtime"`
+	ManagedPrefix                  string                          `json:"managed_prefix"`
+	SharedRuntimeRoot              string                          `json:"shared_runtime_root"`
+	EnvironmentSelectionVersion    string                          `json:"environment_selection_version,omitempty"`
+	EnvironmentSelectionSource     string                          `json:"environment_selection_source"`
+	LocalEnvironmentDefaultVersion string                          `json:"local_environment_default_version,omitempty"`
+	InstalledVersions              []RuntimeInstalledVersionStatus `json:"installed_versions,omitempty"`
+	InstallerScriptURL             string                          `json:"installer_script_url"`
+	Operation                      RuntimeOperationStatus          `json:"operation"`
+	UpdatedAtUnixMs                int64                           `json:"updated_at_unix_ms"`
 }
 
 type RuntimeManagerOptions struct {
@@ -220,26 +220,26 @@ func (m *RuntimeManager) Status(ctx context.Context) RuntimeStatus {
 	}
 	const maxConsistentStatusAttempts = 3
 	type statusParts struct {
-		active           runtimeDetection
-		managed          runtimeDetection
-		selectionSource  string
-		selectionVersion string
-		machineState     machineRuntimeState
-		installed        []RuntimeInstalledVersionStatus
-		snapshot         runtimeSnapshot
+		active                runtimeDetection
+		managed               runtimeDetection
+		selectionSource       string
+		selectionVersion      string
+		localEnvironmentState localEnvironmentRuntimeState
+		installed             []RuntimeInstalledVersionStatus
+		snapshot              runtimeSnapshot
 	}
 
 	buildStatus := func(parts statusParts) RuntimeStatus {
 		return RuntimeStatus{
-			ActiveRuntime:               runtimeTargetStatusFromDetection(parts.active),
-			ManagedRuntime:              runtimeTargetStatusFromDetection(parts.managed),
-			ManagedPrefix:               managedRuntimePrefix(m.stateDir),
-			SharedRuntimeRoot:           sharedRuntimeRoot(m.stateRoot),
-			EnvironmentSelectionVersion: parts.selectionVersion,
-			EnvironmentSelectionSource:  parts.selectionSource,
-			MachineDefaultVersion:       parts.machineState.DefaultVersion,
-			InstalledVersions:           parts.installed,
-			InstallerScriptURL:          m.installScriptURL,
+			ActiveRuntime:                  runtimeTargetStatusFromDetection(parts.active),
+			ManagedRuntime:                 runtimeTargetStatusFromDetection(parts.managed),
+			ManagedPrefix:                  managedRuntimePrefix(m.stateDir),
+			SharedRuntimeRoot:              sharedRuntimeRoot(m.stateRoot),
+			EnvironmentSelectionVersion:    parts.selectionVersion,
+			EnvironmentSelectionSource:     parts.selectionSource,
+			LocalEnvironmentDefaultVersion: parts.localEnvironmentState.DefaultVersion,
+			InstalledVersions:              parts.installed,
+			InstallerScriptURL:             m.installScriptURL,
 			Operation: RuntimeOperationStatus{
 				Action:           parts.snapshot.operationAction,
 				State:            parts.snapshot.operationState,
@@ -258,17 +258,17 @@ func (m *RuntimeManager) Status(ctx context.Context) RuntimeStatus {
 	last := statusParts{}
 	for attempt := 0; attempt < maxConsistentStatusAttempts; attempt++ {
 		snapshotBefore := m.snapshot()
-		active, managed, selectionSource, selectionVersion, machineState := runtimeStatusSnapshot(ctx, m.stateDir, m.stateRoot)
-		installedVersions := installedVersionStatuses(ctx, m.stateRoot, machineState, selectionVersion)
+		active, managed, selectionSource, selectionVersion, localEnvironmentState := runtimeStatusSnapshot(ctx, m.stateDir, m.stateRoot)
+		installedVersions := installedVersionStatuses(ctx, m.stateRoot, localEnvironmentState, selectionVersion)
 		snapshotAfter := m.snapshot()
 		last = statusParts{
-			active:           active,
-			managed:          managed,
-			selectionSource:  selectionSource,
-			selectionVersion: selectionVersion,
-			machineState:     machineState,
-			installed:        installedVersions,
-			snapshot:         snapshotAfter,
+			active:                active,
+			managed:               managed,
+			selectionSource:       selectionSource,
+			selectionVersion:      selectionVersion,
+			localEnvironmentState: localEnvironmentState,
+			installed:             installedVersions,
+			snapshot:              snapshotAfter,
 		}
 		if snapshotBefore.updatedAt.Equal(snapshotAfter.updatedAt) {
 			return buildStatus(last)
@@ -321,10 +321,10 @@ func (m *RuntimeManager) SelectVersion(ctx context.Context, version string) (Run
 		return RuntimeStatus{}, err
 	}
 	var selectedPath string
-	err := withMachineRuntimeStateLock(m.stateRoot, func(state *machineRuntimeState) error {
+	err := withLocalEnvironmentRuntimeStateLock(m.stateRoot, func(state *localEnvironmentRuntimeState) error {
 		record, ok := state.Versions[version]
 		if !ok {
-			return fmt.Errorf("managed version %s is not installed on this machine", version)
+			return fmt.Errorf("managed version %s is not installed in the Local Environment inventory", version)
 		}
 		selectedPath = filepath.Join(sharedVersionRoot(m.stateRoot, version), strings.TrimSpace(record.BinaryRelPath))
 		if err := probeRuntimeBinary(ctx, selectedPath); err != nil {
@@ -340,9 +340,9 @@ func (m *RuntimeManager) SelectVersion(ctx context.Context, version string) (Run
 			return err
 		}
 		if state.Selections == nil {
-			state.Selections = make(map[string]machineRuntimeSelection)
+			state.Selections = make(map[string]localEnvironmentRuntimeSelection)
 		}
-		state.Selections[filepath.Clean(m.stateDir)] = machineRuntimeSelection{
+		state.Selections[filepath.Clean(m.stateDir)] = localEnvironmentRuntimeSelection{
 			Version:         version,
 			UpdatedAtUnixMs: m.now().UnixMilli(),
 		}
@@ -354,7 +354,7 @@ func (m *RuntimeManager) SelectVersion(ctx context.Context, version string) (Run
 	return m.Status(ctx), nil
 }
 
-func (m *RuntimeManager) SetMachineDefaultVersion(ctx context.Context, version string) (RuntimeStatus, error) {
+func (m *RuntimeManager) SetLocalEnvironmentDefaultVersion(ctx context.Context, version string) (RuntimeStatus, error) {
 	if m == nil {
 		return RuntimeStatus{}, errors.New("runtime manager not ready")
 	}
@@ -362,10 +362,10 @@ func (m *RuntimeManager) SetMachineDefaultVersion(ctx context.Context, version s
 	if version == "" {
 		return RuntimeStatus{}, errors.New("missing version")
 	}
-	err := withMachineRuntimeStateLock(m.stateRoot, func(state *machineRuntimeState) error {
+	err := withLocalEnvironmentRuntimeStateLock(m.stateRoot, func(state *localEnvironmentRuntimeState) error {
 		record, ok := state.Versions[version]
 		if !ok {
-			return fmt.Errorf("managed version %s is not installed on this machine", version)
+			return fmt.Errorf("managed version %s is not installed in the Local Environment inventory", version)
 		}
 		binaryPath := filepath.Join(sharedVersionRoot(m.stateRoot, version), strings.TrimSpace(record.BinaryRelPath))
 		if err := probeRuntimeBinary(ctx, binaryPath); err != nil {
@@ -384,7 +384,7 @@ func (m *RuntimeManager) RemoveEnvironmentSelection(ctx context.Context) (Runtim
 	if m == nil {
 		return RuntimeStatus{}, errors.New("runtime manager not ready")
 	}
-	err := withMachineRuntimeStateLock(m.stateRoot, func(state *machineRuntimeState) error {
+	err := withLocalEnvironmentRuntimeStateLock(m.stateRoot, func(state *localEnvironmentRuntimeState) error {
 		if err := clearScopeSelection(m.stateDir); err != nil {
 			return err
 		}
@@ -397,7 +397,7 @@ func (m *RuntimeManager) RemoveEnvironmentSelection(ctx context.Context) (Runtim
 	return m.Status(ctx), nil
 }
 
-func (m *RuntimeManager) RemoveMachineVersion(ctx context.Context, version string) (RuntimeStatus, error) {
+func (m *RuntimeManager) RemoveLocalEnvironmentVersion(ctx context.Context, version string) (RuntimeStatus, error) {
 	if m == nil {
 		return RuntimeStatus{}, errors.New("runtime manager not ready")
 	}
@@ -405,11 +405,11 @@ func (m *RuntimeManager) RemoveMachineVersion(ctx context.Context, version strin
 	if version == "" {
 		return RuntimeStatus{}, errors.New("missing version")
 	}
-	opCtx, started := m.startOperation(RuntimeOperationActionRemoveMachineVersion, version)
+	opCtx, started := m.startOperation(RuntimeOperationActionRemoveLocalEnvironmentVersion, version)
 	if !started {
 		return m.Status(ctx), nil
 	}
-	go m.runRemoveMachineVersion(opCtx, version)
+	go m.runRemoveLocalEnvironmentVersion(opCtx, version)
 	return m.Status(ctx), nil
 }
 
@@ -446,7 +446,7 @@ func (m *RuntimeManager) runInstall(ctx context.Context) {
 	stagePrefix := filepath.Join(sharedStagingRoot(m.stateRoot), sanitizePathSegment(jobID))
 	linkPath := managedRuntimePrefix(m.stateDir)
 
-	m.appendLog("Preparing machine-scoped code-server install.")
+	m.appendLog("Preparing code-server install for this Local Environment.")
 	m.appendLog("Installer URL: " + m.installScriptURL)
 	m.appendLog("Shared runtime root: " + sharedRuntimeRoot(m.stateRoot))
 	m.appendLog("Current environment link: " + linkPath)
@@ -505,11 +505,11 @@ func (m *RuntimeManager) runInstall(ctx context.Context) {
 	m.appendLog("Resolved managed version: " + version)
 
 	m.setStage(RuntimeOperationStageFinalizing)
-	err = withMachineRuntimeStateLock(m.stateRoot, func(state *machineRuntimeState) error {
+	err = withLocalEnvironmentRuntimeStateLock(m.stateRoot, func(state *localEnvironmentRuntimeState) error {
 		if existing, ok := state.Versions[version]; ok {
 			existingBinary := filepath.Join(sharedVersionRoot(m.stateRoot, version), strings.TrimSpace(existing.BinaryRelPath))
 			if err := probeRuntimeBinary(ctx, existingBinary); err == nil {
-				m.appendLog("Reusing existing machine-managed version: " + version)
+				m.appendLog("Reusing existing Local Environment runtime version: " + version)
 				if strings.TrimSpace(state.DefaultVersion) == "" {
 					state.DefaultVersion = version
 				}
@@ -519,7 +519,7 @@ func (m *RuntimeManager) runInstall(ctx context.Context) {
 				}); err != nil {
 					return err
 				}
-				state.Selections[filepath.Clean(m.stateDir)] = machineRuntimeSelection{
+				state.Selections[filepath.Clean(m.stateDir)] = localEnvironmentRuntimeSelection{
 					Version:         version,
 					UpdatedAtUnixMs: m.now().UnixMilli(),
 				}
@@ -535,7 +535,7 @@ func (m *RuntimeManager) runInstall(ctx context.Context) {
 		if err := repairRuntimeBinaryLink(versionRoot); err != nil {
 			return err
 		}
-		state.Versions[version] = machineRuntimeVersion{
+		state.Versions[version] = localEnvironmentRuntimeVersion{
 			InstalledAtUnixMs: m.now().UnixMilli(),
 			BinaryRelPath:     filepath.Join("bin", codeServerBinaryName()),
 		}
@@ -548,7 +548,7 @@ func (m *RuntimeManager) runInstall(ctx context.Context) {
 		}); err != nil {
 			return err
 		}
-		state.Selections[filepath.Clean(m.stateDir)] = machineRuntimeSelection{
+		state.Selections[filepath.Clean(m.stateDir)] = localEnvironmentRuntimeSelection{
 			Version:         version,
 			UpdatedAtUnixMs: m.now().UnixMilli(),
 		}
@@ -569,25 +569,25 @@ func (m *RuntimeManager) runInstall(ctx context.Context) {
 		return
 	}
 
-	m.appendLog("Machine-managed runtime is ready for the current environment.")
+	m.appendLog("The Local Environment runtime is ready for the current environment.")
 	m.finishOperation("", "", false)
 }
 
-func (m *RuntimeManager) runRemoveMachineVersion(ctx context.Context, version string) {
-	m.appendLog("Preparing machine runtime removal.")
+func (m *RuntimeManager) runRemoveLocalEnvironmentVersion(ctx context.Context, version string) {
+	m.appendLog("Preparing Local Environment runtime removal.")
 	m.appendLog("Target version: " + version)
 	m.appendLog("Shared runtime root: " + sharedRuntimeRoot(m.stateRoot))
 
 	m.setStage(RuntimeOperationStageRemoving)
-	err := withMachineRuntimeStateLock(m.stateRoot, func(state *machineRuntimeState) error {
+	err := withLocalEnvironmentRuntimeStateLock(m.stateRoot, func(state *localEnvironmentRuntimeState) error {
 		if strings.TrimSpace(state.DefaultVersion) == version {
-			return fmt.Errorf("version %s is still the machine default; choose another default before removing it", version)
+			return fmt.Errorf("version %s is still the Local Environment default; choose another default before removing it", version)
 		}
 		if selectionCountForVersion(*state, version) > 0 {
 			return fmt.Errorf("version %s is still selected by one or more environments", version)
 		}
 		if _, ok := state.Versions[version]; !ok {
-			return fmt.Errorf("managed version %s is not installed on this machine", version)
+			return fmt.Errorf("managed version %s is not installed in the Local Environment inventory", version)
 		}
 		if err := removeIfExists(sharedVersionRoot(m.stateRoot, version)); err != nil {
 			return err
@@ -614,7 +614,7 @@ func (m *RuntimeManager) runRemoveMachineVersion(ctx context.Context, version st
 	}
 
 	m.setStage(RuntimeOperationStageFinalizing)
-	m.appendLog("Machine-managed version has been removed.")
+	m.appendLog("The Local Environment runtime version has been removed.")
 	m.finishOperation("", "", false)
 }
 
@@ -819,24 +819,24 @@ func runtimeTargetStatusFromDetection(d runtimeDetection) RuntimeTargetStatus {
 	}
 }
 
-func runtimeStatusSnapshot(ctx context.Context, stateDir string, stateRoot string) (runtimeDetection, runtimeDetection, string, string, machineRuntimeState) {
+func runtimeStatusSnapshot(ctx context.Context, stateDir string, stateRoot string) (runtimeDetection, runtimeDetection, string, string, localEnvironmentRuntimeState) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	machineState, _ := loadMachineRuntimeState(stateRoot)
-	selectionVersion, selectionSource := resolveManagedSelection(stateDir, machineState)
+	localEnvironmentState, _ := loadLocalEnvironmentRuntimeState(stateRoot)
+	selectionVersion, selectionSource := resolveManagedSelection(stateDir, localEnvironmentState)
 	managedDetection := detectManagedRuntime(ctx, stateDir, stateRoot, selectionVersion)
 	activeDetection := detectRuntime(ctx, stateDir, stateRoot, selectionVersion)
-	return activeDetection, managedDetection, selectionSource, selectionVersion, machineState
+	return activeDetection, managedDetection, selectionSource, selectionVersion, localEnvironmentState
 }
 
-func resolveManagedSelection(stateDir string, machineState machineRuntimeState) (string, string) {
+func resolveManagedSelection(stateDir string, localEnvironmentState localEnvironmentRuntimeState) (string, string) {
 	selectedVersion, err := explicitSelectionVersion(stateDir)
 	if err == nil && strings.TrimSpace(selectedVersion) != "" {
 		return strings.TrimSpace(selectedVersion), "environment"
 	}
-	if strings.TrimSpace(machineState.DefaultVersion) != "" {
-		return strings.TrimSpace(machineState.DefaultVersion), "machine_default"
+	if strings.TrimSpace(localEnvironmentState.DefaultVersion) != "" {
+		return strings.TrimSpace(localEnvironmentState.DefaultVersion), "local_environment_default"
 	}
 	return "", "none"
 }
@@ -861,8 +861,8 @@ func detectRuntime(ctx context.Context, stateDir string, stateRoot string, selec
 }
 
 func detectSelectedManagedRuntime(ctx context.Context, stateDir string, stateRoot string) runtimeDetection {
-	machineState, _ := loadMachineRuntimeState(stateRoot)
-	version, _ := resolveManagedSelection(stateDir, machineState)
+	localEnvironmentState, _ := loadLocalEnvironmentRuntimeState(stateRoot)
+	version, _ := resolveManagedSelection(stateDir, localEnvironmentState)
 	return detectManagedRuntime(ctx, stateDir, stateRoot, version)
 }
 
@@ -883,7 +883,7 @@ func detectManagedRuntime(ctx context.Context, stateDir string, stateRoot string
 				binaryPath:   path,
 				version:      version,
 				errorCode:    "managed_version_missing",
-				errorMessage: fmt.Sprintf("managed version %s is not installed on this machine", version),
+				errorMessage: fmt.Sprintf("managed version %s is not installed in the Local Environment inventory", version),
 			}
 		}
 	}
@@ -954,19 +954,19 @@ func detectRuntimeCandidate(ctx context.Context, candidate binaryCandidate) runt
 	return detection
 }
 
-func installedVersionStatuses(ctx context.Context, stateRoot string, machineState machineRuntimeState, currentSelectionVersion string) []RuntimeInstalledVersionStatus {
-	versions := sortedInstalledVersions(machineState)
+func installedVersionStatuses(ctx context.Context, stateRoot string, localEnvironmentState localEnvironmentRuntimeState, currentSelectionVersion string) []RuntimeInstalledVersionStatus {
+	versions := sortedInstalledVersions(localEnvironmentState)
 	out := make([]RuntimeInstalledVersionStatus, 0, len(versions))
 	for _, version := range versions {
-		record := machineState.Versions[version]
+		record := localEnvironmentState.Versions[version]
 		path := filepath.Join(sharedVersionRoot(stateRoot, version), strings.TrimSpace(record.BinaryRelPath))
 		status := RuntimeInstalledVersionStatus{
 			Version:                      version,
 			BinaryPath:                   path,
 			InstalledAtUnixMs:            record.InstalledAtUnixMs,
-			SelectionCount:               selectionCountForVersion(machineState, version),
+			SelectionCount:               selectionCountForVersion(localEnvironmentState, version),
 			SelectedByCurrentEnvironment: strings.TrimSpace(currentSelectionVersion) == version,
-			DefaultForNewEnvironments:    strings.TrimSpace(machineState.DefaultVersion) == version,
+			DefaultForNewEnvironments:    strings.TrimSpace(localEnvironmentState.DefaultVersion) == version,
 			DetectionState:               RuntimeDetectionMissing,
 		}
 		if status.SelectionCount == 0 && !status.DefaultForNewEnvironments {

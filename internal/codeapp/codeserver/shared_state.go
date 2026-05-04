@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	scopeSelectionSchemaVersion = 1
-	machineStateSchemaVersion   = 1
+	scopeSelectionSchemaVersion        = 1
+	localEnvironmentStateSchemaVersion = 1
 )
 
 type scopeSelectionState struct {
@@ -25,32 +25,32 @@ type scopeSelectionState struct {
 	UpdatedAtUnixMs int64  `json:"updated_at_unix_ms,omitempty"`
 }
 
-type machineRuntimeState struct {
-	SchemaVersion  int                                `json:"schema_version"`
-	DefaultVersion string                             `json:"default_version,omitempty"`
-	Versions       map[string]machineRuntimeVersion   `json:"versions,omitempty"`
-	Selections     map[string]machineRuntimeSelection `json:"selections,omitempty"`
+type localEnvironmentRuntimeState struct {
+	SchemaVersion  int                                         `json:"schema_version"`
+	DefaultVersion string                                      `json:"default_version,omitempty"`
+	Versions       map[string]localEnvironmentRuntimeVersion   `json:"versions,omitempty"`
+	Selections     map[string]localEnvironmentRuntimeSelection `json:"selections,omitempty"`
 }
 
-type machineRuntimeVersion struct {
+type localEnvironmentRuntimeVersion struct {
 	InstalledAtUnixMs int64  `json:"installed_at_unix_ms,omitempty"`
 	BinaryRelPath     string `json:"binary_rel_path,omitempty"`
 }
 
-type machineRuntimeSelection struct {
+type localEnvironmentRuntimeSelection struct {
 	Version         string `json:"version,omitempty"`
 	UpdatedAtUnixMs int64  `json:"updated_at_unix_ms,omitempty"`
 }
 
-func normalizeMachineRuntimeState(state machineRuntimeState) machineRuntimeState {
+func normalizeLocalEnvironmentRuntimeState(state localEnvironmentRuntimeState) localEnvironmentRuntimeState {
 	if state.SchemaVersion == 0 {
-		state.SchemaVersion = machineStateSchemaVersion
+		state.SchemaVersion = localEnvironmentStateSchemaVersion
 	}
 	if state.Versions == nil {
-		state.Versions = make(map[string]machineRuntimeVersion)
+		state.Versions = make(map[string]localEnvironmentRuntimeVersion)
 	}
 	if state.Selections == nil {
-		state.Selections = make(map[string]machineRuntimeSelection)
+		state.Selections = make(map[string]localEnvironmentRuntimeSelection)
 	}
 	for version, record := range state.Versions {
 		cleanVersion := strings.TrimSpace(version)
@@ -195,32 +195,32 @@ func clearScopeSelection(stateDir string) error {
 	return nil
 }
 
-func loadMachineRuntimeState(stateRoot string) (machineRuntimeState, error) {
-	path := filepath.Join(sharedRuntimeRoot(stateRoot), "machine.json")
+func loadLocalEnvironmentRuntimeState(stateRoot string) (localEnvironmentRuntimeState, error) {
+	path := filepath.Join(sharedRuntimeRoot(stateRoot), "local-environment.json")
 	body, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return normalizeMachineRuntimeState(machineRuntimeState{}), nil
+			return normalizeLocalEnvironmentRuntimeState(localEnvironmentRuntimeState{}), nil
 		}
-		return machineRuntimeState{}, err
+		return localEnvironmentRuntimeState{}, err
 	}
-	var state machineRuntimeState
+	var state localEnvironmentRuntimeState
 	if err := json.Unmarshal(body, &state); err != nil {
-		return machineRuntimeState{}, err
+		return localEnvironmentRuntimeState{}, err
 	}
-	return normalizeMachineRuntimeState(state), nil
+	return normalizeLocalEnvironmentRuntimeState(state), nil
 }
 
-func saveMachineRuntimeState(stateRoot string, state machineRuntimeState) error {
+func saveLocalEnvironmentRuntimeState(stateRoot string, state localEnvironmentRuntimeState) error {
 	if err := ensureSharedRuntimeDirs(stateRoot); err != nil {
 		return err
 	}
-	state = normalizeMachineRuntimeState(state)
+	state = normalizeLocalEnvironmentRuntimeState(state)
 	body, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(sharedRuntimeRoot(stateRoot), "machine.json")
+	path := filepath.Join(sharedRuntimeRoot(stateRoot), "local-environment.json")
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, append(body, '\n'), 0o600); err != nil {
 		return err
@@ -232,7 +232,7 @@ func saveMachineRuntimeState(stateRoot string, state machineRuntimeState) error 
 	return nil
 }
 
-func withMachineRuntimeStateLock(stateRoot string, fn func(state *machineRuntimeState) error) error {
+func withLocalEnvironmentRuntimeStateLock(stateRoot string, fn func(state *localEnvironmentRuntimeState) error) error {
 	if err := ensureSharedRuntimeDirs(stateRoot); err != nil {
 		return err
 	}
@@ -243,7 +243,7 @@ func withMachineRuntimeStateLock(stateRoot string, fn func(state *machineRuntime
 	}
 	defer func() { _ = lk.Release() }()
 
-	state, err := loadMachineRuntimeState(stateRoot)
+	state, err := loadLocalEnvironmentRuntimeState(stateRoot)
 	if err != nil {
 		return err
 	}
@@ -252,7 +252,7 @@ func withMachineRuntimeStateLock(stateRoot string, fn func(state *machineRuntime
 			return err
 		}
 	}
-	return saveMachineRuntimeState(stateRoot, state)
+	return saveLocalEnvironmentRuntimeState(stateRoot, state)
 }
 
 func repairManagedRuntimeLink(stateDir string, stateRoot string, version string) error {
@@ -285,7 +285,7 @@ func explicitSelectionVersion(stateDir string) (string, error) {
 	return strings.TrimSpace(selection.SelectedVersion), nil
 }
 
-func selectionCountForVersion(state machineRuntimeState, version string) int {
+func selectionCountForVersion(state localEnvironmentRuntimeState, version string) int {
 	cleanVersion := strings.TrimSpace(version)
 	if cleanVersion == "" {
 		return 0
@@ -299,7 +299,7 @@ func selectionCountForVersion(state machineRuntimeState, version string) int {
 	return count
 }
 
-func sortedInstalledVersions(state machineRuntimeState) []string {
+func sortedInstalledVersions(state localEnvironmentRuntimeState) []string {
 	out := make([]string, 0, len(state.Versions))
 	for version := range state.Versions {
 		if strings.TrimSpace(version) == "" {

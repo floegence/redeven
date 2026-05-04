@@ -96,7 +96,7 @@ export function accessModeVisual(mode: DesktopAccessMode): AccessModeVisual {
       return {
         short_label: 'Local',
         tone: 'neutral',
-        description: 'Only this machine',
+        description: 'Only this device',
       };
   }
 }

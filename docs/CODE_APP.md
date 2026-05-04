@@ -32,18 +32,18 @@ This document describes the **Code App** implementation in the Redeven runtime:
 
 ## Local data directory
 
-The Code App stores all code space data on the user's machine (not on Redeven servers).
+The Code App stores all code space data in the user's Local Environment state, not on Redeven servers.
 
-By default, the machine config is `~/.redeven/machine/config.json`, so the state directory is:
+By default, the Local Environment config is `~/.redeven/local-environment/config.json`, so the state directory is:
 
-- `state_dir = ~/.redeven/machine/`
+- `state_dir = ~/.redeven/local-environment/`
 - `state_root = ~/.redeven/`
 
-Machine-scoped Code App data:
+Local Environment-scoped Code App data:
 
 ```
 ~/.redeven/
-  machine/
+  local-environment/
     config.json
     apps/
       code/
@@ -63,14 +63,14 @@ Machine-scoped Code App data:
               stderr.log
 ```
 
-Machine-scoped shared managed runtime data:
+Local Environment-scoped shared managed runtime data:
 
 ```
 ~/.redeven/
   shared/
     code-server/
       <os>-<arch>/
-        machine.json
+        local-environment.json
         lock
         downloads/
           install.sh
@@ -96,9 +96,9 @@ Instead, Codespaces can install a **managed** `code-server` runtime on demand af
 Rules:
 
 - Redeven never auto-installs `code-server` on page load or on codespace open.
-- Installing a managed version stores it once per machine under the shared runtime root.
+- Installing a managed version stores it once per Local Environment under the shared runtime root.
 - Each environment stores only its own managed version selection in `apps/code/runtime/current.json`.
-- New environments inherit the machine default managed version when they do not pin their own version.
+- New environments inherit the Local Environment default managed version when they do not pin their own version.
 - The user must explicitly click `Install and use for this environment` or `Install latest and use for this environment`.
 - Redeven runs the official upstream `code-server` install script in `standalone` mode and follows the latest stable release flow by default.
 - The environment-local `apps/code/runtime/managed` path is only a symlink to the selected shared version.
@@ -112,7 +112,7 @@ Managed selection precedence remains:
 2. `CODE_SERVER_BIN`
 3. `CODE_SERVER_PATH`
 4. explicit environment-managed selection
-5. machine default managed selection
+5. Local Environment default managed selection
 6. host runtime discovery
 
 ## Runtime status and install API
@@ -132,8 +132,8 @@ The explicit install flow is:
 1. Env App reads runtime status.
 2. Env App Settings exposes a dedicated `code-server Runtime` management card that shows:
    - the current environment selection,
-   - the machine-managed version inventory and machine default,
-   - a focused running/error panel for explicit install or machine-version removal actions,
+   - the Local Environment runtime version inventory and Local Environment default,
+   - a focused running/error panel for explicit install or Local Environment version removal actions,
    - recent output only while an operation is running or when the last action failed or was cancelled.
 3. If the runtime is missing or unusable, Env App Codespaces shows a dedicated install UI instead of trying to start a codespace.
 4. After the user explicitly clicks `Install and use for this environment` or `Install latest and use for this environment`, the runtime:
@@ -142,10 +142,10 @@ The explicit install flow is:
    - validates the staged binary and resolves the upstream `code-server` version,
    - promotes that install into `shared/code-server/<os>-<arch>/versions/<version>/`,
    - selects that version for the current environment,
-   - sets the machine default only when the machine does not already have one.
-5. If the resolved latest version is already installed on the machine, Redeven reuses it and only updates the current environment selection instead of running a second install.
-6. `POST /detach` removes only the current environment pin. It does not delete any machine-managed files.
-7. `POST /remove-version` deletes only one machine-managed version, and only when it is not the machine default and no environment still selects it.
+   - sets the Local Environment default only when one does not already exist.
+5. If the resolved latest version is already installed for the Local Environment, Redeven reuses it and only updates the current environment selection instead of running a second install.
+6. `POST /detach` removes only the current environment pin. It does not delete any Local Environment runtime files.
+7. `POST /remove-version` deletes only one Local Environment runtime version, and only when it is not the Local Environment default and no environment still selects it.
 8. Env App shows focused progress while the action is running, then returns to the calm steady state after success. Failed or cancelled actions keep their recent output visible for recovery.
 
 ## Runtime status model
@@ -153,13 +153,13 @@ The explicit install flow is:
 `GET /_redeven_proxy/api/code-runtime/status` returns:
 
 - `active_runtime`: the runtime currently selected for Codespaces (`managed`, `system`, `env_override`, or `none`)
-- `managed_runtime`: the managed version currently selected for the environment or inherited from the machine default, whether or not it is active
+- `managed_runtime`: the managed version currently selected for the environment or inherited from the Local Environment default, whether or not it is active
 - `environment_selection_version`: the managed version chosen by or inherited into the current environment
-- `environment_selection_source`: `environment`, `machine_default`, or `none`
-- `machine_default_version`: the managed version inherited by new environments on this machine
-- `shared_runtime_root`: the machine-scoped shared runtime directory
-- `installed_versions[]`: every managed version installed on this machine, including selection counts, removability, default status, and health
-- `operation`: the current or most recent explicit management operation (`install` / `remove_machine_version`) plus stage, error, target version, and log tail
+- `environment_selection_source`: `environment`, `local_environment_default`, or `none`
+- `local_environment_default_version`: the managed version inherited by new environments in this Local Environment
+- `shared_runtime_root`: the Local Environment-scoped shared runtime directory
+- `installed_versions[]`: every managed version installed for this Local Environment, including selection counts, removability, default status, and health
+- `operation`: the current or most recent explicit management operation (`install` / `remove_local_environment_version`) plus stage, error, target version, and log tail
 
 This split exists so Settings can truthfully show managed inventory, environment selection, and active runtime precedence without inferring hidden state on the client.
 
@@ -172,11 +172,11 @@ Binary resolution order:
    - `CODE_SERVER_BIN`
    - `CODE_SERVER_PATH`
 2) The current environment's explicit managed version selection, if present
-3) The machine default managed version, if present
+3) The Local Environment default managed version, if present
 4) Common install locations (`~/.local/bin/code-server`, Homebrew paths, `/usr/local/bin`, `/usr/bin`, ...)
 5) `PATH` (`exec.LookPath("code-server")`)
 
-The selected binary must be usable on the current machine. If an explicit managed selection is missing or unusable, Redeven reports that exact problem and does not silently fall back to host discovery. If no managed selection exists at all, Env App blocks the Codespaces launch path and asks the user to explicitly install the managed runtime.
+The selected binary must be usable on the current host. If an explicit managed selection is missing or unusable, Redeven reports that exact problem and does not silently fall back to host discovery. If no managed selection exists at all, Env App blocks the Codespaces launch path and asks the user to explicitly install the managed runtime.
 
 ### Note for macOS/Homebrew
 
@@ -244,15 +244,15 @@ This is conservative: code-server is not designed to enforce a partial permissio
   - Check the per-codespace logs under:
     - `~/.redeven/apps/code/spaces/<code_space_id>/codeserver/stdout.log`
     - `~/.redeven/apps/code/spaces/<code_space_id>/codeserver/stderr.log`
-  - Verify `code-server` runs on your machine (`code-server --version`).
+  - Verify `code-server` runs on the host (`code-server --version`).
   - If Homebrew installs `code-server` as a Node.js script, ensure `node` works, or set `REDEVEN_CODE_SERVER_NODE_BIN`.
-  - If startup is slow on your machine (first launch, heavy extensions, slow disk), increase `REDEVEN_CODE_SERVER_STARTUP_TIMEOUT`.
+  - If startup is slow on the host (first launch, heavy extensions, slow disk), increase `REDEVEN_CODE_SERVER_STARTUP_TIMEOUT`.
 
 - Frequent "Extension Host reconnect" loops:
   - Redeven now cleans up stale code-server processes for the same codespace session socket before start/stop.
   - Redeven also removes stale `User/workspaceStorage/*/vscode.lock` files before each start.
   - In Local UI mode, Redeven also shortens extension-host reconnection grace to 30s by default to reduce long-lived stale locks.
-  - You can tune this per machine via `REDEVEN_CODE_SERVER_RECONNECTION_GRACE_TIME`.
+  - You can tune this per Local Environment via `REDEVEN_CODE_SERVER_RECONNECTION_GRACE_TIME`.
   - If reconnect loops persist, inspect `remoteagent.log` and `exthost*/remoteexthost.log` under:
     - `~/.redeven/apps/code/spaces/<code_space_id>/codeserver/user-data/logs/<timestamp>/`
 

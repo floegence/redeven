@@ -32,6 +32,18 @@ function blockedHeadline(report: LaunchBlockedReport): { title: string; body: st
       body: report.message,
     };
   }
+  if (report.code === 'startup_invalid') {
+    return {
+      title: 'Local Environment startup needs a setting',
+      body: report.message,
+    };
+  }
+  if (report.code === 'startup_failed') {
+    return {
+      title: 'Local Environment startup failed',
+      body: report.message,
+    };
+  }
   return {
     title: 'Redeven Desktop is blocked',
     body: report.message,
@@ -49,6 +61,12 @@ function secondaryAction(report: LaunchBlockedReport): Readonly<{ action: Blocke
     return {
       action: 'connection-center',
       label: 'Open Environment',
+    };
+  }
+  if (report.code === 'startup_invalid' || report.code === 'startup_failed') {
+    return {
+      action: 'advanced-settings',
+      label: 'Local Environment Settings',
     };
   }
   return {
@@ -93,6 +111,8 @@ export function buildBlockedPageHTML(
   const diagnostics = escapeHTML(formatBlockedLaunchDiagnostics(report));
   const details = report.diagnostics?.target_url
     ? `Target URL: ${escapeHTML(report.diagnostics.target_url)}`
+    : report.diagnostics?.config_path
+    ? `Config path: ${escapeHTML(report.diagnostics.config_path)}`
     : report.diagnostics?.state_dir
     ? `Default state directory: ${escapeHTML(report.diagnostics.state_dir)}`
     : 'Desktop could not attach to an existing Local UI instance.';

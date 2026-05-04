@@ -21,7 +21,6 @@ export type BusyAction =
   | 'delete_control_plane'
   | 'close_launcher_or_quit'
   | 'upsert_managed_environment'
-  | 'upsert_provider_environment_local_runtime'
   | 'save_settings'
   | 'save_environment'
   | 'delete_environment';
@@ -47,7 +46,6 @@ export function busyStateForLauncherRequest(
 ): DesktopLauncherBusyState {
   switch (request.kind) {
     case 'upsert_managed_environment':
-    case 'upsert_provider_environment_local_runtime':
     case 'upsert_saved_environment':
     case 'upsert_saved_ssh_environment':
       return {

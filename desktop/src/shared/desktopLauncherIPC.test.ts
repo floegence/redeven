@@ -11,18 +11,18 @@ describe('desktopLauncherIPC', () => {
   it('normalizes launcher actions and trims Environment inputs', () => {
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'open_managed_environment',
-      environment_id: ' machine ',
+      environment_id: ' local ',
     })).toEqual({
       kind: 'open_managed_environment',
-      environment_id: 'machine',
+      environment_id: 'local',
       route: 'auto',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'open_environment_settings',
-      environment_id: ' machine ',
+      environment_id: ' local ',
     })).toEqual({
       kind: 'open_environment_settings',
-      environment_id: 'machine',
+      environment_id: 'local',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'start_environment_runtime',
@@ -36,32 +36,17 @@ describe('desktopLauncherIPC', () => {
     expect(normalizeDesktopLauncherActionRequest({ kind: 'close_launcher_or_quit' })).toEqual({ kind: 'close_launcher_or_quit' });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'upsert_managed_environment',
-      environment_id: ' machine ',
-      environment_name: ' dev-a ',
-      label: ' Local Dev ',
+      environment_id: ' local ',
+      environment_name: ' local ',
+      label: ' Local Environment ',
       local_ui_bind: ' localhost:23998 ',
       local_ui_password: ' secret ',
       local_ui_password_mode: ' replace ',
     })).toEqual({
       kind: 'upsert_managed_environment',
-      environment_id: 'machine',
-      environment_name: 'dev-a',
-      label: 'Local Dev',
-      local_ui_bind: 'localhost:23998',
-      local_ui_password: ' secret ',
-      local_ui_password_mode: 'replace',
-    });
-    expect(normalizeDesktopLauncherActionRequest({
-      kind: 'upsert_provider_environment_local_runtime',
-      environment_id: ' cp:https%3A%2F%2Fcp.example.invalid:env:env_demo ',
-      label: ' Demo ',
-      local_ui_bind: ' localhost:23998 ',
-      local_ui_password: ' secret ',
-      local_ui_password_mode: ' replace ',
-    })).toEqual({
-      kind: 'upsert_provider_environment_local_runtime',
-      environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
-      label: 'Demo',
+      environment_id: 'local',
+      environment_name: 'local',
+      label: 'Local Environment',
       local_ui_bind: 'localhost:23998',
       local_ui_password: ' secret ',
       local_ui_password_mode: 'replace',
@@ -97,10 +82,10 @@ describe('desktopLauncherIPC', () => {
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'delete_managed_environment',
-      environment_id: ' machine ',
+      environment_id: ' local ',
     })).toEqual({
       kind: 'delete_managed_environment',
-      environment_id: 'machine',
+      environment_id: 'local',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'delete_saved_environment',
@@ -120,11 +105,11 @@ describe('desktopLauncherIPC', () => {
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'set_managed_environment_pinned',
-      environment_id: ' machine ',
+      environment_id: ' local ',
       pinned: true,
     })).toEqual({
       kind: 'set_managed_environment_pinned',
-      environment_id: 'machine',
+      environment_id: 'local',
       pinned: true,
     });
     expect(normalizeDesktopLauncherActionRequest({
@@ -228,9 +213,7 @@ describe('desktopLauncherIPC', () => {
     expect(normalizeDesktopLauncherActionRequest({ kind: 'open_managed_environment' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'stop_environment_runtime', environment_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'focus_environment_window', session_key: '   ' })).toBeNull();
-    expect(normalizeDesktopLauncherActionRequest({
-      kind: 'upsert_provider_environment_local_runtime',
-    })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'legacy_provider_local_runtime_action' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'set_provider_environment_pinned',
       environment_id: '   ',

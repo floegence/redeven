@@ -306,7 +306,7 @@ function EmptyState(props: { onCreateClick: () => void }) {
       </div>
       <h3 class="text-sm font-medium text-foreground mb-1">No codespaces yet</h3>
       <p class="text-xs text-muted-foreground text-center max-w-xs mb-4">
-        Create a codespace to start coding with VS Code in the browser. Your code stays on your machine.
+        Create a codespace to start coding with VS Code in the browser. Your code stays in this Local Environment.
       </p>
       <Button size="sm" variant="default" onClick={props.onCreateClick}>
         Create Codespace
@@ -580,7 +580,7 @@ function runtimeRequirementLabel(status: CodeRuntimeStatus | null | undefined): 
   if (status.active_runtime.detection_state === "unusable") {
     return status.active_runtime.error_message || "Redeven detected a code-server runtime, but it is not usable for Codespaces on this host.";
   }
-  return "Redeven can install the latest stable code-server once for this machine, then use it for the current environment.";
+  return "Redeven can install the latest stable code-server once for this Local Environment, then use it for the current environment.";
 }
 
 type CodeRuntimeBannerMode = "inline" | "floating";
@@ -615,13 +615,13 @@ function CodeRuntimeBanner(props: {
     if (props.loading) return "Checking runtime";
     if (!status) return "Runtime unavailable";
     if (status.operation.state === "running") {
-      return status.operation.action === "remove_machine_version" ? "Removing version" : "Installing";
+      return status.operation.action === "remove_local_environment_version" ? "Removing version" : "Installing";
     }
     if (status.operation.state === "failed") {
-      return status.operation.action === "remove_machine_version" ? "Version removal failed" : "Install failed";
+      return status.operation.action === "remove_local_environment_version" ? "Version removal failed" : "Install failed";
     }
     if (status.operation.state === "cancelled") {
-      return status.operation.action === "remove_machine_version" ? "Version removal cancelled" : "Install cancelled";
+      return status.operation.action === "remove_local_environment_version" ? "Version removal cancelled" : "Install cancelled";
     }
     if (status.active_runtime.detection_state === "unusable") return "Needs attention";
     return "Not installed";
@@ -825,7 +825,7 @@ function CodeRuntimeInstallDialog(props: {
       <div class="space-y-4">
         <div class="space-y-1">
           <div class="text-sm text-foreground">
-            Redeven installs the latest stable managed <span class="font-mono">code-server</span> runtime once for this machine only after you explicitly confirm it here.
+            Redeven installs the latest stable managed <span class="font-mono">code-server</span> runtime once for this Local Environment only after you explicitly confirm it here.
           </div>
           <div class="text-xs text-muted-foreground">
             Installer source: official <span class="font-mono">code-server install.sh</span> latest-stable flow.
@@ -1276,7 +1276,7 @@ export function EnvCodespacesPage() {
   };
   const runtimeBannerMode = (): CodeRuntimeBannerMode | null => {
     const status = runtimeStatus();
-    const installFlowActive = status?.operation.action !== "remove_machine_version";
+    const installFlowActive = status?.operation.action !== "remove_local_environment_version";
     if (runtimeBannerError()) return "inline";
     if (runtimeStatus.loading || (installFlowActive && status?.operation.state === "running")) return "floating";
     if (!status) return null;
@@ -1318,7 +1318,7 @@ export function EnvCodespacesPage() {
             <div class="space-y-1">
               <div class="text-sm font-semibold">Codespaces</div>
               <div class="text-xs text-muted-foreground">
-                Create and manage local VS Code instances in your browser. All code stays securely on your machine.
+                Create and manage local VS Code instances in your browser. All code stays securely in this Local Environment.
               </div>
             </div>
             <div class="flex items-center gap-2 flex-shrink-0">

@@ -1,12 +1,45 @@
 import type { DesktopLauncherActionFailure } from '../shared/desktopLauncherIPC';
-import type { DesktopActionToastTone } from './actionToastModel';
+import type {
+  DesktopActionToastAction,
+  DesktopActionToastTone,
+} from './actionToastModel';
 
 export type LauncherActionFailurePresentation = Readonly<{
+  title?: string;
   message: string;
   tone: DesktopActionToastTone;
   refresh_snapshot: boolean;
   delivery: 'toast' | 'inline';
+  action?: DesktopActionToastAction;
+  auto_dismiss?: boolean;
 }>;
+
+function compact(value: unknown): string {
+  return String(value ?? '').trim();
+}
+
+function controlPlaneAuthRequiredMessage(failure: DesktopLauncherActionFailure): string {
+  const envPublicID = compact(failure.env_public_id);
+  if (envPublicID !== '') {
+    return 'Desktop needs fresh provider authorization before it can request a one-time Local Environment bootstrap ticket for this Environment.';
+  }
+  return 'Desktop authorization for this provider expired. Reconnect the provider, then try the action again.';
+}
+
+function reconnectControlPlaneAction(
+  failure: DesktopLauncherActionFailure,
+): DesktopActionToastAction | undefined {
+  const providerOrigin = compact(failure.provider_origin);
+  if (providerOrigin === '') {
+    return undefined;
+  }
+  return {
+    kind: 'reconnect_control_plane',
+    label: 'Reconnect Provider',
+    provider_origin: providerOrigin,
+    provider_id: compact(failure.provider_id) || undefined,
+  };
+}
 
 export function launcherActionFailurePresentation(
   failure: DesktopLauncherActionFailure,
@@ -76,7 +109,6 @@ export function launcherActionFailurePresentation(
     case 'control_plane_missing':
     case 'control_plane_environment_missing':
     case 'provider_environment_removed':
-    case 'control_plane_auth_required':
     case 'provider_unreachable':
     case 'provider_invalid_response':
       return {
@@ -84,6 +116,16 @@ export function launcherActionFailurePresentation(
         tone: 'warning',
         refresh_snapshot: refreshSnapshot,
         delivery,
+      };
+    case 'control_plane_auth_required':
+      return {
+        title: 'Provider Authorization Expired',
+        message: controlPlaneAuthRequiredMessage(failure),
+        tone: 'warning',
+        refresh_snapshot: refreshSnapshot,
+        delivery,
+        action: reconnectControlPlaneAction(failure),
+        auto_dismiss: false,
       };
     case 'runtime_start_failed':
       return {

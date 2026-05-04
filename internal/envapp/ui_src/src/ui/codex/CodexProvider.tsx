@@ -1335,7 +1335,7 @@ export function CodexProvider(props: ParentProps) {
   const statusError = createMemo(() => statusErrorMessage(status));
   const hostDisabledReason = createMemo(() => {
     if (status()?.available) return '';
-    return statusError() || 'Install `codex` on the host machine and refresh diagnostics.';
+    return statusError() || 'Install `codex` on the host and refresh diagnostics.';
   });
   const hasHostBinary = createMemo(() => Boolean(status()?.available));
   const supportsOperation = (operation: CodexOperationName): boolean => codexSupportsOperation(capabilities(), operation);

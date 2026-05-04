@@ -150,7 +150,7 @@ func (c *cli) searchCmd(args []string) int {
 func resolveSearchStateLayout(configPath string, stateRoot string) (config.StateLayout, error) {
 	cleanPath := strings.TrimSpace(configPath)
 	if cleanPath == "" {
-		return config.MachineStateLayout(stateRoot)
+		return config.LocalEnvironmentStateLayout(stateRoot)
 	}
 	return config.StateLayoutForConfigPath(cleanPath)
 }

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/floegence/redeven/internal/config"
 	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
 	"github.com/floegence/redeven/internal/runtimeservice"
 )
@@ -20,47 +21,74 @@ func desktopLaunchReportEnabled(mode runMode, desktopManaged bool, reportPath st
 	return mode == runModeDesktop && desktopManaged && strings.TrimSpace(reportPath) != ""
 }
 
+func writeDesktopBlockedLaunchReport(
+	reportPath string,
+	code string,
+	message string,
+	stateLayout config.StateLayout,
+) error {
+	return writeDesktopLaunchReport(reportPath, desktopLaunchReport{
+		Status:  desktopLaunchStatusBlocked,
+		Code:    code,
+		Message: message,
+		Diagnostics: &desktopLaunchDiagnostics{
+			StateDir:   stateLayout.StateDir,
+			ConfigPath: stateLayout.ConfigPath,
+			Command:    "redeven run",
+		},
+	})
+}
+
 func writeDesktopReadyLaunchReport(reportPath string, startup runtimeStartupReport, status desktopLaunchStatus) error {
 	return writeDesktopLaunchReport(reportPath, desktopLaunchReport{
-		Status:             status,
-		LocalUIURL:         startup.LocalUIURL,
-		LocalUIURLs:        append([]string(nil), startup.LocalUIURLs...),
-		PasswordRequired:   startup.PasswordRequired,
-		EffectiveRunMode:   startup.EffectiveRunMode,
-		RemoteEnabled:      startup.RemoteEnabled,
-		DesktopManaged:     startup.DesktopManaged,
-		StateDir:           startup.StateDir,
-		DiagnosticsEnabled: startup.DiagnosticsEnabled,
-		PID:                startup.PID,
-		RuntimeService:     startup.RuntimeService,
+		Status:                 status,
+		LocalUIURL:             startup.LocalUIURL,
+		LocalUIURLs:            append([]string(nil), startup.LocalUIURLs...),
+		PasswordRequired:       startup.PasswordRequired,
+		EffectiveRunMode:       startup.EffectiveRunMode,
+		RemoteEnabled:          startup.RemoteEnabled,
+		DesktopManaged:         startup.DesktopManaged,
+		ControlplaneBaseURL:    startup.ControlplaneBaseURL,
+		ControlplaneProviderID: startup.ControlplaneProviderID,
+		EnvPublicID:            startup.EnvPublicID,
+		StateDir:               startup.StateDir,
+		DiagnosticsEnabled:     startup.DiagnosticsEnabled,
+		PID:                    startup.PID,
+		RuntimeService:         startup.RuntimeService,
 	})
 }
 
 type runtimeStartupReport struct {
-	LocalUIURL         string
-	LocalUIURLs        []string
-	PasswordRequired   bool
-	EffectiveRunMode   string
-	RemoteEnabled      bool
-	DesktopManaged     bool
-	StateDir           string
-	DiagnosticsEnabled bool
-	PID                int
-	RuntimeService     runtimeservice.Snapshot
+	LocalUIURL             string
+	LocalUIURLs            []string
+	PasswordRequired       bool
+	EffectiveRunMode       string
+	RemoteEnabled          bool
+	DesktopManaged         bool
+	ControlplaneBaseURL    string
+	ControlplaneProviderID string
+	EnvPublicID            string
+	StateDir               string
+	DiagnosticsEnabled     bool
+	PID                    int
+	RuntimeService         runtimeservice.Snapshot
 }
 
 func buildRuntimeStartupReport(state *localuiruntime.Snapshot) runtimeStartupReport {
 	return runtimeStartupReport{
-		LocalUIURL:         state.LocalUIURL,
-		LocalUIURLs:        append([]string(nil), state.LocalUIURLs...),
-		PasswordRequired:   state.PasswordRequired,
-		EffectiveRunMode:   state.EffectiveRunMode,
-		RemoteEnabled:      state.RemoteEnabled,
-		DesktopManaged:     state.DesktopManaged,
-		StateDir:           state.StateDir,
-		DiagnosticsEnabled: state.DiagnosticsEnabled,
-		PID:                state.PID,
-		RuntimeService:     state.RuntimeService,
+		LocalUIURL:             state.LocalUIURL,
+		LocalUIURLs:            append([]string(nil), state.LocalUIURLs...),
+		PasswordRequired:       state.PasswordRequired,
+		EffectiveRunMode:       state.EffectiveRunMode,
+		RemoteEnabled:          state.RemoteEnabled,
+		DesktopManaged:         state.DesktopManaged,
+		ControlplaneBaseURL:    state.ControlplaneBaseURL,
+		ControlplaneProviderID: state.ControlplaneProviderID,
+		EnvPublicID:            state.EnvPublicID,
+		StateDir:               state.StateDir,
+		DiagnosticsEnabled:     state.DiagnosticsEnabled,
+		PID:                    state.PID,
+		RuntimeService:         state.RuntimeService,
 	}
 }
 

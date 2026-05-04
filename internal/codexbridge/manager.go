@@ -1725,7 +1725,7 @@ func withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
 }
 
 func fmtUnavailable() error {
-	return errors.Join(ErrUnavailable, errors.New("host codex binary not found on PATH; install Codex on this machine and ensure `codex` is available"))
+	return errors.Join(ErrUnavailable, errors.New("host codex binary not found on PATH; install Codex on this host and ensure `codex` is available"))
 }
 
 func normalizeApprovalPolicyRequest(v string) string {

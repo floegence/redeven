@@ -117,7 +117,7 @@ func readCatalogEnvironmentRecords(environmentsDir string) ([]environmentCatalog
 
 func catalogDefaultEnvironmentID(layout StateLayout) string {
 	_ = layout
-	return string(ScopeKindMachine)
+	return "local"
 }
 
 func defaultCatalogEnvironmentLabel(layout StateLayout, binding *catalogEnvironmentBinding) string {
@@ -125,7 +125,7 @@ func defaultCatalogEnvironmentLabel(layout StateLayout, binding *catalogEnvironm
 		return strings.TrimSpace(binding.EnvPublicID)
 	}
 	_ = layout
-	return "Local Machine"
+	return "Local Environment"
 }
 
 func bindingForConfig(cfg *Config) (*catalogEnvironmentBinding, error) {
@@ -177,7 +177,7 @@ func findCatalogEnvironmentRecord(records []environmentCatalogRecordRef, id stri
 
 func catalogScopeForLayout(layout StateLayout, binding *catalogEnvironmentBinding) environmentCatalogScope {
 	_ = layout
-	scope := environmentCatalogScope{Kind: string(ScopeKindMachine), Name: DefaultMachineScopeName}
+	scope := environmentCatalogScope{Kind: string(ScopeKindLocalEnvironment), Name: DefaultLocalEnvironmentScopeName}
 	if binding != nil {
 		scope.ProviderOrigin = binding.ProviderOrigin
 		scope.ProviderKey = binding.ProviderID
@@ -253,8 +253,8 @@ func WriteEnvironmentCatalogRecord(layout StateLayout, cfg *Config, localUIBind 
 		}
 	} else {
 		record.Identity = environmentCatalogIdentity{
-			Kind:      "machine",
-			LocalName: DefaultMachineScopeName,
+			Kind:      "local_environment",
+			LocalName: DefaultLocalEnvironmentScopeName,
 		}
 	}
 

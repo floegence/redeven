@@ -27,7 +27,7 @@ Usage:
   redeven help [command]
 
 Commands:
-  bootstrap   Bind this machine to a control-plane environment.
+  bootstrap   Bind the Local Environment to a control-plane environment.
   run         Start the runtime in remote, hybrid, local, or desktop mode.
   search      Run web search using configured provider credentials.
   knowledge   Build or verify embedded knowledge bundle assets.
@@ -35,18 +35,18 @@ Commands:
   help        Show detailed help and startup examples.
 
 Quick start:
-  Bind this machine once, then run:
+  Bind the Local Environment once, then run:
     redeven bootstrap --controlplane %[1]s --env-id %[2]s --bootstrap-ticket %[3]s
     redeven run --mode hybrid
 
-  Local-only mode on this machine:
+  Local-only mode on this device:
     redeven run --mode local
 
-  Expose Local UI to another machine on a trusted network:
+  Expose Local UI to another trusted device on your local network:
     %[4]s=replace-with-a-long-password \
     redeven run --mode hybrid --local-ui-bind 0.0.0.0:24000 --password-env %[4]s
 
-  One-shot machine rebind without a separate bootstrap step:
+  One-shot Local Environment rebind without a separate bootstrap step:
     redeven run --mode hybrid --controlplane %[1]s --env-id %[2]s --bootstrap-ticket %[3]s
 
 Run %[5]s for detailed usage.
@@ -57,7 +57,7 @@ func bootstrapHelpText() string {
 	return strings.TrimLeft(fmt.Sprintf(`
 redeven bootstrap
 
-Bind this machine to a control-plane environment.
+Bind the Local Environment to a control-plane environment.
 
 Usage:
   redeven bootstrap --controlplane <url> --env-id <env_public_id> [ticket flags] [flags]
@@ -80,14 +80,14 @@ Optional flags:
                                     Log level override.
   --timeout <duration>              Bootstrap request timeout (default: 15s).
 
-Machine state:
-  - Default target: ~/.redeven/machine/config.json.
-  - Rebinding this machine replaces the current control-plane environment binding.
+Local Environment state:
+  - Default target: ~/.redeven/local-environment/config.json.
+  - Rebinding replaces the current Local Environment control-plane binding.
   - Use --config-path only for development or tests that need a fully explicit file path.
 
 Writes by default:
-  ~/.redeven/machine/config.json
-  ~/.redeven/machine/scope.json
+  ~/.redeven/local-environment/config.json
+  ~/.redeven/local-environment/scope.json
 
 Examples:
   Minimal bootstrap:
@@ -124,10 +124,10 @@ Bootstrap rules:
   - Recommended flow: run %[4]s once, then use %[5]s.
   - One-shot flow: pass --controlplane, --env-id, and a one-time bootstrap ticket to %[5]s.
 
-Machine state rules:
-  - Without --config-path, redeven uses the single machine state at ~/.redeven/machine.
-  - Inline bootstrap flags rebind the same machine state before startup.
-  - Use --state-root to relocate the whole machine state root, including desktop-managed SSH runtimes.
+Local Environment state rules:
+  - Without --config-path, redeven uses the single Local Environment state at ~/.redeven/local-environment.
+  - Inline bootstrap flags rebind the same Local Environment state before startup.
+  - Use --state-root to relocate the whole Local Environment state root, including desktop-managed SSH runtimes.
 
 Local UI bind rules:
   - Default bind: localhost:23998
@@ -155,7 +155,7 @@ Flags:
   --state-root <path>               State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
   --config-path <path>              Config path override.
   --desktop-managed                 Disable CLI self-upgrade for desktop-managed Local UI runs.
-  --startup-report-file <path>      Write machine-readable Local UI readiness JSON.
+  --startup-report-file <path>      Write structured Local UI readiness JSON.
 
 Examples:
   Remote mode:
@@ -170,7 +170,7 @@ Examples:
   Desktop shell mode:
     redeven run --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0
 
-  Hybrid mode exposed to another machine on a trusted network:
+  Hybrid mode exposed to another trusted device on your local network:
     %[7]s=replace-with-a-long-password \
     redeven run --mode hybrid --local-ui-bind 0.0.0.0:24000 --password-env %[7]s
 

@@ -30,7 +30,7 @@ describe('sshRuntime', () => {
     expect(buildManagedSSHStartScript()).toContain('printf "%s\\n" "$!" > "${session_dir}/launcher.pid"');
     expect(buildManagedSSHStartScript()).not.toContain('exec "$binary" run');
     expect(buildManagedSSHStartScript()).not.toContain('trap cleanup');
-    expect(buildManagedSSHStartScript()).toContain('machine_root="${install_root%/}/machine"');
+    expect(buildManagedSSHStartScript()).toContain('local_environment_root="${install_root%/}/local-environment"');
     expect(buildManagedSSHRuntimeProbeScript()).toContain("printf 'status=%s\\n' \"$probe_status\"");
     expect(buildManagedSSHRuntimeProbeScript()).toContain(`stamp_path="${'${release_root}'}/${MANAGED_SSH_RUNTIME_STAMP_FILENAME}"`);
     expect(buildManagedSSHRuntimeProbeScript()).toContain('runtime_release_tag=$release_tag');
@@ -43,7 +43,7 @@ describe('sshRuntime', () => {
     expect(buildManagedSSHRemoteInstallScript()).toContain('force_install="${4:-0}"');
     expect(buildManagedSSHRemoteInstallScript()).toContain('if [ "$force_install" = "1" ] || ! runtime_is_compatible; then');
     expect(buildManagedSSHRemoteInstallScript()).toContain('write_runtime_stamp "remote_install"');
-    expect(buildManagedSSHReportReadScript()).toContain('machine/sessions/${session_token}/startup-report.json');
+    expect(buildManagedSSHReportReadScript()).toContain('local-environment/sessions/${session_token}/startup-report.json');
     expect(buildManagedSSHStopScript()).toContain('kill "$pid"');
     expect(buildManagedSSHStopScript()).toContain('kill -KILL "$pid"');
   });

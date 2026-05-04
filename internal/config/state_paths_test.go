@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestDefaultStateLayoutUsesMachineScope(t *testing.T) {
+func TestDefaultStateLayoutUsesLocalEnvironmentScope(t *testing.T) {
 	restoreHome := stubUserHomeDir("/Users/tester", nil)
 	restoreEnv := stubLookupEnv("", false)
 	defer restoreHome()
@@ -18,14 +18,14 @@ func TestDefaultStateLayoutUsesMachineScope(t *testing.T) {
 		t.Fatalf("DefaultStateLayout() error = %v", err)
 	}
 
-	wantStateDir := filepath.Clean("/Users/tester/.redeven/machine")
+	wantStateDir := filepath.Clean("/Users/tester/.redeven/local-environment")
 	if layout.StateRoot != filepath.Clean("/Users/tester/.redeven") {
 		t.Fatalf("StateRoot = %q", layout.StateRoot)
 	}
-	if layout.ScopeKey != "machine" {
+	if layout.ScopeKey != "local_environment" {
 		t.Fatalf("ScopeKey = %q", layout.ScopeKey)
 	}
-	if layout.Scope.Kind != ScopeKindMachine {
+	if layout.Scope.Kind != ScopeKindLocalEnvironment {
 		t.Fatalf("Scope.Kind = %q", layout.Scope.Kind)
 	}
 	if layout.ConfigPath != filepath.Join(wantStateDir, "config.json") {
@@ -45,7 +45,7 @@ func TestDefaultStateLayoutUsesMachineScope(t *testing.T) {
 	}
 }
 
-func TestControlPlaneStateLayoutReturnsMachineScope(t *testing.T) {
+func TestControlPlaneStateLayoutReturnsLocalEnvironmentScope(t *testing.T) {
 	restoreHome := stubUserHomeDir("/Users/tester", nil)
 	restoreEnv := stubLookupEnv("", false)
 	defer restoreHome()
@@ -56,10 +56,10 @@ func TestControlPlaneStateLayoutReturnsMachineScope(t *testing.T) {
 		t.Fatalf("ControlPlaneStateLayout() error = %v", err)
 	}
 
-	if layout.ScopeKey != "machine" {
+	if layout.ScopeKey != "local_environment" {
 		t.Fatalf("ScopeKey = %q", layout.ScopeKey)
 	}
-	if layout.ConfigPath != filepath.Clean("/Users/tester/.redeven/machine/config.json") {
+	if layout.ConfigPath != filepath.Clean("/Users/tester/.redeven/local-environment/config.json") {
 		t.Fatalf("ConfigPath = %q", layout.ConfigPath)
 	}
 }
@@ -79,12 +79,12 @@ func TestResolveStateRootUsesEnvOverride(t *testing.T) {
 	}
 }
 
-func TestParseScopeRefSupportsMachineOnly(t *testing.T) {
-	got, err := ParseScopeRef("machine")
+func TestParseScopeRefSupportsLocalEnvironmentOnly(t *testing.T) {
+	got, err := ParseScopeRef("local_environment")
 	if err != nil {
 		t.Fatalf("ParseScopeRef() error = %v", err)
 	}
-	if got != (ScopeRef{Kind: ScopeKindMachine, Name: DefaultMachineScopeName}) {
+	if got != (ScopeRef{Kind: ScopeKindLocalEnvironment, Name: DefaultLocalEnvironmentScopeName}) {
 		t.Fatalf("ParseScopeRef() = %#v", got)
 	}
 

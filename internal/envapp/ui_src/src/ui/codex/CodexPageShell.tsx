@@ -258,7 +258,7 @@ export function CodexPageShell() {
   const emptyStateBody = () => (
     summary().hostReady
       ? 'Start a Codex conversation with a prompt, paste an image, use @ to reference files, or use / for local composer commands.'
-      : 'Redeven does not install Codex for you. Put the host machine\'s `codex` binary on PATH, then refresh this page to start a dedicated Codex chat.'
+      : 'Redeven does not install Codex for you. Put the host `codex` binary on PATH, then refresh this page to start a dedicated Codex chat.'
   );
   const modelValue = createMemo(() => String(codex.modelDraft() ?? '').trim());
   const effortValue = createMemo(() => String(codex.effortDraft() ?? '').trim());

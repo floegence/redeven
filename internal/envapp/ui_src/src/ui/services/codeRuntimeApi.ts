@@ -1,7 +1,7 @@
 import { fetchGatewayJSON } from './gatewayApi';
 
 export type CodeRuntimeDetectionState = 'ready' | 'missing' | 'unusable';
-export type CodeRuntimeOperationAction = 'install' | 'remove_machine_version' | '';
+export type CodeRuntimeOperationAction = 'install' | 'remove_local_environment_version' | '';
 export type CodeRuntimeOperationState = 'idle' | 'running' | 'succeeded' | 'failed' | 'cancelled';
 export type CodeRuntimeOperationStage = 'preparing' | 'downloading' | 'installing' | 'removing' | 'validating' | 'finalizing' | '';
 
@@ -45,8 +45,8 @@ export type CodeRuntimeStatus = Readonly<{
   managed_prefix: string;
   shared_runtime_root: string;
   environment_selection_version?: string;
-  environment_selection_source: 'environment' | 'machine_default' | 'none';
-  machine_default_version?: string;
+  environment_selection_source: 'environment' | 'local_environment_default' | 'none';
+  local_environment_default_version?: string;
   installed_versions: CodeRuntimeInstalledVersion[];
   installer_script_url: string;
   operation: CodeRuntimeOperationStatus;
@@ -134,18 +134,18 @@ export function codeRuntimeManagedActionLabel(status: CodeRuntimeStatus | null |
 
 export function codeRuntimeStageLabel(stage: string | null | undefined, action?: string | null | undefined): string {
   const normalizedStage = String(stage ?? '').trim();
-  if (String(action ?? '').trim() === 'remove_machine_version') {
+  if (String(action ?? '').trim() === 'remove_local_environment_version') {
     switch (normalizedStage) {
       case 'preparing':
-        return 'Preparing machine version removal...';
+        return 'Preparing Local Environment runtime removal...';
       case 'removing':
-        return 'Removing machine version files...';
+        return 'Removing Local Environment runtime files...';
       case 'validating':
-        return 'Validating machine version removal...';
+        return 'Validating Local Environment runtime removal...';
       case 'finalizing':
-        return 'Finalizing machine version removal...';
+        return 'Finalizing Local Environment runtime removal...';
       default:
-        return 'Removing machine version...';
+        return 'Removing Local Environment runtime...';
     }
   }
 
@@ -161,6 +161,6 @@ export function codeRuntimeStageLabel(stage: string | null | undefined, action?:
     case 'finalizing':
       return 'Finalizing managed runtime...';
     default:
-      return 'Installing code-server for this machine...';
+      return 'Installing code-server for this Local Environment...';
   }
 }

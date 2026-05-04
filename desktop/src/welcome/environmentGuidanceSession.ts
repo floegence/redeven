@@ -28,7 +28,9 @@ export type ActiveEnvironmentGuidanceSessionState = Exclude<EnvironmentGuidanceS
 export function isEnvironmentGuidancePendingIntent(
   intent: EnvironmentActionIntent,
 ): intent is EnvironmentGuidancePendingIntent {
-  return intent === 'refresh_runtime' || intent === 'start_runtime' || intent === 'serve_runtime_locally';
+  return intent === 'refresh_runtime'
+    || intent === 'start_runtime'
+    || intent === 'serve_runtime_locally';
 }
 
 export function openEnvironmentGuidanceSession(
@@ -93,9 +95,6 @@ export function failEnvironmentGuidanceIntent(
 function runtimeStillOfflineDetail(environment: DesktopEnvironmentEntry): string {
   if (environment.kind === 'ssh_environment') {
     return 'The runtime is still offline on this SSH host. Start it from the same host, then try again.';
-  }
-  if (environment.kind === 'provider_environment' && environment.provider_local_runtime_configured !== true) {
-    return 'Local runtime setup is still required on this device before Desktop can open the environment.';
   }
   return 'The runtime is still offline on this device. Start it from its source, then try again.';
 }

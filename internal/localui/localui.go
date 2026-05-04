@@ -50,9 +50,12 @@ type Options struct {
 	Logger *slog.Logger
 	Bind   BindSpec
 
-	DesktopManaged   bool
-	EffectiveRunMode string
-	RemoteEnabled    bool
+	DesktopManaged         bool
+	EffectiveRunMode       string
+	RemoteEnabled          bool
+	ControlplaneBaseURL    string
+	ControlplaneProviderID string
+	EnvPublicID            string
 
 	// Gateway is the Env App gateway handler mounted under /_redeven_proxy/*.
 	Gateway *gateway.Gateway
@@ -77,15 +80,18 @@ type Options struct {
 type Server struct {
 	log *slog.Logger
 
-	bind               BindSpec
-	configPath         string
-	stateDir           string
-	runtimeStatePath   string
-	version            string
-	desktopManaged     bool
-	effectiveRunMode   string
-	remoteEnabled      bool
-	localPermissionCap *config.PermissionSet
+	bind                   BindSpec
+	configPath             string
+	stateDir               string
+	runtimeStatePath       string
+	version                string
+	desktopManaged         bool
+	effectiveRunMode       string
+	remoteEnabled          bool
+	controlplaneBaseURL    string
+	controlplaneProviderID string
+	envPublicID            string
+	localPermissionCap     *config.PermissionSet
 
 	gw   *gateway.Gateway
 	a    *agent.Agent
@@ -167,21 +173,24 @@ func New(opts Options) (*Server, error) {
 		config.PermissionSet{Read: true, Write: false, Execute: true},
 	)
 	return &Server{
-		log:                logger,
-		bind:               bind,
-		configPath:         configPath,
-		stateDir:           filepath.Dir(configPath),
-		runtimeStatePath:   localuiruntime.RuntimeStatePath(configPath),
-		version:            strings.TrimSpace(opts.Version),
-		desktopManaged:     opts.DesktopManaged,
-		effectiveRunMode:   strings.TrimSpace(opts.EffectiveRunMode),
-		remoteEnabled:      opts.RemoteEnabled,
-		localPermissionCap: &localPermissionCap,
-		gw:                 opts.Gateway,
-		a:                  opts.Agent,
-		diag:               opts.Diagnostics,
-		accessGate:         opts.AccessGate,
-		pending:            make(map[string]pendingDirect),
+		log:                    logger,
+		bind:                   bind,
+		configPath:             configPath,
+		stateDir:               filepath.Dir(configPath),
+		runtimeStatePath:       localuiruntime.RuntimeStatePath(configPath),
+		version:                strings.TrimSpace(opts.Version),
+		desktopManaged:         opts.DesktopManaged,
+		effectiveRunMode:       strings.TrimSpace(opts.EffectiveRunMode),
+		remoteEnabled:          opts.RemoteEnabled,
+		controlplaneBaseURL:    strings.TrimSpace(opts.ControlplaneBaseURL),
+		controlplaneProviderID: strings.TrimSpace(opts.ControlplaneProviderID),
+		envPublicID:            strings.TrimSpace(opts.EnvPublicID),
+		localPermissionCap:     &localPermissionCap,
+		gw:                     opts.Gateway,
+		a:                      opts.Agent,
+		diag:                   opts.Diagnostics,
+		accessGate:             opts.AccessGate,
+		pending:                make(map[string]pendingDirect),
 	}, nil
 }
 
@@ -237,16 +246,19 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	if err := localuiruntime.WriteState(s.runtimeStatePath, localuiruntime.State{
-		LocalUIURL:         firstNonEmptyString(s.DisplayURLs()),
-		LocalUIURLs:        s.DisplayURLs(),
-		PasswordRequired:   s.accessEnabled(),
-		EffectiveRunMode:   s.effectiveRunMode,
-		RemoteEnabled:      s.remoteEnabled,
-		DesktopManaged:     s.desktopManaged,
-		StateDir:           s.stateDir,
-		DiagnosticsEnabled: s.diag != nil && s.diag.Enabled(),
-		PID:                os.Getpid(),
-		RuntimeService:     s.runtimeServiceSnapshot(),
+		LocalUIURL:             firstNonEmptyString(s.DisplayURLs()),
+		LocalUIURLs:            s.DisplayURLs(),
+		PasswordRequired:       s.accessEnabled(),
+		EffectiveRunMode:       s.effectiveRunMode,
+		RemoteEnabled:          s.remoteEnabled,
+		DesktopManaged:         s.desktopManaged,
+		ControlplaneBaseURL:    s.controlplaneBaseURL,
+		ControlplaneProviderID: s.controlplaneProviderID,
+		EnvPublicID:            s.envPublicID,
+		StateDir:               s.stateDir,
+		DiagnosticsEnabled:     s.diag != nil && s.diag.Enabled(),
+		PID:                    os.Getpid(),
+		RuntimeService:         s.runtimeServiceSnapshot(),
 	}); err != nil {
 		_ = s.Close()
 		return fmt.Errorf("write local runtime state: %w", err)

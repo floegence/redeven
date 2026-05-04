@@ -35,8 +35,8 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
     "e2ee_psk_b64u": "cHNr",
     "channel_init_expire_at_unix_s": 4102444800
   },
-  "machine_binding": {
-    "machine_public_id": "mach_existing",
+  "local_environment_binding": {
+    "local_environment_public_id": "le_existing",
     "env_public_id": "env_123",
     "generation": 7,
     "status": "active"
@@ -47,12 +47,12 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
 	if err := Save(cfgPath, &Config{
-		ControlplaneBaseURL: "https://old.example.invalid",
-		EnvironmentID:       "env_old",
-		MachinePublicID:     "mach_existing",
-		AgentInstanceID:     "ai_existing",
-		LogFormat:           "json",
-		LogLevel:            "debug",
+		ControlplaneBaseURL:      "https://old.example.invalid",
+		EnvironmentID:            "env_old",
+		LocalEnvironmentPublicID: "le_existing",
+		AgentInstanceID:          "ai_existing",
+		LogFormat:                "json",
+		LogLevel:                 "debug",
 	}); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
@@ -84,8 +84,8 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 	if cfg.AgentInstanceID != "ai_existing" {
 		t.Fatalf("AgentInstanceID = %q, want %q", cfg.AgentInstanceID, "ai_existing")
 	}
-	if cfg.MachinePublicID != "mach_existing" {
-		t.Fatalf("MachinePublicID = %q, want %q", cfg.MachinePublicID, "mach_existing")
+	if cfg.LocalEnvironmentPublicID != "le_existing" {
+		t.Fatalf("LocalEnvironmentPublicID = %q, want %q", cfg.LocalEnvironmentPublicID, "le_existing")
 	}
 	if cfg.BindingGeneration != 7 {
 		t.Fatalf("BindingGeneration = %d, want 7", cfg.BindingGeneration)
@@ -124,8 +124,8 @@ func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
 		if payload.EnvPublicID != "env_123" {
 			t.Fatalf("EnvPublicID = %q", payload.EnvPublicID)
 		}
-		if payload.MachinePublicID == "" {
-			t.Fatalf("MachinePublicID is empty")
+		if payload.LocalEnvironmentPublicID == "" {
+			t.Fatalf("LocalEnvironmentPublicID is empty")
 		}
 		if payload.AgentInstanceID == "" {
 			t.Fatalf("AgentInstanceID is empty")
@@ -138,8 +138,8 @@ func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
     "e2ee_psk_b64u": "cHNr",
     "channel_init_expire_at_unix_s": 4102444800
   },
-  "machine_binding": {
-    "machine_public_id": "` + payload.MachinePublicID + `",
+  "local_environment_binding": {
+    "local_environment_public_id": "` + payload.LocalEnvironmentPublicID + `",
     "env_public_id": "env_123",
     "generation": 3,
     "status": "active"
@@ -175,8 +175,8 @@ func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
 	if cfg.Direct == nil || cfg.Direct.ChannelId != "ch_ticket" {
 		t.Fatalf("Direct = %#v", cfg.Direct)
 	}
-	if cfg.MachinePublicID == "" {
-		t.Fatalf("MachinePublicID is empty")
+	if cfg.LocalEnvironmentPublicID == "" {
+		t.Fatalf("LocalEnvironmentPublicID is empty")
 	}
 	if cfg.BindingGeneration != 3 {
 		t.Fatalf("BindingGeneration = %d, want 3", cfg.BindingGeneration)
@@ -203,8 +203,8 @@ func TestBootstrapConfigWritesScopeMetadataWithProviderIdentity(t *testing.T) {
     "e2ee_psk_b64u": "cHNr",
     "channel_init_expire_at_unix_s": 4102444800
   },
-  "machine_binding": {
-    "machine_public_id": "` + payload.MachinePublicID + `",
+  "local_environment_binding": {
+    "local_environment_public_id": "` + payload.LocalEnvironmentPublicID + `",
     "env_public_id": "env_123",
     "generation": 2,
     "status": "active"

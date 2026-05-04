@@ -22,7 +22,6 @@ import {
   describeManagedEnvironmentLocalBindConflict,
   createSafeStorageSecretCodec,
   deleteManagedEnvironment,
-  deleteProviderEnvironmentLocalRuntime,
   deleteSavedControlPlane,
   deleteSavedEnvironment,
   deleteSavedSSHEnvironment,
@@ -41,9 +40,7 @@ import {
   setSavedEnvironmentPinned,
   setSavedSSHEnvironmentPinned,
   updateManagedEnvironmentAccess,
-  updateProviderEnvironmentAccess,
   upsertManagedEnvironment,
-  upsertProviderEnvironmentLocalRuntime,
   upsertSavedControlPlane,
   upsertSavedEnvironment,
   upsertSavedSSHEnvironment,
@@ -89,8 +86,9 @@ import { PUBLIC_REDEVEN_RELEASE_BASE_URL } from './sshReleaseAssets';
 import { installStdioBrokenPipeGuards } from './stdio';
 import type { StartupReport } from './startup';
 import {
-  createManagedControlPlaneEnvironment,
   createManagedEnvironmentLocalHosting,
+  createManagedEnvironmentProviderBinding,
+  createManagedLocalEnvironment,
   desktopManagedLocalEnvironmentID,
   isDefaultLocalManagedEnvironment,
   managedEnvironmentKind,
@@ -406,6 +404,7 @@ const WELCOME_RUNTIME_POLL_INTERVAL_MS = 5_000;
 const DESKTOP_RUNTIME_PROBE_TIMEOUT_MS = 1_500;
 const DESKTOP_SESSION_INITIAL_LOAD_TIMEOUT_MS = 15_000;
 const DESKTOP_STALE_WINDOW_MESSAGE = 'That window was already closed. Desktop refreshed the environment list.';
+const DESKTOP_PROVIDER_RECONNECT_MESSAGE = 'Desktop needs fresh provider authorization before it can request a one-time Local Environment bootstrap ticket for this Environment.';
 const DESKTOP_GPU_TILE_MEMORY_BUDGET_MB = 2048;
 const pendingDesktopDeepLinks: string[] = [];
 let controlPlaneSyncPollTimer: NodeJS.Timeout | null = null;
@@ -420,43 +419,148 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
+type LocalRuntimeProviderBinding = Readonly<{
+  provider_origin: string;
+  provider_id: string;
+  env_public_id: string;
+}>;
+
 function managedEnvironmentRuntimeStateFile(environment: DesktopManagedEnvironment): string {
   const stateDir = compact(environment.local_hosting?.state_dir);
   return stateDir === '' ? '' : path.join(stateDir, 'runtime', 'local-ui.json');
 }
 
+function providerBindingForEnvironment(
+  environment: DesktopProviderEnvironmentRecord | DesktopManagedEnvironment,
+): LocalRuntimeProviderBinding | null {
+  if ('provider_origin' in environment) {
+    return {
+      provider_origin: normalizeControlPlaneOrigin(environment.provider_origin),
+      provider_id: compact(environment.provider_id),
+      env_public_id: compact(environment.env_public_id),
+    };
+  }
+  const binding = environment.provider_binding;
+  if (!binding) {
+    return null;
+  }
+  return {
+    provider_origin: normalizeControlPlaneOrigin(binding.provider_origin),
+    provider_id: compact(binding.provider_id),
+    env_public_id: compact(binding.env_public_id),
+  };
+}
+
+function startupProviderBinding(startup: StartupReport | null | undefined): LocalRuntimeProviderBinding | null {
+  const providerOrigin = compact(startup?.controlplane_base_url);
+  const providerID = compact(startup?.controlplane_provider_id);
+  const envPublicID = compact(startup?.env_public_id);
+  if (providerOrigin === '' || providerID === '' || envPublicID === '') {
+    return null;
+  }
+  try {
+    return {
+      provider_origin: normalizeControlPlaneOrigin(providerOrigin),
+      provider_id: providerID,
+      env_public_id: envPublicID,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function providerBindingsMatch(
+  left: LocalRuntimeProviderBinding | null | undefined,
+  right: LocalRuntimeProviderBinding | null | undefined,
+): boolean {
+  return Boolean(
+    left
+    && right
+    && left.provider_origin === right.provider_origin
+    && left.provider_id === right.provider_id
+    && left.env_public_id === right.env_public_id,
+  );
+}
+
+function localRuntimeMatchesProvider(
+  startup: StartupReport | null | undefined,
+  environment: DesktopProviderEnvironmentRecord | DesktopManagedEnvironment,
+): boolean {
+  return providerBindingsMatch(startupProviderBinding(startup), providerBindingForEnvironment(environment));
+}
+
+function localRuntimeProviderBindingFailure(
+  environment: DesktopProviderEnvironmentRecord,
+  startup: StartupReport | null | undefined,
+): DesktopLauncherActionFailure {
+  const current = startupProviderBinding(startup);
+  return launcherActionFailure(
+    'environment_in_use',
+    'environment',
+    current
+      ? 'Local Environment is already linked to another provider environment. Stop it or switch it before using this provider environment locally.'
+      : 'Local Environment is running without this provider binding. Stop it before using this provider environment locally.',
+    {
+      environmentID: environment.id,
+      providerOrigin: environment.provider_origin,
+      providerID: environment.provider_id,
+      envPublicID: environment.env_public_id,
+      shouldRefreshSnapshot: true,
+    },
+  );
+}
+
 function providerEnvironmentAsManagedEnvironment(
   environment: DesktopProviderEnvironmentRecord,
+  localEnvironment?: DesktopManagedEnvironment | null,
 ): DesktopManagedEnvironment {
-  const localHosting = environment.local_runtime
+  const localSource = localEnvironment ?? null;
+  const localHosting = localSource?.local_hosting
     ? createManagedEnvironmentLocalHosting(
       {
-        kind: 'machine',
-        name: 'machine',
+        kind: 'local_environment',
+        name: 'local',
       },
       {
-        access: environment.local_runtime.access,
-        owner: environment.local_runtime.owner,
-        stateDir: environment.local_runtime.scope.state_dir,
-        currentRuntime: environment.local_runtime.current_runtime,
+        access: localSource.local_hosting.access,
+        owner: localSource.local_hosting.owner,
+        stateDir: localSource.local_hosting.state_dir,
+        currentRuntime: localSource.local_hosting.current_runtime,
       },
     )
     : undefined;
-  return createManagedControlPlaneEnvironment(
+  const providerBinding = createManagedEnvironmentProviderBinding(
     environment.provider_origin,
     environment.env_public_id,
     {
       providerID: environment.provider_id,
-      label: environment.label,
-      pinned: environment.pinned,
-      preferredOpenRoute: environment.preferred_open_route,
-      localHosting,
-      createdAtMS: environment.created_at_ms,
-      updatedAtMS: environment.updated_at_ms,
-      lastUsedAtMS: environment.last_used_at_ms,
       remoteWebSupported: environment.remote_web_supported,
       remoteDesktopSupported: environment.remote_desktop_supported,
     },
+  );
+  return createManagedLocalEnvironment('local', {
+    environmentID: localSource?.id ?? desktopManagedLocalEnvironmentID('local'),
+    label: environment.label,
+    pinned: localSource?.pinned ?? false,
+    preferredOpenRoute: environment.preferred_open_route,
+    providerBinding,
+    access: localHosting?.access,
+    owner: localHosting?.owner,
+    stateDir: localHosting?.state_dir,
+    currentRuntime: localHosting?.current_runtime,
+    createdAtMS: localSource?.created_at_ms ?? environment.created_at_ms,
+    updatedAtMS: environment.updated_at_ms,
+    lastUsedAtMS: environment.last_used_at_ms,
+  });
+}
+
+function localEnvironmentForProviderBinding(
+  preferences: DesktopPreferences,
+  providerEnvironment: DesktopProviderEnvironmentRecord,
+): DesktopManagedEnvironment {
+  return providerEnvironmentAsManagedEnvironment(
+    providerEnvironment,
+    preferences.managed_environments[0] ?? createManagedLocalEnvironment('local'),
   );
 }
 
@@ -570,6 +674,15 @@ function consumePendingControlPlaneAuthorization(state: string): PendingControlP
   return pendingAuthorization;
 }
 
+function clearPendingControlPlaneAuthorizations(providerOrigin: string): void {
+  const cleanProviderOrigin = normalizeControlPlaneOrigin(providerOrigin);
+  for (const [state, pendingAuthorization] of pendingControlPlaneAuthorizationsByState) {
+    if (pendingAuthorization.provider_origin === cleanProviderOrigin) {
+      pendingControlPlaneAuthorizationsByState.delete(state);
+    }
+  }
+}
+
 function launcherActionSuccess(
   outcome: DesktopLauncherActionSuccess['outcome'],
   options: Readonly<{
@@ -623,7 +736,7 @@ function launcherActionFailureFromProviderAuthError(
     return launcherActionFailure(
       'control_plane_auth_required',
       'control_plane',
-      'Reconnect the provider in your browser, then try again.',
+      DESKTOP_PROVIDER_RECONNECT_MESSAGE,
       {
         environmentID: options.environmentID,
         providerOrigin: options.providerOrigin || error.providerOrigin,
@@ -641,7 +754,7 @@ function launcherActionFailureFromUnexpectedError(error: unknown): DesktopLaunch
       return launcherActionFailure(
         'control_plane_auth_required',
         'control_plane',
-        'Reconnect the provider in your browser, then try again.',
+        DESKTOP_PROVIDER_RECONNECT_MESSAGE,
         {
           providerOrigin: error.providerOrigin,
         },
@@ -1939,18 +2052,24 @@ function controlPlaneIssueForError(
 function preferredEnvironmentID(preferences: DesktopPreferences): string {
   if (lastFocusedSessionKey) {
     const sessionRecord = liveSession(lastFocusedSessionKey);
-    if (
-      sessionRecord?.target.kind === 'managed_environment'
-      && (
-        findManagedEnvironmentByID(preferences, sessionRecord.target.environment_id)
-        || findProviderEnvironmentByID(preferences, sessionRecord.target.environment_id)
-      )
-    ) {
-      return sessionRecord.target.environment_id;
+    const target = sessionRecord?.target;
+    if (target?.kind === 'managed_environment') {
+      if (target.provider_origin && target.env_public_id) {
+        const providerEnvironment = preferences.provider_environments.find((environment) => (
+          environment.provider_origin === target.provider_origin
+          && environment.provider_id === target.provider_id
+          && environment.env_public_id === target.env_public_id
+        )) ?? null;
+        if (providerEnvironment) {
+          return providerEnvironment.id;
+        }
+      }
+      if (findManagedEnvironmentByID(preferences, target.environment_id)) {
+        return target.environment_id;
+      }
     }
   }
   return preferences.managed_environments.find((environment) => Boolean(environment.local_hosting))?.id
-    ?? preferences.provider_environments.find((environment) => Boolean(environment.local_runtime))?.id
     ?? preferences.managed_environments[0]?.id
     ?? preferences.provider_environments[0]?.id
     ?? '';
@@ -1975,7 +2094,7 @@ async function prepareExternalTarget(targetURL: string): Promise<PreparedExterna
         issue: buildRemoteConnectionIssue(
           targetURL,
           'external_target_unreachable',
-          'Desktop could not reach that Redeven Environment. Make sure the target host is exposing Redeven Local UI and that its port is reachable from this machine.',
+          'Desktop could not reach that Redeven Environment. Make sure the target host is exposing Redeven Local UI and that its port is reachable from this device.',
         ),
       };
     }
@@ -2051,13 +2170,16 @@ async function attachManagedEnvironmentRuntime(
     try {
       const startup = await loadExternalLocalUIStartup(existingRecord.startup.local_ui_url, DESKTOP_RUNTIME_PROBE_TIMEOUT_MS);
       if (startup) {
-        const updatedRecord = {
-          ...existingRecord,
-          startup: {
-            ...existingRecord.startup,
-            local_ui_url: startup.local_ui_url,
-            local_ui_urls: startup.local_ui_urls,
-            password_required: startup.password_required,
+      const updatedRecord = {
+        ...existingRecord,
+        startup: {
+          ...existingRecord.startup,
+          controlplane_base_url: startup.controlplane_base_url ?? existingRecord.startup.controlplane_base_url,
+          controlplane_provider_id: startup.controlplane_provider_id ?? existingRecord.startup.controlplane_provider_id,
+          env_public_id: startup.env_public_id ?? existingRecord.startup.env_public_id,
+          local_ui_url: startup.local_ui_url,
+          local_ui_urls: startup.local_ui_urls,
+          password_required: startup.password_required,
             runtime_service: startup.runtime_service ?? existingRecord.startup.runtime_service,
           },
         };
@@ -2104,7 +2226,18 @@ async function resolveManagedEnvironmentBootstrap(
     envPublicID,
   );
   if (!controlPlaneState.controlPlane) {
-    return null;
+    throw launcherActionFailure(
+      'control_plane_auth_required',
+      'control_plane',
+      DESKTOP_PROVIDER_RECONNECT_MESSAGE,
+      {
+        environmentID: environment.id,
+        providerOrigin,
+        providerID,
+        envPublicID,
+        shouldRefreshSnapshot: true,
+      },
+    );
   }
 
   let synchronized = {
@@ -2124,7 +2257,7 @@ async function resolveManagedEnvironmentBootstrap(
     throw launcherActionFailure(
       'control_plane_auth_required',
       'control_plane',
-      'Reconnect this provider in Desktop before serving the runtime locally.',
+      DESKTOP_PROVIDER_RECONNECT_MESSAGE,
       {
         environmentID: environment.id,
         providerOrigin,
@@ -2138,7 +2271,7 @@ async function resolveManagedEnvironmentBootstrap(
     throw launcherActionFailure(
       'provider_unreachable',
       'control_plane',
-      'Desktop could not refresh this provider from the current machine.',
+      'Desktop could not refresh this provider from this device.',
       {
         environmentID: environment.id,
         providerOrigin,
@@ -2161,7 +2294,18 @@ async function resolveManagedEnvironmentBootstrap(
     );
   }
   if (latestState.remoteRouteState === 'removed') {
-    return null;
+    throw launcherActionFailure(
+      'provider_environment_removed',
+      'environment',
+      'This environment is no longer published by the provider. Refresh the provider and try again.',
+      {
+        environmentID: environment.id,
+        providerOrigin,
+        providerID,
+        envPublicID,
+        shouldRefreshSnapshot: true,
+      },
+    );
   }
   const authorized = await ensureControlPlaneAccessToken(synchronized.preferences, synchronized.controlPlane);
   const openSession = await requestDesktopOpenSession(
@@ -2547,6 +2691,19 @@ function clearControlPlaneSyncRecord(providerOrigin: string, providerID: string)
   }
 }
 
+function clearControlPlaneTransientState(providerOrigin: string, providerID: string): void {
+  clearControlPlaneAccessState(providerOrigin, providerID);
+  clearControlPlaneSyncRecord(providerOrigin, providerID);
+  clearPendingControlPlaneAuthorizations(providerOrigin);
+  try {
+    const key = desktopControlPlaneKey(providerOrigin, providerID);
+    controlPlaneSyncTaskByKey.delete(key);
+    providerRuntimeHealthByControlPlaneKey.delete(key);
+  } catch {
+    // Ignore malformed identifiers during best-effort cleanup.
+  }
+}
+
 function controlPlaneSummary(controlPlane: DesktopSavedControlPlane): DesktopControlPlaneSummary {
   const syncRecord = currentControlPlaneSyncRecord(controlPlane);
   const environments = controlPlane.environments.map((environment) => ({
@@ -2697,7 +2854,10 @@ function controlPlaneAuthorizationNeedsReconnect(error: unknown): boolean {
     return true;
   }
   return error instanceof Error
-    && error.message === 'Desktop authorization is missing. Reconnect this provider in your browser.';
+    && (
+      error.message === DESKTOP_PROVIDER_RECONNECT_MESSAGE
+      || error.message === 'Desktop authorization is missing. Reconnect this provider in your browser.'
+    );
 }
 
 async function startControlPlaneAuthorization(args: Readonly<{
@@ -3067,7 +3227,7 @@ function launcherActionFailureForRemoteRouteState(
       return launcherActionFailure(
         'control_plane_auth_required',
         'control_plane',
-        'Reconnect the provider in your browser, then try again.',
+        DESKTOP_PROVIDER_RECONNECT_MESSAGE,
         {
           environmentID: options.environmentID,
           providerOrigin: options.providerOrigin,
@@ -3240,7 +3400,7 @@ async function openProviderLocalEnvironmentRecord(
     stealAppFocus?: boolean;
   }> = {},
 ): Promise<DesktopLauncherActionResult> {
-  const managedEnvironment = providerEnvironmentAsManagedEnvironment(environment);
+  const managedEnvironment = localEnvironmentForProviderBinding(preferences, environment);
   const target = buildManagedEnvironmentDesktopTarget(managedEnvironment, { route: 'local_host' });
   const sessionKey = target.session_key;
   const existingSession = liveSession(sessionKey);
@@ -3274,6 +3434,9 @@ async function openProviderLocalEnvironmentRecord(
         envPublicID: environment.env_public_id,
       },
     );
+  }
+  if (!localRuntimeMatchesProvider(runtimeRecord.startup, environment)) {
+    return localRuntimeProviderBindingFailure(environment, runtimeRecord.startup);
   }
   if (!runtimeServiceIsOpenable(runtimeRecord.startup.runtime_service)) {
     return launcherActionFailureForRuntimeNotOpenable(runtimeRecord.startup, {
@@ -3723,7 +3886,7 @@ async function startEnvironmentRuntimeFromLauncher(
   const environment = findManagedEnvironmentByID(preferences, environmentID);
   if (!environment || !environment.local_hosting) {
     const providerEnvironment = findProviderEnvironmentByID(preferences, environmentID);
-    if (!providerEnvironment?.local_runtime) {
+    if (!providerEnvironment) {
       return launcherActionFailure(
         'environment_missing',
         'environment',
@@ -3735,8 +3898,12 @@ async function startEnvironmentRuntimeFromLauncher(
       );
     }
 
-    const providerManagedEnvironment = providerEnvironmentAsManagedEnvironment(providerEnvironment);
+    const providerManagedEnvironment = localEnvironmentForProviderBinding(preferences, providerEnvironment);
     try {
+      const existingRuntime = await attachManagedEnvironmentRuntime(providerManagedEnvironment);
+      if (existingRuntime && !localRuntimeMatchesProvider(existingRuntime.startup, providerEnvironment)) {
+        return localRuntimeProviderBindingFailure(providerEnvironment, existingRuntime.startup);
+      }
       const bootstrap = await resolveManagedEnvironmentBootstrap(preferences, providerManagedEnvironment);
       const prepared = await prepareManagedTarget({
         environment: providerManagedEnvironment,
@@ -3759,7 +3926,7 @@ async function startEnvironmentRuntimeFromLauncher(
         providerManagedEnvironment,
         prepared.launch.managedRuntime.startup,
         desktopSessionRuntimeHandleFromManagedRuntime(prepared.launch.managedRuntime, {
-          persistedOwner: providerEnvironment.local_runtime?.owner,
+          persistedOwner: providerManagedEnvironment.local_hosting?.owner,
         }),
       );
       resetLauncherIssueState();
@@ -3876,7 +4043,7 @@ async function stopEnvironmentRuntimeFromLauncher(
   const environment = findManagedEnvironmentByID(preferences, environmentID);
   if (!environment || !environment.local_hosting) {
     const providerEnvironment = findProviderEnvironmentByID(preferences, environmentID);
-    if (!providerEnvironment?.local_runtime) {
+    if (!providerEnvironment) {
       return launcherActionFailure(
         'environment_missing',
         'environment',
@@ -3888,8 +4055,9 @@ async function stopEnvironmentRuntimeFromLauncher(
       );
     }
 
-    const runtimeRecord = managedEnvironmentRuntimeByID.get(providerEnvironment.id)
-      ?? await attachManagedEnvironmentRuntime(providerEnvironmentAsManagedEnvironment(providerEnvironment));
+    const providerManagedEnvironment = localEnvironmentForProviderBinding(preferences, providerEnvironment);
+    const runtimeRecord = managedEnvironmentRuntimeByID.get(providerManagedEnvironment.id)
+      ?? await attachManagedEnvironmentRuntime(providerManagedEnvironment);
     if (!runtimeRecord) {
       return launcherActionFailure(
         'action_invalid',
@@ -3900,18 +4068,23 @@ async function stopEnvironmentRuntimeFromLauncher(
         },
       );
     }
+    if (!localRuntimeMatchesProvider(runtimeRecord.startup, providerEnvironment)) {
+      return localRuntimeProviderBindingFailure(providerEnvironment, runtimeRecord.startup);
+    }
 
     const liveLocalSession = [...sessionsByKey.values()].find((sessionRecord) => (
       !sessionRecord.closing
       && sessionRecord.target.kind === 'managed_environment'
-      && sessionRecord.target.environment_id === providerEnvironment.id
+      && sessionRecord.target.provider_origin === providerEnvironment.provider_origin
+      && sessionRecord.target.provider_id === providerEnvironment.provider_id
+      && sessionRecord.target.env_public_id === providerEnvironment.env_public_id
       && sessionRecord.target.route === 'local_host'
     )) ?? null;
     if (liveLocalSession) {
       await finalizeSessionClosure(liveLocalSession.session_key);
     }
     await runtimeRecord.runtime_handle.stop();
-    managedEnvironmentRuntimeByID.delete(providerEnvironment.id);
+    managedEnvironmentRuntimeByID.delete(providerManagedEnvironment.id);
     resetLauncherIssueState();
     broadcastDesktopWelcomeSnapshots();
     return launcherActionSuccess('stopped_environment_runtime');
@@ -4066,21 +4239,18 @@ async function deleteControlPlaneFromLauncher(
   if (refreshToken !== '') {
     await revokeProviderDesktopAuthorization(controlPlane.provider, refreshToken);
   }
-  const remoteSessionKeys = [...sessionsByKey.values()]
+  const providerSessionKeys = [...sessionsByKey.values()]
     .filter((sessionRecord) => (
       !sessionRecord.closing
       && sessionRecord.target.kind === 'managed_environment'
-      && sessionRecord.target.route === 'remote_desktop'
       && sessionRecord.target.provider_origin === request.provider_origin
       && sessionRecord.target.provider_id === request.provider_id
     ))
     .map((sessionRecord) => sessionRecord.session_key);
-  for (const sessionKey of remoteSessionKeys) {
+  for (const sessionKey of providerSessionKeys) {
     await finalizeSessionClosure(sessionKey);
   }
-  clearControlPlaneAccessState(request.provider_origin, request.provider_id);
-  clearControlPlaneSyncRecord(request.provider_origin, request.provider_id);
-  providerRuntimeHealthByControlPlaneKey.delete(desktopControlPlaneKey(request.provider_origin, request.provider_id));
+  clearControlPlaneTransientState(request.provider_origin, request.provider_id);
   await persistDesktopPreferences(deleteSavedControlPlane(preferences, request.provider_origin, request.provider_id));
   resetLauncherIssueState();
   return launcherActionSuccess('deleted_control_plane', {
@@ -4108,30 +4278,17 @@ async function openProviderEnvironmentFromLauncher(
     ? request.route
     : 'auto';
   if (requestedRoute === 'local_host') {
-    if (!environment.local_runtime) {
-      return launcherActionFailure(
-        'environment_route_unavailable',
-        'environment',
-        'Set up the local runtime for this provider environment first.',
-        {
-          environmentID: environment.id,
-          providerOrigin: environment.provider_origin,
-          providerID: environment.provider_id,
-          envPublicID: environment.env_public_id,
-        },
-      );
-    }
     return openProviderLocalEnvironmentRecord(preferences, environment, { stealAppFocus: true });
   }
-  if (requestedRoute === 'auto' && environment.local_runtime) {
-    const localManagedEnvironment = providerEnvironmentAsManagedEnvironment(environment);
+  if (requestedRoute === 'auto') {
+    const localManagedEnvironment = localEnvironmentForProviderBinding(preferences, environment);
     const localTarget = buildManagedEnvironmentDesktopTarget(localManagedEnvironment, { route: 'local_host' });
     const liveLocalSession = liveSession(localTarget.session_key);
     if (liveLocalSession) {
       return openProviderLocalEnvironmentRecord(preferences, environment, { stealAppFocus: true });
     }
     const runtimeRecord = await attachManagedEnvironmentRuntime(localManagedEnvironment);
-    if (runtimeRecord) {
+    if (runtimeRecord && localRuntimeMatchesProvider(runtimeRecord.startup, environment)) {
       return openProviderLocalEnvironmentRecord(preferences, environment, { stealAppFocus: true });
     }
   }
@@ -4146,7 +4303,7 @@ async function openProviderEnvironmentFromLauncher(
     return launcherActionFailure(
       'control_plane_missing',
       'control_plane',
-      'Reconnect the provider for this environment, then try again.',
+      'This provider is no longer saved in Desktop. Reconnect the provider, then try this Environment again.',
       {
         environmentID: environment.id,
         providerOrigin: environment.provider_origin,
@@ -4249,9 +4406,23 @@ async function restartManagedRuntimeFromShell(webContentsID: number): Promise<De
       message: 'This runtime is attached from another Redeven host process. Restart it from that host process instead.',
     };
   }
+  const sessionTarget = sessionRecord.target;
   const previousRuntimeHandle = sessionRecord.runtime_handle;
   const preferences = await loadDesktopPreferencesCached();
-  const environment = findManagedEnvironmentByID(preferences, sessionRecord.target.environment_id);
+  const providerEnvironment = (
+    sessionTarget.provider_origin
+    && sessionTarget.provider_id
+    && sessionTarget.env_public_id
+  )
+    ? preferences.provider_environments.find((entry) => (
+      entry.provider_origin === sessionTarget.provider_origin
+      && entry.provider_id === sessionTarget.provider_id
+      && entry.env_public_id === sessionTarget.env_public_id
+    )) ?? null
+    : null;
+  const environment = providerEnvironment
+    ? localEnvironmentForProviderBinding(preferences, providerEnvironment)
+    : findManagedEnvironmentByID(preferences, sessionTarget.environment_id);
   if (!environment) {
     return {
       ok: false,
@@ -4262,23 +4433,26 @@ async function restartManagedRuntimeFromShell(webContentsID: number): Promise<De
   const localUIBind = resolveManagedRestartBindOverride(environment, sessionRecord.startup) ?? undefined;
   let bootstrap: DesktopRuntimeBootstrap | null = null;
   if (managedEnvironmentKind(environment) === 'controlplane') {
+    const providerOrigin = managedEnvironmentProviderOrigin(environment);
+    const providerID = managedEnvironmentProviderID(environment);
+    const envPublicID = managedEnvironmentPublicID(environment);
     const controlPlane = savedControlPlaneByIdentity(
       preferences,
-      managedEnvironmentProviderOrigin(environment),
-      managedEnvironmentProviderID(environment),
+      providerOrigin,
+      providerID,
     );
     if (!controlPlane) {
       return {
         ok: false,
         started: false,
-        message: 'Reconnect the provider before restarting this environment.',
+        message: 'This provider is no longer saved in Desktop. Reconnect the provider, then try this Environment again.',
       };
     }
     const authorized = await ensureControlPlaneAccessToken(preferences, controlPlane);
     const openSession = await requestDesktopOpenSession(
       authorized.controlPlane.provider,
       authorized.accessToken,
-      managedEnvironmentPublicID(environment),
+      envPublicID,
     );
     if (!openSession.bootstrap_ticket) {
       return {
@@ -4290,7 +4464,7 @@ async function restartManagedRuntimeFromShell(webContentsID: number): Promise<De
     bootstrap = {
       ...controlPlaneBootstrap(
         authorized.controlPlane.provider.provider_origin,
-        managedEnvironmentPublicID(environment),
+        envPublicID,
         openSession.bootstrap_ticket,
       ),
     };
@@ -4350,6 +4524,7 @@ async function restartManagedRuntimeFromShell(webContentsID: number): Promise<De
     persistedOwner: environment.local_hosting?.owner,
   });
   sessionRecord.startup = prepared.launch.managedRuntime.startup;
+  updateManagedEnvironmentRuntimeRecord(environment, sessionRecord.startup, sessionRecord.runtime_handle);
   sessionRecord.allowed_base_url = prepared.launch.managedRuntime.startup.local_ui_url;
   sessionRecord.target = buildManagedEnvironmentDesktopTarget(environment, { route: 'local_host' });
   sessionRecord.entry_url = desktopSessionEntryURL(sessionRecord.target, sessionRecord.startup);
@@ -4414,7 +4589,7 @@ async function manageDesktopUpdateFromShell(webContentsID: number): Promise<Desk
     : 'Local environment';
   const detail = sessionRecord.target.managed_environment_kind === 'controlplane'
     ? 'Desktop will keep this environment in the same provider-backed scope and may need a newer desktop release before redeploying the managed runtime.'
-    : 'Desktop will keep this environment on the same machine state and may need a newer desktop release before restarting the managed runtime.';
+    : 'Desktop will keep this environment on the same Local Environment state and may need a newer desktop release before restarting the managed runtime.';
   const dialogOptions: MessageBoxOptions = {
     type: 'info',
     buttons: ['Open release page', 'Later'],
@@ -4470,7 +4645,7 @@ async function upsertManagedEnvironmentFromWelcome(
   const existingAccess = existing ? managedEnvironmentLocalAccess(existing) : null;
   const requestedEnvironmentName = compact(request.environment_name)
     || compact(options.label)
-    || 'machine';
+    || 'local';
   const access = validateDesktopSettingsDraft(draft, {
     currentLocalUIPassword: existingAccess?.local_ui_password ?? '',
     currentLocalUIPasswordConfigured: existingAccess?.local_ui_password_configured === true,
@@ -4488,47 +4663,6 @@ async function upsertManagedEnvironmentFromWelcome(
   );
   if (!resolvedEnvironment) {
     throw new Error('Desktop could not save that managed environment.');
-  }
-  const bindConflict = findManagedEnvironmentLocalBindConflict(next, resolvedEnvironment.id);
-  if (bindConflict) {
-    throw new Error(describeManagedEnvironmentLocalBindConflict(bindConflict));
-  }
-  await persistDesktopPreferences(next);
-  return resolvedEnvironment;
-}
-
-async function upsertProviderEnvironmentLocalRuntimeFromWelcome(
-  request: Readonly<{
-    environment_id: string;
-  }>,
-  draft: DesktopSettingsDraft,
-  options: Readonly<{
-    label: string;
-  }>,
-): Promise<DesktopProviderEnvironmentRecord> {
-  const preferences = await loadDesktopPreferencesCached();
-  const existing = findProviderEnvironmentByID(preferences, request.environment_id);
-  if (!existing) {
-    throw new Error('Desktop could not resolve that provider environment.');
-  }
-  const existingAccess = existing.local_runtime?.access ?? null;
-  const access = validateDesktopSettingsDraft(draft, {
-    currentLocalUIPassword: existingAccess?.local_ui_password ?? '',
-    currentLocalUIPasswordConfigured: existingAccess?.local_ui_password_configured === true,
-  });
-  const next = upsertProviderEnvironmentLocalRuntime(preferences, {
-    environment_id: existing.id,
-    provider_origin: existing.provider_origin,
-    provider_id: existing.provider_id,
-    env_public_id: existing.env_public_id,
-    label: options.label,
-    access,
-    pinned: existing.pinned,
-    last_used_at_ms: existing.last_used_at_ms,
-  });
-  const resolvedEnvironment = findProviderEnvironmentByID(next, existing.id);
-  if (!resolvedEnvironment) {
-    throw new Error('Desktop could not save that provider local runtime.');
   }
   const bindConflict = findManagedEnvironmentLocalBindConflict(next, resolvedEnvironment.id);
   if (bindConflict) {
@@ -4646,10 +4780,7 @@ async function deleteManagedEnvironmentStateDir(stateDir: string): Promise<void>
 
 async function deleteEnvironmentFromWelcome(environmentID: string): Promise<void> {
   const preferences = await loadDesktopPreferencesCached();
-  const providerEnvironment = findProviderEnvironmentByID(preferences, environmentID);
-  const result = providerEnvironment
-    ? deleteProviderEnvironmentLocalRuntime(preferences, environmentID)
-    : deleteManagedEnvironment(preferences, environmentID);
+  const result = deleteManagedEnvironment(preferences, environmentID);
   if (!result.deleted_environment) {
     return;
   }
@@ -4758,25 +4889,6 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
         await upsertManagedEnvironmentFromWelcome({
           environment_id: request.environment_id,
           environment_name: request.environment_name,
-        }, {
-          local_ui_bind: request.local_ui_bind,
-          local_ui_password: request.local_ui_password,
-          local_ui_password_mode: request.local_ui_password_mode,
-        }, {
-          label: request.label,
-        });
-        return launcherActionSuccess('saved_environment');
-      } catch (error) {
-        return launcherActionFailure(
-          'action_invalid',
-          'dialog',
-          error instanceof Error ? error.message : String(error),
-        );
-      }
-    case 'upsert_provider_environment_local_runtime':
-      try {
-        await upsertProviderEnvironmentLocalRuntimeFromWelcome({
-          environment_id: request.environment_id,
         }, {
           local_ui_bind: request.local_ui_bind,
           local_ui_password: request.local_ui_password,
@@ -5241,7 +5353,12 @@ if (!app.requestSingleInstanceLock()) {
     }
     event.returnValue = {
       managed_environment_id: sessionRecord.target.environment_id,
-      environment_storage_scope_id: sessionRecord.target.environment_id,
+      environment_storage_scope_id: sessionRecord.target.route === 'local_host'
+        ? 'local'
+        : sessionRecord.target.environment_id,
+      ...(sessionRecord.target.provider_origin ? { provider_origin: sessionRecord.target.provider_origin } : {}),
+      ...(sessionRecord.target.provider_id ? { provider_id: sessionRecord.target.provider_id } : {}),
+      ...(sessionRecord.target.env_public_id ? { env_public_id: sessionRecord.target.env_public_id } : {}),
     };
   });
   ipcMain.on(DESKTOP_SESSION_APP_READY_CHANNEL, (event, payload) => {
@@ -5277,36 +5394,17 @@ if (!app.requestSingleInstanceLock()) {
       if (!managedEnvironment && !providerEnvironment) {
         throw new Error('Desktop could not resolve the selected environment.');
       }
-      const access = managedEnvironment
-        ? managedEnvironmentLocalAccess(managedEnvironment)
-        : providerEnvironment!.local_runtime
-          ? providerEnvironment!.local_runtime.access
-          : {
-              local_ui_bind: draft.local_ui_bind,
-              local_ui_password: '',
-              local_ui_password_configured: false,
-            };
+      const localEnvironment = previous.managed_environments[0] ?? createManagedLocalEnvironment('local');
+      const settingsEnvironment = managedEnvironment ?? localEnvironment;
+      const access = managedEnvironmentLocalAccess(settingsEnvironment);
       const validated = validateDesktopSettingsDraft(draft, {
         currentLocalUIPassword: access.local_ui_password,
         currentLocalUIPasswordConfigured: access.local_ui_password_configured,
       });
-      const next = managedEnvironment
-        ? updateManagedEnvironmentAccess(previous, managedEnvironment.id, validated)
-        : providerEnvironment!.local_runtime
-          ? updateProviderEnvironmentAccess(previous, providerEnvironment!.id, validated)
-          : upsertProviderEnvironmentLocalRuntime(previous, {
-              environment_id: providerEnvironment!.id,
-              provider_origin: providerEnvironment!.provider_origin,
-              provider_id: providerEnvironment!.provider_id,
-              env_public_id: providerEnvironment!.env_public_id,
-              label: providerEnvironment!.label,
-              pinned: providerEnvironment!.pinned,
-              access: validated,
-              last_used_at_ms: providerEnvironment!.last_used_at_ms,
-            });
+      const next = updateManagedEnvironmentAccess(previous, settingsEnvironment.id, validated);
       const bindConflict = findManagedEnvironmentLocalBindConflict(
         next,
-        managedEnvironment?.id ?? providerEnvironment!.id,
+        settingsEnvironment.id,
       );
       if (bindConflict) {
         throw new Error(describeManagedEnvironmentLocalBindConflict(bindConflict));

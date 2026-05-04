@@ -18,7 +18,7 @@ export const DESKTOP_ACCESS_MODE_OPTIONS: readonly DesktopAccessModeOption[] = [
   {
     value: 'local_only',
     label: 'Local only',
-    description: 'Keep the Local Environment available only on this machine.',
+    description: 'Keep the Local Environment available only on this device.',
   },
   {
     value: 'shared_local_network',
@@ -177,7 +177,7 @@ function nextStartAddressDisplay(
     }
     return {
       value: `localhost:${fixedPort}`,
-      detail: 'Only this machine can open the Local Environment.',
+      detail: 'Only this device can open the Local Environment.',
     };
   }
   if (accessMode === 'shared_local_network') {

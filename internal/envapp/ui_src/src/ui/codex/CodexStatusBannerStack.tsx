@@ -61,7 +61,7 @@ export function CodexStatusBannerStack(props: {
       <Show when={!props.hostAvailable}>
         <Banner
           title="Host diagnostics"
-          body="Redeven uses the host machine's `codex` binary directly. There is no separate in-app Codex runtime toggle to manage here."
+          body="Redeven uses the host's `codex` binary directly. There is no separate in-app Codex runtime toggle to manage here."
           variant="warning"
         />
       </Show>

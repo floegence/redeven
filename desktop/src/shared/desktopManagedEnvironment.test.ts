@@ -6,7 +6,7 @@ import {
 } from './desktopManagedEnvironment';
 
 describe('desktopManagedEnvironment', () => {
-  it('treats machine as the protected default local environment', () => {
+  it('treats any requested id as the protected default local environment', () => {
     expect(isDefaultLocalManagedEnvironment(createManagedLocalEnvironment('default'))).toBe(true);
     expect(isDefaultLocalManagedEnvironment(createManagedLocalEnvironment('lab'))).toBe(true);
   });

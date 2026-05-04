@@ -180,7 +180,7 @@ async function waitForHostText(host: HTMLElement, text: string, attempts = 20): 
 
 function makeRuntimeStatus(overrides: any = {}): any {
   const sharedRoot = '/Users/test/.redeven/shared/code-server/darwin-arm64';
-  const managedPrefix = '/Users/test/.redeven/machine/apps/code/runtime/managed';
+  const managedPrefix = '/Users/test/.redeven/local-environment/apps/code/runtime/managed';
   return {
     active_runtime: {
       detection_state: 'ready',
@@ -202,7 +202,7 @@ function makeRuntimeStatus(overrides: any = {}): any {
     shared_runtime_root: overrides.shared_runtime_root ?? sharedRoot,
     environment_selection_version: overrides.environment_selection_version ?? '4.109.1',
     environment_selection_source: overrides.environment_selection_source ?? 'environment',
-    machine_default_version: overrides.machine_default_version ?? '4.109.1',
+    local_environment_default_version: overrides.local_environment_default_version ?? '4.109.1',
     installed_versions: overrides.installed_versions ?? [
       {
         version: '4.109.1',
@@ -387,7 +387,7 @@ describe('EnvCodespacesPage', () => {
       installed_versions: [],
       environment_selection_version: '',
       environment_selection_source: 'none',
-      machine_default_version: '',
+      local_environment_default_version: '',
       operation: { state: 'idle', log_tail: [] },
     });
 
@@ -466,7 +466,7 @@ describe('EnvCodespacesPage', () => {
       installed_versions: [],
       environment_selection_version: '',
       environment_selection_source: 'none',
-      machine_default_version: '',
+      local_environment_default_version: '',
       operation: { state: 'idle', log_tail: [] },
     });
 

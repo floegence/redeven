@@ -10,10 +10,10 @@ export type DesktopManagedEnvironmentAccess = Readonly<{
 
 export type DesktopManagedEnvironmentPreferredOpenRoute = 'auto' | 'local_host' | 'remote_desktop';
 export type DesktopManagedEnvironmentLocalOwner = 'desktop' | 'agent' | 'unknown';
-export type DesktopManagedEnvironmentLocalScopeKind = 'machine';
+export type DesktopManagedEnvironmentLocalScopeKind = 'local_environment';
 
 export type DesktopManagedEnvironmentLocalScope = Readonly<{
-  kind: 'machine';
+  kind: 'local_environment';
   name: string;
 }>;
 
@@ -22,6 +22,9 @@ export type DesktopManagedEnvironmentRuntimeState = Readonly<{
   effective_run_mode: string;
   remote_enabled: boolean;
   desktop_managed: boolean;
+  controlplane_base_url?: string;
+  controlplane_provider_id?: string;
+  env_public_id?: string;
   password_required: boolean;
   diagnostics_enabled: boolean;
   pid: number;
@@ -73,7 +76,8 @@ export type DesktopManagedEnvironment = Readonly<{
 export type DesktopManagedLocalEnvironment = DesktopManagedEnvironment;
 export type DesktopManagedControlPlaneEnvironment = DesktopManagedEnvironment;
 
-export const DEFAULT_LOCAL_ENVIRONMENT_NAME = 'machine';
+export const LOCAL_ENVIRONMENT_ID = 'local';
+export const DEFAULT_LOCAL_ENVIRONMENT_NAME = 'local';
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -106,7 +110,7 @@ export function normalizeDesktopProviderKey(value: unknown): string {
 
 export function desktopManagedLocalEnvironmentID(name: string): string {
 	void name;
-	return 'machine';
+	return LOCAL_ENVIRONMENT_ID;
 }
 
 export function desktopManagedControlPlaneEnvironmentID(providerOrigin: string, envPublicID: string): string {
@@ -117,7 +121,7 @@ export function desktopManagedControlPlaneEnvironmentID(providerOrigin: string, 
 
 export function desktopManagedEnvironmentIDForScope(scope: DesktopManagedEnvironmentLocalScope): string {
 	void scope;
-	return 'machine';
+	return LOCAL_ENVIRONMENT_ID;
 }
 
 export function defaultDesktopManagedEnvironmentAccess(): DesktopManagedEnvironmentAccess {
@@ -130,7 +134,7 @@ export function defaultDesktopManagedEnvironmentAccess(): DesktopManagedEnvironm
 
 export function defaultLocalManagedEnvironmentLabel(name: string): string {
 	void name;
-	return 'Local Machine';
+	return 'Local Environment';
 }
 
 function normalizeRuntimeState(
@@ -149,6 +153,9 @@ function normalizeRuntimeState(
     effective_run_mode: compact(value.effective_run_mode),
     remote_enabled: value.remote_enabled === true,
     desktop_managed: value.desktop_managed === true,
+    controlplane_base_url: compact(value.controlplane_base_url) || undefined,
+    controlplane_provider_id: compact(value.controlplane_provider_id) || undefined,
+    env_public_id: compact(value.env_public_id) || undefined,
     password_required: value.password_required === true,
     diagnostics_enabled: value.diagnostics_enabled === true,
     pid: Number.isInteger(pid) && pid > 0 ? pid : 0,
@@ -175,10 +182,10 @@ export function createManagedEnvironmentLocalHosting(
 
 	return {
 		scope: {
-			kind: 'machine',
+			kind: 'local_environment',
 			name: DEFAULT_LOCAL_ENVIRONMENT_NAME,
 		},
-		scope_key: 'machine',
+		scope_key: 'local_environment',
 		state_dir: compact(options.stateDir),
 		owner: options.owner ?? 'desktop',
 		access: options.access ?? defaultDesktopManagedEnvironmentAccess(),
@@ -313,7 +320,7 @@ export function createManagedLocalEnvironment(
 ): DesktopManagedEnvironment {
   const normalizedName = normalizeDesktopLocalEnvironmentName(name);
   const localHosting = createManagedEnvironmentLocalHosting(
-    { kind: 'machine', name: DEFAULT_LOCAL_ENVIRONMENT_NAME },
+    { kind: 'local_environment', name: DEFAULT_LOCAL_ENVIRONMENT_NAME },
     {
       access: options.access,
       owner: options.owner,
@@ -361,7 +368,7 @@ export function createManagedNamedEnvironment(
 ): DesktopManagedEnvironment {
 	const normalizedName = normalizeDesktopLocalEnvironmentName(name);
 	const localHosting = createManagedEnvironmentLocalHosting(
-		{ kind: 'machine', name: DEFAULT_LOCAL_ENVIRONMENT_NAME },
+		{ kind: 'local_environment', name: DEFAULT_LOCAL_ENVIRONMENT_NAME },
 		{
 			access: options.access,
 			owner: options.owner,
@@ -442,7 +449,7 @@ export function managedEnvironmentKind(environment: DesktopManagedEnvironment): 
 
 export function isDefaultLocalManagedEnvironment(environment: DesktopManagedEnvironment | null | undefined): boolean {
   const scope = environment?.local_hosting?.scope;
-  return scope?.kind === 'machine' && scope.name === DEFAULT_LOCAL_ENVIRONMENT_NAME;
+  return scope?.kind === 'local_environment' && scope.name === DEFAULT_LOCAL_ENVIRONMENT_NAME;
 }
 
 export function managedEnvironmentLocalName(environment: DesktopManagedEnvironment): string | undefined {

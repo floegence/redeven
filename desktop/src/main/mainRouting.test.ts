@@ -119,11 +119,11 @@ describe('main routing', () => {
     expect(mainSrc).toContain('await rootWindow.loadURL(sessionRecord.entry_url);');
   });
 
-  it('protects the default local environment from deletion and reuses the single machine record', () => {
+  it('protects the default local environment from deletion and reuses the single local record', () => {
     const mainSrc = readMainSource();
 
     expect(mainSrc).toContain('Local Environment is always available in Desktop. Change its settings instead of deleting it.');
-    expect(mainSrc).toContain("|| 'machine';");
+    expect(mainSrc).toContain("|| 'local';");
     expect(mainSrc).toContain('findManagedEnvironmentLocalBindConflict(next, resolvedEnvironment.id)');
     expect(mainSrc).toContain("'action_invalid',");
     expect(mainSrc).toContain("'dialog',");

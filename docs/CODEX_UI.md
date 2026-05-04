@@ -1,6 +1,6 @@
 # Codex (Optional)
 
-Redeven exposes **Codex** as a separate Env App surface that uses the host machine's `codex` binary directly.
+Redeven exposes **Codex** as a separate Env App surface that uses the host's `codex` binary directly.
 
 This integration is intentionally independent from Flower:
 
@@ -70,7 +70,7 @@ The browser-side Codex UI uses an explicit controller split so thread switching,
 
 ## Host-managed runtime
 
-There is **no** `config.codex` block in the runtime machine config (for example `~/.redeven/machine/config.json`).
+There is **no** `config.codex` block in the runtime Local Environment config (for example `~/.redeven/local-environment/config.json`).
 
 Redeven resolves `codex` like this:
 

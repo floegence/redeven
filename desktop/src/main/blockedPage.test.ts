@@ -76,4 +76,22 @@ describe('blockedPage', () => {
     expect(html).toContain('Open Environment');
     expect(html).toContain('aria-describedby="blocked-meta"');
   });
+
+  it('renders a concrete startup validation failure', () => {
+    const html = buildBlockedPageHTML({
+      status: 'blocked',
+      code: 'startup_invalid',
+      message: 'incomplete bootstrap flags for `redeven run`: missing flag one bootstrap ticket (--bootstrap-ticket or --bootstrap-ticket-env)',
+      diagnostics: {
+        state_dir: '/Users/tester/.redeven/local-environment',
+        config_path: '/Users/tester/.redeven/local-environment/config.json',
+        command: 'redeven run',
+      },
+    }, 'linux');
+
+    expect(html).toContain('Local Environment startup needs a setting');
+    expect(html).toContain('missing flag one bootstrap ticket');
+    expect(html).toContain('Config path: /Users/tester/.redeven/local-environment/config.json');
+    expect(html).toContain('Local Environment Settings');
+  });
 });
