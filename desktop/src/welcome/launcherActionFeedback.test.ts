@@ -84,6 +84,32 @@ describe('launcherActionFeedback', () => {
     });
   });
 
+  it('turns provider authorization failures into persistent reconnect actions', () => {
+    expect(launcherActionFailurePresentation({
+      ok: false,
+      code: 'control_plane_auth_required',
+      scope: 'control_plane',
+      message: 'Desktop needs fresh provider authorization before it can request a one-time Local Environment bootstrap ticket for this Environment.',
+      provider_origin: 'https://cp.example.invalid',
+      provider_id: 'redeven_portal',
+      env_public_id: 'env_demo',
+      should_refresh_snapshot: true,
+    })).toEqual({
+      title: 'Provider Authorization Expired',
+      message: 'Desktop needs fresh provider authorization before it can request a one-time Local Environment bootstrap ticket for this Environment.',
+      tone: 'warning',
+      refresh_snapshot: true,
+      delivery: 'toast',
+      action: {
+        kind: 'reconnect_control_plane',
+        label: 'Reconnect Provider',
+        provider_origin: 'https://cp.example.invalid',
+        provider_id: 'redeven_portal',
+      },
+      auto_dismiss: false,
+    });
+  });
+
   it('shows Start Runtime failures as error toasts with a snapshot refresh', () => {
     expect(launcherActionFailurePresentation({
       ok: false,

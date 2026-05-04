@@ -71,7 +71,7 @@ vi.mock('./SettingsPrimitives', () => ({
 
 function makeStatus(overrides: any = {}) {
   const sharedRoot = '/Users/test/.redeven/shared/code-server/darwin-arm64';
-  const managedPrefix = '/Users/test/.redeven/machine/apps/code/runtime/managed';
+  const managedPrefix = '/Users/test/.redeven/local-environment/apps/code/runtime/managed';
   return {
     active_runtime: {
       detection_state: 'ready',
@@ -93,7 +93,7 @@ function makeStatus(overrides: any = {}) {
     shared_runtime_root: sharedRoot,
     environment_selection_version: '4.109.1',
     environment_selection_source: 'environment',
-    machine_default_version: '4.109.1',
+    local_environment_default_version: '4.109.1',
     installed_versions: [
       {
         version: '4.109.1',
@@ -156,11 +156,11 @@ describe('CodeRuntimeSettingsCard', () => {
     host.remove();
   });
 
-  it('renders current environment and machine inventory sections with scope-explicit wording', () => {
+  it('renders current environment and Local Environment inventory sections with scope-explicit wording', () => {
     renderCard(host);
 
     expect(host.textContent).toContain('Current environment');
-    expect(host.textContent).toContain('Installed on this machine');
+    expect(host.textContent).toContain('Installed for this Local Environment');
     expect(host.textContent).toContain('Pinned to this environment');
     expect(host.textContent).toContain('Shared runtime root');
     expect(host.textContent).toContain('Refresh');
@@ -173,12 +173,12 @@ describe('CodeRuntimeSettingsCard', () => {
     expect(host.textContent).toContain('Set as default for new environments');
 
     const tooltipContents = Array.from(host.querySelectorAll('[data-testid="tooltip"]')).map((node) => node.getAttribute('data-content'));
-    expect(tooltipContents).toContain('Re-scan the machine inventory and the active runtime used by this environment.');
-    expect(tooltipContents).toContain('Remove this environment-specific runtime pin. The environment falls back to the machine default when one is configured.');
-    expect(tooltipContents).toContain('Install the latest stable managed code-server on this machine, then pin this environment to it.');
+    expect(tooltipContents).toContain('Re-scan the Local Environment inventory and the active runtime used by this environment.');
+    expect(tooltipContents).toContain('Remove this environment-specific runtime pin. The environment falls back to the Local Environment default when one is configured.');
+    expect(tooltipContents).toContain('Install the latest stable managed code-server for this Local Environment, then pin this environment to it.');
   });
 
-  it('shows an empty-state warning when no managed versions are installed on this machine', () => {
+  it('shows an empty-state warning when no managed versions are installed for this Local Environment', () => {
     renderCard(host, {
       status: makeStatus({
         active_runtime: {
@@ -196,12 +196,12 @@ describe('CodeRuntimeSettingsCard', () => {
         installed_versions: [],
         environment_selection_source: 'none',
         environment_selection_version: '',
-        machine_default_version: '',
+        local_environment_default_version: '',
       }),
     });
 
     expect(host.textContent).toContain('No managed versions installed');
-    expect(host.textContent).toContain('Install the latest stable managed runtime once on this machine');
+    expect(host.textContent).toContain('Install the latest stable managed runtime once for this Local Environment');
   });
 
   it('opens the install confirmation and calls the install action', () => {
@@ -230,7 +230,7 @@ describe('CodeRuntimeSettingsCard', () => {
 
     expect(host.textContent).toContain('Unpin environment');
     expect(host.textContent).toContain('This environment will stop using its pinned managed version.');
-    expect(host.textContent).toContain('No machine-managed version files are deleted by this action.');
+    expect(host.textContent).toContain('No Local Environment runtime version files are deleted by this action.');
 
     const confirmButton = Array.from(host.querySelectorAll('button')).filter((button) => button.textContent === 'Unpin').at(-1);
     confirmButton?.click();

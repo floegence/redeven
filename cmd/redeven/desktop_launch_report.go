@@ -20,6 +20,8 @@ const (
 
 const (
 	desktopLaunchCodeStateDirLocked = "state_dir_locked"
+	desktopLaunchCodeStartupInvalid = "startup_invalid"
+	desktopLaunchCodeStartupFailed  = "startup_failed"
 )
 
 type desktopLaunchLockOwner struct {
@@ -37,6 +39,8 @@ type desktopLaunchDiagnostics struct {
 	LockPath         string `json:"lock_path,omitempty"`
 	StateDir         string `json:"state_dir,omitempty"`
 	RuntimeStatePath string `json:"runtime_state_path,omitempty"`
+	ConfigPath       string `json:"config_path,omitempty"`
+	Command          string `json:"command,omitempty"`
 }
 
 type desktopLaunchReport struct {
@@ -44,16 +48,19 @@ type desktopLaunchReport struct {
 	Code    string              `json:"code,omitempty"`
 	Message string              `json:"message,omitempty"`
 
-	LocalUIURL         string                  `json:"local_ui_url,omitempty"`
-	LocalUIURLs        []string                `json:"local_ui_urls,omitempty"`
-	PasswordRequired   bool                    `json:"password_required"`
-	EffectiveRunMode   string                  `json:"effective_run_mode,omitempty"`
-	RemoteEnabled      bool                    `json:"remote_enabled"`
-	DesktopManaged     bool                    `json:"desktop_managed"`
-	StateDir           string                  `json:"state_dir,omitempty"`
-	DiagnosticsEnabled bool                    `json:"diagnostics_enabled"`
-	PID                int                     `json:"pid,omitempty"`
-	RuntimeService     runtimeservice.Snapshot `json:"runtime_service"`
+	LocalUIURL             string                  `json:"local_ui_url,omitempty"`
+	LocalUIURLs            []string                `json:"local_ui_urls,omitempty"`
+	PasswordRequired       bool                    `json:"password_required"`
+	EffectiveRunMode       string                  `json:"effective_run_mode,omitempty"`
+	RemoteEnabled          bool                    `json:"remote_enabled"`
+	DesktopManaged         bool                    `json:"desktop_managed"`
+	ControlplaneBaseURL    string                  `json:"controlplane_base_url,omitempty"`
+	ControlplaneProviderID string                  `json:"controlplane_provider_id,omitempty"`
+	EnvPublicID            string                  `json:"env_public_id,omitempty"`
+	StateDir               string                  `json:"state_dir,omitempty"`
+	DiagnosticsEnabled     bool                    `json:"diagnostics_enabled"`
+	PID                    int                     `json:"pid,omitempty"`
+	RuntimeService         runtimeservice.Snapshot `json:"runtime_service"`
 
 	LockOwner   *desktopLaunchLockOwner   `json:"lock_owner,omitempty"`
 	Diagnostics *desktopLaunchDiagnostics `json:"diagnostics,omitempty"`
@@ -80,6 +87,9 @@ func writeDesktopLaunchReport(path string, report desktopLaunchReport) error {
 			report.LocalUIURLs = []string{report.LocalUIURL}
 		}
 		report.EffectiveRunMode = strings.TrimSpace(report.EffectiveRunMode)
+		report.ControlplaneBaseURL = strings.TrimSpace(report.ControlplaneBaseURL)
+		report.ControlplaneProviderID = strings.TrimSpace(report.ControlplaneProviderID)
+		report.EnvPublicID = strings.TrimSpace(report.EnvPublicID)
 		report.RuntimeService = normalizeLaunchRuntimeServiceSnapshot(
 			report.RuntimeService,
 			report.DesktopManaged,

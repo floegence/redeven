@@ -1,8 +1,5 @@
 import {
-  managedEnvironmentKind,
   managedEnvironmentLocalAccess,
-  managedEnvironmentProviderOrigin,
-  managedEnvironmentPublicID,
   type DesktopManagedEnvironment,
 } from '../shared/desktopManagedEnvironment';
 import {
@@ -66,15 +63,19 @@ export function buildDesktopRuntimeArgs(
   }
 
   const bootstrap = resolvedRuntimeBootstrap(options.bootstrap);
-  if (managedEnvironmentKind(environment) === 'controlplane') {
-    const controlPlaneURL = bootstrap?.controlplane_url ?? managedEnvironmentProviderOrigin(environment);
-    const envID = bootstrap?.env_id ?? managedEnvironmentPublicID(environment);
-    if (controlPlaneURL !== '' && envID !== '') {
-      args.push('--controlplane', controlPlaneURL, '--env-id', envID);
-    }
-  }
   if (bootstrap) {
-    args.push('--bootstrap-ticket-env', BOOTSTRAP_TICKET_ENV_NAME);
+    const controlPlaneURL = bootstrap.controlplane_url;
+    const envID = bootstrap.env_id;
+    if (controlPlaneURL !== '' && envID !== '') {
+      args.push(
+        '--controlplane',
+        controlPlaneURL,
+        '--env-id',
+        envID,
+        '--bootstrap-ticket-env',
+        BOOTSTRAP_TICKET_ENV_NAME,
+      );
+    }
   }
 
   return args;

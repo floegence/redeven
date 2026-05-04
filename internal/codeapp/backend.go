@@ -267,7 +267,7 @@ func (s *Service) SetCodeRuntimeDefaultVersion(ctx context.Context, version stri
 	if s == nil || s.runtime == nil {
 		return gateway.CodeRuntimeStatus{}, errors.New("code runtime not ready")
 	}
-	status, err := s.runtime.SetMachineDefaultVersion(ctx, version)
+	status, err := s.runtime.SetLocalEnvironmentDefaultVersion(ctx, version)
 	return gateway.CodeRuntimeStatus(status), err
 }
 
@@ -283,7 +283,7 @@ func (s *Service) RemoveCodeRuntimeVersion(ctx context.Context, version string) 
 	if s == nil || s.runtime == nil {
 		return gateway.CodeRuntimeStatus{}, errors.New("code runtime not ready")
 	}
-	status, err := s.runtime.RemoveMachineVersion(ctx, version)
+	status, err := s.runtime.RemoveLocalEnvironmentVersion(ctx, version)
 	return gateway.CodeRuntimeStatus(status), err
 }
 

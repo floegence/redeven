@@ -11,6 +11,7 @@ import {
   type DesktopControlPlaneSummary,
   type DesktopProviderEnvironmentRuntimeHealth,
 } from '../shared/controlPlaneProvider';
+import type { RuntimeServiceOpenReadiness, RuntimeServiceSnapshot } from '../shared/runtimeService';
 import {
   testDesktopPreferences,
   testManagedControlPlaneEnvironment,
@@ -128,6 +129,32 @@ function buildControlPlaneSummary(options: Readonly<{
     last_sync_error_code: '',
     last_sync_error_message: '',
     catalog_freshness: options.catalogFreshness ?? 'fresh',
+  };
+}
+
+function providerRuntimeState(envPublicID = 'env_demo') {
+  return {
+    controlplane_base_url: 'https://cp.example.invalid',
+    controlplane_provider_id: 'redeven_portal',
+    env_public_id: envPublicID,
+  };
+}
+
+function providerRuntimeService(openReadiness: RuntimeServiceOpenReadiness = { state: 'openable' }): RuntimeServiceSnapshot {
+  return {
+    protocol_version: 'redeven-runtime-v1',
+    service_owner: 'desktop',
+    desktop_managed: true,
+    effective_run_mode: 'desktop',
+    remote_enabled: false,
+    compatibility: 'compatible',
+    open_readiness: openReadiness,
+    active_workload: {
+      terminal_count: 0,
+      session_count: 0,
+      task_count: 0,
+      port_forward_count: 0,
+    },
   };
 }
 
@@ -649,7 +676,7 @@ describe('buildEnvironmentCardModel', () => {
     });
   });
 
-  it('builds provider-card actions around runtime availability and external runtime control', () => {
+  it('builds provider-card actions around runtime availability and local binding state', () => {
     const controlPlane = buildControlPlaneSummary({
       status: 'offline',
       lifecycleStatus: 'suspended',
@@ -681,17 +708,18 @@ describe('buildEnvironmentCardModel', () => {
           kind: 'popover',
           tone: 'warning',
           eyebrow: 'Runtime offline',
-          title: 'Set up local runtime to continue',
-          detail: 'Open becomes available after you finish local runtime setup for this environment.',
+          title: 'Use Local Environment to continue',
+          detail: 'Desktop will link the Local Environment on this device to this provider Environment, then open it locally.',
           actions: [
             {
-              label: 'Set up local runtime…',
+              label: 'Use Locally',
               emphasis: 'primary',
               action: {
                 intent: 'serve_runtime_locally',
-                label: 'Set up local runtime…',
+                label: 'Use Locally',
                 enabled: true,
                 variant: 'outline',
+                route: 'local_host',
               },
             },
             {
@@ -709,13 +737,14 @@ describe('buildEnvironmentCardModel', () => {
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
-            id: 'set_up_local_runtime',
-            label: 'Set up local runtime…',
+            id: 'use_locally',
+            label: 'Use Locally',
             action: {
               intent: 'serve_runtime_locally',
-              label: 'Set up local runtime…',
+              label: 'Use Locally',
               enabled: true,
               variant: 'outline',
+              route: 'local_host',
             },
           },
           {
@@ -744,71 +773,7 @@ describe('buildEnvironmentCardModel', () => {
     });
     const savedLocalServeProviderEntry = savedLocalServeSnapshot.environments.find((environment) => environment.kind === 'provider_environment');
     expect(savedLocalServeProviderEntry?.provider_local_runtime_state).toBe('not_running');
-    expect(buildProviderBackedEnvironmentActionModel(savedLocalServeProviderEntry!)).toEqual({
-      status_label: 'RUNTIME OFFLINE',
-      status_tone: 'warning',
-      action_presentation: {
-        kind: 'split_button',
-        primary_action: {
-          intent: 'open',
-          label: 'Open',
-          enabled: false,
-          variant: 'default',
-        },
-        primary_action_overlay: {
-          kind: 'popover',
-          tone: 'warning',
-          eyebrow: 'Runtime offline',
-          title: 'Start the local runtime to continue',
-          detail: 'Open becomes available once the runtime is ready on this device.',
-          actions: [
-            {
-              label: 'Start runtime locally',
-              emphasis: 'primary',
-              action: {
-                intent: 'start_runtime',
-                label: 'Start runtime',
-                enabled: true,
-                variant: 'outline',
-              },
-            },
-            {
-              label: 'Refresh status',
-              emphasis: 'secondary',
-              action: {
-                intent: 'refresh_runtime',
-                label: 'Refresh runtime status',
-                enabled: true,
-                variant: 'outline',
-              },
-            },
-          ],
-        },
-        menu_button_label: 'Runtime actions',
-        menu_actions: [
-          {
-            id: 'start_runtime',
-            label: 'Start runtime',
-            action: {
-              intent: 'start_runtime',
-              label: 'Start runtime',
-              enabled: true,
-              variant: 'outline',
-            },
-          },
-          {
-            id: 'refresh_runtime',
-            label: 'Refresh runtime status',
-            action: {
-              intent: 'refresh_runtime',
-              label: 'Refresh runtime status',
-              enabled: true,
-              variant: 'outline',
-            },
-          },
-        ],
-      },
-    });
+    expect(buildProviderBackedEnvironmentActionModel(savedLocalServeProviderEntry!)).toEqual(buildProviderBackedEnvironmentActionModel(providerOnlyEntry!));
 
     const openLocalServeSnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
@@ -891,13 +856,25 @@ describe('buildEnvironmentCardModel', () => {
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
-            id: 'set_up_local_runtime',
-            label: 'Set up local runtime…',
+            id: 'use_locally',
+            label: 'Use Locally',
             action: {
               intent: 'serve_runtime_locally',
-              label: 'Set up local runtime…',
+              label: 'Use Locally',
               enabled: true,
               variant: 'outline',
+              route: 'local_host',
+            },
+          },
+          {
+            id: 'open_via_control_plane',
+            label: 'Open remotely',
+            action: {
+              intent: 'open',
+              label: 'Open remotely',
+              enabled: true,
+              variant: 'outline',
+              route: 'remote_desktop',
             },
           },
           {
@@ -915,31 +892,73 @@ describe('buildEnvironmentCardModel', () => {
     });
   });
 
+  it('uses provider reconnect as the provider-card action when authorization expired', () => {
+    const controlPlane = buildControlPlaneSummary({
+      status: 'offline',
+      lifecycleStatus: 'suspended',
+      syncState: 'auth_required',
+    });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [testManagedLocalEnvironment('default')],
+        control_planes: [controlPlane],
+      }),
+      controlPlanes: [controlPlane],
+    });
+    const entry = snapshot.environments.find((environment) => environment.kind === 'provider_environment');
+
+    expect(entry?.control_plane_sync_state).toBe('auth_required');
+    expect(buildProviderBackedEnvironmentActionModel(entry!)).toEqual({
+      status_label: 'RECONNECT REQUIRED',
+      status_tone: 'warning',
+      action_presentation: {
+        kind: 'split_button',
+        primary_action: {
+          intent: 'reconnect_provider',
+          label: 'Reconnect Provider',
+          enabled: true,
+          variant: 'default',
+          provider_origin: 'https://cp.example.invalid',
+          provider_id: 'redeven_portal',
+        },
+        primary_action_overlay: {
+          kind: 'tooltip',
+          tone: 'warning',
+          message: 'Desktop needs fresh provider authorization before it can request a one-time Local Environment bootstrap ticket for this Environment.',
+        },
+        menu_button_label: 'Runtime actions',
+        menu_actions: [{
+          id: 'reconnect_provider',
+          label: 'Reconnect Provider',
+          action: {
+            intent: 'reconnect_provider',
+            label: 'Reconnect Provider',
+            enabled: true,
+            variant: 'default',
+            provider_origin: 'https://cp.example.invalid',
+            provider_id: 'redeven_portal',
+          },
+        }],
+      },
+    });
+  });
+
   it('builds provider cards around effective local-serve routes instead of separate local-serve cards', () => {
+    const providerRuntime = {
+      local_ui_url: 'http://127.0.0.1:24001/',
+      desktop_managed: false,
+      ...providerRuntimeState('env_demo'),
+      runtime_service: providerRuntimeService({
+        state: 'openable',
+      }),
+    };
     const attachableLocalServe = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         managed_environments: [
-          testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
-            currentRuntime: {
-              local_ui_url: 'http://127.0.0.1:24001/',
-              desktop_managed: false,
-              runtime_service: {
-                protocol_version: 'redeven-runtime-v1',
-                service_owner: 'external',
-                desktop_managed: false,
-                effective_run_mode: 'local',
-                remote_enabled: false,
-                compatibility: 'compatible',
-                open_readiness: { state: 'openable' },
-                active_workload: {
-                  terminal_count: 0,
-                  session_count: 0,
-                  task_count: 0,
-                  port_forward_count: 0,
-                },
-              },
-            },
+          testManagedLocalEnvironment('default', {
+            currentRuntime: providerRuntime,
           }),
+          testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo'),
         ],
       }),
       controlPlanes: [buildControlPlaneSummary({
@@ -1112,34 +1131,22 @@ describe('buildEnvironmentCardModel', () => {
   });
 
   it('keeps Open disabled while an online runtime is still preparing Env App readiness', () => {
-    const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_preparing', {
+    const managedLocal = testManagedLocalEnvironment('default', {
       currentRuntime: {
         local_ui_url: 'http://127.0.0.1:24001/',
         desktop_managed: true,
-        runtime_service: {
-          protocol_version: 'redeven-runtime-v1',
-          service_owner: 'desktop',
-          desktop_managed: true,
-          effective_run_mode: 'desktop',
-          remote_enabled: false,
-          compatibility: 'compatible',
-          open_readiness: {
+        ...providerRuntimeState('env_preparing'),
+        runtime_service: providerRuntimeService({
             state: 'starting',
             reason_code: 'env_app_gateway_starting',
             message: 'Env App gateway is starting.',
-          },
-          active_workload: {
-            terminal_count: 0,
-            session_count: 0,
-            task_count: 0,
-            port_forward_count: 0,
-          },
-        },
+        }),
       },
     });
+    const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_preparing');
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [localServe],
+        managed_environments: [managedLocal, localServe],
       }),
     });
     const entry = snapshot.environments.find((environment) => environment.id === localServe.id);
@@ -1218,7 +1225,7 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(splitPinnedEnvironmentEntries(snapshot.environments)).toEqual({
       pinned_entries: expect.arrayContaining([
-        expect.objectContaining({ id: 'machine' }),
+        expect.objectContaining({ id: 'local' }),
         expect.objectContaining({ id: 'http://192.168.1.12:24000/' }),
       ]),
       regular_entries: [],

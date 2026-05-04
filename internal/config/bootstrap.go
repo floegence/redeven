@@ -42,21 +42,21 @@ type BootstrapArgs struct {
 }
 
 type bootstrapResponse struct {
-	Direct         *directv1.DirectConnectInfo `json:"direct"`
-	MachineBinding *MachineBinding             `json:"machine_binding"`
+	Direct                  *directv1.DirectConnectInfo `json:"direct"`
+	LocalEnvironmentBinding *LocalEnvironmentBinding    `json:"local_environment_binding"`
 }
 
-type MachineBinding struct {
-	MachinePublicID  string `json:"machine_public_id"`
-	UserPublicID     string `json:"user_public_id,omitempty"`
-	EnvPublicID      string `json:"env_public_id"`
-	Generation       int64  `json:"generation"`
-	Status           string `json:"status,omitempty"`
-	Hostname         string `json:"hostname,omitempty"`
-	OS               string `json:"os,omitempty"`
-	Arch             string `json:"arch,omitempty"`
-	RuntimeVersion   string `json:"runtime_version,omitempty"`
-	LastSeenAtUnixMS int64  `json:"last_seen_at_unix_ms,omitempty"`
+type LocalEnvironmentBinding struct {
+	LocalEnvironmentPublicID string `json:"local_environment_public_id"`
+	UserPublicID             string `json:"user_public_id,omitempty"`
+	EnvPublicID              string `json:"env_public_id"`
+	Generation               int64  `json:"generation"`
+	Status                   string `json:"status,omitempty"`
+	Hostname                 string `json:"hostname,omitempty"`
+	OS                       string `json:"os,omitempty"`
+	Arch                     string `json:"arch,omitempty"`
+	RuntimeVersion           string `json:"runtime_version,omitempty"`
+	LastSeenAtUnixMS         int64  `json:"last_seen_at_unix_ms,omitempty"`
 }
 
 type providerDiscoveryResponse struct {
@@ -64,13 +64,13 @@ type providerDiscoveryResponse struct {
 }
 
 type bootstrapTicketExchangeRequest struct {
-	EnvPublicID     string `json:"env_public_id"`
-	MachinePublicID string `json:"machine_public_id"`
-	AgentInstanceID string `json:"agent_instance_id"`
-	Hostname        string `json:"hostname,omitempty"`
-	OS              string `json:"os,omitempty"`
-	Arch            string `json:"arch,omitempty"`
-	RuntimeVersion  string `json:"runtime_version,omitempty"`
+	EnvPublicID              string `json:"env_public_id"`
+	LocalEnvironmentPublicID string `json:"local_environment_public_id"`
+	AgentInstanceID          string `json:"agent_instance_id"`
+	Hostname                 string `json:"hostname,omitempty"`
+	OS                       string `json:"os,omitempty"`
+	Arch                     string `json:"arch,omitempty"`
+	RuntimeVersion           string `json:"runtime_version,omitempty"`
 }
 
 func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath string, err error) {
@@ -97,10 +97,10 @@ func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath strin
 	}
 
 	agentInstanceID := ""
-	machinePublicID := ""
+	localEnvironmentPublicID := ""
 	if prev != nil {
 		agentInstanceID = strings.TrimSpace(prev.AgentInstanceID)
-		machinePublicID = strings.TrimSpace(prev.MachinePublicID)
+		localEnvironmentPublicID = strings.TrimSpace(prev.LocalEnvironmentPublicID)
 	}
 	if agentInstanceID == "" {
 		agentInstanceID, err = newAgentInstanceID()
@@ -108,32 +108,32 @@ func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath strin
 			return "", err
 		}
 	}
-	if machinePublicID == "" {
-		machinePublicID, err = newMachinePublicID()
+	if localEnvironmentPublicID == "" {
+		localEnvironmentPublicID, err = newLocalEnvironmentPublicID()
 		if err != nil {
 			return "", err
 		}
 	}
 
 	bootstrap, err := exchangeBootstrapTicket(ctx, baseURL, envID, bootstrapTicket, bootstrapTicketExchangeRequest{
-		EnvPublicID:     envID,
-		MachinePublicID: machinePublicID,
-		AgentInstanceID: agentInstanceID,
-		Hostname:        hostnameBestEffort(),
-		OS:              runtime.GOOS,
-		Arch:            runtime.GOARCH,
-		RuntimeVersion:  strings.TrimSpace(args.RuntimeVersion),
+		EnvPublicID:              envID,
+		LocalEnvironmentPublicID: localEnvironmentPublicID,
+		AgentInstanceID:          agentInstanceID,
+		Hostname:                 hostnameBestEffort(),
+		OS:                       runtime.GOOS,
+		Arch:                     runtime.GOARCH,
+		RuntimeVersion:           strings.TrimSpace(args.RuntimeVersion),
 	})
 	if err != nil {
 		return "", err
 	}
 	direct := bootstrap.Direct
-	binding := bootstrap.MachineBinding
+	binding := bootstrap.LocalEnvironmentBinding
 	if binding == nil {
-		return "", errors.New("invalid bootstrap exchange response: missing machine_binding")
+		return "", errors.New("invalid bootstrap exchange response: missing local_environment_binding")
 	}
-	if strings.TrimSpace(binding.MachinePublicID) != machinePublicID {
-		return "", errors.New("invalid bootstrap exchange response: machine_public_id mismatch")
+	if strings.TrimSpace(binding.LocalEnvironmentPublicID) != localEnvironmentPublicID {
+		return "", errors.New("invalid bootstrap exchange response: local_environment_public_id mismatch")
 	}
 	if strings.TrimSpace(binding.EnvPublicID) != envID {
 		return "", errors.New("invalid bootstrap exchange response: env_public_id mismatch")
@@ -178,19 +178,19 @@ func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath strin
 	}
 
 	cfg := &Config{
-		ControlplaneBaseURL:    baseURL,
-		ControlplaneProviderID: providerID,
-		EnvironmentID:          envID,
-		MachinePublicID:        machinePublicID,
-		BindingGeneration:      binding.Generation,
-		AgentInstanceID:        agentInstanceID,
-		Direct:                 direct,
-		AI:                     nil,
-		PermissionPolicy:       nil,
-		AgentHomeDir:           agentHomeDir,
-		Shell:                  shell,
-		LogFormat:              logFormat,
-		LogLevel:               logLevel,
+		ControlplaneBaseURL:      baseURL,
+		ControlplaneProviderID:   providerID,
+		EnvironmentID:            envID,
+		LocalEnvironmentPublicID: localEnvironmentPublicID,
+		BindingGeneration:        binding.Generation,
+		AgentInstanceID:          agentInstanceID,
+		Direct:                   direct,
+		AI:                       nil,
+		PermissionPolicy:         nil,
+		AgentHomeDir:             agentHomeDir,
+		Shell:                    shell,
+		LogFormat:                logFormat,
+		LogLevel:                 logLevel,
 	}
 
 	// Write permission_policy explicitly so users can audit what is enabled locally.
@@ -332,12 +332,12 @@ func newAgentInstanceID() (string, error) {
 	return "ai_" + base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-func newMachinePublicID() (string, error) {
+func newLocalEnvironmentPublicID() (string, error) {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
-	return "mach_" + base64.RawURLEncoding.EncodeToString(b), nil
+	return "le_" + base64.RawURLEncoding.EncodeToString(b), nil
 }
 
 func hostnameBestEffort() string {

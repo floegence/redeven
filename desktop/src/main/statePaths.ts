@@ -1,10 +1,11 @@
 import os from 'node:os';
 import path from 'node:path';
 
-const MACHINE_SCOPE_KEY = 'machine';
+const LOCAL_ENVIRONMENT_SCOPE_KEY = 'local_environment';
+const LOCAL_ENVIRONMENT_SCOPE_DIR = 'local-environment';
 
 export type DesktopManagedScopeRef =
-  | Readonly<{ kind: 'machine'; name?: string }>
+  | Readonly<{ kind: 'local_environment'; name?: string }>
   | Readonly<{ kind: 'local'; name?: string }>
   | Readonly<{ kind: 'named'; name: string }>
   | Readonly<{ kind: 'controlplane'; provider_origin?: string; provider_key?: string; env_public_id: string }>;
@@ -70,8 +71,8 @@ export function resolveStateRoot(
 }
 
 function stateLayoutForScope(scope: DesktopManagedScopeRef, stateRoot: string): DesktopManagedStateLayout {
-  const scopeKey = MACHINE_SCOPE_KEY;
-  const scopeDir = path.join(stateRoot, MACHINE_SCOPE_KEY);
+  const scopeKey = LOCAL_ENVIRONMENT_SCOPE_KEY;
+  const scopeDir = path.join(stateRoot, LOCAL_ENVIRONMENT_SCOPE_DIR);
 
   return {
     stateRoot,
@@ -122,7 +123,7 @@ export function defaultManagedStateLayout(
   homedir: () => string = os.homedir,
   override?: string,
 ): DesktopManagedStateLayout {
-  return stateLayoutForScope({ kind: 'machine', name: MACHINE_SCOPE_KEY }, resolveStateRoot(env, homedir, override));
+  return stateLayoutForScope({ kind: 'local_environment', name: 'local' }, resolveStateRoot(env, homedir, override));
 }
 
 export function localManagedStateLayout(

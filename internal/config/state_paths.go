@@ -12,8 +12,10 @@ import (
 var ErrHomeDirUnavailable = errors.New("user home directory is unavailable")
 
 const (
-	DefaultMachineScopeName = "machine"
-	stateRootEnvName        = "REDEVEN_STATE_ROOT"
+	DefaultLocalEnvironmentScopeName = "local"
+	localEnvironmentScopeKey         = "local_environment"
+	localEnvironmentScopeDirName     = "local-environment"
+	stateRootEnvName                 = "REDEVEN_STATE_ROOT"
 )
 
 var (
@@ -24,7 +26,7 @@ var (
 type ScopeKind string
 
 const (
-	ScopeKindMachine ScopeKind = "machine"
+	ScopeKindLocalEnvironment ScopeKind = "local_environment"
 )
 
 type ScopeRef struct {
@@ -60,19 +62,19 @@ func DefaultConfigPath() (string, error) {
 	return layout.ConfigPath, nil
 }
 
-// DefaultStateLayout returns the single machine layout rooted under the resolved state root.
+// DefaultStateLayout returns the single Local Environment layout rooted under the resolved state root.
 func DefaultStateLayout() (StateLayout, error) {
-	return MachineStateLayout("")
+	return LocalEnvironmentStateLayout("")
 }
 
-func MachineStateLayout(stateRoot string) (StateLayout, error) {
-	return StateLayoutForScope(ScopeRef{Kind: ScopeKindMachine, Name: DefaultMachineScopeName}, stateRoot)
+func LocalEnvironmentStateLayout(stateRoot string) (StateLayout, error) {
+	return StateLayoutForScope(ScopeRef{Kind: ScopeKindLocalEnvironment, Name: DefaultLocalEnvironmentScopeName}, stateRoot)
 }
 
 func ControlPlaneStateLayout(controlplaneBaseURL string, envID string, stateRoot string) (StateLayout, error) {
 	_ = controlplaneBaseURL
 	_ = envID
-	return MachineStateLayout(stateRoot)
+	return LocalEnvironmentStateLayout(stateRoot)
 }
 
 func ParseScopeRef(raw string) (ScopeRef, error) {
@@ -80,10 +82,10 @@ func ParseScopeRef(raw string) (ScopeRef, error) {
 	switch {
 	case value == "":
 		return ScopeRef{}, errors.New("missing scope")
-	case value == string(ScopeKindMachine):
-		return ScopeRef{Kind: ScopeKindMachine, Name: DefaultMachineScopeName}, nil
+	case value == string(ScopeKindLocalEnvironment):
+		return ScopeRef{Kind: ScopeKindLocalEnvironment, Name: DefaultLocalEnvironmentScopeName}, nil
 	default:
-		return ScopeRef{}, fmt.Errorf("invalid scope %q (supported: machine)", value)
+		return ScopeRef{}, fmt.Errorf("invalid scope %q (supported: local_environment)", value)
 	}
 }
 
@@ -157,9 +159,9 @@ func stateLayoutForScopeResolvedRoot(scope ScopeRef, stateRoot string) (StateLay
 	var scopeKey string
 	var scopeDir string
 	switch normalizedScope.Kind {
-	case ScopeKindMachine:
-		scopeKey = string(ScopeKindMachine)
-		scopeDir = filepath.Join(stateRoot, string(ScopeKindMachine))
+	case ScopeKindLocalEnvironment:
+		scopeKey = localEnvironmentScopeKey
+		scopeDir = filepath.Join(stateRoot, localEnvironmentScopeDirName)
 	default:
 		return StateLayout{}, fmt.Errorf("unsupported scope kind %q", normalizedScope.Kind)
 	}
@@ -184,12 +186,12 @@ func stateLayoutForScopeResolvedRoot(scope ScopeRef, stateRoot string) (StateLay
 
 func normalizeScopeRef(scope ScopeRef) (ScopeRef, error) {
 	switch scope.Kind {
-	case ScopeKindMachine, "":
-		name, err := normalizeScopeName(scope.Name, DefaultMachineScopeName)
+	case ScopeKindLocalEnvironment, "":
+		name, err := normalizeScopeName(scope.Name, DefaultLocalEnvironmentScopeName)
 		if err != nil {
 			return ScopeRef{}, err
 		}
-		return ScopeRef{Kind: ScopeKindMachine, Name: name}, nil
+		return ScopeRef{Kind: ScopeKindLocalEnvironment, Name: name}, nil
 	default:
 		return ScopeRef{}, fmt.Errorf("unsupported scope kind %q", scope.Kind)
 	}

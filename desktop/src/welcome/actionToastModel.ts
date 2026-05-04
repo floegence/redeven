@@ -1,9 +1,19 @@
 export type DesktopActionToastTone = 'info' | 'success' | 'warning' | 'error';
 
+export type DesktopActionToastAction = Readonly<{
+  kind: 'reconnect_control_plane';
+  label: string;
+  provider_origin: string;
+  provider_id?: string;
+}>;
+
 export type DesktopActionToast = Readonly<{
   id: number;
   tone: DesktopActionToastTone;
+  title?: string;
   message: string;
+  action?: DesktopActionToastAction;
+  auto_dismiss?: boolean;
 }>;
 
 export const DESKTOP_ACTION_TOAST_LIMIT = 3;
@@ -24,6 +34,18 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
+function actionKey(action: DesktopActionToastAction | undefined): string {
+  if (!action) {
+    return '';
+  }
+  return [
+    action.kind,
+    compact(action.label),
+    compact(action.provider_origin),
+    compact(action.provider_id),
+  ].join(':');
+}
+
 export function queueDesktopActionToast(
   args: QueueDesktopActionToastArgs,
 ): QueueDesktopActionToastResult {
@@ -39,14 +61,24 @@ export function queueDesktopActionToast(
   const limit = Number.isInteger(args.limit) && Number(args.limit) > 0
     ? Number(args.limit)
     : DESKTOP_ACTION_TOAST_LIMIT;
+  const title = compact(args.next.title);
+  const nextActionKey = actionKey(args.next.action);
   const duplicateIDs = args.current
-    .filter((toast) => toast.message === message && toast.tone === args.next.tone)
+    .filter((toast) => (
+      toast.message === message
+      && toast.tone === args.next.tone
+      && compact(toast.title) === title
+      && actionKey(toast.action) === nextActionKey
+    ))
     .map((toast) => toast.id);
   const deduped = args.current.filter((toast) => !duplicateIDs.includes(toast.id));
   const nextToast: DesktopActionToast = {
     id: args.next.id,
     tone: args.next.tone,
+    ...(title !== '' ? { title } : {}),
     message,
+    ...(args.next.action ? { action: args.next.action } : {}),
+    ...(args.next.auto_dismiss === false ? { auto_dismiss: false } : {}),
   };
   const combined = [...deduped, nextToast];
   const overflowCount = Math.max(0, combined.length - limit);

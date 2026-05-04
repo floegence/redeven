@@ -32,6 +32,14 @@ const testProvider = normalizeDesktopControlPlaneProvider({
   documentation_url: 'https://cp.example.invalid/docs/control-plane-providers',
 });
 
+function providerRuntimeState(envPublicID = 'env_demo') {
+  return {
+    controlplane_base_url: 'https://cp.example.invalid',
+    controlplane_provider_id: 'redeven_portal',
+    env_public_id: envPublicID,
+  };
+}
+
 describe('desktopWelcomeState', () => {
   it('builds launcher snapshots around open windows and saved environments', () => {
     const managedLocal = testManagedLocalEnvironment('default', {
@@ -122,10 +130,10 @@ describe('desktopWelcomeState', () => {
     expect(snapshot.action_progress).toEqual([]);
     expect(snapshot.open_windows).toEqual([
       expect.objectContaining({
-        session_key: 'env:machine:local_host',
+        session_key: 'env:local:local_host',
         target_kind: 'managed_environment',
-        environment_id: 'machine',
-        label: 'Local Machine',
+        environment_id: 'local',
+        label: 'Local Environment',
         local_ui_url: 'http://localhost:23998/',
       }),
       expect.objectContaining({
@@ -137,9 +145,9 @@ describe('desktopWelcomeState', () => {
     ]);
     expect(snapshot.environments).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        id: 'machine',
+        id: 'local',
         kind: 'managed_environment',
-        label: 'Local Machine',
+        label: 'Local Environment',
         pinned: false,
         tag: 'Open',
         category: 'managed',
@@ -149,7 +157,7 @@ describe('desktopWelcomeState', () => {
         can_delete: false,
         can_save: false,
         managed_environment_kind: 'local',
-        managed_environment_name: 'machine',
+        managed_environment_name: 'local',
         managed_local_ui_bind: '0.0.0.0:24000',
         managed_local_runtime_state: 'running_desktop',
         managed_local_runtime_url: 'http://localhost:23998/',
@@ -207,7 +215,7 @@ describe('desktopWelcomeState', () => {
     ]);
     expect(snapshot.suggested_remote_url).toBe('http://192.168.1.99:24000/');
     expect(snapshot.issue?.title).toBe('Unable to open that Environment');
-    expect(snapshot.settings_surface.window_title).toBe('Local Machine Settings');
+    expect(snapshot.settings_surface.window_title).toBe('Local Environment Settings');
   });
 
   it('carries active launcher action progress in the welcome snapshot', () => {
@@ -240,17 +248,17 @@ describe('desktopWelcomeState', () => {
     }]);
   });
 
-  it('keeps the single local machine protected', () => {
+  it('keeps the single Local Environment protected', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         managed_environments: [testManagedLocalEnvironment('default')],
       }),
     });
 
-    expect(snapshot.environments.filter((environment) => environment.id === 'machine')).toEqual([
+    expect(snapshot.environments.filter((environment) => environment.id === 'local')).toEqual([
       expect.objectContaining({
-        id: 'machine',
-        label: 'Local Machine',
+        id: 'local',
+        label: 'Local Environment',
         can_delete: false,
       }),
     ]);
@@ -288,7 +296,7 @@ describe('desktopWelcomeState', () => {
 
     expect(snapshot.environments).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        id: 'machine',
+        id: 'local',
         local_ui_url: 'http://127.0.0.1:24001/',
         managed_local_runtime_state: 'running_external',
         managed_local_runtime_url: 'http://127.0.0.1:24001/',
@@ -377,7 +385,7 @@ describe('desktopWelcomeState', () => {
     });
 
     expect(snapshot.environments).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'machine', kind: 'managed_environment' }),
+      expect.objectContaining({ id: 'local', kind: 'managed_environment' }),
       expect.objectContaining({
         id: 'http://192.168.1.77:24000/',
         kind: 'external_local_ui',
@@ -571,8 +579,8 @@ describe('desktopWelcomeState', () => {
 
     expect(snapshot.surface).toBe('environment_settings');
     expect(snapshot.close_action_label).toBe('Quit');
-    expect(snapshot.settings_surface.window_title).toBe('Local Machine Settings');
-    expect(snapshot.settings_surface.save_label).toBe('Save Local Machine Settings');
+    expect(snapshot.settings_surface.window_title).toBe('Local Environment Settings');
+    expect(snapshot.settings_surface.save_label).toBe('Save Local Environment Settings');
     expect(snapshot.settings_surface.access_mode).toBe('local_only');
     expect(snapshot.settings_surface.summary_items).toEqual(expect.arrayContaining([
       expect.objectContaining({
@@ -617,23 +625,25 @@ describe('desktopWelcomeState', () => {
 
   it('projects provider local-serve state onto the aggregated provider card', () => {
     const managedControlPlane = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo');
+    const managedLocal = testManagedLocalEnvironment('default', {
+      access: testManagedAccess({
+        local_ui_bind: 'localhost:23998',
+      }),
+      currentRuntime: {
+        local_ui_url: 'http://localhost:23998/',
+        desktop_managed: true,
+        effective_run_mode: 'desktop',
+        ...providerRuntimeState('env_demo'),
+      },
+    });
     const localTarget = buildManagedEnvironmentDesktopTarget(managedControlPlane, { route: 'local_host' });
     const remoteTarget = buildManagedEnvironmentDesktopTarget(managedControlPlane, { route: 'remote_desktop' });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [managedControlPlane],
+        managed_environments: [managedLocal, managedControlPlane],
       }),
       openSessions: [
-        {
-          session_key: localTarget.session_key,
-          target: localTarget,
-          lifecycle: 'open',
-          entry_url: 'http://localhost:23998/',
-          startup: {
-            local_ui_url: 'http://localhost:23998/',
-            local_ui_urls: ['http://localhost:23998/'],
-          },
-        },
+        testManagedSession(managedControlPlane, 'http://localhost:23998/', 'open', providerRuntimeState('env_demo')),
         {
           session_key: controlPlaneDesktopSessionKey('https://cp.example.invalid', 'env_demo'),
           target: remoteTarget,
@@ -830,7 +840,7 @@ describe('desktopWelcomeState', () => {
       provider_local_runtime_configured: true,
       provider_local_runtime_state: 'not_running',
       can_edit: true,
-      can_delete: true,
+      can_delete: false,
     }));
   });
 
@@ -907,7 +917,7 @@ describe('desktopWelcomeState', () => {
     ]));
   });
 
-  it('keeps dual-route entries visible when remote access is removed and marks their machine state as controlplane', () => {
+  it('keeps dual-route entries visible when remote access is removed and marks their Local Environment state as controlplane', () => {
     const freshSyncAt = Date.now();
     expect(testProvider).toBeTruthy();
     if (!testProvider) {
@@ -980,10 +990,29 @@ describe('desktopWelcomeState', () => {
     expect(issue.diagnostics_copy).toContain('lock owner pid: 1234');
   });
 
+  it('turns startup validation reports into startup recovery copy', () => {
+    const issue = buildBlockedLaunchIssue({
+      status: 'blocked',
+      code: 'startup_invalid',
+      message: 'incomplete bootstrap flags for `redeven run`: missing flag one bootstrap ticket (--bootstrap-ticket or --bootstrap-ticket-env)',
+      diagnostics: {
+        state_dir: '/Users/test/.redeven/local-environment',
+        config_path: '/Users/test/.redeven/local-environment/config.json',
+        command: 'redeven run',
+      },
+    });
+
+    expect(issue.scope).toBe('startup');
+    expect(issue.title).toBe('Local Environment startup needs a setting');
+    expect(issue.message).toContain('missing flag one bootstrap ticket');
+    expect(issue.diagnostics_copy).toContain('config path: /Users/test/.redeven/local-environment/config.json');
+    expect(issue.diagnostics_copy).toContain('command: redeven run');
+  });
+
   it('adds provider diagnostics to control plane issues and maps titles by failure class', () => {
     const issue = buildControlPlaneIssue(
       'provider_tls_untrusted',
-      'Desktop could not verify the provider certificate. Trust that certificate on this machine, then try again.',
+      'Desktop could not verify the provider certificate. Trust that certificate on this device, then try again.',
       {
         providerOrigin: 'https://dev.redeven.test',
         status: 502,

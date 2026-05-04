@@ -28,6 +28,12 @@ type RuntimeProbeStatus = Readonly<{
   runtime_service?: RuntimeServiceSnapshot;
 }>;
 
+const PROVIDER_BINDING_STARTUP_FIELDS = [
+  'controlplane_base_url',
+  'controlplane_provider_id',
+  'env_public_id',
+] as const satisfies readonly (keyof StartupReport)[];
+
 type EnvAppShellValidation = Readonly<{
   ok: boolean;
   assetPaths: readonly string[];
@@ -284,9 +290,15 @@ export async function loadAttachableRuntimeState(
 
   for (const candidateURL of candidateStartupURLs(startup)) {
     const status = await probeRedevenLocalUI(candidateURL, timeoutMs);
-    if (status) {
+      if (status) {
+      const providerBindingFields = Object.fromEntries(
+        PROVIDER_BINDING_STARTUP_FIELDS.flatMap((key) => (
+          startup[key] ? [[key, startup[key]]] : []
+        )),
+      ) as Partial<StartupReport>;
       return {
         ...startup,
+        ...providerBindingFields,
         local_ui_url: candidateURL,
         local_ui_urls: candidateStartupURLs({
           ...startup,

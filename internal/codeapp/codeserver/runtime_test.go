@@ -40,17 +40,17 @@ func TestRuntimeManagerSelectedManagedVersionDoesNotSilentlyFallBackToSystem(t *
 	}); err != nil {
 		t.Fatalf("saveScopeSelection() error = %v", err)
 	}
-	if err := saveMachineRuntimeState(stateRoot, machineRuntimeState{
+	if err := saveLocalEnvironmentRuntimeState(stateRoot, localEnvironmentRuntimeState{
 		DefaultVersion: "",
-		Versions:       map[string]machineRuntimeVersion{},
-		Selections: map[string]machineRuntimeSelection{
+		Versions:       map[string]localEnvironmentRuntimeVersion{},
+		Selections: map[string]localEnvironmentRuntimeSelection{
 			filepath.Clean(stateDir): {
 				Version:         "4.109.1",
 				UpdatedAtUnixMs: time.Now().UnixMilli(),
 			},
 		},
 	}); err != nil {
-		t.Fatalf("saveMachineRuntimeState() error = %v", err)
+		t.Fatalf("saveLocalEnvironmentRuntimeState() error = %v", err)
 	}
 
 	mgr := NewRuntimeManager(RuntimeManagerOptions{
@@ -86,15 +86,15 @@ func TestRuntimeManagerStatusKeepsSelectedManagedRuntimeVisibleWhenOverrideIsAct
 	}); err != nil {
 		t.Fatalf("saveScopeSelection() error = %v", err)
 	}
-	if err := saveMachineRuntimeState(stateRoot, machineRuntimeState{
-		Versions: map[string]machineRuntimeVersion{
+	if err := saveLocalEnvironmentRuntimeState(stateRoot, localEnvironmentRuntimeState{
+		Versions: map[string]localEnvironmentRuntimeVersion{
 			"4.109.1": {InstalledAtUnixMs: time.Now().UnixMilli(), BinaryRelPath: filepath.Join("bin", codeServerBinaryName())},
 		},
-		Selections: map[string]machineRuntimeSelection{
+		Selections: map[string]localEnvironmentRuntimeSelection{
 			filepath.Clean(stateDir): {Version: "4.109.1", UpdatedAtUnixMs: time.Now().UnixMilli()},
 		},
 	}); err != nil {
-		t.Fatalf("saveMachineRuntimeState() error = %v", err)
+		t.Fatalf("saveLocalEnvironmentRuntimeState() error = %v", err)
 	}
 
 	mgr := NewRuntimeManager(RuntimeManagerOptions{
@@ -140,8 +140,8 @@ func TestRuntimeManagerInstallPromotesSharedVersionAndSelectsEnvironment(t *test
 	if final.EnvironmentSelectionVersion != "4.109.1" {
 		t.Fatalf("environment_selection_version=%q, want 4.109.1", final.EnvironmentSelectionVersion)
 	}
-	if final.MachineDefaultVersion != "4.109.1" {
-		t.Fatalf("machine_default_version=%q, want 4.109.1", final.MachineDefaultVersion)
+	if final.LocalEnvironmentDefaultVersion != "4.109.1" {
+		t.Fatalf("local_environment_default_version=%q, want 4.109.1", final.LocalEnvironmentDefaultVersion)
 	}
 	if _, err := os.Stat(sharedBin); err != nil {
 		t.Fatalf("shared runtime missing: %v", err)
@@ -179,32 +179,32 @@ func TestRuntimeManagerInstallReusesExistingSharedVersion(t *testing.T) {
 	if final.EnvironmentSelectionVersion != "4.109.1" {
 		t.Fatalf("environment_selection_version=%q, want 4.109.1", final.EnvironmentSelectionVersion)
 	}
-	state, err := loadMachineRuntimeState(stateRoot)
+	state, err := loadLocalEnvironmentRuntimeState(stateRoot)
 	if err != nil {
-		t.Fatalf("loadMachineRuntimeState() error = %v", err)
+		t.Fatalf("loadLocalEnvironmentRuntimeState() error = %v", err)
 	}
 	if len(state.Versions) != 1 {
 		t.Fatalf("len(versions)=%d, want 1", len(state.Versions))
 	}
 }
 
-func TestRuntimeManagerRemoveEnvironmentSelectionFallsBackToMachineDefault(t *testing.T) {
+func TestRuntimeManagerRemoveEnvironmentSelectionFallsBackToLocalEnvironmentDefault(t *testing.T) {
 	stateDir := t.TempDir()
 	stateRoot := t.TempDir()
 	writeFakeCodeServerBinary(t, filepath.Join(sharedVersionRoot(stateRoot, "4.108.2"), "bin", codeServerBinaryName()), "4.108.2")
 	writeFakeCodeServerBinary(t, filepath.Join(sharedVersionRoot(stateRoot, "4.109.1"), "bin", codeServerBinaryName()), "4.109.1")
 
-	if err := saveMachineRuntimeState(stateRoot, machineRuntimeState{
+	if err := saveLocalEnvironmentRuntimeState(stateRoot, localEnvironmentRuntimeState{
 		DefaultVersion: "4.108.2",
-		Versions: map[string]machineRuntimeVersion{
+		Versions: map[string]localEnvironmentRuntimeVersion{
 			"4.108.2": {InstalledAtUnixMs: time.Now().UnixMilli(), BinaryRelPath: filepath.Join("bin", codeServerBinaryName())},
 			"4.109.1": {InstalledAtUnixMs: time.Now().UnixMilli(), BinaryRelPath: filepath.Join("bin", codeServerBinaryName())},
 		},
-		Selections: map[string]machineRuntimeSelection{
+		Selections: map[string]localEnvironmentRuntimeSelection{
 			filepath.Clean(stateDir): {Version: "4.109.1", UpdatedAtUnixMs: time.Now().UnixMilli()},
 		},
 	}); err != nil {
-		t.Fatalf("saveMachineRuntimeState() error = %v", err)
+		t.Fatalf("saveLocalEnvironmentRuntimeState() error = %v", err)
 	}
 	if err := saveScopeSelection(stateDir, scopeSelectionState{
 		SelectedVersion: "4.109.1",
@@ -218,8 +218,8 @@ func TestRuntimeManagerRemoveEnvironmentSelectionFallsBackToMachineDefault(t *te
 	if err != nil {
 		t.Fatalf("RemoveEnvironmentSelection() error = %v", err)
 	}
-	if status.EnvironmentSelectionSource != "machine_default" {
-		t.Fatalf("environment_selection_source=%q, want machine_default", status.EnvironmentSelectionSource)
+	if status.EnvironmentSelectionSource != "local_environment_default" {
+		t.Fatalf("environment_selection_source=%q, want local_environment_default", status.EnvironmentSelectionSource)
 	}
 	if status.EnvironmentSelectionVersion != "4.108.2" {
 		t.Fatalf("environment_selection_version=%q, want 4.108.2", status.EnvironmentSelectionVersion)
@@ -229,44 +229,44 @@ func TestRuntimeManagerRemoveEnvironmentSelectionFallsBackToMachineDefault(t *te
 	}
 }
 
-func TestRuntimeManagerRemoveMachineVersionEnforcesSafetyChecks(t *testing.T) {
+func TestRuntimeManagerRemoveLocalEnvironmentVersionEnforcesSafetyChecks(t *testing.T) {
 	stateDir := t.TempDir()
 	stateRoot := t.TempDir()
 	writeFakeCodeServerBinary(t, filepath.Join(sharedVersionRoot(stateRoot, "4.108.2"), "bin", codeServerBinaryName()), "4.108.2")
 	writeFakeCodeServerBinary(t, filepath.Join(sharedVersionRoot(stateRoot, "4.109.1"), "bin", codeServerBinaryName()), "4.109.1")
-	if err := saveMachineRuntimeState(stateRoot, machineRuntimeState{
+	if err := saveLocalEnvironmentRuntimeState(stateRoot, localEnvironmentRuntimeState{
 		DefaultVersion: "4.108.2",
-		Versions: map[string]machineRuntimeVersion{
+		Versions: map[string]localEnvironmentRuntimeVersion{
 			"4.108.2": {InstalledAtUnixMs: time.Now().UnixMilli(), BinaryRelPath: filepath.Join("bin", codeServerBinaryName())},
 			"4.109.1": {InstalledAtUnixMs: time.Now().UnixMilli(), BinaryRelPath: filepath.Join("bin", codeServerBinaryName())},
 		},
-		Selections: map[string]machineRuntimeSelection{
+		Selections: map[string]localEnvironmentRuntimeSelection{
 			filepath.Clean(stateDir): {Version: "4.109.1", UpdatedAtUnixMs: time.Now().UnixMilli()},
 		},
 	}); err != nil {
-		t.Fatalf("saveMachineRuntimeState() error = %v", err)
+		t.Fatalf("saveLocalEnvironmentRuntimeState() error = %v", err)
 	}
 
 	mgr := NewRuntimeManager(RuntimeManagerOptions{StateDir: stateDir, StateRoot: stateRoot})
-	if _, err := mgr.RemoveMachineVersion(context.Background(), "4.108.2"); err != nil {
-		t.Fatalf("RemoveMachineVersion(default) returned error = %v, want nil status kickoff", err)
+	if _, err := mgr.RemoveLocalEnvironmentVersion(context.Background(), "4.108.2"); err != nil {
+		t.Fatalf("RemoveLocalEnvironmentVersion(default) returned error = %v, want nil status kickoff", err)
 	}
 	final := waitForOperationState(t, mgr, RuntimeOperationStateFailed)
-	if !strings.Contains(final.Operation.LastError, "machine default") {
-		t.Fatalf("last_error=%q, want machine default guidance", final.Operation.LastError)
+	if !strings.Contains(final.Operation.LastError, "Local Environment default") {
+		t.Fatalf("last_error=%q, want Local Environment default guidance", final.Operation.LastError)
 	}
 
-	state, err := loadMachineRuntimeState(stateRoot)
+	state, err := loadLocalEnvironmentRuntimeState(stateRoot)
 	if err != nil {
-		t.Fatalf("loadMachineRuntimeState() error = %v", err)
+		t.Fatalf("loadLocalEnvironmentRuntimeState() error = %v", err)
 	}
 	state.DefaultVersion = ""
-	if err := saveMachineRuntimeState(stateRoot, state); err != nil {
-		t.Fatalf("saveMachineRuntimeState() error = %v", err)
+	if err := saveLocalEnvironmentRuntimeState(stateRoot, state); err != nil {
+		t.Fatalf("saveLocalEnvironmentRuntimeState() error = %v", err)
 	}
 
-	if _, err := mgr.RemoveMachineVersion(context.Background(), "4.109.1"); err != nil {
-		t.Fatalf("RemoveMachineVersion(selected) returned error = %v, want nil status kickoff", err)
+	if _, err := mgr.RemoveLocalEnvironmentVersion(context.Background(), "4.109.1"); err != nil {
+		t.Fatalf("RemoveLocalEnvironmentVersion(selected) returned error = %v, want nil status kickoff", err)
 	}
 	final = waitForOperationState(t, mgr, RuntimeOperationStateFailed)
 	if !strings.Contains(final.Operation.LastError, "selected by one or more environments") {
@@ -274,11 +274,11 @@ func TestRuntimeManagerRemoveMachineVersionEnforcesSafetyChecks(t *testing.T) {
 	}
 
 	delete(state.Selections, filepath.Clean(stateDir))
-	if err := saveMachineRuntimeState(stateRoot, state); err != nil {
-		t.Fatalf("saveMachineRuntimeState() error = %v", err)
+	if err := saveLocalEnvironmentRuntimeState(stateRoot, state); err != nil {
+		t.Fatalf("saveLocalEnvironmentRuntimeState() error = %v", err)
 	}
-	if _, err := mgr.RemoveMachineVersion(context.Background(), "4.109.1"); err != nil {
-		t.Fatalf("RemoveMachineVersion(removable) returned error = %v", err)
+	if _, err := mgr.RemoveLocalEnvironmentVersion(context.Background(), "4.109.1"); err != nil {
+		t.Fatalf("RemoveLocalEnvironmentVersion(removable) returned error = %v", err)
 	}
 	final = waitForOperationState(t, mgr, RuntimeOperationStateSucceeded)
 	if final.Operation.TargetVersion != "4.109.1" {
@@ -294,15 +294,15 @@ func TestResolveBinaryReturnsSelectedManagedRuntime(t *testing.T) {
 	stateRoot := t.TempDir()
 	managedBin := filepath.Join(sharedVersionRoot(stateRoot, "4.109.1"), "bin", codeServerBinaryName())
 	writeFakeCodeServerBinary(t, managedBin, "4.109.1")
-	if err := saveMachineRuntimeState(stateRoot, machineRuntimeState{
-		Versions: map[string]machineRuntimeVersion{
+	if err := saveLocalEnvironmentRuntimeState(stateRoot, localEnvironmentRuntimeState{
+		Versions: map[string]localEnvironmentRuntimeVersion{
 			"4.109.1": {InstalledAtUnixMs: time.Now().UnixMilli(), BinaryRelPath: filepath.Join("bin", codeServerBinaryName())},
 		},
-		Selections: map[string]machineRuntimeSelection{
+		Selections: map[string]localEnvironmentRuntimeSelection{
 			filepath.Clean(stateDir): {Version: "4.109.1", UpdatedAtUnixMs: time.Now().UnixMilli()},
 		},
 	}); err != nil {
-		t.Fatalf("saveMachineRuntimeState() error = %v", err)
+		t.Fatalf("saveLocalEnvironmentRuntimeState() error = %v", err)
 	}
 	if err := saveScopeSelection(stateDir, scopeSelectionState{
 		SelectedVersion: "4.109.1",

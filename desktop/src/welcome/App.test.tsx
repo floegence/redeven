@@ -94,7 +94,7 @@ describe('DesktopWelcomeShell', () => {
       surface_title: 'Connect Environment',
       connect_heading: 'Connect Environment',
       primary_action_label: 'Open Environment',
-      settings_save_label: 'Save Local Machine Settings',
+      settings_save_label: 'Save Local Environment Settings',
     });
     expect(shellStatus(snapshot)).toEqual({
       tone: 'disconnected',
@@ -123,9 +123,9 @@ describe('DesktopWelcomeShell', () => {
       surface_title: 'Environment Settings',
       connect_heading: 'Connect Environment',
       primary_action_label: 'Open Environment',
-      settings_save_label: 'Save Local Machine Settings',
+      settings_save_label: 'Save Local Environment Settings',
     });
-    expect(snapshot.settings_surface.window_title).toBe('Local Machine Settings');
+    expect(snapshot.settings_surface.window_title).toBe('Local Environment Settings');
     expect(snapshot.settings_surface.access_mode).toBe('shared_local_network');
     expect(snapshot.settings_surface.password_state_label).toBe('Password configured');
     expect(snapshot.settings_surface.draft.local_ui_password).toBe('');
@@ -221,7 +221,7 @@ describe('DesktopWelcomeShell', () => {
 
     expect(filterEnvironmentLibrary(snapshot, '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)).toEqual([
       expect.objectContaining({
-        id: 'machine',
+        id: 'local',
         category: 'managed',
         managed_environment_kind: 'local',
       }),
@@ -519,9 +519,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('function EnvironmentPrimaryActionPanel');
     expect(appSrc).toContain('function serveRuntimeLocally');
     expect(appSrc).not.toContain('function openProviderLocalServeDialog');
-    expect(appSrc).toContain("environment.provider_local_runtime_configured !== true");
     expect(appSrc).toContain('openSettingsSurface(environment.id);');
     expect(appSrc).toContain("return openProviderEnvironment(environment, errorTarget, 'local_host');");
+    expect(appSrc).toContain('return startEnvironmentRuntime(environment, errorTarget);');
     expect(appSrc).toContain('Refresh runtime status');
     expect(appSrc).toContain('Refresh runtime statuses');
     expect(appSrc).toContain('primary_action_overlay');
@@ -642,7 +642,10 @@ describe('DesktopWelcomeShell', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain('launcherActionFailurePresentation');
-    expect(appSrc).toContain('showActionToast(presentation.message, presentation.tone);');
+    expect(appSrc).toContain('title: presentation.title');
+    expect(appSrc).toContain('action: presentation.action');
+    expect(appSrc).toContain('autoDismiss: presentation.auto_dismiss');
+    expect(appSrc).toContain('runToastAction={runActionToastAction}');
     expect(appSrc).not.toContain('IssueCard');
     expect(appSrc).not.toContain('EnvironmentInlineNotice');
     expect(appSrc).not.toContain('redeven-console-banner--error');
@@ -687,6 +690,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('props.feedback');
     expect(styles).toContain('.redeven-desktop-toast-viewport');
     expect(styles).toContain('.redeven-desktop-toast');
+    expect(styles).toContain('.redeven-desktop-toast__action');
   });
 
   it('keeps environment cards stable by rendering them directly instead of replaying entry animations', () => {
@@ -696,22 +700,23 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('<AnimatedCard');
   });
 
-  it('includes SSH connection mode copy inside the connection dialog source', () => {
+  it('keeps the New Environment dialog focused on Redeven URLs and SSH hosts', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain('Name</label>');
     expect(appSrc).not.toContain('Environment Name');
     expect(appSrc).toContain("label: 'Redeven URL'");
     expect(appSrc).toContain("label: 'SSH Host'");
-    expect(appSrc).toContain('Run a Desktop-managed Redeven environment on this device.');
-    expect(appSrc).toContain('Local environments are created independently and are not bound directly to a provider environment.');
+    expect(appSrc).not.toContain('Run a Desktop-managed Redeven environment on this device.');
+    expect(appSrc).not.toContain('Local environments are created independently and are not bound directly to a provider environment.');
+    expect(appSrc).toContain('Open a Redeven URL or connect over SSH');
     expect(appSrc).not.toContain('Create a local serve runtime for this provider environment on this Mac.');
     expect(appSrc).not.toContain('This provider environment card will keep both routes visible on this device: serve local here, or open via Control Plane.');
     expect(appSrc).toContain('Connect straight to a Redeven runtime that already exposes its own Environment URL');
     expect(appSrc).toContain('This is not the Provider URL.');
-    expect(appSrc).toContain('Deploy a Desktop-managed environment to a machine you can reach over SSH.');
-    expect(appSrc).toContain('Desktop reuses shared release artifacts on that host and keeps one runtime state set per host.');
-    expect(appSrc).toContain("Desktop reuses only the exact Desktop-managed Redeven release on that host, installs it on demand when needed, and stores runtime state in that host's single machine profile.");
+    expect(appSrc).toContain('Deploy a Desktop-managed environment to a host you can reach over SSH.');
+    expect(appSrc).toContain('Desktop reuses shared release artifacts on that host and keeps one runtime state set there.');
+    expect(appSrc).toContain("Desktop reuses only the exact Desktop-managed Redeven release on that host, installs it on demand when needed, and stores runtime state in that host's single runtime profile.");
     expect(appSrc).toContain('Bootstrap Delivery');
     expect(appSrc).toContain('Authentication');
     expect(appSrc).toContain("label: 'Key / agent'");
@@ -734,56 +739,42 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Leave blank to use the default remote user cache:');
   });
 
-  it('explains machine state behavior separately from the single visible Name field', () => {
+  it('keeps the connection dialog from exposing managed Local Environment creation', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain("Desktop will use this device&apos;s single machine state at");
-    expect(appSrc).toContain('~/.redeven/machine');
+    expect(appSrc).toContain("type ConnectionDialogState = ExternalURLConnectionDialogState | SSHConnectionDialogState | null;");
+    expect(appSrc).toContain("props.switchKind(value as 'external_local_ui' | 'ssh_environment')");
     expect(appSrc).not.toContain('scope derived from Name.');
     expect(appSrc).not.toContain('Next scope:');
-    expect(appSrc).toContain('Renaming this environment only changes how it appears in Desktop.');
-    expect(appSrc).toContain('Runtime state stays under');
-  });
-
-  it('keeps managed saves pinned to the single machine environment name', () => {
-    const appSrc = readWelcomeSource();
-
-    expect(appSrc).toContain('const localEnvironmentName = DEFAULT_LOCAL_ENVIRONMENT_NAME;');
-    expect(appSrc).toContain("environment_name: localEnvironmentName || undefined");
+    expect(appSrc).not.toContain('DEFAULT_LOCAL_ENVIRONMENT_NAME');
+    expect(appSrc).not.toContain("kind: 'upsert_managed_environment'");
     expect(appSrc).not.toContain("environment_name: shouldAutoSyncManagedEnvironmentScopeName(current)");
     expect(appSrc).not.toContain('? deriveManagedEnvironmentScopeNameFromName(value)');
   });
 
-  it('keeps the managed environment dialog focused on local-environment creation only', () => {
+  it('keeps provider-local runtime setup out of the connection dialog', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).not.toContain('ManagedEnvironmentBindingResolutionPanel');
     expect(appSrc).not.toContain('resolveManagedEnvironmentBindingResolution');
     expect(appSrc).not.toContain('provider_local_serve');
     expect(appSrc).not.toContain('use_control_plane_binding');
-    expect(appSrc).toContain('Run a Desktop-managed Redeven environment on this device.');
+    expect(appSrc).toContain('function serveRuntimeLocally');
+    expect(appSrc).toContain("case 'serve_runtime_locally':");
   });
 
-  it('explains Local UI Bind examples inside the managed environment form', () => {
+  it('keeps Local UI access controls inside Local Environment Settings', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain('aria-label="Local UI Bind examples"');
-    expect(appSrc).toContain('Choose where the Local UI listens');
-    expect(appSrc).toContain('These examples show patterns, not fixed values.');
-    expect(appSrc).toContain('Only this machine');
-    expect(appSrc).toContain('localhost:<port>');
-    expect(appSrc).toContain('127.0.0.1:<port>');
-    expect(appSrc).toContain('One local-network address');
-    expect(appSrc).toContain('<your-device-ip>:<port>');
-    expect(appSrc).toContain('For example, your device IP might look like 192.168.1.24 on a home or office network.');
-    expect(appSrc).toContain('All IPv4 addresses');
-    expect(appSrc).toContain('0.0.0.0:<port>');
-    expect(appSrc).toContain('Replace');
-    expect(appSrc).toContain('or IP literals are supported here.');
-    expect(appSrc).toContain('Use a password if other devices can reach this address.');
+    expect(appSrc).toContain('props.baselineSnapshot.access_mode_options');
+    expect(appSrc).toContain('aria-label="Visibility presets"');
+    expect(appSrc).toContain('This device keeps one Local Environment runtime profile for the current binding.');
+    expect(appSrc).toContain('Choose how the Local Environment is exposed on the next desktop-managed start');
+    expect(appSrc).toContain('Loopback bind keeps the runtime on this device only. No password is required.');
+    expect(appSrc).toContain('Shared local network access requires a password before other devices can open this Environment.');
   });
 
-  it('includes machine-first Local Environment Settings copy inside the source', () => {
+  it('includes Local Environment Settings copy inside the source', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain('Next start');

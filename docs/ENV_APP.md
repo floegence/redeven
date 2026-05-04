@@ -437,10 +437,10 @@ Notes:
 - Codespaces does **not** auto-install `code-server`. When the runtime is missing or unusable, Env App shows an explicit install UI and waits for the user to click `Install and use for this environment` or `Install latest and use for this environment`.
 - Runtime Settings -> `Codespaces & Tooling` also exposes a dedicated `code-server Runtime` management card. It separates steady runtime status from transient management activity:
   - when no usable runtime is available, Settings renders a compact installable state instead of a dense `Not detected` table dump,
-  - the steady state clearly separates `Current environment`, `Installed on this machine`, and `Recent runtime operation`,
-  - users can reuse an installed version for the current environment, set the machine default for new environments, remove only the current environment pin, or remove one machine version when it is safe,
-  - while install or machine-version removal is running, Settings switches to a focused operation panel with optional recent output,
-  - after a successful install or machine-version removal, Settings returns to the normal steady state instead of leaving a persistent success audit block on screen,
+  - the steady state clearly separates `Current environment`, `Installed for this Local Environment`, and `Recent runtime operation`,
+  - users can reuse an installed version for the current environment, set the Local Environment default for new environments, remove only the current environment pin, or remove one Local Environment version when it is safe,
+  - while install or Local Environment version removal is running, Settings switches to a focused operation panel with optional recent output,
+  - after a successful install or Local Environment version removal, Settings returns to the normal steady state instead of leaving a persistent success audit block on screen,
   - failed or cancelled actions keep their recent output visible so the user can recover explicitly.
 - The Codespaces install flow displays the same explicit source and progress details inside Env App before the user continues to the pending `Start` or `Open` action.
 

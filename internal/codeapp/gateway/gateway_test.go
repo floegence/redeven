@@ -377,21 +377,21 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 		setCodeRuntimeDefault: func(ctx context.Context, version string) (CodeRuntimeStatus, error) {
 			defaultCalls++
 			return CodeRuntimeStatus{
-				ManagedPrefix:              "/tmp/runtime",
-				SharedRuntimeRoot:          "/tmp/shared-runtime",
-				EnvironmentSelectionSource: "none",
-				MachineDefaultVersion:      version,
-				InstallerScriptURL:         "https://code-server.dev/install.sh",
+				ManagedPrefix:                  "/tmp/runtime",
+				SharedRuntimeRoot:              "/tmp/shared-runtime",
+				EnvironmentSelectionSource:     "none",
+				LocalEnvironmentDefaultVersion: version,
+				InstallerScriptURL:             "https://code-server.dev/install.sh",
 			}, nil
 		},
 		removeCodeRuntimeSelection: func(ctx context.Context) (CodeRuntimeStatus, error) {
 			detachCalls++
 			return CodeRuntimeStatus{
-				ManagedPrefix:              "/tmp/runtime",
-				SharedRuntimeRoot:          "/tmp/shared-runtime",
-				EnvironmentSelectionSource: "machine_default",
-				MachineDefaultVersion:      "4.109.1",
-				InstallerScriptURL:         "https://code-server.dev/install.sh",
+				ManagedPrefix:                  "/tmp/runtime",
+				SharedRuntimeRoot:              "/tmp/shared-runtime",
+				EnvironmentSelectionSource:     "local_environment_default",
+				LocalEnvironmentDefaultVersion: "4.109.1",
+				InstallerScriptURL:             "https://code-server.dev/install.sh",
 			}, nil
 		},
 		removeCodeRuntimeVersion: func(ctx context.Context, version string) (CodeRuntimeStatus, error) {
@@ -402,7 +402,7 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 				EnvironmentSelectionSource: "none",
 				InstallerScriptURL:         "https://code-server.dev/install.sh",
 				Operation: codeserver.RuntimeOperationStatus{
-					Action:        "remove_machine_version",
+					Action:        "remove_local_environment_version",
 					State:         "running",
 					Stage:         "removing",
 					TargetVersion: version,

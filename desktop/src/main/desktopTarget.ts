@@ -88,6 +88,19 @@ export function managedEnvironmentDesktopSessionKey(
   return `env:${encodeURIComponent(cleanEnvironmentID)}:${route}`;
 }
 
+function providerManagedEnvironmentSessionIdentity(environment: DesktopManagedEnvironment): string {
+  const binding = environment.provider_binding;
+  if (!binding) {
+    return compact(environment.id);
+  }
+  return [
+    'provider-local',
+    binding.provider_origin,
+    binding.provider_id,
+    binding.env_public_id,
+  ].map(encodeURIComponent).join(':');
+}
+
 export function controlPlaneDesktopSessionKey(
   rawProviderOrigin: string,
   rawEnvPublicID: string,
@@ -123,7 +136,12 @@ export function buildManagedEnvironmentDesktopTarget(
   const localScope = environment.local_hosting?.scope;
   return {
     kind: 'managed_environment',
-    session_key: managedEnvironmentDesktopSessionKey(environment.id, route),
+    session_key: managedEnvironmentDesktopSessionKey(
+      route === 'local_host'
+        ? providerManagedEnvironmentSessionIdentity(environment)
+        : environment.id,
+      route,
+    ),
     environment_id: environment.id,
     label: environment.label,
     route,

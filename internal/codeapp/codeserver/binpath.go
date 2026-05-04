@@ -8,8 +8,8 @@ import (
 // ResolveBinary resolves the selected code-server binary path for the current
 // environment and validates that it is usable.
 func ResolveBinary(stateDir string, stateRoot string) (string, error) {
-	machineState, _ := loadMachineRuntimeState(stateRoot)
-	selectedVersion, _ := resolveManagedSelection(stateDir, machineState)
+	localEnvironmentState, _ := loadLocalEnvironmentRuntimeState(stateRoot)
+	selectedVersion, _ := resolveManagedSelection(stateDir, localEnvironmentState)
 	detection := detectRuntime(context.Background(), stateDir, stateRoot, selectedVersion)
 	switch detection.state {
 	case RuntimeDetectionReady:

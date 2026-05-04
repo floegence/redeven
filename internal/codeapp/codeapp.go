@@ -162,7 +162,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	portMin, portMax := normalizePortRange(opts.CodeServerPortMin, opts.CodeServerPortMax)
 	reconnectionGrace := time.Duration(0)
 	if opts.LocalUIEnabled {
-		// Local UI keeps code-server on the same machine, so keeping extension-host reconnect
+		// Local UI keeps code-server on the same host, so keeping extension-host reconnect
 		// grace in hours only accumulates stale hosts and lock contention after refreshes.
 		reconnectionGrace = 30 * time.Second
 	}

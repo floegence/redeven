@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,7 +39,7 @@ func TestRunCLIHelp(t *testing.T) {
 		assertContainsAll(t, stdout,
 			"redeven run",
 			"Modes:",
-			"Machine state rules:",
+			"Local Environment state rules:",
 			"Local UI bind rules:",
 			"Always start the Local UI. Connect to the control plane only when bootstrap config is already valid.",
 			"--state-root <path>",
@@ -133,6 +134,48 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 			"incomplete bootstrap flags for `redeven run`: missing flag one bootstrap ticket (--bootstrap-ticket or --bootstrap-ticket-env)",
 			"Hint: provide --controlplane, --env-id, and exactly one bootstrap ticket together, or run `redeven bootstrap` first.",
 		)
+	})
+
+	t.Run("desktop startup report captures incomplete inline bootstrap flags", func(t *testing.T) {
+		tempDir := t.TempDir()
+		reportPath := filepath.Join(tempDir, "startup", "report.json")
+		stateRoot := filepath.Join(tempDir, "state")
+		code, _, stderr := runCLITest(t,
+			"run",
+			"--mode", "desktop",
+			"--desktop-managed",
+			"--state-root", stateRoot,
+			"--startup-report-file", reportPath,
+			"--controlplane", "https://region.example.invalid",
+			"--env-id", "env_123",
+		)
+		if code != 2 {
+			t.Fatalf("exit code = %d, want 2", code)
+		}
+		assertContainsAll(t, stderr,
+			"incomplete bootstrap flags for `redeven run`: missing flag one bootstrap ticket (--bootstrap-ticket or --bootstrap-ticket-env)",
+		)
+
+		body, err := os.ReadFile(reportPath)
+		if err != nil {
+			t.Fatalf("ReadFile(%s) error = %v", reportPath, err)
+		}
+		var report desktopLaunchReport
+		if err := json.Unmarshal(body, &report); err != nil {
+			t.Fatalf("json.Unmarshal() error = %v", err)
+		}
+		if report.Status != desktopLaunchStatusBlocked {
+			t.Fatalf("Status = %q, want %q", report.Status, desktopLaunchStatusBlocked)
+		}
+		if report.Code != desktopLaunchCodeStartupInvalid {
+			t.Fatalf("Code = %q, want %q", report.Code, desktopLaunchCodeStartupInvalid)
+		}
+		if !strings.Contains(report.Message, "missing flag one bootstrap ticket") {
+			t.Fatalf("Message = %q", report.Message)
+		}
+		if report.Diagnostics == nil || report.Diagnostics.StateDir != filepath.Join(stateRoot, "local-environment") {
+			t.Fatalf("Diagnostics = %#v", report.Diagnostics)
+		}
 	})
 
 	t.Run("invalid mode includes allowed values", func(t *testing.T) {
@@ -317,32 +360,32 @@ func TestResolveRunStateLayoutUsesExplicitConfigPath(t *testing.T) {
 	}
 }
 
-func TestResolveRunStateLayoutDefaultsToMachineScope(t *testing.T) {
+func TestResolveRunStateLayoutDefaultsToLocalEnvironmentScope(t *testing.T) {
 	stateRoot := t.TempDir()
 
 	layout, err := resolveRunStateLayout("", stateRoot)
 	if err != nil {
 		t.Fatalf("resolveRunStateLayout() error = %v", err)
 	}
-	if layout.ScopeKey != "machine" {
+	if layout.ScopeKey != "local_environment" {
 		t.Fatalf("ScopeKey = %q", layout.ScopeKey)
 	}
-	if layout.ConfigPath != filepath.Join(stateRoot, "machine", "config.json") {
+	if layout.ConfigPath != filepath.Join(stateRoot, "local-environment", "config.json") {
 		t.Fatalf("ConfigPath = %q", layout.ConfigPath)
 	}
 }
 
-func TestResolveRunStateLayoutUsesMachineScopeForInlineBootstrap(t *testing.T) {
+func TestResolveRunStateLayoutUsesLocalEnvironmentScopeForInlineBootstrap(t *testing.T) {
 	stateRoot := t.TempDir()
 
 	layout, err := resolveRunStateLayout("", stateRoot)
 	if err != nil {
 		t.Fatalf("resolveRunStateLayout() error = %v", err)
 	}
-	if layout.ScopeKey != "machine" {
+	if layout.ScopeKey != "local_environment" {
 		t.Fatalf("ScopeKey = %q", layout.ScopeKey)
 	}
-	if layout.ConfigPath != filepath.Join(stateRoot, "machine", "config.json") {
+	if layout.ConfigPath != filepath.Join(stateRoot, "local-environment", "config.json") {
 		t.Fatalf("ConfigPath = %q", layout.ConfigPath)
 	}
 }

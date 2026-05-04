@@ -88,7 +88,6 @@ export type DesktopLauncherActionKind =
   | 'refresh_control_plane'
   | 'delete_control_plane'
   | 'upsert_managed_environment'
-  | 'upsert_provider_environment_local_runtime'
   | 'upsert_saved_environment'
   | 'upsert_saved_ssh_environment'
   | 'delete_managed_environment'
@@ -135,7 +134,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   local_ui_url: string;
   secondary_text: string;
   managed_environment_kind?: 'local' | 'controlplane';
-  managed_local_scope_kind?: 'machine';
+  managed_local_scope_kind?: 'local_environment';
   managed_environment_name?: string;
   managed_local_ui_bind?: string;
   managed_local_ui_password_configured?: boolean;
@@ -294,14 +293,6 @@ export type DesktopLauncherActionRequest = Readonly<
       kind: 'upsert_managed_environment';
       environment_id?: string;
       environment_name?: string;
-      label: string;
-      local_ui_bind: string;
-      local_ui_password: string;
-      local_ui_password_mode: 'keep' | 'replace' | 'clear';
-    }
-  | {
-      kind: 'upsert_provider_environment_local_runtime';
-      environment_id: string;
       label: string;
       local_ui_bind: string;
       local_ui_password: string;
@@ -590,22 +581,6 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         kind,
         environment_id: compact((candidate as { environment_id?: unknown }).environment_id) || undefined,
         environment_name: compact((candidate as { environment_name?: unknown }).environment_name) || undefined,
-        label: compact((candidate as { label?: unknown }).label),
-        local_ui_bind: compact((candidate as { local_ui_bind?: unknown }).local_ui_bind),
-        local_ui_password: String((candidate as { local_ui_password?: unknown }).local_ui_password ?? ''),
-        local_ui_password_mode: compact(
-          (candidate as { local_ui_password_mode?: unknown }).local_ui_password_mode,
-        ) as 'keep' | 'replace' | 'clear',
-      };
-    }
-    case 'upsert_provider_environment_local_runtime': {
-      const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
-      if (environmentID === '') {
-        return null;
-      }
-      return {
-        kind,
-        environment_id: environmentID,
         label: compact((candidate as { label?: unknown }).label),
         local_ui_bind: compact((candidate as { local_ui_bind?: unknown }).local_ui_bind),
         local_ui_password: String((candidate as { local_ui_password?: unknown }).local_ui_password ?? ''),

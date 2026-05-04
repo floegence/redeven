@@ -5,7 +5,6 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
-  desktopControlPlaneKey,
   normalizeDesktopControlPlaneProvider,
 } from '../shared/controlPlaneProvider';
 import type { DesktopSettingsDraft } from '../shared/settingsIPC';
@@ -18,13 +17,11 @@ import {
   testProviderEnvironment,
 } from '../testSupport/desktopTestHelpers';
 import {
-  controlPlaneManagedStateLayout,
   controlPlaneProviderKeyForOrigin,
 } from './statePaths';
 import {
   createPlaintextSecretCodec,
   deleteManagedEnvironment,
-  deleteProviderEnvironmentLocalRuntime,
   type DesktopPreferences,
   defaultDesktopPreferences,
   defaultDesktopPreferencesPaths,
@@ -50,7 +47,6 @@ import {
   setSavedEnvironmentPinned,
   setSavedSSHEnvironmentPinned,
   upsertManagedEnvironment,
-  upsertProviderEnvironmentLocalRuntime,
   upsertSavedControlPlane,
   upsertSavedEnvironment,
   upsertSavedSSHEnvironment,
@@ -149,9 +145,9 @@ describe('desktopPreferences', () => {
     }))).toThrow('Non-loopback Local UI binds require a Local UI password.');
   });
 
-  it('does not report bind conflicts across collapsed machine records', () => {
-    const primary = testManagedLocalEnvironment('default', {
-      label: 'Local Machine',
+  it('does not report bind conflicts after collapsed local environment records normalize to one entry', () => {
+    const primary = testManagedLocalEnvironment('local', {
+      label: 'Local Environment',
       access: testManagedAccess({
         local_ui_bind: 'localhost:23998',
       }),
@@ -187,7 +183,7 @@ describe('desktopPreferences', () => {
     expect(findManagedEnvironmentLocalBindConflict(preferences, lab.id)).toBeNull();
   });
 
-  it('preserves the existing machine state name when editing a local-only environment without resending it', () => {
+  it('preserves the single Local Environment state when editing access without resending it', () => {
     const existing = testManagedLocalEnvironment('lab', {
       label: 'Lab',
       access: testManagedAccess({
@@ -208,11 +204,11 @@ describe('desktopPreferences', () => {
     expect(updated).toBeTruthy();
     expect(updated).toEqual(expect.objectContaining({
       id: existing.id,
-      label: 'Renamed Lab',
+      label: 'Local Environment',
     }));
     expect(updated?.local_hosting?.scope).toEqual({
-      kind: 'machine',
-      name: 'machine',
+      kind: 'local_environment',
+      name: 'local',
     });
     expect(updated?.local_hosting?.access.local_ui_bind).toBe('localhost:24000');
   });
@@ -249,7 +245,7 @@ describe('desktopPreferences', () => {
       const codec = createPlaintextSecretCodec();
       const preferences: DesktopPreferences = testDesktopPreferences({
         managed_environments: [
-          testManagedLocalEnvironment('default', {
+          testManagedLocalEnvironment('local', {
             access: testManagedAccess({
               local_ui_bind: '0.0.0.0:23998',
               local_ui_password: 'super-secret',
@@ -290,7 +286,7 @@ describe('desktopPreferences', () => {
     });
   });
 
-  it('canonicalizes legacy SSH catalog records onto host-scoped machine ids', async () => {
+  it('canonicalizes legacy SSH catalog records onto host-scoped SSH ids', async () => {
     await withTempPreferencesDir(async (root) => {
       const paths = defaultDesktopPreferencesPaths(root);
       const codec = createPlaintextSecretCodec();
@@ -411,10 +407,10 @@ describe('desktopPreferences', () => {
       }));
       expect(loaded.managed_environments).toEqual([
         expect.objectContaining({
-          id: 'machine',
-          identity: { kind: 'provisional_local', local_name: 'machine' },
+          id: 'local',
+          identity: { kind: 'provisional_local', local_name: 'local' },
           local_hosting: expect.objectContaining({
-            scope: { kind: 'machine', name: 'machine' },
+            scope: { kind: 'local_environment', name: 'local' },
           }),
         }),
       ]);
@@ -438,6 +434,47 @@ describe('desktopPreferences', () => {
     });
   });
 
+  it('drops orphaned provider environment catalog records without a saved provider owner', async () => {
+    await withTempPreferencesDir(async (root) => {
+      const paths = defaultDesktopPreferencesPaths(root);
+      const codec = createPlaintextSecretCodec();
+      const providerEnvironmentsDir = path.join(paths.stateRoot, 'catalog', 'provider-environments');
+      const orphan = testProviderEnvironment('https://cp.example.invalid', 'env_orphan', {
+        label: 'Orphaned Env',
+        pinned: true,
+        lastUsedAtMS: 111,
+      });
+
+      await fs.mkdir(providerEnvironmentsDir, { recursive: true });
+      await fs.writeFile(
+        path.join(providerEnvironmentsDir, `${encodeURIComponent(orphan.id)}.json`),
+        `${JSON.stringify({
+          schema_version: 1,
+          record_kind: 'provider_environment',
+          id: orphan.id,
+          provider_origin: orphan.provider_origin,
+          provider_id: orphan.provider_id,
+          env_public_id: orphan.env_public_id,
+          label: orphan.label,
+          pinned: orphan.pinned,
+          created_at_ms: orphan.created_at_ms,
+          updated_at_ms: orphan.updated_at_ms,
+          last_used_at_ms: orphan.last_used_at_ms,
+          preferred_open_route: orphan.preferred_open_route,
+          remote_web_supported: orphan.remote_web_supported,
+          remote_desktop_supported: orphan.remote_desktop_supported,
+        }, null, 2)}\n`,
+      );
+
+      const loaded = await loadDesktopPreferences(paths, codec);
+      expect(loaded.control_planes).toEqual([]);
+      expect(loaded.provider_environments).toEqual([]);
+
+      await saveDesktopPreferences(paths, loaded, codec);
+      expect(await fs.readdir(providerEnvironmentsDir)).toEqual([]);
+    });
+  });
+
   it('preserves an existing encoded password when saving configured write-only state', async () => {
     await withTempPreferencesDir(async (root) => {
       const paths = defaultDesktopPreferencesPaths(root);
@@ -448,7 +485,7 @@ describe('desktopPreferences', () => {
       }));
       const initial = testDesktopPreferences({
         managed_environments: [
-          testManagedLocalEnvironment('default', {
+          testManagedLocalEnvironment('local', {
             access: initialAccess,
           }),
         ],
@@ -458,7 +495,7 @@ describe('desktopPreferences', () => {
       await saveDesktopPreferences(paths, {
         ...initial,
         managed_environments: [
-          testManagedLocalEnvironment('default', {
+          testManagedLocalEnvironment('local', {
             access: {
               ...initialAccess,
               local_ui_password: '',
@@ -478,11 +515,11 @@ describe('desktopPreferences', () => {
       }));
       expect(loaded.managed_environments).toEqual([
         expect.objectContaining({
-          id: 'machine',
-          label: 'Local Machine',
-          identity: { kind: 'provisional_local', local_name: 'machine' },
+          id: 'local',
+          label: 'Local Environment',
+          identity: { kind: 'provisional_local', local_name: 'local' },
           local_hosting: expect.objectContaining({
-            scope: { kind: 'machine', name: 'machine' },
+            scope: { kind: 'local_environment', name: 'local' },
             access: {
               local_ui_bind: '0.0.0.0:24000',
               local_ui_password: 'super-secret',
@@ -509,11 +546,11 @@ describe('desktopPreferences', () => {
       }));
       expect(loaded.managed_environments).toEqual([
         expect.objectContaining({
-          id: 'machine',
-          label: 'Local Machine',
-          identity: { kind: 'provisional_local', local_name: 'machine' },
+          id: 'local',
+          label: 'Local Environment',
+          identity: { kind: 'provisional_local', local_name: 'local' },
           local_hosting: expect.objectContaining({
-            scope: { kind: 'machine', name: 'machine' },
+            scope: { kind: 'local_environment', name: 'local' },
             access: {
               local_ui_bind: 'localhost:23998',
               local_ui_password: '',
@@ -544,10 +581,10 @@ describe('desktopPreferences', () => {
       }));
       expect(loaded.managed_environments).toEqual([
         expect.objectContaining({
-          id: 'machine',
-          identity: { kind: 'provisional_local', local_name: 'machine' },
+          id: 'local',
+          identity: { kind: 'provisional_local', local_name: 'local' },
           local_hosting: expect.objectContaining({
-            scope: { kind: 'machine', name: 'machine' },
+            scope: { kind: 'local_environment', name: 'local' },
             access: {
               local_ui_bind: '127.0.0.1:0',
               local_ui_password: '',
@@ -597,10 +634,10 @@ describe('desktopPreferences', () => {
       }));
       expect(loaded.managed_environments).toEqual([
         expect.objectContaining({
-          id: 'machine',
-          identity: { kind: 'provisional_local', local_name: 'machine' },
+          id: 'local',
+          identity: { kind: 'provisional_local', local_name: 'local' },
           local_hosting: expect.objectContaining({
-            scope: { kind: 'machine', name: 'machine' },
+            scope: { kind: 'local_environment', name: 'local' },
             access: {
               local_ui_bind: 'localhost:23998',
               local_ui_password: '',
@@ -735,7 +772,7 @@ describe('desktopPreferences', () => {
 
   it('persists pin state for managed, URL, and SSH environments', () => {
     const base = testDesktopPreferences({
-      managed_environments: [testManagedLocalEnvironment('default', { pinned: false })],
+      managed_environments: [testManagedLocalEnvironment('local', { pinned: false })],
       saved_environments: [{
         id: 'http://192.168.1.12:24000/',
         label: 'Staging',
@@ -759,7 +796,7 @@ describe('desktopPreferences', () => {
       }],
     });
 
-    const managedPinned = setManagedEnvironmentPinned(base, 'machine', true);
+    const managedPinned = setManagedEnvironmentPinned(base, 'local', true);
     const urlPinned = setSavedEnvironmentPinned(managedPinned, {
       environment_id: 'http://192.168.1.12:24000/',
       label: 'Staging',
@@ -860,7 +897,7 @@ describe('desktopPreferences', () => {
 
     expect(next.managed_environments).toEqual([
       expect.objectContaining({
-        id: 'machine',
+        id: 'local',
       }),
     ]);
     expect(next.provider_environments).toEqual([
@@ -890,15 +927,11 @@ describe('desktopPreferences', () => {
     ]);
   });
 
-  it('merges provider refresh data into an existing dual-route environment without dropping local state', () => {
+  it('merges provider refresh data into an existing provider preference without writing local runtime state', () => {
     const provider = buildTestControlPlaneProvider();
     const existing = testProviderEnvironment('https://cp.example.invalid', 'env_demo', {
       label: 'Desktop Label',
       preferredOpenRoute: 'local_host',
-      localRuntime: true,
-      access: {
-        local_ui_bind: '127.0.0.1:0',
-      },
     });
 
     const next = upsertSavedControlPlane(testDesktopPreferences({
@@ -922,13 +955,6 @@ describe('desktopPreferences', () => {
       id: existing.id,
       label: 'Provider Label',
       preferred_open_route: 'local_host',
-      local_runtime: expect.objectContaining({
-        access: expect.objectContaining({
-          local_ui_bind: '127.0.0.1:0',
-          local_ui_password: '',
-          local_ui_password_configured: false,
-        }),
-      }),
       remote_catalog_entry: expect.objectContaining({
         description: 'team sandbox',
         namespace_public_id: 'ns_demo',
@@ -940,49 +966,50 @@ describe('desktopPreferences', () => {
       provider_id: 'redeven_portal',
       env_public_id: 'env_demo',
     }));
+    expect(merged).not.toHaveProperty('local_runtime');
   });
 
-  it('upserts one provider environment record with local runtime state and no duplicate local card', () => {
-    const next = upsertProviderEnvironmentLocalRuntime(testDesktopPreferences(), {
-      label: 'Desktop Demo',
+  it('keeps provider preferences separate from the single Local Environment state', () => {
+    const local = testManagedLocalEnvironment('local', {
       access: testManagedAccess({
         local_ui_bind: '127.0.0.1:24001',
         local_ui_password: 'secret',
         local_ui_password_configured: true,
       }),
-      provider_origin: 'https://cp.example.invalid',
-      provider_id: 'redeven_portal',
-      env_public_id: 'env_demo',
+    });
+    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo', {
+      label: 'Desktop Demo',
+      preferredOpenRoute: 'local_host',
+    });
+    const preferences = testDesktopPreferences({
+      managed_environments: [local],
+      provider_environments: [providerEnvironment],
     });
 
-    const providerEnvironment = next.provider_environments.find((environment) => environment.id === 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo');
-
-    expect(providerEnvironment).toEqual(expect.objectContaining({
+    expect(preferences.provider_environments[0]).toEqual(expect.objectContaining({
       id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
       label: 'Desktop Demo',
       provider_origin: 'https://cp.example.invalid',
       provider_id: 'redeven_portal',
       env_public_id: 'env_demo',
-      local_runtime: expect.objectContaining({
-        scope: expect.objectContaining({
-          provider_origin: 'https://cp.example.invalid',
-          env_public_id: 'env_demo',
-        }),
-        access: expect.objectContaining({
-          local_ui_bind: '127.0.0.1:24001',
-          local_ui_password: 'secret',
-          local_ui_password_configured: true,
-        }),
-      }),
+      preferred_open_route: 'local_host',
     }));
-    expect(next.managed_environments).toEqual([
+    expect(preferences.provider_environments[0]).not.toHaveProperty('local_runtime');
+    expect(preferences.managed_environments).toEqual([
       expect.objectContaining({
-        id: 'machine',
+        id: 'local',
+        local_hosting: expect.objectContaining({
+          access: expect.objectContaining({
+            local_ui_bind: '127.0.0.1:24001',
+            local_ui_password: 'secret',
+            local_ui_password_configured: true,
+          }),
+        }),
       }),
     ]);
   });
 
-  it('keeps local-only managed environments separate when attaching local runtime to a provider env', () => {
+  it('collapses local-only managed records to the single Local Environment while keeping provider preferences separate', () => {
     const existingLocal = testManagedLocalEnvironment('lab', {
       label: 'Local Lab',
       access: {
@@ -995,16 +1022,9 @@ describe('desktopPreferences', () => {
       label: 'Remote Lab',
     });
 
-    const next = upsertProviderEnvironmentLocalRuntime(testDesktopPreferences({
+    const next = testDesktopPreferences({
       managed_environments: [existingLocal],
       provider_environments: [existingRemoteOnly],
-    }), {
-      environment_id: existingRemoteOnly.id,
-      label: 'Unified Lab',
-      access: managedEnvironmentLocalAccess(existingLocal),
-      provider_origin: 'https://cp.example.invalid',
-      provider_id: 'redeven_portal',
-      env_public_id: 'env_lab',
     });
 
     const providerEntries = next.provider_environments.filter((environment) => environment.id === existingRemoteOnly.id);
@@ -1012,29 +1032,26 @@ describe('desktopPreferences', () => {
     expect(providerEntries).toHaveLength(1);
     expect(providerEntries[0]).toEqual(expect.objectContaining({
       id: existingRemoteOnly.id,
-      label: 'Unified Lab',
-      local_runtime: expect.objectContaining({
-        scope: expect.objectContaining({
-          provider_origin: 'https://cp.example.invalid',
-          env_public_id: 'env_lab',
-        }),
-        access: expect.objectContaining({
-          local_ui_bind: '0.0.0.0:24000',
-          local_ui_password: 'secret',
-          local_ui_password_configured: true,
-        }),
-      }),
+      label: 'Remote Lab',
     }));
-    expect(next.managed_environments).toEqual(expect.arrayContaining([
+    expect(providerEntries[0]).not.toHaveProperty('local_runtime');
+    expect(next.managed_environments).toEqual([
       expect.objectContaining({
         id: existingLocal.id,
         label: 'Local Lab',
+        local_hosting: expect.objectContaining({
+          access: expect.objectContaining({
+            local_ui_bind: '0.0.0.0:24000',
+            local_ui_password: 'secret',
+            local_ui_password_configured: true,
+          }),
+        }),
       }),
-    ]));
+    ]);
     expect(next.managed_environments.some((environment) => environment.id === existingRemoteOnly.id)).toBe(false);
   });
 
-  it('keeps the existing machine state when editing a local-only environment label', () => {
+  it('keeps the existing local state when editing Local Environment settings', () => {
     const existing = testManagedLocalEnvironment('lab', {
       label: 'Lab',
       stateDir: '/tmp/redeven-lab',
@@ -1052,11 +1069,11 @@ describe('desktopPreferences', () => {
     expect(next.managed_environments).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: existing.id,
-        label: 'Renamed Lab',
+        label: 'Local Environment',
         local_hosting: expect.objectContaining({
           scope: expect.objectContaining({
-            kind: 'machine',
-            name: 'machine',
+            kind: 'local_environment',
+            name: 'local',
           }),
           state_dir: '/tmp/redeven-lab',
         }),
@@ -1064,12 +1081,12 @@ describe('desktopPreferences', () => {
     ]));
   });
 
-  it('keeps the local machine record when deletion is requested directly', () => {
+  it('keeps the Local Environment record when deletion is requested directly', () => {
     const removable = testManagedLocalEnvironment('lab');
 
     const result = deleteManagedEnvironment(testDesktopPreferences({
       managed_environments: [
-        testManagedLocalEnvironment('default'),
+        testManagedLocalEnvironment('local'),
         removable,
       ],
     }), removable.id);
@@ -1079,46 +1096,7 @@ describe('desktopPreferences', () => {
     expect(result.preferences.managed_environments.some((environment) => environment.id === removable.id)).toBe(true);
   });
 
-  it('deleting a provider local runtime removes only the local route state', () => {
-    const localServe = testProviderEnvironment('https://cp.example.invalid', 'env_dual_route', {
-      label: 'Dual Route',
-      localRuntime: true,
-      access: {
-        local_ui_bind: '127.0.0.1:24000',
-      },
-    });
-
-    const result = deleteProviderEnvironmentLocalRuntime(testDesktopPreferences({
-      provider_environments: [localServe],
-      control_planes: [{
-        provider: buildTestControlPlaneProvider(),
-        account: buildTestControlPlaneAccount(),
-        environments: [buildTestProviderEnvironment(buildTestControlPlaneProvider(), 'env_dual_route')],
-        display_label: 'Demo Portal',
-        last_synced_at_ms: 456,
-      }],
-    }), localServe.id);
-
-    expect(result.deleted_environment?.id).toBe(localServe.id);
-    expect(result.deleted_state_dir).toBe(localServe.local_runtime?.scope.state_dir);
-    expect(result.preferences.managed_environments.map((environment) => environment.id)).toEqual(['machine']);
-    expect(result.preferences.provider_environments).toEqual([
-      expect.objectContaining({
-        id: localServe.id,
-        provider_origin: 'https://cp.example.invalid',
-        provider_id: 'redeven_portal',
-        env_public_id: 'env_dual_route',
-      }),
-    ]);
-    expect(result.preferences.provider_environments[0]?.local_runtime).toBeUndefined();
-    expect(result.preferences.control_planes[0]?.environments).toEqual([
-      expect.objectContaining({
-        env_public_id: 'env_dual_route',
-      }),
-    ]);
-  });
-
-  it('repairs a legacy provider-backed local environment during control-plane sync without duplicating it', () => {
+  it('repairs a legacy provider-backed local environment into provider preference only', () => {
     const provider = buildTestControlPlaneProvider();
     const legacyProviderID = controlPlaneProviderKeyForOrigin(provider.provider_origin);
     const existing = testManagedControlPlaneEnvironment(provider.provider_origin, 'env_demo', {
@@ -1151,17 +1129,6 @@ describe('desktopPreferences', () => {
       id: existing.id,
       label: 'Demo Environment',
       preferred_open_route: 'local_host',
-      local_runtime: expect.objectContaining({
-        scope: expect.objectContaining({
-          provider_origin: provider.provider_origin,
-          env_public_id: 'env_demo',
-        }),
-        access: expect.objectContaining({
-          local_ui_bind: '127.0.0.1:0',
-          local_ui_password: '',
-          local_ui_password_configured: false,
-        }),
-      }),
       remote_catalog_entry: expect.objectContaining({
         description: 'team sandbox',
         namespace_public_id: 'ns_demo',
@@ -1173,18 +1140,24 @@ describe('desktopPreferences', () => {
       provider_id: provider.provider_id,
       env_public_id: 'env_demo',
     }));
+    expect(repairedEntries[0]).not.toHaveProperty('local_runtime');
+    expect(next.managed_environments).toEqual([
+      expect.objectContaining({
+        id: 'local',
+      }),
+    ]);
   });
 
-  it('drops revoked remote-only entries during provider refresh while keeping local-hosted environments', () => {
+  it('drops revoked provider entries unless they have durable user preference metadata', () => {
     const provider = buildTestControlPlaneProvider();
     const remoteOnly = testProviderEnvironment('https://cp.example.invalid', 'env_removed');
-    const dualRoute = testProviderEnvironment('https://cp.example.invalid', 'env_kept', {
-      localRuntime: true,
+    const preferredRoute = testProviderEnvironment('https://cp.example.invalid', 'env_kept', {
       preferredOpenRoute: 'local_host',
+      lastUsedAtMS: 111,
     });
 
     const next = upsertSavedControlPlane(testDesktopPreferences({
-      provider_environments: [remoteOnly, dualRoute],
+      provider_environments: [remoteOnly, preferredRoute],
     }), {
       provider,
       account: buildTestControlPlaneAccount(provider),
@@ -1195,34 +1168,37 @@ describe('desktopPreferences', () => {
     });
 
     expect(next.provider_environments.some((environment) => environment.id === remoteOnly.id)).toBe(false);
-    expect(next.provider_environments.find((environment) => environment.id === dualRoute.id)).toEqual(expect.objectContaining({
-      id: dualRoute.id,
+    expect(next.provider_environments.find((environment) => environment.id === preferredRoute.id)).toEqual(expect.objectContaining({
+      id: preferredRoute.id,
       preferred_open_route: 'local_host',
+      last_used_at_ms: 111,
       provider_origin: 'https://cp.example.invalid',
       env_public_id: 'env_kept',
-      local_runtime: expect.objectContaining({
-        scope: expect.objectContaining({
-          provider_origin: provider.provider_origin,
-          env_public_id: 'env_kept',
-        }),
-      }),
     }));
   });
 
-  it('deleting a control plane keeps provider environments that still have a local runtime', () => {
+  it('deleting a control plane removes its provider environments even when pinned or recently used', () => {
     const provider = buildTestControlPlaneProvider();
+    const otherProvider = buildTestControlPlaneProvider('https://other.example.invalid');
     const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_kept', {
       label: 'Env Kept',
-      localRuntime: true,
+    });
+    const otherProviderEnvironment = testProviderEnvironment(otherProvider.provider_origin, 'env_other', {
+      providerID: otherProvider.provider_id,
+      label: 'Other Env',
+      pinned: true,
+      lastUsedAtMS: 222,
     });
     const preferencesWithProviderState = setProviderEnvironmentPinned(
       rememberProviderEnvironmentUse(testDesktopPreferences({
         provider_environments: [
           testProviderEnvironment('https://cp.example.invalid', 'env_removed'),
           providerEnvironment,
+          otherProviderEnvironment,
         ],
         control_plane_refresh_tokens: {
           'https://cp.example.invalid|redeven_portal': 'refresh-demo-token',
+          'https://other.example.invalid|redeven_portal': 'refresh-other-token',
         },
         control_planes: [{
           provider,
@@ -1230,6 +1206,12 @@ describe('desktopPreferences', () => {
           environments: [buildTestProviderEnvironment(provider)],
           display_label: 'Demo Portal',
           last_synced_at_ms: 456,
+        }, {
+          provider: otherProvider,
+          account: buildTestControlPlaneAccount(otherProvider),
+          environments: [buildTestProviderEnvironment(otherProvider, 'env_other')],
+          display_label: 'Other Portal',
+          last_synced_at_ms: 789,
         }],
       }), providerEnvironment.id),
       providerEnvironment.id,
@@ -1237,25 +1219,28 @@ describe('desktopPreferences', () => {
     );
     const next = deleteSavedControlPlane(preferencesWithProviderState, 'https://cp.example.invalid', 'redeven_portal');
 
-    expect(next.control_planes).toEqual([]);
-    expect(next.control_plane_refresh_tokens).toEqual({});
-    expect(next.provider_environments).toEqual([
+    expect(next.control_planes).toEqual([
       expect.objectContaining({
-        id: providerEnvironment.id,
-        provider_origin: 'https://cp.example.invalid',
-        provider_id: 'redeven_portal',
-        env_public_id: 'env_kept',
-        pinned: true,
-        local_runtime: expect.objectContaining({
-          scope: expect.objectContaining({
-            provider_origin: 'https://cp.example.invalid',
-            env_public_id: 'env_kept',
-          }),
+        provider: expect.objectContaining({
+          provider_origin: 'https://other.example.invalid',
+          provider_id: 'redeven_portal',
         }),
       }),
     ]);
+    expect(next.control_plane_refresh_tokens).toEqual({
+      'https://other.example.invalid|redeven_portal': 'refresh-other-token',
+    });
+    expect(next.provider_environments).toEqual([
+      expect.objectContaining({
+        id: otherProviderEnvironment.id,
+        provider_origin: 'https://other.example.invalid',
+        provider_id: 'redeven_portal',
+        env_public_id: 'env_other',
+        pinned: true,
+      }),
+    ]);
     expect(next.managed_environments.map((environment) => environment.id)).toEqual([
-      'machine',
+      'local',
     ]);
   });
 
@@ -1276,7 +1261,7 @@ describe('desktopPreferences', () => {
 
     expect(pinned.managed_environments).toEqual([
       expect.objectContaining({
-        id: 'machine',
+        id: 'local',
       }),
     ]);
     expect(pinned.provider_environments).toEqual([
@@ -1289,172 +1274,6 @@ describe('desktopPreferences', () => {
         last_used_at_ms: expect.any(Number),
       }),
     ]);
-  });
-
-  it('upserts provider local runtimes without creating duplicate local cards', () => {
-    const next = upsertProviderEnvironmentLocalRuntime(testDesktopPreferences(), {
-      label: 'Demo Local Serve',
-      access: testManagedAccess({
-        local_ui_bind: '127.0.0.1:24001',
-        local_ui_password: 'secret',
-        local_ui_password_configured: true,
-      }),
-      provider_origin: 'https://cp.example.invalid',
-      provider_id: 'redeven_portal',
-      env_public_id: 'env_demo',
-    });
-
-    expect(next.managed_environments).toEqual([
-      expect.objectContaining({
-        id: 'machine',
-      }),
-    ]);
-    expect(next.provider_environments.filter((environment) => environment.id === 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo')).toEqual([
-      expect.objectContaining({
-        label: 'Demo Local Serve',
-        local_runtime: expect.objectContaining({
-          scope: expect.objectContaining({
-            provider_origin: 'https://cp.example.invalid',
-            env_public_id: 'env_demo',
-          }),
-        }),
-      }),
-    ]);
-  });
-
-  it('loads current provider catalog data without reviving legacy managed provider routes', async () => {
-    await withTempPreferencesDir(async (root) => {
-      const paths = defaultDesktopPreferencesPaths(root);
-      const codec = createPlaintextSecretCodec();
-      const provider = buildTestControlPlaneProvider();
-      const providerKey = controlPlaneProviderKeyForOrigin(provider.provider_origin);
-      const environmentID = 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo';
-      const layout = controlPlaneManagedStateLayout(
-        provider.provider_origin,
-        'env_demo',
-        process.env,
-        os.homedir,
-        paths.stateRoot,
-      );
-      const environmentsDir = path.join(paths.stateRoot, 'catalog', 'environments');
-      const providersDir = path.join(paths.stateRoot, 'catalog', 'providers');
-      const providerCatalogID = desktopControlPlaneKey(provider.provider_origin, provider.provider_id);
-
-      await fs.mkdir(environmentsDir, { recursive: true });
-      await fs.mkdir(providersDir, { recursive: true });
-      await fs.writeFile(paths.preferencesFile, `${JSON.stringify({ version: 10 }, null, 2)}\n`, 'utf8');
-      await fs.writeFile(paths.secretsFile, `${JSON.stringify({
-        version: 2,
-        control_planes: [{
-          provider_origin: provider.provider_origin,
-          provider_id: provider.provider_id,
-          refresh_token: {
-            encoding: 'plain',
-            data: 'refresh-demo-token',
-          },
-        }],
-      }, null, 2)}\n`, 'utf8');
-      await fs.writeFile(
-        path.join(providersDir, `${encodeURIComponent(providerCatalogID)}.json`),
-        `${JSON.stringify({
-          schema_version: 1,
-          record_kind: 'provider',
-          provider: {
-            protocol_version: provider.protocol_version,
-            provider_id: provider.provider_id,
-            display_name: provider.display_name,
-            provider_origin: provider.provider_origin,
-            documentation_url: provider.documentation_url,
-          },
-          account: {
-            user_public_id: 'user_demo',
-            user_display_name: 'Demo User',
-            authorization_expires_at_unix_ms: 1_770_000_000_000,
-          },
-          display_label: 'Demo Portal',
-          environments: [{
-            env_public_id: 'env_demo',
-            name: 'Demo Environment',
-            description: 'team sandbox',
-            namespace_public_id: 'ns_demo',
-            namespace_name: 'Demo Team',
-            status: 'online',
-            lifecycle_status: 'active',
-            last_seen_at_unix_ms: 123,
-          }],
-          last_synced_at_ms: 456,
-        }, null, 2)}\n`,
-        'utf8',
-      );
-      await fs.writeFile(
-        path.join(environmentsDir, `${encodeURIComponent(environmentID)}.json`),
-        `${JSON.stringify({
-          schema_version: 1,
-          record_kind: 'environment',
-          id: environmentID,
-          label: 'Desktop Label',
-          preferred_open_route: 'local_host',
-          created_at_ms: 100,
-          updated_at_ms: 200,
-          last_used_at_ms: 300,
-          identity: {
-            kind: 'provider',
-            provider_origin: provider.provider_origin,
-            provider_id: providerKey,
-            env_public_id: 'env_demo',
-          },
-          local_hosting: {
-            scope: {
-              kind: 'controlplane',
-              provider_origin: provider.provider_origin,
-              provider_key: providerKey,
-              env_public_id: 'env_demo',
-            },
-            scope_key: layout.scopeKey,
-            state_dir: layout.stateDir,
-            owner: 'desktop',
-            access: {
-              local_ui_bind: '127.0.0.1:0',
-              local_ui_password_configured: false,
-            },
-          },
-          provider_binding: {
-            provider_origin: provider.provider_origin,
-            provider_id: providerKey,
-            env_public_id: 'env_demo',
-            remote_web_supported: true,
-            remote_desktop_supported: true,
-          },
-        }, null, 2)}\n`,
-        'utf8',
-      );
-
-      const loaded = await loadDesktopPreferences(paths, codec);
-      const repaired = loaded.provider_environments.find((environment) => environment.id === environmentID);
-
-      expect(repaired).toEqual(expect.objectContaining({
-        id: environmentID,
-        label: 'Demo Environment',
-        preferred_open_route: 'auto',
-        provider_origin: provider.provider_origin,
-        provider_id: provider.provider_id,
-        env_public_id: 'env_demo',
-      }));
-      expect(repaired?.local_runtime).toBeUndefined();
-
-      const providerEnvironmentsDir = path.join(paths.stateRoot, 'catalog', 'provider-environments');
-      const rewrittenEnvironmentCatalog = JSON.parse(
-        await fs.readFile(path.join(providerEnvironmentsDir, `${encodeURIComponent(environmentID)}.json`), 'utf8'),
-      ) as {
-        provider_id?: string;
-        local_runtime?: {
-          state_scope?: { provider_key?: string };
-        };
-      };
-      expect(rewrittenEnvironmentCatalog.provider_id).toBe(provider.provider_id);
-      expect(rewrittenEnvironmentCatalog.local_runtime).toBeUndefined();
-      await expect(fs.stat(path.join(environmentsDir, `${encodeURIComponent(environmentID)}.json`))).rejects.toThrow();
-    });
   });
 
   it('serializes local-environment settings into a settings draft', () => {

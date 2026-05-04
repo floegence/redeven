@@ -26,7 +26,6 @@ import {
   type DesktopManagedLocalEnvironment,
 } from '../shared/desktopManagedEnvironment';
 import {
-  createDesktopProviderEnvironmentLocalRuntime,
   createDesktopProviderEnvironmentRecord,
   type DesktopProviderEnvironmentRecord,
 } from '../shared/desktopProviderEnvironment';
@@ -70,11 +69,6 @@ type TestProviderEnvironmentOptions = Readonly<{
   label?: string;
   pinned?: boolean;
   preferredOpenRoute?: DesktopManagedEnvironmentPreferredOpenRoute;
-  localRuntime?: boolean;
-  access?: TestManagedAccessOverrides;
-  stateDir?: string;
-  owner?: DesktopManagedEnvironmentLocalOwner;
-  currentRuntime?: Partial<DesktopManagedEnvironmentRuntimeState> | null;
   createdAtMS?: number;
   updatedAtMS?: number;
   lastUsedAtMS?: number;
@@ -125,8 +119,8 @@ export function testManagedControlPlaneEnvironment(
       ? undefined
       : createManagedEnvironmentLocalHosting(
         {
-          kind: 'machine',
-          name: 'machine',
+          kind: 'local_environment',
+          name: 'local',
         },
         {
           access: testManagedAccess(options.access),
@@ -143,7 +137,6 @@ export function testProviderEnvironment(
   envPublicID: string,
   options: TestProviderEnvironmentOptions = {},
 ): DesktopProviderEnvironmentRecord {
-  const layout = controlPlaneManagedStateLayout(providerOrigin, envPublicID);
   return createDesktopProviderEnvironmentRecord(providerOrigin, envPublicID, {
     providerID: options.providerID ?? 'redeven_portal',
     label: options.label,
@@ -152,14 +145,6 @@ export function testProviderEnvironment(
     createdAtMS: options.createdAtMS,
     updatedAtMS: options.updatedAtMS,
     lastUsedAtMS: options.lastUsedAtMS,
-    localRuntime: options.localRuntime === true
-      ? createDesktopProviderEnvironmentLocalRuntime(providerOrigin, envPublicID, {
-          access: testManagedAccess(options.access),
-          owner: options.owner ?? 'desktop',
-          stateDir: options.stateDir ?? layout.stateDir,
-          currentRuntime: options.currentRuntime,
-        })
-      : undefined,
   });
 }
 
@@ -184,11 +169,6 @@ export function testDesktopPreferences(
         label: environment.label,
         pinned: environment.pinned,
         preferredOpenRoute: environment.preferred_open_route,
-        localRuntime: Boolean(environment.local_hosting),
-        access: environment.local_hosting?.access,
-        stateDir: environment.local_hosting?.state_dir,
-        owner: environment.local_hosting?.owner,
-        currentRuntime: environment.local_hosting?.current_runtime,
         createdAtMS: environment.created_at_ms,
         updatedAtMS: environment.updated_at_ms,
         lastUsedAtMS: environment.last_used_at_ms,
@@ -241,6 +221,7 @@ export function testManagedSession(
     : desktopManaged
       ? 'desktop'
       : 'unknown';
+  const providerBinding = environment.provider_binding;
   return {
     session_key: target.session_key,
     target,
@@ -249,6 +230,11 @@ export function testManagedSession(
     startup: {
       local_ui_url: localUIURL,
       local_ui_urls: [localUIURL],
+      ...(providerBinding ? {
+        controlplane_base_url: providerBinding.provider_origin,
+        controlplane_provider_id: providerBinding.provider_id,
+        env_public_id: providerBinding.env_public_id,
+      } : {}),
       runtime_service: {
         protocol_version: 'redeven-runtime-v1',
         service_owner: serviceOwner,

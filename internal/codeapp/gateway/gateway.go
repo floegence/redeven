@@ -1542,7 +1542,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if len(body.Codex) > 0 {
 			writeJSON(w, http.StatusBadRequest, apiResp{
 				OK:    false,
-				Error: "Codex is host-managed and cannot be configured from Runtime Settings. Install and configure `codex` on the host machine instead.",
+				Error: "Codex is host-managed and cannot be configured from Runtime Settings. Install and configure `codex` on the host instead.",
 			})
 			return
 		}
@@ -1792,8 +1792,8 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		g.appendAudit(meta, "code_runtime_set_default", "success", map[string]any{
-			"version":                 strings.TrimSpace(body.Version),
-			"machine_default_version": status.MachineDefaultVersion,
+			"version":                           strings.TrimSpace(body.Version),
+			"local_environment_default_version": status.LocalEnvironmentDefaultVersion,
 		}, nil)
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: status})
 		return

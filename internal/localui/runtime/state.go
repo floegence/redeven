@@ -15,29 +15,35 @@ import (
 )
 
 type State struct {
-	LocalUIURL         string                  `json:"local_ui_url,omitempty"`
-	LocalUIURLs        []string                `json:"local_ui_urls,omitempty"`
-	PasswordRequired   bool                    `json:"password_required"`
-	EffectiveRunMode   string                  `json:"effective_run_mode,omitempty"`
-	RemoteEnabled      bool                    `json:"remote_enabled"`
-	DesktopManaged     bool                    `json:"desktop_managed"`
-	StateDir           string                  `json:"state_dir,omitempty"`
-	DiagnosticsEnabled bool                    `json:"diagnostics_enabled"`
-	PID                int                     `json:"pid,omitempty"`
-	RuntimeService     runtimeservice.Snapshot `json:"runtime_service"`
+	LocalUIURL             string                  `json:"local_ui_url,omitempty"`
+	LocalUIURLs            []string                `json:"local_ui_urls,omitempty"`
+	PasswordRequired       bool                    `json:"password_required"`
+	EffectiveRunMode       string                  `json:"effective_run_mode,omitempty"`
+	RemoteEnabled          bool                    `json:"remote_enabled"`
+	DesktopManaged         bool                    `json:"desktop_managed"`
+	ControlplaneBaseURL    string                  `json:"controlplane_base_url,omitempty"`
+	ControlplaneProviderID string                  `json:"controlplane_provider_id,omitempty"`
+	EnvPublicID            string                  `json:"env_public_id,omitempty"`
+	StateDir               string                  `json:"state_dir,omitempty"`
+	DiagnosticsEnabled     bool                    `json:"diagnostics_enabled"`
+	PID                    int                     `json:"pid,omitempty"`
+	RuntimeService         runtimeservice.Snapshot `json:"runtime_service"`
 }
 
 type Snapshot struct {
-	LocalUIURL         string
-	LocalUIURLs        []string
-	PasswordRequired   bool
-	EffectiveRunMode   string
-	RemoteEnabled      bool
-	DesktopManaged     bool
-	StateDir           string
-	DiagnosticsEnabled bool
-	PID                int
-	RuntimeService     runtimeservice.Snapshot
+	LocalUIURL             string
+	LocalUIURLs            []string
+	PasswordRequired       bool
+	EffectiveRunMode       string
+	RemoteEnabled          bool
+	DesktopManaged         bool
+	ControlplaneBaseURL    string
+	ControlplaneProviderID string
+	EnvPublicID            string
+	StateDir               string
+	DiagnosticsEnabled     bool
+	PID                    int
+	RuntimeService         runtimeservice.Snapshot
 }
 
 func RuntimeStatePath(configPath string) string {
@@ -66,6 +72,9 @@ func WriteState(path string, state State) error {
 		state.LocalUIURLs = []string{state.LocalUIURL}
 	}
 	state.EffectiveRunMode = strings.TrimSpace(state.EffectiveRunMode)
+	state.ControlplaneBaseURL = strings.TrimSpace(state.ControlplaneBaseURL)
+	state.ControlplaneProviderID = strings.TrimSpace(state.ControlplaneProviderID)
+	state.EnvPublicID = strings.TrimSpace(state.EnvPublicID)
 	state.RuntimeService = normalizeRuntimeServiceSnapshot(state.RuntimeService, state.DesktopManaged, state.EffectiveRunMode, state.RemoteEnabled)
 
 	dir := filepath.Dir(cleanPath)
@@ -149,16 +158,19 @@ func parseState(raw []byte) (*Snapshot, error) {
 	}
 	state.RuntimeService = normalizeRuntimeServiceSnapshot(state.RuntimeService, state.DesktopManaged, state.EffectiveRunMode, state.RemoteEnabled)
 	return &Snapshot{
-		LocalUIURL:         state.LocalUIURL,
-		LocalUIURLs:        append([]string(nil), state.LocalUIURLs...),
-		PasswordRequired:   state.PasswordRequired,
-		EffectiveRunMode:   strings.TrimSpace(state.EffectiveRunMode),
-		RemoteEnabled:      state.RemoteEnabled,
-		DesktopManaged:     state.DesktopManaged,
-		StateDir:           strings.TrimSpace(state.StateDir),
-		DiagnosticsEnabled: state.DiagnosticsEnabled,
-		PID:                state.PID,
-		RuntimeService:     state.RuntimeService,
+		LocalUIURL:             state.LocalUIURL,
+		LocalUIURLs:            append([]string(nil), state.LocalUIURLs...),
+		PasswordRequired:       state.PasswordRequired,
+		EffectiveRunMode:       strings.TrimSpace(state.EffectiveRunMode),
+		RemoteEnabled:          state.RemoteEnabled,
+		DesktopManaged:         state.DesktopManaged,
+		ControlplaneBaseURL:    strings.TrimSpace(state.ControlplaneBaseURL),
+		ControlplaneProviderID: strings.TrimSpace(state.ControlplaneProviderID),
+		EnvPublicID:            strings.TrimSpace(state.EnvPublicID),
+		StateDir:               strings.TrimSpace(state.StateDir),
+		DiagnosticsEnabled:     state.DiagnosticsEnabled,
+		PID:                    state.PID,
+		RuntimeService:         state.RuntimeService,
 	}, nil
 }
 

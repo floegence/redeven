@@ -3,6 +3,9 @@ import { readDesktopHostBridge } from './desktopHostWindow';
 export interface DesktopSessionContextSnapshot {
   managed_environment_id: string;
   environment_storage_scope_id: string;
+  provider_origin?: string;
+  provider_id?: string;
+  env_public_id?: string;
 }
 
 export interface DesktopSessionContextBridge {
@@ -27,12 +30,18 @@ function normalizeDesktopSessionContextSnapshot(value: unknown): DesktopSessionC
   const candidate = value as Partial<DesktopSessionContextSnapshot>;
   const managedEnvironmentID = compact(candidate.managed_environment_id);
   const environmentStorageScopeID = compact(candidate.environment_storage_scope_id);
+  const providerOrigin = compact(candidate.provider_origin);
+  const providerID = compact(candidate.provider_id);
+  const envPublicID = compact(candidate.env_public_id);
   if (managedEnvironmentID === '' || environmentStorageScopeID === '') {
     return null;
   }
   return {
     managed_environment_id: managedEnvironmentID,
     environment_storage_scope_id: environmentStorageScopeID,
+    ...(providerOrigin !== '' ? { provider_origin: providerOrigin } : {}),
+    ...(providerID !== '' ? { provider_id: providerID } : {}),
+    ...(envPublicID !== '' ? { env_public_id: envPublicID } : {}),
   };
 }
 

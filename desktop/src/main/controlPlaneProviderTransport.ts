@@ -158,7 +158,7 @@ function normalizeTransportFailure(url: string, error: unknown): DesktopProvider
   if (hasCode(TLS_ERROR_CODES) || includesMessage('certificate')) {
     return new DesktopProviderRequestError(
       'provider_tls_untrusted',
-      'Desktop could not verify the provider certificate. Trust that certificate on this machine, then try again.',
+      'Desktop could not verify the provider certificate. Trust that certificate on this device, then try again.',
       { providerOrigin, cause: error },
     );
   }
@@ -182,7 +182,7 @@ function normalizeTransportFailure(url: string, error: unknown): DesktopProvider
   if (hasCode(CONNECTION_ERROR_CODES) || includesMessage('connection refused') || includesMessage('connection reset')) {
     return new DesktopProviderRequestError(
       'provider_connection_failed',
-      'Desktop could not reach the provider. Make sure it is running and reachable from this machine, then try again.',
+      'Desktop could not reach the provider. Make sure it is running and reachable from this device, then try again.',
       { providerOrigin, cause: error },
     );
   }

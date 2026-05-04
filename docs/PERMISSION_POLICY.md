@@ -27,7 +27,7 @@ Notes:
 
 ## Config Schema
 
-`~/.redeven/machine/config.json` (or the equivalent `config.json` inside the machine state directory):
+`~/.redeven/local-environment/config.json` (or the equivalent `config.json` inside the Local Environment state directory):
 
 ```json
 {

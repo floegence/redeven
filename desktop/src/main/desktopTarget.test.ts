@@ -19,12 +19,12 @@ describe('desktopTarget', () => {
   it('builds the managed local session target with a stable per-environment key', () => {
     expect(buildManagedEnvironmentDesktopTarget(testManagedLocalEnvironment())).toEqual({
       kind: 'managed_environment',
-      session_key: 'env:machine:local_host',
-      environment_id: 'machine',
-      label: 'Local Machine',
+      session_key: 'env:local:local_host',
+      environment_id: 'local',
+      label: 'Local Environment',
       route: 'local_host',
       managed_environment_kind: 'local',
-      local_environment_name: 'machine',
+      local_environment_name: 'local',
       provider_origin: undefined,
       provider_id: undefined,
       env_public_id: undefined,
@@ -80,7 +80,7 @@ describe('desktopTarget', () => {
       provider_origin: 'https://cp.example.invalid',
       env_public_id: 'env_demo',
       label: 'Demo Environment',
-      local_environment_name: 'machine',
+      local_environment_name: 'local',
       has_local_hosting: true,
       has_remote_desktop: true,
     });

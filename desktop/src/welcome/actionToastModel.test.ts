@@ -26,20 +26,60 @@ describe('actionToastModel', () => {
   it('replaces a visible duplicate so the latest toast keeps the message alive', () => {
     expect(queueDesktopActionToast({
       current: [
-        { id: 1, tone: 'success', message: 'Saved.' },
+        {
+          id: 1,
+          tone: 'success',
+          title: 'Updated',
+          message: 'Saved.',
+          action: {
+            kind: 'reconnect_control_plane',
+            label: 'Reconnect Provider',
+            provider_origin: 'https://cp.example.invalid',
+          },
+          auto_dismiss: false,
+        },
         { id: 2, tone: 'info', message: 'Copied.' },
       ],
       next: {
         id: 3,
         tone: 'success',
+        title: 'Updated',
         message: 'Saved.',
+        action: {
+          kind: 'reconnect_control_plane',
+          label: 'Reconnect Provider',
+          provider_origin: 'https://cp.example.invalid',
+        },
+        auto_dismiss: false,
       },
     })).toEqual({
       toasts: [
         { id: 2, tone: 'info', message: 'Copied.' },
-        { id: 3, tone: 'success', message: 'Saved.' },
+        {
+          id: 3,
+          tone: 'success',
+          title: 'Updated',
+          message: 'Saved.',
+          action: {
+            kind: 'reconnect_control_plane',
+            label: 'Reconnect Provider',
+            provider_origin: 'https://cp.example.invalid',
+          },
+          auto_dismiss: false,
+        },
       ],
-      active_toast: { id: 3, tone: 'success', message: 'Saved.' },
+      active_toast: {
+        id: 3,
+        tone: 'success',
+        title: 'Updated',
+        message: 'Saved.',
+        action: {
+          kind: 'reconnect_control_plane',
+          label: 'Reconnect Provider',
+          provider_origin: 'https://cp.example.invalid',
+        },
+        auto_dismiss: false,
+      },
       removed_toast_ids: [1],
     });
   });

@@ -211,7 +211,7 @@ func (c *cli) bootstrapCmd(args []string) int {
 
 func (c *cli) runCmd(args []string) int {
 	fs := newCLIFlagSet("run")
-	controlplane := fs.String("controlplane", "", "Controlplane base URL for one-shot machine rebind")
+	controlplane := fs.String("controlplane", "", "Controlplane base URL for one-shot Local Environment rebind")
 	envID := fs.String("env-id", "", "Environment public ID (env_...)")
 	bootstrapTicket := fs.String("bootstrap-ticket", "", "One-time bootstrap ticket")
 	bootstrapTicketEnv := fs.String("bootstrap-ticket-env", "", "Environment variable name holding the bootstrap ticket")
@@ -226,6 +226,7 @@ func (c *cli) runCmd(args []string) int {
 	desktopManaged := fs.Bool("desktop-managed", false, "Disable CLI self-upgrade semantics for desktop-managed Local UI runs")
 	startupReportFile := fs.String("startup-report-file", "", "Write Local UI readiness JSON to the given file (advanced)")
 	configPath := fs.String("config-path", "", "Config path override")
+	var desktopLaunchFailure func(string, string, config.StateLayout, int) int
 
 	if err := parseCommandFlags(fs, args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -296,6 +297,28 @@ func (c *cli) runCmd(args []string) int {
 		return 2
 	}
 
+	stateLayout, err := resolveRunStateLayout(*configPath, *stateRoot)
+	if err != nil {
+		return c.printRunStateLayoutGuidance(err)
+	}
+	if desktopLaunchReportEnabled(mode, *desktopManaged, *startupReportFile) {
+		desktopLaunchFailure = func(code string, message string, layout config.StateLayout, exitCode int) int {
+			if reportErr := writeDesktopBlockedLaunchReport(*startupReportFile, code, message, layout); reportErr != nil {
+				fmt.Fprintf(c.stderr, "failed to write desktop launch report: %v\n", reportErr)
+				return 1
+			}
+			fmt.Fprintf(c.stderr, "%s\n", message)
+			return exitCode
+		}
+	}
+	failDesktopLaunch := func(code string, message string) int {
+		if desktopLaunchFailure != nil {
+			return desktopLaunchFailure(code, message, stateLayout, 1)
+		}
+		fmt.Fprintf(c.stderr, "%s\n", message)
+		return 1
+	}
+
 	bootstrapViaFlags := strings.TrimSpace(*controlplane) != "" ||
 		strings.TrimSpace(*envID) != "" ||
 		resolvedBootstrapTicket != ""
@@ -310,9 +333,10 @@ func (c *cli) runCmd(args []string) int {
 			if len(missing) == 1 {
 				label = "flag"
 			}
+			message := fmt.Sprintf("incomplete bootstrap flags for `redeven run`: missing %s %s", label, formatFlagList(missing))
 			writeErrorWithHelp(
 				c.stderr,
-				fmt.Sprintf("incomplete bootstrap flags for `redeven run`: missing %s %s", label, formatFlagList(missing)),
+				message,
 				[]string{
 					"Hint: provide --controlplane, --env-id, and exactly one bootstrap ticket together, or run `redeven bootstrap` first.",
 					fmt.Sprintf(
@@ -332,20 +356,17 @@ func (c *cli) runCmd(args []string) int {
 				},
 				runHelpText(),
 			)
+			if desktopLaunchFailure != nil {
+				return desktopLaunchFailure(desktopLaunchCodeStartupInvalid, message, stateLayout, 2)
+			}
 			return 2
 		}
 	}
 
-	stateLayout, err := resolveRunStateLayout(*configPath, *stateRoot)
-	if err != nil {
-		return c.printRunStateLayoutGuidance(err)
-	}
-
 	// Ensure the state/config directory exists before taking the lock.
-	// Local mode must work on a clean machine (no bootstrap yet).
+	// Local mode must work on a clean Local Environment (no bootstrap yet).
 	if err := os.MkdirAll(stateLayout.StateDir, 0o700); err != nil {
-		fmt.Fprintf(c.stderr, "failed to init state dir: %v\n", err)
-		return 1
+		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to init state dir: %v", err))
 	}
 
 	// Prevent multiple runtime processes from managing the same local state directory.
@@ -364,18 +385,17 @@ func (c *cli) runCmd(args []string) int {
 					return exitCode
 				}
 			}
-			fmt.Fprintf(c.stderr, "another redeven runtime instance is already using this state directory: %s\n", lockPath)
-			fmt.Fprintf(c.stderr, "Hint: stop the existing runtime process, or use a different environment/state directory before retrying.\n")
-			return 1
+			return failDesktopLaunch(
+				desktopLaunchCodeStateDirLocked,
+				fmt.Sprintf("another redeven runtime instance is already using this state directory: %s", lockPath),
+			)
 		}
-		fmt.Fprintf(c.stderr, "failed to acquire runtime lock (%s): %v\n", lockPath, err)
-		return 1
+		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to acquire runtime lock (%s): %v", lockPath, err))
 	}
 	defer func() { _ = lk.Release() }()
 
 	if err := writeAgentLockMetadata(lk, newAgentLockMetadata(string(mode), *desktopManaged, mode != runModeRemote, stateLayout)); err != nil {
-		fmt.Fprintf(c.stderr, "failed to write runtime lock metadata: %v\n", err)
-		return 1
+		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to write runtime lock metadata: %v", err))
 	}
 
 	runPassword, err := resolveRunPassword(runPasswordOptions{
@@ -395,6 +415,9 @@ func (c *cli) runCmd(args []string) int {
 	if err := verifyStartupAccessPassword(accessGate, runPassword.requireStartupVerification); err != nil {
 		message, details := translatePasswordVerificationError(err)
 		writeErrorWithHelp(c.stderr, message, details, "")
+		if desktopLaunchFailure != nil {
+			return desktopLaunchFailure(desktopLaunchCodeStartupInvalid, message, stateLayout, 1)
+		}
 		return 1
 	}
 	if mode != runModeRemote && !localUIBind.IsLoopbackOnly() && !accessGate.Enabled() {
@@ -429,14 +452,13 @@ func (c *cli) runCmd(args []string) int {
 			Version,
 		))
 		if err != nil {
-			fmt.Fprintf(c.stderr, "bootstrap failed: %v\n", err)
-			return 1
+			return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("bootstrap failed: %v", err))
 		}
 	}
 
 	cfg, err := config.Load(stateLayout.ConfigPath)
 	if err != nil {
-		// Local mode must be able to start from a clean machine (no bootstrap yet).
+		// Local mode must be able to start from a clean Local Environment (no bootstrap yet).
 		if (mode == runModeLocal || mode == runModeDesktop) && os.IsNotExist(err) {
 			p, _ := config.ParsePermissionPolicyPreset("")
 			cfg = &config.Config{
@@ -445,19 +467,16 @@ func (c *cli) runCmd(args []string) int {
 				LogLevel:         "info",
 			}
 			if err := config.Save(stateLayout.ConfigPath, cfg); err != nil {
-				fmt.Fprintf(c.stderr, "failed to init default config: %v\n", err)
-				return 1
+				return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to init default config: %v", err))
 			}
 		} else if os.IsNotExist(err) {
 			return c.printNotBootstrappedGuidance(err)
 		} else {
-			fmt.Fprintf(c.stderr, "failed to load config: %v\n", err)
-			return 1
+			return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to load config: %v", err))
 		}
 	}
 	if err := config.WriteScopeMetadataForConfig(stateLayout, cfg); err != nil {
-		fmt.Fprintf(c.stderr, "failed to update scope metadata: %v\n", err)
-		return 1
+		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to update scope metadata: %v", err))
 	}
 
 	remoteErr := cfg.ValidateRemoteStrict()
@@ -475,14 +494,17 @@ func (c *cli) runCmd(args []string) int {
 	}
 
 	if controlChannelEnabled && !remoteEnabled {
+		message := fmt.Sprintf("runtime is not bootstrapped for remote or hybrid mode: %v", remoteErr)
+		if desktopLaunchFailure != nil {
+			return desktopLaunchFailure(desktopLaunchCodeStartupInvalid, message, stateLayout, 1)
+		}
 		return c.printNotBootstrappedGuidance(remoteErr)
 	}
 
 	localUIBindLabel := localUIBind.ListenLabel()
 	localUIURLs := localUIBind.DisplayURLs()
 	if err := config.WriteEnvironmentCatalogRecord(stateLayout, cfg, localUIBindLabel, accessGate.Enabled()); err != nil {
-		fmt.Fprintf(c.stderr, "failed to update environment catalog: %v\n", err)
-		return 1
+		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to update environment catalog: %v", err))
 	}
 	announce := func() {
 		printWelcomeBanner(c.stderr, welcomeBannerOptions{
@@ -511,8 +533,7 @@ func (c *cli) runCmd(args []string) int {
 		AccessGate:            accessGate,
 	})
 	if err != nil {
-		fmt.Fprintf(c.stderr, "failed to init runtime: %v\n", err)
-		return 1
+		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to init runtime: %v", err))
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -535,48 +556,50 @@ func (c *cli) runCmd(args []string) int {
 	if localUIEnabled {
 		gw := a.CodeGateway()
 		if gw == nil {
-			fmt.Fprintf(c.stderr, "local ui unavailable: gateway not initialized\n")
-			return 1
+			return failDesktopLaunch(desktopLaunchCodeStartupFailed, "local ui unavailable: gateway not initialized")
 		}
 
 		srv, err := localui.New(localui.Options{
-			Bind:             localUIBind,
-			DesktopManaged:   *desktopManaged,
-			EffectiveRunMode: string(effectiveRunMode),
-			RemoteEnabled:    controlChannelEnabled,
-			Gateway:          gw,
-			Agent:            a,
-			ConfigPath:       stateLayout.ConfigPath,
-			Version:          Version,
-			Diagnostics:      a.DiagnosticsStore(),
-			AccessGate:       accessGate,
+			Bind:                   localUIBind,
+			DesktopManaged:         *desktopManaged,
+			EffectiveRunMode:       string(effectiveRunMode),
+			RemoteEnabled:          controlChannelEnabled,
+			ControlplaneBaseURL:    cfg.ControlplaneBaseURL,
+			ControlplaneProviderID: cfg.ControlplaneProviderID,
+			EnvPublicID:            cfg.EnvironmentID,
+			Gateway:                gw,
+			Agent:                  a,
+			ConfigPath:             stateLayout.ConfigPath,
+			Version:                Version,
+			Diagnostics:            a.DiagnosticsStore(),
+			AccessGate:             accessGate,
 		})
 		if err != nil {
-			fmt.Fprintf(c.stderr, "failed to init local ui: %v\n", err)
-			return 1
+			return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to init local ui: %v", err))
 		}
 		if err := srv.Start(ctx); err != nil {
-			fmt.Fprintf(c.stderr, "failed to start local ui: %v\n", err)
-			return 1
+			return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to start local ui: %v", err))
 		}
 		localUIBindLabel = srv.ListenLabel()
 		localUIURLs = srv.DisplayURLs()
 		if err := config.WriteEnvironmentCatalogRecord(stateLayout, cfg, localUIBindLabel, accessGate.Enabled()); err != nil {
-			fmt.Fprintf(c.stderr, "failed to refresh environment catalog: %v\n", err)
-			return 1
+			return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to refresh environment catalog: %v", err))
 		}
 		if reportPath := strings.TrimSpace(*startupReportFile); reportPath != "" {
 			if err := writeDesktopReadyLaunchReport(reportPath, runtimeStartupReport{
-				LocalUIURL:         firstNonEmptyString(localUIURLs),
-				LocalUIURLs:        append([]string(nil), localUIURLs...),
-				PasswordRequired:   accessGate != nil && accessGate.Enabled(),
-				EffectiveRunMode:   string(effectiveRunMode),
-				RemoteEnabled:      controlChannelEnabled,
-				DesktopManaged:     *desktopManaged,
-				StateDir:           stateLayout.StateDir,
-				DiagnosticsEnabled: a.DiagnosticsEnabled(),
-				PID:                os.Getpid(),
-				RuntimeService:     a.RuntimeServiceSnapshot(),
+				LocalUIURL:             firstNonEmptyString(localUIURLs),
+				LocalUIURLs:            append([]string(nil), localUIURLs...),
+				PasswordRequired:       accessGate != nil && accessGate.Enabled(),
+				EffectiveRunMode:       string(effectiveRunMode),
+				RemoteEnabled:          controlChannelEnabled,
+				DesktopManaged:         *desktopManaged,
+				ControlplaneBaseURL:    cfg.ControlplaneBaseURL,
+				ControlplaneProviderID: cfg.ControlplaneProviderID,
+				EnvPublicID:            cfg.EnvironmentID,
+				StateDir:               stateLayout.StateDir,
+				DiagnosticsEnabled:     a.DiagnosticsEnabled(),
+				PID:                    os.Getpid(),
+				RuntimeService:         a.RuntimeServiceSnapshot(),
 			}, desktopLaunchStatusReady); err != nil {
 				fmt.Fprintf(c.stderr, "failed to write desktop launch report: %v\n", err)
 				return 1
@@ -592,8 +615,7 @@ func (c *cli) runCmd(args []string) int {
 	}
 
 	if err := a.Run(ctx); err != nil && ctx.Err() == nil {
-		fmt.Fprintf(c.stderr, "runtime exited with error: %v\n", err)
-		return 1
+		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("runtime exited with error: %v", err))
 	}
 	return 0
 }
@@ -617,7 +639,7 @@ func resolveBootstrapTargetLayout(
 	if cleanPath != "" {
 		return config.StateLayoutForConfigPath(cleanPath)
 	}
-	return config.MachineStateLayout(stateRoot)
+	return config.LocalEnvironmentStateLayout(stateRoot)
 }
 
 func resolveRunStateLayout(
@@ -628,7 +650,7 @@ func resolveRunStateLayout(
 	if cleanPath != "" {
 		return config.StateLayoutForConfigPath(cleanPath)
 	}
-	return config.MachineStateLayout(stateRoot)
+	return config.LocalEnvironmentStateLayout(stateRoot)
 }
 
 func (c *cli) printRunStateLayoutGuidance(reason error) int {

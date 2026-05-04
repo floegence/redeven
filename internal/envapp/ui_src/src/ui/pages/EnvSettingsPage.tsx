@@ -467,10 +467,10 @@ export function EnvSettingsPage() {
     if (status.operation.state === 'running') return;
 
     if (codeRuntimeOperationSucceeded(status) && operationAction === pendingAction) {
-      if (pendingAction === 'remove_machine_version') {
-        notify.success('Version removed', 'The selected managed code-server version has been removed from this machine.');
+      if (pendingAction === 'remove_local_environment_version') {
+        notify.success('Version removed', 'The selected managed code-server version has been removed from the Local Environment inventory.');
       } else {
-        notify.success('Runtime ready', 'The latest managed code-server runtime is now installed on this machine and selected for the current environment.');
+        notify.success('Runtime ready', 'The latest managed code-server runtime is now installed for this Local Environment and selected for the current environment.');
       }
       setPendingRuntimeSuccessAction('');
       return;
@@ -571,7 +571,7 @@ export function EnvSettingsPage() {
   const [codeRuntimeDefaultLoadingVersion, setCodeRuntimeDefaultLoadingVersion] = createSignal<string | null>(null);
   const [codeRuntimeDetachLoading, setCodeRuntimeDetachLoading] = createSignal(false);
   const [codeRuntimeRemoveVersionLoading, setCodeRuntimeRemoveVersionLoading] = createSignal<string | null>(null);
-  const [pendingRuntimeSuccessAction, setPendingRuntimeSuccessAction] = createSignal<'' | 'install' | 'remove_machine_version'>('');
+  const [pendingRuntimeSuccessAction, setPendingRuntimeSuccessAction] = createSignal<'' | 'install' | 'remove_local_environment_version'>('');
 
   // Dirty flags
   const [runtimeDirty, setRuntimeDirty] = createSignal(false);
@@ -625,7 +625,7 @@ export function EnvSettingsPage() {
     try {
       await setCodeRuntimeDefaultVersion(version);
       await refetchCodeRuntimeStatus();
-      notify.success('Machine default updated', `${version} is now the default managed version for environments that follow the machine default.`);
+      notify.success('Local Environment default updated', `${version} is now the default managed version for environments that follow the Local Environment default.`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       notify.error('Default update failed', msg || 'Request failed.');
@@ -638,7 +638,7 @@ export function EnvSettingsPage() {
     try {
       await detachCodeRuntimeSelection();
       await refetchCodeRuntimeStatus();
-      notify.success('Environment selection removed', 'This environment now follows the machine default managed version when one is configured.');
+      notify.success('Environment selection removed', 'This environment now follows the Local Environment default managed version when one is configured.');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       notify.error('Remove failed', msg || 'Request failed.');
@@ -648,7 +648,7 @@ export function EnvSettingsPage() {
   };
   const removeManagedCodeRuntimeVersion = async (version: string) => {
     setCodeRuntimeRemoveVersionLoading(version);
-    setPendingRuntimeSuccessAction('remove_machine_version');
+    setPendingRuntimeSuccessAction('remove_local_environment_version');
     try {
       await removeCodeRuntimeVersion(version);
       await refetchCodeRuntimeStatus();
@@ -809,7 +809,7 @@ export function EnvSettingsPage() {
       {
         label: 'host_binary_detected',
         value: current?.available ? 'Yes' : 'No',
-        note: 'Whether Redeven can resolve `codex` from the host machine PATH.',
+        note: 'Whether Redeven can resolve `codex` from the host PATH.',
       },
       {
         label: 'bridge_state',
@@ -3779,7 +3779,7 @@ export function EnvSettingsPage() {
                   <div class="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-4">
                     <Code class="h-5 w-5 text-muted-foreground" />
                     <div class="text-sm text-muted-foreground">
-                      Redeven is waiting for the host machine&apos;s <span class="font-mono">codex</span> binary. Install it on the host and expose it on <span class="font-mono">PATH</span>; this page remains diagnostics-only and does not store Codex runtime settings.
+                      Redeven is waiting for the host <span class="font-mono">codex</span> binary. Install it on the host and expose it on <span class="font-mono">PATH</span>; this page remains diagnostics-only and does not store Codex runtime settings.
                     </div>
                   </div>
                 </Show>
@@ -3789,7 +3789,7 @@ export function EnvSettingsPage() {
                 <div class="rounded-lg border border-border bg-muted/20 p-4">
                   <div class="text-sm font-semibold text-foreground">Notes</div>
                   <div class="mt-2 space-y-1 text-xs leading-6 text-muted-foreground">
-                    <div>Codex keeps its own runtime defaults on the host machine; Redeven does not mirror them into <span class="font-mono">config.json</span>.</div>
+                    <div>Codex keeps its own runtime defaults on the host; Redeven does not mirror them into <span class="font-mono">config.json</span>.</div>
                     <div>The dedicated Codex activity entry and gateway namespace stay isolated from Flower, so both surfaces can evolve independently.</div>
                   </div>
                 </div>

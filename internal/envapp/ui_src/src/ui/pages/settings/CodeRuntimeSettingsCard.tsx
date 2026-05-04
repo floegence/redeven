@@ -26,8 +26,8 @@ function selectionSourceLabel(source: string | null | undefined): string {
   switch (String(source ?? '').trim()) {
     case 'environment':
       return 'Pinned to this environment';
-    case 'machine_default':
-      return 'Following the machine default';
+    case 'local_environment_default':
+      return 'Following the Local Environment default';
     default:
       return 'No managed selection';
   }
@@ -72,9 +72,9 @@ function operationLabel(status: CodeRuntimeStatus | null | undefined): string {
   const operation = status?.operation;
   if (!operation) return 'Idle';
   if (operation.state === 'running') return codeRuntimeStageLabel(operation.stage, operation.action);
-  if (operation.state === 'failed') return operation.action === 'remove_machine_version' ? 'Version removal failed' : 'Install failed';
-  if (operation.state === 'cancelled') return operation.action === 'remove_machine_version' ? 'Version removal cancelled' : 'Install cancelled';
-  if (operation.state === 'succeeded') return operation.action === 'remove_machine_version' ? 'Version removed' : 'Install completed';
+  if (operation.state === 'failed') return operation.action === 'remove_local_environment_version' ? 'Version removal failed' : 'Install failed';
+  if (operation.state === 'cancelled') return operation.action === 'remove_local_environment_version' ? 'Version removal cancelled' : 'Install cancelled';
+  if (operation.state === 'succeeded') return operation.action === 'remove_local_environment_version' ? 'Version removed' : 'Install completed';
   return 'Idle';
 }
 
@@ -119,7 +119,7 @@ function VersionRow(props: {
               <SettingsPill tone="success">Current environment</SettingsPill>
             </Show>
             <Show when={props.version.default_for_new_environments}>
-              <SettingsPill>Machine default</SettingsPill>
+              <SettingsPill>Local Environment default</SettingsPill>
             </Show>
           </div>
           <div class="grid gap-1 text-[11px] text-muted-foreground">
@@ -158,7 +158,7 @@ function VersionRow(props: {
             onClick={() => props.onRemove(props.version.version)}
             disabled={!props.canInteract || !props.canManage || props.busy || !props.version.removable}
           >
-            Remove from this machine
+            Remove from Local Environment
           </Button>
         </div>
       </div>
@@ -200,11 +200,11 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
   const installedVersions = createMemo(() => props.status?.installed_versions ?? []);
   const activeRuntime = createMemo(() => props.status?.active_runtime);
   const refreshActionLabel = () => 'Refresh';
-  const refreshActionTooltip = () => 'Re-scan the machine inventory and the active runtime used by this environment.';
+  const refreshActionTooltip = () => 'Re-scan the Local Environment inventory and the active runtime used by this environment.';
   const installActionLabel = () => 'Install latest';
-  const installActionTooltip = () => 'Install the latest stable managed code-server on this machine, then pin this environment to it.';
+  const installActionTooltip = () => 'Install the latest stable managed code-server for this Local Environment, then pin this environment to it.';
   const detachActionLabel = () => 'Unpin';
-  const detachActionTooltip = () => 'Remove this environment-specific runtime pin. The environment falls back to the machine default when one is configured.';
+  const detachActionTooltip = () => 'Remove this environment-specific runtime pin. The environment falls back to the Local Environment default when one is configured.';
   const cancelActionLabel = () => 'Cancel';
   const cancelActionTooltip = () => 'Cancel the current managed runtime install.';
 
@@ -215,8 +215,8 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
         label: 'Managed selection',
         value: selectionSourceLabel(props.status?.environment_selection_source),
         note:
-          props.status?.environment_selection_source === 'machine_default'
-            ? 'This environment currently follows the machine default managed version.'
+          props.status?.environment_selection_source === 'local_environment_default'
+            ? 'This environment currently follows the Local Environment default managed version.'
             : props.status?.environment_selection_source === 'environment'
               ? 'This environment is pinned to its own managed version.'
               : 'This environment does not currently select a managed version.',
@@ -259,28 +259,28 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
       {
         label: 'Environment link path',
         value: props.status?.managed_prefix || '-',
-        note: 'The current environment points this path at the selected machine-managed version.',
+        note: 'The current environment points this path at the selected Local Environment runtime version.',
         mono: true,
       },
       {
         label: 'Shared runtime root',
         value: props.status?.shared_runtime_root || '-',
-        note: 'Machine-scoped managed versions are stored here once per host.',
+        note: 'Managed runtime versions for this Local Environment are stored here once per host.',
         mono: true,
       },
     ];
   });
 
-  const machineRows = createMemo<readonly RuntimeDetailRow[]>(() => [
+  const localEnvironmentRows = createMemo<readonly RuntimeDetailRow[]>(() => [
     {
-      label: 'Machine default version',
-      value: props.status?.machine_default_version || 'None',
-      note: 'New environments or environments that follow the machine default use this managed version.',
+      label: 'Local Environment default version',
+      value: props.status?.local_environment_default_version || 'None',
+      note: 'New environments or environments that follow the Local Environment default use this managed version.',
     },
     {
       label: 'Installed versions',
       value: String(installedVersions().length),
-      note: installedVersions().length > 0 ? 'Managed versions currently installed on this machine.' : 'No managed versions are currently installed on this machine.',
+      note: installedVersions().length > 0 ? 'Managed versions currently installed for this Local Environment.' : 'No managed versions are currently installed for this Local Environment.',
     },
     {
       label: 'Installer URL',
@@ -292,15 +292,15 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
 
   const operationSummary = createMemo(() => {
     if (operationRunning()) {
-      return props.status?.operation.action === 'remove_machine_version'
-        ? 'Redeven is removing one machine-managed version after your explicit request.'
-        : 'Redeven is installing the latest stable managed runtime for this machine and then selecting it for the current environment.';
+      return props.status?.operation.action === 'remove_local_environment_version'
+        ? 'Redeven is removing one Local Environment runtime version after your explicit request.'
+        : 'Redeven is installing the latest stable managed runtime for this Local Environment and then selecting it for the current environment.';
     }
     if (operationFailed()) {
-      return 'The last machine-managed runtime action did not finish successfully. Review the recent output below before retrying.';
+      return 'The last Local Environment runtime action did not finish successfully. Review the recent output below before retrying.';
     }
     if (operationCancelled()) {
-      return 'The last machine-managed runtime action was cancelled before Redeven finished validating the result.';
+      return 'The last Local Environment runtime action was cancelled before Redeven finished validating the result.';
     }
     return '';
   });
@@ -330,7 +330,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
       <SettingsCard
         icon={Code}
         title="code-server Runtime"
-        description="Manage the machine-scoped code-server runtime inventory, the current environment selection, and the default managed version for environments that follow the machine default."
+        description="Manage the Local Environment-scoped code-server runtime inventory, the current environment selection, and the default managed version for environments that follow the Local Environment default."
         badge={operationRunning() ? operationLabel(props.status) : runtimeReady() ? 'Current environment ready' : 'Runtime needs action'}
         badgeVariant={operationRunning() ? 'warning' : runtimeReady() ? 'success' : 'warning'}
         error={props.error}
@@ -390,7 +390,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
         <div class="space-y-4">
           <Show when={!props.canManage}>
             <div class="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-              Installing, selecting, or removing machine-managed runtimes requires read, write, and execute access for this environment session.
+              Installing, selecting, or removing Local Environment runtime versions requires read, write, and execute access for this environment session.
             </div>
           </Show>
 
@@ -420,15 +420,15 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
           </Show>
 
           <RuntimeDetailsTableSection title="Current environment" rows={currentEnvironmentRows()} />
-          <RuntimeDetailsTableSection title="Installed on this machine" rows={machineRows()} />
+          <RuntimeDetailsTableSection title="Installed for this Local Environment" rows={localEnvironmentRows()} />
 
           <Show
             when={installedVersions().length > 0}
             fallback={
               <HighlightBlock variant="warning" title="No managed versions installed">
                 <div class="space-y-2 text-sm text-muted-foreground">
-                  <div>Install the latest stable managed runtime once on this machine to reuse it across environments.</div>
-                  <div>This action affects the machine inventory, then selects the installed version for the current environment.</div>
+                  <div>Install the latest stable managed runtime once for this Local Environment to reuse it across environments.</div>
+                  <div>This action affects the Local Environment inventory, then selects the installed version for the current environment.</div>
                 </div>
               </HighlightBlock>
             }
@@ -462,13 +462,13 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
         onConfirm={() => void confirmInstall()}
       >
         <div class="space-y-3">
-          <p class="text-sm">Redeven will install the latest stable managed code-server runtime into the machine inventory, then select it for the current environment.</p>
+          <p class="text-sm">Redeven will install the latest stable managed code-server runtime into the Local Environment inventory, then select it for the current environment.</p>
           <div class="grid gap-2 rounded-lg border border-border bg-muted/20 p-3 text-[11px] text-muted-foreground">
             <div>Shared runtime root: <span class="font-mono text-foreground break-all">{props.status?.shared_runtime_root || '-'}</span></div>
             <div>Current environment link: <span class="font-mono text-foreground break-all">{props.status?.managed_prefix || '-'}</span></div>
             <div>Installer URL: <span class="font-mono text-foreground break-all">{props.status?.installer_script_url || '-'}</span></div>
           </div>
-          <p class="text-xs text-muted-foreground">This does not automatically switch other environments. They keep their own selection unless they follow the machine default.</p>
+          <p class="text-xs text-muted-foreground">This does not automatically switch other environments. They keep their own selection unless they follow the Local Environment default.</p>
         </div>
       </ConfirmDialog>
 
@@ -484,22 +484,22 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
           <p class="text-sm">This environment will stop using its pinned managed version.</p>
           <div class="grid gap-2 rounded-lg border border-border bg-muted/20 p-3 text-[11px] text-muted-foreground">
             <div>Current selection: <span class="font-mono text-foreground">{props.status?.environment_selection_version || '-'}</span></div>
-            <div>Machine default: <span class="font-mono text-foreground">{props.status?.machine_default_version || 'None'}</span></div>
+            <div>Local Environment default: <span class="font-mono text-foreground">{props.status?.local_environment_default_version || 'None'}</span></div>
           </div>
-          <p class="text-xs text-muted-foreground">After this, the environment will follow the machine default when one is configured. No machine-managed version files are deleted by this action.</p>
+          <p class="text-xs text-muted-foreground">After this, the environment will follow the Local Environment default when one is configured. No Local Environment runtime version files are deleted by this action.</p>
         </div>
       </ConfirmDialog>
 
       <ConfirmDialog
         open={Boolean(removeVersionConfirmOpen())}
         onOpenChange={(open) => setRemoveVersionConfirmOpen(open ? removeVersionConfirmOpen() : null)}
-        title="Remove from this machine"
-        confirmText="Remove from this machine"
+        title="Remove from Local Environment"
+        confirmText="Remove from Local Environment"
         loading={Boolean(props.removeVersionLoading)}
         onConfirm={() => void confirmRemoveVersion()}
       >
         <div class="space-y-3">
-          <p class="text-sm">This removes one managed version from the machine inventory only when it is not selected by any environment and is not the machine default.</p>
+          <p class="text-sm">This removes one managed version from the Local Environment inventory only when it is not selected by any environment and is not the Local Environment default.</p>
           <div class="grid gap-2 rounded-lg border border-border bg-muted/20 p-3 text-[11px] text-muted-foreground">
             <div>Target version: <span class="font-mono text-foreground">{removeVersionConfirmOpen() || '-'}</span></div>
             <div>Shared runtime root: <span class="font-mono text-foreground break-all">{props.status?.shared_runtime_root || '-'}</span></div>

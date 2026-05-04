@@ -52,7 +52,7 @@ describe('welcomeCopy', () => {
     expect(accessModeVisual('local_only')).toEqual({
       short_label: 'Local',
       tone: 'neutral',
-      description: 'Only this machine',
+      description: 'Only this device',
     });
     expect(accessModeVisual('shared_local_network')).toEqual({
       short_label: 'LAN',

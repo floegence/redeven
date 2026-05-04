@@ -8,7 +8,6 @@ import type {
   DesktopManagedEnvironment,
   DesktopManagedEnvironmentRuntimeState,
 } from '../shared/desktopManagedEnvironment';
-import type { DesktopProviderEnvironmentRecord } from '../shared/desktopProviderEnvironment';
 import { normalizeRuntimeServiceSnapshot, type RuntimeServiceOwner } from '../shared/runtimeService';
 
 const DEFAULT_WELCOME_RUNTIME_PROBE_TIMEOUT_MS = 200;
@@ -34,6 +33,9 @@ function runtimeStateFromStartup(
     effective_run_mode: compact(startup.effective_run_mode),
     remote_enabled: startup.remote_enabled === true,
     desktop_managed: desktopManaged,
+    controlplane_base_url: compact(startup.controlplane_base_url) || undefined,
+    controlplane_provider_id: compact(startup.controlplane_provider_id) || undefined,
+    env_public_id: compact(startup.env_public_id) || undefined,
     password_required: startup.password_required === true,
     diagnostics_enabled: startup.diagnostics_enabled === true,
     pid: Number.isInteger(pid) && pid > 0 ? pid : 0,
@@ -114,6 +116,9 @@ function withCurrentRuntime(
   if (
     existingURL === nextURL
     && (existingRuntime?.desktop_managed ?? false) === (currentRuntime?.desktop_managed ?? false)
+    && (existingRuntime?.controlplane_base_url ?? '') === (currentRuntime?.controlplane_base_url ?? '')
+    && (existingRuntime?.controlplane_provider_id ?? '') === (currentRuntime?.controlplane_provider_id ?? '')
+    && (existingRuntime?.env_public_id ?? '') === (currentRuntime?.env_public_id ?? '')
     && (existingRuntime?.password_required ?? false) === (currentRuntime?.password_required ?? false)
     && (existingRuntime?.effective_run_mode ?? '') === (currentRuntime?.effective_run_mode ?? '')
     && (existingRuntime?.remote_enabled ?? false) === (currentRuntime?.remote_enabled ?? false)
@@ -127,37 +132,6 @@ function withCurrentRuntime(
     ...environment,
     local_hosting: {
       ...environment.local_hosting,
-      current_runtime: currentRuntime,
-    },
-  };
-}
-
-function withCurrentRuntimeForProviderEnvironment(
-  environment: DesktopProviderEnvironmentRecord,
-  currentRuntime: DesktopManagedEnvironmentRuntimeState | undefined,
-): DesktopProviderEnvironmentRecord {
-  if (!environment.local_runtime) {
-    return environment;
-  }
-  const existingRuntime = environment.local_runtime.current_runtime;
-  const existingURL = compact(existingRuntime?.local_ui_url);
-  const nextURL = compact(currentRuntime?.local_ui_url);
-  if (
-    existingURL === nextURL
-    && (existingRuntime?.desktop_managed ?? false) === (currentRuntime?.desktop_managed ?? false)
-    && (existingRuntime?.password_required ?? false) === (currentRuntime?.password_required ?? false)
-    && (existingRuntime?.effective_run_mode ?? '') === (currentRuntime?.effective_run_mode ?? '')
-    && (existingRuntime?.remote_enabled ?? false) === (currentRuntime?.remote_enabled ?? false)
-    && (existingRuntime?.diagnostics_enabled ?? false) === (currentRuntime?.diagnostics_enabled ?? false)
-    && (existingRuntime?.pid ?? 0) === (currentRuntime?.pid ?? 0)
-    && JSON.stringify(existingRuntime?.runtime_service ?? null) === JSON.stringify(currentRuntime?.runtime_service ?? null)
-  ) {
-    return environment;
-  }
-  return {
-    ...environment,
-    local_runtime: {
-      ...environment.local_runtime,
       current_runtime: currentRuntime,
     },
   };
@@ -182,19 +156,8 @@ export async function hydrateWelcomeManagedEnvironmentRuntimeState(
       return withCurrentRuntime(environment, currentRuntime);
     }),
   );
-  const nextProviderEnvironments = await Promise.all(
-    preferences.provider_environments.map(async (environment) => {
-      if (!environment.local_runtime) {
-        return environment;
-      }
-      const currentRuntime = currentRuntimeFromLocalSession(localSessionsByEnvironmentID.get(environment.id))
-        ?? await currentRuntimeFromProbeStateDir(environment.local_runtime.scope.state_dir, probeTimeoutMs);
-      return withCurrentRuntimeForProviderEnvironment(environment, currentRuntime);
-    }),
-  );
   return {
     ...preferences,
     managed_environments: nextManagedEnvironments,
-    provider_environments: nextProviderEnvironments,
   };
 }
