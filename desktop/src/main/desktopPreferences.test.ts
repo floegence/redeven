@@ -12,13 +12,9 @@ import { managedEnvironmentLocalAccess } from '../shared/desktopManagedEnvironme
 import {
   testDesktopPreferences,
   testManagedAccess,
-  testManagedControlPlaneEnvironment,
   testManagedLocalEnvironment,
   testProviderEnvironment,
 } from '../testSupport/desktopTestHelpers';
-import {
-  controlPlaneProviderKeyForOrigin,
-} from './statePaths';
 import {
   createPlaintextSecretCodec,
   deleteManagedEnvironment,
@@ -37,7 +33,6 @@ import {
   loadDesktopPreferences,
   managedDesktopLaunchKey,
   normalizeRecentExternalLocalUIURLs,
-  normalizeSavedEnvironments,
   rememberRecentExternalLocalUITarget,
   rememberRecentSSHEnvironmentTarget,
   rememberProviderEnvironmentUse,
@@ -562,7 +557,7 @@ describe('desktopPreferences', () => {
     });
   });
 
-  it('drops malformed secrets while keeping valid non-secret preferences', async () => {
+  it('ignores root-level preference fields when secrets are malformed', async () => {
     await withTempPreferencesDir(async (root) => {
       const paths = defaultDesktopPreferencesPaths(root);
       await fs.writeFile(paths.preferencesFile, JSON.stringify({
@@ -586,7 +581,7 @@ describe('desktopPreferences', () => {
           local_hosting: expect.objectContaining({
             scope: { kind: 'local_environment', name: 'local' },
             access: {
-              local_ui_bind: '127.0.0.1:0',
+              local_ui_bind: 'localhost:23998',
               local_ui_password: '',
               local_ui_password_configured: false,
             },
@@ -596,7 +591,7 @@ describe('desktopPreferences', () => {
     });
   });
 
-  it('recovers invalid stored values by falling back to valid defaults and normalized URLs', async () => {
+  it('ignores root-level saved targets and writes the current catalog defaults', async () => {
     await withTempPreferencesDir(async (root) => {
       const paths = defaultDesktopPreferencesPaths(root);
       await fs.writeFile(paths.preferencesFile, JSON.stringify({
@@ -617,18 +612,9 @@ describe('desktopPreferences', () => {
 
       const loaded = await loadDesktopPreferences(paths, createPlaintextSecretCodec());
       expect(loaded).toEqual(expect.objectContaining({
-        saved_environments: [
-          {
-            id: 'http://192.168.1.11:24000/',
-            label: 'Recovered target',
-            local_ui_url: 'http://192.168.1.11:24000/',
-            source: 'saved',
-            pinned: false,
-            last_used_at_ms: 20,
-          },
-        ],
+        saved_environments: [],
         saved_ssh_environments: [],
-        recent_external_local_ui_urls: ['http://192.168.1.11:24000/'],
+        recent_external_local_ui_urls: [],
         control_plane_refresh_tokens: {},
         control_planes: [],
       }));
@@ -647,33 +633,6 @@ describe('desktopPreferences', () => {
         }),
       ]);
     });
-  });
-
-  it('migrates legacy recent URLs into saved environments', () => {
-    expect(normalizeSavedEnvironments(
-      null,
-      [
-        'http://192.168.1.11:24000/_redeven_proxy/env/',
-        'http://192.168.1.12:24000/',
-      ],
-    )).toEqual([
-      {
-        id: 'http://192.168.1.11:24000/',
-        label: '192.168.1.11:24000',
-        local_ui_url: 'http://192.168.1.11:24000/',
-        source: 'recent_auto',
-        pinned: false,
-        last_used_at_ms: 2,
-      },
-      {
-        id: 'http://192.168.1.12:24000/',
-        label: '192.168.1.12:24000',
-        local_ui_url: 'http://192.168.1.12:24000/',
-        source: 'recent_auto',
-        pinned: false,
-        last_used_at_ms: 1,
-      },
-    ]);
   });
 
   it('upserts, promotes, orders, and deletes saved environments while deriving recent URLs', () => {
@@ -1094,58 +1053,6 @@ describe('desktopPreferences', () => {
     expect(result.deleted_environment).toBeNull();
     expect(result.deleted_state_dir).toBe('');
     expect(result.preferences.managed_environments.some((environment) => environment.id === removable.id)).toBe(true);
-  });
-
-  it('repairs a legacy provider-backed local environment into provider preference only', () => {
-    const provider = buildTestControlPlaneProvider();
-    const legacyProviderID = controlPlaneProviderKeyForOrigin(provider.provider_origin);
-    const existing = testManagedControlPlaneEnvironment(provider.provider_origin, 'env_demo', {
-      providerID: legacyProviderID,
-      label: 'Desktop Label',
-      preferredOpenRoute: 'local_host',
-      access: {
-        local_ui_bind: '127.0.0.1:0',
-      },
-    });
-
-    const next = upsertSavedControlPlane(testDesktopPreferences({
-      managed_environments: [existing],
-    }), {
-      provider,
-      account: buildTestControlPlaneAccount(provider),
-      environments: [buildTestProviderEnvironment(provider)],
-      refresh_token: 'refresh-demo-token',
-      display_label: 'Demo Portal',
-      last_synced_at_ms: 456,
-    });
-
-    const repairedEntries = next.provider_environments.filter((environment) => (
-      environment.provider_origin === provider.provider_origin
-      && environment.env_public_id === 'env_demo'
-    ));
-
-    expect(repairedEntries).toHaveLength(1);
-    expect(repairedEntries[0]).toEqual(expect.objectContaining({
-      id: existing.id,
-      label: 'Demo Environment',
-      preferred_open_route: 'local_host',
-      remote_catalog_entry: expect.objectContaining({
-        description: 'team sandbox',
-        namespace_public_id: 'ns_demo',
-        namespace_name: 'Demo Team',
-        status: 'online',
-        lifecycle_status: 'active',
-      }),
-      provider_origin: provider.provider_origin,
-      provider_id: provider.provider_id,
-      env_public_id: 'env_demo',
-    }));
-    expect(repairedEntries[0]).not.toHaveProperty('local_runtime');
-    expect(next.managed_environments).toEqual([
-      expect.objectContaining({
-        id: 'local',
-      }),
-    ]);
   });
 
   it('drops revoked provider entries unless they have durable user preference metadata', () => {

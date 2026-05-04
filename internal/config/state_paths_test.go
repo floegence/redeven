@@ -45,25 +45,6 @@ func TestDefaultStateLayoutUsesLocalEnvironmentScope(t *testing.T) {
 	}
 }
 
-func TestControlPlaneStateLayoutReturnsLocalEnvironmentScope(t *testing.T) {
-	restoreHome := stubUserHomeDir("/Users/tester", nil)
-	restoreEnv := stubLookupEnv("", false)
-	defer restoreHome()
-	defer restoreEnv()
-
-	layout, err := ControlPlaneStateLayout("https://Region.Example.invalid/path?q=1", "env:bad/id", "")
-	if err != nil {
-		t.Fatalf("ControlPlaneStateLayout() error = %v", err)
-	}
-
-	if layout.ScopeKey != "local_environment" {
-		t.Fatalf("ScopeKey = %q", layout.ScopeKey)
-	}
-	if layout.ConfigPath != filepath.Clean("/Users/tester/.redeven/local-environment/config.json") {
-		t.Fatalf("ConfigPath = %q", layout.ConfigPath)
-	}
-}
-
 func TestResolveStateRootUsesEnvOverride(t *testing.T) {
 	restoreHome := stubUserHomeDir("/Users/ignored", nil)
 	restoreEnv := stubLookupEnv("/tmp/redeven-state", true)

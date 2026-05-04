@@ -30,11 +30,8 @@ const (
 )
 
 type ScopeRef struct {
-	Kind                ScopeKind
-	Name                string
-	ProviderKey         string
-	ControlplaneBaseURL string
-	EnvironmentID       string
+	Kind ScopeKind
+	Name string
 }
 
 type StateLayout struct {
@@ -69,12 +66,6 @@ func DefaultStateLayout() (StateLayout, error) {
 
 func LocalEnvironmentStateLayout(stateRoot string) (StateLayout, error) {
 	return StateLayoutForScope(ScopeRef{Kind: ScopeKindLocalEnvironment, Name: DefaultLocalEnvironmentScopeName}, stateRoot)
-}
-
-func ControlPlaneStateLayout(controlplaneBaseURL string, envID string, stateRoot string) (StateLayout, error) {
-	_ = controlplaneBaseURL
-	_ = envID
-	return LocalEnvironmentStateLayout(stateRoot)
 }
 
 func ParseScopeRef(raw string) (ScopeRef, error) {
@@ -233,18 +224,6 @@ func normalizeControlplaneBaseURL(raw string) (string, error) {
 	parsedURL.Fragment = ""
 	parsedURL.User = nil
 	return parsedURL.String(), nil
-}
-
-func controlPlaneProviderKey(controlplaneBaseURL string) (string, error) {
-	normalizedBaseURL, err := normalizeControlplaneBaseURL(controlplaneBaseURL)
-	if err != nil {
-		return "", err
-	}
-	parsedURL, err := url.Parse(normalizedBaseURL)
-	if err != nil {
-		return "", err
-	}
-	return sanitizeStateScopeID(strings.ToLower(parsedURL.Scheme + "__" + parsedURL.Host)), nil
 }
 
 func sanitizeStateScopeID(raw string) string {

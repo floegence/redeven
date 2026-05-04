@@ -78,7 +78,7 @@ func TestWriteEnvironmentCatalogRecordWritesLocalEnvironmentProviderBinding(t *t
 	}
 }
 
-func TestWriteEnvironmentCatalogRecordFallsBackToProviderKeyWhenCanonicalProviderIDIsUnavailable(t *testing.T) {
+func TestWriteEnvironmentCatalogRecordKeepsLocalIdentityWithoutProviderID(t *testing.T) {
 	stateRoot := t.TempDir()
 	layout, err := LocalEnvironmentStateLayout(stateRoot)
 	if err != nil {
@@ -97,11 +97,11 @@ func TestWriteEnvironmentCatalogRecordFallsBackToProviderKeyWhenCanonicalProvide
 
 	recordPath := filepath.Join(stateRoot, "catalog", "environments", sanitizeStateScopeID("local")+".json")
 	record := readCatalogEnvironmentFile(t, recordPath)
-	if record.ProviderBinding == nil {
-		t.Fatalf("ProviderBinding = nil")
+	if record.Identity.Kind != "local_environment" {
+		t.Fatalf("Identity.Kind = %q", record.Identity.Kind)
 	}
-	if record.ProviderBinding.ProviderID != "https__dev.redeven.test" {
-		t.Fatalf("ProviderBinding.ProviderID = %q", record.ProviderBinding.ProviderID)
+	if record.ProviderBinding != nil {
+		t.Fatalf("ProviderBinding = %#v, want nil", record.ProviderBinding)
 	}
 }
 

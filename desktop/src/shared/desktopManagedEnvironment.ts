@@ -347,54 +347,6 @@ export function createManagedLocalEnvironment(
   });
 }
 
-type CreateManagedNamedEnvironmentOptions = Readonly<{
-  environmentID?: string;
-  label?: string;
-  pinned?: boolean;
-  access?: DesktopManagedEnvironmentAccess;
-  preferredOpenRoute?: DesktopManagedEnvironmentPreferredOpenRoute;
-  providerBinding?: DesktopManagedEnvironmentProviderBinding;
-  owner?: DesktopManagedEnvironmentLocalOwner;
-  stateDir?: string;
-  currentRuntime?: Partial<DesktopManagedEnvironmentRuntimeState> | null;
-  createdAtMS?: number;
-  updatedAtMS?: number;
-  lastUsedAtMS?: number;
-}>;
-
-export function createManagedNamedEnvironment(
-	name: string,
-	options: CreateManagedNamedEnvironmentOptions = {},
-): DesktopManagedEnvironment {
-	const normalizedName = normalizeDesktopLocalEnvironmentName(name);
-	const localHosting = createManagedEnvironmentLocalHosting(
-		{ kind: 'local_environment', name: DEFAULT_LOCAL_ENVIRONMENT_NAME },
-		{
-			access: options.access,
-			owner: options.owner,
-      stateDir: options.stateDir,
-      currentRuntime: options.currentRuntime,
-    },
-  );
-	return createManagedEnvironment({
-		environmentID: options.environmentID,
-		label: options.label || defaultLocalManagedEnvironmentLabel(normalizedName),
-		pinned: options.pinned,
-		preferredOpenRoute: options.preferredOpenRoute,
-		identity: options.providerBinding
-			? undefined
-			: {
-					kind: 'provisional_local',
-					local_name: DEFAULT_LOCAL_ENVIRONMENT_NAME,
-				},
-    localHosting,
-    providerBinding: options.providerBinding,
-    createdAtMS: options.createdAtMS,
-    updatedAtMS: options.updatedAtMS,
-    lastUsedAtMS: options.lastUsedAtMS,
-  });
-}
-
 type CreateManagedControlPlaneEnvironmentOptions = Readonly<{
   providerID: string;
   label?: string;

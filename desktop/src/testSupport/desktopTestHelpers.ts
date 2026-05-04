@@ -1,6 +1,6 @@
 import type { DesktopPreferences } from '../main/desktopPreferences';
 import { defaultDesktopPreferences } from '../main/desktopPreferences';
-import { controlPlaneManagedStateLayout, localManagedStateLayout } from '../main/statePaths';
+import { localEnvironmentManagedStateLayout } from '../main/statePaths';
 import {
   buildManagedEnvironmentDesktopTarget,
   type DesktopSessionLifecycle,
@@ -90,7 +90,7 @@ export function testManagedLocalEnvironment(
   return createManagedLocalEnvironment(name, {
     label: options.label,
     pinned: options.pinned,
-    stateDir: options.stateDir ?? localManagedStateLayout(name).stateDir,
+    stateDir: options.stateDir ?? localEnvironmentManagedStateLayout().stateDir,
     owner: options.owner,
     preferredOpenRoute: options.preferredOpenRoute,
     currentRuntime: options.currentRuntime,
@@ -106,7 +106,7 @@ export function testManagedControlPlaneEnvironment(
   envPublicID: string,
   options: TestManagedControlPlaneEnvironmentOptions = {},
 ): DesktopManagedControlPlaneEnvironment {
-  const layout = controlPlaneManagedStateLayout(providerOrigin, envPublicID);
+  const layout = localEnvironmentManagedStateLayout();
   return createManagedControlPlaneEnvironment(providerOrigin, envPublicID, {
     providerID: options.providerID ?? 'redeven_portal',
     label: options.label,
