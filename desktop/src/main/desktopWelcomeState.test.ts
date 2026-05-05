@@ -6,6 +6,7 @@ import {
   testManagedAccess,
   testManagedControlPlaneEnvironment,
   testManagedLocalEnvironment,
+  testProviderEnvironment,
   testManagedSession,
 } from '../testSupport/desktopTestHelpers';
 import {
@@ -16,7 +17,7 @@ import {
   buildSSHConnectionIssue,
 } from './desktopWelcomeState';
 import {
-  buildManagedEnvironmentDesktopTarget,
+  buildProviderEnvironmentDesktopTarget,
   buildExternalLocalUIDesktopTarget,
   controlPlaneDesktopSessionKey,
   buildSSHDesktopTarget,
@@ -622,6 +623,7 @@ describe('desktopWelcomeState', () => {
   });
 
   it('projects provider local-serve state onto the aggregated provider card', () => {
+    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
     const managedControlPlane = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo');
     const managedLocal = testManagedLocalEnvironment('default', {
       access: testManagedAccess({
@@ -634,8 +636,8 @@ describe('desktopWelcomeState', () => {
         ...providerRuntimeState('env_demo'),
       },
     });
-    const localTarget = buildManagedEnvironmentDesktopTarget(managedControlPlane, { route: 'local_host' });
-    const remoteTarget = buildManagedEnvironmentDesktopTarget(managedControlPlane, { route: 'remote_desktop' });
+    const localTarget = buildProviderEnvironmentDesktopTarget(providerEnvironment, { route: 'local_host' });
+    const remoteTarget = buildProviderEnvironmentDesktopTarget(providerEnvironment, { route: 'remote_desktop' });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         managed_environments: [managedLocal, managedControlPlane],
@@ -704,13 +706,12 @@ describe('desktopWelcomeState', () => {
     expect(snapshot.environments.find((entry) => (
       entry.kind === 'managed_environment'
       && entry.managed_environment_kind === 'controlplane'
-      && entry.id === managedControlPlane.id
     ))).toBeUndefined();
     expect(snapshot.environments.find((entry) => (
       entry.kind === 'provider_environment'
-      && entry.id === managedControlPlane.id
+      && entry.id === providerEnvironment.id
     ))).toEqual(expect.objectContaining({
-      id: managedControlPlane.id,
+      id: providerEnvironment.id,
       kind: 'provider_environment',
       open_local_session_key: localTarget.session_key,
       open_remote_session_key: remoteTarget.session_key,
@@ -728,6 +729,7 @@ describe('desktopWelcomeState', () => {
   });
 
   it('threads Control Plane runtime state into managed environment library entries', () => {
+    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
     const managedControlPlane = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
       localHosting: false,
     });
@@ -764,7 +766,7 @@ describe('desktopWelcomeState', () => {
 
     expect(snapshot.environments).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        id: managedControlPlane.id,
+        id: providerEnvironment.id,
         provider_origin: 'https://cp.example.invalid',
         provider_id: 'redeven_portal',
         env_public_id: 'env_demo',
@@ -782,6 +784,7 @@ describe('desktopWelcomeState', () => {
     if (!testProvider) {
       throw new Error('Expected normalized test provider.');
     }
+    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
     const managedControlPlane = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo');
     const summaryAccount = {
       provider_id: testProvider.provider_id,
@@ -831,7 +834,7 @@ describe('desktopWelcomeState', () => {
 
     expect(snapshot.environments).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        id: managedControlPlane.id,
+        id: providerEnvironment.id,
         kind: 'provider_environment',
         control_plane_sync_state: 'ready',
         provider_local_runtime_configured: true,
@@ -855,6 +858,7 @@ describe('desktopWelcomeState', () => {
     if (!testProvider) {
       throw new Error('Expected normalized test provider.');
     }
+    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
     const managedControlPlane = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo');
     const summaryAccount = {
       provider_id: testProvider.provider_id,
@@ -892,9 +896,9 @@ describe('desktopWelcomeState', () => {
 
     expect(snapshot.environments.find((entry) => (
       entry.kind === 'provider_environment'
-      && entry.id === managedControlPlane.id
+      && entry.id === providerEnvironment.id
     ))).toEqual(expect.objectContaining({
-      id: managedControlPlane.id,
+      id: providerEnvironment.id,
       provider_local_runtime_configured: true,
       provider_local_runtime_state: 'not_running',
       remote_route_state: 'removed',

@@ -6,22 +6,23 @@ import type {
   DesktopSessionRuntimeLifecycleOwner,
 } from './sessionRuntime';
 import {
-  desktopManagedControlPlaneEnvironmentID,
-  managedEnvironmentDefaultOpenRoute,
-  managedEnvironmentKind,
+  desktopProviderEnvironmentStateID,
+  localEnvironmentDefaultOpenRoute,
+  localEnvironmentStateKind,
   normalizeDesktopLocalEnvironmentName,
-  type DesktopManagedEnvironment,
-} from '../shared/desktopManagedEnvironment';
+  type DesktopLocalEnvironmentState,
+} from '../shared/desktopLocalEnvironmentState';
 import {
   defaultSavedSSHEnvironmentLabel,
   desktopSSHEnvironmentID as buildSSHEnvironmentID,
   normalizeDesktopSSHEnvironmentDetails,
   type DesktopSSHEnvironmentDetails,
 } from '../shared/desktopSSH';
+import type { DesktopProviderEnvironmentRecord } from '../shared/desktopProviderEnvironment';
 
 export type DesktopTargetKind = 'managed_environment' | 'external_local_ui' | 'ssh_environment';
-export type DesktopManagedEnvironmentSessionRoute = 'local_host' | 'remote_desktop';
-export type DesktopSessionKey = `env:${string}:${DesktopManagedEnvironmentSessionRoute}` | `url:${string}` | `ssh:${string}`;
+export type DesktopLocalEnvironmentStateSessionRoute = 'local_host' | 'remote_desktop';
+export type DesktopSessionKey = `env:${string}:${DesktopLocalEnvironmentStateSessionRoute}` | `url:${string}` | `ssh:${string}`;
 export type DesktopSessionLifecycle = 'opening' | 'open' | 'closing';
 
 export type ManagedEnvironmentDesktopTarget = Readonly<{
@@ -29,7 +30,7 @@ export type ManagedEnvironmentDesktopTarget = Readonly<{
   session_key: DesktopSessionKey;
   environment_id: string;
   label: string;
-  route: DesktopManagedEnvironmentSessionRoute;
+  route: DesktopLocalEnvironmentStateSessionRoute;
   managed_environment_kind: 'local' | 'controlplane';
   local_environment_name?: string;
   provider_origin?: string;
@@ -79,8 +80,8 @@ function compact(value: unknown): string {
 
 export function managedEnvironmentDesktopSessionKey(
   environmentID: string,
-  route: DesktopManagedEnvironmentSessionRoute,
-): `env:${string}:${DesktopManagedEnvironmentSessionRoute}` {
+  route: DesktopLocalEnvironmentStateSessionRoute,
+): `env:${string}:${DesktopLocalEnvironmentStateSessionRoute}` {
   const cleanEnvironmentID = compact(environmentID);
   if (cleanEnvironmentID === '') {
     throw new Error('Environment ID is required.');
@@ -88,8 +89,8 @@ export function managedEnvironmentDesktopSessionKey(
   return `env:${encodeURIComponent(cleanEnvironmentID)}:${route}`;
 }
 
-function providerManagedEnvironmentSessionIdentity(environment: DesktopManagedEnvironment): string {
-  const binding = environment.provider_binding;
+function providerManagedEnvironmentSessionIdentity(environment: DesktopLocalEnvironmentState): string {
+  const binding = environment.current_provider_binding;
   if (!binding) {
     return compact(environment.id);
   }
@@ -105,7 +106,7 @@ export function controlPlaneDesktopSessionKey(
   rawProviderOrigin: string,
   rawEnvPublicID: string,
 ): `env:${string}:remote_desktop` {
-  return `env:${encodeURIComponent(desktopManagedControlPlaneEnvironmentID(rawProviderOrigin, rawEnvPublicID))}:remote_desktop`;
+  return `env:${encodeURIComponent(desktopProviderEnvironmentStateID(rawProviderOrigin, rawEnvPublicID))}:remote_desktop`;
 }
 
 export function externalLocalUIDesktopSessionKey(rawURL: string): DesktopSessionKey {
@@ -121,19 +122,19 @@ export function desktopSessionStateKeyFragment(sessionKey: DesktopSessionKey): s
 }
 
 type BuildManagedEnvironmentDesktopTargetOptions = Readonly<{
-  route?: DesktopManagedEnvironmentSessionRoute;
+  route?: DesktopLocalEnvironmentStateSessionRoute;
 }>;
 
 export function buildManagedEnvironmentDesktopTarget(
-  environment: DesktopManagedEnvironment,
+  environment: DesktopLocalEnvironmentState,
   options: BuildManagedEnvironmentDesktopTargetOptions = {},
 ): ManagedEnvironmentDesktopTarget {
   const route = options.route ?? (
-    managedEnvironmentDefaultOpenRoute(environment) === 'remote_desktop'
+    localEnvironmentDefaultOpenRoute(environment) === 'remote_desktop'
       ? 'remote_desktop'
       : 'local_host'
   );
-  const localScope = environment.local_hosting?.scope;
+  const localScope = environment.local_hosting.scope;
   return {
     kind: 'managed_environment',
     session_key: managedEnvironmentDesktopSessionKey(
@@ -145,15 +146,44 @@ export function buildManagedEnvironmentDesktopTarget(
     environment_id: environment.id,
     label: environment.label,
     route,
-    managed_environment_kind: managedEnvironmentKind(environment),
+    managed_environment_kind: localEnvironmentStateKind(environment),
     local_environment_name: localScope
       ? normalizeDesktopLocalEnvironmentName(localScope.name)
       : undefined,
-    provider_origin: environment.provider_binding?.provider_origin,
-    provider_id: environment.provider_binding?.provider_id,
-    env_public_id: environment.provider_binding?.env_public_id,
-    has_local_hosting: Boolean(environment.local_hosting),
-    has_remote_desktop: environment.provider_binding?.remote_desktop_supported === true,
+    provider_origin: environment.current_provider_binding?.provider_origin,
+    provider_id: environment.current_provider_binding?.provider_id,
+    env_public_id: environment.current_provider_binding?.env_public_id,
+    has_local_hosting: true,
+    has_remote_desktop: environment.current_provider_binding?.remote_desktop_supported === true,
+  };
+}
+
+export function buildProviderEnvironmentDesktopTarget(
+  environment: DesktopProviderEnvironmentRecord,
+  options: BuildManagedEnvironmentDesktopTargetOptions = {},
+): ManagedEnvironmentDesktopTarget {
+  const route = options.route ?? 'remote_desktop';
+  const sessionIdentity = route === 'local_host'
+    ? [
+        'provider-local',
+        environment.provider_origin,
+        environment.provider_id,
+        environment.env_public_id,
+      ].map(encodeURIComponent).join(':')
+    : environment.id;
+  return {
+    kind: 'managed_environment',
+    session_key: managedEnvironmentDesktopSessionKey(sessionIdentity, route),
+    environment_id: environment.id,
+    label: environment.label,
+    route,
+    managed_environment_kind: 'controlplane',
+    local_environment_name: 'local',
+    provider_origin: environment.provider_origin,
+    provider_id: environment.provider_id,
+    env_public_id: environment.env_public_id,
+    has_local_hosting: route === 'local_host',
+    has_remote_desktop: environment.remote_desktop_supported === true,
   };
 }
 

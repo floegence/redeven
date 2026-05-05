@@ -49,7 +49,7 @@ import type {
   DesktopLauncherActionResult,
   DesktopLauncherActionRequest,
   DesktopLauncherSurface,
-  DesktopManagedEnvironmentRoute,
+  DesktopLocalEnvironmentStateRoute,
   DesktopWelcomeIssue,
   DesktopWelcomeSnapshot,
 } from '../shared/desktopLauncherIPC';
@@ -594,7 +594,7 @@ function DesktopCommandRegistrar(props: Readonly<{
       {
         id: 'redeven.desktop.openLocalEnvironment',
         title: 'Open Environment',
-        description: 'Open the selected desktop-managed environment window',
+        description: 'Open the selected Local Environment window',
         category: 'Desktop',
         keybind: 'mod+enter',
         icon: Globe,
@@ -605,7 +605,7 @@ function DesktopCommandRegistrar(props: Readonly<{
       {
         id: 'redeven.desktop.openLocalEnvironmentSettings',
         title: 'Environment Settings',
-        description: 'Edit startup, access, and exposure settings for the selected desktop-managed environment',
+        description: 'Edit startup, access, and exposure settings for the Local Environment',
         category: 'Desktop',
         keybind: 'mod+,',
         icon: Settings,
@@ -1319,7 +1319,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function openManagedEnvironment(
     environment: DesktopEnvironmentEntry,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
-    route: 'auto' | DesktopManagedEnvironmentRoute = 'auto',
+    route: 'auto' | DesktopLocalEnvironmentStateRoute = 'auto',
   ): Promise<boolean> {
     if (environment.kind !== 'managed_environment') {
       return openEnvironment(environment, errorTarget === 'settings' ? 'connect' : errorTarget);
@@ -1379,7 +1379,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function openProviderEnvironment(
     environment: DesktopEnvironmentEntry,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
-    route: 'auto' | DesktopManagedEnvironmentRoute = 'auto',
+    route: 'auto' | DesktopLocalEnvironmentStateRoute = 'auto',
   ): Promise<boolean> {
     if (environment.kind !== 'provider_environment') {
       return openEnvironment(environment, errorTarget === 'settings' ? 'connect' : errorTarget);
@@ -1623,7 +1623,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function openEnvironment(
     environment: DesktopEnvironmentEntry,
     errorTarget: 'connect' | 'dialog' = 'connect',
-    route: 'auto' | DesktopManagedEnvironmentRoute = 'auto',
+    route: 'auto' | DesktopLocalEnvironmentStateRoute = 'auto',
   ): Promise<boolean> {
     if (environment.window_state === 'closed' && environment.runtime_health.status !== 'online') {
       setErrorMessage(errorTarget, runtimeUnavailableMessage(environment));
@@ -2076,7 +2076,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   async function saveEnvironmentFromLibrary(environment: DesktopEnvironmentEntry): Promise<void> {
     if (environment.kind === 'managed_environment') {
-      setErrorMessage('connect', 'Desktop-managed environments are already saved on this device.');
+      setErrorMessage('connect', 'The Local Environment is already saved on this device.');
       return;
     }
     if (environment.kind === 'ssh_environment') {
@@ -2629,7 +2629,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
   openEnvironment: (
     environment: DesktopEnvironmentEntry,
     errorTarget?: 'connect' | 'dialog',
-    route?: 'auto' | DesktopManagedEnvironmentRoute,
+    route?: 'auto' | DesktopLocalEnvironmentStateRoute,
   ) => Promise<boolean>;
   runManagedEnvironmentAction: (
     environment: DesktopEnvironmentEntry,
@@ -2943,7 +2943,7 @@ function EnvironmentCardsPanel(props: Readonly<{
   openEnvironment: (
     environment: DesktopEnvironmentEntry,
     errorTarget?: 'connect' | 'dialog',
-    route?: 'auto' | DesktopManagedEnvironmentRoute,
+    route?: 'auto' | DesktopLocalEnvironmentStateRoute,
   ) => Promise<boolean>;
   runManagedEnvironmentAction: (
     environment: DesktopEnvironmentEntry,
@@ -3811,7 +3811,7 @@ function EnvironmentConnectionCard(props: Readonly<{
   openEnvironment: (
     environment: DesktopEnvironmentEntry,
     errorTarget?: 'connect' | 'dialog',
-    route?: 'auto' | DesktopManagedEnvironmentRoute,
+    route?: 'auto' | DesktopLocalEnvironmentStateRoute,
   ) => Promise<boolean>;
   runManagedEnvironmentAction: (
     environment: DesktopEnvironmentEntry,
@@ -5028,7 +5028,7 @@ function ConnectionDialog(props: Readonly<{
           </>
         );
       case 'ssh_environment':
-        return 'Deploy a Desktop-managed environment to a host you can reach over SSH. Desktop reuses shared release artifacts on that host and keeps one runtime state set there.';
+        return 'Deploy a Desktop-managed Local Environment profile to a host you can reach over SSH. Desktop reuses shared release artifacts on that host and keeps one runtime state set there.';
       default:
         return '';
     }

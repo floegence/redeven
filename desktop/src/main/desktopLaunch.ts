@@ -1,7 +1,7 @@
 import {
-  managedEnvironmentLocalAccess,
-  type DesktopManagedEnvironment,
-} from '../shared/desktopManagedEnvironment';
+  localEnvironmentAccess,
+  type DesktopLocalEnvironmentState,
+} from '../shared/desktopLocalEnvironmentState';
 import {
   defaultManagedStateLayout,
   type DesktopManagedStateLayout,
@@ -40,10 +40,10 @@ function resolvedRuntimeBootstrap(
 }
 
 export function buildDesktopRuntimeArgs(
-  environment: DesktopManagedEnvironment,
+  environment: DesktopLocalEnvironmentState,
   options: BuildDesktopRuntimeArgsOptions = {},
 ): string[] {
-  const access = managedEnvironmentLocalAccess(environment);
+  const access = localEnvironmentAccess(environment);
   const localUIBind = String(options.localUIBind ?? access.local_ui_bind).trim() || access.local_ui_bind;
   const args = [
     'run',
@@ -82,7 +82,7 @@ export function buildDesktopRuntimeArgs(
 }
 
 export function buildDesktopRuntimeEnvironment(
-  _environment: DesktopManagedEnvironment,
+  _environment: DesktopLocalEnvironmentState,
   baseEnv: NodeJS.ProcessEnv = process.env,
   options?: Readonly<{ bootstrap?: DesktopRuntimeBootstrap | null }>,
 ): NodeJS.ProcessEnv {
@@ -101,7 +101,7 @@ export function buildDesktopRuntimeEnvironment(
 }
 
 function buildDesktopRuntimePlan(
-  environment: DesktopManagedEnvironment,
+  environment: DesktopLocalEnvironmentState,
   baseEnv: NodeJS.ProcessEnv = process.env,
   options?: Readonly<{
     localUIBind?: string;
@@ -115,7 +115,7 @@ function buildDesktopRuntimePlan(
     bootstrap: options?.bootstrap,
     configPath: stateLayout.configPath,
   });
-  const access = managedEnvironmentLocalAccess(environment);
+  const access = localEnvironmentAccess(environment);
   const passwordStdin = access.local_ui_password_configured
     ? String(access.local_ui_password ?? '')
     : '';
@@ -128,7 +128,7 @@ function buildDesktopRuntimePlan(
 }
 
 export function buildDesktopRuntimeLaunchPlan(
-  environment: DesktopManagedEnvironment,
+  environment: DesktopLocalEnvironmentState,
   baseEnv: NodeJS.ProcessEnv = process.env,
   options?: Readonly<{
     localUIBind?: string;
@@ -140,7 +140,7 @@ export function buildDesktopRuntimeLaunchPlan(
 
 export function buildDesktopRuntimeSpawnPlan(
   startupReportFile: string,
-  environment: DesktopManagedEnvironment,
+  environment: DesktopLocalEnvironmentState,
   baseEnv: NodeJS.ProcessEnv = process.env,
   options?: Readonly<{
     localUIBind?: string;
@@ -155,7 +155,7 @@ export function buildDesktopRuntimeSpawnPlan(
 }
 
 export function resolveDesktopManagedStateLayout(
-  _environment: DesktopManagedEnvironment,
+  _environment: DesktopLocalEnvironmentState,
   baseEnv: NodeJS.ProcessEnv = process.env,
 ): DesktopManagedStateLayout {
   return defaultManagedStateLayout(baseEnv);

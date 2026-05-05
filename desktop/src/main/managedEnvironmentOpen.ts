@@ -1,10 +1,10 @@
 import type { ProviderDesktopOpenSession } from './controlPlaneProviderClient';
-import type { DesktopManagedEnvironmentSessionRoute } from './desktopTarget';
+import type { DesktopLocalEnvironmentStateSessionRoute } from './desktopTarget';
 import {
-  managedEnvironmentDefaultOpenRoute,
-  managedEnvironmentSupportsLocalHosting,
-  type DesktopManagedEnvironment,
-} from '../shared/desktopManagedEnvironment';
+  localEnvironmentDefaultOpenRoute,
+  localEnvironmentSupportsLocalHosting,
+  type DesktopLocalEnvironmentState,
+} from '../shared/desktopLocalEnvironmentState';
 
 export type ResolvedManagedEnvironmentOpenTarget = Readonly<
   | {
@@ -20,12 +20,12 @@ export type ResolvedManagedEnvironmentOpenTarget = Readonly<
 type ManagedEnvironmentOpenSession = Readonly<Pick<ProviderDesktopOpenSession, 'bootstrap_ticket' | 'remote_session_url'>>;
 
 export function resolveManagedEnvironmentOpenTarget(
-  environment: DesktopManagedEnvironment,
+  environment: DesktopLocalEnvironmentState,
   openSession: ManagedEnvironmentOpenSession,
-  requestedRoute: 'auto' | DesktopManagedEnvironmentSessionRoute = 'auto',
+  requestedRoute: 'auto' | DesktopLocalEnvironmentStateSessionRoute = 'auto',
 ): ResolvedManagedEnvironmentOpenTarget {
   if (requestedRoute === 'local_host') {
-    if (!managedEnvironmentSupportsLocalHosting(environment)) {
+    if (!localEnvironmentSupportsLocalHosting(environment)) {
       throw new Error('This environment is not hosted on this device.');
     }
     if (!openSession.bootstrap_ticket) {
@@ -47,10 +47,10 @@ export function resolveManagedEnvironmentOpenTarget(
     };
   }
 
-  const defaultRoute = managedEnvironmentDefaultOpenRoute(environment);
+  const defaultRoute = localEnvironmentDefaultOpenRoute(environment);
   if (
     defaultRoute === 'local_host'
-    && managedEnvironmentSupportsLocalHosting(environment)
+    && localEnvironmentSupportsLocalHosting(environment)
     && openSession.bootstrap_ticket
   ) {
     return {
@@ -64,7 +64,7 @@ export function resolveManagedEnvironmentOpenTarget(
       remote_session_url: openSession.remote_session_url,
     };
   }
-  if (managedEnvironmentSupportsLocalHosting(environment) && openSession.bootstrap_ticket) {
+  if (localEnvironmentSupportsLocalHosting(environment) && openSession.bootstrap_ticket) {
     return {
       route: 'local_host',
       bootstrap_ticket: openSession.bootstrap_ticket,
@@ -76,7 +76,7 @@ export function resolveManagedEnvironmentOpenTarget(
       remote_session_url: openSession.remote_session_url,
     };
   }
-  if (managedEnvironmentSupportsLocalHosting(environment)) {
+  if (localEnvironmentSupportsLocalHosting(environment)) {
     throw new Error('Desktop could not obtain a local host bootstrap ticket for this environment.');
   }
   throw new Error('Remote desktop access is unavailable for this environment.');

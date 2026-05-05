@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildExternalLocalUIDesktopTarget,
   buildManagedEnvironmentDesktopTarget,
+  buildProviderEnvironmentDesktopTarget,
   buildSSHDesktopTarget,
   controlPlaneDesktopSessionKey,
   desktopSessionStateKeyFragment,
@@ -10,8 +11,8 @@ import {
   sshDesktopSessionKey,
 } from './desktopTarget';
 import {
-  testManagedControlPlaneEnvironment,
   testManagedLocalEnvironment,
+  testProviderEnvironment,
 } from '../testSupport/desktopTestHelpers';
 import { desktopSSHEnvironmentID } from '../shared/desktopSSH';
 
@@ -63,7 +64,7 @@ describe('desktopTarget', () => {
     expect(controlPlaneDesktopSessionKey('https://cp.example.invalid/path', ' env_demo ')).toBe(
       'env:cp%3Ahttps%253A%252F%252Fcp.example.invalid%3Aenv%3Aenv_demo:remote_desktop',
     );
-    expect(buildManagedEnvironmentDesktopTarget(testManagedControlPlaneEnvironment(
+    expect(buildProviderEnvironmentDesktopTarget(testProviderEnvironment(
       'https://cp.example.invalid/path',
       ' env_demo ',
       {
@@ -81,7 +82,7 @@ describe('desktopTarget', () => {
       env_public_id: 'env_demo',
       label: 'Demo Environment',
       local_environment_name: 'local',
-      has_local_hosting: true,
+      has_local_hosting: false,
       has_remote_desktop: true,
     });
   });

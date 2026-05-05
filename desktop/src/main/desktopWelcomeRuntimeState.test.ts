@@ -42,7 +42,7 @@ describe('desktopWelcomeRuntimeState', () => {
       ],
     );
 
-    expect(hydrated.managed_environments[0]?.local_hosting?.current_runtime).toEqual({
+    expect(hydrated.local_environment.local_hosting.current_runtime).toEqual({
       local_ui_url: 'http://127.0.0.1:23998/',
       effective_run_mode: 'local',
       remote_enabled: false,
@@ -54,7 +54,7 @@ describe('desktopWelcomeRuntimeState', () => {
         open_readiness: { state: 'openable' },
       }),
     });
-    expect(hydrated.managed_environments[0]?.local_hosting?.current_runtime?.runtime_service).toMatchObject({
+    expect(hydrated.local_environment.local_hosting.current_runtime?.runtime_service).toMatchObject({
       service_owner: 'external',
       desktop_managed: false,
       effective_run_mode: 'local',
@@ -142,7 +142,7 @@ describe('desktopWelcomeRuntimeState', () => {
         probeTimeoutMs: 200,
       });
 
-      expect(hydrated.managed_environments[0]?.local_hosting?.current_runtime).toEqual({
+      expect(hydrated.local_environment.local_hosting.current_runtime).toEqual({
         local_ui_url: `http://127.0.0.1:${address.port}/`,
         effective_run_mode: 'desktop',
         remote_enabled: true,

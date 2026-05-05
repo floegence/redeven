@@ -709,7 +709,7 @@ describe('buildEnvironmentCardModel', () => {
           tone: 'warning',
           eyebrow: 'Runtime offline',
           title: 'Use Local Environment to continue',
-          detail: 'Desktop will link the Local Environment on this device to this provider Environment, then open it locally.',
+          detail: 'Desktop will link this Local Environment profile to the provider Environment, then open it locally.',
           actions: [
             {
               label: 'Use Locally',

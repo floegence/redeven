@@ -28,7 +28,7 @@ export type DesktopLauncherSurface = 'connect_environment' | 'environment_settin
 export type DesktopEnvironmentEntryKind = 'managed_environment' | 'provider_environment' | 'external_local_ui' | 'ssh_environment';
 export type DesktopEnvironmentEntryTag = 'Open' | 'Recent' | 'Saved' | 'Managed' | '';
 export type DesktopEnvironmentEntryCategory = 'managed' | 'provider' | 'open_unsaved' | DesktopSavedEnvironmentSource;
-export type DesktopManagedEnvironmentRoute = 'local_host' | 'remote_desktop';
+export type DesktopLocalEnvironmentStateRoute = 'local_host' | 'remote_desktop';
 export type DesktopManagedLocalRuntimeState = 'not_running' | 'running_desktop' | 'running_external';
 export type DesktopManagedLocalCloseBehavior = 'stops_runtime' | 'detaches' | 'not_applicable';
 export type DesktopLauncherSessionLifecycle = 'opening' | 'open' | 'closing';
@@ -145,8 +145,8 @@ export type DesktopEnvironmentEntry = Readonly<{
   managed_local_close_behavior?: DesktopManagedLocalCloseBehavior;
   managed_has_local_hosting?: boolean;
   managed_has_remote_desktop?: boolean;
-  managed_preferred_open_route?: 'auto' | DesktopManagedEnvironmentRoute;
-  default_open_route?: DesktopManagedEnvironmentRoute;
+  managed_preferred_open_route?: 'auto' | DesktopLocalEnvironmentStateRoute;
+  default_open_route?: DesktopLocalEnvironmentStateRoute;
   open_local_session_key?: string;
   open_local_session_lifecycle?: DesktopLauncherSessionLifecycle;
   open_remote_session_key?: string;
@@ -154,9 +154,9 @@ export type DesktopEnvironmentEntry = Readonly<{
   provider_local_ui_bind?: string;
   provider_local_ui_password_configured?: boolean;
   provider_local_owner?: 'desktop' | 'agent' | 'unknown';
-  provider_preferred_open_route?: 'auto' | DesktopManagedEnvironmentRoute;
-  provider_default_open_route?: DesktopManagedEnvironmentRoute;
-  provider_effective_window_route?: DesktopManagedEnvironmentRoute | '';
+  provider_preferred_open_route?: 'auto' | DesktopLocalEnvironmentStateRoute;
+  provider_default_open_route?: DesktopLocalEnvironmentStateRoute;
+  provider_effective_window_route?: DesktopLocalEnvironmentStateRoute | '';
   provider_local_runtime_configured?: boolean;
   provider_local_runtime_state?: DesktopManagedLocalRuntimeState;
   provider_local_runtime_url?: string;
@@ -212,12 +212,12 @@ export type DesktopLauncherActionRequest = Readonly<
   | {
       kind: 'open_managed_environment';
       environment_id: string;
-      route?: 'auto' | DesktopManagedEnvironmentRoute;
+      route?: 'auto' | DesktopLocalEnvironmentStateRoute;
     }
   | {
       kind: 'open_provider_environment';
       environment_id: string;
-      route?: 'auto' | DesktopManagedEnvironmentRoute;
+      route?: 'auto' | DesktopLocalEnvironmentStateRoute;
     }
   | {
       kind: 'open_remote_environment';

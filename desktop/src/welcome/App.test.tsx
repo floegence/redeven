@@ -674,7 +674,7 @@ describe('DesktopWelcomeShell', () => {
   it('describes managed environment actions as window-only and runtime-decoupled', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain('Open the selected desktop-managed environment window');
+    expect(appSrc).toContain('Open the selected Local Environment window');
     expect(appSrc).toContain("case 'start_runtime':");
     expect(appSrc).not.toContain('Open or attach the selected desktop-managed environment');
   });
@@ -714,7 +714,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('This provider environment card will keep both routes visible on this device: serve local here, or open via Control Plane.');
     expect(appSrc).toContain('Connect straight to a Redeven runtime that already exposes its own Environment URL');
     expect(appSrc).toContain('This is not the Provider URL.');
-    expect(appSrc).toContain('Deploy a Desktop-managed environment to a host you can reach over SSH.');
+    expect(appSrc).toContain('Deploy a Desktop-managed Local Environment profile to a host you can reach over SSH.');
     expect(appSrc).toContain('Desktop reuses shared release artifacts on that host and keeps one runtime state set there.');
     expect(appSrc).toContain("Desktop reuses only the exact Desktop-managed Redeven release on that host, installs it on demand when needed, and stores runtime state in that host's single runtime profile.");
     expect(appSrc).toContain('Bootstrap Delivery');

@@ -12,34 +12,30 @@ import type {
 } from '../main/sessionRuntime';
 import type { StartupReport } from '../main/startup';
 import {
-  createManagedControlPlaneEnvironment,
-  createManagedEnvironmentLocalHosting,
-  createManagedLocalEnvironment,
-  defaultDesktopManagedEnvironmentAccess,
-  managedEnvironmentKind,
-  type DesktopManagedControlPlaneEnvironment,
-  type DesktopManagedEnvironment,
-  type DesktopManagedEnvironmentAccess,
-  type DesktopManagedEnvironmentLocalOwner,
-  type DesktopManagedEnvironmentPreferredOpenRoute,
-  type DesktopManagedEnvironmentRuntimeState,
-  type DesktopManagedLocalEnvironment,
-} from '../shared/desktopManagedEnvironment';
+  projectProviderEnvironmentToLocalRuntimeTarget,
+  createDesktopLocalEnvironmentState,
+  defaultDesktopLocalEnvironmentAccess,
+  type DesktopLocalEnvironmentAccess,
+  type DesktopLocalEnvironmentOwner,
+  type DesktopLocalEnvironmentPreferredOpenRoute,
+  type DesktopLocalEnvironmentRuntimeState,
+  type DesktopLocalEnvironmentState,
+} from '../shared/desktopLocalEnvironmentState';
 import {
   createDesktopProviderEnvironmentRecord,
   type DesktopProviderEnvironmentRecord,
 } from '../shared/desktopProviderEnvironment';
 
-type TestManagedAccessOverrides = Partial<DesktopManagedEnvironmentAccess>;
+type TestManagedAccessOverrides = Partial<DesktopLocalEnvironmentAccess>;
 
 type TestManagedLocalEnvironmentOptions = Readonly<{
   label?: string;
   access?: TestManagedAccessOverrides;
   pinned?: boolean;
   stateDir?: string;
-  owner?: DesktopManagedEnvironmentLocalOwner;
-  preferredOpenRoute?: DesktopManagedEnvironmentPreferredOpenRoute;
-  currentRuntime?: Partial<DesktopManagedEnvironmentRuntimeState> | null;
+  owner?: DesktopLocalEnvironmentOwner;
+  preferredOpenRoute?: DesktopLocalEnvironmentPreferredOpenRoute;
+  currentRuntime?: Partial<DesktopLocalEnvironmentRuntimeState> | null;
   createdAtMS?: number;
   updatedAtMS?: number;
   lastUsedAtMS?: number;
@@ -51,24 +47,25 @@ type TestManagedControlPlaneEnvironmentOptions = Readonly<{
   access?: TestManagedAccessOverrides;
   pinned?: boolean;
   stateDir?: string;
-  owner?: DesktopManagedEnvironmentLocalOwner;
-  preferredOpenRoute?: DesktopManagedEnvironmentPreferredOpenRoute;
+  owner?: DesktopLocalEnvironmentOwner;
+  preferredOpenRoute?: DesktopLocalEnvironmentPreferredOpenRoute;
   localHosting?: boolean;
-  currentRuntime?: Partial<DesktopManagedEnvironmentRuntimeState> | null;
+  currentRuntime?: Partial<DesktopLocalEnvironmentRuntimeState> | null;
   createdAtMS?: number;
   updatedAtMS?: number;
   lastUsedAtMS?: number;
 }>;
 
 type TestDesktopPreferencesOptions = Readonly<Partial<DesktopPreferences> & {
-  managed_environments?: readonly DesktopManagedEnvironment[];
+  managed_environments?: readonly DesktopLocalEnvironmentState[];
+  local_environment?: DesktopLocalEnvironmentState;
 }>;
 
 type TestProviderEnvironmentOptions = Readonly<{
   providerID?: string;
   label?: string;
   pinned?: boolean;
-  preferredOpenRoute?: DesktopManagedEnvironmentPreferredOpenRoute;
+  preferredOpenRoute?: DesktopLocalEnvironmentPreferredOpenRoute;
   createdAtMS?: number;
   updatedAtMS?: number;
   lastUsedAtMS?: number;
@@ -76,9 +73,9 @@ type TestProviderEnvironmentOptions = Readonly<{
 
 export function testManagedAccess(
   overrides: TestManagedAccessOverrides = {},
-): DesktopManagedEnvironmentAccess {
+): DesktopLocalEnvironmentAccess {
   return {
-    ...defaultDesktopManagedEnvironmentAccess(),
+    ...defaultDesktopLocalEnvironmentAccess(),
     ...overrides,
   };
 }
@@ -86,8 +83,8 @@ export function testManagedAccess(
 export function testManagedLocalEnvironment(
   name = 'default',
   options: TestManagedLocalEnvironmentOptions = {},
-): DesktopManagedLocalEnvironment {
-  return createManagedLocalEnvironment(name, {
+): DesktopLocalEnvironmentState {
+  return createDesktopLocalEnvironmentState(name, {
     label: options.label,
     pinned: options.pinned,
     stateDir: options.stateDir ?? localEnvironmentManagedStateLayout().stateDir,
@@ -105,9 +102,9 @@ export function testManagedControlPlaneEnvironment(
   providerOrigin: string,
   envPublicID: string,
   options: TestManagedControlPlaneEnvironmentOptions = {},
-): DesktopManagedControlPlaneEnvironment {
+): DesktopLocalEnvironmentState {
   const layout = localEnvironmentManagedStateLayout();
-  return createManagedControlPlaneEnvironment(providerOrigin, envPublicID, {
+  const providerEnvironment = testProviderEnvironment(providerOrigin, envPublicID, {
     providerID: options.providerID ?? 'redeven_portal',
     label: options.label,
     pinned: options.pinned,
@@ -115,21 +112,19 @@ export function testManagedControlPlaneEnvironment(
     createdAtMS: options.createdAtMS,
     updatedAtMS: options.updatedAtMS,
     lastUsedAtMS: options.lastUsedAtMS,
-    localHosting: options.localHosting === false
-      ? undefined
-      : createManagedEnvironmentLocalHosting(
-        {
-          kind: 'local_environment',
-          name: 'local',
-        },
-        {
-          access: testManagedAccess(options.access),
-          owner: options.owner ?? 'desktop',
-          stateDir: options.stateDir ?? layout.stateDir,
-          currentRuntime: options.currentRuntime,
-        },
-      ),
   });
+  return projectProviderEnvironmentToLocalRuntimeTarget(
+    providerEnvironment,
+    testManagedLocalEnvironment('local', {
+      access: options.access,
+      owner: options.owner ?? 'desktop',
+      stateDir: options.stateDir ?? layout.stateDir,
+      currentRuntime: options.currentRuntime,
+      createdAtMS: options.createdAtMS,
+      updatedAtMS: options.updatedAtMS,
+      lastUsedAtMS: options.lastUsedAtMS,
+    }),
+  );
 }
 
 export function testProviderEnvironment(
@@ -152,20 +147,29 @@ export function testDesktopPreferences(
   options: TestDesktopPreferencesOptions = {},
 ): DesktopPreferences {
   const base = defaultDesktopPreferences();
-  const managedEnvironments = options.managed_environments ?? base.managed_environments;
+  const managedEnvironmentOptions = options.managed_environments ?? [];
+  const localEnvironment = options.local_environment
+    ?? managedEnvironmentOptions.find((environment) => !environment.current_provider_binding)
+    ?? managedEnvironmentOptions[0]
+    ?? base.local_environment;
+  const {
+    managed_environments: _legacyManagedEnvironments,
+    local_environment: _localEnvironment,
+    ...preferenceOverrides
+  } = options;
   const providerEnvironmentsByID = new Map(
     (options.provider_environments ?? base.provider_environments).map((environment) => [environment.id, environment] as const),
   );
 
-  for (const environment of managedEnvironments) {
-    if (!environment.provider_binding) {
+  for (const environment of managedEnvironmentOptions) {
+    if (!environment.current_provider_binding) {
       continue;
     }
-    providerEnvironmentsByID.set(environment.id, testProviderEnvironment(
-      environment.provider_binding.provider_origin,
-      environment.provider_binding.env_public_id,
+    const providerEnvironment = testProviderEnvironment(
+      environment.current_provider_binding.provider_origin,
+      environment.current_provider_binding.env_public_id,
       {
-        providerID: environment.provider_binding.provider_id,
+        providerID: environment.current_provider_binding.provider_id,
         label: environment.label,
         pinned: environment.pinned,
         preferredOpenRoute: environment.preferred_open_route,
@@ -173,7 +177,8 @@ export function testDesktopPreferences(
         updatedAtMS: environment.updated_at_ms,
         lastUsedAtMS: environment.last_used_at_ms,
       },
-    ));
+    );
+    providerEnvironmentsByID.set(providerEnvironment.id, providerEnvironment);
   }
 
   for (const controlPlane of options.control_planes ?? base.control_planes) {
@@ -196,14 +201,14 @@ export function testDesktopPreferences(
 
   return {
     ...base,
-    ...options,
-    managed_environments: managedEnvironments.filter((environment) => managedEnvironmentKind(environment) === 'local'),
+    ...preferenceOverrides,
+    local_environment: localEnvironment,
     provider_environments: [...providerEnvironmentsByID.values()],
   };
 }
 
 export function testManagedSession(
-  environment: DesktopManagedEnvironment,
+  environment: DesktopLocalEnvironmentState,
   localUIURL: string,
   lifecycle: DesktopSessionLifecycle = 'open',
   startupOverrides: Partial<StartupReport> = {},
@@ -221,7 +226,7 @@ export function testManagedSession(
     : desktopManaged
       ? 'desktop'
       : 'unknown';
-  const providerBinding = environment.provider_binding;
+  const providerBinding = environment.current_provider_binding;
   return {
     session_key: target.session_key,
     target,

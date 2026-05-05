@@ -8,7 +8,7 @@ import {
   normalizeDesktopControlPlaneProvider,
 } from '../shared/controlPlaneProvider';
 import type { DesktopSettingsDraft } from '../shared/settingsIPC';
-import { managedEnvironmentLocalAccess } from '../shared/desktopManagedEnvironment';
+import { localEnvironmentAccess } from '../shared/desktopLocalEnvironmentState';
 import {
   testDesktopPreferences,
   testManagedAccess,
@@ -400,15 +400,13 @@ describe('desktopPreferences', () => {
         control_plane_refresh_tokens: preferences.control_plane_refresh_tokens,
         control_planes: preferences.control_planes,
       }));
-      expect(loaded.managed_environments).toEqual([
-        expect.objectContaining({
-          id: 'local',
-          identity: { kind: 'provisional_local', local_name: 'local' },
-          local_hosting: expect.objectContaining({
-            scope: { kind: 'local_environment', name: 'local' },
-          }),
+      expect(loaded.local_environment).toEqual(expect.objectContaining({
+        id: 'local',
+        label: 'Local Environment',
+        local_hosting: expect.objectContaining({
+          scope: { kind: 'local_environment', name: 'local' },
         }),
-      ]);
+      }));
       expect(loaded.provider_environments).toEqual([
         expect.objectContaining({
           id: 'cp:https%3A%2F%2Fregion.example.invalid:env:env_demo',
@@ -489,15 +487,13 @@ describe('desktopPreferences', () => {
       await saveDesktopPreferences(paths, initial, codec);
       await saveDesktopPreferences(paths, {
         ...initial,
-        managed_environments: [
-          testManagedLocalEnvironment('local', {
-            access: {
-              ...initialAccess,
-              local_ui_password: '',
-              local_ui_password_configured: true,
-            },
-          }),
-        ],
+        local_environment: testManagedLocalEnvironment('local', {
+          access: {
+            ...initialAccess,
+            local_ui_password: '',
+            local_ui_password_configured: true,
+          },
+        }),
       }, codec);
 
       const loaded = await loadDesktopPreferences(paths, codec);
@@ -508,21 +504,18 @@ describe('desktopPreferences', () => {
         control_plane_refresh_tokens: {},
         control_planes: [],
       }));
-      expect(loaded.managed_environments).toEqual([
-        expect.objectContaining({
-          id: 'local',
-          label: 'Local Environment',
-          identity: { kind: 'provisional_local', local_name: 'local' },
-          local_hosting: expect.objectContaining({
-            scope: { kind: 'local_environment', name: 'local' },
-            access: {
-              local_ui_bind: '0.0.0.0:24000',
-              local_ui_password: 'super-secret',
-              local_ui_password_configured: true,
-            },
-          }),
+      expect(loaded.local_environment).toEqual(expect.objectContaining({
+        id: 'local',
+        label: 'Local Environment',
+        local_hosting: expect.objectContaining({
+          scope: { kind: 'local_environment', name: 'local' },
+          access: {
+            local_ui_bind: '0.0.0.0:24000',
+            local_ui_password: 'super-secret',
+            local_ui_password_configured: true,
+          },
         }),
-      ]);
+      }));
     });
   });
 
@@ -539,21 +532,18 @@ describe('desktopPreferences', () => {
         control_plane_refresh_tokens: {},
         control_planes: [],
       }));
-      expect(loaded.managed_environments).toEqual([
-        expect.objectContaining({
-          id: 'local',
-          label: 'Local Environment',
-          identity: { kind: 'provisional_local', local_name: 'local' },
-          local_hosting: expect.objectContaining({
-            scope: { kind: 'local_environment', name: 'local' },
-            access: {
-              local_ui_bind: 'localhost:23998',
-              local_ui_password: '',
-              local_ui_password_configured: false,
-            },
-          }),
+      expect(loaded.local_environment).toEqual(expect.objectContaining({
+        id: 'local',
+        label: 'Local Environment',
+        local_hosting: expect.objectContaining({
+          scope: { kind: 'local_environment', name: 'local' },
+          access: {
+            local_ui_bind: 'localhost:23998',
+            local_ui_password: '',
+            local_ui_password_configured: false,
+          },
         }),
-      ]);
+      }));
     });
   });
 
@@ -574,20 +564,18 @@ describe('desktopPreferences', () => {
         control_plane_refresh_tokens: {},
         control_planes: [],
       }));
-      expect(loaded.managed_environments).toEqual([
-        expect.objectContaining({
-          id: 'local',
-          identity: { kind: 'provisional_local', local_name: 'local' },
-          local_hosting: expect.objectContaining({
-            scope: { kind: 'local_environment', name: 'local' },
-            access: {
-              local_ui_bind: 'localhost:23998',
-              local_ui_password: '',
-              local_ui_password_configured: false,
-            },
-          }),
+      expect(loaded.local_environment).toEqual(expect.objectContaining({
+        id: 'local',
+        label: 'Local Environment',
+        local_hosting: expect.objectContaining({
+          scope: { kind: 'local_environment', name: 'local' },
+          access: {
+            local_ui_bind: 'localhost:23998',
+            local_ui_password: '',
+            local_ui_password_configured: false,
+          },
         }),
-      ]);
+      }));
     });
   });
 
@@ -618,20 +606,18 @@ describe('desktopPreferences', () => {
         control_plane_refresh_tokens: {},
         control_planes: [],
       }));
-      expect(loaded.managed_environments).toEqual([
-        expect.objectContaining({
-          id: 'local',
-          identity: { kind: 'provisional_local', local_name: 'local' },
-          local_hosting: expect.objectContaining({
-            scope: { kind: 'local_environment', name: 'local' },
-            access: {
-              local_ui_bind: 'localhost:23998',
-              local_ui_password: '',
-              local_ui_password_configured: false,
-            },
-          }),
+      expect(loaded.local_environment).toEqual(expect.objectContaining({
+        id: 'local',
+        label: 'Local Environment',
+        local_hosting: expect.objectContaining({
+          scope: { kind: 'local_environment', name: 'local' },
+          access: {
+            local_ui_bind: 'localhost:23998',
+            local_ui_password: '',
+            local_ui_password_configured: false,
+          },
         }),
-      ]);
+      }));
     });
   });
 
@@ -774,7 +760,7 @@ describe('desktopPreferences', () => {
       release_base_url: '',
     });
 
-    expect(sshPinned.managed_environments[0]).toEqual(expect.objectContaining({ pinned: true }));
+    expect(sshPinned.local_environment).toEqual(expect.objectContaining({ pinned: true }));
     expect(sshPinned.saved_environments[0]).toEqual(expect.objectContaining({ pinned: true }));
     expect(sshPinned.saved_ssh_environments[0]).toEqual(expect.objectContaining({ pinned: true }));
   });
@@ -854,11 +840,9 @@ describe('desktopPreferences', () => {
       last_synced_at_ms: 456,
     });
 
-    expect(next.managed_environments).toEqual([
-      expect.objectContaining({
-        id: 'local',
-      }),
-    ]);
+    expect(next.local_environment).toEqual(expect.objectContaining({
+      id: 'local',
+    }));
     expect(next.provider_environments).toEqual([
       expect.objectContaining({
         id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
@@ -954,18 +938,16 @@ describe('desktopPreferences', () => {
       preferred_open_route: 'local_host',
     }));
     expect(preferences.provider_environments[0]).not.toHaveProperty('local_runtime');
-    expect(preferences.managed_environments).toEqual([
-      expect.objectContaining({
-        id: 'local',
-        local_hosting: expect.objectContaining({
-          access: expect.objectContaining({
-            local_ui_bind: '127.0.0.1:24001',
-            local_ui_password: 'secret',
-            local_ui_password_configured: true,
-          }),
+    expect(preferences.local_environment).toEqual(expect.objectContaining({
+      id: 'local',
+      local_hosting: expect.objectContaining({
+        access: expect.objectContaining({
+          local_ui_bind: '127.0.0.1:24001',
+          local_ui_password: 'secret',
+          local_ui_password_configured: true,
         }),
       }),
-    ]);
+    }));
   });
 
   it('collapses local-only managed records to the single Local Environment while keeping provider preferences separate', () => {
@@ -994,20 +976,18 @@ describe('desktopPreferences', () => {
       label: 'Remote Lab',
     }));
     expect(providerEntries[0]).not.toHaveProperty('local_runtime');
-    expect(next.managed_environments).toEqual([
-      expect.objectContaining({
-        id: existingLocal.id,
-        label: 'Local Lab',
-        local_hosting: expect.objectContaining({
-          access: expect.objectContaining({
-            local_ui_bind: '0.0.0.0:24000',
-            local_ui_password: 'secret',
-            local_ui_password_configured: true,
-          }),
+    expect(next.local_environment).toEqual(expect.objectContaining({
+      id: 'local',
+      label: 'Local Lab',
+      local_hosting: expect.objectContaining({
+        access: expect.objectContaining({
+          local_ui_bind: '0.0.0.0:24000',
+          local_ui_password: 'secret',
+          local_ui_password_configured: true,
         }),
       }),
-    ]);
-    expect(next.managed_environments.some((environment) => environment.id === existingRemoteOnly.id)).toBe(false);
+    }));
+    expect(next.local_environment.id).not.toBe(existingRemoteOnly.id);
   });
 
   it('keeps the existing local state when editing Local Environment settings', () => {
@@ -1022,22 +1002,20 @@ describe('desktopPreferences', () => {
       environment_id: existing.id,
       name: 'lab',
       label: 'Renamed Lab',
-      access: managedEnvironmentLocalAccess(existing),
+      access: localEnvironmentAccess(existing),
     });
 
-    expect(next.managed_environments).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: existing.id,
-        label: 'Local Environment',
-        local_hosting: expect.objectContaining({
-          scope: expect.objectContaining({
-            kind: 'local_environment',
-            name: 'local',
-          }),
-          state_dir: '/tmp/redeven-lab',
+    expect(next.local_environment).toEqual(expect.objectContaining({
+      id: 'local',
+      label: 'Local Environment',
+      local_hosting: expect.objectContaining({
+        scope: expect.objectContaining({
+          kind: 'local_environment',
+          name: 'local',
         }),
+        state_dir: '/tmp/redeven-lab',
       }),
-    ]));
+    }));
   });
 
   it('keeps the Local Environment record when deletion is requested directly', () => {
@@ -1052,7 +1030,7 @@ describe('desktopPreferences', () => {
 
     expect(result.deleted_environment).toBeNull();
     expect(result.deleted_state_dir).toBe('');
-    expect(result.preferences.managed_environments.some((environment) => environment.id === removable.id)).toBe(true);
+    expect(result.preferences.local_environment.id).toBe('local');
   });
 
   it('drops revoked provider entries unless they have durable user preference metadata', () => {
@@ -1146,9 +1124,7 @@ describe('desktopPreferences', () => {
         pinned: true,
       }),
     ]);
-    expect(next.managed_environments.map((environment) => environment.id)).toEqual([
-      'local',
-    ]);
+    expect(next.local_environment.id).toBe('local');
   });
 
   it('tracks provider-card pin and last-used metadata separately from managed environments', () => {
@@ -1166,11 +1142,9 @@ describe('desktopPreferences', () => {
       true,
     );
 
-    expect(pinned.managed_environments).toEqual([
-      expect.objectContaining({
-        id: 'local',
-      }),
-    ]);
+    expect(pinned.local_environment).toEqual(expect.objectContaining({
+      id: 'local',
+    }));
     expect(pinned.provider_environments).toEqual([
       expect.objectContaining({
         id: environmentID,

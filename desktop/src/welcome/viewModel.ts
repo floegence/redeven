@@ -1,7 +1,7 @@
 import type {
   DesktopEnvironmentEntry,
   DesktopLauncherSurface,
-  DesktopManagedEnvironmentRoute,
+  DesktopLocalEnvironmentStateRoute,
   DesktopWelcomeSnapshot,
 } from '../shared/desktopLauncherIPC';
 import { desktopControlPlaneKey, type DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
@@ -83,7 +83,7 @@ export type EnvironmentActionModel = Readonly<{
   label: string;
   enabled: boolean;
   variant: 'default' | 'outline';
-  route?: DesktopManagedEnvironmentRoute;
+  route?: DesktopLocalEnvironmentStateRoute;
   provider_origin?: string;
   provider_id?: string;
 }>;
@@ -684,7 +684,7 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
   };
 }
 
-function providerPrimaryRoute(environment: DesktopEnvironmentEntry): DesktopManagedEnvironmentRoute | '' {
+function providerPrimaryRoute(environment: DesktopEnvironmentEntry): DesktopLocalEnvironmentStateRoute | '' {
   if (environment.kind !== 'provider_environment') {
     return '';
   }
@@ -959,7 +959,7 @@ function blockedPrimaryActionDetail(
   action: EnvironmentActionModel,
 ): string {
   if (action.intent === 'serve_runtime_locally') {
-    return 'Desktop will link the Local Environment on this device to this provider Environment, then open it locally.';
+    return 'Desktop will link this Local Environment profile to the provider Environment, then open it locally.';
   }
   return environment.kind === 'ssh_environment'
     ? 'Open becomes available once the runtime is ready on this SSH host.'

@@ -5,7 +5,6 @@ import path from 'node:path';
 import {
   DEFAULT_DESKTOP_LOCAL_UI_BIND,
   isLoopbackOnlyBind,
-  localUIBindsConflict,
   parseLocalUIBind,
 } from './localUIBind';
 import { normalizeLocalUIBaseURL } from './localUIURL';
@@ -43,23 +42,19 @@ import {
   resolveStateRoot,
 } from './statePaths';
 import {
-  createManagedEnvironment,
-  createManagedEnvironmentLocalHosting,
-  createManagedEnvironmentProviderBinding,
-  createManagedLocalEnvironment,
-  defaultDesktopManagedEnvironmentAccess,
-  defaultLocalManagedEnvironmentLabel,
-  desktopManagedLocalEnvironmentID,
-  isDefaultLocalManagedEnvironment,
+  createDesktopLocalEnvironmentHosting,
+  createDesktopLocalProviderBinding,
+  createDesktopLocalEnvironmentState,
+  defaultDesktopLocalEnvironmentAccess,
+  defaultDesktopLocalEnvironmentLabel,
   LOCAL_ENVIRONMENT_ID,
-  managedEnvironmentLocalAccess,
-  managedEnvironmentSortKey,
+  localEnvironmentAccess,
   normalizeDesktopLocalEnvironmentName,
   normalizeDesktopProviderEnvironmentID,
-  type DesktopManagedEnvironment,
-  type DesktopManagedEnvironmentAccess,
-  type DesktopManagedEnvironmentPreferredOpenRoute,
-} from '../shared/desktopManagedEnvironment';
+  type DesktopLocalEnvironmentState,
+  type DesktopLocalEnvironmentAccess,
+  type DesktopLocalEnvironmentPreferredOpenRoute,
+} from '../shared/desktopLocalEnvironmentState';
 import {
   createDesktopProviderEnvironmentRecord,
   defaultDesktopProviderEnvironmentLabel,
@@ -95,7 +90,7 @@ export type DesktopSavedControlPlane = Readonly<{
 }>;
 
 export type DesktopPreferences = Readonly<{
-  managed_environments: readonly DesktopManagedEnvironment[];
+  local_environment: DesktopLocalEnvironmentState;
   provider_environments: readonly DesktopProviderEnvironmentRecord[];
   saved_environments: readonly DesktopSavedEnvironment[];
   saved_ssh_environments: readonly DesktopSavedSSHEnvironment[];
@@ -113,20 +108,22 @@ export type DesktopPreferencesPaths = Readonly<{
 type DesktopCatalogPaths = Readonly<{
   stateRoot: string;
   catalogRoot: string;
+  localEnvironmentFile: string;
   environmentsDir: string;
   connectionsDir: string;
   providersDir: string;
   providerEnvironmentsDir: string;
 }>;
 
-type ManagedEnvironmentCatalogNormalizationResult = Readonly<{
-  environment: DesktopManagedEnvironment | null;
+type LocalEnvironmentCatalogNormalizationResult = Readonly<{
+  environment: DesktopLocalEnvironmentState | null;
   didCanonicalizeProviderIdentity: boolean;
 }>;
 
-type ManagedEnvironmentCatalogCollectionResult = Readonly<{
-  environments: readonly DesktopManagedEnvironment[];
+type LocalEnvironmentCatalogResult = Readonly<{
+  environment: DesktopLocalEnvironmentState;
   didCanonicalizeProviderIdentity: boolean;
+  didMigrateLegacyCatalog: boolean;
 }>;
 
 type ProviderEnvironmentNormalizationResult = Readonly<{
@@ -172,7 +169,7 @@ type DesktopSavedSSHEnvironmentFile = Readonly<{
   last_used_at_ms?: unknown;
 }>;
 
-type DesktopManagedEnvironmentCatalogFile = Readonly<{
+type DesktopLocalEnvironmentStateCatalogFile = Readonly<{
   schema_version?: unknown;
   record_kind?: unknown;
   id?: unknown;
@@ -182,13 +179,6 @@ type DesktopManagedEnvironmentCatalogFile = Readonly<{
   updated_at_ms?: unknown;
   last_used_at_ms?: unknown;
   preferred_open_route?: unknown;
-  identity?: Readonly<{
-    kind?: unknown;
-    local_name?: unknown;
-    provider_origin?: unknown;
-    provider_id?: unknown;
-    env_public_id?: unknown;
-  }>;
   local_hosting?: Readonly<{
     scope?: Readonly<{
       kind?: unknown;
@@ -201,6 +191,13 @@ type DesktopManagedEnvironmentCatalogFile = Readonly<{
       local_ui_bind?: unknown;
       local_ui_password_configured?: unknown;
     }>;
+  }>;
+  current_provider_binding?: Readonly<{
+    provider_origin?: unknown;
+    provider_id?: unknown;
+    env_public_id?: unknown;
+    remote_web_supported?: unknown;
+    remote_desktop_supported?: unknown;
   }>;
   provider_binding?: Readonly<{
     provider_origin?: unknown;
@@ -291,11 +288,12 @@ type DesktopControlPlaneSecretFile = Readonly<{
 
 type DesktopSecretsFile = Readonly<{
   version?: number;
+  local_environment?: DesktopLocalEnvironmentStateSecretFile;
   managed_environments?: readonly unknown[];
   control_planes?: readonly DesktopControlPlaneSecretFile[];
 }>;
 
-type DesktopManagedEnvironmentSecretFile = Readonly<{
+type DesktopLocalEnvironmentStateSecretFile = Readonly<{
   environment_id?: unknown;
   local_ui_password?: StoredSecret;
 }>;
@@ -311,12 +309,12 @@ export type SafeStorageLike = Readonly<{
   decryptString: (value: Buffer) => string;
 }>;
 
-export type UpsertDesktopManagedEnvironmentInput = Readonly<{
+export type UpsertDesktopLocalEnvironmentStateInput = Readonly<{
   environment_id?: string;
   name?: string;
   label?: string;
   pinned?: boolean;
-  access?: DesktopManagedEnvironmentAccess;
+  access?: DesktopLocalEnvironmentAccess;
   created_at_ms?: number;
   updated_at_ms?: number;
   last_used_at_ms?: number;
@@ -324,11 +322,11 @@ export type UpsertDesktopManagedEnvironmentInput = Readonly<{
 
 export type DeleteManagedEnvironmentResult = Readonly<{
   preferences: DesktopPreferences;
-  deleted_environment: DesktopManagedEnvironment | null;
+  deleted_environment: DesktopLocalEnvironmentState | null;
   deleted_state_dir: string;
 }>;
 
-export type DesktopManagedEnvironmentLocalBindConflict = Readonly<{
+export type DesktopLocalEnvironmentStateLocalBindConflict = Readonly<{
   environment_id: string;
   label: string;
   local_ui_bind: string;
@@ -403,7 +401,7 @@ export function createSafeStorageSecretCodec(safeStorage: SafeStorageLike | null
 
 export function defaultDesktopPreferences(): DesktopPreferences {
   return {
-    managed_environments: [createManagedLocalEnvironment('local')],
+    local_environment: createDesktopLocalEnvironmentState('local'),
     provider_environments: [],
     saved_environments: [],
     saved_ssh_environments: [],
@@ -437,6 +435,7 @@ function defaultDesktopCatalogPaths(stateRootOverride?: string): DesktopCatalogP
   return {
     stateRoot,
     catalogRoot,
+    localEnvironmentFile: path.join(catalogRoot, 'local-environment.json'),
     environmentsDir: path.join(catalogRoot, 'environments'),
     connectionsDir: path.join(catalogRoot, 'connections'),
     providersDir: path.join(catalogRoot, 'providers'),
@@ -448,17 +447,17 @@ export function desktopPreferencesToDraft(
   preferences: DesktopPreferences,
   environmentID?: string,
 ): DesktopSettingsDraft {
-  const localEnvironment = preferences.managed_environments[0] ?? createManagedLocalEnvironment('local');
+  const localEnvironment = preferences.local_environment;
   const access = (() => {
     const managedEnvironment = environmentID ? findManagedEnvironmentByID(preferences, environmentID) : null;
     if (managedEnvironment) {
-      return managedEnvironmentLocalAccess(managedEnvironment);
+      return localEnvironmentAccess(managedEnvironment);
     }
     const providerEnvironment = environmentID ? findProviderEnvironmentByID(preferences, environmentID) : null;
     if (providerEnvironment) {
-      return managedEnvironmentLocalAccess(localEnvironment);
+      return localEnvironmentAccess(localEnvironment);
     }
-    return managedEnvironmentLocalAccess(localEnvironment);
+    return localEnvironmentAccess(localEnvironment);
   })();
   return {
     local_ui_bind: access.local_ui_bind,
@@ -527,16 +526,6 @@ function sortSavedControlPlanes(
   ));
 }
 
-function sortManagedEnvironments(
-  environments: readonly DesktopManagedEnvironment[],
-): readonly DesktopManagedEnvironment[] {
-  return [...environments].sort((left, right) => {
-    const [leftPinned, leftLabel, leftID] = managedEnvironmentSortKey(left);
-    const [rightPinned, rightLabel, rightID] = managedEnvironmentSortKey(right);
-    return leftPinned - rightPinned || leftLabel.localeCompare(rightLabel) || leftID.localeCompare(rightID);
-  });
-}
-
 function sortProviderEnvironments(
   environments: readonly DesktopProviderEnvironmentRecord[],
 ): readonly DesktopProviderEnvironmentRecord[] {
@@ -571,7 +560,7 @@ function normalizeManagedEnvironmentAccess(
   localUIBind: unknown,
   localUIPassword: string,
   localUIPasswordConfigured = compact(localUIPassword) !== '',
-): DesktopManagedEnvironmentAccess {
+): DesktopLocalEnvironmentAccess {
   const draft = validateDesktopSettingsDraft({
     local_ui_bind: compact(localUIBind) || DEFAULT_DESKTOP_LOCAL_UI_BIND,
     local_ui_password: localUIPassword,
@@ -593,7 +582,7 @@ function decodeManagedEnvironmentPasswords(
   }
 
   for (const value of values) {
-    const candidate = value as DesktopManagedEnvironmentSecretFile;
+    const candidate = value as DesktopLocalEnvironmentStateSecretFile;
     const environmentID = compact(candidate?.environment_id);
     const localUIPassword = decodeOptionalSecret(codec, candidate?.local_ui_password);
     if (environmentID === '' || compact(localUIPassword) === '') {
@@ -604,31 +593,36 @@ function decodeManagedEnvironmentPasswords(
   return out;
 }
 
-function ensureDefaultManagedEnvironment(
-  environments: readonly DesktopManagedEnvironment[],
+function normalizeLocalEnvironmentState(
+  environment: DesktopLocalEnvironmentState | null | undefined,
   stateRootOverride?: string,
-): readonly DesktopManagedEnvironment[] {
-  const defaultID = desktopManagedLocalEnvironmentID('local');
-  if (environments.some((environment) => environment.id === defaultID)) {
-    return sortManagedEnvironments(environments);
-  }
-  return sortManagedEnvironments([
-    createManagedLocalEnvironment('local', {
-      stateDir: resolveManagedEnvironmentStateDir({ name: 'local' }, stateRootOverride),
-    }),
-    ...environments,
-  ]);
+): DesktopLocalEnvironmentState {
+  const source = environment ?? null;
+  return createDesktopLocalEnvironmentState('local', {
+    label: defaultDesktopLocalEnvironmentLabel('local'),
+    pinned: source?.pinned,
+    access: source?.local_hosting.access,
+    preferredOpenRoute: source?.preferred_open_route,
+    currentProviderBinding: source?.current_provider_binding,
+    owner: source?.local_hosting.owner,
+    stateDir: compact(source?.local_hosting.state_dir)
+      || resolveManagedEnvironmentStateDir({ name: 'local' }, stateRootOverride),
+    currentRuntime: source?.local_hosting.current_runtime,
+    createdAtMS: source?.created_at_ms,
+    updatedAtMS: source?.updated_at_ms,
+    lastUsedAtMS: source?.last_used_at_ms,
+  });
 }
 
 export function findManagedEnvironmentByID(
   preferences: DesktopPreferences,
   environmentID: string,
-): DesktopManagedEnvironment | null {
+): DesktopLocalEnvironmentState | null {
   const cleanEnvironmentID = compact(environmentID);
-  if (cleanEnvironmentID === '') {
+  if (cleanEnvironmentID === '' || cleanEnvironmentID !== LOCAL_ENVIRONMENT_ID) {
     return null;
   }
-  return preferences.managed_environments.find((environment) => environment.id === cleanEnvironmentID) ?? null;
+  return preferences.local_environment;
 }
 
 export function findProviderEnvironmentByID(
@@ -1020,6 +1014,58 @@ function normalizeProviderEnvironmentsFromCatalog(
   };
 }
 
+function normalizeProviderEnvironmentsFromLegacyLocalCatalog(
+  values: readonly unknown[],
+  canonicalProviderIDsByOrigin: ReadonlyMap<string, string>,
+): ProviderEnvironmentNormalizationResult {
+  const normalized: DesktopProviderEnvironmentRecord[] = [];
+  let didCanonicalizeProviderIdentity = false;
+  for (const value of values) {
+    if (!value || typeof value !== 'object') {
+      continue;
+    }
+    const candidate = value as DesktopLocalEnvironmentStateCatalogFile;
+    const binding = candidate.current_provider_binding && typeof candidate.current_provider_binding === 'object'
+      ? candidate.current_provider_binding
+      : candidate.provider_binding && typeof candidate.provider_binding === 'object'
+        ? candidate.provider_binding
+        : null;
+    if (!binding) {
+      continue;
+    }
+    const providerOrigin = compact(binding.provider_origin);
+    const envPublicID = compact(binding.env_public_id);
+    const normalizedProviderIdentity = normalizeProviderIdentityForOrigin(
+      providerOrigin,
+      binding.provider_id,
+      canonicalProviderIDsByOrigin,
+    );
+    didCanonicalizeProviderIdentity ||= normalizedProviderIdentity.didCanonicalize;
+    if (providerOrigin === '' || envPublicID === '' || normalizedProviderIdentity.providerID === '') {
+      continue;
+    }
+    try {
+      normalized.push(createDesktopProviderEnvironmentRecord(providerOrigin, envPublicID, {
+        providerID: normalizedProviderIdentity.providerID,
+        label: compact(candidate.label),
+        pinned: normalizePinned(candidate.pinned),
+        preferredOpenRoute: normalizePreferredOpenRoute(candidate.preferred_open_route),
+        remoteWebSupported: binding.remote_web_supported !== false,
+        remoteDesktopSupported: binding.remote_desktop_supported !== false,
+        createdAtMS: normalizeLastUsedAtMS(candidate.created_at_ms, Date.now()),
+        updatedAtMS: normalizeLastUsedAtMS(candidate.updated_at_ms, Date.now()),
+        lastUsedAtMS: normalizeLastUsedAtMS(candidate.last_used_at_ms, 0),
+      }));
+    } catch {
+      // Ignore malformed legacy provider projections during one-shot migration.
+    }
+  }
+  return {
+    environments: normalizeProviderEnvironmentCollection(normalized),
+    didCanonicalizeProviderIdentity,
+  };
+}
+
 function mergeProviderEnvironmentRecord(
   existing: DesktopProviderEnvironmentRecord | null,
   input: Readonly<{
@@ -1028,7 +1074,7 @@ function mergeProviderEnvironmentRecord(
     env_public_id: string;
     label?: string;
     pinned?: boolean;
-    preferred_open_route?: DesktopManagedEnvironmentPreferredOpenRoute;
+    preferred_open_route?: DesktopLocalEnvironmentPreferredOpenRoute;
     remote_web_supported?: boolean;
     remote_desktop_supported?: boolean;
     remote_catalog_entry?: DesktopProviderEnvironmentRecord['remote_catalog_entry'] | null;
@@ -1231,41 +1277,6 @@ function normalizeProviderIdentityForOrigin(
   };
 }
 
-function normalizeManagedEnvironmentCollection(
-  environments: readonly DesktopManagedEnvironment[],
-): readonly DesktopManagedEnvironment[] {
-  let selectedLocalEnvironment: DesktopManagedEnvironment | null = null;
-  let selectedLocalHosting: DesktopManagedEnvironment['local_hosting'] | null = null;
-  for (const environment of environments) {
-    if (!environment.local_hosting) {
-      continue;
-    }
-    if (!selectedLocalEnvironment || environment.updated_at_ms >= selectedLocalEnvironment.updated_at_ms) {
-      selectedLocalEnvironment = environment;
-      selectedLocalHosting = environment.local_hosting;
-    }
-  }
-  const localEnvironment = selectedLocalEnvironment && selectedLocalHosting
-    ? createManagedLocalEnvironment('local', {
-      environmentID: LOCAL_ENVIRONMENT_ID,
-      label: selectedLocalEnvironment.provider_binding
-        ? selectedLocalEnvironment.label
-        : defaultLocalManagedEnvironmentLabel('local'),
-      pinned: selectedLocalEnvironment.pinned,
-      access: selectedLocalHosting.access,
-      preferredOpenRoute: selectedLocalEnvironment.preferred_open_route,
-      providerBinding: selectedLocalEnvironment.provider_binding,
-      owner: selectedLocalHosting.owner,
-      stateDir: selectedLocalHosting.state_dir,
-      currentRuntime: selectedLocalHosting.current_runtime,
-        createdAtMS: selectedLocalEnvironment.created_at_ms,
-        updatedAtMS: selectedLocalEnvironment.updated_at_ms,
-        lastUsedAtMS: selectedLocalEnvironment.last_used_at_ms,
-      })
-    : createManagedLocalEnvironment('local');
-  return [localEnvironment];
-}
-
 function providerEnvironmentRecordKey(
   providerOrigin: string,
   providerID: string,
@@ -1303,164 +1314,95 @@ function canonicalizeProviderEnvironmentIdentity(
 }
 
 export function findManagedEnvironmentLocalBindConflict(
-  preferences: DesktopPreferences,
-  environmentID: string,
-): DesktopManagedEnvironmentLocalBindConflict | null {
-  const targetManagedEnvironment = findManagedEnvironmentByID(preferences, environmentID);
-  const targetProviderEnvironment = findProviderEnvironmentByID(preferences, environmentID);
-  const localEnvironment = preferences.managed_environments[0] ?? createManagedLocalEnvironment('local');
-  const target = targetManagedEnvironment ?? (targetProviderEnvironment ? localEnvironment : null);
-  const targetBind = target?.local_hosting?.access.local_ui_bind ?? '';
-  if (!target || targetBind === '') {
-    return null;
-  }
-
-  for (const candidate of preferences.managed_environments.map((environment) => ({
-    id: environment.id,
-    label: environment.label,
-    local_ui_bind: environment.local_hosting?.access.local_ui_bind ?? '',
-  }))) {
-    if (candidate.id === target.id || candidate.local_ui_bind === '') {
-      continue;
-    }
-    if (!localUIBindsConflict(targetBind, candidate.local_ui_bind)) {
-      continue;
-    }
-    return {
-      environment_id: target.id,
-      label: target.label,
-      local_ui_bind: targetBind,
-      conflicting_environment_id: candidate.id,
-      conflicting_label: candidate.label,
-      conflicting_local_ui_bind: candidate.local_ui_bind,
-    };
-  }
+  _preferences: DesktopPreferences,
+  _environmentID: string,
+): DesktopLocalEnvironmentStateLocalBindConflict | null {
   return null;
 }
 
 export function describeManagedEnvironmentLocalBindConflict(
-  conflict: DesktopManagedEnvironmentLocalBindConflict,
+  conflict: DesktopLocalEnvironmentStateLocalBindConflict,
 ): string {
   const targetLabel = compact(conflict.label) || compact(conflict.environment_id) || 'This environment';
   const conflictingLabel = compact(conflict.conflicting_label) || compact(conflict.conflicting_environment_id) || 'another environment';
   return `${targetLabel} cannot use ${conflict.local_ui_bind} because "${conflictingLabel}" is already configured for ${conflict.conflicting_local_ui_bind}. Choose a different Local UI bind or update that environment first.`;
 }
 
-function localHostingForManagedEnvironment(
-  input: UpsertDesktopManagedEnvironmentInput,
-  access: DesktopManagedEnvironmentAccess,
-  existing: DesktopManagedEnvironment | null,
-  stateRootOverride?: string,
-): ReturnType<typeof createManagedEnvironmentLocalHosting> {
-  const name = normalizeDesktopLocalEnvironmentName(input.name || 'local');
-  const existingStateDir = existing?.local_hosting?.state_dir
-    || resolveManagedEnvironmentStateDir({ name }, stateRootOverride);
-  return createManagedEnvironmentLocalHosting(
-    { kind: 'local_environment', name: 'local' },
-    {
-      access,
-      owner: existing?.local_hosting?.owner ?? 'desktop',
-      stateDir: existingStateDir,
-      currentRuntime: existing?.local_hosting?.current_runtime,
-    },
-  );
-}
-
 export function upsertManagedEnvironment(
   preferences: DesktopPreferences,
-  input: UpsertDesktopManagedEnvironmentInput,
+  input: UpsertDesktopLocalEnvironmentStateInput,
 ): DesktopPreferences {
-  const existing = compact(input.environment_id) === ''
-    ? null
-    : preferences.managed_environments.find((environment) => environment.id === compact(input.environment_id)) ?? null;
+  const existing = preferences.local_environment;
   const access = input.access ?? (
     existing
-      ? managedEnvironmentLocalAccess(existing)
-      : defaultDesktopManagedEnvironmentAccess()
+      ? localEnvironmentAccess(existing)
+      : defaultDesktopLocalEnvironmentAccess()
   );
   const name = normalizeDesktopLocalEnvironmentName(
     compact(input.name)
     || 'local',
   );
-  const environmentID = existing?.id || desktopManagedLocalEnvironmentID(name);
-  const nextEnvironment = createManagedEnvironment({
-    environmentID,
-    label: compact(input.label)
-      || existing?.label
-      || defaultLocalManagedEnvironmentLabel(name),
+  const nextEnvironment = createDesktopLocalEnvironmentState(name, {
+    label: defaultDesktopLocalEnvironmentLabel(name),
     pinned: input.pinned ?? existing?.pinned ?? false,
     preferredOpenRoute: existing?.preferred_open_route ?? 'auto',
-    localHosting: localHostingForManagedEnvironment(
-      input,
-      access,
-      existing,
-    ),
+    currentProviderBinding: existing?.current_provider_binding,
+    access,
+    owner: existing?.local_hosting.owner ?? 'desktop',
+    stateDir: existing?.local_hosting.state_dir
+      || resolveManagedEnvironmentStateDir({ name }),
+    currentRuntime: existing?.local_hosting.current_runtime,
     createdAtMS: input.created_at_ms ?? existing?.created_at_ms ?? Date.now(),
     updatedAtMS: input.updated_at_ms ?? Date.now(),
     lastUsedAtMS: input.last_used_at_ms ?? existing?.last_used_at_ms ?? 0,
   });
-  const replacedIDs = new Set<string>([
-    environmentID,
-    existing?.id ?? '',
-  ].filter((value) => value !== ''));
   return {
     ...preferences,
-    managed_environments: normalizeManagedEnvironmentCollection([
-      nextEnvironment,
-      ...preferences.managed_environments.filter((environment) => (
-        !replacedIDs.has(environment.id)
-      )),
-    ]),
+    local_environment: nextEnvironment,
   };
 }
 
 export function updateManagedEnvironmentAccess(
   preferences: DesktopPreferences,
   environmentID: string,
-  access: DesktopManagedEnvironmentAccess,
+  access: DesktopLocalEnvironmentAccess,
 ): DesktopPreferences {
   const cleanEnvironmentID = compact(environmentID);
+  if (cleanEnvironmentID !== LOCAL_ENVIRONMENT_ID) {
+    return preferences;
+  }
   return {
     ...preferences,
-    managed_environments: normalizeManagedEnvironmentCollection(
-      preferences.managed_environments.map((environment) => (
-        environment.id === cleanEnvironmentID && environment.local_hosting
-          ? {
-              ...environment,
-              local_hosting: {
-                ...environment.local_hosting,
-                access,
-              },
-              updated_at_ms: Date.now(),
-            }
-          : environment
-      )),
-    ),
+    local_environment: {
+      ...preferences.local_environment,
+      local_hosting: {
+        ...preferences.local_environment.local_hosting,
+        access,
+      },
+      updated_at_ms: Date.now(),
+    },
   };
 }
 
 export function rememberManagedEnvironmentUse(
   preferences: DesktopPreferences,
   environmentID: string,
-  route?: DesktopManagedEnvironmentPreferredOpenRoute,
+  route?: DesktopLocalEnvironmentPreferredOpenRoute,
 ): DesktopPreferences {
   const cleanEnvironmentID = compact(environmentID);
+  if (cleanEnvironmentID !== LOCAL_ENVIRONMENT_ID) {
+    return preferences;
+  }
   return {
     ...preferences,
-    managed_environments: ensureDefaultManagedEnvironment(
-      preferences.managed_environments.map((environment) => (
-        environment.id === cleanEnvironmentID
-          ? {
-              ...environment,
-              last_used_at_ms: Date.now(),
-              preferred_open_route: route === 'local_host' || route === 'remote_desktop'
-                ? route
-                : environment.preferred_open_route,
-              updated_at_ms: Date.now(),
-            }
-          : environment
-      )),
-    ),
+    local_environment: {
+      ...preferences.local_environment,
+      last_used_at_ms: Date.now(),
+      preferred_open_route: route === 'local_host' || route === 'remote_desktop'
+        ? route
+        : preferences.local_environment.preferred_open_route,
+      updated_at_ms: Date.now(),
+    },
   };
 }
 
@@ -1470,19 +1412,16 @@ export function setManagedEnvironmentPinned(
   pinned: boolean,
 ): DesktopPreferences {
   const cleanEnvironmentID = compact(environmentID);
+  if (cleanEnvironmentID !== LOCAL_ENVIRONMENT_ID) {
+    return preferences;
+  }
   return {
     ...preferences,
-    managed_environments: ensureDefaultManagedEnvironment(
-      preferences.managed_environments.map((environment) => (
-        environment.id === cleanEnvironmentID
-          ? {
-              ...environment,
-              pinned,
-              updated_at_ms: Date.now(),
-            }
-          : environment
-      )),
-    ),
+    local_environment: {
+      ...preferences.local_environment,
+      pinned,
+      updated_at_ms: Date.now(),
+    },
   };
 }
 
@@ -1671,7 +1610,6 @@ export function upsertSavedControlPlane(
   };
   return {
     ...nextPreferences,
-    managed_environments: normalizeManagedEnvironmentCollection(nextPreferences.managed_environments),
     provider_environments: reconcileProviderEnvironments({
       stored: nextPreferences.provider_environments,
       controlPlanes,
@@ -1727,28 +1665,11 @@ export function deleteManagedEnvironment(
   preferences: DesktopPreferences,
   environmentID: string,
 ): DeleteManagedEnvironmentResult {
-  const cleanEnvironmentID = compact(environmentID);
-  const existing = findManagedEnvironmentByID(preferences, cleanEnvironmentID);
-  if (!existing || !existing.local_hosting || isDefaultLocalManagedEnvironment(existing)) {
-    return {
-      preferences,
-      deleted_environment: null,
-      deleted_state_dir: '',
-    };
-  }
-
-  const deletedStateDir = compact(existing.local_hosting.state_dir);
-  const nextManagedEnvironments = normalizeManagedEnvironmentCollection(
-    preferences.managed_environments.filter((environment) => environment.id !== cleanEnvironmentID),
-  );
-
+  void environmentID;
   return {
-    preferences: {
-      ...preferences,
-      managed_environments: nextManagedEnvironments,
-    },
-    deleted_environment: existing,
-    deleted_state_dir: deletedStateDir,
+    preferences,
+    deleted_environment: null,
+    deleted_state_dir: '',
   };
 }
 
@@ -1793,7 +1714,6 @@ export function deleteSavedControlPlane(
     control_planes: preferences.control_planes.filter((controlPlane) => (
       desktopControlPlaneKey(controlPlane.provider.provider_origin, controlPlane.provider.provider_id) !== key
     )),
-    managed_environments: normalizeManagedEnvironmentCollection(preferences.managed_environments),
     provider_environments: normalizeProviderEnvironmentCollection(
       preferences.provider_environments.filter((environment) => (
         !providerEnvironmentBelongsToControlPlane(environment, normalizedProviderOrigin, providerID)
@@ -1834,8 +1754,7 @@ export function rememberRecentSSHEnvironmentTarget(
 }
 
 export function managedDesktopLaunchKey(preferences: DesktopPreferences): string {
-  const environment = preferences.managed_environments[0] ?? createManagedLocalEnvironment('default');
-  return JSON.stringify(managedEnvironmentLocalAccess(environment));
+  return JSON.stringify(localEnvironmentAccess(preferences.local_environment));
 }
 
 type ValidateDesktopSettingsDraftOptions = Readonly<{
@@ -1884,7 +1803,7 @@ function resolveLocalUIPasswordFromDraft(
 export function validateDesktopSettingsDraft(
   draft: DesktopSettingsDraft,
   options?: ValidateDesktopSettingsDraftOptions,
-): DesktopManagedEnvironmentAccess {
+): DesktopLocalEnvironmentAccess {
   const localUIBind = compact(draft.local_ui_bind);
   if (!localUIBind) {
     throw new Error('Local UI bind address is required.');
@@ -1967,21 +1886,21 @@ async function writeCatalogRecords(
   }));
 }
 
-function normalizeManagedEnvironmentCatalogCandidate(
+function normalizeLocalEnvironmentCatalogCandidate(
   value: unknown,
-  passwordsByID: ReadonlyMap<string, string>,
+  localUIPassword: string,
   canonicalProviderIDsByOrigin: ReadonlyMap<string, string>,
   stateRootOverride?: string,
-): ManagedEnvironmentCatalogNormalizationResult {
+): LocalEnvironmentCatalogNormalizationResult {
   if (!value || typeof value !== 'object') {
     return {
       environment: null,
       didCanonicalizeProviderIdentity: false,
     };
   }
-  const candidate = value as DesktopManagedEnvironmentCatalogFile;
+  const candidate = value as DesktopLocalEnvironmentStateCatalogFile;
   const recordKind = compact(candidate.record_kind);
-  if (recordKind !== '' && recordKind !== 'environment') {
+  if (recordKind !== '' && recordKind !== 'local_environment' && recordKind !== 'environment') {
     return {
       environment: null,
       didCanonicalizeProviderIdentity: false,
@@ -1989,24 +1908,31 @@ function normalizeManagedEnvironmentCatalogCandidate(
   }
 
   let didCanonicalizeProviderIdentity = false;
-  const providerBinding = (() => {
-    if (!candidate.provider_binding || typeof candidate.provider_binding !== 'object') {
+  const currentProviderBinding = (() => {
+    const bindingSource = (
+      candidate.current_provider_binding && typeof candidate.current_provider_binding === 'object'
+        ? candidate.current_provider_binding
+        : candidate.provider_binding && typeof candidate.provider_binding === 'object'
+          ? candidate.provider_binding
+          : null
+    );
+    if (!bindingSource) {
       return null;
     }
     const normalizedProviderIdentity = normalizeProviderIdentityForOrigin(
-      compact(candidate.provider_binding.provider_origin),
-      candidate.provider_binding.provider_id,
+      compact(bindingSource.provider_origin),
+      bindingSource.provider_id,
       canonicalProviderIDsByOrigin,
     );
     didCanonicalizeProviderIdentity ||= normalizedProviderIdentity.didCanonicalize;
     try {
-      return createManagedEnvironmentProviderBinding(
-        compact(candidate.provider_binding.provider_origin),
-        compact(candidate.provider_binding.env_public_id),
+      return createDesktopLocalProviderBinding(
+        compact(bindingSource.provider_origin),
+        compact(bindingSource.env_public_id),
         {
           providerID: normalizedProviderIdentity.providerID,
-          remoteWebSupported: candidate.provider_binding.remote_web_supported !== false,
-          remoteDesktopSupported: candidate.provider_binding.remote_desktop_supported !== false,
+          remoteWebSupported: bindingSource.remote_web_supported !== false,
+          remoteDesktopSupported: bindingSource.remote_desktop_supported !== false,
         },
       );
     } catch {
@@ -2014,34 +1940,31 @@ function normalizeManagedEnvironmentCatalogCandidate(
     }
   })();
 
+  const localHostingSource = candidate.local_hosting && typeof candidate.local_hosting === 'object'
+    ? candidate.local_hosting
+    : null;
   const localHosting = (() => {
-    if (!candidate.local_hosting || typeof candidate.local_hosting !== 'object') {
-      return null;
-    }
-    const scope = candidate.local_hosting.scope;
-    if (!scope || typeof scope !== 'object') {
-      return null;
-    }
-    const password = String(passwordsByID.get(compact(candidate.id)) ?? '');
-    const passwordConfigured = candidate.local_hosting.access?.local_ui_password_configured === true || compact(password) !== '';
+    const password = compact(localUIPassword);
+    const passwordConfigured = localHostingSource?.access?.local_ui_password_configured === true || password !== '';
     const access = normalizeManagedEnvironmentAccess(
-      candidate.local_hosting.access?.local_ui_bind ?? DEFAULT_DESKTOP_LOCAL_UI_BIND,
+      localHostingSource?.access?.local_ui_bind ?? DEFAULT_DESKTOP_LOCAL_UI_BIND,
       password,
       passwordConfigured,
     );
-    const owner = candidate.local_hosting.owner === 'desktop' || candidate.local_hosting.owner === 'agent'
-      ? candidate.local_hosting.owner
+    const owner = localHostingSource?.owner === 'desktop' || localHostingSource?.owner === 'agent'
+      ? localHostingSource.owner
       : 'unknown';
     try {
-      if (scope.kind !== 'local_environment') {
+      const scope = localHostingSource?.scope;
+      if (scope && typeof scope === 'object' && scope.kind !== 'local_environment') {
         return null;
       }
-      return createManagedEnvironmentLocalHosting(
+      return createDesktopLocalEnvironmentHosting(
         { kind: 'local_environment', name: 'local' },
         {
           access,
           owner,
-          stateDir: compact(candidate.local_hosting.state_dir)
+          stateDir: compact(localHostingSource?.state_dir)
             || localEnvironmentManagedStateLayout(process.env, os.homedir, stateRootOverride).stateDir,
         },
       );
@@ -2050,14 +1973,7 @@ function normalizeManagedEnvironmentCatalogCandidate(
     }
   })();
 
-  if (!providerBinding && !localHosting) {
-    return {
-      environment: null,
-      didCanonicalizeProviderIdentity,
-    };
-  }
-
-  if (providerBinding && !localHosting) {
+  if (!localHosting) {
     return {
       environment: null,
       didCanonicalizeProviderIdentity,
@@ -2066,19 +1982,15 @@ function normalizeManagedEnvironmentCatalogCandidate(
 
   try {
     return {
-      environment: createManagedEnvironment({
-        environmentID: compact(candidate.id) || undefined,
-        label: compact(candidate.label) || undefined,
+      environment: createDesktopLocalEnvironmentState('local', {
+        label: defaultDesktopLocalEnvironmentLabel('local'),
         pinned: normalizePinned(candidate.pinned),
         preferredOpenRoute: normalizePreferredOpenRoute(candidate.preferred_open_route),
-        identity: candidate.identity?.kind === 'provisional_local'
-          ? {
-              kind: 'provisional_local',
-              local_name: normalizeDesktopLocalEnvironmentName(candidate.identity.local_name),
-            }
-          : undefined,
-        localHosting: localHosting ?? undefined,
-        providerBinding: providerBinding ?? undefined,
+        currentProviderBinding: currentProviderBinding ?? undefined,
+        access: localHosting.access,
+        owner: localHosting.owner,
+        stateDir: localHosting.state_dir,
+        currentRuntime: localHosting.current_runtime,
         createdAtMS: normalizeLastUsedAtMS(candidate.created_at_ms, Date.now()),
         updatedAtMS: normalizeLastUsedAtMS(candidate.updated_at_ms, Date.now()),
         lastUsedAtMS: normalizeLastUsedAtMS(candidate.last_used_at_ms, 0),
@@ -2093,87 +2005,91 @@ function normalizeManagedEnvironmentCatalogCandidate(
   }
 }
 
-function normalizeManagedEnvironmentsFromCatalog(
-  values: readonly unknown[],
-  passwordsByID: ReadonlyMap<string, string>,
+function normalizeLocalEnvironmentFromCatalog(
+  canonicalValue: unknown,
+  legacyValues: readonly unknown[],
+  secretsFile: DesktopSecretsFile | null,
+  codec: DesktopSecretCodec,
   canonicalProviderIDsByOrigin: ReadonlyMap<string, string>,
   stateRootOverride?: string,
-): ManagedEnvironmentCatalogCollectionResult {
-  const normalized: DesktopManagedEnvironment[] = [];
-  const seenIDs = new Set<string>();
+): LocalEnvironmentCatalogResult {
+  const legacyPasswordsByID = decodeManagedEnvironmentPasswords(codec, secretsFile?.managed_environments);
   let didCanonicalizeProviderIdentity = false;
-  for (const value of values) {
-    const result = normalizeManagedEnvironmentCatalogCandidate(
+  const canonicalPassword = decodeOptionalSecret(codec, secretsFile?.local_environment?.local_ui_password)
+    || legacyPasswordsByID.get(LOCAL_ENVIRONMENT_ID)
+    || '';
+  const canonicalResult = normalizeLocalEnvironmentCatalogCandidate(
+    canonicalValue,
+    canonicalPassword,
+    canonicalProviderIDsByOrigin,
+    stateRootOverride,
+  );
+  didCanonicalizeProviderIdentity ||= canonicalResult.didCanonicalizeProviderIdentity;
+  if (canonicalResult.environment) {
+    return {
+      environment: normalizeLocalEnvironmentState(canonicalResult.environment, stateRootOverride),
+      didCanonicalizeProviderIdentity,
+      didMigrateLegacyCatalog: legacyValues.length > 0 || Array.isArray(secretsFile?.managed_environments),
+    };
+  }
+
+  let selectedLegacyEnvironment: DesktopLocalEnvironmentState | null = null;
+  for (const value of legacyValues) {
+    const candidateID = value && typeof value === 'object'
+      ? compact((value as DesktopLocalEnvironmentStateCatalogFile).id)
+      : '';
+    const result = normalizeLocalEnvironmentCatalogCandidate(
       value,
-      passwordsByID,
+      legacyPasswordsByID.get(candidateID) ?? legacyPasswordsByID.get(LOCAL_ENVIRONMENT_ID) ?? '',
       canonicalProviderIDsByOrigin,
       stateRootOverride,
     );
     didCanonicalizeProviderIdentity ||= result.didCanonicalizeProviderIdentity;
     const environment = result.environment;
-    if (!environment || seenIDs.has(environment.id)) {
+    if (!environment) {
       continue;
     }
-    seenIDs.add(environment.id);
-    normalized.push(environment);
+    if (!selectedLegacyEnvironment || environment.updated_at_ms >= selectedLegacyEnvironment.updated_at_ms) {
+      selectedLegacyEnvironment = environment;
+    }
   }
   return {
-    environments: normalizeManagedEnvironmentCollection(
-      normalized.length > 0
-        ? normalized
-        : [createManagedLocalEnvironment('local', {
-            stateDir: resolveManagedEnvironmentStateDir({ name: 'local' }, stateRootOverride),
-          })],
-    ),
+    environment: normalizeLocalEnvironmentState(selectedLegacyEnvironment, stateRootOverride),
     didCanonicalizeProviderIdentity,
+    didMigrateLegacyCatalog: legacyValues.length > 0 || Array.isArray(secretsFile?.managed_environments),
   };
 }
 
-function serializeManagedEnvironmentCatalog(environment: DesktopManagedEnvironment): DesktopManagedEnvironmentCatalogFile {
-  const access = managedEnvironmentLocalAccess(environment);
+function serializeLocalEnvironmentCatalog(environment: DesktopLocalEnvironmentState): DesktopLocalEnvironmentStateCatalogFile {
+  const access = localEnvironmentAccess(environment);
   return {
     schema_version: 1,
-    record_kind: 'environment',
+    record_kind: 'local_environment',
     id: environment.id,
-    label: environment.label,
+    label: defaultDesktopLocalEnvironmentLabel('local'),
     pinned: environment.pinned,
     created_at_ms: environment.created_at_ms,
     updated_at_ms: environment.updated_at_ms,
     last_used_at_ms: environment.last_used_at_ms,
     preferred_open_route: environment.preferred_open_route,
-    identity: environment.identity.kind === 'provisional_local'
+    local_hosting: {
+      scope: environment.local_hosting.scope,
+      scope_key: environment.local_hosting.scope_key,
+      state_dir: environment.local_hosting.state_dir,
+      owner: environment.local_hosting.owner,
+      access: {
+        local_ui_bind: access.local_ui_bind,
+        local_ui_password_configured: access.local_ui_password_configured,
+      },
+    },
+    ...(environment.current_provider_binding
       ? {
-          kind: 'provisional_local',
-          local_name: environment.identity.local_name,
-        }
-      : {
-          kind: 'provider',
-          provider_origin: environment.identity.provider_origin,
-          provider_id: environment.identity.provider_id,
-          env_public_id: environment.identity.env_public_id,
-        },
-    ...(environment.local_hosting
-      ? {
-          local_hosting: {
-            scope: environment.local_hosting.scope,
-            scope_key: environment.local_hosting.scope_key,
-            state_dir: environment.local_hosting.state_dir,
-            owner: environment.local_hosting.owner,
-            access: {
-              local_ui_bind: access.local_ui_bind,
-              local_ui_password_configured: access.local_ui_password_configured,
-            },
-          },
-        }
-      : {}),
-    ...(environment.provider_binding
-      ? {
-          provider_binding: {
-            provider_origin: environment.provider_binding.provider_origin,
-            provider_id: environment.provider_binding.provider_id,
-            env_public_id: environment.provider_binding.env_public_id,
-            remote_web_supported: environment.provider_binding.remote_web_supported,
-            remote_desktop_supported: environment.provider_binding.remote_desktop_supported,
+          current_provider_binding: {
+            provider_origin: environment.current_provider_binding.provider_origin,
+            provider_id: environment.current_provider_binding.provider_id,
+            env_public_id: environment.current_provider_binding.env_public_id,
+            remote_web_supported: environment.current_provider_binding.remote_web_supported,
+            remote_desktop_supported: environment.current_provider_binding.remote_desktop_supported,
           },
         }
       : {}),
@@ -2274,15 +2190,16 @@ function serializeProviderEnvironmentCatalog(
 export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, codec: DesktopSecretCodec): Promise<DesktopPreferences> {
   const secretsFile = await readJSONFile<DesktopSecretsFile>(paths.secretsFile);
   const catalogPaths = defaultDesktopCatalogPaths(paths.stateRoot);
+  const catalogLocalEnvironment = await readJSONFile(catalogPaths.localEnvironmentFile);
   const catalogManagedEnvironments = await readJSONDirectory(catalogPaths.environmentsDir);
   const catalogConnections = await readJSONDirectory(catalogPaths.connectionsDir);
   const catalogProviders = await readJSONDirectory(catalogPaths.providersDir);
   const catalogProviderEnvironments = await readJSONDirectory(catalogPaths.providerEnvironmentsDir);
-  const managedEnvironmentPasswordsByID = decodeManagedEnvironmentPasswords(codec, secretsFile?.managed_environments);
   const controlPlaneRefreshTokensByKey = decodeDesktopControlPlaneRefreshTokens(codec, secretsFile?.control_planes);
 
   const hasCurrentCatalogData = (
-    catalogManagedEnvironments.length > 0
+    catalogLocalEnvironment != null
+    || catalogManagedEnvironments.length > 0
     || catalogConnections.length > 0
     || catalogProviders.length > 0
     || catalogProviderEnvironments.length > 0
@@ -2300,9 +2217,11 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
   const savedSSHEnvironments = savedSSHEnvironmentResult.environments;
   const controlPlanes = normalizeSavedControlPlanes(catalogProviders, controlPlaneRefreshTokensByKey);
   const canonicalProviderIDsByOrigin = buildCanonicalProviderIDByOrigin(controlPlanes);
-  const managedEnvironmentCatalogResult = normalizeManagedEnvironmentsFromCatalog(
+  const localEnvironmentCatalogResult = normalizeLocalEnvironmentFromCatalog(
+    catalogLocalEnvironment,
     catalogManagedEnvironments,
-    managedEnvironmentPasswordsByID,
+    secretsFile,
+    codec,
     canonicalProviderIDsByOrigin,
     paths.stateRoot,
   );
@@ -2310,13 +2229,20 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
     catalogProviderEnvironments,
     canonicalProviderIDsByOrigin,
   );
+  const legacyProviderEnvironmentCatalogResult = normalizeProviderEnvironmentsFromLegacyLocalCatalog(
+    catalogManagedEnvironments,
+    canonicalProviderIDsByOrigin,
+  );
   const providerEnvironments = reconcileProviderEnvironments({
-    stored: providerEnvironmentCatalogResult.environments,
+    stored: normalizeProviderEnvironmentCollection([
+      ...providerEnvironmentCatalogResult.environments,
+      ...legacyProviderEnvironmentCatalogResult.environments,
+    ]),
     controlPlanes,
   });
 
   const nextPreferences: DesktopPreferences = {
-    managed_environments: managedEnvironmentCatalogResult.environments,
+    local_environment: localEnvironmentCatalogResult.environment,
     provider_environments: providerEnvironments,
     saved_environments: savedEnvironments,
     saved_ssh_environments: savedSSHEnvironments,
@@ -2326,8 +2252,11 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
   };
   if (
     !hasCurrentCatalogData
-    || managedEnvironmentCatalogResult.didCanonicalizeProviderIdentity
+    || catalogLocalEnvironment == null
+    || localEnvironmentCatalogResult.didCanonicalizeProviderIdentity
+    || localEnvironmentCatalogResult.didMigrateLegacyCatalog
     || providerEnvironmentCatalogResult.didCanonicalizeProviderIdentity
+    || legacyProviderEnvironmentCatalogResult.didCanonicalizeProviderIdentity
     || savedSSHEnvironmentResult.didCanonicalize
   ) {
     await saveDesktopPreferences(paths, nextPreferences, codec);
@@ -2342,7 +2271,7 @@ export async function saveDesktopPreferences(
 ): Promise<void> {
   const catalogPaths = defaultDesktopCatalogPaths(paths.stateRoot);
   const existingSecretsFile = await readJSONFile<DesktopSecretsFile>(paths.secretsFile);
-  const managedEnvironments = ensureDefaultManagedEnvironment(preferences.managed_environments);
+  const localEnvironment = normalizeLocalEnvironmentState(preferences.local_environment, paths.stateRoot);
   const providerEnvironments = normalizeProviderEnvironmentCollection(preferences.provider_environments);
   const savedEnvironments = normalizeSavedEnvironments(preferences.saved_environments);
   const savedSSHEnvironments = normalizeSavedSSHEnvironments(preferences.saved_ssh_environments);
@@ -2352,22 +2281,25 @@ export async function saveDesktopPreferences(
   };
   const secretsFile: DesktopSecretsFile = {
     version: 3,
-    managed_environments: managedEnvironments.flatMap((environment) => {
-      const access = managedEnvironmentLocalAccess(environment);
-      if (!access.local_ui_password_configured || !environment.local_hosting) {
-        return [];
+    local_environment: (() => {
+      const access = localEnvironmentAccess(localEnvironment);
+      if (!access.local_ui_password_configured) {
+        return undefined;
       }
-      const existingSecret = Array.isArray(existingSecretsFile?.managed_environments)
-        ? (existingSecretsFile!.managed_environments as readonly DesktopManagedEnvironmentSecretFile[])
-          .find((entry) => compact(entry.environment_id) === environment.id)
-        : null;
-      return [{
-        environment_id: environment.id,
+      const existingSecret = existingSecretsFile?.local_environment
+        ?? (
+          Array.isArray(existingSecretsFile?.managed_environments)
+            ? (existingSecretsFile!.managed_environments as readonly DesktopLocalEnvironmentStateSecretFile[])
+              .find((entry) => compact(entry.environment_id) === LOCAL_ENVIRONMENT_ID)
+            : null
+        );
+      return {
+        environment_id: LOCAL_ENVIRONMENT_ID,
         local_ui_password: compact(access.local_ui_password) !== ''
           ? codec.encodeSecret(access.local_ui_password)
           : existingSecret?.local_ui_password,
-      }];
-    }),
+      };
+    })(),
     control_planes: controlPlanes.flatMap((controlPlane) => {
       const refreshToken = compact(preferences.control_plane_refresh_tokens[
         desktopControlPlaneKey(controlPlane.provider.provider_origin, controlPlane.provider.provider_id)
@@ -2383,13 +2315,13 @@ export async function saveDesktopPreferences(
     }),
   };
 
-  await writeCatalogRecords(
-    catalogPaths.environmentsDir,
-    Object.fromEntries(managedEnvironments.map((environment) => [
-      environment.id,
-      serializeManagedEnvironmentCatalog(environment),
-    ])),
+  await fs.mkdir(catalogPaths.catalogRoot, { recursive: true });
+  await fs.writeFile(
+    catalogPaths.localEnvironmentFile,
+    `${JSON.stringify(serializeLocalEnvironmentCatalog(localEnvironment), null, 2)}\n`,
+    { mode: 0o600 },
   );
+  await fs.rm(catalogPaths.environmentsDir, { recursive: true, force: true });
   await writeCatalogRecords(
     catalogPaths.connectionsDir,
     Object.fromEntries([

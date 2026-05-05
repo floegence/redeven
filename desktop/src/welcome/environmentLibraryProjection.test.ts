@@ -5,6 +5,7 @@ import {
   testDesktopPreferences,
   testManagedControlPlaneEnvironment,
   testManagedLocalEnvironment,
+  testProviderEnvironment,
 } from '../testSupport/desktopTestHelpers';
 import {
   environmentLibraryEntryRecord,
@@ -16,12 +17,16 @@ describe('environmentLibraryProjection', () => {
     const local = testManagedLocalEnvironment('default', {
       label: 'Local',
     });
+    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo', {
+      label: 'Demo Local Serve',
+    });
     const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
       label: 'Demo Local Serve',
     });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         managed_environments: [local, localServe],
+        provider_environments: [providerEnvironment],
       }),
     });
 
@@ -35,6 +40,10 @@ describe('environmentLibraryProjection', () => {
       label: 'Local',
       pinned: true,
     });
+    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo', {
+      label: 'Demo Local Serve',
+      pinned: false,
+    });
     const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
       label: 'Demo Local Serve',
       pinned: false,
@@ -42,6 +51,7 @@ describe('environmentLibraryProjection', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         managed_environments: [local, localServe],
+        provider_environments: [providerEnvironment],
       }),
     });
     const entryIDs = snapshot.environments.map((environment) => environment.id);
@@ -49,7 +59,7 @@ describe('environmentLibraryProjection', () => {
 
     expect(splitPinnedEnvironmentEntryIDs(entryIDs, entriesByID)).toEqual({
       pinned_entry_ids: [local.id],
-      regular_entry_ids: [localServe.id],
+      regular_entry_ids: [providerEnvironment.id],
     });
   });
 

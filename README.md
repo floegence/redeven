@@ -93,7 +93,7 @@ redeven bootstrap \
   --bootstrap-ticket <bootstrap_ticket>
 ```
 
-Bootstrap writes the Local Environment config to `~/.redeven/local-environment/config.json` by default. The signed-in user's Local Environment is bound to one Environment at a time; running bootstrap again with a fresh one-time ticket rebinds that Local Environment.
+Bootstrap writes the Local Environment config to `~/.redeven/local-environment/config.json` by default. Each OS user / Redeven profile state root has one Local Environment identity, and that Local Environment is bound to one provider Environment at a time; running bootstrap again with a fresh one-time ticket rebinds that Local Environment.
 
 Desktop and browser-assisted flows use the same one-time `bootstrap_ticket` contract. The desktop/runtime exchange contract is described in [`docs/DESKTOP.md`](docs/DESKTOP.md).
 
@@ -198,11 +198,14 @@ Notes:
 - `~/.redeven/local-environment/diagnostics/desktop-events.jsonl`
 - `~/.redeven/local-environment/apps/code/...`
 
-Desktop and standalone runtime mode also share one environment catalog under:
+Desktop and standalone runtime mode also share one profile-scoped catalog:
 
-- `~/.redeven/catalog/environments/*.json`
+- `~/.redeven/catalog/local-environment.json`
+- `~/.redeven/catalog/provider-environments/*.json`
 - `~/.redeven/catalog/connections/*.json`
 - `~/.redeven/catalog/providers/*.json`
+
+Legacy `~/.redeven/catalog/environments/*.json` records are read only as migration input and are removed after Desktop writes the canonical Local Environment record.
 
 ### Public release contract
 

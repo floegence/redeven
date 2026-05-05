@@ -2,8 +2,8 @@ import type { DesktopProviderEnvironment } from './controlPlaneProvider';
 import { normalizeControlPlaneOrigin } from './controlPlaneProvider';
 import {
   normalizeDesktopProviderEnvironmentID,
-  type DesktopManagedEnvironmentPreferredOpenRoute,
-} from './desktopManagedEnvironment';
+  type DesktopLocalEnvironmentPreferredOpenRoute,
+} from './desktopLocalEnvironmentState';
 
 export type DesktopProviderEnvironmentRemoteCatalogEntry = Readonly<{
   environment_url: string;
@@ -25,7 +25,7 @@ export type DesktopProviderEnvironmentRecord = Readonly<{
   created_at_ms: number;
   updated_at_ms: number;
   last_used_at_ms: number;
-  preferred_open_route: DesktopManagedEnvironmentPreferredOpenRoute;
+  preferred_open_route: DesktopLocalEnvironmentPreferredOpenRoute;
   remote_web_supported: boolean;
   remote_desktop_supported: boolean;
   remote_catalog_entry?: DesktopProviderEnvironmentRemoteCatalogEntry;
@@ -63,7 +63,7 @@ type CreateDesktopProviderEnvironmentRecordOptions = Readonly<{
   environmentID?: string;
   label?: string;
   pinned?: boolean;
-  preferredOpenRoute?: DesktopManagedEnvironmentPreferredOpenRoute;
+  preferredOpenRoute?: DesktopLocalEnvironmentPreferredOpenRoute;
   providerID: string;
   remoteWebSupported?: boolean;
   remoteDesktopSupported?: boolean;
