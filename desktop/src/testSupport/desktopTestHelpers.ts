@@ -214,7 +214,7 @@ export function testLocalEnvironmentSession(
     : desktopManaged
       ? 'desktop'
       : 'unknown';
-  const providerBinding = environment.current_provider_binding;
+  const currentProviderBinding = environment.current_provider_binding;
   return {
     session_key: target.session_key,
     target,
@@ -223,10 +223,10 @@ export function testLocalEnvironmentSession(
     startup: {
       local_ui_url: localUIURL,
       local_ui_urls: [localUIURL],
-      ...(providerBinding ? {
-        controlplane_base_url: providerBinding.provider_origin,
-        controlplane_provider_id: providerBinding.provider_id,
-        env_public_id: providerBinding.env_public_id,
+      ...(currentProviderBinding ? {
+        controlplane_base_url: currentProviderBinding.provider_origin,
+        controlplane_provider_id: currentProviderBinding.provider_id,
+        env_public_id: currentProviderBinding.env_public_id,
       } : {}),
       runtime_service: {
         protocol_version: 'redeven-runtime-v1',
