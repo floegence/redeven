@@ -50,6 +50,8 @@ import {
   normalizeContextWindowByProvider,
   normalizeEffectiveContextPercent,
   normalizePositiveInteger,
+  providerBuiltInWebSearchLabel,
+  providerNeedsWebSearchConfig,
   providerPresetForType,
   providerTypeRequiresBaseURL,
   recommendedModelsForProviderType,
@@ -88,6 +90,7 @@ import type {
   AIProviderModelRow,
   AIProviderRow,
   AIProviderType,
+  AIProviderWebSearchMode,
   AIPreservedUIFields,
   CodexHostStatus,
   PermissionPolicy,
@@ -195,7 +198,6 @@ function defaultPermissionPolicy(): PermissionPolicy {
 function defaultAIConfig(): AIConfig {
   return {
     current_model_id: 'openai/gpt-5.2-mini',
-    web_search_provider: 'prefer_openai',
     execution_policy: {
       require_user_approval: false,
       block_dangerous_commands: false,
@@ -210,10 +212,45 @@ function defaultAIConfig(): AIConfig {
         name: 'OpenAI',
         type: 'openai',
         base_url: 'https://api.openai.com/v1',
-        models: [{ model_name: 'gpt-5.2-mini', context_window: 400000, max_output_tokens: 128000, effective_context_window_percent: DEFAULT_EFFECTIVE_CONTEXT_WINDOW_PERCENT }],
+        models: [
+          {
+            model_name: 'gpt-5.2-mini',
+            context_window: 400000,
+            max_output_tokens: 128000,
+            effective_context_window_percent: DEFAULT_EFFECTIVE_CONTEXT_WINDOW_PERCENT,
+          },
+        ],
       },
     ],
   };
+}
+
+function normalizeAIProviderWebSearchMode(raw: unknown): AIProviderWebSearchMode {
+  const mode = String(raw ?? '')
+    .trim()
+    .toLowerCase();
+  if (mode === 'openai_builtin' || mode === 'brave') return mode;
+  return 'disabled';
+}
+
+function normalizeAIProviderWebSearchForType(providerType: AIProviderType, raw: unknown): { mode: AIProviderWebSearchMode } | undefined {
+  if (!providerNeedsWebSearchConfig(providerType)) return undefined;
+  const source = isJSONObject(raw) ? (raw as any).mode : raw;
+  return { mode: normalizeAIProviderWebSearchMode(source) };
+}
+
+function providerWebSearchSummary(provider: AIProviderRow): string {
+  const builtInLabel = providerBuiltInWebSearchLabel(provider.type);
+  if (builtInLabel) return builtInLabel;
+  if (!providerNeedsWebSearchConfig(provider.type)) return 'Not supported';
+  switch (normalizeAIProviderWebSearchMode(provider.web_search?.mode)) {
+    case 'openai_builtin':
+      return 'OpenAI Responses built-in';
+    case 'brave':
+      return 'Brave web.search';
+    default:
+      return 'Disabled';
+  }
 }
 
 type AIModelOption = Readonly<{ id: string; label: string }>;
@@ -679,7 +716,6 @@ export function EnvSettingsPage() {
   const [aiPreservedFields, setAiPreservedFields] = createSignal<AIPreservedUIFields>({});
   const [aiRequireUserApproval, setAiRequireUserApproval] = createSignal(false);
   const [aiBlockDangerousCommands, setAiBlockDangerousCommands] = createSignal(false);
-  const [aiWebSearchProvider, setAiWebSearchProvider] = createSignal<'prefer_openai' | 'brave' | 'disabled'>('prefer_openai');
   const [aiProviderDialogOpen, setAiProviderDialogOpen] = createSignal(false);
   const [aiProviderDialogMode, setAiProviderDialogMode] = createSignal<AIProviderDialogMode>('edit');
   const [aiProviderDialogSourceIndex, setAiProviderDialogSourceIndex] = createSignal<number | null>(null);
@@ -691,7 +727,7 @@ export function EnvSettingsPage() {
   const [aiProviderKeyDraft, setAiProviderKeyDraft] = createSignal<Record<string, string>>({});
   const [aiProviderKeySaving, setAiProviderKeySaving] = createSignal<Record<string, boolean>>({});
 
-  // Web search provider keys (stored locally in secrets.json; never returned in plaintext).
+  // Provider-scoped web search keys (stored locally in secrets.json; never returned in plaintext).
   const [webSearchKeySet, setWebSearchKeySet] = createSignal<Record<string, boolean>>({});
   const [webSearchKeyDraft, setWebSearchKeyDraft] = createSignal<Record<string, string>>({});
   const [webSearchKeySaving, setWebSearchKeySaving] = createSignal<Record<string, boolean>>({});
@@ -862,6 +898,8 @@ export function EnvSettingsPage() {
       if (name) out.name = name;
       const baseURL = String(p.base_url ?? '').trim();
       if (baseURL) out.base_url = baseURL;
+      const webSearch = normalizeAIProviderWebSearchForType(p.type, p.web_search);
+      if (webSearch) out.web_search = webSearch;
       out.models = (p.models ?? []).map((m) => {
         const modelOut: any = { model_name: String(m.model_name ?? '').trim() };
         const contextWindow = normalizePositiveInteger(m.context_window);
@@ -880,7 +918,7 @@ export function EnvSettingsPage() {
     const currentModelID = normalizeAICurrentModelID(aiCurrentModelID(), aiProviders());
     if (!currentModelID) throw new Error('Flower JSON is missing current_model_id.');
 
-    const out: any = { current_model_id: currentModelID, providers, web_search_provider: aiWebSearchProvider() };
+    const out: any = { current_model_id: currentModelID, providers };
     if (preserved.mode === 'act' || preserved.mode === 'plan') out.mode = preserved.mode;
     if (typeof preserved.tool_recovery_enabled === 'boolean') out.tool_recovery_enabled = preserved.tool_recovery_enabled;
     if (typeof preserved.tool_recovery_max_steps === 'number' && Number.isFinite(preserved.tool_recovery_max_steps)) {
@@ -910,16 +948,6 @@ export function EnvSettingsPage() {
   const validateAIValue = (cfg: AIConfig) => {
     const mode = String((cfg as any).mode ?? '').trim();
     if (mode && mode !== 'act' && mode !== 'plan') throw new Error(`Invalid Flower mode: ${mode}`);
-    const webSearchProvider = (cfg as any).web_search_provider;
-    if (webSearchProvider !== undefined) {
-      if (typeof webSearchProvider !== 'string') throw new Error('web_search_provider must be a string.');
-      const normalized = String(webSearchProvider ?? '')
-        .trim()
-        .toLowerCase();
-      if (normalized && normalized !== 'prefer_openai' && normalized !== 'brave' && normalized !== 'disabled') {
-        throw new Error(`Invalid web_search_provider: ${webSearchProvider}`);
-      }
-    }
     const trEnabled = (cfg as any).tool_recovery_enabled;
     if (trEnabled !== undefined && typeof trEnabled !== 'boolean') {
       throw new Error('tool_recovery_enabled must be a boolean.');
@@ -1026,6 +1054,19 @@ export function EnvSettingsPage() {
         if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error(`Provider "${id}" base_url must be http/https.`);
         if (!u.hostname) throw new Error(`Provider "${id}" base_url host is missing.`);
       }
+      const webSearchRaw = (p as any).web_search;
+      if (webSearchRaw !== undefined) {
+        if (!isJSONObject(webSearchRaw)) throw new Error(`Provider "${id}" web_search must be an object.`);
+        const webSearchMode = String((webSearchRaw as any).mode ?? '')
+          .trim()
+          .toLowerCase();
+        if (webSearchMode && webSearchMode !== 'disabled' && webSearchMode !== 'openai_builtin' && webSearchMode !== 'brave') {
+          throw new Error(`Provider "${id}" has invalid web_search.mode: ${webSearchMode}`);
+        }
+        if (typ !== 'openai_compatible' && webSearchMode && webSearchMode !== 'disabled') {
+          throw new Error(`Provider "${id}" web_search is only supported for openai_compatible providers.`);
+        }
+      }
 
       if (models.length === 0) throw new Error(`Provider "${id}" is missing models.`);
 
@@ -1078,6 +1119,7 @@ export function EnvSettingsPage() {
       name: String((p as any).name ?? ''),
       type: (p as any).type as AIProviderType,
       base_url: String((p as any).base_url ?? ''),
+      web_search: normalizeAIProviderWebSearchForType((p as any).type as AIProviderType, (p as any).web_search),
       models: (Array.isArray((p as any).models) ? ((p as any).models as any[]) : []).map((m) => ({
         model_name: String(m?.model_name ?? ''),
         context_window: normalizePositiveInteger(m?.context_window),
@@ -1102,6 +1144,12 @@ export function EnvSettingsPage() {
     }
     return list;
   };
+
+  const providersNeedingWebSearchKeyStatus = (providers: AIProviderRow[]): string[] =>
+    (Array.isArray(providers) ? providers : [])
+      .filter((p) => p.type === 'openai_compatible' && normalizeAIProviderWebSearchMode(p.web_search?.mode) === 'brave')
+      .map((p) => String(p.id ?? '').trim())
+      .filter(Boolean);
 
   const readAIExecutionPolicy = (cfg: unknown) => {
     const raw = isJSONObject(cfg) ? (cfg as any).execution_policy : null;
@@ -1146,16 +1194,6 @@ export function EnvSettingsPage() {
       }
     }
     return out;
-  };
-
-  const normalizeWebSearchProvider = (raw: unknown): 'prefer_openai' | 'brave' | 'disabled' => {
-    const v = String(raw ?? '')
-      .trim()
-      .toLowerCase();
-    if (v === 'prefer_openai' || v === 'brave' || v === 'disabled') {
-      return v as 'prefer_openai' | 'brave' | 'disabled';
-    }
-    return 'prefer_openai';
   };
 
   const refreshAIProviderKeyStatus = async (providerIDs: string[]) => {
@@ -1361,6 +1399,7 @@ export function EnvSettingsPage() {
     const mode = aiProviderDialogMode();
     const sourceIndex = aiProviderDialogSourceIndex();
     const normalizedDraft = normalizeAIProviderRowDraft(draft);
+    const normalizedDraftID = String(normalizedDraft.id ?? '').trim();
 
     let nextProviders = aiProviders().map((item) => cloneAIProviderRow(item));
 
@@ -1379,6 +1418,9 @@ export function EnvSettingsPage() {
     setAiProviders(normalizedProviders);
     setAiCurrentModelID(normalizeAICurrentModelID(aiCurrentModelID(), normalizedProviders));
     setAiDirty(true);
+    if (normalizedDraft.type === 'openai_compatible' && normalizeAIProviderWebSearchMode(normalizedDraft.web_search?.mode) === 'brave') {
+      void refreshWebSearchKeyStatus([normalizedDraftID]);
+    }
     closeAIProviderDialog();
     if (mode === 'create') notify.success('Provider added', 'Changes confirmed. Auto-save is in progress.');
     else notify.success('Provider updated', 'Changes confirmed. Auto-save is in progress.');
@@ -1430,8 +1472,8 @@ export function EnvSettingsPage() {
       setWebSearchKeySet((prev) => ({ ...prev, ...next }));
       setWebSearchKeyDraft((prev) => ({ ...prev, [id]: '' }));
 
-      if (apiKey) notify.success('Saved', `API key saved for web search provider "${id}".`);
-      else notify.success('Cleared', `API key cleared for web search provider "${id}".`);
+      if (apiKey) notify.success('Saved', `Web search API key saved for provider "${id}".`);
+      else notify.success('Cleared', `Web search API key cleared for provider "${id}".`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       notify.error('Save failed', msg || 'Request failed.');
@@ -1448,7 +1490,7 @@ export function EnvSettingsPage() {
     }
     const key = String(webSearchKeyDraft()?.[id] ?? '').trim();
     if (!key) {
-      notify.error('Missing API key', 'Please paste an API key first.');
+      notify.error('Missing API key', 'Please paste a Brave API key first.');
       return;
     }
     void updateWebSearchKey(id, key);
@@ -1849,12 +1891,12 @@ export function EnvSettingsPage() {
       setAiRequireUserApproval(!!executionPolicy.require_user_approval);
       setAiBlockDangerousCommands(!!executionPolicy.block_dangerous_commands);
       setAiPreservedFields(readAIPreservedFields(a));
-      setAiWebSearchProvider(normalizeWebSearchProvider((a as any).web_search_provider));
       const rows: AIProviderRow[] = (a.providers ?? []).map((p) => ({
         id: String(p.id ?? ''),
         name: String(p.name ?? ''),
         type: p.type,
         base_url: String(p.base_url ?? ''),
+        web_search: normalizeAIProviderWebSearchForType(p.type, (p as any).web_search),
         models: (p.models ?? []).map((m) => ({
           model_name: String(m.model_name ?? ''),
           context_window: normalizePositiveInteger((m as any).context_window),
@@ -1868,6 +1910,7 @@ export function EnvSettingsPage() {
         name: String(p.name ?? ''),
         type: p.type,
         base_url: String(p.base_url ?? ''),
+        web_search: normalizeAIProviderWebSearchForType(p.type, (p as any).web_search),
         models: (p.models ?? []).map((m) => ({
           model_name: String(m.model_name ?? ''),
           context_window: normalizePositiveInteger((m as any).context_window),
@@ -1884,7 +1927,7 @@ export function EnvSettingsPage() {
       const keySet = s.ai_secrets?.provider_api_key_set;
       if (keySet && typeof keySet === 'object') setAiProviderKeySet(keySet);
       void refreshAIProviderKeyStatus((a.providers ?? []).map((p) => String(p.id ?? '')));
-      void refreshWebSearchKeyStatus(['brave']);
+      void refreshWebSearchKeyStatus(providersNeedingWebSearchKeyStatus(normalizedProviders));
     }
 
   });
@@ -2072,35 +2115,31 @@ export function EnvSettingsPage() {
       const providersRaw = (v as any).providers;
       if (!Array.isArray(providersRaw)) throw new Error('Flower JSON is missing providers[].');
 
-      setAiProviders(
-        (() => {
-          const normalizedProviders = normalizeAIProviders(
-            providersRaw.map((p) => ({
-              id: String(p?.id ?? ''),
-              name: String(p?.name ?? ''),
-              type: String(p?.type ?? '') as AIProviderType,
-              base_url: String(p?.base_url ?? ''),
-              models: Array.isArray(p?.models)
-                ? (p.models as any[]).map((m) => ({
-                    model_name: String(m?.model_name ?? ''),
-                    context_window: normalizePositiveInteger(m?.context_window),
-                    max_output_tokens: normalizePositiveInteger(m?.max_output_tokens),
-                    effective_context_window_percent: normalizeEffectiveContextPercent(m?.effective_context_window_percent),
-                  }))
-                : [],
-            })),
-          );
-          setAiCurrentModelID(normalizeAICurrentModelID(String((v as any).current_model_id ?? ''), normalizedProviders));
-          return normalizedProviders;
-        })(),
+      const normalizedProviders = normalizeAIProviders(
+        providersRaw.map((p) => ({
+          id: String(p?.id ?? ''),
+          name: String(p?.name ?? ''),
+          type: String(p?.type ?? '') as AIProviderType,
+          base_url: String(p?.base_url ?? ''),
+          web_search: normalizeAIProviderWebSearchForType(String(p?.type ?? '') as AIProviderType, p?.web_search),
+          models: Array.isArray(p?.models)
+            ? (p.models as any[]).map((m) => ({
+                model_name: String(m?.model_name ?? ''),
+                context_window: normalizePositiveInteger(m?.context_window),
+                max_output_tokens: normalizePositiveInteger(m?.max_output_tokens),
+                effective_context_window_percent: normalizeEffectiveContextPercent(m?.effective_context_window_percent),
+              }))
+            : [],
+        })),
       );
+      setAiProviders(normalizedProviders);
+      setAiCurrentModelID(normalizeAICurrentModelID(String((v as any).current_model_id ?? ''), normalizedProviders));
       const executionPolicy = readAIExecutionPolicy(v);
       setAiRequireUserApproval(!!executionPolicy.require_user_approval);
       setAiBlockDangerousCommands(!!executionPolicy.block_dangerous_commands);
       setAiPreservedFields(readAIPreservedFields(v));
-      setAiWebSearchProvider(normalizeWebSearchProvider((v as any).web_search_provider));
       void refreshAIProviderKeyStatus(providersRaw.map((p) => String(p?.id ?? '')));
-      void refreshWebSearchKeyStatus(['brave']);
+      void refreshWebSearchKeyStatus(providersNeedingWebSearchKeyStatus(normalizedProviders));
       setAiView('ui');
     } catch (e) {
       setAiError(e instanceof Error ? e.message : String(e));
@@ -3419,73 +3458,6 @@ export function EnvSettingsPage() {
                         </SettingsTableCell>
                       </SettingsTableRow>
                       <SettingsTableRow>
-                        <SettingsTableCell class="font-medium text-muted-foreground">Web search provider</SettingsTableCell>
-                        <SettingsTableCell>
-                          <Select
-                            value={aiWebSearchProvider()}
-                            onChange={(value) => {
-                              setAiWebSearchProvider(normalizeWebSearchProvider(value));
-                              setAiDirty(true);
-                            }}
-                            disabled={!canInteract()}
-                            options={[
-                              { value: 'prefer_openai', label: 'prefer_openai (recommended)' },
-                              { value: 'brave', label: 'brave' },
-                              { value: 'disabled', label: 'disabled' },
-                            ]}
-                            class="w-full"
-                          />
-                        </SettingsTableCell>
-                        <SettingsTableCell class="text-[11px] text-muted-foreground">
-                          `prefer_openai` prefers native OpenAI web search when available, otherwise falls back to Brave.
-                        </SettingsTableCell>
-                      </SettingsTableRow>
-                      <Show when={aiWebSearchProvider() === 'prefer_openai' || aiWebSearchProvider() === 'brave'}>
-                        <SettingsTableRow>
-                          <SettingsTableCell class="font-medium text-muted-foreground">brave_api_key</SettingsTableCell>
-                          <SettingsTableCell>
-                            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-                              <SettingsPill tone={webSearchKeySet()?.brave ? 'success' : 'default'}>
-                                {webSearchKeySet()?.brave ? 'Key set' : 'Key not set'}
-                              </SettingsPill>
-                              <Input
-                                type="password"
-                                value={webSearchKeyDraft()?.brave ?? ''}
-                                onInput={(event) => {
-                                  const value = event.currentTarget.value;
-                                  setWebSearchKeyDraft((prev) => ({ ...prev, brave: value }));
-                                }}
-                                placeholder="Paste Brave API key"
-                                size="sm"
-                                class="w-full"
-                                disabled={!canInteract() || !canAdmin()}
-                              />
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => saveWebSearchKey('brave')}
-                                loading={!!webSearchKeySaving()?.brave}
-                                disabled={!canInteract() || !canAdmin()}
-                              >
-                                Save key
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                class="text-muted-foreground hover:text-destructive"
-                                onClick={() => clearWebSearchKey('brave')}
-                                disabled={!canInteract() || !canAdmin()}
-                              >
-                                Clear
-                              </Button>
-                            </div>
-                          </SettingsTableCell>
-                          <SettingsTableCell class="text-[11px] text-muted-foreground">
-                            Stored locally only. You can also use <span class="font-mono">REDEVEN_BRAVE_API_KEY</span>.
-                          </SettingsTableCell>
-                        </SettingsTableRow>
-                      </Show>
-                      <SettingsTableRow>
                         <SettingsTableCell class="font-medium text-muted-foreground">Current model</SettingsTableCell>
                         <SettingsTableCell>
                           <Select
@@ -3536,15 +3508,16 @@ export function EnvSettingsPage() {
 
                     <SettingsTable minWidthClass="min-w-[72rem]">
                       <SettingsTableHead sticky>
-                        <SettingsTableHeaderRow>
-                          <SettingsTableHeaderCell class="w-48">Name</SettingsTableHeaderCell>
-                          <SettingsTableHeaderCell class="w-48">Provider ID</SettingsTableHeaderCell>
-                          <SettingsTableHeaderCell class="w-32">Type</SettingsTableHeaderCell>
-                          <SettingsTableHeaderCell>Base URL</SettingsTableHeaderCell>
-                          <SettingsTableHeaderCell class="w-28">API Key</SettingsTableHeaderCell>
-                          <SettingsTableHeaderCell class="w-56">Models</SettingsTableHeaderCell>
-                          <SettingsTableHeaderCell class="w-32">Actions</SettingsTableHeaderCell>
-                        </SettingsTableHeaderRow>
+                      <SettingsTableHeaderRow>
+                        <SettingsTableHeaderCell class="w-48">Name</SettingsTableHeaderCell>
+                        <SettingsTableHeaderCell class="w-48">Provider ID</SettingsTableHeaderCell>
+                        <SettingsTableHeaderCell class="w-32">Type</SettingsTableHeaderCell>
+                        <SettingsTableHeaderCell>Base URL</SettingsTableHeaderCell>
+                        <SettingsTableHeaderCell class="w-28">API Key</SettingsTableHeaderCell>
+                        <SettingsTableHeaderCell class="w-48">Web Search</SettingsTableHeaderCell>
+                        <SettingsTableHeaderCell class="w-56">Models</SettingsTableHeaderCell>
+                        <SettingsTableHeaderCell class="w-32">Actions</SettingsTableHeaderCell>
+                      </SettingsTableHeaderRow>
                       </SettingsTableHead>
                       <SettingsTableBody>
                         <For each={aiProviders()}>
@@ -3573,6 +3546,18 @@ export function EnvSettingsPage() {
                                 <SettingsTableCell>
                                   <SettingsPill tone={aiProviderKeySet()?.[providerID()] ? 'success' : 'default'}>
                                     {aiProviderKeySet()?.[providerID()] ? 'Key set' : 'Key not set'}
+                                  </SettingsPill>
+                                </SettingsTableCell>
+                                <SettingsTableCell>
+                                  <SettingsPill
+                                    tone={
+                                      providerBuiltInWebSearchLabel(provider.type) ||
+                                      (provider.type === 'openai_compatible' && normalizeAIProviderWebSearchMode(provider.web_search?.mode) !== 'disabled')
+                                        ? 'success'
+                                        : 'default'
+                                    }
+                                  >
+                                    {providerWebSearchSummary(provider)}
                                   </SettingsPill>
                                 </SettingsTableCell>
                                 <SettingsTableCell>
@@ -3803,6 +3788,9 @@ export function EnvSettingsPage() {
         keySet={!!aiProviderKeySet()?.[String(aiProviderDialogProvider()?.id ?? '').trim()]}
         keyDraft={aiProviderKeyDraft()?.[String(aiProviderDialogProvider()?.id ?? '').trim()] ?? ''}
         keySaving={!!aiProviderKeySaving()?.[String(aiProviderDialogProvider()?.id ?? '').trim()]}
+        webSearchKeySet={!!webSearchKeySet()?.[String(aiProviderDialogProvider()?.id ?? '').trim()]}
+        webSearchKeyDraft={webSearchKeyDraft()?.[String(aiProviderDialogProvider()?.id ?? '').trim()] ?? ''}
+        webSearchKeySaving={!!webSearchKeySaving()?.[String(aiProviderDialogProvider()?.id ?? '').trim()]}
         presetModel={aiProviderPresetModel()}
         recommendedModels={aiProviderDialogRecommendedModels()}
         recommendedModelOptions={aiProviderDialogRecommendedModelOptions()}
@@ -3826,6 +3814,7 @@ export function EnvSettingsPage() {
                 : current.name,
             type: nextType,
             base_url: defaultBaseURLForProviderType(nextType),
+            web_search: normalizeAIProviderWebSearchForType(nextType, nextPreset.web_search),
             models:
               nextPresetModels.length > 0
                 ? nextPresetModels
@@ -3843,6 +3832,21 @@ export function EnvSettingsPage() {
         }}
         onSaveKey={() => saveAIProviderKey(String(aiProviderDialogProvider()?.id ?? '').trim())}
         onClearKey={() => clearAIProviderKey(String(aiProviderDialogProvider()?.id ?? '').trim())}
+        onChangeWebSearchMode={(mode) => {
+          updateAIProviderDialogDraft((current) => ({
+            ...current,
+            web_search: normalizeAIProviderWebSearchForType(current.type, mode),
+          }));
+          const id = String(aiProviderDialogProvider()?.id ?? '').trim();
+          if (mode === 'brave' && id) void refreshWebSearchKeyStatus([id]);
+        }}
+        onChangeWebSearchKeyDraft={(value) => {
+          const id = String(aiProviderDialogProvider()?.id ?? '').trim();
+          if (!id) return;
+          setWebSearchKeyDraft((prev) => ({ ...prev, [id]: value }));
+        }}
+        onSaveWebSearchKey={() => saveWebSearchKey(String(aiProviderDialogProvider()?.id ?? '').trim())}
+        onClearWebSearchKey={() => clearWebSearchKey(String(aiProviderDialogProvider()?.id ?? '').trim())}
         onSetPresetModel={(value) => setAiProviderPresetModel(value)}
         onApplyAllPresets={() => applyRecommendedModelsToDraft()}
         onAddSelectedPreset={() => addRecommendedModelToDraft(aiProviderPresetModel())}

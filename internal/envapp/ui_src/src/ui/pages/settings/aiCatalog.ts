@@ -49,8 +49,7 @@ export const AI_PROVIDER_PRESET_CATALOG: Record<AIProviderType, AIProviderPreset
     name: 'Moonshot',
     default_base_url: 'https://api.moonshot.cn/v1',
     models: [
-      { model_name: 'kimi-k2.6', context_window: 256000, note: 'Latest multimodal Kimi flagship for agents and coding' },
-      { model_name: 'kimi-k2.5', context_window: 256000, note: 'Previous all-round Kimi flagship' },
+      { model_name: 'kimi-k2.6', context_window: 256000, max_output_tokens: 96000, note: 'Current Kimi flagship with built-in web search' },
     ],
   },
   chatglm: {
@@ -58,11 +57,7 @@ export const AI_PROVIDER_PRESET_CATALOG: Record<AIProviderType, AIProviderPreset
     name: 'ChatGLM',
     default_base_url: 'https://api.z.ai/api/paas/v4/',
     models: [
-      { model_name: 'glm-5.1', context_window: 200000, max_output_tokens: 128000, note: 'Latest flagship model for long-horizon agentic coding' },
-      { model_name: 'glm-5', context_window: 200000, max_output_tokens: 128000, note: 'Previous flagship model' },
-      { model_name: 'glm-4.7', context_window: 200000, max_output_tokens: 16000, note: 'Stable flagship-level model' },
-      { model_name: 'glm-4.5-air', context_window: 128000, max_output_tokens: 16000, note: 'Balanced quality and speed' },
-      { model_name: 'glm-4.5-flash', context_window: 128000, max_output_tokens: 16000, note: 'Fast and low-latency option' },
+      { model_name: 'glm-5.1', context_window: 200000, max_output_tokens: 128000, note: 'Current GLM flagship with built-in web search' },
     ],
   },
   deepseek: {
@@ -70,8 +65,8 @@ export const AI_PROVIDER_PRESET_CATALOG: Record<AIProviderType, AIProviderPreset
     name: 'DeepSeek',
     default_base_url: 'https://api.deepseek.com',
     models: [
-      { model_name: 'deepseek-v4-pro', context_window: 1000000, max_output_tokens: 384000, note: 'Latest flagship V4 model' },
-      { model_name: 'deepseek-v4-flash', context_window: 1000000, max_output_tokens: 384000, note: 'Latest V4 fast model' },
+      { model_name: 'deepseek-v4-pro', context_window: 1000000, max_output_tokens: 384000, note: 'Current V4 flagship model' },
+      { model_name: 'deepseek-v4-flash', context_window: 1000000, max_output_tokens: 384000, note: 'Current V4 fast model' },
     ],
   },
   qwen: {
@@ -79,16 +74,17 @@ export const AI_PROVIDER_PRESET_CATALOG: Record<AIProviderType, AIProviderPreset
     name: 'Qwen',
     default_base_url: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
     models: [
-      { model_name: 'qwen3-max', context_window: 262144, max_output_tokens: 65536, note: 'Flagship model for complex tasks' },
-      { model_name: 'qwen-plus', context_window: 1000000, max_output_tokens: 32768, note: 'Balanced quality/speed/cost' },
-      { model_name: 'qwen-flash', context_window: 1000000, max_output_tokens: 65536, note: 'Fast and low-cost option' },
-      { model_name: 'qwen3-coder-plus', context_window: 1000000, max_output_tokens: 65536, note: 'Flagship coding model' },
+      { model_name: 'qwen3.6-plus', context_window: 1000000, max_output_tokens: 65536, note: 'Current Qwen3.6 Plus with built-in web search' },
+      { model_name: 'qwen3.6-plus-2026-04-02', context_window: 1000000, max_output_tokens: 65536, note: 'Pinned Qwen3.6 Plus snapshot with built-in web search' },
+      { model_name: 'qwen3.6-flash', context_window: 1000000, max_output_tokens: 65536, note: 'Current Qwen3.6 Flash with built-in web search' },
+      { model_name: 'qwen3.6-flash-2026-04-16', context_window: 1000000, max_output_tokens: 65536, note: 'Pinned Qwen3.6 Flash snapshot with built-in web search' },
     ],
   },
   openai_compatible: {
     type: 'openai_compatible',
     name: 'OpenAI compatible',
     default_base_url: 'https://api.example.com/v1',
+    web_search: { mode: 'disabled' },
     models: [],
   },
 };
@@ -148,12 +144,36 @@ export function defaultBaseURLForProviderType(providerType: AIProviderType): str
   return providerPresetForType(providerType).default_base_url;
 }
 
+export function providerNeedsWebSearchConfig(providerType: AIProviderType): boolean {
+  return providerType === 'openai_compatible';
+}
+
+export function providerBuiltInWebSearchLabel(providerType: AIProviderType): string | undefined {
+  switch (providerType) {
+    case 'openai':
+      return 'OpenAI built-in web search';
+    case 'moonshot':
+      return 'Kimi built-in web search';
+    case 'chatglm':
+      return 'GLM built-in web search';
+    case 'deepseek':
+      return 'DeepSeek built-in web search';
+    case 'qwen':
+      return 'Qwen built-in web search';
+    default:
+      return undefined;
+  }
+}
+
 export function cloneAIProviderRow(row: AIProviderRow): AIProviderRow {
   return {
     id: String(row?.id ?? ''),
     name: String(row?.name ?? ''),
     type: (row?.type as AIProviderType) || 'openai',
     base_url: String(row?.base_url ?? ''),
+    web_search: providerNeedsWebSearchConfig((row?.type as AIProviderType) || 'openai')
+      ? { mode: row?.web_search?.mode === 'openai_builtin' || row?.web_search?.mode === 'brave' ? row.web_search.mode : 'disabled' }
+      : undefined,
     models: (Array.isArray(row?.models) ? row.models : []).map((m) => ({
       model_name: String(m?.model_name ?? ''),
       context_window: normalizePositiveInteger(m?.context_window),

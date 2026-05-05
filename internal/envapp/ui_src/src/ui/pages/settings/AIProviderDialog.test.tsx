@@ -74,6 +74,9 @@ function makeProps(overrides: Partial<AIProviderDialogProps> = {}): AIProviderDi
     keySet: true,
     keyDraft: '',
     keySaving: false,
+    webSearchKeySet: false,
+    webSearchKeyDraft: '',
+    webSearchKeySaving: false,
     presetModel: 'gpt-5.4',
     recommendedModels: [
       {
@@ -93,6 +96,10 @@ function makeProps(overrides: Partial<AIProviderDialogProps> = {}): AIProviderDi
     onChangeKeyDraft: vi.fn(),
     onSaveKey: vi.fn(),
     onClearKey: vi.fn(),
+    onChangeWebSearchMode: vi.fn(),
+    onChangeWebSearchKeyDraft: vi.fn(),
+    onSaveWebSearchKey: vi.fn(),
+    onClearWebSearchKey: vi.fn(),
     onSetPresetModel: vi.fn(),
     onApplyAllPresets: vi.fn(),
     onAddSelectedPreset: vi.fn(),
@@ -126,6 +133,8 @@ describe('AIProviderDialog', () => {
     expect(host.textContent).toContain('prov_openai/gpt-5.2');
     expect(host.textContent).toContain('ctx 400,000');
     expect(host.textContent).toContain('Key set');
+    expect(host.textContent).toContain('OpenAI built-in web search');
+    expect(host.textContent).not.toContain('web_search.mode');
     expect(host.querySelector('[data-dialog-class]')?.getAttribute('data-dialog-class')).toContain('w-[min(80rem,96vw)]');
     expect(host.querySelector('[data-dialog-class]')?.getAttribute('data-dialog-class')).toContain('max-w-[96vw]');
   });
@@ -194,5 +203,34 @@ describe('AIProviderDialog', () => {
     expect(onAddSelectedPreset).toHaveBeenCalledOnce();
     expect(onAddModel).toHaveBeenCalledOnce();
     expect(onConfirm).toHaveBeenCalledOnce();
+  });
+
+  it('shows web search controls only for openai-compatible providers', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(
+      () => (
+        <AIProviderDialog
+          {...makeProps({
+            provider: {
+              ...baseProvider(),
+              type: 'openai_compatible',
+              base_url: 'https://gateway.example/v1',
+              web_search: { mode: 'brave' },
+            },
+            keySet: false,
+            webSearchKeySet: true,
+            webSearchKeyDraft: 'brave-key',
+          })}
+        />
+      ),
+      host,
+    );
+
+    expect(host.textContent).toContain('web_search.mode');
+    expect(host.textContent).toContain('brave_api_key');
+    expect(host.textContent).toContain('Save Brave key');
+    expect(host.textContent).toContain('Clear Brave');
   });
 });

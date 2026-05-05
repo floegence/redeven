@@ -75,7 +75,7 @@ type Options struct {
 	// It should read from a local secrets store, not from config.json.
 	ResolveProviderAPIKey func(providerID string) (string, bool, error)
 
-	// ResolveWebSearchProviderAPIKey returns the API key for the given web search provider id.
+	// ResolveWebSearchProviderAPIKey returns the API key for a provider-scoped web search backend.
 	//
 	// It should read from a local secrets store, not from config.json.
 	ResolveWebSearchProviderAPIKey func(providerID string) (string, bool, error)

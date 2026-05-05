@@ -202,7 +202,6 @@ func TestBuildPromptWorkspaceContextSection_RendersStructuredFacts(t *testing.T)
 				AgentHomeDir:            "/workspace/home",
 				ToolApprovalEnabled:     true,
 				DangerousCommandBlocked: false,
-				WebSearchProvider:       "brave",
 				SubagentDelegation:      true,
 			},
 			Repository: promptRepositoryState{

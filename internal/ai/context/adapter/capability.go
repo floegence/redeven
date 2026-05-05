@@ -81,7 +81,8 @@ func modelNameFromID(modelID string) string {
 
 func defaultCapability(provider config.AIProvider, modelName string) model.ModelCapability {
 	providerType := strings.ToLower(strings.TrimSpace(provider.Type))
-	modelLower := strings.ToLower(strings.TrimSpace(modelName))
+	modelName = strings.TrimSpace(modelName)
+	modelLower := strings.ToLower(modelName)
 	cap := model.ModelCapability{
 		ProviderType:                   providerType,
 		ResolverVersion:                capabilityResolverVersion,
@@ -153,21 +154,22 @@ func defaultCapability(provider config.AIProvider, modelName string) model.Model
 		cap.MaxContextTokens = min(cap.MaxContextTokens, 128000)
 		cap.MaxOutputTokens = min(cap.MaxOutputTokens, 4096)
 	}
-	if strings.Contains(modelLower, "qwen-plus") || strings.Contains(modelLower, "qwen-flash") || strings.Contains(modelLower, "qwen3-coder-plus") {
+	switch modelLower {
+	case "qwen3.6-plus", "qwen3.6-plus-2026-04-02", "qwen3.6-flash", "qwen3.6-flash-2026-04-16":
 		cap.MaxContextTokens = max(cap.MaxContextTokens, 1000000)
 	}
-	if strings.Contains(modelLower, "qwen3-max") {
-		cap.MaxContextTokens = max(cap.MaxContextTokens, 262144)
-		cap.MaxOutputTokens = max(cap.MaxOutputTokens, 65536)
-	}
-	if strings.Contains(modelLower, "kimi-k2") {
+	switch modelLower {
+	case "kimi-k2.6":
 		cap.MaxContextTokens = max(cap.MaxContextTokens, 256000)
+		cap.MaxOutputTokens = max(cap.MaxOutputTokens, 96000)
 	}
-	if strings.Contains(modelLower, "deepseek-chat") || strings.Contains(modelLower, "deepseek-reasoner") {
-		cap.MaxContextTokens = max(cap.MaxContextTokens, 128000)
-		cap.MaxOutputTokens = max(cap.MaxOutputTokens, 64000)
+	switch modelLower {
+	case "deepseek-v4-pro", "deepseek-v4-flash":
+		cap.MaxContextTokens = max(cap.MaxContextTokens, 1000000)
+		cap.MaxOutputTokens = max(cap.MaxOutputTokens, 384000)
 	}
-	if strings.Contains(modelLower, "glm-5") {
+	switch modelLower {
+	case "glm-5.1":
 		cap.MaxContextTokens = max(cap.MaxContextTokens, 200000)
 		cap.MaxOutputTokens = max(cap.MaxOutputTokens, 128000)
 	}

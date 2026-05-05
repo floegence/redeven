@@ -31,7 +31,7 @@ Hard-gate suite:
 
 `eval_ai_loop_matrix.sh` keeps its historical name for compatibility, but it now runs the single behavioral suite rather than a prompt/loop profile matrix.
 
-`eval_local_config_sandbox_suite.sh` is the dedicated entry point for validating the locally active Flower model configuration. It does not force a provider or model on the command line; instead it uses the current `ai.current_model_id` from local config, so if your current local setup is `moonshot/kimi-k2.5`, the suite runs on that model automatically. The wrapper also disables benchmark baselines by default unless you explicitly provide `BASELINE_PATH`, because this suite is meant for provider-specific local diagnostics rather than the shared open-source promotion gate.
+`eval_local_config_sandbox_suite.sh` is the dedicated entry point for validating the locally active Flower model configuration. It does not force a provider or model on the command line; instead it uses the current `ai.current_model_id` from local config, so if your current local setup is `moonshot/kimi-k2.6`, the suite runs on that model automatically. The wrapper also disables benchmark baselines by default unless you explicitly provide `BASELINE_PATH`, because this suite is meant for provider-specific local diagnostics rather than the shared open-source promotion gate.
 
 The local-config sandbox suite is also the main end-to-end regression surface for the structured runtime protocol. It intentionally exercises:
 

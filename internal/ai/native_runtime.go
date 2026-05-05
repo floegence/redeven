@@ -22,6 +22,7 @@ import (
 	"github.com/floegence/redeven/internal/config"
 	openai "github.com/openai/openai-go"
 	ooption "github.com/openai/openai-go/option"
+	"github.com/openai/openai-go/packages/param"
 	oresponses "github.com/openai/openai-go/responses"
 	oshared "github.com/openai/openai-go/shared"
 )
@@ -45,9 +46,102 @@ const (
 	nativeHardMaxSteps = 200
 )
 
+const (
+	providerWebSearchModeDisabled               = "disabled"
+	providerWebSearchModeOpenAIResponsesBuiltin = "openai_responses_builtin"
+	providerWebSearchModeKimiBuiltin            = "kimi_builtin"
+	providerWebSearchModeGLMWebSearchTool       = "glm_web_search_tool"
+	providerWebSearchModeDeepSeekNative         = "deepseek_native"
+	providerWebSearchModeQwenResponsesWebSearch = "qwen_responses_web_search"
+	providerWebSearchModeExternalBrave          = "external_brave"
+)
+
+type providerWebSearchCapability struct {
+	Mode         string
+	Reason       string
+	RegisterTool bool
+}
+
+func resolveProviderWebSearchCapability(provider config.AIProvider, modelName string) providerWebSearchCapability {
+	providerType := strings.ToLower(strings.TrimSpace(provider.Type))
+	modelName = strings.TrimSpace(modelName)
+	capability := providerWebSearchCapability{
+		Mode:   providerWebSearchModeDisabled,
+		Reason: "unsupported_provider",
+	}
+	switch providerType {
+	case "openai":
+		if shouldUseStrictOpenAIToolSchema(providerType, provider.BaseURL) {
+			capability.Mode = providerWebSearchModeOpenAIResponsesBuiltin
+			capability.Reason = "official_openai"
+			return capability
+		}
+		capability.Reason = "openai_not_official_endpoint"
+		return capability
+	case "moonshot":
+		if modelName == "kimi-k2.6" {
+			capability.Mode = providerWebSearchModeKimiBuiltin
+			capability.Reason = "curated_moonshot_model"
+			return capability
+		}
+		capability.Reason = "unsupported_moonshot_model"
+		return capability
+	case "chatglm":
+		if modelName == "glm-5.1" {
+			capability.Mode = providerWebSearchModeGLMWebSearchTool
+			capability.Reason = "curated_glm_model"
+			return capability
+		}
+		capability.Reason = "unsupported_glm_model"
+		return capability
+	case "deepseek":
+		switch modelName {
+		case "deepseek-v4-pro", "deepseek-v4-flash":
+			capability.Mode = providerWebSearchModeDeepSeekNative
+			capability.Reason = "curated_deepseek_model"
+			return capability
+		default:
+			capability.Reason = "unsupported_deepseek_model"
+			return capability
+		}
+	case "qwen":
+		switch modelName {
+		case "qwen3.6-plus", "qwen3.6-plus-2026-04-02", "qwen3.6-flash", "qwen3.6-flash-2026-04-16":
+			capability.Mode = providerWebSearchModeQwenResponsesWebSearch
+			capability.Reason = "curated_qwen_model"
+			return capability
+		default:
+			capability.Reason = "unsupported_qwen_model"
+			return capability
+		}
+	case "openai_compatible":
+		mode := ""
+		if provider.WebSearch != nil {
+			mode = strings.ToLower(strings.TrimSpace(provider.WebSearch.Mode))
+		}
+		switch mode {
+		case config.AIProviderWebSearchModeOpenAIBuiltin:
+			capability.Mode = providerWebSearchModeOpenAIResponsesBuiltin
+			capability.Reason = "openai_compatible_configured_builtin"
+			return capability
+		case config.AIProviderWebSearchModeBrave:
+			capability.Mode = providerWebSearchModeExternalBrave
+			capability.Reason = "openai_compatible_configured_brave"
+			capability.RegisterTool = true
+			return capability
+		default:
+			capability.Reason = "openai_compatible_disabled"
+			return capability
+		}
+	default:
+		return capability
+	}
+}
+
 type openAIProvider struct {
 	client           openai.Client
 	strictToolSchema bool
+	forceChat        bool
 }
 
 func runProviderTurn(ctx context.Context, provider Provider, req TurnRequest, onEvent func(StreamEvent)) (TurnResult, error) {
@@ -65,6 +159,9 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req TurnRequest, onEven
 	}
 	if strings.TrimSpace(req.Model) == "" {
 		return TurnResult{}, errors.New("missing model")
+	}
+	if p.forceChat {
+		return p.streamChatTurn(ctx, req, onEvent)
 	}
 
 	params := oresponses.ResponseNewParams{
@@ -110,9 +207,7 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req TurnRequest, onEven
 		params.Instructions = openai.String(strings.TrimSpace(instructions))
 	}
 	tools, aliasToReal := buildOpenAITools(req.Tools, p.strictToolSchema)
-	if req.WebSearchEnabled && p.strictToolSchema {
-		tools = append(tools, oresponses.ToolParamOfWebSearchPreview(oresponses.WebSearchToolTypeWebSearchPreview))
-	}
+	decorateResponsesParams(&params, req.WebSearchMode, &tools)
 	if len(tools) > 0 {
 		params.Tools = tools
 	}
@@ -409,6 +504,211 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req TurnRequest, onEven
 	return result, nil
 }
 
+func (p *openAIProvider) streamChatTurn(ctx context.Context, req TurnRequest, onEvent func(StreamEvent)) (TurnResult, error) {
+	if p == nil {
+		return TurnResult{}, errors.New("nil provider")
+	}
+	if strings.TrimSpace(req.Model) == "" {
+		return TurnResult{}, errors.New("missing model")
+	}
+
+	messages := buildOpenAIChatMessages(req.Messages)
+	if len(messages) == 0 {
+		messages = append(messages, openai.UserMessage("Continue."))
+	}
+
+	params := openai.ChatCompletionNewParams{
+		Model:             oshared.ChatModel(strings.TrimSpace(req.Model)),
+		Messages:          messages,
+		ParallelToolCalls: openai.Bool(false),
+		StreamOptions:     openai.ChatCompletionStreamOptionsParam{IncludeUsage: openai.Bool(true)},
+	}
+	if req.Budgets.MaxOutputToken > 0 {
+		params.MaxTokens = openai.Int(int64(req.Budgets.MaxOutputToken))
+	}
+	if req.ProviderControls.Temperature != nil {
+		params.Temperature = openai.Float(*req.ProviderControls.Temperature)
+	}
+	if req.ProviderControls.TopP != nil {
+		params.TopP = openai.Float(*req.ProviderControls.TopP)
+	}
+	switch strings.ToLower(strings.TrimSpace(req.ProviderControls.ResponseFormat)) {
+	case "":
+	case "text":
+		txt := oshared.NewResponseFormatTextParam()
+		params.ResponseFormat = openai.ChatCompletionNewParamsResponseFormatUnion{OfText: &txt}
+	case "json_object":
+		obj := oshared.NewResponseFormatJSONObjectParam()
+		params.ResponseFormat = openai.ChatCompletionNewParamsResponseFormatUnion{OfJSONObject: &obj}
+	}
+
+	tools, aliasToReal := buildOpenAIChatTools(req.Tools, p.strictToolSchema)
+	decorateChatCompletionParams(&params, req.WebSearchMode, &tools)
+	if len(tools) > 0 {
+		params.Tools = tools
+	}
+
+	stream := p.client.Chat.Completions.NewStreaming(ctx, params)
+	var textBuf strings.Builder
+	result := TurnResult{
+		FinishReason:    "unknown",
+		RawProviderDiag: map[string]any{},
+	}
+	type partialCall struct {
+		Index   int64
+		CallID  string
+		Name    string
+		Started bool
+		Ended   bool
+		ArgsRaw strings.Builder
+		Args    map[string]any
+	}
+	partials := map[int64]*partialCall{}
+	order := make([]int64, 0, 2)
+	getPartial := func(index int64) *partialCall {
+		if pc := partials[index]; pc != nil {
+			return pc
+		}
+		pc := &partialCall{Index: index}
+		partials[index] = pc
+		order = append(order, index)
+		return pc
+	}
+	ensureCallID := func(pc *partialCall) string {
+		if pc == nil {
+			return ""
+		}
+		if strings.TrimSpace(pc.CallID) == "" {
+			pc.CallID = fmt.Sprintf("chat_call_%d", pc.Index+1)
+		}
+		return strings.TrimSpace(pc.CallID)
+	}
+	emitStart := func(pc *partialCall) {
+		if pc == nil || pc.Started {
+			return
+		}
+		callID := ensureCallID(pc)
+		name := strings.TrimSpace(pc.Name)
+		if callID == "" || name == "" {
+			return
+		}
+		pc.Started = true
+		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallStart, ToolCall: &PartialToolCall{ID: callID, Name: name}})
+	}
+	emitDelta := func(pc *partialCall) {
+		if pc == nil {
+			return
+		}
+		callID := ensureCallID(pc)
+		name := strings.TrimSpace(pc.Name)
+		if callID == "" || name == "" {
+			return
+		}
+		raw := strings.TrimSpace(pc.ArgsRaw.String())
+		args := map[string]any{}
+		if raw != "" {
+			_ = json.Unmarshal([]byte(raw), &args)
+		}
+		emitStart(pc)
+		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, ToolCall: &PartialToolCall{ID: callID, Name: name, ArgumentsJSON: raw, Arguments: cloneAnyMap(args)}})
+	}
+	emitEnd := func(pc *partialCall) {
+		if pc == nil || pc.Ended {
+			return
+		}
+		callID := ensureCallID(pc)
+		name := strings.TrimSpace(pc.Name)
+		if callID == "" || name == "" {
+			return
+		}
+		raw := strings.TrimSpace(pc.ArgsRaw.String())
+		args := map[string]any{}
+		if raw != "" {
+			_ = json.Unmarshal([]byte(raw), &args)
+		}
+		pc.Args = args
+		pc.Ended = true
+		emitStart(pc)
+		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallEnd, ToolCall: &PartialToolCall{ID: callID, Name: name, Arguments: cloneAnyMap(args)}})
+	}
+
+	for stream.Next() {
+		chunk := stream.Current()
+		if rid := strings.TrimSpace(chunk.ID); rid != "" {
+			result.RawProviderDiag["response_id"] = rid
+		}
+		if chunk.Usage.PromptTokens > 0 || chunk.Usage.CompletionTokens > 0 || chunk.Usage.CompletionTokensDetails.ReasoningTokens > 0 {
+			result.Usage = TurnUsage{
+				InputTokens:     chunk.Usage.PromptTokens,
+				OutputTokens:    chunk.Usage.CompletionTokens,
+				ReasoningTokens: chunk.Usage.CompletionTokensDetails.ReasoningTokens,
+			}
+		}
+		for _, choice := range chunk.Choices {
+			if finish := mapOpenAIChatFinishReason(choice.FinishReason); finish != "unknown" {
+				result.FinishReason = finish
+			}
+			delta := choice.Delta
+			if delta.Content != "" {
+				textBuf.WriteString(delta.Content)
+				emitProviderEvent(onEvent, StreamEvent{Type: StreamEventTextDelta, Text: delta.Content})
+			}
+			for _, tc := range delta.ToolCalls {
+				pc := getPartial(tc.Index)
+				if id := strings.TrimSpace(tc.ID); id != "" {
+					pc.CallID = id
+				}
+				name := strings.TrimSpace(tc.Function.Name)
+				if realName, ok := aliasToReal[name]; ok {
+					name = realName
+				}
+				if name != "" {
+					pc.Name = name
+				}
+				if argsDelta := tc.Function.Arguments; argsDelta != "" {
+					pc.ArgsRaw.WriteString(argsDelta)
+					emitDelta(pc)
+					continue
+				}
+				emitStart(pc)
+			}
+		}
+	}
+	if err := stream.Err(); err != nil {
+		return TurnResult{}, err
+	}
+
+	sort.SliceStable(order, func(i, j int) bool { return order[i] < order[j] })
+	for _, idx := range order {
+		pc := partials[idx]
+		if pc == nil {
+			continue
+		}
+		emitEnd(pc)
+		if !pc.Ended {
+			continue
+		}
+		result.ToolCalls = append(result.ToolCalls, ToolCall{ID: ensureCallID(pc), Name: strings.TrimSpace(pc.Name), Args: cloneAnyMap(pc.Args)})
+	}
+	result.Text = strings.TrimSpace(textBuf.String())
+	if len(result.ToolCalls) > 0 {
+		result.FinishReason = "tool_calls"
+	}
+	if result.FinishReason == "unknown" && result.Text != "" {
+		result.FinishReason = "stop"
+	}
+	if result.Text == "" && len(result.ToolCalls) == 0 {
+		return TurnResult{}, errors.New("missing streamed response")
+	}
+	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventUsage, Usage: &PartialUsage{
+		InputTokens:     result.Usage.InputTokens,
+		OutputTokens:    result.Usage.OutputTokens,
+		ReasoningTokens: result.Usage.ReasoningTokens,
+	}})
+	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventFinishReason, FinishHint: result.FinishReason})
+	return result, nil
+}
+
 type moonshotProvider struct {
 	client           openai.Client
 	strictToolSchema bool
@@ -456,6 +756,7 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req TurnRequest, onEv
 	}
 
 	tools, aliasToReal := buildOpenAIChatTools(req.Tools, p.strictToolSchema)
+	decorateChatCompletionParams(&params, req.WebSearchMode, &tools)
 	if len(tools) > 0 {
 		params.Tools = tools
 	}
@@ -696,6 +997,7 @@ func (p *moonshotProvider) Turn(ctx context.Context, req TurnRequest) (TurnResul
 		params.ResponseFormat = openai.ChatCompletionNewParamsResponseFormatUnion{OfJSONObject: &obj}
 	}
 	tools, aliasToReal := buildOpenAIChatTools(req.Tools, p.strictToolSchema)
+	decorateChatCompletionParams(&params, req.WebSearchMode, &tools)
 	if len(tools) > 0 {
 		params.Tools = tools
 	}
@@ -773,6 +1075,67 @@ func buildOpenAIChatTools(defs []ToolDef, strict bool) ([]openai.ChatCompletionT
 		aliasToReal[alias] = name
 	}
 	return out, aliasToReal
+}
+
+func decorateChatCompletionParams(params *openai.ChatCompletionNewParams, webSearchMode string, tools *[]openai.ChatCompletionToolParam) {
+	if params == nil {
+		return
+	}
+	switch strings.TrimSpace(webSearchMode) {
+	case providerWebSearchModeKimiBuiltin:
+		if tools != nil {
+			*tools = append(*tools, openAIChatToolOverride(map[string]any{
+				"type": "builtin_function",
+				"function": map[string]any{
+					"name": "$web_search",
+				},
+			}))
+		}
+		params.SetExtraFields(map[string]any{
+			"thinking": map[string]any{"type": "disabled"},
+		})
+	case providerWebSearchModeGLMWebSearchTool:
+		if tools != nil {
+			*tools = append(*tools, openAIChatToolOverride(map[string]any{
+				"type": "web_search",
+				"web_search": map[string]any{
+					"search_result": true,
+				},
+			}))
+		}
+	case providerWebSearchModeDeepSeekNative:
+		params.SetExtraFields(map[string]any{
+			"enable_search": true,
+		})
+	}
+}
+
+func openAIChatToolOverride(v map[string]any) openai.ChatCompletionToolParam {
+	b, _ := json.Marshal(v)
+	return param.Override[openai.ChatCompletionToolParam](json.RawMessage(b))
+}
+
+func decorateResponsesParams(params *oresponses.ResponseNewParams, webSearchMode string, tools *[]oresponses.ToolUnionParam) {
+	if params == nil {
+		return
+	}
+	switch strings.TrimSpace(webSearchMode) {
+	case providerWebSearchModeOpenAIResponsesBuiltin:
+		if tools != nil {
+			*tools = append(*tools, oresponses.ToolParamOfWebSearchPreview(oresponses.WebSearchToolTypeWebSearchPreview))
+		}
+	case providerWebSearchModeQwenResponsesWebSearch:
+		if tools != nil {
+			*tools = append(*tools, openAIResponsesToolOverride(map[string]any{
+				"type": "web_search",
+			}))
+		}
+	}
+}
+
+func openAIResponsesToolOverride(v map[string]any) oresponses.ToolUnionParam {
+	b, _ := json.Marshal(v)
+	return param.Override[oresponses.ToolUnionParam](json.RawMessage(b))
 }
 
 func buildOpenAIChatMessages(messages []Message) []openai.ChatCompletionMessageParamUnion {
@@ -1606,7 +1969,17 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 			client:           openai.NewClient(opts...),
 			strictToolSchema: strictToolSchema,
 		}, nil
-	case "chatglm", "deepseek", "qwen":
+	case "chatglm", "deepseek":
+		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey))}
+		if strings.TrimSpace(baseURL) != "" {
+			opts = append(opts, ooption.WithBaseURL(strings.TrimSpace(baseURL)))
+		}
+		return &openAIProvider{
+			client:           openai.NewClient(opts...),
+			strictToolSchema: strictToolSchema,
+			forceChat:        true,
+		}, nil
+	case "qwen":
 		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey))}
 		if strings.TrimSpace(baseURL) != "" {
 			opts = append(opts, ooption.WithBaseURL(strings.TrimSpace(baseURL)))
@@ -1735,47 +2108,16 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		return r.failRun("Failed to initialize provider adapter", err)
 	}
 
-	// Configure web search enablement once per run (tools are fixed for a given run).
-	// prefer_openai: prefer OpenAI built-in web search when using official OpenAI endpoints; otherwise use Brave web.search.
-	openAIStrict := resolveStrictToolSchema(providerType, strings.TrimSpace(providerCfg.BaseURL), providerCfg.StrictToolSchema)
-	webSearchProvider := r.cfg.EffectiveWebSearchProvider()
-	resolvedWebSearch := "disabled"
-	webSearchReason := "explicit_disabled"
-	enableOpenAIWebSearch := false
-	enableWebSearchTool := false
-	switch webSearchProvider {
-	case "disabled":
-		// Keep defaults.
-	case "brave":
-		enableWebSearchTool = true
-		resolvedWebSearch = "brave_web_search"
-		webSearchReason = "explicit_brave"
-	default: // prefer_openai
-		if providerType == "openai" && openAIStrict {
-			enableOpenAIWebSearch = true
-			resolvedWebSearch = "openai_builtin"
-			webSearchReason = "openai_strict"
-		} else {
-			enableWebSearchTool = true
-			resolvedWebSearch = "brave_web_search"
-			if providerType != "openai" {
-				webSearchReason = "provider_not_openai"
-			} else {
-				webSearchReason = "openai_not_strict"
-			}
-		}
-	}
-	r.openAIWebSearchEnabled = enableOpenAIWebSearch
-	r.webSearchToolEnabled = enableWebSearchTool
+	webSearchCapability := resolveProviderWebSearchCapability(providerCfg, modelName)
+	r.webSearchMode = webSearchCapability.Mode
+	r.webSearchToolEnabled = webSearchCapability.RegisterTool
 	r.persistRunEvent("web_search.config", RealtimeStreamKindLifecycle, map[string]any{
-		"requested":         webSearchProvider,
-		"resolved":          resolvedWebSearch,
-		"reason":            webSearchReason,
-		"openai_strict":     openAIStrict,
-		"openai_web_search": enableOpenAIWebSearch,
-		"web_search_tool":   enableWebSearchTool,
+		"resolved":          webSearchCapability.Mode,
+		"reason":            webSearchCapability.Reason,
+		"web_search_tool":   webSearchCapability.RegisterTool,
 		"provider_type":     providerType,
 		"provider_base_url": strings.TrimSpace(providerCfg.BaseURL),
+		"model":             modelName,
 	})
 
 	r.persistRunEvent("native.runtime.start", RealtimeStreamKindLifecycle, map[string]any{
@@ -2204,7 +2546,7 @@ mainLoop:
 			Budgets:          TurnBudgets{MaxSteps: maxSteps, MaxInputTokens: req.Options.MaxInputTokens, MaxOutputToken: req.Options.MaxOutputTokens, MaxCostUSD: req.Options.MaxCostUSD},
 			ModeFlags:        ModeFlags{Mode: mode, ReasoningOnly: req.Options.ReasoningOnly},
 			ProviderControls: ProviderControls{ThinkingBudgetTokens: req.Options.ThinkingBudgetTokens, CacheControl: req.Options.CacheControl, ResponseFormat: req.Options.ResponseFormat, Temperature: req.Options.Temperature, TopP: req.Options.TopP},
-			WebSearchEnabled: r.openAIWebSearchEnabled,
+			WebSearchMode:    r.webSearchMode,
 		}
 
 		estimateTokens, estimateSource := estimateTurnTokens(providerType, turnReq)
@@ -2551,6 +2893,19 @@ mainLoop:
 
 		signalSplit := splitSignalsByPolicy(stepResult.ToolCalls, capabilityContract)
 		normalCalls := signalSplit.NormalCalls
+		providerHostedResults := providerHostedToolResults(normalCalls, r.webSearchMode)
+		if len(providerHostedResults) > 0 {
+			for _, tr := range providerHostedResults {
+				if id := strings.TrimSpace(tr.ToolID); id != "" {
+					state.ToolCallLedger[id] = "provider_hosted"
+				}
+			}
+			appendAssistantHistory(step, "provider_hosted_tool_turn", stepResult.Text, stepResult.Reasoning, signalSplit.NormalCalls)
+			messages = append(messages, buildToolResultMessages(providerHostedResults, signalSplit.NormalCalls)...)
+			noToolRounds = 0
+			isFirstRound = false
+			continue mainLoop
+		}
 		taskCompleteCall := signalSplit.TaskCompleteCall
 		askUserCall := signalSplit.AskUserCall
 		exitPlanModeCall := signalSplit.ExitPlanModeCall
@@ -4669,6 +5024,26 @@ func buildToolResultMessages(results []ToolResult, calls []ToolCall) []Message {
 	return out
 }
 
+func providerHostedToolResults(calls []ToolCall, webSearchMode string) []ToolResult {
+	if strings.TrimSpace(webSearchMode) != providerWebSearchModeKimiBuiltin {
+		return nil
+	}
+	out := make([]ToolResult, 0, len(calls))
+	for _, call := range calls {
+		if strings.TrimSpace(call.Name) != "$web_search" {
+			continue
+		}
+		out = append(out, ToolResult{
+			ToolID:   strings.TrimSpace(call.ID),
+			ToolName: "$web_search",
+			Status:   toolResultStatusSuccess,
+			Summary:  "provider_hosted.web_search",
+			Data:     cloneAnyMap(call.Args),
+		})
+	}
+	return out
+}
+
 func buildToolCallMessages(calls []ToolCall, reasoning string) []Message {
 	msg, ok := buildAssistantHistoryMessage("", reasoning, calls)
 	if !ok {
@@ -5648,6 +6023,10 @@ func sanitizeProviderToolName(name string) string {
 	out := strings.Trim(sb.String(), "_-")
 	if out == "" {
 		return "tool"
+	}
+	if strings.TrimSpace(name) == "web.search" && out == "web_search" {
+		// Avoid colliding with provider-hosted web_search tool namespaces.
+		return "web_search_tool"
 	}
 	return out
 }

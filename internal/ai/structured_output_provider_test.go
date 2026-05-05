@@ -21,7 +21,7 @@ func TestInitStructuredOutputProvider_MoonshotUsesPromptLevelJSON(t *testing.T) 
 				ID:      "moonshot",
 				Type:    "moonshot",
 				BaseURL: "https://api.moonshot.example/v1",
-				Models:  []config.AIProviderModel{{ModelName: "kimi-k2.5"}},
+				Models:  []config.AIProviderModel{{ModelName: "kimi-k2.6"}},
 			}},
 		},
 		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
@@ -34,14 +34,14 @@ func TestInitStructuredOutputProvider_MoonshotUsesPromptLevelJSON(t *testing.T) 
 	t.Cleanup(func() { _ = svc.Close() })
 
 	_, responseFormat, err := svc.initStructuredOutputProvider(resolvedRunModel{
-		ID:         "moonshot/kimi-k2.5",
+		ID:         "moonshot/kimi-k2.6",
 		ProviderID: "moonshot",
-		ModelName:  "kimi-k2.5",
+		ModelName:  "kimi-k2.6",
 		Provider: config.AIProvider{
 			ID:      "moonshot",
 			Type:    "moonshot",
 			BaseURL: "https://api.moonshot.example/v1",
-			Models:  []config.AIProviderModel{{ModelName: "kimi-k2.5"}},
+			Models:  []config.AIProviderModel{{ModelName: "kimi-k2.6"}},
 		},
 	})
 	if err != nil {

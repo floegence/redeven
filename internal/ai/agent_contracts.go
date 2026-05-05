@@ -87,7 +87,7 @@ type TurnRequest struct {
 	Budgets          TurnBudgets      `json:"budgets"`
 	ModeFlags        ModeFlags        `json:"mode_flags"`
 	ProviderControls ProviderControls `json:"provider_controls,omitempty"`
-	WebSearchEnabled bool             `json:"web_search_enabled,omitempty"`
+	WebSearchMode    string           `json:"web_search_mode,omitempty"`
 }
 
 type ToolCall struct {

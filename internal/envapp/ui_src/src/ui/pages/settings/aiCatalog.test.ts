@@ -11,9 +11,10 @@ describe('AI provider preset catalog', () => {
   it('prioritizes the latest verified Flower-compatible model IDs', () => {
     expect(modelNames('openai').slice(0, 4)).toEqual(['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano']);
     expect(modelNames('anthropic').slice(0, 3)).toEqual(['claude-opus-4-7', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001']);
-    expect(modelNames('moonshot').slice(0, 2)).toEqual(['kimi-k2.6', 'kimi-k2.5']);
+    expect(modelNames('moonshot')).toEqual(['kimi-k2.6']);
     expect(modelNames('chatglm')[0]).toBe('glm-5.1');
     expect(modelNames('deepseek')).toEqual(['deepseek-v4-pro', 'deepseek-v4-flash']);
+    expect(modelNames('qwen')).toEqual(['qwen3.6-plus', 'qwen3.6-plus-2026-04-02', 'qwen3.6-flash', 'qwen3.6-flash-2026-04-16']);
   });
 
   it('does not recommend provider IDs that official docs mark as deprecated or incompatible with streaming', () => {
@@ -26,6 +27,17 @@ describe('AI provider preset catalog', () => {
     expect(allPresetNames).not.toContain('deepseek-reasoner');
     expect(allPresetNames).not.toContain('kimi-k2-thinking');
     expect(allPresetNames).not.toContain('kimi-k2-thinking-turbo');
+    expect(allPresetNames).not.toContain('kimi-k2.5');
+    expect(allPresetNames).not.toContain('glm-5');
+    expect(allPresetNames).not.toContain('glm-4.7');
+    expect(allPresetNames).not.toContain('glm-4.5-air');
+    expect(allPresetNames).not.toContain('glm-4.5-flash');
+    expect(allPresetNames).not.toContain('qwen3.6-max-preview');
+    expect(allPresetNames).not.toContain('qwen3.6-35b-a3b');
+    expect(allPresetNames).not.toContain('qwen3-max');
+    expect(allPresetNames).not.toContain('qwen-plus');
+    expect(allPresetNames).not.toContain('qwen-flash');
+    expect(allPresetNames).not.toContain('qwen3-coder-plus');
   });
 
   it('uses the current Z.AI OpenAI-compatible endpoint for new ChatGLM providers', () => {

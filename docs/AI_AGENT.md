@@ -11,6 +11,7 @@ High-level design:
   - OpenAI: `openai-go` (Responses API)
   - Moonshot: `openai-go` (Chat Completions API on Moonshot base URL)
   - Anthropic: `anthropic-sdk-go` (Messages API)
+- GLM/Z.ai, DeepSeek, and Qwen: `openai-go` against provider OpenAI-compatible endpoints with provider-specific request decoration. Qwen3.6 Plus/Flash use the provider Responses API `web_search` tool.
 - OpenAI Responses continuation is treated as an optimization layer rather than a second context system: Flower resumes with `previous_response_id` only when the same thread stays on a compatible OpenAI provider/model/base URL fingerprint, and otherwise falls back to the canonical local `PromptPack` replay path.
 
 ## Prompt architecture
@@ -24,7 +25,7 @@ Flower task prompts are built through a section-oriented runtime prompt builder 
 - Static prefix caching is intentionally conservative and excludes volatile facts such as the current objective text, round counters, local date/timezone context, git/worktree state, repository rule excerpts, delegation state, todo counts, recent errors, skill overlays, and exception overlays.
 - Runtime context includes authoritative local date and timezone facts sampled from the runtime host when the prompt is built, so relative date references can be grounded without adding scenario-specific heuristics.
 - Workspace context is collected at prompt-build time and exposes:
-  - environment facts such as shell, runtime home, approval policy, dangerous-command blocking, web-search provider, and whether subagent delegation is available;
+  - environment facts such as shell, runtime home, approval policy, dangerous-command blocking, and whether subagent delegation is available;
   - repository state such as git repository detection, worktree root, branch/upstream, ahead-behind, linked-worktree status, and a staged/unstaged/untracked summary;
   - durable repository rule files discovered from the current worktree path (for example `AGENTS.md`, `CLAUDE.md`, `.introduce.md`, and legacy `.develop.md`) under an explicit prompt budget;
   - active subagent/delegation state so the parent agent can see ongoing parallel work instead of redoing it.
@@ -50,6 +51,16 @@ Notes:
 - The wire model id remains `<provider_id>/<model_name>` and each thread stores its own `model_id`.
 - Changing the model on an existing thread is thread-scoped only; it does not rewrite `ai.current_model_id`.
 - `providers[].base_url` is optional for `openai` / `anthropic`, and **required** for `moonshot` / `chatglm` / `deepseek` / `qwen` / `openai_compatible`.
+- Native provider presets are explicit allow-lists, not prefix matches:
+  - Moonshot: `kimi-k2.6`
+  - GLM/Z.ai: `glm-5.1`
+  - DeepSeek: `deepseek-v4-pro`, `deepseek-v4-flash`
+  - Qwen: `qwen3.6-plus`, `qwen3.6-plus-2026-04-02`, `qwen3.6-flash`, `qwen3.6-flash-2026-04-16`
+- OpenAI, Moonshot, GLM/Z.ai, DeepSeek, and Qwen derive web-search capability from provider type plus the explicit model allow-list. They do not expose extra web-search configuration in Settings.
+- Only `openai_compatible` providers may set `providers[].web_search.mode`:
+  - `disabled`: no web-search tool is exposed.
+  - `openai_builtin`: attach OpenAI Responses-style hosted web search.
+  - `brave`: expose Flower's Brave-backed `web.search` tool.
 
 API keys:
 
@@ -91,20 +102,35 @@ Example:
         ]
       },
       {
-        "id": "anthropic",
-        "type": "anthropic",
-        "name": "Anthropic",
-        "base_url": "https://api.anthropic.com/v1",
+        "id": "moonshot",
+        "type": "moonshot",
+        "name": "Moonshot",
+        "base_url": "https://api.moonshot.cn/v1",
         "models": [
-          { "model_name": "claude-opus-4-7", "context_window": 1000000, "max_output_tokens": 128000 },
-          { "model_name": "claude-sonnet-4-6", "context_window": 1000000, "max_output_tokens": 64000 },
-          { "model_name": "claude-haiku-4-5-20251001", "context_window": 200000, "max_output_tokens": 64000 }
+          { "model_name": "kimi-k2.6", "context_window": 256000, "max_output_tokens": 96000 }
+        ]
+      },
+      {
+        "id": "compat",
+        "type": "openai_compatible",
+        "name": "Custom Gateway",
+        "base_url": "https://gateway.example/v1",
+        "web_search": { "mode": "disabled" },
+        "models": [
+          { "model_name": "custom-model", "context_window": 128000 }
         ]
       }
     ]
   }
 }
 ```
+
+Provider web-search source references:
+
+- Moonshot Kimi model list and K2.6 web-search docs: `https://platform.kimi.ai/docs/models`, `https://platform.kimi.ai/docs/guide/use-web-search`
+- GLM/Z.ai `glm-5.1` and web-search tool docs: `https://docs.bigmodel.cn/cn/guide/models/text/glm-5.1`, `https://docs.bigmodel.cn/cn/guide/tools/web-search`
+- DeepSeek model list and chat completion docs: `https://api-docs.deepseek.com/api/list-models/`, `https://api-docs.deepseek.com/api/create-chat-completion`
+- Qwen text-generation and web-search docs: `https://help.aliyun.com/zh/model-studio/text-generation-model/`, `https://help.aliyun.com/zh/model-studio/web-search`
 
 ## Tooling and execution policy
 
@@ -117,7 +143,7 @@ Built-in tools:
 - `apply_patch`
 - `write_todos`
 - `exit_plan_mode`
-- `web.search` (optional; controlled by `ai.web_search_provider`)
+- `web.search` (optional; exposed only for `openai_compatible` providers with `providers[].web_search.mode = "brave"`)
 
 Structured file-tool notes:
 
