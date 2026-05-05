@@ -43,8 +43,8 @@ describe('main routing', () => {
     expect(mainSrc).toContain("case 'stop_environment_runtime':");
     expect(mainSrc).toContain("case 'refresh_environment_runtime':");
     expect(mainSrc).toContain("case 'refresh_all_environment_runtimes':");
-    expect(mainSrc).toContain("case 'upsert_managed_environment':");
-    expect(mainSrc).toContain("case 'delete_managed_environment':");
+    expect(mainSrc).toContain("case 'upsert_local_environment':");
+    expect(mainSrc).toContain("case 'delete_local_environment':");
     expect(mainSrc).toContain("case 'focus_environment_window':");
     expect(mainSrc).toContain("case 'close_launcher_or_quit':");
     expect(mainSrc).not.toContain("case 'return_to_current_environment':");
@@ -102,7 +102,7 @@ describe('main routing', () => {
     const mainSrc = readMainSource();
 
     expect(mainSrc).toContain('function desktopDiagnosticsStateDirForTarget(target: DesktopSessionTarget, startup: StartupReport): string');
-    expect(mainSrc).toContain("target.kind === 'managed_environment'");
+    expect(mainSrc).toContain("target.kind === 'local_environment'");
     expect(mainSrc).toContain("app.getPath('userData'), 'session-diagnostics'");
     expect(mainSrc).toContain('stateDirOverride: desktopDiagnosticsStateDirForTarget(target, startup)');
   });
@@ -111,7 +111,7 @@ describe('main routing', () => {
     const mainSrc = readMainSource();
 
     expect(mainSrc).toContain('function desktopSessionEntryURL(target: DesktopSessionTarget, startup: StartupReport): string');
-    expect(mainSrc).toContain("target.kind === 'managed_environment' && target.route === 'remote_desktop'");
+    expect(mainSrc).toContain("target.kind === 'local_environment' && target.route === 'remote_desktop'");
     expect(mainSrc).toContain('return buildLocalUIEnvAppEntryURL(startup.local_ui_url);');
     expect(mainSrc).toContain('const entryURL = desktopSessionEntryURL(target, startup);');
     expect(mainSrc).toContain('const rootWindow = createSessionRootWindow(target.session_key, entryURL, diagnostics');
@@ -124,10 +124,10 @@ describe('main routing', () => {
 
     expect(mainSrc).toContain('Local Environment is always available in Desktop. Change its settings instead of deleting it.');
     expect(mainSrc).toContain("|| 'local';");
-    expect(mainSrc).toContain('findManagedEnvironmentLocalBindConflict(next, resolvedEnvironment.id)');
+    expect(mainSrc).toContain('findLocalEnvironmentLocalBindConflict(next, resolvedEnvironment.id)');
     expect(mainSrc).toContain("'action_invalid',");
     expect(mainSrc).toContain("'dialog',");
-    expect(mainSrc).toContain('protectedManagedEnvironmentDeleteFailure');
+    expect(mainSrc).toContain('protectedLocalEnvironmentDeleteFailure');
   });
 
   it('broadcasts launcher snapshots per utility window and keeps session child identities stable', () => {

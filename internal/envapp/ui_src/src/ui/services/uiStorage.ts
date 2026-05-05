@@ -1,5 +1,5 @@
 import type { FloeStorageAdapter } from '@floegence/floe-webapp-core';
-import { desktopManagedEnvironmentStorageScopeID } from './desktopSessionContext';
+import { desktopLocalEnvironmentStorageScopeID } from './desktopSessionContext';
 import { readDesktopHostBridge } from './desktopHostWindow';
 
 export interface DesktopStateStorageBridge {
@@ -180,7 +180,7 @@ export function environmentOwnedUIStorageKey(key: string): string {
   if (cleanKey === '') {
     return '';
   }
-  const environmentScopeID = desktopManagedEnvironmentStorageScopeID();
+  const environmentScopeID = desktopLocalEnvironmentStorageScopeID();
   if (environmentScopeID === '') {
     return cleanKey;
   }

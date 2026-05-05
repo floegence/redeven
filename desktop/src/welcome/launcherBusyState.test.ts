@@ -34,7 +34,7 @@ describe('launcherBusyState', () => {
 
   it('maps environment save and delete flows to the normalized busy actions', () => {
     expect(busyStateForLauncherRequest({
-      kind: 'upsert_managed_environment',
+      kind: 'upsert_local_environment',
       environment_id: 'managed_demo',
       label: 'Demo',
       local_ui_bind: '127.0.0.1:24000',
@@ -100,7 +100,7 @@ describe('launcherBusyState', () => {
     });
 
     expect(busyStateMatchesAction(state, 'set_provider_environment_pinned')).toBe(true);
-    expect(busyStateMatchesAction(state, 'set_managed_environment_pinned')).toBe(false);
+    expect(busyStateMatchesAction(state, 'set_local_environment_pinned')).toBe(false);
     expect(busyStateMatchesAnyAction(state, [
       'set_provider_environment_pinned',
       'set_saved_environment_pinned',

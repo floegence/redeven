@@ -2,7 +2,7 @@ import type { ManagedRuntime } from './runtimeProcess';
 import type { StartupReport } from './startup';
 import type { DesktopLocalEnvironmentOwner } from '../shared/desktopLocalEnvironmentState';
 
-export type DesktopSessionRuntimeKind = 'managed_environment' | 'ssh';
+export type DesktopSessionRuntimeKind = 'local_environment' | 'ssh';
 export type DesktopSessionRuntimeLifecycleOwner = 'desktop' | 'external';
 export type DesktopSessionRuntimeLaunchMode = 'spawned' | 'attached';
 
@@ -47,7 +47,7 @@ export function desktopSessionRuntimeHandleFromManagedRuntime(
     persistedOwner: options.persistedOwner,
   });
   return {
-    runtime_kind: 'managed_environment',
+    runtime_kind: 'local_environment',
     lifecycle_owner: lifecycleOwner,
     launch_mode: runtime.attached ? 'attached' : 'spawned',
     stop: lifecycleOwner === 'desktop' ? runtime.stop : noopStop,

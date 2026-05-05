@@ -78,7 +78,7 @@ describe('desktopHostWindow', () => {
     const parentWindow = createFakeWindow();
     const sessionContextBridge = {
       getSnapshot: () => ({
-        managed_environment_id: 'env_demo',
+        local_environment_id: 'env_demo',
         environment_storage_scope_id: 'env_demo',
       }),
     };

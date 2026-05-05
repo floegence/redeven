@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
-  desktopManagedEnvironmentStorageScopeID,
+  desktopLocalEnvironmentStorageScopeID,
   notifyDesktopSessionAppReady,
   readDesktopSessionContextSnapshot,
   resolveEnvironmentStorageScopeID,
@@ -41,7 +41,7 @@ describe('desktopSessionContext', () => {
       location: { origin: window.location.origin },
       redevenDesktopSessionContext: {
         getSnapshot: () => ({
-          managed_environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+          local_environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
           environment_storage_scope_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
         }),
       },
@@ -50,15 +50,15 @@ describe('desktopSessionContext', () => {
     setWindowHierarchy(parentWindow);
 
     expect(readDesktopSessionContextSnapshot()).toEqual({
-      managed_environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      local_environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
       environment_storage_scope_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
     });
-    expect(desktopManagedEnvironmentStorageScopeID()).toBe('cp:https%3A%2F%2Fcp.example.invalid:env:env_demo');
+    expect(desktopLocalEnvironmentStorageScopeID()).toBe('cp:https%3A%2F%2Fcp.example.invalid:env:env_demo');
   });
 
   it('falls back to the provided scope id when no desktop session context exists', () => {
     expect(readDesktopSessionContextSnapshot()).toBeNull();
-    expect(desktopManagedEnvironmentStorageScopeID()).toBe('');
+    expect(desktopLocalEnvironmentStorageScopeID()).toBe('');
     expect(resolveEnvironmentStorageScopeID('env_demo')).toBe('env_demo');
   });
 
@@ -68,7 +68,7 @@ describe('desktopSessionContext', () => {
       location: { origin: window.location.origin },
       redevenDesktopSessionContext: {
         getSnapshot: () => ({
-          managed_environment_id: 'env_demo',
+          local_environment_id: 'env_demo',
           environment_storage_scope_id: 'env_demo',
         }),
         notifyAppReady: (payload: { state: string }) => {

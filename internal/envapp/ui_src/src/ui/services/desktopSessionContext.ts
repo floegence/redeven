@@ -1,7 +1,7 @@
 import { readDesktopHostBridge } from './desktopHostWindow';
 
 export interface DesktopSessionContextSnapshot {
-  managed_environment_id: string;
+  local_environment_id: string;
   environment_storage_scope_id: string;
   provider_origin?: string;
   provider_id?: string;
@@ -28,16 +28,16 @@ function normalizeDesktopSessionContextSnapshot(value: unknown): DesktopSessionC
     return null;
   }
   const candidate = value as Partial<DesktopSessionContextSnapshot>;
-  const managedEnvironmentID = compact(candidate.managed_environment_id);
+  const localEnvironmentID = compact(candidate.local_environment_id);
   const environmentStorageScopeID = compact(candidate.environment_storage_scope_id);
   const providerOrigin = compact(candidate.provider_origin);
   const providerID = compact(candidate.provider_id);
   const envPublicID = compact(candidate.env_public_id);
-  if (managedEnvironmentID === '' || environmentStorageScopeID === '') {
+  if (localEnvironmentID === '' || environmentStorageScopeID === '') {
     return null;
   }
   return {
-    managed_environment_id: managedEnvironmentID,
+    local_environment_id: localEnvironmentID,
     environment_storage_scope_id: environmentStorageScopeID,
     ...(providerOrigin !== '' ? { provider_origin: providerOrigin } : {}),
     ...(providerID !== '' ? { provider_id: providerID } : {}),
@@ -65,12 +65,12 @@ export function readDesktopSessionContextSnapshot(): DesktopSessionContextSnapsh
   }
 }
 
-export function desktopManagedEnvironmentStorageScopeID(): string {
+export function desktopLocalEnvironmentStorageScopeID(): string {
   return compact(readDesktopSessionContextSnapshot()?.environment_storage_scope_id);
 }
 
 export function resolveEnvironmentStorageScopeID(fallback: string): string {
-  return desktopManagedEnvironmentStorageScopeID() || compact(fallback);
+  return desktopLocalEnvironmentStorageScopeID() || compact(fallback);
 }
 
 export function notifyDesktopSessionAppReady(state: 'access_gate_interactive' | 'runtime_connected'): boolean {

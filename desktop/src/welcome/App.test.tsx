@@ -7,9 +7,8 @@ import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import { desktopControlPlaneKey } from '../shared/controlPlaneProvider';
 import {
   testDesktopPreferences,
-  testManagedAccess,
-  testManagedControlPlaneEnvironment,
-  testManagedLocalEnvironment,
+  testLocalAccess,
+  testLocalEnvironment,
 } from '../testSupport/desktopTestHelpers';
 import {
   buildDesktopWelcomeShellViewModel,
@@ -65,14 +64,14 @@ function readInstalledDialogSource(): string {
 
 describe('DesktopWelcomeShell', () => {
   it('describes Connect Environment inside the shared shell model', () => {
-    const managedLocal = testManagedLocalEnvironment('default', {
-      access: testManagedAccess({
+    const local = testLocalEnvironment('default', {
+      access: testLocalAccess({
         local_ui_bind: '127.0.0.1:0',
       }),
     });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [managedLocal],
+        local_environment: local,
         saved_environments: [
           {
             id: 'http://192.168.1.11:24000/',
@@ -103,8 +102,8 @@ describe('DesktopWelcomeShell', () => {
   });
 
   it('describes Local Environment Settings inside the same shell model', () => {
-    const managedLocal = testManagedLocalEnvironment('default', {
-      access: testManagedAccess({
+    const local = testLocalEnvironment('default', {
+      access: testLocalAccess({
         local_ui_bind: '0.0.0.0:24000',
         local_ui_password: 'secret',
         local_ui_password_configured: true,
@@ -112,10 +111,10 @@ describe('DesktopWelcomeShell', () => {
     });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [managedLocal],
+        local_environment: local,
       }),
       surface: 'environment_settings',
-      selectedEnvironmentID: managedLocal.id,
+      selectedEnvironmentID: local.id,
     });
 
     expect(buildDesktopWelcomeShellViewModel(snapshot)).toEqual({
@@ -145,13 +144,10 @@ describe('DesktopWelcomeShell', () => {
   });
 
   it('filters the Environment Library by local and provider sources', () => {
-    const managedLocal = testManagedLocalEnvironment();
-    const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
-      label: 'Demo Local Serve',
-    });
+    const local = testLocalEnvironment();
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [managedLocal, localServe],
+        local_environment: local,
         saved_environments: [
           {
             id: 'http://192.168.1.12:24000/',
@@ -222,8 +218,8 @@ describe('DesktopWelcomeShell', () => {
     expect(filterEnvironmentLibrary(snapshot, '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)).toEqual([
       expect.objectContaining({
         id: 'local',
-        category: 'managed',
-        managed_environment_kind: 'local',
+        category: 'local',
+        local_environment_kind: 'local',
       }),
     ]);
     expect(filterEnvironmentLibrary(snapshot, 'stag')).toEqual([
@@ -235,15 +231,9 @@ describe('DesktopWelcomeShell', () => {
   });
 
   it('can narrow the Environment Library to one provider-backed catalog', () => {
-    const providerLocalServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
-      label: 'Demo Local Serve',
-    });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [
-          testManagedLocalEnvironment(),
-          providerLocalServe,
-        ],
+        local_environment: testLocalEnvironment(),
       }),
       controlPlanes: [{
         provider: {
@@ -656,7 +646,6 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).not.toContain('managedActionModel()?.helper_text');
     expect(appSrc).not.toContain('actionModel().helper_text');
-    expect(appSrc).not.toContain('Open the managed environment or adjust startup settings before the next launch.');
     expect(appSrc).not.toContain('The provider currently reports this environment as offline.');
     expect(appSrc).not.toContain('Desktop opens a remote session through the Control Plane without starting a local runtime here.');
   });
@@ -665,18 +654,17 @@ describe('DesktopWelcomeShell', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain('content="Settings"');
-    expect(appSrc).toContain("title={props.environment.kind === 'managed_environment' ? 'Environment settings' : 'Connection settings'}");
+    expect(appSrc).toContain("title={props.environment.kind === 'local_environment' ? 'Environment settings' : 'Connection settings'}");
     expect(appSrc).toContain('Connection settings for ${props.environment.label}');
     expect(appSrc).toContain('<Settings class="h-3.5 w-3.5" />');
     expect(appSrc).not.toContain('<Pencil class="h-3.5 w-3.5" />');
   });
 
-  it('describes managed environment actions as window-only and runtime-decoupled', () => {
+  it('describes local environment actions as window-only and runtime-decoupled', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain('Open the selected Local Environment window');
     expect(appSrc).toContain("case 'start_runtime':");
-    expect(appSrc).not.toContain('Open or attach the selected desktop-managed environment');
   });
 
   it('keeps transient action feedback out of page flow by using a toast viewport', () => {
@@ -714,7 +702,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('This provider environment card will keep both routes visible on this device: serve local here, or open via Control Plane.');
     expect(appSrc).toContain('Connect straight to a Redeven runtime that already exposes its own Environment URL');
     expect(appSrc).toContain('This is not the Provider URL.');
-    expect(appSrc).toContain('Deploy a Desktop-managed Local Environment profile to a host you can reach over SSH.');
+    expect(appSrc).toContain('Deploy a Desktop-owned Local Environment profile to a host you can reach over SSH.');
     expect(appSrc).toContain('Desktop reuses shared release artifacts on that host and keeps one runtime state set there.');
     expect(appSrc).toContain("Desktop reuses only the exact Desktop-managed Redeven release on that host, installs it on demand when needed, and stores runtime state in that host's single runtime profile.");
     expect(appSrc).toContain('Bootstrap Delivery');
@@ -739,7 +727,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Leave blank to use the default remote user cache:');
   });
 
-  it('keeps the connection dialog from exposing managed Local Environment creation', () => {
+  it('keeps the connection dialog from exposing extra Local Environment creation', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain("type ConnectionDialogState = ExternalURLConnectionDialogState | SSHConnectionDialogState | null;");
@@ -747,16 +735,16 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('scope derived from Name.');
     expect(appSrc).not.toContain('Next scope:');
     expect(appSrc).not.toContain('DEFAULT_LOCAL_ENVIRONMENT_NAME');
-    expect(appSrc).not.toContain("kind: 'upsert_managed_environment'");
-    expect(appSrc).not.toContain("environment_name: shouldAutoSyncManagedEnvironmentScopeName(current)");
-    expect(appSrc).not.toContain('? deriveManagedEnvironmentScopeNameFromName(value)');
+    expect(appSrc).not.toContain("kind: 'upsert_local_environment'");
+    expect(appSrc).not.toContain("environment_name: shouldAutoSyncLocalEnvironmentScopeName(current)");
+    expect(appSrc).not.toContain('? deriveLocalEnvironmentScopeNameFromName(value)');
   });
 
   it('keeps provider-local runtime setup out of the connection dialog', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).not.toContain('ManagedEnvironmentBindingResolutionPanel');
-    expect(appSrc).not.toContain('resolveManagedEnvironmentBindingResolution');
+    expect(appSrc).not.toContain('LocalEnvironmentBindingResolutionPanel');
+    expect(appSrc).not.toContain('resolveLocalEnvironmentBindingResolution');
     expect(appSrc).not.toContain('provider_local_serve');
     expect(appSrc).not.toContain('use_control_plane_binding');
     expect(appSrc).toContain('function serveRuntimeLocally');
@@ -800,7 +788,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('const deleteTargetIsManaged = createMemo(() => {');
     expect(appSrc).toContain("title={deleteTargetIsManaged() ? 'Delete Environment' : 'Delete Connection'}");
     expect(appSrc).toContain("confirmText={deleteTargetIsManaged() ? 'Delete Environment' : 'Delete Connection'}");
-    expect(appSrc).toContain("title={props.environment.kind === 'managed_environment' ? 'Delete environment' : 'Delete connection'}");
+    expect(appSrc).toContain("title={props.environment.kind === 'local_environment' ? 'Delete environment' : 'Delete connection'}");
   });
 
   it('memoizes the Dialog open prop so overlay-mask focus trap does not thrash on every keystroke', () => {

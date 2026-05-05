@@ -52,7 +52,7 @@ function localManagedSessionByEnvironmentID(
 ): ReadonlyMap<string, DesktopSessionSummary> {
   return new Map(
     openSessions.flatMap((session) => (
-      session.target.kind === 'managed_environment' && session.target.route === 'local_host'
+      session.target.kind === 'local_environment' && session.target.route === 'local_host'
         ? [[session.target.environment_id, session] as const]
         : []
     )),
@@ -64,7 +64,7 @@ function currentRuntimeFromLocalSession(
 ): DesktopLocalEnvironmentRuntimeState | undefined {
   if (
     !session
-    || session.target.kind !== 'managed_environment'
+    || session.target.kind !== 'local_environment'
     || session.target.route !== 'local_host'
     || !session.startup
   ) {
@@ -137,7 +137,7 @@ function withCurrentRuntime(
   };
 }
 
-export async function hydrateWelcomeManagedEnvironmentRuntimeState(
+export async function hydrateWelcomeLocalEnvironmentRuntimeState(
   preferences: DesktopPreferences,
   openSessions: readonly DesktopSessionSummary[],
   options: Readonly<{

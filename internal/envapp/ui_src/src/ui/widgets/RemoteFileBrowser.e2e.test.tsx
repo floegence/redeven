@@ -1299,12 +1299,12 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
-  it('uses the desktop-managed environment scope id instead of the runtime env id for persisted paths', async () => {
+  it('uses the Desktop session storage scope id instead of the runtime env id for persisted paths', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     window.redevenDesktopSessionContext = {
       getSnapshot: () => ({
-        managed_environment_id: 'local:dev-b',
+        local_environment_id: 'local:dev-b',
         environment_storage_scope_id: 'local:dev-b',
       }),
     };

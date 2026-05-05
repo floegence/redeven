@@ -3,11 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { normalizeDesktopControlPlaneProvider } from '../shared/controlPlaneProvider';
 import {
   testDesktopPreferences,
-  testManagedAccess,
-  testManagedControlPlaneEnvironment,
-  testManagedLocalEnvironment,
+  testLocalAccess,
+  testProviderBoundLocalEnvironment,
+  testLocalEnvironment,
   testProviderEnvironment,
-  testManagedSession,
+  testLocalEnvironmentSession,
 } from '../testSupport/desktopTestHelpers';
 import {
   buildBlockedLaunchIssue,
@@ -41,8 +41,8 @@ function providerRuntimeState(envPublicID = 'env_demo') {
 
 describe('desktopWelcomeState', () => {
   it('builds launcher snapshots around open windows and saved environments', () => {
-    const managedLocal = testManagedLocalEnvironment('default', {
-      access: testManagedAccess({
+    const local = testLocalEnvironment('default', {
+      access: testLocalAccess({
         local_ui_bind: '0.0.0.0:24000',
         local_ui_password: 'secret',
         local_ui_password_configured: true,
@@ -51,7 +51,7 @@ describe('desktopWelcomeState', () => {
 
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [managedLocal],
+        local_environment: local,
         saved_environments: [
           {
             id: 'http://192.168.1.12:24000/',
@@ -104,7 +104,7 @@ describe('desktopWelcomeState', () => {
         }] : [],
       }),
       openSessions: [
-        testManagedSession(managedLocal, 'http://localhost:23998/'),
+        testLocalEnvironmentSession(local, 'http://localhost:23998/'),
         {
           session_key: 'url:http://192.168.1.12:24000/',
           target: buildExternalLocalUIDesktopTarget('http://192.168.1.12:24000/', { label: 'Staging' }),
@@ -130,7 +130,7 @@ describe('desktopWelcomeState', () => {
     expect(snapshot.open_windows).toEqual([
       expect.objectContaining({
         session_key: 'env:local:local_host',
-        target_kind: 'managed_environment',
+        target_kind: 'local_environment',
         environment_id: 'local',
         label: 'Local Environment',
         local_ui_url: 'http://localhost:23998/',
@@ -145,22 +145,22 @@ describe('desktopWelcomeState', () => {
     expect(snapshot.environments).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'local',
-        kind: 'managed_environment',
+        kind: 'local_environment',
         label: 'Local Environment',
         pinned: false,
         tag: 'Open',
-        category: 'managed',
+        category: 'local',
         is_open: true,
         open_action_label: 'Focus',
         can_edit: true,
         can_delete: false,
         can_save: false,
-        managed_environment_kind: 'local',
-        managed_environment_name: 'local',
-        managed_local_ui_bind: '0.0.0.0:24000',
-        managed_local_runtime_state: 'running_desktop',
-        managed_local_runtime_url: 'http://localhost:23998/',
-        managed_local_close_behavior: 'stops_runtime',
+        local_environment_kind: 'local',
+        local_environment_name: 'local',
+        local_environment_ui_bind: '0.0.0.0:24000',
+        local_environment_runtime_state: 'running_desktop',
+        local_environment_runtime_url: 'http://localhost:23998/',
+        local_environment_close_behavior: 'stops_runtime',
       }),
       expect.objectContaining({
         id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
@@ -218,10 +218,10 @@ describe('desktopWelcomeState', () => {
   });
 
   it('carries active launcher action progress in the welcome snapshot', () => {
-    const managedLocal = testManagedLocalEnvironment('default');
+    const local = testLocalEnvironment('default');
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [managedLocal],
+        local_environment: local,
       }),
       actionProgress: [{
         action: 'start_environment_runtime',
@@ -250,7 +250,7 @@ describe('desktopWelcomeState', () => {
   it('keeps the single Local Environment protected', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [testManagedLocalEnvironment('default')],
+        local_environment: testLocalEnvironment('default'),
       }),
     });
 
@@ -264,7 +264,7 @@ describe('desktopWelcomeState', () => {
   });
 
   it('marks a discovered external local runtime as online before a Desktop session is open', () => {
-    const managedLocal = testManagedLocalEnvironment('default', {
+    const local = testLocalEnvironment('default', {
       currentRuntime: {
         local_ui_url: 'http://127.0.0.1:24001/',
         desktop_managed: false,
@@ -289,7 +289,7 @@ describe('desktopWelcomeState', () => {
 
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [managedLocal],
+        local_environment: local,
       }),
     });
 
@@ -297,9 +297,9 @@ describe('desktopWelcomeState', () => {
       expect.objectContaining({
         id: 'local',
         local_ui_url: 'http://127.0.0.1:24001/',
-        managed_local_runtime_state: 'running_external',
-        managed_local_runtime_url: 'http://127.0.0.1:24001/',
-        managed_local_close_behavior: 'detaches',
+        local_environment_runtime_state: 'running_external',
+        local_environment_runtime_url: 'http://127.0.0.1:24001/',
+        local_environment_close_behavior: 'detaches',
         window_state: 'closed',
         open_action_label: 'Open',
         runtime_control_capability: 'start_stop',
@@ -384,7 +384,7 @@ describe('desktopWelcomeState', () => {
     });
 
     expect(snapshot.environments).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'local', kind: 'managed_environment' }),
+      expect.objectContaining({ id: 'local', kind: 'local_environment' }),
       expect.objectContaining({
         id: 'http://192.168.1.77:24000/',
         kind: 'external_local_ui',
@@ -560,7 +560,7 @@ describe('desktopWelcomeState', () => {
   });
 
   it('builds a dedicated settings snapshot when requested by the desktop shell', () => {
-    const managedLocal = testManagedLocalEnvironment('default', {
+    const local = testLocalEnvironment('default', {
       access: {
         local_ui_bind: '127.0.0.1:0',
         local_ui_password: '',
@@ -570,10 +570,10 @@ describe('desktopWelcomeState', () => {
 
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [managedLocal],
+        local_environment: local,
       }),
       surface: 'environment_settings',
-      selectedEnvironmentID: managedLocal.id,
+      selectedEnvironmentID: local.id,
     });
 
     expect(snapshot.surface).toBe('environment_settings');
@@ -598,8 +598,8 @@ describe('desktopWelcomeState', () => {
     });
   });
 
-  it('threads the current managed runtime url into the settings surface when Local Environment is open', () => {
-    const managedLocal = testManagedLocalEnvironment('default', {
+  it('threads the current Local Environment runtime url into the settings surface when Local Environment is open', () => {
+    const local = testLocalEnvironment('default', {
       access: {
         local_ui_bind: 'localhost:23998',
         local_ui_password: '',
@@ -609,13 +609,13 @@ describe('desktopWelcomeState', () => {
 
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [managedLocal],
+        local_environment: local,
       }),
       openSessions: [
-        testManagedSession(managedLocal, 'http://localhost:23998/'),
+        testLocalEnvironmentSession(local, 'http://localhost:23998/'),
       ],
       surface: 'environment_settings',
-      selectedEnvironmentID: managedLocal.id,
+      selectedEnvironmentID: local.id,
     });
 
     expect(snapshot.settings_surface.current_runtime_url).toBe('http://localhost:23998/');
@@ -624,9 +624,9 @@ describe('desktopWelcomeState', () => {
 
   it('projects provider local-serve state onto the aggregated provider card', () => {
     const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
-    const managedControlPlane = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo');
-    const managedLocal = testManagedLocalEnvironment('default', {
-      access: testManagedAccess({
+    const managedControlPlane = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo');
+    const local = testLocalEnvironment('default', {
+      access: testLocalAccess({
         local_ui_bind: 'localhost:23998',
       }),
       currentRuntime: {
@@ -640,10 +640,10 @@ describe('desktopWelcomeState', () => {
     const remoteTarget = buildProviderEnvironmentDesktopTarget(providerEnvironment, { route: 'remote_desktop' });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [managedLocal, managedControlPlane],
+        local_environment: local,
       }),
       openSessions: [
-        testManagedSession(managedControlPlane, 'http://localhost:23998/', 'open', providerRuntimeState('env_demo')),
+        testLocalEnvironmentSession(managedControlPlane, 'http://localhost:23998/', 'open', providerRuntimeState('env_demo')),
         {
           session_key: controlPlaneDesktopSessionKey('https://cp.example.invalid', 'env_demo'),
           target: remoteTarget,
@@ -704,8 +704,8 @@ describe('desktopWelcomeState', () => {
     });
 
     expect(snapshot.environments.find((entry) => (
-      entry.kind === 'managed_environment'
-      && entry.managed_environment_kind === 'controlplane'
+      entry.kind === 'local_environment'
+      && entry.local_environment_kind === 'controlplane'
     ))).toBeUndefined();
     expect(snapshot.environments.find((entry) => (
       entry.kind === 'provider_environment'
@@ -728,14 +728,14 @@ describe('desktopWelcomeState', () => {
     }));
   });
 
-  it('threads Control Plane runtime state into managed environment library entries', () => {
+  it('threads Control Plane runtime state into provider environment library entries', () => {
     const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
-    const managedControlPlane = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
+    const managedControlPlane = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo', {
       localHosting: false,
     });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [managedControlPlane],
+        local_environment: managedControlPlane,
         control_planes: testProvider ? [{
           provider: testProvider,
           account: {
@@ -785,7 +785,7 @@ describe('desktopWelcomeState', () => {
       throw new Error('Expected normalized test provider.');
     }
     const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
-    const managedControlPlane = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo');
+    const managedControlPlane = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo');
     const summaryAccount = {
       provider_id: testProvider.provider_id,
       provider_origin: testProvider.provider_origin,
@@ -809,7 +809,7 @@ describe('desktopWelcomeState', () => {
 
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [managedControlPlane],
+        local_environment: managedControlPlane,
         control_planes: [{
           provider: testProvider,
           account: summaryAccount,
@@ -859,7 +859,7 @@ describe('desktopWelcomeState', () => {
       throw new Error('Expected normalized test provider.');
     }
     const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
-    const managedControlPlane = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo');
+    const managedControlPlane = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo');
     const summaryAccount = {
       provider_id: testProvider.provider_id,
       provider_origin: testProvider.provider_origin,
@@ -871,7 +871,7 @@ describe('desktopWelcomeState', () => {
 
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [managedControlPlane],
+        local_environment: managedControlPlane,
         control_planes: [{
           provider: testProvider,
           account: summaryAccount,
@@ -920,7 +920,7 @@ describe('desktopWelcomeState', () => {
       },
     });
 
-    expect(issue.scope).toBe('managed_environment');
+    expect(issue.scope).toBe('local_environment');
     expect(issue.title).toBe('Redeven is already starting elsewhere');
     expect(issue.message).toContain('Desktop can attach to it');
     expect(issue.diagnostics_copy).toContain('lock owner pid: 1234');

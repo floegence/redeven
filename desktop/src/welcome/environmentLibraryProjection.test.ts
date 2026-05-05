@@ -3,8 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import {
   testDesktopPreferences,
-  testManagedControlPlaneEnvironment,
-  testManagedLocalEnvironment,
+  testLocalEnvironment,
   testProviderEnvironment,
 } from '../testSupport/desktopTestHelpers';
 import {
@@ -14,18 +13,15 @@ import {
 
 describe('environmentLibraryProjection', () => {
   it('builds an entry record keyed by stable environment id', () => {
-    const local = testManagedLocalEnvironment('default', {
+    const local = testLocalEnvironment('default', {
       label: 'Local',
     });
     const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo', {
       label: 'Demo Local Serve',
     });
-    const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
-      label: 'Demo Local Serve',
-    });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [local, localServe],
+        local_environment: local,
         provider_environments: [providerEnvironment],
       }),
     });
@@ -36,7 +32,7 @@ describe('environmentLibraryProjection', () => {
   });
 
   it('splits visible entry ids into pinned and regular groups without losing order', () => {
-    const local = testManagedLocalEnvironment('default', {
+    const local = testLocalEnvironment('default', {
       label: 'Local',
       pinned: true,
     });
@@ -44,13 +40,9 @@ describe('environmentLibraryProjection', () => {
       label: 'Demo Local Serve',
       pinned: false,
     });
-    const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
-      label: 'Demo Local Serve',
-      pinned: false,
-    });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [local, localServe],
+        local_environment: local,
         provider_environments: [providerEnvironment],
       }),
     });
@@ -64,13 +56,13 @@ describe('environmentLibraryProjection', () => {
   });
 
   it('ignores ids that are no longer present in the projected entry record', () => {
-    const local = testManagedLocalEnvironment('default', {
+    const local = testLocalEnvironment('default', {
       label: 'Local',
       pinned: true,
     });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [local],
+        local_environment: local,
       }),
     });
     const entriesByID = environmentLibraryEntryRecord(snapshot.environments);

@@ -2,7 +2,7 @@ export const DESKTOP_SESSION_CONTEXT_GET_CHANNEL = 'redeven-desktop:session-cont
 export const DESKTOP_SESSION_APP_READY_CHANNEL = 'redeven-desktop:session-app-ready';
 
 export type DesktopSessionContextSnapshot = Readonly<{
-  managed_environment_id: string;
+  local_environment_id: string;
   environment_storage_scope_id: string;
   provider_origin?: string;
   provider_id?: string;

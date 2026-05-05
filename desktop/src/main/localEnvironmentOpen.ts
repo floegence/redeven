@@ -6,7 +6,7 @@ import {
   type DesktopLocalEnvironmentState,
 } from '../shared/desktopLocalEnvironmentState';
 
-export type ResolvedManagedEnvironmentOpenTarget = Readonly<
+export type ResolvedLocalEnvironmentOpenTarget = Readonly<
   | {
       route: 'local_host';
       bootstrap_ticket: string;
@@ -17,13 +17,13 @@ export type ResolvedManagedEnvironmentOpenTarget = Readonly<
     }
 >;
 
-type ManagedEnvironmentOpenSession = Readonly<Pick<ProviderDesktopOpenSession, 'bootstrap_ticket' | 'remote_session_url'>>;
+type LocalEnvironmentOpenSession = Readonly<Pick<ProviderDesktopOpenSession, 'bootstrap_ticket' | 'remote_session_url'>>;
 
-export function resolveManagedEnvironmentOpenTarget(
+export function resolveLocalEnvironmentOpenTarget(
   environment: DesktopLocalEnvironmentState,
-  openSession: ManagedEnvironmentOpenSession,
+  openSession: LocalEnvironmentOpenSession,
   requestedRoute: 'auto' | DesktopLocalEnvironmentStateSessionRoute = 'auto',
-): ResolvedManagedEnvironmentOpenTarget {
+): ResolvedLocalEnvironmentOpenTarget {
   if (requestedRoute === 'local_host') {
     if (!localEnvironmentSupportsLocalHosting(environment)) {
       throw new Error('This environment is not hosted on this device.');
