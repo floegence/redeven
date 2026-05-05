@@ -23,7 +23,6 @@ func (c *cli) searchCmd(args []string) int {
 	count := fs.Int("count", 5, "Number of results to return (default: 5, max: 10)")
 	format := fs.String("format", "json", "Output format: json|text (default: json)")
 	stateRoot := fs.String("state-root", "", "State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven)")
-	configPath := fs.String("config-path", "", "Config path override")
 	secretsPath := fs.String("secrets-path", "", "Secrets path (default: <config dir>/secrets.json)")
 	timeout := fs.Duration("timeout", 15*time.Second, "Search timeout")
 
@@ -48,18 +47,13 @@ func (c *cli) searchCmd(args []string) int {
 		return 2
 	}
 
-	if err := validateStateLayoutSelection(*configPath, *stateRoot); err != nil {
-		writeErrorWithHelp(c.stderr, err.Error(), nil, searchHelpText())
-		return 2
-	}
-
-	stateLayout, err := resolveSearchStateLayout(*configPath, *stateRoot)
+	stateLayout, err := resolveSearchStateLayout(*stateRoot)
 	if err != nil {
 		if errors.Is(err, config.ErrHomeDirUnavailable) {
 			writeErrorWithHelp(
 				c.stderr,
 				fmt.Sprintf("failed to resolve search config path: %v", err),
-				[]string{"Hint: export HOME before running `redeven search`, or pass --config-path <path>."},
+				[]string{"Hint: export HOME before running `redeven search`, or pass --state-root <path>."},
 				searchHelpText(),
 			)
 			return 1
@@ -147,10 +141,6 @@ func (c *cli) searchCmd(args []string) int {
 	}
 }
 
-func resolveSearchStateLayout(configPath string, stateRoot string) (config.StateLayout, error) {
-	cleanPath := strings.TrimSpace(configPath)
-	if cleanPath == "" {
-		return config.LocalEnvironmentStateLayout(stateRoot)
-	}
-	return config.StateLayoutForConfigPath(cleanPath)
+func resolveSearchStateLayout(stateRoot string) (config.StateLayout, error) {
+	return config.LocalEnvironmentStateLayout(stateRoot)
 }

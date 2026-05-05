@@ -14,7 +14,6 @@ import (
 type agentLockMetadata struct {
 	PID              int    `json:"pid,omitempty"`
 	Mode             string `json:"mode,omitempty"`
-	ScopeKey         string `json:"scope_key,omitempty"`
 	DesktopManaged   bool   `json:"desktop_managed"`
 	LocalUIEnabled   bool   `json:"local_ui_enabled"`
 	ConfigPath       string `json:"config_path,omitempty"`
@@ -28,7 +27,6 @@ func newAgentLockMetadata(mode string, desktopManaged bool, localUIEnabled bool,
 	return agentLockMetadata{
 		PID:              os.Getpid(),
 		Mode:             strings.TrimSpace(mode),
-		ScopeKey:         strings.TrimSpace(layout.ScopeKey),
 		DesktopManaged:   desktopManaged,
 		LocalUIEnabled:   localUIEnabled,
 		ConfigPath:       cleanConfigPath,
@@ -59,7 +57,6 @@ func readAgentLockMetadata(path string) (*agentLockMetadata, error) {
 		return nil, err
 	}
 	metadata.Mode = strings.TrimSpace(metadata.Mode)
-	metadata.ScopeKey = strings.TrimSpace(metadata.ScopeKey)
 	metadata.ConfigPath = strings.TrimSpace(metadata.ConfigPath)
 	metadata.StateDir = strings.TrimSpace(metadata.StateDir)
 	metadata.RuntimeStatePath = strings.TrimSpace(metadata.RuntimeStatePath)
@@ -73,7 +70,6 @@ func lockOwnerFromMetadata(metadata *agentLockMetadata) *desktopLaunchLockOwner 
 	return &desktopLaunchLockOwner{
 		PID:              metadata.PID,
 		Mode:             metadata.Mode,
-		ScopeKey:         metadata.ScopeKey,
 		DesktopManaged:   metadata.DesktopManaged,
 		LocalUIEnabled:   metadata.LocalUIEnabled,
 		ConfigPath:       metadata.ConfigPath,

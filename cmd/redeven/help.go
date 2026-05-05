@@ -71,7 +71,6 @@ Required flags:
 
 Optional flags:
   --state-root <path>              State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
-  --config-path <path>             Config path override (advanced).
   --agent-home-dir <path>           Runtime home dir for filesystem-facing features.
   --shell <command>                 Shell command (default: $SHELL or /bin/bash).
   --permission-policy <preset>      Local permission policy: execute_read, read_only, or execute_read_write.
@@ -83,11 +82,10 @@ Optional flags:
 Local Environment state:
   - Default target: ~/.redeven/local-environment/config.json.
   - Rebinding replaces the current Local Environment control-plane binding.
-  - Use --config-path only for development or tests that need a fully explicit file path.
+  - Use --state-root only when this OS user needs an isolated Redeven profile root.
 
 Writes by default:
   ~/.redeven/local-environment/config.json
-  ~/.redeven/local-environment/scope.json
 
 Examples:
   Minimal bootstrap:
@@ -125,7 +123,7 @@ Bootstrap rules:
   - One-shot flow: pass --controlplane, --env-id, and a one-time bootstrap ticket to %[5]s.
 
 Local Environment state rules:
-  - Without --config-path, redeven uses the single Local Environment state at ~/.redeven/local-environment.
+  - Redeven uses one Local Environment state at ~/.redeven/local-environment.
   - Inline bootstrap flags rebind the same Local Environment state before startup.
   - Use --state-root to relocate the whole Local Environment state root, including desktop-managed SSH runtimes.
 
@@ -153,7 +151,6 @@ Flags:
   --password-env <env_name>         Read the Local UI password from an environment variable.
   --password-file <path>            Read the Local UI password from a file.
   --state-root <path>               State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
-  --config-path <path>              Config path override.
   --desktop-managed                 Disable CLI self-upgrade for desktop-managed Local UI runs.
   --startup-report-file <path>      Write structured Local UI readiness JSON.
 
@@ -196,7 +193,6 @@ Flags:
   --count <n>                       Number of results to return (default: 5, max: 10).
   --format <json|text>              Output format (default: json).
   --state-root <path>               State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
-  --config-path <path>              Config path override.
   --secrets-path <path>             Secrets path override.
   --timeout <duration>              Search timeout (default: 15s).
 

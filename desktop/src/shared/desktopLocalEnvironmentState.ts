@@ -11,12 +11,6 @@ export type DesktopLocalEnvironmentAccess = Readonly<{
 
 export type DesktopLocalEnvironmentPreferredOpenRoute = 'auto' | 'local_host' | 'remote_desktop';
 export type DesktopLocalEnvironmentOwner = 'desktop' | 'agent' | 'unknown';
-export type DesktopLocalEnvironmentScopeKind = 'local_environment';
-
-export type DesktopLocalEnvironmentScope = Readonly<{
-  kind: DesktopLocalEnvironmentScopeKind;
-  name: string;
-}>;
 
 export type DesktopLocalEnvironmentRuntimeState = Readonly<{
   local_ui_url: string;
@@ -33,8 +27,6 @@ export type DesktopLocalEnvironmentRuntimeState = Readonly<{
 }>;
 
 export type DesktopLocalEnvironmentHosting = Readonly<{
-  scope: DesktopLocalEnvironmentScope;
-  scope_key: 'local_environment';
   state_dir: string;
   owner: DesktopLocalEnvironmentOwner;
   access: DesktopLocalEnvironmentAccess;
@@ -106,10 +98,6 @@ export function desktopProviderEnvironmentStateID(providerOrigin: string, envPub
   return `cp:${encodeURIComponent(normalizedOrigin)}:env:${encodeURIComponent(normalizedEnvPublicID)}`;
 }
 
-export function desktopLocalEnvironmentStateIDForScope(_scope: DesktopLocalEnvironmentScope): typeof LOCAL_ENVIRONMENT_ID {
-  return LOCAL_ENVIRONMENT_ID;
-}
-
 export function defaultDesktopLocalEnvironmentAccess(): DesktopLocalEnvironmentAccess {
   return {
     local_ui_bind: DEFAULT_DESKTOP_LOCAL_UI_BIND,
@@ -160,15 +148,9 @@ type CreateDesktopLocalEnvironmentHostingOptions = Readonly<{
 }>;
 
 export function createDesktopLocalEnvironmentHosting(
-  _scope: DesktopLocalEnvironmentScope,
   options: CreateDesktopLocalEnvironmentHostingOptions = {},
 ): DesktopLocalEnvironmentHosting {
   return {
-    scope: {
-      kind: 'local_environment',
-      name: DEFAULT_LOCAL_ENVIRONMENT_NAME,
-    },
-    scope_key: 'local_environment',
     state_dir: compact(options.stateDir),
     owner: options.owner ?? 'desktop',
     access: options.access ?? defaultDesktopLocalEnvironmentAccess(),
@@ -235,15 +217,12 @@ export function createDesktopLocalEnvironmentState(
     updated_at_ms: Number(options.updatedAtMS ?? now) || now,
     last_used_at_ms: Number(options.lastUsedAtMS ?? 0) || 0,
     preferred_open_route: options.preferredOpenRoute ?? 'auto',
-    local_hosting: createDesktopLocalEnvironmentHosting(
-      { kind: 'local_environment', name: DEFAULT_LOCAL_ENVIRONMENT_NAME },
-      {
-        access: options.access,
-        owner: options.owner,
-        stateDir: options.stateDir,
-        currentRuntime: options.currentRuntime,
-      },
-    ),
+    local_hosting: createDesktopLocalEnvironmentHosting({
+      access: options.access,
+      owner: options.owner,
+      stateDir: options.stateDir,
+      currentRuntime: options.currentRuntime,
+    }),
     ...(options.currentProviderBinding ? { current_provider_binding: options.currentProviderBinding } : {}),
   };
 }
@@ -293,21 +272,15 @@ export function localEnvironmentStateKind(environment: DesktopLocalEnvironmentSt
 }
 
 export function isDefaultDesktopLocalEnvironmentState(environment: DesktopLocalEnvironmentState | null | undefined): boolean {
-  return environment?.id === LOCAL_ENVIRONMENT_ID
-    && environment.local_hosting.scope.kind === 'local_environment'
-    && environment.local_hosting.scope.name === DEFAULT_LOCAL_ENVIRONMENT_NAME;
+  return environment?.id === LOCAL_ENVIRONMENT_ID;
 }
 
-export function localEnvironmentName(environment: DesktopLocalEnvironmentState): string {
-  return environment.local_hosting.scope.name;
+export function localEnvironmentName(_environment: DesktopLocalEnvironmentState): string {
+  return DEFAULT_LOCAL_ENVIRONMENT_NAME;
 }
 
 export function localEnvironmentAccess(environment: DesktopLocalEnvironmentState): DesktopLocalEnvironmentAccess {
   return environment.local_hosting.access;
-}
-
-export function localEnvironmentScopeKey(environment: DesktopLocalEnvironmentState): string {
-  return environment.local_hosting.scope_key;
 }
 
 export function localEnvironmentStateDir(environment: DesktopLocalEnvironmentState): string {

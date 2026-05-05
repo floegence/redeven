@@ -176,11 +176,6 @@ type DesktopLocalEnvironmentStateCatalogFile = Readonly<{
   last_used_at_ms?: unknown;
   preferred_open_route?: unknown;
   local_hosting?: Readonly<{
-    scope?: Readonly<{
-      kind?: unknown;
-      name?: unknown;
-    }>;
-    scope_key?: unknown;
     state_dir?: unknown;
     owner?: unknown;
     access?: Readonly<{
@@ -1798,19 +1793,12 @@ function normalizeLocalEnvironmentCatalogCandidate(
       ? localHostingSource.owner
       : 'unknown';
     try {
-      const scope = localHostingSource?.scope;
-      if (scope && typeof scope === 'object' && scope.kind !== 'local_environment') {
-        return null;
-      }
-      return createDesktopLocalEnvironmentHosting(
-        { kind: 'local_environment', name: 'local' },
-        {
-          access,
-          owner,
-          stateDir: compact(localHostingSource?.state_dir)
-            || localEnvironmentStateLayout(process.env, os.homedir, stateRootOverride).stateDir,
-        },
-      );
+      return createDesktopLocalEnvironmentHosting({
+        access,
+        owner,
+        stateDir: compact(localHostingSource?.state_dir)
+          || localEnvironmentStateLayout(process.env, os.homedir, stateRootOverride).stateDir,
+      });
     } catch {
       return null;
     }
@@ -1890,8 +1878,6 @@ function serializeLocalEnvironmentCatalog(environment: DesktopLocalEnvironmentSt
     last_used_at_ms: environment.last_used_at_ms,
     preferred_open_route: environment.preferred_open_route,
     local_hosting: {
-      scope: environment.local_hosting.scope,
-      scope_key: environment.local_hosting.scope_key,
       state_dir: environment.local_hosting.state_dir,
       owner: environment.local_hosting.owner,
       access: {

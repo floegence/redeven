@@ -133,7 +133,6 @@ export type DesktopEnvironmentEntry = Readonly<{
   local_ui_url: string;
   secondary_text: string;
   local_environment_kind?: 'local' | 'controlplane';
-  local_environment_scope_kind?: 'local_environment';
   local_environment_name?: string;
   local_environment_ui_bind?: string;
   local_environment_ui_password_configured?: boolean;

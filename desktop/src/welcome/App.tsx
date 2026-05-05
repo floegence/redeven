@@ -2232,7 +2232,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (!target) {
       return;
     }
-    if (target.kind !== 'ssh_environment' && target.kind !== 'saved_environment') {
+    if (target.kind !== 'ssh_environment' && target.kind !== 'external_local_ui') {
       throw new Error('Unsupported delete target.');
     }
     setBusyState({

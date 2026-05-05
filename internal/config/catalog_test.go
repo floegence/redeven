@@ -46,15 +46,6 @@ func TestWriteEnvironmentCatalogRecordWritesLocalEnvironmentProviderBinding(t *t
 	if record.ID != "local" {
 		t.Fatalf("ID = %q", record.ID)
 	}
-	if record.LocalHosting.Scope.Kind != string(ScopeKindLocalEnvironment) {
-		t.Fatalf("LocalHosting.Scope.Kind = %q", record.LocalHosting.Scope.Kind)
-	}
-	if record.LocalHosting.Scope.Name != DefaultLocalEnvironmentScopeName {
-		t.Fatalf("LocalHosting.Scope.Name = %q", record.LocalHosting.Scope.Name)
-	}
-	if record.LocalHosting.ScopeKey != "local_environment" {
-		t.Fatalf("LocalHosting.ScopeKey = %q", record.LocalHosting.ScopeKey)
-	}
 	if record.LocalHosting.Owner != "agent" {
 		t.Fatalf("LocalHosting.Owner = %q", record.LocalHosting.Owner)
 	}
@@ -174,9 +165,6 @@ func TestWriteEnvironmentCatalogRecordReusesExistingLocalEnvironmentRecordProper
 	}
 	if record.PreferredOpen != "remote_desktop" {
 		t.Fatalf("PreferredOpen = %q", record.PreferredOpen)
-	}
-	if record.LocalHosting.ScopeKey != layout.ScopeKey {
-		t.Fatalf("LocalHosting.ScopeKey = %q, want %q", record.LocalHosting.ScopeKey, layout.ScopeKey)
 	}
 	if record.LocalHosting.Access.LocalUIBind != "127.0.0.1:24000" {
 		t.Fatalf("LocalHosting.Access.LocalUIBind = %q", record.LocalHosting.Access.LocalUIBind)

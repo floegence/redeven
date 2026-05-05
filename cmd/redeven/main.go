@@ -39,7 +39,6 @@ func main() {
 }
 
 func runCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	cleanupLegacyHomeDir()
 	return (&cli{stdin: stdin, stdout: stdout, stderr: stderr}).run(args)
 }
 
@@ -83,17 +82,6 @@ func (c *cli) run(args []string) int {
 	}
 }
 
-func cleanupLegacyHomeDir() {
-	home, err := os.UserHomeDir()
-	if err != nil || strings.TrimSpace(home) == "" {
-		return
-	}
-
-	// NOTE: We renamed the default config/state directory from ~/.redeven-agent to ~/.redeven.
-	// During development, remove the legacy directory proactively to avoid stale state surprises.
-	_ = os.RemoveAll(filepath.Join(home, ".redeven-agent"))
-}
-
 func (c *cli) helpCmd(args []string) int {
 	text, ok := lookupHelpText(args)
 	if !ok {
@@ -121,7 +109,6 @@ func (c *cli) bootstrapCmd(args []string) int {
 	bootstrapTicket := fs.String("bootstrap-ticket", "", "One-time bootstrap ticket (raw ticket; 'Bearer <ticket>' is also accepted)")
 	bootstrapTicketEnv := fs.String("bootstrap-ticket-env", "", "Environment variable name holding the bootstrap ticket")
 	stateRoot := fs.String("state-root", "", "State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven)")
-	configPath := fs.String("config-path", "", "Config path override")
 
 	agentHomeDir := fs.String("agent-home-dir", "", "Runtime home dir used for filesystem-facing features (default: user home dir)")
 	shell := fs.String("shell", "", "Shell command (default: $SHELL or /bin/bash)")
@@ -174,11 +161,7 @@ func (c *cli) bootstrapCmd(args []string) int {
 		return 2
 	}
 
-	if err := validateStateLayoutSelection(*configPath, *stateRoot); err != nil {
-		writeErrorWithHelp(c.stderr, err.Error(), nil, bootstrapHelpText())
-		return 2
-	}
-	stateLayout, err := resolveBootstrapTargetLayout(*configPath, *stateRoot)
+	stateLayout, err := resolveBootstrapTargetLayout(*stateRoot)
 	if err != nil {
 		return c.printRunStateLayoutGuidance(err)
 	}
@@ -191,7 +174,7 @@ func (c *cli) bootstrapCmd(args []string) int {
 		EnvironmentID:          *envID,
 		BootstrapTicket:        resolvedBootstrapTicket,
 		RuntimeVersion:         Version,
-		ConfigPath:             stateLayout.ConfigPath,
+		StateRoot:              stateLayout.StateRoot,
 		AgentHomeDir:           *agentHomeDir,
 		Shell:                  *shell,
 		LogFormat:              *logFormat,
@@ -225,7 +208,6 @@ func (c *cli) runCmd(args []string) int {
 	passwordFile := fs.String("password-file", "", "File path holding the access password")
 	desktopManaged := fs.Bool("desktop-managed", false, "Disable CLI self-upgrade semantics for desktop-managed Local UI runs")
 	startupReportFile := fs.String("startup-report-file", "", "Write Local UI readiness JSON to the given file (advanced)")
-	configPath := fs.String("config-path", "", "Config path override")
 	var desktopLaunchFailure func(string, string, config.StateLayout, int) int
 
 	if err := parseCommandFlags(fs, args); err != nil {
@@ -292,12 +274,7 @@ func (c *cli) runCmd(args []string) int {
 		return 2
 	}
 
-	if err := validateStateLayoutSelection(*configPath, *stateRoot); err != nil {
-		writeErrorWithHelp(c.stderr, err.Error(), nil, runHelpText())
-		return 2
-	}
-
-	stateLayout, err := resolveRunStateLayout(*configPath, *stateRoot)
+	stateLayout, err := resolveRunStateLayout(*stateRoot)
 	if err != nil {
 		return c.printRunStateLayoutGuidance(err)
 	}
@@ -442,7 +419,7 @@ func (c *cli) runCmd(args []string) int {
 		defer cancel()
 
 		_, err = config.BootstrapConfig(ctx, buildRunBootstrapArgs(
-			stateLayout.ConfigPath,
+			stateLayout.StateRoot,
 			*controlplane,
 			*envID,
 			resolvedBootstrapTicket,
@@ -475,10 +452,6 @@ func (c *cli) runCmd(args []string) int {
 			return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to load config: %v", err))
 		}
 	}
-	if err := config.WriteScopeMetadataForConfig(stateLayout, cfg); err != nil {
-		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to update scope metadata: %v", err))
-	}
-
 	remoteErr := cfg.ValidateRemoteStrict()
 	remoteEnabled := remoteErr == nil
 
@@ -620,36 +593,15 @@ func (c *cli) runCmd(args []string) int {
 	return 0
 }
 
-func validateStateLayoutSelection(configPath string, stateRoot string) error {
-	cleanPath := strings.TrimSpace(configPath)
-	if cleanPath == "" {
-		return nil
-	}
-	if strings.TrimSpace(stateRoot) != "" {
-		return errors.New("`--config-path` cannot be combined with `--state-root`")
-	}
-	return nil
-}
-
 func resolveBootstrapTargetLayout(
-	configPath string,
 	stateRoot string,
 ) (config.StateLayout, error) {
-	cleanPath := strings.TrimSpace(configPath)
-	if cleanPath != "" {
-		return config.StateLayoutForConfigPath(cleanPath)
-	}
 	return config.LocalEnvironmentStateLayout(stateRoot)
 }
 
 func resolveRunStateLayout(
-	configPath string,
 	stateRoot string,
 ) (config.StateLayout, error) {
-	cleanPath := strings.TrimSpace(configPath)
-	if cleanPath != "" {
-		return config.StateLayoutForConfigPath(cleanPath)
-	}
 	return config.LocalEnvironmentStateLayout(stateRoot)
 }
 
@@ -658,7 +610,7 @@ func (c *cli) printRunStateLayoutGuidance(reason error) int {
 		writeErrorWithHelp(
 			c.stderr,
 			fmt.Sprintf("failed to resolve runtime state layout: %v", reason),
-			[]string{"Hint: export HOME before running `redeven run`, or pass --config-path <path>."},
+			[]string{"Hint: export HOME before running `redeven run`, or pass --state-root <path>."},
 			runHelpText(),
 		)
 		return 1
@@ -668,7 +620,7 @@ func (c *cli) printRunStateLayoutGuidance(reason error) int {
 }
 
 func buildRunBootstrapArgs(
-	configPath string,
+	stateRoot string,
 	controlplane string,
 	envID string,
 	bootstrapTicket string,
@@ -682,7 +634,7 @@ func buildRunBootstrapArgs(
 		EnvironmentID:          envID,
 		BootstrapTicket:        bootstrapTicket,
 		RuntimeVersion:         runtimeVersion,
-		ConfigPath:             configPath,
+		StateRoot:              stateRoot,
 		PermissionPolicyPreset: permissionPolicy,
 	}
 	if mode == runModeDesktop && desktopManaged {

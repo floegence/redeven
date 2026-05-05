@@ -8,11 +8,6 @@ import (
 	"time"
 )
 
-type environmentCatalogScope struct {
-	Kind string `json:"kind"`
-	Name string `json:"name,omitempty"`
-}
-
 type environmentCatalogProviderBinding struct {
 	ProviderOrigin         string `json:"provider_origin"`
 	ProviderID             string `json:"provider_id"`
@@ -32,10 +27,6 @@ type environmentCatalogFile struct {
 	LastUsedAtMS  int64  `json:"last_used_at_ms"`
 	PreferredOpen string `json:"preferred_open_route,omitempty"`
 	LocalHosting  struct {
-		Scope environmentCatalogScope `json:"scope"`
-		// ScopeKey and StateDir are kept explicit so Desktop does not have to
-		// reconstruct host ownership or custom config-path layouts heuristically.
-		ScopeKey string `json:"scope_key"`
 		StateDir string `json:"state_dir"`
 		Owner    string `json:"owner"`
 		Access   struct {
@@ -115,11 +106,6 @@ func bindingForConfig(cfg *Config) (*catalogEnvironmentBinding, error) {
 	}, nil
 }
 
-func catalogScopeForLayout(layout StateLayout) environmentCatalogScope {
-	_ = layout
-	return environmentCatalogScope{Kind: string(ScopeKindLocalEnvironment), Name: DefaultLocalEnvironmentScopeName}
-}
-
 func WriteEnvironmentCatalogRecord(layout StateLayout, cfg *Config, localUIBind string, passwordConfigured bool) error {
 	catalogRoot, err := catalogRootForLayout(layout)
 	if err != nil {
@@ -140,7 +126,7 @@ func WriteEnvironmentCatalogRecord(layout StateLayout, cfg *Config, localUIBind 
 	record := environmentCatalogFile{
 		SchemaVersion: 1,
 		RecordKind:    "local_environment",
-		ID:            DefaultLocalEnvironmentScopeName,
+		ID:            DefaultLocalEnvironmentID,
 		Label:         defaultCatalogEnvironmentLabel(layout),
 		Pinned:        false,
 		CreatedAtMS:   now,
@@ -173,8 +159,6 @@ func WriteEnvironmentCatalogRecord(layout StateLayout, cfg *Config, localUIBind 
 		}
 	}
 
-	record.LocalHosting.Scope = catalogScopeForLayout(layout)
-	record.LocalHosting.ScopeKey = strings.TrimSpace(layout.ScopeKey)
 	record.LocalHosting.StateDir = strings.TrimSpace(layout.StateDir)
 	record.LocalHosting.Owner = "agent"
 	record.LocalHosting.Access.LocalUIBind = strings.TrimSpace(localUIBind)

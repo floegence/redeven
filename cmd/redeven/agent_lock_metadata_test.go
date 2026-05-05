@@ -22,7 +22,6 @@ func TestWriteAndReadAgentLockMetadata(t *testing.T) {
 		true,
 		true,
 		config.StateLayout{
-			ScopeKey:         "local_environment",
 			ConfigPath:       "/Users/tester/.redeven/local-environment/config.json",
 			RuntimeStatePath: "/Users/tester/.redeven/local-environment/runtime/local-ui.json",
 		},
@@ -40,9 +39,6 @@ func TestWriteAndReadAgentLockMetadata(t *testing.T) {
 	}
 	if got.Mode != "desktop" || !got.DesktopManaged || !got.LocalUIEnabled {
 		t.Fatalf("unexpected metadata: %#v", got)
-	}
-	if got.ScopeKey != "local_environment" {
-		t.Fatalf("ScopeKey = %q", got.ScopeKey)
 	}
 	if got.ConfigPath != "/Users/tester/.redeven/local-environment/config.json" {
 		t.Fatalf("ConfigPath = %q", got.ConfigPath)

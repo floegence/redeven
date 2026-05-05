@@ -2,12 +2,11 @@ package config
 
 import (
 	"errors"
-	"os"
 	"path/filepath"
 	"testing"
 )
 
-func TestDefaultStateLayoutUsesLocalEnvironmentScope(t *testing.T) {
+func TestDefaultStateLayoutUsesSingleLocalEnvironment(t *testing.T) {
 	restoreHome := stubUserHomeDir("/Users/tester", nil)
 	restoreEnv := stubLookupEnv("", false)
 	defer restoreHome()
@@ -18,18 +17,19 @@ func TestDefaultStateLayoutUsesLocalEnvironmentScope(t *testing.T) {
 		t.Fatalf("DefaultStateLayout() error = %v", err)
 	}
 
-	wantStateDir := filepath.Clean("/Users/tester/.redeven/local-environment")
-	if layout.StateRoot != filepath.Clean("/Users/tester/.redeven") {
+	wantStateRoot := filepath.Clean("/Users/tester/.redeven")
+	wantStateDir := filepath.Join(wantStateRoot, "local-environment")
+	if layout.StateRoot != wantStateRoot {
 		t.Fatalf("StateRoot = %q", layout.StateRoot)
-	}
-	if layout.ScopeKey != "local_environment" {
-		t.Fatalf("ScopeKey = %q", layout.ScopeKey)
-	}
-	if layout.Scope.Kind != ScopeKindLocalEnvironment {
-		t.Fatalf("Scope.Kind = %q", layout.Scope.Kind)
 	}
 	if layout.ConfigPath != filepath.Join(wantStateDir, "config.json") {
 		t.Fatalf("ConfigPath = %q", layout.ConfigPath)
+	}
+	if layout.SecretsPath != filepath.Join(wantStateDir, "secrets.json") {
+		t.Fatalf("SecretsPath = %q", layout.SecretsPath)
+	}
+	if layout.LockPath != filepath.Join(wantStateDir, "agent.lock") {
+		t.Fatalf("LockPath = %q", layout.LockPath)
 	}
 	if layout.StateDir != wantStateDir {
 		t.Fatalf("StateDir = %q", layout.StateDir)
@@ -40,8 +40,14 @@ func TestDefaultStateLayoutUsesLocalEnvironmentScope(t *testing.T) {
 	if layout.DiagnosticsDir != filepath.Join(wantStateDir, "diagnostics") {
 		t.Fatalf("DiagnosticsDir = %q", layout.DiagnosticsDir)
 	}
-	if layout.ScopeMetadataPath != filepath.Join(wantStateDir, "scope.json") {
-		t.Fatalf("ScopeMetadataPath = %q", layout.ScopeMetadataPath)
+	if layout.AuditDir != filepath.Join(wantStateDir, "audit") {
+		t.Fatalf("AuditDir = %q", layout.AuditDir)
+	}
+	if layout.AppsDir != filepath.Join(wantStateDir, "apps") {
+		t.Fatalf("AppsDir = %q", layout.AppsDir)
+	}
+	if layout.GatewayDir != filepath.Join(wantStateDir, "gateway") {
+		t.Fatalf("GatewayDir = %q", layout.GatewayDir)
 	}
 }
 
@@ -60,59 +66,19 @@ func TestResolveStateRootUsesEnvOverride(t *testing.T) {
 	}
 }
 
-func TestParseScopeRefSupportsLocalEnvironmentOnly(t *testing.T) {
-	got, err := ParseScopeRef("local_environment")
+func TestLocalEnvironmentStateLayoutUsesStateRootOverride(t *testing.T) {
+	layout, err := LocalEnvironmentStateLayout("/tmp/redeven-profile")
 	if err != nil {
-		t.Fatalf("ParseScopeRef() error = %v", err)
-	}
-	if got != (ScopeRef{Kind: ScopeKindLocalEnvironment, Name: DefaultLocalEnvironmentScopeName}) {
-		t.Fatalf("ParseScopeRef() = %#v", got)
+		t.Fatalf("LocalEnvironmentStateLayout() error = %v", err)
 	}
 
-	if _, err := ParseScopeRef("named/dev-a"); err == nil {
-		t.Fatalf("ParseScopeRef(named/dev-a) error = nil, want error")
+	wantStateRoot := filepath.Clean("/tmp/redeven-profile")
+	wantStateDir := filepath.Join(wantStateRoot, "local-environment")
+	if layout.StateRoot != wantStateRoot {
+		t.Fatalf("StateRoot = %q", layout.StateRoot)
 	}
-}
-
-func TestStateLayoutForConfigPathNormalizesRelativePath(t *testing.T) {
-	wd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd() error = %v", err)
-	}
-	tmpDir := t.TempDir()
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatalf("Chdir() error = %v", err)
-	}
-	defer func() {
-		if chdirErr := os.Chdir(wd); chdirErr != nil {
-			t.Fatalf("restore cwd: %v", chdirErr)
-		}
-	}()
-
-	layout, err := StateLayoutForConfigPath(filepath.Join(".", "nested", "..", "state", "config.json"))
-	if err != nil {
-		t.Fatalf("StateLayoutForConfigPath() error = %v", err)
-	}
-
-	expectedConfigPath, err := filepath.Abs(filepath.Join(".", "state", "config.json"))
-	if err != nil {
-		t.Fatalf("Abs() error = %v", err)
-	}
-	if layout.ConfigPath != expectedConfigPath {
-		t.Fatalf("ConfigPath = %q, want %q", layout.ConfigPath, expectedConfigPath)
-	}
-	expectedStateDir := filepath.Dir(expectedConfigPath)
-	if layout.StateDir != expectedStateDir {
-		t.Fatalf("StateDir = %q", layout.StateDir)
-	}
-	if layout.ScopeDir != expectedStateDir {
-		t.Fatalf("ScopeDir = %q", layout.ScopeDir)
-	}
-	if layout.RuntimeStatePath != filepath.Join(expectedStateDir, "runtime", "local-ui.json") {
-		t.Fatalf("RuntimeStatePath = %q", layout.RuntimeStatePath)
-	}
-	if layout.ScopeMetadataPath != filepath.Join(expectedStateDir, "scope.json") {
-		t.Fatalf("ScopeMetadataPath = %q", layout.ScopeMetadataPath)
+	if layout.ConfigPath != filepath.Join(wantStateDir, "config.json") {
+		t.Fatalf("ConfigPath = %q", layout.ConfigPath)
 	}
 }
 
