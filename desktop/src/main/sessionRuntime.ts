@@ -1,6 +1,6 @@
 import type { ManagedRuntime } from './runtimeProcess';
 import type { StartupReport } from './startup';
-import type { DesktopManagedEnvironmentLocalOwner } from '../shared/desktopManagedEnvironment';
+import type { DesktopLocalEnvironmentOwner } from '../shared/desktopLocalEnvironmentState';
 
 export type DesktopSessionRuntimeKind = 'managed_environment' | 'ssh';
 export type DesktopSessionRuntimeLifecycleOwner = 'desktop' | 'external';
@@ -21,7 +21,7 @@ export function resolveManagedRuntimeLifecycleOwner(
   startup: StartupReport,
   options: Readonly<{
     attached: boolean;
-    persistedOwner?: DesktopManagedEnvironmentLocalOwner;
+    persistedOwner?: DesktopLocalEnvironmentOwner;
   }>,
 ): DesktopSessionRuntimeLifecycleOwner {
   if (!options.attached) {
@@ -39,7 +39,7 @@ export function resolveManagedRuntimeLifecycleOwner(
 export function desktopSessionRuntimeHandleFromManagedRuntime(
   runtime: ManagedRuntime,
   options: Readonly<{
-    persistedOwner?: DesktopManagedEnvironmentLocalOwner;
+    persistedOwner?: DesktopLocalEnvironmentOwner;
   }> = {},
 ): DesktopSessionRuntimeHandle {
   const lifecycleOwner = resolveManagedRuntimeLifecycleOwner(runtime.startup, {

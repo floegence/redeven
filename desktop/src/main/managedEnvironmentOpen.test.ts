@@ -31,38 +31,31 @@ describe('managedEnvironmentOpen', () => {
     });
   });
 
-  it('opens remote desktop for control-plane environments that are not hosted on this device', () => {
-    const environment = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
-      localHosting: false,
-    });
+  it('uses local host for provider-local projections when a bootstrap ticket is available', () => {
+    const environment = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo');
 
     expect(resolveManagedEnvironmentOpenTarget(environment, {
       bootstrap_ticket: 'ticket-123',
       remote_session_url: 'https://env.example.invalid/_redeven_boot/#redeven=abc',
     })).toEqual({
-      route: 'remote_desktop',
-      remote_session_url: 'https://env.example.invalid/_redeven_boot/#redeven=abc',
+      route: 'local_host',
+      bootstrap_ticket: 'ticket-123',
     });
   });
 
-  it('rejects explicit local opens for environments that are not hosted on this device', () => {
-    const environment = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
-      localHosting: false,
-    });
+  it('rejects explicit local opens when the provider did not return a bootstrap ticket', () => {
+    const environment = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo');
 
     expect(() => resolveManagedEnvironmentOpenTarget(environment, {
-      bootstrap_ticket: 'ticket-123',
       remote_session_url: 'https://env.example.invalid/_redeven_boot/#redeven=abc',
-    }, 'local_host')).toThrow('This environment is not hosted on this device.');
+    }, 'local_host')).toThrow('Desktop could not obtain a local host bootstrap ticket for this environment.');
   });
 
-  it('fails instead of silently local-starting an unhosted environment when remote desktop is unavailable', () => {
-    const environment = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
-      localHosting: false,
-    });
+  it('fails instead of silently remote-opening when neither route has credentials', () => {
+    const environment = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo');
 
-    expect(() => resolveManagedEnvironmentOpenTarget(environment, {
-      bootstrap_ticket: 'ticket-123',
-    })).toThrow('Remote desktop access is unavailable for this environment.');
+    expect(() => resolveManagedEnvironmentOpenTarget(environment, {})).toThrow(
+      'Desktop could not obtain a local host bootstrap ticket for this environment.',
+    );
   });
 });

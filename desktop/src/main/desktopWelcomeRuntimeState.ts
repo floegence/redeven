@@ -5,9 +5,9 @@ import type { StartupReport } from './startup';
 import type { DesktopPreferences } from './desktopPreferences';
 import type { DesktopSessionSummary } from './desktopTarget';
 import type {
-  DesktopManagedEnvironment,
-  DesktopManagedEnvironmentRuntimeState,
-} from '../shared/desktopManagedEnvironment';
+  DesktopLocalEnvironmentState,
+  DesktopLocalEnvironmentRuntimeState,
+} from '../shared/desktopLocalEnvironmentState';
 import { normalizeRuntimeServiceSnapshot, type RuntimeServiceOwner } from '../shared/runtimeService';
 
 const DEFAULT_WELCOME_RUNTIME_PROBE_TIMEOUT_MS = 200;
@@ -21,7 +21,7 @@ function runtimeStateFromStartup(
   desktopManaged: boolean,
   localUIURLOverride?: string,
   serviceOwner?: RuntimeServiceOwner,
-): DesktopManagedEnvironmentRuntimeState | undefined {
+): DesktopLocalEnvironmentRuntimeState | undefined {
   const localUIURL = compact(localUIURLOverride) || compact(startup.local_ui_url);
   if (localUIURL === '') {
     return undefined;
@@ -61,7 +61,7 @@ function localManagedSessionByEnvironmentID(
 
 function currentRuntimeFromLocalSession(
   session: DesktopSessionSummary | null | undefined,
-): DesktopManagedEnvironmentRuntimeState | undefined {
+): DesktopLocalEnvironmentRuntimeState | undefined {
   if (
     !session
     || session.target.kind !== 'managed_environment'
@@ -81,7 +81,7 @@ function currentRuntimeFromLocalSession(
 async function currentRuntimeFromProbeStateDir(
   stateDir: string,
   probeTimeoutMs: number,
-): Promise<DesktopManagedEnvironmentRuntimeState | undefined> {
+): Promise<DesktopLocalEnvironmentRuntimeState | undefined> {
   const cleanStateDir = compact(stateDir);
   if (cleanStateDir === '') {
     return undefined;
@@ -97,16 +97,16 @@ async function currentRuntimeFromProbeStateDir(
 }
 
 async function currentRuntimeFromProbe(
-  environment: DesktopManagedEnvironment,
+  environment: DesktopLocalEnvironmentState,
   probeTimeoutMs: number,
-): Promise<DesktopManagedEnvironmentRuntimeState | undefined> {
+): Promise<DesktopLocalEnvironmentRuntimeState | undefined> {
   return currentRuntimeFromProbeStateDir(environment.local_hosting?.state_dir ?? '', probeTimeoutMs);
 }
 
 function withCurrentRuntime(
-  environment: DesktopManagedEnvironment,
-  currentRuntime: DesktopManagedEnvironmentRuntimeState | undefined,
-): DesktopManagedEnvironment {
+  environment: DesktopLocalEnvironmentState,
+  currentRuntime: DesktopLocalEnvironmentRuntimeState | undefined,
+): DesktopLocalEnvironmentState {
   if (!environment.local_hosting) {
     return environment;
   }
@@ -146,18 +146,11 @@ export async function hydrateWelcomeManagedEnvironmentRuntimeState(
 ): Promise<DesktopPreferences> {
   const probeTimeoutMs = options.probeTimeoutMs ?? DEFAULT_WELCOME_RUNTIME_PROBE_TIMEOUT_MS;
   const localSessionsByEnvironmentID = localManagedSessionByEnvironmentID(openSessions);
-  const nextManagedEnvironments = await Promise.all(
-    preferences.managed_environments.map(async (environment) => {
-      if (!environment.local_hosting) {
-        return environment;
-      }
-      const currentRuntime = currentRuntimeFromLocalSession(localSessionsByEnvironmentID.get(environment.id))
-        ?? await currentRuntimeFromProbe(environment, probeTimeoutMs);
-      return withCurrentRuntime(environment, currentRuntime);
-    }),
-  );
+  const localEnvironment = preferences.local_environment;
+  const currentRuntime = currentRuntimeFromLocalSession(localSessionsByEnvironmentID.get(localEnvironment.id))
+    ?? await currentRuntimeFromProbe(localEnvironment, probeTimeoutMs);
   return {
     ...preferences,
-    managed_environments: nextManagedEnvironments,
+    local_environment: withCurrentRuntime(localEnvironment, currentRuntime),
   };
 }
