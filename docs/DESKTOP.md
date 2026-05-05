@@ -308,7 +308,7 @@ duplicating as a low-value fact row.
     - the launcher keeps a dedicated guidance-session state per active blocked environment, so a refresh can stay in context and either show `Runtime is still offline`, render an inline failure, or dismiss itself once `Open` becomes available
     - the launcher also scopes busy state to the affected environment or control plane, so unrelated cards do not inherit disabled/loading affordances during another card's action
     - or a simple unavailable tooltip when Desktop cannot offer a direct local recovery path
-  - the Local Environment, provider environments linked to the Local Environment, and SSH Host entries expose `Start runtime` / `Stop runtime` plus `Refresh runtime status` from the adjacent runtime menu
+  - the Local Environment, the provider Environment currently linked to that profile, and SSH Host entries expose `Start runtime` / `Stop runtime` plus `Refresh runtime status` from the adjacent runtime menu
 - provider environments keep route selection explicit in the same menu, including `Open remotely`
   - remote-only provider and Redeven URL entries treat runtime control as observe-only and expose `Refresh runtime status` from the runtime menu
 - Runtime health probing uses dedicated contracts instead of route/access inference:
@@ -322,7 +322,7 @@ duplicating as a low-value fact row.
 - Environment cards stay concise:
   - card bodies avoid explanatory helper prose under the actions
   - only concrete identifiers, runtime details, badges, explicit `None` placeholders, and notices stay visible inside the card
-- Provider environments keep their Local Environment link visible even when the source provider environment is offline or later removed.
+- Provider Environment cards keep the current Local Environment link target visible even when the source provider environment is offline or later removed.
 - Direct Redeven URL cards surface whether the target is a saved record, a recent record, or an open window, and whether it points at this device, a LAN host, or a remote host.
 - Direct SSH Host cards keep their type-specific bootstrap facts and forwarded endpoints visible.
 - Deleting an Environment Library entry is a first-class action:

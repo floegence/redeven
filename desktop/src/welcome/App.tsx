@@ -4194,7 +4194,7 @@ function controlPlaneLocalHostCountTooltipContent(
     <ControlPlaneMetricTooltipContent
       title="Published environments that Desktop can host locally on this Mac."
       description={stats.local_host_count > 0
-        ? 'Local Hosts counts environments from this provider that can open as local desktop hosts on this device.'
+        ? 'Local Hosts counts provider environments that can be linked to this Local Environment profile and opened locally.'
         : 'This provider has not exposed any published environments for local hosting on this Mac yet.'}
       status={status}
     />
@@ -4611,7 +4611,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Access &amp; Security</div>
-            <div class="mt-1 text-sm text-foreground">This device keeps one Local Environment runtime profile for the current binding.</div>
+            <div class="mt-1 text-sm text-foreground">This Redeven profile keeps one Local Environment runtime for the current binding.</div>
           </div>
           <div class="flex flex-wrap items-center gap-1.5">
             <Tag variant={passwordStateTagVariant(accessModel().password_state_tone)} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
