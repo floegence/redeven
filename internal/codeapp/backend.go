@@ -263,22 +263,6 @@ func (s *Service) SelectCodeRuntimeVersion(ctx context.Context, version string) 
 	return gateway.CodeRuntimeStatus(status), err
 }
 
-func (s *Service) SetCodeRuntimeDefaultVersion(ctx context.Context, version string) (gateway.CodeRuntimeStatus, error) {
-	if s == nil || s.runtime == nil {
-		return gateway.CodeRuntimeStatus{}, errors.New("code runtime not ready")
-	}
-	status, err := s.runtime.SetLocalEnvironmentDefaultVersion(ctx, version)
-	return gateway.CodeRuntimeStatus(status), err
-}
-
-func (s *Service) RemoveCodeRuntimeSelection(ctx context.Context) (gateway.CodeRuntimeStatus, error) {
-	if s == nil || s.runtime == nil {
-		return gateway.CodeRuntimeStatus{}, errors.New("code runtime not ready")
-	}
-	status, err := s.runtime.RemoveEnvironmentSelection(ctx)
-	return gateway.CodeRuntimeStatus(status), err
-}
-
 func (s *Service) RemoveCodeRuntimeVersion(ctx context.Context, version string) (gateway.CodeRuntimeStatus, error) {
 	if s == nil || s.runtime == nil {
 		return gateway.CodeRuntimeStatus{}, errors.New("code runtime not ready")

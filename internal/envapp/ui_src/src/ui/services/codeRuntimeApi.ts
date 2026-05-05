@@ -19,9 +19,7 @@ export type CodeRuntimeInstalledVersion = Readonly<{
   version: string;
   binary_path?: string;
   installed_at_unix_ms?: number;
-  selection_count: number;
-  selected_by_current_environment?: boolean;
-  default_for_new_environments?: boolean;
+  selected_by_local_environment?: boolean;
   removable?: boolean;
   detection_state: CodeRuntimeDetectionState;
   error_message?: string;
@@ -44,9 +42,8 @@ export type CodeRuntimeStatus = Readonly<{
   managed_runtime: CodeRuntimeTargetStatus;
   managed_prefix: string;
   shared_runtime_root: string;
-  environment_selection_version?: string;
-  environment_selection_source: 'environment' | 'local_environment_default' | 'none';
-  local_environment_default_version?: string;
+  managed_runtime_version?: string;
+  managed_runtime_source: 'managed' | 'none';
   installed_versions: CodeRuntimeInstalledVersion[];
   installer_script_url: string;
   operation: CodeRuntimeOperationStatus;
@@ -66,17 +63,6 @@ export async function selectCodeRuntimeVersion(version: string): Promise<CodeRun
     method: 'POST',
     body: JSON.stringify({ version }),
   });
-}
-
-export async function setCodeRuntimeDefaultVersion(version: string): Promise<CodeRuntimeStatus> {
-  return fetchGatewayJSON<CodeRuntimeStatus>('/_redeven_proxy/api/code-runtime/default', {
-    method: 'POST',
-    body: JSON.stringify({ version }),
-  });
-}
-
-export async function detachCodeRuntimeSelection(): Promise<CodeRuntimeStatus> {
-  return fetchGatewayJSON<CodeRuntimeStatus>('/_redeven_proxy/api/code-runtime/detach', { method: 'POST' });
 }
 
 export async function removeCodeRuntimeVersion(version: string): Promise<CodeRuntimeStatus> {
@@ -128,8 +114,8 @@ export function codeRuntimeManagedRuntimeSelected(status: CodeRuntimeStatus | nu
 }
 
 export function codeRuntimeManagedActionLabel(status: CodeRuntimeStatus | null | undefined): string {
-  if (!codeRuntimeManagedInstalled(status)) return 'Install and use for this environment';
-  return 'Install latest and use for this environment';
+  if (!codeRuntimeManagedInstalled(status)) return 'Install and use for this Local Environment';
+  return 'Install latest and use for this Local Environment';
 }
 
 export function codeRuntimeStageLabel(stage: string | null | undefined, action?: string | null | undefined): string {

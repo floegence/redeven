@@ -220,7 +220,7 @@ Interaction rules:
 
 - Cold launch never auto-opens a remembered target.
 - Environment choice is always a launcher action, never a side effect of saving settings.
-- The Local Environment is one protected first-class card instead of multiple local environment entries.
+- The Local Environment is one protected first-class card for the current OS user / Redeven profile state root.
 - `Environment Settings` opens or focuses the launcher, then presents a modal dialog inside that same window for the selected Local Environment or provider Environment card.
 - The `Add` action opens a dialog that can either connect immediately or save a new Environment into the library.
 - `New Environment` is a two-mode dialog:
@@ -337,7 +337,7 @@ duplicating as a low-value fact row.
 - Recent remote Environments stay one click away after a successful connection.
 - Saved remote Environments render in a card grid and can be opened, edited, saved, or deleted inline.
 - Saved SSH Host environments render in that same card grid, with the SSH host (`destination[:port]`) and forwarded Local UI both exposed through the Endpoint copy rows.
-- Saved Providers render in a separate tab with compact provider-level reconnect/refresh/delete shelves and no nested per-environment card grid.
+- Saved Providers render in a separate tab with compact provider-level reconnect/refresh/delete shelves and no nested environment card grid.
 - Provider shelves show the Desktop display label as the primary title while still surfacing the provider product name, origin, published environment count, unified-catalog count, and local-host count.
 - Dense repeated controls use compact visible labels such as `Open`, `Focus`, `Add`, and `Save`; hover and accessibility metadata keep the full descriptive meaning.
 - Field-validation errors stay inline inside the active launcher dialog, while transient launcher/open failures render as toasts instead of entering page flow.
@@ -503,7 +503,7 @@ Desktop supports compatible first-party and third-party control planes through o
 - desktop token revoke: `POST /api/rcpp/v1/desktop/token/revoke`
 - desktop account lookup: `GET /api/rcpp/v1/me`
 - provider environment list: `GET /api/rcpp/v1/environments`
-- per-environment open session: `POST /api/rcpp/v1/environments/:env_public_id/desktop/open-session`
+- provider Environment open session: `POST /api/rcpp/v1/environments/:env_public_id/desktop/open-session`
 - runtime bootstrap exchange: `POST /api/rcpp/v1/runtime/bootstrap/exchange`
 
 Canonical provider references in `redeven-portal`:
@@ -530,7 +530,7 @@ The Control Plane flow is:
 6. Desktop loads `me` and `environments` with the access token.
 7. Desktop stores the provider catalog in `control_planes[*].environments` and reconciles it into first-class `provider_environments` records.
 8. Desktop refreshes access tokens on demand with the stored refresh token.
-9. Desktop requests a per-environment open session only when it opens a specific provider environment or needs bootstrap data to link that provider Environment to the Local Environment.
+9. Desktop requests a provider Environment open session only when it opens a specific provider environment or needs bootstrap data to link that provider Environment to the Local Environment.
 10. For a remote provider card, Desktop opens the returned `remote_session_url` directly without persisting a remote-only Local Environment state first.
     - The top-level remote session page may in turn host the Env App inside a same-origin boot iframe.
     - Embedded same-origin Env App documents must still inherit the desktop shell bridges and window-chrome contract from the owning session window, so titlebar safe areas, theme state, and environment-scoped renderer storage stay identical to direct desktop-hosted sessions.

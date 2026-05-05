@@ -38,16 +38,13 @@ func TestWriteEnvironmentCatalogRecordWritesLocalEnvironmentProviderBinding(t *t
 		t.Fatalf("WriteEnvironmentCatalogRecord() error = %v", err)
 	}
 
-	recordPath := filepath.Join(stateRoot, "catalog", "environments", sanitizeStateScopeID("local")+".json")
+	recordPath := filepath.Join(stateRoot, "catalog", "local-environment.json")
 	record := readCatalogEnvironmentFile(t, recordPath)
+	if record.RecordKind != "local_environment" {
+		t.Fatalf("RecordKind = %q", record.RecordKind)
+	}
 	if record.ID != "local" {
 		t.Fatalf("ID = %q", record.ID)
-	}
-	if record.Identity.Kind != "provider" {
-		t.Fatalf("Identity.Kind = %q", record.Identity.Kind)
-	}
-	if record.Identity.ProviderOrigin != "https://dev.redeven.test" {
-		t.Fatalf("Identity.ProviderOrigin = %q", record.Identity.ProviderOrigin)
 	}
 	if record.LocalHosting.Scope.Kind != string(ScopeKindLocalEnvironment) {
 		t.Fatalf("LocalHosting.Scope.Kind = %q", record.LocalHosting.Scope.Kind)
@@ -67,14 +64,20 @@ func TestWriteEnvironmentCatalogRecordWritesLocalEnvironmentProviderBinding(t *t
 	if !record.LocalHosting.Access.LocalUIPasswordConfigured {
 		t.Fatalf("LocalHosting.Access.LocalUIPasswordConfigured = false, want true")
 	}
-	if record.ProviderBinding == nil {
-		t.Fatalf("ProviderBinding = nil")
+	if record.CurrentProviderBinding == nil {
+		t.Fatalf("CurrentProviderBinding = nil")
 	}
-	if record.ProviderBinding.ProviderID != "redeven_portal" {
-		t.Fatalf("ProviderBinding.ProviderID = %q", record.ProviderBinding.ProviderID)
+	if record.CurrentProviderBinding.ProviderOrigin != "https://dev.redeven.test" {
+		t.Fatalf("CurrentProviderBinding.ProviderOrigin = %q", record.CurrentProviderBinding.ProviderOrigin)
 	}
-	if record.ProviderBinding.EnvPublicID != "env_demo" {
-		t.Fatalf("ProviderBinding.EnvPublicID = %q", record.ProviderBinding.EnvPublicID)
+	if record.CurrentProviderBinding.ProviderID != "redeven_portal" {
+		t.Fatalf("CurrentProviderBinding.ProviderID = %q", record.CurrentProviderBinding.ProviderID)
+	}
+	if record.CurrentProviderBinding.EnvPublicID != "env_demo" {
+		t.Fatalf("CurrentProviderBinding.EnvPublicID = %q", record.CurrentProviderBinding.EnvPublicID)
+	}
+	if _, err := os.Stat(filepath.Join(stateRoot, "catalog", "environments")); !os.IsNotExist(err) {
+		t.Fatalf("unexpected extra catalog directory, err=%v", err)
 	}
 }
 
@@ -95,13 +98,13 @@ func TestWriteEnvironmentCatalogRecordKeepsLocalIdentityWithoutProviderID(t *tes
 		t.Fatalf("WriteEnvironmentCatalogRecord() error = %v", err)
 	}
 
-	recordPath := filepath.Join(stateRoot, "catalog", "environments", sanitizeStateScopeID("local")+".json")
+	recordPath := filepath.Join(stateRoot, "catalog", "local-environment.json")
 	record := readCatalogEnvironmentFile(t, recordPath)
-	if record.Identity.Kind != "local_environment" {
-		t.Fatalf("Identity.Kind = %q", record.Identity.Kind)
+	if record.RecordKind != "local_environment" {
+		t.Fatalf("RecordKind = %q", record.RecordKind)
 	}
-	if record.ProviderBinding != nil {
-		t.Fatalf("ProviderBinding = %#v, want nil", record.ProviderBinding)
+	if record.CurrentProviderBinding != nil {
+		t.Fatalf("CurrentProviderBinding = %#v, want nil", record.CurrentProviderBinding)
 	}
 }
 
@@ -112,13 +115,13 @@ func TestWriteEnvironmentCatalogRecordReusesExistingLocalEnvironmentRecordProper
 		t.Fatalf("LocalEnvironmentStateLayout() error = %v", err)
 	}
 
-	recordPath := filepath.Join(stateRoot, "catalog", "environments", sanitizeStateScopeID("local")+".json")
+	recordPath := filepath.Join(stateRoot, "catalog", "local-environment.json")
 	if err := os.MkdirAll(filepath.Dir(recordPath), 0o700); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
 	seed := environmentCatalogFile{
 		SchemaVersion: 1,
-		RecordKind:    "environment",
+		RecordKind:    "local_environment",
 		ID:            "local",
 		Label:         "Existing Local Environment",
 		Pinned:        true,
@@ -126,19 +129,7 @@ func TestWriteEnvironmentCatalogRecordReusesExistingLocalEnvironmentRecordProper
 		UpdatedAtMS:   456,
 		LastUsedAtMS:  789,
 		PreferredOpen: "remote_desktop",
-		Identity: environmentCatalogIdentity{
-			Kind:           "provider",
-			ProviderOrigin: "https://dev.redeven.test",
-			ProviderID:     "https__dev.redeven.test",
-			EnvPublicID:    "env_demo",
-		},
-		ProviderBinding: &struct {
-			ProviderOrigin         string `json:"provider_origin"`
-			ProviderID             string `json:"provider_id"`
-			EnvPublicID            string `json:"env_public_id"`
-			RemoteWebSupported     bool   `json:"remote_web_supported"`
-			RemoteDesktopSupported bool   `json:"remote_desktop_supported"`
-		}{
+		CurrentProviderBinding: &environmentCatalogProviderBinding{
 			ProviderOrigin:         "https://dev.redeven.test",
 			ProviderID:             "https__dev.redeven.test",
 			EnvPublicID:            "env_demo",

@@ -43,11 +43,9 @@ describe('main routing', () => {
     expect(mainSrc).toContain("case 'stop_environment_runtime':");
     expect(mainSrc).toContain("case 'refresh_environment_runtime':");
     expect(mainSrc).toContain("case 'refresh_all_environment_runtimes':");
-    expect(mainSrc).toContain("case 'upsert_local_environment':");
-    expect(mainSrc).toContain("case 'delete_local_environment':");
+    expect(mainSrc).toContain("case 'save_local_environment_settings':");
     expect(mainSrc).toContain("case 'focus_environment_window':");
     expect(mainSrc).toContain("case 'close_launcher_or_quit':");
-    expect(mainSrc).not.toContain("case 'return_to_current_environment':");
     expect(mainSrc).toContain("if (normalized.kind === 'connection_center') {");
     expect(mainSrc).toContain('await openAdvancedSettingsWindow();');
     expect(mainSrc).toContain("return openUtilityWindow('launcher', {");
@@ -119,15 +117,15 @@ describe('main routing', () => {
     expect(mainSrc).toContain('await rootWindow.loadURL(sessionRecord.entry_url);');
   });
 
-  it('protects the default local environment from deletion and reuses the single local record', () => {
+  it('saves Local Environment settings without exposing deletion or extra local records', () => {
     const mainSrc = readMainSource();
 
-    expect(mainSrc).toContain('Local Environment is always available in Desktop. Change its settings instead of deleting it.');
-    expect(mainSrc).toContain("|| 'local';");
+    expect(mainSrc).toContain('async function saveLocalEnvironmentSettingsFromWelcome(');
+    expect(mainSrc).toContain("case 'save_local_environment_settings':");
+    expect(mainSrc).toContain('updateLocalEnvironmentAccess(preferences, existing.id, access)');
     expect(mainSrc).toContain('findLocalEnvironmentLocalBindConflict(next, resolvedEnvironment.id)');
     expect(mainSrc).toContain("'action_invalid',");
     expect(mainSrc).toContain("'dialog',");
-    expect(mainSrc).toContain('protectedLocalEnvironmentDeleteFailure');
   });
 
   it('broadcasts launcher snapshots per utility window and keeps session child identities stable', () => {

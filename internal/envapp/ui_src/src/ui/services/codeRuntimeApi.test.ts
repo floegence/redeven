@@ -27,16 +27,13 @@ function makeStatus(state: CodeRuntimeStatus['operation']['state']): CodeRuntime
     },
     managed_prefix: '/Users/test/.redeven/local-environment/apps/code/runtime/managed',
     shared_runtime_root: '/Users/test/.redeven/shared/code-server/darwin-arm64',
-    environment_selection_version: '4.109.1',
-    environment_selection_source: 'environment',
-    local_environment_default_version: '4.109.1',
+    managed_runtime_version: '4.109.1',
+    managed_runtime_source: 'managed',
     installed_versions: [
       {
         version: '4.109.1',
         binary_path: '/Users/test/.redeven/shared/code-server/darwin-arm64/versions/4.109.1/bin/code-server',
-        selection_count: 1,
-        selected_by_current_environment: true,
-        default_for_new_environments: true,
+        selected_by_local_environment: true,
         removable: false,
         detection_state: 'ready',
       },
@@ -79,9 +76,9 @@ describe('codeRuntimeApi selectors', () => {
         present: false,
         source: 'managed',
       },
-      environment_selection_source: 'none',
-    })).toBe('Install and use for this environment');
+      managed_runtime_source: 'none',
+    })).toBe('Install and use for this Local Environment');
 
-    expect(codeRuntimeManagedActionLabel(makeStatus('idle'))).toBe('Install latest and use for this environment');
+    expect(codeRuntimeManagedActionLabel(makeStatus('idle'))).toBe('Install latest and use for this Local Environment');
   });
 });

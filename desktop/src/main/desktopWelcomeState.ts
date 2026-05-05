@@ -29,7 +29,6 @@ import {
   type DesktopSSHEnvironmentDetails,
 } from '../shared/desktopSSH';
 import {
-  isDefaultDesktopLocalEnvironmentState,
   localEnvironmentStateKind,
   localEnvironmentAccess,
   localEnvironmentName,
@@ -749,7 +748,7 @@ function buildLocalEnvironmentEntry(
       isOpening,
     }),
     can_edit: true,
-    can_delete: !isDefaultDesktopLocalEnvironmentState(environment),
+    can_delete: false,
     can_save: false,
     last_used_at_ms: environment.last_used_at_ms,
   };

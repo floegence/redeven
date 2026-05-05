@@ -79,8 +79,6 @@ type Backend interface {
 	CodeRuntimeStatus(ctx context.Context) (CodeRuntimeStatus, error)
 	InstallCodeRuntime(ctx context.Context) (CodeRuntimeStatus, error)
 	SelectCodeRuntimeVersion(ctx context.Context, version string) (CodeRuntimeStatus, error)
-	SetCodeRuntimeDefaultVersion(ctx context.Context, version string) (CodeRuntimeStatus, error)
-	RemoveCodeRuntimeSelection(ctx context.Context) (CodeRuntimeStatus, error)
 	RemoveCodeRuntimeVersion(ctx context.Context, version string) (CodeRuntimeStatus, error)
 	CancelCodeRuntimeOperation(ctx context.Context) (CodeRuntimeStatus, error)
 }
@@ -1768,50 +1766,9 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		g.appendAudit(meta, "code_runtime_select", "success", map[string]any{
-			"version":          strings.TrimSpace(body.Version),
-			"selection_source": status.EnvironmentSelectionSource,
-			"source":           status.ActiveRuntime.Source,
-		}, nil)
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: status})
-		return
-
-	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/code-runtime/default":
-		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
-		if !ok {
-			return
-		}
-		var body CodeRuntimeVersionRequest
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid request body"})
-			return
-		}
-		status, err := g.backend.SetCodeRuntimeDefaultVersion(r.Context(), body.Version)
-		if err != nil {
-			g.appendAudit(meta, "code_runtime_set_default", "failure", map[string]any{"version": strings.TrimSpace(body.Version)}, err)
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
-			return
-		}
-		g.appendAudit(meta, "code_runtime_set_default", "success", map[string]any{
-			"version":                           strings.TrimSpace(body.Version),
-			"local_environment_default_version": status.LocalEnvironmentDefaultVersion,
-		}, nil)
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: status})
-		return
-
-	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/code-runtime/detach":
-		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
-		if !ok {
-			return
-		}
-		status, err := g.backend.RemoveCodeRuntimeSelection(r.Context())
-		if err != nil {
-			g.appendAudit(meta, "code_runtime_detach", "failure", nil, err)
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
-			return
-		}
-		g.appendAudit(meta, "code_runtime_detach", "success", map[string]any{
-			"selection_source": status.EnvironmentSelectionSource,
-			"source":           status.ActiveRuntime.Source,
+			"version":                strings.TrimSpace(body.Version),
+			"managed_runtime_source": status.ManagedRuntimeSource,
+			"source":                 status.ActiveRuntime.Source,
 		}, nil)
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: status})
 		return
