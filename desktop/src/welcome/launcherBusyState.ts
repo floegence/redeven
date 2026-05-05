@@ -20,7 +20,7 @@ export type BusyAction =
   | 'set_saved_ssh_environment_pinned'
   | 'delete_control_plane'
   | 'close_launcher_or_quit'
-  | 'upsert_local_environment'
+  | 'save_local_environment_settings'
   | 'save_settings'
   | 'save_environment'
   | 'delete_environment';
@@ -45,7 +45,14 @@ export function busyStateForLauncherRequest(
   request: DesktopLauncherActionRequest,
 ): DesktopLauncherBusyState {
   switch (request.kind) {
-    case 'upsert_local_environment':
+    case 'save_local_environment_settings':
+      return {
+        action: 'save_settings',
+        environment_id: '',
+        provider_origin: '',
+        provider_id: '',
+        progress: null,
+      };
     case 'upsert_saved_environment':
     case 'upsert_saved_ssh_environment':
       return {
@@ -55,7 +62,6 @@ export function busyStateForLauncherRequest(
         provider_id: '',
         progress: null,
       };
-    case 'delete_local_environment':
     case 'delete_saved_environment':
     case 'delete_saved_ssh_environment':
       return {

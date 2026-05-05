@@ -580,7 +580,7 @@ function runtimeRequirementLabel(status: CodeRuntimeStatus | null | undefined): 
   if (status.active_runtime.detection_state === "unusable") {
     return status.active_runtime.error_message || "Redeven detected a code-server runtime, but it is not usable for Codespaces on this host.";
   }
-  return "Redeven can install the latest stable code-server once for this Local Environment, then use it for the current environment.";
+  return "Redeven can install the latest stable code-server for this Local Environment, then select it.";
 }
 
 type CodeRuntimeBannerMode = "inline" | "floating";
@@ -694,7 +694,7 @@ function CodeRuntimeBanner(props: {
               <div>Detected path: <span class="font-mono break-all">{props.status?.active_runtime.binary_path}</span></div>
             </Show>
             <Show when={props.status?.managed_prefix}>
-              <div>Current environment link: <span class="font-mono break-all">{props.status?.managed_prefix}</span></div>
+              <div>Local Environment link: <span class="font-mono break-all">{props.status?.managed_prefix}</span></div>
             </Show>
             <Show when={props.status?.shared_runtime_root}>
               <div>Shared runtime root: <span class="font-mono break-all">{props.status?.shared_runtime_root}</span></div>
@@ -834,7 +834,7 @@ function CodeRuntimeInstallDialog(props: {
 
         <div class="grid gap-2 rounded-lg border border-border bg-muted/20 p-3 text-[11px] text-muted-foreground">
           <div>Shared runtime root: <span class="font-mono text-foreground break-all">{props.status?.shared_runtime_root ?? "-"}</span></div>
-          <div>Current environment link: <span class="font-mono text-foreground break-all">{props.status?.managed_prefix ?? "-"}</span></div>
+          <div>Local Environment link: <span class="font-mono text-foreground break-all">{props.status?.managed_prefix ?? "-"}</span></div>
           <div>Installer URL: <span class="font-mono text-foreground break-all">{props.status?.installer_script_url ?? "-"}</span></div>
           <Show when={props.pendingIntent}>
             <div>Pending action: <span class="text-foreground">{props.pendingIntent?.kind === "open" ? "Open codespace after install" : "Start codespace after install"}</span></div>
@@ -852,7 +852,7 @@ function CodeRuntimeInstallDialog(props: {
 
         <Show when={runtimeReady()}>
           <div class="rounded-lg border border-emerald-500/30 bg-emerald-500/[0.04] p-3 space-y-1">
-            <div class="text-sm font-medium text-foreground">Managed runtime is ready for this environment.</div>
+            <div class="text-sm font-medium text-foreground">Managed runtime is ready for this Local Environment.</div>
             <div class="text-xs text-muted-foreground">
               Binary path: <span class="font-mono text-foreground break-all">{props.status?.active_runtime.binary_path ?? "-"}</span>.
             </div>

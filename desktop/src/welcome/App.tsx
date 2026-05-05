@@ -760,13 +760,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       librarySourceFilter(),
     )
   ));
-  const deleteTargetIsManaged = createMemo(() => {
-    const target = deleteTarget();
-    if (!target) {
-      return false;
-    }
-    return target.kind === 'local_environment';
-  });
   const stopRuntimeSnapshot = createMemo<RuntimeServiceSnapshot | undefined>(() => (
     environmentRuntimeServiceSnapshot(stopRuntimeTarget())
   ));
@@ -2239,6 +2232,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (!target) {
       return;
     }
+    if (target.kind !== 'ssh_environment' && target.kind !== 'saved_environment') {
+      throw new Error('Unsupported delete target.');
+    }
     setBusyState({
       action: 'delete_environment',
       environment_id: target.id,
@@ -2248,20 +2244,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
     try {
       await props.runtime.launcher.performAction({
-        kind: target.kind === 'local_environment'
-          ? 'delete_local_environment'
-          : target.kind === 'ssh_environment'
-            ? 'delete_saved_ssh_environment'
-            : 'delete_saved_environment',
+        kind: target.kind === 'ssh_environment' ? 'delete_saved_ssh_environment' : 'delete_saved_environment',
         environment_id: target.id,
       });
       await refreshSnapshot();
       setDeleteTarget(null);
-      showActionToast(
-        target.kind === 'local_environment'
-          ? 'Environment removed from this device.'
-          : 'Connection removed from Environment Library.',
-      );
+      showActionToast('Connection removed from Environment Library.');
     } catch (error) {
       setErrorMessage('connect', getErrorMessage(error));
     } finally {
@@ -2442,32 +2430,18 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             setDeleteTarget(null);
           }
         }}
-        title={deleteTargetIsManaged() ? 'Delete Environment' : 'Delete Connection'}
-        confirmText={deleteTargetIsManaged() ? 'Delete Environment' : 'Delete Connection'}
+        title="Delete Connection"
+        confirmText="Delete Connection"
         variant="destructive"
         loading={busyStateMatchesAction(busyState(), 'delete_environment')}
         onConfirm={() => void deleteEnvironment()}
       >
         <div class="space-y-2">
           <p class="text-sm">
-            <Show
-              when={deleteTargetIsManaged()}
-              fallback={(
-                <>
-                  Remove <span class="font-semibold">{deleteTarget()?.label}</span> from the Environment Library?
-                </>
-              )}
-            >
-              Delete <span class="font-semibold">{deleteTarget()?.label}</span> from this device?
-            </Show>
+            Remove <span class="font-semibold">{deleteTarget()?.label}</span> from the Environment Library?
           </p>
           <p class="text-xs text-muted-foreground">
-            <Show
-              when={deleteTargetIsManaged()}
-              fallback={'This only removes the saved Desktop entry. It does not stop the remote Environment.'}
-            >
-              Desktop will remove the local managed state for this device. If this environment is bound to a provider, the remote environment will remain available there.
-            </Show>
+            This only removes the saved Desktop entry. It does not stop the remote Environment.
           </p>
         </div>
       </ConfirmDialog>
@@ -4008,7 +3982,7 @@ function EnvironmentConnectionCard(props: Readonly<{
           <Show when={props.environment.can_delete}>
             <DesktopTooltip content="Delete" placement="top">
               <ConsoleActionIconButton
-                title={props.environment.kind === 'local_environment' ? 'Delete environment' : 'Delete connection'}
+                title="Delete connection"
                 aria-label={`Delete ${props.environment.label}`}
                 danger
                 onClick={() => props.deleteEnvironment(props.environment)}

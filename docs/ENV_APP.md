@@ -416,8 +416,6 @@ The Env App UI manages local codespaces via the local runtime gateway API:
 - `GET /_redeven_proxy/api/code-runtime/status`
 - `POST /_redeven_proxy/api/code-runtime/install`
 - `POST /_redeven_proxy/api/code-runtime/select`
-- `POST /_redeven_proxy/api/code-runtime/default`
-- `POST /_redeven_proxy/api/code-runtime/detach`
 - `POST /_redeven_proxy/api/code-runtime/remove-version`
 - `POST /_redeven_proxy/api/code-runtime/cancel`
 
@@ -434,11 +432,11 @@ Notes:
 - If a codespace window is refreshed after the hash is cleared, it can request a fresh `entry_ticket` from the opener Env App via `postMessage` handshake.
 - If the desktop-opened browser window no longer has an opener, the trusted launcher still keeps `?env=` so the existing independent-open recovery flow can redirect back through Portal / Env App bootstrap when needed.
 - Codespaces cards also expose right-click `Ask Flower` and `Open in Terminal` actions. `Ask Flower` stays first to match the broader Env App handoff ordering, while `Open in Terminal` opens a terminal session rooted at `workspace_path`. The `Ask Flower` action sends that same `workspace_path` as directory context so the composer keeps the same folder-oriented prompt copy used by File Browser directory launches.
-- Codespaces does **not** auto-install `code-server`. When the runtime is missing or unusable, Env App shows an explicit install UI and waits for the user to click `Install and use for this environment` or `Install latest and use for this environment`.
+- Codespaces does **not** auto-install `code-server`. When the runtime is missing or unusable, Env App shows an explicit install UI and waits for the user to click `Install and use for this Local Environment` or `Install latest and use for this Local Environment`.
 - Runtime Settings -> `Codespaces & Tooling` also exposes a dedicated `code-server Runtime` management card. It separates steady runtime status from transient management activity:
   - when no usable runtime is available, Settings renders a compact installable state instead of a dense `Not detected` table dump,
-  - the steady state clearly separates `Current environment`, `Installed for this Local Environment`, and `Recent runtime operation`,
-  - users can reuse an installed version for the current environment, set the Local Environment default for new environments, remove only the current environment pin, or remove one Local Environment version when it is safe,
+  - the steady state clearly separates `Current Local Environment`, `Installed for this Local Environment`, and `Recent runtime operation`,
+  - users can reuse an installed version for the current Local Environment or remove one Local Environment version when it is not selected,
   - while install or Local Environment version removal is running, Settings switches to a focused operation panel with optional recent output,
   - after a successful install or Local Environment version removal, Settings returns to the normal steady state instead of leaving a persistent success audit block on screen,
   - failed or cancelled actions keep their recent output visible so the user can recover explicitly.

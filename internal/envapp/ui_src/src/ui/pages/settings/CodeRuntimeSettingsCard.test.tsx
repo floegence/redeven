@@ -91,16 +91,13 @@ function makeStatus(overrides: any = {}) {
     },
     managed_prefix: managedPrefix,
     shared_runtime_root: sharedRoot,
-    environment_selection_version: '4.109.1',
-    environment_selection_source: 'environment',
-    local_environment_default_version: '4.109.1',
+    managed_runtime_version: '4.109.1',
+    managed_runtime_source: 'managed',
     installed_versions: [
       {
         version: '4.109.1',
         binary_path: `${sharedRoot}/versions/4.109.1/bin/code-server`,
-        selection_count: 1,
-        selected_by_current_environment: true,
-        default_for_new_environments: true,
+        selected_by_local_environment: true,
         removable: false,
         detection_state: 'ready',
       },
@@ -127,14 +124,10 @@ function renderCard(host: HTMLElement, overrides: Partial<CodeRuntimeSettingsCar
     actionLoading: false,
     cancelLoading: false,
     selectionLoadingVersion: null,
-    defaultLoadingVersion: null,
-    detachLoading: false,
     removeVersionLoading: null,
     onRefresh: () => undefined,
     onInstall: () => undefined,
     onSelectVersion: () => undefined,
-    onSetDefaultVersion: () => undefined,
-    onDetach: () => undefined,
     onRemoveVersion: () => undefined,
     onCancel: () => undefined,
     ...overrides,
@@ -156,26 +149,20 @@ describe('CodeRuntimeSettingsCard', () => {
     host.remove();
   });
 
-  it('renders current environment and Local Environment inventory sections with scope-explicit wording', () => {
+  it('renders current Local Environment and inventory sections with scope-explicit wording', () => {
     renderCard(host);
 
-    expect(host.textContent).toContain('Current environment');
+    expect(host.textContent).toContain('Current Local Environment');
     expect(host.textContent).toContain('Installed for this Local Environment');
-    expect(host.textContent).toContain('Pinned to this environment');
+    expect(host.textContent).toContain('Current Local Environment selection');
     expect(host.textContent).toContain('Shared runtime root');
     expect(host.textContent).toContain('Refresh');
-    expect(host.textContent).toContain('Unpin');
     expect(host.textContent).toContain('Install latest');
-    expect(host.textContent).not.toContain('Refresh runtime');
-    expect(host.textContent).not.toContain('Remove from current environment');
-    expect(host.textContent).not.toContain('Install latest and use for this environment');
-    expect(host.textContent).toContain('Use for this environment');
-    expect(host.textContent).toContain('Set as default for new environments');
+    expect(host.textContent).toContain('Use for this Local Environment');
 
     const tooltipContents = Array.from(host.querySelectorAll('[data-testid="tooltip"]')).map((node) => node.getAttribute('data-content'));
-    expect(tooltipContents).toContain('Re-scan the Local Environment inventory and the active runtime used by this environment.');
-    expect(tooltipContents).toContain('Remove this environment-specific runtime pin. The environment falls back to the Local Environment default when one is configured.');
-    expect(tooltipContents).toContain('Install the latest stable managed code-server for this Local Environment, then pin this environment to it.');
+    expect(tooltipContents).toContain('Re-scan the Local Environment inventory and the active runtime.');
+    expect(tooltipContents).toContain('Install the latest stable managed code-server for this Local Environment, then select it.');
   });
 
   it('shows an empty-state warning when no managed versions are installed for this Local Environment', () => {
@@ -194,14 +181,13 @@ describe('CodeRuntimeSettingsCard', () => {
           binary_path: '',
         },
         installed_versions: [],
-        environment_selection_source: 'none',
-        environment_selection_version: '',
-        local_environment_default_version: '',
+        managed_runtime_source: 'none',
+        managed_runtime_version: '',
       }),
     });
 
     expect(host.textContent).toContain('No managed versions installed');
-    expect(host.textContent).toContain('Install the latest stable managed runtime once for this Local Environment');
+    expect(host.textContent).toContain('Install the latest stable managed runtime for this Local Environment');
   });
 
   it('opens the install confirmation and calls the install action', () => {
@@ -213,28 +199,10 @@ describe('CodeRuntimeSettingsCard', () => {
 
     expect(host.textContent).toContain('Install latest runtime');
     expect(host.textContent).toContain('Redeven will install the latest stable managed code-server runtime');
-    expect(host.textContent).toContain('This does not automatically switch other environments');
 
     const confirmButton = Array.from(host.querySelectorAll('button')).filter((button) => button.textContent === 'Install latest').at(-1);
     confirmButton?.click();
 
     expect(onInstall).toHaveBeenCalledTimes(1);
-  });
-
-  it('opens the current-environment removal confirmation and calls the detach action', () => {
-    const onDetach = vi.fn(async () => undefined);
-    renderCard(host, { onDetach });
-
-    const detachButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Unpin');
-    detachButton?.click();
-
-    expect(host.textContent).toContain('Unpin environment');
-    expect(host.textContent).toContain('This environment will stop using its pinned managed version.');
-    expect(host.textContent).toContain('No Local Environment runtime version files are deleted by this action.');
-
-    const confirmButton = Array.from(host.querySelectorAll('button')).filter((button) => button.textContent === 'Unpin').at(-1);
-    confirmButton?.click();
-
-    expect(onDetach).toHaveBeenCalledTimes(1);
   });
 });

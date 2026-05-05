@@ -200,16 +200,13 @@ function makeRuntimeStatus(overrides: any = {}): any {
     },
     managed_prefix: overrides.managed_prefix ?? managedPrefix,
     shared_runtime_root: overrides.shared_runtime_root ?? sharedRoot,
-    environment_selection_version: overrides.environment_selection_version ?? '4.109.1',
-    environment_selection_source: overrides.environment_selection_source ?? 'environment',
-    local_environment_default_version: overrides.local_environment_default_version ?? '4.109.1',
+    managed_runtime_version: overrides.managed_runtime_version ?? '4.109.1',
+    managed_runtime_source: overrides.managed_runtime_source ?? 'managed',
     installed_versions: overrides.installed_versions ?? [
       {
         version: '4.109.1',
         binary_path: `${sharedRoot}/versions/4.109.1/bin/code-server`,
-        selection_count: 1,
-        selected_by_current_environment: true,
-        default_for_new_environments: true,
+        selected_by_local_environment: true,
         removable: false,
         detection_state: 'ready',
       },
@@ -385,9 +382,8 @@ describe('EnvCodespacesPage', () => {
         binary_path: '',
       },
       installed_versions: [],
-      environment_selection_version: '',
-      environment_selection_source: 'none',
-      local_environment_default_version: '',
+      managed_runtime_version: '',
+      managed_runtime_source: 'none',
       operation: { state: 'idle', log_tail: [] },
     });
 
@@ -400,7 +396,7 @@ describe('EnvCodespacesPage', () => {
     expect(banner?.querySelector('.highlight-block')).toBeTruthy();
     expect(banner?.querySelector('.highlight-block')?.getAttribute('data-highlight-variant')).toBe('warning');
     expect(banner?.textContent).toContain('code-server runtime');
-    expect(banner?.textContent).toContain('Install and use for this environment');
+    expect(banner?.textContent).toContain('Install and use for this Local Environment');
     expect(banner?.textContent).toContain('latest stable code-server');
   });
 
@@ -464,9 +460,8 @@ describe('EnvCodespacesPage', () => {
         binary_path: '',
       },
       installed_versions: [],
-      environment_selection_version: '',
-      environment_selection_source: 'none',
-      local_environment_default_version: '',
+      managed_runtime_version: '',
+      managed_runtime_source: 'none',
       operation: { state: 'idle', log_tail: [] },
     });
 
@@ -511,7 +506,7 @@ describe('EnvCodespacesPage', () => {
 
     expect(windowOpenSpy).not.toHaveBeenCalled();
     expect(gatewayMocks.fetchGatewayJSON).not.toHaveBeenCalledWith('/_redeven_proxy/api/spaces/space-1/start', expect.anything());
-    expect(host.textContent).toContain('Install and use for this environment');
+    expect(host.textContent).toContain('Install and use for this Local Environment');
     expect(host.textContent).toContain('Pending action: Start codespace after install');
 
     windowOpenSpy.mockRestore();

@@ -48,7 +48,6 @@ Local Environment-scoped Code App data:
     apps/
       code/
         runtime/
-          current.json
           managed -> ~/.redeven/shared/code-server/<os>-<arch>/versions/<version>/
         registry.sqlite
         spaces/
@@ -97,23 +96,21 @@ Rules:
 
 - Redeven never auto-installs `code-server` on page load or on codespace open.
 - Installing a managed version stores it once per Local Environment under the shared runtime root.
-- Each environment stores only its own managed version selection in `apps/code/runtime/current.json`.
-- New environments inherit the Local Environment default managed version when they do not pin their own version.
-- The user must explicitly click `Install and use for this environment` or `Install latest and use for this environment`.
+- The current Local Environment stores one managed runtime selection in `shared/code-server/<os>-<arch>/local-environment.json`.
+- The user must explicitly click `Install and use for this Local Environment` or `Install latest and use for this Local Environment`.
 - Redeven runs the official upstream `code-server` install script in `standalone` mode and follows the latest stable release flow by default.
-- The environment-local `apps/code/runtime/managed` path is only a symlink to the selected shared version.
+- The Local Environment `apps/code/runtime/managed` path is only a symlink to the selected shared version.
 - No user shell commands or PATH edits are required for the managed runtime.
 - Redeven does not pin business behavior to one exact upstream `code-server` version.
-- If an environment explicitly selected a managed version and that version is missing or unusable, Redeven reports the problem directly and does **not** silently fall back to another managed or host runtime.
+- If the Local Environment selected a managed version and that version is missing or unusable, Redeven reports the problem directly and does **not** silently fall back to another managed or host runtime.
 
-Managed selection precedence remains:
+Managed runtime precedence remains:
 
 1. `REDEVEN_CODE_SERVER_BIN`
 2. `CODE_SERVER_BIN`
 3. `CODE_SERVER_PATH`
-4. explicit environment-managed selection
-5. Local Environment default managed selection
-6. host runtime discovery
+4. current Local Environment managed selection
+5. host runtime discovery
 
 ## Runtime status and install API
 
@@ -122,8 +119,6 @@ Env App uses the local gateway runtime endpoints before it tries to start Code A
 - `GET /_redeven_proxy/api/code-runtime/status`
 - `POST /_redeven_proxy/api/code-runtime/install`
 - `POST /_redeven_proxy/api/code-runtime/select`
-- `POST /_redeven_proxy/api/code-runtime/default`
-- `POST /_redeven_proxy/api/code-runtime/detach`
 - `POST /_redeven_proxy/api/code-runtime/remove-version`
 - `POST /_redeven_proxy/api/code-runtime/cancel`
 
@@ -131,37 +126,34 @@ The explicit install flow is:
 
 1. Env App reads runtime status.
 2. Env App Settings exposes a dedicated `code-server Runtime` management card that shows:
-   - the current environment selection,
-   - the Local Environment runtime version inventory and Local Environment default,
+   - the current Local Environment managed selection,
+   - the Local Environment runtime version inventory,
    - a focused running/error panel for explicit install or Local Environment version removal actions,
    - recent output only while an operation is running or when the last action failed or was cancelled.
 3. If the runtime is missing or unusable, Env App Codespaces shows a dedicated install UI instead of trying to start a codespace.
-4. After the user explicitly clicks `Install and use for this environment` or `Install latest and use for this environment`, the runtime:
+4. After the user explicitly clicks `Install and use for this Local Environment` or `Install latest and use for this Local Environment`, the runtime:
    - downloads the official upstream `install.sh` latest-stable entrypoint,
    - runs it with `--method=standalone --prefix <shared staging prefix>`,
    - validates the staged binary and resolves the upstream `code-server` version,
    - promotes that install into `shared/code-server/<os>-<arch>/versions/<version>/`,
-   - selects that version for the current environment,
-   - sets the Local Environment default only when one does not already exist.
-5. If the resolved latest version is already installed for the Local Environment, Redeven reuses it and only updates the current environment selection instead of running a second install.
-6. `POST /detach` removes only the current environment pin. It does not delete any Local Environment runtime files.
-7. `POST /remove-version` deletes only one Local Environment runtime version, and only when it is not the Local Environment default and no environment still selects it.
-8. Env App shows focused progress while the action is running, then returns to the calm steady state after success. Failed or cancelled actions keep their recent output visible for recovery.
+   - selects that version for the current Local Environment.
+5. If the resolved latest version is already installed for the Local Environment, Redeven reuses it and only updates the current Local Environment selection instead of running a second install.
+6. `POST /remove-version` deletes only one Local Environment runtime version, and only when it is not the current Local Environment selection.
+7. Env App shows focused progress while the action is running, then returns to the calm steady state after success. Failed or cancelled actions keep their recent output visible for recovery.
 
 ## Runtime status model
 
 `GET /_redeven_proxy/api/code-runtime/status` returns:
 
 - `active_runtime`: the runtime currently selected for Codespaces (`managed`, `system`, `env_override`, or `none`)
-- `managed_runtime`: the managed version currently selected for the environment or inherited from the Local Environment default, whether or not it is active
-- `environment_selection_version`: the managed version chosen by or inherited into the current environment
-- `environment_selection_source`: `environment`, `local_environment_default`, or `none`
-- `local_environment_default_version`: the managed version inherited by new environments in this Local Environment
+- `managed_runtime`: the managed version currently selected for this Local Environment, whether or not it is active
+- `managed_runtime_version`: the managed version selected by this Local Environment
+- `managed_runtime_source`: `managed` or `none`
 - `shared_runtime_root`: the Local Environment-scoped shared runtime directory
-- `installed_versions[]`: every managed version installed for this Local Environment, including selection counts, removability, default status, and health
+- `installed_versions[]`: every managed version installed for this Local Environment, including current selection, removability, and health
 - `operation`: the current or most recent explicit management operation (`install` / `remove_local_environment_version`) plus stage, error, target version, and log tail
 
-This split exists so Settings can truthfully show managed inventory, environment selection, and active runtime precedence without inferring hidden state on the client.
+This split exists so Settings can truthfully show managed inventory, the current Local Environment selection, and active runtime precedence without inferring hidden state on the client.
 
 ## code-server binary resolution
 
@@ -171,12 +163,11 @@ Binary resolution order:
    - `REDEVEN_CODE_SERVER_BIN`
    - `CODE_SERVER_BIN`
    - `CODE_SERVER_PATH`
-2) The current environment's explicit managed version selection, if present
-3) The Local Environment default managed version, if present
-4) Common install locations (`~/.local/bin/code-server`, Homebrew paths, `/usr/local/bin`, `/usr/bin`, ...)
-5) `PATH` (`exec.LookPath("code-server")`)
+2) The current Local Environment managed version selection, if present
+3) Common install locations (`~/.local/bin/code-server`, Homebrew paths, `/usr/local/bin`, `/usr/bin`, ...)
+4) `PATH` (`exec.LookPath("code-server")`)
 
-The selected binary must be usable on the current host. If an explicit managed selection is missing or unusable, Redeven reports that exact problem and does not silently fall back to host discovery. If no managed selection exists at all, Env App blocks the Codespaces launch path and asks the user to explicitly install the managed runtime.
+The selected binary must be usable on the current host. If the Local Environment managed selection is missing or unusable, Redeven reports that exact problem and does not silently fall back to host discovery. If no managed selection exists at all, Env App blocks the Codespaces launch path and asks the user to explicitly install the managed runtime.
 
 ### Note for macOS/Homebrew
 

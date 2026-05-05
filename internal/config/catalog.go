@@ -4,35 +4,33 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 )
-
-type environmentCatalogIdentity struct {
-	Kind           string `json:"kind"`
-	LocalName      string `json:"local_name,omitempty"`
-	ProviderOrigin string `json:"provider_origin,omitempty"`
-	ProviderID     string `json:"provider_id,omitempty"`
-	EnvPublicID    string `json:"env_public_id,omitempty"`
-}
 
 type environmentCatalogScope struct {
 	Kind string `json:"kind"`
 	Name string `json:"name,omitempty"`
 }
 
+type environmentCatalogProviderBinding struct {
+	ProviderOrigin         string `json:"provider_origin"`
+	ProviderID             string `json:"provider_id"`
+	EnvPublicID            string `json:"env_public_id"`
+	RemoteWebSupported     bool   `json:"remote_web_supported"`
+	RemoteDesktopSupported bool   `json:"remote_desktop_supported"`
+}
+
 type environmentCatalogFile struct {
-	SchemaVersion int                        `json:"schema_version"`
-	RecordKind    string                     `json:"record_kind"`
-	ID            string                     `json:"id"`
-	Label         string                     `json:"label"`
-	Pinned        bool                       `json:"pinned"`
-	CreatedAtMS   int64                      `json:"created_at_ms"`
-	UpdatedAtMS   int64                      `json:"updated_at_ms"`
-	LastUsedAtMS  int64                      `json:"last_used_at_ms"`
-	PreferredOpen string                     `json:"preferred_open_route,omitempty"`
-	Identity      environmentCatalogIdentity `json:"identity"`
+	SchemaVersion int    `json:"schema_version"`
+	RecordKind    string `json:"record_kind"`
+	ID            string `json:"id"`
+	Label         string `json:"label"`
+	Pinned        bool   `json:"pinned"`
+	CreatedAtMS   int64  `json:"created_at_ms"`
+	UpdatedAtMS   int64  `json:"updated_at_ms"`
+	LastUsedAtMS  int64  `json:"last_used_at_ms"`
+	PreferredOpen string `json:"preferred_open_route,omitempty"`
 	LocalHosting  struct {
 		Scope environmentCatalogScope `json:"scope"`
 		// ScopeKey and StateDir are kept explicit so Desktop does not have to
@@ -45,18 +43,7 @@ type environmentCatalogFile struct {
 			LocalUIPasswordConfigured bool   `json:"local_ui_password_configured"`
 		} `json:"access"`
 	} `json:"local_hosting"`
-	ProviderBinding *struct {
-		ProviderOrigin         string `json:"provider_origin"`
-		ProviderID             string `json:"provider_id"`
-		EnvPublicID            string `json:"env_public_id"`
-		RemoteWebSupported     bool   `json:"remote_web_supported"`
-		RemoteDesktopSupported bool   `json:"remote_desktop_supported"`
-	} `json:"provider_binding,omitempty"`
-}
-
-type environmentCatalogRecordRef struct {
-	Path string
-	File environmentCatalogFile
+	CurrentProviderBinding *environmentCatalogProviderBinding `json:"current_provider_binding,omitempty"`
 }
 
 type catalogEnvironmentBinding struct {
@@ -77,50 +64,29 @@ func catalogRootForLayout(layout StateLayout) (string, error) {
 	return filepath.Join(root, "catalog"), nil
 }
 
-func readCatalogEnvironmentRecords(environmentsDir string) ([]environmentCatalogRecordRef, error) {
-	entries, err := os.ReadDir(environmentsDir)
+func localEnvironmentCatalogPath(catalogRoot string) string {
+	return filepath.Join(catalogRoot, "local-environment.json")
+}
+
+func readLocalEnvironmentCatalogRecord(path string) (*environmentCatalogFile, error) {
+	body, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
 		return nil, err
 	}
-
-	records := make([]environmentCatalogRecordRef, 0, len(entries))
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
-			continue
-		}
-		path := filepath.Join(environmentsDir, entry.Name())
-		body, err := os.ReadFile(path)
-		if err != nil {
-			return nil, err
-		}
-		var file environmentCatalogFile
-		if err := json.Unmarshal(body, &file); err != nil {
-			continue
-		}
-		if strings.TrimSpace(file.RecordKind) != "environment" || strings.TrimSpace(file.ID) == "" {
-			continue
-		}
-		records = append(records, environmentCatalogRecordRef{Path: path, File: file})
+	var file environmentCatalogFile
+	if err := json.Unmarshal(body, &file); err != nil {
+		return nil, err
 	}
-
-	sort.Slice(records, func(i, j int) bool {
-		return records[i].File.ID < records[j].File.ID
-	})
-	return records, nil
+	if strings.TrimSpace(file.RecordKind) != "local_environment" {
+		return nil, nil
+	}
+	return &file, nil
 }
 
-func catalogDefaultEnvironmentID(layout StateLayout) string {
-	_ = layout
-	return "local"
-}
-
-func defaultCatalogEnvironmentLabel(layout StateLayout, binding *catalogEnvironmentBinding) string {
-	if binding != nil && strings.TrimSpace(binding.EnvPublicID) != "" {
-		return strings.TrimSpace(binding.EnvPublicID)
-	}
+func defaultCatalogEnvironmentLabel(layout StateLayout) string {
 	_ = layout
 	return "Local Environment"
 }
@@ -149,25 +115,6 @@ func bindingForConfig(cfg *Config) (*catalogEnvironmentBinding, error) {
 	}, nil
 }
 
-func chooseCatalogEnvironmentID(layout StateLayout, binding *catalogEnvironmentBinding, existing []environmentCatalogRecordRef) string {
-	_ = binding
-	_ = existing
-	return catalogDefaultEnvironmentID(layout)
-}
-
-func findCatalogEnvironmentRecord(records []environmentCatalogRecordRef, id string) *environmentCatalogRecordRef {
-	cleanID := strings.TrimSpace(id)
-	if cleanID == "" {
-		return nil
-	}
-	for i := range records {
-		if strings.TrimSpace(records[i].File.ID) == cleanID {
-			return &records[i]
-		}
-	}
-	return nil
-}
-
 func catalogScopeForLayout(layout StateLayout) environmentCatalogScope {
 	_ = layout
 	return environmentCatalogScope{Kind: string(ScopeKindLocalEnvironment), Name: DefaultLocalEnvironmentScopeName}
@@ -178,8 +125,8 @@ func WriteEnvironmentCatalogRecord(layout StateLayout, cfg *Config, localUIBind 
 	if err != nil {
 		return err
 	}
-	environmentsDir := filepath.Join(catalogRoot, "environments")
-	existing, err := readCatalogEnvironmentRecords(environmentsDir)
+	recordPath := localEnvironmentCatalogPath(catalogRoot)
+	existingRecord, err := readLocalEnvironmentCatalogRecord(recordPath)
 	if err != nil {
 		return err
 	}
@@ -188,15 +135,13 @@ func WriteEnvironmentCatalogRecord(layout StateLayout, cfg *Config, localUIBind 
 	if err != nil {
 		return err
 	}
-	recordID := chooseCatalogEnvironmentID(layout, binding, existing)
-	existingRecord := findCatalogEnvironmentRecord(existing, recordID)
 	now := time.Now().UnixMilli()
 
 	record := environmentCatalogFile{
 		SchemaVersion: 1,
-		RecordKind:    "environment",
-		ID:            recordID,
-		Label:         defaultCatalogEnvironmentLabel(layout, binding),
+		RecordKind:    "local_environment",
+		ID:            DefaultLocalEnvironmentScopeName,
+		Label:         defaultCatalogEnvironmentLabel(layout),
 		Pinned:        false,
 		CreatedAtMS:   now,
 		UpdatedAtMS:   now,
@@ -204,44 +149,27 @@ func WriteEnvironmentCatalogRecord(layout StateLayout, cfg *Config, localUIBind 
 		PreferredOpen: "auto",
 	}
 	if existingRecord != nil {
-		record.Label = strings.TrimSpace(existingRecord.File.Label)
+		record.Label = strings.TrimSpace(existingRecord.Label)
 		if record.Label == "" {
-			record.Label = defaultCatalogEnvironmentLabel(layout, binding)
+			record.Label = defaultCatalogEnvironmentLabel(layout)
 		}
-		record.Pinned = existingRecord.File.Pinned
-		if existingRecord.File.CreatedAtMS > 0 {
-			record.CreatedAtMS = existingRecord.File.CreatedAtMS
+		record.Pinned = existingRecord.Pinned
+		if existingRecord.CreatedAtMS > 0 {
+			record.CreatedAtMS = existingRecord.CreatedAtMS
 		}
-		record.LastUsedAtMS = existingRecord.File.LastUsedAtMS
-		if route := strings.TrimSpace(existingRecord.File.PreferredOpen); route == "local_host" || route == "remote_desktop" || route == "auto" {
+		record.LastUsedAtMS = existingRecord.LastUsedAtMS
+		if route := strings.TrimSpace(existingRecord.PreferredOpen); route == "local_host" || route == "remote_desktop" || route == "auto" {
 			record.PreferredOpen = route
 		}
 	}
 
 	if binding != nil {
-		record.Identity = environmentCatalogIdentity{
-			Kind:           "provider",
-			ProviderOrigin: binding.ProviderOrigin,
-			ProviderID:     binding.ProviderID,
-			EnvPublicID:    binding.EnvPublicID,
-		}
-		record.ProviderBinding = &struct {
-			ProviderOrigin         string `json:"provider_origin"`
-			ProviderID             string `json:"provider_id"`
-			EnvPublicID            string `json:"env_public_id"`
-			RemoteWebSupported     bool   `json:"remote_web_supported"`
-			RemoteDesktopSupported bool   `json:"remote_desktop_supported"`
-		}{
+		record.CurrentProviderBinding = &environmentCatalogProviderBinding{
 			ProviderOrigin:         binding.ProviderOrigin,
 			ProviderID:             binding.ProviderID,
 			EnvPublicID:            binding.EnvPublicID,
 			RemoteWebSupported:     true,
 			RemoteDesktopSupported: true,
-		}
-	} else {
-		record.Identity = environmentCatalogIdentity{
-			Kind:      "local_environment",
-			LocalName: DefaultLocalEnvironmentScopeName,
 		}
 	}
 
@@ -252,7 +180,7 @@ func WriteEnvironmentCatalogRecord(layout StateLayout, cfg *Config, localUIBind 
 	record.LocalHosting.Access.LocalUIBind = strings.TrimSpace(localUIBind)
 	record.LocalHosting.Access.LocalUIPasswordConfigured = passwordConfigured
 
-	if err := os.MkdirAll(environmentsDir, 0o700); err != nil {
+	if err := os.MkdirAll(catalogRoot, 0o700); err != nil {
 		return err
 	}
 	body, err := json.MarshalIndent(record, "", "  ")
@@ -261,7 +189,6 @@ func WriteEnvironmentCatalogRecord(layout StateLayout, cfg *Config, localUIBind 
 	}
 	body = append(body, '\n')
 
-	recordPath := filepath.Join(environmentsDir, sanitizeStateScopeID(recordID)+".json")
 	tmpPath := recordPath + ".tmp"
 	if err := os.WriteFile(tmpPath, body, 0o600); err != nil {
 		return err

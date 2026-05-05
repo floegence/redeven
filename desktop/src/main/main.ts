@@ -1,5 +1,4 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, powerMonitor, safeStorage, session, shell, type MessageBoxOptions } from 'electron';
-import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -21,7 +20,6 @@ import type { DesktopConfirmationDialogModel } from '../shared/desktopConfirmati
 import {
   describeLocalEnvironmentLocalBindConflict,
   createSafeStorageSecretCodec,
-  deleteLocalEnvironment,
   deleteSavedControlPlane,
   deleteSavedEnvironment,
   deleteSavedSSHEnvironment,
@@ -40,7 +38,6 @@ import {
   setSavedEnvironmentPinned,
   setSavedSSHEnvironmentPinned,
   updateLocalEnvironmentAccess,
-  upsertLocalEnvironment,
   upsertSavedControlPlane,
   upsertSavedEnvironment,
   upsertSavedSSHEnvironment,
@@ -4617,40 +4614,18 @@ async function upsertSavedEnvironmentFromWelcome(
   await persistDesktopPreferences(next);
 }
 
-async function upsertLocalEnvironmentFromWelcome(
-  request: Readonly<{
-    environment_id?: string;
-    environment_name?: string;
-  }>,
+async function saveLocalEnvironmentSettingsFromWelcome(
   draft: DesktopSettingsDraft,
-  options: Readonly<{
-    label: string;
-  }>,
 ): Promise<DesktopLocalEnvironmentState> {
   const preferences = await loadDesktopPreferencesCached();
-  const existing = request.environment_id ? findLocalEnvironmentByID(preferences, request.environment_id) : null;
-  const existingAccess = existing ? localEnvironmentAccess(existing) : null;
-  const requestedEnvironmentName = compact(request.environment_name)
-    || compact(options.label)
-    || 'local';
+  const existing = preferences.local_environment;
+  const existingAccess = localEnvironmentAccess(existing);
   const access = validateDesktopSettingsDraft(draft, {
     currentLocalUIPassword: existingAccess?.local_ui_password ?? '',
     currentLocalUIPasswordConfigured: existingAccess?.local_ui_password_configured === true,
   });
-  const next = upsertLocalEnvironment(preferences, {
-    environment_id: request.environment_id,
-    name: requestedEnvironmentName,
-    label: options.label,
-    access,
-    last_used_at_ms: existing?.last_used_at_ms ?? 0,
-  });
-  const resolvedEnvironment = (
-    (request.environment_id ? findLocalEnvironmentByID(next, request.environment_id) : null)
-    ?? next.local_environment
-  );
-  if (!resolvedEnvironment) {
-    throw new Error('Desktop could not save the Local Environment settings.');
-  }
+  const next = updateLocalEnvironmentAccess(preferences, existing.id, access);
+  const resolvedEnvironment = next.local_environment;
   const bindConflict = findLocalEnvironmentLocalBindConflict(next, resolvedEnvironment.id);
   if (bindConflict) {
     throw new Error(describeLocalEnvironmentLocalBindConflict(bindConflict));
@@ -4746,70 +4721,6 @@ async function deleteSavedSSHEnvironmentFromWelcome(environmentID: string): Prom
   await persistDesktopPreferences(deleteSavedSSHEnvironment(preferences, environmentID));
 }
 
-async function deleteLocalEnvironmentStateDir(stateDir: string): Promise<void> {
-  const cleanStateDir = String(stateDir ?? '').trim();
-  if (cleanStateDir === '') {
-    return;
-  }
-
-  const resolvedStateDir = path.resolve(cleanStateDir);
-  const scopesRoot = path.join(preferencesPaths().stateRoot, 'scopes');
-  const relativePath = path.relative(scopesRoot, resolvedStateDir);
-  if (
-    relativePath === ''
-    || relativePath.startsWith('..')
-    || path.isAbsolute(relativePath)
-  ) {
-    return;
-  }
-  await fs.rm(resolvedStateDir, { recursive: true, force: true });
-}
-
-async function deleteEnvironmentFromWelcome(environmentID: string): Promise<void> {
-  const preferences = await loadDesktopPreferencesCached();
-  const result = deleteLocalEnvironment(preferences, environmentID);
-  if (!result.deleted_environment) {
-    return;
-  }
-  await persistDesktopPreferences(result.preferences);
-  await deleteLocalEnvironmentStateDir(result.deleted_state_dir);
-}
-
-function hasLiveLocalEnvironmentSession(environmentID: string): boolean {
-  const cleanEnvironmentID = String(environmentID ?? '').trim();
-  if (cleanEnvironmentID === '') {
-    return false;
-  }
-  for (const sessionRecord of sessionsByKey.values()) {
-    if (
-      !sessionRecord.closing
-      && sessionRecord.target.kind === 'local_environment'
-      && sessionRecord.target.environment_id === cleanEnvironmentID
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
-async function protectedLocalEnvironmentDeleteFailure(
-  environmentID: string,
-): Promise<DesktopLauncherActionFailure | null> {
-  const preferences = await loadDesktopPreferencesCached();
-  const environment = findLocalEnvironmentByID(preferences, environmentID);
-  if (!environment || environment.id !== 'local') {
-    return null;
-  }
-  return launcherActionFailure(
-    'action_invalid',
-    'environment',
-    'Local Environment is always available in Desktop. Change its settings instead of deleting it.',
-    {
-      environmentID,
-    },
-  );
-}
-
 async function performDesktopLauncherAction(request: DesktopLauncherActionRequest): Promise<DesktopLauncherActionResult> {
   switch (request.kind) {
     case 'open_local_environment':
@@ -4871,17 +4782,12 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       return refreshControlPlaneFromLauncher(request);
     case 'delete_control_plane':
       return deleteControlPlaneFromLauncher(request);
-    case 'upsert_local_environment':
+    case 'save_local_environment_settings':
       try {
-        await upsertLocalEnvironmentFromWelcome({
-          environment_id: request.environment_id,
-          environment_name: request.environment_name,
-        }, {
+        await saveLocalEnvironmentSettingsFromWelcome({
           local_ui_bind: request.local_ui_bind,
           local_ui_password: request.local_ui_password,
           local_ui_password_mode: request.local_ui_password_mode,
-        }, {
-          label: request.label,
         });
         return launcherActionSuccess('saved_environment');
       } catch (error) {
@@ -4904,25 +4810,6 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
         release_base_url: request.release_base_url,
       });
       return launcherActionSuccess('saved_environment');
-    case 'delete_local_environment':
-      {
-        const protectedFailure = await protectedLocalEnvironmentDeleteFailure(request.environment_id);
-        if (protectedFailure) {
-          return protectedFailure;
-        }
-      }
-      if (hasLiveLocalEnvironmentSession(request.environment_id)) {
-        return launcherActionFailure(
-          'environment_in_use',
-          'environment',
-          'Close the environment window before deleting it from this device.',
-          {
-            environmentID: request.environment_id,
-          },
-        );
-      }
-      await deleteEnvironmentFromWelcome(request.environment_id);
-      return launcherActionSuccess('deleted_environment');
     case 'delete_saved_environment':
       await deleteSavedEnvironmentFromWelcome(request.environment_id);
       return launcherActionSuccess('deleted_environment');

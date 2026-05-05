@@ -17,7 +17,7 @@ import {
 import { desktopSSHEnvironmentID } from '../shared/desktopSSH';
 
 describe('desktopTarget', () => {
-  it('builds the Local Environment session target with a stable per-environment key', () => {
+  it('builds the Local Environment session target with a stable Local Environment key', () => {
     expect(buildLocalEnvironmentDesktopTarget(testLocalEnvironment())).toEqual({
       kind: 'local_environment',
       session_key: 'env:local:local_host',

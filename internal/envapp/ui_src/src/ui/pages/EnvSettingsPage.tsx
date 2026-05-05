@@ -25,14 +25,12 @@ import { manageDesktopUpdate, openExternalURLInDesktopShell } from '../services/
 import { fetchGatewayJSON } from '../services/gatewayApi';
 import {
   cancelCodeRuntimeOperation,
-  detachCodeRuntimeSelection,
   codeRuntimeOperationNeedsAttention,
   codeRuntimeOperationSucceeded,
   fetchCodeRuntimeStatus,
   installCodeRuntime,
   removeCodeRuntimeVersion,
   selectCodeRuntimeVersion,
-  setCodeRuntimeDefaultVersion,
   type CodeRuntimeStatus,
 } from '../services/codeRuntimeApi';
 import { FlowerIcon } from '../icons/FlowerIcon';
@@ -568,8 +566,6 @@ export function EnvSettingsPage() {
   const [codeRuntimeActionLoading, setCodeRuntimeActionLoading] = createSignal(false);
   const [codeRuntimeCancelLoading, setCodeRuntimeCancelLoading] = createSignal(false);
   const [codeRuntimeSelectionLoadingVersion, setCodeRuntimeSelectionLoadingVersion] = createSignal<string | null>(null);
-  const [codeRuntimeDefaultLoadingVersion, setCodeRuntimeDefaultLoadingVersion] = createSignal<string | null>(null);
-  const [codeRuntimeDetachLoading, setCodeRuntimeDetachLoading] = createSignal(false);
   const [codeRuntimeRemoveVersionLoading, setCodeRuntimeRemoveVersionLoading] = createSignal<string | null>(null);
   const [pendingRuntimeSuccessAction, setPendingRuntimeSuccessAction] = createSignal<'' | 'install' | 'remove_local_environment_version'>('');
 
@@ -612,38 +608,12 @@ export function EnvSettingsPage() {
     try {
       await selectCodeRuntimeVersion(version);
       await refetchCodeRuntimeStatus();
-      notify.success('Environment updated', `This environment now uses managed version ${version}.`);
+      notify.success('Local Environment updated', `This Local Environment now uses managed version ${version}.`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       notify.error('Selection failed', msg || 'Request failed.');
     } finally {
       setCodeRuntimeSelectionLoadingVersion(null);
-    }
-  };
-  const setManagedCodeRuntimeDefaultVersion = async (version: string) => {
-    setCodeRuntimeDefaultLoadingVersion(version);
-    try {
-      await setCodeRuntimeDefaultVersion(version);
-      await refetchCodeRuntimeStatus();
-      notify.success('Local Environment default updated', `${version} is now the default managed version for environments that follow the Local Environment default.`);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      notify.error('Default update failed', msg || 'Request failed.');
-    } finally {
-      setCodeRuntimeDefaultLoadingVersion(null);
-    }
-  };
-  const detachManagedCodeRuntimeSelection = async () => {
-    setCodeRuntimeDetachLoading(true);
-    try {
-      await detachCodeRuntimeSelection();
-      await refetchCodeRuntimeStatus();
-      notify.success('Environment selection removed', 'This environment now follows the Local Environment default managed version when one is configured.');
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      notify.error('Remove failed', msg || 'Request failed.');
-    } finally {
-      setCodeRuntimeDetachLoading(false);
     }
   };
   const removeManagedCodeRuntimeVersion = async (version: string) => {
@@ -3079,14 +3049,10 @@ export function EnvSettingsPage() {
                 actionLoading={codeRuntimeActionLoading()}
                 cancelLoading={codeRuntimeCancelLoading()}
                 selectionLoadingVersion={codeRuntimeSelectionLoadingVersion()}
-                defaultLoadingVersion={codeRuntimeDefaultLoadingVersion()}
-                detachLoading={codeRuntimeDetachLoading()}
                 removeVersionLoading={codeRuntimeRemoveVersionLoading()}
                 onRefresh={() => void refreshCodeRuntimeStatus()}
                 onInstall={() => installManagedCodeRuntime()}
                 onSelectVersion={(version) => selectManagedCodeRuntimeVersion(version)}
-                onSetDefaultVersion={(version) => setManagedCodeRuntimeDefaultVersion(version)}
-                onDetach={() => detachManagedCodeRuntimeSelection()}
                 onRemoveVersion={(version) => removeManagedCodeRuntimeVersion(version)}
                 onCancel={() => cancelManagedCodeRuntimeOperation()}
               />

@@ -735,9 +735,6 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('scope derived from Name.');
     expect(appSrc).not.toContain('Next scope:');
     expect(appSrc).not.toContain('DEFAULT_LOCAL_ENVIRONMENT_NAME');
-    expect(appSrc).not.toContain("kind: 'upsert_local_environment'");
-    expect(appSrc).not.toContain("environment_name: shouldAutoSyncLocalEnvironmentScopeName(current)");
-    expect(appSrc).not.toContain('? deriveLocalEnvironmentScopeNameFromName(value)');
   });
 
   it('keeps provider-local runtime setup out of the connection dialog', () => {
@@ -782,13 +779,12 @@ describe('DesktopWelcomeShell', () => {
     expect(dialogSrc).toContain('variant: "ghost-destructive"');
   });
 
-  it('distinguishes managed-environment deletion copy from saved connection deletion copy', () => {
+  it('uses the shared deletion copy for saved connections only', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain('const deleteTargetIsManaged = createMemo(() => {');
-    expect(appSrc).toContain("title={deleteTargetIsManaged() ? 'Delete Environment' : 'Delete Connection'}");
-    expect(appSrc).toContain("confirmText={deleteTargetIsManaged() ? 'Delete Environment' : 'Delete Connection'}");
-    expect(appSrc).toContain("title={props.environment.kind === 'local_environment' ? 'Delete environment' : 'Delete connection'}");
+    expect(appSrc).toContain('title="Delete Connection"');
+    expect(appSrc).toContain('confirmText="Delete Connection"');
+    expect(appSrc).toContain('Remove <span class="font-semibold">{deleteTarget()?.label}</span> from the Environment Library?');
   });
 
   it('memoizes the Dialog open prop so overlay-mask focus trap does not thrash on every keystroke', () => {

@@ -29,20 +29,18 @@ import (
 )
 
 type stubBackend struct {
-	listSpaces                 func(ctx context.Context) ([]SpaceStatus, error)
-	createSpace                func(ctx context.Context, req CreateSpaceRequest) (*SpaceStatus, error)
-	updateSpace                func(ctx context.Context, codeSpaceID string, req UpdateSpaceRequest) (*SpaceStatus, error)
-	deleteSpace                func(ctx context.Context, codeSpaceID string) error
-	startSpace                 func(ctx context.Context, codeSpaceID string) (*SpaceStatus, error)
-	stopSpace                  func(ctx context.Context, codeSpaceID string) error
-	resolveCodeServerPort      func(ctx context.Context, codeSpaceID string) (int, error)
-	codeRuntimeStatus          func(ctx context.Context) (CodeRuntimeStatus, error)
-	installCodeRuntime         func(ctx context.Context) (CodeRuntimeStatus, error)
-	selectCodeRuntime          func(ctx context.Context, version string) (CodeRuntimeStatus, error)
-	setCodeRuntimeDefault      func(ctx context.Context, version string) (CodeRuntimeStatus, error)
-	removeCodeRuntimeSelection func(ctx context.Context) (CodeRuntimeStatus, error)
-	removeCodeRuntimeVersion   func(ctx context.Context, version string) (CodeRuntimeStatus, error)
-	cancelCodeRuntime          func(ctx context.Context) (CodeRuntimeStatus, error)
+	listSpaces               func(ctx context.Context) ([]SpaceStatus, error)
+	createSpace              func(ctx context.Context, req CreateSpaceRequest) (*SpaceStatus, error)
+	updateSpace              func(ctx context.Context, codeSpaceID string, req UpdateSpaceRequest) (*SpaceStatus, error)
+	deleteSpace              func(ctx context.Context, codeSpaceID string) error
+	startSpace               func(ctx context.Context, codeSpaceID string) (*SpaceStatus, error)
+	stopSpace                func(ctx context.Context, codeSpaceID string) error
+	resolveCodeServerPort    func(ctx context.Context, codeSpaceID string) (int, error)
+	codeRuntimeStatus        func(ctx context.Context) (CodeRuntimeStatus, error)
+	installCodeRuntime       func(ctx context.Context) (CodeRuntimeStatus, error)
+	selectCodeRuntime        func(ctx context.Context, version string) (CodeRuntimeStatus, error)
+	removeCodeRuntimeVersion func(ctx context.Context, version string) (CodeRuntimeStatus, error)
+	cancelCodeRuntime        func(ctx context.Context) (CodeRuntimeStatus, error)
 }
 
 func (s *stubBackend) ListSpaces(ctx context.Context) ([]SpaceStatus, error) {
@@ -102,18 +100,6 @@ func (s *stubBackend) InstallCodeRuntime(ctx context.Context) (CodeRuntimeStatus
 func (s *stubBackend) SelectCodeRuntimeVersion(ctx context.Context, version string) (CodeRuntimeStatus, error) {
 	if s.selectCodeRuntime != nil {
 		return s.selectCodeRuntime(ctx, version)
-	}
-	return CodeRuntimeStatus{}, errors.New("not implemented")
-}
-func (s *stubBackend) SetCodeRuntimeDefaultVersion(ctx context.Context, version string) (CodeRuntimeStatus, error) {
-	if s.setCodeRuntimeDefault != nil {
-		return s.setCodeRuntimeDefault(ctx, version)
-	}
-	return CodeRuntimeStatus{}, errors.New("not implemented")
-}
-func (s *stubBackend) RemoveCodeRuntimeSelection(ctx context.Context) (CodeRuntimeStatus, error) {
-	if s.removeCodeRuntimeSelection != nil {
-		return s.removeCodeRuntimeSelection(ctx)
 	}
 	return CodeRuntimeStatus{}, errors.New("not implemented")
 }
@@ -308,8 +294,6 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 	envOrigin := envOriginWithChannel(channelID)
 	var installCalls int
 	var selectCalls int
-	var defaultCalls int
-	var detachCalls int
 	var removeVersionCalls int
 	var cancelCalls int
 	b := &stubBackend{
@@ -323,10 +307,10 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 					DetectionState: "missing",
 					Source:         "managed",
 				},
-				ManagedPrefix:              "/tmp/runtime",
-				SharedRuntimeRoot:          "/tmp/shared-runtime",
-				EnvironmentSelectionSource: "none",
-				InstallerScriptURL:         "https://code-server.dev/install.sh",
+				ManagedPrefix:        "/tmp/runtime",
+				SharedRuntimeRoot:    "/tmp/shared-runtime",
+				ManagedRuntimeSource: "none",
+				InstallerScriptURL:   "https://code-server.dev/install.sh",
 				Operation: codeserver.RuntimeOperationStatus{
 					State: "idle",
 				},
@@ -343,10 +327,10 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 					DetectionState: "missing",
 					Source:         "managed",
 				},
-				ManagedPrefix:              "/tmp/runtime",
-				SharedRuntimeRoot:          "/tmp/shared-runtime",
-				EnvironmentSelectionSource: "environment",
-				InstallerScriptURL:         "https://code-server.dev/install.sh",
+				ManagedPrefix:        "/tmp/runtime",
+				SharedRuntimeRoot:    "/tmp/shared-runtime",
+				ManagedRuntimeSource: "managed",
+				InstallerScriptURL:   "https://code-server.dev/install.sh",
 				Operation: codeserver.RuntimeOperationStatus{
 					Action: "install",
 					State:  "running",
@@ -367,40 +351,20 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 					Source:         "managed",
 					Version:        version,
 				},
-				ManagedPrefix:               "/tmp/runtime",
-				SharedRuntimeRoot:           "/tmp/shared-runtime",
-				EnvironmentSelectionSource:  "environment",
-				EnvironmentSelectionVersion: version,
-				InstallerScriptURL:          "https://code-server.dev/install.sh",
-			}, nil
-		},
-		setCodeRuntimeDefault: func(ctx context.Context, version string) (CodeRuntimeStatus, error) {
-			defaultCalls++
-			return CodeRuntimeStatus{
-				ManagedPrefix:                  "/tmp/runtime",
-				SharedRuntimeRoot:              "/tmp/shared-runtime",
-				EnvironmentSelectionSource:     "none",
-				LocalEnvironmentDefaultVersion: version,
-				InstallerScriptURL:             "https://code-server.dev/install.sh",
-			}, nil
-		},
-		removeCodeRuntimeSelection: func(ctx context.Context) (CodeRuntimeStatus, error) {
-			detachCalls++
-			return CodeRuntimeStatus{
-				ManagedPrefix:                  "/tmp/runtime",
-				SharedRuntimeRoot:              "/tmp/shared-runtime",
-				EnvironmentSelectionSource:     "local_environment_default",
-				LocalEnvironmentDefaultVersion: "4.109.1",
-				InstallerScriptURL:             "https://code-server.dev/install.sh",
+				ManagedPrefix:         "/tmp/runtime",
+				SharedRuntimeRoot:     "/tmp/shared-runtime",
+				ManagedRuntimeSource:  "managed",
+				ManagedRuntimeVersion: version,
+				InstallerScriptURL:    "https://code-server.dev/install.sh",
 			}, nil
 		},
 		removeCodeRuntimeVersion: func(ctx context.Context, version string) (CodeRuntimeStatus, error) {
 			removeVersionCalls++
 			return CodeRuntimeStatus{
-				ManagedPrefix:              "/tmp/runtime",
-				SharedRuntimeRoot:          "/tmp/shared-runtime",
-				EnvironmentSelectionSource: "none",
-				InstallerScriptURL:         "https://code-server.dev/install.sh",
+				ManagedPrefix:        "/tmp/runtime",
+				SharedRuntimeRoot:    "/tmp/shared-runtime",
+				ManagedRuntimeSource: "none",
+				InstallerScriptURL:   "https://code-server.dev/install.sh",
 				Operation: codeserver.RuntimeOperationStatus{
 					Action:        "remove_local_environment_version",
 					State:         "running",
@@ -420,10 +384,10 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 					DetectionState: "missing",
 					Source:         "managed",
 				},
-				ManagedPrefix:              "/tmp/runtime",
-				SharedRuntimeRoot:          "/tmp/shared-runtime",
-				EnvironmentSelectionSource: "none",
-				InstallerScriptURL:         "https://code-server.dev/install.sh",
+				ManagedPrefix:        "/tmp/runtime",
+				SharedRuntimeRoot:    "/tmp/shared-runtime",
+				ManagedRuntimeSource: "none",
+				InstallerScriptURL:   "https://code-server.dev/install.sh",
 				Operation: codeserver.RuntimeOperationStatus{
 					Action: "install",
 					State:  "cancelled",
@@ -479,24 +443,8 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 	if selectCalls != 1 {
 		t.Fatalf("select_calls=%d, want 1", selectCalls)
 	}
-	if !bytes.Contains(selectResp.Body.Bytes(), []byte(`"environment_selection_version":"4.109.1"`)) {
+	if !bytes.Contains(selectResp.Body.Bytes(), []byte(`"managed_runtime_version":"4.109.1"`)) {
 		t.Fatalf("select body missing selection version: %s", selectResp.Body.String())
-	}
-
-	defaultResp := request(http.MethodPost, "/_redeven_proxy/api/code-runtime/default", `{"version":"4.109.1"}`)
-	if defaultResp.Code != http.StatusOK {
-		t.Fatalf("default code=%d, want %d", defaultResp.Code, http.StatusOK)
-	}
-	if defaultCalls != 1 {
-		t.Fatalf("default_calls=%d, want 1", defaultCalls)
-	}
-
-	detachResp := request(http.MethodPost, "/_redeven_proxy/api/code-runtime/detach", "")
-	if detachResp.Code != http.StatusOK {
-		t.Fatalf("detach code=%d, want %d", detachResp.Code, http.StatusOK)
-	}
-	if detachCalls != 1 {
-		t.Fatalf("detach_calls=%d, want 1", detachCalls)
 	}
 
 	removeVersionResp := request(http.MethodPost, "/_redeven_proxy/api/code-runtime/remove-version", `{"version":"4.109.1"}`)

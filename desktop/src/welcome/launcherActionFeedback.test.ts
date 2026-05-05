@@ -130,9 +130,9 @@ describe('launcherActionFeedback', () => {
       ok: false,
       code: 'action_invalid',
       scope: 'dialog',
-      message: 'Local Default Environment cannot use localhost:23998 because "Lab" is already configured for localhost:23998. Choose a different Local UI bind or update that environment first.',
+      message: 'Local Environment cannot use localhost:23998 because "Lab" is already configured for localhost:23998. Choose a different Local UI bind or update that environment first.',
     })).toEqual({
-      message: 'Local Default Environment cannot use localhost:23998 because "Lab" is already configured for localhost:23998. Choose a different Local UI bind or update that environment first.',
+      message: 'Local Environment cannot use localhost:23998 because "Lab" is already configured for localhost:23998. Choose a different Local UI bind or update that environment first.',
       tone: 'error',
       refresh_snapshot: false,
       delivery: 'inline',

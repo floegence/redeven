@@ -35,18 +35,12 @@ describe('desktopLauncherIPC', () => {
     });
     expect(normalizeDesktopLauncherActionRequest({ kind: 'close_launcher_or_quit' })).toEqual({ kind: 'close_launcher_or_quit' });
     expect(normalizeDesktopLauncherActionRequest({
-      kind: 'upsert_local_environment',
-      environment_id: ' local ',
-      environment_name: ' local ',
-      label: ' Local Environment ',
+      kind: 'save_local_environment_settings',
       local_ui_bind: ' localhost:23998 ',
       local_ui_password: ' secret ',
       local_ui_password_mode: ' replace ',
     })).toEqual({
-      kind: 'upsert_local_environment',
-      environment_id: 'local',
-      environment_name: 'local',
-      label: 'Local Environment',
+      kind: 'save_local_environment_settings',
       local_ui_bind: 'localhost:23998',
       local_ui_password: ' secret ',
       local_ui_password_mode: 'replace',
@@ -79,13 +73,6 @@ describe('desktopLauncherIPC', () => {
       environment_id: 'env-1',
       label: 'Work laptop',
       external_local_ui_url: 'http://192.168.1.11:24000/',
-    });
-    expect(normalizeDesktopLauncherActionRequest({
-      kind: 'delete_local_environment',
-      environment_id: ' local ',
-    })).toEqual({
-      kind: 'delete_local_environment',
-      environment_id: 'local',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'delete_saved_environment',
@@ -217,7 +204,6 @@ describe('desktopLauncherIPC', () => {
       kind: 'set_provider_environment_pinned',
       environment_id: '   ',
     })).toBeNull();
-    expect(normalizeDesktopLauncherActionRequest({ kind: 'delete_local_environment', environment_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'delete_saved_environment', environment_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest(null)).toBeNull();
   });

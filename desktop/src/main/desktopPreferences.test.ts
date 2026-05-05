@@ -17,7 +17,6 @@ import {
 } from '../testSupport/desktopTestHelpers';
 import {
   createPlaintextSecretCodec,
-  deleteLocalEnvironment,
   type DesktopPreferences,
   defaultDesktopPreferences,
   defaultDesktopPreferencesPaths,
@@ -41,7 +40,7 @@ import {
   setProviderEnvironmentPinned,
   setSavedEnvironmentPinned,
   setSavedSSHEnvironmentPinned,
-  upsertLocalEnvironment,
+  updateLocalEnvironmentAccess,
   upsertSavedControlPlane,
   upsertSavedEnvironment,
   upsertSavedSSHEnvironment,
@@ -185,21 +184,17 @@ describe('desktopPreferences', () => {
         local_ui_bind: 'localhost:23998',
       }),
     });
-    const next = upsertLocalEnvironment(testDesktopPreferences({
+    const next = updateLocalEnvironmentAccess(testDesktopPreferences({
       local_environment: existing,
-    }), {
-      environment_id: existing.id,
-      label: 'Renamed Lab',
-      access: testLocalAccess({
-        local_ui_bind: 'localhost:24000',
-      }),
-    });
+    }), existing.id, testLocalAccess({
+      local_ui_bind: 'localhost:24000',
+    }));
     const updated = findLocalEnvironmentByID(next, existing.id);
 
     expect(updated).toBeTruthy();
     expect(updated).toEqual(expect.objectContaining({
       id: existing.id,
-      label: 'Local Environment',
+      label: existing.label,
     }));
     expect(updated?.local_hosting?.scope).toEqual({
       kind: 'local_environment',
@@ -992,18 +987,13 @@ describe('desktopPreferences', () => {
       stateDir: '/tmp/redeven-lab',
     });
 
-    const next = upsertLocalEnvironment(testDesktopPreferences({
+    const next = updateLocalEnvironmentAccess(testDesktopPreferences({
       local_environment: existing,
-    }), {
-      environment_id: existing.id,
-      name: 'lab',
-      label: 'Renamed Lab',
-      access: localEnvironmentAccess(existing),
-    });
+    }), existing.id, localEnvironmentAccess(existing));
 
     expect(next.local_environment).toEqual(expect.objectContaining({
       id: 'local',
-      label: 'Local Environment',
+      label: existing.label,
       local_hosting: expect.objectContaining({
         scope: expect.objectContaining({
           kind: 'local_environment',
@@ -1012,18 +1002,6 @@ describe('desktopPreferences', () => {
         state_dir: '/tmp/redeven-lab',
       }),
     }));
-  });
-
-  it('keeps the Local Environment record when deletion is requested directly', () => {
-    const removable = testLocalEnvironment('lab');
-
-    const result = deleteLocalEnvironment(testDesktopPreferences({
-      local_environment: testLocalEnvironment('local'),
-    }), removable.id);
-
-    expect(result.deleted_environment).toBeNull();
-    expect(result.deleted_state_dir).toBe('');
-    expect(result.preferences.local_environment.id).toBe('local');
   });
 
   it('drops revoked provider entries unless they have durable user preference metadata', () => {

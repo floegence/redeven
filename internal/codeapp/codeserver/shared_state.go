@@ -9,37 +9,24 @@ import (
 	"runtime"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/floegence/redeven/internal/lockfile"
 )
 
 const (
-	scopeSelectionSchemaVersion        = 1
 	localEnvironmentStateSchemaVersion = 1
 )
 
-type scopeSelectionState struct {
-	SchemaVersion   int    `json:"schema_version"`
-	SelectedVersion string `json:"selected_version,omitempty"`
-	UpdatedAtUnixMs int64  `json:"updated_at_unix_ms,omitempty"`
-}
-
 type localEnvironmentRuntimeState struct {
-	SchemaVersion  int                                         `json:"schema_version"`
-	DefaultVersion string                                      `json:"default_version,omitempty"`
-	Versions       map[string]localEnvironmentRuntimeVersion   `json:"versions,omitempty"`
-	Selections     map[string]localEnvironmentRuntimeSelection `json:"selections,omitempty"`
+	SchemaVersion   int                                       `json:"schema_version"`
+	SelectedVersion string                                    `json:"selected_version,omitempty"`
+	UpdatedAtUnixMs int64                                     `json:"updated_at_unix_ms,omitempty"`
+	Versions        map[string]localEnvironmentRuntimeVersion `json:"versions,omitempty"`
 }
 
 type localEnvironmentRuntimeVersion struct {
 	InstalledAtUnixMs int64  `json:"installed_at_unix_ms,omitempty"`
 	BinaryRelPath     string `json:"binary_rel_path,omitempty"`
-}
-
-type localEnvironmentRuntimeSelection struct {
-	Version         string `json:"version,omitempty"`
-	UpdatedAtUnixMs int64  `json:"updated_at_unix_ms,omitempty"`
 }
 
 func normalizeLocalEnvironmentRuntimeState(state localEnvironmentRuntimeState) localEnvironmentRuntimeState {
@@ -48,9 +35,6 @@ func normalizeLocalEnvironmentRuntimeState(state localEnvironmentRuntimeState) l
 	}
 	if state.Versions == nil {
 		state.Versions = make(map[string]localEnvironmentRuntimeVersion)
-	}
-	if state.Selections == nil {
-		state.Selections = make(map[string]localEnvironmentRuntimeSelection)
 	}
 	for version, record := range state.Versions {
 		cleanVersion := strings.TrimSpace(version)
@@ -67,19 +51,13 @@ func normalizeLocalEnvironmentRuntimeState(state localEnvironmentRuntimeState) l
 		}
 		state.Versions[cleanVersion] = record
 	}
-	for stateDir, selection := range state.Selections {
-		cleanStateDir := filepath.Clean(strings.TrimSpace(stateDir))
-		selection.Version = strings.TrimSpace(selection.Version)
-		if cleanStateDir == "" || cleanStateDir == "." || selection.Version == "" {
-			delete(state.Selections, stateDir)
-			continue
+	state.SelectedVersion = strings.TrimSpace(state.SelectedVersion)
+	if state.SelectedVersion != "" {
+		if _, ok := state.Versions[state.SelectedVersion]; !ok {
+			state.SelectedVersion = ""
+			state.UpdatedAtUnixMs = 0
 		}
-		if cleanStateDir != stateDir {
-			delete(state.Selections, stateDir)
-		}
-		state.Selections[cleanStateDir] = selection
 	}
-	state.DefaultVersion = strings.TrimSpace(state.DefaultVersion)
 	return state
 }
 
@@ -115,10 +93,6 @@ func sharedInstallerScriptPath(stateRoot string) string {
 	return filepath.Join(sharedDownloadsRoot(stateRoot), "install.sh")
 }
 
-func scopeSelectionPath(stateDir string) string {
-	return filepath.Join(runtimeRoot(stateDir), "current.json")
-}
-
 func managedRuntimePrefix(stateDir string) string {
 	return filepath.Join(runtimeRoot(stateDir), "managed")
 }
@@ -137,60 +111,6 @@ func ensureSharedRuntimeDirs(stateRoot string) error {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-func loadScopeSelection(stateDir string) (scopeSelectionState, error) {
-	path := scopeSelectionPath(stateDir)
-	body, err := os.ReadFile(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return scopeSelectionState{}, nil
-		}
-		return scopeSelectionState{}, err
-	}
-	var state scopeSelectionState
-	if err := json.Unmarshal(body, &state); err != nil {
-		return scopeSelectionState{}, err
-	}
-	if state.SchemaVersion == 0 {
-		state.SchemaVersion = scopeSelectionSchemaVersion
-	}
-	state.SelectedVersion = strings.TrimSpace(state.SelectedVersion)
-	return state, nil
-}
-
-func saveScopeSelection(stateDir string, selection scopeSelectionState) error {
-	selection.SchemaVersion = scopeSelectionSchemaVersion
-	selection.SelectedVersion = strings.TrimSpace(selection.SelectedVersion)
-	if selection.UpdatedAtUnixMs == 0 {
-		selection.UpdatedAtUnixMs = time.Now().UnixMilli()
-	}
-	root := runtimeRoot(stateDir)
-	if err := os.MkdirAll(root, 0o700); err != nil {
-		return err
-	}
-	body, err := json.MarshalIndent(selection, "", "  ")
-	if err != nil {
-		return err
-	}
-	path := scopeSelectionPath(stateDir)
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, append(body, '\n'), 0o600); err != nil {
-		return err
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
-		return err
-	}
-	return nil
-}
-
-func clearScopeSelection(stateDir string) error {
-	path := scopeSelectionPath(stateDir)
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
 	}
 	return nil
 }
@@ -275,28 +195,6 @@ func repairManagedRuntimeLink(stateDir string, stateRoot string, version string)
 		return err
 	}
 	return os.Symlink(target, linkPath)
-}
-
-func explicitSelectionVersion(stateDir string) (string, error) {
-	selection, err := loadScopeSelection(stateDir)
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(selection.SelectedVersion), nil
-}
-
-func selectionCountForVersion(state localEnvironmentRuntimeState, version string) int {
-	cleanVersion := strings.TrimSpace(version)
-	if cleanVersion == "" {
-		return 0
-	}
-	count := 0
-	for _, selection := range state.Selections {
-		if strings.TrimSpace(selection.Version) == cleanVersion {
-			count++
-		}
-	}
-	return count
 }
 
 func sortedInstalledVersions(state localEnvironmentRuntimeState) []string {

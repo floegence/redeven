@@ -205,8 +205,6 @@ Desktop and standalone runtime mode also share one profile-scoped catalog:
 - `~/.redeven/catalog/connections/*.json`
 - `~/.redeven/catalog/providers/*.json`
 
-Legacy `~/.redeven/catalog/environments/*.json` records are read only as migration input and are removed after Desktop writes the canonical Local Environment record.
-
 ### Public release contract
 
 - GitHub Release is the source of truth for versioned CLI tarballs, desktop installers, checksums, and signatures.

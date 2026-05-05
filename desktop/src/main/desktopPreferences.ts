@@ -45,11 +45,9 @@ import {
   createDesktopLocalEnvironmentHosting,
   createDesktopLocalProviderBinding,
   createDesktopLocalEnvironmentState,
-  defaultDesktopLocalEnvironmentAccess,
   defaultDesktopLocalEnvironmentLabel,
   LOCAL_ENVIRONMENT_ID,
   localEnvironmentAccess,
-  normalizeDesktopLocalEnvironmentName,
   normalizeDesktopProviderEnvironmentID,
   type DesktopLocalEnvironmentState,
   type DesktopLocalEnvironmentAccess,
@@ -297,23 +295,6 @@ export type SafeStorageLike = Readonly<{
   isEncryptionAvailable: () => boolean;
   encryptString: (value: string) => Buffer;
   decryptString: (value: Buffer) => string;
-}>;
-
-export type UpsertDesktopLocalEnvironmentStateInput = Readonly<{
-  environment_id?: string;
-  name?: string;
-  label?: string;
-  pinned?: boolean;
-  access?: DesktopLocalEnvironmentAccess;
-  created_at_ms?: number;
-  updated_at_ms?: number;
-  last_used_at_ms?: number;
-}>;
-
-export type DeleteLocalEnvironmentResult = Readonly<{
-  preferences: DesktopPreferences;
-  deleted_environment: DesktopLocalEnvironmentState | null;
-  deleted_state_dir: string;
 }>;
 
 export type DesktopLocalEnvironmentStateLocalBindConflict = Readonly<{
@@ -1240,40 +1221,6 @@ export function describeLocalEnvironmentLocalBindConflict(
   return `${targetLabel} cannot use ${conflict.local_ui_bind} because "${conflictingLabel}" is already configured for ${conflict.conflicting_local_ui_bind}. Choose a different Local UI bind or update that environment first.`;
 }
 
-export function upsertLocalEnvironment(
-  preferences: DesktopPreferences,
-  input: UpsertDesktopLocalEnvironmentStateInput,
-): DesktopPreferences {
-  const existing = preferences.local_environment;
-  const access = input.access ?? (
-    existing
-      ? localEnvironmentAccess(existing)
-      : defaultDesktopLocalEnvironmentAccess()
-  );
-  const name = normalizeDesktopLocalEnvironmentName(
-    compact(input.name)
-    || 'local',
-  );
-  const nextEnvironment = createDesktopLocalEnvironmentState(name, {
-    label: defaultDesktopLocalEnvironmentLabel(name),
-    pinned: input.pinned ?? existing?.pinned ?? false,
-    preferredOpenRoute: existing?.preferred_open_route ?? 'auto',
-    currentProviderBinding: existing?.current_provider_binding,
-    access,
-    owner: existing?.local_hosting.owner ?? 'desktop',
-    stateDir: existing?.local_hosting.state_dir
-      || resolveLocalEnvironmentStateDir({ name }),
-    currentRuntime: existing?.local_hosting.current_runtime,
-    createdAtMS: input.created_at_ms ?? existing?.created_at_ms ?? Date.now(),
-    updatedAtMS: input.updated_at_ms ?? Date.now(),
-    lastUsedAtMS: input.last_used_at_ms ?? existing?.last_used_at_ms ?? 0,
-  });
-  return {
-    ...preferences,
-    local_environment: nextEnvironment,
-  };
-}
-
 export function updateLocalEnvironmentAccess(
   preferences: DesktopPreferences,
   environmentID: string,
@@ -1571,18 +1518,6 @@ export function setSavedSSHEnvironmentPinned(
     pinned: input.pinned,
     last_used_at_ms: input.last_used_at_ms,
   });
-}
-
-export function deleteLocalEnvironment(
-  preferences: DesktopPreferences,
-  environmentID: string,
-): DeleteLocalEnvironmentResult {
-  void environmentID;
-  return {
-    preferences,
-    deleted_environment: null,
-    deleted_state_dir: '',
-  };
 }
 
 export function deleteSavedEnvironment(

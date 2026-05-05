@@ -87,10 +87,9 @@ export type DesktopLauncherActionKind =
   | 'focus_environment_window'
   | 'refresh_control_plane'
   | 'delete_control_plane'
-  | 'upsert_local_environment'
+  | 'save_local_environment_settings'
   | 'upsert_saved_environment'
   | 'upsert_saved_ssh_environment'
-  | 'delete_local_environment'
   | 'delete_saved_environment'
   | 'delete_saved_ssh_environment'
   | 'close_launcher_or_quit';
@@ -290,10 +289,7 @@ export type DesktopLauncherActionRequest = Readonly<
       provider_id: string;
     }
   | {
-      kind: 'upsert_local_environment';
-      environment_id?: string;
-      environment_name?: string;
-      label: string;
+      kind: 'save_local_environment_settings';
       local_ui_bind: string;
       local_ui_password: string;
       local_ui_password_mode: 'keep' | 'replace' | 'clear';
@@ -309,10 +305,6 @@ export type DesktopLauncherActionRequest = Readonly<
       environment_id: string;
       label: string;
     } & DesktopSSHEnvironmentDetails)
-  | {
-      kind: 'delete_local_environment';
-      environment_id: string;
-    }
   | {
       kind: 'delete_saved_environment';
       environment_id: string;
@@ -576,12 +568,9 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           release_base_url: compact((candidate as { release_base_url?: unknown }).release_base_url),
         };
       }
-    case 'upsert_local_environment': {
+    case 'save_local_environment_settings': {
       return {
         kind,
-        environment_id: compact((candidate as { environment_id?: unknown }).environment_id) || undefined,
-        environment_name: compact((candidate as { environment_name?: unknown }).environment_name) || undefined,
-        label: compact((candidate as { label?: unknown }).label),
         local_ui_bind: compact((candidate as { local_ui_bind?: unknown }).local_ui_bind),
         local_ui_password: String((candidate as { local_ui_password?: unknown }).local_ui_password ?? ''),
         local_ui_password_mode: compact(
@@ -636,7 +625,6 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         release_base_url: compact((candidate as { release_base_url?: unknown }).release_base_url),
       };
       }
-    case 'delete_local_environment':
     case 'delete_saved_environment': {
       const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
       if (environmentID === '') {
