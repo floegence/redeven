@@ -43,7 +43,6 @@ type promptEnvironmentFacts struct {
 	UserInteractionEnabled  bool
 	ToolApprovalEnabled     bool
 	DangerousCommandBlocked bool
-	WebSearchProvider       string
 	SubagentDelegation      bool
 }
 
@@ -113,7 +112,6 @@ func collectPromptEnvironmentFacts(r *run, capability runCapabilityContract) pro
 	if r.cfg != nil {
 		out.ToolApprovalEnabled = r.cfg.EffectiveRequireUserApproval()
 		out.DangerousCommandBlocked = r.cfg.EffectiveBlockDangerousCommands()
-		out.WebSearchProvider = r.cfg.EffectiveWebSearchProvider()
 	}
 	out.SubagentDelegation = r.allowSubagentDelegate
 	return out
@@ -471,9 +469,6 @@ func renderPromptEnvironmentFactsLines(env promptEnvironmentFacts) []string {
 		fmt.Sprintf("- Mutating tool approval required: %t", env.ToolApprovalEnabled),
 		fmt.Sprintf("- Dangerous terminal commands hard-blocked: %t", env.DangerousCommandBlocked),
 	)
-	if provider := strings.TrimSpace(env.WebSearchProvider); provider != "" {
-		lines = append(lines, fmt.Sprintf("- Web search provider: %s", provider))
-	}
 	lines = append(lines, fmt.Sprintf("- Subagent delegation available: %t", env.SubagentDelegation))
 	return lines
 }

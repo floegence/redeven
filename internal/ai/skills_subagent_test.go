@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -457,8 +458,9 @@ func TestSubagentManager_DelegateAndWait(t *testing.T) {
 }
 
 type subagentWebSearchResolverMock struct {
-	mu   sync.Mutex
-	step int
+	mu                    sync.Mutex
+	step                  int
+	firstRequestToolNames []string
 }
 
 func (m *subagentWebSearchResolverMock) handle(w http.ResponseWriter, r *http.Request) {
@@ -474,10 +476,37 @@ func (m *subagentWebSearchResolverMock) handle(w http.ResponseWriter, r *http.Re
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
+	body, _ := io.ReadAll(r.Body)
+	var reqBody map[string]any
+	requestToolNames := []string{}
+	if err := json.Unmarshal(body, &reqBody); err == nil {
+		if rawTools, ok := reqBody["tools"].([]any); ok {
+			names := make([]string, 0, len(rawTools))
+			for _, rawTool := range rawTools {
+				tool, ok := rawTool.(map[string]any)
+				if !ok {
+					continue
+				}
+				if name, ok := tool["name"].(string); ok {
+					names = append(names, name)
+					continue
+				}
+				if fn, ok := tool["function"].(map[string]any); ok {
+					if name, ok := fn["name"].(string); ok {
+						names = append(names, name)
+					}
+				}
+			}
+			requestToolNames = names
+		}
+	}
 
 	m.mu.Lock()
 	m.step++
 	step := m.step
+	if step == 1 {
+		m.firstRequestToolNames = append([]string(nil), requestToolNames...)
+	}
 	m.mu.Unlock()
 
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -493,6 +522,28 @@ func (m *subagentWebSearchResolverMock) handle(w http.ResponseWriter, r *http.Re
 	case 1:
 		writeOpenAISSEJSON(w, f, map[string]any{"type": "response.output_text.delta", "delta": "Searching..."})
 		writeOpenAISSEJSON(w, f, map[string]any{
+			"type":         "response.output_item.added",
+			"output_index": 0,
+			"item": map[string]any{
+				"type":      "function_call",
+				"id":        "fc_subagent_search_1",
+				"call_id":   "call_subagent_search_1",
+				"name":      "web_search_tool",
+				"arguments": `{"query":"hello","provider":"dummy","count":1}`,
+			},
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type":         "response.output_item.done",
+			"output_index": 0,
+			"item": map[string]any{
+				"type":      "function_call",
+				"id":        "fc_subagent_search_1",
+				"call_id":   "call_subagent_search_1",
+				"name":      "web_search_tool",
+				"arguments": `{"query":"hello","provider":"dummy","count":1}`,
+			},
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
 			"type": "response.completed",
 			"response": map[string]any{
 				"id":     "resp_subagent_search_1",
@@ -503,7 +554,7 @@ func (m *subagentWebSearchResolverMock) handle(w http.ResponseWriter, r *http.Re
 						"type":      "function_call",
 						"id":        "fc_subagent_search_1",
 						"call_id":   "call_subagent_search_1",
-						"name":      "web_search",
+						"name":      "web_search_tool",
 						"arguments": `{"query":"hello","provider":"dummy","count":1}`,
 					},
 				},
@@ -552,10 +603,13 @@ func TestSubagentManager_InheritsWebSearchResolver(t *testing.T) {
 
 	cfg := &config.AIConfig{
 		Providers: []config.AIProvider{{
-			ID:      "openai",
-			Type:    "openai",
+			ID:      "compat",
+			Type:    "openai_compatible",
 			BaseURL: strings.TrimSuffix(srv.URL, "/") + "/v1",
-			Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
+			WebSearch: &config.AIProviderWebSearch{
+				Mode: config.AIProviderWebSearchModeBrave,
+			},
+			Models: []config.AIProviderModel{{ModelName: "gpt-5-mini", ContextWindow: 128000}},
 		}},
 	}
 
@@ -578,7 +632,7 @@ func TestSubagentManager_InheritsWebSearchResolver(t *testing.T) {
 		AIConfig:     cfg,
 		SessionMeta:  meta,
 		ResolveProviderKey: func(providerID string) (string, bool, error) {
-			if strings.TrimSpace(providerID) == "openai" {
+			if strings.TrimSpace(providerID) == "compat" {
 				return "sk-test", true, nil
 			}
 			return "", false, nil
@@ -597,7 +651,7 @@ func TestSubagentManager_InheritsWebSearchResolver(t *testing.T) {
 		UserPublicID: meta.UserPublicID,
 		MessageID:    "m_parent_websearch",
 	})
-	r.currentModelID = "openai/gpt-5-mini"
+	r.currentModelID = "compat/gpt-5-mini"
 
 	created, err := r.manageSubagents(context.Background(), map[string]any{
 		"action":             "create",
@@ -641,6 +695,12 @@ func TestSubagentManager_InheritsWebSearchResolver(t *testing.T) {
 	if waited["timed_out"] == true {
 		t.Fatalf("wait timed out: %#v", waited)
 	}
+	mock.mu.Lock()
+	firstRequestToolNames := append([]string(nil), mock.firstRequestToolNames...)
+	mock.mu.Unlock()
+	if !containsString(firstRequestToolNames, "web_search_tool") {
+		t.Fatalf("first subagent request tools=%v, want web_search_tool", firstRequestToolNames)
+	}
 	statuses, _ := waited["snapshots"].(map[string]any)
 	entryRaw, ok := statuses[id]
 	if !ok {
@@ -652,7 +712,11 @@ func TestSubagentManager_InheritsWebSearchResolver(t *testing.T) {
 	}
 	stats, _ := entry["stats"].(map[string]any)
 	if parseIntRaw(stats["tool_calls"], 0) < 1 {
-		t.Fatalf("unexpected subagent tool call stats: %#v", stats)
+		mock.mu.Lock()
+		mockStep := mock.step
+		firstRequestToolNames := append([]string(nil), mock.firstRequestToolNames...)
+		mock.mu.Unlock()
+		t.Fatalf("unexpected subagent tool call stats: %#v step=%d tools=%v", stats, mockStep, firstRequestToolNames)
 	}
 	if parseIntRaw(stats["tokens"], 0) <= 0 {
 		t.Fatalf("unexpected subagent token stats: %#v", stats)

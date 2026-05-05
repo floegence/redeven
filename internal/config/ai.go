@@ -65,17 +65,6 @@ type AIConfig struct {
 	// - default timeout: 2 minutes
 	// - maximum timeout cap: 10 minutes
 	TerminalExecPolicy *AITerminalExecPolicy `json:"terminal_exec_policy,omitempty"`
-
-	// WebSearchProvider controls which web search backend is enabled for AI runs.
-	//
-	// Supported values:
-	// - "prefer_openai": prefer OpenAI built-in web search when using official OpenAI endpoints; otherwise use Brave (default)
-	// - "brave": use Brave web search (requires a Brave Search API key)
-	// - "disabled": disable all web search tools
-	//
-	// Notes:
-	// - Secrets (API keys) must never be stored in config.json. Web search keys must live in secrets.json.
-	WebSearchProvider string `json:"web_search_provider,omitempty"`
 }
 
 type AIExecutionPolicy struct {
@@ -131,8 +120,24 @@ type AIProvider struct {
 	// - moonshot/chatglm/deepseek/qwen: non-strict
 	StrictToolSchema *bool `json:"strict_tool_schema,omitempty"`
 
+	// WebSearch configures optional web search behavior for generic OpenAI-compatible providers.
+	//
+	// Native providers (OpenAI, Moonshot, ChatGLM/GLM, DeepSeek, and Qwen) derive their web-search
+	// behavior from the provider type and explicit model allow-list, so this field is ignored for them.
+	WebSearch *AIProviderWebSearch `json:"web_search,omitempty"`
+
 	// Models is the allowed model list for this provider (shown in the Chat UI).
 	Models []AIProviderModel `json:"models,omitempty"`
+}
+
+type AIProviderWebSearch struct {
+	// Mode is only honored for openai_compatible providers.
+	//
+	// Supported values:
+	// - "disabled": do not expose any web-search capability
+	// - "openai_builtin": attach OpenAI Responses-style hosted web search
+	// - "brave": expose Flower's external Brave-backed web.search tool
+	Mode string `json:"mode,omitempty"`
 }
 
 type AIProviderModel struct {
@@ -160,9 +165,33 @@ const (
 	defaultAITerminalExecDefaultTimeoutMS = 120_000
 	defaultAITerminalExecMaxTimeoutMS     = 600_000
 
-	defaultAIWebSearchProvider                 = "prefer_openai"
 	defaultAIEffectiveContextWindowPercent int = 95
 )
+
+const (
+	AIProviderWebSearchModeDisabled      = "disabled"
+	AIProviderWebSearchModeOpenAIBuiltin = "openai_builtin"
+	AIProviderWebSearchModeBrave         = "brave"
+)
+
+var curatedNativeAIProviderModels = map[string]map[string]struct{}{
+	"moonshot": {
+		"kimi-k2.6": {},
+	},
+	"chatglm": {
+		"glm-5.1": {},
+	},
+	"deepseek": {
+		"deepseek-v4-pro":   {},
+		"deepseek-v4-flash": {},
+	},
+	"qwen": {
+		"qwen3.6-plus":             {},
+		"qwen3.6-plus-2026-04-02":  {},
+		"qwen3.6-flash":            {},
+		"qwen3.6-flash-2026-04-16": {},
+	},
+}
 
 func (m AIProviderModel) EffectiveContextWindowPercentValue() int {
 	if m.EffectiveContextWindowPercent <= 0 {
@@ -196,6 +225,15 @@ func requiresExplicitAIProviderBaseURL(providerType string) bool {
 	}
 }
 
+func IsCuratedNativeAIProviderModel(providerType string, modelName string) bool {
+	models, ok := curatedNativeAIProviderModels[strings.ToLower(strings.TrimSpace(providerType))]
+	if !ok {
+		return false
+	}
+	_, ok = models[strings.TrimSpace(modelName)]
+	return ok
+}
+
 func (c *AIConfig) Validate() error {
 	if c == nil {
 		return errors.New("nil config")
@@ -209,16 +247,6 @@ func (c *AIConfig) Validate() error {
 	case AIModeAct, AIModePlan:
 	default:
 		return fmt.Errorf("invalid ai mode %q", c.Mode)
-	}
-
-	webSearchProvider := strings.TrimSpace(strings.ToLower(c.WebSearchProvider))
-	if webSearchProvider == "" {
-		webSearchProvider = defaultAIWebSearchProvider
-	}
-	switch webSearchProvider {
-	case "prefer_openai", "brave", "disabled":
-	default:
-		return fmt.Errorf("invalid web_search_provider %q", c.WebSearchProvider)
 	}
 
 	if c.ToolRecoveryMaxSteps != nil {
@@ -289,6 +317,21 @@ func (c *AIConfig) Validate() error {
 			}
 		}
 
+		if p.WebSearch != nil {
+			mode := strings.ToLower(strings.TrimSpace(p.WebSearch.Mode))
+			if mode == "" {
+				mode = AIProviderWebSearchModeDisabled
+			}
+			switch mode {
+			case AIProviderWebSearchModeDisabled, AIProviderWebSearchModeOpenAIBuiltin, AIProviderWebSearchModeBrave:
+			default:
+				return fmt.Errorf("providers[%d]: invalid web_search.mode %q", i, p.WebSearch.Mode)
+			}
+			if t != "openai_compatible" && mode != AIProviderWebSearchModeDisabled {
+				return fmt.Errorf("providers[%d]: web_search.mode is only supported for openai_compatible providers", i)
+			}
+		}
+
 		// Validate models (provider-owned list).
 		if len(p.Models) == 0 {
 			return fmt.Errorf("providers[%d]: missing models", i)
@@ -307,6 +350,9 @@ func (c *AIConfig) Validate() error {
 				return fmt.Errorf("providers[%d].models[%d]: duplicate model_name %q", i, j, name)
 			}
 			modelNames[name] = struct{}{}
+			if _, curatedProvider := curatedNativeAIProviderModels[t]; curatedProvider && !IsCuratedNativeAIProviderModel(t, name) {
+				return fmt.Errorf("providers[%d].models[%d]: unsupported %s model %q", i, j, t, name)
+			}
 
 			contextWindow := m.ContextWindow
 			if t == "openai_compatible" {
@@ -431,22 +477,6 @@ func (c *AIConfig) EffectiveMode() string {
 		return AIModePlan
 	default:
 		return AIModeAct
-	}
-}
-
-func (c *AIConfig) EffectiveWebSearchProvider() string {
-	if c == nil {
-		return defaultAIWebSearchProvider
-	}
-	v := strings.TrimSpace(strings.ToLower(c.WebSearchProvider))
-	if v == "" {
-		return defaultAIWebSearchProvider
-	}
-	switch v {
-	case "prefer_openai", "brave", "disabled":
-		return v
-	default:
-		return defaultAIWebSearchProvider
 	}
 }
 

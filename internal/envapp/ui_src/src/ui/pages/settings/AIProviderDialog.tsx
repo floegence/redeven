@@ -5,6 +5,8 @@ import {
   defaultBaseURLForProviderType,
   formatTokenCount,
   modelID,
+  providerBuiltInWebSearchLabel,
+  providerNeedsWebSearchConfig,
   providerTypeRequiresBaseURL,
 } from './aiCatalog';
 import {
@@ -20,7 +22,7 @@ import {
   SettingsTableRow,
   SubSectionHeader,
 } from './SettingsPrimitives';
-import type { AIProviderModelPreset, AIProviderRow, AIProviderType } from './types';
+import type { AIProviderModelPreset, AIProviderRow, AIProviderType, AIProviderWebSearchMode } from './types';
 
 export type AIProviderDialogProps = {
   open: boolean;
@@ -33,6 +35,9 @@ export type AIProviderDialogProps = {
   keySet: boolean;
   keyDraft: string;
   keySaving: boolean;
+  webSearchKeySet: boolean;
+  webSearchKeyDraft: string;
+  webSearchKeySaving: boolean;
   presetModel: string;
   recommendedModels: readonly AIProviderModelPreset[];
   recommendedModelOptions: ReadonlyArray<{ value: string; label: string }>;
@@ -44,16 +49,16 @@ export type AIProviderDialogProps = {
   onChangeKeyDraft: (value: string) => void;
   onSaveKey: () => void;
   onClearKey: () => void;
+  onChangeWebSearchMode: (mode: AIProviderWebSearchMode) => void;
+  onChangeWebSearchKeyDraft: (value: string) => void;
+  onSaveWebSearchKey: () => void;
+  onClearWebSearchKey: () => void;
   onSetPresetModel: (value: string) => void;
   onApplyAllPresets: () => void;
   onAddSelectedPreset: () => void;
   onAddModel: () => void;
   onChangeModelName: (index: number, value: string) => void;
-  onChangeModelNumber: (
-    index: number,
-    key: 'context_window' | 'max_output_tokens' | 'effective_context_window_percent',
-    rawValue: string,
-  ) => void;
+  onChangeModelNumber: (index: number, key: 'context_window' | 'max_output_tokens' | 'effective_context_window_percent', rawValue: string) => void;
   onRemoveModel: (index: number) => void;
 };
 
@@ -197,6 +202,74 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                       Secrets stay in a separate local secrets file and never go back into config responses.
                     </SettingsTableCell>
                   </SettingsTableRow>
+                  <Show
+                    when={providerNeedsWebSearchConfig(provider().type)}
+                    fallback={
+                      <Show when={providerBuiltInWebSearchLabel(provider().type)}>
+                        {(label) => (
+                          <SettingsTableRow>
+                            <SettingsTableCell class="font-medium text-muted-foreground">web_search</SettingsTableCell>
+                            <SettingsTableCell>
+                              <SettingsPill tone="success">{label()}</SettingsPill>
+                            </SettingsTableCell>
+                            <SettingsTableCell class="text-[11px] text-muted-foreground">
+                              Native provider search is enabled from the curated provider and model list.
+                            </SettingsTableCell>
+                          </SettingsTableRow>
+                        )}
+                      </Show>
+                    }
+                  >
+                    <SettingsTableRow>
+                      <SettingsTableCell class="font-medium text-muted-foreground">web_search.mode</SettingsTableCell>
+                      <SettingsTableCell>
+                        <Select
+                          value={provider().web_search?.mode ?? 'disabled'}
+                          onChange={(value) => props.onChangeWebSearchMode(value as AIProviderWebSearchMode)}
+                          disabled={!props.canInteract}
+                          options={[
+                            { value: 'disabled', label: 'disabled' },
+                            { value: 'openai_builtin', label: 'openai_builtin' },
+                            { value: 'brave', label: 'brave' },
+                          ]}
+                          class="w-full"
+                        />
+                      </SettingsTableCell>
+                      <SettingsTableCell class="text-[11px] text-muted-foreground">
+                        Only OpenAI-compatible providers need an explicit web search policy.
+                      </SettingsTableCell>
+                    </SettingsTableRow>
+                    <Show when={(provider().web_search?.mode ?? 'disabled') === 'brave'}>
+                      <SettingsTableRow>
+                        <SettingsTableCell class="font-medium text-muted-foreground">
+                          <FieldLabel hint="stored locally, never shown again">brave_api_key</FieldLabel>
+                        </SettingsTableCell>
+                        <SettingsTableCell>
+                          <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                            <SettingsPill tone={props.webSearchKeySet ? 'success' : 'default'}>{props.webSearchKeySet ? 'Key set' : 'Key not set'}</SettingsPill>
+                            <Input
+                              type="password"
+                              value={props.webSearchKeyDraft}
+                              onInput={(event) => props.onChangeWebSearchKeyDraft(event.currentTarget.value)}
+                              placeholder="Paste Brave API key"
+                              size="sm"
+                              class="w-full"
+                              disabled={!props.canInteract || !props.canAdmin || !providerID()}
+                            />
+                            <Button size="sm" variant="outline" onClick={props.onSaveWebSearchKey} loading={props.webSearchKeySaving} disabled={!props.canInteract || !props.canAdmin || !providerID()}>
+                              Save Brave key
+                            </Button>
+                            <Button size="sm" variant="ghost" class="text-muted-foreground hover:text-destructive" onClick={props.onClearWebSearchKey} disabled={!props.canInteract || !props.canAdmin || !providerID()}>
+                              Clear Brave
+                            </Button>
+                          </div>
+                        </SettingsTableCell>
+                        <SettingsTableCell class="text-[11px] text-muted-foreground">
+                          This key is used only when this OpenAI-compatible provider exposes Flower's Brave-backed search tool.
+                        </SettingsTableCell>
+                      </SettingsTableRow>
+                    </Show>
+                  </Show>
                 </SettingsTableBody>
               </SettingsTable>
 

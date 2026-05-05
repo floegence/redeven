@@ -143,8 +143,8 @@ type run struct {
 	executionContract  string
 	currentModelID     string
 
-	webSearchToolEnabled   bool
-	openAIWebSearchEnabled bool
+	webSearchToolEnabled bool
+	webSearchMode        string
 
 	collectedWebSources        map[string]SourceRef // url -> source
 	collectedWebSourceOrder    []string

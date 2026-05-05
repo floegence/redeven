@@ -184,7 +184,7 @@ func (m *moonshotAutoTitleMock) handle(w http.ResponseWriter, r *http.Request) {
 			"id":      "chatcmpl_auto_title_low",
 			"object":  "chat.completion.chunk",
 			"created": 123,
-			"model":   "kimi-k2.5",
+			"model":   "kimi-k2.6",
 			"choices": []any{
 				map[string]any{
 					"index":         0,
@@ -200,7 +200,7 @@ func (m *moonshotAutoTitleMock) handle(w http.ResponseWriter, r *http.Request) {
 			"id":      "chatcmpl_auto_title_low",
 			"object":  "chat.completion.chunk",
 			"created": 123,
-			"model":   "kimi-k2.5",
+			"model":   "kimi-k2.6",
 			"choices": []any{
 				map[string]any{
 					"index":         0,
@@ -213,7 +213,7 @@ func (m *moonshotAutoTitleMock) handle(w http.ResponseWriter, r *http.Request) {
 			"id":      "chatcmpl_auto_title_low",
 			"object":  "chat.completion.chunk",
 			"created": 123,
-			"model":   "kimi-k2.5",
+			"model":   "kimi-k2.6",
 			"choices": []any{},
 			"usage": map[string]any{
 				"prompt_tokens":     12,
@@ -231,7 +231,7 @@ func (m *moonshotAutoTitleMock) handle(w http.ResponseWriter, r *http.Request) {
 		"id":      "chatcmpl_auto_title_high",
 		"object":  "chat.completion.chunk",
 		"created": 124,
-		"model":   "kimi-k2.5",
+		"model":   "kimi-k2.6",
 		"choices": []any{
 			map[string]any{
 				"index":         0,
@@ -247,7 +247,7 @@ func (m *moonshotAutoTitleMock) handle(w http.ResponseWriter, r *http.Request) {
 		"id":      "chatcmpl_auto_title_high",
 		"object":  "chat.completion.chunk",
 		"created": 124,
-		"model":   "kimi-k2.5",
+		"model":   "kimi-k2.6",
 		"choices": []any{
 			map[string]any{
 				"index":         0,
@@ -262,7 +262,7 @@ func (m *moonshotAutoTitleMock) handle(w http.ResponseWriter, r *http.Request) {
 		"id":      "chatcmpl_auto_title_high",
 		"object":  "chat.completion.chunk",
 		"created": 124,
-		"model":   "kimi-k2.5",
+		"model":   "kimi-k2.6",
 		"choices": []any{
 			map[string]any{
 				"index":         0,
@@ -275,7 +275,7 @@ func (m *moonshotAutoTitleMock) handle(w http.ResponseWriter, r *http.Request) {
 		"id":      "chatcmpl_auto_title_high",
 		"object":  "chat.completion.chunk",
 		"created": 124,
-		"model":   "kimi-k2.5",
+		"model":   "kimi-k2.6",
 		"choices": []any{},
 		"usage": map[string]any{
 			"prompt_tokens":     14,
@@ -389,7 +389,7 @@ func newMoonshotAutoTitleTestService(t *testing.T, mock *moonshotAutoTitleMock) 
 				Name:    "Moonshot",
 				Type:    "moonshot",
 				BaseURL: strings.TrimSuffix(srv.URL, "/") + "/v1",
-				Models:  []config.AIProviderModel{{ModelName: "kimi-k2.5"}},
+				Models:  []config.AIProviderModel{{ModelName: "kimi-k2.6"}},
 			},
 		},
 	}
@@ -538,7 +538,7 @@ func TestApplyAutoThreadTitle_ExpandsOutputBudgetForReasoningHeavyProvider(t *te
 	svc, meta := newMoonshotAutoTitleTestService(t, mock)
 
 	ctx := context.Background()
-	thread, err := svc.CreateThread(ctx, &meta, "", "moonshot/kimi-k2.5", "", "")
+	thread, err := svc.CreateThread(ctx, &meta, "", "moonshot/kimi-k2.6", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
@@ -561,8 +561,8 @@ func TestApplyAutoThreadTitle_ExpandsOutputBudgetForReasoningHeavyProvider(t *te
 	if th.TitleInputMessageID != "msg_auto_title_budget" {
 		t.Fatalf("TitleInputMessageID=%q, want msg_auto_title_budget", th.TitleInputMessageID)
 	}
-	if th.TitleModelID != "moonshot/kimi-k2.5" {
-		t.Fatalf("TitleModelID=%q, want moonshot/kimi-k2.5", th.TitleModelID)
+	if th.TitleModelID != "moonshot/kimi-k2.6" {
+		t.Fatalf("TitleModelID=%q, want moonshot/kimi-k2.6", th.TitleModelID)
 	}
 	if mock.count() != 2 {
 		t.Fatalf("requestCount=%d, want 2 attempts within one apply call", mock.count())

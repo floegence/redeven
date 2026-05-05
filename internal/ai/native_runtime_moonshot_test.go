@@ -29,8 +29,8 @@ func TestMoonshotProvider_StreamTurn_TextResponse(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
-		if strings.TrimSpace(reqString(req, "model")) != "kimi-k2.5" {
-			t.Fatalf("model=%q, want kimi-k2.5", reqString(req, "model"))
+		if strings.TrimSpace(reqString(req, "model")) != "kimi-k2.6" {
+			t.Fatalf("model=%q, want kimi-k2.6", reqString(req, "model"))
 		}
 		if !anyBool(req["stream"]) {
 			t.Fatalf("stream=%v, want true", req["stream"])
@@ -45,7 +45,7 @@ func TestMoonshotProvider_StreamTurn_TextResponse(t *testing.T) {
 			"id":      "chatcmpl_test_1",
 			"object":  "chat.completion.chunk",
 			"created": 123,
-			"model":   "kimi-k2.5",
+			"model":   "kimi-k2.6",
 			"choices": []any{
 				map[string]any{
 					"index":         0,
@@ -60,7 +60,7 @@ func TestMoonshotProvider_StreamTurn_TextResponse(t *testing.T) {
 			"id":      "chatcmpl_test_1",
 			"object":  "chat.completion.chunk",
 			"created": 123,
-			"model":   "kimi-k2.5",
+			"model":   "kimi-k2.6",
 			"choices": []any{
 				map[string]any{
 					"index":         0,
@@ -75,7 +75,7 @@ func TestMoonshotProvider_StreamTurn_TextResponse(t *testing.T) {
 			"id":      "chatcmpl_test_1",
 			"object":  "chat.completion.chunk",
 			"created": 123,
-			"model":   "kimi-k2.5",
+			"model":   "kimi-k2.6",
 			"choices": []any{
 				map[string]any{
 					"index":         0,
@@ -90,7 +90,7 @@ func TestMoonshotProvider_StreamTurn_TextResponse(t *testing.T) {
 			"id":      "chatcmpl_test_1",
 			"object":  "chat.completion.chunk",
 			"created": 123,
-			"model":   "kimi-k2.5",
+			"model":   "kimi-k2.6",
 			"choices": []any{
 				map[string]any{
 					"index":         0,
@@ -103,7 +103,7 @@ func TestMoonshotProvider_StreamTurn_TextResponse(t *testing.T) {
 			"id":      "chatcmpl_test_1",
 			"object":  "chat.completion.chunk",
 			"created": 123,
-			"model":   "kimi-k2.5",
+			"model":   "kimi-k2.6",
 			"choices": []any{},
 			"usage": map[string]any{
 				"prompt_tokens":     10,
@@ -124,7 +124,7 @@ func TestMoonshotProvider_StreamTurn_TextResponse(t *testing.T) {
 
 	events := make([]StreamEvent, 0, 4)
 	result, err := provider.StreamTurn(context.Background(), TurnRequest{
-		Model: "kimi-k2.5",
+		Model: "kimi-k2.6",
 		Messages: []Message{
 			{Role: "user", Content: []ContentPart{{Type: "text", Text: "hello"}}},
 		},
@@ -174,8 +174,8 @@ func TestMoonshotProvider_Turn_ToolCallResponse(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
-		if strings.TrimSpace(reqString(req, "model")) != "kimi-k2.5" {
-			t.Fatalf("model=%q, want kimi-k2.5", reqString(req, "model"))
+		if strings.TrimSpace(reqString(req, "model")) != "kimi-k2.6" {
+			t.Fatalf("model=%q, want kimi-k2.6", reqString(req, "model"))
 		}
 		if got := extractOpenAIToolNames(req); len(got) != 1 || got[0] != structuredClassifierRunPolicyToolName {
 			t.Fatalf("tool_names=%v, want [%s]", got, structuredClassifierRunPolicyToolName)
@@ -186,7 +186,7 @@ func TestMoonshotProvider_Turn_ToolCallResponse(t *testing.T) {
 			"id":      "chatcmpl_turn_tool_1",
 			"object":  "chat.completion",
 			"created": 125,
-			"model":   "kimi-k2.5",
+			"model":   "kimi-k2.6",
 			"choices": []any{
 				map[string]any{
 					"index":         0,
@@ -230,7 +230,7 @@ func TestMoonshotProvider_Turn_ToolCallResponse(t *testing.T) {
 	}
 
 	result, err := direct.Turn(context.Background(), TurnRequest{
-		Model: "kimi-k2.5",
+		Model: "kimi-k2.6",
 		Messages: []Message{
 			{Role: "user", Content: []ContentPart{{Type: "text", Text: "classify this objective"}}},
 		},
@@ -273,7 +273,7 @@ func TestMoonshotProvider_StreamTurn_PreservesReasoningFragmentWhitespace(t *tes
 			"id":      "chatcmpl_reasoning_spacing_1",
 			"object":  "chat.completion.chunk",
 			"created": 124,
-			"model":   "kimi-k2.5",
+			"model":   "kimi-k2.6",
 			"choices": []any{
 				map[string]any{
 					"index":         0,
@@ -289,7 +289,7 @@ func TestMoonshotProvider_StreamTurn_PreservesReasoningFragmentWhitespace(t *tes
 			"id":      "chatcmpl_reasoning_spacing_1",
 			"object":  "chat.completion.chunk",
 			"created": 124,
-			"model":   "kimi-k2.5",
+			"model":   "kimi-k2.6",
 			"choices": []any{
 				map[string]any{
 					"index":         0,
@@ -304,7 +304,7 @@ func TestMoonshotProvider_StreamTurn_PreservesReasoningFragmentWhitespace(t *tes
 			"id":      "chatcmpl_reasoning_spacing_1",
 			"object":  "chat.completion.chunk",
 			"created": 124,
-			"model":   "kimi-k2.5",
+			"model":   "kimi-k2.6",
 			"choices": []any{
 				map[string]any{
 					"index":         0,
@@ -319,7 +319,7 @@ func TestMoonshotProvider_StreamTurn_PreservesReasoningFragmentWhitespace(t *tes
 			"id":      "chatcmpl_reasoning_spacing_1",
 			"object":  "chat.completion.chunk",
 			"created": 124,
-			"model":   "kimi-k2.5",
+			"model":   "kimi-k2.6",
 			"choices": []any{
 				map[string]any{
 					"index":         0,
@@ -332,7 +332,7 @@ func TestMoonshotProvider_StreamTurn_PreservesReasoningFragmentWhitespace(t *tes
 			"id":      "chatcmpl_reasoning_spacing_1",
 			"object":  "chat.completion.chunk",
 			"created": 124,
-			"model":   "kimi-k2.5",
+			"model":   "kimi-k2.6",
 			"choices": []any{},
 			"usage": map[string]any{
 				"prompt_tokens":     14,
@@ -353,7 +353,7 @@ func TestMoonshotProvider_StreamTurn_PreservesReasoningFragmentWhitespace(t *tes
 
 	events := make([]StreamEvent, 0, 5)
 	result, err := provider.StreamTurn(context.Background(), TurnRequest{
-		Model: "kimi-k2.5",
+		Model: "kimi-k2.6",
 		Messages: []Message{
 			{Role: "user", Content: []ContentPart{{Type: "text", Text: "think out loud"}}},
 		},
@@ -410,7 +410,7 @@ func TestMoonshotProvider_StreamTurn_ToolCallAliasRoundTrip(t *testing.T) {
 			"id":      "chatcmpl_test_2",
 			"object":  "chat.completion.chunk",
 			"created": 124,
-			"model":   "kimi-k2.5",
+			"model":   "kimi-k2.6",
 			"choices": []any{
 				map[string]any{
 					"index":         0,
@@ -435,7 +435,7 @@ func TestMoonshotProvider_StreamTurn_ToolCallAliasRoundTrip(t *testing.T) {
 			"id":      "chatcmpl_test_2",
 			"object":  "chat.completion.chunk",
 			"created": 124,
-			"model":   "kimi-k2.5",
+			"model":   "kimi-k2.6",
 			"choices": []any{
 				map[string]any{
 					"index":         0,
@@ -457,7 +457,7 @@ func TestMoonshotProvider_StreamTurn_ToolCallAliasRoundTrip(t *testing.T) {
 			"id":      "chatcmpl_test_2",
 			"object":  "chat.completion.chunk",
 			"created": 124,
-			"model":   "kimi-k2.5",
+			"model":   "kimi-k2.6",
 			"choices": []any{
 				map[string]any{
 					"index":         0,
@@ -479,7 +479,7 @@ func TestMoonshotProvider_StreamTurn_ToolCallAliasRoundTrip(t *testing.T) {
 			"id":      "chatcmpl_test_2",
 			"object":  "chat.completion.chunk",
 			"created": 124,
-			"model":   "kimi-k2.5",
+			"model":   "kimi-k2.6",
 			"choices": []any{
 				map[string]any{
 					"index":         0,
@@ -492,7 +492,7 @@ func TestMoonshotProvider_StreamTurn_ToolCallAliasRoundTrip(t *testing.T) {
 			"id":      "chatcmpl_test_2",
 			"object":  "chat.completion.chunk",
 			"created": 124,
-			"model":   "kimi-k2.5",
+			"model":   "kimi-k2.6",
 			"choices": []any{},
 			"usage": map[string]any{
 				"prompt_tokens":     20,
@@ -510,7 +510,7 @@ func TestMoonshotProvider_StreamTurn_ToolCallAliasRoundTrip(t *testing.T) {
 
 	events := make([]StreamEvent, 0, 8)
 	result, err := provider.StreamTurn(context.Background(), TurnRequest{
-		Model: "kimi-k2.5",
+		Model: "kimi-k2.6",
 		Messages: []Message{
 			{Role: "user", Content: []ContentPart{{Type: "text", Text: "run pwd"}}},
 		},
@@ -580,7 +580,7 @@ func TestMoonshotProvider_StreamTurn_ToolCallHistoryKeepsReasoningContent(t *tes
 				"id":      "chatcmpl_reasoning_1",
 				"object":  "chat.completion.chunk",
 				"created": 125,
-				"model":   "kimi-k2.5",
+				"model":   "kimi-k2.6",
 				"choices": []any{
 					map[string]any{
 						"index":         0,
@@ -607,7 +607,7 @@ func TestMoonshotProvider_StreamTurn_ToolCallHistoryKeepsReasoningContent(t *tes
 				"id":      "chatcmpl_reasoning_1",
 				"object":  "chat.completion.chunk",
 				"created": 125,
-				"model":   "kimi-k2.5",
+				"model":   "kimi-k2.6",
 				"choices": []any{
 					map[string]any{
 						"index":         0,
@@ -620,7 +620,7 @@ func TestMoonshotProvider_StreamTurn_ToolCallHistoryKeepsReasoningContent(t *tes
 				"id":      "chatcmpl_reasoning_1",
 				"object":  "chat.completion.chunk",
 				"created": 125,
-				"model":   "kimi-k2.5",
+				"model":   "kimi-k2.6",
 				"choices": []any{},
 				"usage": map[string]any{
 					"prompt_tokens":     30,
@@ -664,7 +664,7 @@ func TestMoonshotProvider_StreamTurn_ToolCallHistoryKeepsReasoningContent(t *tes
 				"id":      "chatcmpl_reasoning_2",
 				"object":  "chat.completion.chunk",
 				"created": 126,
-				"model":   "kimi-k2.5",
+				"model":   "kimi-k2.6",
 				"choices": []any{
 					map[string]any{
 						"index":         0,
@@ -680,7 +680,7 @@ func TestMoonshotProvider_StreamTurn_ToolCallHistoryKeepsReasoningContent(t *tes
 				"id":      "chatcmpl_reasoning_2",
 				"object":  "chat.completion.chunk",
 				"created": 126,
-				"model":   "kimi-k2.5",
+				"model":   "kimi-k2.6",
 				"choices": []any{
 					map[string]any{
 						"index":         0,
@@ -693,7 +693,7 @@ func TestMoonshotProvider_StreamTurn_ToolCallHistoryKeepsReasoningContent(t *tes
 				"id":      "chatcmpl_reasoning_2",
 				"object":  "chat.completion.chunk",
 				"created": 126,
-				"model":   "kimi-k2.5",
+				"model":   "kimi-k2.6",
 				"choices": []any{},
 				"usage": map[string]any{
 					"prompt_tokens":     12,
@@ -713,7 +713,7 @@ func TestMoonshotProvider_StreamTurn_ToolCallHistoryKeepsReasoningContent(t *tes
 	}
 
 	firstResult, err := provider.StreamTurn(context.Background(), TurnRequest{
-		Model: "kimi-k2.5",
+		Model: "kimi-k2.6",
 		Messages: []Message{
 			{Role: "user", Content: []ContentPart{{Type: "text", Text: "check load"}}},
 		},
@@ -750,7 +750,7 @@ func TestMoonshotProvider_StreamTurn_ToolCallHistoryKeepsReasoningContent(t *tes
 	history = append(history, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "continue"}}})
 
 	secondResult, err := provider.StreamTurn(context.Background(), TurnRequest{
-		Model:    "kimi-k2.5",
+		Model:    "kimi-k2.6",
 		Messages: history,
 	}, nil)
 	if err != nil {
@@ -761,6 +761,94 @@ func TestMoonshotProvider_StreamTurn_ToolCallHistoryKeepsReasoningContent(t *tes
 	}
 	if requestCount.Load() != 2 {
 		t.Fatalf("request_count=%d, want 2", requestCount.Load())
+	}
+}
+
+func TestMoonshotProvider_StreamTurn_AddsBuiltinWebSearchTool(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(strings.TrimSpace(r.URL.Path), "/chat/completions") {
+			t.Fatalf("path=%s, want /chat/completions", r.URL.Path)
+		}
+
+		var req map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		tools, _ := req["tools"].([]any)
+		if len(tools) != 1 {
+			t.Fatalf("tools=%d, want 1", len(tools))
+		}
+		tool, _ := tools[0].(map[string]any)
+		if got := strings.TrimSpace(anyString(tool["type"])); got != "builtin_function" {
+			t.Fatalf("tool type=%q, want builtin_function", got)
+		}
+		fn, _ := tool["function"].(map[string]any)
+		if got := strings.TrimSpace(anyString(fn["name"])); got != "$web_search" {
+			t.Fatalf("builtin tool name=%q, want $web_search", got)
+		}
+		thinking, _ := req["thinking"].(map[string]any)
+		if got := strings.TrimSpace(anyString(thinking["type"])); got != "disabled" {
+			t.Fatalf("thinking.type=%q, want disabled", got)
+		}
+
+		f, ok := w.(http.Flusher)
+		if !ok {
+			t.Fatalf("response writer does not support flushing")
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"id":      "chatcmpl_web_search_1",
+			"object":  "chat.completion.chunk",
+			"created": 124,
+			"model":   "kimi-k2.6",
+			"choices": []any{
+				map[string]any{
+					"index":         0,
+					"finish_reason": nil,
+					"delta": map[string]any{
+						"role":    "assistant",
+						"content": "searched",
+					},
+				},
+			},
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"id":      "chatcmpl_web_search_1",
+			"object":  "chat.completion.chunk",
+			"created": 124,
+			"model":   "kimi-k2.6",
+			"choices": []any{
+				map[string]any{
+					"index":         0,
+					"finish_reason": "stop",
+					"delta":         map[string]any{},
+				},
+			},
+		})
+		fmt.Fprint(w, "data: [DONE]\n\n")
+		f.Flush()
+	}))
+	defer srv.Close()
+
+	provider, err := newProviderAdapter("moonshot", srv.URL+"/v1", "sk-test", nil)
+	if err != nil {
+		t.Fatalf("newProviderAdapter: %v", err)
+	}
+
+	result, err := provider.StreamTurn(context.Background(), TurnRequest{
+		Model:         "kimi-k2.6",
+		WebSearchMode: providerWebSearchModeKimiBuiltin,
+		Messages: []Message{
+			{Role: "user", Content: []ContentPart{{Type: "text", Text: "latest docs"}}},
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("StreamTurn: %v", err)
+	}
+	if strings.TrimSpace(result.Text) != "searched" {
+		t.Fatalf("text=%q, want searched", result.Text)
 	}
 }
 

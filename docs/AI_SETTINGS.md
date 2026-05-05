@@ -25,6 +25,7 @@ Flower deliberately splits non-secret settings and secrets into two local files:
 
 2. `~/.redeven/local-environment/secrets.json`
    - provider API keys
+   - optional Brave web-search API keys for OpenAI-compatible providers
    - future user secrets
 
 The UI never receives stored plaintext secrets back from the runtime. It only gets derived state such as `key_set=true`.
@@ -56,7 +57,23 @@ Rules:
   - `deepseek`
   - `qwen`
   - `openai_compatible`
-- `base_url` is optional for native providers and required for OpenAI-compatible providers that need a custom endpoint.
+- `base_url` is optional for OpenAI and Anthropic, and required for Moonshot, GLM/Z.ai, DeepSeek, Qwen, and OpenAI-compatible providers.
+- `web_search` is valid only for `openai_compatible` providers.
+
+OpenAI-compatible web-search example:
+
+```json
+{
+  "id": "compat",
+  "name": "Custom Gateway",
+  "type": "openai_compatible",
+  "base_url": "https://gateway.example/v1",
+  "web_search": { "mode": "brave" },
+  "models": [
+    { "model_name": "custom-model", "context_window": 128000 }
+  ]
+}
+```
 
 ## 3. Model registry
 
@@ -76,18 +93,47 @@ Important rules:
 - `model_name` must not contain `/`.
 - `context_window` is used by runtime budgeting.
 - `max_output_tokens` and `effective_context_window_percent` are optional overrides.
+- Native provider model support is an explicit allow-list, not a prefix match:
+  - Moonshot: `kimi-k2.6`
+  - GLM/Z.ai: `glm-5.1`
+  - DeepSeek: `deepseek-v4-pro`, `deepseek-v4-flash`
+  - Qwen: `qwen3.6-plus`, `qwen3.6-plus-2026-04-02`, `qwen3.6-flash`, `qwen3.6-flash-2026-04-16`
 
 Each thread stores its own selected `model_id`; switching threads follows the thread selection instead of a global session override. Updating a thread model never rewrites `current_model_id`.
 
-## 4. Runtime key handling
+## 4. Web search policy
+
+Native providers do not show web-search configuration in Settings:
+
+- OpenAI uses hosted Responses web search on official OpenAI endpoints.
+- Moonshot `kimi-k2.6` uses Kimi `$web_search` and disables thinking for those requests because Kimi documents that requirement.
+- GLM/Z.ai `glm-5.1` uses the provider `web_search` tool with `search_result=true`.
+- DeepSeek V4 Pro/Flash use an isolated DeepSeek-native search decorator so their schema can evolve without changing generic OpenAI-compatible behavior.
+- Qwen3.6 Plus/Flash use the provider Responses API `web_search` tool for the explicit Qwen3.6 model IDs listed above.
+
+Only `openai_compatible` providers may set `providers[].web_search.mode`:
+
+- `disabled`: no web-search capability is exposed for that provider.
+- `openai_builtin`: attach OpenAI Responses-style hosted web search for a compatible gateway.
+- `brave`: expose Flower's external Brave-backed `web.search` tool.
+
+Official source references:
+
+- Moonshot: `https://platform.kimi.ai/docs/models`, `https://platform.kimi.ai/docs/guide/use-web-search`
+- GLM/Z.ai: `https://docs.bigmodel.cn/cn/guide/models/text/glm-5.1`, `https://docs.bigmodel.cn/cn/guide/tools/web-search`
+- DeepSeek: `https://api-docs.deepseek.com/api/list-models/`, `https://api-docs.deepseek.com/api/create-chat-completion`
+- Qwen: `https://help.aliyun.com/zh/model-studio/text-generation-model/`, `https://help.aliyun.com/zh/model-studio/web-search`
+
+## 5. Runtime key handling
 
 For each run the Go runtime:
 
 1. resolves the API key from `secrets.json` by `provider_id`
 2. initializes the provider SDK client
 3. never writes the key back into `config.json` or API responses
+4. resolves a Brave API key only when the selected OpenAI-compatible provider uses `web_search.mode = "brave"`
 
-## 5. UI behavior
+## 6. UI behavior
 
 Current Runtime Settings UI behavior is:
 
@@ -95,12 +141,14 @@ Current Runtime Settings UI behavior is:
 - Add Provider generates a provider id automatically.
 - Provider id is shown as read-only.
 - API keys are stored locally and shown only as status (`Key set` / `Key not set`).
+- Web search controls are shown only inside OpenAI-compatible provider editing.
+- Native providers show built-in web-search status only; they do not show Brave or hosted-search configuration.
 - Models are configured inside each provider entry.
 - In a draft chat with no active thread, the chat model picker updates `current_model_id` immediately for future new chats.
 - In an active unlocked thread, the chat model picker updates only that thread's `model_id`.
 - Locked threads show the current thread model as read-only instead of as an editable picker.
 
-## 6. Permissions
+## 7. Permissions
 
 Current permission policy is:
 
@@ -109,7 +157,7 @@ Current permission policy is:
 
 This keeps local secret writes behind endpoint-owner or admin control.
 
-## 7. Execution policy
+## 8. Execution policy
 
 `ai.execution_policy` defines optional hard guardrails:
 
@@ -133,7 +181,7 @@ Current behavior:
 
 The execution-policy UI is exposed under Runtime Settings -> `AI & Extensions` -> Flower -> Execution policy.
 
-## 8. Terminal execution policy
+## 9. Terminal execution policy
 
 `ai.terminal_exec_policy` controls the bounded execution contract for `terminal.exec`:
 

@@ -497,7 +497,7 @@ func TestRun_LoadProviderTurnResumeState_SkipsOnIncompatibleState(t *testing.T) 
 				BaseURL: "https://api.moonshot.cn/v1",
 			},
 			providerType: "moonshot",
-			modelName:    "moonshot-v1-8k",
+			modelName:    "kimi-k2.6",
 			wantReason:   "provider_not_supported",
 		},
 	}

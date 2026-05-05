@@ -71,7 +71,7 @@ func TestResolver_Resolve_RefreshesStaleCapability(t *testing.T) {
 		ProviderID:               "prov_1",
 		ProviderType:             "openai_compatible",
 		ResolverVersion:          0,
-		ModelName:                "kimi-k2.5",
+		ModelName:                "kimi-k2.6",
 		SupportsTools:            true,
 		SupportsParallelTools:    false,
 		SupportsStrictJSONSchema: false,
@@ -85,7 +85,7 @@ func TestResolver_Resolve_RefreshesStaleCapability(t *testing.T) {
 		t.Fatalf("UpsertCapability: %v", err)
 	}
 
-	cap, err := resolver.Resolve(ctx, config.AIProvider{ID: "prov_1", Type: "moonshot"}, "prov_1/kimi-k2.5")
+	cap, err := resolver.Resolve(ctx, config.AIProvider{ID: "prov_1", Type: "moonshot"}, "prov_1/kimi-k2.6")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -98,11 +98,11 @@ func TestResolver_Resolve_RefreshesStaleCapability(t *testing.T) {
 	if cap.MaxContextTokens != 256000 {
 		t.Fatalf("MaxContextTokens=%d, want 256000", cap.MaxContextTokens)
 	}
-	if cap.MaxOutputTokens != 16384 {
-		t.Fatalf("MaxOutputTokens=%d, want 16384", cap.MaxOutputTokens)
+	if cap.MaxOutputTokens != 96000 {
+		t.Fatalf("MaxOutputTokens=%d, want 96000", cap.MaxOutputTokens)
 	}
 
-	cached, ok, err := repo.GetCapability(ctx, "prov_1", "kimi-k2.5")
+	cached, ok, err := repo.GetCapability(ctx, "prov_1", "kimi-k2.6")
 	if err != nil {
 		t.Fatalf("GetCapability: %v", err)
 	}
@@ -115,6 +115,79 @@ func TestResolver_Resolve_RefreshesStaleCapability(t *testing.T) {
 	}
 	if cached.MaxContextTokens != 256000 {
 		t.Fatalf("cached.MaxContextTokens=%d, want 256000", cached.MaxContextTokens)
+	}
+}
+
+func TestResolver_Resolve_UsesCuratedNativeModelMetadata(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewResolver(nil)
+	tests := []struct {
+		name       string
+		provider   config.AIProvider
+		modelID    string
+		wantCtx    int
+		wantOutput int
+	}{
+		{
+			name:       "moonshot_kimi_k2_6",
+			provider:   config.AIProvider{ID: "moonshot", Type: "moonshot"},
+			modelID:    "moonshot/kimi-k2.6",
+			wantCtx:    256000,
+			wantOutput: 96000,
+		},
+		{
+			name:       "glm_5_1",
+			provider:   config.AIProvider{ID: "glm", Type: "chatglm"},
+			modelID:    "glm/glm-5.1",
+			wantCtx:    200000,
+			wantOutput: 128000,
+		},
+		{
+			name:       "deepseek_v4_pro",
+			provider:   config.AIProvider{ID: "deepseek", Type: "deepseek"},
+			modelID:    "deepseek/deepseek-v4-pro",
+			wantCtx:    1000000,
+			wantOutput: 384000,
+		},
+		{
+			name:       "deepseek_v4_flash",
+			provider:   config.AIProvider{ID: "deepseek", Type: "deepseek"},
+			modelID:    "deepseek/deepseek-v4-flash",
+			wantCtx:    1000000,
+			wantOutput: 384000,
+		},
+		{
+			name:       "qwen_3_6_plus",
+			provider:   config.AIProvider{ID: "qwen", Type: "qwen"},
+			modelID:    "qwen/qwen3.6-plus",
+			wantCtx:    1000000,
+			wantOutput: 65536,
+		},
+		{
+			name:       "qwen_3_6_flash_snapshot",
+			provider:   config.AIProvider{ID: "qwen", Type: "qwen"},
+			modelID:    "qwen/qwen3.6-flash-2026-04-16",
+			wantCtx:    1000000,
+			wantOutput: 65536,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cap, err := resolver.Resolve(context.Background(), tc.provider, tc.modelID)
+			if err != nil {
+				t.Fatalf("Resolve: %v", err)
+			}
+			if cap.MaxContextTokens != tc.wantCtx {
+				t.Fatalf("MaxContextTokens=%d, want %d", cap.MaxContextTokens, tc.wantCtx)
+			}
+			if cap.MaxOutputTokens != tc.wantOutput {
+				t.Fatalf("MaxOutputTokens=%d, want %d", cap.MaxOutputTokens, tc.wantOutput)
+			}
+		})
 	}
 }
 

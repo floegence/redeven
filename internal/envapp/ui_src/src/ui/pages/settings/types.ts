@@ -16,11 +16,18 @@ export type AIProviderModel = Readonly<{
   effective_context_window_percent?: number;
 }>;
 
+export type AIProviderWebSearchMode = 'disabled' | 'openai_builtin' | 'brave';
+
+export type AIProviderWebSearch = Readonly<{
+  mode?: AIProviderWebSearchMode;
+}>;
+
 export type AIProvider = Readonly<{
   id: string;
   name?: string;
   type: AIProviderType;
   base_url?: string;
+  web_search?: AIProviderWebSearch;
   models: AIProviderModel[];
 }>;
 
@@ -38,7 +45,6 @@ export type AIConfig = Readonly<{
   current_model_id: string;
   providers: AIProvider[];
   mode?: 'act' | 'plan';
-  web_search_provider?: 'prefer_openai' | 'brave' | 'disabled';
   tool_recovery_enabled?: boolean;
   tool_recovery_max_steps?: number;
   tool_recovery_allow_path_rewrite?: boolean;
@@ -223,6 +229,7 @@ export type AIProviderRow = {
   name: string;
   type: AIProviderType;
   base_url: string;
+  web_search?: AIProviderWebSearch;
   models: AIProviderModelRow[];
 };
 
@@ -238,6 +245,7 @@ export type AIProviderPreset = Readonly<{
   type: AIProviderType;
   name: string;
   default_base_url: string;
+  web_search?: AIProviderWebSearch;
   models: readonly AIProviderModelPreset[];
 }>;
 

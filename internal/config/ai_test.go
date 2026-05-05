@@ -61,13 +61,13 @@ func TestAIConfigValidate_MoonshotRequiresBaseURL(t *testing.T) {
 	t.Parallel()
 
 	cfg := &AIConfig{
-		CurrentModelID: "moonshot/kimi-k2.5",
+		CurrentModelID: "moonshot/kimi-k2.6",
 		Providers: []AIProvider{
 			{
 				ID:     "moonshot",
 				Name:   "Moonshot",
 				Type:   "moonshot",
-				Models: []AIProviderModel{{ModelName: "kimi-k2.5"}},
+				Models: []AIProviderModel{{ModelName: "kimi-k2.6"}},
 			},
 		},
 	}
@@ -88,6 +88,7 @@ func TestAIConfigValidate_ProviderTypeBaseURLRequirements(t *testing.T) {
 		name      string
 		typ       string
 		baseURL   string
+		modelName string
 		wantError bool
 	}{
 		{name: "openai_without_base_url", typ: "openai", baseURL: "", wantError: false},
@@ -97,24 +98,28 @@ func TestAIConfigValidate_ProviderTypeBaseURLRequirements(t *testing.T) {
 		{name: "chatglm_without_base_url", typ: "chatglm", baseURL: "", wantError: true},
 		{name: "deepseek_without_base_url", typ: "deepseek", baseURL: "", wantError: true},
 		{name: "qwen_without_base_url", typ: "qwen", baseURL: "", wantError: true},
-		{name: "chatglm_with_base_url", typ: "chatglm", baseURL: "https://open.bigmodel.cn/api/paas/v4/", wantError: false},
-		{name: "deepseek_with_base_url", typ: "deepseek", baseURL: "https://api.deepseek.com", wantError: false},
-		{name: "qwen_with_base_url", typ: "qwen", baseURL: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", wantError: false},
+		{name: "chatglm_with_base_url", typ: "chatglm", baseURL: "https://open.bigmodel.cn/api/paas/v4/", modelName: "glm-5.1", wantError: false},
+		{name: "deepseek_with_base_url", typ: "deepseek", baseURL: "https://api.deepseek.com", modelName: "deepseek-v4-pro", wantError: false},
+		{name: "qwen_with_base_url", typ: "qwen", baseURL: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", modelName: "qwen3.6-plus", wantError: false},
 	}
 
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			modelName := tc.modelName
+			if modelName == "" {
+				modelName = "test-model"
+			}
 			cfg := &AIConfig{
-				CurrentModelID: "provider/test-model",
+				CurrentModelID: "provider/" + modelName,
 				Providers: []AIProvider{
 					{
 						ID:      "provider",
 						Name:    "Provider",
 						Type:    tc.typ,
 						BaseURL: tc.baseURL,
-						Models:  []AIProviderModel{{ModelName: "test-model"}},
+						Models:  []AIProviderModel{{ModelName: modelName}},
 					},
 				},
 			}
@@ -151,6 +156,56 @@ func TestAIConfigValidate_OpenAICompatibleRequiresContextWindow(t *testing.T) {
 	cfg.Providers[0].Models[0].ContextWindow = 128000
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Validate openai_compatible with context_window: %v", err)
+	}
+}
+
+func TestAIConfigValidate_CuratedNativeProviderModels(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		typ       string
+		models    []string
+		baseURL   string
+		wantError bool
+	}{
+		{name: "moonshot_current", typ: "moonshot", models: []string{"kimi-k2.6"}, baseURL: "https://api.moonshot.cn/v1"},
+		{name: "moonshot_legacy_removed", typ: "moonshot", models: []string{"kimi-k2.5"}, baseURL: "https://api.moonshot.cn/v1", wantError: true},
+		{name: "glm_current", typ: "chatglm", models: []string{"glm-5.1"}, baseURL: "https://api.z.ai/api/paas/v4/"},
+		{name: "glm_legacy_removed", typ: "chatglm", models: []string{"glm-4.5"}, baseURL: "https://api.z.ai/api/paas/v4/", wantError: true},
+		{name: "deepseek_current", typ: "deepseek", models: []string{"deepseek-v4-pro", "deepseek-v4-flash"}, baseURL: "https://api.deepseek.com"},
+		{name: "deepseek_legacy_removed", typ: "deepseek", models: []string{"deepseek-chat"}, baseURL: "https://api.deepseek.com", wantError: true},
+		{name: "qwen_current", typ: "qwen", models: []string{"qwen3.6-plus", "qwen3.6-plus-2026-04-02", "qwen3.6-flash", "qwen3.6-flash-2026-04-16"}, baseURL: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"},
+		{name: "qwen_preview_without_builtin_tools_removed", typ: "qwen", models: []string{"qwen3.6-max-preview"}, baseURL: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", wantError: true},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			models := make([]AIProviderModel, 0, len(tc.models))
+			for _, modelName := range tc.models {
+				models = append(models, AIProviderModel{ModelName: modelName, ContextWindow: 1000000})
+			}
+			cfg := &AIConfig{
+				CurrentModelID: "provider/" + tc.models[0],
+				Providers: []AIProvider{
+					{
+						ID:      "provider",
+						Type:    tc.typ,
+						BaseURL: tc.baseURL,
+						Models:  models,
+					},
+				},
+			}
+			err := cfg.Validate()
+			if tc.wantError && err == nil {
+				t.Fatalf("expected validation error")
+			}
+			if !tc.wantError && err != nil {
+				t.Fatalf("Validate: %v", err)
+			}
+		})
 	}
 }
 
@@ -239,58 +294,46 @@ func TestAIConfig_EffectiveMode_DefaultsAct(t *testing.T) {
 func boolPtr(v bool) *bool { return &v }
 func intPtr(v int) *int    { return &v }
 
-func TestAIConfig_EffectiveWebSearchProvider_DefaultsPreferOpenAI(t *testing.T) {
-	t.Parallel()
-
-	nilCfg := (*AIConfig)(nil)
-	if got := nilCfg.EffectiveWebSearchProvider(); got != "prefer_openai" {
-		t.Fatalf("EffectiveWebSearchProvider nil=%q, want %q", got, "prefer_openai")
-	}
-
-	cfg := &AIConfig{}
-	if got := cfg.EffectiveWebSearchProvider(); got != "prefer_openai" {
-		t.Fatalf("EffectiveWebSearchProvider empty=%q, want %q", got, "prefer_openai")
-	}
-
-	cfg.WebSearchProvider = "brave"
-	if got := cfg.EffectiveWebSearchProvider(); got != "brave" {
-		t.Fatalf("EffectiveWebSearchProvider brave=%q, want %q", got, "brave")
-	}
-
-	cfg.WebSearchProvider = "invalid"
-	if got := cfg.EffectiveWebSearchProvider(); got != "prefer_openai" {
-		t.Fatalf("EffectiveWebSearchProvider invalid=%q, want %q", got, "prefer_openai")
-	}
-}
-
-func TestAIConfigValidate_RejectsLegacyWebSearchProviderValues(t *testing.T) {
+func TestAIConfigValidate_ProviderScopedWebSearch(t *testing.T) {
 	t.Parallel()
 
 	cfg := &AIConfig{
-		WebSearchProvider: "auto",
-		CurrentModelID:    "openai/gpt-5-mini",
+		CurrentModelID: "compat/custom-model",
 		Providers: []AIProvider{
 			{
-				ID:      "openai",
-				Name:    "OpenAI",
-				Type:    "openai",
-				BaseURL: "https://api.openai.com/v1",
-				Models:  []AIProviderModel{{ModelName: "gpt-5-mini"}},
+				ID:        "compat",
+				Name:      "Compat",
+				Type:      "openai_compatible",
+				BaseURL:   "https://example.com/v1",
+				WebSearch: &AIProviderWebSearch{Mode: AIProviderWebSearchModeBrave},
+				Models:    []AIProviderModel{{ModelName: "custom-model", ContextWindow: 128000}},
 			},
 		},
 	}
-	if err := cfg.Validate(); err == nil {
-		t.Fatalf("expected validation error for legacy web_search_provider=auto")
-	}
-
-	cfg.WebSearchProvider = "openai"
-	if err := cfg.Validate(); err == nil {
-		t.Fatalf("expected validation error for legacy web_search_provider=openai")
-	}
-
-	cfg.WebSearchProvider = "prefer_openai"
 	if err := cfg.Validate(); err != nil {
-		t.Fatalf("Validate prefer_openai: %v", err)
+		t.Fatalf("Validate openai_compatible brave web_search: %v", err)
+	}
+
+	cfg.Providers[0].WebSearch.Mode = AIProviderWebSearchModeOpenAIBuiltin
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate openai_compatible openai_builtin web_search: %v", err)
+	}
+
+	cfg.Providers[0].WebSearch.Mode = "auto"
+	if err := cfg.Validate(); err == nil {
+		t.Fatalf("expected validation error for invalid provider web_search.mode")
+	}
+
+	cfg.Providers[0].Type = "openai"
+	cfg.Providers[0].BaseURL = "https://api.openai.com/v1"
+	cfg.Providers[0].WebSearch.Mode = AIProviderWebSearchModeBrave
+	if err := cfg.Validate(); err == nil {
+		t.Fatalf("expected validation error for native provider web_search.mode")
+	}
+
+	cfg.Providers[0].WebSearch.Mode = AIProviderWebSearchModeDisabled
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate disabled native provider web_search: %v", err)
 	}
 }
 
