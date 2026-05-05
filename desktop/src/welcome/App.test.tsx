@@ -753,7 +753,7 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain('props.baselineSnapshot.access_mode_options');
     expect(appSrc).toContain('aria-label="Visibility presets"');
-    expect(appSrc).toContain('This device keeps one Local Environment runtime profile for the current binding.');
+    expect(appSrc).toContain('This Redeven profile keeps one Local Environment runtime for the current binding.');
     expect(appSrc).toContain('Choose how the Local Environment is exposed on the next desktop-managed start');
     expect(appSrc).toContain('Loopback bind keeps the runtime on this device only. No password is required.');
     expect(appSrc).toContain('Shared local network access requires a password before other devices can open this Environment.');
