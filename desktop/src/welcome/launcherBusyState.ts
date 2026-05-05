@@ -2,7 +2,7 @@ import type { DesktopLauncherActionProgress, DesktopLauncherActionRequest } from
 
 export type BusyAction =
   | ''
-  | 'open_managed_environment'
+  | 'open_local_environment'
   | 'open_provider_environment'
   | 'open_remote_environment'
   | 'open_ssh_environment'
@@ -14,13 +14,13 @@ export type BusyAction =
   | 'focus_environment_window'
   | 'open_environment_settings'
   | 'refresh_control_plane'
-  | 'set_managed_environment_pinned'
+  | 'set_local_environment_pinned'
   | 'set_provider_environment_pinned'
   | 'set_saved_environment_pinned'
   | 'set_saved_ssh_environment_pinned'
   | 'delete_control_plane'
   | 'close_launcher_or_quit'
-  | 'upsert_managed_environment'
+  | 'upsert_local_environment'
   | 'save_settings'
   | 'save_environment'
   | 'delete_environment';
@@ -45,7 +45,7 @@ export function busyStateForLauncherRequest(
   request: DesktopLauncherActionRequest,
 ): DesktopLauncherBusyState {
   switch (request.kind) {
-    case 'upsert_managed_environment':
+    case 'upsert_local_environment':
     case 'upsert_saved_environment':
     case 'upsert_saved_ssh_environment':
       return {
@@ -55,7 +55,7 @@ export function busyStateForLauncherRequest(
         provider_id: '',
         progress: null,
       };
-    case 'delete_managed_environment':
+    case 'delete_local_environment':
     case 'delete_saved_environment':
     case 'delete_saved_ssh_environment':
       return {

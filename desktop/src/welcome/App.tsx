@@ -408,8 +408,8 @@ function environmentRuntimeServiceSnapshot(
   if (environment.runtime_service) {
     return environment.runtime_service;
   }
-  if (environment.kind === 'managed_environment') {
-    return environment.managed_runtime_service;
+  if (environment.kind === 'local_environment') {
+    return environment.local_environment_runtime_service;
   }
   if (environment.kind === 'provider_environment') {
     return environment.provider_runtime_service;
@@ -498,7 +498,7 @@ function createControlPlaneDialogState(
 
 function environmentKindTagVariant(kind: string): 'neutral' | 'primary' | 'success' {
   switch (kind) {
-    case 'managed_environment':
+    case 'local_environment':
       return 'primary';
     case 'provider_environment':
       return 'neutral';
@@ -716,7 +716,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const draft = createMemo(() => settingsDraftSession().draft);
   const selectedSettingsEnvironmentEntry = createMemo(() => (
     snapshot().environments.find((environment) => environment.id === snapshot().settings_surface.environment_id)
-      ?? snapshot().environments.find((environment) => environment.kind === 'managed_environment')
+      ?? snapshot().environments.find((environment) => environment.kind === 'local_environment')
       ?? snapshot().environments.find((environment) => environment.kind === 'provider_environment')
       ?? null
   ));
@@ -765,7 +765,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (!target) {
       return false;
     }
-    return target.kind === 'managed_environment';
+    return target.kind === 'local_environment';
   });
   const stopRuntimeSnapshot = createMemo<RuntimeServiceSnapshot | undefined>(() => (
     environmentRuntimeServiceSnapshot(stopRuntimeTarget())
@@ -1132,7 +1132,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function startEditingEnvironment(environment: DesktopEnvironmentEntry): void {
-    if (environment.kind === 'managed_environment') {
+    if (environment.kind === 'local_environment') {
       openSettingsSurface(environment.id);
     } else if (environment.kind === 'provider_environment') {
       openSettingsSurface(environment.id);
@@ -1316,12 +1316,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return result?.outcome === 'focused_environment_window';
   }
 
-  async function openManagedEnvironment(
+  async function openLocalEnvironment(
     environment: DesktopEnvironmentEntry,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
     route: 'auto' | DesktopLocalEnvironmentStateRoute = 'auto',
   ): Promise<boolean> {
-    if (environment.kind !== 'managed_environment') {
+    if (environment.kind !== 'local_environment') {
       return openEnvironment(environment, errorTarget === 'settings' ? 'connect' : errorTarget);
     }
     const preferredOpenSessionKey = route === 'remote_desktop'
@@ -1333,20 +1333,20 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return focusEnvironmentWindow(preferredOpenSessionKey, errorTarget);
     }
     const result = await performLauncherAction({
-      kind: 'open_managed_environment',
+      kind: 'open_local_environment',
       environment_id: environment.id,
       route,
     }, errorTarget);
     return result?.outcome === 'opened_environment_window' || result?.outcome === 'focused_environment_window';
   }
 
-  async function openPrimaryManagedEnvironment(): Promise<void> {
+  async function openPrimaryLocalEnvironment(): Promise<void> {
     const entry = selectedSettingsEnvironmentEntry();
     if (!entry) {
       setErrorMessage(visibleSurface() === 'environment_settings' ? 'settings' : 'connect', 'Create a Local Environment or connect a Provider first.');
       return;
     }
-    await openManagedEnvironment(entry, visibleSurface() === 'environment_settings' ? 'settings' : 'connect');
+    await openLocalEnvironment(entry, visibleSurface() === 'environment_settings' ? 'settings' : 'connect');
   }
 
   async function openRemoteEnvironment(
@@ -1414,7 +1414,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     kind: 'start_environment_runtime' | 'stop_environment_runtime' | 'refresh_environment_runtime',
     options: Readonly<{ forceRuntimeUpdate?: boolean }> = {},
   ): DesktopLauncherActionRequest | null {
-    if (environment.kind === 'managed_environment') {
+    if (environment.kind === 'local_environment') {
       return {
         kind,
         environment_id: environment.id,
@@ -1629,8 +1629,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       setErrorMessage(errorTarget, runtimeUnavailableMessage(environment));
       return false;
     }
-    if (environment.kind === 'managed_environment') {
-      return openManagedEnvironment(environment, errorTarget, route);
+    if (environment.kind === 'local_environment') {
+      return openLocalEnvironment(environment, errorTarget, route);
     }
     if (environment.kind === 'provider_environment') {
       return openProviderEnvironment(environment, errorTarget, route);
@@ -1646,7 +1646,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return openRemoteEnvironment(environment.local_ui_url, errorTarget, environment);
   }
 
-  async function triggerManagedEnvironmentAction(
+  async function triggerLocalEnvironmentAction(
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
@@ -1847,7 +1847,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       };
     }
 
-    const completed = await triggerManagedEnvironmentAction(environment, action, 'connect');
+    const completed = await triggerLocalEnvironmentAction(environment, action, 'connect');
     return {
       close_panel: completed,
       next_session: completed
@@ -2075,7 +2075,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   async function saveEnvironmentFromLibrary(environment: DesktopEnvironmentEntry): Promise<void> {
-    if (environment.kind === 'managed_environment') {
+    if (environment.kind === 'local_environment') {
       setErrorMessage('connect', 'The Local Environment is already saved on this device.');
       return;
     }
@@ -2171,9 +2171,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const successMessage = nextPinned
       ? `${environment.label} pinned.`
       : `${environment.label} unpinned.`;
-    if (environment.kind === 'managed_environment') {
+    if (environment.kind === 'local_environment') {
       const result = await performLauncherAction({
-        kind: 'set_managed_environment_pinned',
+        kind: 'set_local_environment_pinned',
         environment_id: environment.id,
         pinned: nextPinned,
       }, 'connect');
@@ -2248,8 +2248,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
     try {
       await props.runtime.launcher.performAction({
-        kind: target.kind === 'managed_environment'
-          ? 'delete_managed_environment'
+        kind: target.kind === 'local_environment'
+          ? 'delete_local_environment'
           : target.kind === 'ssh_environment'
             ? 'delete_saved_ssh_environment'
             : 'delete_saved_environment',
@@ -2258,7 +2258,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       await refreshSnapshot();
       setDeleteTarget(null);
       showActionToast(
-        target.kind === 'managed_environment'
+        target.kind === 'local_environment'
           ? 'Environment removed from this device.'
           : 'Connection removed from Environment Library.',
       );
@@ -2292,7 +2292,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         showConnectEnvironment={showConnectEnvironment}
         openCreateConnectionDialog={openCreateConnectionDialog}
         openSettingsSurface={openSettingsSurface}
-        openLocalEnvironment={openPrimaryManagedEnvironment}
+        openLocalEnvironment={openPrimaryLocalEnvironment}
         openEnvironment={openEnvironment}
         closeLauncherOrQuit={closeLauncherOrQuit}
       />
@@ -2352,7 +2352,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           libraryEntries={libraryEntries()}
           setLibrarySourceFilter={setLibrarySourceFilter}
           setLibraryQuery={setLibraryQuery}
-          openLocalEnvironment={openPrimaryManagedEnvironment}
+          openLocalEnvironment={openPrimaryLocalEnvironment}
           openSettingsSurface={openSettingsSurface}
           openCreateConnectionDialog={openCreateConnectionDialog}
           openCreateControlPlaneDialog={openCreateControlPlaneDialog}
@@ -2360,7 +2360,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           openRemoteEnvironment={openRemoteEnvironment}
           openSSHEnvironment={openSSHEnvironment}
           openEnvironment={openEnvironment}
-          runManagedEnvironmentAction={triggerManagedEnvironmentAction}
+          runLocalEnvironmentAction={triggerLocalEnvironmentAction}
           refreshEnvironmentRuntime={refreshEnvironmentRuntime}
           runEnvironmentGuidanceAction={runEnvironmentGuidanceAction}
           toggleEnvironmentPinned={toggleEnvironmentPinned}
@@ -2631,7 +2631,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
     errorTarget?: 'connect' | 'dialog',
     route?: 'auto' | DesktopLocalEnvironmentStateRoute,
   ) => Promise<boolean>;
-  runManagedEnvironmentAction: (
+  runLocalEnvironmentAction: (
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
     errorTarget?: 'connect' | 'dialog' | 'settings',
@@ -2915,7 +2915,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 actionProgress={props.actionProgress}
                 openCreateConnectionDialog={props.openCreateConnectionDialog}
                 openEnvironment={props.openEnvironment}
-                runManagedEnvironmentAction={props.runManagedEnvironmentAction}
+                runLocalEnvironmentAction={props.runLocalEnvironmentAction}
                 refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
                 runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
                 toggleEnvironmentPinned={props.toggleEnvironmentPinned}
@@ -2945,7 +2945,7 @@ function EnvironmentCardsPanel(props: Readonly<{
     errorTarget?: 'connect' | 'dialog',
     route?: 'auto' | DesktopLocalEnvironmentStateRoute,
   ) => Promise<boolean>;
-  runManagedEnvironmentAction: (
+  runLocalEnvironmentAction: (
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
     errorTarget?: 'connect' | 'dialog' | 'settings',
@@ -3124,7 +3124,7 @@ function EnvironmentCardsPanel(props: Readonly<{
                     onPrimaryActionGuidanceOpenChange={(open) => setPrimaryActionGuidanceOpen(environmentID, open)}
                     guidanceSession={guidanceSessionForEnvironment(environmentID)}
                     openEnvironment={props.openEnvironment}
-                    runManagedEnvironmentAction={props.runManagedEnvironmentAction}
+                    runLocalEnvironmentAction={props.runLocalEnvironmentAction}
                     refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
                     runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
                     toggleEnvironmentPinned={props.toggleEnvironmentPinned}
@@ -3154,7 +3154,7 @@ function EnvironmentCardsPanel(props: Readonly<{
                     onPrimaryActionGuidanceOpenChange={(open) => setPrimaryActionGuidanceOpen(environmentID, open)}
                     guidanceSession={guidanceSessionForEnvironment(environmentID)}
                     openEnvironment={props.openEnvironment}
-                    runManagedEnvironmentAction={props.runManagedEnvironmentAction}
+                    runLocalEnvironmentAction={props.runLocalEnvironmentAction}
                     refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
                     runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
                     toggleEnvironmentPinned={props.toggleEnvironmentPinned}
@@ -3813,7 +3813,7 @@ function EnvironmentConnectionCard(props: Readonly<{
     errorTarget?: 'connect' | 'dialog',
     route?: 'auto' | DesktopLocalEnvironmentStateRoute,
   ) => Promise<boolean>;
-  runManagedEnvironmentAction: (
+  runLocalEnvironmentAction: (
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
     errorTarget?: 'connect' | 'dialog' | 'settings',
@@ -3840,7 +3840,7 @@ function EnvironmentConnectionCard(props: Readonly<{
   const isCardOpen = createMemo(() => props.environment.window_state === 'open');
   const isWindowActionBusy = createMemo(() => (
     busyStateMatchesEnvironment(props.busyState, props.environment.id, [
-      'open_managed_environment',
+      'open_local_environment',
       'open_provider_environment',
       'open_remote_environment',
       'open_ssh_environment',
@@ -3858,7 +3858,7 @@ function EnvironmentConnectionCard(props: Readonly<{
   ));
   const isPinBusy = createMemo(() => (
     busyStateMatchesEnvironment(props.busyState, props.environment.id, [
-      'set_managed_environment_pinned',
+      'set_local_environment_pinned',
       'set_provider_environment_pinned',
       'set_saved_environment_pinned',
       'set_saved_ssh_environment_pinned',
@@ -3936,7 +3936,7 @@ function EnvironmentConnectionCard(props: Readonly<{
           busyState={props.busyState}
           loading={isWindowActionBusy() || isRuntimeActionBusy()}
           onRunAction={(action) => {
-            void props.runManagedEnvironmentAction(
+            void props.runLocalEnvironmentAction(
               props.environment,
               action,
               'connect',
@@ -3995,8 +3995,8 @@ function EnvironmentConnectionCard(props: Readonly<{
               placement="top"
             >
               <ConsoleActionIconButton
-                title={props.environment.kind === 'managed_environment' ? 'Environment settings' : 'Connection settings'}
-                aria-label={props.environment.kind === 'managed_environment'
+                title={props.environment.kind === 'local_environment' ? 'Environment settings' : 'Connection settings'}
+                aria-label={props.environment.kind === 'local_environment'
                   ? `Settings for ${props.environment.label}`
                   : `Connection settings for ${props.environment.label}`}
                 onClick={() => props.editEnvironment(props.environment)}
@@ -4008,7 +4008,7 @@ function EnvironmentConnectionCard(props: Readonly<{
           <Show when={props.environment.can_delete}>
             <DesktopTooltip content="Delete" placement="top">
               <ConsoleActionIconButton
-                title={props.environment.kind === 'managed_environment' ? 'Delete environment' : 'Delete connection'}
+                title={props.environment.kind === 'local_environment' ? 'Delete environment' : 'Delete connection'}
                 aria-label={`Delete ${props.environment.label}`}
                 danger
                 onClick={() => props.deleteEnvironment(props.environment)}
@@ -4114,7 +4114,7 @@ function ControlPlanesPanel(props: Readonly<{
   );
 }
 
-function controlPlaneManagedEnvironmentStats(
+function controlPlaneLocalEnvironmentStats(
   controlPlane: DesktopControlPlaneSummary,
   environments: readonly DesktopEnvironmentEntry[],
 ): Readonly<{
@@ -4257,7 +4257,7 @@ function ControlPlaneShelf(props: Readonly<{
   deleteControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
 }>) {
   const statusModel = createMemo(() => buildControlPlaneStatusModel(props.controlPlane));
-  const stats = createMemo(() => controlPlaneManagedEnvironmentStats(
+  const stats = createMemo(() => controlPlaneLocalEnvironmentStats(
     props.controlPlane,
     props.environments,
   ));
@@ -5028,7 +5028,7 @@ function ConnectionDialog(props: Readonly<{
           </>
         );
       case 'ssh_environment':
-        return 'Deploy a Desktop-managed Local Environment profile to a host you can reach over SSH. Desktop reuses shared release artifacts on that host and keeps one runtime state set there.';
+        return 'Deploy a Desktop-owned Local Environment profile to a host you can reach over SSH. Desktop reuses shared release artifacts on that host and keeps one runtime state set there.';
       default:
         return '';
     }

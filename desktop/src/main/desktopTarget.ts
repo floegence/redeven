@@ -20,18 +20,18 @@ import {
 } from '../shared/desktopSSH';
 import type { DesktopProviderEnvironmentRecord } from '../shared/desktopProviderEnvironment';
 
-export type DesktopTargetKind = 'managed_environment' | 'external_local_ui' | 'ssh_environment';
+export type DesktopTargetKind = 'local_environment' | 'external_local_ui' | 'ssh_environment';
 export type DesktopLocalEnvironmentStateSessionRoute = 'local_host' | 'remote_desktop';
 export type DesktopSessionKey = `env:${string}:${DesktopLocalEnvironmentStateSessionRoute}` | `url:${string}` | `ssh:${string}`;
 export type DesktopSessionLifecycle = 'opening' | 'open' | 'closing';
 
-export type ManagedEnvironmentDesktopTarget = Readonly<{
-  kind: 'managed_environment';
+export type LocalEnvironmentDesktopTarget = Readonly<{
+  kind: 'local_environment';
   session_key: DesktopSessionKey;
   environment_id: string;
   label: string;
   route: DesktopLocalEnvironmentStateSessionRoute;
-  managed_environment_kind: 'local' | 'controlplane';
+  local_environment_kind: 'local' | 'controlplane';
   local_environment_name?: string;
   provider_origin?: string;
   provider_id?: string;
@@ -62,7 +62,7 @@ export type SSHDesktopTarget = Readonly<{
   forwarded_local_ui_url: string;
 }>;
 
-export type DesktopSessionTarget = ManagedEnvironmentDesktopTarget | ExternalLocalUIDesktopTarget | SSHDesktopTarget;
+export type DesktopSessionTarget = LocalEnvironmentDesktopTarget | ExternalLocalUIDesktopTarget | SSHDesktopTarget;
 
 export type DesktopSessionSummary = Readonly<{
   session_key: DesktopSessionKey;
@@ -78,7 +78,7 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-export function managedEnvironmentDesktopSessionKey(
+export function localEnvironmentDesktopSessionKey(
   environmentID: string,
   route: DesktopLocalEnvironmentStateSessionRoute,
 ): `env:${string}:${DesktopLocalEnvironmentStateSessionRoute}` {
@@ -89,7 +89,7 @@ export function managedEnvironmentDesktopSessionKey(
   return `env:${encodeURIComponent(cleanEnvironmentID)}:${route}`;
 }
 
-function providerManagedEnvironmentSessionIdentity(environment: DesktopLocalEnvironmentState): string {
+function providerLocalEnvironmentSessionIdentity(environment: DesktopLocalEnvironmentState): string {
   const binding = environment.current_provider_binding;
   if (!binding) {
     return compact(environment.id);
@@ -121,14 +121,14 @@ export function desktopSessionStateKeyFragment(sessionKey: DesktopSessionKey): s
   return encodeURIComponent(String(sessionKey ?? '').trim());
 }
 
-type BuildManagedEnvironmentDesktopTargetOptions = Readonly<{
+type BuildLocalEnvironmentDesktopTargetOptions = Readonly<{
   route?: DesktopLocalEnvironmentStateSessionRoute;
 }>;
 
-export function buildManagedEnvironmentDesktopTarget(
+export function buildLocalEnvironmentDesktopTarget(
   environment: DesktopLocalEnvironmentState,
-  options: BuildManagedEnvironmentDesktopTargetOptions = {},
-): ManagedEnvironmentDesktopTarget {
+  options: BuildLocalEnvironmentDesktopTargetOptions = {},
+): LocalEnvironmentDesktopTarget {
   const route = options.route ?? (
     localEnvironmentDefaultOpenRoute(environment) === 'remote_desktop'
       ? 'remote_desktop'
@@ -136,17 +136,17 @@ export function buildManagedEnvironmentDesktopTarget(
   );
   const localScope = environment.local_hosting.scope;
   return {
-    kind: 'managed_environment',
-    session_key: managedEnvironmentDesktopSessionKey(
+    kind: 'local_environment',
+    session_key: localEnvironmentDesktopSessionKey(
       route === 'local_host'
-        ? providerManagedEnvironmentSessionIdentity(environment)
+        ? providerLocalEnvironmentSessionIdentity(environment)
         : environment.id,
       route,
     ),
     environment_id: environment.id,
     label: environment.label,
     route,
-    managed_environment_kind: localEnvironmentStateKind(environment),
+    local_environment_kind: localEnvironmentStateKind(environment),
     local_environment_name: localScope
       ? normalizeDesktopLocalEnvironmentName(localScope.name)
       : undefined,
@@ -160,8 +160,8 @@ export function buildManagedEnvironmentDesktopTarget(
 
 export function buildProviderEnvironmentDesktopTarget(
   environment: DesktopProviderEnvironmentRecord,
-  options: BuildManagedEnvironmentDesktopTargetOptions = {},
-): ManagedEnvironmentDesktopTarget {
+  options: BuildLocalEnvironmentDesktopTargetOptions = {},
+): LocalEnvironmentDesktopTarget {
   const route = options.route ?? 'remote_desktop';
   const sessionIdentity = route === 'local_host'
     ? [
@@ -172,12 +172,12 @@ export function buildProviderEnvironmentDesktopTarget(
       ].map(encodeURIComponent).join(':')
     : environment.id;
   return {
-    kind: 'managed_environment',
-    session_key: managedEnvironmentDesktopSessionKey(sessionIdentity, route),
+    kind: 'local_environment',
+    session_key: localEnvironmentDesktopSessionKey(sessionIdentity, route),
     environment_id: environment.id,
     label: environment.label,
     route,
-    managed_environment_kind: 'controlplane',
+    local_environment_kind: 'controlplane',
     local_environment_name: 'local',
     provider_origin: environment.provider_origin,
     provider_id: environment.provider_id,

@@ -10,10 +10,10 @@ import {
 describe('desktopLauncherIPC', () => {
   it('normalizes launcher actions and trims Environment inputs', () => {
     expect(normalizeDesktopLauncherActionRequest({
-      kind: 'open_managed_environment',
+      kind: 'open_local_environment',
       environment_id: ' local ',
     })).toEqual({
-      kind: 'open_managed_environment',
+      kind: 'open_local_environment',
       environment_id: 'local',
       route: 'auto',
     });
@@ -35,7 +35,7 @@ describe('desktopLauncherIPC', () => {
     });
     expect(normalizeDesktopLauncherActionRequest({ kind: 'close_launcher_or_quit' })).toEqual({ kind: 'close_launcher_or_quit' });
     expect(normalizeDesktopLauncherActionRequest({
-      kind: 'upsert_managed_environment',
+      kind: 'upsert_local_environment',
       environment_id: ' local ',
       environment_name: ' local ',
       label: ' Local Environment ',
@@ -43,7 +43,7 @@ describe('desktopLauncherIPC', () => {
       local_ui_password: ' secret ',
       local_ui_password_mode: ' replace ',
     })).toEqual({
-      kind: 'upsert_managed_environment',
+      kind: 'upsert_local_environment',
       environment_id: 'local',
       environment_name: 'local',
       label: 'Local Environment',
@@ -81,10 +81,10 @@ describe('desktopLauncherIPC', () => {
       external_local_ui_url: 'http://192.168.1.11:24000/',
     });
     expect(normalizeDesktopLauncherActionRequest({
-      kind: 'delete_managed_environment',
+      kind: 'delete_local_environment',
       environment_id: ' local ',
     })).toEqual({
-      kind: 'delete_managed_environment',
+      kind: 'delete_local_environment',
       environment_id: 'local',
     });
     expect(normalizeDesktopLauncherActionRequest({
@@ -104,11 +104,11 @@ describe('desktopLauncherIPC', () => {
       display_label: 'Redeven Portal',
     });
     expect(normalizeDesktopLauncherActionRequest({
-      kind: 'set_managed_environment_pinned',
+      kind: 'set_local_environment_pinned',
       environment_id: ' local ',
       pinned: true,
     })).toEqual({
-      kind: 'set_managed_environment_pinned',
+      kind: 'set_local_environment_pinned',
       environment_id: 'local',
       pinned: true,
     });
@@ -210,14 +210,14 @@ describe('desktopLauncherIPC', () => {
 
   it('rejects unsupported or incomplete launcher actions', () => {
     expect(normalizeDesktopLauncherActionRequest({ kind: 'open_advanced_settings' })).toBeNull();
-    expect(normalizeDesktopLauncherActionRequest({ kind: 'open_managed_environment' })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'open_local_environment' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'stop_environment_runtime', environment_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'focus_environment_window', session_key: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'set_provider_environment_pinned',
       environment_id: '   ',
     })).toBeNull();
-    expect(normalizeDesktopLauncherActionRequest({ kind: 'delete_managed_environment', environment_id: '   ' })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'delete_local_environment', environment_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'delete_saved_environment', environment_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest(null)).toBeNull();
   });

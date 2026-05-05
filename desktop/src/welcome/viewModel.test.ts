@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import {
   buildExternalLocalUIDesktopTarget,
-  buildManagedEnvironmentDesktopTarget,
+  buildLocalEnvironmentDesktopTarget,
   buildSSHDesktopTarget,
 } from '../main/desktopTarget';
 import {
@@ -14,9 +14,9 @@ import {
 import type { RuntimeServiceOpenReadiness, RuntimeServiceSnapshot } from '../shared/runtimeService';
 import {
   testDesktopPreferences,
-  testManagedControlPlaneEnvironment,
-  testManagedLocalEnvironment,
-  testManagedSession,
+  testProviderBoundLocalEnvironment,
+  testLocalEnvironment,
+  testLocalEnvironmentSession,
 } from '../testSupport/desktopTestHelpers';
 import {
   buildEnvironmentLibraryLayoutModel,
@@ -160,14 +160,14 @@ function providerRuntimeService(openReadiness: RuntimeServiceOpenReadiness = { s
 
 describe('buildEnvironmentCardModel', () => {
   it('builds local, provider, URL, and SSH cards from the aggregated launcher entries', () => {
-    const managedLocal = testManagedLocalEnvironment('default');
-    const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
+    const local = testLocalEnvironment('default');
+    const localServe = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo', {
       label: 'Demo Local Serve',
     });
     const controlPlane = buildControlPlaneSummary({});
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [managedLocal, localServe],
+        local_environment: local,
         saved_environments: [
           {
             id: 'http://192.168.1.12:24000/',
@@ -197,7 +197,7 @@ describe('buildEnvironmentCardModel', () => {
       }),
       controlPlanes: [controlPlane],
       openSessions: [
-        testManagedSession(managedLocal, 'http://localhost:23998/', 'open', {
+        testLocalEnvironmentSession(local, 'http://localhost:23998/', 'open', {
           runtime_service: {
             runtime_version: 'v1.4.2',
             protocol_version: 'redeven-runtime-v1',
@@ -215,7 +215,7 @@ describe('buildEnvironmentCardModel', () => {
             },
           },
         }),
-        testManagedSession(localServe, 'http://127.0.0.1:24001/', 'open', {
+        testLocalEnvironmentSession(localServe, 'http://127.0.0.1:24001/', 'open', {
           runtime_service: {
             runtime_version: 'v1.4.2',
             protocol_version: 'redeven-runtime-v1',
@@ -301,7 +301,7 @@ describe('buildEnvironmentCardModel', () => {
     });
 
     const localEntry = snapshot.environments.find((environment) => (
-      environment.kind === 'managed_environment' && environment.managed_environment_kind === 'local'
+      environment.kind === 'local_environment' && environment.local_environment_kind === 'local'
     ));
     const providerEntry = snapshot.environments.find((environment) => environment.kind === 'provider_environment');
     const urlEntry = snapshot.environments.find((environment) => environment.kind === 'external_local_ui');
@@ -394,14 +394,11 @@ describe('buildEnvironmentCardModel', () => {
   });
 
   it('filters the environment library by local, provider, URL, SSH, and provider-specific scopes', () => {
-    const managedLocal = testManagedLocalEnvironment('default');
-    const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
-      label: 'Demo Local Serve',
-    });
+    const local = testLocalEnvironment('default');
     const controlPlane = buildControlPlaneSummary({});
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [managedLocal, localServe],
+        local_environment: local,
         saved_environments: [{
           id: 'http://192.168.1.12:24000/',
           label: 'Staging',
@@ -443,13 +440,13 @@ describe('buildEnvironmentCardModel', () => {
   });
 
   it('shows runtime maintenance state in the stable card fact slot', () => {
-    const managedLocal = testManagedLocalEnvironment('default');
+    const local = testLocalEnvironment('default');
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [managedLocal],
+        local_environment: local,
       }),
       openSessions: [
-        testManagedSession(managedLocal, 'http://localhost:23998/', 'open', {
+        testLocalEnvironmentSession(local, 'http://localhost:23998/', 'open', {
           runtime_service: {
             runtime_version: 'v1.4.3',
             protocol_version: 'redeven-runtime-v1',
@@ -470,7 +467,7 @@ describe('buildEnvironmentCardModel', () => {
       ],
     });
     const localEntry = snapshot.environments.find((environment) => (
-      environment.kind === 'managed_environment' && environment.managed_environment_kind === 'local'
+      environment.kind === 'local_environment' && environment.local_environment_kind === 'local'
     ));
 
     expect(localEntry).toBeTruthy();
@@ -683,7 +680,7 @@ describe('buildEnvironmentCardModel', () => {
     });
     const providerOnlySnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [testManagedLocalEnvironment('default')],
+        local_environment: testLocalEnvironment('default'),
         control_planes: [controlPlane],
       }),
       controlPlanes: [controlPlane],
@@ -761,12 +758,12 @@ describe('buildEnvironmentCardModel', () => {
       },
     });
 
-    const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
+    const localServe = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo', {
       label: 'Demo Local Serve',
     });
     const savedLocalServeSnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [testManagedLocalEnvironment('default'), localServe],
+        local_environment: testLocalEnvironment('default'),
         control_planes: [controlPlane],
       }),
       controlPlanes: [controlPlane],
@@ -777,12 +774,12 @@ describe('buildEnvironmentCardModel', () => {
 
     const openLocalServeSnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [testManagedLocalEnvironment('default'), localServe],
+        local_environment: testLocalEnvironment('default'),
         control_planes: [controlPlane],
       }),
       controlPlanes: [controlPlane],
       openSessions: [
-        testManagedSession(localServe, 'http://127.0.0.1:24001/'),
+        testLocalEnvironmentSession(localServe, 'http://127.0.0.1:24001/'),
       ],
     });
     const openLocalServeProviderEntry = openLocalServeSnapshot.environments.find((environment) => environment.kind === 'provider_environment');
@@ -831,7 +828,7 @@ describe('buildEnvironmentCardModel', () => {
     });
     const readySnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [testManagedLocalEnvironment('default')],
+        local_environment: testLocalEnvironment('default'),
         control_planes: [readyControlPlane],
       }),
       controlPlanes: [readyControlPlane],
@@ -900,7 +897,7 @@ describe('buildEnvironmentCardModel', () => {
     });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [testManagedLocalEnvironment('default')],
+        local_environment: testLocalEnvironment('default'),
         control_planes: [controlPlane],
       }),
       controlPlanes: [controlPlane],
@@ -954,12 +951,9 @@ describe('buildEnvironmentCardModel', () => {
     };
     const attachableLocalServe = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [
-          testManagedLocalEnvironment('default', {
+        local_environment: testLocalEnvironment('default', {
             currentRuntime: providerRuntime,
           }),
-          testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo'),
-        ],
       }),
       controlPlanes: [buildControlPlaneSummary({
         status: 'offline',
@@ -1008,14 +1002,12 @@ describe('buildEnvironmentCardModel', () => {
 
     const focusableLocalServe = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [
-          testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo'),
-        ],
+        local_environment: testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo'),
       }),
       controlPlanes: [buildControlPlaneSummary({})],
       openSessions: [
-        testManagedSession(
-          testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo'),
+        testLocalEnvironmentSession(
+          testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo'),
           'http://127.0.0.1:24001/',
         ),
       ],
@@ -1073,13 +1065,13 @@ describe('buildEnvironmentCardModel', () => {
   });
 
   it('treats opening managed sessions as a disabled Opening state instead of Focus', () => {
-    const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_opening');
+    const localServe = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_opening');
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [localServe],
+        local_environment: localServe,
       }),
       openSessions: [
-        testManagedSession(localServe, 'http://localhost:23998/', 'opening'),
+        testLocalEnvironmentSession(localServe, 'http://localhost:23998/', 'opening'),
       ],
     });
 
@@ -1131,7 +1123,7 @@ describe('buildEnvironmentCardModel', () => {
   });
 
   it('keeps Open disabled while an online runtime is still preparing Env App readiness', () => {
-    const managedLocal = testManagedLocalEnvironment('default', {
+    const local = testLocalEnvironment('default', {
       currentRuntime: {
         local_ui_url: 'http://127.0.0.1:24001/',
         desktop_managed: true,
@@ -1143,10 +1135,10 @@ describe('buildEnvironmentCardModel', () => {
         }),
       },
     });
-    const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_preparing');
+    const localServe = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_preparing');
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [managedLocal, localServe],
+        local_environment: local,
       }),
     });
     const entry = snapshot.environments.find((environment) => environment.id === localServe.id);
@@ -1171,11 +1163,11 @@ describe('buildEnvironmentCardModel', () => {
   });
 
   it('projects provider remote sessions onto the separate provider card', () => {
-    const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo');
-    const remoteTarget = buildManagedEnvironmentDesktopTarget(localServe, { route: 'remote_desktop' });
+    const localServe = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo');
+    const remoteTarget = buildLocalEnvironmentDesktopTarget(localServe, { route: 'remote_desktop' });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [localServe],
+        local_environment: localServe,
       }),
       controlPlanes: [buildControlPlaneSummary({})],
       openSessions: [
@@ -1208,10 +1200,7 @@ describe('buildEnvironmentCardModel', () => {
   it('splits pinned entries ahead of the regular environment list', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [
-          testManagedLocalEnvironment('default', { pinned: true }),
-          testManagedLocalEnvironment('lab'),
-        ],
+        local_environment: testLocalEnvironment('default', { pinned: true }),
         saved_environments: [{
           id: 'http://192.168.1.12:24000/',
           label: 'Staging',

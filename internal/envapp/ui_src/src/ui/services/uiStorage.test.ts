@@ -150,11 +150,11 @@ describe('uiStorage', () => {
     );
   });
 
-  it('prefixes environment-owned keys with the managed environment scope when available', () => {
+  it('prefixes environment-owned keys with the Desktop session storage scope when available', () => {
     vi.stubGlobal('localStorage', createStorageMock());
     window.redevenDesktopSessionContext = {
       getSnapshot: () => ({
-        managed_environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+        local_environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
         environment_storage_scope_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
       }),
     };

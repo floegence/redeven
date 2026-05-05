@@ -65,7 +65,7 @@ describe('sessionRuntime', () => {
       persistedOwner: 'agent',
     });
 
-    expect(handle.runtime_kind).toBe('managed_environment');
+    expect(handle.runtime_kind).toBe('local_environment');
     expect(handle.lifecycle_owner).toBe('external');
     expect(handle.launch_mode).toBe('attached');
 

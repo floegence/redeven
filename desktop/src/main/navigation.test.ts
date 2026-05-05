@@ -11,7 +11,7 @@ describe('navigation', () => {
     expect(isLoopbackHost('192.168.1.11')).toBe(false);
   });
 
-  it('allows loopback urls on the managed local ui port', () => {
+  it('allows loopback urls on the Local UI port', () => {
     expect(isAllowedAppNavigation('http://127.0.0.1:43123/_redeven_proxy/env/', 'http://127.0.0.1:43123/')).toBe(true);
     expect(isAllowedAppNavigation('http://localhost:43123/cs/demo/', 'http://127.0.0.1:43123/')).toBe(true);
   });

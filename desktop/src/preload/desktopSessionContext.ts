@@ -28,16 +28,16 @@ export function bootstrapDesktopSessionContextBridge(): void {
         return null;
       }
       const candidate = value as Partial<DesktopSessionContextSnapshot>;
-      const managedEnvironmentID = String(candidate.managed_environment_id ?? '').trim();
+      const localEnvironmentID = String(candidate.local_environment_id ?? '').trim();
       const environmentStorageScopeID = String(candidate.environment_storage_scope_id ?? '').trim();
       const providerOrigin = String(candidate.provider_origin ?? '').trim();
       const providerID = String(candidate.provider_id ?? '').trim();
       const envPublicID = String(candidate.env_public_id ?? '').trim();
-      if (managedEnvironmentID === '' || environmentStorageScopeID === '') {
+      if (localEnvironmentID === '' || environmentStorageScopeID === '') {
         return null;
       }
       return {
-        managed_environment_id: managedEnvironmentID,
+        local_environment_id: localEnvironmentID,
         environment_storage_scope_id: environmentStorageScopeID,
         ...(providerOrigin !== '' ? { provider_origin: providerOrigin } : {}),
         ...(providerID !== '' ? { provider_id: providerID } : {}),

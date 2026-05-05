@@ -19,7 +19,7 @@ import {
 
 export { desktopAccessModeForDraft };
 
-type ManagedEnvironmentSettingsSnapshotOptions = DesktopAccessModelOptions & Readonly<{
+type LocalEnvironmentSettingsSnapshotOptions = DesktopAccessModelOptions & Readonly<{
   environment_id: string;
   environment_label: string;
   environment_kind: 'local' | 'controlplane';
@@ -33,7 +33,7 @@ function trimString(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-type BuildDesktopSettingsSurfaceSnapshotOptions = ManagedEnvironmentSettingsSnapshotOptions;
+type BuildDesktopSettingsSurfaceSnapshotOptions = LocalEnvironmentSettingsSnapshotOptions;
 
 function localUIPasswordMode(
   draft: DesktopSettingsDraft,

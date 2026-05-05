@@ -3,14 +3,14 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
-  defaultManagedStateLayout,
-  localEnvironmentManagedStateLayout,
+  defaultLocalEnvironmentStateLayout,
+  localEnvironmentStateLayout,
   stateLayoutForConfigPath,
 } from './statePaths';
 
 describe('statePaths', () => {
-  it('resolves the default managed state layout under the single Local Environment scope', () => {
-    expect(defaultManagedStateLayout({ HOME: '/Users/tester' }, () => '/ignored')).toEqual({
+  it('resolves the default Local Environment state layout under the single scope', () => {
+    expect(defaultLocalEnvironmentStateLayout({ HOME: '/Users/tester' }, () => '/ignored')).toEqual({
       stateRoot: '/Users/tester/.redeven',
       scope: { kind: 'local_environment', name: 'local' },
       scopeKey: 'local_environment',
@@ -29,7 +29,7 @@ describe('statePaths', () => {
   });
 
   it('resolves the explicit Local Environment layout helper to the same single scope', () => {
-    expect(localEnvironmentManagedStateLayout({ HOME: '/Users/tester' }, () => '/ignored')).toEqual(expect.objectContaining({
+    expect(localEnvironmentStateLayout({ HOME: '/Users/tester' }, () => '/ignored')).toEqual(expect.objectContaining({
       scopeKey: 'local_environment',
       configPath: '/Users/tester/.redeven/local-environment/config.json',
       stateDir: '/Users/tester/.redeven/local-environment',
@@ -59,6 +59,6 @@ describe('statePaths', () => {
   });
 
   it('fails clearly when no home directory is available for implicit defaults', () => {
-    expect(() => defaultManagedStateLayout({}, () => '')).toThrow('user home directory is unavailable');
+    expect(() => defaultLocalEnvironmentStateLayout({}, () => '')).toThrow('user home directory is unavailable');
   });
 });

@@ -164,7 +164,7 @@ ipcMain.on('redeven-desktop:window-chrome-get-snapshot', (event) => {
 
 ipcMain.on('redeven-desktop:session-context-get', (event) => {
   event.returnValue = {
-    managed_environment_id: 'env_demo',
+    local_environment_id: 'env_demo',
     environment_storage_scope_id: 'env_demo',
   };
 });

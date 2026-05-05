@@ -1,8 +1,8 @@
 import type { DesktopPreferences } from '../main/desktopPreferences';
 import { defaultDesktopPreferences } from '../main/desktopPreferences';
-import { localEnvironmentManagedStateLayout } from '../main/statePaths';
+import { localEnvironmentStateLayout } from '../main/statePaths';
 import {
-  buildManagedEnvironmentDesktopTarget,
+  buildLocalEnvironmentDesktopTarget,
   type DesktopSessionLifecycle,
   type DesktopSessionSummary,
 } from '../main/desktopTarget';
@@ -26,11 +26,11 @@ import {
   type DesktopProviderEnvironmentRecord,
 } from '../shared/desktopProviderEnvironment';
 
-type TestManagedAccessOverrides = Partial<DesktopLocalEnvironmentAccess>;
+type TestLocalAccessOverrides = Partial<DesktopLocalEnvironmentAccess>;
 
-type TestManagedLocalEnvironmentOptions = Readonly<{
+type TestLocalEnvironmentOptions = Readonly<{
   label?: string;
-  access?: TestManagedAccessOverrides;
+  access?: TestLocalAccessOverrides;
   pinned?: boolean;
   stateDir?: string;
   owner?: DesktopLocalEnvironmentOwner;
@@ -41,10 +41,10 @@ type TestManagedLocalEnvironmentOptions = Readonly<{
   lastUsedAtMS?: number;
 }>;
 
-type TestManagedControlPlaneEnvironmentOptions = Readonly<{
+type TestProviderBoundLocalEnvironmentOptions = Readonly<{
   providerID?: string;
   label?: string;
-  access?: TestManagedAccessOverrides;
+  access?: TestLocalAccessOverrides;
   pinned?: boolean;
   stateDir?: string;
   owner?: DesktopLocalEnvironmentOwner;
@@ -57,7 +57,6 @@ type TestManagedControlPlaneEnvironmentOptions = Readonly<{
 }>;
 
 type TestDesktopPreferencesOptions = Readonly<Partial<DesktopPreferences> & {
-  managed_environments?: readonly DesktopLocalEnvironmentState[];
   local_environment?: DesktopLocalEnvironmentState;
 }>;
 
@@ -71,8 +70,8 @@ type TestProviderEnvironmentOptions = Readonly<{
   lastUsedAtMS?: number;
 }>;
 
-export function testManagedAccess(
-  overrides: TestManagedAccessOverrides = {},
+export function testLocalAccess(
+  overrides: TestLocalAccessOverrides = {},
 ): DesktopLocalEnvironmentAccess {
   return {
     ...defaultDesktopLocalEnvironmentAccess(),
@@ -80,30 +79,30 @@ export function testManagedAccess(
   };
 }
 
-export function testManagedLocalEnvironment(
+export function testLocalEnvironment(
   name = 'default',
-  options: TestManagedLocalEnvironmentOptions = {},
+  options: TestLocalEnvironmentOptions = {},
 ): DesktopLocalEnvironmentState {
   return createDesktopLocalEnvironmentState(name, {
     label: options.label,
     pinned: options.pinned,
-    stateDir: options.stateDir ?? localEnvironmentManagedStateLayout().stateDir,
+    stateDir: options.stateDir ?? localEnvironmentStateLayout().stateDir,
     owner: options.owner,
     preferredOpenRoute: options.preferredOpenRoute,
     currentRuntime: options.currentRuntime,
     createdAtMS: options.createdAtMS,
     updatedAtMS: options.updatedAtMS,
     lastUsedAtMS: options.lastUsedAtMS,
-    access: testManagedAccess(options.access),
+    access: testLocalAccess(options.access),
   });
 }
 
-export function testManagedControlPlaneEnvironment(
+export function testProviderBoundLocalEnvironment(
   providerOrigin: string,
   envPublicID: string,
-  options: TestManagedControlPlaneEnvironmentOptions = {},
+  options: TestProviderBoundLocalEnvironmentOptions = {},
 ): DesktopLocalEnvironmentState {
-  const layout = localEnvironmentManagedStateLayout();
+  const layout = localEnvironmentStateLayout();
   const providerEnvironment = testProviderEnvironment(providerOrigin, envPublicID, {
     providerID: options.providerID ?? 'redeven_portal',
     label: options.label,
@@ -115,7 +114,7 @@ export function testManagedControlPlaneEnvironment(
   });
   return projectProviderEnvironmentToLocalRuntimeTarget(
     providerEnvironment,
-    testManagedLocalEnvironment('local', {
+    testLocalEnvironment('local', {
       access: options.access,
       owner: options.owner ?? 'desktop',
       stateDir: options.stateDir ?? layout.stateDir,
@@ -147,13 +146,8 @@ export function testDesktopPreferences(
   options: TestDesktopPreferencesOptions = {},
 ): DesktopPreferences {
   const base = defaultDesktopPreferences();
-  const managedEnvironmentOptions = options.managed_environments ?? [];
-  const localEnvironment = options.local_environment
-    ?? managedEnvironmentOptions.find((environment) => !environment.current_provider_binding)
-    ?? managedEnvironmentOptions[0]
-    ?? base.local_environment;
+  const localEnvironment = options.local_environment ?? base.local_environment;
   const {
-    managed_environments: _legacyManagedEnvironments,
     local_environment: _localEnvironment,
     ...preferenceOverrides
   } = options;
@@ -161,24 +155,18 @@ export function testDesktopPreferences(
     (options.provider_environments ?? base.provider_environments).map((environment) => [environment.id, environment] as const),
   );
 
-  for (const environment of managedEnvironmentOptions) {
-    if (!environment.current_provider_binding) {
-      continue;
-    }
+  const localProviderBinding = localEnvironment.current_provider_binding;
+  if (localProviderBinding) {
     const providerEnvironment = testProviderEnvironment(
-      environment.current_provider_binding.provider_origin,
-      environment.current_provider_binding.env_public_id,
+      localProviderBinding.provider_origin,
+      localProviderBinding.env_public_id,
       {
-        providerID: environment.current_provider_binding.provider_id,
-        label: environment.label,
-        pinned: environment.pinned,
-        preferredOpenRoute: environment.preferred_open_route,
-        createdAtMS: environment.created_at_ms,
-        updatedAtMS: environment.updated_at_ms,
-        lastUsedAtMS: environment.last_used_at_ms,
+        providerID: localProviderBinding.provider_id,
       },
     );
-    providerEnvironmentsByID.set(providerEnvironment.id, providerEnvironment);
+    if (!providerEnvironmentsByID.has(providerEnvironment.id)) {
+      providerEnvironmentsByID.set(providerEnvironment.id, providerEnvironment);
+    }
   }
 
   for (const controlPlane of options.control_planes ?? base.control_planes) {
@@ -207,7 +195,7 @@ export function testDesktopPreferences(
   };
 }
 
-export function testManagedSession(
+export function testLocalEnvironmentSession(
   environment: DesktopLocalEnvironmentState,
   localUIURL: string,
   lifecycle: DesktopSessionLifecycle = 'open',
@@ -217,7 +205,7 @@ export function testManagedSession(
     runtimeLaunchMode?: DesktopSessionRuntimeLaunchMode;
   }> = {},
 ): DesktopSessionSummary {
-  const target = buildManagedEnvironmentDesktopTarget(environment);
+  const target = buildLocalEnvironmentDesktopTarget(environment);
   const desktopManaged = startupOverrides.desktop_managed !== false;
   const effectiveRunMode = String(startupOverrides.effective_run_mode ?? 'desktop');
   const remoteEnabled = startupOverrides.remote_enabled === true;

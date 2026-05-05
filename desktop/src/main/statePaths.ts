@@ -4,12 +4,12 @@ import path from 'node:path';
 const LOCAL_ENVIRONMENT_SCOPE_KEY = 'local_environment';
 const LOCAL_ENVIRONMENT_SCOPE_DIR = 'local-environment';
 
-export type DesktopManagedScopeRef =
+export type DesktopLocalEnvironmentScopeRef =
   Readonly<{ kind: 'local_environment'; name?: string }>;
 
-export type DesktopManagedStateLayout = Readonly<{
+export type DesktopLocalEnvironmentStateLayout = Readonly<{
   stateRoot: string;
-  scope: DesktopManagedScopeRef | null;
+  scope: DesktopLocalEnvironmentScopeRef | null;
   scopeKey: string;
   scopeDir: string;
   scopeMetadataFile: string;
@@ -40,7 +40,10 @@ export function resolveStateRoot(
   return path.join(homeDir, '.redeven');
 }
 
-function stateLayoutForScope(scope: DesktopManagedScopeRef, stateRoot: string): DesktopManagedStateLayout {
+function stateLayoutForLocalEnvironmentScope(
+  scope: DesktopLocalEnvironmentScopeRef,
+  stateRoot: string,
+): DesktopLocalEnvironmentStateLayout {
   const scopeKey = LOCAL_ENVIRONMENT_SCOPE_KEY;
   const scopeDir = path.join(stateRoot, LOCAL_ENVIRONMENT_SCOPE_DIR);
 
@@ -62,7 +65,7 @@ function stateLayoutForScope(scope: DesktopManagedScopeRef, stateRoot: string): 
   };
 }
 
-export function stateLayoutForConfigPath(configPath: string): DesktopManagedStateLayout {
+export function stateLayoutForConfigPath(configPath: string): DesktopLocalEnvironmentStateLayout {
   const cleanPath = String(configPath ?? '').trim();
   if (!cleanPath) {
     throw new Error('missing config path');
@@ -88,18 +91,18 @@ export function stateLayoutForConfigPath(configPath: string): DesktopManagedStat
   };
 }
 
-export function defaultManagedStateLayout(
+export function defaultLocalEnvironmentStateLayout(
   env: NodeJS.ProcessEnv = process.env,
   homedir: () => string = os.homedir,
   override?: string,
-): DesktopManagedStateLayout {
-  return stateLayoutForScope({ kind: 'local_environment', name: 'local' }, resolveStateRoot(env, homedir, override));
+): DesktopLocalEnvironmentStateLayout {
+  return stateLayoutForLocalEnvironmentScope({ kind: 'local_environment', name: 'local' }, resolveStateRoot(env, homedir, override));
 }
 
-export function localEnvironmentManagedStateLayout(
+export function localEnvironmentStateLayout(
   env: NodeJS.ProcessEnv = process.env,
   homedir: () => string = os.homedir,
   override?: string,
-): DesktopManagedStateLayout {
-  return defaultManagedStateLayout(env, homedir, override);
+): DesktopLocalEnvironmentStateLayout {
+  return defaultLocalEnvironmentStateLayout(env, homedir, override);
 }

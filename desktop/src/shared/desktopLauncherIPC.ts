@@ -5,7 +5,7 @@ import { normalizeControlPlaneOrigin } from './controlPlaneProvider';
 import type { DesktopSSHEnvironmentDetails } from './desktopSSH';
 import type {
   DesktopControlPlaneSyncState,
-  DesktopManagedLocalRouteState,
+  DesktopLocalRouteState,
   DesktopProviderCatalogFreshness,
   DesktopProviderRemoteRouteState,
 } from './providerEnvironmentState';
@@ -21,16 +21,16 @@ export const DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL = 'redeven-desktop:launcher
 export const DESKTOP_LAUNCHER_SNAPSHOT_UPDATED_CHANNEL = 'redeven-desktop:launcher-snapshot-updated';
 export const DESKTOP_LAUNCHER_ACTION_PROGRESS_CHANNEL = 'redeven-desktop:launcher-action-progress';
 
-export type DesktopTargetKind = 'managed_environment' | 'external_local_ui' | 'ssh_environment';
+export type DesktopTargetKind = 'local_environment' | 'external_local_ui' | 'ssh_environment';
 export type DesktopWelcomeEntryReason = 'app_launch' | 'switch_environment' | 'connect_failed' | 'blocked';
-export type DesktopWelcomeIssueScope = 'managed_environment' | 'remote_environment' | 'startup';
+export type DesktopWelcomeIssueScope = 'local_environment' | 'remote_environment' | 'startup';
 export type DesktopLauncherSurface = 'connect_environment' | 'environment_settings';
-export type DesktopEnvironmentEntryKind = 'managed_environment' | 'provider_environment' | 'external_local_ui' | 'ssh_environment';
-export type DesktopEnvironmentEntryTag = 'Open' | 'Recent' | 'Saved' | 'Managed' | '';
-export type DesktopEnvironmentEntryCategory = 'managed' | 'provider' | 'open_unsaved' | DesktopSavedEnvironmentSource;
+export type DesktopEnvironmentEntryKind = 'local_environment' | 'provider_environment' | 'external_local_ui' | 'ssh_environment';
+export type DesktopEnvironmentEntryTag = 'Open' | 'Recent' | 'Saved' | 'Local' | 'Provider' | '';
+export type DesktopEnvironmentEntryCategory = 'local' | 'provider' | 'open_unsaved' | DesktopSavedEnvironmentSource;
 export type DesktopLocalEnvironmentStateRoute = 'local_host' | 'remote_desktop';
-export type DesktopManagedLocalRuntimeState = 'not_running' | 'running_desktop' | 'running_external';
-export type DesktopManagedLocalCloseBehavior = 'stops_runtime' | 'detaches' | 'not_applicable';
+export type DesktopLocalRuntimeState = 'not_running' | 'running_desktop' | 'running_external';
+export type DesktopLocalCloseBehavior = 'stops_runtime' | 'detaches' | 'not_applicable';
 export type DesktopLauncherSessionLifecycle = 'opening' | 'open' | 'closing';
 export type DesktopLauncherActionOutcome =
   | 'opened_environment_window'
@@ -70,7 +70,7 @@ export type DesktopLauncherActionFailureCode =
   | 'runtime_start_failed'
   | 'action_invalid';
 export type DesktopLauncherActionKind =
-  | 'open_managed_environment'
+  | 'open_local_environment'
   | 'open_provider_environment'
   | 'open_remote_environment'
   | 'open_ssh_environment'
@@ -79,7 +79,7 @@ export type DesktopLauncherActionKind =
   | 'refresh_environment_runtime'
   | 'refresh_all_environment_runtimes'
   | 'start_control_plane_connect'
-  | 'set_managed_environment_pinned'
+  | 'set_local_environment_pinned'
   | 'set_provider_environment_pinned'
   | 'set_saved_environment_pinned'
   | 'set_saved_ssh_environment_pinned'
@@ -87,10 +87,10 @@ export type DesktopLauncherActionKind =
   | 'focus_environment_window'
   | 'refresh_control_plane'
   | 'delete_control_plane'
-  | 'upsert_managed_environment'
+  | 'upsert_local_environment'
   | 'upsert_saved_environment'
   | 'upsert_saved_ssh_environment'
-  | 'delete_managed_environment'
+  | 'delete_local_environment'
   | 'delete_saved_environment'
   | 'delete_saved_ssh_environment'
   | 'close_launcher_or_quit';
@@ -133,19 +133,19 @@ export type DesktopEnvironmentEntry = Readonly<{
   label: string;
   local_ui_url: string;
   secondary_text: string;
-  managed_environment_kind?: 'local' | 'controlplane';
-  managed_local_scope_kind?: 'local_environment';
-  managed_environment_name?: string;
-  managed_local_ui_bind?: string;
-  managed_local_ui_password_configured?: boolean;
-  managed_local_owner?: 'desktop' | 'agent' | 'unknown';
-  managed_local_runtime_state?: DesktopManagedLocalRuntimeState;
-  managed_local_runtime_url?: string;
-  managed_runtime_service?: RuntimeServiceSnapshot;
-  managed_local_close_behavior?: DesktopManagedLocalCloseBehavior;
-  managed_has_local_hosting?: boolean;
-  managed_has_remote_desktop?: boolean;
-  managed_preferred_open_route?: 'auto' | DesktopLocalEnvironmentStateRoute;
+  local_environment_kind?: 'local' | 'controlplane';
+  local_environment_scope_kind?: 'local_environment';
+  local_environment_name?: string;
+  local_environment_ui_bind?: string;
+  local_environment_ui_password_configured?: boolean;
+  local_environment_owner?: 'desktop' | 'agent' | 'unknown';
+  local_environment_runtime_state?: DesktopLocalRuntimeState;
+  local_environment_runtime_url?: string;
+  local_environment_runtime_service?: RuntimeServiceSnapshot;
+  local_environment_close_behavior?: DesktopLocalCloseBehavior;
+  local_environment_has_local_hosting?: boolean;
+  local_environment_has_remote_desktop?: boolean;
+  local_environment_preferred_open_route?: 'auto' | DesktopLocalEnvironmentStateRoute;
   default_open_route?: DesktopLocalEnvironmentStateRoute;
   open_local_session_key?: string;
   open_local_session_lifecycle?: DesktopLauncherSessionLifecycle;
@@ -158,10 +158,10 @@ export type DesktopEnvironmentEntry = Readonly<{
   provider_default_open_route?: DesktopLocalEnvironmentStateRoute;
   provider_effective_window_route?: DesktopLocalEnvironmentStateRoute | '';
   provider_local_runtime_configured?: boolean;
-  provider_local_runtime_state?: DesktopManagedLocalRuntimeState;
+  provider_local_runtime_state?: DesktopLocalRuntimeState;
   provider_local_runtime_url?: string;
   provider_runtime_service?: RuntimeServiceSnapshot;
-  provider_local_close_behavior?: DesktopManagedLocalCloseBehavior;
+  provider_local_close_behavior?: DesktopLocalCloseBehavior;
   provider_origin?: string;
   provider_id?: string;
   env_public_id?: string;
@@ -170,7 +170,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   provider_lifecycle_status?: string;
   provider_last_seen_at_unix_ms?: number;
   control_plane_sync_state?: DesktopControlPlaneSyncState;
-  local_route_state?: DesktopManagedLocalRouteState;
+  local_route_state?: DesktopLocalRouteState;
   remote_route_state?: DesktopProviderRemoteRouteState;
   remote_catalog_freshness?: DesktopProviderCatalogFreshness;
   remote_state_reason?: string;
@@ -210,7 +210,7 @@ export type DesktopWelcomeSnapshot = Readonly<{
 
 export type DesktopLauncherActionRequest = Readonly<
   | {
-      kind: 'open_managed_environment';
+      kind: 'open_local_environment';
       environment_id: string;
       route?: 'auto' | DesktopLocalEnvironmentStateRoute;
     }
@@ -248,7 +248,7 @@ export type DesktopLauncherActionRequest = Readonly<
       display_label?: string;
     }
   | {
-      kind: 'set_managed_environment_pinned';
+      kind: 'set_local_environment_pinned';
       environment_id: string;
       pinned: boolean;
     }
@@ -290,7 +290,7 @@ export type DesktopLauncherActionRequest = Readonly<
       provider_id: string;
     }
   | {
-      kind: 'upsert_managed_environment';
+      kind: 'upsert_local_environment';
       environment_id?: string;
       environment_name?: string;
       label: string;
@@ -310,7 +310,7 @@ export type DesktopLauncherActionRequest = Readonly<
       label: string;
     } & DesktopSSHEnvironmentDetails)
   | {
-      kind: 'delete_managed_environment';
+      kind: 'delete_local_environment';
       environment_id: string;
     }
   | {
@@ -442,7 +442,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
   switch (kind) {
     case 'close_launcher_or_quit':
       return { kind };
-    case 'open_managed_environment':
+    case 'open_local_environment':
     case 'open_provider_environment':
     case 'open_environment_settings': {
       const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
@@ -452,7 +452,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       return {
         kind,
         environment_id: environmentID,
-        ...((kind === 'open_managed_environment' || kind === 'open_provider_environment')
+        ...((kind === 'open_local_environment' || kind === 'open_provider_environment')
           ? {
               route: (() => {
                 const route = compact((candidate as { route?: unknown }).route);
@@ -519,7 +519,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           return null;
         }
       }
-    case 'set_managed_environment_pinned': {
+    case 'set_local_environment_pinned': {
       const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
       if (environmentID === '') {
         return null;
@@ -576,7 +576,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           release_base_url: compact((candidate as { release_base_url?: unknown }).release_base_url),
         };
       }
-    case 'upsert_managed_environment': {
+    case 'upsert_local_environment': {
       return {
         kind,
         environment_id: compact((candidate as { environment_id?: unknown }).environment_id) || undefined,
@@ -636,7 +636,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         release_base_url: compact((candidate as { release_base_url?: unknown }).release_base_url),
       };
       }
-    case 'delete_managed_environment':
+    case 'delete_local_environment':
     case 'delete_saved_environment': {
       const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
       if (environmentID === '') {

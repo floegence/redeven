@@ -6,7 +6,7 @@ import os from 'node:os';
 import { isAllowedAppNavigation } from './navigation';
 import { parseStartupReport, type StartupReport } from './startup';
 import { normalizeLocalUIBaseURL } from './localUIURL';
-import { defaultManagedStateLayout } from './statePaths';
+import { defaultLocalEnvironmentStateLayout } from './statePaths';
 import {
   envAppShellUnavailableOpenReadiness,
   normalizeRuntimeServiceSnapshot,
@@ -258,7 +258,7 @@ export function defaultRuntimeStatePath(
   env: NodeJS.ProcessEnv = process.env,
   homedir: () => string = os.homedir,
 ): string {
-  return defaultManagedStateLayout(env, homedir).runtimeStateFile;
+  return defaultLocalEnvironmentStateLayout(env, homedir).runtimeStateFile;
 }
 
 export async function loadAttachableRuntimeState(

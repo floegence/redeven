@@ -27,8 +27,8 @@ This document describes the public Electron desktop shell that ships with each `
 - Desktop owns one Local Environment for the current OS user / Redeven profile state root:
   - the runtime config is stored at `~/.redeven/local-environment/config.json`
   - provider environments may be listed in the catalog, but only one provider Environment can be linked to the Local Environment at a time
-- Each desktop-managed Environment window also receives a Desktop-owned session context snapshot:
-  - `managed_environment_id`
+- Each Desktop session window also receives a Desktop-owned session context snapshot:
+  - `local_environment_id`
   - `environment_storage_scope_id`
 - Env App uses `environment_storage_scope_id` only for environment-owned persisted UI state such as File Browser history and active thread context. Intentionally global shell/UI preferences remain global.
 - `provider_id` is the canonical discovery identity from `/.well-known/redeven-provider.json` and is used for provider protocol payloads, provider catalogs, and provider bindings.
@@ -37,7 +37,6 @@ This document describes the public Electron desktop shell that ships with each `
   - `~/.redeven/catalog/provider-environments/*.json`
   - `~/.redeven/catalog/connections/*.json`
   - `~/.redeven/catalog/providers/*.json`
-- Legacy `~/.redeven/catalog/environments/*.json` records are read only as migration input and are removed after Desktop writes the canonical Local Environment record.
 - In the shared catalog, `provider_id` and `current_provider_binding.provider_id` always mean the canonical discovery `provider_id`.
 - Saved Redeven URL and SSH Host entries are connection records only. SSH Host entries persist host-access details and do not own an additional Desktop-private local runtime state directory.
 - Desktop and standalone runtime / CLI mode resolve the same Local Environment state directory. Desktop does not invent a second local runtime state root.
@@ -81,10 +80,10 @@ Desktop may add user-configured startup flags on top of that base command:
 
 Behavior:
 
-- Local UI always starts for the desktop-managed Local Environment runtime that Desktop owns locally.
+- Local UI always starts for the Desktop-owned Local Environment runtime that Desktop owns locally.
 - `--password-stdin` is the non-interactive desktop-managed password transport.
 - Desktop resolves the managed config path before spawn and passes it explicitly to `redeven run`.
-- Desktop-managed local runtime uses `~/.redeven/local-environment/config.json`.
+- The Desktop-owned local runtime uses `~/.redeven/local-environment/config.json`.
 - Desktop startup flows that include a bootstrap target write the same Local Environment config and replace the previous provider link for that Local Environment profile.
 - Desktop attach probing reads `runtime/local-ui.json` from the same resolved state root as the spawned config path.
 - The Local UI password stays out of process args and environment variables.
@@ -96,7 +95,7 @@ Behavior:
 - Managed restart reuses Desktop-owned startup preferences, including `--password-stdin`, and preserves the current resolved loopback bind when the saved bind uses the advanced auto-port loopback option such as `127.0.0.1:0`.
 - `--startup-report-file` lets Electron wait for a structured desktop launch report instead of scraping terminal output.
 - On lock conflicts, the runtime first tries to attach to an existing Local UI from the same state directory before reporting a blocked launch outcome.
-- Desktop-managed startup settings do not create a second preference-owned runtime target; the resolved Local Environment state directory remains the runtime source of truth.
+- Desktop startup settings do not create a second preference-owned runtime target; the resolved Local Environment state directory remains the runtime source of truth.
 - Desktop-managed runtime state never falls back to the Electron process working directory; if no usable home directory exists and no explicit config path is available, startup fails clearly instead of writing inside an arbitrary repository or shell cwd.
 
 When the selected target is `Remote Environment`, Desktop does not start the bundled binary.
@@ -203,7 +202,7 @@ Visual hierarchy:
   - add / close actions
 - `Environments` tab:
   - one shared card grid for:
-    - desktop-managed local environments
+    - the canonical Local Environment
     - provider environment cards stored in `provider_environments` and refreshed from connected providers
     - saved Redeven URL connections
     - saved SSH Host connections
@@ -221,7 +220,7 @@ Interaction rules:
 
 - Cold launch never auto-opens a remembered target.
 - Environment choice is always a launcher action, never a side effect of saving settings.
-- The desktop-managed Local Environment is one protected first-class card instead of multiple local environment entries.
+- The Local Environment is one protected first-class card instead of multiple local environment entries.
 - `Environment Settings` opens or focuses the launcher, then presents a modal dialog inside that same window for the selected Local Environment or provider Environment card.
 - The `Add` action opens a dialog that can either connect immediately or save a new Environment into the library.
 - `New Environment` is a two-mode dialog:
@@ -392,7 +391,7 @@ Rules:
 - The Local UI password input is write-only. When Desktop already has a stored password, the field stays blank and blank means `keep the stored password`.
 - Removing a stored password requires an explicit remove action. Simply seeing an empty write-only field must not clear the stored secret.
 - The dialog starts with a workbench-style overview that shows:
-  - the current managed runtime address
+  - the current Local Environment runtime address
   - the next-start address and protection state
   - a compact summary grid for visibility, next-start address, and password state
 - Summary-card details and field-level help stay available through compact question-mark tooltip affordances instead of always-visible helper paragraphs.
@@ -425,7 +424,7 @@ Desktop keeps one current persisted preference model for the profile's Local Env
 
 Semantics:
 
-- Loading preferences prefers the current catalog schema. Legacy `catalog/environments/*.json` and `desktop-secrets.json.managed_environments` are accepted only as one-shot migration input.
+- Loading preferences reads only the current catalog schema.
 - Saving preferences writes only the canonical `catalog/local-environment.json`, `catalog/provider-environments/*.json`, connection/provider catalog files, and `desktop-secrets.json.local_environment`.
 - Desktop does not persist a remembered current target for the next launch.
 - Open Environment windows are runtime-only desktop session state.
@@ -465,7 +464,7 @@ Desktop semantics:
 - One Local Environment runtime may be active for the signed-in user / profile state root. Linking another provider Environment replaces the prior local provider link.
 - Provider environments never persist provider-owned local runtime configuration; Desktop derives provider-local readiness from the single Local Environment runtime and its current provider binding.
 - If Desktop attaches to a runtime that was started by standalone runtime / CLI mode, that attached runtime stays externally owned: closing the Desktop session only detaches, and restart/update stay delegated to the host process that owns that runtime.
-- Launcher runtime ownership is explicit on the environment card: externally owned runtimes surface as attachable local runtimes, while the Local Environment surfaces as the Desktop-managed local runtime.
+- Launcher runtime ownership is explicit on the environment card: externally owned runtimes surface as attachable local runtimes, while the Local Environment surfaces as the Desktop-owned local runtime.
 - Launcher Runtime Service details are stable card facts, not banners. When a runtime snapshot is available, all runtime types can show service state, runtime version, and active work counts in the existing fact grid.
 - Standalone runtime / CLI and Desktop sessions stay interoperable because both read and write the same Local Environment runtime layout.
 
@@ -681,7 +680,7 @@ Desktop-specific outcomes from this implementation:
 - When a desktop-managed restart finishes, Env App recovers in place through the same shell-owned reconnect/access-gate flow used by other reconnect scenarios.
 - If the restarted runtime requires password verification again, the same page asks for the Local UI password instead of requiring a manual browser refresh.
 - Desktop resolves update impact before continuing:
-  - Desktop-managed local and provider environments may require a Desktop restart and reopen flow
+  - Desktop-owned local and provider sessions may require a Desktop restart and reopen flow
   - SSH-hosted Local Environment profiles only affect that one SSH Host entry and remote install root
   - external Redeven URL targets stay externally managed and do not offer a Desktop-side runtime update action
 - Session child windows keep using the same Env App runtime, access gate, and Flowersec protocol path; only the shell-owned launcher/options surfaces differ.

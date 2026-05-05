@@ -7,24 +7,24 @@ import { describe, expect, it } from 'vitest';
 
 import {
   testDesktopPreferences,
-  testManagedLocalEnvironment,
-  testManagedSession,
+  testLocalEnvironment,
+  testLocalEnvironmentSession,
 } from '../testSupport/desktopTestHelpers';
-import { hydrateWelcomeManagedEnvironmentRuntimeState } from './desktopWelcomeRuntimeState';
+import { hydrateWelcomeLocalEnvironmentRuntimeState } from './desktopWelcomeRuntimeState';
 
 const validEnvAppShellHTML = '<!doctype html><html><body><div id="root"></div><script type="module" src="/_redeven_proxy/env/assets/index.js"></script></body></html>';
 
 describe('desktopWelcomeRuntimeState', () => {
-  it('hydrates local runtime ownership from an open external managed session', async () => {
-    const environment = testManagedLocalEnvironment('default');
+  it('hydrates local runtime ownership from an open external Local Environment session', async () => {
+    const environment = testLocalEnvironment('default');
     const preferences = testDesktopPreferences({
-      managed_environments: [environment],
+      local_environment: environment,
     });
 
-    const hydrated = await hydrateWelcomeManagedEnvironmentRuntimeState(
+    const hydrated = await hydrateWelcomeLocalEnvironmentRuntimeState(
       preferences,
       [
-        testManagedSession(
+        testLocalEnvironmentSession(
           environment,
           'http://127.0.0.1:23998/',
           'open',
@@ -131,14 +131,14 @@ describe('desktopWelcomeRuntimeState', () => {
         'utf8',
       );
 
-      const environment = testManagedLocalEnvironment('lab', {
+      const environment = testLocalEnvironment('lab', {
         stateDir,
       });
       const preferences = testDesktopPreferences({
-        managed_environments: [environment],
+        local_environment: environment,
       });
 
-      const hydrated = await hydrateWelcomeManagedEnvironmentRuntimeState(preferences, [], {
+      const hydrated = await hydrateWelcomeLocalEnvironmentRuntimeState(preferences, [], {
         probeTimeoutMs: 200,
       });
 

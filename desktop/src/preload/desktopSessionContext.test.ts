@@ -33,7 +33,7 @@ describe('bootstrapDesktopSessionContextBridge', () => {
     ipcRendererSend.mockReset();
     ipcRendererSendSync.mockReset();
     ipcRendererSendSync.mockReturnValue({
-      managed_environment_id: 'env_demo',
+      local_environment_id: 'env_demo',
       environment_storage_scope_id: 'env_demo',
     });
   });
@@ -45,7 +45,7 @@ describe('bootstrapDesktopSessionContextBridge', () => {
     const bridge = exposedBridge();
 
     expect(bridge.getSnapshot()).toEqual({
-      managed_environment_id: 'env_demo',
+      local_environment_id: 'env_demo',
       environment_storage_scope_id: 'env_demo',
     });
 

@@ -3,8 +3,8 @@ import {
   type DesktopLocalEnvironmentState,
 } from '../shared/desktopLocalEnvironmentState';
 import {
-  defaultManagedStateLayout,
-  type DesktopManagedStateLayout,
+  defaultLocalEnvironmentStateLayout,
+  type DesktopLocalEnvironmentStateLayout,
 } from './statePaths';
 
 export const BOOTSTRAP_TICKET_ENV_NAME = 'REDEVEN_DESKTOP_BOOTSTRAP_TICKET';
@@ -22,7 +22,7 @@ export type DesktopRuntimeSpawnPlan = Readonly<{
   args: string[];
   env: NodeJS.ProcessEnv;
   password_stdin: string;
-  state_layout: DesktopManagedStateLayout;
+  state_layout: DesktopLocalEnvironmentStateLayout;
 }>;
 
 export type DesktopRuntimeLaunchPlan = DesktopRuntimeSpawnPlan;
@@ -108,7 +108,7 @@ function buildDesktopRuntimePlan(
     bootstrap?: DesktopRuntimeBootstrap | null;
   }>,
 ): DesktopRuntimeLaunchPlan {
-  const stateLayout = resolveDesktopManagedStateLayout(environment, baseEnv);
+  const stateLayout = resolveDesktopLocalEnvironmentStateLayout(environment, baseEnv);
   const env = buildDesktopRuntimeEnvironment(environment, baseEnv, { bootstrap: options?.bootstrap });
   const args = buildDesktopRuntimeArgs(environment, {
     localUIBind: options?.localUIBind,
@@ -154,9 +154,9 @@ export function buildDesktopRuntimeSpawnPlan(
   };
 }
 
-export function resolveDesktopManagedStateLayout(
+export function resolveDesktopLocalEnvironmentStateLayout(
   _environment: DesktopLocalEnvironmentState,
   baseEnv: NodeJS.ProcessEnv = process.env,
-): DesktopManagedStateLayout {
-  return defaultManagedStateLayout(baseEnv);
+): DesktopLocalEnvironmentStateLayout {
+  return defaultLocalEnvironmentStateLayout(baseEnv);
 }

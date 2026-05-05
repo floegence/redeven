@@ -8,15 +8,15 @@ import {
   buildDesktopRuntimeSpawnPlan,
 } from './desktopLaunch';
 import {
-  testManagedAccess,
-  testManagedControlPlaneEnvironment,
-  testManagedLocalEnvironment,
+  testLocalAccess,
+  testProviderBoundLocalEnvironment,
+  testLocalEnvironment,
 } from '../testSupport/desktopTestHelpers';
 
 describe('desktopLaunch', () => {
   it('builds desktop-managed args from persistent local settings', () => {
-    const environment = testManagedLocalEnvironment('default', {
-      access: testManagedAccess({
+    const environment = testLocalEnvironment('default', {
+      access: testLocalAccess({
         local_ui_bind: '0.0.0.0:24000',
         local_ui_password: 'secret',
         local_ui_password_configured: true,
@@ -35,11 +35,11 @@ describe('desktopLaunch', () => {
   });
 
   it('adds one-shot bootstrap ticket args and secret env vars to the spawn plan', () => {
-    const environment = testManagedControlPlaneEnvironment(
+    const environment = testProviderBoundLocalEnvironment(
       'https://region.example.invalid',
       'env_123',
       {
-        access: testManagedAccess({
+        access: testLocalAccess({
           local_ui_bind: '127.0.0.1:0',
           local_ui_password: 'secret',
           local_ui_password_configured: true,
@@ -90,8 +90,8 @@ describe('desktopLaunch', () => {
   });
 
   it('adds one-shot bootstrap ticket env vars', () => {
-    const environment = testManagedControlPlaneEnvironment('https://region.example.invalid', 'env_123', {
-      access: testManagedAccess({
+    const environment = testProviderBoundLocalEnvironment('https://region.example.invalid', 'env_123', {
+      access: testLocalAccess({
         local_ui_bind: '127.0.0.1:0',
       }),
     });
@@ -111,8 +111,8 @@ describe('desktopLaunch', () => {
   });
 
   it('does not emit provider bootstrap flags without a one-shot ticket', () => {
-    const environment = testManagedControlPlaneEnvironment('https://region.example.invalid', 'env_123', {
-      access: testManagedAccess({
+    const environment = testProviderBoundLocalEnvironment('https://region.example.invalid', 'env_123', {
+      access: testLocalAccess({
         local_ui_bind: '127.0.0.1:0',
       }),
     });
@@ -132,8 +132,8 @@ describe('desktopLaunch', () => {
   });
 
   it('removes stale bootstrap ticket env vars when the current settings do not use them', () => {
-    const environment = testManagedLocalEnvironment('default', {
-      access: testManagedAccess({
+    const environment = testLocalEnvironment('default', {
+      access: testLocalAccess({
         local_ui_bind: '127.0.0.1:0',
       }),
     });
@@ -148,8 +148,8 @@ describe('desktopLaunch', () => {
   });
 
   it('builds a launch plan with the Local Environment scope when no bootstrap target is provided', () => {
-    const environment = testManagedLocalEnvironment('default', {
-      access: testManagedAccess({
+    const environment = testLocalEnvironment('default', {
+      access: testLocalAccess({
         local_ui_bind: '127.0.0.1:0',
       }),
     });

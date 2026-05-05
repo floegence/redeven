@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import {
   testDesktopPreferences,
-  testManagedControlPlaneEnvironment,
-  testManagedLocalEnvironment,
-  testManagedSession,
+  testProviderBoundLocalEnvironment,
+  testLocalEnvironment,
+  testLocalEnvironmentSession,
 } from '../testSupport/desktopTestHelpers';
 import {
   closeEnvironmentLibraryOverlayState,
@@ -24,20 +24,20 @@ describe('environmentLibraryOverlayState', () => {
   });
 
   it('keeps a runtime menu open across refresh while the same environment remains visible', () => {
-    const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
+    const localServe = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo', {
       label: 'Demo Local Serve',
     });
     const initialSnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [testManagedLocalEnvironment('default'), localServe],
+        local_environment: localServe,
       }),
     });
     const refreshedSnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [testManagedLocalEnvironment('default'), localServe],
+        local_environment: localServe,
       }),
       openSessions: [
-        testManagedSession(localServe, 'http://127.0.0.1:24001/'),
+        testLocalEnvironmentSession(localServe, 'http://127.0.0.1:24001/'),
       ],
     });
     const providerEntry = initialSnapshot.environments.find((environment) => environment.kind === 'provider_environment');
@@ -49,12 +49,9 @@ describe('environmentLibraryOverlayState', () => {
   });
 
   it('keeps a guidance overlay open across refresh while the same environment still exposes popover guidance', () => {
-    const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
-      label: 'Demo Local Serve',
-    });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [testManagedLocalEnvironment('default'), localServe],
+        local_environment: testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo'),
       }),
     });
     const providerEntry = snapshot.environments.find((environment) => environment.kind === 'provider_environment');
@@ -66,10 +63,10 @@ describe('environmentLibraryOverlayState', () => {
   });
 
   it('closes a guidance overlay when the environment is no longer visible in the current card list', () => {
-    const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo');
+    const localServe = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo');
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [testManagedLocalEnvironment('default'), localServe],
+        local_environment: localServe,
       }),
     });
     const providerEntry = snapshot.environments.find((environment) => environment.kind === 'provider_environment');
@@ -80,15 +77,15 @@ describe('environmentLibraryOverlayState', () => {
   });
 
   it('closes a guidance overlay once the same environment no longer exposes blocked-action guidance', () => {
-    const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
+    const localServe = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo', {
       label: 'Demo Local Serve',
     });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [testManagedLocalEnvironment('default'), localServe],
+        local_environment: localServe,
       }),
       openSessions: [
-        testManagedSession(localServe, 'http://127.0.0.1:24001/'),
+        testLocalEnvironmentSession(localServe, 'http://127.0.0.1:24001/'),
       ],
     });
     const providerEntry = snapshot.environments.find((environment) => environment.kind === 'provider_environment');
@@ -101,7 +98,7 @@ describe('environmentLibraryOverlayState', () => {
   it('closes a guidance overlay when the same environment now only exposes tooltip guidance', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [testManagedLocalEnvironment('default')],
+        local_environment: testLocalEnvironment('default'),
         saved_environments: [{
           id: 'http://192.168.1.12:24000/',
           label: 'Staging',

@@ -12,7 +12,7 @@ describe('desktopQuitImpact', () => {
   it('keeps only Desktop-owned runtimes in the destructive impact list', () => {
     const impact = buildDesktopQuitImpact({
       environment_window_count: 2,
-      managed_environment_runtimes: [
+      local_environment_runtimes: [
         { id: 'managed-b', label: 'Bravo', lifecycle_owner: 'desktop' },
         { id: 'managed-a', label: 'Alpha', lifecycle_owner: 'external' },
       ],
@@ -24,7 +24,7 @@ describe('desktopQuitImpact', () => {
     expect(impact).toEqual({
       environment_window_count: 2,
       desktop_owned_runtimes: [
-        { id: 'managed-b', label: 'Bravo', kind: 'managed_environment' },
+        { id: 'managed-b', label: 'Bravo', kind: 'local_environment' },
       ],
       external_runtime_count: 2,
     });
@@ -33,7 +33,7 @@ describe('desktopQuitImpact', () => {
   it('requires confirmation for any quit path when Desktop-owned runtimes are active', () => {
     const impact = buildDesktopQuitImpact({
       environment_window_count: 0,
-      managed_environment_runtimes: [
+      local_environment_runtimes: [
         { id: 'managed-a', label: 'Alpha', lifecycle_owner: 'desktop' },
       ],
       ssh_runtimes: [],
@@ -48,7 +48,7 @@ describe('desktopQuitImpact', () => {
   it('keeps explicit and system quit confirmations for open environment windows without local runtime shutdown', () => {
     const impact = buildDesktopQuitImpact({
       environment_window_count: 2,
-      managed_environment_runtimes: [],
+      local_environment_runtimes: [],
       ssh_runtimes: [],
     });
 
@@ -61,7 +61,7 @@ describe('desktopQuitImpact', () => {
   it('avoids a confirmation when quitting has no active runtime or window impact', () => {
     const impact = buildDesktopQuitImpact({
       environment_window_count: 0,
-      managed_environment_runtimes: [],
+      local_environment_runtimes: [],
       ssh_runtimes: [],
     });
 
@@ -74,7 +74,7 @@ describe('desktopQuitImpact', () => {
   it('builds a structured quit confirmation model for runtime shutdown and open windows', () => {
     const model = buildDesktopQuitConfirmationModel(buildDesktopQuitImpact({
       environment_window_count: 2,
-      managed_environment_runtimes: [
+      local_environment_runtimes: [
         { id: 'managed-a', label: 'Alpha', lifecycle_owner: 'desktop' },
       ],
       ssh_runtimes: [
@@ -96,7 +96,7 @@ describe('desktopQuitImpact', () => {
   it('keeps long runtime-only quit models concise', () => {
     const model = buildDesktopQuitConfirmationModel(buildDesktopQuitImpact({
       environment_window_count: 0,
-      managed_environment_runtimes: [
+      local_environment_runtimes: [
         { id: 'managed-a', label: 'Alpha', lifecycle_owner: 'desktop' },
         { id: 'managed-b', label: 'Bravo', lifecycle_owner: 'desktop' },
         { id: 'managed-c', label: 'Charlie', lifecycle_owner: 'desktop' },
@@ -119,7 +119,7 @@ describe('desktopQuitImpact', () => {
   it('builds a macOS last-window-close confirmation model that preserves close semantics', () => {
     const model = buildDesktopLastWindowCloseConfirmationModel(buildDesktopQuitImpact({
       environment_window_count: 1,
-      managed_environment_runtimes: [
+      local_environment_runtimes: [
         { id: 'managed-a', label: 'Alpha', lifecycle_owner: 'desktop' },
       ],
       ssh_runtimes: [],
@@ -138,7 +138,7 @@ describe('desktopQuitImpact', () => {
   it('keeps the macOS last-window-close model concise when only the window disappears', () => {
     const model = buildDesktopLastWindowCloseConfirmationModel(buildDesktopQuitImpact({
       environment_window_count: 1,
-      managed_environment_runtimes: [],
+      local_environment_runtimes: [],
       ssh_runtimes: [],
     }));
 

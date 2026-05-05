@@ -1,6 +1,6 @@
 export type DesktopProviderEnvironmentAvailability = 'online' | 'offline' | 'unknown';
 export type DesktopProviderCatalogFreshness = 'fresh' | 'stale' | 'unknown';
-export type DesktopManagedLocalRouteState = 'ready' | 'opening' | 'open' | 'unavailable';
+export type DesktopLocalRouteState = 'ready' | 'opening' | 'open' | 'unavailable';
 export type DesktopControlPlaneSyncState =
   | 'idle'
   | 'syncing'

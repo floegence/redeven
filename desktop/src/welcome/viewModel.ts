@@ -292,7 +292,7 @@ export function environmentKindLabel(environment: DesktopEnvironmentEntry): Envi
       return 'SSH Host';
     case 'provider_environment':
       return 'Provider';
-    case 'managed_environment':
+    case 'local_environment':
       return 'Local';
     case 'external_local_ui':
       return 'Redeven URL';
@@ -303,8 +303,8 @@ export function environmentKindLabel(environment: DesktopEnvironmentEntry): Envi
 
 export function environmentSourceLabel(environment: DesktopEnvironmentEntry): string {
   switch (environment.category) {
-    case 'managed':
-      return 'Desktop-managed';
+    case 'local':
+      return 'Local Environment';
     case 'provider':
       return 'Provider';
     case 'open_unsaved':
@@ -431,7 +431,7 @@ function controlPlaneDisplayLabel(environment: DesktopEnvironmentEntry): string 
 }
 
 function environmentRunsOnLabel(environment: DesktopEnvironmentEntry): string {
-  if (environment.kind === 'managed_environment') {
+  if (environment.kind === 'local_environment') {
     return 'This device';
   }
   if (environment.kind === 'provider_environment') {
@@ -453,8 +453,8 @@ function environmentRuntimeService(environment: DesktopEnvironmentEntry): Runtim
   if (environment.runtime_service) {
     return environment.runtime_service;
   }
-  if (environment.kind === 'managed_environment') {
-    return environment.managed_runtime_service;
+  if (environment.kind === 'local_environment') {
+    return environment.local_environment_runtime_service;
   }
   if (environment.kind === 'provider_environment') {
     return environment.provider_runtime_service;
@@ -517,7 +517,7 @@ function runtimeServiceFacts(environment: DesktopEnvironmentEntry): readonly Env
 export function buildEnvironmentCardFactsModel(
   environment: DesktopEnvironmentEntry,
 ): readonly EnvironmentCardFactModel[] {
-  if (environment.kind === 'managed_environment') {
+  if (environment.kind === 'local_environment') {
     return orderEnvironmentCardFacts([
       buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment)),
       ...runtimeServiceFacts(environment),
@@ -551,8 +551,8 @@ export function buildEnvironmentCardFactsModel(
 export function buildEnvironmentCardEndpointsModel(
   environment: DesktopEnvironmentEntry,
 ): readonly EnvironmentCardEndpointModel[] {
-  if (environment.kind === 'managed_environment') {
-    const localEndpoint = compact(environment.local_ui_url) || compact(environment.managed_local_ui_bind) || compact(environment.managed_environment_name);
+  if (environment.kind === 'local_environment') {
+    const localEndpoint = compact(environment.local_ui_url) || compact(environment.local_environment_ui_bind) || compact(environment.local_environment_name);
     return localEndpoint !== ''
       ? [{
         label: looksLikeAbsoluteURL(localEndpoint) ? 'URL' : 'LOCAL',
@@ -1119,11 +1119,11 @@ export function environmentStatusTone(environment: DesktopEnvironmentEntry): Env
 }
 
 function environmentCardMeta(environment: DesktopEnvironmentEntry): readonly EnvironmentCardMetaItem[] {
-  if (environment.kind === 'managed_environment') {
+  if (environment.kind === 'local_environment') {
     return [
       {
         label: 'Scope',
-        value: environment.managed_environment_name ?? '',
+        value: environment.local_environment_name ?? '',
         monospace: true,
       },
     ].filter((item) => item.value !== '');
@@ -1171,8 +1171,8 @@ function environmentCardMeta(environment: DesktopEnvironmentEntry): readonly Env
 }
 
 export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry): EnvironmentCardModel {
-  if (environment.kind === 'managed_environment') {
-    const localEndpoint = compact(environment.local_ui_url) || compact(environment.managed_local_ui_bind) || compact(environment.managed_environment_name);
+  if (environment.kind === 'local_environment') {
+    const localEndpoint = compact(environment.local_ui_url) || compact(environment.local_environment_ui_bind) || compact(environment.local_environment_name);
     const targetPrimary = localEndpoint || environment.secondary_text || 'Local environment';
     return {
       kind_label: environmentKindLabel(environment),
@@ -1245,7 +1245,7 @@ export function environmentMatchesLibrarySearch(
     environment.label,
     environment.local_ui_url,
     environment.secondary_text,
-    environment.managed_environment_name ?? '',
+    environment.local_environment_name ?? '',
     environment.control_plane_label ?? '',
     environment.provider_origin ?? '',
     environment.env_public_id ?? '',
@@ -1282,7 +1282,7 @@ export function environmentMatchesProviderFilter(
     return true;
   }
   if (activeFilter === LOCAL_ENVIRONMENT_LIBRARY_FILTER) {
-    return environment.kind === 'managed_environment';
+    return environment.kind === 'local_environment';
   }
   if (activeFilter === PROVIDER_ENVIRONMENT_LIBRARY_FILTER) {
     return environment.kind === 'provider_environment';

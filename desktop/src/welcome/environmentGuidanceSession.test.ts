@@ -3,9 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import {
   testDesktopPreferences,
-  testManagedControlPlaneEnvironment,
-  testManagedLocalEnvironment,
-  testManagedSession,
+  testProviderBoundLocalEnvironment,
+  testLocalEnvironmentSession,
 } from '../testSupport/desktopTestHelpers';
 import {
   closeEnvironmentGuidanceSession,
@@ -80,12 +79,7 @@ describe('environmentGuidanceSession', () => {
   it('keeps the panel open with a warning when refresh still resolves to an offline environment', () => {
     const environment = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [
-          testManagedLocalEnvironment('default'),
-          testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
-            label: 'Demo Local Serve',
-          }),
-        ],
+        local_environment: testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo'),
       }),
     }).environments.find((entry) => entry.kind === 'provider_environment');
 
@@ -105,15 +99,15 @@ describe('environmentGuidanceSession', () => {
   });
 
   it('settles the active session once the environment no longer exposes a guidance popover', () => {
-    const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
+    const localServe = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo', {
       label: 'Demo Local Serve',
     });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [testManagedLocalEnvironment('default'), localServe],
+        local_environment: localServe,
       }),
       openSessions: [
-        testManagedSession(localServe, 'http://127.0.0.1:24001/'),
+        testLocalEnvironmentSession(localServe, 'http://127.0.0.1:24001/'),
       ],
     });
     const providerEntry = snapshot.environments.find((entry) => entry.kind === 'provider_environment');
@@ -135,15 +129,15 @@ describe('environmentGuidanceSession', () => {
   });
 
   it('keeps settled success reconciliation referentially stable', () => {
-    const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
+    const localServe = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo', {
       label: 'Demo Local Serve',
     });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [testManagedLocalEnvironment('default'), localServe],
+        local_environment: localServe,
       }),
       openSessions: [
-        testManagedSession(localServe, 'http://127.0.0.1:24001/'),
+        testLocalEnvironmentSession(localServe, 'http://127.0.0.1:24001/'),
       ],
     });
     const providerEntry = snapshot.environments.find((entry) => entry.kind === 'provider_environment');
