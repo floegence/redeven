@@ -27,9 +27,7 @@ type BootstrapArgs struct {
 	BootstrapTicket        string
 	RuntimeVersion         string
 
-	ConfigPath string
-	StateRoot  string
-	ScopeRef   *ScopeRef
+	StateRoot string
 
 	AgentHomeDir string
 	Shell        string
@@ -221,20 +219,10 @@ func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath strin
 	if err := Save(cfgPath, cfg); err != nil {
 		return "", err
 	}
-	if err := WriteScopeMetadataForConfig(layout, cfg); err != nil {
-		return "", err
-	}
 	return filepath.Clean(cfgPath), nil
 }
 
 func resolveBootstrapStateLayout(args BootstrapArgs) (StateLayout, error) {
-	cleanPath := strings.TrimSpace(args.ConfigPath)
-	if cleanPath != "" {
-		return StateLayoutForConfigPath(cleanPath)
-	}
-	if args.ScopeRef != nil {
-		return StateLayoutForScope(*args.ScopeRef, args.StateRoot)
-	}
 	return LocalEnvironmentStateLayout(args.StateRoot)
 }
 

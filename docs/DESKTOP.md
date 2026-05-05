@@ -64,7 +64,7 @@ The base launch shape is:
 redeven run \
   --mode desktop \
   --desktop-managed \
-  --config-path <absolute-config-path> \
+  --state-root <absolute-state-root> \
   --local-ui-bind localhost:23998 \
   --startup-report-file <temp-path>
 ```
@@ -72,7 +72,7 @@ redeven run \
 Desktop may add user-configured startup flags on top of that base command:
 
 - `--local-ui-bind <host:port>`
-- `--config-path <absolute-config-path>`
+- `--state-root <absolute-state-root>`
 - `--password-stdin`
 - `--controlplane <url>`
 - `--env-id <env_public_id>`
@@ -82,7 +82,7 @@ Behavior:
 
 - Local UI always starts for the Desktop-owned Local Environment runtime that Desktop owns locally.
 - `--password-stdin` is the non-interactive desktop-managed password transport.
-- Desktop resolves the managed config path before spawn and passes it explicitly to `redeven run`.
+- Desktop resolves the managed state root before spawn and passes it explicitly to `redeven run`.
 - The Desktop-owned local runtime uses `~/.redeven/local-environment/config.json`.
 - Desktop startup flows that include a bootstrap target write the same Local Environment config and replace the previous provider link for that Local Environment profile.
 - Desktop attach probing reads `runtime/local-ui.json` from the same resolved state root as the spawned config path.

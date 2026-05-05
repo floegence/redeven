@@ -9,7 +9,7 @@ import (
 func TestBuildRunBootstrapArgs(t *testing.T) {
 	t.Run("desktop managed bootstrap defaults to info logging", func(t *testing.T) {
 		got := buildRunBootstrapArgs(
-			"/tmp/redeven/envs/env_123/config.json",
+			"/tmp/redeven",
 			"https://region.example.invalid",
 			"env_123",
 			"ticket-123",
@@ -27,7 +27,7 @@ func TestBuildRunBootstrapArgs(t *testing.T) {
 
 	t.Run("non desktop bootstrap keeps inherited logging behavior", func(t *testing.T) {
 		got := buildRunBootstrapArgs(
-			"/tmp/redeven/config.json",
+			"/tmp/redeven",
 			"https://region.example.invalid",
 			"env_123",
 			"ticket-123",
@@ -48,7 +48,7 @@ func TestBuildRunBootstrapArgs(t *testing.T) {
 
 	t.Run("bootstrap ticket args populate the alternate credential field", func(t *testing.T) {
 		got := buildRunBootstrapArgs(
-			"/tmp/redeven/envs/env_123/config.json",
+			"/tmp/redeven",
 			"https://region.example.invalid",
 			"env_123",
 			"ticket-123",
@@ -66,6 +66,9 @@ func TestBuildRunBootstrapArgs(t *testing.T) {
 
 func assertRunBootstrapArgsCore(t *testing.T, got config.BootstrapArgs) {
 	t.Helper()
+	if got.StateRoot != "/tmp/redeven" {
+		t.Fatalf("StateRoot = %q", got.StateRoot)
+	}
 	if got.ControlplaneBaseURL != "https://region.example.invalid" {
 		t.Fatalf("ControlplaneBaseURL = %q", got.ControlplaneBaseURL)
 	}

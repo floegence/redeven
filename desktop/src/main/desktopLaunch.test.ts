@@ -67,8 +67,8 @@ describe('desktopLaunch', () => {
       '--desktop-managed',
       '--local-ui-bind',
       '127.0.0.1:0',
-      '--config-path',
-      '/Users/tester/.redeven/local-environment/config.json',
+      '--state-root',
+      '/Users/tester/.redeven',
       '--password-stdin',
       '--controlplane',
       'https://region.example.invalid',
@@ -82,7 +82,6 @@ describe('desktopLaunch', () => {
     expect(plan.password_stdin).toBe('secret');
     expect(plan.env[BOOTSTRAP_TICKET_ENV_NAME]).toBe('ticket-123');
     expect(plan.state_layout).toEqual(expect.objectContaining({
-      scopeKey: 'local_environment',
       configPath: '/Users/tester/.redeven/local-environment/config.json',
       stateDir: '/Users/tester/.redeven/local-environment',
       runtimeStateFile: '/Users/tester/.redeven/local-environment/runtime/local-ui.json',
@@ -118,7 +117,7 @@ describe('desktopLaunch', () => {
     });
 
     expect(buildDesktopRuntimeArgs(environment, {
-      configPath: '/Users/tester/.redeven/local-environment/config.json',
+      stateRoot: '/Users/tester/.redeven',
     })).toEqual([
       'run',
       '--mode',
@@ -126,8 +125,8 @@ describe('desktopLaunch', () => {
       '--desktop-managed',
       '--local-ui-bind',
       '127.0.0.1:0',
-      '--config-path',
-      '/Users/tester/.redeven/local-environment/config.json',
+      '--state-root',
+      '/Users/tester/.redeven',
     ]);
   });
 
@@ -147,7 +146,7 @@ describe('desktopLaunch', () => {
     expect(env.HOME).toBe('/Users/tester');
   });
 
-  it('builds a launch plan with the Local Environment scope when no bootstrap target is provided', () => {
+  it('builds a launch plan with the Local Environment layout when no bootstrap target is provided', () => {
     const environment = testLocalEnvironment('default', {
       access: testLocalAccess({
         local_ui_bind: '127.0.0.1:0',
@@ -162,11 +161,10 @@ describe('desktopLaunch', () => {
       '--desktop-managed',
       '--local-ui-bind',
       '127.0.0.1:0',
-      '--config-path',
-      '/Users/tester/.redeven/local-environment/config.json',
+      '--state-root',
+      '/Users/tester/.redeven',
     ]);
     expect(plan.state_layout).toEqual(expect.objectContaining({
-      scopeKey: 'local_environment',
       configPath: '/Users/tester/.redeven/local-environment/config.json',
       stateDir: '/Users/tester/.redeven/local-environment',
       runtimeStateFile: '/Users/tester/.redeven/local-environment/runtime/local-ui.json',

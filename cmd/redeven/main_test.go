@@ -43,7 +43,6 @@ func TestRunCLIHelp(t *testing.T) {
 			"Local UI bind rules:",
 			"Always start the Local UI. Connect to the control plane only when bootstrap config is already valid.",
 			"--state-root <path>",
-			"--config-path <path>",
 			"Accepted examples: localhost:23998, 127.0.0.1:24000, 127.0.0.1:0, 0.0.0.0:24000, 192.168.1.11:24000",
 		)
 	})
@@ -344,60 +343,31 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 	})
 }
 
-func TestResolveRunStateLayoutUsesExplicitConfigPath(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "custom", "config.json")
-
-	layout, err := resolveRunStateLayout(configPath, "")
-	if err != nil {
-		t.Fatalf("resolveRunStateLayout() error = %v", err)
-	}
-	if layout.ConfigPath != configPath {
-		t.Fatalf("ConfigPath = %q, want %q", layout.ConfigPath, configPath)
-	}
-	if layout.StateDir != filepath.Join(tmpDir, "custom") {
-		t.Fatalf("StateDir = %q", layout.StateDir)
-	}
-}
-
-func TestResolveRunStateLayoutDefaultsToLocalEnvironmentScope(t *testing.T) {
+func TestResolveRunStateLayoutDefaultsToLocalEnvironmentLayout(t *testing.T) {
 	stateRoot := t.TempDir()
 
-	layout, err := resolveRunStateLayout("", stateRoot)
+	layout, err := resolveRunStateLayout(stateRoot)
 	if err != nil {
 		t.Fatalf("resolveRunStateLayout() error = %v", err)
-	}
-	if layout.ScopeKey != "local_environment" {
-		t.Fatalf("ScopeKey = %q", layout.ScopeKey)
 	}
 	if layout.ConfigPath != filepath.Join(stateRoot, "local-environment", "config.json") {
 		t.Fatalf("ConfigPath = %q", layout.ConfigPath)
 	}
 }
 
-func TestResolveRunStateLayoutUsesLocalEnvironmentScopeForInlineBootstrap(t *testing.T) {
+func TestResolveRunStateLayoutUsesLocalEnvironmentLayoutForInlineBootstrap(t *testing.T) {
 	stateRoot := t.TempDir()
 
-	layout, err := resolveRunStateLayout("", stateRoot)
+	layout, err := resolveRunStateLayout(stateRoot)
 	if err != nil {
 		t.Fatalf("resolveRunStateLayout() error = %v", err)
-	}
-	if layout.ScopeKey != "local_environment" {
-		t.Fatalf("ScopeKey = %q", layout.ScopeKey)
 	}
 	if layout.ConfigPath != filepath.Join(stateRoot, "local-environment", "config.json") {
 		t.Fatalf("ConfigPath = %q", layout.ConfigPath)
 	}
 }
 
-func TestValidateStateLayoutSelectionRejectsConfigPathWithStateRoot(t *testing.T) {
-	err := validateStateLayoutSelection("/tmp/config.json", "/tmp/state")
-	if err == nil || !strings.Contains(err.Error(), "`--config-path` cannot be combined with `--state-root`") {
-		t.Fatalf("validateStateLayoutSelection() error = %v", err)
-	}
-}
-
-func TestPrintRunStateLayoutGuidanceIncludesConfigPathHint(t *testing.T) {
+func TestPrintRunStateLayoutGuidanceIncludesStateRootHint(t *testing.T) {
 	var stderr bytes.Buffer
 	exitCode := (&cli{stderr: &stderr}).printRunStateLayoutGuidance(config.ErrHomeDirUnavailable)
 	if exitCode != 1 {
@@ -405,7 +375,7 @@ func TestPrintRunStateLayoutGuidanceIncludesConfigPathHint(t *testing.T) {
 	}
 	assertContainsAll(t, stderr.String(),
 		"failed to resolve runtime state layout: user home directory is unavailable",
-		"Hint: export HOME before running `redeven run`, or pass --config-path <path>.",
+		"Hint: export HOME before running `redeven run`, or pass --state-root <path>.",
 	)
 }
 

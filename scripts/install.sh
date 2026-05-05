@@ -536,14 +536,6 @@ install_ripgrep() {
     log_info "ripgrep symlink updated: $RG_LINK_PATH"
 }
 
-cleanup_legacy_home() {
-    # Dev-stage breaking change: remove legacy ~/.redeven-agent to avoid stale state surprises.
-    if [ -n "${HOME:-}" ] && [ -e "${HOME}/.redeven-agent" ]; then
-        log_info "Removing legacy directory: ${HOME}/.redeven-agent"
-        rm -rf "${HOME}/.redeven-agent" 2>/dev/null || true
-    fi
-}
-
 # Add installation directory to PATH if needed
 setup_path() {
     log_info "Checking PATH configuration..."
@@ -714,9 +706,6 @@ main() {
 
     # Check environment
     check_environment
-
-    # Remove legacy config/state directory (dev-stage breaking change)
-    cleanup_legacy_home
 
     # Determine installation directory
     determine_install_dir

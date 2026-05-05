@@ -82,7 +82,7 @@ curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/inst
 
 Prefer a native shell? Download Redeven Desktop from [GitHub Releases](https://github.com/floegence/redeven/releases).
 
-Redeven Desktop keeps environment entry simple on purpose: one launcher, one card system, and one place to open local environments, compatible provider environments, saved Redeven Local UI URLs, and SSH hosts.
+Redeven Desktop keeps environment entry simple on purpose: one launcher, one card system, and one place to open your Local Environment, compatible provider environments, saved Redeven Local UI URLs, and SSH hosts.
 
 ### 2. Bootstrap once
 

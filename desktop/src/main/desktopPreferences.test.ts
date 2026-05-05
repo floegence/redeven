@@ -196,10 +196,6 @@ describe('desktopPreferences', () => {
       id: existing.id,
       label: existing.label,
     }));
-    expect(updated?.local_hosting?.scope).toEqual({
-      kind: 'local_environment',
-      name: 'local',
-    });
     expect(updated?.local_hosting?.access.local_ui_bind).toBe('localhost:24000');
   });
 
@@ -396,9 +392,7 @@ describe('desktopPreferences', () => {
       expect(loaded.local_environment).toEqual(expect.objectContaining({
         id: 'local',
         label: 'Local Environment',
-        local_hosting: expect.objectContaining({
-          scope: { kind: 'local_environment', name: 'local' },
-        }),
+        local_hosting: expect.objectContaining({}),
       }));
       expect(loaded.provider_environments).toEqual([
         expect.objectContaining({
@@ -499,7 +493,6 @@ describe('desktopPreferences', () => {
         id: 'local',
         label: 'Local Environment',
         local_hosting: expect.objectContaining({
-          scope: { kind: 'local_environment', name: 'local' },
           access: {
             local_ui_bind: '0.0.0.0:24000',
             local_ui_password: 'super-secret',
@@ -527,7 +520,6 @@ describe('desktopPreferences', () => {
         id: 'local',
         label: 'Local Environment',
         local_hosting: expect.objectContaining({
-          scope: { kind: 'local_environment', name: 'local' },
           access: {
             local_ui_bind: 'localhost:23998',
             local_ui_password: '',
@@ -559,7 +551,6 @@ describe('desktopPreferences', () => {
         id: 'local',
         label: 'Local Environment',
         local_hosting: expect.objectContaining({
-          scope: { kind: 'local_environment', name: 'local' },
           access: {
             local_ui_bind: 'localhost:23998',
             local_ui_password: '',
@@ -601,7 +592,6 @@ describe('desktopPreferences', () => {
         id: 'local',
         label: 'Local Environment',
         local_hosting: expect.objectContaining({
-          scope: { kind: 'local_environment', name: 'local' },
           access: {
             local_ui_bind: 'localhost:23998',
             local_ui_password: '',
@@ -995,10 +985,6 @@ describe('desktopPreferences', () => {
       id: 'local',
       label: existing.label,
       local_hosting: expect.objectContaining({
-        scope: expect.objectContaining({
-          kind: 'local_environment',
-          name: 'local',
-        }),
         state_dir: '/tmp/redeven-lab',
       }),
     }));

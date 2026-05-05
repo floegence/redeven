@@ -8,6 +8,7 @@ import type {
 import {
   desktopProviderEnvironmentStateID,
   localEnvironmentDefaultOpenRoute,
+  localEnvironmentName,
   localEnvironmentStateKind,
   normalizeDesktopLocalEnvironmentName,
   type DesktopLocalEnvironmentState,
@@ -134,7 +135,6 @@ export function buildLocalEnvironmentDesktopTarget(
       ? 'remote_desktop'
       : 'local_host'
   );
-  const localScope = environment.local_hosting.scope;
   return {
     kind: 'local_environment',
     session_key: localEnvironmentDesktopSessionKey(
@@ -147,9 +147,7 @@ export function buildLocalEnvironmentDesktopTarget(
     label: environment.label,
     route,
     local_environment_kind: localEnvironmentStateKind(environment),
-    local_environment_name: localScope
-      ? normalizeDesktopLocalEnvironmentName(localScope.name)
-      : undefined,
+    local_environment_name: normalizeDesktopLocalEnvironmentName(localEnvironmentName(environment)),
     provider_origin: environment.current_provider_binding?.provider_origin,
     provider_id: environment.current_provider_binding?.provider_id,
     env_public_id: environment.current_provider_binding?.env_public_id,

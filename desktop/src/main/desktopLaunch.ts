@@ -30,7 +30,7 @@ export type DesktopRuntimeLaunchPlan = DesktopRuntimeSpawnPlan;
 type BuildDesktopRuntimeArgsOptions = Readonly<{
   localUIBind?: string;
   bootstrap?: DesktopRuntimeBootstrap | null;
-  configPath?: string;
+  stateRoot?: string;
 }>;
 
 function resolvedRuntimeBootstrap(
@@ -53,9 +53,9 @@ export function buildDesktopRuntimeArgs(
     '--local-ui-bind',
     localUIBind,
   ];
-  const configPath = String(options.configPath ?? '').trim();
-  if (configPath !== '') {
-    args.push('--config-path', configPath);
+  const stateRoot = String(options.stateRoot ?? '').trim();
+  if (stateRoot !== '') {
+    args.push('--state-root', stateRoot);
   }
 
   if (access.local_ui_password_configured) {
@@ -113,7 +113,7 @@ function buildDesktopRuntimePlan(
   const args = buildDesktopRuntimeArgs(environment, {
     localUIBind: options?.localUIBind,
     bootstrap: options?.bootstrap,
-    configPath: stateLayout.configPath,
+    stateRoot: stateLayout.stateRoot,
   });
   const access = localEnvironmentAccess(environment);
   const passwordStdin = access.local_ui_password_configured

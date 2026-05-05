@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 )
@@ -45,8 +43,12 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cfgPath := filepath.Join(t.TempDir(), "config.json")
-	if err := Save(cfgPath, &Config{
+	stateRoot := t.TempDir()
+	layout, err := LocalEnvironmentStateLayout(stateRoot)
+	if err != nil {
+		t.Fatalf("LocalEnvironmentStateLayout() error = %v", err)
+	}
+	if err := Save(layout.ConfigPath, &Config{
 		ControlplaneBaseURL:      "https://old.example.invalid",
 		EnvironmentID:            "env_old",
 		LocalEnvironmentPublicID: "le_existing",
@@ -64,17 +66,17 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 		ControlplaneBaseURL: server.URL,
 		EnvironmentID:       "env_123",
 		BootstrapTicket:     "ticket-123",
-		ConfigPath:          cfgPath,
+		StateRoot:           stateRoot,
 		LogLevel:            "info",
 	})
 	if err != nil {
 		t.Fatalf("BootstrapConfig() error = %v", err)
 	}
-	if writtenPath != cfgPath {
-		t.Fatalf("writtenPath = %q, want %q", writtenPath, cfgPath)
+	if writtenPath != layout.ConfigPath {
+		t.Fatalf("writtenPath = %q, want %q", writtenPath, layout.ConfigPath)
 	}
 
-	cfg, err := Load(cfgPath)
+	cfg, err := Load(layout.ConfigPath)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -148,7 +150,11 @@ func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cfgPath := filepath.Join(t.TempDir(), "config.json")
+	stateRoot := t.TempDir()
+	layout, err := LocalEnvironmentStateLayout(stateRoot)
+	if err != nil {
+		t.Fatalf("LocalEnvironmentStateLayout() error = %v", err)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -156,16 +162,16 @@ func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
 		ControlplaneBaseURL: server.URL,
 		EnvironmentID:       "env_123",
 		BootstrapTicket:     "ticket-123",
-		ConfigPath:          cfgPath,
+		StateRoot:           stateRoot,
 	})
 	if err != nil {
 		t.Fatalf("BootstrapConfig() error = %v", err)
 	}
-	if writtenPath != cfgPath {
-		t.Fatalf("writtenPath = %q, want %q", writtenPath, cfgPath)
+	if writtenPath != layout.ConfigPath {
+		t.Fatalf("writtenPath = %q, want %q", writtenPath, layout.ConfigPath)
 	}
 
-	cfg, err := Load(cfgPath)
+	cfg, err := Load(layout.ConfigPath)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -183,78 +189,6 @@ func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
 	}
 }
 
-func TestBootstrapConfigWritesScopeMetadataWithProviderIdentity(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/.well-known/redeven-provider.json":
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"provider_id":"redeven_portal"}`))
-			return
-		case r.Method == http.MethodPost && r.URL.Path == "/api/rcpp/v1/runtime/bootstrap/exchange":
-			var payload bootstrapTicketExchangeRequest
-			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-				t.Fatalf("Decode(request) error = %v", err)
-			}
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{
-  "direct": {
-    "ws_url": "wss://region.example.invalid/control/ws",
-    "channel_id": "ch_ticket",
-    "e2ee_psk_b64u": "cHNr",
-    "channel_init_expire_at_unix_s": 4102444800
-  },
-  "local_environment_binding": {
-    "local_environment_public_id": "` + payload.LocalEnvironmentPublicID + `",
-    "env_public_id": "env_123",
-    "generation": 2,
-    "status": "active"
-  }
-}`))
-			return
-		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
-		}
-	}))
-	defer server.Close()
-
-	stateRoot := t.TempDir()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	cfgPath, err := BootstrapConfig(ctx, BootstrapArgs{
-		ControlplaneBaseURL: server.URL,
-		EnvironmentID:       "env_123",
-		BootstrapTicket:     "ticket-123",
-		StateRoot:           stateRoot,
-	})
-	if err != nil {
-		t.Fatalf("BootstrapConfig() error = %v", err)
-	}
-
-	layout, err := StateLayoutForConfigPath(cfgPath)
-	if err != nil {
-		t.Fatalf("StateLayoutForConfigPath() error = %v", err)
-	}
-
-	body, err := os.ReadFile(layout.ScopeMetadataPath)
-	if err != nil {
-		t.Fatalf("ReadFile(%q) error = %v", layout.ScopeMetadataPath, err)
-	}
-	var metadata ScopeMetadata
-	if err := json.Unmarshal(body, &metadata); err != nil {
-		t.Fatalf("json.Unmarshal(scope metadata) error = %v", err)
-	}
-	if metadata.BoundControlplaneBaseURL != server.URL {
-		t.Fatalf("BoundControlplaneBaseURL = %q, want %q", metadata.BoundControlplaneBaseURL, server.URL)
-	}
-	if metadata.BoundControlplaneProviderID != "redeven_portal" {
-		t.Fatalf("BoundControlplaneProviderID = %q, want %q", metadata.BoundControlplaneProviderID, "redeven_portal")
-	}
-	if metadata.BoundEnvironmentID != "env_123" {
-		t.Fatalf("BoundEnvironmentID = %q, want %q", metadata.BoundEnvironmentID, "env_123")
-	}
-}
-
 func TestBootstrapConfigRejectsMissingBootstrapTicket(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -262,7 +196,7 @@ func TestBootstrapConfigRejectsMissingBootstrapTicket(t *testing.T) {
 	_, err := BootstrapConfig(ctx, BootstrapArgs{
 		ControlplaneBaseURL: "https://region.example.invalid",
 		EnvironmentID:       "env_123",
-		ConfigPath:          filepath.Join(t.TempDir(), "config.json"),
+		StateRoot:           t.TempDir(),
 	})
 	if err == nil || err.Error() != "missing bootstrap ticket" {
 		t.Fatalf("BootstrapConfig() error = %v", err)

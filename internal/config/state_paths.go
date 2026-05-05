@@ -12,10 +12,9 @@ import (
 var ErrHomeDirUnavailable = errors.New("user home directory is unavailable")
 
 const (
-	DefaultLocalEnvironmentScopeName = "local"
-	localEnvironmentScopeKey         = "local_environment"
-	localEnvironmentScopeDirName     = "local-environment"
-	stateRootEnvName                 = "REDEVEN_STATE_ROOT"
+	DefaultLocalEnvironmentID = "local"
+	localEnvironmentDirName   = "local-environment"
+	stateRootEnvName          = "REDEVEN_STATE_ROOT"
 )
 
 var (
@@ -23,32 +22,17 @@ var (
 	lookupEnv   = os.LookupEnv
 )
 
-type ScopeKind string
-
-const (
-	ScopeKindLocalEnvironment ScopeKind = "local_environment"
-)
-
-type ScopeRef struct {
-	Kind ScopeKind
-	Name string
-}
-
 type StateLayout struct {
-	StateRoot         string
-	Scope             ScopeRef
-	ScopeKey          string
-	ScopeDir          string
-	ScopeMetadataPath string
-	ConfigPath        string
-	SecretsPath       string
-	LockPath          string
-	StateDir          string
-	RuntimeStatePath  string
-	DiagnosticsDir    string
-	AuditDir          string
-	AppsDir           string
-	GatewayDir        string
+	StateRoot        string
+	ConfigPath       string
+	SecretsPath      string
+	LockPath         string
+	StateDir         string
+	RuntimeStatePath string
+	DiagnosticsDir   string
+	AuditDir         string
+	AppsDir          string
+	GatewayDir       string
 }
 
 func DefaultConfigPath() (string, error) {
@@ -65,19 +49,11 @@ func DefaultStateLayout() (StateLayout, error) {
 }
 
 func LocalEnvironmentStateLayout(stateRoot string) (StateLayout, error) {
-	return StateLayoutForScope(ScopeRef{Kind: ScopeKindLocalEnvironment, Name: DefaultLocalEnvironmentScopeName}, stateRoot)
-}
-
-func ParseScopeRef(raw string) (ScopeRef, error) {
-	value := strings.TrimSpace(raw)
-	switch {
-	case value == "":
-		return ScopeRef{}, errors.New("missing scope")
-	case value == string(ScopeKindLocalEnvironment):
-		return ScopeRef{Kind: ScopeKindLocalEnvironment, Name: DefaultLocalEnvironmentScopeName}, nil
-	default:
-		return ScopeRef{}, fmt.Errorf("invalid scope %q (supported: local_environment)", value)
+	root, err := ResolveStateRoot(stateRoot)
+	if err != nil {
+		return StateLayout{}, err
 	}
+	return stateLayoutForResolvedRoot(root), nil
 }
 
 func ResolveStateRoot(override string) (string, error) {
@@ -106,102 +82,20 @@ func ResolveStateRoot(override string) (string, error) {
 	return filepath.Join(cleanHome, ".redeven"), nil
 }
 
-func StateLayoutForScope(scope ScopeRef, stateRoot string) (StateLayout, error) {
-	root, err := ResolveStateRoot(stateRoot)
-	if err != nil {
-		return StateLayout{}, err
-	}
-	return stateLayoutForScopeResolvedRoot(scope, root)
-}
-
-// StateLayoutForConfigPath normalizes an explicit config path and derives the matching state layout.
-func StateLayoutForConfigPath(configPath string) (StateLayout, error) {
-	cleanPath := strings.TrimSpace(configPath)
-	if cleanPath == "" {
-		return StateLayout{}, errors.New("missing config path")
-	}
-
-	absPath, err := filepath.Abs(cleanPath)
-	if err != nil {
-		return StateLayout{}, fmt.Errorf("resolve config path %q: %w", cleanPath, err)
-	}
-	stateDir := filepath.Dir(absPath)
+func stateLayoutForResolvedRoot(stateRoot string) StateLayout {
+	stateDir := filepath.Join(stateRoot, localEnvironmentDirName)
 	return StateLayout{
-		ConfigPath:        absPath,
-		SecretsPath:       filepath.Join(stateDir, "secrets.json"),
-		LockPath:          filepath.Join(stateDir, "agent.lock"),
-		StateDir:          stateDir,
-		ScopeDir:          stateDir,
-		ScopeMetadataPath: filepath.Join(stateDir, "scope.json"),
-		RuntimeStatePath:  filepath.Join(stateDir, "runtime", "local-ui.json"),
-		DiagnosticsDir:    filepath.Join(stateDir, "diagnostics"),
-		AuditDir:          filepath.Join(stateDir, "audit"),
-		AppsDir:           filepath.Join(stateDir, "apps"),
-		GatewayDir:        filepath.Join(stateDir, "gateway"),
-	}, nil
-}
-
-func stateLayoutForScopeResolvedRoot(scope ScopeRef, stateRoot string) (StateLayout, error) {
-	normalizedScope, err := normalizeScopeRef(scope)
-	if err != nil {
-		return StateLayout{}, err
+		StateRoot:        stateRoot,
+		ConfigPath:       filepath.Join(stateDir, "config.json"),
+		SecretsPath:      filepath.Join(stateDir, "secrets.json"),
+		LockPath:         filepath.Join(stateDir, "agent.lock"),
+		StateDir:         stateDir,
+		RuntimeStatePath: filepath.Join(stateDir, "runtime", "local-ui.json"),
+		DiagnosticsDir:   filepath.Join(stateDir, "diagnostics"),
+		AuditDir:         filepath.Join(stateDir, "audit"),
+		AppsDir:          filepath.Join(stateDir, "apps"),
+		GatewayDir:       filepath.Join(stateDir, "gateway"),
 	}
-
-	var scopeKey string
-	var scopeDir string
-	switch normalizedScope.Kind {
-	case ScopeKindLocalEnvironment:
-		scopeKey = localEnvironmentScopeKey
-		scopeDir = filepath.Join(stateRoot, localEnvironmentScopeDirName)
-	default:
-		return StateLayout{}, fmt.Errorf("unsupported scope kind %q", normalizedScope.Kind)
-	}
-
-	return StateLayout{
-		StateRoot:         stateRoot,
-		Scope:             normalizedScope,
-		ScopeKey:          scopeKey,
-		ScopeDir:          scopeDir,
-		ScopeMetadataPath: filepath.Join(scopeDir, "scope.json"),
-		ConfigPath:        filepath.Join(scopeDir, "config.json"),
-		SecretsPath:       filepath.Join(scopeDir, "secrets.json"),
-		LockPath:          filepath.Join(scopeDir, "agent.lock"),
-		StateDir:          scopeDir,
-		RuntimeStatePath:  filepath.Join(scopeDir, "runtime", "local-ui.json"),
-		DiagnosticsDir:    filepath.Join(scopeDir, "diagnostics"),
-		AuditDir:          filepath.Join(scopeDir, "audit"),
-		AppsDir:           filepath.Join(scopeDir, "apps"),
-		GatewayDir:        filepath.Join(scopeDir, "gateway"),
-	}, nil
-}
-
-func normalizeScopeRef(scope ScopeRef) (ScopeRef, error) {
-	switch scope.Kind {
-	case ScopeKindLocalEnvironment, "":
-		name, err := normalizeScopeName(scope.Name, DefaultLocalEnvironmentScopeName)
-		if err != nil {
-			return ScopeRef{}, err
-		}
-		return ScopeRef{Kind: ScopeKindLocalEnvironment, Name: name}, nil
-	default:
-		return ScopeRef{}, fmt.Errorf("unsupported scope kind %q", scope.Kind)
-	}
-}
-
-func normalizeScopeName(raw string, fallback string) (string, error) {
-	name := strings.TrimSpace(raw)
-	if name == "" {
-		name = strings.TrimSpace(fallback)
-	}
-	name = normalizeScopeSegment(name)
-	if name == "" {
-		return "", errors.New("missing scope name")
-	}
-	return name, nil
-}
-
-func normalizeScopeSegment(raw string) string {
-	return sanitizeStateScopeID(strings.TrimSpace(raw))
 }
 
 func normalizeControlplaneBaseURL(raw string) (string, error) {
@@ -224,30 +118,4 @@ func normalizeControlplaneBaseURL(raw string) (string, error) {
 	parsedURL.Fragment = ""
 	parsedURL.User = nil
 	return parsedURL.String(), nil
-}
-
-func sanitizeStateScopeID(raw string) string {
-	id := strings.TrimSpace(raw)
-	if id == "" {
-		return ""
-	}
-
-	var b strings.Builder
-	b.Grow(len(id))
-	for i := 0; i < len(id); i++ {
-		c := id[i]
-		switch {
-		case c >= 'a' && c <= 'z':
-			b.WriteByte(c)
-		case c >= 'A' && c <= 'Z':
-			b.WriteByte(c)
-		case c >= '0' && c <= '9':
-			b.WriteByte(c)
-		case c == '_' || c == '-' || c == '.':
-			b.WriteByte(c)
-		default:
-			b.WriteByte('_')
-		}
-	}
-	return b.String()
 }
