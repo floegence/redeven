@@ -6,6 +6,7 @@ import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
 import { MonitoringChart } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { FlowerContextMenuIcon } from '../icons/FlowerSoftAuraIcon';
+import { sortContextActionMenuItems } from '../contextActions/menu';
 import { useRedevenRpc, type ActiveSession, type SysMonitorProcessInfo, type SysMonitorSnapshot, type SysMonitorSortBy } from '../protocol/redeven_v1';
 import { useEnvContext } from '../pages/EnvContext';
 import {
@@ -427,31 +428,33 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
   };
 
   const buildProcessContextMenuItems = (menu: NonNullable<ReturnType<typeof processContextMenu>>): FloatingContextMenuItem[] => [
-    {
-      id: 'ask-flower',
-      kind: 'action',
-      label: 'Ask Flower',
-      icon: FlowerContextMenuIcon,
-      onSelect: handleAskFlowerFromProcess,
-    },
-    {
-      id: 'copy-name',
-      kind: 'action',
-      label: 'Copy name',
-      icon: Copy,
-      onSelect: () => {
-        void handleCopyProcessName();
+    ...sortContextActionMenuItems<FloatingContextMenuItem>([
+      {
+        id: 'ask-flower',
+        kind: 'action',
+        label: 'Ask Flower',
+        icon: FlowerContextMenuIcon,
+        onSelect: handleAskFlowerFromProcess,
       },
-    },
-    {
-      id: 'copy-pid',
-      kind: 'action',
-      label: 'Copy PID',
-      icon: Copy,
-      onSelect: () => {
-        void handleCopyProcessPid();
+      {
+        id: 'copy-name',
+        kind: 'action',
+        label: 'Copy name',
+        icon: Copy,
+        onSelect: () => {
+          void handleCopyProcessName();
+        },
       },
-    },
+      {
+        id: 'copy-pid',
+        kind: 'action',
+        label: 'Copy PID',
+        icon: Copy,
+        onSelect: () => {
+          void handleCopyProcessPid();
+        },
+      },
+    ]),
     {
       id: 'primary-secondary-separator',
       kind: 'separator',

@@ -27,6 +27,30 @@ describe('filePathAskFlower', () => {
       ],
       pendingAttachments: [],
       notes: [],
+      contextAction: {
+        schema_version: 1,
+        action_id: 'assistant.ask.flower',
+        provider: 'flower',
+        target: {
+          target_id: 'current',
+          locality: 'auto',
+        },
+        source: {
+          surface: 'file_browser',
+        },
+        context: [
+          {
+            kind: 'file_path',
+            path: '/workspace/demo',
+            is_directory: true,
+          },
+        ],
+        presentation: {
+          label: 'Ask Flower',
+          priority: 100,
+        },
+        suggested_working_dir_abs: '/workspace/demo',
+      },
     });
   });
 

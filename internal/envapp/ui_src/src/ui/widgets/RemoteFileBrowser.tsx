@@ -34,6 +34,7 @@ import { getExtDot, mimeFromExtDot } from '../utils/filePreview';
 import { readFileBytesOnce } from '../utils/fileStreamReader';
 import { useEnvContext } from '../pages/EnvContext';
 import type { AskFlowerIntent } from '../pages/askFlowerIntent';
+import { sortContextActionMenuItems } from '../contextActions/menu';
 import { resolveRendererStorageScopeID } from '../services/desktopSessionContext';
 import {
   basenameFromAbsolutePath,
@@ -4495,7 +4496,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         backgroundItems.push(buildOpenInTerminalMenuItem());
       }
       backgroundItems.push(buildNewContextMenuItem());
-      return backgroundItems;
+      return sortContextActionMenuItems(backgroundItems);
     }
 
     if (scope === 'single-folder') {
@@ -4506,7 +4507,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         folderItems.push(buildOpenInTerminalMenuItem());
       }
       folderItems.push(buildNewContextMenuItem(true));
-      return [...folderItems, ...filterSecondaryContextMenuItems(singleSelectSecondaryContextMenuItemIds)];
+      return [...sortContextActionMenuItems(folderItems), ...filterSecondaryContextMenuItems(singleSelectSecondaryContextMenuItemIds)];
     }
 
     return [

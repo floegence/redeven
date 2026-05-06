@@ -1,5 +1,6 @@
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type { AskFlowerIntent } from '../pages/askFlowerIntent';
+import { attachAskFlowerContextAction } from '../contextActions/askFlower';
 import { dirnameAbsolute, normalizeAbsolutePath } from './askFlowerPath';
 import { createClientId } from './clientId';
 
@@ -45,15 +46,17 @@ export function buildFilePreviewAskFlowerIntent(params: {
     contextItems = [{ kind: 'file_path', path: absolutePath, isDirectory: false }];
   }
 
+  const intent: AskFlowerIntent = {
+    id: createClientId('ask-flower'),
+    source: 'file_preview',
+    mode: 'append',
+    suggestedWorkingDirAbs: dirnameAbsolute(absolutePath),
+    contextItems,
+    pendingAttachments,
+    notes,
+  };
+
   return {
-    intent: {
-      id: createClientId('ask-flower'),
-      source: 'file_preview',
-      mode: 'append',
-      suggestedWorkingDirAbs: dirnameAbsolute(absolutePath),
-      contextItems,
-      pendingAttachments,
-      notes,
-    },
+    intent: attachAskFlowerContextAction(intent),
   };
 }

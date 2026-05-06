@@ -1,4 +1,5 @@
 import type { AskFlowerIntent } from '../pages/askFlowerIntent';
+import { attachAskFlowerContextAction } from '../contextActions/askFlower';
 import { deriveAbsoluteWorkingDirFromItems, normalizeAbsolutePath } from './askFlowerPath';
 import { createClientId } from './clientId';
 
@@ -41,19 +42,21 @@ export function buildFilePathAskFlowerIntent(params: {
 
   const suggestedWorkingDirAbs = deriveAbsoluteWorkingDirFromItems(normalizedItems, params.fallbackWorkingDirAbs ?? '/');
 
+  const intent: AskFlowerIntent = {
+    id: createClientId('ask-flower'),
+    source: 'file_browser',
+    mode: 'append',
+    suggestedWorkingDirAbs: suggestedWorkingDirAbs || undefined,
+    contextItems: normalizedItems.map((item) => ({
+      kind: 'file_path' as const,
+      path: item.path,
+      isDirectory: item.isDirectory,
+    })),
+    pendingAttachments: [...(params.pendingAttachments ?? [])],
+    notes: [...(params.notes ?? [])],
+  };
+
   return {
-    intent: {
-      id: createClientId('ask-flower'),
-      source: 'file_browser',
-      mode: 'append',
-      suggestedWorkingDirAbs: suggestedWorkingDirAbs || undefined,
-      contextItems: normalizedItems.map((item) => ({
-        kind: 'file_path' as const,
-        path: item.path,
-        isDirectory: item.isDirectory,
-      })),
-      pendingAttachments: [...(params.pendingAttachments ?? [])],
-      notes: [...(params.notes ?? [])],
-    },
+    intent: attachAskFlowerContextAction(intent),
   };
 }
