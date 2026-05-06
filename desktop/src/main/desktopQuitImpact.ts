@@ -10,11 +10,11 @@ export type DesktopQuitImpactRuntime = Readonly<{
 
 export type DesktopQuitImpactInput = Readonly<{
   environment_window_count: number;
-  local_environment_runtimes: readonly Readonly<{
+  local_environment_runtime: Readonly<{
     id: string;
     label: string;
     lifecycle_owner: 'desktop' | 'external';
-  }>[];
+  }> | null;
   ssh_runtimes: readonly Readonly<{
     id: string;
     label: string;
@@ -49,7 +49,8 @@ export function buildDesktopQuitImpact(input: DesktopQuitImpactInput): DesktopQu
   const desktopOwnedRuntimes: DesktopQuitImpactRuntime[] = [];
   let externalRuntimeCount = 0;
 
-  for (const runtime of input.local_environment_runtimes) {
+  const runtime = input.local_environment_runtime;
+  if (runtime) {
     if (runtime.lifecycle_owner === 'desktop') {
       desktopOwnedRuntimes.push({
         id: runtime.id,

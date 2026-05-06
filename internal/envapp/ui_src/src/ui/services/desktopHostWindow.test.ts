@@ -79,7 +79,7 @@ describe('desktopHostWindow', () => {
     const sessionContextBridge = {
       getSnapshot: () => ({
         local_environment_id: 'env_demo',
-        environment_storage_scope_id: 'env_demo',
+        renderer_storage_scope_id: 'env_demo',
       }),
     };
     parentWindow.redevenDesktopSessionContext = sessionContextBridge;

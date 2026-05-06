@@ -2,7 +2,7 @@ import { readDesktopHostBridge } from './desktopHostWindow';
 
 export interface DesktopSessionContextSnapshot {
   local_environment_id: string;
-  environment_storage_scope_id: string;
+  renderer_storage_scope_id: string;
   provider_origin?: string;
   provider_id?: string;
   env_public_id?: string;
@@ -29,16 +29,16 @@ function normalizeDesktopSessionContextSnapshot(value: unknown): DesktopSessionC
   }
   const candidate = value as Partial<DesktopSessionContextSnapshot>;
   const localEnvironmentID = compact(candidate.local_environment_id);
-  const environmentStorageScopeID = compact(candidate.environment_storage_scope_id);
+  const rendererStorageScopeID = compact(candidate.renderer_storage_scope_id);
   const providerOrigin = compact(candidate.provider_origin);
   const providerID = compact(candidate.provider_id);
   const envPublicID = compact(candidate.env_public_id);
-  if (localEnvironmentID === '' || environmentStorageScopeID === '') {
+  if (localEnvironmentID === '' || rendererStorageScopeID === '') {
     return null;
   }
   return {
     local_environment_id: localEnvironmentID,
-    environment_storage_scope_id: environmentStorageScopeID,
+    renderer_storage_scope_id: rendererStorageScopeID,
     ...(providerOrigin !== '' ? { provider_origin: providerOrigin } : {}),
     ...(providerID !== '' ? { provider_id: providerID } : {}),
     ...(envPublicID !== '' ? { env_public_id: envPublicID } : {}),
@@ -65,12 +65,12 @@ export function readDesktopSessionContextSnapshot(): DesktopSessionContextSnapsh
   }
 }
 
-export function desktopLocalEnvironmentStorageScopeID(): string {
-  return compact(readDesktopSessionContextSnapshot()?.environment_storage_scope_id);
+export function desktopRendererStorageScopeID(): string {
+  return compact(readDesktopSessionContextSnapshot()?.renderer_storage_scope_id);
 }
 
-export function resolveEnvironmentStorageScopeID(fallback: string): string {
-  return desktopLocalEnvironmentStorageScopeID() || compact(fallback);
+export function resolveRendererStorageScopeID(fallback: string): string {
+  return desktopRendererStorageScopeID() || compact(fallback);
 }
 
 export function notifyDesktopSessionAppReady(state: 'access_gate_interactive' | 'runtime_connected'): boolean {

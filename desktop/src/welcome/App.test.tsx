@@ -734,7 +734,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('scope derived from Name.');
   });
 
-  it('keeps provider-local runtime setup out of the connection dialog', () => {
+  it('keeps linked-local runtime setup out of the connection dialog', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).not.toContain('LocalEnvironmentBindingResolutionPanel');

@@ -1,5 +1,5 @@
 import type { FloeStorageAdapter } from '@floegence/floe-webapp-core';
-import { desktopLocalEnvironmentStorageScopeID } from './desktopSessionContext';
+import { desktopRendererStorageScopeID } from './desktopSessionContext';
 import { readDesktopHostBridge } from './desktopHostWindow';
 
 export interface DesktopStateStorageBridge {
@@ -175,34 +175,34 @@ export function writeUIStorageJSON(key: string, value: unknown): void {
   writeUIStorageItem(key, JSON.stringify(value));
 }
 
-export function environmentOwnedUIStorageKey(key: string): string {
+export function rendererScopedUIStorageKey(key: string): string {
   const cleanKey = String(key ?? '').trim();
   if (cleanKey === '') {
     return '';
   }
-  const environmentScopeID = desktopLocalEnvironmentStorageScopeID();
-  if (environmentScopeID === '') {
+  const rendererScopeID = desktopRendererStorageScopeID();
+  if (rendererScopeID === '') {
     return cleanKey;
   }
-  return `${cleanKey}:${environmentScopeID}`;
+  return `${cleanKey}:${rendererScopeID}`;
 }
 
-export function readEnvironmentOwnedUIStorageItem(key: string): string | null {
-  return readUIStorageItem(environmentOwnedUIStorageKey(key));
+export function readRendererScopedUIStorageItem(key: string): string | null {
+  return readUIStorageItem(rendererScopedUIStorageKey(key));
 }
 
-export function writeEnvironmentOwnedUIStorageItem(key: string, value: string): void {
-  writeUIStorageItem(environmentOwnedUIStorageKey(key), value);
+export function writeRendererScopedUIStorageItem(key: string, value: string): void {
+  writeUIStorageItem(rendererScopedUIStorageKey(key), value);
 }
 
-export function removeEnvironmentOwnedUIStorageItem(key: string): void {
-  removeUIStorageItem(environmentOwnedUIStorageKey(key));
+export function removeRendererScopedUIStorageItem(key: string): void {
+  removeUIStorageItem(rendererScopedUIStorageKey(key));
 }
 
-export function readEnvironmentOwnedUIStorageJSON<T>(key: string, fallback: T): T {
-  return readUIStorageJSON(environmentOwnedUIStorageKey(key), fallback);
+export function readRendererScopedUIStorageJSON<T>(key: string, fallback: T): T {
+  return readUIStorageJSON(rendererScopedUIStorageKey(key), fallback);
 }
 
-export function writeEnvironmentOwnedUIStorageJSON(key: string, value: unknown): void {
-  writeUIStorageJSON(environmentOwnedUIStorageKey(key), value);
+export function writeRendererScopedUIStorageJSON(key: string, value: unknown): void {
+  writeUIStorageJSON(rendererScopedUIStorageKey(key), value);
 }

@@ -31,7 +31,7 @@ describe('localEnvironmentOpen', () => {
     });
   });
 
-  it('uses local host for provider-local projections when a bootstrap ticket is available', () => {
+  it('uses local host for linked-local projections when a bootstrap ticket is available', () => {
     const environment = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo');
 
     expect(resolveLocalEnvironmentOpenTarget(environment, {

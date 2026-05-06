@@ -4,13 +4,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createUIStorageAdapter,
-  environmentOwnedUIStorageKey,
+  rendererScopedUIStorageKey,
   isDesktopStateStorageAvailable,
   removeUIStorageItem,
   readUIStorageItem,
-  readEnvironmentOwnedUIStorageItem,
+  readRendererScopedUIStorageItem,
   writeUIStorageItem,
-  writeEnvironmentOwnedUIStorageItem,
+  writeRendererScopedUIStorageItem,
 } from './uiStorage';
 
 const originalParent = window.parent;
@@ -150,20 +150,20 @@ describe('uiStorage', () => {
     );
   });
 
-  it('prefixes environment-owned keys with the Desktop session storage scope when available', () => {
+  it('prefixes renderer-scoped keys with the Desktop session storage scope when available', () => {
     vi.stubGlobal('localStorage', createStorageMock());
     window.redevenDesktopSessionContext = {
       getSnapshot: () => ({
         local_environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
-        environment_storage_scope_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+        renderer_storage_scope_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
       }),
     };
 
-    writeEnvironmentOwnedUIStorageItem('files:lastPath', '/workspace/demo');
+    writeRendererScopedUIStorageItem('files:lastPath', '/workspace/demo');
 
-    expect(environmentOwnedUIStorageKey('files:lastPath')).toBe(
+    expect(rendererScopedUIStorageKey('files:lastPath')).toBe(
       'files:lastPath:cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
     );
-    expect(readEnvironmentOwnedUIStorageItem('files:lastPath')).toBe('/workspace/demo');
+    expect(readRendererScopedUIStorageItem('files:lastPath')).toBe('/workspace/demo');
   });
 });

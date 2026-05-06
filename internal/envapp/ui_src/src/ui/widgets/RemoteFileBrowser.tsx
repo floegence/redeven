@@ -34,7 +34,7 @@ import { getExtDot, mimeFromExtDot } from '../utils/filePreview';
 import { readFileBytesOnce } from '../utils/fileStreamReader';
 import { useEnvContext } from '../pages/EnvContext';
 import type { AskFlowerIntent } from '../pages/askFlowerIntent';
-import { resolveEnvironmentStorageScopeID } from '../services/desktopSessionContext';
+import { resolveRendererStorageScopeID } from '../services/desktopSessionContext';
 import {
   basenameFromAbsolutePath,
   normalizeAbsolutePath,
@@ -504,7 +504,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const notification = useNotification();
   const filePreview = useFilePreviewContext();
 
-  const envId = () => resolveEnvironmentStorageScopeID(ctx.env_id() ?? '');
+  const envId = () => resolveRendererStorageScopeID(ctx.env_id() ?? '');
   const persistenceTarget = () => props.persistenceTarget ?? (props.widgetId ? 'deck' : 'page');
   const embeddedWidgetId = () => String(props.widgetId ?? '').trim();
   const deckWidgetId = () => (persistenceTarget() === 'deck' ? embeddedWidgetId() : '');

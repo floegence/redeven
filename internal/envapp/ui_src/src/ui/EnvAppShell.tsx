@@ -135,7 +135,7 @@ import {
 import { desktopThemeBridge, toggleDesktopTheme } from './services/desktopTheme';
 import { notifyDesktopSessionAppReady } from './services/desktopSessionContext';
 import { portalOriginFromSandboxLocation } from './services/sandboxOrigins';
-import { readUIStorageItem, writeEnvironmentOwnedUIStorageItem, writeUIStorageItem } from './services/uiStorage';
+import { readUIStorageItem, writeRendererScopedUIStorageItem, writeUIStorageItem } from './services/uiStorage';
 import {
   ENV_DEFAULT_SURFACE_ID,
   envWidgetTypeForSurface,
@@ -259,7 +259,7 @@ function readPersistedExecutionMode(): 'act' | 'plan' {
 function persistActiveThreadId(threadId: string): void {
   const value = String(threadId ?? '').trim();
   if (!value) return;
-  writeEnvironmentOwnedUIStorageItem(ACTIVE_THREAD_STORAGE_KEY, value);
+  writeRendererScopedUIStorageItem(ACTIVE_THREAD_STORAGE_KEY, value);
 }
 
 function readPersistedDesktopViewMode(): EnvViewMode | null {
