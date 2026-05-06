@@ -225,4 +225,4 @@ Desktop and standalone runtime mode also share one profile-scoped catalog:
 
 This public repository covers the endpoint/runtime layer, Redeven Local UI behavior, the desktop shell, and the GitHub Release contract.
 
-Organization-specific deployment automation, control-plane implementations, and environment-specific wrappers are intentionally out of scope here.
+Organization-specific deployment automation, control-plane implementations, and site-specific packaging wrappers are intentionally out of scope here.
