@@ -79,6 +79,7 @@ import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workb
 import { FloatingContextMenu, type FloatingContextMenuItem } from './FloatingContextMenu';
 
 type session_loading_state = 'idle' | 'initializing' | 'attaching' | 'loading_history';
+type pending_terminal_session_status = 'creating' | 'failed';
 
 export type TerminalPanelVariant = 'panel' | 'deck' | 'workbench';
 
@@ -300,6 +301,21 @@ const MOBILE_TERMINAL_TOUCH_SCROLL_MIN_LINE_HEIGHT_PX = 12;
 type TerminalSessionTabVisualStateMap = Record<string, TerminalTabVisualState>;
 type TerminalSessionWorkStateMap = Record<string, TerminalSessionWorkState>;
 
+type pending_terminal_session = {
+  id: string;
+  name: string;
+  workingDir: string;
+  visibleSessionIdsAtCreate: string[];
+  status: pending_terminal_session_status;
+  errorMessage?: string;
+};
+
+type resolved_pending_terminal_session = {
+  pendingSessionId: string;
+  sessionId: string;
+  session: TerminalSessionInfo;
+};
+
 type terminal_touch_scroll_target = {
   scrollLines?: (amount: number) => void;
   getScrollbackLength?: () => number;
@@ -349,6 +365,10 @@ function buildTerminalSessionLabel(session: TerminalSessionInfo, index: number):
   return session.name?.trim() ? session.name.trim() : `Terminal ${index + 1}`;
 }
 
+function buildPendingTerminalSessionLabel(session: pending_terminal_session): string {
+  return session.name?.trim() ? session.name.trim() : 'Terminal';
+}
+
 function buildTerminalPanelTitle(session: TerminalSessionInfo | null): string {
   const sessionName = String(session?.name ?? '').trim();
   if (sessionName) {
@@ -365,6 +385,65 @@ function buildTerminalPanelTitle(session: TerminalSessionInfo | null): string {
   }
 
   return 'Terminal';
+}
+
+function buildPendingTerminalPanelTitle(session: pending_terminal_session | null): string {
+  const sessionName = String(session?.name ?? '').trim();
+  if (sessionName) {
+    return `Terminal · ${sessionName}`;
+  }
+  return 'Terminal';
+}
+
+function normalizeTerminalSessionMatchName(value: string | undefined): string {
+  return String(value ?? '').trim();
+}
+
+function normalizeTerminalSessionMatchWorkingDir(value: string | undefined): string {
+  return normalizeAskFlowerAbsolutePath(String(value ?? '').trim());
+}
+
+function terminalSessionMatchesPendingSession(
+  session: TerminalSessionInfo,
+  pendingSession: pending_terminal_session,
+): boolean {
+  if (pendingSession.visibleSessionIdsAtCreate.includes(session.id)) {
+    return false;
+  }
+
+  const sessionName = normalizeTerminalSessionMatchName(session.name);
+  const pendingName = normalizeTerminalSessionMatchName(pendingSession.name);
+  if (!sessionName || sessionName !== pendingName) {
+    return false;
+  }
+
+  const sessionWorkingDir = normalizeTerminalSessionMatchWorkingDir(session.workingDir);
+  const pendingWorkingDir = normalizeTerminalSessionMatchWorkingDir(pendingSession.workingDir);
+  return !sessionWorkingDir || !pendingWorkingDir || sessionWorkingDir === pendingWorkingDir;
+}
+
+function resolvePendingTerminalSessions(
+  pendingSessions: readonly pending_terminal_session[],
+  visibleSessions: readonly TerminalSessionInfo[],
+): resolved_pending_terminal_session[] {
+  const claimedSessionIds = new Set<string>();
+  const resolved: resolved_pending_terminal_session[] = [];
+
+  for (const pendingSession of pendingSessions) {
+    const session = visibleSessions.find((candidate) => (
+      !claimedSessionIds.has(candidate.id)
+        && terminalSessionMatchesPendingSession(candidate, pendingSession)
+    ));
+    if (!session) continue;
+    claimedSessionIds.add(session.id);
+    resolved.push({
+      pendingSessionId: pendingSession.id,
+      sessionId: session.id,
+      session,
+    });
+  }
+
+  return resolved;
 }
 
 function mergeTerminalSessionWorkStates(
@@ -410,6 +489,30 @@ const TerminalTabStatusIcon = (props: { state: 'none' | 'running' | 'unread' }) 
   }
 
   return <span class="inline-block h-3 w-3 opacity-0" data-terminal-tab-status="none" aria-hidden="true" />;
+};
+
+const PendingTerminalTabStatusIcon = (props: { status: pending_terminal_session_status }) => {
+  if (props.status === 'failed') {
+    return (
+      <span class="inline-flex h-3 w-3 items-center justify-center text-error" data-terminal-tab-status="failed" aria-hidden="true">
+        <span class="h-2 w-2 rounded-full bg-current" />
+      </span>
+    );
+  }
+
+  return (
+    <span class="inline-flex h-3 w-3 items-center justify-center text-muted-foreground" data-terminal-tab-status="creating" aria-hidden="true">
+      <svg
+        class="h-3 w-3 animate-spin"
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+      >
+        <circle cx="12" cy="12" r="8" class="opacity-20" stroke="currentColor" stroke-width="3" />
+        <path d="M20 12a8 8 0 0 0-8-8" class="opacity-100" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+      </svg>
+    </span>
+  );
 };
 
 const PlusIcon = (props: { class?: string }) => (
@@ -1313,11 +1416,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
 
   const [allSessions, setAllSessions] = createSignal<TerminalSessionInfo[]>([]);
+  const [pendingTerminalSessions, setPendingTerminalSessions] = createSignal<pending_terminal_session[]>([]);
   const [sessionsLoading, setSessionsLoading] = createSignal(false);
   const [localActiveSessionId, setLocalActiveSessionId] = createSignal<string | null>(readActiveSessionId(activeSessionStorageKey));
+  const [localActivePendingSessionId, setLocalActivePendingSessionId] = createSignal<string | null>(null);
   const [mountedSessionIds, setMountedSessionIds] = createSignal<Set<string>>(new Set());
   const [error, setError] = createSignal<string | null>(null);
-  const [creating, setCreating] = createSignal(false);
   const [mobileKeyboardVisible, setMobileKeyboardVisible] = createSignal(
     isMobileLayout() && mobileInputMode() === 'floe',
   );
@@ -1421,7 +1525,45 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return orderedVisibleSessions;
   });
 
-  const activeSessionId = createMemo<string | null>(() => {
+  const pendingTerminalSessionById = (sessionId: string): pending_terminal_session | null => {
+    const normalizedSessionId = String(sessionId ?? '').trim();
+    if (!normalizedSessionId) return null;
+    return pendingTerminalSessions().find((session) => session.id === normalizedSessionId) ?? null;
+  };
+
+  const resolvedPendingTerminalSessions = createMemo<resolved_pending_terminal_session[]>(() => (
+    resolvePendingTerminalSessions(pendingTerminalSessions(), sessions())
+  ));
+
+  const resolvedPendingTerminalSessionByPendingId = (pendingSessionId: string): resolved_pending_terminal_session | null => {
+    const normalizedPendingSessionId = String(pendingSessionId ?? '').trim();
+    if (!normalizedPendingSessionId) return null;
+    return resolvedPendingTerminalSessions().find((session) => session.pendingSessionId === normalizedPendingSessionId) ?? null;
+  };
+
+  const visiblePendingTerminalSessions = createMemo<pending_terminal_session[]>(() => {
+    const resolvedPendingIds = new Set(resolvedPendingTerminalSessions().map((session) => session.pendingSessionId));
+    return pendingTerminalSessions().filter((session) => !resolvedPendingIds.has(session.id));
+  });
+
+  const visiblePendingTerminalSessionById = (sessionId: string): pending_terminal_session | null => {
+    const normalizedSessionId = String(sessionId ?? '').trim();
+    if (!normalizedSessionId) return null;
+    return visiblePendingTerminalSessions().find((session) => session.id === normalizedSessionId) ?? null;
+  };
+
+  const activeDisplaySessionId = createMemo<string | null>(() => {
+    const activePendingId = localActivePendingSessionId();
+    if (activePendingId) {
+      const resolved = resolvedPendingTerminalSessionByPendingId(activePendingId);
+      if (resolved) {
+        return resolved.sessionId;
+      }
+    }
+    if (activePendingId && visiblePendingTerminalSessionById(activePendingId)) {
+      return activePendingId;
+    }
+
     const group = sessionGroupState();
     if (group) {
       return group.activeSessionId;
@@ -1429,19 +1571,16 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return localActiveSessionId();
   });
 
-  const setActiveSessionId = (value: string | null) => {
-    const normalizedValue = String(value ?? '').trim() || null;
-    if (!updateSessionGroupState((previous) => ({
-      sessionIds: previous.sessionIds,
-      activeSessionId: normalizedValue === null
-        ? null
-        : previous.sessionIds.includes(normalizedValue)
-          ? normalizedValue
-          : previous.activeSessionId,
-    }))) {
-      setLocalActiveSessionId(normalizedValue);
-    }
-  };
+  const activeSessionId = createMemo<string | null>(() => {
+    const activeId = activeDisplaySessionId();
+    return activeId && !visiblePendingTerminalSessionById(activeId) ? activeId : null;
+  });
+
+  const activePendingSession = createMemo<pending_terminal_session | null>(() => {
+    const activeId = activeDisplaySessionId();
+    if (!activeId) return null;
+    return visiblePendingTerminalSessions().find((session) => session.id === activeId) ?? null;
+  });
 
   const ensureSessionInGroup = (sessionId: string) => {
     const normalizedSessionId = String(sessionId ?? '').trim();
@@ -1457,6 +1596,72 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
           activeSessionId: previous.activeSessionId,
         }
     ));
+  };
+
+  const markSessionMounted = (sessionId: string) => {
+    const normalizedSessionId = String(sessionId ?? '').trim();
+    if (!normalizedSessionId) return;
+    setMountedSessionIds((prev) => {
+      if (prev.has(normalizedSessionId)) return prev;
+      const next = new Set(prev);
+      next.add(normalizedSessionId);
+      return next;
+    });
+  };
+
+  const setActiveRealSessionId = (sessionId: string | null) => {
+    const normalizedSessionId = String(sessionId ?? '').trim() || null;
+    setLocalActivePendingSessionId(null);
+    if (!updateSessionGroupState((previous) => ({
+      sessionIds: previous.sessionIds,
+      activeSessionId: normalizedSessionId === null
+        ? null
+        : previous.sessionIds.includes(normalizedSessionId)
+          ? normalizedSessionId
+          : previous.activeSessionId,
+    }))) {
+      setLocalActiveSessionId(normalizedSessionId);
+    }
+  };
+
+  const activateResolvedPendingSession = (resolved: resolved_pending_terminal_session) => {
+    ensureSessionInGroup(resolved.sessionId);
+    setActiveRealSessionId(resolved.sessionId);
+    markSessionMounted(resolved.sessionId);
+  };
+
+  createEffect(() => {
+    const resolvedSessions = resolvedPendingTerminalSessions();
+    if (resolvedSessions.length === 0) return;
+
+    const activePendingId = localActivePendingSessionId();
+    const activeResolvedSession = activePendingId
+      ? resolvedSessions.find((session) => session.pendingSessionId === activePendingId)
+      : null;
+    if (activeResolvedSession) {
+      activateResolvedPendingSession(activeResolvedSession);
+    }
+
+    const resolvedPendingIds = new Set(resolvedSessions.map((session) => session.pendingSessionId));
+    setPendingTerminalSessions((previous) => {
+      const next = previous.filter((session) => !resolvedPendingIds.has(session.id));
+      return next.length === previous.length ? previous : next;
+    });
+  });
+
+  const setActiveSessionId = (value: string | null) => {
+    const normalizedValue = String(value ?? '').trim() || null;
+    if (normalizedValue && pendingTerminalSessionById(normalizedValue)) {
+      const resolved = resolvedPendingTerminalSessionByPendingId(normalizedValue);
+      if (resolved) {
+        activateResolvedPendingSession(resolved);
+        return;
+      }
+      setLocalActivePendingSessionId(normalizedValue);
+      return;
+    }
+
+    setActiveRealSessionId(normalizedValue);
   };
 
   onCleanup(() => {
@@ -1542,7 +1747,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       return;
     }
 
-    const currentActive = activeSessionId();
+    const currentActive = activeDisplaySessionId();
+    if (currentActive && pendingTerminalSessionById(currentActive)) {
+      return;
+    }
     if (currentActive && next.some((session) => session.id === currentActive)) {
       return;
     }
@@ -1652,7 +1860,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
 
   createEffect(() => {
-    props.onTitleChange?.(buildTerminalPanelTitle(activeSession()));
+    props.onTitleChange?.(activeSession()
+      ? buildTerminalPanelTitle(activeSession())
+      : buildPendingTerminalPanelTitle(activePendingSession()));
   });
 
   const activeSessionWorkingDir = createMemo(() => {
@@ -1722,7 +1932,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
 
   const showTerminalStatusBar = createMemo(() => {
-    return Boolean(activeSessionId()) && !(shouldUseFloeMobileKeyboard() && mobileKeyboardVisible());
+    return Boolean(activeSession()) && !(shouldUseFloeMobileKeyboard() && mobileKeyboardVisible());
   });
 
   const shouldRestoreTerminalFocus = () => {
@@ -1989,12 +2199,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
     ensureSessionInGroup(normalizedSessionId);
     setActiveSessionId(normalizedSessionId);
-    setMountedSessionIds((prev) => {
-      if (prev.has(normalizedSessionId)) return prev;
-      const next = new Set(prev);
-      next.add(normalizedSessionId);
-      return next;
-    });
+    markSessionMounted(normalizedSessionId);
   };
 
   const createPanelSession = async (name: string | undefined, workingDir: string): Promise<string | null> => {
@@ -2009,22 +2214,95 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return String(session?.id ?? '').trim() || null;
   };
 
+  const createPendingSession = (name: string | undefined, workingDir: string): pending_terminal_session => {
+    const pendingSession: pending_terminal_session = {
+      id: createClientId('pending-terminal'),
+      name: String(name ?? '').trim() || 'Terminal',
+      workingDir: normalizeAskFlowerAbsolutePath(String(workingDir ?? '').trim()) || agentHomePathAbs() || '',
+      visibleSessionIdsAtCreate: sessions().map((session) => session.id),
+      status: 'creating',
+    };
+    setPendingTerminalSessions((previous) => [...previous, pendingSession]);
+    setLocalActivePendingSessionId(pendingSession.id);
+    return pendingSession;
+  };
+
+  const removePendingSession = (pendingSessionId: string) => {
+    const normalizedPendingSessionId = String(pendingSessionId ?? '').trim();
+    if (!normalizedPendingSessionId) return;
+    setPendingTerminalSessions((previous) => previous.filter((session) => session.id !== normalizedPendingSessionId));
+    if (localActivePendingSessionId() === normalizedPendingSessionId) {
+      setLocalActivePendingSessionId(null);
+    }
+  };
+
+  const failPendingSession = (pendingSessionId: string, errorMessage: string) => {
+    const normalizedPendingSessionId = String(pendingSessionId ?? '').trim();
+    if (!normalizedPendingSessionId) return;
+    let updated = false;
+    setPendingTerminalSessions((previous) => {
+      const next = previous.map((session) => {
+        if (session.id !== normalizedPendingSessionId) {
+          return session;
+        }
+        updated = true;
+        return {
+          ...session,
+          status: 'failed' as const,
+          errorMessage: String(errorMessage ?? '').trim() || 'Terminal session could not be created.',
+        };
+      });
+      return updated ? next : previous;
+    });
+    if (!updated) return;
+    setActiveSessionId(normalizedPendingSessionId);
+  };
+
+  const resolvePendingSession = (pendingSessionId: string, sessionId: string) => {
+    const normalizedPendingSessionId = String(pendingSessionId ?? '').trim();
+    const normalizedSessionId = String(sessionId ?? '').trim();
+    if (!normalizedPendingSessionId || !normalizedSessionId) return;
+
+    if (!pendingTerminalSessionById(normalizedPendingSessionId)) {
+      activateSession(normalizedSessionId);
+      return;
+    }
+    removePendingSession(normalizedPendingSessionId);
+    activateSession(normalizedSessionId);
+  };
+
+  const findResolvedSessionForRemovedPendingSession = (pendingSession: pending_terminal_session): string | null => {
+    const session = sessions().find((candidate) => terminalSessionMatchesPendingSession(candidate, pendingSession));
+    return String(session?.id ?? '').trim() || null;
+  };
+
+  const beginCreateSession = async (name: string | undefined, workingDir: string): Promise<string | null> => {
+    const pendingSession = createPendingSession(name, workingDir);
+    try {
+      const sessionId = await createPanelSession(name, pendingSession.workingDir);
+      if (!sessionId) throw new Error('Invalid create response');
+      resolvePendingSession(pendingSession.id, sessionId);
+      return sessionId;
+    } catch (e) {
+      const resolvedSessionId = findResolvedSessionForRemovedPendingSession(pendingSession);
+      if (resolvedSessionId) {
+        activateSession(resolvedSessionId);
+        return resolvedSessionId;
+      }
+      if (handleExecuteDenied(e)) {
+        removePendingSession(pendingSession.id);
+        return null;
+      }
+      failPendingSession(pendingSession.id, e instanceof Error ? e.message : String(e));
+      return null;
+    }
+  };
+
   const createSession = async () => {
     if (!connected()) return;
-    setCreating(true);
     setError(null);
-    try {
-      const nextIndex = (sessions()?.length ?? 0) + 1;
-      const sessionId = await createPanelSession(`Terminal ${nextIndex}`, agentHomePathAbs() || '');
-      if (!sessionId) throw new Error('Invalid create response');
-
-      activateSession(sessionId);
-    } catch (e) {
-      if (handleExecuteDenied(e)) return;
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setCreating(false);
-    }
+    const nextIndex = sessions().length + visiblePendingTerminalSessions().length + 1;
+    void beginCreateSession(`Terminal ${nextIndex}`, agentHomePathAbs() || '');
   };
 
   let lastHandledOpenSessionRequestId = '';
@@ -2047,22 +2325,15 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
     lastHandledOpenSessionRequestId = requestId;
     void (async () => {
-      setCreating(true);
       setError(null);
       try {
-        const nextIndex = (sessions()?.length ?? 0) + 1;
-        const sessionId = await createPanelSession(
+        const nextIndex = sessions().length + visiblePendingTerminalSessions().length + 1;
+        await beginCreateSession(
           resolveRequestedSessionName(request?.preferredName, workingDir, nextIndex),
           workingDir,
         );
-        if (!sessionId) throw new Error('Invalid create response');
-        activateSession(sessionId);
-      } catch (e) {
-        if (handleExecuteDenied(e)) return;
-        setError(e instanceof Error ? e.message : String(e));
       } finally {
         props.onOpenSessionRequestHandled?.(requestId);
-        setCreating(false);
       }
     })();
   });
@@ -2134,6 +2405,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const closeSession = (id: string) => {
     void (async () => {
       try {
+        if (pendingTerminalSessionById(id)) {
+          removePendingSession(id);
+          return;
+        }
         if (props.sessionOperations) {
           await props.sessionOperations.deleteSession(id);
           await sessionsCoordinator.refresh();
@@ -2174,12 +2449,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const id = activeSessionId();
     if (!id) return;
     if (!sessions().some((s) => s.id === id)) return;
-    setMountedSessionIds((prev) => {
-      if (prev.has(id)) return prev;
-      const next = new Set(prev);
-      next.add(id);
-      return next;
-    });
+    markSessionMounted(id);
   });
 
   createEffect(() => {
@@ -2231,18 +2501,26 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
 
   createEffect(() => {
-    writeActiveSessionId(activeSessionStorageKey, activeSessionId());
+    const id = activeSessionId();
+    writeActiveSessionId(activeSessionStorageKey, id && !pendingTerminalSessionById(id) ? id : null);
   });
 
   const tabItems = createMemo<TabItem[]>(() => {
     const list = sessions();
     const tabStates = tabVisualStateBySession();
-    return list.map((s, index) => ({
+    const sessionTabs = list.map((s, index) => ({
       id: s.id,
       label: buildTerminalSessionLabel(s, index),
       icon: <TerminalTabStatusIcon state={tabStates[s.id] ?? 'none'} />,
       closable: true,
     }));
+    const pendingTabs = visiblePendingTerminalSessions().map((session) => ({
+      id: session.id,
+      label: buildPendingTerminalSessionLabel(session),
+      icon: <PendingTerminalTabStatusIcon status={session.status} />,
+      closable: session.status === 'failed',
+    }));
+    return [...sessionTabs, ...pendingTabs];
   });
 
   let searchInputEl: HTMLInputElement | null = null;
@@ -2926,18 +3204,18 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         >
           <Tabs
             items={tabItems()}
-            activeId={activeSessionId() ?? undefined}
+            activeId={activeDisplaySessionId() ?? undefined}
             onChange={(id) => {
               setActiveSessionId(id);
             }}
             onClose={(id) => closeSession(id)}
             onAdd={createSession}
-            showAdd={connected() && !creating()}
+            showAdd={connected()}
             closable
             features={{
               indicator: { mode: 'slider', thicknessPx: 2, colorToken: 'primary', animated: true },
               closeButton: { enabledByDefault: true, dangerHover: true },
-              addButton: { enabled: connected() && !creating() },
+              addButton: { enabled: connected() },
             }}
             class="flex-1 min-w-0"
           />
@@ -2949,8 +3227,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               size="sm"
               variant="ghost"
               onClick={createSession}
-              disabled={!connected() || creating()}
-              loading={creating()}
+              disabled={!connected()}
               title="New session"
             >
               <PlusIcon class="w-3.5 h-3.5" />
@@ -3047,16 +3324,16 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               </Button>
             </div>
           </Show>
-          <Show when={sessions().length > 0}>
+          <Show when={sessions().length > 0 || visiblePendingTerminalSessions().length > 0}>
             <div class="h-full">
               <Index each={sessions()}>
                 {(session) => (
                   <Show when={mountedSessionIds().has(session().id)}>
-                    <TabPanel active={activeSessionId() === session().id} keepMounted class="h-full">
+                    <TabPanel active={activeDisplaySessionId() === session().id} keepMounted class="h-full">
                       <TerminalSessionView
                         session={session()}
                         variant={variant}
-                        active={() => activeSessionId() === session().id}
+                        active={() => activeDisplaySessionId() === session().id}
                         connected={connected}
                         protocolClient={() => protocol.client()}
                         viewActive={viewActive}
@@ -3084,6 +3361,55 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                   </Show>
                 )}
               </Index>
+              <Index each={visiblePendingTerminalSessions()}>
+                {(session) => (
+                  <TabPanel active={activeDisplaySessionId() === session().id} keepMounted class="h-full">
+                    <div class="h-full min-h-0 relative overflow-hidden redeven-terminal-surface bg-background">
+                      <div class="absolute inset-0 flex items-center justify-center p-8">
+                        <div class="max-w-sm text-center flex flex-col items-center gap-3">
+                          <Show
+                            when={session().status === 'failed'}
+                            fallback={<PendingTerminalTabStatusIcon status="creating" />}
+                          >
+                            <PendingTerminalTabStatusIcon status="failed" />
+                          </Show>
+                          <div class="text-sm font-medium text-foreground">
+                            {session().status === 'failed' ? 'Terminal creation failed' : 'Creating terminal...'}
+                          </div>
+                          <div class="text-xs text-muted-foreground break-words">
+                            {session().status === 'failed'
+                              ? (session().errorMessage || 'Could not create this terminal session.')
+                              : (session().workingDir || 'Preparing shell session')}
+                          </div>
+                          <Show when={session().status === 'failed'}>
+                            <div class="flex items-center justify-center gap-2">
+                              <Button
+                                size="sm"
+                                variant="primary"
+                                onClick={() => {
+                                  const failedSession = session();
+                                  removePendingSession(failedSession.id);
+                                  void beginCreateSession(failedSession.name, failedSession.workingDir);
+                                }}
+                                disabled={!connected()}
+                              >
+                                Retry
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => removePendingSession(session().id)}
+                              >
+                                Dismiss
+                              </Button>
+                            </div>
+                          </Show>
+                        </div>
+                      </div>
+                    </div>
+                  </TabPanel>
+                )}
+              </Index>
             </div>
           </Show>
 
@@ -3091,7 +3417,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             <LoadingOverlay visible message="Loading sessions..." />
           </Show>
 
-          <Show when={!sessionsLoading() && sessions().length === 0}>
+          <Show when={!sessionsLoading() && sessions().length === 0 && visiblePendingTerminalSessions().length === 0}>
             <div class="absolute inset-0 flex items-center justify-center p-8">
               <div class="max-w-sm text-center flex flex-col items-center gap-4">
                 <div class="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
@@ -3105,7 +3431,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                   size="lg"
                   variant="primary"
                   onClick={createSession}
-                  loading={creating()}
                   disabled={!connected()}
                 >
                   Create session

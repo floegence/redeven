@@ -779,7 +779,15 @@ function findTerminalTab(host: HTMLElement, label: string): HTMLButtonElement | 
   return Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes(label)) as HTMLButtonElement | undefined;
 }
 
+function findTerminalTabs(host: HTMLElement, label: string): HTMLButtonElement[] {
+  return Array.from(host.querySelectorAll('button')).filter((button) => button.textContent?.includes(label)) as HTMLButtonElement[];
+}
+
 function findTerminalTabStatus(host: HTMLElement, label: string, status: 'running' | 'unread' | 'none'): Element | null {
+  return findTerminalTab(host, label)?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? null;
+}
+
+function findPendingTerminalTabStatus(host: HTMLElement, label: string, status: 'creating' | 'failed'): Element | null {
   return findTerminalTab(host, label)?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? null;
 }
 
@@ -1432,6 +1440,148 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     expect(sessionsCoordinatorMocks.createSession).toHaveBeenCalledWith('Terminal 2', '/workspace');
+  });
+
+  it('shows an optimistic terminal tab immediately while session creation is pending', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const resolveCreateCallbacks: Array<(value: typeof terminalSessionsState.sessions[number]) => void> = [];
+    sessionsCoordinatorMocks.createSession.mockImplementationOnce(async (name?: string, workingDir?: string) => (
+      await new Promise<typeof terminalSessionsState.sessions[number]>((resolve) => {
+        resolveCreateCallbacks.push((session) => {
+          terminalSessionsState.sessions = [
+            ...terminalSessionsState.sessions.map((entry) => ({ ...entry, isActive: false })),
+            session,
+          ];
+          publishTerminalSessions();
+          resolve(session);
+        });
+      })
+    ));
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await settleTerminalPanel();
+
+    const addButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'Add') as HTMLButtonElement | undefined;
+    expect(addButton).toBeTruthy();
+
+    addButton?.click();
+    await settleTerminalPanel();
+
+    expect(findTerminalTab(host, 'Terminal 2')).toBeTruthy();
+    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).not.toBeNull();
+    expect(host.textContent).toContain('Creating terminal...');
+    expect(sessionsCoordinatorMocks.createSession).toHaveBeenCalledWith('Terminal 2', '/workspace');
+    expect(transportMocks.attach.mock.calls.every((call) => !String(call[0] ?? '').includes('pending-terminal'))).toBe(true);
+
+    resolveCreateCallbacks[0]?.({
+      id: 'session-2',
+      name: 'Terminal 2',
+      workingDir: '/workspace',
+      createdAtMs: 2,
+      isActive: true,
+      lastActiveAtMs: 20,
+    });
+    await settleTerminalPanel();
+
+    expect(findTerminalTab(host, 'Terminal 2')).toBeTruthy();
+    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).toBeNull();
+    expect(host.querySelector('[data-testid="close-tab-session-2"]')).toBeTruthy();
+  });
+
+  it('reconciles an optimistic terminal tab when the session snapshot arrives before create resolves', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const resolveCreateRef: {
+      current: ((value: typeof terminalSessionsState.sessions[number]) => void) | null;
+    } = { current: null };
+    sessionsCoordinatorMocks.createSession.mockImplementationOnce(async () => (
+      await new Promise<typeof terminalSessionsState.sessions[number]>((resolve) => {
+        resolveCreateRef.current = resolve;
+      })
+    ));
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await settleTerminalPanel();
+
+    const addButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'Add') as HTMLButtonElement | undefined;
+    addButton?.click();
+    await settleTerminalPanel();
+
+    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).not.toBeNull();
+
+    const createdSession = {
+      id: 'session-2',
+      name: 'Terminal 2',
+      workingDir: '/workspace',
+      createdAtMs: 2,
+      isActive: true,
+      lastActiveAtMs: 20,
+    };
+    terminalSessionsState.sessions = [
+      ...terminalSessionsState.sessions.map((entry) => ({ ...entry, isActive: false })),
+      createdSession,
+    ];
+    publishTerminalSessions();
+    await settleTerminalPanel();
+
+    expect(findTerminalTabs(host, 'Terminal 2')).toHaveLength(1);
+    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).toBeNull();
+    expect(host.textContent).not.toContain('Creating terminal...');
+    expect(host.querySelector('[data-testid="close-tab-session-2"]')).toBeTruthy();
+
+    const completeCreate = resolveCreateRef.current;
+    expect(completeCreate).not.toBeNull();
+    if (!completeCreate) throw new Error('Missing create resolver');
+    completeCreate(createdSession);
+    await settleTerminalPanel();
+
+    expect(findTerminalTabs(host, 'Terminal 2')).toHaveLength(1);
+    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).toBeNull();
+    expect(host.querySelector('[data-testid="close-tab-session-2"]')).toBeTruthy();
+  });
+
+  it('keeps a failed optimistic terminal tab in place with retry and dismiss actions', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    sessionsCoordinatorMocks.createSession
+      .mockRejectedValueOnce(new Error('shell unavailable'))
+      .mockImplementationOnce(async (name?: string, workingDir?: string) => {
+        const session = {
+          id: 'session-2',
+          name: String(name ?? '').trim() || 'Terminal 2',
+          workingDir: String(workingDir ?? '').trim() || '/workspace',
+          createdAtMs: 2,
+          isActive: true,
+          lastActiveAtMs: 20,
+        };
+        terminalSessionsState.sessions = [
+          ...terminalSessionsState.sessions.map((entry) => ({ ...entry, isActive: false })),
+          session,
+        ];
+        publishTerminalSessions();
+        return session;
+      });
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await settleTerminalPanel();
+
+    const addButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'Add') as HTMLButtonElement | undefined;
+    addButton?.click();
+    await settleTerminalPanel();
+
+    expect(findTerminalTab(host, 'Terminal 2')).toBeTruthy();
+    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'failed')).not.toBeNull();
+    expect(host.textContent).toContain('Terminal creation failed');
+    expect(host.textContent).toContain('shell unavailable');
+
+    const retryButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'Retry') as HTMLButtonElement | undefined;
+    retryButton?.click();
+    await settleTerminalPanel();
+
+    expect(sessionsCoordinatorMocks.createSession).toHaveBeenCalledTimes(2);
+    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'failed')).toBeNull();
+    expect(host.querySelector('[data-testid="close-tab-session-2"]')).toBeTruthy();
   });
 
   it('attaches with measured dimensions and performs one final size confirmation after attach', async () => {
