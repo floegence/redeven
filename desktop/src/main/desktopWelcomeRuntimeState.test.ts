@@ -16,7 +16,7 @@ const validEnvAppShellHTML = '<!doctype html><html><body><div id="root"></div><s
 
 describe('desktopWelcomeRuntimeState', () => {
   it('hydrates local runtime ownership from an open external Local Environment session', async () => {
-    const environment = testLocalEnvironment('default');
+    const environment = testLocalEnvironment();
     const preferences = testDesktopPreferences({
       local_environment: environment,
     });
@@ -131,7 +131,7 @@ describe('desktopWelcomeRuntimeState', () => {
         'utf8',
       );
 
-      const environment = testLocalEnvironment('lab', {
+      const environment = testLocalEnvironment({
         stateDir,
       });
       const preferences = testDesktopPreferences({

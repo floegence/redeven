@@ -123,7 +123,6 @@ describe('main routing', () => {
     expect(mainSrc).toContain('async function saveLocalEnvironmentSettingsFromWelcome(');
     expect(mainSrc).toContain("case 'save_local_environment_settings':");
     expect(mainSrc).toContain('updateLocalEnvironmentAccess(preferences, existing.id, access)');
-    expect(mainSrc).toContain('findLocalEnvironmentLocalBindConflict(next, resolvedEnvironment.id)');
     expect(mainSrc).toContain("'action_invalid',");
     expect(mainSrc).toContain("'dialog',");
   });

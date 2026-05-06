@@ -18,13 +18,11 @@ import {
 } from './desktopConfirmation';
 import type { DesktopConfirmationDialogModel } from '../shared/desktopConfirmationContract';
 import {
-  describeLocalEnvironmentLocalBindConflict,
   createSafeStorageSecretCodec,
   deleteSavedControlPlane,
   deleteSavedEnvironment,
   deleteSavedSSHEnvironment,
   defaultDesktopPreferencesPaths,
-  findLocalEnvironmentLocalBindConflict,
   findLocalEnvironmentByID,
   findProviderEnvironmentByID,
   loadDesktopPreferences,
@@ -4626,10 +4624,6 @@ async function saveLocalEnvironmentSettingsFromWelcome(
   });
   const next = updateLocalEnvironmentAccess(preferences, existing.id, access);
   const resolvedEnvironment = next.local_environment;
-  const bindConflict = findLocalEnvironmentLocalBindConflict(next, resolvedEnvironment.id);
-  if (bindConflict) {
-    throw new Error(describeLocalEnvironmentLocalBindConflict(bindConflict));
-  }
   await persistDesktopPreferences(next);
   return resolvedEnvironment;
 }
@@ -5275,13 +5269,6 @@ if (!app.requestSingleInstanceLock()) {
         currentLocalUIPasswordConfigured: access.local_ui_password_configured,
       });
       const next = updateLocalEnvironmentAccess(previous, settingsEnvironment.id, validated);
-      const bindConflict = findLocalEnvironmentLocalBindConflict(
-        next,
-        settingsEnvironment.id,
-      );
-      if (bindConflict) {
-        throw new Error(describeLocalEnvironmentLocalBindConflict(bindConflict));
-      }
       await persistDesktopPreferences(next);
       return { ok: true };
     } catch (error) {

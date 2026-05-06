@@ -160,7 +160,7 @@ function providerRuntimeService(openReadiness: RuntimeServiceOpenReadiness = { s
 
 describe('buildEnvironmentCardModel', () => {
   it('builds local, provider, URL, and SSH cards from the aggregated launcher entries', () => {
-    const local = testLocalEnvironment('default');
+    const local = testLocalEnvironment();
     const localServe = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo', {
       label: 'Demo Local Serve',
     });
@@ -394,7 +394,7 @@ describe('buildEnvironmentCardModel', () => {
   });
 
   it('filters the environment library by local, provider, URL, SSH, and provider-specific scopes', () => {
-    const local = testLocalEnvironment('default');
+    const local = testLocalEnvironment();
     const controlPlane = buildControlPlaneSummary({});
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
@@ -440,7 +440,7 @@ describe('buildEnvironmentCardModel', () => {
   });
 
   it('shows runtime maintenance state in the stable card fact slot', () => {
-    const local = testLocalEnvironment('default');
+    const local = testLocalEnvironment();
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: local,
@@ -680,7 +680,7 @@ describe('buildEnvironmentCardModel', () => {
     });
     const providerOnlySnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        local_environment: testLocalEnvironment('default'),
+        local_environment: testLocalEnvironment(),
         control_planes: [controlPlane],
       }),
       controlPlanes: [controlPlane],
@@ -763,7 +763,7 @@ describe('buildEnvironmentCardModel', () => {
     });
     const savedLocalServeSnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        local_environment: testLocalEnvironment('default'),
+        local_environment: testLocalEnvironment(),
         control_planes: [controlPlane],
       }),
       controlPlanes: [controlPlane],
@@ -774,7 +774,7 @@ describe('buildEnvironmentCardModel', () => {
 
     const openLocalServeSnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        local_environment: testLocalEnvironment('default'),
+        local_environment: testLocalEnvironment(),
         control_planes: [controlPlane],
       }),
       controlPlanes: [controlPlane],
@@ -828,7 +828,7 @@ describe('buildEnvironmentCardModel', () => {
     });
     const readySnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        local_environment: testLocalEnvironment('default'),
+        local_environment: testLocalEnvironment(),
         control_planes: [readyControlPlane],
       }),
       controlPlanes: [readyControlPlane],
@@ -897,7 +897,7 @@ describe('buildEnvironmentCardModel', () => {
     });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        local_environment: testLocalEnvironment('default'),
+        local_environment: testLocalEnvironment(),
         control_planes: [controlPlane],
       }),
       controlPlanes: [controlPlane],
@@ -951,7 +951,7 @@ describe('buildEnvironmentCardModel', () => {
     };
     const attachableLocalServe = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        local_environment: testLocalEnvironment('default', {
+        local_environment: testLocalEnvironment({
             currentRuntime: providerRuntime,
           }),
       }),
@@ -1123,7 +1123,7 @@ describe('buildEnvironmentCardModel', () => {
   });
 
   it('keeps Open disabled while an online runtime is still preparing Env App readiness', () => {
-    const local = testLocalEnvironment('default', {
+    const local = testLocalEnvironment({
       currentRuntime: {
         local_ui_url: 'http://127.0.0.1:24001/',
         desktop_managed: true,
@@ -1200,7 +1200,7 @@ describe('buildEnvironmentCardModel', () => {
   it('splits pinned entries ahead of the regular environment list', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        local_environment: testLocalEnvironment('default', { pinned: true }),
+        local_environment: testLocalEnvironment({ pinned: true }),
         saved_environments: [{
           id: 'http://192.168.1.12:24000/',
           label: 'Staging',

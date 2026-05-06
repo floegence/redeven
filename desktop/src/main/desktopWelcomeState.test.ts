@@ -41,7 +41,7 @@ function providerRuntimeState(envPublicID = 'env_demo') {
 
 describe('desktopWelcomeState', () => {
   it('builds launcher snapshots around open windows and saved environments', () => {
-    const local = testLocalEnvironment('default', {
+    const local = testLocalEnvironment({
       access: testLocalAccess({
         local_ui_bind: '0.0.0.0:24000',
         local_ui_password: 'secret',
@@ -156,7 +156,6 @@ describe('desktopWelcomeState', () => {
         can_delete: false,
         can_save: false,
         local_environment_kind: 'local',
-        local_environment_name: 'local',
         local_environment_ui_bind: '0.0.0.0:24000',
         local_environment_runtime_state: 'running_desktop',
         local_environment_runtime_url: 'http://localhost:23998/',
@@ -218,7 +217,7 @@ describe('desktopWelcomeState', () => {
   });
 
   it('carries active launcher action progress in the welcome snapshot', () => {
-    const local = testLocalEnvironment('default');
+    const local = testLocalEnvironment();
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: local,
@@ -250,7 +249,7 @@ describe('desktopWelcomeState', () => {
   it('keeps the single Local Environment protected', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        local_environment: testLocalEnvironment('default'),
+        local_environment: testLocalEnvironment(),
       }),
     });
 
@@ -264,7 +263,7 @@ describe('desktopWelcomeState', () => {
   });
 
   it('marks a discovered external local runtime as online before a Desktop session is open', () => {
-    const local = testLocalEnvironment('default', {
+    const local = testLocalEnvironment({
       currentRuntime: {
         local_ui_url: 'http://127.0.0.1:24001/',
         desktop_managed: false,
@@ -560,7 +559,7 @@ describe('desktopWelcomeState', () => {
   });
 
   it('builds a dedicated settings snapshot when requested by the desktop shell', () => {
-    const local = testLocalEnvironment('default', {
+    const local = testLocalEnvironment({
       access: {
         local_ui_bind: '127.0.0.1:0',
         local_ui_password: '',
@@ -599,7 +598,7 @@ describe('desktopWelcomeState', () => {
   });
 
   it('threads the current Local Environment runtime url into the settings surface when Local Environment is open', () => {
-    const local = testLocalEnvironment('default', {
+    const local = testLocalEnvironment({
       access: {
         local_ui_bind: 'localhost:23998',
         local_ui_password: '',
@@ -625,7 +624,7 @@ describe('desktopWelcomeState', () => {
   it('projects provider local-serve state onto the aggregated provider card', () => {
     const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
     const managedControlPlane = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo');
-    const local = testLocalEnvironment('default', {
+    const local = testLocalEnvironment({
       access: testLocalAccess({
         local_ui_bind: 'localhost:23998',
       }),

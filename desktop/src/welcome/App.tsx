@@ -4192,10 +4192,10 @@ function controlPlaneLocalHostCountTooltipContent(
 
   return (
     <ControlPlaneMetricTooltipContent
-      title="Published environments that Desktop can host locally on this Mac."
+      title="Published environments that can link to this Local Environment."
       description={stats.local_host_count > 0
-        ? 'Local Hosts counts provider environments that can be linked to this Local Environment profile and opened locally.'
-        : 'This provider has not exposed any published environments for local hosting on this Mac yet.'}
+        ? 'Local Links counts provider environments that can replace the current provider link and open through this Local Environment profile.'
+        : 'This provider has not exposed any published environments that can link to this Local Environment profile yet.'}
       status={status}
     />
   );
@@ -4269,7 +4269,7 @@ function ControlPlaneShelf(props: Readonly<{
                   <ConsoleBadge>{props.controlPlane.provider.display_name}</ConsoleBadge>
                   <ConsoleBadge>{props.controlPlane.environments.length} envs</ConsoleBadge>
                   <Show when={stats().local_host_count > 0}>
-                    <ConsoleBadge>{stats().local_host_count} local hosts</ConsoleBadge>
+                    <ConsoleBadge>{stats().local_host_count} local links</ConsoleBadge>
                   </Show>
                 </div>
                 <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -4297,7 +4297,7 @@ function ControlPlaneShelf(props: Readonly<{
               help={controlPlaneOnlineCountTooltipContent(props.controlPlane, stats().online_count)}
             />
             <ControlPlaneMetricTile
-              label="Local Hosts"
+              label="Local Links"
               value={stats().local_host_count}
               help={controlPlaneLocalHostCountTooltipContent(stats(), freshestEnvironment())}
             />

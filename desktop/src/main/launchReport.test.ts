@@ -66,9 +66,9 @@ describe('launchReport', () => {
         local_ui_enabled: false,
       },
       diagnostics: {
-        lock_path: '/Users/tester/.redeven/agent.lock',
-        state_dir: '/Users/tester/.redeven',
-        config_path: '/Users/tester/.redeven/config.json',
+        lock_path: '/Users/tester/.redeven/local-environment/agent.lock',
+        state_dir: '/Users/tester/.redeven/local-environment',
+        config_path: '/Users/tester/.redeven/local-environment/config.json',
         command: 'redeven run',
       },
     }))).toEqual({
@@ -85,11 +85,11 @@ describe('launchReport', () => {
         runtime_state_path: undefined,
       },
       diagnostics: {
-        lock_path: '/Users/tester/.redeven/agent.lock',
-        state_dir: '/Users/tester/.redeven',
+        lock_path: '/Users/tester/.redeven/local-environment/agent.lock',
+        state_dir: '/Users/tester/.redeven/local-environment',
         runtime_state_path: undefined,
         target_url: undefined,
-        config_path: '/Users/tester/.redeven/config.json',
+        config_path: '/Users/tester/.redeven/local-environment/config.json',
         command: 'redeven run',
       },
     });
@@ -106,17 +106,17 @@ describe('launchReport', () => {
         local_ui_enabled: false,
       },
       diagnostics: {
-        state_dir: '/Users/tester/.redeven',
-        lock_path: '/Users/tester/.redeven/agent.lock',
-        config_path: '/Users/tester/.redeven/config.json',
+        state_dir: '/Users/tester/.redeven/local-environment',
+        lock_path: '/Users/tester/.redeven/local-environment/agent.lock',
+        config_path: '/Users/tester/.redeven/local-environment/config.json',
         command: 'redeven run',
         target_url: 'http://192.168.1.11:24000/',
       },
     });
     expect(diagnostics).toContain('code: state_dir_locked');
     expect(diagnostics).toContain('lock owner mode: remote');
-    expect(diagnostics).toContain('state dir: /Users/tester/.redeven');
-    expect(diagnostics).toContain('config path: /Users/tester/.redeven/config.json');
+    expect(diagnostics).toContain('state dir: /Users/tester/.redeven/local-environment');
+    expect(diagnostics).toContain('config path: /Users/tester/.redeven/local-environment/config.json');
     expect(diagnostics).toContain('command: redeven run');
     expect(diagnostics).toContain('target url: http://192.168.1.11:24000/');
   });

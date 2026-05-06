@@ -252,7 +252,7 @@ Interaction rules:
 - `Providers` moves into its own tab so provider management does not compete with the main environment-switching path.
 - Environment cards own the primary actions, so open sessions are reflected through `Open` / `Focus` state directly on the relevant card instead of a separate session rail.
 - The Local Environment, provider environments, Redeven URLs, and SSH Host entries all render in the `Environments` tab.
-- Connecting or refreshing a Provider updates the provider catalog immediately but does not create additional Local Environment state records.
+- Connecting or refreshing a Provider updates the provider catalog immediately while the profile keeps its single Local Environment state record.
 - `Providers` stays provider-management-only. Each shelf offers `View Environments`, `Reconnect`, `Refresh`, and `Delete`.
 - Environment Library cards use one fixed-height layout:
   - header with label, relative timestamp, pin/unpin icon, and status badge

@@ -8,9 +8,7 @@ import type {
 import {
   desktopProviderEnvironmentStateID,
   localEnvironmentDefaultOpenRoute,
-  localEnvironmentName,
   localEnvironmentStateKind,
-  normalizeDesktopLocalEnvironmentName,
   type DesktopLocalEnvironmentState,
 } from '../shared/desktopLocalEnvironmentState';
 import {
@@ -33,7 +31,6 @@ export type LocalEnvironmentDesktopTarget = Readonly<{
   label: string;
   route: DesktopLocalEnvironmentStateSessionRoute;
   local_environment_kind: 'local' | 'controlplane';
-  local_environment_name?: string;
   provider_origin?: string;
   provider_id?: string;
   env_public_id?: string;
@@ -147,7 +144,6 @@ export function buildLocalEnvironmentDesktopTarget(
     label: environment.label,
     route,
     local_environment_kind: localEnvironmentStateKind(environment),
-    local_environment_name: normalizeDesktopLocalEnvironmentName(localEnvironmentName(environment)),
     provider_origin: environment.current_provider_binding?.provider_origin,
     provider_id: environment.current_provider_binding?.provider_id,
     env_public_id: environment.current_provider_binding?.env_public_id,
@@ -176,7 +172,6 @@ export function buildProviderEnvironmentDesktopTarget(
     label: environment.label,
     route,
     local_environment_kind: 'controlplane',
-    local_environment_name: 'local',
     provider_origin: environment.provider_origin,
     provider_id: environment.provider_id,
     env_public_id: environment.env_public_id,

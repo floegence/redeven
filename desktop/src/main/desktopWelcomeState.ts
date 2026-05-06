@@ -31,7 +31,6 @@ import {
 import {
   localEnvironmentStateKind,
   localEnvironmentAccess,
-  localEnvironmentName,
   localEnvironmentDefaultOpenRoute,
   localEnvironmentProviderID,
   localEnvironmentProviderOrigin,
@@ -700,7 +699,6 @@ function buildLocalEnvironmentEntry(
       ? access.local_ui_bind
       : [access.local_ui_bind, remoteEnvironmentURL || providerIdentitySummary].filter(Boolean).join(' · '),
     local_environment_kind: kind,
-    local_environment_name: localEnvironmentName(environment),
     local_environment_ui_bind: access.local_ui_bind,
     local_environment_ui_password_configured: access.local_ui_password_configured,
     local_environment_owner: environment.local_hosting?.owner,

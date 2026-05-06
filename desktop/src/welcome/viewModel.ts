@@ -552,7 +552,7 @@ export function buildEnvironmentCardEndpointsModel(
   environment: DesktopEnvironmentEntry,
 ): readonly EnvironmentCardEndpointModel[] {
   if (environment.kind === 'local_environment') {
-    const localEndpoint = compact(environment.local_ui_url) || compact(environment.local_environment_ui_bind) || compact(environment.local_environment_name);
+    const localEndpoint = compact(environment.local_ui_url) || compact(environment.local_environment_ui_bind);
     return localEndpoint !== ''
       ? [{
         label: looksLikeAbsoluteURL(localEndpoint) ? 'URL' : 'LOCAL',
@@ -1120,13 +1120,7 @@ export function environmentStatusTone(environment: DesktopEnvironmentEntry): Env
 
 function environmentCardMeta(environment: DesktopEnvironmentEntry): readonly EnvironmentCardMetaItem[] {
   if (environment.kind === 'local_environment') {
-    return [
-      {
-        label: 'Scope',
-        value: environment.local_environment_name ?? '',
-        monospace: true,
-      },
-    ].filter((item) => item.value !== '');
+    return [];
   }
   if (environment.kind === 'provider_environment') {
     return [
@@ -1172,7 +1166,7 @@ function environmentCardMeta(environment: DesktopEnvironmentEntry): readonly Env
 
 export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry): EnvironmentCardModel {
   if (environment.kind === 'local_environment') {
-    const localEndpoint = compact(environment.local_ui_url) || compact(environment.local_environment_ui_bind) || compact(environment.local_environment_name);
+    const localEndpoint = compact(environment.local_ui_url) || compact(environment.local_environment_ui_bind);
     const targetPrimary = localEndpoint || environment.secondary_text || 'Local environment';
     return {
       kind_label: environmentKindLabel(environment),
@@ -1245,7 +1239,6 @@ export function environmentMatchesLibrarySearch(
     environment.label,
     environment.local_ui_url,
     environment.secondary_text,
-    environment.local_environment_name ?? '',
     environment.control_plane_label ?? '',
     environment.provider_origin ?? '',
     environment.env_public_id ?? '',

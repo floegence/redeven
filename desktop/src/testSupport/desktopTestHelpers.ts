@@ -80,10 +80,9 @@ export function testLocalAccess(
 }
 
 export function testLocalEnvironment(
-  name = 'default',
   options: TestLocalEnvironmentOptions = {},
 ): DesktopLocalEnvironmentState {
-  return createDesktopLocalEnvironmentState(name, {
+  return createDesktopLocalEnvironmentState({
     label: options.label,
     pinned: options.pinned,
     stateDir: options.stateDir ?? localEnvironmentStateLayout().stateDir,
@@ -114,7 +113,7 @@ export function testProviderBoundLocalEnvironment(
   });
   return projectProviderEnvironmentToLocalRuntimeTarget(
     providerEnvironment,
-    testLocalEnvironment('local', {
+    testLocalEnvironment({
       access: options.access,
       owner: options.owner ?? 'desktop',
       stateDir: options.stateDir ?? layout.stateDir,
