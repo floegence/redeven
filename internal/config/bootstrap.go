@@ -49,7 +49,6 @@ type LocalEnvironmentBinding struct {
 	UserPublicID             string `json:"user_public_id,omitempty"`
 	EnvPublicID              string `json:"env_public_id"`
 	Generation               int64  `json:"generation"`
-	Status                   string `json:"status,omitempty"`
 	Hostname                 string `json:"hostname,omitempty"`
 	OS                       string `json:"os,omitempty"`
 	Arch                     string `json:"arch,omitempty"`

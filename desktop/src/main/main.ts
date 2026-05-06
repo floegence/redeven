@@ -286,6 +286,18 @@ type LocalEnvironmentRuntimeRecord = Readonly<{
   runtime_handle: DesktopSessionRuntimeHandle;
 }>;
 
+type ProviderLocalEnvironmentRuntimeResult = Readonly<
+  | {
+    ok: true;
+    localEnvironment: DesktopLocalEnvironmentState;
+    runtimeRecord: LocalEnvironmentRuntimeRecord;
+  }
+  | {
+    ok: false;
+    failure: DesktopLauncherActionFailure;
+  }
+>;
+
 type SSHEnvironmentRuntimeRecord = Readonly<{
   runtime_key: `ssh:${string}`;
   environment_id: string;
@@ -490,16 +502,120 @@ function localRuntimeProviderBindingFailure(
     'environment_in_use',
     'environment',
     current
-      ? 'Local Environment is already linked to another provider environment. Stop it or switch it before using this provider environment locally.'
-      : 'Local Environment is running without this provider binding. Stop it before using this provider environment locally.',
-    {
-      environmentID: environment.id,
-      providerOrigin: environment.provider_origin,
-      providerID: environment.provider_id,
-      envPublicID: environment.env_public_id,
-      shouldRefreshSnapshot: true,
-    },
+      ? 'This Local Environment is currently linked to another provider environment. Open this provider environment locally to rebind this Local Environment profile.'
+      : 'This Local Environment is running without this provider binding. Open this provider environment locally to bind this Local Environment profile.',
+    providerEnvironmentFailureContext(environment),
   );
+}
+
+function providerEnvironmentFailureContext(environment: DesktopProviderEnvironmentRecord): Readonly<{
+  environmentID: string;
+  providerOrigin: string;
+  providerID: string;
+  envPublicID: string;
+  shouldRefreshSnapshot: true;
+}> {
+  return {
+    environmentID: environment.id,
+    providerOrigin: environment.provider_origin,
+    providerID: environment.provider_id,
+    envPublicID: environment.env_public_id,
+    shouldRefreshSnapshot: true,
+  };
+}
+
+function externalProviderLocalEnvironmentRebindFailure(
+  environment: DesktopProviderEnvironmentRecord,
+  startup: StartupReport | null | undefined,
+): DesktopLauncherActionFailure {
+  const current = startupProviderBinding(startup);
+  return launcherActionFailure(
+    'environment_in_use',
+    'environment',
+    current
+      ? 'This Local Environment is running outside Desktop for another provider environment. Close that runtime before linking this provider environment locally.'
+      : 'This Local Environment is running outside Desktop without this provider binding. Close that runtime before linking this provider environment locally.',
+    providerEnvironmentFailureContext(environment),
+  );
+}
+
+async function closeLocalEnvironmentLocalHostSessions(): Promise<void> {
+  for (const sessionRecord of sessionsByKey.values()) {
+    if (
+      !sessionRecord.closing
+      && sessionRecord.target.kind === 'local_environment'
+      && sessionRecord.target.route === 'local_host'
+    ) {
+      await finalizeSessionClosure(sessionRecord.session_key);
+    }
+  }
+}
+
+async function ensureProviderLocalEnvironmentRuntime(
+  preferences: DesktopPreferences,
+  environment: DesktopProviderEnvironmentRecord,
+  options: Readonly<{ startIfMissing: boolean }>,
+): Promise<ProviderLocalEnvironmentRuntimeResult> {
+  const localEnvironment = localEnvironmentForProviderBinding(preferences, environment);
+  let runtimeRecord = await attachLocalEnvironmentRuntime(localEnvironment);
+  let replacedRuntime = false;
+
+  if (runtimeRecord && !localRuntimeMatchesProvider(runtimeRecord.startup, environment)) {
+    if (runtimeRecord.runtime_handle.lifecycle_owner !== 'desktop') {
+      return {
+        ok: false,
+        failure: externalProviderLocalEnvironmentRebindFailure(environment, runtimeRecord.startup),
+      };
+    }
+    await closeLocalEnvironmentLocalHostSessions();
+    await runtimeRecord.runtime_handle.stop();
+    clearLocalEnvironmentRuntimeRecord(localEnvironment);
+    runtimeRecord = null;
+    replacedRuntime = true;
+  }
+
+  if (!runtimeRecord) {
+    if (!options.startIfMissing && !replacedRuntime) {
+      return {
+        ok: false,
+        failure: launcherActionFailure(
+          'runtime_not_started',
+          'environment',
+          'Start the Local Environment runtime first.',
+          providerEnvironmentFailureContext(environment),
+        ),
+      };
+    }
+    const bootstrap = await resolveLocalEnvironmentBootstrap(preferences, localEnvironment);
+    const prepared = await prepareManagedTarget({
+      environment: localEnvironment,
+      bootstrap,
+    });
+    if (!prepared.ok) {
+      return {
+        ok: false,
+        failure: launcherActionFailure(
+          'action_invalid',
+          'environment',
+          prepared.issue.message,
+          providerEnvironmentFailureContext(environment),
+        ),
+      };
+    }
+    runtimeRecord = updateLocalEnvironmentRuntimeRecord(
+      localEnvironment,
+      prepared.launch.managedRuntime.startup,
+      desktopSessionRuntimeHandleFromManagedRuntime(prepared.launch.managedRuntime, {
+        persistedOwner: localEnvironment.local_hosting?.owner,
+      }),
+    );
+  }
+
+  return {
+    ok: true,
+    localEnvironment,
+    runtimeRecord,
+  };
 }
 
 function localEnvironmentForProviderBinding(
@@ -3404,22 +3520,29 @@ async function openProviderLocalEnvironmentRecord(
     });
   }
 
-  const runtimeRecord = await attachLocalEnvironmentRuntime(localEnvironment);
-  if (!runtimeRecord) {
-    return launcherActionFailure(
-      'runtime_not_started',
-      'environment',
-      'Start the local runtime first.',
-      {
-        environmentID: environment.id,
-        providerOrigin: environment.provider_origin,
-        providerID: environment.provider_id,
-        envPublicID: environment.env_public_id,
-      },
-    );
-  }
-  if (!localRuntimeMatchesProvider(runtimeRecord.startup, environment)) {
-    return localRuntimeProviderBindingFailure(environment, runtimeRecord.startup);
+  let runtimeRecord = await attachLocalEnvironmentRuntime(localEnvironment);
+  if (!runtimeRecord || !localRuntimeMatchesProvider(runtimeRecord.startup, environment)) {
+    try {
+      const ensured = await ensureProviderLocalEnvironmentRuntime(preferences, environment, { startIfMissing: false });
+      if (!ensured.ok) {
+        return ensured.failure;
+      }
+      runtimeRecord = ensured.runtimeRecord;
+    } catch (error) {
+      return thrownLauncherActionFailure(error)
+        ?? launcherActionFailureFromProviderAuthError(error, {
+          environmentID: environment.id,
+          providerOrigin: environment.provider_origin,
+          providerID: environment.provider_id,
+          envPublicID: environment.env_public_id,
+        })
+        ?? launcherActionFailureFromRuntimeStartError(error, {
+          environmentID: environment.id,
+          providerOrigin: environment.provider_origin,
+          providerID: environment.provider_id,
+          envPublicID: environment.env_public_id,
+        });
+    }
   }
   if (!runtimeServiceIsOpenable(runtimeRecord.startup.runtime_service)) {
     return launcherActionFailureForRuntimeNotOpenable(runtimeRecord.startup, {
@@ -3882,50 +4005,11 @@ async function startEnvironmentRuntimeFromLauncher(
       );
     }
 
-    const providerLocalEnvironment = localEnvironmentForProviderBinding(preferences, providerEnvironment);
     try {
-      const existingRuntime = await attachLocalEnvironmentRuntime(providerLocalEnvironment);
-      if (existingRuntime && !localRuntimeMatchesProvider(existingRuntime.startup, providerEnvironment)) {
-        if (request.force_runtime_update !== true) {
-          return localRuntimeProviderBindingFailure(providerEnvironment, existingRuntime.startup);
-        }
-        for (const sessionRecord of sessionsByKey.values()) {
-          if (
-            !sessionRecord.closing
-            && sessionRecord.target.kind === 'local_environment'
-            && sessionRecord.target.route === 'local_host'
-          ) {
-            await finalizeSessionClosure(sessionRecord.session_key);
-          }
-        }
-        await existingRuntime.runtime_handle.stop();
-        clearLocalEnvironmentRuntimeRecord(providerLocalEnvironment);
+      const ensured = await ensureProviderLocalEnvironmentRuntime(preferences, providerEnvironment, { startIfMissing: true });
+      if (!ensured.ok) {
+        return ensured.failure;
       }
-      const bootstrap = await resolveLocalEnvironmentBootstrap(preferences, providerLocalEnvironment);
-      const prepared = await prepareManagedTarget({
-        environment: providerLocalEnvironment,
-        bootstrap,
-      });
-      if (!prepared.ok) {
-        return launcherActionFailure(
-          'action_invalid',
-          'environment',
-          prepared.issue.message,
-          {
-            environmentID: providerEnvironment.id,
-            providerOrigin: providerEnvironment.provider_origin,
-            providerID: providerEnvironment.provider_id,
-            envPublicID: providerEnvironment.env_public_id,
-          },
-        );
-      }
-      updateLocalEnvironmentRuntimeRecord(
-        providerLocalEnvironment,
-        prepared.launch.managedRuntime.startup,
-        desktopSessionRuntimeHandleFromManagedRuntime(prepared.launch.managedRuntime, {
-          persistedOwner: providerLocalEnvironment.local_hosting?.owner,
-        }),
-      );
       await persistDesktopPreferences(
         persistLocalEnvironmentProviderBinding(rememberProviderEnvironmentUse(preferences, providerEnvironment.id), providerEnvironment),
       );

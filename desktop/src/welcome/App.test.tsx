@@ -753,6 +753,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('This Redeven profile keeps one Local Environment runtime for the current binding.');
     expect(appSrc).toContain('Choose how the Local Environment is exposed on the next desktop-managed start');
     expect(appSrc).toContain('Published environments that can link to this Local Environment.');
+    expect(appSrc).toContain('Local Links counts provider environments that can bind to this Local Environment profile for local use.');
     expect(appSrc).toContain('Loopback bind keeps the runtime on this device only. No password is required.');
     expect(appSrc).toContain('Shared local network access requires a password before other devices can open this Environment.');
   });
