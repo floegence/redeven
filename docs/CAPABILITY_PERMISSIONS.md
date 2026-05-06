@@ -8,6 +8,7 @@ Scope:
 - Flowersec **RPC** (typed RPC `type_id`s)
 - Flowersec **streams** (Yamux stream `kind`s)
 - Local runtime **HTTP gateway APIs** under `/_redeven_proxy/api/*`
+- Agent Skills / `redeven targets` **discovery metadata** exposed by the local CLI
 
 ## Permission Categories
 
@@ -30,6 +31,7 @@ Notes:
 - `admin` is a separate capability dimension from RWX.
 - Runtime-local AI uploads live under the runtime state directory rather than the workspace tree, but deleting threads/followups may reclaim those upload blobs and SQLite metadata as destructive runtime-local cleanup.
 - UIs should treat permission denials as a normal capability state (not an exceptional error): when a capability is not granted (or is locally capped by `permission_policy`), stop polling and show a permission empty state.
+- Agent Skills target discovery is metadata-only. `redeven targets list` and `redeven targets resolve` read local config/runtime state and do not grant file, terminal, monitor, Flower, Codex, or gateway access by themselves.
 
 ## Effective Permissions (Server-Issued Grant ∩ Endpoint Local Cap)
 
@@ -125,6 +127,17 @@ For maintainability and security hygiene, this document keeps the permission con
 the complete management endpoint inventory. Exact endpoint paths remain discoverable in source:
 
 - `internal/codeapp/gateway/gateway.go`
+
+## Agent Skills CLI Discovery
+
+The `redeven targets` command family is intentionally outside the data-plane capability model. It reads local runtime metadata and returns a protocol envelope for skill-aware agents.
+
+| CLI surface | Purpose | Required permission |
+| --- | --- | --- |
+| `redeven targets list` | List local target descriptors from config/runtime state | Local OS user access to the state root |
+| `redeven targets resolve` | Resolve a target id, label, env id, or local environment id | Local OS user access to the state root |
+
+These commands do not mint sessions, expose `grant_client`, or bypass `session.Meta`. Any command that invokes a runtime capability must either use an existing runtime-authorized gateway/session path or introduce a reviewed permission mapping in this document.
 
 ## Adding New Capabilities (Policy Contract)
 

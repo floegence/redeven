@@ -64,6 +64,8 @@ func (c *cli) run(args []string) int {
 		return c.searchCmd(args[1:])
 	case "knowledge":
 		return c.knowledgeCmd(args[1:])
+	case "targets":
+		return c.targetsCmd(args[1:])
 	case "version":
 		if len(args) > 1 && isHelpToken(args[1]) {
 			writeText(c.stdout, versionHelpText())

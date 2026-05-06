@@ -1,4 +1,5 @@
 import type { AskFlowerContextItem, AskFlowerIntent } from '../pages/askFlowerIntent';
+import { attachAskFlowerContextAction } from '../contextActions/askFlower';
 import type {
   GitBranchSummary,
   GitCommitDetail,
@@ -314,15 +315,17 @@ export function buildGitAskFlowerIntent(request: GitAskFlowerRequest): BuildGitA
     ? normalizeAbsolutePath(request.worktreePath ?? '') || repoRootPath
     : repoRootPath;
 
+  const intent: AskFlowerIntent = {
+    id: createClientId('ask-flower'),
+    source: 'git_browser',
+    mode: 'append',
+    suggestedWorkingDirAbs,
+    contextItems: [contextItem],
+    pendingAttachments: [],
+    notes: [],
+  };
+
   return {
-    intent: {
-      id: createClientId('ask-flower'),
-      source: 'git_browser',
-      mode: 'append',
-      suggestedWorkingDirAbs,
-      contextItems: [contextItem],
-      pendingAttachments: [],
-      notes: [],
-    },
+    intent: attachAskFlowerContextAction(intent),
   };
 }

@@ -6,6 +6,7 @@ High-level design:
 
 - The browser UI calls the runtime via the existing `/_redeven_proxy/api/ai/*` gateway routes (still over Flowersec E2EE proxy).
 - The **Go runtime is the security boundary** and executes tools after validating authoritative session metadata.
+- External AI-agent integrations use Agent Skills plus the `redeven` CLI target-discovery contract; Redeven does not require or expose an MCP server for that integration path. See [`AGENT_SKILLS.md`](AGENT_SKILLS.md).
 - Tooling now uses a structured file-operation surface by default: `file.read` for direct inspection, `file.edit` / `file.write` for deterministic mutations, `terminal.exec` for investigation and verification, and `apply_patch` as a compatibility fallback.
 - LLM orchestration runs in the **Go runtime** via native provider SDK adapters:
   - OpenAI: `openai-go` (Responses API)
@@ -250,6 +251,7 @@ Behavior summary:
 - The live assistant surface is intentionally outside transcript virtualization so streaming markdown growth, phase-label changes, and context telemetry ornament updates do not thrash transcript row measurement or remount settled history during a run.
 - The realtime sink may coalesce low-priority assistant/context updates, but the active thread UI must still converge to the canonical persisted assistant transcript when the run reaches a terminal state, even if some tail realtime frames were missed.
 - Subagents are for parallelizable or independently reviewable work. Simple local inspection tasks should stay in the main Flower run instead of spawning subagents.
+- Ask Flower handoffs from Files, Terminal, Monitor, and Git now carry a Context Action envelope alongside the compatibility Ask Flower intent. The envelope preserves source surface, target locality, structured context items, and suggested working directory without asking each surface to author assistant-specific prompt policy.
 - Flower thread read/unread state is runtime-authoritative, not browser-local:
   - the gateway persists a per-user watermark keyed by `endpoint_id + user_public_id + surface + thread_id`;
   - thread list/detail payloads include `read_status` with `{is_unread, snapshot, read_state}`;

@@ -1,3 +1,5 @@
+import type { ContextActionEnvelope } from '../contextActions/protocol';
+
 export type AskFlowerIntentSource = 'file_browser' | 'terminal' | 'file_preview' | 'monitoring' | 'git_browser';
 
 export type AskFlowerIntentMode = 'append' | 'replace';
@@ -46,4 +48,5 @@ export type AskFlowerIntent = {
   contextItems: AskFlowerContextItem[];
   pendingAttachments: File[];
   notes: string[];
+  contextAction?: ContextActionEnvelope;
 };

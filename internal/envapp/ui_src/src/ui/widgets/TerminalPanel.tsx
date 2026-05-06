@@ -62,8 +62,10 @@ import {
 import { useEnvContext } from '../pages/EnvContext';
 import { isPermissionDeniedError } from '../utils/permission';
 import { createClientId } from '../utils/clientId';
+import { sortContextActionMenuItems } from '../contextActions/menu';
 import { PermissionEmptyState } from './PermissionEmptyState';
 import type { AskFlowerIntent } from '../pages/askFlowerIntent';
+import { attachAskFlowerContextAction } from '../contextActions/askFlower';
 import { normalizeAbsolutePath as normalizeAskFlowerAbsolutePath } from '../utils/askFlowerPath';
 import { resolveTerminalSurfaceTouchAction } from '../mobileViewportPolicy';
 import { resolveTerminalFontFamily, TerminalSettingsDialog } from './TerminalSettingsDialog';
@@ -2695,7 +2697,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       ];
     }
 
-    env.openAskFlowerComposer({
+    env.openAskFlowerComposer(attachAskFlowerContextAction({
       id: createClientId('ask-flower'),
       source: 'terminal',
       mode: 'append',
@@ -2703,11 +2705,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       contextItems,
       pendingAttachments,
       notes,
-    }, { x: menu.x, y: menu.y });
+    }), { x: menu.x, y: menu.y });
   };
 
   const buildTerminalAskMenuItems = (menu: NonNullable<ReturnType<typeof terminalAskMenu>>): FloatingContextMenuItem[] => {
-    const items: FloatingContextMenuItem[] = [
+    const primaryItems: FloatingContextMenuItem[] = [
       {
         id: 'ask-flower',
         kind: 'action',
@@ -2716,9 +2718,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         onSelect: askFlowerFromTerminal,
       },
     ];
-
     if (menu.showBrowseFiles) {
-      items.push({
+      primaryItems.push({
         id: 'browse-files',
         kind: 'action',
         label: 'Browse files',
@@ -2727,6 +2728,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       });
     }
 
+    const items: FloatingContextMenuItem[] = sortContextActionMenuItems(primaryItems);
     items.push({
       id: 'priority-secondary-separator',
       kind: 'separator',

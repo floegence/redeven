@@ -29,6 +29,7 @@ Usage:
 Commands:
   bootstrap   Bind the Local Environment to a control-plane environment.
   run         Start the runtime in remote, hybrid, local, or desktop mode.
+  targets     Inspect Redeven targets for Agent Skills and local automation.
   search      Run web search using configured provider credentials.
   knowledge   Build or verify embedded knowledge bundle assets.
   version     Print build information.
@@ -202,6 +203,67 @@ Examples:
 `, "\n")
 }
 
+func targetsHelpText() string {
+	return strings.TrimLeft(`
+redeven targets
+
+Inspect Redeven targets for Agent Skills and local automation.
+
+Usage:
+  redeven targets <command> [flags]
+  redeven help targets list
+  redeven help targets resolve
+
+Commands:
+  list       List discoverable targets.
+  resolve    Resolve one target id, label, env_public_id, or local_environment_public_id.
+
+Examples:
+  redeven targets list
+  redeven targets list --json
+  redeven targets resolve --target local --json
+`, "\n")
+}
+
+func targetsListHelpText() string {
+	return strings.TrimLeft(`
+redeven targets list
+
+List discoverable Redeven targets.
+
+Usage:
+  redeven targets list [flags]
+
+Flags:
+  --json                            Write the protocol JSON envelope.
+  --state-root <path>               State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
+
+Examples:
+  redeven targets list
+  redeven targets list --json
+`, "\n")
+}
+
+func targetsResolveHelpText() string {
+	return strings.TrimLeft(`
+redeven targets resolve
+
+Resolve one target id, label, env_public_id, or local_environment_public_id.
+
+Usage:
+  redeven targets resolve --target <target> [flags]
+
+Flags:
+  --target <target>                 Target id, label, env_public_id, or local_environment_public_id.
+  --json                            Write the protocol JSON envelope.
+  --state-root <path>               State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
+
+Examples:
+  redeven targets resolve --target local
+  redeven targets resolve --target local:local --json
+`, "\n")
+}
+
 func knowledgeHelpText() string {
 	return strings.TrimLeft(`
 redeven knowledge
@@ -285,6 +347,12 @@ func lookupHelpText(args []string) (string, bool) {
 		return bootstrapHelpText(), true
 	case "run":
 		return runHelpText(), true
+	case "targets":
+		return targetsHelpText(), true
+	case "targets list":
+		return targetsListHelpText(), true
+	case "targets resolve":
+		return targetsResolveHelpText(), true
 	case "search":
 		return searchHelpText(), true
 	case "knowledge":

@@ -1,5 +1,6 @@
 import type { SysMonitorProcessInfo, SysMonitorSnapshot } from '../protocol/redeven_v1';
 import type { AskFlowerContextItem, AskFlowerIntent } from '../pages/askFlowerIntent';
+import { attachAskFlowerContextAction } from '../contextActions/askFlower';
 import { createClientId } from './clientId';
 
 type ProcessSnapshotContextItem = Extract<AskFlowerContextItem, { kind: 'process_snapshot' }>;
@@ -70,7 +71,7 @@ export function buildMonitorProcessAskFlowerIntent(params: {
   process: SysMonitorProcessInfo;
   snapshot?: Pick<SysMonitorSnapshot, 'platform' | 'timestampMs'> | null;
 }): AskFlowerIntent {
-  return {
+  return attachAskFlowerContextAction({
     id: createClientId('ask-flower'),
     source: 'monitoring',
     mode: 'append',
@@ -79,7 +80,7 @@ export function buildMonitorProcessAskFlowerIntent(params: {
     ],
     pendingAttachments: [],
     notes: [],
-  };
+  });
 }
 
 export function monitorProcessDisplayLabel(params: { pid: number; name: string }): string {

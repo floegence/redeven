@@ -8,7 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/floegence/redeven/internal/agentprotocol"
 	"github.com/floegence/redeven/internal/config"
+	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
 )
 
 func TestRunCLIHelp(t *testing.T) {
@@ -23,6 +25,7 @@ func TestRunCLIHelp(t *testing.T) {
 		assertContainsAll(t, stdout,
 			"Redeven runtime and Local UI launcher.",
 			"Quick start:",
+			"targets     Inspect Redeven targets for Agent Skills and local automation.",
 			"redeven bootstrap --controlplane https://region.example.invalid --env-id env_123 --bootstrap-ticket <bootstrap-ticket>",
 			"redeven run --mode local",
 		)
@@ -78,6 +81,22 @@ func TestRunCLIHelp(t *testing.T) {
 			"redeven knowledge bundle",
 			"--verify-only",
 			"--validate-source-only",
+		)
+	})
+
+	t.Run("targets help includes agent skills contract", func(t *testing.T) {
+		code, stdout, stderr := runCLITest(t, "help", "targets")
+		if code != 0 {
+			t.Fatalf("exit code = %d, want 0", code)
+		}
+		if stderr != "" {
+			t.Fatalf("stderr = %q, want empty", stderr)
+		}
+		assertContainsAll(t, stdout,
+			"redeven targets",
+			"Agent Skills",
+			"redeven targets list --json",
+			"redeven targets resolve --target local --json",
 		)
 	})
 }
@@ -365,6 +384,91 @@ func TestResolveRunStateLayoutUsesLocalEnvironmentLayoutForInlineBootstrap(t *te
 	if layout.ConfigPath != filepath.Join(stateRoot, "local-environment", "config.json") {
 		t.Fatalf("ConfigPath = %q", layout.ConfigPath)
 	}
+}
+
+func TestTargetsCommandJSON(t *testing.T) {
+	stateRoot := t.TempDir()
+	layout, err := config.LocalEnvironmentStateLayout(stateRoot)
+	if err != nil {
+		t.Fatalf("LocalEnvironmentStateLayout() error = %v", err)
+	}
+	if err := config.Save(layout.ConfigPath, &config.Config{
+		ControlplaneBaseURL:      "https://region.example.invalid",
+		ControlplaneProviderID:   "provider_1",
+		EnvironmentID:            "env_123",
+		LocalEnvironmentPublicID: "le_123",
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	if err := localuiruntime.WriteState(layout.RuntimeStatePath, localuiruntime.State{
+		LocalUIURL:       "http://127.0.0.1:23998/",
+		EffectiveRunMode: "hybrid",
+		RemoteEnabled:    true,
+	}); err != nil {
+		t.Fatalf("WriteState() error = %v", err)
+	}
+
+	t.Run("list writes protocol envelope", func(t *testing.T) {
+		code, stdout, stderr := runCLITest(t, "targets", "list", "--state-root", stateRoot, "--json")
+		if code != 0 {
+			t.Fatalf("exit code = %d, want 0; stderr=%s", code, stderr)
+		}
+		if stderr != "" {
+			t.Fatalf("stderr = %q, want empty", stderr)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+			t.Fatalf("json.Unmarshal() error = %v\nstdout=%s", err, stdout)
+		}
+		if payload["ok"] != true || payload["schema_version"].(float64) != 1 {
+			t.Fatalf("unexpected envelope: %#v", payload)
+		}
+		data := payload["data"].(map[string]any)
+		targets := data["targets"].([]any)
+		if len(targets) != 1 {
+			t.Fatalf("targets len = %d, want 1", len(targets))
+		}
+		target := targets[0].(map[string]any)
+		if target["id"] != "local:local" || target["env_public_id"] != "env_123" {
+			t.Fatalf("unexpected target: %#v", target)
+		}
+	})
+
+	t.Run("resolve accepts env id", func(t *testing.T) {
+		code, stdout, stderr := runCLITest(t, "targets", "resolve", "--state-root", stateRoot, "--target", "env_123", "--json")
+		if code != 0 {
+			t.Fatalf("exit code = %d, want 0; stderr=%s", code, stderr)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+			t.Fatalf("json.Unmarshal() error = %v", err)
+		}
+		if payload["ok"] != true {
+			t.Fatalf("unexpected envelope: %#v", payload)
+		}
+		trace := payload["trace"].(map[string]any)
+		if trace["target_id"] != "local:local" {
+			t.Fatalf("trace target_id = %#v", trace["target_id"])
+		}
+	})
+
+	t.Run("resolve missing target returns error envelope", func(t *testing.T) {
+		code, stdout, stderr := runCLITest(t, "targets", "resolve", "--state-root", stateRoot, "--target", "missing", "--json")
+		if code != 1 {
+			t.Fatalf("exit code = %d, want 1; stderr=%s", code, stderr)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+			t.Fatalf("json.Unmarshal() error = %v", err)
+		}
+		if payload["ok"] != false {
+			t.Fatalf("unexpected envelope: %#v", payload)
+		}
+		errPayload := payload["error"].(map[string]any)
+		if errPayload["code"] != agentprotocol.ErrCodeTargetNotFound {
+			t.Fatalf("error code = %#v", errPayload["code"])
+		}
+	})
 }
 
 func TestPrintRunStateLayoutGuidanceIncludesStateRootHint(t *testing.T) {
