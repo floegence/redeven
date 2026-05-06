@@ -64,7 +64,7 @@ function readInstalledDialogSource(): string {
 
 describe('DesktopWelcomeShell', () => {
   it('describes Connect Environment inside the shared shell model', () => {
-    const local = testLocalEnvironment('default', {
+    const local = testLocalEnvironment({
       access: testLocalAccess({
         local_ui_bind: '127.0.0.1:0',
       }),
@@ -102,7 +102,7 @@ describe('DesktopWelcomeShell', () => {
   });
 
   it('describes Local Environment Settings inside the same shell model', () => {
-    const local = testLocalEnvironment('default', {
+    const local = testLocalEnvironment({
       access: testLocalAccess({
         local_ui_bind: '0.0.0.0:24000',
         local_ui_password: 'secret',
@@ -696,7 +696,6 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("label: 'Redeven URL'");
     expect(appSrc).toContain("label: 'SSH Host'");
     expect(appSrc).not.toContain('Run a Desktop-managed Redeven environment on this device.');
-    expect(appSrc).not.toContain('Local environments are created independently and are not bound directly to a provider environment.');
     expect(appSrc).toContain('Open a Redeven URL or connect over SSH');
     expect(appSrc).not.toContain('Create a local serve runtime for this provider environment on this Mac.');
     expect(appSrc).not.toContain('This provider environment card will keep both routes visible on this device: serve local here, or open via Control Plane.');
@@ -727,14 +726,12 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Leave blank to use the default remote user cache:');
   });
 
-  it('keeps the connection dialog from exposing extra Local Environment creation', () => {
+  it('keeps the connection dialog focused on Redeven URLs and SSH hosts', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain("type ConnectionDialogState = ExternalURLConnectionDialogState | SSHConnectionDialogState | null;");
     expect(appSrc).toContain("props.switchKind(value as 'external_local_ui' | 'ssh_environment')");
     expect(appSrc).not.toContain('scope derived from Name.');
-    expect(appSrc).not.toContain('Next scope:');
-    expect(appSrc).not.toContain('DEFAULT_LOCAL_ENVIRONMENT_NAME');
   });
 
   it('keeps provider-local runtime setup out of the connection dialog', () => {
@@ -755,6 +752,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('aria-label="Visibility presets"');
     expect(appSrc).toContain('This Redeven profile keeps one Local Environment runtime for the current binding.');
     expect(appSrc).toContain('Choose how the Local Environment is exposed on the next desktop-managed start');
+    expect(appSrc).toContain('Published environments that can link to this Local Environment.');
     expect(appSrc).toContain('Loopback bind keeps the runtime on this device only. No password is required.');
     expect(appSrc).toContain('Shared local network access requires a password before other devices can open this Environment.');
   });

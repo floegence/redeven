@@ -54,7 +54,6 @@ export type DesktopLocalEnvironmentState = Readonly<{
 }>;
 
 export const LOCAL_ENVIRONMENT_ID = 'local';
-export const DEFAULT_LOCAL_ENVIRONMENT_NAME = 'local';
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -65,11 +64,6 @@ function sanitizeIDFragment(value: string): string {
     .replace(/[^A-Za-z0-9_.-]+/g, '-')
     .replace(/-+/g, '-')
     .replace(/^[-.]+|[-.]+$/g, '');
-}
-
-export function normalizeDesktopLocalEnvironmentName(value: unknown): string {
-  const normalized = sanitizeIDFragment(compact(value).toLowerCase());
-  return normalized || DEFAULT_LOCAL_ENVIRONMENT_NAME;
 }
 
 export function normalizeDesktopProviderEnvironmentID(value: unknown): string {
@@ -88,10 +82,6 @@ export function normalizeDesktopProviderKey(value: unknown): string {
   return normalized;
 }
 
-export function desktopLocalEnvironmentStateID(_name: string): typeof LOCAL_ENVIRONMENT_ID {
-  return LOCAL_ENVIRONMENT_ID;
-}
-
 export function desktopProviderEnvironmentStateID(providerOrigin: string, envPublicID: string): string {
   const normalizedOrigin = normalizeControlPlaneOrigin(providerOrigin);
   const normalizedEnvPublicID = normalizeDesktopProviderEnvironmentID(envPublicID);
@@ -106,7 +96,7 @@ export function defaultDesktopLocalEnvironmentAccess(): DesktopLocalEnvironmentA
   };
 }
 
-export function defaultDesktopLocalEnvironmentLabel(_name: string): string {
+export function defaultDesktopLocalEnvironmentLabel(): string {
   return 'Local Environment';
 }
 
@@ -199,10 +189,8 @@ type CreateDesktopLocalEnvironmentStateOptions = Readonly<{
 }>;
 
 export function createDesktopLocalEnvironmentState(
-  name: string,
   options: CreateDesktopLocalEnvironmentStateOptions = {},
 ): DesktopLocalEnvironmentState {
-  const normalizedName = normalizeDesktopLocalEnvironmentName(name);
   const now = Math.max(
     Number(options.createdAtMS ?? Number.NaN) || 0,
     Number(options.updatedAtMS ?? Number.NaN) || 0,
@@ -211,7 +199,7 @@ export function createDesktopLocalEnvironmentState(
   );
   return {
     id: LOCAL_ENVIRONMENT_ID,
-    label: compact(options.label) || defaultDesktopLocalEnvironmentLabel(normalizedName),
+    label: compact(options.label) || defaultDesktopLocalEnvironmentLabel(),
     pinned: options.pinned === true,
     created_at_ms: Number(options.createdAtMS ?? now) || now,
     updated_at_ms: Number(options.updatedAtMS ?? now) || now,
@@ -240,7 +228,7 @@ export function projectProviderEnvironmentToLocalRuntimeTarget(
       remoteDesktopSupported: providerEnvironment.remote_desktop_supported,
     },
   );
-  return createDesktopLocalEnvironmentState(DEFAULT_LOCAL_ENVIRONMENT_NAME, {
+  return createDesktopLocalEnvironmentState({
     label: providerEnvironment.label,
     pinned: localEnvironment.pinned,
     preferredOpenRoute: providerEnvironment.preferred_open_route,
@@ -273,10 +261,6 @@ export function localEnvironmentStateKind(environment: DesktopLocalEnvironmentSt
 
 export function isDefaultDesktopLocalEnvironmentState(environment: DesktopLocalEnvironmentState | null | undefined): boolean {
   return environment?.id === LOCAL_ENVIRONMENT_ID;
-}
-
-export function localEnvironmentName(_environment: DesktopLocalEnvironmentState): string {
-  return DEFAULT_LOCAL_ENVIRONMENT_NAME;
 }
 
 export function localEnvironmentAccess(environment: DesktopLocalEnvironmentState): DesktopLocalEnvironmentAccess {

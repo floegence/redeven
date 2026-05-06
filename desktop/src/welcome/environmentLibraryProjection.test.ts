@@ -13,7 +13,7 @@ import {
 
 describe('environmentLibraryProjection', () => {
   it('builds an entry record keyed by stable environment id', () => {
-    const local = testLocalEnvironment('default', {
+    const local = testLocalEnvironment({
       label: 'Local',
     });
     const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo', {
@@ -32,7 +32,7 @@ describe('environmentLibraryProjection', () => {
   });
 
   it('splits visible entry ids into pinned and regular groups without losing order', () => {
-    const local = testLocalEnvironment('default', {
+    const local = testLocalEnvironment({
       label: 'Local',
       pinned: true,
     });
@@ -56,7 +56,7 @@ describe('environmentLibraryProjection', () => {
   });
 
   it('ignores ids that are no longer present in the projected entry record', () => {
-    const local = testLocalEnvironment('default', {
+    const local = testLocalEnvironment({
       label: 'Local',
       pinned: true,
     });

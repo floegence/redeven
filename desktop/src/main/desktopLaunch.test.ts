@@ -15,7 +15,7 @@ import {
 
 describe('desktopLaunch', () => {
   it('builds desktop-managed args from persistent local settings', () => {
-    const environment = testLocalEnvironment('default', {
+    const environment = testLocalEnvironment({
       access: testLocalAccess({
         local_ui_bind: '0.0.0.0:24000',
         local_ui_password: 'secret',
@@ -131,7 +131,7 @@ describe('desktopLaunch', () => {
   });
 
   it('removes stale bootstrap ticket env vars when the current settings do not use them', () => {
-    const environment = testLocalEnvironment('default', {
+    const environment = testLocalEnvironment({
       access: testLocalAccess({
         local_ui_bind: '127.0.0.1:0',
       }),
@@ -147,7 +147,7 @@ describe('desktopLaunch', () => {
   });
 
   it('builds a launch plan with the Local Environment layout when no bootstrap target is provided', () => {
-    const environment = testLocalEnvironment('default', {
+    const environment = testLocalEnvironment({
       access: testLocalAccess({
         local_ui_bind: '127.0.0.1:0',
       }),

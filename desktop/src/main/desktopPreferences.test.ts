@@ -28,7 +28,6 @@ import {
   desktopEnvironmentID,
   desktopPreferencesToDraft,
   findLocalEnvironmentByID,
-  findLocalEnvironmentLocalBindConflict,
   loadDesktopPreferences,
   localEnvironmentDesktopLaunchKey,
   normalizeRecentExternalLocalUIURLs,
@@ -139,46 +138,8 @@ describe('desktopPreferences', () => {
     }))).toThrow('Non-loopback Local UI binds require a Local UI password.');
   });
 
-  it('does not report bind conflicts after collapsed local environment records normalize to one entry', () => {
-    const primary = testLocalEnvironment('local', {
-      label: 'Local Environment',
-      access: testLocalAccess({
-        local_ui_bind: 'localhost:23998',
-      }),
-    });
-    const lab = testLocalEnvironment('lab', {
-      label: 'Lab',
-      access: testLocalAccess({
-        local_ui_bind: '127.0.0.1:23998',
-      }),
-    });
-    const preferences = testDesktopPreferences({
-      local_environment: primary,
-    });
-
-    expect(findLocalEnvironmentLocalBindConflict(preferences, lab.id)).toBeNull();
-  });
-
-  it('does not treat dynamic local binds as conflicts', () => {
-    const primary = testLocalEnvironment('default', {
-      access: testLocalAccess({
-        local_ui_bind: 'localhost:23998',
-      }),
-    });
-    const lab = testLocalEnvironment('lab', {
-      access: testLocalAccess({
-        local_ui_bind: '127.0.0.1:0',
-      }),
-    });
-    const preferences = testDesktopPreferences({
-      local_environment: primary,
-    });
-
-    expect(findLocalEnvironmentLocalBindConflict(preferences, lab.id)).toBeNull();
-  });
-
   it('preserves the single Local Environment state when editing access without resending it', () => {
-    const existing = testLocalEnvironment('lab', {
+    const existing = testLocalEnvironment({
       label: 'Lab',
       access: testLocalAccess({
         local_ui_bind: 'localhost:23998',
@@ -230,7 +191,7 @@ describe('desktopPreferences', () => {
       const paths = defaultDesktopPreferencesPaths(root);
       const codec = createPlaintextSecretCodec();
       const preferences: DesktopPreferences = testDesktopPreferences({
-        local_environment: testLocalEnvironment('local', {
+        local_environment: testLocalEnvironment({
             access: testLocalAccess({
               local_ui_bind: '0.0.0.0:23998',
               local_ui_password: 'super-secret',
@@ -464,7 +425,7 @@ describe('desktopPreferences', () => {
         local_ui_password: 'super-secret',
       }));
       const initial = testDesktopPreferences({
-        local_environment: testLocalEnvironment('local', {
+        local_environment: testLocalEnvironment({
             access: initialAccess,
           }),
       });
@@ -472,7 +433,7 @@ describe('desktopPreferences', () => {
       await saveDesktopPreferences(paths, initial, codec);
       await saveDesktopPreferences(paths, {
         ...initial,
-        local_environment: testLocalEnvironment('local', {
+        local_environment: testLocalEnvironment({
           access: {
             ...initialAccess,
             local_ui_password: '',
@@ -698,7 +659,7 @@ describe('desktopPreferences', () => {
 
   it('persists pin state for managed, URL, and SSH environments', () => {
     const base = testDesktopPreferences({
-      local_environment: testLocalEnvironment('local', { pinned: false }),
+      local_environment: testLocalEnvironment({ pinned: false }),
       saved_environments: [{
         id: 'http://192.168.1.12:24000/',
         label: 'Staging',
@@ -894,7 +855,7 @@ describe('desktopPreferences', () => {
   });
 
   it('keeps provider preferences separate from the single Local Environment state', () => {
-    const local = testLocalEnvironment('local', {
+    const local = testLocalEnvironment({
       access: testLocalAccess({
         local_ui_bind: '127.0.0.1:24001',
         local_ui_password: 'secret',
@@ -932,7 +893,7 @@ describe('desktopPreferences', () => {
   });
 
   it('keeps the single Local Environment while keeping provider preferences separate', () => {
-    const existingLocal = testLocalEnvironment('lab', {
+    const existingLocal = testLocalEnvironment({
       label: 'Local Lab',
       access: {
         local_ui_bind: '0.0.0.0:24000',
@@ -972,7 +933,7 @@ describe('desktopPreferences', () => {
   });
 
   it('keeps the existing local state when editing Local Environment settings', () => {
-    const existing = testLocalEnvironment('lab', {
+    const existing = testLocalEnvironment({
       label: 'Lab',
       stateDir: '/tmp/redeven-lab',
     });
@@ -1116,7 +1077,7 @@ describe('desktopPreferences', () => {
 
   it('serializes local-environment settings into a settings draft', () => {
     expect(desktopPreferencesToDraft(testDesktopPreferences({
-      local_environment: testLocalEnvironment('default', {
+      local_environment: testLocalEnvironment({
           access: {
             local_ui_bind: '0.0.0.0:23998',
             local_ui_password: 'secret',
@@ -1132,7 +1093,7 @@ describe('desktopPreferences', () => {
 
   it('includes local-environment startup inputs in the managed launch key', () => {
     const left = localEnvironmentDesktopLaunchKey(testDesktopPreferences({
-      local_environment: testLocalEnvironment('default', {
+      local_environment: testLocalEnvironment({
           access: {
             local_ui_bind: '127.0.0.1:0',
             local_ui_password: '',
@@ -1141,7 +1102,7 @@ describe('desktopPreferences', () => {
         }),
     }));
     const right = localEnvironmentDesktopLaunchKey(testDesktopPreferences({
-      local_environment: testLocalEnvironment('default', {
+      local_environment: testLocalEnvironment({
           access: {
             local_ui_bind: '0.0.0.0:24000',
             local_ui_password: 'secret',

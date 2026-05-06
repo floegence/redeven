@@ -130,9 +130,9 @@ describe('launcherActionFeedback', () => {
       ok: false,
       code: 'action_invalid',
       scope: 'dialog',
-      message: 'Local Environment cannot use localhost:23998 because "Lab" is already configured for localhost:23998. Choose a different Local UI bind or update that environment first.',
+      message: 'Non-loopback Local UI binds require a Local UI password.',
     })).toEqual({
-      message: 'Local Environment cannot use localhost:23998 because "Lab" is already configured for localhost:23998. Choose a different Local UI bind or update that environment first.',
+      message: 'Non-loopback Local UI binds require a Local UI password.',
       tone: 'error',
       refresh_snapshot: false,
       delivery: 'inline',

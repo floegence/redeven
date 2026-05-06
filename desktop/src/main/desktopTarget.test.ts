@@ -25,7 +25,6 @@ describe('desktopTarget', () => {
       label: 'Local Environment',
       route: 'local_host',
       local_environment_kind: 'local',
-      local_environment_name: 'local',
       provider_origin: undefined,
       provider_id: undefined,
       env_public_id: undefined,
@@ -81,7 +80,6 @@ describe('desktopTarget', () => {
       provider_origin: 'https://cp.example.invalid',
       env_public_id: 'env_demo',
       label: 'Demo Environment',
-      local_environment_name: 'local',
       has_local_hosting: false,
       has_remote_desktop: true,
     });

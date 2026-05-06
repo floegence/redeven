@@ -98,7 +98,7 @@ describe('environmentLibraryOverlayState', () => {
   it('closes a guidance overlay when the same environment now only exposes tooltip guidance', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        local_environment: testLocalEnvironment('default'),
+        local_environment: testLocalEnvironment(),
         saved_environments: [{
           id: 'http://192.168.1.12:24000/',
           label: 'Staging',

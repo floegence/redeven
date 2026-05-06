@@ -6,8 +6,7 @@ import {
 } from './desktopLocalEnvironmentState';
 
 describe('desktopLocalEnvironmentState', () => {
-  it('treats any requested id as the protected default local environment', () => {
-    expect(isDefaultDesktopLocalEnvironmentState(createDesktopLocalEnvironmentState('default'))).toBe(true);
-    expect(isDefaultDesktopLocalEnvironmentState(createDesktopLocalEnvironmentState('lab'))).toBe(true);
+  it('creates the protected Local Environment identity', () => {
+    expect(isDefaultDesktopLocalEnvironmentState(createDesktopLocalEnvironmentState())).toBe(true);
   });
 });

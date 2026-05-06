@@ -292,15 +292,6 @@ export type SafeStorageLike = Readonly<{
   decryptString: (value: Buffer) => string;
 }>;
 
-export type DesktopLocalEnvironmentStateLocalBindConflict = Readonly<{
-  environment_id: string;
-  label: string;
-  local_ui_bind: string;
-  conflicting_environment_id: string;
-  conflicting_label: string;
-  conflicting_local_ui_bind: string;
-}>;
-
 export type UpsertDesktopSavedEnvironmentInput = Readonly<{
   environment_id: string;
   label: string;
@@ -367,7 +358,7 @@ export function createSafeStorageSecretCodec(safeStorage: SafeStorageLike | null
 
 export function defaultDesktopPreferences(): DesktopPreferences {
   return {
-    local_environment: createDesktopLocalEnvironmentState('local'),
+    local_environment: createDesktopLocalEnvironmentState(),
     provider_environments: [],
     saved_environments: [],
     saved_ssh_environments: [],
@@ -538,8 +529,8 @@ function normalizeLocalEnvironmentState(
   stateRootOverride?: string,
 ): DesktopLocalEnvironmentState {
   const source = environment ?? null;
-  return createDesktopLocalEnvironmentState('local', {
-    label: defaultDesktopLocalEnvironmentLabel('local'),
+  return createDesktopLocalEnvironmentState({
+    label: defaultDesktopLocalEnvironmentLabel(),
     pinned: source?.pinned,
     access: source?.local_hosting.access,
     preferredOpenRoute: source?.preferred_open_route,
@@ -1201,21 +1192,6 @@ function canonicalizeProviderEnvironmentIdentity(
   });
 }
 
-export function findLocalEnvironmentLocalBindConflict(
-  _preferences: DesktopPreferences,
-  _environmentID: string,
-): DesktopLocalEnvironmentStateLocalBindConflict | null {
-  return null;
-}
-
-export function describeLocalEnvironmentLocalBindConflict(
-  conflict: DesktopLocalEnvironmentStateLocalBindConflict,
-): string {
-  const targetLabel = compact(conflict.label) || compact(conflict.environment_id) || 'This environment';
-  const conflictingLabel = compact(conflict.conflicting_label) || compact(conflict.conflicting_environment_id) || 'another environment';
-  return `${targetLabel} cannot use ${conflict.local_ui_bind} because "${conflictingLabel}" is already configured for ${conflict.conflicting_local_ui_bind}. Choose a different Local UI bind or update that environment first.`;
-}
-
 export function updateLocalEnvironmentAccess(
   preferences: DesktopPreferences,
   environmentID: string,
@@ -1813,8 +1789,8 @@ function normalizeLocalEnvironmentCatalogCandidate(
 
   try {
     return {
-      environment: createDesktopLocalEnvironmentState('local', {
-        label: defaultDesktopLocalEnvironmentLabel('local'),
+      environment: createDesktopLocalEnvironmentState({
+        label: defaultDesktopLocalEnvironmentLabel(),
         pinned: normalizePinned(candidate.pinned),
         preferredOpenRoute: normalizePreferredOpenRoute(candidate.preferred_open_route),
         currentProviderBinding: currentProviderBinding ?? undefined,
@@ -1871,7 +1847,7 @@ function serializeLocalEnvironmentCatalog(environment: DesktopLocalEnvironmentSt
     schema_version: 1,
     record_kind: 'local_environment',
     id: environment.id,
-    label: defaultDesktopLocalEnvironmentLabel('local'),
+    label: defaultDesktopLocalEnvironmentLabel(),
     pinned: environment.pinned,
     created_at_ms: environment.created_at_ms,
     updated_at_ms: environment.updated_at_ms,
