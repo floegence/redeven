@@ -2729,7 +2729,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
               <div class="space-y-1">
                 <h1 class="text-lg font-semibold tracking-tight text-foreground">Environments</h1>
                 <p class="text-xs text-muted-foreground">
-                  Manage local and remote environments. Connect, configure, and switch between workspaces.
+                  Manage local and remote environments. Connect providers, open workspaces, and rebind this Local Environment profile when needed.
                 </p>
               </div>
               <div class="flex items-center gap-2">
@@ -4194,7 +4194,7 @@ function controlPlaneLocalHostCountTooltipContent(
     <ControlPlaneMetricTooltipContent
       title="Published environments that can link to this Local Environment."
       description={stats.local_host_count > 0
-        ? 'Local Links counts provider environments that can replace the current provider link and open through this Local Environment profile.'
+        ? 'Local Links counts provider environments that can bind to this Local Environment profile for local use.'
         : 'This provider has not exposed any published environments that can link to this Local Environment profile yet.'}
       status={status}
     />

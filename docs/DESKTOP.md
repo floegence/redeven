@@ -84,7 +84,7 @@ Behavior:
 - `--password-stdin` is the non-interactive desktop-managed password transport.
 - Desktop resolves the managed state root before spawn and passes it explicitly to `redeven run`.
 - The Desktop-owned local runtime uses `~/.redeven/local-environment/config.json`.
-- Desktop startup flows that include a bootstrap target write the same Local Environment config and replace the previous provider link for that Local Environment profile.
+- Desktop startup flows that include a bootstrap target write the same Local Environment config and replace the previous provider binding for that Local Environment profile.
 - Desktop attach probing reads `runtime/local-ui.json` from the same resolved state root as the spawned config path.
 - The Local UI password stays out of process args and environment variables.
 - The one-time bootstrap ticket also stays out of process args and is passed only through a desktop-owned environment variable.
@@ -248,8 +248,8 @@ Interaction rules:
   - a user-owned local `Name`
   - a `Provider URL`
   - the default `Name` is derived from the provider hostname until the user edits it explicitly
-- The launcher defaults to the `Environments` tab and treats environment switching as the primary task.
-- `Providers` moves into its own tab so provider management does not compete with the main environment-switching path.
+- The launcher defaults to the `Environments` tab and treats opening or rebinding a workspace as the primary task.
+- `Providers` moves into its own tab so provider management does not compete with the main workspace open/rebind path.
 - Environment cards own the primary actions, so open sessions are reflected through `Open` / `Focus` state directly on the relevant card instead of a separate session rail.
 - The Local Environment, provider environments, Redeven URLs, and SSH Host entries all render in the `Environments` tab.
 - Connecting or refreshing a Provider updates the provider catalog immediately while the profile keeps its single Local Environment state record.
@@ -328,7 +328,7 @@ duplicating as a low-value fact row.
 - Deleting an Environment Library entry is a first-class action:
   - Desktop blocks deletion while a window for that entry is still open
   - the Local Environment entry is protected and is not deletable from the launcher
-  - unlinking a provider Environment clears only that provider link; the provider card remains if the provider still publishes that Environment
+  - unlinking a provider Environment clears only that provider binding; the provider card remains if the provider still publishes that Environment
 - Remote library entries distinguish:
   - unsaved remote sessions that are already open
   - auto-remembered recent connections
@@ -461,7 +461,7 @@ Desktop semantics:
 - Visibility and port selection are separate controls.
 - `Local only` and `Shared on your local network` share the same fixed default port baseline.
 - The saved configuration applies to the next managed start; the currently running managed URL is displayed separately when available.
-- One Local Environment runtime may be active for the signed-in user / profile state root. Linking another provider Environment replaces the prior local provider link.
+- One Local Environment runtime may be active for the signed-in user / profile state root. Linking another provider Environment replaces the prior local provider binding.
 - Provider environments never persist provider-specific local runtime configuration; Desktop derives linked-local readiness from the single Local Environment runtime and its current provider binding.
 - If Desktop attaches to a runtime that was started by standalone runtime / CLI mode, that attached runtime stays externally owned: closing the Desktop session only detaches, and restart/update stay delegated to the host process that owns that runtime.
 - Launcher runtime ownership is explicit on the environment card: externally owned runtimes surface as attachable local runtimes, while the Local Environment surfaces as the Desktop-owned local runtime.
@@ -535,7 +535,7 @@ The Control Plane flow is:
     - The top-level remote session page may in turn host the Env App inside a same-origin boot iframe.
     - Embedded same-origin Env App documents must still inherit the desktop shell bridges and window-chrome contract from the owning session window, so titlebar safe areas, theme state, and environment-scoped renderer storage stay identical to direct desktop-hosted sessions.
 11. For a provider environment used locally, Desktop uses the returned one-time `bootstrap_ticket` to link the bundled Local Environment runtime for the current profile state root.
-12. Rebinding replaces the previous local provider link; Desktop never materializes a second local runtime state directory for another provider environment.
+12. Rebinding replaces the previous local provider binding; Desktop never materializes a second local runtime state directory for another provider environment.
 
 Browser pages may also open Desktop through a custom protocol link:
 
