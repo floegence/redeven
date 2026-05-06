@@ -3,10 +3,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
-  desktopLocalEnvironmentStorageScopeID,
+  desktopRendererStorageScopeID,
   notifyDesktopSessionAppReady,
   readDesktopSessionContextSnapshot,
-  resolveEnvironmentStorageScopeID,
+  resolveRendererStorageScopeID,
 } from './desktopSessionContext';
 
 const originalParent = window.parent;
@@ -42,7 +42,7 @@ describe('desktopSessionContext', () => {
       redevenDesktopSessionContext: {
         getSnapshot: () => ({
           local_environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
-          environment_storage_scope_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+          renderer_storage_scope_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
         }),
       },
     } as unknown as Window;
@@ -51,15 +51,15 @@ describe('desktopSessionContext', () => {
 
     expect(readDesktopSessionContextSnapshot()).toEqual({
       local_environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
-      environment_storage_scope_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      renderer_storage_scope_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
     });
-    expect(desktopLocalEnvironmentStorageScopeID()).toBe('cp:https%3A%2F%2Fcp.example.invalid:env:env_demo');
+    expect(desktopRendererStorageScopeID()).toBe('cp:https%3A%2F%2Fcp.example.invalid:env:env_demo');
   });
 
   it('falls back to the provided scope id when no desktop session context exists', () => {
     expect(readDesktopSessionContextSnapshot()).toBeNull();
-    expect(desktopLocalEnvironmentStorageScopeID()).toBe('');
-    expect(resolveEnvironmentStorageScopeID('env_demo')).toBe('env_demo');
+    expect(desktopRendererStorageScopeID()).toBe('');
+    expect(resolveRendererStorageScopeID('env_demo')).toBe('env_demo');
   });
 
   it('notifies Desktop when the environment app becomes interactive', () => {
@@ -69,7 +69,7 @@ describe('desktopSessionContext', () => {
       redevenDesktopSessionContext: {
         getSnapshot: () => ({
           local_environment_id: 'env_demo',
-          environment_storage_scope_id: 'env_demo',
+          renderer_storage_scope_id: 'env_demo',
         }),
         notifyAppReady: (payload: { state: string }) => {
           readyStates.push(payload.state);

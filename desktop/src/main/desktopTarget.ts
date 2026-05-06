@@ -87,17 +87,29 @@ export function localEnvironmentDesktopSessionKey(
   return `env:${encodeURIComponent(cleanEnvironmentID)}:${route}`;
 }
 
-function providerLocalEnvironmentSessionIdentity(environment: DesktopLocalEnvironmentState): string {
+function linkedLocalEnvironmentSessionIdentityFromParts(
+  providerOrigin: string,
+  providerID: string,
+  envPublicID: string,
+): string {
+  return [
+    'linked-local',
+    providerOrigin,
+    providerID,
+    envPublicID,
+  ].map(encodeURIComponent).join(':');
+}
+
+function linkedLocalEnvironmentSessionIdentity(environment: DesktopLocalEnvironmentState): string {
   const binding = environment.current_provider_binding;
   if (!binding) {
     return compact(environment.id);
   }
-  return [
-    'provider-local',
+  return linkedLocalEnvironmentSessionIdentityFromParts(
     binding.provider_origin,
     binding.provider_id,
     binding.env_public_id,
-  ].map(encodeURIComponent).join(':');
+  );
 }
 
 export function controlPlaneDesktopSessionKey(
@@ -136,7 +148,7 @@ export function buildLocalEnvironmentDesktopTarget(
     kind: 'local_environment',
     session_key: localEnvironmentDesktopSessionKey(
       route === 'local_host'
-        ? providerLocalEnvironmentSessionIdentity(environment)
+        ? linkedLocalEnvironmentSessionIdentity(environment)
         : environment.id,
       route,
     ),
@@ -158,12 +170,11 @@ export function buildProviderEnvironmentDesktopTarget(
 ): LocalEnvironmentDesktopTarget {
   const route = options.route ?? 'remote_desktop';
   const sessionIdentity = route === 'local_host'
-    ? [
-        'provider-local',
+    ? linkedLocalEnvironmentSessionIdentityFromParts(
         environment.provider_origin,
         environment.provider_id,
         environment.env_public_id,
-      ].map(encodeURIComponent).join(':')
+      )
     : environment.id;
   return {
     kind: 'local_environment',

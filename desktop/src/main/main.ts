@@ -382,7 +382,7 @@ const controlPlaneSyncTaskByKey = new Map<string, Promise<Readonly<{
   preferences: DesktopPreferences;
   controlPlane: DesktopSavedControlPlane;
 }>>>();
-const localEnvironmentRuntimeByID = new Map<string, LocalEnvironmentRuntimeRecord>();
+let localEnvironmentRuntimeRecord: LocalEnvironmentRuntimeRecord | null = null;
 const sshEnvironmentRuntimeByKey = new Map<`ssh:${string}`, SSHEnvironmentRuntimeRecord>();
 const pendingSSHRuntimeStartByKey = new Map<`ssh:${string}`, PendingSSHRuntimeStart>();
 const pendingLauncherActionProgressByKey = new Map<string, PendingLauncherActionProgress>();
@@ -550,8 +550,24 @@ function updateLocalEnvironmentRuntimeRecord(
   runtimeHandle: DesktopSessionRuntimeHandle,
 ): LocalEnvironmentRuntimeRecord {
   const record = localEnvironmentRuntimeRecordFromHandle(environment, startup, runtimeHandle);
-  localEnvironmentRuntimeByID.set(environment.id, record);
+  localEnvironmentRuntimeRecord = record;
   return record;
+}
+
+function currentLocalEnvironmentRuntimeRecord(
+  environment: DesktopLocalEnvironmentState,
+): LocalEnvironmentRuntimeRecord | null {
+  const record = localEnvironmentRuntimeRecord;
+  if (!record || record.environment_id !== environment.id) {
+    return null;
+  }
+  return record;
+}
+
+function clearLocalEnvironmentRuntimeRecord(environment: DesktopLocalEnvironmentState): void {
+  if (localEnvironmentRuntimeRecord?.environment_id === environment.id) {
+    localEnvironmentRuntimeRecord = null;
+  }
 }
 
 function providerRuntimeHealthMap(
@@ -979,11 +995,13 @@ async function buildCurrentDesktopQuitImpact(): Promise<DesktopQuitImpact> {
 
   return buildDesktopQuitImpact({
     environment_window_count: openSessionSummaries().length,
-    local_environment_runtimes: [...localEnvironmentRuntimeByID.values()].map((runtimeRecord) => ({
-      id: runtimeRecord.environment_id,
-      label: resolveManagedRuntimeQuitLabel(runtimeRecord, preferences),
-      lifecycle_owner: runtimeRecord.runtime_handle.lifecycle_owner,
-    })),
+    local_environment_runtime: localEnvironmentRuntimeRecord
+      ? {
+          id: localEnvironmentRuntimeRecord.environment_id,
+          label: resolveManagedRuntimeQuitLabel(localEnvironmentRuntimeRecord, preferences),
+          lifecycle_owner: localEnvironmentRuntimeRecord.runtime_handle.lifecycle_owner,
+        }
+      : null,
     ssh_runtimes: [...sshEnvironmentRuntimeByKey.values()].map((runtimeRecord) => ({
       id: runtimeRecord.runtime_key,
       label: runtimeRecord.label,
@@ -2128,31 +2146,31 @@ async function prepareManagedTarget(
 async function attachLocalEnvironmentRuntime(
   environment: DesktopLocalEnvironmentState,
 ): Promise<LocalEnvironmentRuntimeRecord | null> {
-  const existingRecord = localEnvironmentRuntimeByID.get(environment.id) ?? null;
+  const existingRecord = currentLocalEnvironmentRuntimeRecord(environment);
   if (existingRecord) {
     try {
       const startup = await loadExternalLocalUIStartup(existingRecord.startup.local_ui_url, DESKTOP_RUNTIME_PROBE_TIMEOUT_MS);
       if (startup) {
-      const updatedRecord = {
-        ...existingRecord,
-        startup: {
-          ...existingRecord.startup,
-          controlplane_base_url: startup.controlplane_base_url ?? existingRecord.startup.controlplane_base_url,
-          controlplane_provider_id: startup.controlplane_provider_id ?? existingRecord.startup.controlplane_provider_id,
-          env_public_id: startup.env_public_id ?? existingRecord.startup.env_public_id,
-          local_ui_url: startup.local_ui_url,
-          local_ui_urls: startup.local_ui_urls,
-          password_required: startup.password_required,
+        const updatedRecord = {
+          ...existingRecord,
+          startup: {
+            ...existingRecord.startup,
+            controlplane_base_url: startup.controlplane_base_url ?? existingRecord.startup.controlplane_base_url,
+            controlplane_provider_id: startup.controlplane_provider_id ?? existingRecord.startup.controlplane_provider_id,
+            env_public_id: startup.env_public_id ?? existingRecord.startup.env_public_id,
+            local_ui_url: startup.local_ui_url,
+            local_ui_urls: startup.local_ui_urls,
+            password_required: startup.password_required,
             runtime_service: startup.runtime_service ?? existingRecord.startup.runtime_service,
           },
         };
-        localEnvironmentRuntimeByID.set(environment.id, updatedRecord);
+        localEnvironmentRuntimeRecord = updatedRecord;
         return updatedRecord;
       }
     } catch {
       // Fall back to state-file attach below.
     }
-    localEnvironmentRuntimeByID.delete(environment.id);
+    clearLocalEnvironmentRuntimeRecord(environment);
   }
 
   const attachedRuntime = await attachManagedRuntimeFromStateFile({
@@ -3881,7 +3899,7 @@ async function startEnvironmentRuntimeFromLauncher(
           }
         }
         await existingRuntime.runtime_handle.stop();
-        localEnvironmentRuntimeByID.delete(providerLocalEnvironment.id);
+        clearLocalEnvironmentRuntimeRecord(providerLocalEnvironment);
       }
       const bootstrap = await resolveLocalEnvironmentBootstrap(preferences, providerLocalEnvironment);
       const prepared = await prepareManagedTarget({
@@ -4038,7 +4056,7 @@ async function stopEnvironmentRuntimeFromLauncher(
     }
 
     const providerLocalEnvironment = localEnvironmentForProviderBinding(preferences, providerEnvironment);
-    const runtimeRecord = localEnvironmentRuntimeByID.get(providerLocalEnvironment.id)
+    const runtimeRecord = currentLocalEnvironmentRuntimeRecord(providerLocalEnvironment)
       ?? await attachLocalEnvironmentRuntime(providerLocalEnvironment);
     if (!runtimeRecord) {
       return launcherActionFailure(
@@ -4066,13 +4084,13 @@ async function stopEnvironmentRuntimeFromLauncher(
       await finalizeSessionClosure(liveLocalSession.session_key);
     }
     await runtimeRecord.runtime_handle.stop();
-    localEnvironmentRuntimeByID.delete(providerLocalEnvironment.id);
+    clearLocalEnvironmentRuntimeRecord(providerLocalEnvironment);
     resetLauncherIssueState();
     broadcastDesktopWelcomeSnapshots();
     return launcherActionSuccess('stopped_environment_runtime');
   }
 
-  const runtimeRecord = localEnvironmentRuntimeByID.get(environment.id) ?? await attachLocalEnvironmentRuntime(environment);
+  const runtimeRecord = currentLocalEnvironmentRuntimeRecord(environment) ?? await attachLocalEnvironmentRuntime(environment);
   if (!runtimeRecord) {
     return launcherActionFailure(
       'action_invalid',
@@ -4094,7 +4112,7 @@ async function stopEnvironmentRuntimeFromLauncher(
     await finalizeSessionClosure(liveLocalSession.session_key);
   }
   await runtimeRecord.runtime_handle.stop();
-  localEnvironmentRuntimeByID.delete(environment.id);
+  clearLocalEnvironmentRuntimeRecord(environment);
   resetLauncherIssueState();
   broadcastDesktopWelcomeSnapshots();
   return launcherActionSuccess('stopped_environment_runtime');
@@ -5221,7 +5239,7 @@ if (!app.requestSingleInstanceLock()) {
     }
     event.returnValue = {
       local_environment_id: sessionRecord.target.environment_id,
-      environment_storage_scope_id: sessionRecord.target.route === 'local_host'
+      renderer_storage_scope_id: sessionRecord.target.route === 'local_host'
         ? 'local'
         : sessionRecord.target.environment_id,
       ...(sessionRecord.target.provider_origin ? { provider_origin: sessionRecord.target.provider_origin } : {}),

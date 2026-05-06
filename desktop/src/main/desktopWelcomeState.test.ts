@@ -621,7 +621,7 @@ describe('desktopWelcomeState', () => {
     expect(snapshot.settings_surface.next_start_address_display).toBe('localhost:23998');
   });
 
-  it('projects provider local-serve state onto the aggregated provider card', () => {
+  it('projects linked-local runtime state onto the aggregated provider card', () => {
     const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
     const managedControlPlane = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo');
     const local = testLocalEnvironment({

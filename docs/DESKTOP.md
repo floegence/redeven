@@ -20,7 +20,7 @@ This document describes the public Electron desktop shell that ships with each `
 - `Environment Settings` renders as a launcher-owned modal dialog instead of a second native window.
 - Each opened Environment owns its own top-level session window, plus any session child windows opened by allowed in-app navigation.
 - Session deduplication happens in Electron main through a canonical session key:
-  - `env:<environment_id>:local_host` for a locally hosted Local Environment or provider-local window
+  - `env:<environment_id>:local_host` for a locally hosted Local Environment or linked-local window
   - `env:<environment_id>:remote_desktop` for a remote desktop window opened through a Control Plane provider
   - `url:<normalized-local-ui-origin>` for remote Local UI targets
   - `ssh:<normalized-ssh-environment-id>` for SSH-hosted environment instances
@@ -29,8 +29,8 @@ This document describes the public Electron desktop shell that ships with each `
   - provider environments may be listed in the catalog, but only one provider Environment can be linked to the Local Environment at a time
 - Each Desktop session window also receives a Desktop-owned session context snapshot:
   - `local_environment_id`
-  - `environment_storage_scope_id`
-- Env App uses `environment_storage_scope_id` only for environment-owned persisted UI state such as File Browser history and active thread context. Intentionally global shell/UI preferences remain global.
+  - `renderer_storage_scope_id`
+- Env App uses `renderer_storage_scope_id` only for renderer-scoped persisted UI state such as File Browser history and active thread context. Intentionally global shell/UI preferences remain global.
 - `provider_id` is the canonical discovery identity from `/.well-known/redeven-provider.json` and is used for provider protocol payloads, provider catalogs, and provider bindings.
 - Desktop and standalone runtime / CLI mode also share one profile-scoped catalog:
   - `~/.redeven/catalog/local-environment.json`
@@ -232,7 +232,7 @@ Interaction rules:
   - the route menu may expose `Use locally` when the provider Environment can be linked to the Local Environment
   - local access configuration remains owned by the Local Environment settings surface
   - after linking, the same provider card can `Open Local`, `Start runtime`, `Stop runtime`, or `Open remotely`
-  - Desktop never creates a second visible card or provider-owned local runtime just because a provider Environment is used locally
+- Desktop never creates a second visible card or provider-specific local runtime just because a provider Environment is used locally
 - SSH Host mode keeps the same compact launcher shell but adds:
   - `Name`
   - `SSH Destination`, as a free-entry combobox backed by concrete Host aliases from the user's local SSH config
@@ -312,7 +312,7 @@ duplicating as a low-value fact row.
 - provider environments keep route selection explicit in the same menu, including `Open remotely`
   - remote-only provider and Redeven URL entries treat runtime control as observe-only and expose `Refresh runtime status` from the runtime menu
 - Runtime health probing uses dedicated contracts instead of route/access inference:
-  - the Local Environment, provider-local sessions, SSH forwards, and direct Redeven URLs probe `GET /api/local/runtime/health`
+  - the Local Environment, linked-local sessions, SSH forwards, and direct Redeven URLs probe `GET /api/local/runtime/health`
   - Control Plane provider environments use the RCPP batch runtime-health query endpoint
   - per-card refresh and the launcher-wide refresh button re-probe runtime health without mutating window state
 - Managed session action state is lifecycle-aware:
@@ -462,7 +462,7 @@ Desktop semantics:
 - `Local only` and `Shared on your local network` share the same fixed default port baseline.
 - The saved configuration applies to the next managed start; the currently running managed URL is displayed separately when available.
 - One Local Environment runtime may be active for the signed-in user / profile state root. Linking another provider Environment replaces the prior local provider link.
-- Provider environments never persist provider-owned local runtime configuration; Desktop derives provider-local readiness from the single Local Environment runtime and its current provider binding.
+- Provider environments never persist provider-specific local runtime configuration; Desktop derives linked-local readiness from the single Local Environment runtime and its current provider binding.
 - If Desktop attaches to a runtime that was started by standalone runtime / CLI mode, that attached runtime stays externally owned: closing the Desktop session only detaches, and restart/update stay delegated to the host process that owns that runtime.
 - Launcher runtime ownership is explicit on the environment card: externally owned runtimes surface as attachable local runtimes, while the Local Environment surfaces as the Desktop-owned local runtime.
 - Launcher Runtime Service details are stable card facts, not banners. When a runtime snapshot is available, all runtime types can show service state, runtime version, and active work counts in the existing fact grid.

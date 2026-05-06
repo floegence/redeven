@@ -15,9 +15,9 @@ import { useRedevenRpc, type AIRealtimeEvent } from '../protocol/redeven_v1';
 import { useEnvContext } from './EnvContext';
 import { fetchGatewayJSON } from '../services/gatewayApi';
 import {
-  readEnvironmentOwnedUIStorageItem,
-  removeEnvironmentOwnedUIStorageItem,
-  writeEnvironmentOwnedUIStorageItem,
+  readRendererScopedUIStorageItem,
+  removeRendererScopedUIStorageItem,
+  writeRendererScopedUIStorageItem,
 } from '../services/uiStorage';
 import { hasRWXPermissions } from './aiPermissions';
 import {
@@ -120,30 +120,30 @@ const ACTIVE_THREAD_STORAGE_KEY = 'redeven_ai_active_thread_id';
 const DRAFT_WORKING_DIR_STORAGE_KEY = 'redeven_ai_draft_working_dir';
 
 function readPersistedActiveThreadId(): string | null {
-  const v = String(readEnvironmentOwnedUIStorageItem(ACTIVE_THREAD_STORAGE_KEY) ?? '').trim();
+  const v = String(readRendererScopedUIStorageItem(ACTIVE_THREAD_STORAGE_KEY) ?? '').trim();
   return v || null;
 }
 
 function persistActiveThreadId(threadId: string): void {
-  writeEnvironmentOwnedUIStorageItem(ACTIVE_THREAD_STORAGE_KEY, threadId);
+  writeRendererScopedUIStorageItem(ACTIVE_THREAD_STORAGE_KEY, threadId);
 }
 
 function clearPersistedActiveThreadId(): void {
-  removeEnvironmentOwnedUIStorageItem(ACTIVE_THREAD_STORAGE_KEY);
+  removeRendererScopedUIStorageItem(ACTIVE_THREAD_STORAGE_KEY);
 }
 
 function readPersistedDraftWorkingDir(): string | null {
-  const v = String(readEnvironmentOwnedUIStorageItem(DRAFT_WORKING_DIR_STORAGE_KEY) ?? '').trim();
+  const v = String(readRendererScopedUIStorageItem(DRAFT_WORKING_DIR_STORAGE_KEY) ?? '').trim();
   return v || null;
 }
 
 function persistDraftWorkingDir(path: string): void {
   const v = String(path ?? '').trim();
   if (!v) {
-    removeEnvironmentOwnedUIStorageItem(DRAFT_WORKING_DIR_STORAGE_KEY);
+    removeRendererScopedUIStorageItem(DRAFT_WORKING_DIR_STORAGE_KEY);
     return;
   }
-  writeEnvironmentOwnedUIStorageItem(DRAFT_WORKING_DIR_STORAGE_KEY, v);
+  writeRendererScopedUIStorageItem(DRAFT_WORKING_DIR_STORAGE_KEY, v);
 }
 
 function normalizeThreadRunStatus(raw: string | null | undefined): ThreadRunStatus {

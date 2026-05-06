@@ -34,7 +34,7 @@ describe('bootstrapDesktopSessionContextBridge', () => {
     ipcRendererSendSync.mockReset();
     ipcRendererSendSync.mockReturnValue({
       local_environment_id: 'env_demo',
-      environment_storage_scope_id: 'env_demo',
+      renderer_storage_scope_id: 'env_demo',
     });
   });
 
@@ -46,7 +46,7 @@ describe('bootstrapDesktopSessionContextBridge', () => {
 
     expect(bridge.getSnapshot()).toEqual({
       local_environment_id: 'env_demo',
-      environment_storage_scope_id: 'env_demo',
+      renderer_storage_scope_id: 'env_demo',
     });
 
     bridge.notifyAppReady({ state: 'access_gate_interactive' });
