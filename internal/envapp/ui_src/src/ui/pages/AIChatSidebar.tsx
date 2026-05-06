@@ -1,5 +1,5 @@
-import { For, Index, Show, createEffect, createMemo, createSignal } from 'solid-js';
-import { History, Plus, Refresh, Trash, X } from '@floegence/floe-webapp-core/icons';
+import { For, Index, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
+import { Copy, History, Plus, Refresh, Trash, X } from '@floegence/floe-webapp-core/icons';
 import { FlowerSoftAuraIcon } from '../icons/FlowerSoftAuraIcon';
 import { useNotification } from '@floegence/floe-webapp-core';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
@@ -13,6 +13,8 @@ import { useAIChatContext, type ListThreadsResponse, type ThreadRunStatus, type 
 import { useEnvContext } from './EnvContext';
 import { hasRWXPermissions } from './aiPermissions';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
+import { FloatingContextMenu, type FloatingContextMenuItem } from '../widgets/FloatingContextMenu';
+import { writeTextToClipboard } from '../utils/clipboard';
 
 const THREAD_RAIL_CONTENT_CLASS = 'flex h-full min-h-0 flex-col overflow-hidden';
 const THREAD_RAIL_SECTION_CLASS = 'min-h-0 flex flex-1 flex-col overflow-hidden [&>div:last-child]:flex [&>div:last-child]:min-h-0 [&>div:last-child]:flex-1 [&>div:last-child]:flex-col [&>div:last-child]:overflow-hidden';
@@ -282,6 +284,12 @@ export function AIChatSidebar() {
   const [managerSelection, setManagerSelection] = createSignal<Record<string, true>>({});
   const [managerDeleteConfirmOpen, setManagerDeleteConfirmOpen] = createSignal(false);
   const [managerDeleting, setManagerDeleting] = createSignal(false);
+  const [threadContextMenu, setThreadContextMenu] = createSignal<{
+    x: number;
+    y: number;
+    thread: ThreadView;
+  } | null>(null);
+  let threadContextMenuEl: HTMLDivElement | null = null;
   let managerLoadVersion = 0;
 
   const openDelete = (threadId: string, title: string) => {
@@ -365,12 +373,90 @@ export function AIChatSidebar() {
     void loadManagerThreads();
   });
 
+  createEffect(() => {
+    const menu = threadContextMenu();
+    if (!menu) return;
+
+    const closeMenu = () => setThreadContextMenu(null);
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && threadContextMenuEl?.contains(target)) return;
+      closeMenu();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeMenu();
+      }
+    };
+
+    window.addEventListener('pointerdown', onPointerDown, true);
+    window.addEventListener('resize', closeMenu);
+    window.addEventListener('scroll', closeMenu, true);
+    window.addEventListener('keydown', onKeyDown);
+    onCleanup(() => {
+      window.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('resize', closeMenu);
+      window.removeEventListener('scroll', closeMenu, true);
+      window.removeEventListener('keydown', onKeyDown);
+    });
+  });
+
   const openManager = () => {
     setManagerSelection({});
     setManagerAgePreset('all');
     setManagerError('');
     setManagerOpen(true);
   };
+
+  const openThreadContextMenu = (event: MouseEvent, thread: ThreadView) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    setThreadContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      thread,
+    });
+  };
+
+  const copyThreadContextValue = async (label: string, value: string | null | undefined) => {
+    const text = String(value ?? '').trim();
+    setThreadContextMenu(null);
+    if (!text) {
+      notify.error('Copy failed', `${label} unavailable.`);
+      return;
+    }
+
+    try {
+      await writeTextToClipboard(text);
+      notify.success('Copied', `${label} copied to clipboard`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      notify.error('Copy failed', message || 'Failed to copy to clipboard.');
+    }
+  };
+
+  const buildThreadContextMenuItems = (menu: NonNullable<ReturnType<typeof threadContextMenu>>): FloatingContextMenuItem[] => [
+    {
+      id: 'copy-thread-id',
+      kind: 'action',
+      label: 'Copy thread ID',
+      icon: Copy,
+      onSelect: () => {
+        void copyThreadContextValue('Thread ID', menu.thread.thread_id);
+      },
+    },
+    {
+      id: 'copy-working-directory',
+      kind: 'action',
+      label: 'Copy working directory',
+      icon: Copy,
+      disabled: !String(menu.thread.working_dir ?? '').trim(),
+      onSelect: () => {
+        void copyThreadContextValue('Working directory', menu.thread.working_dir);
+      },
+    },
+  ];
 
   const managerStatusFor = (thread: ThreadView): ThreadRunStatus => {
     const persisted = normalizeThreadStatus(thread.run_status);
@@ -606,7 +692,11 @@ export function AIChatSidebar() {
                                       unread={ctx.isThreadUnread(threadID())}
                                       connected={protocol.status() === 'connected'}
                                       canDelete={canManageChats()}
-                                      onClick={() => ctx.selectThreadId(threadID())}
+                                      onClick={() => {
+                                        setThreadContextMenu(null);
+                                        ctx.selectThreadId(threadID());
+                                      }}
+                                      onContextMenu={(event) => openThreadContextMenu(event, thread())}
                                       onDelete={() => openDelete(threadID(), thread().title)}
                                     />
                                   );
@@ -866,6 +956,19 @@ export function AIChatSidebar() {
           <p class="text-xs text-muted-foreground">This cannot be undone.</p>
         </div>
       </ConfirmDialog>
+
+      <Show when={threadContextMenu()} keyed>
+        {(menu) => (
+          <FloatingContextMenu
+            x={menu.x}
+            y={menu.y}
+            items={buildThreadContextMenuItems(menu)}
+            menuRef={(el) => {
+              threadContextMenuEl = el;
+            }}
+          />
+        )}
+      </Show>
     </>
   );
 }
@@ -880,6 +983,7 @@ function ThreadCard(props: {
   connected: boolean;
   canDelete: boolean;
   onClick: () => void;
+  onContextMenu: (event: MouseEvent) => void;
   onDelete: () => void;
 }) {
   const status = (): ThreadRunStatus => {
@@ -904,6 +1008,7 @@ function ThreadCard(props: {
   return (
     <div
       data-thread-id={props.thread.thread_id}
+      onContextMenu={props.onContextMenu}
       class={`group relative w-full cursor-pointer rounded-lg border transition-all duration-150 ${
         props.active
           ? 'bg-sidebar-accent text-sidebar-foreground border-border/20 shadow-[0_1px_3px_rgba(0,0,0,0.06)]'

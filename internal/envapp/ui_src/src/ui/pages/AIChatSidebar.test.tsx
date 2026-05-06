@@ -17,6 +17,10 @@ const notificationMock = {
   success: vi.fn(),
 };
 
+const clipboardMock = {
+  writeTextToClipboard: vi.fn(),
+};
+
 const protocolState = {
   status: 'connected',
 };
@@ -57,12 +61,14 @@ function makeThread(overrides: Partial<ThreadView> = {}): ThreadView {
 }
 
 vi.mock('@floegence/floe-webapp-core', () => ({
+  cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
   useNotification: () => notificationMock,
 }));
 
 vi.mock('@floegence/floe-webapp-core/icons', () => {
   const Icon = () => <span />;
   return {
+    Copy: Icon,
     History: Icon,
     Plus: Icon,
     Refresh: Icon,
@@ -111,6 +117,24 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   ),
   ProcessingIndicator: (props: any) => <div data-testid="processing-indicator">{props.status}</div>,
   SegmentedControl: (props: any) => <div>{props.value}</div>,
+  SurfaceFloatingLayer: (props: any) => {
+    const { children, layerRef, position, class: className, style, ...rest } = props;
+    return (
+      <div
+        ref={layerRef}
+        class={className}
+        style={{
+          ...(style ?? {}),
+          left: `${position?.x ?? 0}px`,
+          top: `${position?.y ?? 0}px`,
+        }}
+        data-floe-local-interaction-surface="true"
+        {...rest}
+      >
+        {children}
+      </div>
+    );
+  },
   Tooltip: (props: any) => <>{props.children}</>,
 }));
 
@@ -136,6 +160,10 @@ vi.mock('../services/gatewayApi', () => ({
   prepareGatewayRequestInit: vi.fn(async () => ({})),
 }));
 
+vi.mock('../utils/clipboard', () => ({
+  writeTextToClipboard: (...args: unknown[]) => clipboardMock.writeTextToClipboard(...args),
+}));
+
 vi.mock('./EnvContext', () => ({
   useEnvContext: () => ({
     env_id: () => 'env-1',
@@ -159,6 +187,8 @@ describe('AIChatSidebar', () => {
     protocolState.status = 'connected';
     notificationMock.error.mockReset();
     notificationMock.success.mockReset();
+    clipboardMock.writeTextToClipboard.mockReset();
+    clipboardMock.writeTextToClipboard.mockResolvedValue(undefined);
     aiContextStub = {
       threads: makeThreadsResource([]),
       activeThreadId: () => null,
@@ -247,6 +277,91 @@ describe('AIChatSidebar', () => {
     deleteButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(host.textContent).toContain('Delete ');
     expect(host.textContent).toContain('"Conversation"?');
+  });
+
+  it('copies thread metadata from the thread row context menu', async () => {
+    aiContextStub.threads = makeThreadsResource([
+      makeThread({
+        thread_id: 'thread-copy',
+        working_dir: '/workspace/project',
+      }),
+    ]);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <AIChatSidebar />, host);
+
+    const threadCard = host.querySelector('[data-thread-id="thread-copy"]') as HTMLDivElement | null;
+    expect(threadCard).toBeTruthy();
+
+    threadCard?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 40,
+      clientY: 56,
+    }));
+    await Promise.resolve();
+
+    const menu = host.querySelector('[role="menu"]') as HTMLDivElement | null;
+    expect(menu).toBeTruthy();
+    expect(menu?.getAttribute('data-floe-local-interaction-surface')).toBe('true');
+
+    const copyThreadIDButton = Array.from(menu?.querySelectorAll('button') ?? []).find((button) =>
+      button.textContent?.includes('Copy thread ID')
+    ) as HTMLButtonElement | undefined;
+    expect(copyThreadIDButton).toBeTruthy();
+    copyThreadIDButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+
+    expect(clipboardMock.writeTextToClipboard).toHaveBeenNthCalledWith(1, 'thread-copy');
+    expect(notificationMock.success).toHaveBeenNthCalledWith(1, 'Copied', 'Thread ID copied to clipboard');
+
+    threadCard?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 44,
+      clientY: 60,
+    }));
+    await Promise.resolve();
+
+    const copyWorkingDirButton = Array.from(host.querySelectorAll('[role="menu"] button')).find((button) =>
+      button.textContent?.includes('Copy working directory')
+    ) as HTMLButtonElement | undefined;
+    expect(copyWorkingDirButton).toBeTruthy();
+    copyWorkingDirButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+
+    expect(clipboardMock.writeTextToClipboard).toHaveBeenNthCalledWith(2, '/workspace/project');
+    expect(notificationMock.success).toHaveBeenNthCalledWith(2, 'Copied', 'Working directory copied to clipboard');
+  });
+
+  it('disables working directory copy when the thread has no working directory', async () => {
+    aiContextStub.threads = makeThreadsResource([
+      makeThread({
+        thread_id: 'thread-no-working-dir',
+        working_dir: '',
+      }),
+    ]);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <AIChatSidebar />, host);
+
+    const threadCard = host.querySelector('[data-thread-id="thread-no-working-dir"]') as HTMLDivElement | null;
+    threadCard?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 40,
+      clientY: 56,
+    }));
+    await Promise.resolve();
+
+    const copyWorkingDirButton = Array.from(host.querySelectorAll('[role="menu"] button')).find((button) =>
+      button.textContent?.includes('Copy working directory')
+    ) as HTMLButtonElement | undefined;
+
+    expect(copyWorkingDirButton).toBeTruthy();
+    expect(copyWorkingDirButton?.disabled).toBe(true);
   });
 
   it('keeps the threads rail actions fixed while the conversation list owns scrolling', () => {
