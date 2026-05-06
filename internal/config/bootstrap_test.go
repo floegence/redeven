@@ -36,8 +36,7 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
   "local_environment_binding": {
     "local_environment_public_id": "le_existing",
     "env_public_id": "env_123",
-    "generation": 7,
-    "status": "active"
+    "generation": 7
   }
 }`))
 	}))
@@ -143,8 +142,7 @@ func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
   "local_environment_binding": {
     "local_environment_public_id": "` + payload.LocalEnvironmentPublicID + `",
     "env_public_id": "env_123",
-    "generation": 3,
-    "status": "active"
+    "generation": 3
   }
 }`))
 	}))
