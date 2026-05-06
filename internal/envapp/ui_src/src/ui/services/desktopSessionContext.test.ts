@@ -68,8 +68,8 @@ describe('desktopSessionContext', () => {
       location: { origin: window.location.origin },
       redevenDesktopSessionContext: {
         getSnapshot: () => ({
-          local_environment_id: 'env_demo',
-          renderer_storage_scope_id: 'env_demo',
+          local_environment_id: 'local',
+          renderer_storage_scope_id: 'local',
         }),
         notifyAppReady: (payload: { state: string }) => {
           readyStates.push(payload.state);
