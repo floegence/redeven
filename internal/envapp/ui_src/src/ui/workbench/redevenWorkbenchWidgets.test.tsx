@@ -149,6 +149,25 @@ async function flushWorkbenchInteraction(): Promise<void> {
   await Promise.resolve();
 }
 
+describe('redevenWorkbenchWidgets default geometry', () => {
+  it('creates workbench widgets at focus-ready sizes', () => {
+    const sizes = Object.fromEntries(
+      redevenWorkbenchWidgets.map((widget) => [widget.type, widget.defaultSize])
+    );
+
+    expect(sizes).toEqual({
+      'redeven.files': { width: 1080, height: 700 },
+      'redeven.terminal': { width: 1120, height: 680 },
+      'redeven.preview': { width: 1120, height: 720 },
+      'redeven.monitor': { width: 1040, height: 640 },
+      'redeven.codespaces': { width: 1040, height: 660 },
+      'redeven.ports': { width: 1000, height: 620 },
+      'redeven.ai': { width: 1200, height: 760 },
+      'redeven.codex': { width: 1200, height: 760 },
+    });
+  });
+});
+
 describe('redevenWorkbenchWidgets terminal behavior', () => {
   afterEach(() => {
     document.body.innerHTML = '';
