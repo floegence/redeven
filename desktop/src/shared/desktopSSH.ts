@@ -4,6 +4,7 @@ export const DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY = 'auto';
 export const DEFAULT_DESKTOP_SSH_AUTH_MODE = 'key_agent';
 export const DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL = '';
 export const DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL_LABEL = 'Public GitHub Releases';
+export const DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS = 10;
 
 export type DesktopSSHBootstrapStrategy = 'auto' | 'desktop_upload' | 'remote_install';
 export type DesktopSSHAuthMode = 'key_agent' | 'password';
@@ -15,6 +16,7 @@ export type DesktopSSHHostAccessDetails = Readonly<{
   remote_install_dir: string;
   bootstrap_strategy: DesktopSSHBootstrapStrategy;
   release_base_url: string;
+  connect_timeout_seconds?: number | null;
 }>;
 
 export type DesktopSSHEnvironmentDetails = DesktopSSHHostAccessDetails;
@@ -123,6 +125,7 @@ export function normalizeDesktopSSHHostAccessDetails(
     remote_install_dir: unknown;
     bootstrap_strategy: unknown;
     release_base_url: unknown;
+    connect_timeout_seconds?: unknown;
   }>,
 ): DesktopSSHHostAccessDetails {
   return {
@@ -132,7 +135,23 @@ export function normalizeDesktopSSHHostAccessDetails(
     remote_install_dir: normalizeDesktopSSHRemoteInstallDir(value.remote_install_dir),
     bootstrap_strategy: normalizeDesktopSSHBootstrapStrategy(value.bootstrap_strategy),
     release_base_url: normalizeDesktopSSHReleaseBaseURL(value.release_base_url),
+    connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds(value.connect_timeout_seconds),
   };
+}
+
+export function normalizeDesktopSSHConnectTimeoutSeconds(value: unknown): number | null {
+  if (value === null || value === undefined) {
+    return DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS;
+  }
+  const text = String(value).trim();
+  if (text === '') {
+    return DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS;
+  }
+  const num = Number(text);
+  if (!Number.isFinite(num) || num < 1) {
+    throw new Error('SSH connect timeout must be a number of at least 1 second.');
+  }
+  return num;
 }
 
 export function normalizeDesktopSSHEnvironmentDetails(
@@ -143,6 +162,7 @@ export function normalizeDesktopSSHEnvironmentDetails(
     remote_install_dir: unknown;
     bootstrap_strategy: unknown;
     release_base_url: unknown;
+    connect_timeout_seconds?: unknown;
   }>,
 ): DesktopSSHEnvironmentDetails {
   return normalizeDesktopSSHHostAccessDetails(value);
