@@ -3461,18 +3461,34 @@ function EnvironmentPrimaryActionPanel(props: Readonly<{
       <Show when={props.overlay.actions.length > 0}>
         <div class="redeven-action-popover__actions">
           <For each={props.overlay.actions}>
-            {(item) => (
-              <Button
-                size="sm"
-                variant={item.emphasis === 'primary' ? 'default' : 'outline'}
-                class="w-full justify-center"
-                loading={isEnvironmentActionBusy(item.action, props.busyState, props.environmentID)}
-                disabled={panelBusy() && !isEnvironmentActionBusy(item.action, props.busyState, props.environmentID)}
-                onClick={() => props.onRunAction(item.action)}
-              >
-                {item.label}
-              </Button>
-            )}
+            {(item) => {
+              const loading = () => isEnvironmentActionBusy(item.action, props.busyState, props.environmentID);
+              return (
+                <div class="relative rounded-md" classList={{ 'redeven-loading-glow': loading() }}>
+                  <Button
+                    size="sm"
+                    variant={item.emphasis === 'primary' ? 'default' : 'outline'}
+                    class="w-full justify-center"
+                    loading={loading()}
+                    disabled={panelBusy() && !loading()}
+                    onClick={() => props.onRunAction(item.action)}
+                  >
+                    {item.label}
+                  </Button>
+                  <Presence>
+                    <Show when={loading()}>
+                      <Motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.25 }}
+                        class="redeven-loading-shimmer-overlay"
+                      />
+                    </Show>
+                  </Presence>
+                </div>
+              );
+            }}
           </For>
         </div>
       </Show>
@@ -3611,7 +3627,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
   );
 
   return (
-    <div ref={rootRef} class="redeven-split-action flex-1">
+    <div ref={rootRef} class={cn('redeven-split-action flex-1', props.loading && 'redeven-loading-glow')}>
       <div class="redeven-split-action-primary">
         <Show when={primaryActionOverlay()} fallback={primaryButton}>
           <Show
@@ -3690,6 +3706,17 @@ function EnvironmentSplitActionButton(props: Readonly<{
             )}
           </Show>
         </Show>
+        <Presence>
+          <Show when={props.loading}>
+            <Motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              class="redeven-loading-shimmer-overlay"
+            />
+          </Show>
+        </Presence>
       </div>
       <Show when={hasMenuActions()}>
         <button
