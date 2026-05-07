@@ -201,6 +201,7 @@ describe('desktopLauncherIPC', () => {
       remote_install_dir: '/opt/redeven',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example.invalid/releases/',
+      connect_timeout_seconds: 10,
     });
   });
 
