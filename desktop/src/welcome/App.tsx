@@ -74,6 +74,7 @@ import {
 import {
   formatRuntimeServiceWorkload,
   runtimeServiceHasActiveWork,
+  runtimeServiceIsOpenable,
   type RuntimeServiceSnapshot,
 } from '../shared/runtimeService';
 import {
@@ -265,6 +266,11 @@ type EnvironmentGuidanceActionResolution = Readonly<{
 
 const LOGO_LIGHT_URL = new URL('../../../internal/envapp/ui_src/public/logo.svg', import.meta.url).href;
 const LOGO_DARK_URL = new URL('../../../internal/envapp/ui_src/public/logo-dark.svg', import.meta.url).href;
+
+type EnvironmentFailureState = Readonly<{
+  message: string;
+  tone: 'error' | 'warning';
+}>;
 
 const DESKTOP_FLOE_STORAGE_NAMESPACE = 'redeven-desktop-shell';
 const DESKTOP_FLOE_THEME_STORAGE_KEY = 'theme';
@@ -717,6 +723,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [librarySourceFilter, setLibrarySourceFilter] = createSignal('');
   const [libraryQuery, setLibraryQuery] = createSignal('');
   const [activeCenterTab, setActiveCenterTab] = createSignal<EnvironmentCenterTab>('environments');
+  const [environmentFailures, setEnvironmentFailures] = createSignal<ReadonlyMap<string, EnvironmentFailureState>>(new Map());
   const actionToastTimers = new Map<number, number>();
   let nextActionToastID = 0;
   let settingsErrorRef: HTMLElement | undefined;
@@ -822,7 +829,26 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   const unsubscribeSnapshot = props.runtime.launcher.subscribeSnapshot((nextSnapshot) => {
-    setSnapshot((current) => nextDesktopWelcomeSnapshot(current, nextSnapshot));
+    setSnapshot((current) => {
+      const next = nextDesktopWelcomeSnapshot(current, nextSnapshot);
+      setEnvironmentFailures((failures) => {
+        if (failures.size === 0) {
+          return failures;
+        }
+        const nextFailures = new Map(failures);
+        for (const env of next.environments) {
+          if (
+            nextFailures.has(env.id)
+            && env.runtime_health.status === 'online'
+            && runtimeServiceIsOpenable(environmentRuntimeServiceSnapshot(env))
+          ) {
+            nextFailures.delete(env.id);
+          }
+        }
+        return nextFailures.size !== failures.size ? nextFailures : failures;
+      });
+      return next;
+    });
   });
   onCleanup(unsubscribeSnapshot);
   const unsubscribeActionProgress = props.runtime.launcher.subscribeActionProgress?.((progress) => {
@@ -994,6 +1020,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function handleLauncherActionFailure(
     failure: Extract<DesktopLauncherActionResult, Readonly<{ ok: false }>>,
     errorTarget: 'connect' | 'settings' | 'dialog' | 'control_plane_dialog',
+    requestEnvID?: string,
   ): Promise<void> {
     const presentation = launcherActionFailurePresentation(failure);
     if (presentation.refresh_snapshot) {
@@ -1014,6 +1041,15 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         action: presentation.action,
         autoDismiss: presentation.auto_dismiss,
       });
+      const environmentID = requestEnvID || failure.environment_id?.trim();
+      if (environmentID && (presentation.tone === 'error' || presentation.tone === 'warning')) {
+        const tone: 'error' | 'warning' = presentation.tone;
+        setEnvironmentFailures((current) => {
+          const next = new Map(current);
+          next.set(environmentID, { message: presentation.message, tone });
+          return next;
+        });
+      }
     }
   }
 
@@ -1300,7 +1336,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     try {
       const result = await props.runtime.launcher.performAction(request);
       if (isDesktopLauncherActionFailure(result)) {
-        await handleLauncherActionFailure(result, errorTarget);
+        const requestEnvID = (request as { environment_id?: string }).environment_id?.trim();
+        await handleLauncherActionFailure(result, errorTarget, requestEnvID || undefined);
         return null;
       }
       if (isDesktopLauncherActionSuccess(result)) {
@@ -1655,7 +1692,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     route: 'auto' | DesktopLocalEnvironmentStateRoute = 'auto',
   ): Promise<boolean> {
     if (environment.window_state === 'closed' && environment.runtime_health.status !== 'online') {
-      setErrorMessage(errorTarget, runtimeUnavailableMessage(environment));
+      const message = runtimeUnavailableMessage(environment);
+      setErrorMessage(errorTarget, message);
+      setEnvironmentFailures((current) => {
+        const next = new Map(current);
+        next.set(environment.id, { message, tone: 'warning' });
+        return next;
+      });
       return false;
     }
     if (environment.kind === 'local_environment') {
@@ -1788,6 +1831,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       }
       const result = await performLauncherActionSilently(request);
       if (!result.ok) {
+        setEnvironmentFailures((current) => {
+          const next = new Map(current);
+          next.set(environment.id, { message: result.message, tone: 'error' });
+          return next;
+        });
         return {
           close_panel: false,
           next_session: failEnvironmentGuidanceIntent(currentSession, result.message),
@@ -2435,6 +2483,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           reconnectControlPlane={reconnectControlPlane}
           refreshControlPlane={refreshControlPlane}
           deleteControlPlane={setDeleteControlPlaneTarget}
+          environmentFailures={environmentFailures()}
+          dismissEnvironmentFailure={(environmentID: string) => {
+            setEnvironmentFailures((current) => {
+              const next = new Map(current);
+              next.delete(environmentID);
+              return next;
+            });
+          }}
         />
       </DesktopLauncherShell>
 
@@ -2602,7 +2658,28 @@ function DesktopActionToastViewport(props: Readonly<{
         <div class="redeven-desktop-toast-viewport" aria-live="polite" aria-atomic="true">
           <Presence>
             <For each={props.toasts}>
-              {(toast) => (
+              {(toast) => {
+                const [copied, setCopied] = createSignal(false);
+                const toastCopyText = createMemo(() => {
+                  const title = toast.title ?? (toast.tone === 'success'
+                    ? 'Updated'
+                    : toast.tone === 'info'
+                      ? 'Notice'
+                      : toast.tone === 'warning'
+                        ? 'Needs Attention'
+                        : 'Could Not Complete');
+                  return `${title}: ${toast.message}`;
+                });
+                let copyResetHandle: number | undefined;
+                const handleCopy = () => {
+                  void copyToClipboard(toastCopyText()).then(() => {
+                    setCopied(true);
+                    window.clearTimeout(copyResetHandle);
+                    copyResetHandle = window.setTimeout(() => setCopied(false), 1800);
+                  });
+                };
+                onCleanup(() => window.clearTimeout(copyResetHandle));
+                return (
                 <Motion.div
                   initial={{ opacity: 0, x: 24 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -2640,6 +2717,17 @@ function DesktopActionToastViewport(props: Readonly<{
                     </div>
                     <button
                       type="button"
+                      class="redeven-desktop-toast__copy"
+                      aria-label="Copy message"
+                      title="Copy message"
+                      onClick={handleCopy}
+                    >
+                      <Show when={!copied()} fallback={<Check class="h-3 w-3" />}>
+                        <Copy class="h-3 w-3" />
+                      </Show>
+                    </button>
+                    <button
+                      type="button"
                       class="redeven-desktop-toast__dismiss"
                       onClick={() => props.dismissToast(toast.id)}
                     >
@@ -2647,7 +2735,8 @@ function DesktopActionToastViewport(props: Readonly<{
                     </button>
                   </div>
                 </Motion.div>
-              )}
+                );
+              }}
             </For>
           </Presence>
         </div>
@@ -2710,6 +2799,8 @@ function ConnectEnvironmentSurface(props: Readonly<{
   reconnectControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   deleteControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
+  environmentFailures: ReadonlyMap<string, EnvironmentFailureState>;
+  dismissEnvironmentFailure: (environmentID: string) => void;
 }>) {
   const visibleEnvironmentCount = createMemo(() => (
     environmentLibraryCount(
@@ -2979,6 +3070,8 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 saveEnvironment={props.saveEnvironmentFromLibrary}
                 editEnvironment={props.editEnvironment}
                 deleteEnvironment={props.deleteEnvironment}
+                environmentFailures={props.environmentFailures}
+                dismissEnvironmentFailure={props.dismissEnvironmentFailure}
               />
             </Show>
           </div>
@@ -3019,6 +3112,8 @@ function EnvironmentCardsPanel(props: Readonly<{
   saveEnvironment: (environment: DesktopEnvironmentEntry) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
+  environmentFailures: ReadonlyMap<string, EnvironmentFailureState>;
+  dismissEnvironmentFailure: (environmentID: string) => void;
 }>) {
   const [environmentLibraryElement, setEnvironmentLibraryElement] = createSignal<HTMLDivElement>();
   const [environmentLibraryWidthPx, setEnvironmentLibraryWidthPx] = createSignal(0);
@@ -3189,6 +3284,8 @@ function EnvironmentCardsPanel(props: Readonly<{
                     editEnvironment={props.editEnvironment}
                     deleteEnvironment={props.deleteEnvironment}
                     setGuidanceSession={(nextSession) => setGuidanceSessionState(nextSession)}
+                    environmentFailure={props.environmentFailures.get(environmentID) ?? null}
+                    dismissEnvironmentFailure={() => props.dismissEnvironmentFailure(environmentID)}
                   />
                 )}
               </For>
@@ -3219,6 +3316,8 @@ function EnvironmentCardsPanel(props: Readonly<{
                     editEnvironment={props.editEnvironment}
                     deleteEnvironment={props.deleteEnvironment}
                     setGuidanceSession={(nextSession) => setGuidanceSessionState(nextSession)}
+                    environmentFailure={props.environmentFailures.get(environmentID) ?? null}
+                    dismissEnvironmentFailure={() => props.dismissEnvironmentFailure(environmentID)}
                   />
                 )}
               </For>
@@ -3982,6 +4081,8 @@ function EnvironmentConnectionCard(props: Readonly<{
   saveEnvironment: (environment: DesktopEnvironmentEntry) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
+  environmentFailure: EnvironmentFailureState | null;
+  dismissEnvironmentFailure: () => void;
 }>) {
   const card = createMemo(() => buildEnvironmentCardModel(props.environment));
   const facts = createMemo(() => buildEnvironmentCardFactsModel(props.environment));
@@ -4023,6 +4124,9 @@ function EnvironmentConnectionCard(props: Readonly<{
       isCardOpen()
         ? 'redeven-environment-card--open'
         : 'border-border',
+      props.environmentFailure && 'redeven-environment-card--failure',
+      props.environmentFailure?.tone === 'error' && 'redeven-environment-card--failure-error',
+      props.environmentFailure?.tone === 'warning' && 'redeven-environment-card--failure-warning',
     )}>
       <CardHeader class="px-3.5 pb-2 pt-3.5">
         <div class="flex items-start justify-between gap-2">
@@ -4034,6 +4138,23 @@ function EnvironmentConnectionCard(props: Readonly<{
               <EnvironmentStatusIndicator tone={card().status_tone}>
                 {card().status_label}
               </EnvironmentStatusIndicator>
+              <Show when={props.environmentFailure}>
+                {(failure) => (
+                  <span
+                    class="redeven-environment-card__failure-badge"
+                    data-tone={failure().tone}
+                    onClick={props.dismissEnvironmentFailure}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Dismiss startup failure: ${failure().message}`}
+                  >
+                    <span class="redeven-environment-card__failure-badge-icon" aria-hidden="true">!</span>
+                    <span class="redeven-environment-card__failure-tooltip">
+                      {failure().message}
+                    </span>
+                  </span>
+                )}
+              </Show>
             </div>
             <CardTitle class="truncate text-sm font-semibold" title={props.environment.label}>
               {props.environment.label}
