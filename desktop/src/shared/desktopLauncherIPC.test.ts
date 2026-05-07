@@ -141,6 +141,7 @@ describe('desktopLauncherIPC', () => {
       remote_install_dir: '/opt/redeven',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example.invalid/releases/',
+      connect_timeout_seconds: 10,
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'upsert_saved_ssh_environment',
@@ -162,6 +163,7 @@ describe('desktopLauncherIPC', () => {
       remote_install_dir: '',
       bootstrap_strategy: '',
       release_base_url: '',
+      connect_timeout_seconds: 10,
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'delete_saved_ssh_environment',
