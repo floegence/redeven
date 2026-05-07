@@ -1,4 +1,4 @@
-import { For, Index, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
+import { For, Index, Show, batch, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
 import { Copy, Folder, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
@@ -326,6 +326,19 @@ type terminal_touch_scroll_target = {
   isAlternateScreen?: () => boolean;
   input?: (data: string, wasUserInput?: boolean) => void;
 };
+
+function waitForOptimisticTerminalTabPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    const resolveAfterPaint = () => {
+      globalThis.setTimeout(resolve, 0);
+    };
+    if (typeof globalThis.requestAnimationFrame === 'function') {
+      globalThis.requestAnimationFrame(resolveAfterPaint);
+      return;
+    }
+    resolveAfterPaint();
+  });
+}
 
 type terminal_selection_snapshot = {
   sessionId: string;
@@ -1352,6 +1365,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const transport = createRedevenTerminalTransport(rpc, connId);
   const eventSource = createRedevenTerminalEventSource(rpc);
   const sessionsCoordinator = getRedevenTerminalSessionsCoordinator({ connId, transport, logger: buildLogger() });
+  let disposed = false;
+  onCleanup(() => {
+    disposed = true;
+  });
 
   const connected = () => Boolean(protocol.client());
   const viewActive = () => view.active();
@@ -2406,8 +2423,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       visibleSessionIdsAtCreate: sessions().map((session) => session.id),
       status: 'creating',
     };
-    setPendingTerminalSessions((previous) => [...previous, pendingSession]);
-    setLocalActivePendingSessionId(pendingSession.id);
+    batch(() => {
+      setPendingTerminalSessions((previous) => [...previous, pendingSession]);
+      setLocalActivePendingSessionId(pendingSession.id);
+    });
     return pendingSession;
   };
 
@@ -2462,6 +2481,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const beginCreateSession = async (name: string | undefined, workingDir: string): Promise<string | null> => {
     const pendingSession = createPendingSession(name, workingDir);
+    // Let the optimistic tab reach the screen before starting the heavier RPC/state reconciliation path.
+    await waitForOptimisticTerminalTabPaint();
+    if (disposed || !pendingTerminalSessionById(pendingSession.id)) return null;
     try {
       const sessionId = await createPanelSession(name, pendingSession.workingDir);
       if (!sessionId) throw new Error('Invalid create response');
@@ -2485,7 +2507,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const createSession = async () => {
     if (!connected()) return;
     setError(null);
-    const nextIndex = sessions().length + visiblePendingTerminalSessions().length + 1;
+    const nextIndex = sessions().length + pendingTerminalSessions().length + 1;
     void beginCreateSession(`Terminal ${nextIndex}`, agentHomePathAbs() || '');
   };
 
@@ -2511,7 +2533,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     void (async () => {
       setError(null);
       try {
-        const nextIndex = sessions().length + visiblePendingTerminalSessions().length + 1;
+        const nextIndex = sessions().length + pendingTerminalSessions().length + 1;
         await beginCreateSession(
           resolveRequestedSessionName(request?.preferredName, workingDir, nextIndex),
           workingDir,
