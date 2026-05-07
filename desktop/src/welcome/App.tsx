@@ -2119,6 +2119,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (state?.connection_kind === 'ssh_environment' && !trimString(state.ssh_destination)) {
       errors.ssh_destination = 'SSH Destination is required.';
     }
+    if (state?.connection_kind === 'ssh_environment' && trimString(state.ssh_port) !== '') {
+      const port = Number.parseInt(state.ssh_port, 10);
+      if (!Number.isFinite(port) || port < 1 || port > 65535) {
+        errors.ssh_port = 'Port must be 1–65535.';
+      }
+    }
     return errors;
   }
 
@@ -4815,7 +4821,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                               inputMode="numeric"
                               disabled={accessModel().port_mode === 'auto'}
                               size="sm"
-                              class="w-full font-mono"
+                              class="w-full"
                               aria-label="Port"
                               placeholder="23998"
                               onInput={(event) => props.applyAccessFixedPort(event.currentTarget.value)}
@@ -5005,7 +5011,7 @@ function SSHDestinationCombobox(props: Readonly<{
         }}
         placeholder="user@host or ssh-config-alias"
         size="sm"
-        class={cn('w-full font-mono', props.class)}
+        class={cn('w-full', props.class)}
         spellcheck={false}
         autofocus={props.autofocus}
         role="combobox"
@@ -5018,6 +5024,13 @@ function SSHDestinationCombobox(props: Readonly<{
           id="environment-ssh-destination-options"
           class="absolute left-0 right-0 z-50 mt-1 max-h-56 overflow-auto rounded-md border border-border bg-popover p-1 shadow-xl"
           role="listbox"
+          onWheel={(event) => {
+            const el = event.currentTarget as HTMLElement;
+            event.stopPropagation();
+            if (el.scrollHeight > el.clientHeight) {
+              el.scrollTop += event.deltaY;
+            }
+          }}
         >
           <For each={filteredHosts()}>
             {(host, index) => (
@@ -5234,7 +5247,7 @@ function ConnectionDialog(props: Readonly<{
               }}
               placeholder="http://192.168.1.11:24000/"
               size="sm"
-              class={cn('w-full font-mono', props.fieldErrors.external_local_ui_url && 'border-destructive ring-1 ring-destructive/20')}
+              class={cn('w-full', props.fieldErrors.external_local_ui_url && 'border-destructive ring-1 ring-destructive/20')}
               spellcheck={false}
               autofocus={props.state?.mode === 'create'}
             />
@@ -5278,33 +5291,19 @@ function ConnectionDialog(props: Readonly<{
                   <Input
                     id="environment-ssh-port"
                     value={props.state?.connection_kind === 'ssh_environment' ? props.state.ssh_port : ''}
-                    onInput={(event) => props.updateField('ssh_port', event.currentTarget.value)}
+                    onInput={(event) => {
+                      const raw = event.currentTarget.value.replace(/\D/g, '');
+                      props.updateField('ssh_port', raw);
+                      props.clearFieldErrors();
+                    }}
                     placeholder="22"
                     inputMode="numeric"
                     size="sm"
-                    class="w-full font-mono"
+                    class={cn('w-full', props.fieldErrors.ssh_port && 'border-destructive ring-1 ring-destructive/20')}
                   />
-                </div>
-              </div>
-              <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_9rem]">
-                <div class="space-y-1.5">
-                  <label class="block text-xs font-medium text-foreground">Bootstrap Delivery</label>
-                  <SegmentedControl
-                    value={sshBootstrapStrategy()}
-                    onChange={(value) => props.switchBootstrapStrategy(value as DesktopSSHBootstrapStrategy)}
-                    options={[
-                      { value: 'auto', label: 'Automatic' },
-                      { value: 'desktop_upload', label: 'Desktop Upload' },
-                      { value: 'remote_install', label: 'Remote Install' },
-                    ]}
-                    size="sm"
-                  />
-                </div>
-                <div class="space-y-1.5">
-                  <label class="block text-xs font-medium text-foreground">Source</label>
-                  <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                    {sshBootstrapSummaryLabel()}
-                  </Tag>
+                  <Show when={props.fieldErrors.ssh_port}>
+                    <div class="text-[11px] text-destructive">{props.fieldErrors.ssh_port}</div>
+                  </Show>
                 </div>
               </div>
               <div class="space-y-1.5">
@@ -5331,7 +5330,7 @@ function ConnectionDialog(props: Readonly<{
                   <div>
                     <div class="text-xs font-medium text-foreground">Advanced</div>
                     <div class="mt-1 text-[11px] text-muted-foreground">
-                      Configure the remote install location and release mirror used by this SSH host.
+                      Bootstrap delivery, remote install path, and release mirror for this SSH host.
                     </div>
                   </div>
                   <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
@@ -5342,6 +5341,23 @@ function ConnectionDialog(props: Readonly<{
                   <div class="border-t border-border/70 px-3 py-3">
                     <div class="space-y-3">
                       <div class="space-y-1.5">
+                        <label class="block text-xs font-medium text-foreground">Bootstrap Delivery</label>
+                        <SegmentedControl
+                          value={sshBootstrapStrategy()}
+                          onChange={(value) => props.switchBootstrapStrategy(value as DesktopSSHBootstrapStrategy)}
+                          options={[
+                            { value: 'auto', label: 'Automatic' },
+                            { value: 'desktop_upload', label: 'Desktop Upload' },
+                            { value: 'remote_install', label: 'Remote Install' },
+                          ]}
+                          size="sm"
+                        />
+                        <div class="text-[11px] text-muted-foreground">
+                          How Desktop places the runtime on this SSH host.{' '}
+                          <span class="font-medium text-foreground">Source: {sshBootstrapSummaryLabel()}</span>
+                        </div>
+                      </div>
+                      <div class="space-y-1.5">
                         <label for="environment-ssh-install-dir" class="block text-xs font-medium text-foreground">Remote Install Directory</label>
                         <Input
                           id="environment-ssh-install-dir"
@@ -5349,7 +5365,7 @@ function ConnectionDialog(props: Readonly<{
                           onInput={(event) => props.updateField('remote_install_dir', event.currentTarget.value)}
                           placeholder="/opt/redeven-desktop/runtime"
                           size="sm"
-                          class="w-full font-mono"
+                          class="w-full"
                           spellcheck={false}
                         />
                         <div class="text-[11px] text-muted-foreground">
@@ -5364,7 +5380,7 @@ function ConnectionDialog(props: Readonly<{
                           onInput={(event) => props.updateField('release_base_url', event.currentTarget.value)}
                           placeholder="https://github.com/floegence/redeven/releases"
                           size="sm"
-                          class="w-full font-mono"
+                          class="w-full"
                           spellcheck={false}
                         />
                         <div class="text-[11px] text-muted-foreground">
@@ -5444,7 +5460,7 @@ function ControlPlaneDialog(props: Readonly<{
             onInput={(event) => props.updateField('provider_origin', event.currentTarget.value)}
             placeholder="https://region.example.invalid"
             size="sm"
-            class="w-full font-mono"
+            class="w-full"
             spellcheck={false}
             autofocus
           />
