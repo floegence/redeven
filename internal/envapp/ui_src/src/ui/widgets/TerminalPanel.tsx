@@ -1,4 +1,4 @@
-import { Index, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
+import { For, Index, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
 import { Copy, Folder, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
@@ -91,16 +91,16 @@ const TERMINAL_HISTORY_REPLAY_MAX_BYTES = 512 * 1024;
 const TERMINAL_HISTORY_REPLAY_MODE_MS = 120_000;
 const TERMINAL_HISTORY_REPLAY_MAX_PAGES = 4096;
 const TERMINAL_WORK_INDICATOR_BASE_THICKNESS_PX = 3.5;
-const TERMINAL_WORK_INDICATOR_SCREEN_THICKNESS_PX = 3.5;
-const TERMINAL_WORK_INDICATOR_MAX_THICKNESS_PX = 38;
 
 export type TerminalPanelSessionGroupState = Readonly<{
   sessionIds: string[];
   activeSessionId: string | null;
 }>;
 
+export type TerminalPanelSessionCreateResult = TerminalSessionInfo | string | null;
+
 export type TerminalPanelSessionOperations = Readonly<{
-  createSession: (name: string | undefined, workingDir: string) => Promise<string | null>;
+  createSession: (name: string | undefined, workingDir: string) => Promise<TerminalPanelSessionCreateResult>;
   deleteSession: (sessionId: string) => Promise<void>;
 }>;
 
@@ -124,7 +124,6 @@ export interface TerminalPanelProps {
   terminalGeometryPreferences?: TerminalPanelGeometryPreferences;
   workbenchSelected?: boolean;
   workbenchActivationSeq?: number;
-  workbenchPresentationScale?: number;
   onWorkbenchTerminalCoreChange?: (sessionId: string, core: TerminalCore | null) => void;
   onWorkbenchTerminalSurfaceChange?: (sessionId: string, surface: HTMLDivElement | null) => void;
   onTitleChange?: (title: string) => void;
@@ -316,6 +315,11 @@ type resolved_pending_terminal_session = {
   session: TerminalSessionInfo;
 };
 
+type terminal_panel_created_session = {
+  sessionId: string;
+  session: TerminalSessionInfo | null;
+};
+
 type terminal_touch_scroll_target = {
   scrollLines?: (amount: number) => void;
   getScrollbackLength?: () => number;
@@ -393,6 +397,108 @@ function buildPendingTerminalPanelTitle(session: pending_terminal_session | null
     return `Terminal · ${sessionName}`;
   }
   return 'Terminal';
+}
+
+function normalizeTerminalSessionTimestamp(value: unknown): number {
+  const timestamp = Number(value ?? 0);
+  return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : 0;
+}
+
+function normalizeTerminalSessionInfo(value: TerminalSessionInfo): TerminalSessionInfo | null {
+  const id = String(value?.id ?? '').trim();
+  if (!id) return null;
+  return {
+    id,
+    name: String(value?.name ?? '').trim(),
+    workingDir: normalizeAskFlowerAbsolutePath(String(value?.workingDir ?? '').trim()),
+    createdAtMs: normalizeTerminalSessionTimestamp(value?.createdAtMs),
+    lastActiveAtMs: normalizeTerminalSessionTimestamp(value?.lastActiveAtMs),
+    isActive: Boolean(value?.isActive),
+  };
+}
+
+function sameTerminalSessionInfo(a: TerminalSessionInfo | null | undefined, b: TerminalSessionInfo | null | undefined): boolean {
+  return Boolean(
+    a
+    && b
+    && a.id === b.id
+    && a.name === b.name
+    && a.workingDir === b.workingDir
+    && a.createdAtMs === b.createdAtMs
+    && a.lastActiveAtMs === b.lastActiveAtMs
+    && a.isActive === b.isActive,
+  );
+}
+
+function preserveStableTerminalSessionReferences(
+  nextSessions: readonly TerminalSessionInfo[],
+  previousSessions: readonly TerminalSessionInfo[] = [],
+): TerminalSessionInfo[] {
+  if (nextSessions.length === 0) {
+    return previousSessions.length === 0 ? previousSessions as TerminalSessionInfo[] : [];
+  }
+
+  const previousById = new Map(previousSessions.map((session) => [session.id, session]));
+  let changed = nextSessions.length !== previousSessions.length;
+  const stableSessions = nextSessions.map((session, index) => {
+    const previous = previousById.get(session.id);
+    if (previous && sameTerminalSessionInfo(previous, session)) {
+      if (previousSessions[index] !== previous) {
+        changed = true;
+      }
+      return previous;
+    }
+    changed = true;
+    return session;
+  });
+
+  return changed ? stableSessions : previousSessions as TerminalSessionInfo[];
+}
+
+function normalizeTerminalPanelSessionCreateResult(
+  value: TerminalPanelSessionCreateResult,
+): terminal_panel_created_session | null {
+  if (typeof value === 'string') {
+    const sessionId = String(value ?? '').trim();
+    return sessionId ? { sessionId, session: null } : null;
+  }
+
+  if (!value) {
+    return null;
+  }
+
+  const session = normalizeTerminalSessionInfo(value);
+  return session ? { sessionId: session.id, session } : null;
+}
+
+function mergeTerminalSessionLists(
+  baseSessions: readonly TerminalSessionInfo[],
+  optimisticSessions: readonly TerminalSessionInfo[],
+  closingSessionIds: ReadonlySet<string>,
+): TerminalSessionInfo[] {
+  const merged: TerminalSessionInfo[] = [];
+  const indexesById = new Map<string, number>();
+
+  for (const session of baseSessions) {
+    const normalized = normalizeTerminalSessionInfo(session);
+    if (!normalized || closingSessionIds.has(normalized.id)) continue;
+    indexesById.set(normalized.id, merged.length);
+    merged.push(normalized);
+  }
+
+  for (const session of optimisticSessions) {
+    const normalized = normalizeTerminalSessionInfo(session);
+    if (!normalized || closingSessionIds.has(normalized.id)) continue;
+    const existingIndex = indexesById.get(normalized.id);
+    if (typeof existingIndex === 'number') {
+      merged[existingIndex] = normalized;
+      continue;
+    }
+    indexesById.set(normalized.id, merged.length);
+    merged.push(normalized);
+  }
+
+  return merged;
 }
 
 function normalizeTerminalSessionMatchName(value: string | undefined): string {
@@ -567,7 +673,8 @@ const MoreVerticalIcon = (props: { class?: string }) => (
 );
 
 function TerminalSessionView(props: terminal_session_view_props) {
-  const sessionId = () => props.session.id;
+  const stableSessionId = props.session.id;
+  const sessionId = () => stableSessionId;
   const colors = () => props.themeColors();
   const fontSize = () => props.fontSize();
   const fontFamily = () => props.fontFamily();
@@ -1416,6 +1523,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
 
   const [allSessions, setAllSessions] = createSignal<TerminalSessionInfo[]>([]);
+  const [optimisticTerminalSessions, setOptimisticTerminalSessions] = createSignal<TerminalSessionInfo[]>([]);
+  const [optimisticClosingSessionIds, setOptimisticClosingSessionIds] = createSignal<Set<string>>(new Set());
   const [pendingTerminalSessions, setPendingTerminalSessions] = createSignal<pending_terminal_session[]>([]);
   const [sessionsLoading, setSessionsLoading] = createSignal(false);
   const [localActiveSessionId, setLocalActiveSessionId] = createSignal<string | null>(readActiveSessionId(activeSessionStorageKey));
@@ -1477,6 +1586,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [surfaceRegistrySeq, setSurfaceRegistrySeq] = createSignal(0);
   let mobileKeyboardInsetSyncRaf: number | null = null;
 
+  const visibleAllSessions = createMemo<TerminalSessionInfo[]>((previous) => (
+    preserveStableTerminalSessionReferences(
+      mergeTerminalSessionLists(allSessions(), optimisticTerminalSessions(), optimisticClosingSessionIds()),
+      previous,
+    )
+  ), []);
+
   const buildRegisteredTerminalAppearance = (): TerminalAppearance => ({
     theme: terminalThemeColors(),
     fontSize: fontSize(),
@@ -1508,7 +1624,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const sessions = createMemo<TerminalSessionInfo[]>(() => {
-    const list = allSessions();
+    const list = visibleAllSessions();
     const group = sessionGroupState();
     if (!group) {
       return list;
@@ -1723,15 +1839,33 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   let prevSessionsSnapshot: TerminalSessionInfo[] = [];
   const handleSessionsSnapshot = (next: TerminalSessionInfo[]) => {
     const prev = prevSessionsSnapshot;
-    prevSessionsSnapshot = next;
+    const nextSessionIds = new Set(next.map((session) => String(session.id ?? '').trim()).filter(Boolean));
+    const visibleNext = mergeTerminalSessionLists(next, optimisticTerminalSessions(), optimisticClosingSessionIds());
+    prevSessionsSnapshot = visibleNext;
 
     setAllSessions(next);
+    setOptimisticTerminalSessions((previous) => {
+      const filtered = previous.filter((session) => !nextSessionIds.has(session.id));
+      return filtered.length === previous.length ? previous : filtered;
+    });
+    setOptimisticClosingSessionIds((previous) => {
+      let changed = false;
+      const filtered = new Set<string>();
+      for (const sessionId of previous) {
+        if (nextSessionIds.has(sessionId)) {
+          filtered.add(sessionId);
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? filtered : previous;
+    });
 
     const group = sessionGroupState();
     if (group && props.onSessionGroupStateChange) {
-      const nextVisibleIds = group.sessionIds.filter((sessionId) => next.some((session) => session.id === sessionId));
+      const nextVisibleIds = group.sessionIds.filter((sessionId) => visibleNext.some((session) => session.id === sessionId));
       const visibleSessions = nextVisibleIds
-        .map((sessionId) => next.find((session) => session.id === sessionId) ?? null)
+        .map((sessionId) => visibleNext.find((session) => session.id === sessionId) ?? null)
         .filter((session): session is TerminalSessionInfo => session !== null);
       const preferredActiveSessionId = group.activeSessionId && nextVisibleIds.includes(group.activeSessionId)
         ? group.activeSessionId
@@ -1751,7 +1885,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (currentActive && pendingTerminalSessionById(currentActive)) {
       return;
     }
-    if (currentActive && next.some((session) => session.id === currentActive)) {
+    if (currentActive && visibleNext.some((session) => session.id === currentActive)) {
       return;
     }
 
@@ -1759,12 +1893,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (currentActive) {
       const prevIdx = prev.findIndex((session) => session.id === currentActive);
       if (prevIdx >= 0) {
-        nextActive = next[prevIdx]?.id ?? next[prevIdx - 1]?.id ?? null;
+        nextActive = visibleNext[prevIdx]?.id ?? visibleNext[prevIdx - 1]?.id ?? null;
       }
     }
 
     if (!nextActive) {
-      nextActive = pickPreferredActiveId(next, null);
+      nextActive = pickPreferredActiveId(visibleNext, null);
     }
 
     setActiveSessionId(nextActive);
@@ -1916,19 +2050,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
 
   const terminalWorkIndicatorThicknessPx = createMemo(() => {
-    if (variant !== 'workbench') {
-      return TERMINAL_WORK_INDICATOR_BASE_THICKNESS_PX;
-    }
-    const rawScale = Number(props.workbenchPresentationScale ?? 1);
-    if (!Number.isFinite(rawScale) || rawScale <= 0) {
-      return TERMINAL_WORK_INDICATOR_BASE_THICKNESS_PX;
-    }
-    const scaledThickness = TERMINAL_WORK_INDICATOR_SCREEN_THICKNESS_PX / rawScale;
-    const clampedThickness = Math.min(
-      TERMINAL_WORK_INDICATOR_MAX_THICKNESS_PX,
-      scaledThickness,
-    );
-    return Math.round(clampedThickness * 2) / 2;
+    return TERMINAL_WORK_INDICATOR_BASE_THICKNESS_PX;
   });
 
   const showTerminalStatusBar = createMemo(() => {
@@ -2202,12 +2324,74 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     markSessionMounted(normalizedSessionId);
   };
 
+  const mergeOptimisticTerminalSession = (session: TerminalSessionInfo): TerminalSessionInfo | null => {
+    const normalized = normalizeTerminalSessionInfo(session);
+    if (!normalized) return null;
+
+    setOptimisticClosingSessionIds((previous) => {
+      if (!previous.has(normalized.id)) return previous;
+      const next = new Set(previous);
+      next.delete(normalized.id);
+      return next;
+    });
+    setOptimisticTerminalSessions((previous) => {
+      const existingIndex = previous.findIndex((entry) => entry.id === normalized.id);
+      if (existingIndex < 0) {
+        return [...previous, normalized];
+      }
+      const next = [...previous];
+      next[existingIndex] = normalized;
+      return next;
+    });
+    return normalized;
+  };
+
+  const removeOptimisticTerminalSession = (sessionId: string) => {
+    const normalizedSessionId = String(sessionId ?? '').trim();
+    if (!normalizedSessionId) return;
+    setOptimisticTerminalSessions((previous) => previous.filter((session) => session.id !== normalizedSessionId));
+  };
+
+  const setOptimisticSessionClosing = (sessionId: string, closing: boolean) => {
+    const normalizedSessionId = String(sessionId ?? '').trim();
+    if (!normalizedSessionId) return;
+    setOptimisticClosingSessionIds((previous) => {
+      if (closing && previous.has(normalizedSessionId)) return previous;
+      if (!closing && !previous.has(normalizedSessionId)) return previous;
+      const next = new Set(previous);
+      if (closing) {
+        next.add(normalizedSessionId);
+      } else {
+        next.delete(normalizedSessionId);
+      }
+      return next;
+    });
+  };
+
+  const pickActiveSessionAfterClose = (sessionId: string): string | null => {
+    const normalizedSessionId = String(sessionId ?? '').trim();
+    const realSessions = sessions();
+    const currentIndex = realSessions.findIndex((session) => session.id === normalizedSessionId);
+    if (currentIndex >= 0) {
+      return realSessions[currentIndex + 1]?.id ?? realSessions[currentIndex - 1]?.id ?? null;
+    }
+    return realSessions.find((session) => session.id !== normalizedSessionId)?.id ?? null;
+  };
+
   const createPanelSession = async (name: string | undefined, workingDir: string): Promise<string | null> => {
     const normalizedWorkingDir = normalizeAskFlowerAbsolutePath(String(workingDir ?? '').trim()) || agentHomePathAbs() || '';
     if (props.sessionOperations) {
-      const sessionId = await props.sessionOperations.createSession(name, normalizedWorkingDir);
-      await sessionsCoordinator.refresh();
-      return String(sessionId ?? '').trim() || null;
+      const result = normalizeTerminalPanelSessionCreateResult(
+        await props.sessionOperations.createSession(name, normalizedWorkingDir),
+      );
+      if (!result) return null;
+      if (result.session) {
+        mergeOptimisticTerminalSession(result.session);
+        void sessionsCoordinator.refresh().catch(() => undefined);
+      } else {
+        await sessionsCoordinator.refresh();
+      }
+      return result.sessionId;
     }
 
     const session = await sessionsCoordinator.createSession(String(name ?? '').trim(), normalizedWorkingDir);
@@ -2404,18 +2588,31 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const closeSession = (id: string) => {
     void (async () => {
+      const normalizedSessionId = String(id ?? '').trim();
       try {
-        if (pendingTerminalSessionById(id)) {
-          removePendingSession(id);
+        if (!normalizedSessionId) return;
+        if (pendingTerminalSessionById(normalizedSessionId)) {
+          removePendingSession(normalizedSessionId);
           return;
         }
         if (props.sessionOperations) {
-          await props.sessionOperations.deleteSession(id);
-          await sessionsCoordinator.refresh();
+          const nextActiveSessionId = activeDisplaySessionId() === normalizedSessionId
+            ? pickActiveSessionAfterClose(normalizedSessionId)
+            : activeDisplaySessionId();
+          setOptimisticSessionClosing(normalizedSessionId, true);
+          removeOptimisticTerminalSession(normalizedSessionId);
+          if (activeDisplaySessionId() === normalizedSessionId) {
+            setActiveSessionId(nextActiveSessionId);
+          }
+          await props.sessionOperations.deleteSession(normalizedSessionId);
+          setOptimisticSessionClosing(normalizedSessionId, false);
+          void sessionsCoordinator.refresh().catch(() => undefined);
         } else {
-          await sessionsCoordinator.deleteSession(id);
+          await sessionsCoordinator.deleteSession(normalizedSessionId);
         }
       } catch (e) {
+        setOptimisticSessionClosing(normalizedSessionId, false);
+        void sessionsCoordinator.refresh().catch(() => undefined);
         if (handleExecuteDenied(e)) return;
         setError(e instanceof Error ? e.message : String(e));
       }
@@ -2522,6 +2719,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     }));
     return [...sessionTabs, ...pendingTabs];
   });
+  const sessionPanelIds = createMemo(() => sessions().map((session) => session.id));
 
   let searchInputEl: HTMLInputElement | null = null;
   let rootEl: HTMLDivElement | null = null;
@@ -3326,41 +3524,48 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
           </Show>
           <Show when={sessions().length > 0 || visiblePendingTerminalSessions().length > 0}>
             <div class="h-full">
-              <Index each={sessions()}>
-                {(session) => (
-                  <Show when={mountedSessionIds().has(session().id)}>
-                    <TabPanel active={activeDisplaySessionId() === session().id} keepMounted class="h-full">
-                      <TerminalSessionView
-                        session={session()}
-                        variant={variant}
-                        active={() => activeDisplaySessionId() === session().id}
-                        connected={connected}
-                        protocolClient={() => protocol.client()}
-                        viewActive={viewActive}
-                        autoFocus={shouldAutoFocus}
-                        themeColors={terminalThemeColors}
-                        fontSize={fontSize}
-                        fontFamily={fontFamily}
-                        agentHomePathAbs={agentHomePathAbs}
-                        canOpenFilePreview={canBrowseFiles}
-                        bottomInsetPx={terminalViewportInsetPx}
-                        connId={connId}
-                        transport={transport}
-                        eventSource={eventSource}
-                        registerCore={registerCore}
-                        registerSurfaceElement={registerSurfaceElement}
-                        registerActions={registerActions}
-                        onSurfaceClick={handleWorkbenchTerminalSurfaceClick}
-                        onBell={handleSessionBell}
-                        onShellIntegrationEvent={handleShellIntegrationEvent}
-                        onVisibleOutput={handleVisibleOutput}
-                        onTerminalFileLinkOpen={openTerminalFileLinkTarget}
-                        onNameUpdate={handleNameUpdate}
-                      />
-                    </TabPanel>
-                  </Show>
-                )}
-              </Index>
+              <For each={sessionPanelIds()}>
+                {(sessionId) => {
+                  const sessionForId = createMemo(() => sessions().find((session) => session.id === sessionId) ?? null);
+                  const mountedSessionForId = createMemo(() => (
+                    mountedSessionIds().has(sessionId) ? sessionForId() : null
+                  ));
+                  return (
+                    <Show when={mountedSessionForId()}>
+                      {/* Keep TerminalSessionView identity tied to sessionId; metadata snapshots may replace session objects. */}
+                      <TabPanel active={activeDisplaySessionId() === sessionId} keepMounted class="h-full">
+                        <TerminalSessionView
+                          session={mountedSessionForId() as TerminalSessionInfo}
+                          variant={variant}
+                          active={() => activeDisplaySessionId() === sessionId}
+                          connected={connected}
+                          protocolClient={() => protocol.client()}
+                          viewActive={viewActive}
+                          autoFocus={shouldAutoFocus}
+                          themeColors={terminalThemeColors}
+                          fontSize={fontSize}
+                          fontFamily={fontFamily}
+                          agentHomePathAbs={agentHomePathAbs}
+                          canOpenFilePreview={canBrowseFiles}
+                          bottomInsetPx={terminalViewportInsetPx}
+                          connId={connId}
+                          transport={transport}
+                          eventSource={eventSource}
+                          registerCore={registerCore}
+                          registerSurfaceElement={registerSurfaceElement}
+                          registerActions={registerActions}
+                          onSurfaceClick={handleWorkbenchTerminalSurfaceClick}
+                          onBell={handleSessionBell}
+                          onShellIntegrationEvent={handleShellIntegrationEvent}
+                          onVisibleOutput={handleVisibleOutput}
+                          onTerminalFileLinkOpen={openTerminalFileLinkTarget}
+                          onNameUpdate={handleNameUpdate}
+                        />
+                      </TabPanel>
+                    </Show>
+                  );
+                }}
+              </For>
               <Index each={visiblePendingTerminalSessions()}>
                 {(session) => (
                   <TabPanel active={activeDisplaySessionId() === session().id} keepMounted class="h-full">
