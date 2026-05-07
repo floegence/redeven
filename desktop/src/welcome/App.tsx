@@ -3783,7 +3783,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.25 }}
-              class="redeven-loading-shimmer-overlay"
+              class={blockedPrimaryActionDisabled() ? 'redeven-blocked-shimmer-overlay' : 'redeven-loading-shimmer-overlay'}
             />
           </Show>
         </Presence>
