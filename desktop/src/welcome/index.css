@@ -1398,6 +1398,12 @@ pre,
   font-family: var(--font-mono);
 }
 
+/* ── Dialog input typography: uniform sans-serif at 14 px ── */
+[role='dialog'] input {
+  font-size: 0.875rem;
+  height: 2rem;
+}
+
 /*
  * Loading animation keyframes — shimmer sweep + breathing glow for action buttons.
  * Shimmer: a translucent highlight that sweeps left-to-right across the button surface.
