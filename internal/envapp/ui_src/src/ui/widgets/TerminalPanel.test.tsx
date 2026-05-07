@@ -1055,47 +1055,28 @@ describe('TerminalPanel', () => {
     });
   });
 
-  it('keeps workbench zoom out of terminal render scale and hot appearance updates', async () => {
+  it('keeps workbench projected surfaces out of terminal render scale', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
-    const [scale, setScale] = createSignal(2);
 
-    render(() => <TerminalPanel variant="workbench" workbenchPresentationScale={scale()} />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
     const core = terminalCoreInstances[0];
     expect(terminalConfigState.values[0]?.presentationScale).toBe(1);
     expect(core?.setAppearance).toHaveBeenCalled();
     expect(core?.setPresentationScale).not.toHaveBeenCalled();
-
-    core?.setAppearance.mockClear();
-    core?.setPresentationScale.mockClear();
-
-    setScale(3);
-    await settleTerminalPanel();
-
-    expect(core?.setAppearance).not.toHaveBeenCalled();
-    expect(core?.setPresentationScale).not.toHaveBeenCalled();
   });
 
-  it('keeps the terminal work indicator at a consistent screen thickness across workbench scale', async () => {
+  it('keeps the terminal work indicator thickness local to the terminal panel', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="workbench" workbenchPresentationScale={0.3} />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
     const indicator = findTerminalWorkIndicator(host);
-    expect(indicator?.style.getPropertyValue('--redeven-terminal-work-indicator-size')).toBe('11.5px');
-
-    const zoomedHost = document.createElement('div');
-    document.body.appendChild(zoomedHost);
-
-    render(() => <TerminalPanel variant="workbench" workbenchPresentationScale={2} />, zoomedHost);
-    await settleTerminalPanel();
-
-    const zoomedIndicator = findTerminalWorkIndicator(zoomedHost);
-    expect(zoomedIndicator?.style.getPropertyValue('--redeven-terminal-work-indicator-size')).toBe('2px');
+    expect(indicator?.style.getPropertyValue('--redeven-terminal-work-indicator-size')).toBe('3.5px');
   });
 
   it('hides the terminal work indicator when the global activity border preference is disabled', async () => {
@@ -1365,29 +1346,88 @@ describe('TerminalPanel', () => {
     expect(terminalEventSourceState.dataHandlers.get('session-2')?.size).toBe(1);
   });
 
-  it('uses workbench session operations for tab create and close', async () => {
+  it('keeps mounted terminal views alive when equivalent session snapshots replace objects', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace/repo',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+    ];
+
     const host = document.createElement('div');
     document.body.appendChild(host);
 
+    render(() => (
+      (() => {
+        const [groupState, setGroupState] = createSignal({
+          sessionIds: ['session-1', 'session-2'],
+          activeSessionId: 'session-1' as string | null,
+        });
+
+        return (
+          <TerminalPanel
+            variant="workbench"
+            sessionGroupState={groupState()}
+            onSessionGroupStateChange={setGroupState}
+          />
+        );
+      })()
+    ), host);
+    await settleTerminalPanel();
+
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await settleTerminalPanel();
+    await vi.waitFor(() => {
+      expect(terminalCoreInstances).toHaveLength(2);
+    });
+
+    const initialAttachCallCount = transportMocks.attach.mock.calls.length;
+    const mountedCores = [...terminalCoreInstances];
+
+    terminalSessionsState.sessions = terminalSessionsState.sessions.map((session) => ({ ...session }));
+    publishTerminalSessions();
+    await settleTerminalPanel();
+
+    expect(terminalCoreInstances).toEqual(mountedCores);
+    expect(mountedCores[0]?.dispose).not.toHaveBeenCalled();
+    expect(mountedCores[1]?.dispose).not.toHaveBeenCalled();
+    expect(mountedCores[0]?.initialize).toHaveBeenCalledTimes(1);
+    expect(mountedCores[1]?.initialize).toHaveBeenCalledTimes(1);
+    expect(transportMocks.attach).toHaveBeenCalledTimes(initialAttachCallCount);
+  });
+
+  it('uses workbench session operations for tab create and close', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const deletePromise = {
+      resolve: null as (() => void) | null,
+    };
+
     const sessionOperations = {
-      createSession: vi.fn(async () => {
-        terminalSessionsState.sessions = [
-          ...terminalSessionsState.sessions.map((session) => ({ ...session, isActive: false })),
-          {
-            id: 'session-2',
-            name: 'Terminal 2',
-            workingDir: '/workspace',
-            createdAtMs: 2,
-            isActive: true,
-            lastActiveAtMs: 20,
-          },
-        ];
-        publishTerminalSessions();
-        return 'session-2';
-      }),
-      deleteSession: vi.fn(async (sessionId: string) => {
-        terminalSessionsState.sessions = terminalSessionsState.sessions.filter((session) => session.id !== sessionId);
-        publishTerminalSessions();
+      createSession: vi.fn(async () => ({
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace',
+        createdAtMs: 2,
+        isActive: true,
+        lastActiveAtMs: 20,
+      })),
+      deleteSession: vi.fn(async () => {
+        await new Promise<void>((resolve) => {
+          deletePromise.resolve = resolve;
+        });
       }),
     };
 
@@ -1418,12 +1458,20 @@ describe('TerminalPanel', () => {
 
     expect(sessionOperations.createSession).toHaveBeenCalledWith('Terminal 2', '/workspace');
     expect(sessionsCoordinatorMocks.createSession).not.toHaveBeenCalled();
+    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).toBeNull();
+    expect(host.querySelector('[data-testid="close-tab-session-2"]')).toBeTruthy();
 
-    (host.querySelector('[data-testid="close-tab-session-2"]') as HTMLButtonElement | null)?.click();
+    const closeButton = host.querySelector('[data-testid="close-tab-session-2"]') as HTMLButtonElement | null;
+    expect(closeButton).toBeTruthy();
+    closeButton?.click();
     await settleTerminalPanel();
 
     expect(sessionOperations.deleteSession).toHaveBeenCalledWith('session-2');
     expect(sessionsCoordinatorMocks.deleteSession).not.toHaveBeenCalled();
+    expect(findTerminalTab(host, 'Terminal 2')).toBeUndefined();
+
+    deletePromise.resolve?.();
+    await settleTerminalPanel();
   });
 
   it('creates a new terminal session without sending a fixed 80x24 create size', async () => {

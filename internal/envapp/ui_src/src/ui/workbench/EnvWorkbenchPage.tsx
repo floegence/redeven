@@ -6,6 +6,7 @@ import {
   type WorkbenchState,
 } from '@floegence/floe-webapp-core/workbench';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
+import type { TerminalSessionInfo } from '@floegence/floeterm-terminal-web';
 import { LayoutDashboard, Maximize, Minus } from '@floegence/floe-webapp-core/icons';
 import { batch, createEffect, createMemo, createSignal, onCleanup, Show } from 'solid-js';
 import { Portal } from 'solid-js/web';
@@ -83,6 +84,7 @@ import {
   type PersistedWorkbenchLocalState,
   type RuntimeWorkbenchLayoutSnapshot,
   type RuntimeWorkbenchPreviewItem,
+  type RuntimeWorkbenchTerminalSessionInfo,
   type RuntimeWorkbenchWidgetState,
   type RuntimeWorkbenchWidgetStateData,
 } from './runtimeWorkbenchLayout';
@@ -116,6 +118,24 @@ const DEFAULT_TERMINAL_GEOMETRY_PREFERENCES: RedevenWorkbenchTerminalGeometryPre
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+function normalizeRuntimeTerminalTimestamp(value: unknown): number {
+  const timestamp = Number(value ?? 0);
+  return Number.isFinite(timestamp) && timestamp > 0 ? Math.trunc(timestamp) : 0;
+}
+
+function normalizeRuntimeTerminalSessionInfo(session: RuntimeWorkbenchTerminalSessionInfo): TerminalSessionInfo | null {
+  const id = compact(session.id);
+  if (!id) return null;
+  return {
+    id,
+    name: compact(session.name),
+    workingDir: normalizeAbsolutePath(session.working_dir),
+    createdAtMs: normalizeRuntimeTerminalTimestamp(session.created_at_ms),
+    lastActiveAtMs: normalizeRuntimeTerminalTimestamp(session.last_active_at_ms),
+    isActive: Boolean(session.is_active),
+  };
 }
 
 function scaleAtMinimum(scale: number): boolean {
@@ -2063,10 +2083,10 @@ export function EnvWorkbenchPage() {
         if (sessionId) {
           persistLocalTerminalPanelState(normalizedWidgetId, nextSessionIds, sessionId);
         }
-        return sessionId || null;
+        return normalizeRuntimeTerminalSessionInfo(result.session);
       } catch (error) {
         console.warn('Failed to create workbench terminal session:', error);
-        return null;
+        throw error;
       }
     },
     deleteTerminalSession: async (widgetId, sessionId) => {
@@ -2087,6 +2107,7 @@ export function EnvWorkbenchPage() {
         );
       } catch (error) {
         console.warn('Failed to delete workbench terminal session:', error);
+        throw error;
       }
     },
     registerTerminalCore: (widgetId, sessionId, core) => {

@@ -219,29 +219,30 @@ describe('redevenWorkbenchWidgets terminal behavior', () => {
     });
   });
 
-  it('forwards the current workbench surface scale into the live terminal panel', () => {
+  it('keeps high-frequency workbench surface scale out of the live terminal panel', () => {
+    const surfaceMetrics = vi.fn(() => ({
+      ready: true,
+      rect: {
+        widgetId: 'widget-terminal-1',
+        worldX: 0,
+        worldY: 0,
+        worldWidth: 840,
+        worldHeight: 500,
+        screenX: 0,
+        screenY: 0,
+        screenWidth: 1680,
+        screenHeight: 1000,
+        viewportScale: 2,
+      },
+    }));
+
     renderTerminalBody({
-      surfaceMetrics: () => ({
-        ready: true,
-        rect: {
-          widgetId: 'widget-terminal-1',
-          worldX: 0,
-          worldY: 0,
-          worldWidth: 840,
-          worldHeight: 500,
-          screenX: 0,
-          screenY: 0,
-          screenWidth: 1680,
-          screenHeight: 1000,
-          viewportScale: 2,
-        },
-      }),
+      surfaceMetrics,
     });
 
     expect(terminalPanelMocks.render).toHaveBeenCalledTimes(1);
-    expect(terminalPanelMocks.render.mock.calls[0]?.[0]).toMatchObject({
-      workbenchPresentationScale: 2,
-    });
+    expect(surfaceMetrics).not.toHaveBeenCalled();
+    expect(terminalPanelMocks.render.mock.calls[0]?.[0]).not.toHaveProperty('workbenchPresentationScale');
   });
 
   it('focuses the terminal input on the first click after switching workbench widgets', async () => {
