@@ -152,7 +152,9 @@ SSH bootstrap is intentionally transport-light and runtime-heavy:
 - SSH Host data traffic goes through the local SSH tunnel: Desktop opens `127.0.0.1:<local_forward>` and SSH forwards it to the remote runtime's loopback-only Local UI port. No public or LAN-facing host port is required for the Local UI.
 - Session identity is derived from SSH destination, SSH port, authentication mode, and remote install directory so reconnecting does not create duplicates just because the forwarded local port changed.
 - Closing the Desktop session window, losing the local forward, or quitting Desktop disconnects only the SSH transport. The SSH-hosted runtime keeps running until the user explicitly stops it or the remote host/process exits.
-- SSH runtime stop is an explicit launcher/runtime-menu action. Desktop may reuse an existing live forward or recreate the forward on the next `Open`.
+- SSH runtime stop is an explicit launcher/runtime-menu action. If startup is still pending, `Stop runtime` cancels that startup operation instead of reporting that no runtime exists yet. Desktop may reuse an existing live forward or recreate the forward on the next `Open`.
+- Long-running SSH bootstrap is represented as a launcher operation with a stable operation key, subject generation, cancel state, and progress snapshot. The renderer receives both the legacy `action_progress` projection and the richer `operations` list.
+- Canceling an SSH bootstrap passes an `AbortSignal` through local probes, SSH child processes, remote install/upload commands, startup-report polling, and tunnel verification. Local SSH transport cleanup is bounded; remote upload temp paths are removed best-effort.
 - `SSH Destination` accepts either a direct `user@host` target or a Host alias from the user's local SSH config. When a selected Host has a configured `Port`, Desktop fills the Port field while still allowing the user to edit or clear that override.
 - SSH bootstrap supports key/agent authentication and a Desktop-owned password prompt mode. Key/agent mode keeps `BatchMode=yes` so missing keys or host-key trust issues surface as actionable launcher errors. Password prompt mode disables batch auth, asks through the OS askpass flow only while starting the runtime, and does not store the SSH password.
 
@@ -329,6 +331,9 @@ duplicating as a low-value fact row.
   - Desktop blocks deletion while a window for that entry is still open
   - the Local Environment entry is protected and is not deletable from the launcher
   - unlinking a provider Environment clears only that provider binding; the provider card remains if the provider still publishes that Environment
+  - deleting a saved Redeven URL or SSH Host entry persists the removal immediately; runtime shutdown, SSH startup cancelation, tunnel disconnect, or remote cleanup never blocks the deletion result
+  - if a saved SSH Host is deleted while its bootstrap is running, the card disappears immediately, the operation is marked as belonging to a deleted subject, and Desktop cancels or cleans the startup in the background
+  - stale operations must not resurrect deleted connections through recent-entry writes, catalog writes, or old preference snapshots
 - Remote library entries distinguish:
   - unsaved remote sessions that are already open
   - auto-remembered recent connections
@@ -338,6 +343,7 @@ duplicating as a low-value fact row.
 - Saved remote Environments render in a card grid and can be opened, edited, saved, or deleted inline.
 - Saved SSH Host environments render in that same card grid, with the SSH host (`destination[:port]`) and forwarded Local UI both exposed through the Endpoint copy rows.
 - Saved Providers render in a separate tab with compact provider-level reconnect/refresh/delete shelves and no nested environment card grid.
+- Deleting a Provider persists the local removal immediately, clears local provider transient state, and then revokes the remote authorization and closes provider sessions best-effort in the background. In-flight provider sync checks the provider subject generation before writing preferences or sync errors, so a deleted Provider cannot be restored by an older sync response.
 - Provider shelves show the Desktop display label as the primary title while still surfacing the provider product name, origin, published environment count, unified-catalog count, and local-host count.
 - Dense repeated controls use compact visible labels such as `Open`, `Focus`, `Add`, and `Save`; hover and accessibility metadata keep the full descriptive meaning.
 - Field-validation errors stay inline inside the active launcher dialog, while transient launcher/open failures render as toasts instead of entering page flow.
@@ -358,6 +364,7 @@ duplicating as a low-value fact row.
 - The launcher close action means:
   - `Quit` when no environment is open yet
   - `Close Launcher` when one or more Environment windows are already open
+- Quit and last-window-close confirmation models include pending background operations. On quit, Desktop cancels pending SSH startup operations and waits only for bounded best-effort cleanup before exiting.
 
 ## Session Child Windows
 

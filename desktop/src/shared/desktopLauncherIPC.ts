@@ -32,11 +32,25 @@ export type DesktopLocalEnvironmentStateRoute = 'local_host' | 'remote_desktop';
 export type DesktopLocalRuntimeState = 'not_running' | 'running_desktop' | 'running_external';
 export type DesktopLocalCloseBehavior = 'stops_runtime' | 'detaches' | 'not_applicable';
 export type DesktopLauncherSessionLifecycle = 'opening' | 'open' | 'closing';
+export type DesktopLauncherOperationStatus =
+  | 'running'
+  | 'canceling'
+  | 'canceled'
+  | 'cleanup_running'
+  | 'cleanup_failed'
+  | 'failed'
+  | 'succeeded';
+export type DesktopLauncherOperationSubjectKind =
+  | 'local_environment'
+  | 'external_local_ui'
+  | 'ssh_environment'
+  | 'control_plane';
 export type DesktopLauncherActionOutcome =
   | 'opened_environment_window'
   | 'focused_environment_window'
   | 'started_environment_runtime'
   | 'stopped_environment_runtime'
+  | 'canceled_launcher_operation'
   | 'refreshed_environment_runtime'
   | 'refreshed_all_environment_runtimes'
   | 'opened_utility_window'
@@ -68,6 +82,8 @@ export type DesktopLauncherActionFailureCode =
   | 'provider_unreachable'
   | 'provider_invalid_response'
   | 'runtime_start_failed'
+  | 'operation_missing'
+  | 'operation_not_cancelable'
   | 'action_invalid';
 export type DesktopLauncherActionKind =
   | 'open_local_environment'
@@ -92,6 +108,7 @@ export type DesktopLauncherActionKind =
   | 'upsert_saved_ssh_environment'
   | 'delete_saved_environment'
   | 'delete_saved_ssh_environment'
+  | 'cancel_launcher_operation'
   | 'close_launcher_or_quit';
 
 export type DesktopWelcomeIssue = Readonly<{
@@ -200,9 +217,31 @@ export type DesktopWelcomeSnapshot = Readonly<{
   environments: readonly DesktopEnvironmentEntry[];
   control_planes: readonly DesktopControlPlaneSummary[];
   action_progress: readonly DesktopLauncherActionProgress[];
+  operations: readonly DesktopLauncherOperationSnapshot[];
   suggested_remote_url: string;
   issue: DesktopWelcomeIssue | null;
   settings_surface: DesktopSettingsSurfaceSnapshot;
+}>;
+
+export type DesktopLauncherOperationSnapshot = Readonly<{
+  operation_key: string;
+  action: DesktopLauncherActionKind;
+  subject_kind: DesktopLauncherOperationSubjectKind;
+  subject_id: string;
+  subject_generation: number;
+  environment_id?: string;
+  environment_label?: string;
+  provider_origin?: string;
+  provider_id?: string;
+  started_at_unix_ms: number;
+  updated_at_unix_ms: number;
+  status: DesktopLauncherOperationStatus;
+  phase: string;
+  title: string;
+  detail: string;
+  cancelable: boolean;
+  deleted_subject: boolean;
+  error_message?: string;
 }>;
 
 export type DesktopLauncherActionRequest = Readonly<
@@ -312,6 +351,10 @@ export type DesktopLauncherActionRequest = Readonly<
       environment_id: string;
     }
   | {
+      kind: 'cancel_launcher_operation';
+      operation_key: string;
+    }
+  | {
       kind: 'close_launcher_or_quit';
     }
 >;
@@ -342,10 +385,17 @@ export type DesktopLauncherActionProgress = Readonly<{
   environment_id?: string;
   environment_label?: string;
   operation_key?: string;
+  subject_kind?: DesktopLauncherOperationSubjectKind;
+  subject_id?: string;
   started_at_unix_ms?: number;
+  updated_at_unix_ms?: number;
+  status?: DesktopLauncherOperationStatus;
   phase: string;
   title: string;
   detail: string;
+  cancelable?: boolean;
+  deleted_subject?: boolean;
+  error_message?: string;
 }>;
 
 export function isDesktopLauncherActionFailure(
@@ -641,6 +691,16 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       return {
         kind,
         environment_id: environmentID,
+      };
+    }
+    case 'cancel_launcher_operation': {
+      const operationKey = compact((candidate as { operation_key?: unknown }).operation_key);
+      if (operationKey === '') {
+        return null;
+      }
+      return {
+        kind,
+        operation_key: operationKey,
       };
     }
     default:

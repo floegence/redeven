@@ -123,6 +123,13 @@ class DesktopSSHUploadAssetPreparationError extends Error {
   }
 }
 
+export class DesktopSSHRuntimeCanceledError extends Error {
+  constructor(message = 'SSH runtime startup was canceled.') {
+    super(message);
+    this.name = 'DesktopSSHRuntimeCanceledError';
+  }
+}
+
 export type ManagedSSHRuntime = Readonly<{
   startup: StartupReport;
   local_forward_url: string;
@@ -149,6 +156,7 @@ export type StartManagedSSHRuntimeArgs = Readonly<{
   stopTimeoutMs?: number;
   connectTimeoutSeconds?: number;
   probeTimeoutMs?: number;
+  signal?: AbortSignal;
   onLog?: (stream: 'master_stderr' | 'control_stdout' | 'control_stderr' | 'forward_stderr', chunk: string) => void;
   onProgress?: (progress: DesktopSSHRuntimeProgress) => void;
 }>;
@@ -194,6 +202,17 @@ function missingSSHBinaryError(logs: RecentLogs): Error {
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isAbortError(error: unknown): boolean {
+  const candidate = error as Partial<Error> & Readonly<{ code?: string }>;
+  return candidate?.name === 'AbortError' || candidate?.code === 'ABORT_ERR';
+}
+
+function throwIfSSHRuntimeCanceled(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw new DesktopSSHRuntimeCanceledError();
+  }
 }
 
 function emitSSHRuntimeProgress(
@@ -313,10 +332,13 @@ function spawnSSHProcess(
   args: readonly string[],
   auth: SSHCommandAuthContext,
   stdinData?: Buffer,
+  signal?: AbortSignal,
 ): SpawnedSSHProcess {
+  throwIfSSHRuntimeCanceled(signal);
   return spawn(sshBinary, args, {
     ...sshSpawnOptions(auth),
     stdio: sshStdioForAuth(auth, stdinData),
+    signal,
   }) as SpawnedSSHProcess;
 }
 
@@ -713,10 +735,11 @@ function localForwardURL(port: number): string {
   return `http://127.0.0.1:${port}/`;
 }
 
-async function waitForForwardedLocalUIOpenable(url: string, timeoutMs: number): Promise<StartupReport | null> {
+async function waitForForwardedLocalUIOpenable(url: string, timeoutMs: number, signal?: AbortSignal): Promise<StartupReport | null> {
   const deadline = Date.now() + timeoutMs;
   let latestStartup: StartupReport | null = null;
   for (;;) {
+    throwIfSSHRuntimeCanceled(signal);
     const startup = await loadExternalLocalUIStartup(url, Math.min(timeoutMs, DEFAULT_SSH_POLL_INTERVAL_MS));
     if (startup) {
       latestStartup = startup;
@@ -805,9 +828,16 @@ async function runSSHOnce(
   key: keyof MutableRecentLogs,
   onLog: StartManagedSSHRuntimeArgs['onLog'],
   stdinData?: Buffer,
+  signal?: AbortSignal,
 ): Promise<SSHCommandResult> {
   return new Promise<SSHCommandResult>((resolve, reject) => {
-    const child = spawnSSHProcess(sshBinary, args, auth, stdinData);
+    let child: SpawnedSSHProcess;
+    try {
+      child = spawnSSHProcess(sshBinary, args, auth, stdinData, signal);
+    } catch (error) {
+      reject(error);
+      return;
+    }
     let stdout = '';
     let stderr = '';
     let spawnError: Error | null = null;
@@ -838,8 +868,16 @@ async function runSSHOnce(
       });
     }
 
-    child.once('close', (exitCode, signal) => {
+    child.once('close', (exitCode, closeSignal) => {
+      if (signal?.aborted) {
+        reject(new DesktopSSHRuntimeCanceledError());
+        return;
+      }
       if (spawnError) {
+        if (isAbortError(spawnError)) {
+          reject(new DesktopSSHRuntimeCanceledError());
+          return;
+        }
         const nodeError = spawnError as NodeJS.ErrnoException;
         if (nodeError.code === 'ENOENT') {
           reject(missingSSHBinaryError(logs));
@@ -850,7 +888,7 @@ async function runSSHOnce(
       }
       resolve({
         exit_code: exitCode,
-        signal,
+        signal: closeSignal,
         stdout,
         stderr,
       });
@@ -938,10 +976,12 @@ async function waitForMasterReady(args: Readonly<{
   logs: MutableRecentLogs;
   onLog: StartManagedSSHRuntimeArgs['onLog'];
   onProgress: StartManagedSSHRuntimeArgs['onProgress'];
+  signal?: AbortSignal;
   getMasterProcess: () => SpawnedSSHProcess | null;
 }>): Promise<void> {
   const deadline = Date.now() + args.startupTimeoutMs;
   for (;;) {
+    throwIfSSHRuntimeCanceled(args.signal);
     const masterProcess = args.getMasterProcess();
     if (!masterProcess) {
       throw readinessFailure('Desktop failed to start the SSH control connection.', args.logs);
@@ -961,6 +1001,8 @@ async function waitForMasterReady(args: Readonly<{
       args.logs,
       'master_stderr',
       args.onLog,
+      undefined,
+      args.signal,
     );
     if (result.exit_code === 0) {
       emitSSHRuntimeProgress(
@@ -988,7 +1030,9 @@ async function probeRemoteRuntimeCompatibility(args: Readonly<{
   logs: MutableRecentLogs;
   onLog: StartManagedSSHRuntimeArgs['onLog'];
   onProgress: StartManagedSSHRuntimeArgs['onProgress'];
+  signal?: AbortSignal;
 }>): Promise<DesktopSSHRemoteRuntimeProbeResult> {
+  throwIfSSHRuntimeCanceled(args.signal);
   emitSSHRuntimeProgress(
     args.onProgress,
     'ssh_checking_runtime',
@@ -1009,6 +1053,8 @@ async function probeRemoteRuntimeCompatibility(args: Readonly<{
     args.logs,
     'control_stderr',
     args.onLog,
+    undefined,
+    args.signal,
   );
   if (result.exit_code !== 0) {
     throw readinessFailure('Desktop could not probe the managed Redeven runtime over SSH.', args.logs);
@@ -1041,7 +1087,9 @@ async function probeRemotePlatform(args: Readonly<{
   logs: MutableRecentLogs;
   onLog: StartManagedSSHRuntimeArgs['onLog'];
   onProgress: StartManagedSSHRuntimeArgs['onProgress'];
+  signal?: AbortSignal;
 }>): Promise<DesktopSSHRemotePlatform> {
+  throwIfSSHRuntimeCanceled(args.signal);
   emitSSHRuntimeProgress(
     args.onProgress,
     'ssh_detecting_platform',
@@ -1059,6 +1107,8 @@ async function probeRemotePlatform(args: Readonly<{
     args.logs,
     'control_stderr',
     args.onLog,
+    undefined,
+    args.signal,
   );
   if (result.exit_code !== 0) {
     throw readinessFailure('Desktop could not determine the remote platform for SSH bootstrap.', args.logs);
@@ -1082,7 +1132,9 @@ async function createRemoteTempDir(args: Readonly<{
   logs: MutableRecentLogs;
   onLog: StartManagedSSHRuntimeArgs['onLog'];
   onProgress: StartManagedSSHRuntimeArgs['onProgress'];
+  signal?: AbortSignal;
 }>): Promise<string> {
+  throwIfSSHRuntimeCanceled(args.signal);
   emitSSHRuntimeProgress(
     args.onProgress,
     'ssh_creating_upload_dir',
@@ -1100,6 +1152,8 @@ async function createRemoteTempDir(args: Readonly<{
     args.logs,
     'control_stderr',
     args.onLog,
+    undefined,
+    args.signal,
   );
   if (result.exit_code !== 0) {
     throw readinessFailure('Desktop could not allocate a remote temporary directory for SSH upload.', args.logs);
@@ -1172,7 +1226,9 @@ async function installRemoteRuntimeViaRemoteInstall(args: Readonly<{
   logs: MutableRecentLogs;
   onLog: StartManagedSSHRuntimeArgs['onLog'];
   onProgress: StartManagedSSHRuntimeArgs['onProgress'];
+  signal?: AbortSignal;
 }>): Promise<void> {
+  throwIfSSHRuntimeCanceled(args.signal);
   emitSSHRuntimeProgress(
     args.onProgress,
     'ssh_remote_installing',
@@ -1195,6 +1251,8 @@ async function installRemoteRuntimeViaRemoteInstall(args: Readonly<{
     args.logs,
     'control_stderr',
     args.onLog,
+    undefined,
+    args.signal,
   );
   if (result.exit_code !== 0) {
     throw readinessFailure('Desktop could not install Redeven on the remote host using the remote installer.', args.logs);
@@ -1324,8 +1382,10 @@ async function prepareDesktopSSHUploadAsset(args: Readonly<{
   platform: DesktopSSHRemotePlatform;
   fetchPolicy: DesktopSSHReleaseFetchPolicy;
   onProgress: StartManagedSSHRuntimeArgs['onProgress'];
+  signal?: AbortSignal;
 }>): Promise<PreparedDesktopSSHUploadAsset> {
   try {
+    throwIfSSHRuntimeCanceled(args.signal);
     emitSSHRuntimeProgress(
       args.onProgress,
       'ssh_preparing_upload',
@@ -1339,6 +1399,7 @@ async function prepareDesktopSSHUploadAsset(args: Readonly<{
       platform: args.platform,
     });
     if (sourceAsset) {
+      throwIfSSHRuntimeCanceled(args.signal);
       return sourceAsset;
     }
     const asset = await ensureDesktopSSHReleaseAsset({
@@ -1370,7 +1431,9 @@ async function installRemoteRuntimeViaDesktopUpload(args: Readonly<{
   logs: MutableRecentLogs;
   onLog: StartManagedSSHRuntimeArgs['onLog'];
   onProgress: StartManagedSSHRuntimeArgs['onProgress'];
+  signal?: AbortSignal;
 }>): Promise<void> {
+  throwIfSSHRuntimeCanceled(args.signal);
   const remoteTempDir = await createRemoteTempDir(args);
   const remoteArchivePath = `${remoteTempDir}/redeven.tar.gz`;
 
@@ -1395,6 +1458,7 @@ async function installRemoteRuntimeViaDesktopUpload(args: Readonly<{
       'control_stderr',
       args.onLog,
       args.archiveData,
+      args.signal,
     );
     if (uploadResult.exit_code !== 0) {
       throw readinessFailure(
@@ -1425,6 +1489,8 @@ async function installRemoteRuntimeViaDesktopUpload(args: Readonly<{
       args.logs,
       'control_stderr',
       args.onLog,
+      undefined,
+      args.signal,
     );
     if (installResult.exit_code !== 0) {
       throw readinessFailure(
@@ -1455,6 +1521,7 @@ async function ensureRemoteRuntimeInstalled(args: Readonly<{
   logs: MutableRecentLogs;
   onLog: StartManagedSSHRuntimeArgs['onLog'];
   onProgress: StartManagedSSHRuntimeArgs['onProgress'];
+  signal?: AbortSignal;
 }>): Promise<void> {
   const initialProbe = await probeRemoteRuntimeCompatibility(args);
   const sourceRuntimeRoot = compact(args.sourceRuntimeRoot);
@@ -1482,6 +1549,7 @@ async function ensureRemoteRuntimeInstalled(args: Readonly<{
             platform,
             fetchPolicy: args.fetchPolicy,
             onProgress: args.onProgress,
+            signal: args.signal,
           });
         } catch (error) {
           if (args.target.bootstrap_strategy === 'auto' && error instanceof DesktopSSHUploadAssetPreparationError) {
@@ -1502,6 +1570,7 @@ async function ensureRemoteRuntimeInstalled(args: Readonly<{
           logs: args.logs,
           onLog: args.onLog,
           onProgress: args.onProgress,
+          signal: args.signal,
         });
         const uploadProbe = await probeRemoteRuntimeCompatibility(args);
         if (uploadProbe.status === 'ready') {
@@ -1546,6 +1615,7 @@ async function waitForRemoteStartupReport(args: Readonly<{
   logs: MutableRecentLogs;
   onLog: StartManagedSSHRuntimeArgs['onLog'];
   onProgress: StartManagedSSHRuntimeArgs['onProgress'];
+  signal?: AbortSignal;
   getControlProcess: () => SpawnedSSHProcess | null;
 }>): Promise<ManagedSSHRemoteStartup> {
   const deadline = Date.now() + args.startupTimeoutMs;
@@ -1557,6 +1627,7 @@ async function waitForRemoteStartupReport(args: Readonly<{
     'Redeven is starting on the SSH host and writing its startup report.',
   );
   for (;;) {
+    throwIfSSHRuntimeCanceled(args.signal);
     const controlProcess = args.getControlProcess();
     if (!controlProcess) {
       throw readinessFailure('Desktop lost the SSH runtime bootstrap session before Redeven reported readiness.', args.logs);
@@ -1576,6 +1647,8 @@ async function waitForRemoteStartupReport(args: Readonly<{
       args.logs,
       'control_stderr',
       args.onLog,
+      undefined,
+      args.signal,
     );
     if (result.exit_code === 0) {
       try {
@@ -1617,6 +1690,7 @@ async function waitForRemoteStartupReport(args: Readonly<{
 }
 
 export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): Promise<ManagedSSHRuntime> {
+  throwIfSSHRuntimeCanceled(args.signal);
   const target = normalizeDesktopSSHEnvironmentDetails(args.target);
   const runtimeReleaseTag = normalizeRuntimeReleaseTag(args.runtimeReleaseTag);
   const sshBinary = compact(args.sshBinary) || 'ssh';
@@ -1655,7 +1729,7 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
     '-o', 'ControlMaster=yes',
     '-o', 'ControlPersist=no',
     ...sshTargetArgs(target),
-  ], auth);
+  ], auth, undefined, args.signal);
   let masterSpawnError: Error | null = null;
   masterProcess.once('error', (error) => {
     masterSpawnError = error instanceof Error ? error : new Error(String(error));
@@ -1713,6 +1787,7 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       logs,
       onLog: args.onLog,
       onProgress: args.onProgress,
+      signal: args.signal,
       getMasterProcess: () => masterProcess,
     });
 
@@ -1731,6 +1806,7 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       logs,
       onLog: args.onLog,
       onProgress: args.onProgress,
+      signal: args.signal,
     });
 
     emitSSHRuntimeProgress(
@@ -1747,7 +1823,7 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
         runtimeReleaseTag,
         sessionToken,
       ]),
-    ], auth);
+    ], auth, undefined, args.signal);
     let controlSpawnError: Error | null = null;
     controlProcess.once('error', (error) => {
       controlSpawnError = error instanceof Error ? error : new Error(String(error));
@@ -1769,6 +1845,7 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       logs,
       onLog: args.onLog,
       onProgress: args.onProgress,
+      signal: args.signal,
       getControlProcess: () => controlProcess,
     });
     const remoteStartup = remoteLaunch.startup;
@@ -1788,7 +1865,7 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       '-N',
       '-L', `127.0.0.1:${localPort}:127.0.0.1:${remotePort}`,
       ...sshTargetArgs(target),
-    ], auth);
+    ], auth, undefined, args.signal);
     let forwardSpawnError: Error | null = null;
     forwardProcess.once('error', (error) => {
       forwardSpawnError = error instanceof Error ? error : new Error(String(error));
@@ -1808,6 +1885,7 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
     const forwardedStartup = await waitForForwardedLocalUIOpenable(
       forwardedURL,
       args.probeTimeoutMs ?? startupTimeoutMs,
+      args.signal,
     );
     if (!forwardedStartup) {
       throw readinessFailure('Desktop created the SSH port forward but could not reach the forwarded Redeven Local UI.', logs);
@@ -1833,6 +1911,9 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
     };
   } catch (error) {
     await disconnect();
+    if (error instanceof DesktopSSHRuntimeCanceledError || isAbortError(error) || args.signal?.aborted) {
+      throw new DesktopSSHRuntimeCanceledError();
+    }
     const nodeError = error as NodeJS.ErrnoException;
     if (nodeError?.code === 'ENOENT') {
       throw missingSSHBinaryError(logs);

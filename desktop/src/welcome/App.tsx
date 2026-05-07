@@ -704,6 +704,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [stopRuntimeTarget, setStopRuntimeTarget] = createSignal<DesktopEnvironmentEntry | null>(null);
   const [restartRuntimeAfterStop, setRestartRuntimeAfterStop] = createSignal(false);
   const [deleteControlPlaneTarget, setDeleteControlPlaneTarget] = createSignal<DesktopControlPlaneSummary | null>(null);
+  const deleteTargetOperation = createMemo(() => {
+    const target = deleteTarget();
+    if (!target) {
+      return null;
+    }
+    return snapshot().operations.find((operation) => (
+      operation.environment_id === target.id
+      || operation.subject_id === target.id
+    )) ?? null;
+  });
   const [librarySourceFilter, setLibrarySourceFilter] = createSignal('');
   const [libraryQuery, setLibraryQuery] = createSignal('');
   const [activeCenterTab, setActiveCenterTab] = createSignal<EnvironmentCenterTab>('environments');
@@ -1317,6 +1327,20 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return result?.outcome === 'focused_environment_window';
   }
 
+  async function cancelLauncherOperation(progress: DesktopLauncherActionProgress): Promise<void> {
+    const operationKey = trimString(progress.operation_key);
+    if (operationKey === '') {
+      return;
+    }
+    const result = await performLauncherAction({
+      kind: 'cancel_launcher_operation',
+      operation_key: operationKey,
+    });
+    if (result?.outcome === 'canceled_launcher_operation') {
+      showActionToast('Background task is canceling.', 'info');
+    }
+  }
+
   async function openLocalEnvironment(
     environment: DesktopEnvironmentEntry,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
@@ -1522,10 +1546,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     const result = await performLauncherAction(request, errorTarget);
     const stopped = result?.outcome === 'stopped_environment_runtime';
+    const canceled = result?.outcome === 'canceled_launcher_operation';
     if (stopped) {
       showActionToast(`Runtime stopped for ${environment.label}.`);
     }
-    return stopped;
+    if (canceled) {
+      showActionToast(`Startup canceled for ${environment.label}.`, 'info');
+    }
+    return stopped || canceled;
   }
 
   async function confirmStopRuntime(): Promise<void> {
@@ -2275,6 +2303,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (target.kind !== 'ssh_environment' && target.kind !== 'external_local_ui') {
       throw new Error('Unsupported delete target.');
     }
+    const hadBackgroundOperation = deleteTargetOperation() !== null;
     setBusyState({
       action: 'delete_environment',
       environment_id: target.id,
@@ -2289,7 +2318,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       });
       await refreshSnapshot();
       setDeleteTarget(null);
-      showActionToast('Connection removed from Environment Library.');
+      showActionToast(
+        hadBackgroundOperation
+          ? 'Connection removed. Startup cleanup is running in the background.'
+          : 'Connection removed from Environment Library.',
+        'info',
+      );
     } catch (error) {
       setErrorMessage('connect', getErrorMessage(error));
     } finally {
@@ -2412,6 +2446,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       <SSHRuntimeActivityOverlay
         snapshot={snapshot()}
         progressItems={sshRuntimeProgressItems()}
+        cancelOperation={cancelLauncherOperation}
       />
 
       <LocalEnvironmentSettingsDialog
@@ -2483,7 +2518,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             Remove <span class="font-semibold">{deleteTarget()?.label}</span> from the Environment Library?
           </p>
           <p class="text-xs text-muted-foreground">
-            This only removes the saved Desktop entry. It does not stop the remote Environment.
+            <Show
+              when={deleteTargetOperation()}
+              fallback={<>This only removes the saved Desktop entry. It does not stop the remote Environment.</>}
+            >
+              <>The connection is involved in a background task. Desktop will remove it now, then cancel or clean up that task in the background.</>
+            </Show>
           </p>
         </div>
       </ConfirmDialog>
@@ -3432,6 +3472,7 @@ function sshRuntimeActivityLabel(
 function SSHRuntimeActivityOverlay(props: Readonly<{
   snapshot: DesktopWelcomeSnapshot;
   progressItems: readonly DesktopLauncherActionProgress[];
+  cancelOperation: (progress: DesktopLauncherActionProgress) => void;
 }>) {
   return (
     <Portal>
@@ -3460,6 +3501,30 @@ function SSHRuntimeActivityOverlay(props: Readonly<{
                   </div>
                   <div class="redeven-ssh-runtime-activity__detail">
                     {progress.detail}
+                  </div>
+                  <div class="mt-2 flex items-center justify-between gap-2">
+                    <span class="text-[11px] font-medium text-muted-foreground">
+                      {progress.deleted_subject
+                        ? 'Connection removed'
+                        : progress.status === 'canceling'
+                          ? 'Canceling'
+                          : progress.status === 'cleanup_failed'
+                            ? 'Cleanup needs attention'
+                            : progress.status === 'canceled'
+                              ? 'Canceled'
+                              : 'Running'}
+                    </span>
+                    <Show when={progress.cancelable === true && progress.status === 'running'}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        class="h-7 gap-1.5 px-2 text-[11px]"
+                        onClick={() => props.cancelOperation(progress)}
+                      >
+                        <Stop class="h-3 w-3" />
+                        Cancel
+                      </Button>
+                    </Show>
                   </div>
                 </div>
               )}

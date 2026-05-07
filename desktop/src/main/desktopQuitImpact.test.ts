@@ -20,6 +20,7 @@ describe('desktopQuitImpact', () => {
 
     expect(impact).toEqual({
       environment_window_count: 2,
+      pending_operation_count: 0,
       desktop_owned_runtimes: [
         { id: 'managed-b', label: 'Bravo', kind: 'local_environment' },
       ],
@@ -64,6 +65,24 @@ describe('desktopQuitImpact', () => {
     expect(shouldConfirmDesktopQuit(impact, 'system')).toBe(false);
     expect(shouldConfirmDesktopQuit(impact, 'last_window_close')).toBe(false);
     expect(shouldConfirmDesktopLastWindowClose(impact)).toBe(false);
+  });
+
+  it('treats pending background operations as quit and last-window-close impact', () => {
+    const impact = buildDesktopQuitImpact({
+      environment_window_count: 0,
+      pending_operation_count: 2,
+      local_environment_runtime: null,
+      ssh_runtimes: [],
+    });
+
+    expect(shouldConfirmDesktopQuit(impact, 'explicit')).toBe(true);
+    expect(shouldConfirmDesktopQuit(impact, 'system')).toBe(true);
+    expect(shouldConfirmDesktopQuit(impact, 'last_window_close')).toBe(true);
+    expect(shouldConfirmDesktopLastWindowClose(impact)).toBe(true);
+    expect(buildDesktopQuitConfirmationModel(impact).message).toBe('This will cancel 2 background tasks.');
+    expect(buildDesktopLastWindowCloseConfirmationModel(impact).message).toBe(
+      'The last window will close, but 2 background tasks will keep running.',
+    );
   });
 
   it('builds a structured quit confirmation model for runtime shutdown and open windows', () => {

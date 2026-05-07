@@ -127,4 +127,22 @@ describe('sshRuntime', () => {
     expect(source).toContain('remoteRuntimePID = remoteStartup.pid ?? null;');
     expect(source).toContain('Remote Redeven launcher failed before reporting readiness (${exitReason}).');
   });
+
+  it('threads AbortSignal through SSH child processes, polling loops, and upload cleanup', () => {
+    const source = readSSHRuntimeSource();
+
+    expect(source).toContain('export class DesktopSSHRuntimeCanceledError extends Error');
+    expect(source).toContain('signal?: AbortSignal;');
+    expect(source).toContain('function throwIfSSHRuntimeCanceled(signal: AbortSignal | undefined): void');
+    expect(source).toContain('throwIfSSHRuntimeCanceled(signal);');
+    expect(source).toContain('signal,');
+    expect(source).toContain('reject(new DesktopSSHRuntimeCanceledError());');
+    expect(source).toContain('async function waitForForwardedLocalUIOpenable(url: string, timeoutMs: number, signal?: AbortSignal)');
+    expect(source).toContain('async function createRemoteTempDir(args: Readonly<{');
+    expect(source).toContain('async function installRemoteRuntimeViaDesktopUpload(args: Readonly<{');
+    expect(source).toContain('const remoteTempDir = await createRemoteTempDir(args);');
+    expect(source).toContain('await removeRemotePath({\n      ...args,\n      remotePath: remoteTempDir,\n    });');
+    expect(source).toContain('await disconnect();');
+    expect(source).toContain('if (error instanceof DesktopSSHRuntimeCanceledError || isAbortError(error) || args.signal?.aborted) {');
+  });
 });

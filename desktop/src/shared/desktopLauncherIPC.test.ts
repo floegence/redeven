@@ -171,6 +171,13 @@ describe('desktopLauncherIPC', () => {
       environment_id: 'ssh-1',
     });
     expect(normalizeDesktopLauncherActionRequest({
+      kind: 'cancel_launcher_operation',
+      operation_key: ' ssh:devbox:default:key_agent:remote_default ',
+    })).toEqual({
+      kind: 'cancel_launcher_operation',
+      operation_key: 'ssh:devbox:default:key_agent:remote_default',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
       kind: 'set_saved_ssh_environment_pinned',
       environment_id: ' ssh-1 ',
       label: ' SSH lab ',
@@ -200,6 +207,7 @@ describe('desktopLauncherIPC', () => {
     expect(normalizeDesktopLauncherActionRequest({ kind: 'open_local_environment' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'stop_environment_runtime', environment_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'focus_environment_window', session_key: '   ' })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'cancel_launcher_operation', operation_key: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'set_provider_environment_pinned',
       environment_id: '   ',
