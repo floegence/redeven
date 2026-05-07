@@ -7,10 +7,12 @@ import {
   Check,
   ChevronDown,
   Copy,
+  ExternalLink,
   Globe,
   Lock,
   Moon,
   Pin,
+  Play,
   Plus,
   Refresh,
   Save,
@@ -18,6 +20,7 @@ import {
   Settings,
   Shield,
   ShieldCheck,
+  Stop,
   Sun,
   Terminal,
   Trash,
@@ -3532,6 +3535,35 @@ function firstEnabledMenuItem(root: HTMLElement | undefined): HTMLElement | null
   return root?.querySelector<HTMLElement>('[role="menuitem"]:not([disabled])') ?? null;
 }
 
+function splitMenuIcon(intent: EnvironmentActionIntent): ((props?: { class?: string }) => JSX.Element) | null {
+  switch (intent) {
+    case 'stop_runtime':
+      return Stop;
+    case 'start_runtime':
+      return Play;
+    case 'restart_runtime':
+      return Refresh;
+    case 'refresh_runtime':
+      return Refresh;
+    case 'focus_local_serve':
+    case 'open_local_runtime':
+      return ExternalLink;
+    default:
+      return null;
+  }
+}
+
+function splitMenuItemTone(intent: EnvironmentActionIntent): string {
+  switch (intent) {
+    case 'stop_runtime':
+      return 'light-dark(#dc2626, #f87171)';
+    case 'start_runtime':
+      return 'light-dark(#2563eb, #60a5fa)';
+    default:
+      return '';
+  }
+}
+
 function EnvironmentSplitActionButton(props: Readonly<{
   presentation: Extract<EnvironmentActionPresentation, Readonly<{ kind: 'split_button' }>>;
   environmentID: string;
@@ -3777,20 +3809,32 @@ function EnvironmentSplitActionButton(props: Readonly<{
           }}
         >
           <For each={props.presentation.menu_actions}>
-            {(item: EnvironmentActionMenuItemModel) => (
-              <button
-                type="button"
-                role="menuitem"
-                class="redeven-split-menu-item"
-                disabled={!item.action.enabled}
-                onClick={() => {
-                  closeMenu();
-                  props.onRunAction(item.action);
-                }}
-              >
-                {item.label}
-              </button>
-            )}
+            {(item: EnvironmentActionMenuItemModel) => {
+              const icon = () => splitMenuIcon(item.action.intent);
+              const toneColor = () => splitMenuItemTone(item.action.intent);
+              return (
+                <button
+                    type="button"
+                    role="menuitem"
+                    class="redeven-split-menu-item"
+                    style={toneColor() ? { color: toneColor() } : undefined}
+                    disabled={!item.action.enabled}
+                    onClick={() => {
+                      closeMenu();
+                      props.onRunAction(item.action);
+                    }}
+                  >
+                    <Show when={icon()}>
+                      {(Icon) => (
+                        <span class="redeven-split-menu-item-icon opacity-70">
+                          <Icon />
+                        </span>
+                      )}
+                    </Show>
+                    {item.label}
+                  </button>
+              );
+            }}
           </For>
         </DesktopAnchoredOverlaySurface>
       </Show>
