@@ -19,6 +19,7 @@ export type BusyAction =
   | 'set_saved_environment_pinned'
   | 'set_saved_ssh_environment_pinned'
   | 'delete_control_plane'
+  | 'cancel_launcher_operation'
   | 'close_launcher_or_quit'
   | 'save_local_environment_settings'
   | 'save_settings'
@@ -78,6 +79,14 @@ export function busyStateForLauncherRequest(
         environment_id: '',
         provider_origin: request.provider_origin,
         provider_id: request.provider_id,
+        progress: null,
+      };
+    case 'cancel_launcher_operation':
+      return {
+        action: request.kind,
+        environment_id: '',
+        provider_origin: '',
+        provider_id: '',
         progress: null,
       };
     case 'start_control_plane_connect':

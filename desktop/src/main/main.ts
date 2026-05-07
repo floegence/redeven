@@ -72,12 +72,13 @@ import { hydrateWelcomeLocalEnvironmentRuntimeState } from './desktopWelcomeRunt
 import { defaultDesktopStateStorePath, DesktopStateStore } from './desktopStateStore';
 import { DesktopThemeState } from './desktopThemeState';
 import { DesktopDiagnosticsRecorder } from './diagnostics';
+import { LauncherOperationRegistry, launcherOperationProgress } from './launcherOperations';
 import { buildLocalUIEnvAppEntryURL } from './localUIURL';
 import { isAllowedAppNavigation } from './navigation';
 import { resolveBundledRuntimePath, resolveSessionPreloadPath, resolveUtilityPreloadPath, resolveWelcomeRendererPath } from './paths';
 import { loadExternalLocalUIStartup } from './runtimeState';
 import { desktopSessionRuntimeHandleFromManagedRuntime, type DesktopSessionRuntimeHandle } from './sessionRuntime';
-import { startManagedSSHRuntime } from './sshRuntime';
+import { DesktopSSHRuntimeCanceledError, startManagedSSHRuntime } from './sshRuntime';
 import { PUBLIC_REDEVEN_RELEASE_BASE_URL } from './sshReleaseAssets';
 import { installStdioBrokenPipeGuards } from './stdio';
 import type { StartupReport } from './startup';
@@ -182,6 +183,7 @@ import {
   DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL,
   DESKTOP_LAUNCHER_SNAPSHOT_UPDATED_CHANNEL,
   type DesktopLauncherActionProgress,
+  type DesktopLauncherOperationSnapshot,
   normalizeDesktopLauncherActionRequest,
   type DesktopLauncherActionFailure,
   type DesktopLauncherActionFailureCode,
@@ -310,15 +312,11 @@ type SSHEnvironmentRuntimeRecord = Readonly<{
   stop: () => Promise<void>;
 }>;
 
-type PendingLauncherActionProgress = DesktopLauncherActionProgress & Readonly<{
-  operation_key: string;
-  started_at_unix_ms: number;
-}>;
-
 type PendingSSHRuntimeStart = Readonly<{
   runtime_key: `ssh:${string}`;
   environment_id: string;
   label: string;
+  operation_key: string;
   task: Promise<SSHEnvironmentRuntimeRecord>;
 }>;
 
@@ -397,7 +395,8 @@ const controlPlaneSyncTaskByKey = new Map<string, Promise<Readonly<{
 let localEnvironmentRuntimeRecord: LocalEnvironmentRuntimeRecord | null = null;
 const sshEnvironmentRuntimeByKey = new Map<`ssh:${string}`, SSHEnvironmentRuntimeRecord>();
 const pendingSSHRuntimeStartByKey = new Map<`ssh:${string}`, PendingSSHRuntimeStart>();
-const pendingLauncherActionProgressByKey = new Map<string, PendingLauncherActionProgress>();
+const launcherOperationRemovalTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const launcherOperations = new LauncherOperationRegistry(handleLauncherOperationChange);
 const desktopDevToolsEnabled = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.REDEVEN_DESKTOP_OPEN_DEVTOOLS ?? '').trim().toLowerCase(),
 );
@@ -893,6 +892,9 @@ function firstDisplayLine(value: unknown): string {
 }
 
 function friendlyRuntimeStartErrorMessage(error: unknown): string {
+  if (error instanceof DesktopSSHRuntimeCanceledError) {
+    return 'SSH runtime startup was canceled.';
+  }
   const rawMessage = error instanceof Error ? error.message : String(error);
   const message = firstDisplayLine(rawMessage);
   if (/ENOENT: no such file or directory, mkdir '\/root'/u.test(message)) {
@@ -1111,6 +1113,9 @@ async function buildCurrentDesktopQuitImpact(): Promise<DesktopQuitImpact> {
 
   return buildDesktopQuitImpact({
     environment_window_count: openSessionSummaries().length,
+    pending_operation_count: launcherOperations.operations().filter((operation) => (
+      operation.status === 'running' || operation.status === 'canceling' || operation.status === 'cleanup_running'
+    )).length,
     local_environment_runtime: localEnvironmentRuntimeRecord
       ? {
           id: localEnvironmentRuntimeRecord.environment_id,
@@ -1384,8 +1389,8 @@ async function buildCurrentDesktopWelcomeSnapshot(
     openSessions,
     savedExternalRuntimeHealth,
     savedSSHRuntimeHealth,
-    actionProgress: [...pendingLauncherActionProgressByKey.values()]
-      .sort((left, right) => left.started_at_unix_ms - right.started_at_unix_ms),
+    actionProgress: launcherOperations.progressItems(),
+    operations: launcherOperations.operations(),
     surface: state.surface,
     entryReason: overrides.entryReason ?? state.entryReason,
     issue: overrides.issue ?? state.issue,
@@ -1460,15 +1465,8 @@ function broadcastDesktopWelcomeSnapshots(): void {
   }
 }
 
-function emitLauncherActionProgress(progress: DesktopLauncherActionProgress): void {
-  const operationKey = compact(progress.operation_key)
-    || `${progress.action}:${compact(progress.environment_id) || compact(progress.phase)}`;
-  const persistedProgress = {
-    ...progress,
-    operation_key: operationKey,
-    started_at_unix_ms: pendingLauncherActionProgressByKey.get(operationKey)?.started_at_unix_ms ?? Date.now(),
-  };
-  pendingLauncherActionProgressByKey.set(operationKey, persistedProgress);
+function handleLauncherOperationChange(snapshot: DesktopLauncherOperationSnapshot): void {
+  const persistedProgress: DesktopLauncherActionProgress = launcherOperationProgress(snapshot);
   const launcher = liveUtilityWindow('launcher');
   if (launcher && !launcher.webContents.isDestroyed()) {
     launcher.webContents.send(DESKTOP_LAUNCHER_ACTION_PROGRESS_CHANNEL, persistedProgress);
@@ -1476,13 +1474,21 @@ function emitLauncherActionProgress(progress: DesktopLauncherActionProgress): vo
   void emitDesktopWelcomeSnapshot('launcher');
 }
 
-function clearLauncherActionProgress(operationKey: string): void {
+function scheduleLauncherOperationRemoval(operationKey: string, delayMs = 4_000): void {
   const cleanOperationKey = compact(operationKey);
   if (cleanOperationKey === '') {
     return;
   }
-  pendingLauncherActionProgressByKey.delete(cleanOperationKey);
-  void emitDesktopWelcomeSnapshot('launcher');
+  const existingTimer = launcherOperationRemovalTimers.get(cleanOperationKey);
+  if (existingTimer) {
+    clearTimeout(existingTimer);
+  }
+  const timer = setTimeout(() => {
+    launcherOperationRemovalTimers.delete(cleanOperationKey);
+    launcherOperations.remove(cleanOperationKey);
+    void emitDesktopWelcomeSnapshot('launcher');
+  }, delayMs);
+  launcherOperationRemovalTimers.set(cleanOperationKey, timer);
 }
 
 function setLauncherViewState(options: OpenDesktopWelcomeOptions = {}): DesktopUtilityWindowState {
@@ -2535,17 +2541,23 @@ async function startSSHEnvironmentRuntimeRecord(
     return pendingStart.task;
   }
 
+  const operation = launcherOperations.create({
+    operation_key: runtimeKey,
+    action: 'start_environment_runtime',
+    subject_kind: 'ssh_environment',
+    subject_id: runtimeKey,
+    environment_id: environmentID,
+    environment_label: label,
+    phase: 'ssh_preparing_start',
+    title: 'Preparing SSH runtime',
+    detail: 'Desktop is preparing the SSH bootstrap task and will keep this progress visible until it finishes.',
+    cancelable: true,
+  });
+  const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
+
   const task = (async () => {
+    let operationSettled = false;
     try {
-      emitLauncherActionProgress({
-        action: 'start_environment_runtime',
-        environment_id: environmentID,
-        environment_label: label,
-        operation_key: runtimeKey,
-        phase: 'ssh_preparing_start',
-        title: 'Preparing SSH runtime',
-        detail: 'Desktop is preparing the SSH bootstrap task and will keep this progress visible until it finishes.',
-      });
       const managedSSHRuntime = await startManagedSSHRuntime({
         target: sshDetails,
         runtimeReleaseTag: resolveSSHRuntimeReleaseTag(),
@@ -2553,6 +2565,7 @@ async function startSSHEnvironmentRuntimeRecord(
         forceRuntimeUpdate: options.forceRuntimeUpdate,
         tempRoot: app.getPath('temp'),
         assetCacheRoot: path.join(app.getPath('userData'), 'ssh-runtime-cache'),
+        signal,
         onLog: (stream, chunk) => {
           const text = String(chunk ?? '').trim();
           if (!text) {
@@ -2561,17 +2574,43 @@ async function startSSHEnvironmentRuntimeRecord(
           console.log(`[redeven:${stream}] ${text}`);
         },
         onProgress: (progress) => {
-          emitLauncherActionProgress({
-            action: 'start_environment_runtime',
-            environment_id: environmentID,
-            environment_label: label,
-            operation_key: runtimeKey,
+          launcherOperations.update(runtimeKey, {
             phase: progress.phase,
             title: progress.title,
             detail: progress.detail,
           });
         },
       });
+      if (launcherOperations.isStale(runtimeKey)) {
+        launcherOperations.update(runtimeKey, {
+          status: 'cleanup_running',
+          phase: 'cleanup_deleted_connection',
+          title: 'Connection removed',
+          detail: 'Desktop is stopping the SSH runtime that finished after this connection was removed.',
+          cancelable: false,
+        });
+        try {
+          await managedSSHRuntime.stop();
+          launcherOperations.finish(runtimeKey, 'canceled', {
+            phase: 'deleted_connection_cleaned',
+            title: 'Startup canceled',
+            detail: 'Desktop removed the connection and cleaned up the SSH startup task.',
+            deleted_subject: true,
+          });
+          scheduleLauncherOperationRemoval(runtimeKey);
+          operationSettled = true;
+        } catch (cleanupError) {
+          launcherOperations.finish(runtimeKey, 'cleanup_failed', {
+            phase: 'cleanup_failed',
+            title: 'Connection removed; cleanup needs attention',
+            detail: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+            deleted_subject: true,
+            error_message: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+          });
+          operationSettled = true;
+        }
+        throw new DesktopSSHRuntimeCanceledError('SSH runtime startup was canceled because the connection was removed.');
+      }
       const runtimeRecord: SSHEnvironmentRuntimeRecord = {
         runtime_key: runtimeKey,
         environment_id: environmentID,
@@ -2584,16 +2623,44 @@ async function startSSHEnvironmentRuntimeRecord(
         stop: managedSSHRuntime.stop,
       };
       sshEnvironmentRuntimeByKey.set(runtimeKey, runtimeRecord);
+      launcherOperations.finish(runtimeKey, 'succeeded', {
+        phase: 'ssh_runtime_started',
+        title: 'SSH runtime ready',
+        detail: 'Desktop started the SSH runtime and opened a local tunnel.',
+      });
+      scheduleLauncherOperationRemoval(runtimeKey);
+      operationSettled = true;
       return runtimeRecord;
+    } catch (error) {
+      if (!operationSettled) {
+        if (error instanceof DesktopSSHRuntimeCanceledError || signal?.aborted) {
+          launcherOperations.finish(runtimeKey, 'canceled', {
+            phase: 'canceled',
+            title: 'Startup canceled',
+            detail: 'Desktop canceled the SSH startup task.',
+            deleted_subject: launcherOperations.get(runtimeKey)?.deleted_subject === true,
+          });
+        } else {
+          const message = error instanceof Error ? error.message : String(error);
+          launcherOperations.finish(runtimeKey, 'failed', {
+            phase: 'failed',
+            title: 'SSH runtime start failed',
+            detail: firstDisplayLine(message) || 'Desktop could not start the SSH runtime.',
+            error_message: message,
+          });
+        }
+        scheduleLauncherOperationRemoval(runtimeKey);
+      }
+      throw error;
     } finally {
       pendingSSHRuntimeStartByKey.delete(runtimeKey);
-      clearLauncherActionProgress(runtimeKey);
     }
   })();
   pendingSSHRuntimeStartByKey.set(runtimeKey, {
     runtime_key: runtimeKey,
     environment_id: environmentID,
     label,
+    operation_key: runtimeKey,
     task,
   });
   return task;
@@ -3046,17 +3113,26 @@ async function syncSavedControlPlaneAccount(
   preferences: DesktopPreferences;
   controlPlane: DesktopSavedControlPlane;
 }>> {
+  const subjectID = desktopControlPlaneKey(providerOrigin, providerID);
+  const subjectGeneration = launcherOperations.currentSubjectGeneration('control_plane', subjectID);
+  const assertCurrentSubject = () => {
+    if (launcherOperations.currentSubjectGeneration('control_plane', subjectID) !== subjectGeneration) {
+      throw new Error('This provider was removed while Desktop was syncing it.');
+    }
+  };
   const refreshToken = controlPlaneRefreshToken(preferences, providerOrigin, providerID);
   if (refreshToken === '') {
     throw new Error('Desktop authorization is missing. Reconnect this provider in your browser.');
   }
 
   const provider = await fetchProviderDiscovery(providerOrigin);
+  assertCurrentSubject();
   if (provider.provider_id !== providerID) {
     throw new Error(`Provider ID mismatch: expected ${providerID}, got ${provider.provider_id}.`);
   }
 
   const refreshed = await refreshProviderDesktopAccessToken(provider, refreshToken);
+  assertCurrentSubject();
   rememberControlPlaneAccessState(
     provider.provider_origin,
     provider.provider_id,
@@ -3069,6 +3145,7 @@ async function syncSavedControlPlaneAccount(
     fetchProviderAccount(provider, refreshed.access_token),
     fetchProviderEnvironments(provider, refreshed.access_token),
   ]);
+  assertCurrentSubject();
   const nextPreferences = upsertSavedControlPlane(preferences, {
     provider,
     account,
@@ -3101,6 +3178,7 @@ async function syncSavedControlPlaneAccountWithState(
   controlPlane: DesktopSavedControlPlane;
 }>> {
   const key = desktopControlPlaneKey(providerOrigin, providerID);
+  const subjectGeneration = launcherOperations.currentSubjectGeneration('control_plane', key);
   const inFlight = controlPlaneSyncTaskByKey.get(key);
   if (inFlight) {
     return inFlight;
@@ -3139,11 +3217,13 @@ async function syncSavedControlPlaneAccountWithState(
       });
       return synced;
     } catch (error) {
-      setControlPlaneSyncRecord(
-        providerOrigin,
-        providerID,
-        controlPlaneSyncRecordFromError(error, lastSyncAttemptAtMS),
-      );
+      if (launcherOperations.currentSubjectGeneration('control_plane', key) === subjectGeneration) {
+        setControlPlaneSyncRecord(
+          providerOrigin,
+          providerID,
+          controlPlaneSyncRecordFromError(error, lastSyncAttemptAtMS),
+        );
+      }
       throw error;
     } finally {
       controlPlaneSyncTaskByKey.delete(key);
@@ -4076,6 +4156,35 @@ async function startEnvironmentRuntimeFromLauncher(
   }
 }
 
+async function cancelLauncherOperationFromLauncher(
+  request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'cancel_launcher_operation' }>>,
+): Promise<DesktopLauncherActionResult> {
+  const operation = launcherOperations.get(request.operation_key);
+  if (!operation) {
+    return launcherActionFailure(
+      'operation_missing',
+      'global',
+      'That background task is no longer active.',
+      {
+        shouldRefreshSnapshot: true,
+      },
+    );
+  }
+  if (!operation.cancelable) {
+    return launcherActionFailure(
+      'operation_not_cancelable',
+      'global',
+      'That background task cannot be canceled at this stage.',
+      {
+        shouldRefreshSnapshot: true,
+      },
+    );
+  }
+  launcherOperations.cancel(request.operation_key, 'Desktop is canceling this background task.');
+  broadcastDesktopWelcomeSnapshots();
+  return launcherActionSuccess('canceled_launcher_operation');
+}
+
 async function stopEnvironmentRuntimeFromLauncher(
   request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'stop_environment_runtime' }>>,
 ): Promise<DesktopLauncherActionResult> {
@@ -4100,6 +4209,12 @@ async function stopEnvironmentRuntimeFromLauncher(
       release_base_url: request.release_base_url,
     });
     const runtimeKey = sshDesktopSessionKey(sshDetails);
+    const pendingStart = pendingSSHRuntimeStartByKey.get(runtimeKey) ?? null;
+    if (pendingStart) {
+      launcherOperations.cancel(pendingStart.operation_key, 'Desktop is canceling the SSH startup task.');
+      broadcastDesktopWelcomeSnapshots();
+      return launcherActionSuccess('canceled_launcher_operation');
+    }
     const runtimeRecord = sshEnvironmentRuntimeByKey.get(runtimeKey) ?? null;
     if (!runtimeRecord) {
       return launcherActionFailure(
@@ -4319,10 +4434,12 @@ async function deleteControlPlaneFromLauncher(
       },
     );
   }
+  const subjectID = desktopControlPlaneKey(request.provider_origin, request.provider_id);
+  launcherOperations.markSubjectDeleted(
+    'control_plane',
+    subjectID,
+  );
   const refreshToken = controlPlaneRefreshToken(preferences, request.provider_origin, request.provider_id);
-  if (refreshToken !== '') {
-    await revokeProviderDesktopAuthorization(controlPlane.provider, refreshToken);
-  }
   const providerSessionKeys = [...sessionsByKey.values()]
     .filter((sessionRecord) => (
       !sessionRecord.closing
@@ -4331,15 +4448,34 @@ async function deleteControlPlaneFromLauncher(
       && sessionRecord.target.provider_id === request.provider_id
     ))
     .map((sessionRecord) => sessionRecord.session_key);
-  for (const sessionKey of providerSessionKeys) {
-    await finalizeSessionClosure(sessionKey);
-  }
-  clearControlPlaneTransientState(request.provider_origin, request.provider_id);
   await persistDesktopPreferences(deleteSavedControlPlane(preferences, request.provider_origin, request.provider_id));
+  clearControlPlaneTransientState(request.provider_origin, request.provider_id);
+  void cleanupDeletedControlPlane(controlPlane, refreshToken, providerSessionKeys);
   resetLauncherIssueState();
   return launcherActionSuccess('deleted_control_plane', {
     utilityWindowKind: 'launcher',
   });
+}
+
+async function cleanupDeletedControlPlane(
+  controlPlane: DesktopSavedControlPlane,
+  refreshToken: string,
+  providerSessionKeys: readonly DesktopSessionKey[],
+): Promise<void> {
+  if (refreshToken !== '') {
+    try {
+      await revokeProviderDesktopAuthorization(controlPlane.provider, refreshToken);
+    } catch (error) {
+      console.warn('Redeven Desktop failed to revoke a deleted provider authorization.', error);
+    }
+  }
+  for (const sessionKey of providerSessionKeys) {
+    try {
+      await finalizeSessionClosure(sessionKey);
+    } catch (error) {
+      console.warn('Redeven Desktop failed to close a deleted provider session.', error);
+    }
+  }
 }
 
 async function openProviderEnvironmentFromLauncher(
@@ -4814,7 +4950,25 @@ async function deleteSavedEnvironmentFromWelcome(environmentID: string): Promise
 
 async function deleteSavedSSHEnvironmentFromWelcome(environmentID: string): Promise<void> {
   const preferences = await loadDesktopPreferencesCached();
+  const existing = preferences.saved_ssh_environments.find((environment) => environment.id === environmentID) ?? null;
+  const runtimeKey = existing ? sshDesktopSessionKey(existing) : null;
+  if (runtimeKey !== null) {
+    launcherOperations.markSubjectDeleted('ssh_environment', runtimeKey, {
+      status: 'canceling',
+      phase: 'canceling_deleted_connection',
+      title: 'Connection removed',
+      detail: 'Desktop is canceling any startup task that still belongs to this deleted connection.',
+      cancelable: false,
+      deleted_subject: true,
+    });
+  }
   await persistDesktopPreferences(deleteSavedSSHEnvironment(preferences, environmentID));
+  if (runtimeKey) {
+    const pendingStart = pendingSSHRuntimeStartByKey.get(runtimeKey) ?? null;
+    if (pendingStart) {
+      launcherOperations.cancel(pendingStart.operation_key, 'Connection removed. Desktop is canceling the SSH startup task in the background.');
+    }
+  }
 }
 
 async function performDesktopLauncherAction(request: DesktopLauncherActionRequest): Promise<DesktopLauncherActionResult> {
@@ -4827,6 +4981,8 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       return openSSHEnvironmentFromLauncher(request);
     case 'start_environment_runtime':
       return startEnvironmentRuntimeFromLauncher(request);
+    case 'cancel_launcher_operation':
+      return cancelLauncherOperationFromLauncher(request);
     case 'stop_environment_runtime':
       return stopEnvironmentRuntimeFromLauncher(request);
     case 'refresh_environment_runtime':
@@ -4993,6 +5149,12 @@ async function restoreBestAvailableWindow(options?: Readonly<{ stealAppFocus?: b
 }
 
 async function shutdownDesktopWindowsAndSessions(): Promise<void> {
+  for (const pendingStart of pendingSSHRuntimeStartByKey.values()) {
+    launcherOperations.cancel(pendingStart.operation_key, 'Redeven Desktop is quitting and canceling this SSH startup task.');
+  }
+  const pendingSSHStartPromises = [...pendingSSHRuntimeStartByKey.values()].map((pendingStart) => (
+    pendingStart.task.catch(() => undefined)
+  ));
   const sessionClosePromises = [...sessionsByKey.keys()].map((sessionKey) => finalizeSessionClosure(sessionKey));
   const sshDisconnectPromises = [...sshEnvironmentRuntimeByKey.values()].map((runtimeRecord) => runtimeRecord.disconnect());
   sshEnvironmentRuntimeByKey.clear();
@@ -5015,6 +5177,10 @@ async function shutdownDesktopWindowsAndSessions(): Promise<void> {
   await Promise.allSettled(sessionClosePromises);
   await Promise.allSettled([...sessionCloseTasks.values()]);
   await Promise.allSettled(sshDisconnectPromises);
+  await Promise.race([
+    Promise.allSettled(pendingSSHStartPromises),
+    new Promise((resolve) => setTimeout(resolve, 3_000)),
+  ]);
 }
 
 type DesktopDeepLinkRequest =

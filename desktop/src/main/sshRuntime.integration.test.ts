@@ -17,6 +17,7 @@ vi.mock('./sshReleaseAssets', async (importOriginal) => {
 });
 
 import {
+  DesktopSSHRuntimeCanceledError,
   startManagedSSHRuntime,
   type ManagedSSHRuntime,
 } from './sshRuntime';
@@ -443,6 +444,20 @@ async function readFakeSSHEvents(fixture: FakeSSHFixture): Promise<readonly Fake
     .map((line) => JSON.parse(line) as FakeSSHEvent);
 }
 
+async function waitForFakeSSHEvent(fixture: FakeSSHFixture, eventName: string, timeoutMs = 1_500): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const events = await readFakeSSHEvents(fixture);
+    if (events.some((event) => event.event === eventName)) {
+      return;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(`Timed out waiting for fake SSH event: ${eventName}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
 async function withFakeSSHEnv<T>(fixture: FakeSSHFixture, run: () => Promise<T>): Promise<T> {
   const previousLog = process.env.REDEVEN_FAKE_SSH_LOG;
   const previousState = process.env.REDEVEN_FAKE_SSH_STATE;
@@ -498,6 +513,7 @@ async function startWithFakeSSH(
     target?: DesktopSSHEnvironmentDetails;
     sourceRuntimeRoot?: string;
     forceRuntimeUpdate?: boolean;
+    signal?: AbortSignal;
   }> = {},
 ): Promise<ManagedSSHRuntime> {
   return withFakeSSHEnv(fixture, () => startManagedSSHRuntime({
@@ -512,6 +528,7 @@ async function startWithFakeSSH(
     probeTimeoutMs: options.probeTimeoutMs ?? 2_500,
     stopTimeoutMs: 500,
     connectTimeoutSeconds: 1,
+    signal: options.signal,
   }));
 }
 
@@ -637,6 +654,35 @@ describe('sshRuntime integration', () => {
       pid: '4242',
     });
     await removeFakeSSHFixture(fixture);
+  });
+
+  it('aborts a pending SSH startup and tears down long-lived SSH processes before opening a tunnel', async () => {
+    const fixture = await createFakeSSHFixture('no_report');
+    try {
+      const abortController = new AbortController();
+      const startup = startWithFakeSSH(fixture, 'auto', {
+        startupTimeoutMs: 2_500,
+        signal: abortController.signal,
+      });
+
+      await waitForFakeSSHEvent(fixture, 'start_runtime');
+      abortController.abort();
+
+      await expect(startup).rejects.toBeInstanceOf(DesktopSSHRuntimeCanceledError);
+      await waitForFakeSSHEvent(fixture, 'master_terminated');
+      await waitForFakeSSHEvent(fixture, 'control_terminated');
+
+      const events = await readFakeSSHEvents(fixture);
+      expect(events.map((event) => event.event)).toEqual(expect.arrayContaining([
+        'master_start',
+        'start_runtime',
+        'master_terminated',
+        'control_terminated',
+      ]));
+      expect(events.map((event) => event.event)).not.toContain('forward_start');
+    } finally {
+      await removeFakeSSHFixture(fixture);
+    }
   });
 
   it('keeps the SSH tunnel attached when the forwarded Local UI reports blocked open-readiness', async () => {

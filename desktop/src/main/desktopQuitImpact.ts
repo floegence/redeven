@@ -10,6 +10,7 @@ export type DesktopQuitImpactRuntime = Readonly<{
 
 export type DesktopQuitImpactInput = Readonly<{
   environment_window_count: number;
+  pending_operation_count?: number;
   local_environment_runtime: Readonly<{
     id: string;
     label: string;
@@ -24,6 +25,7 @@ export type DesktopQuitImpactInput = Readonly<{
 
 export type DesktopQuitImpact = Readonly<{
   environment_window_count: number;
+  pending_operation_count: number;
   desktop_owned_runtimes: readonly DesktopQuitImpactRuntime[];
   external_runtime_count: number;
 }>;
@@ -78,6 +80,7 @@ export function buildDesktopQuitImpact(input: DesktopQuitImpactInput): DesktopQu
 
   return {
     environment_window_count: Math.max(0, Math.trunc(input.environment_window_count)),
+    pending_operation_count: Math.max(0, Math.trunc(input.pending_operation_count ?? 0)),
     desktop_owned_runtimes: desktopOwnedRuntimes,
     external_runtime_count: externalRuntimeCount,
   };
@@ -90,6 +93,9 @@ export function shouldConfirmDesktopQuit(
   if (impact.desktop_owned_runtimes.length > 0) {
     return true;
   }
+  if (impact.pending_operation_count > 0) {
+    return true;
+  }
   if (source === 'last_window_close') {
     return false;
   }
@@ -99,12 +105,13 @@ export function shouldConfirmDesktopQuit(
 export function shouldConfirmDesktopLastWindowClose(
   impact: DesktopQuitImpact,
 ): boolean {
-  return impact.desktop_owned_runtimes.length > 0 || impact.environment_window_count > 0;
+  return impact.desktop_owned_runtimes.length > 0 || impact.pending_operation_count > 0 || impact.environment_window_count > 0;
 }
 
 export function buildDesktopQuitConfirmationModel(impact: DesktopQuitImpact): DesktopConfirmationDialogModel {
   const runtimeCount = impact.desktop_owned_runtimes.length;
   const sessionCount = impact.environment_window_count;
+  const operationCount = impact.pending_operation_count;
   const externalRuntimeCount = impact.external_runtime_count;
   const summary: string[] = [];
 
@@ -116,6 +123,11 @@ export function buildDesktopQuitConfirmationModel(impact: DesktopQuitImpact): De
   if (sessionCount > 0) {
     summary.push(
       `close ${sessionCount} environment ${pluralize(sessionCount, 'window')}`,
+    );
+  }
+  if (operationCount > 0) {
+    summary.push(
+      `cancel ${operationCount} background ${pluralize(operationCount, 'task')}`,
     );
   }
 
@@ -140,9 +152,12 @@ export function buildDesktopLastWindowCloseConfirmationModel(
   impact: DesktopQuitImpact,
 ): DesktopConfirmationDialogModel {
   const runtimeCount = impact.desktop_owned_runtimes.length;
+  const operationCount = impact.pending_operation_count;
   const runtimeLabel = `${runtimeCount} Desktop-managed ${pluralize(runtimeCount, 'runtime')}`;
   const message = runtimeCount > 0
     ? `The last window will close, but ${runtimeLabel} will keep running in the background.`
+    : operationCount > 0
+      ? `The last window will close, but ${operationCount} background ${pluralize(operationCount, 'task')} will keep running.`
     : impact.environment_window_count > 0
       ? 'The last window will close, but Redeven Desktop will keep running in the background.'
       : 'Redeven Desktop will keep running in the background.';

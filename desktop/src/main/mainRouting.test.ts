@@ -77,23 +77,68 @@ describe('main routing', () => {
     expect(mainSrc).toContain('Set REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG for dev SSH bootstrap');
   });
 
-  it('forwards SSH runtime bootstrap progress to the launcher renderer', () => {
+  it('routes SSH runtime bootstrap progress through cancellable launcher operations', () => {
     const mainSrc = readMainSource();
 
     expect(mainSrc).toContain('DESKTOP_LAUNCHER_ACTION_PROGRESS_CHANNEL');
-    expect(mainSrc).toContain('function emitLauncherActionProgress(');
-    expect(mainSrc).toContain('pendingLauncherActionProgressByKey.set(operationKey, persistedProgress);');
-    expect(mainSrc).toContain('actionProgress: [...pendingLauncherActionProgressByKey.values()]');
+    expect(mainSrc).toContain('const launcherOperations = new LauncherOperationRegistry(handleLauncherOperationChange);');
+    expect(mainSrc).toContain('actionProgress: launcherOperations.progressItems()');
+    expect(mainSrc).toContain('operations: launcherOperations.operations()');
     expect(mainSrc).toContain('const pendingStart = pendingSSHRuntimeStartByKey.get(runtimeKey) ?? null;');
     expect(mainSrc).toContain('return pendingStart.task;');
+    expect(mainSrc).toContain('const operation = launcherOperations.create({');
     expect(mainSrc).toContain("phase: 'ssh_preparing_start'");
     expect(mainSrc).toContain("action: 'start_environment_runtime'");
+    expect(mainSrc).toContain("subject_kind: 'ssh_environment'");
+    expect(mainSrc).toContain('cancelable: true');
+    expect(mainSrc).toContain('const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;');
     expect(mainSrc).toContain('environment_label: label');
     expect(mainSrc).toContain('phase: progress.phase');
     expect(mainSrc).toContain('detail: progress.detail');
-    expect(mainSrc).toContain('clearLauncherActionProgress(runtimeKey);');
+    expect(mainSrc).toContain('launcherOperations.isStale(runtimeKey)');
+    expect(mainSrc).toContain('scheduleLauncherOperationRemoval(runtimeKey);');
     expect(mainSrc).toContain('function friendlyRuntimeStartErrorMessage(');
     expect(mainSrc).toContain('The SSH host resolved its runtime directory to /root');
+  });
+
+  it('keeps delete actions non-blocking while preventing stale SSH and provider tasks from resurrecting entries', () => {
+    const mainSrc = readMainSource();
+    const sshDeleteStart = mainSrc.indexOf('async function deleteSavedSSHEnvironmentFromWelcome');
+    const providerDeleteStart = mainSrc.indexOf('async function deleteControlPlaneFromLauncher');
+    const providerCleanupStart = mainSrc.indexOf('async function cleanupDeletedControlPlane');
+    const syncAccountStart = mainSrc.indexOf('async function syncSavedControlPlaneAccount(');
+    const syncStart = mainSrc.indexOf('async function syncSavedControlPlaneAccountWithState');
+    const syncEnd = mainSrc.indexOf('async function ensureControlPlaneAccessToken');
+
+    expect(sshDeleteStart).toBeGreaterThanOrEqual(0);
+    const sshDeleteSrc = mainSrc.slice(sshDeleteStart, mainSrc.indexOf('async function performDesktopLauncherAction', sshDeleteStart));
+    expect(sshDeleteSrc).toContain("launcherOperations.markSubjectDeleted('ssh_environment', runtimeKey");
+    expect(sshDeleteSrc.indexOf('await persistDesktopPreferences(deleteSavedSSHEnvironment(preferences, environmentID));')).toBeLessThan(
+      sshDeleteSrc.indexOf('launcherOperations.cancel(pendingStart.operation_key'),
+    );
+
+    expect(providerDeleteStart).toBeGreaterThanOrEqual(0);
+    expect(providerCleanupStart).toBeGreaterThan(providerDeleteStart);
+    const providerDeleteSrc = mainSrc.slice(providerDeleteStart, providerCleanupStart);
+    expect(providerDeleteSrc).toContain("launcherOperations.markSubjectDeleted(\n    'control_plane'");
+    expect(providerDeleteSrc).toContain('await persistDesktopPreferences(deleteSavedControlPlane(preferences, request.provider_origin, request.provider_id));');
+    expect(providerDeleteSrc).toContain('void cleanupDeletedControlPlane(controlPlane, refreshToken, providerSessionKeys);');
+    expect(providerDeleteSrc).not.toContain('await revokeProviderDesktopAuthorization');
+    expect(providerDeleteSrc).not.toContain('await finalizeSessionClosure(sessionKey)');
+
+    expect(syncAccountStart).toBeGreaterThanOrEqual(0);
+    expect(syncStart).toBeGreaterThan(syncAccountStart);
+    const syncAccountSrc = mainSrc.slice(syncAccountStart, syncStart);
+    expect(syncAccountSrc).toContain('const assertCurrentSubject = () => {');
+    expect(syncAccountSrc.indexOf('assertCurrentSubject();')).toBeLessThan(
+      syncAccountSrc.indexOf('rememberControlPlaneAccessState('),
+    );
+
+    expect(syncStart).toBeGreaterThanOrEqual(0);
+    expect(syncEnd).toBeGreaterThan(syncStart);
+    const syncSrc = mainSrc.slice(syncStart, syncEnd);
+    expect(syncSrc).toContain("const subjectGeneration = launcherOperations.currentSubjectGeneration('control_plane', key);");
+    expect(syncSrc).toContain("if (launcherOperations.currentSubjectGeneration('control_plane', key) === subjectGeneration) {");
   });
 
   it('keeps desktop diagnostics for SSH and external sessions in local userData', () => {
@@ -153,6 +198,8 @@ describe('main routing', () => {
     expect(mainSrc).toContain('const confirmedFinalWindowCloseWebContentsIDs = new Set<number>();');
     expect(mainSrc).toContain('label: string;');
     expect(mainSrc).toContain('async function buildCurrentDesktopQuitImpact(): Promise<DesktopQuitImpact> {');
+    expect(mainSrc).toContain('pending_operation_count: launcherOperations.operations().filter((operation) => (');
+    expect(mainSrc).toContain("launcherOperations.cancel(pendingStart.operation_key, 'Redeven Desktop is quitting and canceling this SSH startup task.');");
     expect(mainSrc).toContain('async function confirmDesktopImpact(');
     expect(mainSrc).toContain('async function requestFinalWindowClose(');
     expect(mainSrc).toContain('confirmedFinalWindowCloseWebContentsIDs.add(windowRecord.webContentsID);');

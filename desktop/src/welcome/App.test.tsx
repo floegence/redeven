@@ -597,6 +597,22 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).not.toContain('.redeven-ssh-runtime-progress');
   });
 
+  it('lets users cancel long-running SSH startup operations from the activity overlay', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain('async function cancelLauncherOperation(progress: DesktopLauncherActionProgress): Promise<void>');
+    expect(appSrc).toContain("kind: 'cancel_launcher_operation'");
+    expect(appSrc).toContain("showActionToast('Background task is canceling.', 'info');");
+    expect(appSrc).toContain('cancelOperation={cancelLauncherOperation}');
+    expect(appSrc).toContain('cancelOperation: (progress: DesktopLauncherActionProgress) => void;');
+    expect(appSrc).toContain("progress.deleted_subject\n                        ? 'Connection removed'");
+    expect(appSrc).toContain("progress.status === 'cleanup_failed'\n                            ? 'Cleanup needs attention'");
+    expect(appSrc).toContain('progress.cancelable === true && progress.status === \'running\'');
+    expect(appSrc).toContain('onClick={() => props.cancelOperation(progress)}');
+    expect(appSrc).toContain('<Stop class="h-3 w-3" />');
+    expect(appSrc).toContain('Cancel');
+  });
+
   it('includes Control Plane management copy inside the launcher source', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
@@ -784,6 +800,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('title="Delete Connection"');
     expect(appSrc).toContain('confirmText="Delete Connection"');
     expect(appSrc).toContain('Remove <span class="font-semibold">{deleteTarget()?.label}</span> from the Environment Library?');
+    expect(appSrc).toContain('const deleteTargetOperation = createMemo(() => {');
+    expect(appSrc).toContain('The connection is involved in a background task. Desktop will remove it now, then cancel or clean up that task in the background.');
+    expect(appSrc).toContain('Connection removed. Startup cleanup is running in the background.');
   });
 
   it('memoizes the Dialog open prop so overlay-mask focus trap does not thrash on every keystroke', () => {

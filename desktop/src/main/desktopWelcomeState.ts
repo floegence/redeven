@@ -64,6 +64,7 @@ export type BuildDesktopWelcomeSnapshotArgs = Readonly<{
   savedExternalRuntimeHealth?: Readonly<Record<string, DesktopRuntimeHealth>>;
   savedSSHRuntimeHealth?: Readonly<Record<string, DesktopRuntimeHealth>>;
   actionProgress?: DesktopWelcomeSnapshot['action_progress'];
+  operations?: DesktopWelcomeSnapshot['operations'];
   surface?: DesktopLauncherSurface;
   entryReason?: DesktopWelcomeEntryReason;
   issue?: DesktopWelcomeIssue | null;
@@ -1373,6 +1374,7 @@ export function buildDesktopWelcomeSnapshot(
     environments,
     control_planes: controlPlanes,
     action_progress: args.actionProgress ?? [],
+    operations: args.operations ?? [],
     suggested_remote_url: suggestedRemoteURL(issue, openSessions, environments),
     issue,
     settings_surface: buildDesktopSettingsSurfaceSnapshot('environment_settings', desktopPreferencesToDraft(snapshotPreferences, selectedSettingsState.environment_id), selectedSettingsState),
