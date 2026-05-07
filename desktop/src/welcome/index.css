@@ -1351,10 +1351,10 @@ pre,
  */
 @keyframes redeven-loading-shimmer {
   0% {
-    background-position: 200% 0;
+    background-position: 100% 0;
   }
   100% {
-    background-position: -200% 0;
+    background-position: -100% 0;
   }
 }
 
@@ -1385,22 +1385,23 @@ pre,
   content: '';
   position: absolute;
   inset: 0;
+  mix-blend-mode: overlay;
   background: linear-gradient(
     105deg,
     transparent 0%,
-    transparent 30%,
-    rgba(255, 255, 255, 0.08) 40%,
-    rgba(255, 255, 255, 0.24) 50%,
-    rgba(255, 255, 255, 0.08) 60%,
-    transparent 70%,
+    transparent 25%,
+    rgba(255, 255, 255, 0.04) 34%,
+    rgba(255, 255, 255, 0.35) 50%,
+    rgba(255, 255, 255, 0.04) 66%,
+    transparent 75%,
     transparent 100%
   );
   background-size: 200% 100%;
-  animation: redeven-loading-shimmer 1.6s ease-in-out infinite;
+  animation: redeven-loading-shimmer 3s linear infinite;
 }
 
 .redeven-loading-glow {
-  animation: redeven-loading-glow-pulse 1.6s ease-in-out infinite;
+  animation: redeven-loading-glow-pulse 3s ease-in-out infinite;
   border-radius: 0.375rem;
 }
 
