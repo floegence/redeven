@@ -236,7 +236,7 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
     icon: Search,
     body: WorkbenchFilePreviewWidget,
     defaultTitle: 'Preview',
-    defaultSize: { width: 1120, height: 720 },
+    defaultSize: { width: 1080, height: 700 },
     group: 'workspace',
     singleton: false,
     renderMode: FRONTABLE_WORKBENCH_RENDER_MODE,
