@@ -688,6 +688,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [actionToasts, setActionToasts] = createSignal<readonly DesktopActionToast[]>([]);
   const [settingsError, setSettingsError] = createSignal('');
   const [connectionDialogError, setConnectionDialogError] = createSignal('');
+  const [connectionDialogFieldErrors, setConnectionDialogFieldErrors] = createSignal<Partial<Record<string, string>>>({});
   const [controlPlaneDialogError, setControlPlaneDialogError] = createSignal('');
   const [busyState, setBusyState] = createSignal<DesktopLauncherBusyState>(IDLE_LAUNCHER_BUSY_STATE);
   const [settingsDraftSession, setSettingsDraftSession] = createSignal(createDesktopSettingsDraftSession(props.snapshot.settings_surface));
@@ -1111,6 +1112,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     setSettingsError('');
     setConnectionDialogError('');
+    setConnectionDialogFieldErrors({});
     setControlPlaneDialogError('');
     setControlPlaneDialogState(null);
     setConnectionDialogState(
@@ -1155,6 +1157,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   function closeConnectionDialog(): void {
     setConnectionDialogState(null);
     setConnectionDialogError('');
+    setConnectionDialogFieldErrors({});
   }
 
   function openCreateControlPlaneDialog(message = ''): void {
@@ -1208,6 +1211,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function switchConnectionDialogKind(kind: 'external_local_ui' | 'ssh_environment'): void {
+    setConnectionDialogFieldErrors({});
     setConnectionDialogState((current) => {
       if (!current || current.mode !== 'create' || current.connection_kind === kind) {
         return current;
@@ -2101,11 +2105,31 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
   }
 
+  function validateConnectionDialogFields(state: ConnectionDialogState): Partial<Record<string, string>> {
+    const errors: Partial<Record<string, string>> = {};
+    if (!trimString(state?.label ?? '')) {
+      errors.label = 'Name is required.';
+    }
+    if (state?.connection_kind === 'external_local_ui' && !trimString(state.external_local_ui_url)) {
+      errors.external_local_ui_url = 'Environment URL is required.';
+    }
+    if (state?.connection_kind === 'ssh_environment' && !trimString(state.ssh_destination)) {
+      errors.ssh_destination = 'SSH Destination is required.';
+    }
+    return errors;
+  }
+
   async function saveConnectionFromDialog(): Promise<void> {
     const state = connectionDialogState();
     if (!state) {
       return;
     }
+    const errors = validateConnectionDialogFields(state);
+    setConnectionDialogFieldErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      return;
+    }
+    setConnectionDialogFieldErrors({});
     let saved = false;
     if (state.connection_kind === 'ssh_environment') {
       saved = await upsertSavedSSHEnvironment({
@@ -2145,6 +2169,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (!state) {
       return;
     }
+    const errors = validateConnectionDialogFields(state);
+    setConnectionDialogFieldErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      return;
+    }
+    setConnectionDialogFieldErrors({});
     if (state.connection_kind === 'ssh_environment') {
       await openSSHEnvironment({
         ssh_destination: state.ssh_destination,
@@ -2397,6 +2427,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         state={connectionDialogState()}
         sshConfigHosts={sshConfigHosts()}
         error={connectionDialogError()}
+        fieldErrors={connectionDialogFieldErrors()}
         busyState={busyState()}
         onOpenChange={(open) => {
           if (!open) {
@@ -2406,6 +2437,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         updateField={updateConnectionDialogField}
         switchKind={switchConnectionDialogKind}
         switchBootstrapStrategy={switchSSHBootstrapStrategy}
+        clearFieldErrors={() => setConnectionDialogFieldErrors({})}
         onConnect={connectFromDialog}
         onSave={saveConnectionFromDialog}
       />
@@ -4381,7 +4413,12 @@ const LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS = cn(
   'max-h-[calc(100dvh-1rem)] w-[min(52rem,96vw)]',
 );
 
-const CONNECTION_DIALOG_CLASS = 'max-w-none w-[min(58rem,96vw)]';
+	const CONNECTION_DIALOG_CLASS = cn(
+	  'flex max-w-none flex-col overflow-hidden rounded-md p-0',
+	  '[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2',
+	  '[&>div:nth-child(2)]:min-h-0 [&>div:nth-child(2)]:flex-1 [&>div:nth-child(2)]:overflow-auto [&>div:nth-child(2)]:pt-2',
+	  'max-h-[calc(100dvh-3rem)] w-[min(58rem,96vw)]',
+	);
 
 const LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS = 'redeven-tile rounded-md border border-border px-4 py-4';
 
@@ -4829,6 +4866,7 @@ function SSHDestinationCombobox(props: Readonly<{
   value: string;
   hosts: readonly DesktopSSHConfigHost[];
   autofocus: boolean;
+  class?: string;
   onInput: (value: string) => void;
   onSelectHost: (host: DesktopSSHConfigHost) => void;
 }>) {
@@ -4923,7 +4961,7 @@ function SSHDestinationCombobox(props: Readonly<{
         }}
         placeholder="user@host or ssh-config-alias"
         size="sm"
-        class="w-full font-mono"
+        class={cn('w-full font-mono', props.class)}
         spellcheck={false}
         autofocus={props.autofocus}
         role="combobox"
@@ -4978,6 +5016,7 @@ function ConnectionDialog(props: Readonly<{
   state: ConnectionDialogState;
   sshConfigHosts: readonly DesktopSSHConfigHost[];
   error: string;
+  fieldErrors: Partial<Record<string, string>>;
   busyState: DesktopLauncherBusyState;
   onOpenChange: (open: boolean) => void;
   updateField: (
@@ -4986,6 +5025,7 @@ function ConnectionDialog(props: Readonly<{
   ) => void;
   switchKind: (kind: 'external_local_ui' | 'ssh_environment') => void;
   switchBootstrapStrategy: (strategy: DesktopSSHBootstrapStrategy) => void;
+  clearFieldErrors: () => void;
   onConnect: () => Promise<void>;
   onSave: () => Promise<void>;
 }>) {
@@ -5082,7 +5122,22 @@ function ConnectionDialog(props: Readonly<{
         </div>
       )}
     >
-      <div class="space-y-4">
+      <div
+        class="space-y-4"
+        onWheel={(event) => {
+          let el: HTMLElement | null = event.currentTarget as HTMLElement;
+          while (el) {
+            if (el.scrollHeight > el.clientHeight) {
+              const style = getComputedStyle(el);
+              if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+                el.scrollTop += event.deltaY;
+                return;
+              }
+            }
+            el = el.parentElement;
+          }
+        }}
+      >
         <Show when={isCreate()}>
           <div class="space-y-1.5">
             <label class="block text-xs font-medium text-foreground">Environment Type</label>
@@ -5102,30 +5157,46 @@ function ConnectionDialog(props: Readonly<{
         </Show>
 
         <div class="space-y-1.5">
-          <label for="environment-label" class="block text-xs font-medium text-foreground">Name</label>
+          <label for="environment-label" class="block text-xs font-medium text-foreground">
+            Name <span class="text-destructive">*</span>
+          </label>
           <Input
             id="environment-label"
             value={props.state?.label ?? ''}
-            onInput={(event) => props.updateField('label', event.currentTarget.value)}
+            onInput={(event) => {
+              props.updateField('label', event.currentTarget.value);
+              props.clearFieldErrors();
+            }}
             placeholder="My Environment"
             size="sm"
-            class="w-full"
+            class={cn('w-full', props.fieldErrors.label && 'border-destructive ring-1 ring-destructive/20')}
           />
+          <Show when={props.fieldErrors.label}>
+            <div class="text-[11px] text-destructive">{props.fieldErrors.label}</div>
+          </Show>
         </div>
 
         <Show when={connectionKind() === 'external_local_ui'}>
           <div class="space-y-1.5">
-            <label for="environment-url" class="block text-xs font-medium text-foreground">Environment URL</label>
+            <label for="environment-url" class="block text-xs font-medium text-foreground">
+              Environment URL <span class="text-destructive">*</span>
+            </label>
             <Input
               id="environment-url"
               value={props.state?.connection_kind === 'external_local_ui' ? props.state.external_local_ui_url : ''}
-              onInput={(event) => props.updateField('external_local_ui_url', event.currentTarget.value)}
+              onInput={(event) => {
+                props.updateField('external_local_ui_url', event.currentTarget.value);
+                props.clearFieldErrors();
+              }}
               placeholder="http://192.168.1.11:24000/"
               size="sm"
-              class="w-full font-mono"
+              class={cn('w-full font-mono', props.fieldErrors.external_local_ui_url && 'border-destructive ring-1 ring-destructive/20')}
               spellcheck={false}
               autofocus={props.state?.mode === 'create'}
             />
+            <Show when={props.fieldErrors.external_local_ui_url}>
+              <div class="text-[11px] text-destructive">{props.fieldErrors.external_local_ui_url}</div>
+            </Show>
           </div>
         </Show>
 
@@ -5137,17 +5208,26 @@ function ConnectionDialog(props: Readonly<{
             <div class="mt-3 space-y-3">
               <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7.5rem]">
                 <div class="space-y-1.5">
-                  <label for="environment-ssh-destination" class="block text-xs font-medium text-foreground">SSH Destination</label>
+                  <label for="environment-ssh-destination" class="block text-xs font-medium text-foreground">
+                    SSH Destination <span class="text-destructive">*</span>
+                  </label>
                   <SSHDestinationCombobox
                     value={props.state?.connection_kind === 'ssh_environment' ? props.state.ssh_destination : ''}
                     hosts={props.sshConfigHosts}
                     autofocus={props.state?.mode === 'create'}
-                    onInput={(value) => props.updateField('ssh_destination', value)}
+                    class={props.fieldErrors.ssh_destination && 'border-destructive ring-1 ring-destructive/20'}
+                    onInput={(value) => {
+                      props.updateField('ssh_destination', value);
+                      props.clearFieldErrors();
+                    }}
                     onSelectHost={(host) => {
                       props.updateField('ssh_destination', host.alias);
                       props.updateField('ssh_port', host.port == null ? '' : String(host.port));
                     }}
                   />
+                  <Show when={props.fieldErrors.ssh_destination}>
+                    <div class="text-[11px] text-destructive">{props.fieldErrors.ssh_destination}</div>
+                  </Show>
                 </div>
                 <div class="space-y-1.5">
                   <label for="environment-ssh-port" class="block text-xs font-medium text-foreground">Port</label>
