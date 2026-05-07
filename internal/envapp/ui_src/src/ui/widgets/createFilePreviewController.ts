@@ -4,6 +4,10 @@ import type { Client } from '@floegence/flowersec-core';
 import type { JsonFrameChannel } from '@floegence/flowersec-core/streamio';
 import type { RedevenV1Rpc } from '../protocol/redeven_v1';
 import {
+  getRedevenFilePreviewOversizedMessage,
+  getRedevenFilePreviewReadPlan,
+} from '../file-preview/readPlan';
+import {
   describeFilePreview,
   FALLBACK_TEXT_FILE_PREVIEW_DESCRIPTOR,
   getExtDot,
@@ -13,10 +17,6 @@ import {
 } from '../utils/filePreview';
 import { openReadFileStreamChannel, readFileBytesOnce } from '../utils/fileStreamReader';
 import { getFilePreviewBlockReason } from './FileBrowserShared';
-
-const MAX_PREVIEW_BYTES = 20 * 1024 * 1024;
-const MAX_TEXT_PREVIEW_BYTES = 2 * 1024 * 1024;
-const SNIFF_BYTES = 64 * 1024;
 
 type PendingPreviewAction =
   | { type: 'close' }
@@ -232,16 +232,16 @@ export function createFilePreviewController(params: {
     }
 
     const fileSize = typeof item.size === 'number' ? item.size : undefined;
-    const maxBytes = baseDescriptor.mode === 'text' ? MAX_TEXT_PREVIEW_BYTES : MAX_PREVIEW_BYTES;
-    if (fileSize != null && fileSize > maxBytes && baseDescriptor.mode !== 'text') {
+    const readPlan = getRedevenFilePreviewReadPlan(baseDescriptor);
+    if (fileSize != null && readPlan.rejectOversizedBeforeRead && fileSize > readPlan.maxBytes) {
       setPreviewDescriptor({ mode: 'unsupported' });
-      setPreviewMessage('This file is too large to preview.');
+      setPreviewMessage(readPlan.oversizedMessage);
       setPreviewLoading(false);
       return;
     }
 
     try {
-      const wantBytes = baseDescriptor.mode === 'binary' ? SNIFF_BYTES : maxBytes;
+      const wantBytes = readPlan.readBytes;
       let bytes = emptyBytes();
       let truncated = false;
       let mime = 'application/octet-stream';
@@ -299,7 +299,7 @@ export function createFilePreviewController(params: {
       if (baseDescriptor.mode === 'image') {
         if (truncated) {
           setPreviewDescriptor({ mode: 'unsupported' });
-          setPreviewMessage('This image is too large to preview.');
+          setPreviewMessage(getRedevenFilePreviewOversizedMessage('image'));
           return;
         }
 
@@ -312,7 +312,7 @@ export function createFilePreviewController(params: {
       if (baseDescriptor.mode === 'pdf') {
         if (truncated) {
           setPreviewDescriptor({ mode: 'unsupported' });
-          setPreviewMessage('This PDF is too large to preview.');
+          setPreviewMessage(getRedevenFilePreviewOversizedMessage('pdf'));
         }
         return;
       }
@@ -320,7 +320,7 @@ export function createFilePreviewController(params: {
       if (baseDescriptor.mode === 'docx') {
         if (truncated) {
           setPreviewDescriptor({ mode: 'unsupported' });
-          setPreviewMessage('This document is too large to preview.');
+          setPreviewMessage(getRedevenFilePreviewOversizedMessage('docx'));
         }
         return;
       }
@@ -328,7 +328,7 @@ export function createFilePreviewController(params: {
       if (baseDescriptor.mode === 'xlsx') {
         if (truncated) {
           setPreviewDescriptor({ mode: 'unsupported' });
-          setPreviewMessage('This spreadsheet is too large to preview.');
+          setPreviewMessage(getRedevenFilePreviewOversizedMessage('xlsx'));
           return;
         }
 

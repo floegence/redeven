@@ -1,13 +1,11 @@
-import { For, Show, createEffect, createSignal, onCleanup } from 'solid-js';
+import { Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { Check, Copy } from '@floegence/floe-webapp-core/icons';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { Button } from '@floegence/floe-webapp-core/ui';
+import { renderRedevenFilePreviewBody } from '../file-preview/rendererRegistry';
 import type { FilePreviewDescriptor } from '../utils/filePreview';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
-import { DocxPreviewPane } from './DocxPreviewPane';
-import { PdfPreviewPane } from './PdfPreviewPane';
-import { TextFilePreviewPane } from './TextFilePreviewPane';
 
 export interface FilePreviewContentProps {
   item?: FileItem | null;
@@ -147,73 +145,8 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
         {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
         class="relative flex-1 min-h-0 overflow-auto bg-background"
       >
-        <Show when={props.descriptor.mode === 'text' && !resolvedError()}>
-          <TextFilePreviewPane
-            path={props.item?.path ?? 'preview.txt'}
-            descriptor={props.descriptor}
-            text={props.text ?? ''}
-            draftText={props.draftText ?? props.text ?? ''}
-            truncated={props.truncated}
-            editing={props.editing}
-            saveError={props.saveError}
-            onDraftChange={props.onDraftChange}
-            onSelectionChange={props.onSelectionChange}
-          />
-        </Show>
-
-        <Show when={props.descriptor.mode === 'image' && !resolvedError()}>
-          <div class="flex h-full items-center justify-center p-3">
-            <img
-              src={props.objectUrl}
-              alt={props.item?.name ?? 'Preview'}
-              class="max-h-full max-w-full object-contain"
-            />
-          </div>
-        </Show>
-
-        <Show when={props.descriptor.mode === 'pdf' && !resolvedError()}>
-          <PdfPreviewPane bytes={props.bytes} />
-        </Show>
-
-        <Show when={props.descriptor.mode === 'docx' && !resolvedError()}>
-          <DocxPreviewPane bytes={props.bytes} />
-        </Show>
-
-        <Show when={props.descriptor.mode === 'xlsx' && !resolvedError()}>
-          <div class="p-3">
-            <Show when={props.xlsxSheetName}>
-              <div class="mb-2 text-[11px] text-muted-foreground">Sheet: {props.xlsxSheetName}</div>
-            </Show>
-
-            <div class="overflow-auto rounded-md border border-border">
-              <table class="w-full text-xs">
-                <tbody>
-                  <For each={props.xlsxRows ?? []}>
-                    {(row) => (
-                      <tr class="border-b border-border last:border-b-0">
-                        <For each={row}>
-                          {(cell) => (
-                            <td class="border-r border-border px-2 py-1 align-top whitespace-pre-wrap break-words last:border-r-0">
-                              {cell}
-                            </td>
-                          )}
-                        </For>
-                      </tr>
-                    )}
-                  </For>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </Show>
-
-        <Show when={(props.descriptor.mode === 'binary' || props.descriptor.mode === 'unsupported') && !resolvedError()}>
-          <div class="p-4 text-sm text-muted-foreground">
-            <div class="mb-1 font-medium text-foreground">
-              {props.descriptor.mode === 'binary' ? 'Binary file' : 'Preview not available'}
-            </div>
-            <div class="text-xs">{props.message || 'Preview is not available.'}</div>
-          </div>
+        <Show when={!resolvedError()}>
+          {renderRedevenFilePreviewBody(props)}
         </Show>
 
         <Show when={resolvedError()}>
