@@ -160,7 +160,7 @@ export function completeEnvironmentGuidanceRefresh(
     ...state,
     pending_intent: null,
     feedback: {
-      tone: 'warning',
+      tone: 'info',
       title: 'Runtime is still offline',
       detail: runtimeStillOfflineDetail(environment),
     },
