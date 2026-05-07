@@ -851,6 +851,33 @@ body {
   flex: 1 1 auto;
 }
 
+/*
+ * Split action container: a single shared border wraps both the primary button
+ * and the toggle, so they always read as one cohesive control.  Individual
+ * button borders are removed; only a subtle left border on the toggle serves
+ * as the divider between the two actions.
+ */
+.redeven-split-action:has(.redeven-split-action-toggle) {
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 0.375rem;
+}
+
+.redeven-split-action:has(.redeven-split-action-toggle) .redeven-split-action-primary button:not(.redeven-split-action-trigger--blocked) {
+  border: 0;
+  border-radius: 0.375rem 0 0 0.375rem;
+}
+
+.redeven-split-action:has(.redeven-split-action-toggle) .redeven-split-action-toggle {
+  border: 0;
+  border-left: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 0 0.375rem 0.375rem 0;
+}
+
+.redeven-split-action:has(.redeven-split-action-toggle) .redeven-split-action-primary button:disabled:not(.redeven-split-action-trigger--blocked),
+.redeven-split-action:has(.redeven-split-action-toggle) .redeven-split-action-toggle:disabled {
+  opacity: 0.6;
+}
+
 .redeven-split-action-trigger__content {
   display: inline-flex;
   align-items: center;
