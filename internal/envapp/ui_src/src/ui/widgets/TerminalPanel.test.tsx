@@ -750,10 +750,16 @@ function decodeTerminalWrite(value: unknown): string {
   return value instanceof Uint8Array ? textDecoder.decode(value) : '';
 }
 
+async function settleTerminalPanelMicrotasks() {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 async function settleTerminalPanel() {
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
+  await settleTerminalPanelMicrotasks();
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  await settleTerminalPanelMicrotasks();
 }
 
 function emitTerminalData(sessionId: string, data: string, sequence?: number) {
@@ -1514,11 +1520,15 @@ describe('TerminalPanel', () => {
     expect(addButton).toBeTruthy();
 
     addButton?.click();
-    await settleTerminalPanel();
+    await settleTerminalPanelMicrotasks();
 
     expect(findTerminalTab(host, 'Terminal 2')).toBeTruthy();
     expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).not.toBeNull();
     expect(host.textContent).toContain('Creating terminal...');
+    expect(sessionsCoordinatorMocks.createSession).not.toHaveBeenCalled();
+
+    await settleTerminalPanel();
+
     expect(sessionsCoordinatorMocks.createSession).toHaveBeenCalledWith('Terminal 2', '/workspace');
     expect(transportMocks.attach.mock.calls.every((call) => !String(call[0] ?? '').includes('pending-terminal'))).toBe(true);
 
