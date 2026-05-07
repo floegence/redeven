@@ -988,7 +988,7 @@ function primaryActionOverlay(
     if (snapshot?.open_readiness?.state === 'blocked') {
       return {
         kind: 'popover',
-        tone: 'neutral',
+        tone: 'warning',
         eyebrow: 'Runtime blocked',
         title: blockedRuntimePrimaryActionTitle(snapshot),
         detail: blockedRuntimePrimaryActionDetail(environment, snapshot),
@@ -997,7 +997,7 @@ function primaryActionOverlay(
     }
     return {
       kind: 'tooltip',
-      tone: 'neutral',
+      tone: 'warning',
       message: runtimeServiceOpenReadinessLabel(snapshot),
     };
   }

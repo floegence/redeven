@@ -109,6 +109,7 @@ import {
   PROVIDER_ENVIRONMENT_LIBRARY_FILTER,
   SSH_ENVIRONMENT_LIBRARY_FILTER,
   URL_ENVIRONMENT_LIBRARY_FILTER,
+  type EnvironmentActionIntent,
   type EnvironmentActionModel,
   type EnvironmentActionMenuItemModel,
   type EnvironmentCardEndpointModel,
@@ -3552,7 +3553,6 @@ function splitMenuIcon(intent: EnvironmentActionIntent): ((props?: { class?: str
     case 'refresh_runtime':
       return Refresh;
     case 'focus_local_serve':
-    case 'open_local_runtime':
       return ExternalLink;
     default:
       return null;
@@ -3831,11 +3831,14 @@ function EnvironmentSplitActionButton(props: Readonly<{
                     }}
                   >
                     <Show when={icon()}>
-                      {(Icon) => (
-                        <span class="redeven-split-menu-item-icon opacity-70">
-                          <Icon />
-                        </span>
-                      )}
+                      {(Icon) => {
+                        const MenuIcon = Icon();
+                        return (
+                          <span class="redeven-split-menu-item-icon opacity-70">
+                            <MenuIcon />
+                          </span>
+                        );
+                      }}
                     </Show>
                     {item.label}
                   </button>

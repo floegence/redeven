@@ -25,18 +25,12 @@ vi.mock('@floegence/floe-webapp-core/loading', () => ({
   ),
 }));
 
-vi.mock('./TextFilePreviewPane', () => ({
-  TextFilePreviewPane: (props: any) => (
-    <div data-testid="text-preview-pane">{`${props.path}:${props.text}`}</div>
+vi.mock('../file-preview/rendererRegistry', () => ({
+  renderRedevenFilePreviewBody: (props: any) => (
+    <div data-testid={`${props.descriptor.mode}-preview-pane`}>
+      {`${props.item?.path ?? ''}:${props.text ?? ''}`}
+    </div>
   ),
-}));
-
-vi.mock('./DocxPreviewPane', () => ({
-  DocxPreviewPane: () => <div data-testid="docx-preview-pane" />,
-}));
-
-vi.mock('./PdfPreviewPane', () => ({
-  PdfPreviewPane: () => <div data-testid="pdf-preview-pane" />,
 }));
 
 async function flushAsync(): Promise<void> {
