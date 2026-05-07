@@ -19,6 +19,7 @@ import {
   normalizeDesktopSSHReleaseBaseURL,
   normalizeDesktopSSHRemoteInstallDir,
   normalizeDesktopSSHDestination,
+  normalizeDesktopSSHConnectTimeoutSeconds,
   type DesktopSSHEnvironmentDetails,
 } from '../shared/desktopSSH';
 import {
@@ -160,6 +161,7 @@ type DesktopSavedSSHEnvironmentFile = Readonly<{
   remote_install_dir?: unknown;
   bootstrap_strategy?: unknown;
   release_base_url?: unknown;
+  connect_timeout_seconds?: unknown;
   source?: unknown;
   pinned?: unknown;
   last_used_at_ms?: unknown;
@@ -205,6 +207,7 @@ type DesktopConnectionCatalogFile = Readonly<{
   remote_install_dir?: unknown;
   bootstrap_strategy?: unknown;
   release_base_url?: unknown;
+  connect_timeout_seconds?: unknown;
   source?: unknown;
   pinned?: unknown;
   last_used_at_ms?: unknown;
@@ -616,6 +619,7 @@ function normalizeSavedSSHEnvironmentCandidate(
       remote_install_dir: normalizeDesktopSSHRemoteInstallDir(candidate.remote_install_dir),
       bootstrap_strategy: normalizeDesktopSSHBootstrapStrategy(candidate.bootstrap_strategy),
       release_base_url: normalizeDesktopSSHReleaseBaseURL(candidate.release_base_url),
+      connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds(candidate.connect_timeout_seconds),
     });
   } catch {
     return {
@@ -636,6 +640,7 @@ function normalizeSavedSSHEnvironmentCandidate(
       remote_install_dir: details.remote_install_dir,
       bootstrap_strategy: details.bootstrap_strategy,
       release_base_url: details.release_base_url,
+      connect_timeout_seconds: details.connect_timeout_seconds,
       source: normalizeSavedEnvironmentSource(candidate.source, 'saved'),
       pinned: normalizePinned(candidate.pinned),
       last_used_at_ms: normalizeLastUsedAtMS(candidate.last_used_at_ms, fallbackLastUsedAtMS),
@@ -1377,6 +1382,7 @@ export function upsertSavedSSHEnvironment(
     remote_install_dir: details.remote_install_dir,
     bootstrap_strategy: details.bootstrap_strategy,
     release_base_url: details.release_base_url,
+    connect_timeout_seconds: details.connect_timeout_seconds,
     source,
     pinned: input.pinned ?? existing?.pinned ?? false,
     last_used_at_ms: normalizeLastUsedAtMS(input.last_used_at_ms, Date.now()),
@@ -1485,6 +1491,7 @@ export function setSavedSSHEnvironmentPinned(
     remote_install_dir: input.remote_install_dir,
     bootstrap_strategy: input.bootstrap_strategy,
     release_base_url: input.release_base_url,
+    connect_timeout_seconds: input.connect_timeout_seconds,
     source: 'saved',
     pinned: input.pinned,
     last_used_at_ms: input.last_used_at_ms,
@@ -1566,6 +1573,7 @@ export function rememberRecentSSHEnvironmentTarget(
     remote_install_dir: input.remote_install_dir,
     bootstrap_strategy: input.bootstrap_strategy,
     release_base_url: input.release_base_url,
+    connect_timeout_seconds: input.connect_timeout_seconds,
     source: 'recent_auto',
     last_used_at_ms: Date.now(),
   });
@@ -1902,6 +1910,7 @@ function serializeSavedSSHEnvironmentCatalog(environment: DesktopSavedSSHEnviron
     remote_install_dir: environment.remote_install_dir,
     bootstrap_strategy: environment.bootstrap_strategy,
     release_base_url: environment.release_base_url,
+    connect_timeout_seconds: environment.connect_timeout_seconds,
     source: environment.source,
     pinned: environment.pinned,
     last_used_at_ms: environment.last_used_at_ms,

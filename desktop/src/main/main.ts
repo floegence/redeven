@@ -2494,6 +2494,7 @@ async function rememberRecentSSHTarget(
     remote_install_dir: input.remote_install_dir,
     bootstrap_strategy: input.bootstrap_strategy,
     release_base_url: input.release_base_url,
+    connect_timeout_seconds: input.connect_timeout_seconds,
     label: input.label,
     environment_id: input.environmentID,
   }));
@@ -2563,6 +2564,9 @@ async function startSSHEnvironmentRuntimeRecord(
         runtimeReleaseTag: resolveSSHRuntimeReleaseTag(),
         sourceRuntimeRoot: process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT,
         forceRuntimeUpdate: options.forceRuntimeUpdate,
+        connectTimeoutSeconds: typeof sshDetails.connect_timeout_seconds === 'number'
+          ? sshDetails.connect_timeout_seconds
+          : undefined,
         tempRoot: app.getPath('temp'),
         assetCacheRoot: path.join(app.getPath('userData'), 'ssh-runtime-cache'),
         signal,
@@ -4882,6 +4886,7 @@ async function upsertSavedSSHEnvironmentFromWelcome(
     remote_install_dir: details.remote_install_dir,
     bootstrap_strategy: details.bootstrap_strategy,
     release_base_url: details.release_base_url,
+    connect_timeout_seconds: details.connect_timeout_seconds,
     source: 'saved',
     last_used_at_ms: existing?.last_used_at_ms ?? Date.now(),
   });
@@ -4940,6 +4945,7 @@ async function setSavedSSHEnvironmentPinnedFromWelcome(
     remote_install_dir: details.remote_install_dir,
     bootstrap_strategy: details.bootstrap_strategy,
     release_base_url: details.release_base_url,
+    connect_timeout_seconds: details.connect_timeout_seconds,
   }));
 }
 
@@ -5016,6 +5022,7 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
           remote_install_dir: request.remote_install_dir,
           bootstrap_strategy: request.bootstrap_strategy,
           release_base_url: request.release_base_url,
+          connect_timeout_seconds: request.connect_timeout_seconds,
         },
         request.pinned,
       );
@@ -5060,6 +5067,7 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
         remote_install_dir: request.remote_install_dir,
         bootstrap_strategy: request.bootstrap_strategy,
         release_base_url: request.release_base_url,
+        connect_timeout_seconds: request.connect_timeout_seconds,
       });
       return launcherActionSuccess('saved_environment');
     case 'delete_saved_environment':

@@ -80,6 +80,7 @@ import {
 import {
   DEFAULT_DESKTOP_SSH_AUTH_MODE,
   DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
+  DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS,
   DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
   DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR_LABEL,
   DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL_LABEL,
@@ -249,6 +250,7 @@ type SSHConnectionDialogState = Readonly<{
   remote_install_dir: string;
   bootstrap_strategy: DesktopSSHBootstrapStrategy;
   release_base_url: string;
+  connect_timeout_seconds: string;
 }>;
 
 type ConnectionDialogState = ExternalURLConnectionDialogState | SSHConnectionDialogState | null;
@@ -491,6 +493,7 @@ function createSSHConnectionDialogState(
     remote_install_dir: trimString(overrides.remote_install_dir),
     bootstrap_strategy: (trimString(overrides.bootstrap_strategy) as DesktopSSHBootstrapStrategy) || DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
     release_base_url: trimString(overrides.release_base_url),
+    connect_timeout_seconds: trimString(overrides.connect_timeout_seconds),
   };
 }
 
@@ -1193,6 +1196,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           : (environment.ssh_details?.remote_install_dir ?? ''),
         bootstrap_strategy: environment.ssh_details?.bootstrap_strategy ?? DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
         release_base_url: environment.ssh_details?.release_base_url ?? '',
+        connect_timeout_seconds: environment.ssh_details?.connect_timeout_seconds == null ? '' : String(environment.ssh_details.connect_timeout_seconds),
       }));
     } else {
       setConnectionDialogState(createExternalURLConnectionDialogState('edit', {
@@ -1282,7 +1286,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function updateConnectionDialogField(
-    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'remote_install_dir' | 'release_base_url',
+    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'remote_install_dir' | 'release_base_url' | 'connect_timeout_seconds',
     value: string,
   ): void {
     setConnectionDialogState((current) => {
@@ -1514,6 +1518,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       remote_install_dir: environment.ssh_details.remote_install_dir,
       bootstrap_strategy: environment.ssh_details.bootstrap_strategy,
       release_base_url: environment.ssh_details.release_base_url,
+      connect_timeout_seconds: environment.ssh_details.connect_timeout_seconds,
       ...(options.forceRuntimeUpdate ? { force_runtime_update: true } : {}),
     };
   }
@@ -1678,6 +1683,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       remote_install_dir: details.remote_install_dir,
       bootstrap_strategy: details.bootstrap_strategy,
       release_base_url: details.release_base_url,
+      connect_timeout_seconds: details.connect_timeout_seconds,
     }, errorTarget);
     const opened = result?.outcome === 'opened_environment_window' || result?.outcome === 'focused_environment_window';
     if (opened && errorTarget === 'dialog') {
@@ -2139,6 +2145,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         remote_install_dir: request.details.remote_install_dir,
         bootstrap_strategy: request.details.bootstrap_strategy,
         release_base_url: request.details.release_base_url,
+        connect_timeout_seconds: request.details.connect_timeout_seconds,
       });
       await refreshSnapshot();
       showActionToast(request.successMessage);
@@ -2228,6 +2235,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           remote_install_dir: trimString(state.remote_install_dir) || DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
           bootstrap_strategy: state.bootstrap_strategy,
           release_base_url: trimString(state.release_base_url),
+          connect_timeout_seconds: trimString(state.connect_timeout_seconds) === '' ? null : Number(trimString(state.connect_timeout_seconds)),
         },
         errorTarget: 'dialog',
         successMessage: state.mode === 'edit'
@@ -2269,6 +2277,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         remote_install_dir: trimString(state.remote_install_dir) || DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
         bootstrap_strategy: state.bootstrap_strategy,
         release_base_url: trimString(state.release_base_url),
+        connect_timeout_seconds: trimString(state.connect_timeout_seconds) === '' ? null : Number(trimString(state.connect_timeout_seconds)),
       }, 'dialog');
       return;
     }
@@ -2319,6 +2328,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         remote_install_dir: details.remote_install_dir,
         bootstrap_strategy: details.bootstrap_strategy,
         release_base_url: details.release_base_url,
+        connect_timeout_seconds: details.connect_timeout_seconds,
       }, 'connect');
       if (result?.outcome === 'saved_environment') {
         showActionToast(successMessage);
@@ -5268,7 +5278,7 @@ function ConnectionDialog(props: Readonly<{
   busyState: DesktopLauncherBusyState;
   onOpenChange: (open: boolean) => void;
   updateField: (
-    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'remote_install_dir' | 'release_base_url',
+    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'remote_install_dir' | 'release_base_url' | 'connect_timeout_seconds',
     value: string,
   ) => void;
   switchKind: (kind: 'external_local_ui' | 'ssh_environment') => void;
@@ -5576,6 +5586,21 @@ function ConnectionDialog(props: Readonly<{
                         />
                         <div class="text-[11px] text-muted-foreground">
                           Leave blank to use {DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL_LABEL}. Set an internal release mirror when this desktop cannot use GitHub directly.
+                        </div>
+                      </div>
+                      <div class="space-y-1.5">
+                        <label for="environment-ssh-connect-timeout" class="block text-xs font-medium text-foreground">Connect Timeout (seconds)</label>
+                        <Input
+                          id="environment-ssh-connect-timeout"
+                          value={props.state?.connection_kind === 'ssh_environment' ? props.state.connect_timeout_seconds : ''}
+                          onInput={(event) => props.updateField('connect_timeout_seconds', event.currentTarget.value)}
+                          placeholder={String(DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS)}
+                          size="sm"
+                          class="w-28"
+                          spellcheck={false}
+                        />
+                        <div class="text-[11px] text-muted-foreground">
+                          SSH connection timeout in seconds. Defaults to {DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS}s.
                         </div>
                       </div>
                     </div>

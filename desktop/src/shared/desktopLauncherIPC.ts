@@ -2,7 +2,7 @@ import type { DesktopSettingsSurfaceSnapshot } from './desktopSettingsSurface';
 import type { DesktopSavedEnvironmentSource } from './desktopConnectionTypes';
 import type { DesktopControlPlaneSummary } from './controlPlaneProvider';
 import { normalizeControlPlaneOrigin } from './controlPlaneProvider';
-import type { DesktopSSHEnvironmentDetails } from './desktopSSH';
+import { normalizeDesktopSSHConnectTimeoutSeconds, type DesktopSSHEnvironmentDetails } from './desktopSSH';
 import type {
   DesktopControlPlaneSyncState,
   DesktopLocalRouteState,
@@ -458,6 +458,7 @@ function normalizeDesktopLauncherRuntimeTarget(
     ...(remoteInstallDir !== '' ? { remote_install_dir: remoteInstallDir } : {}),
     ...(bootstrapStrategy !== '' ? { bootstrap_strategy: bootstrapStrategy as DesktopSSHEnvironmentDetails['bootstrap_strategy'] } : {}),
     ...(releaseBaseURL !== '' ? { release_base_url: releaseBaseURL } : {}),
+    ...(candidate.connect_timeout_seconds != null ? { connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds(candidate.connect_timeout_seconds) } : {}),
     ...(candidate.force_runtime_update === true ? { force_runtime_update: true } : {}),
   };
 
@@ -541,6 +542,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         remote_install_dir: compact((candidate as { remote_install_dir?: unknown }).remote_install_dir),
         bootstrap_strategy: compact((candidate as { bootstrap_strategy?: unknown }).bootstrap_strategy) as DesktopSSHEnvironmentDetails['bootstrap_strategy'],
         release_base_url: compact((candidate as { release_base_url?: unknown }).release_base_url),
+        connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds((candidate as { connect_timeout_seconds?: unknown }).connect_timeout_seconds),
       };
       }
     case 'start_control_plane_connect':
@@ -614,6 +616,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           remote_install_dir: compact((candidate as { remote_install_dir?: unknown }).remote_install_dir),
           bootstrap_strategy: compact((candidate as { bootstrap_strategy?: unknown }).bootstrap_strategy) as DesktopSSHEnvironmentDetails['bootstrap_strategy'],
           release_base_url: compact((candidate as { release_base_url?: unknown }).release_base_url),
+          connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds((candidate as { connect_timeout_seconds?: unknown }).connect_timeout_seconds),
         };
       }
     case 'save_local_environment_settings': {
@@ -671,6 +674,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         remote_install_dir: compact((candidate as { remote_install_dir?: unknown }).remote_install_dir),
         bootstrap_strategy: compact((candidate as { bootstrap_strategy?: unknown }).bootstrap_strategy) as DesktopSSHEnvironmentDetails['bootstrap_strategy'],
         release_base_url: compact((candidate as { release_base_url?: unknown }).release_base_url),
+        connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds((candidate as { connect_timeout_seconds?: unknown }).connect_timeout_seconds),
       };
       }
     case 'delete_saved_environment': {
