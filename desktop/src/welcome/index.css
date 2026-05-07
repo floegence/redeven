@@ -1366,6 +1366,11 @@ body {
   border-radius: 0.25rem;
 }
 
+/* ── Dialog scroll viewport wheel fix ── */
+[data-floe-dialog-panel] [class*='overflow-auto'] {
+  overscroll-behavior: auto;
+}
+
 /* ── Monospace fonts ── */
 
 code,
