@@ -1504,7 +1504,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const resolveCreateCallbacks: Array<(value: typeof terminalSessionsState.sessions[number]) => void> = [];
-    sessionsCoordinatorMocks.createSession.mockImplementationOnce(async (name?: string, workingDir?: string) => (
+    sessionsCoordinatorMocks.createSession.mockImplementationOnce(async () => (
       await new Promise<typeof terminalSessionsState.sessions[number]>((resolve) => {
         resolveCreateCallbacks.push((session) => {
           terminalSessionsState.sessions = [
