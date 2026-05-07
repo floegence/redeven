@@ -1538,6 +1538,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       selection: TERMINAL_SELECTION_BACKGROUND,
     } as Record<string, string>;
   });
+  const terminalThemeBackground = createMemo(() => terminalThemeColors().background ?? '#1e1e1e');
+  const terminalThemeForeground = createMemo(() => terminalThemeColors().foreground ?? '#c9d1d9');
+  const terminalThemeMutedForeground = createMemo(() => (
+    `color-mix(in srgb, ${terminalThemeForeground()} 70%, transparent)`
+  ));
 
   const [allSessions, setAllSessions] = createSignal<TerminalSessionInfo[]>([]);
   const [optimisticTerminalSessions, setOptimisticTerminalSessions] = createSignal<TerminalSessionInfo[]>([]);
@@ -2071,7 +2076,16 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
 
   const showTerminalStatusBar = createMemo(() => {
-    return Boolean(activeSession()) && !(shouldUseFloeMobileKeyboard() && mobileKeyboardVisible());
+    return Boolean(activeSession() || activePendingSession()) && !(shouldUseFloeMobileKeyboard() && mobileKeyboardVisible());
+  });
+
+  const statusBarSessionLabel = createMemo(() => {
+    const sid = activeSessionId();
+    if (sid) return sid;
+
+    const pending = activePendingSession();
+    if (!pending) return '';
+    return pending.status === 'failed' ? 'Creation failed' : 'Creating terminal';
   });
 
   const shouldRestoreTerminalFocus = () => {
@@ -3591,7 +3605,14 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               <Index each={visiblePendingTerminalSessions()}>
                 {(session) => (
                   <TabPanel active={activeDisplaySessionId() === session().id} keepMounted class="h-full">
-                    <div class="h-full min-h-0 relative overflow-hidden redeven-terminal-surface bg-background">
+                    <div
+                      class="h-full min-h-0 relative overflow-hidden redeven-terminal-surface"
+                      data-terminal-pending-surface="true"
+                      style={{
+                        'background-color': terminalThemeBackground(),
+                        color: terminalThemeForeground(),
+                      }}
+                    >
                       <div class="absolute inset-0 flex items-center justify-center p-8">
                         <div class="max-w-sm text-center flex flex-col items-center gap-3">
                           <Show
@@ -3600,10 +3621,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                           >
                             <PendingTerminalTabStatusIcon status="failed" />
                           </Show>
-                          <div class="text-sm font-medium text-foreground">
+                          <div class="text-sm font-medium">
                             {session().status === 'failed' ? 'Terminal creation failed' : 'Creating terminal...'}
                           </div>
-                          <div class="text-xs text-muted-foreground break-words">
+                          <div class="text-xs break-words" style={{ color: terminalThemeMutedForeground() }}>
                             {session().status === 'failed'
                               ? (session().errorMessage || 'Could not create this terminal session.')
                               : (session().workingDir || 'Preparing shell session')}
@@ -3718,8 +3739,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         <div class="p-2 text-[11px] text-error border-t border-border bg-background/80 break-words">{error()}</div>
       </Show>
       <Show when={showTerminalStatusBar()}>
-        <div class="flex items-center justify-between px-3 py-1 border-t border-border text-[10px] text-muted-foreground">
-          <span>Session: {activeSessionId()}</span>
+        <div data-testid="terminal-status-bar" class="flex items-center justify-between px-3 py-1 border-t border-border text-[10px] text-muted-foreground">
+          <span>Session: {statusBarSessionLabel()}</span>
           <span>History: {historyBytes() === null ? '-' : formatBytes(historyBytes() ?? 0)}</span>
         </div>
       </Show>

@@ -758,8 +758,12 @@ async function settleTerminalPanelMicrotasks() {
 
 async function settleTerminalPanel() {
   await settleTerminalPanelMicrotasks();
+}
+
+async function settleTerminalPanelAfterPaint() {
+  await settleTerminalPanel();
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
-  await settleTerminalPanelMicrotasks();
+  await settleTerminalPanel();
 }
 
 function emitTerminalData(sessionId: string, data: string, sequence?: number) {
@@ -1021,7 +1025,7 @@ describe('TerminalPanel', () => {
     document.body.appendChild(host);
 
     render(() => <TerminalPanel variant="deck" />, host);
-    await settleTerminalPanel();
+    await settleTerminalPanelAfterPaint();
 
     expect(terminalCoreInstances.length).toBeGreaterThan(0);
     expect(host.textContent).toContain('Terminal 1');
@@ -1032,7 +1036,7 @@ describe('TerminalPanel', () => {
     document.body.appendChild(host);
 
     render(() => <TerminalPanel variant="deck" />, host);
-    await settleTerminalPanel();
+    await settleTerminalPanelAfterPaint();
 
     expect(terminalConfigState.values.length).toBeGreaterThan(0);
     expect(terminalConfigState.values[0]?.cursorBlink).toBe(false);
@@ -1154,7 +1158,7 @@ describe('TerminalPanel', () => {
         }}
       />
     ), host);
-    await settleTerminalPanel();
+    await settleTerminalPanelAfterPaint();
 
     expect(terminalConfigState.values[0]?.fontSize).toBe(14);
     expect(terminalCoreInstances[0]?.setFontSize).toHaveBeenCalledWith(14);
@@ -1187,7 +1191,7 @@ describe('TerminalPanel', () => {
         onOpenSessionRequestHandled={handledSpy}
       />
     ), host);
-    await settleTerminalPanel();
+    await settleTerminalPanelAfterPaint();
 
     expect(sessionsCoordinatorMocks.createSession).toHaveBeenCalledWith('repo', '/workspace/repo');
     expect(handledSpy).toHaveBeenCalledWith('request-1');
@@ -1233,7 +1237,7 @@ describe('TerminalPanel', () => {
         onOpenSessionRequestHandled={handledSpy}
       />
     ), deckHost);
-    await settleTerminalPanel();
+    await settleTerminalPanelAfterPaint();
 
     expect(sessionsCoordinatorMocks.createSession).toHaveBeenCalledWith('repo', '/workspace/repo');
     expect(handledSpy).toHaveBeenCalledWith('request-deck');
@@ -1289,7 +1293,7 @@ describe('TerminalPanel', () => {
         );
       })()
     ), host);
-    await settleTerminalPanel();
+    await settleTerminalPanelAfterPaint();
 
     expect(host.textContent).toContain('Terminal 1');
     expect(host.textContent).not.toContain('Server logs');
@@ -1460,7 +1464,7 @@ describe('TerminalPanel', () => {
     expect(addButton).toBeTruthy();
 
     addButton?.click();
-    await settleTerminalPanel();
+    await settleTerminalPanelAfterPaint();
 
     expect(sessionOperations.createSession).toHaveBeenCalledWith('Terminal 2', '/workspace');
     expect(sessionsCoordinatorMocks.createSession).not.toHaveBeenCalled();
@@ -1491,7 +1495,7 @@ describe('TerminalPanel', () => {
     expect(button).toBeTruthy();
 
     button?.click();
-    await settleTerminalPanel();
+    await settleTerminalPanelAfterPaint();
 
     expect(sessionsCoordinatorMocks.createSession).toHaveBeenCalledWith('Terminal 2', '/workspace');
   });
@@ -1514,7 +1518,7 @@ describe('TerminalPanel', () => {
     ));
 
     render(() => <TerminalPanel variant="deck" />, host);
-    await settleTerminalPanel();
+    await settleTerminalPanelAfterPaint();
 
     const addButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'Add') as HTMLButtonElement | undefined;
     expect(addButton).toBeTruthy();
@@ -1525,9 +1529,24 @@ describe('TerminalPanel', () => {
     expect(findTerminalTab(host, 'Terminal 2')).toBeTruthy();
     expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).not.toBeNull();
     expect(host.textContent).toContain('Creating terminal...');
+    const pendingSurface = host.querySelector('[data-terminal-pending-surface="true"]') as HTMLElement | null;
+    expect(pendingSurface).toBeTruthy();
+    expect(pendingSurface?.style.backgroundColor).toBe('rgb(17, 17, 17)');
+    expect(pendingSurface?.style.color).toBe('rgb(238, 238, 238)');
+    expect(pendingSurface?.style.getPropertyValue('--background')).toBe('');
+    expect(pendingSurface?.style.getPropertyValue('--foreground')).toBe('');
+    expect(pendingSurface?.style.getPropertyValue('--muted')).toBe('');
+    expect(pendingSurface?.style.getPropertyValue('--muted-foreground')).toBe('');
+    const statusBar = host.querySelector('[data-testid="terminal-status-bar"]') as HTMLElement | null;
+    expect(statusBar).toBeTruthy();
+    expect(statusBar?.textContent).toContain('Session: Creating terminal');
+    expect(statusBar?.textContent).toContain('History: -');
+    expect(pendingSurface?.contains(statusBar)).toBe(false);
+    expect(statusBar?.style.backgroundColor).toBe('');
+    expect(statusBar?.style.color).toBe('');
     expect(sessionsCoordinatorMocks.createSession).not.toHaveBeenCalled();
 
-    await settleTerminalPanel();
+    await settleTerminalPanelAfterPaint();
 
     expect(sessionsCoordinatorMocks.createSession).toHaveBeenCalledWith('Terminal 2', '/workspace');
     expect(transportMocks.attach.mock.calls.every((call) => !String(call[0] ?? '').includes('pending-terminal'))).toBe(true);
@@ -1564,7 +1583,7 @@ describe('TerminalPanel', () => {
 
     const addButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'Add') as HTMLButtonElement | undefined;
     addButton?.click();
-    await settleTerminalPanel();
+    await settleTerminalPanelAfterPaint();
 
     expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).not.toBeNull();
 
@@ -1626,7 +1645,7 @@ describe('TerminalPanel', () => {
 
     const addButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'Add') as HTMLButtonElement | undefined;
     addButton?.click();
-    await settleTerminalPanel();
+    await settleTerminalPanelAfterPaint();
 
     expect(findTerminalTab(host, 'Terminal 2')).toBeTruthy();
     expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'failed')).not.toBeNull();
@@ -1635,7 +1654,7 @@ describe('TerminalPanel', () => {
 
     const retryButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'Retry') as HTMLButtonElement | undefined;
     retryButton?.click();
-    await settleTerminalPanel();
+    await settleTerminalPanelAfterPaint();
 
     expect(sessionsCoordinatorMocks.createSession).toHaveBeenCalledTimes(2);
     expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'failed')).toBeNull();
@@ -2161,7 +2180,7 @@ describe('TerminalPanel', () => {
         onOpenSessionRequestHandled={handledSpy}
       />
     ), host);
-    await settleTerminalPanel();
+    await settleTerminalPanelAfterPaint();
 
     setRequest({
       requestId: 'request-1',
