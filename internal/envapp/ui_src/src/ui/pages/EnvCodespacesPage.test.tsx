@@ -390,17 +390,15 @@ describe('EnvCodespacesPage', () => {
     render(() => <EnvCodespacesPage />, host);
     await flushPage();
 
-    const banner = host.querySelector('[data-testid="code-runtime-banner"]') as HTMLDivElement | null;
-    expect(banner).toBeTruthy();
-    expect(banner?.dataset.bannerMode).toBe('inline');
-    expect(banner?.querySelector('.highlight-block')).toBeTruthy();
-    expect(banner?.querySelector('.highlight-block')?.getAttribute('data-highlight-variant')).toBe('warning');
-    expect(banner?.textContent).toContain('code-server runtime');
-    expect(banner?.textContent).toContain('Install and use for this Local Environment');
-    expect(banner?.textContent).toContain('latest stable code-server');
+    const wizard = host.querySelector('[data-testid="code-runtime-install-wizard"]') as HTMLDivElement | null;
+    expect(wizard).toBeTruthy();
+    expect(wizard?.textContent).toContain('code-server runtime');
+    expect(wizard?.textContent).toContain('Not installed');
+    expect(wizard?.textContent).toContain('Install and use for this Local Environment');
+    expect(wizard?.textContent).toContain('latest stable code-server');
   });
 
-  it('shows a floating runtime toast while the initial runtime check is still running', async () => {
+  it('shows the install wizard inline while the initial runtime check is still running', async () => {
     let resolveRuntimeStatus!: (value: any) => void;
 
     gatewayMocks.fetchGatewayJSON.mockImplementation((url: string) => {
@@ -433,19 +431,18 @@ describe('EnvCodespacesPage', () => {
     render(() => <EnvCodespacesPage />, host);
     await flushPage();
 
-    const banner = host.querySelector('[data-testid="code-runtime-banner"]') as HTMLDivElement | null;
-    expect(banner).toBeTruthy();
-    expect(banner?.dataset.bannerMode).toBe('floating');
-    expect(banner?.className).toContain('fixed');
-    expect(banner?.textContent).toContain('Checking runtime');
+    const wizard = host.querySelector('[data-testid="code-runtime-install-wizard"]') as HTMLDivElement | null;
+    expect(wizard).toBeTruthy();
+    expect(wizard?.textContent).toContain('code-server runtime');
+    expect(wizard?.textContent).toContain('Checking');
 
     resolveRuntimeStatus(makeRuntimeStatus());
     await flushPage();
 
-    expect(host.querySelector('[data-testid="code-runtime-banner"]')).toBeNull();
+    expect(host.querySelector('[data-testid="code-runtime-install-wizard"]')).toBeNull();
   });
 
-  it('opens the explicit install dialog instead of starting a codespace when runtime is missing', async () => {
+  it('shows install inline in the wizard instead of starting a codespace when runtime is missing', async () => {
     runtimeStatusResponse = makeRuntimeStatus({
       active_runtime: {
         detection_state: 'missing',
@@ -502,12 +499,12 @@ describe('EnvCodespacesPage', () => {
     startButton?.click();
     await waitForHostText(host, 'Demo Space');
     expect(gatewayMocks.fetchGatewayJSON.mock.calls.filter(([url]) => url === '/_redeven_proxy/api/code-runtime/status').length).toBeGreaterThanOrEqual(2);
-    await waitForHostText(host, 'Pending action: Start codespace after install');
+    await waitForHostText(host, 'Will start codespace after install');
 
     expect(windowOpenSpy).not.toHaveBeenCalled();
     expect(gatewayMocks.fetchGatewayJSON).not.toHaveBeenCalledWith('/_redeven_proxy/api/spaces/space-1/start', expect.anything());
     expect(host.textContent).toContain('Install and use for this Local Environment');
-    expect(host.textContent).toContain('Pending action: Start codespace after install');
+    expect(host.textContent).toContain('Will start codespace after install');
 
     windowOpenSpy.mockRestore();
   });
