@@ -100,7 +100,9 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
     const nextOverlayRef = overlayRef;
     const observer = typeof ResizeObserver === 'undefined' || !anchorEl || !nextOverlayRef
       ? null
-      : new ResizeObserver(() => schedulePositionUpdate());
+      : new ResizeObserver(() => {
+	        updatePosition();
+	      });
     if (observer && anchorEl && nextOverlayRef) {
       observer.observe(anchorEl);
       observer.observe(nextOverlayRef);
