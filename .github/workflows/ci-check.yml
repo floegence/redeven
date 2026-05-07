@@ -44,7 +44,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          node-version: "22"
+          node-version: "24"
 
       - name: Enable corepack
         run: corepack enable
@@ -93,11 +93,6 @@ jobs:
 
       - name: UI lint
         run: ./scripts/lint_ui.sh
-
-      - name: Setup Desktop Node
-        uses: actions/setup-node@v5
-        with:
-          node-version: "24"
 
       - name: Desktop checks
         run: ./scripts/check_desktop.sh
