@@ -15,13 +15,22 @@ import { extractFrontmatter } from './frontmatterParser';
 import { buildToc, type TocItem } from './tocBuilder';
 import { postProcess } from './postProcess';
 import { parseMarkdown } from './markedConfig';
+import { resolveFileMarkdownLink } from './linkResolver';
 import type { JSX } from 'solid-js';
+
+export interface FileMarkdownFileLinkTarget {
+  path: string;
+  fragment: string;
+  href: string;
+}
 
 export interface FileMarkdownProps {
   content: string;
   filePath?: string;
   showToc?: boolean;
   class?: string;
+  onOpenFileLink?: (target: FileMarkdownFileLinkTarget) => void | Promise<void>;
+  onUnresolvedLocalLink?: (href: string, reason: string) => void;
 }
 
 const FS_FILE_ENDPOINT = '/_redeven_proxy/api/fs/file';
@@ -294,6 +303,57 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
     scheduleActiveTocFromScroll();
   }
 
+  function scrollMarkdownBodyToHeadingId(targetId: string): boolean {
+    const id = String(targetId ?? '').trim();
+    if (!id) return false;
+
+    const target = containerRef.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
+    if (!target) return false;
+
+    startTocNavigation(id);
+    scrollMarkdownBodyToHeading(target);
+    return true;
+  }
+
+  function handleMarkdownClick(event: MouseEvent): void {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
+
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+
+    const anchor = target.closest('a[href]');
+    if (!(anchor instanceof HTMLAnchorElement) || !containerRef.contains(anchor)) return;
+
+    const href = anchor.getAttribute('href') ?? '';
+    const resolved = resolveFileMarkdownLink(href, props.filePath ?? '');
+
+    if (resolved.kind === 'heading') {
+      if (!scrollMarkdownBodyToHeadingId(resolved.targetId)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    if (resolved.kind === 'file') {
+      event.preventDefault();
+      event.stopPropagation();
+      void props.onOpenFileLink?.({
+        path: resolved.path,
+        fragment: resolved.fragment,
+        href: resolved.href,
+      });
+      return;
+    }
+
+    if (resolved.kind === 'unresolved-local') {
+      event.preventDefault();
+      event.stopPropagation();
+      props.onUnresolvedLocalLink?.(resolved.href, resolved.reason);
+    }
+  }
+
   onCleanup(() => {
     themeObserver?.disconnect();
     if (themeRefreshRaf !== undefined) {
@@ -332,11 +392,7 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
         class={`fm-toc-link${activeTocId() === item.id ? ' fm-toc-active' : ''}`}
         onClick={(e) => {
           e.preventDefault();
-          const target = containerRef.querySelector<HTMLElement>(`#${CSS.escape(item.id)}`);
-          if (target) {
-            startTocNavigation(item.id);
-            scrollMarkdownBodyToHeading(target);
-          }
+          scrollMarkdownBodyToHeadingId(item.id);
         }}
       >
         {item.text}
@@ -386,6 +442,7 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
             ref={containerRef!}
             class={`file-markdown-body${readingMode() ? ' file-markdown-reading' : ''}`}
             style="flex: 1; min-width: 0; overflow-y: auto;"
+            onClick={handleMarkdownClick}
             onScroll={handleMarkdownScroll}
             onPointerDown={cancelTocNavigation}
             onWheel={cancelTocNavigation}
