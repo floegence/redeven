@@ -12,6 +12,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"mime"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -66,6 +67,9 @@ type Options struct {
 	SecretsStore *settings.SecretsStore
 	// ThreadReadStateStore persists per-user per-surface thread read watermarks.
 	ThreadReadStateStore *threadreadstate.Store
+	// AgentHomeDir is the canonical absolute path to the agent home directory,
+	// used as the filesystem scope root for the file-serving endpoint.
+	AgentHomeDir string
 }
 
 type Backend interface {
@@ -165,6 +169,8 @@ type Gateway struct {
 	secrets            *settings.SecretsStore
 	threadReadState    *threadreadstate.Store
 
+	agentHomeDir string
+
 	distFS fs.FS
 
 	ln   net.Listener
@@ -259,6 +265,7 @@ func New(opts Options) (*Gateway, error) {
 	)
 	return &Gateway{
 		log:                     logger,
+		agentHomeDir:            opts.AgentHomeDir,
 		backend:                 opts.Backend,
 		pf:                      opts.PortForward,
 		ai:                      opts.AI,
@@ -1361,6 +1368,85 @@ func (g *Gateway) appendAudit(meta *session.Meta, action string, status string, 
 	})
 }
 
+// handleFSServeFile serves a project file identified by the "path" query parameter.
+// Security: reuses pathutil.ResolveExistingScopedPath to prevent traversal and symlink escape.
+func (g *Gateway) handleFSServeFile(w http.ResponseWriter, r *http.Request) {
+	userPath := strings.TrimSpace(r.URL.Query().Get("path"))
+	if userPath == "" {
+		http.Error(w, "missing path parameter", http.StatusBadRequest)
+		return
+	}
+
+	resolvedPath, err := pathutil.ResolveExistingScopedPath(userPath, g.agentHomeDir)
+	if err != nil {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	ext := strings.ToLower(filepath.Ext(resolvedPath))
+	ct := mime.TypeByExtension(ext)
+	if !isRenderableMime(ct) {
+		http.Error(w, "unsupported file type", http.StatusUnsupportedMediaType)
+		return
+	}
+
+	f, err := os.Open(resolvedPath)
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	defer f.Close()
+
+	st, err := f.Stat()
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if st.IsDir() {
+		http.Error(w, "not a file", http.StatusBadRequest)
+		return
+	}
+	if st.Size() > 50<<20 { // 50 MB
+		http.Error(w, "file too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+
+	w.Header().Set("Content-Type", ct)
+	w.Header().Set("Cache-Control", "private, max-age=300")
+	http.ServeContent(w, r, filepath.Base(resolvedPath), st.ModTime(), f)
+}
+
+// isRenderableMime returns true for web-browser-renderable content types.
+func isRenderableMime(ct string) bool {
+	if ct == "" {
+		return false
+	}
+	switch {
+	case strings.HasPrefix(ct, "image/"):
+		return true
+	case strings.HasPrefix(ct, "video/"):
+		return true
+	case strings.HasPrefix(ct, "audio/"):
+		return true
+	case strings.HasPrefix(ct, "font/"):
+		return true
+	case ct == "text/css", ct == "text/javascript", ct == "application/javascript":
+		return true
+	case strings.HasPrefix(ct, "text/"):
+		return true
+	case ct == "application/pdf":
+		return true
+	case strings.HasPrefix(ct, "application/xml"):
+		return true
+	case strings.HasPrefix(ct, "application/json"):
+		return true
+	case strings.HasSuffix(ct, "+xml"):
+		return true
+	default:
+		return false
+	}
+}
+
 func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 	if g.handleWorkbenchLayoutAPI(w, r) {
 		return
@@ -1369,6 +1455,13 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/fs/file":
+		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+			return
+		}
+		g.handleFSServeFile(w, r)
+		return
+
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/audit/logs":
 		if _, ok := g.requirePermission(w, r, requiredPermissionAdmin); !ok {
 			return

@@ -50,12 +50,27 @@ importers:
       docx-preview:
         specifier: ^0.3.6
         version: 0.3.7
+      dompurify:
+        specifier: ^3.4.0
+        version: 3.4.0
       exceljs:
         specifier: ^4.4.0
         version: 4.4.0
+      highlight.js:
+        specifier: ^11.11.1
+        version: 11.11.1
+      katex:
+        specifier: ^0.16.45
+        version: 0.16.45
       marked:
         specifier: ^17.0.2
         version: 17.0.2
+      marked-footnote:
+        specifier: ^1.4.0
+        version: 1.4.0(marked@17.0.2)
+      marked-gfm-heading-id:
+        specifier: ^4.1.4
+        version: 4.1.4(marked@17.0.2)
       mermaid:
         specifier: ^11.12.2
         version: 11.12.3
@@ -84,6 +99,9 @@ importers:
       '@types/diff':
         specifier: ^8.0.0
         version: 8.0.0
+      '@types/katex':
+        specifier: ^0.16.8
+        version: 0.16.8
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.30
@@ -1049,6 +1067,9 @@ packages:
   '@types/json-schema@7.0.15':
     resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
 
+  '@types/katex@0.16.8':
+    resolution: {integrity: sha512-trgaNyfU+Xh2Tc+ABIb44a5AYUpicB3uwirOioeOkNPPbmgRNtcWyDeeFRzjPZENO9Vq8gvVqfhaaXWLlevVwg==}
+
   '@types/mdast@4.0.4':
     resolution: {integrity: sha512-kGaNbPh1k7AFzgpud/gMdvIm5xuECykRR+JnWKQno9TAXVa6WIVCGTPvYGekIDL4uwCZQSYbUxNBSb1aUo79oA==}
 
@@ -1772,6 +1793,9 @@ packages:
   ghostty-web@0.4.0-next.14.g6a1a50d:
     resolution: {integrity: sha512-01H59pAKq43Y8ZZiIhH98cu0ahZaoGoPQPtW4KnZPT0JFdQYen2djsXrOnt27JnMv64D4eLeAq8D6h72mo52xQ==}
 
+  github-slugger@2.0.0:
+    resolution: {integrity: sha512-IaOQ9puYtjrkq7Y0Ygl9KDZnrf/aiUJYUpVf89y8kyaxbRG7Y1SrX/jaumrv81vc61+kiMempujsM3Yw7w5qcw==}
+
   glob-parent@6.0.2:
     resolution: {integrity: sha512-XxwI8EOhVQgWp6iDL+3b0r86f4d6AX6zSU55HfB4ydCEuXLXc5FcYeOu+nnGftS4TEju/11rt4KJPTMgbfmv4A==}
     engines: {node: '>=10.13.0'}
@@ -1806,6 +1830,10 @@ packages:
 
   hey-listen@1.0.8:
     resolution: {integrity: sha512-COpmrF2NOg4TBWUJ5UVyaCU2A88wEMkUPK4hNqyCkqHbxT92BbvfjoSozkAIIm6XhicGlJHhFdullInrdhwU8Q==}
+
+  highlight.js@11.11.1:
+    resolution: {integrity: sha512-Xwwo44whKBVCYoliBQwaPvtd/2tYFkRQtXDWj1nackaV2JPXx3L0+Jvd8/qCJ2p+ML0/XVkJ2q+Mr+UVdpJK5w==}
+    engines: {node: '>=12.0.0'}
 
   html-encoding-sniffer@4.0.0:
     resolution: {integrity: sha512-Y22oTqIU4uuPgEemfz7NDJz6OeKf12Lsu+QC+s3BVpda64lTiMYCyGwg5ki4vFxkMwQdeZDl2adZoqUgdFuTgQ==}
@@ -1942,8 +1970,8 @@ packages:
   jszip@3.10.1:
     resolution: {integrity: sha512-xXDvecyTpGLrqFrvkrUSoxxfJI5AH7U8zxxtVclpsUtMCq4JQ290LY8AW5c7Ggnr/Y/oK+bQMbqK2qmtk3pN4g==}
 
-  katex@0.16.28:
-    resolution: {integrity: sha512-YHzO7721WbmAL6Ov1uzN/l5mY5WWWhJBSW+jq4tkfZfsxmo1hu6frS0EOswvjBUnWE6NtjEs48SFn5CQESRLZg==}
+  katex@0.16.45:
+    resolution: {integrity: sha512-pQpZbdBu7wCTmQUh7ufPmLr0pFoObnGUoL/yhtwJDgmmQpbkg/0HSVti25Fu4rmd1oCR6NGWe9vqTWuWv3GcNA==}
     hasBin: true
 
   kebab-case@1.0.2:
@@ -2121,6 +2149,16 @@ packages:
 
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
+
+  marked-footnote@1.4.0:
+    resolution: {integrity: sha512-fZTxAhI1TcLEs5UOjCfYfTHpyKGaWQevbxaGTEA68B51l7i87SctPFtHETYqPkEN0ka5opvy4Dy1l/yXVC+hmg==}
+    peerDependencies:
+      marked: '>=7.0.0'
+
+  marked-gfm-heading-id@4.1.4:
+    resolution: {integrity: sha512-CspnvVfHSkb/znqdPS4jUR8HtCjq3M/DnrsJCrfLBLvdrgbemmoINKpeWKQYkBiXAoBGejw0cV7xzqrPdup3WA==}
+    peerDependencies:
+      marked: '>=13 <19'
 
   marked@14.0.0:
     resolution: {integrity: sha512-uIj4+faQ+MgHgwUW1l2PsPglZLOLOT1uErt06dAPtx2kjteLAkbsd/0FiYg/MGS+i7ZKLb7w2WClxHkzOOuryQ==}
@@ -3685,6 +3723,8 @@ snapshots:
 
   '@types/json-schema@7.0.15': {}
 
+  '@types/katex@0.16.8': {}
+
   '@types/mdast@4.0.4':
     dependencies:
       '@types/unist': 3.0.3
@@ -4526,6 +4566,8 @@ snapshots:
 
   ghostty-web@0.4.0-next.14.g6a1a50d: {}
 
+  github-slugger@2.0.0: {}
+
   glob-parent@6.0.2:
     dependencies:
       is-glob: 4.0.3
@@ -4568,6 +4610,8 @@ snapshots:
       '@types/hast': 3.0.4
 
   hey-listen@1.0.8: {}
+
+  highlight.js@11.11.1: {}
 
   html-encoding-sniffer@4.0.0:
     dependencies:
@@ -4697,7 +4741,7 @@ snapshots:
       readable-stream: 2.3.8
       setimmediate: 1.0.5
 
-  katex@0.16.28:
+  katex@0.16.45:
     dependencies:
       commander: 8.3.0
 
@@ -4839,6 +4883,15 @@ snapshots:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
 
+  marked-footnote@1.4.0(marked@17.0.2):
+    dependencies:
+      marked: 17.0.2
+
+  marked-gfm-heading-id@4.1.4(marked@17.0.2):
+    dependencies:
+      github-slugger: 2.0.0
+      marked: 17.0.2
+
   marked@14.0.0: {}
 
   marked@16.4.2: {}
@@ -4875,7 +4928,7 @@ snapshots:
       dagre-d3-es: 7.0.13
       dayjs: 1.11.19
       dompurify: 3.4.0
-      katex: 0.16.28
+      katex: 0.16.45
       khroma: 2.1.0
       lodash-es: 4.18.1
       marked: 16.4.2

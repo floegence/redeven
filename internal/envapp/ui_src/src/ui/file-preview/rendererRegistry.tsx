@@ -3,11 +3,13 @@ import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 
 import type { FilePreviewDescriptor, PreviewMode } from '../utils/filePreview';
 import { DocxPreviewPane } from '../widgets/DocxPreviewPane';
+import { MarkdownPreviewPane } from '../widgets/MarkdownPreviewPane';
 import { PdfPreviewPane } from '../widgets/PdfPreviewPane';
 import { TextFilePreviewPane } from '../widgets/TextFilePreviewPane';
 
 export type RedevenFilePreviewRendererId =
   | 'text'
+  | 'markdown'
   | 'image'
   | 'pdf'
   | 'docx'
@@ -37,6 +39,21 @@ export type RedevenFilePreviewRenderer = Readonly<{
   modes: readonly PreviewMode[];
   render: (props: RedevenFilePreviewRenderProps) => JSX.Element;
 }>;
+
+function renderMarkdownPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
+  return (
+    <MarkdownPreviewPane
+      path={props.item?.path ?? 'preview.md'}
+      descriptor={props.descriptor}
+      text={props.text ?? ''}
+      draftText={props.draftText ?? props.text ?? ''}
+      editing={props.editing}
+      saveError={props.saveError}
+      onDraftChange={props.onDraftChange}
+      onSelectionChange={props.onSelectionChange}
+    />
+  );
+}
 
 function renderTextPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
   return (
@@ -113,6 +130,11 @@ export const REDEVEN_FILE_PREVIEW_RENDERERS: readonly RedevenFilePreviewRenderer
     id: 'text',
     modes: ['text'],
     render: renderTextPreview,
+  },
+  {
+    id: 'markdown',
+    modes: ['markdown'],
+    render: renderMarkdownPreview,
   },
   {
     id: 'image',

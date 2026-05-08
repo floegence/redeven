@@ -286,6 +286,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		ConfigPath:              strings.TrimSpace(opts.ConfigPath),
 		SecretsStore:            secrets,
 		ThreadReadStateStore:    threadReadStateStore,
+		AgentHomeDir:            agentHomeDir,
 		ListenAddr:              "127.0.0.1:0",
 	})
 	if err != nil {
