@@ -3,10 +3,12 @@ import { parseMarkdown } from './markedConfig';
 
 describe('file markdown marked renderer', () => {
   it('renders fenced code blocks with the file markdown code structure', () => {
-    const html = parseMarkdown('```ts\nconst value = 1;\n```');
+    const html = parseMarkdown('```ts\nconst value = 1 < 2;\n```');
 
     expect(html).toContain('<pre class="fm-code-block">');
-    expect(html).toContain('<code class="hljs language-ts">');
+    expect(html).toContain('<code class="fm-code-source language-ts">');
+    expect(html).toContain('const value = 1 &lt; 2;');
+    expect(html).not.toContain('hljs');
     expect(html).not.toContain('fm-code-block-wrapper');
   });
 

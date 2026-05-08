@@ -1,7 +1,6 @@
 import { Marked } from 'marked';
 import type { Token, Tokens } from 'marked';
 import markedFootnote from 'marked-footnote';
-import { highlightCached } from './highlightCache';
 
 const fileMarkdown = new Marked({
   gfm: true,
@@ -117,9 +116,8 @@ fileMarkdown.use({
       if (lang === 'mermaid') {
         return `<div class="mermaid" data-mermaid-src="${encodeURIComponent(text)}">${escapeHtml(text)}</div>`;
       }
-      const highlighted = highlightCached(text, lang || undefined);
       const langClass = lang ? ` language-${escapeHtml(lang)}` : ' language-text';
-      return `<pre class="fm-code-block"><code class="hljs${langClass}">${highlighted}</code></pre>`;
+      return `<pre class="fm-code-block"><code class="fm-code-source${langClass}">${escapeHtml(text)}</code></pre>`;
     },
     codespan(token: Tokens.Codespan): string {
       return `<code class="fm-inline-code">${escapeHtml(token.text)}</code>`;

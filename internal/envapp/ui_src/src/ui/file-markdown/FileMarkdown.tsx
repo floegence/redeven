@@ -79,6 +79,8 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
   let activeTocUpdateRaf: number | undefined;
   let tocNavigationTargetId = '';
   let tocNavigationReleaseTimer: number | undefined;
+  let themeRefreshRaf: number | undefined;
+  let themeObserver: MutationObserver | undefined;
   let renderGen = 0;
 
   const showToc = () => props.showToc !== false;
@@ -142,6 +144,30 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
 
   onMount(() => {
     setupMermaid(detectMermaidTheme());
+
+    if (typeof MutationObserver === 'function') {
+      themeObserver = new MutationObserver((records) => {
+        const shouldRefreshCodeBlocks = records.some((record) => record.type === 'attributes');
+        if (!shouldRefreshCodeBlocks || !containerRef) return;
+
+        if (themeRefreshRaf !== undefined && typeof window.cancelAnimationFrame === 'function') {
+          window.cancelAnimationFrame(themeRefreshRaf);
+        }
+
+        const refresh = () => {
+          themeRefreshRaf = undefined;
+          postProcess(containerRef);
+        };
+
+        themeRefreshRaf = typeof window.requestAnimationFrame === 'function'
+          ? window.requestAnimationFrame(refresh)
+          : window.setTimeout(refresh, 16);
+      });
+      themeObserver.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['class', 'data-theme', 'data-theme-switching'],
+      });
+    }
   });
 
   createEffect(() => {
@@ -269,6 +295,14 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
   }
 
   onCleanup(() => {
+    themeObserver?.disconnect();
+    if (themeRefreshRaf !== undefined) {
+      if (typeof window.cancelAnimationFrame === 'function') {
+        window.cancelAnimationFrame(themeRefreshRaf);
+      } else {
+        window.clearTimeout(themeRefreshRaf);
+      }
+    }
     clearTocNavigationReleaseTimer();
     if (activeTocUpdateRaf !== undefined && typeof window.cancelAnimationFrame === 'function') {
       window.cancelAnimationFrame(activeTocUpdateRaf);

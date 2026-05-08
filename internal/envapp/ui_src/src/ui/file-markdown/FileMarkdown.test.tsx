@@ -4,9 +4,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import { FileMarkdown } from './FileMarkdown';
 
+const postProcessMock = vi.hoisted(() => vi.fn());
+
 vi.mock('./mermaidPlugin', () => ({
   setupMermaid: vi.fn(),
   runMermaid: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('./postProcess', () => ({
+  postProcess: (...args: unknown[]) => postProcessMock(...args),
 }));
 
 function rect(top: number, height = 24): DOMRect {
@@ -62,8 +68,35 @@ describe('FileMarkdown', () => {
 
   afterEach(() => {
     document.body.innerHTML = '';
+    document.documentElement.removeAttribute('class');
+    document.documentElement.removeAttribute('data-theme');
+    document.documentElement.removeAttribute('data-theme-switching');
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+  });
+
+  it('re-processes existing code blocks when the app theme changes', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <FileMarkdown
+        filePath="/workspace/README.md"
+        content={'```ts\nconst value = 1;\n```'}
+      />
+    ), host);
+
+    try {
+      await flushAsync();
+      expect(postProcessMock).toHaveBeenCalledTimes(1);
+
+      document.documentElement.classList.add('dark');
+      await flushAsync();
+
+      expect(postProcessMock).toHaveBeenCalledTimes(2);
+    } finally {
+      dispose();
+    }
   });
 
   it('keeps TOC navigation inside the markdown scroll container instead of scrolling outer workbench surfaces', async () => {
