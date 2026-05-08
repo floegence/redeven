@@ -156,6 +156,121 @@ describe('FileMarkdown', () => {
     }
   });
 
+  it('opens relative file links from markdown tables without navigating the app shell', async () => {
+    const openFileLink = vi.fn();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    window.history.replaceState(null, '', '/_redeven_proxy/env/');
+
+    const dispose = render(() => (
+      <FileMarkdown
+        filePath="/workspace/README.md"
+        content={'| Item | Link |\n| --- | --- |\n| Review | [`docs/CAPABILITY_PERMISSIONS.md`](docs/CAPABILITY_PERMISSIONS.md) |'}
+        onOpenFileLink={openFileLink}
+      />
+    ), host);
+
+    try {
+      await flushAsync();
+
+      const link = host.querySelector<HTMLAnchorElement>('a[href="docs/CAPABILITY_PERMISSIONS.md"]');
+      expect(link).toBeTruthy();
+
+      link!.click();
+
+      expect(openFileLink).toHaveBeenCalledWith({
+        path: '/workspace/docs/CAPABILITY_PERMISSIONS.md',
+        fragment: '',
+        href: 'docs/CAPABILITY_PERMISSIONS.md',
+      });
+      expect(window.location.pathname).toBe('/_redeven_proxy/env/');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('opens raw HTML relative file links without relying on browser navigation', async () => {
+    const openFileLink = vi.fn();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    window.history.replaceState(null, '', '/_redeven_proxy/env/');
+
+    const dispose = render(() => (
+      <FileMarkdown
+        filePath="/workspace/docs/README.md"
+        content={'<a href="../PERMISSION_POLICY.md#trust">Policy</a>'}
+        onOpenFileLink={openFileLink}
+      />
+    ), host);
+
+    try {
+      await flushAsync();
+
+      host.querySelector<HTMLAnchorElement>('a[href="../PERMISSION_POLICY.md#trust"]')?.click();
+
+      expect(openFileLink).toHaveBeenCalledWith({
+        path: '/workspace/PERMISSION_POLICY.md',
+        fragment: 'trust',
+        href: '../PERMISSION_POLICY.md#trust',
+      });
+      expect(window.location.pathname).toBe('/_redeven_proxy/env/');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('blocks unresolved local links instead of navigating the app shell', async () => {
+    const unresolved = vi.fn();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    window.history.replaceState(null, '', '/_redeven_proxy/env/');
+
+    const dispose = render(() => (
+      <FileMarkdown
+        content={'[Policy](docs/PERMISSION_POLICY.md)'}
+        onUnresolvedLocalLink={unresolved}
+      />
+    ), host);
+
+    try {
+      await flushAsync();
+
+      host.querySelector<HTMLAnchorElement>('a[href="docs/PERMISSION_POLICY.md"]')?.click();
+
+      expect(unresolved).toHaveBeenCalledWith('docs/PERMISSION_POLICY.md', 'missing_current_file_path');
+      expect(window.location.pathname).toBe('/_redeven_proxy/env/');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('leaves external links to the browser default behavior', async () => {
+    const openFileLink = vi.fn();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <FileMarkdown
+        filePath="/workspace/README.md"
+        content={'[External](https://example.com/docs)'}
+        onOpenFileLink={openFileLink}
+      />
+    ), host);
+
+    try {
+      await flushAsync();
+
+      const link = host.querySelector<HTMLAnchorElement>('a[href="https://example.com/docs"]');
+      const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
+      link?.dispatchEvent(clickEvent);
+
+      expect(openFileLink).not.toHaveBeenCalled();
+      expect(clickEvent.defaultPrevented).toBe(false);
+    } finally {
+      dispose();
+    }
+  });
+
   it('keeps the clicked TOC item active while smooth scrolling passes other headings', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

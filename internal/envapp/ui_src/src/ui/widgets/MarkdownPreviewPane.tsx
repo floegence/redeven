@@ -1,7 +1,9 @@
 import { ErrorBoundary, Suspense, Show, createMemo, createSignal, lazy } from 'solid-js';
 import type { CodeEditorApi, CodeEditorProps } from '@floegence/floe-webapp-core/editor';
 import type { FilePreviewDescriptor } from '../utils/filePreview';
+import { fileItemFromPath } from '../utils/filePreviewItem';
 import { FileMarkdown } from '../file-markdown/FileMarkdown';
+import { useFilePreviewContext } from './FilePreviewContext';
 
 const CodeEditor = lazy(async () => {
   const module = await import('@floegence/floe-webapp-core/editor');
@@ -40,6 +42,7 @@ export interface MarkdownPreviewPaneProps {
 }
 
 export function MarkdownPreviewPane(props: MarkdownPreviewPaneProps) {
+  const filePreview = useFilePreviewContext();
   const [monacoFailed, setMonacoFailed] = createSignal(false);
   const editorValue = createMemo(() => (props.editing ? props.draftText ?? props.text : props.text));
   const resolvedLanguage = createMemo(() => props.descriptor.language ?? 'markdown');
@@ -60,6 +63,13 @@ export function MarkdownPreviewPane(props: MarkdownPreviewPaneProps) {
       content={props.text}
       filePath={props.path}
       showToc={true}
+      onOpenFileLink={(target) => {
+        void filePreview.openPreview(fileItemFromPath(target.path), {
+          reusePolicy: 'same_file_or_create',
+          focus: true,
+          ensureVisible: true,
+        });
+      }}
     />
   );
 

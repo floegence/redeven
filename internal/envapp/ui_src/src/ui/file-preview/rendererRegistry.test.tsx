@@ -14,6 +14,12 @@ vi.mock('../widgets/TextFilePreviewPane', () => ({
   ),
 }));
 
+vi.mock('../widgets/MarkdownPreviewPane', () => ({
+  MarkdownPreviewPane: (props: any) => (
+    <div data-testid="markdown-renderer">{`${props.path}:${props.text}`}</div>
+  ),
+}));
+
 vi.mock('../widgets/PdfPreviewPane', () => ({
   PdfPreviewPane: (props: any) => (
     <div data-testid="pdf-renderer">{props.bytes?.length ?? 0}</div>
@@ -52,6 +58,11 @@ describe('Redeven file preview renderer registry', () => {
           text: 'const value = 1;',
         })}
         {renderRedevenFilePreviewBody({
+          item: { id: '/workspace/README.md', name: 'README.md', path: '/workspace/README.md', type: 'file' },
+          descriptor: { mode: 'markdown' },
+          text: '# Hello',
+        })}
+        {renderRedevenFilePreviewBody({
           descriptor: { mode: 'pdf' },
           bytes: new Uint8Array([1, 2, 3]),
         })}
@@ -72,6 +83,7 @@ describe('Redeven file preview renderer registry', () => {
     ), host);
 
     expect(host.querySelector('[data-testid="text-renderer"]')?.textContent).toContain('/workspace/app.ts');
+    expect(host.querySelector('[data-testid="markdown-renderer"]')?.textContent).toContain('/workspace/README.md');
     expect(host.querySelector('[data-testid="pdf-renderer"]')?.textContent).toBe('3');
     expect(host.querySelector('[data-testid="docx-renderer"]')?.textContent).toBe('2');
     expect(host.textContent).toContain('Sheet: Sheet1');
