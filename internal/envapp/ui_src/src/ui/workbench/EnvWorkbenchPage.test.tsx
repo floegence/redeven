@@ -84,8 +84,8 @@ const surfaceApiMocks = vi.hoisted(() => ({
   enterOverview: vi.fn(),
   runViewportTransition: vi.fn((action: () => unknown, _options?: unknown) => action()),
   clearSelection: vi.fn(),
-  findWidgetByType: vi.fn(() => null),
-  findWidgetById: vi.fn(() => null),
+  findWidgetByType: vi.fn((_type?: unknown): any => null),
+  findWidgetById: vi.fn((_widgetId?: unknown): any => null),
   updateWidgetTitle: vi.fn(),
   viewportTransitionReleases: [] as Array<() => void>,
   lastWidgetDefinitions: null as any,
@@ -2089,7 +2089,7 @@ describe('EnvWorkbenchPage', () => {
     expect((host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement).dataset.widgetX).toBe('320');
   });
 
-  it('routes workbench preview activation requests through the preview widget lifecycle', async () => {
+  it('focuses an existing workbench preview widget when the same file is requested again', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -2141,7 +2141,6 @@ describe('EnvWorkbenchPage', () => {
       }
       return null;
     }) as any);
-    surfaceApiMocks.createWidget.mockReturnValue(existingWidget as any);
     surfaceApiMocks.findWidgetById.mockReturnValue(existingWidget as any);
 
     mount(() => <EnvWorkbenchPage />, host);
@@ -2162,9 +2161,163 @@ describe('EnvWorkbenchPage', () => {
     setWorkbenchFilePreviewActivationSeq((value) => value + 1);
     await flushMicrotasks();
 
+    expect(surfaceApiMocks.createWidget).not.toHaveBeenCalled();
     expect(surfaceApiMocks.focusWidget).toHaveBeenCalledWith(existingWidget, { centerViewport: true });
     expect(surfaceApiMocks.updateWidgetTitle).toHaveBeenCalledWith(existingWidget.id, 'Preview · demo.txt');
     expect(contextMocks.consumeWorkbenchFilePreviewActivation).toHaveBeenCalledWith('request-preview-existing');
+  });
+
+  it('creates a new workbench preview widget for a different file by default', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const existingWidget = persistedWidget('widget-preview-existing', 'redeven.preview', 'Preview · demo.txt', 7, 456);
+    const newWidget = persistedWidget('widget-preview-new', 'redeven.preview', 'Preview', 8, 500);
+
+    storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
+      if (key === 'workbench:env-123') {
+        return {
+          version: 1,
+          widgets: [existingWidget],
+          viewport: { x: 80, y: 60, scale: 1 },
+          locked: false,
+          filters: {
+            'redeven.terminal': true,
+            'redeven.files': true,
+            'redeven.preview': true,
+          },
+          selectedWidgetId: existingWidget.id,
+          theme: 'default',
+        };
+      }
+      if (key === 'workbench:env-123:instances') {
+        return {
+          version: 2,
+          latestWidgetIdByType: {
+            'redeven.preview': existingWidget.id,
+          },
+          terminalPanelsByWidgetId: {},
+          previewItemsByWidgetId: {
+            [existingWidget.id]: {
+              id: '/workspace/demo.txt',
+              type: 'file',
+              name: 'demo.txt',
+              path: '/workspace/demo.txt',
+              size: 12,
+            },
+          },
+        };
+      }
+      return null;
+    }) as any);
+    surfaceApiMocks.findWidgetById.mockImplementation((widgetId: unknown) => (
+      String(widgetId) === existingWidget.id ? existingWidget : null
+    ));
+    surfaceApiMocks.findWidgetByType.mockReturnValue(existingWidget as any);
+    surfaceApiMocks.createWidget.mockImplementation((_type: string, _options?: any) => {
+      surfaceApiMocks.lastSetState((previous: any) => ({
+        ...previous,
+        widgets: [...previous.widgets, newWidget],
+        selectedWidgetId: newWidget.id,
+      }));
+      return newWidget;
+    });
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    setWorkbenchFilePreviewActivation({
+      requestId: 'request-preview-other',
+      item: {
+        id: '/workspace/other.txt',
+        type: 'file',
+        name: 'other.txt',
+        path: '/workspace/other.txt',
+        size: 18,
+      },
+      focus: true,
+      ensureVisible: true,
+    });
+    setWorkbenchFilePreviewActivationSeq((value) => value + 1);
+    await flushMicrotasks();
+
+    expect(surfaceApiMocks.createWidget).toHaveBeenCalledWith('redeven.preview', { centerViewport: true });
+    expect(surfaceApiMocks.focusWidget).toHaveBeenCalledWith(newWidget, { centerViewport: true });
+    expect(surfaceApiMocks.updateWidgetTitle).toHaveBeenCalledWith(newWidget.id, 'Preview · other.txt');
+    expect(host.querySelector('[data-testid="env-workbench-surface"]')?.getAttribute('data-widget-ids')).toBe(
+      'widget-preview-existing,widget-preview-new',
+    );
+    expect(surfaceApiMocks.findWidgetByType).not.toHaveBeenCalled();
+  });
+
+  it('can still reuse the latest workbench preview widget when explicitly requested', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const latestWidget = persistedWidget('widget-preview-latest', 'redeven.preview', 'Preview · demo.txt', 7, 456);
+
+    storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
+      if (key === 'workbench:env-123') {
+        return {
+          version: 1,
+          widgets: [latestWidget],
+          viewport: { x: 80, y: 60, scale: 1 },
+          locked: false,
+          filters: {
+            'redeven.terminal': true,
+            'redeven.files': true,
+            'redeven.preview': true,
+          },
+          selectedWidgetId: latestWidget.id,
+          theme: 'default',
+        };
+      }
+      if (key === 'workbench:env-123:instances') {
+        return {
+          version: 2,
+          latestWidgetIdByType: {
+            'redeven.preview': latestWidget.id,
+          },
+          terminalPanelsByWidgetId: {},
+          previewItemsByWidgetId: {
+            [latestWidget.id]: {
+              id: '/workspace/demo.txt',
+              type: 'file',
+              name: 'demo.txt',
+              path: '/workspace/demo.txt',
+              size: 12,
+            },
+          },
+        };
+      }
+      return null;
+    }) as any);
+    surfaceApiMocks.findWidgetById.mockImplementation((widgetId: unknown) => (
+      String(widgetId) === latestWidget.id ? latestWidget : null
+    ));
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    setWorkbenchFilePreviewActivation({
+      requestId: 'request-preview-reuse-latest',
+      item: {
+        id: '/workspace/other.txt',
+        type: 'file',
+        name: 'other.txt',
+        path: '/workspace/other.txt',
+        size: 18,
+      },
+      focus: true,
+      ensureVisible: true,
+      openStrategy: 'focus_latest_or_create',
+    });
+    setWorkbenchFilePreviewActivationSeq((value) => value + 1);
+    await flushMicrotasks();
+
+    expect(surfaceApiMocks.createWidget).not.toHaveBeenCalled();
+    expect(surfaceApiMocks.focusWidget).toHaveBeenCalledWith(latestWidget, { centerViewport: true });
+    expect(surfaceApiMocks.updateWidgetTitle).toHaveBeenCalledWith(latestWidget.id, 'Preview · other.txt');
   });
 
   it('falls back to the previous focused widget when the selected widget is closed', async () => {

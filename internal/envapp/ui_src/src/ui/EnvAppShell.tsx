@@ -91,7 +91,7 @@ import { createFileBrowserSurfaceController } from './widgets/createFileBrowserS
 import { createFilePreviewController } from './widgets/createFilePreviewController';
 import { FileBrowserSurfaceContext } from './widgets/FileBrowserSurfaceContext';
 import { FileBrowserSurfaceHost } from './widgets/FileBrowserSurfaceHost';
-import { FilePreviewContext } from './widgets/FilePreviewContext';
+import { FilePreviewContext, type FilePreviewOpenOptions } from './widgets/FilePreviewContext';
 import { FilePreviewHost } from './widgets/FilePreviewHost';
 import { openFileBrowserSurface } from './widgets/openFileBrowserSurface';
 import { buildAskFlowerDraftMarkdown } from './utils/askFlowerContextTemplate';
@@ -836,11 +836,7 @@ export function EnvAppShell() {
 
   const openFilePreview = async (
     item: FileItem,
-    options?: {
-      openStrategy?: 'focus_latest_or_create' | 'create_new';
-      focus?: boolean;
-      ensureVisible?: boolean;
-    },
+    options?: FilePreviewOpenOptions,
   ): Promise<void> => {
     const normalizedPath = normalizeAbsolutePath(item?.path ?? '');
     if (!normalizedPath) {
@@ -861,13 +857,15 @@ export function EnvAppShell() {
     };
 
     if (!layout.isMobile() && viewMode() === 'workbench') {
+      const reusePolicy = options?.reusePolicy ?? 'same_file_or_create';
+      const openStrategy = reusePolicy === 'single_surface' ? 'same_file_or_create' : reusePolicy;
       setWorkbenchFilePreviewActivation({
         requestId: createClientId('workbench-preview'),
         item: normalizedItem,
         focus: options?.focus ?? true,
         ensureVisible: options?.ensureVisible ?? true,
         centerViewport: options?.ensureVisible ?? true,
-        openStrategy: options?.openStrategy,
+        openStrategy,
       });
       setWorkbenchFilePreviewActivationSeq((n) => n + 1);
       return;
@@ -2581,7 +2579,7 @@ export function EnvAppShell() {
 
   const filePreviewContextValue = {
     controller: filePreviewController,
-    openPreview: async (item: FileItem) => openFilePreview(item),
+    openPreview: async (item: FileItem, options?: FilePreviewOpenOptions) => openFilePreview(item, options),
     closePreview: filePreviewController.closePreview,
   } as const;
   const fileBrowserSurfaceContextValue = {
@@ -2744,7 +2742,6 @@ export function EnvAppShell() {
       </div>
 
       <AuditLogDialog open={auditOpen()} envId={envId()} onClose={() => setAuditOpen(false)} />
-      <FilePreviewHost />
       <FileBrowserSurfaceHost />
       <DebugConsoleWindow controller={debugConsole} />
     </Shell>
@@ -2856,6 +2853,9 @@ export function EnvAppShell() {
             <FloeRegistryRuntime components={components()}>
               <AIChatProviderBridge>
                 <CodexProvider>{renderMainShell()}</CodexProvider>
+                <Show when={viewMode() !== 'workbench'}>
+                  <FilePreviewHost />
+                </Show>
                 <AskFlowerComposerWindow
                   open={askFlowerComposerOpen()}
                   intent={askFlowerComposerIntent()}

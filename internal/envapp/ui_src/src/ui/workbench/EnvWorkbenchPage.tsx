@@ -1745,7 +1745,7 @@ export function EnvWorkbenchPage() {
     }
 
     const centerViewport = request.centerViewport ?? request.ensureVisible ?? true;
-    const openStrategy = request.openStrategy ?? 'focus_latest_or_create';
+    const openStrategy = request.openStrategy ?? 'same_file_or_create';
     const normalizedItem: FileItem = {
       ...request.item,
       id: compact(request.item?.id) || previewPath,
@@ -1768,8 +1768,8 @@ export function EnvWorkbenchPage() {
     }
 
     if (!widget) {
-      const latestWidgetId = instanceState().latestWidgetIdByType['redeven.preview'] ?? null;
-      if (openStrategy !== 'create_new') {
+      if (openStrategy === 'focus_latest_or_create') {
+        const latestWidgetId = instanceState().latestWidgetIdByType['redeven.preview'] ?? null;
         const latestWidget = latestWidgetId ? api.findWidgetById(latestWidgetId) : null;
         widget = latestWidget?.type === 'redeven.preview'
           ? latestWidget

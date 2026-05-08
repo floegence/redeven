@@ -43,6 +43,7 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
   });
   const [hydratedPath, setHydratedPath] = createSignal('');
   const [dismissedSyncedPreviewKey, setDismissedSyncedPreviewKey] = createSignal('');
+  const [pendingOpenRequestPath, setPendingOpenRequestPath] = createSignal('');
   const [pendingWidgetRemoval, setPendingWidgetRemoval] = createSignal(false);
   const pendingSyncedItem = () => workbench.pendingSyncedPreviewItem(props.widgetId);
 
@@ -86,8 +87,17 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
     if (!requestPath) {
       return;
     }
-    setHydratedPath(requestPath);
-    void controller.openPreview(request.item);
+    setPendingOpenRequestPath(requestPath);
+    void controller.openPreview(request.item)
+      .then(() => {
+        if (compact(controller.item()?.path) === requestPath) {
+          setHydratedPath(requestPath);
+        }
+      })
+      .finally(() => {
+        setPendingOpenRequestPath((current) => (current === requestPath ? '' : current));
+      })
+      .catch(() => undefined);
   });
 
   createEffect(() => {
@@ -100,6 +110,9 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
     }
     const previewPath = compact(item?.path);
     if (!previewPath || previewPath === hydratedPath()) {
+      return;
+    }
+    if (pendingOpenRequestPath() === previewPath) {
       return;
     }
     const syncedItem = {
