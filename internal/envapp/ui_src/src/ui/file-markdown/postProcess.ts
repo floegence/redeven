@@ -5,6 +5,7 @@ import {
 } from '../utils/shikiHighlight';
 
 export function postProcess(root: HTMLElement): void {
+  normalizeEmbeddedHtml(root);
   enhanceCodeBlocks(root);
   protectExternalLinks(root);
 }
@@ -42,6 +43,7 @@ const LANGUAGE_LABELS: Readonly<Record<string, string>> = {
 
 const PLAIN_TEXT_LANGUAGES = new Set(['', 'text', 'txt', 'plain', 'plaintext']);
 const codeBlockStates = new WeakMap<HTMLPreElement, FileMarkdownCodeBlockState>();
+const PARAGRAPH_ALIGNMENTS = new Set(['left', 'center', 'right']);
 
 interface RgbColor {
   readonly r: number;
@@ -259,11 +261,109 @@ function enhanceCodeBlocks(root: HTMLElement): void {
   }
 }
 
-function protectExternalLinks(root: HTMLElement): void {
-  const links = root.querySelectorAll<HTMLAnchorElement>('a[target="_blank"]');
-  for (const link of links) {
-    if (!link.getAttribute('rel')) {
-      link.setAttribute('rel', 'noopener noreferrer');
+function isImageOnlyLink(link: HTMLAnchorElement): boolean {
+  let hasImage = false;
+
+  for (const child of Array.from(link.childNodes)) {
+    if (child.nodeType === Node.TEXT_NODE) {
+      if (child.textContent?.trim()) return false;
+      continue;
     }
+    if (child instanceof HTMLImageElement) {
+      hasImage = true;
+      continue;
+    }
+    return false;
+  }
+
+  return hasImage;
+}
+
+function isImageParagraphChild(node: ChildNode): boolean {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return !node.textContent?.trim();
+  }
+  if (node instanceof HTMLImageElement) {
+    return true;
+  }
+  if (node instanceof HTMLAnchorElement) {
+    return isImageOnlyLink(node);
+  }
+  return false;
+}
+
+function countParagraphImages(paragraph: HTMLParagraphElement): number {
+  let count = 0;
+  for (const child of Array.from(paragraph.children)) {
+    if (child instanceof HTMLImageElement) {
+      count += 1;
+      continue;
+    }
+    if (child instanceof HTMLAnchorElement && isImageOnlyLink(child)) {
+      count += child.querySelectorAll('img').length;
+    }
+  }
+  return count;
+}
+
+function normalizeImageParagraph(paragraph: HTMLParagraphElement): void {
+  paragraph.classList.remove('fm-image-paragraph', 'fm-image-single', 'fm-image-row');
+
+  const children = Array.from(paragraph.childNodes);
+  if (!children.length || !children.every(isImageParagraphChild)) return;
+
+  const imageCount = countParagraphImages(paragraph);
+  if (imageCount === 0) return;
+
+  paragraph.classList.add('fm-image-paragraph');
+  paragraph.classList.toggle('fm-image-single', imageCount === 1);
+  paragraph.classList.toggle('fm-image-row', imageCount > 1);
+}
+
+function normalizeEmbeddedHtml(root: HTMLElement): void {
+  const alignedParagraphs = root.querySelectorAll<HTMLParagraphElement>('p[align]');
+  for (const paragraph of alignedParagraphs) {
+    const align = paragraph.getAttribute('align')?.trim().toLowerCase() ?? '';
+    if (!PARAGRAPH_ALIGNMENTS.has(align)) continue;
+    paragraph.classList.add(`fm-align-${align}`);
+  }
+
+  const images = root.querySelectorAll<HTMLImageElement>('img');
+  for (const image of images) {
+    image.classList.add('fm-image');
+    if (!image.hasAttribute('loading')) {
+      image.setAttribute('loading', 'lazy');
+    }
+    if (!image.hasAttribute('decoding')) {
+      image.setAttribute('decoding', 'async');
+    }
+  }
+
+  const links = root.querySelectorAll<HTMLAnchorElement>('a[href]');
+  for (const link of links) {
+    if (isImageOnlyLink(link)) {
+      link.classList.add('fm-image-link');
+    }
+  }
+
+  const paragraphs = root.querySelectorAll<HTMLParagraphElement>('p');
+  for (const paragraph of paragraphs) {
+    normalizeImageParagraph(paragraph);
+  }
+}
+
+function protectExternalLinks(root: HTMLElement): void {
+  const links = root.querySelectorAll<HTMLAnchorElement>('a[href]');
+  for (const link of links) {
+    const href = link.getAttribute('href') ?? '';
+    if (!/^https?:\/\//i.test(href)) continue;
+
+    if (!link.getAttribute('target')) {
+      link.setAttribute('target', '_blank');
+    }
+    const relTokens = new Set((link.getAttribute('rel') ?? '').split(/\s+/).filter(Boolean));
+    relTokens.add('noopener');
+    relTokens.add('noreferrer');
+    link.setAttribute('rel', Array.from(relTokens).join(' '));
   }
 }

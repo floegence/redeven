@@ -32,6 +32,70 @@ afterEach(() => {
 });
 
 describe('file markdown postProcess', () => {
+  it('normalizes raw HTML badge rows to the same inline image treatment as markdown images', () => {
+    const root = createRoot(`
+      <p align="center">
+        <a href="https://go.dev/"><img alt="Go Version" src="https://img.shields.io/badge/Go-1.25.9-00ADD8?style=flat-square&logo=go"></a>
+        <a href="docs/ENV_APP.md"><img alt="Local Environment Workspace" src="https://img.shields.io/badge/Local%20Environment-Workspace-6C3BFF?style=flat-square"></a>
+      </p>
+    `);
+
+    postProcess(root);
+
+    const paragraph = root.querySelector('p');
+    const externalLink = root.querySelector<HTMLAnchorElement>('a[href="https://go.dev/"]');
+    const localLink = root.querySelector<HTMLAnchorElement>('a[href="docs/ENV_APP.md"]');
+    const images = root.querySelectorAll<HTMLImageElement>('img.fm-image');
+
+    expect(paragraph?.classList.contains('fm-align-center')).toBe(true);
+    expect(paragraph?.classList.contains('fm-image-paragraph')).toBe(true);
+    expect(paragraph?.classList.contains('fm-image-row')).toBe(true);
+    expect(paragraph?.classList.contains('fm-image-single')).toBe(false);
+    expect(images).toHaveLength(2);
+    expect(Array.from(root.querySelectorAll('a.fm-image-link'))).toHaveLength(2);
+    expect(externalLink?.getAttribute('target')).toBe('_blank');
+    expect(externalLink?.getAttribute('rel')).toContain('noopener');
+    expect(externalLink?.getAttribute('rel')).toContain('noreferrer');
+    expect(localLink?.getAttribute('target')).toBeNull();
+    expect(images[0].getAttribute('loading')).toBe('lazy');
+    expect(images[0].getAttribute('decoding')).toBe('async');
+  });
+
+  it('keeps a centered raw HTML logo image centered as a single image paragraph', () => {
+    const root = createRoot(`
+      <p align="center">
+        <img src="desktop/build/icon.svg" alt="Redeven" width="120">
+      </p>
+    `);
+
+    postProcess(root);
+
+    const paragraph = root.querySelector('p');
+    const image = root.querySelector<HTMLImageElement>('img');
+
+    expect(paragraph?.classList.contains('fm-align-center')).toBe(true);
+    expect(paragraph?.classList.contains('fm-image-paragraph')).toBe(true);
+    expect(paragraph?.classList.contains('fm-image-single')).toBe(true);
+    expect(paragraph?.classList.contains('fm-image-row')).toBe(false);
+    expect(image?.classList.contains('fm-image')).toBe(true);
+    expect(image?.getAttribute('width')).toBe('120');
+  });
+
+  it('recomputes image paragraph classes when postProcess runs again', () => {
+    const root = createRoot('<p><img src="one.svg" alt="One"></p>');
+    const paragraph = root.querySelector('p');
+
+    postProcess(root);
+    expect(paragraph?.classList.contains('fm-image-single')).toBe(true);
+
+    paragraph?.insertAdjacentHTML('beforeend', ' text');
+    postProcess(root);
+
+    expect(paragraph?.classList.contains('fm-image-paragraph')).toBe(false);
+    expect(paragraph?.classList.contains('fm-image-single')).toBe(false);
+    expect(paragraph?.classList.contains('fm-image-row')).toBe(false);
+  });
+
   it('adds a language badge and copy button to rendered code blocks', async () => {
     highlightCodeToHtmlMock.mockResolvedValue('<pre class="shiki" style="color:#24292f"><code><span class="line"><span style="color:#CF222E">const</span> value = 1;</span></code></pre>');
     document.documentElement.classList.add('light');

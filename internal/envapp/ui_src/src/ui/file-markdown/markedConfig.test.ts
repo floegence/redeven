@@ -19,6 +19,24 @@ describe('file markdown marked renderer', () => {
     expect(html).not.toContain('fm-code-block');
   });
 
+  it('keeps soft line breaks inline so badge images can flow like GitHub markdown', () => {
+    const html = parseMarkdown([
+      '![Go Version](https://img.shields.io/badge/Go-1.25.9-00ADD8?logo=go)',
+      '![Node Version](https://img.shields.io/badge/Node.js-24-339933?logo=node.js)',
+    ].join('\n'));
+
+    expect(html).toContain('<p><img class="fm-image"');
+    expect(html).toContain('alt="Go Version"');
+    expect(html).toContain('alt="Node Version"');
+    expect(html).not.toContain('<br>');
+  });
+
+  it('still renders explicit hard line breaks inside paragraphs', () => {
+    const html = parseMarkdown('First line  \nSecond line');
+
+    expect(html).toContain('First line<br>Second line');
+  });
+
   it('keeps mermaid fences on the mermaid rendering path', () => {
     const html = parseMarkdown('```mermaid\ngraph TD\n  A-->B\n```');
 
