@@ -2,6 +2,7 @@ import { createContext, useContext, type Resource } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type { EnvironmentDetail, LocalRuntimeInfo } from '../services/controlplaneApi';
 import type { AskFlowerIntent } from './askFlowerIntent';
+import type { FilePreviewOpenOptions } from '../widgets/FilePreviewContext';
 import type {
   EnvFileBrowserSurfacePayload,
   EnvOpenSurfaceOptions,
@@ -63,7 +64,7 @@ export type EnvWorkbenchFilePreviewActivationRequest = {
   focus?: boolean;
   ensureVisible?: boolean;
   centerViewport?: boolean;
-  openStrategy?: EnvWorkbenchSurfaceOpenStrategy;
+  openStrategy?: EnvWorkbenchSurfaceOpenStrategy | 'same_file_or_create';
 };
 
 export type EnvWorkbenchOverviewEntryRequest = {
@@ -143,11 +144,7 @@ export type EnvContextValue = {
   ) => Promise<void>;
   openFilePreview: (
     item: FileItem,
-    options?: {
-      openStrategy?: EnvWorkbenchSurfaceOpenStrategy;
-      focus?: boolean;
-      ensureVisible?: boolean;
-    },
+    options?: FilePreviewOpenOptions,
   ) => Promise<void>;
   consumeOpenTerminalInDirectoryRequest: (requestId: string) => void;
 

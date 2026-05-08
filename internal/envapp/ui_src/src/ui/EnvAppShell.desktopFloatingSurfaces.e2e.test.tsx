@@ -27,7 +27,7 @@ const connectArtifactEntryMock = vi.fn();
 let debugConsoleEnabled = false;
 let protocolStatus: 'connected' | 'disconnected' | 'connecting' | 'error' = 'disconnected';
 let protocolClient: unknown = null;
-let desktopViewMode: 'activity' | 'workbench' = 'activity';
+let desktopViewMode: 'activity' | 'deck' | 'workbench' = 'activity';
 
 const connectMock = vi.fn(async () => {
   protocolStatus = 'connected';
@@ -225,7 +225,26 @@ vi.mock('./TopBarBrandButton', () => ({
   TopBarBrandButton: (props: any) => <button type="button" aria-label={props.label}>{props.children}</button>,
 }));
 
-vi.mock('./pages/EnvDeckPage', () => ({ EnvDeckPage: () => <div /> }));
+vi.mock('./pages/EnvDeckPage', () => ({
+  EnvDeckPage: () => {
+    const filePreview = useContext(FilePreviewContextMock);
+    return (
+      <button
+        type="button"
+        data-testid="deck-open-preview"
+        onClick={() => void filePreview.openPreview({
+          id: '/workspace/deck.txt',
+          type: 'file',
+          name: 'deck.txt',
+          path: '/workspace/deck.txt',
+          size: 8,
+        })}
+      >
+        Open Deck Preview
+      </button>
+    );
+  },
+}));
 
 vi.mock('./workbench/EnvWorkbenchPage', () => ({
   EnvWorkbenchPage: () => {
@@ -471,6 +490,35 @@ describe('EnvAppShell desktop floating surfaces', () => {
       expect(filePreviewOpenPreviewMock).toHaveBeenCalledWith(expect.objectContaining({
         type: 'file',
         path: '/workspace/demo.txt',
+      }));
+      expect(windowOpenMock).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps the floating file preview host available in deck mode', async () => {
+    desktopViewMode = 'deck';
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushAsync();
+
+      expect(host.querySelector('[data-testid="file-preview-host"]')).not.toBeNull();
+      expect(host.querySelector('[data-testid="display-mode-page-shell"]')).not.toBeNull();
+
+      filePreviewOpenPreviewMock.mockClear();
+      (host.querySelector('[data-testid="deck-open-preview"]') as HTMLButtonElement).click();
+      await flushAsync();
+
+      expect(filePreviewOpenPreviewMock).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'file',
+        path: '/workspace/deck.txt',
       }));
       expect(windowOpenMock).not.toHaveBeenCalled();
     } finally {

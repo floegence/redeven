@@ -33,6 +33,7 @@ const workbenchStore = vi.hoisted(() => ({
   updatePreviewItem: vi.fn(),
   setPendingSyncedPreviewItem: vi.fn(),
   registerWidgetRemoveGuard: vi.fn(),
+  consumePreviewOpenRequest: vi.fn(),
   removeWidget: vi.fn(),
 }));
 
@@ -127,6 +128,7 @@ function renderPreviewWidget() {
   const [dirty, setDirty] = createSignal(true);
   const [sharedItem, setSharedItem] = createSignal<RuntimeWorkbenchPreviewItem | null>(null);
   const [pendingItem, setPendingItem] = createSignal<RuntimeWorkbenchPreviewItem | null>(null);
+  const [openRequest, setOpenRequest] = createSignal<any>(null);
   const host = document.createElement('div');
   document.body.appendChild(host);
 
@@ -168,9 +170,9 @@ function renderPreviewWidget() {
           pendingSyncedPreviewItem: () => pendingItem(),
           setPendingSyncedPreviewItem: workbenchStore.setPendingSyncedPreviewItem,
           updatePreviewItem: workbenchStore.updatePreviewItem,
-          previewOpenRequest: () => null,
+          previewOpenRequest: () => openRequest(),
           dispatchPreviewOpenRequest: vi.fn(),
-          consumePreviewOpenRequest: vi.fn(),
+          consumePreviewOpenRequest: workbenchStore.consumePreviewOpenRequest,
           registerWidgetRemoveGuard: workbenchStore.registerWidgetRemoveGuard,
           removeWidget: workbenchStore.removeWidget,
           requestWidgetRemoval: vi.fn(),
@@ -187,6 +189,7 @@ function renderPreviewWidget() {
     dispose,
     setSharedItem,
     setDirty,
+    setOpenRequest,
   };
 }
 
@@ -253,6 +256,88 @@ describe('WorkbenchFilePreviewWidget', () => {
 
       expect(controllerStore.openPreview).toHaveBeenCalledWith(remoteItem);
       expect(harness.host.textContent).not.toContain('Synced preview pending');
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  it('does not treat a dirty blocked open request as hydrated', async () => {
+    const harness = renderPreviewWidget();
+    const blockedItem: RuntimeWorkbenchPreviewItem = {
+      id: '/workspace/blocked.ts',
+      type: 'file',
+      path: '/workspace/blocked.ts',
+      name: 'blocked.ts',
+    };
+
+    try {
+      await flush();
+      controllerStore.openPreview.mockClear();
+
+      controllerStore.openPreview.mockImplementationOnce(async () => undefined);
+      harness.setOpenRequest({
+        requestId: 'request-blocked-preview',
+        widgetId: 'widget-preview-1',
+        item: blockedItem,
+      });
+      await flush();
+
+      expect(workbenchStore.consumePreviewOpenRequest).toHaveBeenCalledWith('request-blocked-preview');
+      expect(controllerStore.openPreview).toHaveBeenCalledWith(blockedItem);
+      expect(controllerStore.item?.()?.path).toBe('/workspace/local.ts');
+
+      harness.setSharedItem(blockedItem);
+      await flush();
+
+      expect(harness.host.textContent).toContain('Synced preview pending');
+      expect(harness.host.textContent).toContain('blocked.ts');
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  it('does not reopen the same clean preview through shared state while a direct open request is in flight', async () => {
+    const harness = renderPreviewWidget();
+    const targetItem: RuntimeWorkbenchPreviewItem = {
+      id: '/workspace/target.ts',
+      type: 'file',
+      path: '/workspace/target.ts',
+      name: 'target.ts',
+    };
+
+    try {
+      await flush();
+      harness.setDirty(false);
+      controllerStore.openPreview.mockClear();
+
+      let resolveOpen: () => void = () => {
+        throw new Error('open promise was not created');
+      };
+      controllerStore.openPreview.mockImplementationOnce((async (item: any) => {
+        await new Promise<void>((resolve) => {
+          resolveOpen = resolve;
+        });
+        controllerStore.setItem?.(item);
+        controllerStore.setDirty?.(false);
+      }) as any);
+
+      harness.setOpenRequest({
+        requestId: 'request-target-preview',
+        widgetId: 'widget-preview-1',
+        item: targetItem,
+      });
+      await flush();
+      harness.setSharedItem(targetItem);
+      await flush();
+
+      expect(controllerStore.openPreview).toHaveBeenCalledTimes(1);
+      expect(controllerStore.openPreview).toHaveBeenCalledWith(targetItem);
+
+      resolveOpen();
+      await flush();
+
+      expect(controllerStore.openPreview).toHaveBeenCalledTimes(1);
+      expect(controllerStore.item?.()?.path).toBe('/workspace/target.ts');
     } finally {
       harness.dispose();
     }
