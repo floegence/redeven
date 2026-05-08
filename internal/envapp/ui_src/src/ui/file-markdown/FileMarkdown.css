@@ -1,14 +1,21 @@
 /* FileMarkdown — document-style markdown preview, uses app theme variables */
 
 .file-markdown-body {
-  --fm-code-surface: #f7f8fb;
-  --fm-code-chrome: #eef2f7;
-  --fm-code-border: #d6dee8;
-  --fm-code-muted: #64748b;
-  --fm-code-fallback-text: #24292f;
-  --fm-code-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --fm-code-copy-bg: rgba(255, 255, 255, 0.74);
-  --fm-code-copy-hover-bg: #ffffff;
+  --fm-code-green-rgb: 46, 160, 67;
+  --fm-code-surface: #f8fcf7;
+  --fm-code-chrome: #f1f7f0;
+  --fm-code-border: rgba(var(--fm-code-green-rgb), 0.14);
+  --fm-code-muted: #66796d;
+  --fm-code-fallback-text: #22362a;
+  --fm-code-accent: #2f7d58;
+  --fm-code-shadow: 0 1px 2px rgba(20, 83, 45, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  --fm-code-copy-bg: rgba(250, 254, 249, 0.68);
+  --fm-code-copy-hover-bg: rgba(253, 255, 252, 0.96);
+  --fm-inline-code-bg: rgba(var(--fm-code-green-rgb), 0.105);
+  --fm-inline-code-border: rgba(var(--fm-code-green-rgb), 0.19);
+  --fm-inline-code-highlight: rgba(255, 255, 255, 0.6);
+  --fm-inline-code-ink: #23593d;
+  --fm-inline-code-shadow: 0 1px 1px rgba(20, 83, 45, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.54);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   font-size: 15.5px;
   line-height: 1.7;
@@ -21,14 +28,21 @@
 }
 
 html.dark .file-markdown-body {
-  --fm-code-surface: #0d1117;
-  --fm-code-chrome: #161b22;
-  --fm-code-border: #30363d;
-  --fm-code-muted: #8b949e;
-  --fm-code-fallback-text: #c9d1d9;
-  --fm-code-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
-  --fm-code-copy-bg: rgba(22, 27, 34, 0.82);
-  --fm-code-copy-hover-bg: #21262d;
+  --fm-code-green-rgb: 63, 185, 80;
+  --fm-code-surface: #0d1713;
+  --fm-code-chrome: #111c18;
+  --fm-code-border: rgba(var(--fm-code-green-rgb), 0.18);
+  --fm-code-muted: #93b7a3;
+  --fm-code-fallback-text: #d9e6dd;
+  --fm-code-accent: #7ad99d;
+  --fm-code-shadow: 0 1px 2px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  --fm-code-copy-bg: rgba(13, 23, 19, 0.72);
+  --fm-code-copy-hover-bg: rgba(21, 34, 28, 0.96);
+  --fm-inline-code-bg: rgba(var(--fm-code-green-rgb), 0.13);
+  --fm-inline-code-border: rgba(var(--fm-code-green-rgb), 0.24);
+  --fm-inline-code-highlight: rgba(220, 255, 232, 0.06);
+  --fm-inline-code-ink: #c3f2d0;
+  --fm-inline-code-shadow: 0 1px 1px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.055);
 }
 
 /* Headings */
@@ -54,10 +68,17 @@ html.dark .file-markdown-body {
 .file-markdown-body code.fm-inline-code {
   font-family: 'JetBrains Mono', 'Iosevka', ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.85em;
-  color: var(--primary);
-  background: color-mix(in srgb, var(--primary) 10%, var(--background));
+  line-height: 1.25;
+  color: var(--fm-inline-code-ink);
+  background:
+    linear-gradient(135deg, var(--fm-inline-code-highlight), transparent 72%),
+    var(--fm-inline-code-bg);
+  border: 1px solid var(--fm-inline-code-border);
   border-radius: 4px;
-  padding: 0.15em 0.4em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  box-shadow: var(--fm-inline-code-shadow);
+  padding: 0.08em 0.36em;
 }
 
 /* Code blocks */
@@ -76,6 +97,7 @@ html.dark .file-markdown-body {
       var(--fm-code-surface) 30px,
       var(--fm-code-surface) 100%
     );
+  background-clip: padding-box;
   box-shadow: var(--fm-code-shadow);
   color: var(--fm-code-fallback-text);
   font-family: 'JetBrains Mono', 'Iosevka', ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -157,15 +179,15 @@ html.dark .file-markdown-body {
 
 .file-markdown-body .fm-code-copy:hover {
   background: var(--fm-code-copy-hover-bg);
-  color: var(--primary);
-  border-color: color-mix(in srgb, var(--primary) 30%, var(--fm-code-border));
+  color: var(--fm-code-accent);
+  border-color: color-mix(in srgb, var(--fm-code-accent) 38%, var(--fm-code-border));
   opacity: 1;
 }
 .file-markdown-body pre.fm-code-block:hover .fm-code-copy,
 .file-markdown-body .fm-code-copy:focus-visible,
 .file-markdown-body .fm-code-copy.fm-copied { opacity: 1; }
-.file-markdown-body .fm-code-copy:focus-visible { outline: 2px solid color-mix(in srgb, var(--primary) 45%, transparent); outline-offset: 2px; }
-.file-markdown-body .fm-code-copy.fm-copied { background: color-mix(in srgb, var(--primary) 16%, var(--fm-code-copy-hover-bg)); color: var(--primary); border-color: color-mix(in srgb, var(--primary) 30%, var(--fm-code-border)); }
+.file-markdown-body .fm-code-copy:focus-visible { outline: 2px solid color-mix(in srgb, var(--fm-code-accent) 45%, transparent); outline-offset: 2px; }
+.file-markdown-body .fm-code-copy.fm-copied { background: color-mix(in srgb, var(--fm-code-accent) 16%, var(--fm-code-copy-hover-bg)); color: var(--fm-code-accent); border-color: color-mix(in srgb, var(--fm-code-accent) 34%, var(--fm-code-border)); }
 
 @media (hover: hover) and (pointer: fine) {
   .file-markdown-body .fm-code-copy {
