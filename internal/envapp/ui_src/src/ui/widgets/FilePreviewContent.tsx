@@ -1,7 +1,8 @@
 import { Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
-import { Check, Copy, Download, Loader2, Pencil, Save, Sparkles, X } from '@floegence/floe-webapp-core/icons';
+import { Check, Copy, Download, Loader2, Pencil, Save, X } from '@floegence/floe-webapp-core/icons';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
+import { FlowerNavigationIcon } from '../icons/FlowerSoftAuraIcon';
 import { renderRedevenFilePreviewBody } from '../file-preview/rendererRegistry';
 import type { FilePreviewDescriptor } from '../utils/filePreview';
 import { readSelectionTextFromPreview } from '../utils/filePreviewSelection';
@@ -177,7 +178,7 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
                 disabled={!props.item || props.loading}
                 onClick={handleAskFlower}
               >
-                <Sparkles class="size-3.5" />
+                <FlowerNavigationIcon class="size-5" />
               </button>
             </Show>
 
