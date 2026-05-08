@@ -1,4 +1,4 @@
-import { type Accessor, createSignal, onCleanup } from 'solid-js';
+import { type Accessor, createEffect, createSignal, onCleanup, untrack } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type { Client } from '@floegence/flowersec-core';
 import type { JsonFrameChannel } from '@floegence/flowersec-core/streamio';
@@ -22,6 +22,13 @@ type PendingPreviewAction =
   | { type: 'close' }
   | { type: 'open'; item: FileItem }
   | null;
+
+type PendingConnectionPreviewLoad = Readonly<{
+  item: FileItem;
+  seq: number;
+}>;
+
+const CONNECTION_WAITING_MESSAGE = 'Waiting for connection...';
 
 function emptyBytes(): Uint8Array<ArrayBuffer> {
   return new Uint8Array(new ArrayBuffer(0));
@@ -109,6 +116,7 @@ export function createFilePreviewController(params: {
   const [xlsxSheetName, setXlsxSheetName] = createSignal('');
   const [xlsxRows, setXlsxRows] = createSignal<string[][]>([]);
   const [downloadLoading, setDownloadLoading] = createSignal(false);
+  const [pendingConnectionLoad, setPendingConnectionLoad] = createSignal<PendingConnectionPreviewLoad | null>(null);
 
   let activePreviewChannel: JsonFrameChannel | null = null;
   let activeObjectUrl: string | null = null;
@@ -166,6 +174,7 @@ export function createFilePreviewController(params: {
   const forceClosePreview = () => {
     previewReqSeq += 1;
     saveReqSeq += 1;
+    setPendingConnectionLoad(null);
     clearPendingAction();
     cleanupPreviewContent();
     setPreviewItem(null);
@@ -200,9 +209,15 @@ export function createFilePreviewController(params: {
   };
 
   const loadPreview = async (item: FileItem) => {
+    if (item.type !== 'file') return;
+
+    const seq = (previewReqSeq += 1);
+    saveReqSeq += 1;
+    setPendingConnectionLoad(null);
+    clearPendingAction();
+
     const blockedReason = getFilePreviewBlockReason(item);
     if (blockedReason) {
-      clearPendingAction();
       cleanupPreviewContent();
       setPreviewItem(item);
       setPreviewOpen(true);
@@ -211,11 +226,7 @@ export function createFilePreviewController(params: {
       setPreviewMessage(blockedReason);
       return;
     }
-    if (item.type !== 'file') return;
 
-    const seq = (previewReqSeq += 1);
-    saveReqSeq += 1;
-    clearPendingAction();
     cleanupPreviewContent();
     setPreviewItem(item);
     setPreviewOpen(true);
@@ -226,8 +237,9 @@ export function createFilePreviewController(params: {
 
     const client = params.client();
     if (!client) {
-      setPreviewLoading(false);
-      setPreviewError('Connection is not ready.');
+      setPendingConnectionLoad({ item, seq });
+      setPreviewError(null);
+      setPreviewMessage(CONNECTION_WAITING_MESSAGE);
       return;
     }
 
@@ -428,6 +440,21 @@ export function createFilePreviewController(params: {
     }
     await loadPreview(item);
   };
+
+  createEffect(() => {
+    const client = params.client();
+    const pending = pendingConnectionLoad();
+    if (!client || !pending) return;
+
+    untrack(() => {
+      if (pending.seq !== previewReqSeq || !previewOpen()) {
+        setPendingConnectionLoad(null);
+        return;
+      }
+      setPendingConnectionLoad(null);
+      void loadPreview(pending.item);
+    });
+  });
 
   const closePreview = () => {
     if (!previewOpen()) return;
