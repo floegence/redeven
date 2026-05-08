@@ -4,7 +4,7 @@ import markedFootnote from 'marked-footnote';
 
 const fileMarkdown = new Marked({
   gfm: true,
-  breaks: true,
+  breaks: false,
   pedantic: false,
 });
 let headingIdCounts = new Map<string, number>();
