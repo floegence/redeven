@@ -3680,7 +3680,7 @@ function EnvironmentPrimaryActionPanel(props: Readonly<{
             {(item) => {
               const loading = () => isEnvironmentActionBusy(item.action, props.busyState, props.environmentID);
               return (
-                <div class="relative rounded-md" classList={{ 'redeven-loading-glow': loading() }}>
+                <div class="relative rounded-md">
                   <Button
                     size="sm"
                     variant={item.emphasis === 'primary' ? 'default' : 'outline'}
@@ -3871,7 +3871,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
   );
 
   return (
-    <div ref={rootRef} class={cn('redeven-split-action flex-1', props.loading && 'redeven-loading-glow')}>
+    <div ref={rootRef} class="redeven-split-action flex-1">
       <div class="redeven-split-action-primary">
         <Show when={primaryActionOverlay()} fallback={primaryButton}>
           <Show
