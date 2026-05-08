@@ -25,6 +25,10 @@ export interface FileMarkdownProps {
 }
 
 const FS_FILE_ENDPOINT = '/_redeven_proxy/api/fs/file';
+const TOC_HEADING_SELECTOR = 'h1.fm-heading, h2.fm-heading, h3.fm-heading, h4.fm-heading';
+const TOC_ACTIVE_ANCHOR_OFFSET_PX = 88;
+const TOC_SCROLL_BOTTOM_EPSILON_PX = 2;
+const TOC_NAVIGATION_SETTLE_MS = 520;
 const TOC_SCROLL_TOP_OFFSET_PX = 8;
 
 function resolveImagePaths(markdown: string, mdFilePath: string): string {
@@ -72,7 +76,9 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
   const [tocItems, setTocItems] = createSignal<TocItem[]>([]);
   const [activeTocId, setActiveTocId] = createSignal('');
   let containerRef!: HTMLDivElement;
-  let tocObserver: IntersectionObserver | undefined;
+  let activeTocUpdateRaf: number | undefined;
+  let tocNavigationTargetId = '';
+  let tocNavigationReleaseTimer: number | undefined;
   let renderGen = 0;
 
   const showToc = () => props.showToc !== false;
@@ -151,42 +157,122 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
 
       // Build TOC
       if (showToc()) {
-        setTocItems(buildToc(containerRef));
+        const nextTocItems = buildToc(containerRef);
+        setTocItems(nextTocItems);
+        updateActiveTocFromScrollNow();
+      } else {
+        setTocItems([]);
+        setActiveTocId('');
       }
-
-      // Set up TOC heading observer
-      setupTocObserver();
     });
   });
 
-  function setupTocObserver(): void {
-    if (tocObserver) tocObserver.disconnect();
+  function getTocHeadings(): HTMLElement[] {
+    return Array.from(containerRef.querySelectorAll<HTMLElement>(TOC_HEADING_SELECTOR))
+      .filter((heading) => heading.id !== '');
+  }
 
-    const headings = containerRef.querySelectorAll<HTMLElement>('h1.fm-heading, h2.fm-heading, h3.fm-heading, h4.fm-heading');
-    if (headings.length === 0) return;
+  function isMarkdownBodyScrolledToBottom(): boolean {
+    return containerRef.scrollTop + containerRef.clientHeight >= containerRef.scrollHeight - TOC_SCROLL_BOTTOM_EPSILON_PX;
+  }
 
-    tocObserver = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            setActiveTocId(entry.target.id);
-            break;
-          }
-        }
-      },
-      {
-        root: containerRef,
-        rootMargin: '-80px 0px -60% 0px',
-      },
+  function computeActiveTocIdFromScroll(): string {
+    const headings = getTocHeadings();
+    if (headings.length === 0) return '';
+
+    const containerRect = containerRef.getBoundingClientRect();
+    const anchorOffset = Math.min(
+      TOC_ACTIVE_ANCHOR_OFFSET_PX,
+      Math.max(TOC_SCROLL_TOP_OFFSET_PX, containerRect.height * 0.35),
     );
+    const anchorY = containerRect.top + anchorOffset;
+
+    let activeId = headings[0].id;
+
+    if (isMarkdownBodyScrolledToBottom()) {
+      const bottomY = containerRect.bottom - TOC_SCROLL_TOP_OFFSET_PX;
+      for (const heading of headings) {
+        if (heading.getBoundingClientRect().top <= bottomY) {
+          activeId = heading.id;
+        }
+      }
+      return activeId;
+    }
 
     for (const heading of headings) {
-      tocObserver.observe(heading);
+      if (heading.getBoundingClientRect().top <= anchorY) {
+        activeId = heading.id;
+      } else {
+        break;
+      }
     }
+
+    return activeId;
+  }
+
+  function updateActiveTocFromScrollNow(): void {
+    if (tocNavigationTargetId) return;
+
+    const nextActiveId = computeActiveTocIdFromScroll();
+    setActiveTocId(nextActiveId);
+  }
+
+  function scheduleActiveTocFromScroll(): void {
+    if (tocNavigationTargetId) return;
+    if (activeTocUpdateRaf !== undefined) return;
+
+    if (typeof window.requestAnimationFrame !== 'function') {
+      updateActiveTocFromScrollNow();
+      return;
+    }
+
+    activeTocUpdateRaf = window.requestAnimationFrame(() => {
+      activeTocUpdateRaf = undefined;
+      updateActiveTocFromScrollNow();
+    });
+  }
+
+  function clearTocNavigationReleaseTimer(): void {
+    if (tocNavigationReleaseTimer === undefined) return;
+    window.clearTimeout(tocNavigationReleaseTimer);
+    tocNavigationReleaseTimer = undefined;
+  }
+
+  function finishTocNavigation(): void {
+    tocNavigationTargetId = '';
+    clearTocNavigationReleaseTimer();
+  }
+
+  function scheduleTocNavigationFinish(): void {
+    clearTocNavigationReleaseTimer();
+    tocNavigationReleaseTimer = window.setTimeout(finishTocNavigation, TOC_NAVIGATION_SETTLE_MS);
+  }
+
+  function startTocNavigation(targetId: string): void {
+    tocNavigationTargetId = targetId;
+    setActiveTocId(targetId);
+    scheduleTocNavigationFinish();
+  }
+
+  function cancelTocNavigation(): void {
+    tocNavigationTargetId = '';
+    clearTocNavigationReleaseTimer();
+  }
+
+  function handleMarkdownScroll(): void {
+    if (tocNavigationTargetId) {
+      scheduleTocNavigationFinish();
+      return;
+    }
+
+    scheduleActiveTocFromScroll();
   }
 
   onCleanup(() => {
-    if (tocObserver) tocObserver.disconnect();
+    clearTocNavigationReleaseTimer();
+    if (activeTocUpdateRaf !== undefined && typeof window.cancelAnimationFrame === 'function') {
+      window.cancelAnimationFrame(activeTocUpdateRaf);
+    }
   });
 
   function scrollMarkdownBodyToHeading(target: HTMLElement): void {
@@ -214,7 +300,7 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
           e.preventDefault();
           const target = containerRef.querySelector<HTMLElement>(`#${CSS.escape(item.id)}`);
           if (target) {
-            setActiveTocId(item.id);
+            startTocNavigation(item.id);
             scrollMarkdownBodyToHeading(target);
           }
         }}
@@ -266,6 +352,10 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
             ref={containerRef!}
             class={`file-markdown-body${readingMode() ? ' file-markdown-reading' : ''}`}
             style="flex: 1; min-width: 0; overflow-y: auto;"
+            onScroll={handleMarkdownScroll}
+            onPointerDown={cancelTocNavigation}
+            onWheel={cancelTocNavigation}
+            onTouchStart={cancelTocNavigation}
           />
 
           {/* TOC sidebar */}
