@@ -410,7 +410,7 @@ function CreateForwardDialog(props: {
 
 async function openPortForward(forwardID: string, setStatus: (s: string) => void): Promise<void> {
   const envPublicID = getEnvPublicIDFromSession();
-  if (!envPublicID) throw new Error('Missing env context. Please reopen from the Redeven Portal.');
+  if (!envPublicID) throw new Error('Missing env context. Please reopen from the control plane.');
 
   const origin = portForwardOrigin(forwardID);
   const bootURL = `${origin}/_redeven_boot/?env=${encodeURIComponent(envPublicID)}`;

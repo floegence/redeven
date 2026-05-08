@@ -14,7 +14,7 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/.well-known/redeven-provider.json":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"provider_id":"redeven_portal"}`))
+			_, _ = w.Write([]byte(`{"provider_id":"example_control_plane"}`))
 			return
 		case r.Method != http.MethodPost:
 			t.Fatalf("method = %s, want POST", r.Method)
@@ -94,8 +94,8 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 	if cfg.EnvironmentID != "env_123" {
 		t.Fatalf("EnvironmentID = %q, want %q", cfg.EnvironmentID, "env_123")
 	}
-	if cfg.ControlplaneProviderID != "redeven_portal" {
-		t.Fatalf("ControlplaneProviderID = %q, want %q", cfg.ControlplaneProviderID, "redeven_portal")
+	if cfg.ControlplaneProviderID != "example_control_plane" {
+		t.Fatalf("ControlplaneProviderID = %q, want %q", cfg.ControlplaneProviderID, "example_control_plane")
 	}
 	if cfg.Direct == nil || cfg.Direct.ChannelId != "ch_123" {
 		t.Fatalf("Direct = %#v", cfg.Direct)
@@ -107,7 +107,7 @@ func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/.well-known/redeven-provider.json":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"provider_id":"redeven_portal"}`))
+			_, _ = w.Write([]byte(`{"provider_id":"example_control_plane"}`))
 			return
 		case r.Method != http.MethodPost:
 			t.Fatalf("method = %s, want POST", r.Method)
@@ -173,8 +173,8 @@ func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.ControlplaneProviderID != "redeven_portal" {
-		t.Fatalf("ControlplaneProviderID = %q, want %q", cfg.ControlplaneProviderID, "redeven_portal")
+	if cfg.ControlplaneProviderID != "example_control_plane" {
+		t.Fatalf("ControlplaneProviderID = %q, want %q", cfg.ControlplaneProviderID, "example_control_plane")
 	}
 	if cfg.Direct == nil || cfg.Direct.ChannelId != "ch_ticket" {
 		t.Fatalf("Direct = %#v", cfg.Direct)

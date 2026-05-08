@@ -103,7 +103,7 @@ export function testProviderBoundLocalEnvironment(
 ): DesktopLocalEnvironmentState {
   const layout = localEnvironmentStateLayout();
   const providerEnvironment = testProviderEnvironment(providerOrigin, envPublicID, {
-    providerID: options.providerID ?? 'redeven_portal',
+    providerID: options.providerID ?? 'example_control_plane',
     label: options.label,
     pinned: options.pinned,
     preferredOpenRoute: options.preferredOpenRoute,
@@ -131,7 +131,7 @@ export function testProviderEnvironment(
   options: TestProviderEnvironmentOptions = {},
 ): DesktopProviderEnvironmentRecord {
   return createDesktopProviderEnvironmentRecord(providerOrigin, envPublicID, {
-    providerID: options.providerID ?? 'redeven_portal',
+    providerID: options.providerID ?? 'example_control_plane',
     label: options.label,
     pinned: options.pinned,
     preferredOpenRoute: options.preferredOpenRoute,

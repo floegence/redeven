@@ -134,7 +134,7 @@ import {
 } from './services/controlplaneApi';
 import { desktopThemeBridge, toggleDesktopTheme } from './services/desktopTheme';
 import { notifyDesktopSessionAppReady } from './services/desktopSessionContext';
-import { portalOriginFromSandboxLocation } from './services/sandboxOrigins';
+import { controlPlaneOriginFromSandboxLocation } from './services/sandboxOrigins';
 import { readUIStorageItem, writeRendererScopedUIStorageItem, writeUIStorageItem } from './services/uiStorage';
 import {
   ENV_DEFAULT_SURFACE_ID,
@@ -1092,7 +1092,7 @@ export function EnvAppShell() {
 
   const createGetArtifact = () => async (ctx: Readonly<{ traceId?: string; signal?: AbortSignal }> = {}) => {
     const id = envId();
-    if (!id) throw new Error('Missing env context. Please reopen from the Redeven Portal.');
+    if (!id) throw new Error('Missing env context. Please reopen from the control plane.');
 
     // Probe runtime status to avoid grant-audit spam while the runtime is clearly offline.
     let agentStatus: string | null = null;
@@ -1102,7 +1102,7 @@ export function EnvAppShell() {
       agentStatus = detail?.status ? String(detail.status) : null;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes('Redirecting to Redeven Portal')) throw new Error(msg);
+      if (msg.includes('Redirecting to the control plane')) throw new Error(msg);
       // For transient failures (meta/network), continue with the grant flow below.
     }
     if (agentStatus && agentStatus !== 'online') {
@@ -1130,7 +1130,7 @@ export function EnvAppShell() {
 
     const id = envId();
     if (!id) {
-      setManualError('Missing env context. Please reopen from the Redeven Portal.');
+      setManualError('Missing env context. Please reopen from the control plane.');
       protocol.disconnect();
       return;
     }
@@ -1740,7 +1740,7 @@ export function EnvAppShell() {
   });
 
   // Cross-window handshake: allow non-Env App sandbox windows (codespaces/3rd-party apps) to
-  // request a fresh entry_ticket after refresh.
+  // request a fresh short-lived bootstrap credential after refresh.
   onMount(() => {
     const onMessage = (ev: MessageEvent) => {
       if (isLocalMode()) return;
@@ -2131,7 +2131,7 @@ export function EnvAppShell() {
 
   function consoleOrigin(): string {
     try {
-      return portalOriginFromSandboxLocation(window.location);
+      return controlPlaneOriginFromSandboxLocation(window.location);
     } catch {
       const proto = window.location.protocol;
       const host = window.location.hostname.trim().toLowerCase();

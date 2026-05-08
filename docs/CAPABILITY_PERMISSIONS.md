@@ -51,7 +51,7 @@ effective_rwx = session_meta.rwx ∩ cap_rwx
 effective_admin = session_meta.can_admin  // NOTE: not clamped by permission_policy
 ```
 
-The customer-side runtime is not a Portal authorization boundary: users can inspect or modify their local Redeven binary, UI assets, and config. Local policy may only narrow the server-issued grant; it must never expand `session_meta` or infer access to another environment/client from local state.
+The customer-side runtime is not a control-plane authorization boundary: users can inspect or modify their local Redeven binary, UI assets, and config. Local policy may only narrow the server-issued grant; it must never expand `session_meta` or infer access to another environment/client from local state.
 
 See also: [`PERMISSION_POLICY.md`](PERMISSION_POLICY.md).
 

@@ -38,6 +38,7 @@ EOF
 
   cat >"${root}/docs/RELEASE.md" <<'EOF'
 The public manifest endpoint is https://version.agent.redeven.com/v1/manifest.json.
+Solid <Portal>, body-level portal, overlay portal, and npm portal: are technical terms.
 EOF
 
   cat >"${root}/internal/agent/upgrade.go" <<'EOF'
@@ -66,9 +67,10 @@ track_fixture_files() {
 allowed_repo="$(mktemp -d)"
 bad_path_repo="$(mktemp -d)"
 bad_domain_repo="$(mktemp -d)"
+bad_product_repo="$(mktemp -d)"
 
 cleanup() {
-  rm -rf "$allowed_repo" "$bad_path_repo" "$bad_domain_repo"
+  rm -rf "$allowed_repo" "$bad_path_repo" "$bad_domain_repo" "$bad_product_repo"
 }
 
 trap cleanup EXIT
@@ -108,5 +110,35 @@ if run_check "$bad_domain_repo" "$bad_domain_out" "$bad_domain_err"; then
   exit 1
 fi
 assert_contains "$bad_domain_err" "Only the public runtime endpoint literals https://redeven.com/install.sh and https://version.agent.redeven.com/v1/manifest.json may appear"
+
+create_fixture_repo "$bad_product_repo"
+write_allowed_contract_files "$bad_product_repo"
+git -C "$bad_product_repo" add README.md docs/RELEASE.md internal/agent/upgrade.go scripts/open_source_hygiene_check.sh .gitleaks.toml
+blocked_product_terms=(
+  "redeven""-portal"
+  "redeven""_portal"
+  "Redeven ""Portal"
+  "REDEVEN""_PORTAL"
+  "Portal ""session"
+  "Region ""Portal"
+  "Portal ""console"
+  "portal""Origin"
+  "portal""BaseDomain"
+  "build""PortalEnvRecoverURL"
+  "redirectTo""PortalForEnvSessionRecovery"
+  "case '""portal""'"
+)
+for blocked_product_term in "${blocked_product_terms[@]}"; do
+  printf 'Do not leak %s.\n' "$blocked_product_term" >"${bad_product_repo}/docs/bad.md"
+  git -C "$bad_product_repo" add docs/bad.md
+  bad_product_out="${bad_product_repo}/bad-product.out"
+  bad_product_err="${bad_product_repo}/bad-product.err"
+  if run_check "$bad_product_repo" "$bad_product_out" "$bad_product_err"; then
+    echo "expected private control-plane product naming to fail hygiene check for ${blocked_product_term}" >&2
+    exit 1
+  fi
+  assert_contains "$bad_product_out" "$blocked_product_term"
+  assert_contains "$bad_product_err" "Private control-plane product naming must not appear in this public repository."
+done
 
 echo "open-source hygiene checks passed"

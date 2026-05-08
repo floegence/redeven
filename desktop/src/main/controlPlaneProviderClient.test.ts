@@ -30,16 +30,16 @@ describe('controlPlaneProviderClient', () => {
   it('normalizes provider discovery through the injected transport', async () => {
     const transport = vi.fn<DesktopProviderTransport>().mockResolvedValueOnce(response(200, JSON.stringify({
       protocol_version: 'rcpp-v1',
-      provider_id: 'redeven_portal',
-      display_name: 'Redeven Portal',
+      provider_id: 'example_control_plane',
+      display_name: 'Example Control Plane',
       provider_origin: 'https://dev.redeven.test',
       documentation_url: 'https://redeven.test/docs/control-plane-providers',
     })));
 
     await expect(fetchProviderDiscovery('https://dev.redeven.test', { transport })).resolves.toEqual({
       protocol_version: 'rcpp-v1',
-      provider_id: 'redeven_portal',
-      display_name: 'Redeven Portal',
+      provider_id: 'example_control_plane',
+      display_name: 'Example Control Plane',
       provider_origin: 'https://dev.redeven.test',
       documentation_url: 'https://redeven.test/docs/control-plane-providers',
     });
@@ -68,8 +68,8 @@ describe('controlPlaneProviderClient', () => {
   it('preserves provider-side JSON errors with HTTP status', async () => {
     const provider = normalizeDesktopControlPlaneProvider({
       protocol_version: 'rcpp-v1',
-      provider_id: 'redeven_portal',
-      display_name: 'Redeven Portal',
+      provider_id: 'example_control_plane',
+      display_name: 'Example Control Plane',
       provider_origin: 'https://dev.redeven.test',
       documentation_url: 'https://redeven.test/docs/control-plane-providers',
     });
@@ -94,8 +94,8 @@ describe('controlPlaneProviderClient', () => {
   it('rejects malformed environment list payloads', async () => {
     const provider = normalizeDesktopControlPlaneProvider({
       protocol_version: 'rcpp-v1',
-      provider_id: 'redeven_portal',
-      display_name: 'Redeven Portal',
+      provider_id: 'example_control_plane',
+      display_name: 'Example Control Plane',
       provider_origin: 'https://dev.redeven.test',
       documentation_url: 'https://redeven.test/docs/control-plane-providers',
     });
@@ -116,8 +116,8 @@ describe('controlPlaneProviderClient', () => {
   it('posts authorization_code and code_verifier for the desktop connect exchange', async () => {
     const provider = normalizeDesktopControlPlaneProvider({
       protocol_version: 'rcpp-v1',
-      provider_id: 'redeven_portal',
-      display_name: 'Redeven Portal',
+      provider_id: 'example_control_plane',
+      display_name: 'Example Control Plane',
       provider_origin: 'https://dev.redeven.test',
       documentation_url: 'https://redeven.test/docs/control-plane-providers',
     });

@@ -22,19 +22,19 @@ function originFromLocationLike(loc: OriginLocationLike, hostname: string): stri
   return `${protocol}//${hostname}${port ? `:${port}` : ''}`;
 }
 
-export function derivePortalBaseDomainFromSandboxBaseDomain(sandboxBaseDomain: string): string {
+export function deriveControlPlaneBaseDomainFromSandboxBaseDomain(sandboxBaseDomain: string): string {
   const labels = splitHostname(sandboxBaseDomain);
   if (labels.length < 2) throw new Error('Invalid sandbox base domain');
 
   const [first, ...rest] = labels;
   if (!first.endsWith('-sandbox')) throw new Error('Invalid sandbox base domain');
 
-  const portalFirst = first.slice(0, -'-sandbox'.length).trim();
-  if (!portalFirst) throw new Error('Invalid sandbox base domain');
-  return [portalFirst, ...rest].join('.');
+  const controlPlaneFirst = first.slice(0, -'-sandbox'.length).trim();
+  if (!controlPlaneFirst) throw new Error('Invalid sandbox base domain');
+  return [controlPlaneFirst, ...rest].join('.');
 }
 
-export function portalOriginFromSandboxLocation(loc: OriginLocationLike): string {
+export function controlPlaneOriginFromSandboxLocation(loc: OriginLocationLike): string {
   const labels = splitHostname(loc.hostname);
   if (labels.length < 4) throw new Error('Invalid sandbox host');
 
@@ -42,8 +42,8 @@ export function portalOriginFromSandboxLocation(loc: OriginLocationLike): string
   if (!region) throw new Error('Invalid sandbox host');
 
   const sandboxBaseDomain = rest.join('.');
-  const portalBaseDomain = derivePortalBaseDomainFromSandboxBaseDomain(sandboxBaseDomain);
-  return originFromLocationLike(loc, `${region}.${portalBaseDomain}`);
+  const controlPlaneBaseDomain = deriveControlPlaneBaseDomainFromSandboxBaseDomain(sandboxBaseDomain);
+  return originFromLocationLike(loc, `${region}.${controlPlaneBaseDomain}`);
 }
 
 export function trustedLauncherOriginFromSandboxLocation(

@@ -402,7 +402,7 @@ vi.mock('./services/desktopTheme', () => ({
   desktopThemeBridge: () => ({ source: () => 'dark' }),
   toggleDesktopTheme: vi.fn(),
 }));
-vi.mock('./services/sandboxOrigins', () => ({ portalOriginFromSandboxLocation: () => 'https://console.example.com' }));
+vi.mock('./services/sandboxOrigins', () => ({ controlPlaneOriginFromSandboxLocation: () => 'https://console.example.com' }));
 vi.mock('./services/uiStorage', () => ({
   readUIStorageJSON: vi.fn(() => null),
   readUIStorageItem: vi.fn((key: string) => (key === 'redeven_envapp_desktop_view_mode' ? desktopViewMode : null)),

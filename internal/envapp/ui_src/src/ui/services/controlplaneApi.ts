@@ -3,7 +3,7 @@ import { assertConnectArtifact, type ConnectArtifact } from '@floegence/flowerse
 
 import { SESSION_KIND_ENVAPP_RPC, sessionKindForLauncherApp, type LauncherFloeApp } from './floeproxyContract';
 import { appendLocalAccessResumeQuery, applyLocalAccessResumeHeader } from './localAccessAuth';
-import { portalOriginFromSandboxLocation } from './sandboxOrigins';
+import { controlPlaneOriginFromSandboxLocation } from './sandboxOrigins';
 import { AccessUnlockError, normalizeRetryAfterMs } from './accessUnlockError';
 
 export interface Environment {
@@ -161,14 +161,14 @@ function currentEnvAppReturnToBestEffort(): string {
   }
 }
 
-function portalOriginFromSandboxOriginBestEffort(): string {
-  return portalOriginFromSandboxLocation(window.location);
+function controlPlaneOriginFromSandboxOriginBestEffort(): string {
+  return controlPlaneOriginFromSandboxLocation(window.location);
 }
 
-function buildPortalEnvRecoverURL(envPublicID: string): string {
+function buildControlPlaneEnvRecoverURL(envPublicID: string): string {
   const envID = asString(envPublicID);
-  const portalOrigin = portalOriginFromSandboxOriginBestEffort();
-  const url = new URL(`${portalOrigin}/env/${encodeURIComponent(envID)}`);
+  const controlPlaneOrigin = controlPlaneOriginFromSandboxOriginBestEffort();
+  const url = new URL(`${controlPlaneOrigin}/env/${encodeURIComponent(envID)}`);
 
   const returnTo = currentEnvAppReturnToBestEffort();
   if (returnTo) {
@@ -192,27 +192,27 @@ function clearEnvSessionRecoverMarker(): void {
   removeSessionStorage(SESSION_STORAGE_KEYS.envSessionRecoverAtMs);
 }
 
-function redirectToPortalForEnvSessionRecovery(envPublicID: string): never {
+function redirectToControlPlaneForEnvSessionRecovery(envPublicID: string): never {
   const envID = asString(envPublicID);
   if (!envID) {
-    throw new Error('Missing env context. Please reopen from the Redeven Portal.');
+    throw new Error('Missing env context. Please reopen from the control plane.');
   }
 
   const age = envSessionRecoverAgeMsBestEffort();
   if (age >= 0 && age < ENV_SESSION_RECOVER_REDIRECT_DEBOUNCE_MS) {
-    throw new Error('Session expired. Redirecting to Redeven Portal...');
+    throw new Error('Session expired. Redirecting to the control plane...');
   }
   if (age >= 0 && age < ENV_SESSION_RECOVER_RETRY_WINDOW_MS) {
-    throw new Error('Failed to refresh session. Please reopen from the Redeven Portal.');
+    throw new Error('Failed to refresh session. Please reopen from the control plane.');
   }
 
   if (envSessionRecoverRedirecting) {
-    throw new Error('Session expired. Redirecting to Redeven Portal...');
+    throw new Error('Session expired. Redirecting to the control plane...');
   }
   envSessionRecoverRedirecting = true;
   markEnvSessionRecoverNow();
 
-  const target = buildPortalEnvRecoverURL(envID);
+  const target = buildControlPlaneEnvRecoverURL(envID);
   try {
     if (window.top && window.top.location) {
       window.top.location.replace(target);
@@ -223,7 +223,7 @@ function redirectToPortalForEnvSessionRecovery(envPublicID: string): never {
     window.location.replace(target);
   }
 
-  throw new Error('Session expired. Redirecting to Redeven Portal...');
+  throw new Error('Session expired. Redirecting to the control plane...');
 }
 
 async function fetchJSONWithEnvSessionAutoRecover<T>(
@@ -241,7 +241,7 @@ async function fetchJSONWithEnvSessionAutoRecover<T>(
   } catch (e) {
     if (opts?.envSessionAutoRecover && isEnvSessionUnauthorizedError(e)) {
       const envID = asString(opts.envPublicID) || getEnvPublicIDFromSession();
-      redirectToPortalForEnvSessionRecovery(envID);
+      redirectToControlPlaneForEnvSessionRecovery(envID);
     }
     throw e;
   }

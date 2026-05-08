@@ -67,7 +67,7 @@ describe('desktopTarget', () => {
       'https://cp.example.invalid/path',
       ' env_demo ',
       {
-        providerID: ' redeven_portal ',
+        providerID: ' example_control_plane ',
         label: ' Demo Environment ',
       },
     ), { route: 'remote_desktop' })).toEqual({
@@ -76,7 +76,7 @@ describe('desktopTarget', () => {
       environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
       route: 'remote_desktop',
       local_environment_kind: 'controlplane',
-      provider_id: 'redeven_portal',
+      provider_id: 'example_control_plane',
       provider_origin: 'https://cp.example.invalid',
       env_public_id: 'env_demo',
       label: 'Demo Environment',

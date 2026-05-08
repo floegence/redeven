@@ -175,22 +175,22 @@ describe('DesktopWelcomeShell', () => {
       controlPlanes: [{
         provider: {
           protocol_version: 'rcpp-v1',
-          provider_id: 'redeven_portal',
-          display_name: 'Redeven Portal',
+          provider_id: 'example_control_plane',
+          display_name: 'Example Control Plane',
           provider_origin: 'https://cp.example.invalid',
           documentation_url: 'https://cp.example.invalid/docs/control-plane-providers',
         },
         account: {
-          provider_id: 'redeven_portal',
+          provider_id: 'example_control_plane',
           provider_origin: 'https://cp.example.invalid',
-          display_name: 'Redeven Portal',
+          display_name: 'Example Control Plane',
           user_public_id: 'user_demo',
           user_display_name: 'Demo User',
           authorization_expires_at_unix_ms: Date.now() + 60_000,
         },
-        display_label: 'Demo Portal',
+        display_label: 'Demo Control Plane',
         environments: [{
-          provider_id: 'redeven_portal',
+          provider_id: 'example_control_plane',
           provider_origin: 'https://cp.example.invalid',
           env_public_id: 'env_demo',
           label: 'Demo Environment',
@@ -238,22 +238,22 @@ describe('DesktopWelcomeShell', () => {
       controlPlanes: [{
         provider: {
           protocol_version: 'rcpp-v1',
-          provider_id: 'redeven_portal',
-          display_name: 'Redeven Portal',
+          provider_id: 'example_control_plane',
+          display_name: 'Example Control Plane',
           provider_origin: 'https://cp.example.invalid',
           documentation_url: 'https://cp.example.invalid/docs/control-plane-providers',
         },
         account: {
-          provider_id: 'redeven_portal',
+          provider_id: 'example_control_plane',
           provider_origin: 'https://cp.example.invalid',
-          display_name: 'Redeven Portal',
+          display_name: 'Example Control Plane',
           user_public_id: 'user_demo',
           user_display_name: 'Demo User',
           authorization_expires_at_unix_ms: Date.now() + 60_000,
         },
-        display_label: 'Demo Portal',
+        display_label: 'Demo Control Plane',
         environments: [{
-          provider_id: 'redeven_portal',
+          provider_id: 'example_control_plane',
           provider_origin: 'https://cp.example.invalid',
           env_public_id: 'env_demo',
           label: 'Demo Environment',
@@ -274,22 +274,22 @@ describe('DesktopWelcomeShell', () => {
       }, {
         provider: {
           protocol_version: 'rcpp-v1',
-          provider_id: 'redeven_portal',
-          display_name: 'Redeven Portal',
+          provider_id: 'example_control_plane',
+          display_name: 'Example Control Plane',
           provider_origin: 'https://cp.other.invalid',
           documentation_url: 'https://cp.other.invalid/docs/control-plane-providers',
         },
         account: {
-          provider_id: 'redeven_portal',
+          provider_id: 'example_control_plane',
           provider_origin: 'https://cp.other.invalid',
-          display_name: 'Redeven Portal',
+          display_name: 'Example Control Plane',
           user_public_id: 'user_other',
           user_display_name: 'Other User',
           authorization_expires_at_unix_ms: Date.now() + 60_000,
         },
-        display_label: 'Other Portal',
+        display_label: 'Other Control Plane',
         environments: [{
-          provider_id: 'redeven_portal',
+          provider_id: 'example_control_plane',
           provider_origin: 'https://cp.other.invalid',
           env_public_id: 'env_other',
           label: 'Other Environment',
@@ -313,7 +313,7 @@ describe('DesktopWelcomeShell', () => {
     expect(filterEnvironmentLibrary(
       snapshot,
       '',
-      desktopControlPlaneKey('https://cp.example.invalid', 'redeven_portal'),
+      desktopControlPlaneKey('https://cp.example.invalid', 'example_control_plane'),
     )).toEqual([
       expect.objectContaining({
         kind: 'provider_environment',

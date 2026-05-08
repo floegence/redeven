@@ -104,9 +104,9 @@ export function classifyReconnectFailure(error: unknown): ReconnectFailure {
     || lowerMessage.includes('invalid resume token')
     || lowerMessage.includes('resume token')
     || lowerMessage.includes('access password')
-    || lowerMessage.includes('reopen from the redeven portal')
+    || lowerMessage.includes('reopen from the control plane')
     || lowerMessage.includes('missing env context')
-    || lowerMessage.includes('redirecting to redeven portal')
+    || lowerMessage.includes('redirecting to the control plane')
   ) {
     return {
       kind: 'fatal',

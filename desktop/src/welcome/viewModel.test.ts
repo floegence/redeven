@@ -52,8 +52,8 @@ function placeholderFact(label: string, value = 'None') {
 function buildProvider(providerOrigin = 'https://cp.example.invalid') {
   return {
     protocol_version: 'rcpp-v1' as const,
-    provider_id: 'redeven_portal',
-    display_name: 'Redeven Portal',
+    provider_id: 'example_control_plane',
+    display_name: 'Example Control Plane',
     provider_origin: providerOrigin,
     documentation_url: `${providerOrigin}/docs/control-plane-providers`,
   };
@@ -104,7 +104,7 @@ function buildControlPlaneSummary(options: Readonly<{
       user_display_name: 'Demo User',
       authorization_expires_at_unix_ms: now + 60_000,
     },
-    display_label: options.displayLabel ?? 'Demo Portal',
+    display_label: options.displayLabel ?? 'Demo Control Plane',
     environments: [{
       provider_id: provider.provider_id,
       provider_origin: provider.provider_origin,
@@ -135,7 +135,7 @@ function buildControlPlaneSummary(options: Readonly<{
 function providerRuntimeState(envPublicID = 'env_demo') {
   return {
     controlplane_base_url: 'https://cp.example.invalid',
-    controlplane_provider_id: 'redeven_portal',
+    controlplane_provider_id: 'example_control_plane',
     env_public_id: envPublicID,
   };
 }
@@ -346,7 +346,7 @@ describe('buildEnvironmentCardModel', () => {
       defaultFact('RUNTIME SERVICE', 'Running'),
       defaultFact('VERSION', 'v1.4.2'),
       defaultFact('ACTIVE WORK', '1 terminal, 1 session'),
-      defaultFact('PROVIDER', 'Demo Portal'),
+      defaultFact('PROVIDER', 'Demo Control Plane'),
       defaultFact('SOURCE ENV', 'env_demo'),
     ]);
     expect(buildEnvironmentCardFactsModel(urlEntry!)).toEqual([
@@ -433,7 +433,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(filterEnvironmentLibrary(
       snapshot,
       '',
-      desktopControlPlaneKey('https://cp.example.invalid', 'redeven_portal'),
+      desktopControlPlaneKey('https://cp.example.invalid', 'example_control_plane'),
     ).map((environment) => environment.kind)).toEqual([
       'provider_environment',
     ]);
@@ -916,7 +916,7 @@ describe('buildEnvironmentCardModel', () => {
           enabled: true,
           variant: 'default',
           provider_origin: 'https://cp.example.invalid',
-          provider_id: 'redeven_portal',
+          provider_id: 'example_control_plane',
         },
         primary_action_overlay: {
           kind: 'tooltip',
@@ -933,7 +933,7 @@ describe('buildEnvironmentCardModel', () => {
             enabled: true,
             variant: 'default',
             provider_origin: 'https://cp.example.invalid',
-            provider_id: 'redeven_portal',
+            provider_id: 'example_control_plane',
           },
         }],
       },

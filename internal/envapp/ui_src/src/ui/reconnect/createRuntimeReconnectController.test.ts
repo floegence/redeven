@@ -29,7 +29,7 @@ describe('classifyReconnectFailure', () => {
     expect(classifyReconnectFailure({ status: 401, message: 'invalid resume token' })).toMatchObject({
       kind: 'fatal',
     });
-    expect(classifyReconnectFailure(new Error('Missing env context. Please reopen from the Redeven Portal.'))).toMatchObject({
+    expect(classifyReconnectFailure(new Error('Missing env context. Please reopen from the control plane.'))).toMatchObject({
       kind: 'fatal',
     });
   });

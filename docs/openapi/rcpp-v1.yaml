@@ -1,0 +1,612 @@
+openapi: 3.1.0
+info:
+  title: Redeven Control Plane Provider Protocol
+  version: rcpp-v1
+  summary: Stable provider contract for Redeven Desktop and Redeven Runtime.
+  description: |
+    RCPP v1 defines the fixed discovery, desktop authorization, environment
+    open-session, and runtime bootstrap endpoints that a compatible control
+    plane provider exposes. The contract remains environment-first:
+    `local_environment_public_id` is an internal Local Environment binding
+    identity scoped to the current OS user / Redeven profile state root, not a
+    user-visible device inventory resource or provider-side device inventory
+    object.
+servers:
+  - url: https://provider.example.invalid
+tags:
+  - name: Discovery
+  - name: Desktop
+  - name: Runtime
+paths:
+  /.well-known/redeven-provider.json:
+    get:
+      tags: [Discovery]
+      operationId: getProviderDiscovery
+      summary: Return the provider discovery document.
+      responses:
+        '200':
+          description: Provider discovery document.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoveryResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v1/desktop/authorize:
+    post:
+      tags: [Desktop]
+      operationId: createDesktopAuthorizationCode
+      summary: Mint a short-lived Desktop authorization code.
+      description: Requires same-origin browser session authentication.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DesktopAuthorizationRequest'
+      responses:
+        '200':
+          description: Desktop authorization code minted successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DesktopAuthorizationResponse'
+        '400':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '401':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '500':
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v1/desktop/connect/exchange:
+    post:
+      tags: [Desktop]
+      operationId: exchangeDesktopAuthorizationCode
+      summary: Exchange an authorization code plus PKCE verifier for desktop authorization material.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DesktopConnectExchangeRequest'
+      responses:
+        '200':
+          description: Desktop connect exchange response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DesktopConnectExchangeResponse'
+        '400':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '401':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '500':
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v1/desktop/token/refresh:
+    post:
+      tags: [Desktop]
+      operationId: refreshDesktopAccessToken
+      summary: Refresh a desktop access token using a refresh token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DesktopTokenRefreshRequest'
+      responses:
+        '200':
+          description: Desktop token refresh response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DesktopTokenRefreshResponse'
+        '400':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '401':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '500':
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v1/desktop/token/revoke:
+    post:
+      tags: [Desktop]
+      operationId: revokeDesktopAuthorization
+      summary: Revoke a saved desktop authorization.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DesktopTokenRevokeRequest'
+      responses:
+        '204':
+          description: Desktop authorization revoked.
+        '400':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '401':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '500':
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v1/me:
+    get:
+      tags: [Desktop]
+      operationId: getProviderAccount
+      summary: Return the account bound to the desktop access token.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Provider account summary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderMeResponse'
+        '401':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '500':
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v1/environments:
+    get:
+      tags: [Desktop]
+      operationId: listProviderEnvironments
+      summary: Return the environments visible to the desktop access token.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Provider environment list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderEnvironmentListResponse'
+        '401':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '500':
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v1/environments/runtime-health/query:
+    post:
+      tags: [Desktop]
+      operationId: queryProviderEnvironmentRuntimeHealth
+      summary: Return current runtime health snapshots for provider Environment records.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderEnvironmentRuntimeHealthQueryRequest'
+      responses:
+        '200':
+          description: Provider environment runtime health response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderEnvironmentRuntimeHealthQueryResponse'
+        '400':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '401':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '500':
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v1/environments/{envId}/desktop/open-session:
+    post:
+      tags: [Desktop]
+      operationId: createDesktopOpenSession
+      summary: Return the current desktop open session materials for one environment.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: envId
+          in: path
+          required: true
+          description: Environment public ID.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Desktop open session response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DesktopOpenEnvironmentResponse'
+        '400':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '401':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '404':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '409':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '500':
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v1/runtime/bootstrap/exchange:
+    post:
+      tags: [Runtime]
+      operationId: exchangeRuntimeBootstrapTicket
+      summary: Exchange a one-time bootstrap ticket for direct runtime connection info.
+      description: Confirms the current user's Local Environment binding for the requested environment and returns direct control-channel credentials.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeBootstrapExchangeRequest'
+      responses:
+        '200':
+          description: Runtime bootstrap exchange response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeBootstrapExchangeResponse'
+        '400':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '401':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '404':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '409':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '500':
+          $ref: '#/components/responses/ErrorEnvelope'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+  responses:
+    ErrorEnvelope:
+      description: Standard Redeven error envelope.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+  schemas:
+    DiscoveryResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - protocol_version
+        - provider_id
+        - display_name
+        - provider_origin
+        - documentation_url
+      properties:
+        protocol_version:
+          type: string
+          const: rcpp-v1
+        provider_id:
+          type: string
+        display_name:
+          type: string
+        provider_origin:
+          type: string
+          format: uri
+        documentation_url:
+          type: string
+          format: uri
+    DesktopAuthorizationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - code_challenge
+        - code_challenge_method
+      properties:
+        code_challenge:
+          type: string
+        code_challenge_method:
+          type: string
+          enum: [S256]
+    DesktopAuthorizationResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - authorization_code
+        - expires_at_unix_ms
+      properties:
+        authorization_code:
+          type: string
+        expires_at_unix_ms:
+          type: integer
+          format: int64
+    ProviderMeResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - user_public_id
+        - user_display_name
+        - authorization_expires_at_unix_ms
+      properties:
+        user_public_id:
+          type: string
+        user_display_name:
+          type: string
+        authorization_expires_at_unix_ms:
+          type: integer
+          format: int64
+    ProviderEnvironmentSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - env_public_id
+        - name
+      properties:
+        env_public_id:
+          type: string
+        name:
+          type: string
+        environment_url:
+          type: string
+          format: uri
+        description:
+          type: string
+        namespace_public_id:
+          type: string
+        namespace_name:
+          type: string
+        status:
+          type: string
+        lifecycle_status:
+          type: string
+        last_seen_at_unix_ms:
+          type: integer
+          format: int64
+        runtime_health:
+          $ref: '#/components/schemas/ProviderEnvironmentRuntimeHealth'
+    ProviderEnvironmentListResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - environments
+      properties:
+        environments:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderEnvironmentSummary'
+    ProviderEnvironmentRuntimeHealth:
+      type: object
+      additionalProperties: false
+      required:
+        - env_public_id
+        - runtime_status
+        - observed_at_unix_ms
+      properties:
+        env_public_id:
+          type: string
+        runtime_status:
+          type: string
+          enum: [online, offline]
+        observed_at_unix_ms:
+          type: integer
+          format: int64
+        last_seen_at_unix_ms:
+          type: integer
+          format: int64
+        offline_reason_code:
+          type: string
+        offline_reason:
+          type: string
+    ProviderEnvironmentRuntimeHealthQueryRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - env_public_ids
+      properties:
+        env_public_ids:
+          type: array
+          items:
+            type: string
+    ProviderEnvironmentRuntimeHealthQueryResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - environments
+      properties:
+        environments:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderEnvironmentRuntimeHealth'
+    DesktopConnectExchangeRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - authorization_code
+        - code_verifier
+      properties:
+        authorization_code:
+          type: string
+        code_verifier:
+          type: string
+    DesktopConnectExchangeResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - access_token
+        - access_expires_at_unix_ms
+        - refresh_token
+        - authorization_expires_at_unix_ms
+        - account
+        - environments
+      properties:
+        access_token:
+          type: string
+        access_expires_at_unix_ms:
+          type: integer
+          format: int64
+        refresh_token:
+          type: string
+        authorization_expires_at_unix_ms:
+          type: integer
+          format: int64
+        account:
+          $ref: '#/components/schemas/ProviderMeResponse'
+        environments:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderEnvironmentSummary'
+    DesktopOpenSessionResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - expires_at_unix_ms
+      properties:
+        bootstrap_ticket:
+          type: string
+        remote_session_url:
+          type: string
+          format: uri
+        expires_at_unix_ms:
+          type: integer
+          format: int64
+      anyOf:
+        - required: [bootstrap_ticket]
+        - required: [remote_session_url]
+    DesktopTokenRefreshRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+    DesktopTokenRefreshResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - access_token
+        - access_expires_at_unix_ms
+        - authorization_expires_at_unix_ms
+      properties:
+        access_token:
+          type: string
+        access_expires_at_unix_ms:
+          type: integer
+          format: int64
+        authorization_expires_at_unix_ms:
+          type: integer
+          format: int64
+    DesktopTokenRevokeRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+    DesktopOpenEnvironmentResponse:
+      $ref: '#/components/schemas/DesktopOpenSessionResponse'
+    RuntimeBootstrapExchangeRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - env_public_id
+        - local_environment_public_id
+        - agent_instance_id
+      properties:
+        env_public_id:
+          type: string
+          description: Target environment selected by the user.
+        local_environment_public_id:
+          type: string
+          description: Stable internal runtime identity for the current user's Local Environment profile; scoped to the current OS user / Redeven profile state root, not a provider-visible device inventory resource.
+        agent_instance_id:
+          type: string
+          description: Current runtime installation/process identity.
+        hostname:
+          type: string
+        os:
+          type: string
+        arch:
+          type: string
+        runtime_version:
+          type: string
+    RuntimeDirectConnectInfo:
+      type: object
+      additionalProperties: false
+      required:
+        - ws_url
+        - channel_id
+        - e2ee_psk_b64u
+        - channel_init_expire_at_unix_s
+        - default_suite
+      properties:
+        ws_url:
+          type: string
+          format: uri
+        channel_id:
+          type: string
+        e2ee_psk_b64u:
+          type: string
+        channel_init_expire_at_unix_s:
+          type: integer
+          format: int64
+        default_suite:
+          type: integer
+          format: int32
+    RuntimeBootstrapExchangeResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - direct
+        - local_environment_binding
+      properties:
+        direct:
+          $ref: '#/components/schemas/RuntimeDirectConnectInfo'
+        local_environment_binding:
+          $ref: '#/components/schemas/ProviderLocalEnvironmentBinding'
+    ProviderLocalEnvironmentBinding:
+      type: object
+      description: Provider-confirmed Local Environment binding for one user and one internal runtime identity.
+      additionalProperties: false
+      required:
+        - local_environment_public_id
+        - user_public_id
+        - env_public_id
+        - generation
+      properties:
+        local_environment_public_id:
+          type: string
+          description: Stable internal runtime identity for the current user's Local Environment profile.
+        user_public_id:
+          type: string
+        env_public_id:
+          type: string
+          description: Environment currently linked to this Local Environment binding.
+        generation:
+          type: integer
+          format: int64
+        hostname:
+          type: string
+        os:
+          type: string
+        arch:
+          type: string
+        last_seen_at_unix_ms:
+          type: integer
+          format: int64
+    APIError:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required:
+        - success
+        - error
+      properties:
+        success:
+          type: boolean
+          const: false
+        error:
+          $ref: '#/components/schemas/APIError'
+        data:
+          description: Optional extra context returned by some provider errors.

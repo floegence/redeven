@@ -141,7 +141,7 @@ Read the full contract in [`docs/CAPABILITY_PERMISSIONS.md`](docs/CAPABILITY_PER
 | Configure optional AI assistance | [`docs/AI_AGENT.md`](docs/AI_AGENT.md), [`docs/AI_SETTINGS.md`](docs/AI_SETTINGS.md) |
 | Connect Codex to the same Environment workspace | [`docs/CODEX_UI.md`](docs/CODEX_UI.md) |
 | Review permissions and trust boundaries | [`docs/CAPABILITY_PERMISSIONS.md`](docs/CAPABILITY_PERMISSIONS.md), [`docs/PERMISSION_POLICY.md`](docs/PERMISSION_POLICY.md) |
-| Integrate a compatible control plane provider | [`redeven-portal` RCPP v1 spec](https://github.com/floegence/redeven-portal/blob/main/docs/protocol/rcpp-v1.md), [`redeven-portal` OpenAPI](https://github.com/floegence/redeven-portal/blob/main/docs/openapi/rcpp-v1.yaml) |
+| Integrate a compatible control plane provider | [`RCPP v1 spec`](docs/protocol/rcpp-v1.md), [`RCPP v1 OpenAPI`](docs/openapi/rcpp-v1.yaml) |
 | Refresh or audit the embedded knowledge bundle | [`docs/KNOWLEDGE.md`](docs/KNOWLEDGE.md) |
 | Verify releases and artifacts | [`docs/RELEASE.md`](docs/RELEASE.md) |
 
