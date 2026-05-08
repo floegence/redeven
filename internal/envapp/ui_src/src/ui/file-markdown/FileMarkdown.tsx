@@ -25,6 +25,7 @@ export interface FileMarkdownProps {
 }
 
 const FS_FILE_ENDPOINT = '/_redeven_proxy/api/fs/file';
+const TOC_SCROLL_TOP_OFFSET_PX = 8;
 
 function resolveImagePaths(markdown: string, mdFilePath: string): string {
   const dir = mdFilePath.replace(/[/\\][^/\\]*$/, '') || '/';
@@ -173,7 +174,10 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
           }
         }
       },
-      { rootMargin: '-80px 0px -60% 0px' },
+      {
+        root: containerRef,
+        rootMargin: '-80px 0px -60% 0px',
+      },
     );
 
     for (const heading of headings) {
@@ -185,6 +189,22 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
     if (tocObserver) tocObserver.disconnect();
   });
 
+  function scrollMarkdownBodyToHeading(target: HTMLElement): void {
+    const containerRect = containerRef.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const top = containerRef.scrollTop + targetRect.top - containerRect.top - TOC_SCROLL_TOP_OFFSET_PX;
+
+    if (typeof containerRef.scrollTo === 'function') {
+      containerRef.scrollTo({
+        top: Math.max(0, top),
+        behavior: 'smooth',
+      });
+      return;
+    }
+
+    containerRef.scrollTop = Math.max(0, top);
+  }
+
   const renderTocItem = (item: TocItem, depth: number): JSX.Element => (
     <li class="fm-toc-item" style={{ 'padding-left': `${(depth - 1) * 12}px` }}>
       <a
@@ -192,9 +212,10 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
         class={`fm-toc-link${activeTocId() === item.id ? ' fm-toc-active' : ''}`}
         onClick={(e) => {
           e.preventDefault();
-          const target = containerRef.querySelector(`#${CSS.escape(item.id)}`);
+          const target = containerRef.querySelector<HTMLElement>(`#${CSS.escape(item.id)}`);
           if (target) {
-            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            setActiveTocId(item.id);
+            scrollMarkdownBodyToHeading(target);
           }
         }}
       >
