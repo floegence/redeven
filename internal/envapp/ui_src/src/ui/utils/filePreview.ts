@@ -1,6 +1,6 @@
 // File preview helpers: extension classification, language resolution, and basic content sniffing.
 
-export type PreviewMode = 'text' | 'image' | 'pdf' | 'docx' | 'xlsx' | 'binary' | 'unsupported';
+export type PreviewMode = 'text' | 'markdown' | 'image' | 'pdf' | 'docx' | 'xlsx' | 'binary' | 'unsupported';
 export type TextPreviewPresentation = 'plain' | 'code';
 
 export interface FilePreviewDescriptor {
@@ -11,10 +11,12 @@ export interface FilePreviewDescriptor {
 }
 
 const PLAIN_TEXT_PREVIEW_EXTENSIONS = [
-  '.txt', '.text', '.log', '.md', '.markdown', '.readme',
+  '.txt', '.text', '.log', '.readme',
   '.csv', '.tsv', '.psv',
   '.rst', '.asciidoc', '.adoc',
 ] as const;
+
+const MARKDOWN_PREVIEW_EXTENSIONS = ['.md', '.markdown'] as const;
 
 const CODE_PREVIEW_EXTENSIONS = [
   '.json', '.jsonc', '.webmanifest', '.yaml', '.yml', '.toml', '.ini', '.conf', '.config', '.env',
@@ -50,6 +52,7 @@ export const FALLBACK_TEXT_FILE_PREVIEW_DESCRIPTOR: FilePreviewDescriptor = {
 };
 
 const PLAIN_TEXT_EXTENSION_SET = new Set<string>(PLAIN_TEXT_PREVIEW_EXTENSIONS);
+const MARKDOWN_PREVIEW_EXTENSION_SET = new Set<string>(MARKDOWN_PREVIEW_EXTENSIONS);
 const CODE_PREVIEW_EXTENSION_SET = new Set<string>(CODE_PREVIEW_EXTENSIONS);
 const IMAGE_PREVIEW_EXTENSION_SET = new Set<string>(IMAGE_PREVIEW_EXTENSIONS);
 const PDF_PREVIEW_EXTENSION_SET = new Set<string>(PDF_PREVIEW_EXTENSIONS);
@@ -218,6 +221,13 @@ export function describeFilePreview(name: string): FilePreviewDescriptor {
       textPresentation: 'code',
       language: LANGUAGE_BY_EXTENSION[ext],
       wrapText: false,
+    };
+  }
+
+  if (MARKDOWN_PREVIEW_EXTENSION_SET.has(ext)) {
+    return {
+      mode: 'markdown',
+      language: LANGUAGE_BY_PLAIN_TEXT_EXTENSION[ext],
     };
   }
 

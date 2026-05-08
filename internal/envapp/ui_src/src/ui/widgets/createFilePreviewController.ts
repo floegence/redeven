@@ -173,13 +173,13 @@ export function createFilePreviewController(params: {
     setDownloadLoading(false);
   };
 
-  const hasUnsavedChanges = () => previewOpen() && previewDescriptor().mode === 'text' && previewDirty();
+  const hasUnsavedChanges = () => previewOpen() && (previewDescriptor().mode === 'text' || previewDescriptor().mode === 'markdown') && previewDirty();
 
   const canEdit = () => (
     Boolean(
       params.canWrite()
       && previewItem()?.type === 'file'
-      && previewDescriptor().mode === 'text'
+      && (previewDescriptor().mode === 'text' || previewDescriptor().mode === 'markdown')
       && !previewLoading()
       && !previewError()
       && !previewTruncated(),
@@ -277,7 +277,7 @@ export function createFilePreviewController(params: {
         const extDot = getExtDot(item.name);
         mime = mimeFromExtDot(extDot) ?? 'application/octet-stream';
 
-        if (baseDescriptor.mode === 'text') {
+        if (baseDescriptor.mode === 'text' || baseDescriptor.mode === 'markdown') {
           const decodedText = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
           setPreviewText(decodedText);
           resetEditorState(decodedText);
@@ -470,7 +470,7 @@ export function createFilePreviewController(params: {
   };
 
   const updateDraft = (value: string) => {
-    if (previewDescriptor().mode !== 'text') return;
+    if (previewDescriptor().mode !== 'text' && previewDescriptor().mode !== 'markdown') return;
     setPreviewDraftText(value);
     setPreviewDirty(value !== previewText());
     if (previewSaveError()) {
@@ -487,7 +487,7 @@ export function createFilePreviewController(params: {
 
     const rpc = params.rpc();
     const item = previewItem();
-    if (!rpc || !item || previewDescriptor().mode !== 'text') return false;
+    if (!rpc || !item || (previewDescriptor().mode !== 'text' && previewDescriptor().mode !== 'markdown')) return false;
 
     const content = previewDraftText();
     const requestSeq = ++saveReqSeq;
@@ -526,7 +526,7 @@ export function createFilePreviewController(params: {
   };
 
   const revertCurrent = () => {
-    if (previewDescriptor().mode !== 'text') return;
+    if (previewDescriptor().mode !== 'text' && previewDescriptor().mode !== 'markdown') return;
     resetEditorState(previewText());
   };
 
@@ -537,7 +537,7 @@ export function createFilePreviewController(params: {
 
     setDownloadLoading(true);
     try {
-      if (previewDescriptor().mode === 'text' && previewDirty()) {
+      if ((previewDescriptor().mode === 'text' || previewDescriptor().mode === 'markdown') && previewDirty()) {
         const mime = mimeFromExtDot(getExtDot(item.name)) ?? 'text/plain;charset=utf-8';
         downloadBlob({ name: item.name, blob: new Blob([previewDraftText()], { type: mime }) });
         return;

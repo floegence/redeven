@@ -39,7 +39,7 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
   const resolvedError = () => props.error;
   const resolvedPath = () => String(props.item?.path ?? '').trim();
   const showHeader = () => props.showHeader !== false;
-  const showEditorActions = () => props.descriptor.mode === 'text' && Boolean(props.canEdit);
+  const showEditorActions = () => (props.descriptor.mode === 'text' || props.descriptor.mode === 'markdown') && Boolean(props.canEdit);
   const [pathCopied, setPathCopied] = createSignal(false);
   let copyResetTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
 
