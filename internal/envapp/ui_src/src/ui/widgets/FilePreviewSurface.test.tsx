@@ -64,6 +64,8 @@ vi.mock('./FilePreviewContent', () => ({
       <div>{props.item?.path}</div>
       <pre>{props.text}</pre>
       <div>{props.message}</div>
+      <button type="button" aria-label="Ask Flower" onClick={() => props.onAskFlower?.(props.selectedText || 'selected from dom')} />
+      <button type="button" aria-label="Download file" onClick={() => props.onDownload?.()} />
     </div>
   ),
 }));
@@ -98,12 +100,9 @@ describe('FilePreviewSurface', () => {
 
     expect(host.querySelector('[data-testid="floating-window"]')).toBeTruthy();
     expect((host.querySelector('[data-testid="floating-window"]') as HTMLElement | null)?.className).not.toContain('[&>div>div:last-child]');
-    const footer = host.querySelector('[data-testid="file-preview-footer"]') as HTMLElement | null;
-    expect(footer).toBeTruthy();
-    expect(footer?.className).toContain('w-full');
-    expect(footer?.className).not.toContain('px-3');
-    expect(footer?.textContent).toContain('Editing');
-    expect(footer?.textContent).toContain('No local changes');
+    expect(host.querySelector('[data-testid="file-preview-footer"]')).toBeNull();
+    expect(host.textContent).not.toContain('Editing');
+    expect(host.textContent).not.toContain('No local changes');
 
     vi.spyOn(window, 'getSelection').mockReturnValue({
       rangeCount: 1,
@@ -111,9 +110,8 @@ describe('FilePreviewSurface', () => {
       getRangeAt: () => ({ commonAncestorContainer: host.querySelector('pre')?.firstChild as Node }) as Range,
     } as unknown as Selection);
 
-    const buttons = Array.from(host.querySelectorAll('button'));
-    buttons.find((button) => button.textContent?.includes('Ask Flower'))?.click();
-    buttons.find((button) => button.textContent?.includes('Download'))?.click();
+    (host.querySelector('button[aria-label="Ask Flower"]') as HTMLButtonElement | null)?.click();
+    (host.querySelector('button[aria-label="Download file"]') as HTMLButtonElement | null)?.click();
 
     expect(onAskFlower).toHaveBeenCalledWith('selected from editor');
     expect(onDownload).toHaveBeenCalledTimes(1);
@@ -145,14 +143,10 @@ describe('FilePreviewSurface', () => {
     expect(dialog?.className).toContain('h-[calc(100dvh-0.5rem)]');
     expect(dialog?.className).not.toContain('[&>div:last-child]');
     expect(host.textContent).toContain('/workspace/demo.pdf');
-    const footer = host.querySelector('[data-testid="file-preview-footer"]') as HTMLElement | null;
-    expect(footer).toBeTruthy();
-    expect(footer?.className).toContain('w-full');
-    expect(footer?.className).not.toContain('rounded-xl');
-    expect(footer?.textContent).toContain('Truncated preview');
-    const buttons = Array.from(host.querySelectorAll('button'));
-    expect(buttons.find((button) => button.textContent?.includes('Ask Flower'))?.className).toContain('w-full');
-    expect(buttons.find((button) => button.textContent?.includes('Download'))?.className).toContain('w-full');
+    expect(host.querySelector('[data-testid="file-preview-footer"]')).toBeNull();
+    expect(host.textContent).not.toContain('Truncated preview');
+    expect(host.querySelector('button[aria-label="Ask Flower"]')).toBeTruthy();
+    expect(host.querySelector('button[aria-label="Download file"]')).toBeTruthy();
     expect(host.textContent).toContain('This file is too large to preview.');
     expect(host.querySelector('[data-testid="confirm-dialog"]')).toBeTruthy();
   });

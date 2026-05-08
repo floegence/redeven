@@ -68,7 +68,7 @@ describe('FilePreviewContent', () => {
     const header = root?.firstElementChild as HTMLElement | null;
     expect(header?.textContent).toContain('Path');
     expect(header?.textContent).toContain('/workspace/demo.sh');
-    expect(header?.textContent).toContain('Edit');
+    expect(host.querySelector('button[aria-label="Edit file"]')).toBeTruthy();
     expect(host.querySelector('button[aria-label="Copy path"]')).toBeTruthy();
 
     const copyButton = host.querySelector('button[aria-label="Copy path"]') as HTMLButtonElement | null;
@@ -79,8 +79,7 @@ describe('FilePreviewContent', () => {
     await flushAsync();
     expect(host.querySelector('button[aria-label="Copy path"]')).toBeTruthy();
 
-    const buttons = Array.from(host.querySelectorAll('button'));
-    buttons.find((button) => button.textContent?.includes('Edit'))?.click();
+    (host.querySelector('button[aria-label="Edit file"]') as HTMLButtonElement | null)?.click();
 
     expect(onCopyPath).toHaveBeenCalledTimes(1);
     expect(onStartEdit).toHaveBeenCalledTimes(1);
@@ -111,15 +110,14 @@ describe('FilePreviewContent', () => {
     const root = host.firstElementChild as HTMLElement | null;
     const header = root?.firstElementChild as HTMLElement | null;
     expect(header?.textContent).toContain('/workspace/demo.ts');
-    expect(header?.textContent).toContain('Discard');
-    expect(header?.textContent).toContain('Save');
-    expect(header?.textContent).not.toContain('Edit');
+    expect(host.querySelector('button[aria-label="Discard changes"]')).toBeTruthy();
+    expect(host.querySelector('button[aria-label="Save file"]')).toBeTruthy();
+    expect(host.querySelector('button[aria-label="Edit file"]')).toBeNull();
     expect(host.querySelector('button[aria-label="Copy path"]')).toBeTruthy();
 
-    const buttons = Array.from(host.querySelectorAll('button'));
     (host.querySelector('button[aria-label="Copy path"]') as HTMLButtonElement | null)?.click();
-    buttons.find((button) => button.textContent?.includes('Discard'))?.click();
-    buttons.find((button) => button.textContent?.includes('Save'))?.click();
+    (host.querySelector('button[aria-label="Discard changes"]') as HTMLButtonElement | null)?.click();
+    (host.querySelector('button[aria-label="Save file"]') as HTMLButtonElement | null)?.click();
 
     expect(onCopyPath).toHaveBeenCalledTimes(1);
     expect(onDiscard).toHaveBeenCalledTimes(1);
@@ -144,14 +142,42 @@ describe('FilePreviewContent', () => {
       />
     ), host);
 
-    const discardButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Discard')) as HTMLButtonElement | undefined;
-    const saveButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Save')) as HTMLButtonElement | undefined;
+    const discardButton = host.querySelector('button[aria-label="Discard changes"]') as HTMLButtonElement | null;
+    const saveButton = host.querySelector('button[aria-label="Save file"]') as HTMLButtonElement | null;
 
     expect(discardButton?.disabled).toBe(false);
     expect(saveButton?.disabled).toBe(true);
 
     discardButton?.click();
     expect(onDiscard).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps Ask Flower and Download actions in the shared path header', () => {
+    const onAskFlower = vi.fn();
+    const onDownload = vi.fn();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <FilePreviewContent
+        item={{ id: '/workspace/demo.ts', name: 'demo.ts', path: '/workspace/demo.ts', type: 'file' }}
+        descriptor={{ mode: 'text', textPresentation: 'code', language: 'typescript', wrapText: false }}
+        text="const value = 1;"
+        selectedText="selected from editor"
+        onAskFlower={onAskFlower}
+        onDownload={onDownload}
+      />
+    ), host);
+
+    const header = host.firstElementChild?.firstElementChild as HTMLElement | null;
+    expect(header?.textContent).toContain('/workspace/demo.ts');
+    expect(host.querySelector('[data-testid="file-preview-footer"]')).toBeNull();
+
+    (host.querySelector('button[aria-label="Ask Flower"]') as HTMLButtonElement | null)?.click();
+    (host.querySelector('button[aria-label="Download file"]') as HTMLButtonElement | null)?.click();
+
+    expect(onAskFlower).toHaveBeenCalledWith('selected from editor');
+    expect(onDownload).toHaveBeenCalledTimes(1);
   });
 
   it('supports a content-only mode without the shared path header', () => {
@@ -170,7 +196,7 @@ describe('FilePreviewContent', () => {
 
     const root = host.firstElementChild as HTMLElement | null;
     expect(root?.firstElementChild?.textContent).not.toContain('Path');
-    expect(host.textContent).not.toContain('Edit');
+    expect(host.querySelector('button[aria-label="Edit file"]')).toBeNull();
     expect(host.querySelector('button[aria-label="Copy path"]')).toBeNull();
     expect(host.querySelector('[data-testid="text-preview-pane"]')?.textContent).toContain('/workspace/demo.ts');
   });
