@@ -156,7 +156,7 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
           </div>
         </Show>
 
-        <LoadingOverlay visible={!!props.loading} message="Loading file..." />
+        <LoadingOverlay visible={!!props.loading} message={props.message || 'Loading file...'} />
       </div>
     </div>
   );

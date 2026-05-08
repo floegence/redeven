@@ -64,7 +64,7 @@ export function FilePreviewPanel(props: FilePreviewPanelProps) {
       return { label: 'Truncated preview', detail: 'Download the full file for the complete content.', tone: 'warning' as const };
     }
     if (props.loading) {
-      return { label: 'Loading', detail: 'Fetching preview content', tone: 'neutral' as const };
+      return { label: 'Loading', detail: props.message || 'Fetching preview content', tone: 'neutral' as const };
     }
     return { label: 'Ready', detail: '', tone: 'neutral' as const };
   });

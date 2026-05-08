@@ -214,4 +214,115 @@ describe('createFilePreviewController', () => {
       dispose();
     }
   });
+
+  it('waits for the connection and retries the latest preview request', async () => {
+    const file = { id: '/workspace/demo.ts', name: 'demo.ts', path: '/workspace/demo.ts', type: 'file' } satisfies FileItem;
+
+    openReadFileStreamChannelMock.mockResolvedValue(createTextChannel('const value = 1;\n'));
+
+    const [client, setClient] = createSignal<any>(null);
+    const [rpc] = createSignal({ fs: { writeFile: vi.fn(async () => ({ success: true })) } } as any);
+    const [canWrite] = createSignal(true);
+
+    let controller!: ReturnType<typeof createFilePreviewController>;
+    const dispose = createRoot((disposeRoot) => {
+      controller = createFilePreviewController({ client, rpc, canWrite });
+      return disposeRoot;
+    });
+
+    try {
+      await controller.openPreview(file);
+      await flushAsync();
+
+      expect(controller.open()).toBe(true);
+      expect(controller.item()?.path).toBe('/workspace/demo.ts');
+      expect(controller.loading()).toBe(true);
+      expect(controller.error()).toBe(null);
+      expect(controller.message()).toBe('Waiting for connection...');
+      expect(openReadFileStreamChannelMock).not.toHaveBeenCalled();
+
+      setClient({ id: 'client-ready' });
+      await flushAsync();
+
+      expect(openReadFileStreamChannelMock).toHaveBeenCalledTimes(1);
+      expect(openReadFileStreamChannelMock).toHaveBeenCalledWith({
+        client: { id: 'client-ready' },
+        path: '/workspace/demo.ts',
+        offset: 0,
+        maxBytes: expect.any(Number),
+      });
+      expect(controller.loading()).toBe(false);
+      expect(controller.error()).toBe(null);
+      expect(controller.message()).toBe('');
+      expect(controller.text()).toBe('const value = 1;\n');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('cancels a connection retry when the preview is closed before the client is ready', async () => {
+    const file = { id: '/workspace/demo.ts', name: 'demo.ts', path: '/workspace/demo.ts', type: 'file' } satisfies FileItem;
+
+    const [client, setClient] = createSignal<any>(null);
+    const [rpc] = createSignal({ fs: { writeFile: vi.fn(async () => ({ success: true })) } } as any);
+    const [canWrite] = createSignal(true);
+
+    let controller!: ReturnType<typeof createFilePreviewController>;
+    const dispose = createRoot((disposeRoot) => {
+      controller = createFilePreviewController({ client, rpc, canWrite });
+      return disposeRoot;
+    });
+
+    try {
+      await controller.openPreview(file);
+      await flushAsync();
+
+      controller.closePreview();
+      setClient({ id: 'client-ready' });
+      await flushAsync();
+
+      expect(controller.open()).toBe(false);
+      expect(controller.item()).toBe(null);
+      expect(openReadFileStreamChannelMock).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('loads only the newest pending preview after the connection becomes ready', async () => {
+    const firstFile = { id: '/workspace/first.ts', name: 'first.ts', path: '/workspace/first.ts', type: 'file' } satisfies FileItem;
+    const secondFile = { id: '/workspace/second.ts', name: 'second.ts', path: '/workspace/second.ts', type: 'file' } satisfies FileItem;
+
+    openReadFileStreamChannelMock.mockResolvedValue(createTextChannel('const second = true;\n'));
+
+    const [client, setClient] = createSignal<any>(null);
+    const [rpc] = createSignal({ fs: { writeFile: vi.fn(async () => ({ success: true })) } } as any);
+    const [canWrite] = createSignal(true);
+
+    let controller!: ReturnType<typeof createFilePreviewController>;
+    const dispose = createRoot((disposeRoot) => {
+      controller = createFilePreviewController({ client, rpc, canWrite });
+      return disposeRoot;
+    });
+
+    try {
+      await controller.openPreview(firstFile);
+      await controller.openPreview(secondFile);
+      await flushAsync();
+
+      expect(controller.item()?.path).toBe('/workspace/second.ts');
+      expect(openReadFileStreamChannelMock).not.toHaveBeenCalled();
+
+      setClient({ id: 'client-ready' });
+      await flushAsync();
+
+      expect(openReadFileStreamChannelMock).toHaveBeenCalledTimes(1);
+      expect(openReadFileStreamChannelMock).toHaveBeenCalledWith(expect.objectContaining({
+        path: '/workspace/second.ts',
+      }));
+      expect(controller.text()).toBe('const second = true;\n');
+    } finally {
+      dispose();
+    }
+  });
 });
