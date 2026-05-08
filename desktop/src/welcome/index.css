@@ -1037,20 +1037,8 @@ body {
 }
 
 /*
- * Blocked action button — clean primary-tinted design replacing the old
- * warning-yellow caution stripes.  The left edge uses a subtle pulsing
- * accent bar to draw attention without signalling an error.
+ * Blocked action button — clean primary-tinted design.
  */
-@keyframes redeven-blocked-accent-pulse {
-  0%,
-  100% {
-    border-left-color: color-mix(in srgb, var(--primary) 30%, transparent);
-  }
-  50% {
-    border-left-color: color-mix(in srgb, var(--primary) 66%, transparent);
-  }
-}
-
 @keyframes redeven-blocked-shimmer {
   0% {
     background-position: 100% 0;
@@ -1098,7 +1086,6 @@ body {
   color: var(--primary);
   box-shadow: none;
   opacity: 1;
-  animation: redeven-blocked-accent-pulse 3s ease-in-out infinite;
 }
 
 .redeven-split-action-trigger--blocked:hover {
@@ -1586,9 +1573,7 @@ pre,
 }
 
 /*
- * Loading animation keyframes — shimmer sweep + breathing glow for action buttons.
- * Shimmer: a translucent highlight that sweeps left-to-right across the button surface.
- * Glow:   a pulsing ring that expands and contracts around the button perimeter.
+ * Loading animation keyframes — shimmer sweep for action buttons.
  */
 @keyframes redeven-loading-shimmer {
   0% {
@@ -1596,20 +1581,6 @@ pre,
   }
   100% {
     background-position: -100% 0;
-  }
-}
-
-@keyframes redeven-loading-glow-pulse {
-  0%,
-  100% {
-    box-shadow:
-      0 0 0 0px transparent,
-      0 0 0 0px transparent;
-  }
-  50% {
-    box-shadow:
-      0 0 0 4px color-mix(in srgb, var(--ring) 35%, transparent),
-      0 0 18px 2px color-mix(in srgb, var(--ring) 15%, transparent);
   }
 }
 
@@ -1641,11 +1612,6 @@ pre,
   animation: redeven-loading-shimmer 3s linear infinite;
 }
 
-.redeven-loading-glow {
-  animation: redeven-loading-glow-pulse 3s ease-in-out infinite;
-  border-radius: 0.375rem;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .redeven-action-popover-surface,
   .redeven-action-popover-surface--closing {
@@ -1664,8 +1630,7 @@ pre,
   }
 
   .redeven-loading-shimmer-overlay::after,
-  .redeven-blocked-shimmer-overlay::after,
-  .redeven-loading-glow {
+  .redeven-blocked-shimmer-overlay::after {
     animation-duration: 1ms;
   }
 }

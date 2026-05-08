@@ -567,7 +567,6 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('.redeven-split-action-trigger__icon');
     expect(styles).toContain('.redeven-split-action-trigger--blocked');
     expect(styles).toContain('border-style: solid;');
-    expect(styles).toContain('redeven-blocked-accent-pulse');
     expect(styles).toContain(".redeven-split-action-trigger--blocked[aria-expanded='true']");
     expect(styles).toContain('.redeven-split-action-toggle');
     expect(styles).toContain('.redeven-split-menu');
