@@ -42,67 +42,110 @@
 }
 
 /* Code blocks */
-.file-markdown-body .fm-code-block-wrapper {
+.file-markdown-body pre.fm-code-block {
   position: relative;
   margin: 1em 0;
-  border-radius: 8px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  background: var(--muted);
-}
-
-.file-markdown-body .fm-code-block-wrapper pre {
-  margin: 0;
   padding: 16px;
+  padding-top: 34px;
+  border-radius: 8px;
   overflow-x: auto;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--muted) 82%, var(--background));
+  color: var(--foreground);
   font-family: 'JetBrains Mono', 'Iosevka', ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 13px;
   line-height: 1.55;
-  color: var(--foreground);
 }
 
-.file-markdown-body .fm-code-block-wrapper pre code {
+.file-markdown-body pre.fm-code-block code {
+  display: block;
   background: none;
   padding: 0;
   font-size: inherit;
+  color: inherit;
+  white-space: pre;
 }
 
 .file-markdown-body .fm-code-lang {
   position: absolute;
   top: 0;
-  right: 36px;
+  right: 61px;
+  max-width: calc(100% - 116px);
   font-size: 10px;
   font-family: 'Inter', system-ui, sans-serif;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
   color: var(--muted-foreground);
-  background: var(--muted);
+  background: color-mix(in srgb, var(--background) 72%, var(--muted));
   padding: 3px 8px;
   border-bottom-left-radius: 6px;
-  opacity: 0.6;
+  border-left: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  opacity: 0.82;
+  pointer-events: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .file-markdown-body .fm-code-copy {
   position: absolute;
   top: 4px;
   right: 4px;
-  width: 28px;
-  height: 28px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid transparent;
+  min-width: 44px;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--muted);
+  background: color-mix(in srgb, var(--background) 78%, var(--muted));
   color: var(--muted-foreground);
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.15s, background 0.15s;
+  transition: opacity 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
 }
 
-.file-markdown-body .fm-code-block-wrapper:hover .fm-code-copy { opacity: 1; }
-.file-markdown-body .fm-code-copy:hover { background: color-mix(in srgb, var(--primary) 15%, transparent); color: var(--primary); }
-.file-markdown-body .fm-code-copy.fm-copied { background: color-mix(in srgb, var(--primary) 20%, transparent); color: var(--primary); }
+.file-markdown-body pre.fm-code-block:hover .fm-code-copy,
+.file-markdown-body .fm-code-copy:focus-visible,
+.file-markdown-body .fm-code-copy.fm-copied { opacity: 1; }
+.file-markdown-body .fm-code-copy:hover { background: color-mix(in srgb, var(--primary) 12%, var(--background)); color: var(--primary); border-color: color-mix(in srgb, var(--primary) 28%, var(--border)); }
+.file-markdown-body .fm-code-copy:focus-visible { outline: 2px solid color-mix(in srgb, var(--primary) 45%, transparent); outline-offset: 2px; }
+.file-markdown-body .fm-code-copy.fm-copied { background: color-mix(in srgb, var(--primary) 18%, var(--background)); color: var(--primary); border-color: color-mix(in srgb, var(--primary) 30%, var(--border)); }
+
+.file-markdown-body pre.fm-code-block .hljs-comment,
+.file-markdown-body pre.fm-code-block .hljs-quote {
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+
+.file-markdown-body pre.fm-code-block .hljs-keyword,
+.file-markdown-body pre.fm-code-block .hljs-selector-tag,
+.file-markdown-body pre.fm-code-block .hljs-built_in {
+  color: color-mix(in srgb, var(--primary) 86%, #8b5cf6);
+}
+
+.file-markdown-body pre.fm-code-block .hljs-string,
+.file-markdown-body pre.fm-code-block .hljs-attr,
+.file-markdown-body pre.fm-code-block .hljs-symbol {
+  color: color-mix(in srgb, var(--primary) 42%, #15803d);
+}
+
+.file-markdown-body pre.fm-code-block .hljs-number,
+.file-markdown-body pre.fm-code-block .hljs-literal,
+.file-markdown-body pre.fm-code-block .hljs-variable {
+  color: color-mix(in srgb, var(--primary) 42%, #b45309);
+}
+
+.file-markdown-body pre.fm-code-block .hljs-title,
+.file-markdown-body pre.fm-code-block .hljs-function,
+.file-markdown-body pre.fm-code-block .hljs-name {
+  color: color-mix(in srgb, var(--primary) 70%, var(--foreground));
+}
 
 /* Blockquote */
 .file-markdown-body blockquote.fm-blockquote {

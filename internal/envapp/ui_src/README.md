@@ -122,6 +122,7 @@ Notes:
 - File Browser uses Monaco as the single text preview/edit surface instead of splitting preview by language support or by a second highlighted renderer.
 - Supported code previews remount Monaco when the user enters Edit mode so the writable editor never inherits stale read-only lifecycle state from preview mode.
 - Truncated previews and preview-side Monaco runtime failures fall back to plain text only; edit mode never silently downgrades into a fake editable fallback and instead shows an explicit editor-unavailable state until the user discards or retries the edit session.
+- Markdown file preview owns an isolated `Marked` rendering pipeline under `src/ui/file-markdown/*`. The renderer emits semantic document HTML (`pre.fm-code-block > code.hljs.language-*` for fenced code, `.fm-inline-code` for inline code, `.mermaid` for Mermaid fences), while `postProcess` adds DOM-only affordances such as language badges, copy buttons, and external-link protection. Copy actions read from `code.textContent`, so highlighted markup never becomes part of the copied source.
 
 ## CSS Layering Notes
 
