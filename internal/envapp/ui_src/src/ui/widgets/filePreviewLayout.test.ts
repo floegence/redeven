@@ -79,6 +79,9 @@ describe('file preview wiring', () => {
     expect(contentSrc).toContain('Save file');
     expect(contentSrc).toContain('Discard changes');
     expect(contentSrc).toContain('Ask Flower');
+    expect(contentSrc).toContain("import { FlowerNavigationIcon } from '../icons/FlowerSoftAuraIcon';");
+    expect(contentSrc).toContain('<FlowerNavigationIcon class="size-5" />');
+    expect(contentSrc).not.toContain('Sparkles');
     expect(contentSrc).toContain('Download file');
     expect(contentSrc).toContain('title={resolvedPath()');
     expect(contentSrc).toContain('min-w-0 flex-1 truncate');
