@@ -1,10 +1,10 @@
 import { Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
-import { Check, Copy } from '@floegence/floe-webapp-core/icons';
+import { Check, Copy, Download, Loader2, Pencil, Save, Sparkles, X } from '@floegence/floe-webapp-core/icons';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
-import { Button } from '@floegence/floe-webapp-core/ui';
 import { renderRedevenFilePreviewBody } from '../file-preview/rendererRegistry';
 import type { FilePreviewDescriptor } from '../utils/filePreview';
+import { readSelectionTextFromPreview } from '../utils/filePreviewSelection';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
 
 export interface FilePreviewContentProps {
@@ -18,6 +18,7 @@ export interface FilePreviewContentProps {
   saving?: boolean;
   saveError?: string | null;
   canEdit?: boolean;
+  selectedText?: string;
   message?: string;
   objectUrl?: string;
   bytes?: Uint8Array<ArrayBuffer> | null;
@@ -33,7 +34,18 @@ export interface FilePreviewContentProps {
   onSelectionChange?: (selectionText: string) => void;
   onSave?: () => void;
   onDiscard?: () => void;
+  downloadLoading?: boolean;
+  onDownload?: () => void;
+  onAskFlower?: (selectionText: string) => void | Promise<void>;
 }
+
+const PREVIEW_HEADER_ICON_BUTTON_CLASS = [
+  'inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-transparent',
+  'text-muted-foreground transition-colors duration-150',
+  'hover:border-border/70 hover:bg-accent hover:text-foreground',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+  'disabled:cursor-not-allowed disabled:opacity-40',
+].join(' ');
 
 export function FilePreviewContent(props: FilePreviewContentProps) {
   const resolvedError = () => props.error;
@@ -42,6 +54,7 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
   const showEditorActions = () => (props.descriptor.mode === 'text' || props.descriptor.mode === 'markdown') && Boolean(props.canEdit);
   const [pathCopied, setPathCopied] = createSignal(false);
   let copyResetTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
+  let previewContentEl: HTMLDivElement | undefined;
 
   const clearCopiedState = () => {
     if (copyResetTimer !== undefined) {
@@ -79,19 +92,28 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
     }, 1600);
   };
 
+  const handleAskFlower = () => {
+    if (!props.onAskFlower || !props.item || props.loading) return;
+    const selectionText = String(props.selectedText ?? '').trim() || readSelectionTextFromPreview(previewContentEl);
+    void props.onAskFlower(selectionText);
+  };
+
   return (
     <div class="flex h-full min-h-0 flex-col overflow-hidden">
       <Show when={showHeader()}>
-        <div class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
-          <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-            <span class="shrink-0 text-[11px] uppercase tracking-[0.08em] text-muted-foreground">Path</span>
-            <span class="min-w-[12rem] flex-1 truncate font-mono text-xs text-muted-foreground">
+        <div class="flex shrink-0 items-center gap-2 border-b border-border px-2.5 py-2 sm:px-3">
+          <div class="flex min-w-0 flex-1 items-center gap-2">
+            <span class="hidden shrink-0 text-[11px] uppercase tracking-[0.08em] text-muted-foreground sm:inline">Path</span>
+            <span
+              class="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground"
+              title={resolvedPath() || '(unknown path)'}
+            >
               {resolvedPath() || '(unknown path)'}
             </span>
             <Show when={props.onCopyPath}>
               <button
                 type="button"
-                class={`inline-flex size-6 shrink-0 items-center justify-center rounded-md border border-transparent transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 ${
+                class={`${PREVIEW_HEADER_ICON_BUTTON_CLASS} ${
                   pathCopied() ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                 }`}
                 disabled={!resolvedPath()}
@@ -108,38 +130,76 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
             </Show>
           </div>
 
-          <Show when={showEditorActions() && !props.editing}>
-            <Button size="sm" variant="outline" class="shrink-0" onClick={() => props.onStartEdit?.()}>
-              Edit
-            </Button>
-          </Show>
+          <div class="flex shrink-0 items-center justify-end gap-1">
+            <Show when={showEditorActions() && !props.editing}>
+              <button
+                type="button"
+                class={PREVIEW_HEADER_ICON_BUTTON_CLASS}
+                aria-label="Edit file"
+                title="Edit file"
+                onClick={() => props.onStartEdit?.()}
+              >
+                <Pencil class="size-3.5" />
+              </button>
+            </Show>
 
-          <Show when={showEditorActions() && props.editing}>
-            <div class="flex shrink-0 items-center gap-2">
-              <Button
-                size="sm"
-                variant="ghost"
+            <Show when={showEditorActions() && props.editing}>
+              <button
+                type="button"
+                class={PREVIEW_HEADER_ICON_BUTTON_CLASS}
+                aria-label="Discard changes"
+                title="Discard changes"
                 disabled={props.saving}
                 onClick={() => props.onDiscard?.()}
               >
-                Discard
-              </Button>
-              <Button
-                size="sm"
-                variant="default"
-                loading={props.saving}
-                disabled={!props.dirty}
+                <X class="size-3.5" />
+              </button>
+              <button
+                type="button"
+                class={PREVIEW_HEADER_ICON_BUTTON_CLASS}
+                aria-label="Save file"
+                title="Save file"
+                disabled={!props.dirty || props.saving}
                 onClick={() => props.onSave?.()}
               >
-                Save
-              </Button>
-            </div>
-          </Show>
+                <Show when={props.saving} fallback={<Save class="size-3.5" />}>
+                  <Loader2 class="size-3.5 animate-spin" />
+                </Show>
+              </button>
+            </Show>
+
+            <Show when={props.onAskFlower}>
+              <button
+                type="button"
+                class={PREVIEW_HEADER_ICON_BUTTON_CLASS}
+                aria-label="Ask Flower"
+                title="Ask Flower"
+                disabled={!props.item || props.loading}
+                onClick={handleAskFlower}
+              >
+                <Sparkles class="size-3.5" />
+              </button>
+            </Show>
+
+            <button
+              type="button"
+              class={PREVIEW_HEADER_ICON_BUTTON_CLASS}
+              aria-label="Download file"
+              title="Download file"
+              disabled={!props.item || props.loading || props.downloadLoading}
+              onClick={() => props.onDownload?.()}
+            >
+              <Show when={props.downloadLoading} fallback={<Download class="size-3.5" />}>
+                <Loader2 class="size-3.5 animate-spin" />
+              </Show>
+            </button>
+          </div>
         </div>
       </Show>
 
       <div
         ref={(element) => {
+          previewContentEl = element;
           props.contentRef?.(element);
         }}
         {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}

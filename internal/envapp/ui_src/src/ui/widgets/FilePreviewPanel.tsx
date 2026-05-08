@@ -1,10 +1,8 @@
 import { Show, createMemo } from 'solid-js';
-import { cn, useLayout } from '@floegence/floe-webapp-core';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { Button, ConfirmDialog } from '@floegence/floe-webapp-core/ui';
 
 import type { FilePreviewDescriptor } from '../utils/filePreview';
-import { readSelectionTextFromPreview } from '../utils/filePreviewSelection';
 import { FilePreviewContent } from './FilePreviewContent';
 import { WindowModal } from './WindowModal';
 
@@ -45,57 +43,6 @@ export interface FilePreviewPanelProps {
 }
 
 export function FilePreviewPanel(props: FilePreviewPanelProps) {
-  const layout = useLayout();
-  const isMobile = createMemo(() => layout.isMobile());
-  let previewContentEl: HTMLDivElement | undefined;
-
-  const footerStatus = createMemo(() => {
-    const saveError = String(props.saveError ?? '').trim();
-    if (saveError) {
-      return { label: 'Save failed', detail: saveError, tone: 'error' as const };
-    }
-    if (props.dirty) {
-      return { label: 'Unsaved changes', detail: 'Editing with local changes', tone: 'warning' as const };
-    }
-    if (props.editing) {
-      return { label: 'Editing', detail: 'No local changes', tone: 'brand' as const };
-    }
-    if (props.truncated) {
-      return { label: 'Truncated preview', detail: 'Download the full file for the complete content.', tone: 'warning' as const };
-    }
-    if (props.loading) {
-      return { label: 'Loading', detail: props.message || 'Fetching preview content', tone: 'neutral' as const };
-    }
-    return { label: 'Ready', detail: '', tone: 'neutral' as const };
-  });
-
-  const footerBadgeClass = createMemo(() => {
-    switch (footerStatus().tone) {
-      case 'error':
-        return 'border-error/20 bg-error/10 text-error';
-      case 'warning':
-        return 'border-warning/20 bg-warning/12 text-warning';
-      case 'brand':
-        return 'border-primary/20 bg-primary/[0.08] text-primary';
-      default:
-        return 'border-border/70 bg-background/80 text-muted-foreground';
-    }
-  });
-
-  const footerDetailClass = createMemo(() => {
-    switch (footerStatus().tone) {
-      case 'error':
-        return 'text-error';
-      case 'warning':
-        return 'text-warning';
-      case 'brand':
-        return 'text-primary';
-      default:
-        return 'text-muted-foreground';
-    }
-  });
-
-  const hasAskFlowerAction = () => Boolean(props.onAskFlower);
   const closeConfirmVariant = createMemo(() => props.closeConfirmVariant ?? 'none');
 
   const closeConfirmFooter = (
@@ -125,6 +72,7 @@ export function FilePreviewPanel(props: FilePreviewPanelProps) {
             saving={props.saving}
             saveError={props.saveError}
             canEdit={props.canEdit}
+            selectedText={props.selectedText}
             message={props.message}
             objectUrl={props.objectUrl}
             bytes={props.bytes}
@@ -139,64 +87,10 @@ export function FilePreviewPanel(props: FilePreviewPanelProps) {
             onSelectionChange={props.onSelectionChange}
             onSave={props.onSave}
             onDiscard={props.onDiscard}
-            contentRef={(element) => {
-              previewContentEl = element;
-            }}
+            downloadLoading={props.downloadLoading}
+            onDownload={props.onDownload}
+            onAskFlower={props.onAskFlower}
           />
-        </div>
-
-        <div class="shrink-0 border-t border-border/70 px-4 py-3">
-          <div data-testid="file-preview-footer" class="w-full">
-            <div class={cn('flex w-full', isMobile() ? 'flex-col gap-2' : 'flex-col gap-2 sm:flex-row sm:items-center sm:justify-between')}>
-              <div class={cn('min-w-0', isMobile() ? 'flex flex-col gap-1' : 'flex items-center gap-2')}>
-                <span class={cn('shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]', footerBadgeClass())}>
-                  {footerStatus().label}
-                </span>
-                <Show when={footerStatus().detail}>
-                  <span class={cn(isMobile() ? 'text-xs leading-4 whitespace-normal break-words' : 'min-w-0 truncate text-xs', footerDetailClass())}>
-                    {footerStatus().detail}
-                  </span>
-                </Show>
-              </div>
-
-              <div
-                class={cn(
-                  'gap-2',
-                  isMobile()
-                    ? hasAskFlowerAction()
-                      ? 'grid w-full grid-cols-2'
-                      : 'grid w-full grid-cols-1'
-                    : 'flex w-full flex-col sm:w-auto sm:flex-row sm:justify-end',
-                )}
-              >
-                <Show when={props.onAskFlower}>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    class="w-full sm:w-auto"
-                    disabled={!props.item || props.loading}
-                    onClick={() => {
-                      const selectionText = String(props.selectedText ?? '').trim() || readSelectionTextFromPreview(previewContentEl);
-                      void props.onAskFlower?.(selectionText);
-                    }}
-                  >
-                    Ask Flower
-                  </Button>
-                </Show>
-
-                <Button
-                  size="sm"
-                  variant="outline"
-                  class="w-full sm:w-auto"
-                  loading={props.downloadLoading}
-                  disabled={!props.item || props.loading}
-                  onClick={() => props.onDownload?.()}
-                >
-                  Download
-                </Button>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
