@@ -177,6 +177,29 @@ function previewNoticeForMode(mode: ReturnType<typeof describeFilePreview>['mode
   return 'This file is best viewed in the full preview.';
 }
 
+function attachmentSnapshotNoticeForMode(mode: ReturnType<typeof describeFilePreview>['mode']): string {
+  if (mode === 'image') return 'Image snapshots are sent to Flower, but inline image rendering stays in the live file preview.';
+  if (mode === 'pdf') return 'PDF snapshots are sent to Flower, but inline PDF rendering stays in the live file preview.';
+  if (mode === 'docx') return 'Document snapshots are sent to Flower, but inline document rendering stays in the live file preview.';
+  if (mode === 'xlsx') return 'Spreadsheet snapshots are sent to Flower, but inline spreadsheet rendering stays in the live file preview.';
+  return 'This snapshot is sent to Flower, but inline preview is available for text content only.';
+}
+
+function canReadAttachmentSnapshotInline(mode: ReturnType<typeof describeFilePreview>['mode']): boolean {
+  return mode === 'text' || mode === 'markdown' || mode === 'binary';
+}
+
+function friendlyAttachmentPreviewError(error: unknown): string {
+  const message = error instanceof Error ? String(error.message ?? '').trim() : String(error ?? '').trim();
+  if (message.toLowerCase().includes('maximum call stack size exceeded')) {
+    return 'The attachment preview renderer could not open this snapshot. You can still send it to Flower or use the live file preview.';
+  }
+  if (!message) {
+    return 'The attachment snapshot could not be previewed. You can still send it to Flower.';
+  }
+  return 'The attachment snapshot could not be previewed. You can still send it to Flower or use the live file preview.';
+}
+
 function trimPreviewBody(content: string): { body: string; truncated: boolean } {
   if (content.length <= INLINE_TEXT_PREVIEW_MAX_CHARS) {
     return { body: content, truncated: false };
@@ -230,6 +253,31 @@ function contextPreviewStateForMessage(params: {
     onAction: params.onAction,
     error: params.error ?? null,
   };
+}
+
+function contextPreviewStateForAttachmentNotice(params: {
+  title: string;
+  subtitle: string;
+  item: FileItem;
+  mode: ReturnType<typeof describeFilePreview>['mode'];
+  helper?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}): ContextPreviewState {
+  const helperParts = [
+    params.helper,
+    params.actionLabel ? 'Open the live file preview to inspect the source file.' : undefined,
+  ].filter((item): item is string => !!String(item ?? '').trim());
+
+  return contextPreviewStateForMessage({
+    title: params.title,
+    subtitle: params.subtitle,
+    item: params.item,
+    message: attachmentSnapshotNoticeForMode(params.mode),
+    helper: helperParts.join(' ') || undefined,
+    actionLabel: params.actionLabel,
+    onAction: params.onAction,
+  });
 }
 
 function contextPreviewStateLoading(params: {
@@ -554,6 +602,10 @@ function entryButtonClass(entry: AskFlowerComposerEntry): string {
   return 'border-primary/20 bg-primary/10 text-primary hover:border-primary/35 hover:bg-primary/16';
 }
 
+function hasAttachedSnapshot(entry: AskFlowerComposerEntry): entry is Extract<AskFlowerComposerEntry, { kind: 'file' }> & { attachmentFile: File } {
+  return entry.kind === 'file' && !!entry.attachmentFile;
+}
+
 const FlowerComposerAvatar: Component = () => (
   <div data-testid="ask-flower-avatar" class="ask-flower-composer-avatar relative flex size-8 shrink-0 items-center justify-center">
     <div class="absolute inset-0 rounded-full bg-primary/8 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]" />
@@ -695,6 +747,20 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
     await filePreview.openPreview(fileItemFromPath(path));
   };
 
+  const openAttachedSnapshotPreview = async (entry: Extract<AskFlowerComposerEntry, { kind: 'file' }> & { attachmentFile: File }) => {
+    await openAttachmentPreview({
+      title: `${entry.label} snapshot`,
+      subtitle: entry.path,
+      item: fileItemForContextPreview(entry.path, entry.label),
+      file: entry.attachmentFile,
+      helper: 'Showing the attached snapshot that Flower will receive.',
+      actionLabel: 'Open live file preview',
+      onAction: () => {
+        void openFullFilePreview(entry.path);
+      },
+    });
+  };
+
   const openAttachmentPreview = async (params: {
     title: string;
     subtitle: string;
@@ -705,6 +771,20 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
     onAction?: () => void;
   }) => {
     const seq = ++previewRequestSeq;
+    const descriptor = describeFilePreview(params.file.name || params.item.name);
+    if (!canReadAttachmentSnapshotInline(descriptor.mode)) {
+      updateContextPreview(contextPreviewStateForAttachmentNotice({
+        title: params.title,
+        subtitle: params.subtitle,
+        item: params.item,
+        mode: descriptor.mode,
+        helper: params.helper,
+        actionLabel: params.actionLabel,
+        onAction: params.onAction,
+      }));
+      return;
+    }
+
     updateContextPreview(contextPreviewStateLoading({
       title: params.title,
       subtitle: params.subtitle,
@@ -733,14 +813,16 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
       updateContextPreview(nextPreview);
     } catch (error) {
       if (seq !== previewRequestSeq) return;
-      const message = error instanceof Error ? error.message : String(error);
+      const friendlyMessage = friendlyAttachmentPreviewError(error);
       updateContextPreview(contextPreviewStateForMessage({
         title: params.title,
         subtitle: params.subtitle,
         item: params.item,
-        message: 'Failed to read the attachment preview.',
-        helper: message || undefined,
-        error: message || 'Failed to read the attachment preview.',
+        message: friendlyMessage,
+        helper: params.actionLabel ? 'Open the live file preview to inspect the source file.' : undefined,
+        error: friendlyMessage,
+        actionLabel: params.actionLabel,
+        onAction: params.onAction,
       }));
     }
   };
@@ -815,17 +897,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
     }
 
     if (entry.attachmentFile) {
-      await openAttachmentPreview({
-        title: entry.label,
-        subtitle: entry.path,
-        item: fileItemForContextPreview(entry.path, entry.label),
-        file: entry.attachmentFile,
-        helper: 'Showing the attached snapshot that Flower will receive.',
-        actionLabel: 'Open live file preview',
-        onAction: () => {
-          void openFullFilePreview(entry.path);
-        },
-      });
+      await openFullFilePreview(entry.path);
       return;
     }
 
@@ -972,20 +1044,39 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                             <div class="grid grid-cols-1 gap-1 sm:grid-cols-2">
                               <For each={composerCopy()?.contextEntries ?? []}>
                                 {(entry) => (
-                                  <button
-                                    type="button"
-                                    class={`flex min-w-0 items-start gap-2 rounded-[0.95rem] border px-2 py-1.5 text-left text-[11px] font-medium transition-colors cursor-pointer ${entryButtonClass(entry)}`}
-                                    title={entry.title}
-                                    onClick={() => {
-                                      void openContextEntry(entry);
-                                    }}
-                                  >
-                                    <span class="mt-0.5 shrink-0">{entryIcon(entry)}</span>
-                                    <span class="min-w-0 flex-1">
-                                      <span class="block truncate leading-4">{entry.label}</span>
-                                      <span class="mt-0.5 block truncate font-mono text-[11px] leading-4 opacity-75">{entry.detail}</span>
-                                    </span>
-                                  </button>
+                                  <div class="flex min-w-0 items-stretch">
+                                    <button
+                                      type="button"
+                                      class={`flex min-w-0 flex-1 items-start gap-2 border px-2 py-1.5 text-left text-[11px] font-medium transition-colors cursor-pointer ${
+                                        hasAttachedSnapshot(entry) ? 'rounded-l-[0.95rem] rounded-r-none' : 'rounded-[0.95rem]'
+                                      } ${entryButtonClass(entry)}`}
+                                      title={entry.title}
+                                      onClick={() => {
+                                        void openContextEntry(entry);
+                                      }}
+                                    >
+                                      <span class="mt-0.5 shrink-0">{entryIcon(entry)}</span>
+                                      <span class="min-w-0 flex-1">
+                                        <span class="block truncate leading-4">{entry.label}</span>
+                                        <span class="mt-0.5 block truncate font-mono text-[11px] leading-4 opacity-75">{entry.detail}</span>
+                                      </span>
+                                    </button>
+                                    <Show when={hasAttachedSnapshot(entry)}>
+                                      <button
+                                        type="button"
+                                        class={`-ml-px flex w-9 shrink-0 items-center justify-center rounded-l-none rounded-r-[0.95rem] border px-0 py-1.5 transition-colors cursor-pointer ${entryButtonClass(entry)}`}
+                                        aria-label={`Preview attached snapshot for ${entry.label}`}
+                                        title={`Preview attached snapshot for ${entry.label}`}
+                                        onClick={() => {
+                                          if (hasAttachedSnapshot(entry)) {
+                                            void openAttachedSnapshotPreview(entry);
+                                          }
+                                        }}
+                                      >
+                                        <Paperclip class="size-3.5" />
+                                      </button>
+                                    </Show>
+                                  </div>
                                 )}
                               </For>
                             </div>

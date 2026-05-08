@@ -12,6 +12,10 @@ import {
   REDEVEN_WORKBENCH_WHEEL_ROLE_LOCAL_SCROLL_VIEWPORT,
 } from '../workbench/surface/workbenchWheelInteractive';
 
+const filePreviewContextMock = vi.hoisted(() => ({
+  openPreview: vi.fn(async () => undefined),
+}));
+
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Button: (props: any) => (
     <button type="button" onClick={props.onClick} disabled={props.disabled}>
@@ -58,7 +62,7 @@ vi.mock('@floegence/floe-webapp-protocol', () => ({
 
 vi.mock('./FilePreviewContext', () => ({
   useFilePreviewContext: () => ({
-    openPreview: vi.fn(),
+    openPreview: filePreviewContextMock.openPreview,
   }),
 }));
 
@@ -67,7 +71,11 @@ vi.mock('../icons/FlowerIcon', () => ({
 }));
 
 vi.mock('../utils/filePreview', () => ({
-  describeFilePreview: () => ({ mode: 'text' }),
+  describeFilePreview: (value: string) => {
+    const normalized = String(value ?? '').toLowerCase();
+    if (normalized.endsWith('.xlsx') || normalized.endsWith('.xls')) return { mode: 'xlsx' };
+    return { mode: 'text' };
+  },
   FALLBACK_TEXT_FILE_PREVIEW_DESCRIPTOR: { mode: 'text', textPresentation: 'plain', wrapText: true },
   getExtDot: (value: string) => value.slice(value.lastIndexOf('.')).toLowerCase(),
   isLikelyTextContent: () => true,
@@ -163,6 +171,7 @@ function composePrompt(host: HTMLElement, value: string): HTMLTextAreaElement {
 beforeEach(() => {
   vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => setTimeout(() => cb(performance.now()), 0));
   vi.stubGlobal('cancelAnimationFrame', (id: number) => clearTimeout(id));
+  filePreviewContextMock.openPreview.mockClear();
 });
 
 afterEach(() => {
@@ -443,7 +452,7 @@ describe('AskFlowerComposerWindow', () => {
     expect(host.textContent).toContain('/Users/demo/project');
   });
 
-  it('collapses a matching file-browser attachment into a single linked context entry and previews the attached snapshot', async () => {
+  it('collapses a matching file-browser attachment into one live file entry with an explicit snapshot action', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -483,10 +492,102 @@ describe('AskFlowerComposerWindow', () => {
     fileButton?.click();
     await flushAsync();
 
+    expect(filePreviewContextMock.openPreview).toHaveBeenCalledWith(expect.objectContaining({
+      path: '/Users/demo/eslint.config.mjs',
+      name: 'eslint.config.mjs',
+      type: 'file',
+    }));
+    expect(host.querySelector('[data-testid="preview-window"]')).toBeFalsy();
+
+    const snapshotButton = host.querySelector('button[aria-label="Preview attached snapshot for eslint.config.mjs"]') as HTMLButtonElement | null;
+    expect(snapshotButton).toBeTruthy();
+    snapshotButton?.click();
+    await flushAsync();
+
     await vi.waitFor(() => {
       expect(host.querySelector('[data-testid="preview-window"]')).toBeTruthy();
       expect(host.textContent).toContain('Showing the attached snapshot that Flower will receive.');
       expect(host.textContent).toContain('export default [];');
+    });
+  });
+
+  it('shows a lightweight attached snapshot notice for spreadsheet files instead of parsing them inline', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const attachment = setAskFlowerAttachmentSourcePath(
+      new File([new Uint8Array([1, 2, 3])], 'report.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+      '/Users/demo/report.xlsx',
+    );
+
+    render(() => (
+      <AskFlowerComposerWindow
+        open
+        intent={{
+          ...baseIntent,
+          source: 'file_browser',
+          contextItems: [
+            {
+              kind: 'file_path',
+              path: '/Users/demo/report.xlsx',
+              isDirectory: false,
+            },
+          ],
+          pendingAttachments: [attachment],
+        }}
+        onClose={() => undefined}
+        onSend={async () => undefined}
+      />
+    ), host);
+
+    const snapshotButton = host.querySelector('button[aria-label="Preview attached snapshot for report.xlsx"]') as HTMLButtonElement | null;
+    expect(snapshotButton).toBeTruthy();
+    snapshotButton?.click();
+    await flushAsync();
+
+    await vi.waitFor(() => {
+      expect(host.querySelector('[data-testid="preview-window"]')).toBeTruthy();
+      expect(host.textContent).toContain('Spreadsheet snapshots are sent to Flower');
+      expect(host.textContent).toContain('Open live file preview');
+      expect(host.textContent).not.toContain('Maximum call stack size exceeded');
+    });
+  });
+
+  it('maps attachment preview stack overflows to a user-facing recovery message', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const brokenAttachment = new File(['broken'], 'broken.txt', { type: 'text/plain' });
+    Object.defineProperty(brokenAttachment, 'arrayBuffer', {
+      value: async () => {
+        throw new RangeError('Maximum call stack size exceeded');
+      },
+    });
+
+    render(() => (
+      <AskFlowerComposerWindow
+        open
+        intent={{
+          ...baseIntent,
+          source: 'file_browser',
+          pendingAttachments: [brokenAttachment],
+        }}
+        onClose={() => undefined}
+        onSend={async () => undefined}
+      />
+    ), host);
+
+    const attachmentButton = Array.from(host.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('broken.txt') && button.getAttribute('title')?.includes('Preview attachment broken.txt'),
+    );
+    expect(attachmentButton).toBeTruthy();
+    attachmentButton?.click();
+    await flushAsync();
+
+    await vi.waitFor(() => {
+      expect(host.querySelector('[data-testid="preview-window"]')).toBeTruthy();
+      expect(host.textContent).toContain('The attachment preview renderer could not open this snapshot.');
+      expect(host.textContent).not.toContain('Maximum call stack size exceeded');
     });
   });
 });
