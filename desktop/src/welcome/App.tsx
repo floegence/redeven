@@ -5682,7 +5682,7 @@ function ControlPlaneDialog(props: Readonly<{
           />
         </div>
         <div class="text-xs text-muted-foreground">
-          Desktop will open your browser, use your current Portal session to authorize this provider, and store only a revocable desktop authorization locally.
+          Desktop will open your browser, use your current control plane session to authorize this provider, and store only a revocable desktop authorization locally.
         </div>
         <Show when={props.error}>
           <div role="alert" class="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">

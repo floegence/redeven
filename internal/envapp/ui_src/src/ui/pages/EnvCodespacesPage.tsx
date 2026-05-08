@@ -225,7 +225,7 @@ function buildTrustedLauncherCodespaceTarget(args: Readonly<{
 
 async function openCodespace(codeSpaceID: string, setStatus: (s: string) => void): Promise<void> {
   const envPublicID = getEnvPublicIDFromSession();
-  if (!envPublicID) throw new Error("Missing env context. Please reopen from the Redeven Portal.");
+  if (!envPublicID) throw new Error("Missing env context. Please reopen from the control plane.");
 
   const strategy = resolveCodespaceOpenStrategy(codeSpaceID);
 

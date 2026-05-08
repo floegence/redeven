@@ -75,7 +75,7 @@ type Options struct {
 	//
 	// When enabled, the agent is allowed to start even without a full bootstrap config.
 	LocalUIEnabled bool
-	// ControlChannelEnabled indicates whether the agent should connect to the Region Center control channel.
+	// ControlChannelEnabled indicates whether the agent should connect to the control-plane control channel.
 	//
 	// In Local mode, this should be false even when the config is fully bootstrapped.
 	ControlChannelEnabled bool

@@ -29,7 +29,7 @@ func TestWriteEnvironmentCatalogRecordWritesLocalEnvironmentProviderBinding(t *t
 
 	cfg := &Config{
 		ControlplaneBaseURL:      "https://dev.redeven.test",
-		ControlplaneProviderID:   "redeven_portal",
+		ControlplaneProviderID:   "example_control_plane",
 		EnvironmentID:            "env_demo",
 		LocalEnvironmentPublicID: "le_demo",
 		BindingGeneration:        1,
@@ -61,7 +61,7 @@ func TestWriteEnvironmentCatalogRecordWritesLocalEnvironmentProviderBinding(t *t
 	if record.CurrentProviderBinding.ProviderOrigin != "https://dev.redeven.test" {
 		t.Fatalf("CurrentProviderBinding.ProviderOrigin = %q", record.CurrentProviderBinding.ProviderOrigin)
 	}
-	if record.CurrentProviderBinding.ProviderID != "redeven_portal" {
+	if record.CurrentProviderBinding.ProviderID != "example_control_plane" {
 		t.Fatalf("CurrentProviderBinding.ProviderID = %q", record.CurrentProviderBinding.ProviderID)
 	}
 	if record.CurrentProviderBinding.EnvPublicID != "env_demo" {

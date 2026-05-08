@@ -28,7 +28,7 @@ function splitHostname(hostname: string): string[] {
     .filter(Boolean);
 }
 
-function derivePortalBaseDomainFromSandboxBaseDomain(sandboxBaseDomain: string): string | null {
+function deriveControlPlaneBaseDomainFromSandboxBaseDomain(sandboxBaseDomain: string): string | null {
   const labels = splitHostname(sandboxBaseDomain);
   if (labels.length < 2) {
     return null;
@@ -37,11 +37,11 @@ function derivePortalBaseDomainFromSandboxBaseDomain(sandboxBaseDomain: string):
   if (!first.endsWith('-sandbox')) {
     return null;
   }
-  const portalFirst = first.slice(0, -'-sandbox'.length).trim();
-  if (portalFirst === '') {
+  const controlPlaneFirst = first.slice(0, -'-sandbox'.length).trim();
+  if (controlPlaneFirst === '') {
     return null;
   }
-  return [portalFirst, ...rest].join('.');
+  return [controlPlaneFirst, ...rest].join('.');
 }
 
 function deriveRuntimeIsolationBaseDomain(baseDomain: string): string | null {
@@ -76,9 +76,9 @@ function parseSandboxFamily(hostname: string): RemoteSessionFamily | null {
     return null;
   }
   const sandboxBaseDomain = rest.join('.');
-  const portalBaseDomain = derivePortalBaseDomainFromSandboxBaseDomain(sandboxBaseDomain);
-  const runtimeBaseDomain = portalBaseDomain ? deriveRuntimeIsolationBaseDomain(portalBaseDomain) : null;
-  if (!portalBaseDomain || !runtimeBaseDomain) {
+  const controlPlaneBaseDomain = deriveControlPlaneBaseDomainFromSandboxBaseDomain(sandboxBaseDomain);
+  const runtimeBaseDomain = controlPlaneBaseDomain ? deriveRuntimeIsolationBaseDomain(controlPlaneBaseDomain) : null;
+  if (!controlPlaneBaseDomain || !runtimeBaseDomain) {
     return null;
   }
   return {

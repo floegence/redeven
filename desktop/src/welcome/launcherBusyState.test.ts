@@ -62,18 +62,18 @@ describe('launcherBusyState', () => {
     const refreshState = busyStateForLauncherRequest({
       kind: 'refresh_control_plane',
       provider_origin: 'https://cp.example.invalid',
-      provider_id: 'redeven_portal',
+      provider_id: 'example_control_plane',
     });
     const connectState = busyStateForLauncherRequest({
       kind: 'start_control_plane_connect',
       provider_origin: 'https://cp.example.invalid',
-      display_label: 'Demo Portal',
+      display_label: 'Demo Control Plane',
     });
 
     expect(busyStateMatchesControlPlane(
       refreshState,
       'https://cp.example.invalid',
-      'redeven_portal',
+      'example_control_plane',
       ['refresh_control_plane'],
     )).toBe(true);
     expect(busyStateMatchesControlPlane(
@@ -85,7 +85,7 @@ describe('launcherBusyState', () => {
     expect(busyStateMatchesControlPlane(
       connectState,
       'https://cp.example.invalid',
-      'redeven_portal',
+      'example_control_plane',
       ['start_control_plane_connect'],
     )).toBe(true);
   });

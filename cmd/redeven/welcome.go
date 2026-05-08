@@ -87,7 +87,7 @@ func buildEnvAccessURL(controlplaneBaseURL string, envPublicID string) string {
 		return ""
 	}
 
-	// The Region Portal is served at the controlplane origin; /env/:envPublicID opens the environment page.
+	// The environment page is served from the control plane origin at /env/:envPublicID.
 	return (&url.URL{
 		Scheme: u.Scheme,
 		Host:   u.Host,

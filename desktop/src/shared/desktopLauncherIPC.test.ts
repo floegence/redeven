@@ -84,11 +84,11 @@ describe('desktopLauncherIPC', () => {
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'start_control_plane_connect',
       provider_origin: ' https://cp.example.invalid/root ',
-      display_label: ' Redeven Portal ',
+      display_label: ' Example Control Plane ',
     })).toEqual({
       kind: 'start_control_plane_connect',
       provider_origin: 'https://cp.example.invalid',
-      display_label: 'Redeven Portal',
+      display_label: 'Example Control Plane',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'set_local_environment_pinned',

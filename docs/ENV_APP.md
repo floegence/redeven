@@ -279,8 +279,8 @@ Browser side:
 - This same-origin iframe pattern is specific to the trusted Env App origin.
   - When that iframe is hosted inside Redeven Desktop remote sessions, Env App publishes desktop drag-region rectangles for its header, while the Desktop session preload in the top-level document owns the actual native drag overlays.
   - Codespace and port-forward windows opened from Env App use a different path:
-    `cs-*` / `pf-*` trusted launcher -> `rt-*` controller origin -> `app-*` untrusted app origin.
-  - The untrusted app never runs on the same origin as the Env App runtime/controller window.
+    a trusted launcher origin -> an isolated runtime origin -> an untrusted app origin.
+  - The untrusted app never runs on the same origin as the Env App runtime window.
 
 Runtime side:
 
@@ -306,23 +306,21 @@ Runtime side:
 - Terminal initializes new users with the `Dark` color theme and `Monaco` font while still preserving any saved per-user overrides.
 - On mobile, Terminal defaults to the built-in Floe keyboard, keeps taps from auto-triggering the system IME in Floe mode, and offers suggestion rails for recent commands, common commands, scripts, and paths. The default mobile input mode is chosen in Terminal settings as a strict `Floe Keyboard` / `System IME` toggle, while the More menu only exposes temporary show/hide actions when Floe Keyboard mode is active. Floe Keyboard stays as a bottom overlay, the terminal viewport aligns itself to the measured keyboard inset instead of reserving a separate blank spacer above it, and vertical touch drags on the terminal surface are translated into native terminal scrolling on mobile.
 
-## Session bootstrap flow used by the Env App UI
+## Session bootstrap contract used by the Env App UI
 
-The Env App UI runs on sandbox origins and uses the Redeven session-bootstrap flow:
+The Env App UI runs on sandbox origins and consumes a short-lived control-plane bootstrap contract. Public implementations should treat the control plane as the authority that issues browser bootstrap credentials and runtime connection artifacts. The wire-level runtime control-plane protocol is documented in [`protocol/rcpp-v1.md`](protocol/rcpp-v1.md) and [`openapi/rcpp-v1.yaml`](openapi/rcpp-v1.yaml).
 
-- Portal issues a one-time `boot_ticket` for Env App startup.
-- Sandbox bootstrap exchanges `boot_ticket` for an HttpOnly `env_session` cookie.
-- Env App uses `env_session` to mint one-time `entry_ticket` values on demand.
-- `entry_ticket` is then redeemed for a canonical `connect_artifact`, and Flowersec uses the embedded tunnel grant to establish the runtime session.
+- Browser bootstrap credentials are short-lived and origin-scoped.
+- Runtime connection artifacts are minted on demand and used by Flowersec to establish the encrypted runtime session.
 - The shared browser bootstrap helper layer for artifact fetching, reconnect config assembly, and default `proxy.runtime` scope validation is now consumed from released `@floegence/floe-webapp-boot`; Redeven keeps runtime preflight, Local UI direct artifacts, access resume, and recovery UX as product-owned logic.
-- In Local UI mode, the browser still uses the same canonical shape: Local UI mints a direct-transport `connect_artifact`, and the Env App reconnect contract stays artifact-first even though the underlying transport is direct instead of tunnel.
+- In Local UI mode, the browser still uses the same canonical shape: Local UI mints a direct-transport runtime connection artifact, and the Env App reconnect contract stays artifact-first even though the underlying transport is direct instead of tunnel.
 
 Security baseline:
 
 - Env App UI never stores long-lived capability credentials in browser storage.
 - High-value credentials are HttpOnly cookies scoped to the sandbox origin.
-- One-time `entry_ticket` values are exchanged on demand with short TTL.
-- If sandbox session context is missing or expired, the browser must return to the Redeven web app for re-issuance.
+- One-time browser bootstrap credentials are exchanged on demand with short TTL.
+- If sandbox session context is missing or expired, the browser must return to the control plane for re-issuance.
 
 ## Reconnect recovery strategy
 
@@ -427,12 +425,12 @@ When opening a codespace, the Env App mints a one-time ticket for `com.floegence
 
 Notes:
 
-- Codespace/3rd-party app windows never receive `boot_ticket` or `env_session`. They only get one-time `entry_ticket`.
+- Codespace/3rd-party app windows never receive long-lived control-plane credentials. They only get short-lived bootstrap credentials scoped to the requested app launch.
 - In normal browser sessions, Env App still uses a pre-opened popup/tab so user-triggered navigation stays within browser popup-blocker rules.
-- In Redeven Desktop, Codespaces `Open` does not stay inside Electron. Env App asks the desktop shell bridge to open the final Codespaces URL in the system browser, while keeping the same one-time `entry_ticket` bootstrap contract.
+- In Redeven Desktop, Codespaces `Open` does not stay inside Electron. Env App asks the desktop shell bridge to open the final Codespaces URL in the system browser, while keeping the same short-lived bootstrap contract.
 - If the desktop-managed Local UI is password-protected, the first protected Local UI request can still start from a `redeven_access_resume` token. Local UI exchanges that resume token into the standard local access cookie before returning the protected Codespaces page so later same-origin asset requests do not need to keep carrying the token.
-- If a codespace window is refreshed after the hash is cleared, it can request a fresh `entry_ticket` from the opener Env App via `postMessage` handshake.
-- If the desktop-opened browser window no longer has an opener, the trusted launcher still keeps `?env=` so the existing independent-open recovery flow can redirect back through Portal / Env App bootstrap when needed.
+- If a codespace window is refreshed after the hash is cleared, it can request a fresh bootstrap credential from the opener Env App via `postMessage` handshake.
+- If the desktop-opened browser window no longer has an opener, the trusted launcher still keeps `?env=` so the existing independent-open recovery flow can redirect back through the control plane / Env App bootstrap when needed.
 - Codespaces cards also expose right-click `Ask Flower` and `Open in Terminal` actions. `Ask Flower` stays first to match the broader Env App handoff ordering, while `Open in Terminal` opens a terminal session rooted at `workspace_path`. The `Ask Flower` action sends that same `workspace_path` as directory context so the composer keeps the same folder-oriented prompt copy used by File Browser directory launches.
 - Codespaces does **not** auto-install `code-server`. When the runtime is missing or unusable, Env App shows an explicit install UI and waits for the user to click `Install and use for this Local Environment` or `Install latest and use for this Local Environment`.
 - Runtime Settings -> `Codespaces & Tooling` also exposes a dedicated `code-server Runtime` management card. It separates steady runtime status from transient management activity:

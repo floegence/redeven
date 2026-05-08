@@ -27,8 +27,8 @@ function formatPerm(e: AgentAuditEntry): string {
 function kindLabel(kind: string): string {
   const v = String(kind ?? '').trim();
   switch (v) {
-    case 'portal':
-      return 'Portal';
+    case 'control_plane':
+      return 'Control Plane';
     case 'envapp_rpc':
     case 'envapp_proxy':
       return 'Env UI';

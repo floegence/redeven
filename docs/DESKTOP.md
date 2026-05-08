@@ -513,11 +513,10 @@ Desktop supports compatible first-party and third-party control planes through o
 - provider Environment open session: `POST /api/rcpp/v1/environments/:env_public_id/desktop/open-session`
 - runtime bootstrap exchange: `POST /api/rcpp/v1/runtime/bootstrap/exchange`
 
-Canonical provider references in `redeven-portal`:
+Public provider protocol references:
 
-- end-user guide: Portal console docs (`/docs/control-plane-providers`)
-- formal RCPP v1 specification: [https://github.com/floegence/redeven-portal/blob/main/docs/protocol/rcpp-v1.md](https://github.com/floegence/redeven-portal/blob/main/docs/protocol/rcpp-v1.md)
-- machine-readable OpenAPI: [https://github.com/floegence/redeven-portal/blob/main/docs/openapi/rcpp-v1.yaml](https://github.com/floegence/redeven-portal/blob/main/docs/openapi/rcpp-v1.yaml)
+- formal RCPP v1 specification: [`docs/protocol/rcpp-v1.md`](protocol/rcpp-v1.md)
+- machine-readable OpenAPI: [`docs/openapi/rcpp-v1.yaml`](openapi/rcpp-v1.yaml)
 
 Desktop assumptions:
 

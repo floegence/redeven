@@ -25,8 +25,8 @@ import {
 
 const testProvider = normalizeDesktopControlPlaneProvider({
   protocol_version: 'rcpp-v1',
-  provider_id: 'redeven_portal',
-  display_name: 'Redeven Portal',
+  provider_id: 'example_control_plane',
+  display_name: 'Example Control Plane',
   provider_origin: 'https://cp.example.invalid',
   documentation_url: 'https://cp.example.invalid/docs/control-plane-providers',
 });
@@ -34,7 +34,7 @@ const testProvider = normalizeDesktopControlPlaneProvider({
 function providerRuntimeState(envPublicID = 'env_demo') {
   return {
     controlplane_base_url: 'https://cp.example.invalid',
-    controlplane_provider_id: 'redeven_portal',
+    controlplane_provider_id: 'example_control_plane',
     env_public_id: envPublicID,
   };
 }
@@ -75,7 +75,7 @@ describe('desktopWelcomeState', () => {
           'http://192.168.1.11:24000/',
         ],
         control_plane_refresh_tokens: {
-          'https://cp.example.invalid|redeven_portal': 'refresh-123',
+          'https://cp.example.invalid|example_control_plane': 'refresh-123',
         },
         control_planes: testProvider ? [{
           provider: testProvider,
@@ -99,7 +99,7 @@ describe('desktopWelcomeState', () => {
             lifecycle_status: 'active',
             last_seen_at_unix_ms: 123,
           }],
-          display_label: 'Demo Portal',
+          display_label: 'Demo Control Plane',
           last_synced_at_ms: 500,
         }] : [],
       }),
@@ -168,7 +168,7 @@ describe('desktopWelcomeState', () => {
         category: 'provider',
         is_open: false,
         provider_origin: 'https://cp.example.invalid',
-        provider_id: 'redeven_portal',
+        provider_id: 'example_control_plane',
         env_public_id: 'env_demo',
       }),
       expect.objectContaining({
@@ -203,7 +203,7 @@ describe('desktopWelcomeState', () => {
     expect(snapshot.control_planes).toEqual([
       expect.objectContaining({
         provider: expect.objectContaining({
-          provider_id: 'redeven_portal',
+          provider_id: 'example_control_plane',
           provider_origin: 'https://cp.example.invalid',
         }),
         account: expect.objectContaining({
@@ -660,22 +660,22 @@ describe('desktopWelcomeState', () => {
       controlPlanes: [{
         provider: {
           protocol_version: 'rcpp-v1',
-          provider_id: 'redeven_portal',
-          display_name: 'Redeven Portal',
+          provider_id: 'example_control_plane',
+          display_name: 'Example Control Plane',
           provider_origin: 'https://cp.example.invalid',
           documentation_url: 'https://cp.example.invalid/docs/control-plane-providers',
         },
         account: {
-          provider_id: 'redeven_portal',
+          provider_id: 'example_control_plane',
           provider_origin: 'https://cp.example.invalid',
-          display_name: 'Redeven Portal',
+          display_name: 'Example Control Plane',
           user_public_id: 'user_demo',
           user_display_name: 'Demo User',
           authorization_expires_at_unix_ms: Date.now() + 60_000,
         },
-        display_label: 'Demo Portal',
+        display_label: 'Demo Control Plane',
         environments: [{
-          provider_id: 'redeven_portal',
+          provider_id: 'example_control_plane',
           provider_origin: 'https://cp.example.invalid',
           env_public_id: 'env_demo',
           label: 'Demo Environment',
@@ -759,7 +759,7 @@ describe('desktopWelcomeState', () => {
             lifecycle_status: 'suspended',
             last_seen_at_unix_ms: 456,
           }],
-          display_label: 'Demo Portal',
+          display_label: 'Demo Control Plane',
           last_synced_at_ms: 500,
         }] : [],
       }),
@@ -769,9 +769,9 @@ describe('desktopWelcomeState', () => {
       expect.objectContaining({
         id: providerEnvironment.id,
         provider_origin: 'https://cp.example.invalid',
-        provider_id: 'redeven_portal',
+        provider_id: 'example_control_plane',
         env_public_id: 'env_demo',
-        control_plane_label: 'Demo Portal',
+        control_plane_label: 'Demo Control Plane',
         provider_status: 'offline',
         provider_lifecycle_status: 'suspended',
         provider_last_seen_at_unix_ms: 456,
@@ -815,7 +815,7 @@ describe('desktopWelcomeState', () => {
           provider: testProvider,
           account: summaryAccount,
           environments: [summaryEnvironment],
-          display_label: 'Demo Portal',
+          display_label: 'Demo Control Plane',
           last_synced_at_ms: freshSyncAt,
         }],
       }),
@@ -823,7 +823,7 @@ describe('desktopWelcomeState', () => {
         provider: testProvider,
         account: summaryAccount,
         environments: [summaryEnvironment],
-        display_label: 'Demo Portal',
+        display_label: 'Demo Control Plane',
         last_synced_at_ms: freshSyncAt,
         sync_state: 'ready',
         last_sync_attempt_at_ms: freshSyncAt,
@@ -877,7 +877,7 @@ describe('desktopWelcomeState', () => {
           provider: testProvider,
           account: summaryAccount,
           environments: [],
-          display_label: 'Demo Portal',
+          display_label: 'Demo Control Plane',
           last_synced_at_ms: freshSyncAt,
         }],
       }),
@@ -885,7 +885,7 @@ describe('desktopWelcomeState', () => {
         provider: testProvider,
         account: summaryAccount,
         environments: [],
-        display_label: 'Demo Portal',
+        display_label: 'Demo Control Plane',
         last_synced_at_ms: freshSyncAt,
         sync_state: 'ready',
         last_sync_attempt_at_ms: freshSyncAt,

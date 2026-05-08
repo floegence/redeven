@@ -1,20 +1,20 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  derivePortalBaseDomainFromSandboxBaseDomain,
-  portalOriginFromSandboxLocation,
+  deriveControlPlaneBaseDomainFromSandboxBaseDomain,
+  controlPlaneOriginFromSandboxLocation,
   trustedLauncherOriginFromSandboxLocation,
 } from './sandboxOrigins';
 
 describe('sandboxOrigins', () => {
-  it('maps sandbox base domains back to the portal base domain', () => {
-    expect(derivePortalBaseDomainFromSandboxBaseDomain('redeven-sandbox.test')).toBe('redeven.test');
-    expect(derivePortalBaseDomainFromSandboxBaseDomain('redeven-sandbox.test')).toBe('redeven.test');
+  it('maps sandbox base domains back to the control plane base domain', () => {
+    expect(deriveControlPlaneBaseDomainFromSandboxBaseDomain('redeven-sandbox.test')).toBe('redeven.test');
+    expect(deriveControlPlaneBaseDomainFromSandboxBaseDomain('redeven-sandbox.test')).toBe('redeven.test');
   });
 
-  it('maps sandbox origins back to the regional portal origin', () => {
+  it('maps sandbox origins back to the regional control plane origin', () => {
     expect(
-      portalOriginFromSandboxLocation({
+      controlPlaneOriginFromSandboxLocation({
         protocol: 'https:',
         hostname: 'env-demo.dev.redeven-sandbox.test',
         port: '',
@@ -22,9 +22,9 @@ describe('sandboxOrigins', () => {
     ).toBe('https://dev.redeven.test');
   });
 
-  it('preserves explicit ports when deriving the portal origin', () => {
+  it('preserves explicit ports when deriving the control plane origin', () => {
     expect(
-      portalOriginFromSandboxLocation({
+      controlPlaneOriginFromSandboxLocation({
         protocol: 'https:',
         hostname: 'env-demo.dev.redeven-sandbox.test',
         port: '8443',
@@ -60,7 +60,7 @@ describe('sandboxOrigins', () => {
 
   it('rejects invalid sandbox hosts', () => {
     expect(() =>
-      portalOriginFromSandboxLocation({
+      controlPlaneOriginFromSandboxLocation({
         protocol: 'https:',
         hostname: 'env-demo.dev.redeven.test',
         port: '',

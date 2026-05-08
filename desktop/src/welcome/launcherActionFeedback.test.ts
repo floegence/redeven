@@ -91,7 +91,7 @@ describe('launcherActionFeedback', () => {
       scope: 'control_plane',
       message: 'Desktop needs fresh provider authorization before it can request a one-time Local Environment bootstrap ticket for this Environment.',
       provider_origin: 'https://cp.example.invalid',
-      provider_id: 'redeven_portal',
+      provider_id: 'example_control_plane',
       env_public_id: 'env_demo',
       should_refresh_snapshot: true,
     })).toEqual({
@@ -104,7 +104,7 @@ describe('launcherActionFeedback', () => {
         kind: 'reconnect_control_plane',
         label: 'Reconnect Provider',
         provider_origin: 'https://cp.example.invalid',
-        provider_id: 'redeven_portal',
+        provider_id: 'example_control_plane',
       },
       auto_dismiss: false,
     });

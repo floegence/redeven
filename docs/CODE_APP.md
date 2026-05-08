@@ -15,12 +15,12 @@ This document describes the **Code App** implementation in the Redeven runtime:
 ## What runs where
 
 - Browser side:
-  - A trusted launcher origin (`cs-*` or `pf-*`) exchanges the one-time `entry_ticket` for a canonical `connect_artifact`, and Flowersec uses the embedded tunnel grant to establish the runtime session.
-  - The browser then navigates to a controller origin (`rt-*`) that owns the real Flowersec proxy runtime.
-  - The controller origin loads the actual app in an `app-*` iframe, so the untrusted app is not same-origin with the runtime/controller window.
-  - An app-origin Service Worker forwards `fetch()` through a cross-origin bridge to the controller runtime.
+  - A trusted launcher origin exchanges a short-lived bootstrap credential for a runtime connection artifact, and Flowersec uses the embedded tunnel grant to establish the runtime session.
+  - The browser then navigates to an isolated runtime origin that owns the real Flowersec proxy runtime.
+  - The runtime origin loads the actual app in an untrusted app iframe, so the app is not same-origin with the runtime window.
+  - An app-origin Service Worker forwards `fetch()` through a cross-origin bridge to the runtime.
   - The injected script patches same-origin `WebSocket` so it also goes through `flowersec-proxy/ws`, but it now uses `registerCodeAppProxyBridge()` instead of reading `window.top.__flowersecProxyRuntime`.
-  - In Redeven Desktop, Env App requests the desktop shell to open Codespaces in the system browser, but the browser-facing bootstrap contract stays the same: the first load still starts from the trusted launcher with a one-time `entry_ticket`.
+  - In Redeven Desktop, Env App requests the desktop shell to open Codespaces in the system browser, but the browser-facing bootstrap contract stays the same: the first load still starts from the trusted launcher with a short-lived bootstrap credential.
   - For desktop-managed Local UI with an access password, the first protected `http://127.0.0.1:23998/cs/<code_space_id>/...` request can arrive with only `redeven_access_resume`. Local UI exchanges that resume token into the normal `redeven_local_access` cookie before returning the page so code-server subresources can continue on the standard same-origin session path.
 
 - Runtime side:
@@ -248,7 +248,7 @@ This is conservative: code-server is not designed to enforce a partial permissio
     - `~/.redeven/apps/code/spaces/<code_space_id>/codeserver/user-data/logs/<timestamp>/`
 
 - "Handshake timed out":
-  - Ensure the launcher/controller bootstrap can load `/_redeven_boot/`, and the app origin can load `/_redeven_app/` plus `/_redeven_app_sw.js`.
+  - Ensure the launcher/runtime bootstrap can load the configured Redeven bootstrap routes.
   - Ensure popups are allowed.
-  - If you refreshed the codespace window after the bootstrap cleared the URL hash, the page must re-request a fresh `entry_ticket` from its opener (Env App). Reopen the codespace from the Env App if the opener is gone.
+  - If you refreshed the codespace window after the bootstrap cleared the URL hash, the page must re-request a fresh bootstrap credential from its opener (Env App). Reopen the codespace from the Env App if the opener is gone.
   - Ensure the runtime is online and reachable via the configured Flowersec tunnel endpoint.

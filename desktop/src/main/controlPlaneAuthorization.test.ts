@@ -13,18 +13,18 @@ describe('controlPlaneAuthorization', () => {
   it('creates a pending authorization with a local PKCE verifier and challenge', () => {
     const pending = createPendingControlPlaneAuthorization({
       providerOrigin: 'https://dev.redeven.test/provider/path?q=1',
-      providerID: 'redeven_portal',
+      providerID: 'example_control_plane',
       requestedEnvPublicID: ' env_demo ',
       label: ' Demo Environment ',
-      displayLabel: ' Demo Portal ',
+      displayLabel: ' Demo Control Plane ',
       now: 1_710_000_000_000,
     });
 
     expect(pending.provider_origin).toBe('https://dev.redeven.test');
-    expect(pending.provider_id).toBe('redeven_portal');
+    expect(pending.provider_id).toBe('example_control_plane');
     expect(pending.requested_env_public_id).toBe('env_demo');
     expect(pending.label).toBe('Demo Environment');
-    expect(pending.display_label).toBe('Demo Portal');
+    expect(pending.display_label).toBe('Demo Control Plane');
     expect(pending.code_verifier).toHaveLength(43);
     expect(pending.code_challenge).toHaveLength(43);
     expect(pending.code_challenge).toBe(buildControlPlaneCodeChallenge(pending.code_verifier));

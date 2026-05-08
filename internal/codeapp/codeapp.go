@@ -69,7 +69,7 @@ type Service struct {
 	stateDir     string
 	agentHomeDir string
 
-	// controlplane origin is the Region Portal base (scheme + <region>.<base-domain>).
+	// Control plane origin is the environment URL base (scheme + <region>.<base-domain>).
 	// Trusted launcher origins are derived from it as:
 	//   <sandbox_id>.<region>.<base-sandbox-domain>
 	cpOrigin controlplaneOrigin

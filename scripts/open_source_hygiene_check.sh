@@ -114,7 +114,13 @@ check_public_domain_literals
 run_pattern_check "(?i)\\b(release hook|package mirror|delivery branch|version endpoint|installer wrapper)\\b|REDEVEN_[A-Z_]*(DISPATCH|TARGET)_[A-Z_]*" \
   "Internal delivery pipeline details must not appear in this public repository."
 
-# Rule 4: block private delivery assets from being tracked again.
+# Rule 4: block private control-plane product naming without banning technical portal terminology.
+run_pattern_check "(?i)(^|[^[:alnum:]])(redeven[-_ ]portal|portal session|region portal|portal console)([^[:alnum:]]|$)" \
+  "Private control-plane product naming must not appear in this public repository."
+run_pattern_check "\\b[A-Za-z0-9_]*Portal[A-Z][A-Za-z0-9_]*\\b|\\bportal(Origin|BaseDomain|First)\\b|case ['\\\"]portal['\\\"]" \
+  "Private control-plane product naming must not appear in this public repository."
+
+# Rule 5: block private delivery assets from being tracked again.
 while IFS= read -r -d '' file_path; do
   [ -e "$file_path" ] || continue
   case "$file_path" in
@@ -125,7 +131,7 @@ while IFS= read -r -d '' file_path; do
   esac
 done <"$selected_files"
 
-# Rule 5: secret scan must be clean.
+# Rule 6: secret scan must be clean.
 if ! gitleaks detect --source . --no-git --redact --exit-code 1 --config .gitleaks.toml >/dev/null; then
   echo "[ERROR] gitleaks detected potential secrets." >&2
   failed=1

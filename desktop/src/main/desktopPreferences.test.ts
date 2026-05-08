@@ -58,8 +58,8 @@ function draft(overrides: Partial<DesktopSettingsDraft> = {}): DesktopSettingsDr
 function buildTestControlPlaneProvider(providerOrigin = 'https://cp.example.invalid') {
   const provider = normalizeDesktopControlPlaneProvider({
     protocol_version: 'rcpp-v1',
-    provider_id: 'redeven_portal',
-    display_name: 'Redeven Portal',
+    provider_id: 'example_control_plane',
+    display_name: 'Example Control Plane',
     provider_origin: providerOrigin,
     documentation_url: `${providerOrigin}/docs/control-plane-providers`,
   });
@@ -283,8 +283,8 @@ describe('desktopPreferences', () => {
   it('stores control plane refresh tokens only in secrets while keeping account summaries in preferences', async () => {
     const provider = normalizeDesktopControlPlaneProvider({
       protocol_version: 'rcpp-v1',
-      provider_id: 'redeven_portal',
-      display_name: 'Redeven Portal',
+      provider_id: 'example_control_plane',
+      display_name: 'Example Control Plane',
       provider_origin: 'https://region.example.invalid',
       documentation_url: 'https://region.example.invalid/docs/control-plane-providers',
     });
@@ -316,7 +316,7 @@ describe('desktopPreferences', () => {
           last_seen_at_unix_ms: 123,
         }],
         refresh_token: 'refresh-demo-token',
-        display_label: 'Demo Portal',
+        display_label: 'Demo Control Plane',
         last_synced_at_ms: 456,
       });
 
@@ -360,7 +360,7 @@ describe('desktopPreferences', () => {
         expect.objectContaining({
           id: 'cp:https%3A%2F%2Fregion.example.invalid:env:env_demo',
           provider_origin: 'https://region.example.invalid',
-          provider_id: 'redeven_portal',
+          provider_id: 'example_control_plane',
           env_public_id: 'env_demo',
           label: 'Demo Environment',
           remote_catalog_entry: expect.objectContaining({
@@ -781,7 +781,7 @@ describe('desktopPreferences', () => {
       account: buildTestControlPlaneAccount(provider),
       environments: [buildTestProviderEnvironment(provider)],
       refresh_token: 'refresh-demo-token',
-      display_label: 'Demo Portal',
+      display_label: 'Demo Control Plane',
       last_synced_at_ms: 456,
     });
 
@@ -792,7 +792,7 @@ describe('desktopPreferences', () => {
       expect.objectContaining({
         id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
         provider_origin: 'https://cp.example.invalid',
-        provider_id: 'redeven_portal',
+        provider_id: 'example_control_plane',
         env_public_id: 'env_demo',
         label: 'Demo Environment',
         remote_catalog_entry: expect.objectContaining({
@@ -808,7 +808,7 @@ describe('desktopPreferences', () => {
     expect(next.control_planes[0]?.environments).toEqual([
       expect.objectContaining({
         provider_origin: 'https://cp.example.invalid',
-        provider_id: 'redeven_portal',
+        provider_id: 'example_control_plane',
         env_public_id: 'env_demo',
         label: 'Demo Environment',
       }),
@@ -833,7 +833,7 @@ describe('desktopPreferences', () => {
         lifecycle_status: 'suspended',
       })],
       refresh_token: 'refresh-demo-token',
-      display_label: 'Demo Portal',
+      display_label: 'Demo Control Plane',
       last_synced_at_ms: 456,
     });
 
@@ -851,7 +851,7 @@ describe('desktopPreferences', () => {
         lifecycle_status: 'suspended',
       }),
       provider_origin: 'https://cp.example.invalid',
-      provider_id: 'redeven_portal',
+      provider_id: 'example_control_plane',
       env_public_id: 'env_demo',
     }));
     expect(merged).not.toHaveProperty('local_runtime');
@@ -878,7 +878,7 @@ describe('desktopPreferences', () => {
       id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
       label: 'Desktop Demo',
       provider_origin: 'https://cp.example.invalid',
-      provider_id: 'redeven_portal',
+      provider_id: 'example_control_plane',
       env_public_id: 'env_demo',
       preferred_open_route: 'local_host',
     }));
@@ -969,7 +969,7 @@ describe('desktopPreferences', () => {
       account: buildTestControlPlaneAccount(provider),
       environments: [],
       refresh_token: 'refresh-demo-token',
-      display_label: 'Demo Portal',
+      display_label: 'Demo Control Plane',
       last_synced_at_ms: 456,
     });
 
@@ -1003,44 +1003,44 @@ describe('desktopPreferences', () => {
           otherProviderEnvironment,
         ],
         control_plane_refresh_tokens: {
-          'https://cp.example.invalid|redeven_portal': 'refresh-demo-token',
-          'https://other.example.invalid|redeven_portal': 'refresh-other-token',
+          'https://cp.example.invalid|example_control_plane': 'refresh-demo-token',
+          'https://other.example.invalid|example_control_plane': 'refresh-other-token',
         },
         control_planes: [{
           provider,
           account: buildTestControlPlaneAccount(provider),
           environments: [buildTestProviderEnvironment(provider)],
-          display_label: 'Demo Portal',
+          display_label: 'Demo Control Plane',
           last_synced_at_ms: 456,
         }, {
           provider: otherProvider,
           account: buildTestControlPlaneAccount(otherProvider),
           environments: [buildTestProviderEnvironment(otherProvider, 'env_other')],
-          display_label: 'Other Portal',
+          display_label: 'Other Control Plane',
           last_synced_at_ms: 789,
         }],
       }), providerEnvironment.id),
       providerEnvironment.id,
       true,
     );
-    const next = deleteSavedControlPlane(preferencesWithProviderState, 'https://cp.example.invalid', 'redeven_portal');
+    const next = deleteSavedControlPlane(preferencesWithProviderState, 'https://cp.example.invalid', 'example_control_plane');
 
     expect(next.control_planes).toEqual([
       expect.objectContaining({
         provider: expect.objectContaining({
           provider_origin: 'https://other.example.invalid',
-          provider_id: 'redeven_portal',
+          provider_id: 'example_control_plane',
         }),
       }),
     ]);
     expect(next.control_plane_refresh_tokens).toEqual({
-      'https://other.example.invalid|redeven_portal': 'refresh-other-token',
+      'https://other.example.invalid|example_control_plane': 'refresh-other-token',
     });
     expect(next.provider_environments).toEqual([
       expect.objectContaining({
         id: otherProviderEnvironment.id,
         provider_origin: 'https://other.example.invalid',
-        provider_id: 'redeven_portal',
+        provider_id: 'example_control_plane',
         env_public_id: 'env_other',
         pinned: true,
       }),

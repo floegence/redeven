@@ -583,7 +583,7 @@ func (c *cli) runCmd(args []string) int {
 
 		// In local-only modes, print after the Local UI is ready.
 		// In remote-connected modes, print after the control channel connects so the
-		// final portal URL and Local UI URL are both available together.
+		// final environment URL and Local UI URL are both available together.
 		if !controlChannelEnabled {
 			announce()
 		}

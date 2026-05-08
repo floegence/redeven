@@ -106,7 +106,7 @@ export function createAgentMaintenanceController(args: CreateAgentMaintenanceCon
 
     const envId = String(args.envId() ?? '').trim();
     if (!envId) {
-      const message = 'Missing env context. Please reopen from the Redeven Portal.';
+      const message = 'Missing env context. Please reopen from the control plane.';
       setError(message);
       args.notify.error(nextKind === 'upgrade' ? 'Update failed' : 'Restart failed', message);
       return;
