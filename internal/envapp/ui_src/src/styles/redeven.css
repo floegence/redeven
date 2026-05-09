@@ -3494,26 +3494,87 @@ a.chat-sources-cell-url:focus-visible {
   }
 }
 
-.workbench-entry-intro {
+.redeven-workbench-progress-curtain {
   position: absolute;
   inset: 0;
   z-index: 45;
+  display: grid;
+  place-items: center;
+  padding: clamp(1.5rem, 5vw, 4rem);
   pointer-events: auto;
+  color: var(--foreground);
+  background: var(--background);
+}
+
+.redeven-workbench-progress-curtain__panel {
+  width: min(24rem, 100%);
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 1rem;
+}
+
+.redeven-workbench-progress-curtain__eyebrow {
+  color: color-mix(in srgb, var(--foreground) 38%, transparent);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.redeven-workbench-progress-curtain__indicator {
+  width: 10rem;
+  height: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
   overflow: hidden;
-  perspective: 1400px;
 }
 
-.redeven-workbench-intro-preparing {
-  opacity: 0;
-  pointer-events: none;
+.redeven-workbench-progress-curtain__indicator-bar {
+  width: 50%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--foreground) 30%, transparent) 50%,
+    transparent
+  );
+  animation: redeven-workbench-curtain-sweep 2s ease-in-out infinite;
+  will-change: transform;
 }
 
-.workbench-entry-intro__veil {
-  position: absolute;
-  inset: 0;
+@keyframes redeven-workbench-curtain-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  50%,
+  100% {
+    transform: translateX(200%);
+  }
+}
+
+.redeven-workbench-progress-curtain__message {
+  color: color-mix(in srgb, var(--foreground) 55%, transparent);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  font-weight: 480;
+}
+
+html.dark .redeven-workbench-progress-curtain {
   background:
-    radial-gradient(circle at center, color-mix(in srgb, var(--background) 78%, transparent), transparent 48%),
-    radial-gradient(circle at center, color-mix(in srgb, var(--primary) 8%, transparent), transparent 62%);
+    linear-gradient(180deg, color-mix(in srgb, var(--background) 82%, #111827 18%), color-mix(in srgb, var(--background) 92%, #0f172a 8%)),
+    var(--background);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .redeven-workbench-progress-curtain__indicator-bar {
+    animation: none;
+    background: color-mix(in srgb, var(--foreground) 15%, transparent);
+    width: 100%;
+  }
 }
 
 .workbench-surface[data-workbench-theme='default'] {

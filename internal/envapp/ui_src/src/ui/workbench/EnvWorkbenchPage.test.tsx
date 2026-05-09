@@ -288,10 +288,6 @@ function persistedWidget(widget_id: string, widget_type: string, title: string, 
   };
 }
 
-vi.mock('@floegence/floe-webapp-core/loading', () => ({
-  LoadingOverlay: () => null,
-}));
-
 vi.mock('../pages/EnvContext', () => ({
   useEnvContext: () => ({
     env_id: envId,
@@ -686,6 +682,35 @@ describe('EnvWorkbenchPage', () => {
       expect.objectContaining({ type: 'redeven.files', singleton: false }),
       expect.objectContaining({ type: 'redeven.preview', singleton: false }),
     ]));
+  });
+
+  it('uses a full-screen progress curtain until the runtime layout is ready', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const layout = deferred<any>();
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockReturnValueOnce(layout.promise);
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    const curtain = host.querySelector('.redeven-workbench-progress-curtain') as HTMLElement | null;
+    expect(curtain).toBeTruthy();
+    expect(curtain?.getAttribute('data-redeven-workbench-progress-stage')).toBe('layout');
+    expect(host.querySelector('.workbench-entry-intro')).toBeNull();
+    expect(host.querySelector('.redeven-workbench-intro-preparing')).toBeNull();
+    expect(host.textContent).toContain('Loading layout');
+
+    layout.resolve({
+      seq: 0,
+      revision: 0,
+      updated_at_unix_ms: 0,
+      widgets: [],
+      widget_states: [],
+    });
+    await flushMicrotasks();
+
+    expect(host.querySelector('.redeven-workbench-progress-curtain')).toBeNull();
+    expect(host.textContent).not.toContain('Loading workbench');
   });
 
   it('shows the global min-scale HUD action even without a selected widget', async () => {

@@ -1,4 +1,3 @@
-import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import {
   createDefaultWorkbenchState,
   sanitizeWorkbenchState,
@@ -93,7 +92,10 @@ import {
   readLegacyWorkbenchThemeMigration,
   removeLegacyWorkbenchAppearance,
 } from './workbenchThemeMigration';
-import { WorkbenchEntryIntro } from './WorkbenchEntryIntro';
+import {
+  WorkbenchProgressCurtain,
+  type WorkbenchProgressCurtainStage,
+} from './WorkbenchProgressCurtain';
 
 const WORKBENCH_PERSIST_DELAY_MS = 120;
 const WORKBENCH_LAYOUT_FLUSH_DELAY_MS = 160;
@@ -610,15 +612,9 @@ export function EnvWorkbenchPage() {
   const [focusHistory, setFocusHistory] = createSignal<string[]>([]);
   const [widgetRemoveGuards, setWidgetRemoveGuards] = createSignal<Record<string, () => boolean>>({});
   const [localOwnerHandoffActive, setLocalOwnerHandoffActive] = createSignal(false);
-  const [introSurfaceHost, setIntroSurfaceHost] = createSignal<HTMLDivElement>();
+  const [surfaceHost, setSurfaceHost] = createSignal<HTMLDivElement>();
   const [workbenchHudMount, setWorkbenchHudMount] = createSignal<HTMLDivElement | null>(null);
-  const [introPreparing, setIntroPreparing] = createSignal(true);
-  const [introVisible, setIntroVisible] = createSignal(false);
-  const [introSequence, setIntroSequence] = createSignal(0);
-  const [introDecisionMade, setIntroDecisionMade] = createSignal(false);
   let localOwnerHandoffToken = 0;
-  let introStartFrame: number | undefined;
-  let introStartSettleFrame: number | undefined;
   let canvasScaleAnimationFrame: number | undefined;
   let canvasScaleAnimationToken = 0;
   let layoutInteractionVisualSettleTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
@@ -642,6 +638,26 @@ export function EnvWorkbenchPage() {
       .map((state) => [state.widget_id, runtimePreviewItemToFileItem(
         (state.state as Extract<RuntimeWorkbenchWidgetStateData, { kind: 'preview' }>).item as RuntimeWorkbenchPreviewItem,
       )]),
+  ));
+  const workbenchCurtainStage = createMemo<WorkbenchProgressCurtainStage>(() => {
+    if (env.connectionOverlayVisible()) {
+      return 'connecting';
+    }
+    if (!runtimeLayoutReady()) {
+      return 'layout';
+    }
+    if (!surfaceApi()) {
+      return 'canvas';
+    }
+    return 'ready';
+  });
+  const workbenchCurtainVisible = createMemo(() => (
+    env.connectionOverlayVisible()
+    || !runtimeLayoutReady()
+    || !surfaceApi()
+  ));
+  const workbenchCurtainMessage = createMemo(() => (
+    env.connectionOverlayVisible() ? env.connectionOverlayMessage() : undefined
   ));
   const knownPreviewItemsByWidgetId = createMemo<Record<string, FileItem>>(() => ({
     ...instanceState().previewItemsByWidgetId,
@@ -728,7 +744,7 @@ export function EnvWorkbenchPage() {
   };
 
   const resolveCanvasFrameSize = (): { width: number; height: number } => {
-    const host = introSurfaceHost();
+    const host = surfaceHost();
     const frame = host?.querySelector('[data-floe-workbench-canvas-frame="true"]') as HTMLElement | null;
     const rect = frame?.getBoundingClientRect();
     const hostRect = host?.getBoundingClientRect();
@@ -749,7 +765,7 @@ export function EnvWorkbenchPage() {
       return null;
     }
 
-    const host = introSurfaceHost();
+    const host = surfaceHost();
     const frame = host?.querySelector('[data-floe-workbench-canvas-frame="true"]') as HTMLElement | null;
     const rect = frame?.getBoundingClientRect();
     const scale = Number(workbenchState().viewport.scale);
@@ -1571,7 +1587,7 @@ export function EnvWorkbenchPage() {
   });
 
   createEffect(() => {
-    const host = introSurfaceHost();
+    const host = surfaceHost();
     if (!host) {
       setWorkbenchHudMount(null);
       return;
@@ -1590,32 +1606,6 @@ export function EnvWorkbenchPage() {
     const observer = new MutationObserver(() => syncHudMount());
     observer.observe(host, { childList: true, subtree: true });
     onCleanup(() => observer.disconnect());
-  });
-
-  createEffect(() => {
-    const host = introSurfaceHost();
-    const api = surfaceApi();
-    const ready = runtimeLayoutReady();
-    const overlayVisible = env.connectionOverlayVisible();
-    if (!host || !api || !ready || overlayVisible || introDecisionMade()) {
-      return;
-    }
-
-    setIntroDecisionMade(true);
-    if (workbenchState().widgets.length === 0) {
-      setIntroPreparing(false);
-      return;
-    }
-
-    setIntroPreparing(true);
-    introStartFrame = window.requestAnimationFrame(() => {
-      introStartFrame = undefined;
-      introStartSettleFrame = window.requestAnimationFrame(() => {
-        introStartSettleFrame = undefined;
-        setIntroVisible(true);
-        setIntroSequence((value) => value + 1);
-      });
-    });
   });
 
   createEffect(() => {
@@ -1884,7 +1874,7 @@ export function EnvWorkbenchPage() {
     if (guard && !guard()) {
       return;
     }
-    const host = introSurfaceHost();
+    const host = surfaceHost();
     const widgetElement = host?.querySelector(
       `[data-redeven-workbench-widget-id="${escapeWorkbenchWidgetIdSelectorValue(normalizedWidgetId)}"]`,
     );
@@ -2320,12 +2310,6 @@ export function EnvWorkbenchPage() {
       pendingRemoval.releaseInteraction();
     }
     pendingWidgetRemovalTimers.clear();
-    if (introStartFrame !== undefined) {
-      window.cancelAnimationFrame(introStartFrame);
-    }
-    if (introStartSettleFrame !== undefined) {
-      window.cancelAnimationFrame(introStartSettleFrame);
-    }
   });
 
   return (
@@ -2335,10 +2319,7 @@ export function EnvWorkbenchPage() {
         data-testid="redeven-workbench-page"
         data-redeven-workbench-layout-interacting={layoutInteractionVisualActive() ? 'true' : 'false'}
       >
-        <div
-          ref={setIntroSurfaceHost}
-          class={`h-full min-h-0${introPreparing() ? ' redeven-workbench-intro-preparing' : ''}`}
-        >
+        <div ref={setSurfaceHost} class="h-full min-h-0">
           <RedevenWorkbenchSurface
             state={workbenchState}
             setState={setSurfaceWorkbenchState}
@@ -2360,22 +2341,10 @@ export function EnvWorkbenchPage() {
           onMinimizeCanvasScale={minimizeCanvasScale}
           onFitSelectedWidget={fitSelectedWidgetToViewport}
         />
-        {introVisible() ? (
-          <WorkbenchEntryIntro
-            state={workbenchState}
-            frameSize={() => ({ width: 0, height: 0 })}
-            surfaceHost={introSurfaceHost}
-            sequence={introSequence}
-            onStart={() => setIntroPreparing(false)}
-            onComplete={() => {
-              setIntroPreparing(false);
-              setIntroVisible(false);
-            }}
-          />
-        ) : null}
-        <LoadingOverlay
-          visible={!runtimeLayoutReady() || env.connectionOverlayVisible()}
-          message={!runtimeLayoutReady() ? 'Loading workbench…' : env.connectionOverlayMessage()}
+        <WorkbenchProgressCurtain
+          visible={workbenchCurtainVisible()}
+          stage={workbenchCurtainStage()}
+          message={workbenchCurtainMessage()}
         />
       </div>
     </EnvWorkbenchInstancesContext.Provider>
