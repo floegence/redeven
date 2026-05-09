@@ -407,63 +407,70 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
     </li>
   );
 
+  const renderToolbar = (placement: 'toc' | 'floating'): JSX.Element => (
+    <div
+      class={`fm-toolbar${placement === 'toc' ? ' fm-toolbar-toc' : ' fm-toolbar-floating'}`}
+      aria-label="Markdown preview controls"
+    >
+      <button
+        type="button"
+        class={`fm-toolbar-btn${readingMode() ? ' fm-toolbar-active' : ''}`}
+        title="Reading mode"
+        aria-pressed={readingMode()}
+        onClick={() => setReadingMode(!readingMode())}
+      >
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 2a.75.75 0 0 1 .75.75v10.5a.75.75 0 0 1-1.5 0V2.75A.75.75 0 0 1 8 2Zm-5.25 2a.75.75 0 0 1 .75.75v6.5a.75.75 0 0 1-1.5 0v-6.5A.75.75 0 0 1 2.75 4Zm10.5 0a.75.75 0 0 1 .75.75v6.5a.75.75 0 0 1-1.5 0v-6.5a.75.75 0 0 1 .75-.75Z"/>
+        </svg>
+      </button>
+      <Show when={showToc()}>
+        <button
+          type="button"
+          class={`fm-toolbar-btn${tocVisible() ? ' fm-toolbar-active' : ''}`}
+          title="Toggle table of contents"
+          aria-pressed={tocVisible()}
+          onClick={() => setTocVisible(!tocVisible())}
+        >
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M2 3.75A.75.75 0 0 1 2.75 3h10.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 3.75ZM2.75 7.5h7.5a.75.75 0 0 1 0 1.5h-7.5a.75.75 0 0 1 0-1.5Zm0 3.75h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5Z"/>
+          </svg>
+        </button>
+      </Show>
+    </div>
+  );
+
   return (
     <div class={`file-markdown-wrapper${props.class ? ` ${props.class}` : ''}`} style="display: flex; height: 100%; min-height: 0;">
-      {/* Toolbar */}
-      <div style="display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0;">
-        <div class="fm-toolbar">
-          <button
-            type="button"
-            class={`fm-toolbar-btn${readingMode() ? ' fm-toolbar-active' : ''}`}
-            title="Reading mode"
-            onClick={() => setReadingMode(!readingMode())}
-          >
-            <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M8 2a.75.75 0 0 1 .75.75v10.5a.75.75 0 0 1-1.5 0V2.75A.75.75 0 0 1 8 2Zm-5.25 2a.75.75 0 0 1 .75.75v6.5a.75.75 0 0 1-1.5 0v-6.5A.75.75 0 0 1 2.75 4Zm10.5 0a.75.75 0 0 1 .75.75v6.5a.75.75 0 0 1-1.5 0v-6.5a.75.75 0 0 1 .75-.75Z"/>
-            </svg>
-          </button>
-          <Show when={showToc()}>
-            <button
-              type="button"
-              class={`fm-toolbar-btn${tocVisible() ? ' fm-toolbar-active' : ''}`}
-              title="Toggle table of contents"
-              onClick={() => setTocVisible(!tocVisible())}
-            >
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
-                <path d="M2 3.75A.75.75 0 0 1 2.75 3h10.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 3.75ZM2.75 7.5h7.5a.75.75 0 0 1 0 1.5h-7.5a.75.75 0 0 1 0-1.5Zm0 3.75h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5Z"/>
-              </svg>
-            </button>
-          </Show>
-        </div>
+      <div style="position: relative; display: flex; flex: 1; min-width: 0; min-height: 0; overflow: hidden;">
+        <Show when={!(tocVisible() && tocItems().length > 0)}>
+          {renderToolbar('floating')}
+        </Show>
 
-        {/* Main content area */}
-        <div style="display: flex; flex: 1; min-height: 0; overflow: hidden;">
+        <div
+          ref={containerRef!}
+          class={`file-markdown-body${readingMode() ? ' file-markdown-reading' : ''}`}
+          style="flex: 1; min-width: 0; overflow-y: auto;"
+          onClick={handleMarkdownClick}
+          onScroll={handleMarkdownScroll}
+          onPointerDown={cancelTocNavigation}
+          onWheel={cancelTocNavigation}
+          onTouchStart={cancelTocNavigation}
+        />
+
+        <Show when={tocVisible() && tocItems().length > 0}>
           <div
-            ref={containerRef!}
-            class={`file-markdown-body${readingMode() ? ' file-markdown-reading' : ''}`}
-            style="flex: 1; min-width: 0; overflow-y: auto;"
-            onClick={handleMarkdownClick}
-            onScroll={handleMarkdownScroll}
-            onPointerDown={cancelTocNavigation}
-            onWheel={cancelTocNavigation}
-            onTouchStart={cancelTocNavigation}
-          />
-
-          {/* TOC sidebar */}
-          <Show when={tocVisible() && tocItems().length > 0}>
-            <div
-              class="fm-toc-panel"
-              style={{ width: '280px', 'flex-shrink': 0 }}
-            >
-              <div class="fm-toc-title">Contents</div>
-              <ul class="fm-toc-list">
-                <For each={tocItems()}>
-                  {(item) => renderTocItem(item, 1)}
-                </For>
-              </ul>
-            </div>
-          </Show>
-        </div>
+            class="fm-toc-panel"
+            style={{ width: '280px', 'flex-shrink': 0 }}
+          >
+            {renderToolbar('toc')}
+            <div class="fm-toc-title">Contents</div>
+            <ul class="fm-toc-list">
+              <For each={tocItems()}>
+                {(item) => renderTocItem(item, 1)}
+              </For>
+            </ul>
+          </div>
+        </Show>
       </div>
     </div>
   );

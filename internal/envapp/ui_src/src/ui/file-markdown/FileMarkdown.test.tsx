@@ -318,6 +318,37 @@ describe('FileMarkdown', () => {
     }
   });
 
+  it('places preview controls inside the TOC panel instead of reserving a separate toolbar row', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <FileMarkdown
+        filePath="/workspace/README.md"
+        content={'# Start\n\n## Target Heading\n\nDetails'}
+      />
+    ), host);
+
+    try {
+      await flushAsync();
+
+      const wrapper = host.querySelector<HTMLElement>('.file-markdown-wrapper');
+      const panel = host.querySelector<HTMLElement>('.fm-toc-panel');
+      const toolbar = host.querySelector<HTMLElement>('.fm-toolbar');
+      const title = host.querySelector<HTMLElement>('.fm-toc-title');
+      expect(wrapper).toBeTruthy();
+      expect(panel).toBeTruthy();
+      expect(toolbar).toBeTruthy();
+      expect(title).toBeTruthy();
+      expect(panel!.contains(toolbar!)).toBe(true);
+      expect(panel!.compareDocumentPosition(toolbar!) & Node.DOCUMENT_POSITION_CONTAINED_BY).toBeTruthy();
+      expect(toolbar!.compareDocumentPosition(title!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(Array.from(wrapper!.children).some((child) => child.classList.contains('fm-toolbar'))).toBe(false);
+    } finally {
+      dispose();
+    }
+  });
+
   it('returns TOC activity to the markdown scroll position after user scrolling', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
