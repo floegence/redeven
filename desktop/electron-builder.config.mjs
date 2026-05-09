@@ -9,6 +9,7 @@ const macIdentity = String(process.env.REDEVEN_DESKTOP_MAC_IDENTITY ?? '')
   .replace(/^Developer ID Application:\s*/u, '')
   .trim();
 const desktopDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(desktopDir, '..');
 const buildResourcesDir = path.join(desktopDir, 'build');
 const require = createRequire(import.meta.url);
 
@@ -87,6 +88,22 @@ export default {
     {
       from: bundledRuntimeBinary,
       to: 'bin/redeven',
+    },
+    {
+      from: path.join(repoRoot, 'LICENSE'),
+      to: 'licenses/LICENSE',
+    },
+    {
+      from: path.join(repoRoot, 'THIRD_PARTY_NOTICES.md'),
+      to: 'licenses/THIRD_PARTY_NOTICES.md',
+    },
+    {
+      from: path.join(desktopDir, 'node_modules', 'electron', 'dist', 'LICENSE'),
+      to: 'licenses/electron/LICENSE',
+    },
+    {
+      from: path.join(desktopDir, 'node_modules', 'electron', 'dist', 'LICENSES.chromium.html'),
+      to: 'licenses/electron/LICENSES.chromium.html',
     },
   ],
   extraMetadata: {

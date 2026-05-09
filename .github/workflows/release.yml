@@ -57,6 +57,8 @@ jobs:
           mkdir -p dist
           cp internal/knowledge/dist/knowledge_bundle.manifest.json dist/
           cp internal/knowledge/dist/knowledge_bundle.sha256 dist/
+          cp LICENSE dist/LICENSE
+          cp THIRD_PARTY_NOTICES.md dist/THIRD_PARTY_NOTICES.md
 
       - name: Build binary
         env:
@@ -76,7 +78,7 @@ jobs:
             -o dist/redeven \
             ./cmd/redeven
 
-          tar -C dist -czf "dist/redeven_${GOOS}_${GOARCH}.tar.gz" redeven
+          tar -C dist -czf "dist/redeven_${GOOS}_${GOARCH}.tar.gz" redeven LICENSE THIRD_PARTY_NOTICES.md
           rm -f dist/redeven
 
       - name: Upload package artifact
@@ -87,6 +89,8 @@ jobs:
             dist/redeven_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
             dist/knowledge_bundle.manifest.json
             dist/knowledge_bundle.sha256
+            dist/LICENSE
+            dist/THIRD_PARTY_NOTICES.md
           if-no-files-found: error
 
   desktop:
@@ -271,12 +275,14 @@ jobs:
 
           cp "${manifest_src}" dist/knowledge_bundle.manifest.json
           cp "${checksum_src}" dist/knowledge_bundle.sha256
+          cp LICENSE dist/LICENSE
+          cp THIRD_PARTY_NOTICES.md dist/THIRD_PARTY_NOTICES.md
 
       - name: Generate checksums
         run: |
           set -euo pipefail
           cd dist
-          sha256sum redeven_*.tar.gz Redeven-Desktop-* knowledge_bundle.manifest.json knowledge_bundle.sha256 > SHA256SUMS
+          sha256sum redeven_*.tar.gz Redeven-Desktop-* LICENSE THIRD_PARTY_NOTICES.md knowledge_bundle.manifest.json knowledge_bundle.sha256 > SHA256SUMS
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
@@ -357,5 +363,7 @@ jobs:
             dist/SHA256SUMS \
             dist/SHA256SUMS.sig \
             dist/SHA256SUMS.pem \
+            dist/LICENSE \
+            dist/THIRD_PARTY_NOTICES.md \
             dist/knowledge_bundle.manifest.json \
             dist/knowledge_bundle.sha256

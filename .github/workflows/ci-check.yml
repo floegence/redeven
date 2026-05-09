@@ -66,6 +66,9 @@ jobs:
           bash -n scripts/open_source_hygiene_check.sh
           bash -n scripts/install_git_hooks.sh
 
+      - name: Third-party notice check
+        run: node scripts/generate_third_party_notices.mjs --check
+
       - name: Install gitleaks
         run: |
           set -euo pipefail
