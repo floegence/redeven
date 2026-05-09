@@ -141,7 +141,7 @@ export function DesktopActionPopover(props: DesktopActionPopoverProps) {
           ariaLabel={props.popoverAriaLabel}
           interactive
           class={cn(
-            'redeven-action-popover-surface z-[225] max-w-[min(22rem,calc(100vw-1rem))] rounded-md border border-border/80 bg-popover text-popover-foreground shadow-[0_14px_40px_-22px_rgba(0,0,0,0.55),0_24px_50px_-28px_rgba(0,0,0,0.28)]',
+            'redeven-action-popover-surface z-[225] max-w-[min(18rem,calc(100vw-1rem))] border border-border bg-popover text-popover-foreground',
             closing() && 'redeven-action-popover-surface--closing',
             props.class,
           )}
