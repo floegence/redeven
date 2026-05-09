@@ -1,4 +1,4 @@
-<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg width="1536" height="512" viewBox="0 0 1536 512" fill="none" xmlns="http://www.w3.org/2000/svg">
   <g fill="#F0EEEA">
     <rect x="176" y="128" width="32" height="112"/>
     <rect x="304" y="128" width="32" height="112"/>
@@ -9,4 +9,5 @@
   <rect x="144" y="240" width="224" height="96" rx="20" fill="#292C33"/>
   <line x1="176" y1="272" x2="240" y2="272" stroke="#F0EEEA" stroke-width="16"/>
   <line x1="176" y1="304" x2="288" y2="304" stroke="#F0EEEA" stroke-width="16"/>
+  <text x="496" y="309" fill="#F0EEEA" font-family="Inter, Arial, Helvetica, sans-serif" font-size="156" font-weight="700" letter-spacing="0">Redeven</text>
 </svg>

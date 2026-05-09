@@ -266,7 +266,7 @@
 
 :root {
   /* Keep the Env App panel surface contract at root scope so body portals inherit it too. */
-  --redeven-surface-panel: rgb(246, 245, 244);
+  --redeven-surface-panel: rgb(240, 238, 234);
   --redeven-surface-panel-soft: #fafbfc;
   --redeven-surface-panel-elevated: #ffffff;
   --redeven-surface-overlay: var(--redeven-surface-panel-elevated);

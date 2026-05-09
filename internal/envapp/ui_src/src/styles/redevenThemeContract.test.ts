@@ -13,7 +13,7 @@ describe('Redeven Env App surface theme contract', () => {
   it('defines the root panel surface family, paired stroke tokens, and aliases shared card/popover tokens to it', () => {
     const src = readRedevenCss();
 
-    expect(src).toContain('--redeven-surface-panel: rgb(246, 245, 244);');
+    expect(src).toContain('--redeven-surface-panel: rgb(240, 238, 234);');
     expect(src).toContain('--redeven-surface-panel-soft: #fafbfc;');
     expect(src).toContain('--redeven-surface-panel-elevated: #ffffff;');
     expect(src).toContain('--redeven-surface-overlay: var(--redeven-surface-panel-elevated);');
@@ -59,9 +59,9 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--flower-chat-surface-soft: var(--redeven-surface-panel-soft);');
     expect(src).toContain('--flower-chat-surface-elevated: var(--redeven-surface-panel-elevated);');
     expect(src).toContain('--flower-chat-surface-border: var(--redeven-surface-panel-border);');
-    expect(src).not.toContain('--flower-chat-surface: rgb(246, 245, 244);');
+    expect(src).not.toContain('--flower-chat-surface: rgb(240, 238, 234);');
     expect(src).not.toContain('--flower-chat-surface: rgb(41, 44, 51);');
-    expect(src.match(/rgb\(246, 245, 244\)/g)?.length ?? 0).toBe(1);
+    expect(src.match(/rgb\(240, 238, 234\)/g)?.length ?? 0).toBe(1);
     expect(src.match(/rgb\(41, 44, 51\)/g)?.length ?? 0).toBe(1);
   });
 
