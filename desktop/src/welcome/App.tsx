@@ -3662,8 +3662,7 @@ function EnvironmentPrimaryActionPanel(props: Readonly<{
   const panelBusy = createMemo(() => props.session?.pending_intent !== null);
 
   return (
-    <div class="redeven-action-popover" data-tone={props.overlay.tone} tabIndex={-1}>
-      <div class="redeven-action-popover__eyebrow">{props.overlay.eyebrow}</div>
+    <div class="redeven-action-popover" tabIndex={-1}>
       <div class="redeven-action-popover__title">{props.overlay.title}</div>
       <div class="redeven-action-popover__detail">{props.overlay.detail}</div>
       <Show when={notice()}>
@@ -3679,17 +3678,22 @@ function EnvironmentPrimaryActionPanel(props: Readonly<{
           <For each={props.overlay.actions}>
             {(item) => {
               const loading = () => isEnvironmentActionBusy(item.action, props.busyState, props.environmentID);
+              const isSecondary = item.emphasis === 'secondary';
               return (
-                <div class="relative rounded-md">
+                <div class={isSecondary ? 'relative' : 'relative flex-1'}>
                   <Button
                     size="sm"
                     variant={item.emphasis === 'primary' ? 'default' : 'outline'}
-                    class="w-full justify-center"
+                    class={isSecondary ? 'aspect-square p-0' : 'w-full justify-center'}
                     loading={loading()}
                     disabled={panelBusy() && !loading()}
                     onClick={() => props.onRunAction(item.action)}
+                    title={isSecondary ? item.label : undefined}
+                    aria-label={isSecondary ? item.label : undefined}
                   >
-                    {item.label}
+                    <Show when={isSecondary} fallback={item.label}>
+                      <Refresh class="h-3.5 w-3.5" />
+                    </Show>
                   </Button>
                   <Presence>
                     <Show when={loading()}>
