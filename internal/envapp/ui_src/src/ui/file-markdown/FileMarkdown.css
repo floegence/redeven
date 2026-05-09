@@ -23,7 +23,7 @@
   background: var(--background);
   max-width: 860px;
   margin: 0 auto;
-  padding: 24px 32px;
+  padding: 16px 32px 24px;
   word-wrap: break-word;
 }
 
@@ -52,6 +52,7 @@ html.dark .file-markdown-body {
 .file-markdown-body h4 { font-size: 1.1em; font-weight: 700; margin: 1em 0 0.25em; color: var(--foreground); }
 .file-markdown-body h5 { font-size: 1em; font-weight: 700; margin: 0.9em 0 0.2em; color: var(--foreground); }
 .file-markdown-body h6 { font-size: 0.9em; font-weight: 700; margin: 0.8em 0 0.2em; color: var(--muted-foreground); }
+.file-markdown-body > :first-child { margin-top: 0; }
 
 /* Paragraphs and lists */
 .file-markdown-body p { margin-bottom: 0.75rem; }
@@ -456,11 +457,8 @@ html.dark .file-markdown-body {
 .fm-toolbar {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--border);
-  background: var(--background);
-  flex-shrink: 0;
+  justify-content: flex-end;
+  gap: 5px;
 }
 
 .fm-toolbar-btn {
@@ -479,6 +477,29 @@ html.dark .file-markdown-body {
 
 .fm-toolbar-btn:hover { background: var(--muted); color: var(--foreground); }
 .fm-toolbar-btn.fm-toolbar-active { background: color-mix(in srgb, var(--primary) 15%, transparent); color: var(--primary); }
+
+.fm-toolbar-toc {
+  margin: -4px 0 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.fm-toolbar-floating {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 2;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--background) 92%, transparent);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(10px);
+}
+
+html.dark .fm-toolbar-floating {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+}
 
 /* TOC sidebar */
 .fm-toc-panel {
