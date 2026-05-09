@@ -110,6 +110,20 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('transition: none !important;');
   });
 
+  it('replaces the Workbench entry expansion animation with a lightweight progress curtain', () => {
+    const src = readRedevenCss();
+
+    expect(src).toContain('.redeven-workbench-progress-curtain {');
+    expect(src).toContain('.redeven-workbench-progress-curtain__indicator {');
+    expect(src).toContain('.redeven-workbench-progress-curtain__indicator-bar {');
+    expect(src).toContain('@keyframes redeven-workbench-curtain-sweep {');
+    expect(src).toContain('.redeven-workbench-progress-curtain__message {');
+    expect(src).toContain('@media (prefers-reduced-motion: reduce) {');
+    expect(src).not.toContain('.workbench-entry-intro');
+    expect(src).not.toContain('.redeven-workbench-intro-preparing');
+    expect(src).not.toContain('perspective: 1400px;');
+  });
+
   it('defines a non-interactive terminal work indicator with reduced-motion support', () => {
     const src = readRedevenCss();
 

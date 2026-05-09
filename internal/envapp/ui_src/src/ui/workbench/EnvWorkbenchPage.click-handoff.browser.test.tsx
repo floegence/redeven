@@ -78,10 +78,6 @@ async function flushWork() {
   await Promise.resolve();
 }
 
-vi.mock('@floegence/floe-webapp-core/loading', () => ({
-  LoadingOverlay: () => null,
-}));
-
 vi.mock('../pages/EnvContext', () => ({
   useEnvContext: () => ({
     env_id: () => envContextState.envId,
