@@ -10,64 +10,64 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 
 | Component | Version | License | Used by | Source | Notes |
 | --- | --- | --- | --- | --- | --- |
-| cloud.google.com/go/auth | v0.7.2 | Apache-2.0 | Runtime | https://pkg.go.dev/cloud.google.com/go/auth@v0.7.2 | Google Cloud Go modules are distributed under Apache-2.0. |
-| cloud.google.com/go/auth/oauth2adapt | v0.2.3 | Apache-2.0 | Runtime | https://pkg.go.dev/cloud.google.com/go/auth/oauth2adapt@v0.2.3 | Google Cloud Go modules are distributed under Apache-2.0. |
-| cloud.google.com/go/compute/metadata | v0.5.0 | Apache-2.0 | Runtime | https://pkg.go.dev/cloud.google.com/go/compute/metadata@v0.5.0 | Google Cloud Go modules are distributed under Apache-2.0. |
+| cloud.google.com/go/auth | v0.7.2 | Apache-2.0 | Runtime | https://pkg.go.dev/cloud.google.com/go/auth@v0.7.2 | Detected from LICENSE. |
+| cloud.google.com/go/auth/oauth2adapt | v0.2.3 | Apache-2.0 | Runtime | https://pkg.go.dev/cloud.google.com/go/auth/oauth2adapt@v0.2.3 | Detected from LICENSE. |
+| cloud.google.com/go/compute/metadata | v0.5.0 | Apache-2.0 | Runtime | https://pkg.go.dev/cloud.google.com/go/compute/metadata@v0.5.0 | Detected from LICENSE. |
 | github.com/anthropics/anthropic-sdk-go | v1.22.1 | MIT | Runtime | https://pkg.go.dev/github.com/anthropics/anthropic-sdk-go@v1.22.1 | Detected from LICENSE. |
-| github.com/aws/aws-sdk-go-v2 | v1.30.3 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2@v1.30.3 | AWS SDK for Go modules are distributed under Apache-2.0. |
-| github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream | v1.6.3 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream@v1.6.3 | AWS SDK for Go modules are distributed under Apache-2.0. |
-| github.com/aws/aws-sdk-go-v2/config | v1.27.27 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/config@v1.27.27 | AWS SDK for Go modules are distributed under Apache-2.0. |
-| github.com/aws/aws-sdk-go-v2/credentials | v1.17.27 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/credentials@v1.17.27 | AWS SDK for Go modules are distributed under Apache-2.0. |
-| github.com/aws/aws-sdk-go-v2/feature/ec2/imds | v1.16.11 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/feature/ec2/imds@v1.16.11 | AWS SDK for Go modules are distributed under Apache-2.0. |
-| github.com/aws/aws-sdk-go-v2/internal/configsources | v1.3.15 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/internal/configsources@v1.3.15 | AWS SDK for Go modules are distributed under Apache-2.0. |
-| github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 | v2.6.15 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/internal/endpoints/v2@v2.6.15 | AWS SDK for Go modules are distributed under Apache-2.0. |
-| github.com/aws/aws-sdk-go-v2/internal/ini | v1.8.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/internal/ini@v1.8.0 | AWS SDK for Go modules are distributed under Apache-2.0. |
-| github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding | v1.11.3 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding@v1.11.3 | AWS SDK for Go modules are distributed under Apache-2.0. |
-| github.com/aws/aws-sdk-go-v2/service/internal/presigned-url | v1.11.17 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/internal/presigned-url@v1.11.17 | AWS SDK for Go modules are distributed under Apache-2.0. |
-| github.com/aws/aws-sdk-go-v2/service/sso | v1.22.4 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/sso@v1.22.4 | AWS SDK for Go modules are distributed under Apache-2.0. |
-| github.com/aws/aws-sdk-go-v2/service/ssooidc | v1.26.4 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/ssooidc@v1.26.4 | AWS SDK for Go modules are distributed under Apache-2.0. |
-| github.com/aws/aws-sdk-go-v2/service/sts | v1.30.3 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/sts@v1.30.3 | AWS SDK for Go modules are distributed under Apache-2.0. |
-| github.com/aws/smithy-go | v1.20.3 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/smithy-go@v1.20.3 | AWS SDK for Go modules are distributed under Apache-2.0. |
-| github.com/Azure/azure-sdk-for-go/sdk/azcore | v1.17.0 | MIT | Runtime | https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azcore@v1.17.0 | Azure SDK for Go modules are distributed under MIT. |
-| github.com/Azure/azure-sdk-for-go/sdk/azidentity | v1.7.0 | MIT | Runtime | https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity@v1.7.0 | Azure SDK for Go modules are distributed under MIT. |
-| github.com/Azure/azure-sdk-for-go/sdk/internal | v1.10.0 | MIT | Runtime | https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/internal@v1.10.0 | Azure SDK for Go modules are distributed under MIT. |
-| github.com/AzureAD/microsoft-authentication-library-for-go | v1.2.2 | MIT | Runtime | https://pkg.go.dev/github.com/AzureAD/microsoft-authentication-library-for-go@v1.2.2 | Microsoft authentication library for Go is distributed under MIT. |
-| github.com/beorn7/perks | v1.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/beorn7/perks@v1.0.1 | Fallback for beorn7 module license metadata. |
-| github.com/cespare/xxhash/v2 | v2.3.0 | MIT | Runtime | https://pkg.go.dev/github.com/cespare/xxhash/v2@v2.3.0 | xxhash Go module is distributed under MIT. |
+| github.com/aws/aws-sdk-go-v2 | v1.30.3 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2@v1.30.3 | Detected from LICENSE.txt. |
+| github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream | v1.6.3 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream@v1.6.3 | Detected from LICENSE.txt. |
+| github.com/aws/aws-sdk-go-v2/config | v1.27.27 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/config@v1.27.27 | Detected from LICENSE.txt. |
+| github.com/aws/aws-sdk-go-v2/credentials | v1.17.27 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/credentials@v1.17.27 | Detected from LICENSE.txt. |
+| github.com/aws/aws-sdk-go-v2/feature/ec2/imds | v1.16.11 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/feature/ec2/imds@v1.16.11 | Detected from LICENSE.txt. |
+| github.com/aws/aws-sdk-go-v2/internal/configsources | v1.3.15 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/internal/configsources@v1.3.15 | Detected from LICENSE.txt. |
+| github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 | v2.6.15 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/internal/endpoints/v2@v2.6.15 | Detected from LICENSE.txt. |
+| github.com/aws/aws-sdk-go-v2/internal/ini | v1.8.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/internal/ini@v1.8.0 | Detected from LICENSE.txt. |
+| github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding | v1.11.3 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding@v1.11.3 | Detected from LICENSE.txt. |
+| github.com/aws/aws-sdk-go-v2/service/internal/presigned-url | v1.11.17 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/internal/presigned-url@v1.11.17 | Detected from LICENSE.txt. |
+| github.com/aws/aws-sdk-go-v2/service/sso | v1.22.4 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/sso@v1.22.4 | Detected from LICENSE.txt. |
+| github.com/aws/aws-sdk-go-v2/service/ssooidc | v1.26.4 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/ssooidc@v1.26.4 | Detected from LICENSE.txt. |
+| github.com/aws/aws-sdk-go-v2/service/sts | v1.30.3 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/sts@v1.30.3 | Detected from LICENSE.txt. |
+| github.com/aws/smithy-go | v1.20.3 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/smithy-go@v1.20.3 | Detected from LICENSE. |
+| github.com/Azure/azure-sdk-for-go/sdk/azcore | v1.17.0 | MIT | Runtime | https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azcore@v1.17.0 | Detected from LICENSE.txt. |
+| github.com/Azure/azure-sdk-for-go/sdk/azidentity | v1.7.0 | MIT | Runtime | https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity@v1.7.0 | Detected from LICENSE.txt. |
+| github.com/Azure/azure-sdk-for-go/sdk/internal | v1.10.0 | MIT | Runtime | https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/internal@v1.10.0 | Detected from LICENSE.txt. |
+| github.com/AzureAD/microsoft-authentication-library-for-go | v1.2.2 | MIT | Runtime | https://pkg.go.dev/github.com/AzureAD/microsoft-authentication-library-for-go@v1.2.2 | Detected from LICENSE. |
+| github.com/beorn7/perks | v1.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/beorn7/perks@v1.0.1 | Detected from LICENSE. |
+| github.com/cespare/xxhash/v2 | v2.3.0 | MIT | Runtime | https://pkg.go.dev/github.com/cespare/xxhash/v2@v2.3.0 | Detected from LICENSE.txt. |
 | github.com/creack/pty | v1.1.24 | MIT | Runtime | https://pkg.go.dev/github.com/creack/pty@v1.1.24 | Detected from LICENSE. |
 | github.com/davecgh/go-spew | v1.1.1 | ISC | Runtime | https://pkg.go.dev/github.com/davecgh/go-spew@v1.1.1 | Detected from LICENSE. |
 | github.com/dustin/go-humanize | v1.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/dustin/go-humanize@v1.0.1 | Detected from LICENSE. |
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
-| github.com/felixge/httpsnoop | v1.0.4 | MIT | Runtime | https://pkg.go.dev/github.com/felixge/httpsnoop@v1.0.4 | httpsnoop is distributed under MIT. |
+| github.com/felixge/httpsnoop | v1.0.4 | MIT | Runtime | https://pkg.go.dev/github.com/felixge/httpsnoop@v1.0.4 | Detected from LICENSE.txt. |
 | github.com/floegence/floeterm/terminal-go | v0.4.14 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.4.14 | Floegence first-party dependency. |
 | github.com/floegence/flowersec/flowersec-go | v0.19.4 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go@v0.19.4 | Floegence first-party dependency. |
-| github.com/go-logr/logr | v1.4.2 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/go-logr/logr@v1.4.2 | go-logr modules are distributed under Apache-2.0. |
-| github.com/go-logr/stdr | v1.2.2 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/go-logr/stdr@v1.2.2 | go-logr modules are distributed under Apache-2.0. |
+| github.com/go-logr/logr | v1.4.2 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/go-logr/logr@v1.4.2 | Detected from LICENSE. |
+| github.com/go-logr/stdr | v1.2.2 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/go-logr/stdr@v1.2.2 | Detected from LICENSE. |
 | github.com/go-ole/go-ole | v1.2.6 | MIT | Runtime | https://pkg.go.dev/github.com/go-ole/go-ole@v1.2.6 | Detected from LICENSE. |
-| github.com/golang-jwt/jwt/v5 | v5.2.1 | MIT | Runtime | https://pkg.go.dev/github.com/golang-jwt/jwt/v5@v5.2.1 | golang-jwt is distributed under MIT. |
-| github.com/golang/groupcache | v0.0.0-20210331224755-41bb18bfe9da | BSD-style | Runtime | https://pkg.go.dev/github.com/golang/groupcache@v0.0.0-20210331224755-41bb18bfe9da | Go project modules are distributed under a BSD-style license. |
-| github.com/golang/protobuf | v1.5.4 | BSD-style | Runtime | https://pkg.go.dev/github.com/golang/protobuf@v1.5.4 | Go project modules are distributed under a BSD-style license. |
+| github.com/golang-jwt/jwt/v5 | v5.2.1 | MIT | Runtime | https://pkg.go.dev/github.com/golang-jwt/jwt/v5@v5.2.1 | Detected from LICENSE. |
+| github.com/golang/groupcache | v0.0.0-20210331224755-41bb18bfe9da | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/golang/groupcache@v0.0.0-20210331224755-41bb18bfe9da | Detected from LICENSE. |
+| github.com/golang/protobuf | v1.5.4 | BSD-style | Runtime | https://pkg.go.dev/github.com/golang/protobuf@v1.5.4 | Detected from LICENSE. |
 | github.com/google/go-cmp | v0.7.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/google/go-cmp@v0.7.0 | Detected from LICENSE. |
 | github.com/google/pprof | v0.0.0-20250317173921-a4b03ec1a45e | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/google/pprof@v0.0.0-20250317173921-a4b03ec1a45e | Detected from LICENSE. |
-| github.com/google/s2a-go | v0.1.7 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/google/s2a-go@v0.1.7 | Google-maintained Go module fallback; verify on dependency changes. |
+| github.com/google/s2a-go | v0.1.7 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/google/s2a-go@v0.1.7 | Detected from LICENSE.md. |
 | github.com/google/uuid | v1.6.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/google/uuid@v1.6.0 | Detected from LICENSE. |
-| github.com/googleapis/enterprise-certificate-proxy | v0.3.2 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/googleapis/enterprise-certificate-proxy@v0.3.2 | Google APIs module fallback; verify on dependency changes. |
+| github.com/googleapis/enterprise-certificate-proxy | v0.3.2 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/googleapis/enterprise-certificate-proxy@v0.3.2 | Detected from LICENSE. |
 | github.com/gorilla/websocket | v1.5.3 | BSD-style | Runtime | https://pkg.go.dev/github.com/gorilla/websocket@v1.5.3 | Detected from LICENSE. |
 | github.com/hashicorp/yamux | v0.1.2 | MPL-2.0 | Runtime | https://pkg.go.dev/github.com/hashicorp/yamux@v0.1.2 | Detected from LICENSE. |
-| github.com/klauspost/compress | v1.17.9 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/klauspost/compress@v1.17.9 | klauspost/compress is distributed under Apache-2.0. |
-| github.com/kylelemons/godebug | v1.1.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/kylelemons/godebug@v1.1.0 | godebug is distributed under Apache-2.0. |
+| github.com/klauspost/compress | v1.17.9 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/klauspost/compress@v1.17.9 | Detected from LICENSE. |
+| github.com/kylelemons/godebug | v1.1.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/kylelemons/godebug@v1.1.0 | Detected from LICENSE. |
 | github.com/lufia/plan9stats | v0.0.0-20211012122336-39d0f177ccd0 | BSD-style | Runtime | https://pkg.go.dev/github.com/lufia/plan9stats@v0.0.0-20211012122336-39d0f177ccd0 | Detected from LICENSE. |
 | github.com/mattn/go-isatty | v0.0.20 | MIT | Runtime | https://pkg.go.dev/github.com/mattn/go-isatty@v0.0.20 | Detected from LICENSE. |
-| github.com/munnerz/goautoneg | v0.0.0-20191010083416-a7dc8b61c822 | BSD-style | Runtime | https://pkg.go.dev/github.com/munnerz/goautoneg@v0.0.0-20191010083416-a7dc8b61c822 | goautoneg is distributed under a BSD-style license. |
+| github.com/munnerz/goautoneg | v0.0.0-20191010083416-a7dc8b61c822 | BSD-style | Runtime | https://pkg.go.dev/github.com/munnerz/goautoneg@v0.0.0-20191010083416-a7dc8b61c822 | Detected from LICENSE. |
 | github.com/ncruces/go-strftime | v0.1.9 | MIT | Runtime | https://pkg.go.dev/github.com/ncruces/go-strftime@v0.1.9 | Detected from LICENSE. |
 | github.com/openai/openai-go | v1.12.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/openai/openai-go@v1.12.0 | Detected from LICENSE. |
-| github.com/pkg/browser | v0.0.0-20240102092130-5ac0b6a4141c | BSD-style | Runtime | https://pkg.go.dev/github.com/pkg/browser@v0.0.0-20240102092130-5ac0b6a4141c | pkg/browser is distributed under a BSD-style license. |
+| github.com/pkg/browser | v0.0.0-20240102092130-5ac0b6a4141c | BSD-style | Runtime | https://pkg.go.dev/github.com/pkg/browser@v0.0.0-20240102092130-5ac0b6a4141c | Detected from LICENSE. |
 | github.com/pmezard/go-difflib | v1.0.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/pmezard/go-difflib@v1.0.0 | Detected from LICENSE. |
 | github.com/power-devops/perfstat | v0.0.0-20240221224432-82ca36839d55 | MIT | Runtime | https://pkg.go.dev/github.com/power-devops/perfstat@v0.0.0-20240221224432-82ca36839d55 | Detected from LICENSE. |
-| github.com/prometheus/client_golang | v1.20.5 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/prometheus/client_golang@v1.20.5 | Prometheus Go modules are distributed under Apache-2.0. |
-| github.com/prometheus/client_model | v0.6.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/prometheus/client_model@v0.6.1 | Prometheus Go modules are distributed under Apache-2.0. |
-| github.com/prometheus/common | v0.55.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/prometheus/common@v0.55.0 | Prometheus Go modules are distributed under Apache-2.0. |
-| github.com/prometheus/procfs | v0.15.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/prometheus/procfs@v0.15.1 | Prometheus Go modules are distributed under Apache-2.0. |
+| github.com/prometheus/client_golang | v1.20.5 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/prometheus/client_golang@v1.20.5 | Detected from LICENSE. |
+| github.com/prometheus/client_model | v0.6.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/prometheus/client_model@v0.6.1 | Detected from LICENSE. |
+| github.com/prometheus/common | v0.55.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/prometheus/common@v0.55.0 | Detected from LICENSE. |
+| github.com/prometheus/procfs | v0.15.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/prometheus/procfs@v0.15.1 | Detected from LICENSE. |
 | github.com/remyoudompheng/bigfft | v0.0.0-20230129092748-24d4a6f8daec | BSD-style | Runtime | https://pkg.go.dev/github.com/remyoudompheng/bigfft@v0.0.0-20230129092748-24d4a6f8daec | Detected from LICENSE. |
 | github.com/shirou/gopsutil/v4 | v4.25.12 | BSD-style | Runtime | https://pkg.go.dev/github.com/shirou/gopsutil/v4@v4.25.12 | Detected from LICENSE. |
 | github.com/stretchr/testify | v1.11.1 | MIT | Runtime | https://pkg.go.dev/github.com/stretchr/testify@v1.11.1 | Detected from LICENSE. |
@@ -78,28 +78,28 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | github.com/tklauser/go-sysconf | v0.3.16 | BSD-style | Runtime | https://pkg.go.dev/github.com/tklauser/go-sysconf@v0.3.16 | Detected from LICENSE. |
 | github.com/tklauser/numcpus | v0.11.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/tklauser/numcpus@v0.11.0 | Detected from LICENSE. |
 | github.com/yusufpapurcu/wmi | v1.2.4 | MIT | Runtime | https://pkg.go.dev/github.com/yusufpapurcu/wmi@v1.2.4 | Detected from LICENSE. |
-| go.opencensus.io | v0.24.0 | Apache-2.0 | Runtime | https://pkg.go.dev/go.opencensus.io@v0.24.0 | OpenCensus Go is distributed under Apache-2.0. |
-| go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc | v0.49.0 | Apache-2.0 | Runtime | https://pkg.go.dev/go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc@v0.49.0 | OpenTelemetry Go modules are distributed under Apache-2.0. |
-| go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp | v0.49.0 | Apache-2.0 | Runtime | https://pkg.go.dev/go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp@v0.49.0 | OpenTelemetry Go modules are distributed under Apache-2.0. |
-| go.opentelemetry.io/otel | v1.24.0 | Apache-2.0 | Runtime | https://pkg.go.dev/go.opentelemetry.io/otel@v1.24.0 | OpenTelemetry Go modules are distributed under Apache-2.0. |
-| go.opentelemetry.io/otel/metric | v1.24.0 | Apache-2.0 | Runtime | https://pkg.go.dev/go.opentelemetry.io/otel/metric@v1.24.0 | OpenTelemetry Go modules are distributed under Apache-2.0. |
-| go.opentelemetry.io/otel/trace | v1.24.0 | Apache-2.0 | Runtime | https://pkg.go.dev/go.opentelemetry.io/otel/trace@v1.24.0 | OpenTelemetry Go modules are distributed under Apache-2.0. |
-| golang.org/x/crypto | v0.40.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/crypto@v0.40.0 | Go sub-repository modules are distributed under a BSD-style license. |
+| go.opencensus.io | v0.24.0 | Apache-2.0 | Runtime | https://pkg.go.dev/go.opencensus.io@v0.24.0 | Detected from LICENSE. |
+| go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc | v0.49.0 | Apache-2.0 | Runtime | https://pkg.go.dev/go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc@v0.49.0 | Detected from LICENSE. |
+| go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp | v0.49.0 | Apache-2.0 | Runtime | https://pkg.go.dev/go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp@v0.49.0 | Detected from LICENSE. |
+| go.opentelemetry.io/otel | v1.24.0 | Apache-2.0 | Runtime | https://pkg.go.dev/go.opentelemetry.io/otel@v1.24.0 | Detected from LICENSE. |
+| go.opentelemetry.io/otel/metric | v1.24.0 | Apache-2.0 | Runtime | https://pkg.go.dev/go.opentelemetry.io/otel/metric@v1.24.0 | Detected from LICENSE. |
+| go.opentelemetry.io/otel/trace | v1.24.0 | Apache-2.0 | Runtime | https://pkg.go.dev/go.opentelemetry.io/otel/trace@v1.24.0 | Detected from LICENSE. |
+| golang.org/x/crypto | v0.40.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/crypto@v0.40.0 | Detected from LICENSE. |
 | golang.org/x/exp | v0.0.0-20250305212735-054e65f0b394 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/exp@v0.0.0-20250305212735-054e65f0b394 | Detected from LICENSE. |
 | golang.org/x/mod | v0.24.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/mod@v0.24.0 | Detected from LICENSE. |
-| golang.org/x/net | v0.41.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/net@v0.41.0 | Go sub-repository modules are distributed under a BSD-style license. |
-| golang.org/x/oauth2 | v0.30.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/oauth2@v0.30.0 | Go sub-repository modules are distributed under a BSD-style license. |
+| golang.org/x/net | v0.41.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/net@v0.41.0 | Detected from LICENSE. |
+| golang.org/x/oauth2 | v0.30.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/oauth2@v0.30.0 | Detected from LICENSE. |
 | golang.org/x/sync | v0.16.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/sync@v0.16.0 | Detected from LICENSE. |
 | golang.org/x/sys | v0.38.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/sys@v0.38.0 | Detected from LICENSE. |
 | golang.org/x/term | v0.30.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/term@v0.30.0 | Detected from LICENSE. |
-| golang.org/x/text | v0.27.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/text@v0.27.0 | Go sub-repository modules are distributed under a BSD-style license. |
-| golang.org/x/time | v0.5.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/time@v0.5.0 | Go sub-repository modules are distributed under a BSD-style license. |
+| golang.org/x/text | v0.27.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/text@v0.27.0 | Detected from LICENSE. |
+| golang.org/x/time | v0.5.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/time@v0.5.0 | Detected from LICENSE. |
 | golang.org/x/tools | v0.31.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/tools@v0.31.0 | Detected from LICENSE. |
-| golang.org/x/xerrors | v0.0.0-20191204190536-9bdfabe68543 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/xerrors@v0.0.0-20191204190536-9bdfabe68543 | Go sub-repository modules are distributed under a BSD-style license. |
-| google.golang.org/api | v0.189.0 | BSD-style | Runtime | https://pkg.go.dev/google.golang.org/api@v0.189.0 | Google API Go client is distributed under a BSD-style license. |
-| google.golang.org/genproto/googleapis/rpc | v0.0.0-20240722135656-d784300faade | Apache-2.0 | Runtime | https://pkg.go.dev/google.golang.org/genproto/googleapis/rpc@v0.0.0-20240722135656-d784300faade | Google generated protocol modules are distributed under Apache-2.0. |
-| google.golang.org/grpc | v1.64.1 | Apache-2.0 | Runtime | https://pkg.go.dev/google.golang.org/grpc@v1.64.1 | gRPC Go is distributed under Apache-2.0. |
-| google.golang.org/protobuf | v1.34.2 | BSD-style | Runtime | https://pkg.go.dev/google.golang.org/protobuf@v1.34.2 | Protocol Buffers Go is distributed under a BSD-style license. |
+| golang.org/x/xerrors | v0.0.0-20191204190536-9bdfabe68543 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/xerrors@v0.0.0-20191204190536-9bdfabe68543 | Detected from LICENSE. |
+| google.golang.org/api | v0.189.0 | BSD-style | Runtime | https://pkg.go.dev/google.golang.org/api@v0.189.0 | Detected from LICENSE. |
+| google.golang.org/genproto/googleapis/rpc | v0.0.0-20240722135656-d784300faade | Apache-2.0 | Runtime | https://pkg.go.dev/google.golang.org/genproto/googleapis/rpc@v0.0.0-20240722135656-d784300faade | Detected from LICENSE. |
+| google.golang.org/grpc | v1.64.1 | Apache-2.0 | Runtime | https://pkg.go.dev/google.golang.org/grpc@v1.64.1 | Detected from LICENSE. |
+| google.golang.org/protobuf | v1.34.2 | BSD-style | Runtime | https://pkg.go.dev/google.golang.org/protobuf@v1.34.2 | Detected from LICENSE. |
 | gopkg.in/check.v1 | v0.0.0-20161208181325-20d25e280405 | BSD-style | Runtime | https://pkg.go.dev/gopkg.in/check.v1@v0.0.0-20161208181325-20d25e280405 | Detected from LICENSE. |
 | gopkg.in/yaml.v3 | v3.0.1 | MIT | Runtime | https://pkg.go.dev/gopkg.in/yaml.v3@v3.0.1 | Detected from LICENSE. |
 | modernc.org/cc/v4 | v4.25.2 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/cc/v4@v4.25.2 | Detected from LICENSE. |

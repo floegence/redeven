@@ -135,6 +135,15 @@ function goListModules() {
   return splitGoModuleJSON(output);
 }
 
+function hydrateGoModuleSources() {
+  const env = { ...process.env, GOFLAGS: appendGoFlag(process.env.GOFLAGS, '-mod=readonly') };
+  execFileSync('go', ['mod', 'download', 'all'], {
+    cwd: repoRoot,
+    env,
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
+}
+
 function appendGoFlag(current, next) {
   const value = String(current ?? '').trim();
   if (!value) return next;
@@ -190,6 +199,7 @@ function detectGoLicense(moduleInfo) {
 
 function collectGoEntries() {
   const entries = [];
+  hydrateGoModuleSources();
   for (const moduleInfo of goListModules()) {
     if (moduleInfo.Main) continue;
     const version = String(moduleInfo.Version ?? '').trim();
