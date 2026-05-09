@@ -14,7 +14,8 @@
   <a href="#quick-start">Install CLI</a> |
   <a href="#what-redeven-lets-you-do">See what it does</a> |
   <a href="#common-workflows">Common workflows</a> |
-  <a href="#docs-by-task">Docs</a>
+  <a href="#docs-by-task">Docs</a> |
+  <a href="#license">License</a>
 </p>
 
 <p align="center">
@@ -172,12 +173,14 @@ go build -o redeven ./cmd/redeven
 
 ```bash
 ./scripts/install_git_hooks.sh
+node scripts/generate_third_party_notices.mjs --check
 ```
 
 Notes:
 
 - `internal/**/dist/` assets are generated and embedded via Go `embed`.
 - Frontend `dist` assets are not checked into git. The tracked exception is `internal/knowledge/dist/*`, which stays committed as verifiable knowledge bundle release metadata.
+- `THIRD_PARTY_NOTICES.md` is generated from Go modules and JavaScript lockfiles. Run `node scripts/generate_third_party_notices.mjs` after dependency changes, then keep `--check` green.
 - `./scripts/lint_ui.sh` validates the Environment workspace and browser IDE source packages before asset bundling.
 - `./scripts/check_desktop.sh` validates the Electron desktop shell package.
 - `./scripts/dev_desktop.sh` stops any existing Redeven Desktop process, then starts Desktop from the current checkout or worktree with a freshly bundled runtime. It leaves existing runtime processes running unless you explicitly pass `--stop-runtimes`. For SSH Host bootstrap, it exports `REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG` from the development bundle version unless you set that variable explicitly.
@@ -220,6 +223,10 @@ Desktop and standalone runtime mode also share one profile-scoped catalog:
 - Requests feel slow: open Runtime Settings -> Debug Console and compare desktop, gateway, and UI timing.
 
 </details>
+
+## License
+
+Redeven is licensed under the [MIT License](LICENSE). Third-party dependency notices are tracked in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md); release archives and Desktop packages include these files alongside the runtime artifacts.
 
 ## Open-source scope
 

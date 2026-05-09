@@ -62,6 +62,21 @@ build_knowledge_bundle() {
   ui_pkg_log "Knowledge bundle: done."
 }
 
+verify_third_party_notices() {
+  local script="$ROOT_DIR/scripts/generate_third_party_notices.mjs"
+  if [ ! -f "$script" ]; then
+    ui_pkg_die "missing third-party notice generator: $script"
+  fi
+  if ! command -v node >/dev/null 2>&1; then
+    ui_pkg_die "node not found (required to verify third-party notices)"
+  fi
+
+  ui_pkg_log ""
+  ui_pkg_log "Third-party notices: verifying..."
+  node "$script" --check
+  ui_pkg_log "Third-party notices: done."
+}
+
 main() {
   ui_pkg_log "Building redeven embedded assets..."
   ui_pkg_log "ROOT_DIR: $ROOT_DIR"
@@ -72,6 +87,7 @@ main() {
   build_envapp_ui
   build_codeapp_ui
   build_knowledge_bundle
+  verify_third_party_notices
 
   ui_pkg_log ""
   ui_pkg_log "All embedded assets built."

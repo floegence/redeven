@@ -61,6 +61,8 @@ For each release tag, the workflow publishes:
 - `Redeven-Desktop-X.Y.Z-linux-arm64.rpm`
 - `Redeven-Desktop-X.Y.Z-mac-x64.dmg`
 - `Redeven-Desktop-X.Y.Z-mac-arm64.dmg`
+- `LICENSE`
+- `THIRD_PARTY_NOTICES.md`
 - `knowledge_bundle.manifest.json`
 - `knowledge_bundle.sha256`
 - `SHA256SUMS`
@@ -71,7 +73,8 @@ All artifacts are uploaded to the GitHub Release for that tag.
 
 Desktop assets bundle the matching `redeven` binary inside the Electron package and use the same release tag as the CLI tarballs.
 The desktop workflow materializes that binary through `scripts/build_desktop_bundled_runtime.sh`, which hydrates `desktop/.bundle/<goos>-<goarch>/redeven` from the matching CLI tarball before `electron-builder` packages the app.
-`SHA256SUMS` covers the CLI tarballs, desktop packages, and the standalone knowledge verification files.
+CLI tarballs include `LICENSE` and `THIRD_PARTY_NOTICES.md` next to the `redeven` binary. Desktop packages include the same repository license files under `licenses/` and Electron/Chromium runtime notices under `licenses/electron/`.
+`SHA256SUMS` covers the CLI tarballs, desktop packages, repository license files, and standalone knowledge verification files.
 
 ## macOS desktop signing baseline
 
