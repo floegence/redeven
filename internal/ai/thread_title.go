@@ -62,8 +62,9 @@ type autoThreadTitleApplyResult struct {
 type autoThreadTitleCoordinator struct {
 	svc *Service
 
-	mu      sync.Mutex
-	pending map[string]autoThreadTitleRequest
+	mu       sync.Mutex
+	pending  map[string]autoThreadTitleRequest
+	inFlight map[string]autoThreadTitleRequest
 
 	retryDelay func(attempt int) time.Duration
 
@@ -348,8 +349,10 @@ func newAutoThreadTitleCoordinator(svc *Service) *autoThreadTitleCoordinator {
 		return nil
 	}
 	c := &autoThreadTitleCoordinator{
-		svc:        svc,
-		pending:    make(map[string]autoThreadTitleRequest),
+		svc:      svc,
+		pending:  make(map[string]autoThreadTitleRequest),
+		inFlight: make(map[string]autoThreadTitleRequest),
+
 		retryDelay: autoThreadTitleRetryDelay,
 		wakeCh:     make(chan struct{}, 1),
 		stopCh:     make(chan struct{}),
@@ -402,10 +405,22 @@ func (c *autoThreadTitleCoordinator) Schedule(req autoThreadTitleRequest) {
 	}
 
 	c.mu.Lock()
+	if current, ok := c.inFlight[key]; ok {
+		switch {
+		case autoThreadTitleRequestsMatch(current, req):
+			c.mu.Unlock()
+			return
+		case autoThreadTitleRequestIsOlder(req, current):
+			c.mu.Unlock()
+			return
+		}
+	}
 	current, ok := c.pending[key]
-	if ok && autoThreadTitleRequestIsOlder(req, current) {
-		c.mu.Unlock()
-		return
+	if ok {
+		if autoThreadTitleRequestsMatch(current, req) || autoThreadTitleRequestIsOlder(req, current) {
+			c.mu.Unlock()
+			return
+		}
 	}
 	c.pending[key] = req
 	c.mu.Unlock()
@@ -510,6 +525,7 @@ func (c *autoThreadTitleCoordinator) loop() {
 				}
 				continue
 			case <-timer.C:
+				continue
 			}
 		}
 
@@ -532,13 +548,15 @@ func (c *autoThreadTitleCoordinator) nextRequest() (autoThreadTitleRequest, time
 	}
 
 	var selected autoThreadTitleRequest
+	selectedKey := ""
 	first := true
-	for _, req := range c.pending {
+	for key, req := range c.pending {
 		if req.NextAttemptAt.IsZero() {
 			req.NextAttemptAt = now
 		}
 		if first || req.NextAttemptAt.Before(selected.NextAttemptAt) {
 			selected = req
+			selectedKey = key
 			first = false
 		}
 	}
@@ -546,6 +564,11 @@ func (c *autoThreadTitleCoordinator) nextRequest() (autoThreadTitleRequest, time
 		return autoThreadTitleRequest{}, 0, false
 	}
 	if !selected.NextAttemptAt.After(now) {
+		delete(c.pending, selectedKey)
+		if c.inFlight == nil {
+			c.inFlight = make(map[string]autoThreadTitleRequest)
+		}
+		c.inFlight[selectedKey] = selected
 		return selected, 0, true
 	}
 	return selected, selected.NextAttemptAt.Sub(now), true
@@ -564,34 +587,36 @@ func (c *autoThreadTitleCoordinator) handleResult(req autoThreadTitleRequest, re
 	switch result.Status {
 	case autoThreadTitleApplyStatusRetry:
 		attempt := req.Attempts + 1
-		if attempt >= autoThreadTitleMaxAttempts {
-			if c.svc != nil {
-				_ = c.svc.applyFallbackThreadTitleOnce(context.Background(), req, attempt)
-			}
-			c.mu.Lock()
-			current, ok := c.pending[key]
-			if ok && autoThreadTitleRequestsMatch(current, req) {
-				delete(c.pending, key)
-			}
-			c.mu.Unlock()
-			return
-		}
 		delayFn := c.retryDelay
 		if delayFn == nil {
 			delayFn = autoThreadTitleRetryDelay
 		}
 		delay := delayFn(attempt)
 		scheduled := false
+		shouldFallback := false
 		c.mu.Lock()
-		current, ok := c.pending[key]
-		if ok && autoThreadTitleRequestsMatch(current, req) {
-			current.Attempts = attempt
-			current.NextAttemptAt = time.Now().Add(delay)
-			c.pending[key] = current
-			scheduled = true
+		active, activeOK := c.inFlight[key]
+		if activeOK && autoThreadTitleRequestsMatch(active, req) {
+			delete(c.inFlight, key)
+			_, hasNewerPending := c.pending[key]
+			if !hasNewerPending {
+				if attempt >= autoThreadTitleMaxAttempts {
+					shouldFallback = true
+				} else {
+					current := req
+					current.Attempts = attempt
+					current.NextAttemptAt = time.Now().Add(delay)
+					c.pending[key] = current
+					scheduled = true
+				}
+			}
 		}
 		c.mu.Unlock()
 
+		if shouldFallback && c.svc != nil {
+			_ = c.svc.applyFallbackThreadTitleOnce(context.Background(), req, attempt)
+			return
+		}
 		if scheduled && c.svc != nil && c.svc.log != nil {
 			c.svc.log.Info("thread auto title retry scheduled",
 				"endpoint_id", req.EndpointID,
@@ -605,9 +630,9 @@ func (c *autoThreadTitleCoordinator) handleResult(req autoThreadTitleRequest, re
 		}
 	default:
 		c.mu.Lock()
-		current, ok := c.pending[key]
+		current, ok := c.inFlight[key]
 		if ok && autoThreadTitleRequestsMatch(current, req) {
-			delete(c.pending, key)
+			delete(c.inFlight, key)
 		}
 		c.mu.Unlock()
 	}
@@ -619,9 +644,7 @@ func autoThreadTitleRequestsMatch(current autoThreadTitleRequest, req autoThread
 		current.MessageID == req.MessageID &&
 		current.MessageRowID == req.MessageRowID &&
 		current.MessageCreatedAtUnixMs == req.MessageCreatedAtUnixMs &&
-		current.PublicText == req.PublicText &&
-		current.UpdatedByID == req.UpdatedByID &&
-		current.UpdatedByEmail == req.UpdatedByEmail
+		current.PublicText == req.PublicText
 }
 
 func autoThreadTitleRequestIsOlder(candidate autoThreadTitleRequest, current autoThreadTitleRequest) bool {
