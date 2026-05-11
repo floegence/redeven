@@ -1,13 +1,14 @@
 {
   "schema_version": 1,
   "release_review": {
-    "release_version": "v0.6.0",
-    "previous_release": "v0.5.11",
+    "release_version": "v0.6.1",
+    "previous_release": "v0.6.0",
     "reviewed_at": "2026-05-11",
-    "review_id": "workbench-layered-canvas-v1",
-    "summary": "Workbench release: integrates layered canvas objects, sticky notes, annotations, background regions, floe-webapp 0.36.45, runtime-backed layout persistence, projected surface performance work, and scoped render transactions for theme and mode changes. No Runtime Service protocol or compatibility window changes.",
-    "same_window_rationale": "The release changes Env App Workbench UI, runtime-owned Workbench layout persistence, and Desktop shell rendering coordination, but it does not add or change Runtime Service snapshot fields, sys.ping payload semantics, attach/start contracts, startup reports, or SSH bootstrap requirements. Older runtimes continue serving their own Env App bundle and do not need the new layered Workbench APIs from this release, so the existing protocol version, compatibility epoch, minimum Desktop version, and minimum Runtime version remain valid.",
+    "review_id": "auto-thread-title-ci-v1",
+    "summary": "Patch release: fixes the automatic thread-title coordinator so retry timers re-acquire queue ownership before running and recovery scheduling remains idempotent for the same message. No Runtime Service protocol or compatibility window changes.",
+    "same_window_rationale": "The release changes only the local AI thread-title coordinator's in-process retry ownership model and tests. It does not add or change Runtime Service snapshot fields, sys.ping payload semantics, attach/start contracts, startup reports, Desktop IPC payloads, Workbench layout contracts, Env App shell readiness, or SSH bootstrap requirements. The existing protocol version, compatibility epoch, minimum Desktop version, and minimum Runtime version remain valid.",
     "checked_surfaces": [
+      "AI automatic thread-title scheduling, retry, recovery, and fallback ownership",
       "Env App Workbench layered canvas modes and dock routing",
       "Env App Workbench sticky notes, text annotations, and background region persistence",
       "Runtime Workbench layout schema migration and snapshot/event APIs",
