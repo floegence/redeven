@@ -25,7 +25,9 @@ import {
 import { ensureWorkbenchTextSelectionSurfaceContract } from './workbenchTextSelectionSurface';
 import {
   REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE,
+  REDEVEN_WORKBENCH_TEXT_ANNOTATION_DEFAULT_HEIGHT,
   REDEVEN_WORKBENCH_TEXT_ANNOTATION_DEFAULT_FONT_SIZE,
+  REDEVEN_WORKBENCH_TEXT_ANNOTATION_DEFAULT_WIDTH,
   createWorkbenchOverviewViewport,
 } from '../runtimeWorkbenchLayout';
 import type { WorkbenchTerminalInteractionKind } from '../workbenchTerminalVisualCoordinator';
@@ -43,7 +45,8 @@ const REDEVEN_TEXT_ANNOTATION_DEFAULTS: WorkbenchTextAnnotationDefaults = {
     font_weight: REDEVEN_TEXT_ANNOTATION_FONT.fontWeight,
   } : {}),
   font_size: REDEVEN_WORKBENCH_TEXT_ANNOTATION_DEFAULT_FONT_SIZE,
-  width: 460,
+  width: REDEVEN_WORKBENCH_TEXT_ANNOTATION_DEFAULT_WIDTH,
+  height: REDEVEN_WORKBENCH_TEXT_ANNOTATION_DEFAULT_HEIGHT,
 };
 const REDEVEN_BACKGROUND_LAYER_DEFAULTS: WorkbenchBackgroundLayerDefaults = {
   fill: WORKBENCH_REGION_FILL_OPTIONS[1],

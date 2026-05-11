@@ -9,6 +9,10 @@ import {
 
 import { RedevenWorkbenchSurface, type RedevenWorkbenchSurfaceApi } from './RedevenWorkbenchSurface';
 import {
+  REDEVEN_WORKBENCH_TEXT_ANNOTATION_DEFAULT_HEIGHT,
+  REDEVEN_WORKBENCH_TEXT_ANNOTATION_DEFAULT_WIDTH,
+} from '../runtimeWorkbenchLayout';
+import {
   REDEVEN_WORKBENCH_SURFACE_ROOT_ATTR,
   REDEVEN_WORKBENCH_WIDGET_ID_ATTR,
   REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR,
@@ -164,7 +168,8 @@ describe('RedevenWorkbenchSurface', () => {
       font_family: sansTextFont.fontFamily,
       font_weight: sansTextFont.fontWeight,
       font_size: 100,
-      width: 460,
+      width: REDEVEN_WORKBENCH_TEXT_ANNOTATION_DEFAULT_WIDTH,
+      height: REDEVEN_WORKBENCH_TEXT_ANNOTATION_DEFAULT_HEIGHT,
     });
     expect(sharedSurfaceMocks.lastProps.backgroundLayerDefaults).toEqual({
       fill: WORKBENCH_REGION_FILL_OPTIONS[1],
