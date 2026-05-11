@@ -57,17 +57,11 @@ function CodespacesWidget(props: WidgetProps) {
 }
 
 function PortsWidget(props: WidgetProps) {
-  const env = useEnvContext();
-  const available = () => env.localRuntime() === null;
-
   return (
     <EnvDeckSingletonSurface
       widgetId={props.widgetId}
       widgetType="redeven.ports"
-      surfaceLabel="Ports"
-      available={available()}
-      unavailableTitle="Port forwards are remote-only"
-      unavailableDescription="This environment is connected directly to a local runtime, so port forwarding is not exposed as a separate surface."
+      surfaceLabel="Web Services"
     >
       <EnvPortForwardsPage />
     </EnvDeckSingletonSurface>
@@ -167,7 +161,7 @@ export const redevenDeckWidgets: WidgetDefinition[] = [
   },
   {
     type: 'redeven.ports',
-    name: 'Ports',
+    name: 'Web Services',
     icon: Globe,
     category: 'custom',
     component: PortsWidget,

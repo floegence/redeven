@@ -135,27 +135,13 @@ function CodespacesWidget() {
 }
 
 function PortsWidget() {
-  const env = useEnvContext();
-  const available = () => env.localRuntime() === null;
-
   return (
-    <Show
-      when={available()}
-      fallback={(
-        <WorkbenchBodyNotice
-          eyebrow="Ports"
-          title="Port forwards are remote-only"
-          description="This environment is connected directly to a local runtime, so port forwarding is not exposed as a separate workbench surface."
-        />
-      )}
+    <div
+      {...REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS}
+      class="redeven-workbench-body-surface h-full min-h-0 overflow-auto"
     >
-      <div
-        {...REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS}
-        class="redeven-workbench-body-surface h-full min-h-0 overflow-auto"
-      >
-        <EnvPortForwardsPage />
-      </div>
-    </Show>
+      <EnvPortForwardsPage />
+    </div>
   );
 }
 
@@ -266,10 +252,10 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
   },
   {
     type: 'redeven.ports',
-    label: 'Ports',
+    label: 'Web Services',
     icon: Globe,
     body: PortsWidget,
-    defaultTitle: 'Ports',
+    defaultTitle: 'Web Services',
     defaultSize: { width: 1000, height: 620 },
     group: 'network',
     singleton: true,

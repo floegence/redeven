@@ -30,6 +30,8 @@ export function bootstrapDesktopSessionContextBridge(): void {
       const candidate = value as Partial<DesktopSessionContextSnapshot>;
       const localEnvironmentID = String(candidate.local_environment_id ?? '').trim();
       const rendererStorageScopeID = String(candidate.renderer_storage_scope_id ?? '').trim();
+      const targetKind = String(candidate.target_kind ?? '').trim();
+      const targetRoute = String(candidate.target_route ?? '').trim();
       const providerOrigin = String(candidate.provider_origin ?? '').trim();
       const providerID = String(candidate.provider_id ?? '').trim();
       const envPublicID = String(candidate.env_public_id ?? '').trim();
@@ -39,6 +41,8 @@ export function bootstrapDesktopSessionContextBridge(): void {
       return {
         local_environment_id: localEnvironmentID,
         renderer_storage_scope_id: rendererStorageScopeID,
+        ...(targetKind === 'local_environment' || targetKind === 'external_local_ui' || targetKind === 'ssh_environment' ? { target_kind: targetKind } : {}),
+        ...(targetRoute === 'local_host' || targetRoute === 'remote_desktop' ? { target_route: targetRoute } : {}),
         ...(providerOrigin !== '' ? { provider_origin: providerOrigin } : {}),
         ...(providerID !== '' ? { provider_id: providerID } : {}),
         ...(envPublicID !== '' ? { env_public_id: envPublicID } : {}),

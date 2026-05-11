@@ -43,6 +43,8 @@ describe('desktopSessionContext', () => {
         getSnapshot: () => ({
           local_environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
           renderer_storage_scope_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+          target_kind: 'local_environment',
+          target_route: 'remote_desktop',
         }),
       },
     } as unknown as Window;
@@ -52,6 +54,8 @@ describe('desktopSessionContext', () => {
     expect(readDesktopSessionContextSnapshot()).toEqual({
       local_environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
       renderer_storage_scope_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      target_kind: 'local_environment',
+      target_route: 'remote_desktop',
     });
     expect(desktopRendererStorageScopeID()).toBe('cp:https%3A%2F%2Fcp.example.invalid:env:env_demo');
   });

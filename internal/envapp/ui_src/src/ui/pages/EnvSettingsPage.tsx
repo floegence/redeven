@@ -381,7 +381,7 @@ function formatRuntimeServiceWorkload(snapshot: RuntimeServiceSnapshot | undefin
     workload.terminalCount > 0 ? `${workload.terminalCount} ${workload.terminalCount === 1 ? 'terminal' : 'terminals'}` : '',
     workload.sessionCount > 0 ? `${workload.sessionCount} ${workload.sessionCount === 1 ? 'session' : 'sessions'}` : '',
     workload.taskCount > 0 ? `${workload.taskCount} ${workload.taskCount === 1 ? 'task' : 'tasks'}` : '',
-    workload.portForwardCount > 0 ? `${workload.portForwardCount} ${workload.portForwardCount === 1 ? 'port forward' : 'port forwards'}` : '',
+    workload.portForwardCount > 0 ? `${workload.portForwardCount} ${workload.portForwardCount === 1 ? 'web service' : 'web services'}` : '',
   ].filter(Boolean);
   return parts.length > 0 ? parts.join(', ') : 'No active work';
 }

@@ -201,6 +201,7 @@ import {
   DESKTOP_SESSION_APP_READY_CHANNEL,
   DESKTOP_SESSION_CONTEXT_GET_CHANNEL,
   type DesktopSessionAppReadyPayload,
+  type DesktopSessionContextSnapshot,
 } from '../shared/desktopSessionContextIPC';
 import {
   desktopControlPlaneKey,
@@ -1790,6 +1791,33 @@ function normalizeDesktopSessionAppReadyPayload(value: unknown): DesktopSessionA
     return null;
   }
   return { state };
+}
+
+function desktopSessionContextSnapshot(sessionRecord: DesktopSessionRecord | null): DesktopSessionContextSnapshot | null {
+  if (!sessionRecord) {
+    return null;
+  }
+
+  const target = sessionRecord.target;
+  if (target.kind === 'local_environment') {
+    return {
+      local_environment_id: target.environment_id,
+      renderer_storage_scope_id: target.route === 'local_host'
+        ? 'local'
+        : target.environment_id,
+      target_kind: target.kind,
+      target_route: target.route,
+      ...(target.provider_origin ? { provider_origin: target.provider_origin } : {}),
+      ...(target.provider_id ? { provider_id: target.provider_id } : {}),
+      ...(target.env_public_id ? { env_public_id: target.env_public_id } : {}),
+    };
+  }
+
+  return {
+    local_environment_id: target.environment_id,
+    renderer_storage_scope_id: target.environment_id,
+    target_kind: target.kind,
+  };
 }
 
 function markSessionAppReady(
@@ -5491,19 +5519,7 @@ if (!app.requestSingleInstanceLock()) {
   });
   ipcMain.on(DESKTOP_SESSION_CONTEXT_GET_CHANNEL, (event) => {
     const sessionRecord = sessionRecordForWebContentsID(event.sender.id);
-    if (!sessionRecord || sessionRecord.target.kind !== 'local_environment') {
-      event.returnValue = null;
-      return;
-    }
-    event.returnValue = {
-      local_environment_id: sessionRecord.target.environment_id,
-      renderer_storage_scope_id: sessionRecord.target.route === 'local_host'
-        ? 'local'
-        : sessionRecord.target.environment_id,
-      ...(sessionRecord.target.provider_origin ? { provider_origin: sessionRecord.target.provider_origin } : {}),
-      ...(sessionRecord.target.provider_id ? { provider_id: sessionRecord.target.provider_id } : {}),
-      ...(sessionRecord.target.env_public_id ? { env_public_id: sessionRecord.target.env_public_id } : {}),
-    };
+    event.returnValue = desktopSessionContextSnapshot(sessionRecord);
   });
   ipcMain.on(DESKTOP_SESSION_APP_READY_CHANNEL, (event, payload) => {
     const readyPayload = normalizeDesktopSessionAppReadyPayload(payload);

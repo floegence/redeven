@@ -77,7 +77,7 @@ export const ENV_SURFACE_LABELS: Record<EnvSurfaceId, string> = {
   monitor: 'Monitoring',
   files: 'File Browser',
   codespaces: 'Codespaces',
-  ports: 'Ports',
+  ports: 'Web Services',
   ai: 'Flower',
   codex: 'Codex',
 };

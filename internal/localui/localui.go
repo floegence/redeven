@@ -29,6 +29,7 @@ import (
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
 	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
+	"github.com/floegence/redeven/internal/portforward"
 	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/gorilla/websocket"
@@ -120,6 +121,7 @@ func (s *Server) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleRoot)
 	mux.HandleFunc("/cs/", s.handleCodeSpace)
+	mux.HandleFunc("/pf/", s.handlePortForward)
 	// Browsers may request these root-level assets regardless of the actual SPA base path.
 	// Keep them available to avoid noisy 404s in Local UI mode.
 	mux.HandleFunc("/favicon.ico", s.handleFavicon)
@@ -561,6 +563,36 @@ func (s *Server) handleCodeSpace(w http.ResponseWriter, r *http.Request) {
 	s.gw.ServeHTTP(w, gateway.WithLocalUICodeSpaceRoute(r, codeSpaceID))
 }
 
+func (s *Server) handlePortForward(w http.ResponseWriter, r *http.Request) {
+	if s == nil || w == nil || r == nil {
+		return
+	}
+	if s.gw == nil {
+		http.NotFound(w, r)
+		return
+	}
+	forwardID, basePath, ok := localPortForwardRoute(r.URL.Path)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	if r.URL.Path == basePath {
+		target := basePath + "/"
+		if rawQuery := strings.TrimSpace(r.URL.RawQuery); rawQuery != "" {
+			target += "?" + rawQuery
+		}
+		http.Redirect(w, r, target, http.StatusFound)
+		return
+	}
+	if s.accessEnabled() {
+		if !s.ensureLocalAccessHTTPResponse(w, r) {
+			http.Error(w, "access password required", http.StatusLocked)
+			return
+		}
+	}
+	s.gw.ServeHTTP(w, gateway.WithLocalUIPortForwardRoute(r, forwardID))
+}
+
 func localCodeSpaceRoute(path string) (codeSpaceID string, basePath string, ok bool) {
 	p := strings.TrimSpace(path)
 	if !strings.HasPrefix(p, "/cs/") {
@@ -576,6 +608,23 @@ func localCodeSpaceRoute(path string) (codeSpaceID string, basePath string, ok b
 		return "", "", false
 	}
 	return codeSpaceID, "/cs/" + codeSpaceID, true
+}
+
+func localPortForwardRoute(path string) (forwardID string, basePath string, ok bool) {
+	p := strings.TrimSpace(path)
+	if !strings.HasPrefix(p, "/pf/") {
+		return "", "", false
+	}
+	rest := strings.TrimPrefix(p, "/pf/")
+	if rest == "" {
+		return "", "", false
+	}
+	forwardID, _, _ = strings.Cut(rest, "/")
+	forwardID = strings.TrimSpace(forwardID)
+	if !portforward.IsValidForwardID(forwardID) {
+		return "", "", false
+	}
+	return forwardID, "/pf/" + forwardID, true
 }
 
 func (s *Server) handleAccessStatus(w http.ResponseWriter, r *http.Request) {

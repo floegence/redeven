@@ -189,11 +189,13 @@ const (
 	localUIRouteNone localUIRouteKind = iota
 	localUIRouteEnv
 	localUIRouteCodeSpace
+	localUIRoutePortForward
 )
 
 type localUIRoute struct {
 	kind        localUIRouteKind
 	codeSpaceID string
+	forwardID   string
 }
 
 type localUIRouteContextKey struct{}
@@ -206,6 +208,13 @@ func WithLocalUICodeSpaceRoute(r *http.Request, codeSpaceID string) *http.Reques
 	return withLocalUIRoute(r, localUIRoute{
 		kind:        localUIRouteCodeSpace,
 		codeSpaceID: strings.TrimSpace(codeSpaceID),
+	})
+}
+
+func WithLocalUIPortForwardRoute(r *http.Request, forwardID string) *http.Request {
+	return withLocalUIRoute(r, localUIRoute{
+		kind:      localUIRoutePortForward,
+		forwardID: strings.TrimSpace(forwardID),
 	})
 }
 
@@ -380,6 +389,8 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			originRole = originRoleEnv
 		case localUIRouteCodeSpace:
 			originRole = originRoleCodeSpace
+		case localUIRoutePortForward:
+			originRole = originRolePortForward
 		default:
 			originRole = originRoleUnknown
 		}
@@ -389,12 +400,6 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 
 	if strings.HasPrefix(p, "/_redeven_proxy/api/") {
-		// Local UI mode: disable Port Forward management entirely.
-		if localUI && strings.HasPrefix(p, "/_redeven_proxy/api/forwards") {
-			http.Error(w, "not found", http.StatusNotFound)
-			return
-		}
-
 		// Hardening: only allow management APIs from the Env App trusted launcher origin
 		// (env-<env_id>.<region>.<base-sandbox-domain>).
 		// Do not expose them to codespace origins (code-server is untrusted).
@@ -453,11 +458,6 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		g.handleCodeServerProxy(w, r)
 		return
 	case originRolePortForward:
-		// Local UI mode: port forwarding is disabled.
-		if localUI {
-			http.Error(w, "not found", http.StatusNotFound)
-			return
-		}
 		g.handlePortForwardProxy(w, r)
 		return
 	default:
@@ -4143,6 +4143,33 @@ func localCodeSpaceBasePath(r *http.Request) string {
 	return "/cs/" + codeSpaceID
 }
 
+func portForwardIDFromRequest(r *http.Request) (string, bool) {
+	if route, ok := localUIRouteFromRequest(r); ok && route.kind == localUIRoutePortForward {
+		id := strings.TrimSpace(route.forwardID)
+		if id == "" {
+			return "", false
+		}
+		return id, true
+	}
+	_, host, err := externalOriginFromRequest(r)
+	if err != nil {
+		return "", false
+	}
+	return forwardIDFromExternalHost(host)
+}
+
+func localPortForwardBasePath(r *http.Request) string {
+	route, ok := localUIRouteFromRequest(r)
+	if !ok || route.kind != localUIRoutePortForward {
+		return ""
+	}
+	forwardID := strings.TrimSpace(route.forwardID)
+	if forwardID == "" {
+		return ""
+	}
+	return "/pf/" + forwardID
+}
+
 func codespaceRequestRootPath(r *http.Request) string {
 	if base := localCodeSpaceBasePath(r); base != "" {
 		return base + "/"
@@ -4338,11 +4365,12 @@ func (g *Gateway) handlePortForwardProxy(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "missing external origin", http.StatusBadRequest)
 		return
 	}
-	forwardID, ok := forwardIDFromExternalHost(extHost)
+	forwardID, ok := portForwardIDFromRequest(r)
 	if !ok {
 		http.Error(w, "not a port forward origin", http.StatusNotFound)
 		return
 	}
+	localPrefix := localPortForwardBasePath(r)
 
 	fw, err := g.pf.GetForward(r.Context(), forwardID)
 	if err != nil {
@@ -4369,6 +4397,8 @@ func (g *Gateway) handlePortForwardProxy(w http.ResponseWriter, r *http.Request)
 		extWsScheme = "wss"
 	}
 	extWsOrigin := fmt.Sprintf("%s://%s", extWsScheme, extHost)
+	extHTTPBase := extOrigin + localPrefix
+	extWSBase := extWsOrigin + localPrefix
 
 	transport := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
@@ -4394,6 +4424,15 @@ func (g *Gateway) handlePortForwardProxy(w http.ResponseWriter, r *http.Request)
 		Transport: transport,
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.SetURL(targetBase)
+			if localPrefix != "" {
+				pr.Out.URL.Path = stripCodeSpaceProxyPrefix(pr.In.URL.Path, localPrefix)
+				if pr.In.URL.RawPath != "" {
+					pr.Out.URL.RawPath = stripCodeSpaceProxyPrefix(pr.In.URL.RawPath, localPrefix)
+				} else {
+					pr.Out.URL.RawPath = ""
+				}
+				pr.Out.URL.RawQuery = pr.In.URL.RawQuery
+			}
 
 			// Compatibility-first: make the upstream believe it is serving its own origin.
 			pr.Out.Host = targetURL.Host
@@ -4424,7 +4463,7 @@ func (g *Gateway) handlePortForwardProxy(w http.ResponseWriter, r *http.Request)
 
 			// Rewrite Location back to the sandbox origin when redirecting to the target itself.
 			if loc := strings.TrimSpace(resp.Header.Get("Location")); loc != "" {
-				resp.Header.Set("Location", rewriteLocationToSandbox(loc, targetURL, extOrigin))
+				resp.Header.Set("Location", rewriteLocationToProxy(loc, targetURL, localPrefix))
 			}
 
 			// Strip Domain from Set-Cookie so cookies bind to pf-* host.
@@ -4456,7 +4495,7 @@ func (g *Gateway) handlePortForwardProxy(w http.ResponseWriter, r *http.Request)
 				return nil
 			}
 
-			rewritten := rewriteHTMLOrigins(string(b), targetURL, extOrigin, extWsOrigin)
+			rewritten := rewriteHTMLOrigins(string(b), targetURL, extHTTPBase, extWSBase)
 			resp.Body = io.NopCloser(strings.NewReader(rewritten))
 			resp.ContentLength = int64(len(rewritten))
 			resp.Header.Set("Content-Length", fmt.Sprintf("%d", len(rewritten)))
@@ -4473,7 +4512,7 @@ func (g *Gateway) handlePortForwardProxy(w http.ResponseWriter, r *http.Request)
 	proxy.ServeHTTP(w, r)
 }
 
-func rewriteLocationToSandbox(location string, target *url.URL, externalOrigin string) string {
+func rewriteLocationToProxy(location string, target *url.URL, proxyBasePath string) string {
 	loc := strings.TrimSpace(location)
 	if loc == "" || target == nil {
 		return location
@@ -4483,7 +4522,19 @@ func rewriteLocationToSandbox(location string, target *url.URL, externalOrigin s
 		return location
 	}
 	if strings.TrimSpace(u.Host) == "" {
-		// Relative redirects are already sandbox-safe.
+		if strings.TrimSpace(proxyBasePath) != "" && strings.HasPrefix(loc, "/") {
+			path := u.EscapedPath()
+			if strings.TrimSpace(path) == "" {
+				path = "/"
+			}
+			if strings.TrimSpace(u.RawQuery) != "" {
+				path += "?" + u.RawQuery
+			}
+			if strings.TrimSpace(u.Fragment) != "" {
+				path += "#" + u.Fragment
+			}
+			return joinProxyBasePath(proxyBasePath, path)
+		}
 		return location
 	}
 
@@ -4507,9 +4558,8 @@ func rewriteLocationToSandbox(location string, target *url.URL, externalOrigin s
 		return location
 	}
 
-	// Redirect within the target itself: rewrite back to the sandbox origin.
-	//
-	// Note: return a path-only redirect to avoid leaking the sandbox origin into app logic.
+	// Redirect within the target itself: rewrite back to the visible proxy path.
+	// Remote pf-* origins stay root-relative; local /pf/<id> routes keep their prefix.
 	path := u.EscapedPath()
 	if strings.TrimSpace(path) == "" {
 		path = "/"
@@ -4520,8 +4570,7 @@ func rewriteLocationToSandbox(location string, target *url.URL, externalOrigin s
 	if strings.TrimSpace(u.Fragment) != "" {
 		path += "#" + u.Fragment
 	}
-	_ = externalOrigin
-	return path
+	return joinProxyBasePath(proxyBasePath, path)
 }
 
 func defaultPortForScheme(scheme string) string {
@@ -4552,19 +4601,19 @@ func stripCookieDomain(v string) string {
 	return strings.Join(out, "; ")
 }
 
-func rewriteHTMLOrigins(html string, target *url.URL, externalOrigin string, externalWsOrigin string) string {
+func rewriteHTMLOrigins(html string, target *url.URL, externalHTTPBase string, externalWSBase string) string {
 	if html == "" || target == nil {
 		return html
 	}
 
-	extOrigin := strings.TrimSpace(externalOrigin)
-	extHost := ""
-	if extOrigin != "" {
-		if u, err := url.Parse(extOrigin); err == nil && u != nil {
-			extHost = strings.TrimSpace(u.Host)
+	extHTTPBase := strings.TrimSpace(externalHTTPBase)
+	extProtocolRelativeBase := ""
+	if extHTTPBase != "" {
+		if u, err := url.Parse(extHTTPBase); err == nil && u != nil {
+			extProtocolRelativeBase = "//" + strings.TrimSpace(u.Host) + strings.TrimRight(strings.TrimSpace(u.EscapedPath()), "/")
 		}
 	}
-	extWsOrigin := strings.TrimSpace(externalWsOrigin)
+	extWSBase := strings.TrimSpace(externalWSBase)
 
 	targetHostPort := strings.TrimSpace(target.Host)
 	targetHostname := strings.TrimSpace(target.Hostname())
@@ -4581,15 +4630,36 @@ func rewriteHTMLOrigins(html string, target *url.URL, externalOrigin string, ext
 		if h == "" {
 			continue
 		}
-		out = strings.ReplaceAll(out, "http://"+h, extOrigin)
-		out = strings.ReplaceAll(out, "https://"+h, extOrigin)
-		out = strings.ReplaceAll(out, "ws://"+h, extWsOrigin)
-		out = strings.ReplaceAll(out, "wss://"+h, extWsOrigin)
-		if extHost != "" {
-			out = strings.ReplaceAll(out, "//"+h, "//"+extHost)
+		out = strings.ReplaceAll(out, "http://"+h, extHTTPBase)
+		out = strings.ReplaceAll(out, "https://"+h, extHTTPBase)
+		out = strings.ReplaceAll(out, "ws://"+h, extWSBase)
+		out = strings.ReplaceAll(out, "wss://"+h, extWSBase)
+		if extProtocolRelativeBase != "" {
+			out = strings.ReplaceAll(out, "//"+h, extProtocolRelativeBase)
 		}
 	}
 	return out
+}
+
+func joinProxyBasePath(basePath string, targetPath string) string {
+	base := strings.TrimRight("/"+strings.Trim(strings.TrimSpace(basePath), "/"), "/")
+	if base == "" || base == "/" {
+		base = ""
+	}
+	p := strings.TrimSpace(targetPath)
+	if p == "" {
+		p = "/"
+	}
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	if base == "" {
+		return p
+	}
+	if p == "/" {
+		return base + "/"
+	}
+	return base + p
 }
 
 func (g *Gateway) maybeRedirectCodespaceRootToWorkspace(w http.ResponseWriter, r *http.Request) bool {

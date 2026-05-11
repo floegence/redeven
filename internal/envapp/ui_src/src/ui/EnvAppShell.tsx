@@ -1824,10 +1824,8 @@ export function EnvAppShell() {
       { id: 'monitor', name: 'Monitoring', icon: Activity, component: EnvMonitorPage, sidebar: { order: 2, fullScreen: true } },
       { id: 'files', name: 'File Browser', icon: Files, component: EnvFileBrowserPage, sidebar: { order: 3, fullScreen: true } },
       { id: 'codespaces', name: 'Codespaces', icon: Code, component: EnvCodespacesPage, sidebar: { order: 4, fullScreen: true } },
+      { id: 'ports', name: 'Web Services', icon: Globe, component: EnvPortForwardsPage, sidebar: { order: 5, fullScreen: true } },
     ];
-    if (!isLocalMode()) {
-      list.push({ id: 'ports', name: 'Ports', icon: Globe, component: EnvPortForwardsPage, sidebar: { order: 5, fullScreen: true } });
-    }
     list.push({ id: 'ai', name: 'Flower', icon: FlowerIcon, component: EnvAIPage, sidebar: { order: 6, fullScreen: false, renderIn: 'main' } });
     list.push({ id: 'codex', name: 'Codex', icon: CodexNavigationIcon, component: CodexPage, sidebar: { order: 7, fullScreen: false, renderIn: 'main' } });
     list.push({ id: 'settings', name: 'Runtime Settings', icon: Settings, component: EnvSettingsPage, sidebar: { order: 99, fullScreen: true } });
@@ -1865,20 +1863,7 @@ export function EnvAppShell() {
     setEnvSidebarActiveTab(surface, { openSidebar: shouldEnvTabOpenSidebar(surface) });
   };
 
-  const fallbackSurfaceFor = (surfaceId: EnvSurfaceId): EnvSurfaceId => {
-    if (surfaceId === 'ports' && isLocalMode()) {
-      return 'codespaces';
-    }
-    return ENV_DEFAULT_SURFACE_ID;
-  };
-
   const resolveOpenSurfaceTarget = (surfaceId: EnvSurfaceId, options?: EnvOpenSurfaceOptions): EnvSurfaceId => {
-    if (surfaceId === 'ports' && isLocalMode()) {
-      if (options?.reason !== 'mode_restore') {
-        notify.error('Ports unavailable', 'Port forwards are only available for remote environments.');
-      }
-      return fallbackSurfaceFor(surfaceId);
-    }
     if (surfaceId === 'ai' && !canUseFlower()) {
       if (options?.reason !== 'mode_restore') {
         notify.error(
@@ -1888,7 +1873,7 @@ export function EnvAppShell() {
             : 'Loading environment permissions...',
         );
       }
-      return fallbackSurfaceFor(surfaceId);
+      return ENV_DEFAULT_SURFACE_ID;
     }
     if (surfaceId === 'codex' && !canUseCodex()) {
       if (options?.reason !== 'mode_restore') {
@@ -1899,7 +1884,7 @@ export function EnvAppShell() {
             : 'Loading environment permissions...',
         );
       }
-      return fallbackSurfaceFor(surfaceId);
+      return ENV_DEFAULT_SURFACE_ID;
     }
     return surfaceId;
   };
@@ -2048,7 +2033,6 @@ export function EnvAppShell() {
     if (!persistReady()) return;
     const id = layout.sidebarActiveTab();
     if (!isEnvSurfaceId(id)) return;
-    if (id === 'ports' && isLocalMode()) return;
     setLastActivitySurface(id);
     if (viewMode() === 'activity') {
       setLastRequestedSurface(id);
@@ -2080,10 +2064,8 @@ export function EnvAppShell() {
           }
         : { id: 'files', icon: Files, label: 'File Browser', collapseBehavior: 'preserve' },
       { id: 'codespaces', icon: Code, label: 'Codespaces', collapseBehavior: 'preserve' },
+      { id: 'ports', icon: Globe, label: 'Web Services', collapseBehavior: 'preserve' },
     );
-    if (!isLocalMode()) {
-      items.push({ id: 'ports', icon: Globe, label: 'Ports', collapseBehavior: 'preserve' });
-    }
     if (canUseFlower()) {
       items.push({
         id: 'ai',
@@ -2153,7 +2135,6 @@ export function EnvAppShell() {
   // Env App command palette commands (navigation + common actions).
   // Note: register commands once per Shell lifecycle to avoid duplicates during HMR/remount.
   createEffect(() => {
-    const local = isLocalMode();
     const desktopShellAvailable = desktopShellBridgeAvailable();
 
     const list: any[] = [
@@ -2248,17 +2229,15 @@ export function EnvAppShell() {
       },
     ];
 
-    if (!local) {
-      list.push({
-        id: 'redeven.env.goToPorts',
-        title: 'Go to Ports',
-        description: 'Open port forwards',
-        category: 'Navigation',
-        keybind: 'mod+shift+o',
-        icon: Globe,
-        execute: () => openSurface('ports', { reason: 'direct_navigation', focus: true, ensureVisible: true }),
-      });
-    }
+    list.push({
+      id: 'redeven.env.goToWebServices',
+      title: 'Go to Web Services',
+      description: 'Open web service registrations',
+      category: 'Navigation',
+      keybind: 'mod+shift+o',
+      icon: Globe,
+      execute: () => openSurface('ports', { reason: 'direct_navigation', focus: true, ensureVisible: true }),
+    });
 
     if (canUseFlower()) {
       list.push({
