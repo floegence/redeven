@@ -20,6 +20,7 @@ import (
 type autoTitleMock struct {
 	mu           sync.Mutex
 	requestCount int
+	maxTokens    []int
 	token        string
 	responses    []autoTitleMockResponse
 }
@@ -55,9 +56,11 @@ func (m *autoTitleMock) handle(w http.ResponseWriter, r *http.Request) {
 	_ = r.Body.Close()
 	var req map[string]any
 	_ = json.Unmarshal(body, &req)
+	maxTokens := jsonNumberToInt(req["max_output_tokens"])
 
 	m.mu.Lock()
 	m.requestCount++
+	m.maxTokens = append(m.maxTokens, maxTokens)
 	var response autoTitleMockResponse
 	if len(m.responses) > 0 {
 		response = m.responses[0]
@@ -140,6 +143,12 @@ func (m *autoTitleMock) count() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.requestCount
+}
+
+func (m *autoTitleMock) maxTokensSnapshot() []int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]int(nil), m.maxTokens...)
 }
 
 func (m *moonshotAutoTitleMock) handle(w http.ResponseWriter, r *http.Request) {
@@ -675,7 +684,7 @@ func TestScheduleAutoThreadTitle_FallsBackAfterThreeFailures(t *testing.T) {
 				t.Fatalf("TitlePromptVersion=%q, want empty for fallback", th.TitlePromptVersion)
 			}
 			if mock.count() != 3 {
-				t.Fatalf("requestCount=%d, want 3 generation attempts before fallback", mock.count())
+				t.Fatalf("requestCount=%d maxTokens=%v, want 3 generation attempts before fallback", mock.count(), mock.maxTokensSnapshot())
 			}
 			return
 		}
@@ -858,6 +867,135 @@ func TestAutoThreadTitleCoordinator_ScheduleKeepsNewerPendingRequest(t *testing.
 	}
 	if pending.MessageID != newer.MessageID {
 		t.Fatalf("pending.MessageID=%q, want %q", pending.MessageID, newer.MessageID)
+	}
+}
+
+func TestAutoThreadTitleCoordinator_ScheduleDoesNotResetSamePendingRequest(t *testing.T) {
+	t.Parallel()
+
+	req := autoThreadTitleRequest{
+		EndpointID:             "env",
+		ThreadID:               "thread",
+		MessageID:              "msg_pending",
+		MessageRowID:           2,
+		MessageCreatedAtUnixMs: 200,
+		PublicText:             "pending title input",
+		UpdatedByID:            "u_original",
+		UpdatedByEmail:         "original@example.com",
+		Attempts:               2,
+		NextAttemptAt:          time.Now().Add(30 * time.Second),
+	}
+	key := runThreadKey(req.EndpointID, req.ThreadID)
+	c := &autoThreadTitleCoordinator{
+		pending: map[string]autoThreadTitleRequest{
+			key: req,
+		},
+		wakeCh: make(chan struct{}, 1),
+	}
+
+	duplicate := req
+	duplicate.Attempts = 0
+	duplicate.NextAttemptAt = time.Now()
+	duplicate.UpdatedByID = "u_recovered"
+	duplicate.UpdatedByEmail = "recovered@example.com"
+	c.Schedule(duplicate)
+
+	c.mu.Lock()
+	pending, ok := c.pending[key]
+	c.mu.Unlock()
+	if !ok {
+		t.Fatalf("pending request missing")
+	}
+	if pending.Attempts != 2 {
+		t.Fatalf("pending.Attempts=%d, want 2", pending.Attempts)
+	}
+	if !pending.NextAttemptAt.Equal(req.NextAttemptAt) {
+		t.Fatalf("pending.NextAttemptAt=%v, want %v", pending.NextAttemptAt, req.NextAttemptAt)
+	}
+}
+
+func TestAutoThreadTitleCoordinator_InFlightRequestIsNotRescheduled(t *testing.T) {
+	t.Parallel()
+
+	req := autoThreadTitleRequest{
+		EndpointID:             "env",
+		ThreadID:               "thread",
+		MessageID:              "msg_current",
+		MessageRowID:           3,
+		MessageCreatedAtUnixMs: 300,
+		PublicText:             "current title input",
+		UpdatedByID:            "u_original",
+		UpdatedByEmail:         "original@example.com",
+	}
+	key := runThreadKey(req.EndpointID, req.ThreadID)
+	c := &autoThreadTitleCoordinator{
+		pending: map[string]autoThreadTitleRequest{
+			key: req,
+		},
+		inFlight: make(map[string]autoThreadTitleRequest),
+		wakeCh:   make(chan struct{}, 1),
+	}
+
+	selected, wait, ok := c.nextRequest()
+	if !ok || wait != 0 {
+		t.Fatalf("nextRequest ok=%v wait=%v, want due request", ok, wait)
+	}
+	if !autoThreadTitleRequestsMatch(selected, req) {
+		t.Fatalf("selected=%+v, want %+v", selected, req)
+	}
+
+	duplicate := req
+	duplicate.UpdatedByID = "u_recovered"
+	duplicate.UpdatedByEmail = "recovered@example.com"
+	c.Schedule(duplicate)
+
+	c.mu.Lock()
+	_, pending := c.pending[key]
+	active, activeOK := c.inFlight[key]
+	c.mu.Unlock()
+	if pending {
+		t.Fatalf("duplicate in-flight request was requeued")
+	}
+	if !activeOK || !autoThreadTitleRequestsMatch(active, req) {
+		t.Fatalf("inFlight=%+v ok=%v, want original request", active, activeOK)
+	}
+}
+
+func TestAutoThreadTitleCoordinator_RetryRequeuesOwnedInFlightRequest(t *testing.T) {
+	t.Parallel()
+
+	req := autoThreadTitleRequest{
+		EndpointID:             "env",
+		ThreadID:               "thread",
+		MessageID:              "msg_retry",
+		MessageRowID:           4,
+		MessageCreatedAtUnixMs: 400,
+		PublicText:             "retry title input",
+	}
+	key := runThreadKey(req.EndpointID, req.ThreadID)
+	c := &autoThreadTitleCoordinator{
+		pending:    make(map[string]autoThreadTitleRequest),
+		inFlight:   map[string]autoThreadTitleRequest{key: req},
+		retryDelay: func(int) time.Duration { return 0 },
+	}
+
+	c.handleResult(req, autoThreadTitleApplyResult{
+		Status: autoThreadTitleApplyStatusRetry,
+		Reason: "generation_failed",
+	})
+
+	c.mu.Lock()
+	pending, pendingOK := c.pending[key]
+	_, activeOK := c.inFlight[key]
+	c.mu.Unlock()
+	if activeOK {
+		t.Fatalf("in-flight request was not released after retry")
+	}
+	if !pendingOK {
+		t.Fatalf("retry request was not requeued")
+	}
+	if pending.Attempts != 1 {
+		t.Fatalf("pending.Attempts=%d, want 1", pending.Attempts)
 	}
 }
 
