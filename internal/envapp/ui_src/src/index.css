@@ -22,11 +22,27 @@ body {
   color: var(--foreground);
 }
 
-/* Keep desktop theme flips from animating every color and shadow transition at once. */
-html[data-theme-switching='true'],
-html[data-theme-switching='true'] *,
-html[data-theme-switching='true'] *::before,
-html[data-theme-switching='true'] *::after {
+/* Keep desktop theme flips from animating shell chrome without invalidating heavy Workbench trees. */
+html[data-redeven-theme-switching='true'] [data-floe-shell-slot='top-bar'],
+html[data-redeven-theme-switching='true'] [data-floe-shell-slot='top-bar'] *,
+html[data-redeven-theme-switching='true'] [data-floe-shell-slot='top-bar'] *::before,
+html[data-redeven-theme-switching='true'] [data-floe-shell-slot='top-bar'] *::after,
+html[data-redeven-theme-switching='true'] [data-floe-shell-slot='activity-bar'],
+html[data-redeven-theme-switching='true'] [data-floe-shell-slot='activity-bar'] *,
+html[data-redeven-theme-switching='true'] [data-floe-shell-slot='activity-bar'] *::before,
+html[data-redeven-theme-switching='true'] [data-floe-shell-slot='activity-bar'] *::after,
+html[data-redeven-theme-switching='true'] [data-floe-shell-slot='sidebar'],
+html[data-redeven-theme-switching='true'] [data-floe-shell-slot='sidebar'] *,
+html[data-redeven-theme-switching='true'] [data-floe-shell-slot='sidebar'] *::before,
+html[data-redeven-theme-switching='true'] [data-floe-shell-slot='sidebar'] *::after,
+html[data-redeven-theme-switching='true'] [data-floe-shell-slot='bottom-bar'],
+html[data-redeven-theme-switching='true'] [data-floe-shell-slot='bottom-bar'] *,
+html[data-redeven-theme-switching='true'] [data-floe-shell-slot='bottom-bar'] *::before,
+html[data-redeven-theme-switching='true'] [data-floe-shell-slot='bottom-bar'] *::after,
+html[data-redeven-theme-switching='true'] [data-floe-shell-slot='mobile-tab-bar'],
+html[data-redeven-theme-switching='true'] [data-floe-shell-slot='mobile-tab-bar'] *,
+html[data-redeven-theme-switching='true'] [data-floe-shell-slot='mobile-tab-bar'] *::before,
+html[data-redeven-theme-switching='true'] [data-floe-shell-slot='mobile-tab-bar'] *::after {
   transition: none !important;
 }
 

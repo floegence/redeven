@@ -103,6 +103,14 @@ function DesktopThemeSync() {
       window.clearTimeout(handle);
     };
 
+    const setThemeSwitching = (active: boolean) => {
+      if (active) {
+        document.documentElement.dataset.redevenThemeSwitching = 'true';
+        return;
+      }
+      delete document.documentElement.dataset.redevenThemeSwitching;
+    };
+
     const clearThemeSwitching = () => {
       if (clearThemeSwitchingFrame !== null) {
         cancelFrame(clearThemeSwitchingFrame);
@@ -112,11 +120,11 @@ function DesktopThemeSync() {
         cancelFrame(removeThemeSwitchingFrame);
         removeThemeSwitchingFrame = null;
       }
-      delete document.documentElement.dataset.themeSwitching;
+      setThemeSwitching(false);
     };
 
     const markThemeSwitching = () => {
-      document.documentElement.dataset.themeSwitching = 'true';
+      setThemeSwitching(true);
       if (clearThemeSwitchingFrame !== null) {
         cancelFrame(clearThemeSwitchingFrame);
         clearThemeSwitchingFrame = null;
@@ -129,7 +137,7 @@ function DesktopThemeSync() {
         clearThemeSwitchingFrame = null;
         removeThemeSwitchingFrame = requestFrame(() => {
           removeThemeSwitchingFrame = null;
-          delete document.documentElement.dataset.themeSwitching;
+          setThemeSwitching(false);
         });
       });
     };

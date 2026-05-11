@@ -30,6 +30,12 @@ declare global {
 }
 
 const NO_DRAG_TARGET_SELECTOR = DESKTOP_WINDOW_CHROME_NO_DRAG_TARGET_SELECTORS.join(',');
+const DESKTOP_EMBEDDED_DRAG_REGION_MUTATION_ATTRIBUTE_FILTER = [
+  'style',
+  'data-floe-shell-slot',
+  'data-redeven-desktop-titlebar-drag-region',
+  'data-redeven-desktop-titlebar-no-drag',
+] as const;
 
 function defaultCreateResizeObserver(callback: ResizeObserverCallback): ResizeObserverLike | null {
   if (typeof ResizeObserver === 'undefined') {
@@ -397,7 +403,7 @@ export function installDesktopEmbeddedDragRegionSync(args: Readonly<{
 
   mutationObserver?.observe(doc.documentElement, {
     attributes: true,
-    attributeFilter: ['class', 'style', 'data-floe-shell-slot', 'data-redeven-desktop-titlebar-drag-region', 'data-redeven-desktop-titlebar-no-drag'],
+    attributeFilter: [...DESKTOP_EMBEDDED_DRAG_REGION_MUTATION_ATTRIBUTE_FILTER],
     childList: true,
     subtree: true,
   });

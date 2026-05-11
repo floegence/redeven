@@ -9,7 +9,25 @@ function readRedevenCss(): string {
   return fs.readFileSync(path.resolve(dir, './redeven.css'), 'utf8');
 }
 
+function readEnvAppEntryCss(): string {
+  const here = fileURLToPath(import.meta.url);
+  const dir = path.dirname(here);
+  return fs.readFileSync(path.resolve(dir, '../index.css'), 'utf8');
+}
+
 describe('Redeven Env App surface theme contract', () => {
+  it('scopes desktop theme transition suppression to shell chrome instead of the full Workbench tree', () => {
+    const src = readEnvAppEntryCss();
+
+    expect(src).toContain("html[data-redeven-theme-switching='true'] [data-floe-shell-slot='top-bar']");
+    expect(src).toContain("html[data-redeven-theme-switching='true'] [data-floe-shell-slot='activity-bar']");
+    expect(src).toContain("html[data-redeven-theme-switching='true'] [data-floe-shell-slot='sidebar']");
+    expect(src).toContain("html[data-redeven-theme-switching='true'] [data-floe-shell-slot='bottom-bar']");
+    expect(src).not.toContain("html[data-theme-switching='true'] *");
+    expect(src).not.toContain("html[data-redeven-theme-switching='true'] *");
+    expect(src).not.toContain("html[data-redeven-theme-switching='true'] .workbench");
+  });
+
   it('defines the root panel surface family, paired stroke tokens, and aliases shared card/popover tokens to it', () => {
     const src = readRedevenCss();
 
