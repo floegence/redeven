@@ -1,15 +1,17 @@
 {
   "schema_version": 1,
   "release_review": {
-    "release_version": "v0.6.1",
-    "previous_release": "v0.6.0",
+    "release_version": "v0.6.2",
+    "previous_release": "v0.6.1",
     "reviewed_at": "2026-05-11",
-    "review_id": "auto-thread-title-ci-v1",
-    "summary": "Patch release: fixes the automatic thread-title coordinator so retry timers re-acquire queue ownership before running and recovery scheduling remains idempotent for the same message. No Runtime Service protocol or compatibility window changes.",
-    "same_window_rationale": "The release changes only the local AI thread-title coordinator's in-process retry ownership model and tests. It does not add or change Runtime Service snapshot fields, sys.ping payload semantics, attach/start contracts, startup reports, Desktop IPC payloads, Workbench layout contracts, Env App shell readiness, or SSH bootstrap requirements. The existing protocol version, compatibility epoch, minimum Desktop version, and minimum Runtime version remain valid.",
+    "review_id": "workbench-defaults-v1",
+    "summary": "Patch release: updates Env App Workbench defaults for background regions and text annotations, opens Markdown previews in reading mode by default, and consumes the published floe-webapp background layer defaults contract. No Runtime Service protocol or compatibility window changes.",
+    "same_window_rationale": "The release changes only Env App UI defaults and the published floe-webapp UI package versions consumed by the embedded frontend. It does not add or change Runtime Service snapshot fields, sys.ping payload semantics, attach/start contracts, startup reports, Desktop IPC payloads, Workbench layout persistence fields, Env App shell readiness, or SSH bootstrap requirements. The existing protocol version, compatibility epoch, minimum Desktop version, and minimum Runtime version remain valid.",
     "checked_surfaces": [
-      "AI automatic thread-title scheduling, retry, recovery, and fallback ownership",
       "Env App Workbench layered canvas modes and dock routing",
+      "Env App Workbench default background region fill, opacity, and material",
+      "Env App Workbench default text annotation font size",
+      "Env App Markdown file preview reading-mode default",
       "Env App Workbench sticky notes, text annotations, and background region persistence",
       "Runtime Workbench layout schema migration and snapshot/event APIs",
       "Runtime Workbench durable widget-state persistence",

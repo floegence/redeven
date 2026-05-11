@@ -75,6 +75,29 @@ describe('FileMarkdown', () => {
     vi.clearAllMocks();
   });
 
+  it('opens markdown previews in reading mode by default', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <FileMarkdown
+        filePath="/workspace/README.md"
+        content={'# Start\n\nDetails'}
+      />
+    ), host);
+
+    try {
+      await flushAsync();
+
+      const body = host.querySelector<HTMLElement>('.file-markdown-body');
+      const readingButton = host.querySelector<HTMLButtonElement>('button[title="Reading mode"]');
+      expect(body?.classList.contains('file-markdown-reading')).toBe(true);
+      expect(readingButton?.getAttribute('aria-pressed')).toBe('true');
+    } finally {
+      dispose();
+    }
+  });
+
   it('re-processes existing code blocks when the app theme changes', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
