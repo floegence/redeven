@@ -33,7 +33,7 @@
     "marked": "^17.0.2",
     "marked-footnote": "^1.4.0",
     "marked-gfm-heading-id": "^4.1.4",
-    "mermaid": "^11.12.2",
+    "mermaid": "^11.15.0",
     "monaco-editor": "^0.55.1",
     "pdfjs-dist": "^5.6.205",
     "shiki": "^3.22.0",
