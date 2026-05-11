@@ -9,7 +9,7 @@ import (
 
 const (
 	schemaKind           = "workbench_layout_runtime"
-	currentSchemaVersion = 2
+	currentSchemaVersion = 3
 )
 
 func schemaSpec() sqliteutil.Spec {
@@ -21,6 +21,7 @@ func schemaSpec() sqliteutil.Spec {
 		Migrations: []sqliteutil.Migration{
 			{FromVersion: 0, ToVersion: 1, Apply: migrateToV1},
 			{FromVersion: 1, ToVersion: 2, Apply: migrateToV2},
+			{FromVersion: 2, ToVersion: 3, Apply: migrateToV3},
 		},
 		Verify: verifySchema,
 	}
@@ -79,12 +80,73 @@ CREATE INDEX IF NOT EXISTS idx_workbench_widget_states_type
 	return err
 }
 
+func migrateToV3(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+CREATE TABLE IF NOT EXISTS workbench_layout_sticky_notes (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  body TEXT NOT NULL,
+  color TEXT NOT NULL,
+  x REAL NOT NULL,
+  y REAL NOT NULL,
+  width REAL NOT NULL,
+  height REAL NOT NULL,
+  z_index INTEGER NOT NULL,
+  created_at_unix_ms INTEGER NOT NULL,
+  updated_at_unix_ms INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_workbench_layout_sticky_notes_order
+  ON workbench_layout_sticky_notes(z_index ASC, created_at_unix_ms ASC, id ASC);
+
+CREATE TABLE IF NOT EXISTS workbench_layout_annotations (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  text TEXT NOT NULL,
+  font_family TEXT NOT NULL,
+  font_size INTEGER NOT NULL,
+  font_weight INTEGER NOT NULL,
+  color TEXT NOT NULL,
+  align TEXT NOT NULL,
+  x REAL NOT NULL,
+  y REAL NOT NULL,
+  width REAL NOT NULL,
+  height REAL NOT NULL,
+  z_index INTEGER NOT NULL,
+  created_at_unix_ms INTEGER NOT NULL,
+  updated_at_unix_ms INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_workbench_layout_annotations_order
+  ON workbench_layout_annotations(z_index ASC, created_at_unix_ms ASC, id ASC);
+
+CREATE TABLE IF NOT EXISTS workbench_layout_background_layers (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  fill TEXT NOT NULL,
+  opacity REAL NOT NULL,
+  material TEXT NOT NULL,
+  x REAL NOT NULL,
+  y REAL NOT NULL,
+  width REAL NOT NULL,
+  height REAL NOT NULL,
+  z_index INTEGER NOT NULL,
+  created_at_unix_ms INTEGER NOT NULL,
+  updated_at_unix_ms INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_workbench_layout_background_layers_order
+  ON workbench_layout_background_layers(z_index ASC, created_at_unix_ms ASC, id ASC);
+`)
+	return err
+}
+
 func verifySchema(tx *sql.Tx) error {
 	requiredTables := map[string][]string{
-		"workbench_layout_snapshot": {"singleton", "revision", "seq", "updated_at_unix_ms"},
-		"workbench_layout_widgets":  {"widget_id", "widget_type", "x", "y", "width", "height", "z_index", "created_at_unix_ms"},
-		"workbench_layout_events":   {"seq", "event_type", "payload_json", "created_at_unix_ms"},
-		"workbench_widget_states":   {"widget_id", "widget_type", "revision", "state_json", "updated_at_unix_ms"},
+		"workbench_layout_snapshot":          {"singleton", "revision", "seq", "updated_at_unix_ms"},
+		"workbench_layout_widgets":           {"widget_id", "widget_type", "x", "y", "width", "height", "z_index", "created_at_unix_ms"},
+		"workbench_layout_sticky_notes":      {"id", "kind", "body", "color", "x", "y", "width", "height", "z_index", "created_at_unix_ms", "updated_at_unix_ms"},
+		"workbench_layout_annotations":       {"id", "kind", "text", "font_family", "font_size", "font_weight", "color", "align", "x", "y", "width", "height", "z_index", "created_at_unix_ms", "updated_at_unix_ms"},
+		"workbench_layout_background_layers": {"id", "name", "fill", "opacity", "material", "x", "y", "width", "height", "z_index", "created_at_unix_ms", "updated_at_unix_ms"},
+		"workbench_layout_events":            {"seq", "event_type", "payload_json", "created_at_unix_ms"},
+		"workbench_widget_states":            {"widget_id", "widget_type", "revision", "state_json", "updated_at_unix_ms"},
 	}
 	for tableName, columns := range requiredTables {
 		exists, err := sqliteutil.TableExistsTx(tx, tableName)
@@ -107,6 +169,9 @@ func verifySchema(tx *sql.Tx) error {
 
 	requiredIndexes := []string{
 		"idx_workbench_layout_widgets_order",
+		"idx_workbench_layout_sticky_notes_order",
+		"idx_workbench_layout_annotations_order",
+		"idx_workbench_layout_background_layers_order",
 		"idx_workbench_layout_events_seq",
 		"idx_workbench_widget_states_type",
 	}

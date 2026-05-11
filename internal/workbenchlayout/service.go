@@ -227,7 +227,7 @@ func (s *Store) replace(ctx context.Context, req PutLayoutRequest) (Snapshot, Ev
 	}
 
 	if current.Revision != normalizedReq.BaseRevision {
-		if snapshotsEqualWidgets(current, normalizedReq.Widgets) {
+		if snapshotsEqualLayout(current, normalizedReq) {
 			if err := tx.Commit(); err != nil {
 				return Snapshot{}, Event{}, err
 			}
@@ -236,7 +236,7 @@ func (s *Store) replace(ctx context.Context, req PutLayoutRequest) (Snapshot, Ev
 		return Snapshot{}, Event{}, &RevisionConflictError{CurrentRevision: current.Revision}
 	}
 
-	if snapshotsEqualWidgets(current, normalizedReq.Widgets) {
+	if snapshotsEqualLayout(current, normalizedReq) {
 		if err := tx.Commit(); err != nil {
 			return Snapshot{}, Event{}, err
 		}
@@ -270,6 +270,16 @@ func (s *Store) replace(ctx context.Context, req PutLayoutRequest) (Snapshot, Ev
 		); err != nil {
 			return Snapshot{}, Event{}, err
 		}
+	}
+
+	if err := replaceStickyNotesTx(ctx, tx, normalizedReq.StickyNotes); err != nil {
+		return Snapshot{}, Event{}, err
+	}
+	if err := replaceTextAnnotationsTx(ctx, tx, normalizedReq.Annotations); err != nil {
+		return Snapshot{}, Event{}, err
+	}
+	if err := replaceBackgroundLayersTx(ctx, tx, normalizedReq.BackgroundLayers); err != nil {
+		return Snapshot{}, Event{}, err
 	}
 
 	deletedWidgetIDs := removedWidgetIDs(current.Widgets, normalizedReq.Widgets)
@@ -691,6 +701,24 @@ ORDER BY z_index ASC, created_at_unix_ms ASC, widget_id ASC`,
 		return Snapshot{}, err
 	}
 
+	stickyNotes, err := loadStickyNotesTx(ctx, tx)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	snapshot.StickyNotes = stickyNotes
+
+	annotations, err := loadTextAnnotationsTx(ctx, tx)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	snapshot.Annotations = annotations
+
+	backgroundLayers, err := loadBackgroundLayersTx(ctx, tx)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	snapshot.BackgroundLayers = backgroundLayers
+
 	stateRows, err := tx.QueryContext(
 		ctx,
 		`SELECT widget_id, widget_type, revision, state_json, updated_at_unix_ms
@@ -784,6 +812,137 @@ func scanWidgetStateRow(scanner interface {
 	return state, nil
 }
 
+func loadStickyNotesTx(ctx context.Context, tx *sql.Tx) ([]StickyNote, error) {
+	rows, err := tx.QueryContext(
+		ctx,
+		`SELECT id, kind, body, color, x, y, width, height, z_index, created_at_unix_ms, updated_at_unix_ms
+FROM workbench_layout_sticky_notes
+ORDER BY z_index ASC, created_at_unix_ms ASC, id ASC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	notes := make([]StickyNote, 0)
+	for rows.Next() {
+		var note StickyNote
+		if err := rows.Scan(
+			&note.ID,
+			&note.Kind,
+			&note.Body,
+			&note.Color,
+			&note.X,
+			&note.Y,
+			&note.Width,
+			&note.Height,
+			&note.ZIndex,
+			&note.CreatedAtUnixMs,
+			&note.UpdatedAtUnixMs,
+		); err != nil {
+			return nil, err
+		}
+		normalized, err := normalizeStickyNote(note, note.UpdatedAtUnixMs)
+		if err != nil {
+			return nil, err
+		}
+		notes = append(notes, normalized)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return notes, nil
+}
+
+func loadTextAnnotationsTx(ctx context.Context, tx *sql.Tx) ([]TextAnnotation, error) {
+	rows, err := tx.QueryContext(
+		ctx,
+		`SELECT id, kind, text, font_family, font_size, font_weight, color, align, x, y, width, height, z_index, created_at_unix_ms, updated_at_unix_ms
+FROM workbench_layout_annotations
+ORDER BY z_index ASC, created_at_unix_ms ASC, id ASC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	annotations := make([]TextAnnotation, 0)
+	for rows.Next() {
+		var annotation TextAnnotation
+		if err := rows.Scan(
+			&annotation.ID,
+			&annotation.Kind,
+			&annotation.Text,
+			&annotation.FontFamily,
+			&annotation.FontSize,
+			&annotation.FontWeight,
+			&annotation.Color,
+			&annotation.Align,
+			&annotation.X,
+			&annotation.Y,
+			&annotation.Width,
+			&annotation.Height,
+			&annotation.ZIndex,
+			&annotation.CreatedAtUnixMs,
+			&annotation.UpdatedAtUnixMs,
+		); err != nil {
+			return nil, err
+		}
+		normalized, err := normalizeTextAnnotation(annotation, annotation.UpdatedAtUnixMs)
+		if err != nil {
+			return nil, err
+		}
+		annotations = append(annotations, normalized)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return annotations, nil
+}
+
+func loadBackgroundLayersTx(ctx context.Context, tx *sql.Tx) ([]BackgroundLayer, error) {
+	rows, err := tx.QueryContext(
+		ctx,
+		`SELECT id, name, fill, opacity, material, x, y, width, height, z_index, created_at_unix_ms, updated_at_unix_ms
+FROM workbench_layout_background_layers
+ORDER BY z_index ASC, created_at_unix_ms ASC, id ASC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	layers := make([]BackgroundLayer, 0)
+	for rows.Next() {
+		var layer BackgroundLayer
+		if err := rows.Scan(
+			&layer.ID,
+			&layer.Name,
+			&layer.Fill,
+			&layer.Opacity,
+			&layer.Material,
+			&layer.X,
+			&layer.Y,
+			&layer.Width,
+			&layer.Height,
+			&layer.ZIndex,
+			&layer.CreatedAtUnixMs,
+			&layer.UpdatedAtUnixMs,
+		); err != nil {
+			return nil, err
+		}
+		normalized, err := normalizeBackgroundLayer(layer, layer.UpdatedAtUnixMs)
+		if err != nil {
+			return nil, err
+		}
+		layers = append(layers, normalized)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return layers, nil
+}
+
 func upsertWidgetStateTx(ctx context.Context, tx *sql.Tx, state WidgetState) (Event, error) {
 	stateJSON, err := json.Marshal(state.State)
 	if err != nil {
@@ -875,6 +1034,130 @@ func updateSnapshotTimestampTx(ctx context.Context, tx *sql.Tx, seq int64, updat
 		return err
 	}
 	return updateSnapshotHeadTx(ctx, tx, currentRevision, seq, updatedAtUnixMs)
+}
+
+func replaceStickyNotesTx(ctx context.Context, tx *sql.Tx, notes []StickyNote) error {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM workbench_layout_sticky_notes`); err != nil {
+		return err
+	}
+	for _, note := range notes {
+		if _, err := tx.ExecContext(
+			ctx,
+			`INSERT INTO workbench_layout_sticky_notes(
+  id,
+  kind,
+  body,
+  color,
+  x,
+  y,
+  width,
+  height,
+  z_index,
+  created_at_unix_ms,
+  updated_at_unix_ms
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			note.ID,
+			note.Kind,
+			note.Body,
+			note.Color,
+			note.X,
+			note.Y,
+			note.Width,
+			note.Height,
+			note.ZIndex,
+			note.CreatedAtUnixMs,
+			note.UpdatedAtUnixMs,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func replaceTextAnnotationsTx(ctx context.Context, tx *sql.Tx, annotations []TextAnnotation) error {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM workbench_layout_annotations`); err != nil {
+		return err
+	}
+	for _, annotation := range annotations {
+		if _, err := tx.ExecContext(
+			ctx,
+			`INSERT INTO workbench_layout_annotations(
+  id,
+  kind,
+  text,
+  font_family,
+  font_size,
+  font_weight,
+  color,
+  align,
+  x,
+  y,
+  width,
+  height,
+  z_index,
+  created_at_unix_ms,
+  updated_at_unix_ms
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			annotation.ID,
+			annotation.Kind,
+			annotation.Text,
+			annotation.FontFamily,
+			annotation.FontSize,
+			annotation.FontWeight,
+			annotation.Color,
+			annotation.Align,
+			annotation.X,
+			annotation.Y,
+			annotation.Width,
+			annotation.Height,
+			annotation.ZIndex,
+			annotation.CreatedAtUnixMs,
+			annotation.UpdatedAtUnixMs,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func replaceBackgroundLayersTx(ctx context.Context, tx *sql.Tx, layers []BackgroundLayer) error {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM workbench_layout_background_layers`); err != nil {
+		return err
+	}
+	for _, layer := range layers {
+		if _, err := tx.ExecContext(
+			ctx,
+			`INSERT INTO workbench_layout_background_layers(
+  id,
+  name,
+  fill,
+  opacity,
+  material,
+  x,
+  y,
+  width,
+  height,
+  z_index,
+  created_at_unix_ms,
+  updated_at_unix_ms
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			layer.ID,
+			layer.Name,
+			layer.Fill,
+			layer.Opacity,
+			layer.Material,
+			layer.X,
+			layer.Y,
+			layer.Width,
+			layer.Height,
+			layer.ZIndex,
+			layer.CreatedAtUnixMs,
+			layer.UpdatedAtUnixMs,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func sessionIDSet(values []string) map[string]struct{} {

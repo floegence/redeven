@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it } from 'vitest';
+import {
+  WORKBENCH_DEFAULT_REGION_FILL,
+  WORKBENCH_DEFAULT_TEXT_COLOR,
+  WORKBENCH_TEXT_FONT_OPTIONS,
+} from '@floegence/floe-webapp-core/workbench';
 
 import {
   buildWorkbenchLocalStateStorageKey,
@@ -9,7 +14,10 @@ import {
   extractRuntimeWorkbenchLayoutFromWorkbenchState,
   normalizeRuntimeWorkbenchLayoutSnapshot,
   projectWorkbenchStateFromRuntimeLayout,
-  runtimeWorkbenchLayoutWidgetsEqual,
+  runtimeWorkbenchAnnotationsEqual,
+  runtimeWorkbenchBackgroundLayersEqual,
+  runtimeWorkbenchSharedLayoutEqual,
+  runtimeWorkbenchStickyNotesEqual,
   runtimeWorkbenchWidgetStateById,
   runtimeWorkbenchWidgetStateDataEqual,
   runtimeWorkbenchWidgetStatesEqual,
@@ -37,6 +45,7 @@ const widgetDefinitions = [
     singleton: false,
   },
 ] as const;
+const sansTextFont = WORKBENCH_TEXT_FONT_OPTIONS.find((option) => option.id === 'sans') ?? WORKBENCH_TEXT_FONT_OPTIONS[0]!;
 
 describe('runtimeWorkbenchLayout', () => {
   it('builds a dedicated local state storage key', () => {
@@ -86,6 +95,9 @@ describe('runtimeWorkbenchLayout', () => {
         },
       ],
       widget_states: [],
+      sticky_notes: [],
+      annotations: [],
+      background_layers: [],
     };
 
     const projected = projectWorkbenchStateFromRuntimeLayout({
@@ -177,6 +189,9 @@ describe('runtimeWorkbenchLayout', () => {
           },
         ],
         widget_states: [],
+        sticky_notes: [],
+        annotations: [],
+        background_layers: [],
       },
       localState,
       existingState: existingState as any,
@@ -231,6 +246,9 @@ describe('runtimeWorkbenchLayout', () => {
           },
         ],
         widget_states: [],
+        sticky_notes: [],
+        annotations: [],
+        background_layers: [],
       },
       localState,
       existingState: existingState as any,
@@ -306,6 +324,9 @@ describe('runtimeWorkbenchLayout', () => {
           },
         ],
         widget_states: [],
+        sticky_notes: [],
+        annotations: [],
+        background_layers: [],
       },
       localState,
       existingState: existingState as any,
@@ -391,6 +412,9 @@ describe('runtimeWorkbenchLayout', () => {
           },
         ],
         widget_states: [],
+        sticky_notes: [],
+        annotations: [],
+        background_layers: [],
       },
       localState,
       existingState: existingState as any,
@@ -447,7 +471,167 @@ describe('runtimeWorkbenchLayout', () => {
           created_at_unix_ms: 111,
         },
       ],
+      sticky_notes: [],
+      annotations: [],
+      background_layers: [],
     });
+  });
+
+  it('extracts and projects layered canvas objects as shared runtime layout', () => {
+    const existingState = {
+      version: 1,
+      widgets: [],
+      viewport: { x: 80, y: 60, scale: 1 },
+      locked: false,
+      filters: {
+        'redeven.files': true,
+        'sticky-note': true,
+        text: true,
+        'background-region': true,
+      },
+      selectedWidgetId: null,
+      selectedObject: { kind: 'annotation', id: 'annotation-1' },
+      theme: 'default',
+      mode: 'annotation',
+      activeTool: 'text',
+      stickyNotes: [
+        {
+          id: 'note-1',
+          kind: 'sticky_note',
+          body: 'Check deploy notes',
+          color: 'sage',
+          x: 100,
+          y: 120,
+          width: 260,
+          height: 180,
+          z_index: 4,
+          created_at_unix_ms: 10,
+          updated_at_unix_ms: 11,
+        },
+      ],
+      annotations: [
+        {
+          id: 'annotation-1',
+          kind: 'text',
+          text: 'Release gate',
+          font_family: sansTextFont.fontFamily,
+          font_size: 45,
+          font_weight: sansTextFont.fontWeight,
+          color: WORKBENCH_DEFAULT_TEXT_COLOR,
+          align: 'center',
+          x: 420,
+          y: 80,
+          width: 460,
+          height: 120,
+          z_index: 5,
+          created_at_unix_ms: 12,
+          updated_at_unix_ms: 13,
+        },
+      ],
+      backgroundLayers: [
+        {
+          id: 'background-1',
+          name: 'Planning lane',
+          fill: WORKBENCH_DEFAULT_REGION_FILL,
+          opacity: 0.42,
+          material: 'grid',
+          x: 60,
+          y: 40,
+          width: 920,
+          height: 640,
+          z_index: 1,
+          created_at_unix_ms: 8,
+          updated_at_unix_ms: 9,
+        },
+      ],
+    };
+
+    const extracted = extractRuntimeWorkbenchLayoutFromWorkbenchState(existingState as any);
+    expect(extracted).toMatchObject({
+      widgets: [],
+      sticky_notes: [{ id: 'note-1', kind: 'sticky_note', body: 'Check deploy notes' }],
+      annotations: [{ id: 'annotation-1', kind: 'text', font_size: 45, width: 460 }],
+      background_layers: [{ id: 'background-1', material: 'grid', opacity: 0.42 }],
+    });
+
+    const localState = derivePersistedWorkbenchLocalState(existingState as any, true);
+    const projected = projectWorkbenchStateFromRuntimeLayout({
+      snapshot: {
+        seq: 8,
+        revision: 6,
+        updated_at_unix_ms: 600,
+        widget_states: [],
+        ...extracted,
+      },
+      localState,
+      existingState: existingState as any,
+      widgetDefinitions: widgetDefinitions as any,
+    });
+
+    expect(projected.mode).toBe('annotation');
+    expect(projected.activeTool).toBe('text');
+    expect(projected.selectedObject).toEqual({ kind: 'annotation', id: 'annotation-1' });
+    expect(projected.stickyNotes).toEqual(extracted.sticky_notes);
+    expect(projected.annotations).toEqual(extracted.annotations);
+    expect(projected.backgroundLayers).toEqual(extracted.background_layers);
+    expect(runtimeWorkbenchStickyNotesEqual(extracted.sticky_notes, projected.stickyNotes ?? [])).toBe(true);
+    expect(runtimeWorkbenchAnnotationsEqual(extracted.annotations, projected.annotations ?? [])).toBe(true);
+    expect(runtimeWorkbenchBackgroundLayersEqual(extracted.background_layers, projected.backgroundLayers ?? [])).toBe(true);
+    expect(runtimeWorkbenchSharedLayoutEqual(extracted, {
+      widgets: [],
+      sticky_notes: projected.stickyNotes ?? [],
+      annotations: projected.annotations ?? [],
+      background_layers: projected.backgroundLayers ?? [],
+    })).toBe(true);
+  });
+
+  it('clears selected layered object when the runtime snapshot no longer contains it', () => {
+    const existingState = {
+      version: 1,
+      widgets: [],
+      viewport: { x: 80, y: 60, scale: 1 },
+      locked: false,
+      filters: {
+        'redeven.files': true,
+        'redeven.terminal': true,
+      },
+      selectedWidgetId: null,
+      selectedObject: { kind: 'sticky_note', id: 'missing-note' },
+      theme: 'default',
+      stickyNotes: [
+        {
+          id: 'missing-note',
+          kind: 'sticky_note',
+          body: 'Local only',
+          color: 'amber',
+          x: 0,
+          y: 0,
+          width: 200,
+          height: 160,
+          z_index: 1,
+          created_at_unix_ms: 1,
+          updated_at_unix_ms: 1,
+        },
+      ],
+    };
+
+    const projected = projectWorkbenchStateFromRuntimeLayout({
+      snapshot: {
+        seq: 9,
+        revision: 7,
+        updated_at_unix_ms: 700,
+        widgets: [],
+        widget_states: [],
+        sticky_notes: [],
+        annotations: [],
+        background_layers: [],
+      },
+      localState: derivePersistedWorkbenchLocalState(existingState as any, true),
+      existingState: existingState as any,
+      widgetDefinitions: widgetDefinitions as any,
+    });
+
+    expect(projected.selectedObject).toBeNull();
   });
 
   it('sanitizes local-only state from persisted data and legacy fallback', () => {
@@ -476,15 +660,54 @@ describe('runtimeWorkbenchLayout', () => {
     }, legacyState as any, widgetDefinitions as any);
 
     expect(sanitized).toEqual({
-      version: 2,
+      version: 3,
       locked: true,
       filters: {
         'redeven.files': false,
         'redeven.terminal': true,
       },
       theme: 'default',
+      mode: 'work',
+      activeTool: 'select',
       legacyLayoutMigrated: true,
     });
+  });
+
+  it('preserves upstream layered filter ids in local state normalization', () => {
+    const legacyState = {
+      version: 1,
+      widgets: [],
+      viewport: { x: 80, y: 60, scale: 1 },
+      locked: false,
+      filters: {
+        'redeven.files': true,
+        'redeven.terminal': true,
+      },
+      selectedWidgetId: null,
+      theme: 'default',
+    };
+
+    const sanitized = sanitizePersistedWorkbenchLocalState({
+      filters: {
+        'sticky-note': false,
+        text: true,
+        'background-region': false,
+        ignored: false,
+      },
+      mode: 'background',
+      activeTool: 'background-region',
+    }, legacyState as any, widgetDefinitions as any);
+
+    expect(sanitized.filters).toMatchObject({
+      'redeven.files': true,
+      'redeven.terminal': true,
+      'sticky-note': false,
+      text: true,
+      'background-region': false,
+    });
+    expect(sanitized.filters).not.toHaveProperty('ignored');
+    expect(sanitized.mode).toBe('background');
+    expect(sanitized.activeTool).toBe('background-region');
   });
 
   it('drops viewport and selection from the persisted local-state contract', () => {
@@ -502,13 +725,15 @@ describe('runtimeWorkbenchLayout', () => {
     } as any, true);
 
     expect(localState).toEqual({
-      version: 2,
+      version: 3,
       locked: true,
       filters: {
         'redeven.files': false,
         'redeven.terminal': true,
       },
       theme: 'mica',
+      mode: 'work',
+      activeTool: 'select',
       legacyLayoutMigrated: true,
     });
   });
@@ -592,7 +817,17 @@ describe('runtimeWorkbenchLayout', () => {
       ],
     } as any).widgets;
 
-    expect(runtimeWorkbenchLayoutWidgetsEqual(left, right)).toBe(true);
+    expect(runtimeWorkbenchSharedLayoutEqual({
+      widgets: left,
+      sticky_notes: [],
+      annotations: [],
+      background_layers: [],
+    }, {
+      widgets: right,
+      sticky_notes: [],
+      annotations: [],
+      background_layers: [],
+    })).toBe(true);
   });
 
   it('normalizes shared widget state snapshots', () => {

@@ -1,9 +1,11 @@
 import { createEffect, onCleanup } from 'solid-js';
 import {
   WorkbenchSurface,
+  WORKBENCH_TEXT_FONT_OPTIONS,
   type WorkbenchContextMenuItemsResolver,
   type WorkbenchSurfaceApi,
   type WorkbenchState,
+  type WorkbenchTextAnnotationDefaults,
   type WorkbenchWidgetDefinition,
   type WorkbenchWidgetItem,
   type WorkbenchWidgetType,
@@ -31,6 +33,15 @@ const WORKBENCH_PROJECTED_LAYER_SELECTOR = '.workbench-canvas__projected-layer';
 const WORKBENCH_VIEWPORT_PAN_START_DISTANCE_PX = 3;
 const WORKBENCH_VIEWPORT_WHEEL_SETTLE_MS = 180;
 const WORKBENCH_VIEWPORT_PROGRAMMATIC_SETTLE_MS = 260;
+const REDEVEN_TEXT_ANNOTATION_FONT = WORKBENCH_TEXT_FONT_OPTIONS.find((option) => option.id === 'sans');
+const REDEVEN_TEXT_ANNOTATION_DEFAULTS: WorkbenchTextAnnotationDefaults = {
+  ...(REDEVEN_TEXT_ANNOTATION_FONT ? {
+    font_family: REDEVEN_TEXT_ANNOTATION_FONT.fontFamily,
+    font_weight: REDEVEN_TEXT_ANNOTATION_FONT.fontWeight,
+  } : {}),
+  font_size: 45,
+  width: 460,
+};
 const WORKBENCH_WIDGET_VIEWPORT_CONTROL_SELECTOR = [
   '.workbench-widget__traffic-dot--min',
   '.workbench-widget__traffic-dot--max',
@@ -66,6 +77,7 @@ export interface RedevenWorkbenchSurfaceProps {
   class?: string;
   widgetDefinitions?: readonly WorkbenchWidgetDefinition[];
   filterBarWidgetTypes?: readonly WorkbenchWidgetType[];
+  textAnnotationDefaults?: WorkbenchTextAnnotationDefaults;
   resolveContextMenuItems?: RedevenWorkbenchContextMenuItemsResolver;
   onApiReady?: (api: RedevenWorkbenchSurfaceApi | null) => void;
   onRequestDelete?: (widgetId: string) => void;
@@ -127,6 +139,7 @@ function createRedevenWorkbenchSurfaceApi(
             },
           }),
           selectedWidgetId: null,
+          selectedObject: null,
         }));
       }, { reason: 'hud_control', interactionKind: 'widget_minimize' });
     },
@@ -506,6 +519,7 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
         class={props.class}
         widgetDefinitions={props.widgetDefinitions}
         launcherWidgetTypes={props.filterBarWidgetTypes}
+        textAnnotationDefaults={props.textAnnotationDefaults ?? REDEVEN_TEXT_ANNOTATION_DEFAULTS}
         interactionAdapter={redevenWorkbenchInteractionAdapter}
         resolveContextMenuItems={props.resolveContextMenuItems}
         onApiReady={(api) => props.onApiReady?.(api

@@ -100,6 +100,56 @@ func sampleWorkbenchLayoutRequestJSON() string {
       "z_index": 1,
       "created_at_unix_ms": 1700000000000
     }
+  ],
+  "sticky_notes": [
+    {
+      "id": "sticky-1",
+      "kind": "sticky_note",
+      "body": "Remember this decision",
+      "color": "amber",
+      "x": 220,
+      "y": 140,
+      "width": 260,
+      "height": 184,
+      "z_index": 2,
+      "created_at_unix_ms": 1700000000100,
+      "updated_at_unix_ms": 1700000000100
+    }
+  ],
+  "annotations": [
+    {
+      "id": "text-1",
+      "kind": "text",
+      "text": "Review area",
+      "font_family": "ui-serif, Georgia, serif",
+      "font_size": 34,
+      "font_weight": 760,
+      "color": "#6b7280",
+      "align": "left",
+      "x": 320,
+      "y": 180,
+      "width": 360,
+      "height": 96,
+      "z_index": 3,
+      "created_at_unix_ms": 1700000000200,
+      "updated_at_unix_ms": 1700000000200
+    }
+  ],
+  "background_layers": [
+    {
+      "id": "region-1",
+      "name": "Focus area",
+      "fill": "#9da8a1",
+      "opacity": 0.72,
+      "material": "dotted",
+      "x": 80,
+      "y": 60,
+      "width": 560,
+      "height": 360,
+      "z_index": 0,
+      "created_at_unix_ms": 1700000000300,
+      "updated_at_unix_ms": 1700000000300
+    }
   ]
 }`
 }
@@ -175,6 +225,15 @@ func TestGatewayWorkbenchLayoutFlow(t *testing.T) {
 	if len(putSnapshot.Widgets) != 1 || putSnapshot.Widgets[0].WidgetID != "widget-files-1" {
 		t.Fatalf("put snapshot widgets = %#v, want widget-files-1", putSnapshot.Widgets)
 	}
+	if len(putSnapshot.StickyNotes) != 1 || putSnapshot.StickyNotes[0].ID != "sticky-1" {
+		t.Fatalf("put snapshot sticky notes = %#v, want sticky-1", putSnapshot.StickyNotes)
+	}
+	if len(putSnapshot.Annotations) != 1 || putSnapshot.Annotations[0].ID != "text-1" {
+		t.Fatalf("put snapshot annotations = %#v, want text-1", putSnapshot.Annotations)
+	}
+	if len(putSnapshot.BackgroundLayers) != 1 || putSnapshot.BackgroundLayers[0].ID != "region-1" {
+		t.Fatalf("put snapshot background layers = %#v, want region-1", putSnapshot.BackgroundLayers)
+	}
 
 	latestSnapshotResp := performWorkbenchLayoutRequest(t, gw, http.MethodGet, "/_redeven_proxy/api/workbench/layout/snapshot", "")
 	if latestSnapshotResp.Code != http.StatusOK {
@@ -206,6 +265,13 @@ func TestGatewayWorkbenchLayoutFlow(t *testing.T) {
 	event := readWorkbenchLayoutSSEEvent(t, reader)
 	if event.Type != workbenchlayout.EventTypeLayoutReplaced {
 		t.Fatalf("event type = %q, want %q", event.Type, workbenchlayout.EventTypeLayoutReplaced)
+	}
+	var payload workbenchlayout.Snapshot
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		t.Fatalf("json.Unmarshal(event payload) error = %v", err)
+	}
+	if len(payload.StickyNotes) != 1 || len(payload.Annotations) != 1 || len(payload.BackgroundLayers) != 1 {
+		t.Fatalf("event payload layered objects = %#v/%#v/%#v, want full snapshot", payload.StickyNotes, payload.Annotations, payload.BackgroundLayers)
 	}
 }
 

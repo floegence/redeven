@@ -158,7 +158,7 @@ describe('redevenWorkbenchWidgets default geometry', () => {
     expect(sizes).toEqual({
       'redeven.files': { width: 1080, height: 700 },
       'redeven.terminal': { width: 1120, height: 680 },
-      'redeven.preview': { width: 1120, height: 720 },
+      'redeven.preview': { width: 1080, height: 700 },
       'redeven.monitor': { width: 1040, height: 640 },
       'redeven.codespaces': { width: 1040, height: 660 },
       'redeven.ports': { width: 1000, height: 620 },
