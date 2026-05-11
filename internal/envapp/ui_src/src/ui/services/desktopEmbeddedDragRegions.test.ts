@@ -94,6 +94,11 @@ function flushNextFrame(frameCallbacks: FrameRequestCallback[]): void {
   callback(performance.now());
 }
 
+async function flushMutationObserver(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 afterEach(() => {
   document.body.innerHTML = '';
   Object.defineProperty(window, 'parent', {
@@ -314,6 +319,49 @@ describe('desktopEmbeddedDragRegions', () => {
     expect(observe).toHaveBeenCalledTimes(2);
     expect(unobserve).not.toHaveBeenCalled();
     expect(disconnect).not.toHaveBeenCalled();
+
+    sync?.dispose();
+  });
+
+  it('ignores theme class mutations while still refreshing geometry-relevant mutations', async () => {
+    document.body.innerHTML = `
+      <div data-floe-shell-slot="top-bar">
+        <button id="left-action">Left</button>
+      </div>
+    `;
+
+    const topBar = document.querySelector('[data-floe-shell-slot="top-bar"]') as HTMLElement;
+    const leftAction = document.getElementById('left-action') as HTMLButtonElement;
+    stubRect(topBar, { x: 0, y: 0, width: 240, height: 40 });
+    stubRect(leftAction, { x: 0, y: 0, width: 64, height: 40 });
+
+    const setSnapshot = vi.fn();
+    const clear = vi.fn();
+    const { currentWindow, frameCallbacks } = createFakeSyncWindow();
+    currentWindow.redevenDesktopEmbeddedDragRegions = { setSnapshot, clear };
+
+    const sync = installDesktopEmbeddedDragRegionSync({
+      currentWindow,
+      createResizeObserver: () => null,
+    });
+    expect(sync).toBeTruthy();
+
+    flushNextFrame(frameCallbacks);
+    expect(setSnapshot).toHaveBeenCalledTimes(1);
+    expect(frameCallbacks).toHaveLength(0);
+
+    document.documentElement.classList.add('dark');
+    await flushMutationObserver();
+
+    expect(frameCallbacks).toHaveLength(0);
+    expect(setSnapshot).toHaveBeenCalledTimes(1);
+
+    topBar.style.setProperty('--drag-region-test-offset', '1px');
+    await flushMutationObserver();
+
+    expect(frameCallbacks).toHaveLength(1);
+    flushNextFrame(frameCallbacks);
+    expect(setSnapshot).toHaveBeenCalledTimes(1);
 
     sync?.dispose();
   });
