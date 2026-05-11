@@ -80,7 +80,7 @@ function resolveImagePaths(markdown: string, mdFilePath: string): string {
 }
 
 export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
-  const [readingMode, setReadingMode] = createSignal(false);
+  const [readingMode, setReadingMode] = createSignal(true);
   const [tocVisible, setTocVisible] = createSignal(props.showToc !== false);
   const [tocItems, setTocItems] = createSignal<TocItem[]>([]);
   const [activeTocId, setActiveTocId] = createSignal('');

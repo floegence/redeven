@@ -2,7 +2,10 @@
 
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { WORKBENCH_TEXT_FONT_OPTIONS } from '@floegence/floe-webapp-core/workbench';
+import {
+  WORKBENCH_REGION_FILL_OPTIONS,
+  WORKBENCH_TEXT_FONT_OPTIONS,
+} from '@floegence/floe-webapp-core/workbench';
 
 import { RedevenWorkbenchSurface, type RedevenWorkbenchSurfaceApi } from './RedevenWorkbenchSurface';
 import {
@@ -160,8 +163,13 @@ describe('RedevenWorkbenchSurface', () => {
     expect(sharedSurfaceMocks.lastProps.textAnnotationDefaults).toEqual({
       font_family: sansTextFont.fontFamily,
       font_weight: sansTextFont.fontWeight,
-      font_size: 45,
+      font_size: 100,
       width: 460,
+    });
+    expect(sharedSurfaceMocks.lastProps.backgroundLayerDefaults).toEqual({
+      fill: WORKBENCH_REGION_FILL_OPTIONS[1],
+      opacity: 0.42,
+      material: 'solid',
     });
   });
 
@@ -185,6 +193,29 @@ describe('RedevenWorkbenchSurface', () => {
       font_family: 'Serif',
       font_size: 32,
       width: 320,
+    });
+  });
+
+  it('allows callers to override shared background layer defaults', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <RedevenWorkbenchSurface
+        state={() => createWorkbenchState()}
+        setState={() => {}}
+        backgroundLayerDefaults={{
+          fill: WORKBENCH_REGION_FILL_OPTIONS[2],
+          opacity: 0.64,
+          material: 'grid',
+        }}
+      />
+    ), host);
+
+    expect(sharedSurfaceMocks.lastProps.backgroundLayerDefaults).toEqual({
+      fill: WORKBENCH_REGION_FILL_OPTIONS[2],
+      opacity: 0.64,
+      material: 'grid',
     });
   });
 

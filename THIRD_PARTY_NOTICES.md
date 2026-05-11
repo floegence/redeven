@@ -272,10 +272,10 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @exodus/bytes | 1.15.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40exodus%2Fbytes/v/1.15.0 |  |
 | @fast-csv/format | 4.3.5 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fformat/v/4.3.5 |  |
 | @fast-csv/parse | 4.3.6 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fparse/v/4.3.6 |  |
-| @floegence/floe-webapp-boot | 0.36.45 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.36.45 | License inherited from floegence/floe-webapp root LICENSE. |
+| @floegence/floe-webapp-boot | 0.36.47 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.36.47 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floe-webapp-core | 0.36.40 | MIT | Desktop shell | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.36.40 | License inherited from floegence/floe-webapp root LICENSE. |
-| @floegence/floe-webapp-core | 0.36.45 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.36.45 | License inherited from floegence/floe-webapp root LICENSE. |
-| @floegence/floe-webapp-protocol | 0.36.45 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.36.45 | License inherited from floegence/floe-webapp root LICENSE. |
+| @floegence/floe-webapp-core | 0.36.47 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.36.47 | License inherited from floegence/floe-webapp root LICENSE. |
+| @floegence/floe-webapp-protocol | 0.36.47 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.36.47 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floeterm-terminal-web | 0.5.1 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.5.1 |  |
 | @floegence/flowersec-core | 0.19.4 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/0.19.4 |  |
 | @fontsource-variable/inter | 5.2.8 | OFL-1.1 | Desktop shell | https://www.npmjs.com/package/%40fontsource-variable%2Finter/v/5.2.8 |  |

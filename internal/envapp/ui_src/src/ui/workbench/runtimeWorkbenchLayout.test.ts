@@ -14,6 +14,7 @@ import {
   extractRuntimeWorkbenchLayoutFromWorkbenchState,
   normalizeRuntimeWorkbenchLayoutSnapshot,
   projectWorkbenchStateFromRuntimeLayout,
+  REDEVEN_WORKBENCH_TEXT_ANNOTATION_DEFAULT_FONT_SIZE,
   runtimeWorkbenchAnnotationsEqual,
   runtimeWorkbenchBackgroundLayersEqual,
   runtimeWorkbenchSharedLayoutEqual,
@@ -583,6 +584,24 @@ describe('runtimeWorkbenchLayout', () => {
       annotations: projected.annotations ?? [],
       background_layers: projected.backgroundLayers ?? [],
     })).toBe(true);
+  });
+
+  it('normalizes text annotations with the Redeven default font size', () => {
+    const snapshot = normalizeRuntimeWorkbenchLayoutSnapshot({
+      annotations: [
+        {
+          id: 'annotation-1',
+          kind: 'text',
+          text: 'Large note',
+          x: 20,
+          y: 30,
+          width: 420,
+          height: 160,
+        },
+      ],
+    });
+
+    expect(snapshot.annotations[0]?.font_size).toBe(REDEVEN_WORKBENCH_TEXT_ANNOTATION_DEFAULT_FONT_SIZE);
   });
 
   it('clears selected layered object when the runtime snapshot no longer contains it', () => {

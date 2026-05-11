@@ -32,6 +32,7 @@ import {
 } from '../services/terminalGeometry';
 
 export const REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE = 0.45;
+export const REDEVEN_WORKBENCH_TEXT_ANNOTATION_DEFAULT_FONT_SIZE = 100;
 const WORKBENCH_INTERACTION_MODES = new Set(['work', 'annotation', 'background']);
 const WORKBENCH_TEXT_ALIGNMENTS = new Set(['left', 'center', 'right']);
 const WORKBENCH_STICKY_NOTE_COLOR_SET = new Set<string>(WORKBENCH_STICKY_NOTE_COLORS);
@@ -375,7 +376,7 @@ function normalizeWorkbenchAnnotation(value: unknown): WorkbenchAnnotationItem |
     kind: 'text',
     text: stringValue(value.text),
     font_family: normalizeWorkbenchTextFontFamily(value.font_family),
-    font_size: normalizeFiniteDimension(value.font_size, 45),
+    font_size: normalizeFiniteDimension(value.font_size, REDEVEN_WORKBENCH_TEXT_ANNOTATION_DEFAULT_FONT_SIZE),
     font_weight: Math.max(100, Math.min(900, Math.trunc(finiteNumber(value.font_weight, WORKBENCH_DEFAULT_TEXT_FONT.fontWeight)))),
     color: normalizeWorkbenchTextColor(value.color),
     align: normalizeTextAlignment(value.align),

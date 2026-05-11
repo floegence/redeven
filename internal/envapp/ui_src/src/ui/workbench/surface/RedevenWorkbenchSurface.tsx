@@ -1,7 +1,9 @@
 import { createEffect, onCleanup } from 'solid-js';
 import {
   WorkbenchSurface,
+  WORKBENCH_REGION_FILL_OPTIONS,
   WORKBENCH_TEXT_FONT_OPTIONS,
+  type WorkbenchBackgroundLayerDefaults,
   type WorkbenchContextMenuItemsResolver,
   type WorkbenchSurfaceApi,
   type WorkbenchState,
@@ -23,6 +25,7 @@ import {
 import { ensureWorkbenchTextSelectionSurfaceContract } from './workbenchTextSelectionSurface';
 import {
   REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE,
+  REDEVEN_WORKBENCH_TEXT_ANNOTATION_DEFAULT_FONT_SIZE,
   createWorkbenchOverviewViewport,
 } from '../runtimeWorkbenchLayout';
 import type { WorkbenchTerminalInteractionKind } from '../workbenchTerminalVisualCoordinator';
@@ -39,8 +42,13 @@ const REDEVEN_TEXT_ANNOTATION_DEFAULTS: WorkbenchTextAnnotationDefaults = {
     font_family: REDEVEN_TEXT_ANNOTATION_FONT.fontFamily,
     font_weight: REDEVEN_TEXT_ANNOTATION_FONT.fontWeight,
   } : {}),
-  font_size: 45,
+  font_size: REDEVEN_WORKBENCH_TEXT_ANNOTATION_DEFAULT_FONT_SIZE,
   width: 460,
+};
+const REDEVEN_BACKGROUND_LAYER_DEFAULTS: WorkbenchBackgroundLayerDefaults = {
+  fill: WORKBENCH_REGION_FILL_OPTIONS[1],
+  opacity: 0.42,
+  material: 'solid',
 };
 const WORKBENCH_WIDGET_VIEWPORT_CONTROL_SELECTOR = [
   '.workbench-widget__traffic-dot--min',
@@ -78,6 +86,7 @@ export interface RedevenWorkbenchSurfaceProps {
   widgetDefinitions?: readonly WorkbenchWidgetDefinition[];
   filterBarWidgetTypes?: readonly WorkbenchWidgetType[];
   textAnnotationDefaults?: WorkbenchTextAnnotationDefaults;
+  backgroundLayerDefaults?: WorkbenchBackgroundLayerDefaults;
   resolveContextMenuItems?: RedevenWorkbenchContextMenuItemsResolver;
   onApiReady?: (api: RedevenWorkbenchSurfaceApi | null) => void;
   onRequestDelete?: (widgetId: string) => void;
@@ -520,6 +529,7 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
         widgetDefinitions={props.widgetDefinitions}
         launcherWidgetTypes={props.filterBarWidgetTypes}
         textAnnotationDefaults={props.textAnnotationDefaults ?? REDEVEN_TEXT_ANNOTATION_DEFAULTS}
+        backgroundLayerDefaults={props.backgroundLayerDefaults ?? REDEVEN_BACKGROUND_LAYER_DEFAULTS}
         interactionAdapter={redevenWorkbenchInteractionAdapter}
         resolveContextMenuItems={props.resolveContextMenuItems}
         onApiReady={(api) => props.onApiReady?.(api
