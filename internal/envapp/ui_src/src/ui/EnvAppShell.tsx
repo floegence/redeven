@@ -136,6 +136,7 @@ import { desktopThemeBridge, toggleDesktopTheme } from './services/desktopTheme'
 import { notifyDesktopSessionAppReady } from './services/desktopSessionContext';
 import { controlPlaneOriginFromSandboxLocation } from './services/sandboxOrigins';
 import { readUIStorageItem, writeRendererScopedUIStorageItem, writeUIStorageItem } from './services/uiStorage';
+import { requestWorkbenchRenderTransaction } from './workbench/workbenchRenderBoundary';
 import {
   ENV_DEFAULT_SURFACE_ID,
   envWidgetTypeForSurface,
@@ -302,6 +303,10 @@ export function EnvAppShell() {
   const layout = useLayout();
   const theme = useTheme();
   const shellTheme = desktopThemeBridge();
+  const toggleThemeWithRenderBoundary = () => {
+    requestWorkbenchRenderTransaction('theme');
+    toggleDesktopTheme(theme.resolvedTheme(), shellTheme, () => theme.toggleTheme());
+  };
   const widgetRegistry = useWidgetRegistry();
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
@@ -2358,7 +2363,7 @@ export function EnvAppShell() {
         keybind: 'mod+shift+l',
         icon: () => (theme.resolvedTheme() === 'light' ? <Moon class="w-4 h-4" /> : <Sun class="w-4 h-4" />),
         execute: () => {
-          toggleDesktopTheme(theme.resolvedTheme(), shellTheme, () => theme.toggleTheme());
+          toggleThemeWithRenderBoundary();
           const nextTheme = theme.resolvedTheme() === 'light' ? 'dark' : 'light';
           notify.info('Theme changed', `Switched to ${nextTheme} theme`);
         },
@@ -2640,7 +2645,7 @@ export function EnvAppShell() {
       <TopBarIconButton
         label="Toggle theme"
         tooltip={topBarTooltip('Toggle theme')}
-        onClick={() => toggleDesktopTheme(theme.resolvedTheme(), shellTheme, () => theme.toggleTheme())}
+        onClick={toggleThemeWithRenderBoundary}
       >
         {theme.resolvedTheme() === 'light' ? <Moon class="w-4 h-4" /> : <Sun class="w-4 h-4" />}
       </TopBarIconButton>

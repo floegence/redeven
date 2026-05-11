@@ -26,6 +26,14 @@
   transition: none !important;
 }
 
+.redeven-workbench-page .workbench-surface {
+  contain: layout paint;
+}
+
+.redeven-workbench-page[data-redeven-workbench-render-transaction] .workbench-canvas__projected-layer {
+  display: none !important;
+}
+
 @property --redeven-terminal-work-flow-angle {
   syntax: '<angle>';
   inherits: false;

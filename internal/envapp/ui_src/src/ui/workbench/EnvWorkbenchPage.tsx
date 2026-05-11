@@ -96,12 +96,17 @@ import {
   WorkbenchProgressCurtain,
   type WorkbenchProgressCurtainStage,
 } from './WorkbenchProgressCurtain';
+import {
+  subscribeWorkbenchRenderTransactions,
+  type WorkbenchRenderTransactionReason,
+} from './workbenchRenderBoundary';
 
 const WORKBENCH_PERSIST_DELAY_MS = 120;
 const WORKBENCH_LAYOUT_FLUSH_DELAY_MS = 160;
 const WORKBENCH_LAYOUT_FAST_FLUSH_DELAY_MS = 16;
 const WORKBENCH_LAYOUT_RECONNECT_DELAY_MS = 900;
 const WORKBENCH_LAYOUT_VISUAL_SETTLE_MS = 90;
+const WORKBENCH_RENDER_TRANSACTION_FRAME_COUNT = 1;
 const WORKBENCH_WIDGET_CLOSE_DEFER_MS = 48;
 const WORKBENCH_MIN_SCALE_EPSILON = 0.0001;
 const WORKBENCH_SCALE_ANIMATION_DURATION_MS = 180;
@@ -288,6 +293,21 @@ function requestPostInteractionFrame(callback: () => void): void {
     }
     globalThis.setTimeout(() => callback(), 0);
   });
+}
+
+function requestWorkbenchRenderFrame(callback: () => void): number {
+  if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+    return window.requestAnimationFrame(callback);
+  }
+  return globalThis.setTimeout(callback, 16) as unknown as number;
+}
+
+function cancelWorkbenchRenderFrame(handle: number): void {
+  if (typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
+    window.cancelAnimationFrame(handle);
+    return;
+  }
+  globalThis.clearTimeout(handle);
 }
 
 function escapeWorkbenchWidgetIdSelectorValue(value: string): string {
@@ -606,6 +626,7 @@ export function EnvWorkbenchPage() {
   const [submitInFlight, setSubmitInFlight] = createSignal(false);
   const [activeLayoutInteractions, setActiveLayoutInteractions] = createSignal(0);
   const [layoutInteractionVisualActive, setLayoutInteractionVisualActive] = createSignal(false);
+  const [renderTransactionReason, setRenderTransactionReason] = createSignal<WorkbenchRenderTransactionReason | null>(null);
   const [pendingRemoteSnapshot, setPendingRemoteSnapshot] = createSignal<RuntimeWorkbenchLayoutSnapshot | null>(null);
   const [fileBrowserCommittedPaths, setFileBrowserCommittedPaths] = createSignal<Record<string, string>>({});
   const [appliedRemoteFileStateRevisions, setAppliedRemoteFileStateRevisions] = createSignal<Record<string, number>>({});
@@ -625,6 +646,8 @@ export function EnvWorkbenchPage() {
   let canvasScaleAnimationFrame: number | undefined;
   let canvasScaleAnimationToken = 0;
   let layoutInteractionVisualSettleTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
+  let renderTransactionToken = 0;
+  const renderTransactionFrames = new Set<number>();
   const pendingWidgetRemovalTimers = new Map<string, {
     releaseInteraction: () => void;
     timer: ReturnType<typeof globalThis.setTimeout>;
@@ -680,6 +703,13 @@ export function EnvWorkbenchPage() {
 
   createEffect(() => {
     terminalVisualCoordinator.setSelectedWidgetId(workbenchState().selectedWidgetId);
+  });
+
+  createEffect(() => {
+    const unsubscribe = subscribeWorkbenchRenderTransactions((transaction) => {
+      beginRenderTransaction(transaction.reason, transaction.frameCount);
+    });
+    onCleanup(unsubscribe);
   });
 
   const runtimeWidgetExists = (widgetId: string, widgetType?: string): boolean => {
@@ -837,6 +867,39 @@ export function EnvWorkbenchPage() {
     });
   };
 
+  const cancelRenderTransactionFrames = () => {
+    for (const frame of renderTransactionFrames) {
+      cancelWorkbenchRenderFrame(frame);
+    }
+    renderTransactionFrames.clear();
+  };
+
+  const scheduleRenderTransactionRelease = (token: number, remainingFrames: number) => {
+    const frame = requestWorkbenchRenderFrame(() => {
+      renderTransactionFrames.delete(frame);
+      if (renderTransactionToken !== token) {
+        return;
+      }
+      if (remainingFrames <= 1) {
+        setRenderTransactionReason(null);
+        return;
+      }
+      scheduleRenderTransactionRelease(token, remainingFrames - 1);
+    });
+    renderTransactionFrames.add(frame);
+  };
+
+  const beginRenderTransaction = (
+    reason: WorkbenchRenderTransactionReason,
+    frameCount = WORKBENCH_RENDER_TRANSACTION_FRAME_COUNT,
+  ) => {
+    const nextFrameCount = Math.min(4, Math.max(1, Math.trunc(frameCount)));
+    const token = ++renderTransactionToken;
+    cancelRenderTransactionFrames();
+    setRenderTransactionReason(reason);
+    scheduleRenderTransactionRelease(token, nextFrameCount);
+  };
+
   const bufferRuntimeSnapshot = (snapshot: RuntimeWorkbenchLayoutSnapshot) => {
     setPendingRemoteSnapshot((previous) => (shouldReplaceBufferedSnapshot(previous, snapshot) ? snapshot : previous));
   };
@@ -869,6 +932,9 @@ export function EnvWorkbenchPage() {
     let shouldPulseLayoutVisual = false;
     setWorkbenchState((previous) => {
       const next = updater(previous);
+      if ((previous.mode ?? 'work') !== (next.mode ?? 'work')) {
+        beginRenderTransaction('mode');
+      }
       shouldStartOwnerHandoff = shouldTrackSurfaceOwnerHandoff(previous, next);
       shouldPulseLayoutVisual = shouldPulseLayoutVisual || workbenchViewportChanged(previous.viewport, next.viewport);
       return next;
@@ -2321,6 +2387,9 @@ export function EnvWorkbenchPage() {
   onCleanup(() => {
     cancelCanvasScaleAnimation();
     cancelLayoutInteractionVisualSettle();
+    cancelRenderTransactionFrames();
+    renderTransactionToken += 1;
+    setRenderTransactionReason(null);
     while (surfaceLayoutInteractionReleases.length > 0) {
       surfaceLayoutInteractionReleases.pop()?.();
     }
@@ -2340,6 +2409,7 @@ export function EnvWorkbenchPage() {
         class={`redeven-workbench-page relative h-full min-h-0 overflow-hidden${layoutInteractionVisualActive() ? ' is-layout-interacting' : ''}`}
         data-testid="redeven-workbench-page"
         data-redeven-workbench-layout-interacting={layoutInteractionVisualActive() ? 'true' : 'false'}
+        data-redeven-workbench-render-transaction={renderTransactionReason() ?? undefined}
       >
         <div ref={setSurfaceHost} class="h-full min-h-0">
           <RedevenWorkbenchSurface
