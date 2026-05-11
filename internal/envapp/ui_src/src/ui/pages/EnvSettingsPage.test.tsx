@@ -371,7 +371,7 @@ describe('EnvSettingsPage', () => {
     expect(runtimeStatus?.textContent).toContain('Restart recommended');
     expect(runtimeStatus?.textContent).toContain('Restart when your work is idle.');
     expect(runtimeStatus?.textContent).toContain('Active work');
-    expect(runtimeStatus?.textContent).toContain('3 terminals, 2 sessions, 1 task, 4 port forwards');
+    expect(runtimeStatus?.textContent).toContain('3 terminals, 2 sessions, 1 task, 4 web services');
     expect(runtimeStatus?.textContent).toContain('Runtime protocol');
     expect(runtimeStatus?.textContent).toContain('redeven-runtime-v1');
   });

@@ -11,7 +11,7 @@ implementation remains traceable to the chosen product contract.
 
 ## Goals
 
-- Present Runtime as a long-lived service that owns terminal, task, port-forward,
+- Present Runtime as a long-lived service that owns terminal, task, web service registration,
   and environment session continuity.
 - Keep Desktop and Runtime version coordination safe, observable, and easy to
   recover from.
@@ -171,7 +171,7 @@ Desktop launcher cards keep their current dense SaaS tool layout:
   - `Runtime Service`: `Running`, `Update ready`, `Restart recommended`,
     `Needs update`, `Update Desktop`, `Managed elsewhere`
   - `Version`: `v1.4.2`
-  - `Active work`: `3 terminals, 1 port forward`
+  - `Active work`: `3 terminals, 1 web service`
 - Primary actions remain route-aware:
   - compatible: `Open`
   - not running: `Start Runtime`
@@ -222,7 +222,7 @@ Body structure:
 2. Impact summary:
    - `3 terminal sessions`
    - `2 connected environment sessions`
-   - `1 port forward`
+   - `1 web service`
 3. Version summary when relevant:
    - current runtime version
    - target runtime version

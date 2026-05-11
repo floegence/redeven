@@ -30,7 +30,10 @@ This document describes the public Electron desktop shell that ships with each `
 - Each Desktop session window also receives a Desktop-owned session context snapshot:
   - `local_environment_id`
   - `renderer_storage_scope_id`
+  - `target_kind` (`local_environment`, `external_local_ui`, or `ssh_environment`)
+  - `target_route` (`local_host` or `remote_desktop`) when the target is a managed Local Environment
 - Env App uses `renderer_storage_scope_id` only for renderer-scoped persisted UI state such as File Browser history and active thread context. Intentionally global shell/UI preferences remain global.
+- Env App uses `target_kind` / `target_route` to choose Web Services open routes. Managed same-device local sessions can open loopback services directly, saved Redeven URL and SSH Host sessions use the Local UI `/pf/<forward_id>/` proxy, and remote Provider sessions keep using the Flowersec E2EE tunnel.
 - `provider_id` is the canonical discovery identity from `/.well-known/redeven-provider.json` and is used for provider protocol payloads, provider catalogs, and provider bindings.
 - Desktop and standalone runtime / CLI mode also share one profile-scoped catalog:
   - `~/.redeven/catalog/local-environment.json`
@@ -116,6 +119,7 @@ It does not introduce a second SSH-native file or terminal protocol. Instead, El
 7. Waits for the remote startup report under `local-environment/sessions/<session_token>/startup-report.json`.
 8. Creates a local SSH port forward to that remote Local UI port.
 9. Opens the forwarded `127.0.0.1:<port>` origin as a normal Desktop session.
+10. Marks the Env App session as `ssh_environment` so Web Services treat `localhost` targets as remote-host loopback and open through `/pf/<forward_id>/` instead of the user's browser loopback.
 
 ### SSH Host Environment
 

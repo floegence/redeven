@@ -1,6 +1,6 @@
 import { For, Show, createMemo, createResource, createSignal } from 'solid-js';
 import { cn, useNotification } from '@floegence/floe-webapp-core';
-import { Globe, RefreshIcon, Trash } from '@floegence/floe-webapp-core/icons';
+import { ExternalLink, Globe, Plus, RefreshIcon, Trash } from '@floegence/floe-webapp-core/icons';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
 import { LoadingOverlay, SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import {
@@ -18,7 +18,16 @@ import {
   type TagProps,
 } from '@floegence/floe-webapp-core/ui';
 
-import { getEnvPublicIDFromSession, mintEnvEntryTicketForApp } from '../services/controlplaneApi';
+import {
+  getEnvPublicIDFromSession,
+  getLocalRuntime,
+  mintEnvEntryTicketForApp,
+  type LocalRuntimeInfo,
+} from '../services/controlplaneApi';
+import {
+  readDesktopSessionContextSnapshot,
+  type DesktopSessionContextSnapshot,
+} from '../services/desktopSessionContext';
 import { FLOE_APP_PORT_FORWARD } from '../services/floeproxyContract';
 import { fetchGatewayJSON } from '../services/gatewayApi';
 import { trustedLauncherOriginFromSandboxLocation } from '../services/sandboxOrigins';
@@ -52,6 +61,12 @@ type PortForward = Readonly<{
   health: Health;
 }>;
 
+export type WebServiceOpenRoute =
+  | Readonly<{ kind: 'browser_direct'; url: string; label: 'Direct' }>
+  | Readonly<{ kind: 'local_proxy'; url: string; label: 'Local proxy' }>
+  | Readonly<{ kind: 'e2ee_tunnel'; forward_id: string; label: 'Secure tunnel' }>;
+
+type BrowserLocationLike = Pick<Location, 'hostname' | 'href' | 'origin'>;
 
 // ============================================================================
 // Utility Functions
@@ -92,6 +107,78 @@ function portForwardOrigin(forwardID: string): string {
 function base64UrlEncode(raw: string): string {
   const b64 = btoa(raw);
   return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function compact(value: unknown): string {
+  return String(value ?? '').trim();
+}
+
+function parseSupportedWebServiceTarget(raw: string): URL | null {
+  const trimmed = compact(raw);
+  if (!trimmed) return null;
+  const candidate = trimmed.includes('://') ? trimmed : `http://${trimmed}`;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate);
+  } catch {
+    return null;
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+  if (parsed.username || parsed.password) return null;
+  if (!compact(parsed.hostname)) return null;
+  if (parsed.pathname && parsed.pathname !== '/') return null;
+  if (parsed.search || parsed.hash) return null;
+  return parsed;
+}
+
+export function isSupportedWebServiceTarget(raw: string): boolean {
+  return parseSupportedWebServiceTarget(raw) !== null;
+}
+
+function normalizedHostname(hostname: string): string {
+  return compact(hostname).toLowerCase().replace(/^\[/u, '').replace(/\]$/u, '');
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+  const host = normalizedHostname(hostname);
+  return host === 'localhost' || host === '::1' || host.startsWith('127.');
+}
+
+function hasSameDeviceBrowserConfidence(desktopContext: DesktopSessionContextSnapshot | null | undefined): boolean {
+  if (!desktopContext?.target_kind) return true;
+  return desktopContext.target_kind === 'local_environment' && desktopContext.target_route === 'local_host';
+}
+
+function localWebServiceProxyURL(forwardID: string, locationLike: BrowserLocationLike): string {
+  return new URL(`/pf/${encodeURIComponent(forwardID)}/`, locationLike.origin || locationLike.href).toString();
+}
+
+export function resolveWebServiceOpenRoute(args: Readonly<{
+  forwardID: string;
+  targetURL: string;
+  localRuntime: LocalRuntimeInfo | null;
+  desktopContext?: DesktopSessionContextSnapshot | null;
+  browserLocation?: BrowserLocationLike;
+}>): WebServiceOpenRoute {
+  const forwardID = compact(args.forwardID);
+  if (!args.localRuntime) {
+    return { kind: 'e2ee_tunnel', forward_id: forwardID, label: 'Secure tunnel' };
+  }
+
+  const locationLike = args.browserLocation ?? window.location;
+  const targetURL = parseSupportedWebServiceTarget(args.targetURL);
+  if (
+    targetURL
+    && hasSameDeviceBrowserConfidence(args.desktopContext)
+    && isLoopbackHostname(locationLike.hostname)
+    && isLoopbackHostname(targetURL.hostname)
+  ) {
+    return { kind: 'browser_direct', url: targetURL.origin, label: 'Direct' };
+  }
+
+  return { kind: 'local_proxy', url: localWebServiceProxyURL(forwardID, locationLike), label: 'Local proxy' };
 }
 
 // ============================================================================
@@ -162,7 +249,7 @@ function HealthBadge(props: { health?: Health }) {
 }
 
 /**
- * EmptyState - Displayed when no port forwards exist
+ * EmptyState - Displayed when no web services exist
  */
 function EmptyState(props: { onCreateClick: () => void; disabled?: boolean }) {
   return (
@@ -170,45 +257,19 @@ function EmptyState(props: { onCreateClick: () => void; disabled?: boolean }) {
       <div class="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
         <Globe class="w-8 h-8 text-muted-foreground" />
       </div>
-      <h3 class="text-sm font-medium text-foreground mb-1">No port forwards yet</h3>
+      <h3 class="text-sm font-medium text-foreground mb-1">No web services yet</h3>
       <p class="text-xs text-muted-foreground text-center max-w-xs mb-4">
-        Create a port forward to expose HTTP services running on (or reachable from) the runtime host to your browser.
+        Register an HTTP service running on, or reachable from, the runtime host.
       </p>
       <Button size="sm" variant="default" onClick={props.onCreateClick} disabled={props.disabled}>
-        Create Forward
+        Add Service
       </Button>
     </div>
   );
 }
 
 /**
- * ExternalLinkIcon - Icon for open in new window action
- */
-function ExternalLinkIcon(props: { class?: string }) {
-  return (
-    <svg class={props.class} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-      <path
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
-      />
-    </svg>
-  );
-}
-
-/**
- * PlusIcon - Icon for create action
- */
-function PlusIcon(props: { class?: string }) {
-  return (
-    <svg class={props.class} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-      <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-    </svg>
-  );
-}
-
-/**
- * PortForwardCard - A single port forward card with status, info, and actions
+ * PortForwardCard - A single registered web service card with status, info, and actions
  */
 function PortForwardCard(props: {
   forward: PortForward;
@@ -233,7 +294,7 @@ function PortForwardCard(props: {
       <CardHeader class="pb-2">
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0 flex-1">
-            <CardTitle class="text-sm truncate">{props.forward.name || `Forward ${props.forward.forward_id}`}</CardTitle>
+            <CardTitle class="text-sm truncate">{props.forward.name || `Service ${props.forward.forward_id}`}</CardTitle>
             <CardDescription class="text-xs truncate mt-0.5 font-mono" title={props.forward.target_url}>
               {props.forward.target_url}
             </CardDescription>
@@ -270,15 +331,15 @@ function PortForwardCard(props: {
       </CardContent>
 
       <CardFooter class={cn('pt-2 flex items-center justify-between gap-2 border-t', redevenDividerRoleClass())}>
-        <Tooltip content={props.busyText || 'Open in new window'} placement="top">
+        <Tooltip content={props.busyText || 'Open service'} placement="top">
           <Button size="sm" variant="default" onClick={props.onOpen} disabled={props.busy} class="flex-1">
-            <Show when={props.busy} fallback={<ExternalLinkIcon class="w-3.5 h-3.5 mr-1" />}>
+            <Show when={props.busy} fallback={<ExternalLink class="w-3.5 h-3.5 mr-1" />}>
               <InlineButtonSnakeLoading class="mr-1" />
             </Show>
             Open
           </Button>
         </Tooltip>
-        <Tooltip content="Delete forward" placement="top">
+        <Tooltip content="Delete service" placement="top">
           <Button
             size="sm"
             variant="ghost"
@@ -295,15 +356,7 @@ function PortForwardCard(props: {
 }
 
 /**
- * Validates that the target URL starts with http:// or https://
- */
-function isValidHttpUrl(url: string): boolean {
-  const trimmed = url.trim().toLowerCase();
-  return trimmed.startsWith('http://') || trimmed.startsWith('https://');
-}
-
-/**
- * CreateForwardDialog - Dialog for creating a new port forward
+ * CreateForwardDialog - Dialog for registering a new runtime web service
  */
 function CreateForwardDialog(props: {
   open: boolean;
@@ -329,22 +382,22 @@ function CreateForwardDialog(props: {
 
   const handleCreate = () => {
     const targetVal = target().trim();
-    if (!targetVal || !isValidHttpUrl(targetVal)) return;
+    if (!targetVal || !isSupportedWebServiceTarget(targetVal)) return;
     props.onCreate(targetVal, name().trim(), description().trim());
   };
 
   const isValid = () => {
     const val = target().trim();
-    return val.length > 0 && isValidHttpUrl(val);
+    return val.length > 0 && isSupportedWebServiceTarget(val);
   };
 
-  const showError = () => touched() && target().trim().length > 0 && !isValidHttpUrl(target());
+  const showError = () => touched() && target().trim().length > 0 && !isSupportedWebServiceTarget(target());
 
   return (
     <Dialog
       open={props.open}
       onOpenChange={handleOpenChange}
-      title="Create Port Forward"
+      title="Add Web Service"
       footer={
         <div class="flex justify-end gap-2">
           <Button size="sm" variant="outline" onClick={() => handleOpenChange(false)} disabled={props.loading} class={outlineControlClass}>
@@ -354,7 +407,7 @@ function CreateForwardDialog(props: {
             <Show when={props.loading}>
               <InlineButtonSnakeLoading class="mr-1" />
             </Show>
-            Create
+            Add Service
           </Button>
         </div>
       }
@@ -368,7 +421,7 @@ function CreateForwardDialog(props: {
             value={target()}
             onInput={(e) => setTarget(e.currentTarget.value)}
             onBlur={() => setTouched(true)}
-            placeholder="http://localhost:3000"
+            placeholder="localhost:3000"
             size="sm"
             class={cn('w-full font-mono', showError() && 'border-destructive focus:ring-destructive')}
           />
@@ -376,17 +429,17 @@ function CreateForwardDialog(props: {
             when={showError()}
             fallback={
               <p class="text-[11px] text-muted-foreground mt-1">
-                Only HTTP services are supported. URL must start with http:// or https://
+                Use host:port or an http(s):// URL. Paths, query strings, and fragments are not supported.
               </p>
             }
           >
-            <p class="text-[11px] text-destructive mt-1">URL must start with http:// or https://</p>
+            <p class="text-[11px] text-destructive mt-1">Enter a host:port or http(s):// URL without a path.</p>
           </Show>
         </div>
         <div>
           <label class="block text-xs font-medium mb-1">Name</label>
           <Input value={name()} onInput={(e) => setName(e.currentTarget.value)} placeholder="My Service" size="sm" class="w-full" />
-          <p class="text-[11px] text-muted-foreground mt-1">A display name to identify this forward.</p>
+          <p class="text-[11px] text-muted-foreground mt-1">A display name to identify this service.</p>
         </div>
         <div>
           <label class="block text-xs font-medium mb-1">Description</label>
@@ -405,24 +458,29 @@ function CreateForwardDialog(props: {
 }
 
 // ============================================================================
-// Open Port Forward Logic
+// Open web service logic
 // ============================================================================
 
-async function openPortForward(forwardID: string, setStatus: (s: string) => void): Promise<void> {
+async function touchWebService(forwardID: string, setStatus: (s: string) => void): Promise<void> {
+  setStatus('Updating service...');
+  await fetchGatewayJSON(`/_redeven_proxy/api/forwards/${encodeURIComponent(forwardID)}/touch`, { method: 'POST' });
+}
+
+async function openPortForwardTunnel(
+  forwardID: string,
+  setStatus: (s: string) => void,
+  win: Window,
+): Promise<void> {
   const envPublicID = getEnvPublicIDFromSession();
   if (!envPublicID) throw new Error('Missing env context. Please reopen from the control plane.');
 
   const origin = portForwardOrigin(forwardID);
   const bootURL = `${origin}/_redeven_boot/?env=${encodeURIComponent(envPublicID)}`;
 
-  const win = window.open('about:blank', `redeven_portforward_${forwardID}`);
-  if (!win) throw new Error('Popup was blocked. Please allow popups and try again.');
-
   registerSandboxWindow(win, { origin, floe_app: FLOE_APP_PORT_FORWARD, code_space_id: forwardID, app_path: '/' });
 
   try {
-    setStatus('Updating forward...');
-    await fetchGatewayJSON(`/_redeven_proxy/api/forwards/${encodeURIComponent(forwardID)}/touch`, { method: 'POST' });
+    await touchWebService(forwardID, setStatus);
 
     setStatus('Requesting entry ticket...');
     const entryTicket = await mintEnvEntryTicketForApp({ envId: envPublicID, floeApp: FLOE_APP_PORT_FORWARD, codeSpaceId: forwardID });
@@ -449,6 +507,22 @@ async function openPortForward(forwardID: string, setStatus: (s: string) => void
   }
 }
 
+async function openWebServiceRoute(
+  route: WebServiceOpenRoute,
+  forwardID: string,
+  setStatus: (s: string) => void,
+  win: Window,
+): Promise<void> {
+  if (route.kind === 'e2ee_tunnel') {
+    await openPortForwardTunnel(forwardID, setStatus, win);
+    return;
+  }
+
+  await touchWebService(forwardID, setStatus);
+  setStatus(route.kind === 'browser_direct' ? 'Opening directly...' : 'Opening local proxy...');
+  win.location.assign(route.url);
+}
+
 // ============================================================================
 // Main Component
 // ============================================================================
@@ -465,7 +539,7 @@ export function EnvPortForwardsPage() {
   // Search/filter state
   const [searchQuery, setSearchQuery] = createSignal('');
 
-  // Forwards resource
+  // Web services resource
   const [refreshSeq, setRefreshSeq] = createSignal(0);
   const bumpRefresh = () => setRefreshSeq((n) => n + 1);
 
@@ -481,7 +555,7 @@ export function EnvPortForwardsPage() {
     }
   );
 
-  // Filtered and sorted forwards
+  // Filtered and sorted services
   const filteredForwards = createMemo(() => {
     const query = searchQuery().trim().toLowerCase();
     const list = forwards() ?? [];
@@ -515,7 +589,7 @@ export function EnvPortForwardsPage() {
   const [deleteID, setDeleteID] = createSignal<string | null>(null);
   const [deleting, setDeleting] = createSignal(false);
 
-  // Create forward handler
+  // Create service handler
   const doCreate = async (target: string, name: string, description: string) => {
     if (!target) {
       notify.error('Missing target', 'Please enter a target like localhost:3000.');
@@ -529,16 +603,16 @@ export function EnvPortForwardsPage() {
       });
       setCreateOpen(false);
       bumpRefresh();
-      notify.success('Forward created', name ? `Created "${name}"` : 'Port forward created successfully');
+      notify.success('Service added', name ? `Added "${name}"` : 'Web service added successfully');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      notify.error('Failed to create', msg);
+      notify.error('Failed to add service', msg);
     } finally {
       setCreateLoading(false);
     }
   };
 
-  // Delete forward handler
+  // Delete service handler
   const doDelete = async (id: string) => {
     const fid = String(id ?? '').trim();
     if (!fid) return;
@@ -546,17 +620,17 @@ export function EnvPortForwardsPage() {
     try {
       await fetchGatewayJSON(`/_redeven_proxy/api/forwards/${encodeURIComponent(fid)}`, { method: 'DELETE' });
       bumpRefresh();
-      notify.success('Forward deleted', 'Port forward has been removed');
+      notify.success('Service deleted', 'Web service has been removed');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      notify.error('Failed to delete', msg);
+      notify.error('Failed to delete service', msg);
     } finally {
       setDeleting(false);
       setDeleteID(null);
     }
   };
 
-  // Open forward handler
+  // Open service handler
   const doOpen = async (f: PortForward) => {
     const fid = String(f?.forward_id ?? '').trim();
     if (!fid) return;
@@ -564,19 +638,41 @@ export function EnvPortForwardsPage() {
 
     setBusyID(fid);
     setBusyText('Opening...');
+    const win = window.open('about:blank', `redeven_web_service_${fid}`);
+    if (!win) {
+      setBusyID(null);
+      setBusyText('');
+      notify.error('Failed to open service', 'Popup was blocked. Please allow popups and try again.');
+      return;
+    }
+
     try {
-      await openPortForward(fid, (s) => setBusyText(s));
+      setBusyText('Resolving route...');
+      const localRuntime = await getLocalRuntime().catch(() => null);
+      const desktopContext = readDesktopSessionContextSnapshot();
+      const route = resolveWebServiceOpenRoute({
+        forwardID: fid,
+        targetURL: f.target_url,
+        localRuntime,
+        desktopContext,
+      });
+      await openWebServiceRoute(route, fid, (s) => setBusyText(s), win);
       bumpRefresh();
     } catch (e) {
+      try {
+        win.close();
+      } catch {
+        // ignore
+      }
       const msg = e instanceof Error ? e.message : String(e);
-      notify.error('Failed to open', msg);
+      notify.error('Failed to open service', msg);
     } finally {
       setBusyID(null);
       setBusyText('');
     }
   };
 
-  // Find the forward being deleted for the confirmation dialog
+  // Find the service being deleted for the confirmation dialog
   const deleteTarget = createMemo(() => {
     const id = deleteID();
     if (!id) return null;
@@ -585,7 +681,7 @@ export function EnvPortForwardsPage() {
 
   return (
     <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="h-full min-h-0 overflow-auto">
-      <Panel class={cn('border rounded-md overflow-hidden', redevenSurfaceRoleClass('panelStrong'))} data-testid="port-forwards-panel">
+      <Panel class={cn('border rounded-md overflow-hidden', redevenSurfaceRoleClass('panelStrong'))} data-testid="web-services-panel">
         <PanelContent class="p-4 space-y-4">
           {/* Page header */}
           <div class="flex items-start justify-between gap-4">
@@ -594,9 +690,9 @@ export function EnvPortForwardsPage() {
                 <Globe class="w-5 h-5 text-primary" />
               </div>
               <div class="space-y-1">
-                <div class="text-sm font-semibold">Port Forwards</div>
+                <div class="text-sm font-semibold">Web Services</div>
                 <div class="text-xs text-muted-foreground">
-                  Expose HTTP services running on (or reachable from) the runtime host to your browser via secure E2EE tunnel.
+                  Register runtime-reachable HTTP services and open them through the best route for this session.
                 </div>
               </div>
             </div>
@@ -610,11 +706,11 @@ export function EnvPortForwardsPage() {
                 variant="default"
                 onClick={() => setCreateOpen(true)}
                 disabled={!!busyID() || (permissionReady() && !canExecute())}
-                aria-label="New Forward"
-                title="New Forward"
+                aria-label="Add Service"
+                title="Add Service"
               >
-                <PlusIcon class="w-3.5 h-3.5 sm:mr-1" />
-                <span class="hidden sm:inline">New Forward</span>
+                <Plus class="w-3.5 h-3.5 sm:mr-1" />
+                <span class="hidden sm:inline">Add Service</span>
               </Button>
             </div>
           </div>
@@ -629,17 +725,17 @@ export function EnvPortForwardsPage() {
                   d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"
                 />
               </svg>
-              <span>Execute permission is required to manage port forwards.</span>
+              <span>Execute permission is required to manage web services.</span>
             </div>
           </Show>
 
-          {/* Search bar - only show when there are forwards */}
+          {/* Search bar - only show when there are services */}
           <Show when={(forwards()?.length ?? 0) > 0}>
             <div class="flex items-center gap-2">
               <Input
                 value={searchQuery()}
                 onInput={(e) => setSearchQuery(e.currentTarget.value)}
-                placeholder="Search forwards by name, target, or description..."
+                placeholder="Search services by name, target, or description..."
                 size="sm"
                 class="max-w-sm"
               />
@@ -653,9 +749,9 @@ export function EnvPortForwardsPage() {
             </div>
           </Show>
 
-          {/* Forwards list */}
+          {/* Services list */}
           <div class="relative" style={{ 'min-height': '200px' }}>
-            <LoadingOverlay visible={forwards.loading} message="Loading port forwards..." />
+            <LoadingOverlay visible={forwards.loading} message="Loading web services..." />
 
             <Show when={forwards.error}>
               <div class="flex items-center gap-2 text-sm text-destructive p-4">
@@ -666,7 +762,7 @@ export function EnvPortForwardsPage() {
                     d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z"
                   />
                 </svg>
-                Failed to load forwards: {String(forwards.error)}
+                Failed to load web services: {String(forwards.error)}
               </div>
             </Show>
 
@@ -679,7 +775,7 @@ export function EnvPortForwardsPage() {
                   when={filteredForwards().length > 0}
                   fallback={
                     <div class="flex flex-col items-center justify-center py-12 px-4">
-                      <p class="text-sm text-muted-foreground">No forwards match "{searchQuery()}"</p>
+                      <p class="text-sm text-muted-foreground">No services match "{searchQuery()}"</p>
                       <Button size="sm" variant="ghost" onClick={() => setSearchQuery('')} class="mt-2">
                         Clear search
                       </Button>
@@ -715,7 +811,7 @@ export function EnvPortForwardsPage() {
         onOpenChange={(open) => {
           if (!open) setDeleteID(null);
         }}
-        title="Delete Port Forward"
+        title="Delete Web Service"
         confirmText="Delete"
         variant="destructive"
         loading={deleting()}
@@ -727,7 +823,7 @@ export function EnvPortForwardsPage() {
             <span class="font-semibold">"{deleteTarget()?.name || deleteTarget()?.forward_id}"</span>?
           </p>
           <p class="text-xs text-muted-foreground">
-            This will remove the forwarding configuration. Target service at{' '}
+            This removes the service registration. The target at{' '}
             <span class="font-mono">{deleteTarget()?.target_url}</span> will not be affected.
           </p>
         </div>

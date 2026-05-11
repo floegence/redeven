@@ -61,7 +61,7 @@ If `permission_policy` is missing, the recommended default local cap is:
 - `write = true`
 
 Rationale:
-- Redeven is a full remote development environment. Most users expect terminal, file editing, codespaces, and port forwarding to work out of the box.
+- Redeven is a full remote development environment. Most users expect terminal, file editing, codespaces, and Web Services / port-forward routing to work out of the box.
 - The local cap is still only a cap: the effective permissions are always clamped by the server-issued grant.
 
 Security note:

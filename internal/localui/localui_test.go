@@ -602,6 +602,21 @@ func TestServer_handleCodeSpace_bootstrapsLocalAccessCookieFromResumeToken(t *te
 	}
 }
 
+func TestServer_handlePortForward_redirectsBasePathToSlash(t *testing.T) {
+	s := newTestServer(t, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/pf/demo?x=1", nil)
+	res := httptest.NewRecorder()
+	s.handlePortForward(res, req)
+
+	if res.Result().StatusCode != http.StatusFound {
+		t.Fatalf("status = %d, want %d", res.Result().StatusCode, http.StatusFound)
+	}
+	if loc := res.Header().Get("Location"); loc != "/pf/demo/?x=1" {
+		t.Fatalf("Location = %q, want %q", loc, "/pf/demo/?x=1")
+	}
+}
+
 func TestServer_handleFavicon_redirect(t *testing.T) {
 	s := &Server{}
 
@@ -1041,6 +1056,23 @@ func TestLocalCodeSpaceRoute(t *testing.T) {
 	}
 	if basePath != "/cs/demo" {
 		t.Fatalf("basePath = %q, want %q", basePath, "/cs/demo")
+	}
+}
+
+func TestLocalPortForwardRoute(t *testing.T) {
+	forwardID, basePath, ok := localPortForwardRoute("/pf/demo-1/service/")
+	if !ok {
+		t.Fatalf("expected local port forward route")
+	}
+	if forwardID != "demo-1" {
+		t.Fatalf("forwardID = %q, want %q", forwardID, "demo-1")
+	}
+	if basePath != "/pf/demo-1" {
+		t.Fatalf("basePath = %q, want %q", basePath, "/pf/demo-1")
+	}
+
+	if _, _, ok := localPortForwardRoute("/pf/Demo/"); ok {
+		t.Fatalf("expected mixed-case forward id to be rejected")
 	}
 }
 

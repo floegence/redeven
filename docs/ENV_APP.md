@@ -6,12 +6,12 @@ Key points:
 
 - The Env App UI is **runtime-bundled** (built + embedded into the Redeven runtime binary).
 - The browser accesses it over a **Flowersec E2EE proxy** (runtime mode).
-- Env details features live here (Deck/Terminal/Monitor/File Browser/Codespaces/Ports/Flower/Codex/Notes overlay).
+- Env details features live here (Deck/Terminal/Monitor/File Browser/Codespaces/Web Services/Flower/Codex/Notes overlay).
 - Cross-surface right-click actions use Context Action Protocol v1. Surfaces provide structured context snapshots, while the shared action layer owns action identity and ordering for `Ask Flower`, `Ask Codex`, `Open in Terminal`, and `Browse Files`. See [`AGENT_SKILLS.md`](AGENT_SKILLS.md).
 - Notes overlay now consumes the released shared floe-webapp Notes surface (`@floegence/floe-webapp-core/notes`); Redeven keeps snapshot fetch, API mutations, SSE projection, and controller glue as the product-owned runtime layer.
 - Desktop view modes now also follow the same upstream-first split: `DisplayModeSwitcher`, `DisplayModePageShell`, `DeckTopBar`, and `WorkbenchSurface` come from released floe-webapp packages, while Redeven only owns environment surface routing, permission gates, persistence wiring, and business widget bodies.
-- Workbench surface routing now keeps one environment window per session while allowing product-owned multi-instance widget behavior only where users expect it: `Terminal` and `Files` can open multiple workbench windows, ordinary navigation reuses the latest matching window, and explicit `New Terminal Window` / `New File Window` actions create fresh instances without changing singleton behavior for Monitoring, Codespaces, Ports, Flower, or Codex.
-- Workbench launcher copy now stays truthful for singleton assistant surfaces: `Flower`, `Codex`, `Monitoring`, `Codespaces`, and `Ports` say `Add ...` only before the first instance exists, then switch to `Go to ...` so users understand they are navigating to the existing surface instead of creating a hidden duplicate.
+- Workbench surface routing now keeps one environment window per session while allowing product-owned multi-instance widget behavior only where users expect it: `Terminal` and `Files` can open multiple workbench windows, ordinary navigation reuses the latest matching window, and explicit `New Terminal Window` / `New File Window` actions create fresh instances without changing singleton behavior for Monitoring, Codespaces, Web Services, Flower, or Codex.
+- Workbench launcher copy now stays truthful for singleton assistant surfaces: `Flower`, `Codex`, `Monitoring`, `Codespaces`, and Web Services say `Add ...` only before the first instance exists, then switch to `Go to ...` so users understand they are navigating to the existing surface instead of creating a hidden duplicate.
 - Flower and Codex also use workbench-specific compact icon variants instead of reusing the larger activity/navigation icons. Flower keeps a tighter aura balance for the 14px/18px launcher slots, while Codex preserves the official artwork inside a neutral contrast shell so dark workbench menus and dock tiles stay legible without redrawing the brand mark.
 - Workbench widget interaction ownership is intentionally split: floe-webapp owns the generic shell-vs-local event contract, while Redeven marks only widget header chrome as shell-owned so text selection, component context menus, local dialogs, dropdowns, and floating descendants inside widget bodies stay component-owned.
 - App-level floating windows also follow a product-owned layer contract: Redeven centralizes semantic layer tokens in `src/ui/utils/envAppLayers.ts`, while floe-webapp normalizes workbench widget render layers from persisted `z_index` ordering so long-lived bring-to-front history cannot visually cover cross-widget floating windows.
@@ -31,7 +31,11 @@ Key points:
   - `AI & Extensions`: `Flower`, `Skills`, `Codex`
   - `Diagnostics`: `Debug Console`
 - Runtime Settings -> `Overview` -> `Runtime Status` is the stable maintenance surface for the persistent Runtime Service. It shows service owner, compatibility, active work, and runtime protocol as table rows instead of injecting page banners.
-- Optional Runtime Service update notices use toasts only. Risky actions such as restart or update always go through confirmation dialogs that summarize active terminals, sessions, tasks, and port forwards before the user continues.
+- Optional Runtime Service update notices use toasts only. Risky actions such as restart or update always go through confirmation dialogs that summarize active terminals, sessions, tasks, and web service registrations before the user continues.
+- Web Services is the user-facing registry for HTTP services that are reachable from the runtime host. The persisted runtime entity remains `port_forward`, but the Env App treats each row as a service registration and chooses the open route from the current access context:
+  - same-device local mode opens browser-safe loopback targets directly;
+  - URL and SSH Local UI sessions open through the Local UI `/pf/<forward_id>/` proxy;
+  - remote Provider / sandbox sessions keep using the isolated Flowersec E2EE port-forward tunnel.
 - Codex is a separate optional AI runtime with its own activity-bar entry and gateway namespace; it is not implemented as a Flower mode, provider, or sub-page.
 - Runtime Settings -> `AI & Extensions` -> Codex is a read-only host/runtime status panel. Redeven does not persist Codex approval, sandbox, model, or binary configuration in runtime settings.
 - The Codex sidebar/page use floe-webapp layout and form primitives for visual consistency, but Codex state, icon assets, thread navigation, transcript projection, and request handling stay implemented as a separate surface rather than as Flower extensions.
@@ -132,7 +136,7 @@ Deck and Workbench reuse released floe-webapp layout/workbench primitives, and R
 - Pointer/context-menu ownership and wheel ownership are separate contracts. `data-floe-local-interaction-surface="true"` descendants still keep local pointer/context-menu ownership unconditionally, while wheel ownership in workbench mode follows the selected-widget guard plus explicit viewport contract: the selected widget boundary blocks canvas zoom, but only a marked, real constrained local scroll viewport may produce `local_surface` scrolling.
 - Workbench-local overlays stay upstream and surface-scoped. `Dialog`, `FileContextMenu`, and `Dropdown` now reuse floe-webapp's shared surface portal scope, so portaled menus/submenus still mount inside the active widget host and keep clicks, outside-dismiss, and local hot-interaction boundaries truthful to that widget instead of escaping back to the document body.
 - Workbench wheel routing is selection-first but not subtree-scroll-first. Blank canvas and unselected widget bounds keep cursor-centered canvas zoom. Inside the selected widget, explicitly marked local scroll viewports scroll locally; all other selected-widget body regions resolve to `ignore:selected_widget_boundary`, which prevents accidental canvas zoom without pretending that a non-scrollable region can scroll.
-- Workbench wheel routing timing is intentionally narrow: browser `wheel` reaches the shared Workbench surface, Redeven's interaction adapter resolves the target widget and selected widget id, terminal early-capture paths call the same resolver, and the final decision is only one of canvas zoom, local surface, or ignore. This keeps Git Browser, Files, Preview, Terminal, Flower/Codex rails, Codespaces, and Ports on the same data-driven contract.
+- Workbench wheel routing timing is intentionally narrow: browser `wheel` reaches the shared Workbench surface, Redeven's interaction adapter resolves the target widget and selected widget id, terminal early-capture paths call the same resolver, and the final decision is only one of canvas zoom, local surface, or ignore. This keeps Git Browser, Files, Preview, Terminal, Flower/Codex rails, Codespaces, and Web Services on the same data-driven contract.
 - Workbench production scroll viewports must use the exported props from `workbenchWheelInteractive.ts`, and `pnpm run check:workbench-wheel` guards against raw wheel attributes or bounded scroll containers without an explicit local-scroll/layout-only role.
 - Blank-canvas pointer-down is the explicit deselection boundary for workbench mode, so panning/zooming the scene also clears stale widget selection instead of leaving an invisible local wheel owner behind.
 - Heavy workbench widgets now opt into floe-webapp's shared projected-surface path. Files, Terminal, Preview, Codespaces, Flower, and Codex render their business DOM through `renderMode: 'projected_surface'`, while the persisted runtime model remains the same world-space widget geometry and lighter widgets can stay on the default `canvas_scaled` path.
@@ -278,9 +282,10 @@ Browser side:
   - `/_redeven_proxy/env/`
 - This same-origin iframe pattern is specific to the trusted Env App origin.
   - When that iframe is hosted inside Redeven Desktop remote sessions, Env App publishes desktop drag-region rectangles for its header, while the Desktop session preload in the top-level document owns the actual native drag overlays.
-  - Codespace and port-forward windows opened from Env App use a different path:
+  - Codespace windows and remote Web Service tunnel windows opened from Env App use a different path:
     a trusted launcher origin -> an isolated runtime origin -> an untrusted app origin.
   - The untrusted app never runs on the same origin as the Env App runtime window.
+- In Local UI mode, Web Services can also open through the same Local UI origin at `/pf/<forward_id>/`. That route is protected by the Local UI access gate and proxies to the registered target from the runtime host, so SSH and URL access modes do not leak a remote `localhost` assumption into the user's browser.
 
 Runtime side:
 
