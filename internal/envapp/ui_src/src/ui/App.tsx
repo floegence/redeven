@@ -15,6 +15,7 @@ import { installDesktopWindowChromeDocumentSync } from './services/desktopWindow
 import { resolveEnvAppStorageBinding } from './services/uiPersistence';
 import { TerminalSessionsLifecycleSync } from './services/terminalSessionsLifecycleSync';
 import { REDEVEN_DECK_LAYOUT_IDS, redevenDeckPresets } from './deck/redevenDeckPresets';
+import { requestWorkbenchRenderTransaction } from './workbench/workbenchRenderBoundary';
 
 function readSessionStorage(key: string): string {
   try {
@@ -124,6 +125,7 @@ function DesktopThemeSync() {
     };
 
     const markThemeSwitching = () => {
+      requestWorkbenchRenderTransaction('theme');
       setThemeSwitching(true);
       if (clearThemeSwitchingFrame !== null) {
         cancelFrame(clearThemeSwitchingFrame);

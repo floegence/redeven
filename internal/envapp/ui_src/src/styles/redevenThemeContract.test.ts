@@ -128,6 +128,17 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('transition: none !important;');
   });
 
+  it('keeps Workbench render transactions scoped to the projected canvas layer', () => {
+    const src = readRedevenCss();
+
+    expect(src).toContain('.redeven-workbench-page .workbench-surface {');
+    expect(src).toContain('contain: layout paint;');
+    expect(src).toContain('.redeven-workbench-page[data-redeven-workbench-render-transaction] .workbench-canvas__projected-layer {');
+    expect(src).toContain('display: none !important;');
+    expect(src).not.toContain("html[data-redeven-theme-switching='true'] .workbench-canvas__projected-layer");
+    expect(src).not.toContain(".redeven-workbench-page[data-redeven-workbench-render-transaction] .workbench-surface {");
+  });
+
   it('replaces the Workbench entry expansion animation with a lightweight progress curtain', () => {
     const src = readRedevenCss();
 
