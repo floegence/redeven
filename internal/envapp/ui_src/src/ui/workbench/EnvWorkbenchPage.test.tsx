@@ -392,7 +392,8 @@ vi.mock('./redevenWorkbenchWidgets', () => ({
   ],
 }));
 
-vi.mock('@floegence/floe-webapp-core/workbench', () => ({
+vi.mock('@floegence/floe-webapp-core/workbench', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@floegence/floe-webapp-core/workbench')>()),
   DEFAULT_WORKBENCH_THEME: 'default',
   isWorkbenchThemeId: (value: unknown) => (
     value === 'default'
@@ -636,9 +637,11 @@ describe('EnvWorkbenchPage', () => {
     expect(storageMocks.writeUIStorageJSON).toHaveBeenCalledWith(
       'workbench:env-123:local_state',
       expect.objectContaining({
-        version: 2,
+        version: 3,
         locked: true,
         theme: 'mica',
+        mode: 'work',
+        activeTool: 'select',
       }),
     );
   });
@@ -1105,6 +1108,51 @@ describe('EnvWorkbenchPage', () => {
     }
   });
 
+  it('keeps workbench tidy actions out of background-mode canvas menus', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 100,
+      widgets: [
+        runtimeWidget('widget-files-1', 'redeven.files', 1, 123),
+      ],
+      widget_states: [],
+      sticky_notes: [],
+      annotations: [],
+      background_layers: [],
+    });
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    const menuItems = surfaceApiMocks.lastSurfaceProps.resolveContextMenuItems({
+      menu: {
+        clientX: 200,
+        clientY: 200,
+        worldX: 0,
+        worldY: 0,
+        target: { kind: 'canvas', mode: 'background' },
+      },
+      items: [
+        {
+          id: 'create-background-region',
+          kind: 'action',
+          label: 'Add Region',
+          icon: () => null,
+          onSelect: vi.fn(),
+        },
+      ],
+      widgets: surfaceApiMocks.lastStateAccessor().widgets,
+      widget: null,
+      closeMenu: vi.fn(),
+    });
+
+    expect(menuItems.map((item: any) => item.id)).toEqual(['create-background-region']);
+  });
+
   it('enters overview mode when the shell issues a workbench overview request', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -1331,7 +1379,13 @@ describe('EnvWorkbenchPage', () => {
           created_at_unix_ms: 123,
         },
       ],
+      sticky_notes: [],
+      annotations: [],
+      background_layers: [],
     });
+    expect(layoutApiMocks.putWorkbenchLayout.mock.calls[0]?.[0]).not.toHaveProperty('mode');
+    expect(layoutApiMocks.putWorkbenchLayout.mock.calls[0]?.[0]).not.toHaveProperty('activeTool');
+    expect(layoutApiMocks.putWorkbenchLayout.mock.calls[0]?.[0]).not.toHaveProperty('selectedObject');
 
     surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement;
     expect(surface.dataset.widgetX).toBe('700');
@@ -1525,6 +1579,9 @@ describe('EnvWorkbenchPage', () => {
           created_at_unix_ms: 123,
         },
       ],
+      sticky_notes: [],
+      annotations: [],
+      background_layers: [],
     });
   });
 
@@ -2003,6 +2060,9 @@ describe('EnvWorkbenchPage', () => {
           widget_type: 'redeven.terminal',
         }),
       ],
+      sticky_notes: [],
+      annotations: [],
+      background_layers: [],
     });
 
     layoutApiMocks.lastStreamArgs.onEvent({

@@ -23,14 +23,34 @@ const (
 
 	TerminalMinFontSize = 10
 	TerminalMaxFontSize = 20
+
+	StickyNoteKind         = "sticky_note"
+	TextAnnotationKind     = "text"
+	DefaultStickyNoteBody  = "Untitled note"
+	DefaultStickyNoteColor = "amber"
+
+	DefaultAnnotationText       = "Text"
+	DefaultAnnotationFontFamily = `ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`
+	DefaultAnnotationFontWeight = 800
+	DefaultAnnotationFontSize   = 45
+	DefaultAnnotationColor      = "#6b7280"
+	DefaultAnnotationAlign      = "left"
+
+	DefaultBackgroundLayerName     = "Canvas region"
+	DefaultBackgroundLayerFill     = "#9da8a1"
+	DefaultBackgroundLayerOpacity  = 0.72
+	DefaultBackgroundLayerMaterial = "dotted"
 )
 
 type Snapshot struct {
-	Seq             int64          `json:"seq"`
-	Revision        int64          `json:"revision"`
-	UpdatedAtUnixMs int64          `json:"updated_at_unix_ms"`
-	Widgets         []WidgetLayout `json:"widgets"`
-	WidgetStates    []WidgetState  `json:"widget_states"`
+	Seq              int64             `json:"seq"`
+	Revision         int64             `json:"revision"`
+	UpdatedAtUnixMs  int64             `json:"updated_at_unix_ms"`
+	Widgets          []WidgetLayout    `json:"widgets"`
+	StickyNotes      []StickyNote      `json:"sticky_notes"`
+	Annotations      []TextAnnotation  `json:"annotations"`
+	BackgroundLayers []BackgroundLayer `json:"background_layers"`
+	WidgetStates     []WidgetState     `json:"widget_states"`
 }
 
 type WidgetLayout struct {
@@ -52,8 +72,58 @@ type Event struct {
 }
 
 type PutLayoutRequest struct {
-	BaseRevision int64          `json:"base_revision"`
-	Widgets      []WidgetLayout `json:"widgets"`
+	BaseRevision     int64             `json:"base_revision"`
+	Widgets          []WidgetLayout    `json:"widgets"`
+	StickyNotes      []StickyNote      `json:"sticky_notes"`
+	Annotations      []TextAnnotation  `json:"annotations"`
+	BackgroundLayers []BackgroundLayer `json:"background_layers"`
+}
+
+type StickyNote struct {
+	ID              string  `json:"id"`
+	Kind            string  `json:"kind"`
+	Body            string  `json:"body"`
+	Color           string  `json:"color"`
+	X               float64 `json:"x"`
+	Y               float64 `json:"y"`
+	Width           float64 `json:"width"`
+	Height          float64 `json:"height"`
+	ZIndex          int     `json:"z_index"`
+	CreatedAtUnixMs int64   `json:"created_at_unix_ms"`
+	UpdatedAtUnixMs int64   `json:"updated_at_unix_ms"`
+}
+
+type TextAnnotation struct {
+	ID              string  `json:"id"`
+	Kind            string  `json:"kind"`
+	Text            string  `json:"text"`
+	FontFamily      string  `json:"font_family"`
+	FontSize        int     `json:"font_size"`
+	FontWeight      int     `json:"font_weight"`
+	Color           string  `json:"color"`
+	Align           string  `json:"align"`
+	X               float64 `json:"x"`
+	Y               float64 `json:"y"`
+	Width           float64 `json:"width"`
+	Height          float64 `json:"height"`
+	ZIndex          int     `json:"z_index"`
+	CreatedAtUnixMs int64   `json:"created_at_unix_ms"`
+	UpdatedAtUnixMs int64   `json:"updated_at_unix_ms"`
+}
+
+type BackgroundLayer struct {
+	ID              string  `json:"id"`
+	Name            string  `json:"name"`
+	Fill            string  `json:"fill"`
+	Opacity         float64 `json:"opacity"`
+	Material        string  `json:"material"`
+	X               float64 `json:"x"`
+	Y               float64 `json:"y"`
+	Width           float64 `json:"width"`
+	Height          float64 `json:"height"`
+	ZIndex          int     `json:"z_index"`
+	CreatedAtUnixMs int64   `json:"created_at_unix_ms"`
+	UpdatedAtUnixMs int64   `json:"updated_at_unix_ms"`
 }
 
 type WidgetState struct {
@@ -158,9 +228,24 @@ func normalizePutLayoutRequest(req PutLayoutRequest, nowUnixMs int64) (PutLayout
 	if err != nil {
 		return PutLayoutRequest{}, err
 	}
+	stickyNotes, err := normalizeStickyNotes(req.StickyNotes, nowUnixMs)
+	if err != nil {
+		return PutLayoutRequest{}, err
+	}
+	annotations, err := normalizeTextAnnotations(req.Annotations, nowUnixMs)
+	if err != nil {
+		return PutLayoutRequest{}, err
+	}
+	backgroundLayers, err := normalizeBackgroundLayers(req.BackgroundLayers, nowUnixMs)
+	if err != nil {
+		return PutLayoutRequest{}, err
+	}
 	return PutLayoutRequest{
-		BaseRevision: req.BaseRevision,
-		Widgets:      widgets,
+		BaseRevision:     req.BaseRevision,
+		Widgets:          widgets,
+		StickyNotes:      stickyNotes,
+		Annotations:      annotations,
+		BackgroundLayers: backgroundLayers,
 	}, nil
 }
 
@@ -168,11 +253,9 @@ func normalizePutWidgetStateRequest(widgetID string, req PutWidgetStateRequest) 
 	if req.BaseRevision < 0 {
 		return PutWidgetStateRequest{}, &ValidationError{Message: "base_revision must be non-negative"}
 	}
-	normalizedWidgetID, err := normalizeWidgetID(widgetID)
-	if err != nil {
+	if _, err := normalizeWidgetID(widgetID); err != nil {
 		return PutWidgetStateRequest{}, &ValidationError{Message: fmt.Sprintf("widget_id: %v", err)}
 	}
-	_ = normalizedWidgetID
 
 	widgetType := strings.TrimSpace(req.WidgetType)
 	if widgetType == "" {
@@ -268,14 +351,188 @@ func normalizeWidgetLayout(widget WidgetLayout, nowUnixMs int64) (WidgetLayout, 
 }
 
 func normalizeWidgetID(value string) (string, error) {
+	return normalizeLayoutObjectID(value, "widget_id")
+}
+
+func normalizeLayoutObjectID(value string, fieldName string) (string, error) {
 	id := strings.TrimSpace(value)
 	if id == "" {
-		return "", errors.New("missing widget_id")
+		return "", fmt.Errorf("missing %s", fieldName)
 	}
 	if len(id) > 128 {
-		return "", fmt.Errorf("widget_id %q is too long", id)
+		return "", fmt.Errorf("%s %q is too long", fieldName, id)
 	}
 	return id, nil
+}
+
+func normalizeStickyNotes(notes []StickyNote, nowUnixMs int64) ([]StickyNote, error) {
+	if len(notes) == 0 {
+		return []StickyNote{}, nil
+	}
+	seenIDs := make(map[string]struct{}, len(notes))
+	next := make([]StickyNote, 0, len(notes))
+	for index, note := range notes {
+		normalized, err := normalizeStickyNote(note, nowUnixMs)
+		if err != nil {
+			return nil, &ValidationError{Message: fmt.Sprintf("sticky_notes[%d]: %v", index, err)}
+		}
+		if _, exists := seenIDs[normalized.ID]; exists {
+			return nil, &ValidationError{Message: fmt.Sprintf("sticky_notes[%d]: duplicate id %q", index, normalized.ID)}
+		}
+		seenIDs[normalized.ID] = struct{}{}
+		next = append(next, normalized)
+	}
+	sortLayoutObjects(next, func(value StickyNote) (int, int64, string) {
+		return value.ZIndex, value.CreatedAtUnixMs, value.ID
+	})
+	return next, nil
+}
+
+func normalizeStickyNote(note StickyNote, nowUnixMs int64) (StickyNote, error) {
+	id, err := normalizeLayoutObjectID(note.ID, "id")
+	if err != nil {
+		return StickyNote{}, err
+	}
+	kind := strings.TrimSpace(note.Kind)
+	if kind == "" {
+		kind = StickyNoteKind
+	}
+	if kind != StickyNoteKind {
+		return StickyNote{}, fmt.Errorf("kind must be %q", StickyNoteKind)
+	}
+	if !isFinite(note.X) {
+		return StickyNote{}, errors.New("x must be finite")
+	}
+	if !isFinite(note.Y) {
+		return StickyNote{}, errors.New("y must be finite")
+	}
+	createdAt, updatedAt := normalizeTimestamps(note.CreatedAtUnixMs, note.UpdatedAtUnixMs, nowUnixMs)
+	return StickyNote{
+		ID:              id,
+		Kind:            StickyNoteKind,
+		Body:            normalizeBoundedText(note.Body, DefaultStickyNoteBody, 20_000),
+		Color:           normalizeEnum(note.Color, stickyNoteColors(), DefaultStickyNoteColor),
+		X:               note.X,
+		Y:               note.Y,
+		Width:           normalizePositiveFloat(note.Width, 260),
+		Height:          normalizePositiveFloat(note.Height, 190),
+		ZIndex:          normalizeNonNegativeInt(note.ZIndex),
+		CreatedAtUnixMs: createdAt,
+		UpdatedAtUnixMs: updatedAt,
+	}, nil
+}
+
+func normalizeTextAnnotations(annotations []TextAnnotation, nowUnixMs int64) ([]TextAnnotation, error) {
+	if len(annotations) == 0 {
+		return []TextAnnotation{}, nil
+	}
+	seenIDs := make(map[string]struct{}, len(annotations))
+	next := make([]TextAnnotation, 0, len(annotations))
+	for index, annotation := range annotations {
+		normalized, err := normalizeTextAnnotation(annotation, nowUnixMs)
+		if err != nil {
+			return nil, &ValidationError{Message: fmt.Sprintf("annotations[%d]: %v", index, err)}
+		}
+		if _, exists := seenIDs[normalized.ID]; exists {
+			return nil, &ValidationError{Message: fmt.Sprintf("annotations[%d]: duplicate id %q", index, normalized.ID)}
+		}
+		seenIDs[normalized.ID] = struct{}{}
+		next = append(next, normalized)
+	}
+	sortLayoutObjects(next, func(value TextAnnotation) (int, int64, string) {
+		return value.ZIndex, value.CreatedAtUnixMs, value.ID
+	})
+	return next, nil
+}
+
+func normalizeTextAnnotation(annotation TextAnnotation, nowUnixMs int64) (TextAnnotation, error) {
+	id, err := normalizeLayoutObjectID(annotation.ID, "id")
+	if err != nil {
+		return TextAnnotation{}, err
+	}
+	kind := strings.TrimSpace(annotation.Kind)
+	if kind == "" {
+		kind = TextAnnotationKind
+	}
+	if kind != TextAnnotationKind {
+		return TextAnnotation{}, fmt.Errorf("kind must be %q", TextAnnotationKind)
+	}
+	if !isFinite(annotation.X) {
+		return TextAnnotation{}, errors.New("x must be finite")
+	}
+	if !isFinite(annotation.Y) {
+		return TextAnnotation{}, errors.New("y must be finite")
+	}
+	fontFamily, fontWeight := normalizeAnnotationFont(annotation.FontFamily, annotation.FontWeight)
+	createdAt, updatedAt := normalizeTimestamps(annotation.CreatedAtUnixMs, annotation.UpdatedAtUnixMs, nowUnixMs)
+	return TextAnnotation{
+		ID:              id,
+		Kind:            TextAnnotationKind,
+		Text:            normalizeBoundedText(annotation.Text, DefaultAnnotationText, 20_000),
+		FontFamily:      fontFamily,
+		FontSize:        normalizeIntRange(annotation.FontSize, 8, 160, DefaultAnnotationFontSize),
+		FontWeight:      fontWeight,
+		Color:           normalizeEnum(annotation.Color, annotationColors(), DefaultAnnotationColor),
+		Align:           normalizeEnum(annotation.Align, annotationAlignments(), DefaultAnnotationAlign),
+		X:               annotation.X,
+		Y:               annotation.Y,
+		Width:           normalizePositiveFloat(annotation.Width, 460),
+		Height:          normalizePositiveFloat(annotation.Height, 96),
+		ZIndex:          normalizeNonNegativeInt(annotation.ZIndex),
+		CreatedAtUnixMs: createdAt,
+		UpdatedAtUnixMs: updatedAt,
+	}, nil
+}
+
+func normalizeBackgroundLayers(layers []BackgroundLayer, nowUnixMs int64) ([]BackgroundLayer, error) {
+	if len(layers) == 0 {
+		return []BackgroundLayer{}, nil
+	}
+	seenIDs := make(map[string]struct{}, len(layers))
+	next := make([]BackgroundLayer, 0, len(layers))
+	for index, layer := range layers {
+		normalized, err := normalizeBackgroundLayer(layer, nowUnixMs)
+		if err != nil {
+			return nil, &ValidationError{Message: fmt.Sprintf("background_layers[%d]: %v", index, err)}
+		}
+		if _, exists := seenIDs[normalized.ID]; exists {
+			return nil, &ValidationError{Message: fmt.Sprintf("background_layers[%d]: duplicate id %q", index, normalized.ID)}
+		}
+		seenIDs[normalized.ID] = struct{}{}
+		next = append(next, normalized)
+	}
+	sortLayoutObjects(next, func(value BackgroundLayer) (int, int64, string) {
+		return value.ZIndex, value.CreatedAtUnixMs, value.ID
+	})
+	return next, nil
+}
+
+func normalizeBackgroundLayer(layer BackgroundLayer, nowUnixMs int64) (BackgroundLayer, error) {
+	id, err := normalizeLayoutObjectID(layer.ID, "id")
+	if err != nil {
+		return BackgroundLayer{}, err
+	}
+	if !isFinite(layer.X) {
+		return BackgroundLayer{}, errors.New("x must be finite")
+	}
+	if !isFinite(layer.Y) {
+		return BackgroundLayer{}, errors.New("y must be finite")
+	}
+	createdAt, updatedAt := normalizeTimestamps(layer.CreatedAtUnixMs, layer.UpdatedAtUnixMs, nowUnixMs)
+	return BackgroundLayer{
+		ID:              id,
+		Name:            normalizeBoundedText(layer.Name, DefaultBackgroundLayerName, 256),
+		Fill:            normalizeEnum(layer.Fill, backgroundLayerFills(), DefaultBackgroundLayerFill),
+		Opacity:         normalizeFloatRange(layer.Opacity, 0.08, 1, DefaultBackgroundLayerOpacity),
+		Material:        normalizeEnum(layer.Material, backgroundLayerMaterials(), DefaultBackgroundLayerMaterial),
+		X:               layer.X,
+		Y:               layer.Y,
+		Width:           normalizePositiveFloat(layer.Width, 560),
+		Height:          normalizePositiveFloat(layer.Height, 360),
+		ZIndex:          normalizeNonNegativeInt(layer.ZIndex),
+		CreatedAtUnixMs: createdAt,
+		UpdatedAtUnixMs: updatedAt,
+	}, nil
 }
 
 func widgetStateKindForType(widgetType string) (string, bool) {
@@ -455,18 +712,6 @@ func basename(path string) string {
 	return path
 }
 
-func snapshotsEqualWidgets(left Snapshot, right []WidgetLayout) bool {
-	if len(left.Widgets) != len(right) {
-		return false
-	}
-	for index := range left.Widgets {
-		if left.Widgets[index] != right[index] {
-			return false
-		}
-	}
-	return true
-}
-
 func widgetStateDataEqual(left WidgetStateData, right WidgetStateData) bool {
 	if left.Kind != right.Kind || left.CurrentPath != right.CurrentPath || left.FontFamilyID != right.FontFamilyID {
 		return false
@@ -511,6 +756,214 @@ func previewItemsEqual(left *PreviewItem, right *PreviewItem) bool {
 		leftSize == rightSize
 }
 
+func snapshotsEqualLayout(left Snapshot, right PutLayoutRequest) bool {
+	return widgetLayoutsEqual(left.Widgets, right.Widgets) &&
+		stickyNotesEqual(left.StickyNotes, right.StickyNotes) &&
+		textAnnotationsEqual(left.Annotations, right.Annotations) &&
+		backgroundLayersEqual(left.BackgroundLayers, right.BackgroundLayers)
+}
+
 func isFinite(value float64) bool {
 	return !math.IsNaN(value) && !math.IsInf(value, 0)
+}
+
+func normalizeTimestamps(createdAt int64, updatedAt int64, nowUnixMs int64) (int64, int64) {
+	if createdAt <= 0 {
+		createdAt = nowUnixMs
+	}
+	if updatedAt <= 0 {
+		updatedAt = createdAt
+	}
+	return createdAt, updatedAt
+}
+
+func normalizeBoundedText(value string, fallback string, maxLen int) string {
+	next := strings.TrimSpace(value)
+	if next == "" {
+		next = fallback
+	}
+	if maxLen > 0 && len(next) > maxLen {
+		next = next[:maxLen]
+	}
+	return next
+}
+
+func normalizePositiveFloat(value float64, fallback float64) float64 {
+	if !isFinite(value) || value <= 0 {
+		return fallback
+	}
+	return value
+}
+
+func normalizeFloatRange(value float64, min float64, max float64, fallback float64) float64 {
+	if !isFinite(value) {
+		return fallback
+	}
+	if value < min {
+		return min
+	}
+	if value > max {
+		return max
+	}
+	return value
+}
+
+func normalizeNonNegativeInt(value int) int {
+	if value < 0 {
+		return 0
+	}
+	return value
+}
+
+func normalizeIntRange(value int, min int, max int, fallback int) int {
+	if value <= 0 {
+		value = fallback
+	}
+	if value < min {
+		return min
+	}
+	if value > max {
+		return max
+	}
+	return value
+}
+
+func normalizeEnum(value string, allowed map[string]struct{}, fallback string) string {
+	next := strings.TrimSpace(value)
+	if _, ok := allowed[next]; ok {
+		return next
+	}
+	return fallback
+}
+
+func normalizeAnnotationFont(fontFamily string, fontWeight int) (string, int) {
+	switch strings.TrimSpace(fontFamily) {
+	case DefaultAnnotationFontFamily:
+		return DefaultAnnotationFontFamily, DefaultAnnotationFontWeight
+	case "ui-serif, Georgia, serif":
+		return "ui-serif, Georgia, serif", 760
+	case `ui-rounded, "SF Pro Rounded", "Arial Rounded MT Bold", ui-sans-serif, sans-serif`:
+		return `ui-rounded, "SF Pro Rounded", "Arial Rounded MT Bold", ui-sans-serif, sans-serif`, 800
+	case `ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace`:
+		return `ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace`, 800
+	case `Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif`:
+		return `Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif`, 700
+	default:
+		if fontWeight >= 100 && fontWeight <= 1000 {
+			return DefaultAnnotationFontFamily, fontWeight
+		}
+		return DefaultAnnotationFontFamily, DefaultAnnotationFontWeight
+	}
+}
+
+func stickyNoteColors() map[string]struct{} {
+	return map[string]struct{}{
+		"sage":  {},
+		"amber": {},
+		"azure": {},
+		"coral": {},
+		"rose":  {},
+	}
+}
+
+func annotationColors() map[string]struct{} {
+	return map[string]struct{}{
+		"#6b7280": {},
+		"#64748b": {},
+		"#71717a": {},
+		"#78716c": {},
+		"#7770a0": {},
+		"#8a6b6b": {},
+	}
+}
+
+func annotationAlignments() map[string]struct{} {
+	return map[string]struct{}{
+		"left":   {},
+		"center": {},
+		"right":  {},
+	}
+}
+
+func backgroundLayerFills() map[string]struct{} {
+	return map[string]struct{}{
+		"#9da8a1": {},
+		"#a79d8e": {},
+		"#8fa1aa": {},
+		"#a78f86": {},
+		"#9ca184": {},
+		"#9993a7": {},
+	}
+}
+
+func backgroundLayerMaterials() map[string]struct{} {
+	return map[string]struct{}{
+		"solid":   {},
+		"dotted":  {},
+		"grid":    {},
+		"hatched": {},
+		"glass":   {},
+	}
+}
+
+func sortLayoutObjects[T any](values []T, keys func(T) (int, int64, string)) {
+	sort.Slice(values, func(left int, right int) bool {
+		leftZ, leftCreated, leftID := keys(values[left])
+		rightZ, rightCreated, rightID := keys(values[right])
+		if leftZ != rightZ {
+			return leftZ < rightZ
+		}
+		if leftCreated != rightCreated {
+			return leftCreated < rightCreated
+		}
+		return leftID < rightID
+	})
+}
+
+func widgetLayoutsEqual(left []WidgetLayout, right []WidgetLayout) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func stickyNotesEqual(left []StickyNote, right []StickyNote) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func textAnnotationsEqual(left []TextAnnotation, right []TextAnnotation) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func backgroundLayersEqual(left []BackgroundLayer, right []BackgroundLayer) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }

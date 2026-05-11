@@ -2,12 +2,16 @@ package workbenchlayout
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
+	"math"
 	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 func openTestService(t *testing.T) *Service {
@@ -50,8 +54,81 @@ func sampleWidgets() []WidgetLayout {
 	}
 }
 
+func sampleLayeredLayoutRequest() PutLayoutRequest {
+	return PutLayoutRequest{
+		BaseRevision: 0,
+		Widgets:      sampleWidgets(),
+		StickyNotes: []StickyNote{
+			{
+				ID:              "sticky-2",
+				Kind:            StickyNoteKind,
+				Body:            "Later note",
+				Color:           "rose",
+				X:               40,
+				Y:               50,
+				Width:           260,
+				Height:          184,
+				ZIndex:          4,
+				CreatedAtUnixMs: 1_700_000_000_500,
+				UpdatedAtUnixMs: 1_700_000_000_600,
+			},
+			{
+				ID:              "sticky-1",
+				Body:            "First note",
+				Color:           "sage",
+				X:               20,
+				Y:               30,
+				Width:           280,
+				Height:          190,
+				ZIndex:          3,
+				CreatedAtUnixMs: 1_700_000_000_400,
+				UpdatedAtUnixMs: 1_700_000_000_450,
+			},
+		},
+		Annotations: []TextAnnotation{
+			{
+				ID:              "text-1",
+				Kind:            TextAnnotationKind,
+				Text:            "Investigate this area",
+				FontFamily:      DefaultAnnotationFontFamily,
+				FontSize:        34,
+				FontWeight:      760,
+				Color:           "#64748b",
+				Align:           "center",
+				X:               320,
+				Y:               120,
+				Width:           360,
+				Height:          96,
+				ZIndex:          7,
+				CreatedAtUnixMs: 1_700_000_000_700,
+				UpdatedAtUnixMs: 1_700_000_000_800,
+			},
+		},
+		BackgroundLayers: []BackgroundLayer{
+			{
+				ID:              "region-1",
+				Name:            "Focus area",
+				Fill:            "#8fa1aa",
+				Opacity:         0.42,
+				Material:        "grid",
+				X:               -120,
+				Y:               -80,
+				Width:           640,
+				Height:          360,
+				ZIndex:          1,
+				CreatedAtUnixMs: 1_700_000_000_300,
+				UpdatedAtUnixMs: 1_700_000_000_350,
+			},
+		},
+	}
+}
+
 func intPtr(value int) *int {
 	return &value
+}
+
+func mathNaN() float64 {
+	return math.NaN()
 }
 
 func TestServiceSnapshotStartsEmpty(t *testing.T) {
@@ -71,6 +148,9 @@ func TestServiceSnapshotStartsEmpty(t *testing.T) {
 	}
 	if len(snapshot.WidgetStates) != 0 {
 		t.Fatalf("snapshot widget states = %#v, want empty", snapshot.WidgetStates)
+	}
+	if len(snapshot.StickyNotes) != 0 || len(snapshot.Annotations) != 0 || len(snapshot.BackgroundLayers) != 0 {
+		t.Fatalf("snapshot layered objects = %#v/%#v/%#v, want empty", snapshot.StickyNotes, snapshot.Annotations, snapshot.BackgroundLayers)
 	}
 }
 
@@ -129,6 +209,54 @@ func TestServiceReplaceWritesSnapshotAndEvent(t *testing.T) {
 	case <-ch:
 		t.Fatal("unexpected live event after baseline replay")
 	default:
+	}
+}
+
+func TestServiceReplaceWritesLayeredObjectsAndEventPayload(t *testing.T) {
+	t.Parallel()
+
+	svc := openTestService(t)
+	ctx := context.Background()
+
+	req := sampleLayeredLayoutRequest()
+	nextSnapshot, err := svc.Replace(ctx, req)
+	if err != nil {
+		t.Fatalf("Replace() error = %v", err)
+	}
+	if nextSnapshot.Revision != 1 || nextSnapshot.Seq != 1 {
+		t.Fatalf("snapshot revision/seq = %d/%d, want 1/1", nextSnapshot.Revision, nextSnapshot.Seq)
+	}
+	if len(nextSnapshot.StickyNotes) != 2 || nextSnapshot.StickyNotes[0].ID != "sticky-1" || nextSnapshot.StickyNotes[0].Kind != StickyNoteKind {
+		t.Fatalf("sticky notes = %#v, want sorted notes with kind", nextSnapshot.StickyNotes)
+	}
+	if len(nextSnapshot.Annotations) != 1 || nextSnapshot.Annotations[0].Kind != TextAnnotationKind || nextSnapshot.Annotations[0].Align != "center" {
+		t.Fatalf("annotations = %#v, want text annotation", nextSnapshot.Annotations)
+	}
+	if len(nextSnapshot.BackgroundLayers) != 1 || nextSnapshot.BackgroundLayers[0].Material != "grid" || nextSnapshot.BackgroundLayers[0].Opacity != 0.42 {
+		t.Fatalf("background layers = %#v, want grid layer", nextSnapshot.BackgroundLayers)
+	}
+
+	persisted, err := svc.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("Snapshot() error = %v", err)
+	}
+	if !reflect.DeepEqual(persisted, nextSnapshot) {
+		t.Fatalf("persisted snapshot = %#v, want %#v", persisted, nextSnapshot)
+	}
+
+	baseline, _, err := svc.Subscribe(ctx, 0)
+	if err != nil {
+		t.Fatalf("Subscribe() error = %v", err)
+	}
+	if len(baseline) != 1 {
+		t.Fatalf("baseline len = %d, want 1", len(baseline))
+	}
+	var payload Snapshot
+	if err := json.Unmarshal(baseline[0].Payload, &payload); err != nil {
+		t.Fatalf("json.Unmarshal(payload) error = %v", err)
+	}
+	if !reflect.DeepEqual(payload, nextSnapshot) {
+		t.Fatalf("event payload = %#v, want %#v", payload, nextSnapshot)
 	}
 }
 
@@ -237,6 +365,132 @@ func TestServiceReplaceNoOpDoesNotAdvanceRevision(t *testing.T) {
 	}
 	if second.Revision != first.Revision || second.Seq != first.Seq {
 		t.Fatalf("second snapshot = %#v, want unchanged %#v", second, first)
+	}
+}
+
+func TestServiceReplaceLayeredNoOpWithStaleRevisionDoesNotAdvance(t *testing.T) {
+	t.Parallel()
+
+	svc := openTestService(t)
+	ctx := context.Background()
+
+	req := sampleLayeredLayoutRequest()
+	first, err := svc.Replace(ctx, req)
+	if err != nil {
+		t.Fatalf("first Replace() error = %v", err)
+	}
+	req.BaseRevision = 0
+	second, err := svc.Replace(ctx, req)
+	if err != nil {
+		t.Fatalf("second Replace() error = %v", err)
+	}
+	if !reflect.DeepEqual(second, first) {
+		t.Fatalf("stale no-op snapshot = %#v, want unchanged %#v", second, first)
+	}
+}
+
+func TestServiceReplaceNormalizesLayeredObjects(t *testing.T) {
+	t.Parallel()
+
+	svc := openTestService(t)
+	ctx := context.Background()
+
+	snapshot, err := svc.Replace(ctx, PutLayoutRequest{
+		BaseRevision: 0,
+		StickyNotes: []StickyNote{
+			{
+				ID:     "sticky-1",
+				Kind:   "",
+				Body:   "   ",
+				Color:  "not-a-color",
+				X:      10,
+				Y:      20,
+				Width:  -1,
+				Height: -1,
+				ZIndex: -1,
+			},
+		},
+		Annotations: []TextAnnotation{
+			{
+				ID:         "text-1",
+				Text:       "",
+				FontSize:   999,
+				FontWeight: 1200,
+				Color:      "#ffffff",
+				Align:      "justify",
+				X:          30,
+				Y:          40,
+				Width:      -1,
+				Height:     -1,
+				ZIndex:     -8,
+			},
+		},
+		BackgroundLayers: []BackgroundLayer{
+			{
+				ID:       "region-1",
+				Name:     "",
+				Fill:     "#ffffff",
+				Opacity:  2,
+				Material: "noise",
+				X:        50,
+				Y:        60,
+				Width:    -1,
+				Height:   -1,
+				ZIndex:   -2,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Replace() error = %v", err)
+	}
+
+	note := snapshot.StickyNotes[0]
+	if note.Body != DefaultStickyNoteBody || note.Color != DefaultStickyNoteColor || note.Width != 260 || note.Height != 190 || note.ZIndex != 0 || note.CreatedAtUnixMs <= 0 || note.UpdatedAtUnixMs <= 0 {
+		t.Fatalf("normalized note = %#v, want defaults and clamped z", note)
+	}
+	annotation := snapshot.Annotations[0]
+	if annotation.Text != DefaultAnnotationText || annotation.FontSize != 160 || annotation.FontWeight != DefaultAnnotationFontWeight || annotation.Color != DefaultAnnotationColor || annotation.Align != DefaultAnnotationAlign || annotation.Width != 460 || annotation.Height != 96 {
+		t.Fatalf("normalized annotation = %#v, want defaults and clamps", annotation)
+	}
+	layer := snapshot.BackgroundLayers[0]
+	if layer.Name != DefaultBackgroundLayerName || layer.Fill != DefaultBackgroundLayerFill || layer.Opacity != 1 || layer.Material != DefaultBackgroundLayerMaterial || layer.Width != 560 || layer.Height != 360 {
+		t.Fatalf("normalized background layer = %#v, want defaults and clamps", layer)
+	}
+}
+
+func TestServiceReplaceRejectsInvalidAndDuplicateLayeredObjects(t *testing.T) {
+	t.Parallel()
+
+	svc := openTestService(t)
+	ctx := context.Background()
+
+	_, err := svc.Replace(ctx, PutLayoutRequest{
+		BaseRevision: 0,
+		StickyNotes: []StickyNote{
+			{ID: "duplicate", X: 1, Y: 1},
+			{ID: "duplicate", X: 2, Y: 2},
+		},
+	})
+	if err == nil {
+		t.Fatal("Replace(duplicate sticky notes) succeeded, want validation error")
+	}
+	var validation *ValidationError
+	if !errors.As(err, &validation) {
+		t.Fatalf("error = %v, want ValidationError", err)
+	}
+
+	_, err = svc.Replace(ctx, PutLayoutRequest{
+		BaseRevision: 0,
+		Annotations: []TextAnnotation{
+			{ID: "text-1", X: 1, Y: 1},
+			{ID: "text-2", X: mathNaN(), Y: 1},
+		},
+	})
+	if err == nil {
+		t.Fatal("Replace(invalid annotation) succeeded, want validation error")
+	}
+	if !errors.As(err, &validation) {
+		t.Fatalf("error = %v, want ValidationError", err)
 	}
 }
 
@@ -564,6 +818,121 @@ func TestServiceRemoveTerminalSessionFromAllWidgets(t *testing.T) {
 	}
 	if got := terminalSessionIDsForWidget(t, snapshot, "widget-terminal-2"); !reflect.DeepEqual(got, []string{"kept-2"}) {
 		t.Fatalf("widget-terminal-2 sessions = %#v, want kept-2", got)
+	}
+}
+
+func TestServiceMigratesV2DatabaseToV3(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "layout-v2.sqlite")
+	createWorkbenchLayoutV2Database(t, dbPath)
+
+	svc, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open(v2) error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := svc.Close(); err != nil {
+			t.Fatalf("Close() error = %v", err)
+		}
+	})
+
+	snapshot, err := svc.Snapshot(context.Background())
+	if err != nil {
+		t.Fatalf("Snapshot() error = %v", err)
+	}
+	if snapshot.Revision != 1 || len(snapshot.Widgets) != 1 || snapshot.Widgets[0].WidgetID != "widget-files-1" {
+		t.Fatalf("migrated snapshot widgets = %#v revision=%d, want v2 widget", snapshot.Widgets, snapshot.Revision)
+	}
+	if len(snapshot.WidgetStates) != 1 || snapshot.WidgetStates[0].State.CurrentPath != "/workspace/src" {
+		t.Fatalf("migrated widget states = %#v, want files state", snapshot.WidgetStates)
+	}
+	if len(snapshot.StickyNotes) != 0 || len(snapshot.Annotations) != 0 || len(snapshot.BackgroundLayers) != 0 {
+		t.Fatalf("migrated layered objects = %#v/%#v/%#v, want empty", snapshot.StickyNotes, snapshot.Annotations, snapshot.BackgroundLayers)
+	}
+
+	next, err := svc.Replace(context.Background(), PutLayoutRequest{
+		BaseRevision: snapshot.Revision,
+		Widgets:      snapshot.Widgets,
+		StickyNotes: []StickyNote{
+			{ID: "sticky-1", Body: "Migrated DB can write new objects", X: 1, Y: 2},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Replace(after migration) error = %v", err)
+	}
+	if len(next.StickyNotes) != 1 || next.StickyNotes[0].ID != "sticky-1" {
+		t.Fatalf("next sticky notes = %#v, want persisted sticky note", next.StickyNotes)
+	}
+}
+
+func createWorkbenchLayoutV2Database(t *testing.T, dbPath string) {
+	t.Helper()
+
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("sql.Open() error = %v", err)
+	}
+	defer db.Close()
+
+	_, err = db.Exec(`
+CREATE TABLE __redeven_db_meta (
+  singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+  db_kind TEXT NOT NULL,
+  created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  last_migrated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  last_migrated_from_version INTEGER NOT NULL DEFAULT 0,
+  last_migrated_to_version INTEGER NOT NULL DEFAULT 0
+);
+INSERT INTO __redeven_db_meta(singleton, db_kind, created_at_unix_ms, last_migrated_at_unix_ms, last_migrated_from_version, last_migrated_to_version)
+VALUES (1, 'workbench_layout_runtime', 1700000000000, 1700000000000, 1, 2);
+PRAGMA user_version = 2;
+CREATE TABLE workbench_layout_snapshot (
+  singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+  revision INTEGER NOT NULL,
+  seq INTEGER NOT NULL,
+  updated_at_unix_ms INTEGER NOT NULL
+);
+INSERT INTO workbench_layout_snapshot(singleton, revision, seq, updated_at_unix_ms)
+VALUES (1, 1, 2, 1700000000200);
+CREATE TABLE workbench_layout_widgets (
+  widget_id TEXT PRIMARY KEY,
+  widget_type TEXT NOT NULL,
+  x REAL NOT NULL,
+  y REAL NOT NULL,
+  width REAL NOT NULL,
+  height REAL NOT NULL,
+  z_index INTEGER NOT NULL,
+  created_at_unix_ms INTEGER NOT NULL
+);
+CREATE INDEX idx_workbench_layout_widgets_order
+  ON workbench_layout_widgets(z_index ASC, created_at_unix_ms ASC, widget_id ASC);
+INSERT INTO workbench_layout_widgets(widget_id, widget_type, x, y, width, height, z_index, created_at_unix_ms)
+VALUES ('widget-files-1', 'redeven.files', 120, 80, 760, 560, 1, 1700000000000);
+CREATE TABLE workbench_layout_events (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_type TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  created_at_unix_ms INTEGER NOT NULL
+);
+CREATE INDEX idx_workbench_layout_events_seq
+  ON workbench_layout_events(seq ASC);
+INSERT INTO workbench_layout_events(seq, event_type, payload_json, created_at_unix_ms)
+VALUES (1, 'layout.replaced', '{}', 1700000000100);
+CREATE TABLE workbench_widget_states (
+  widget_id TEXT PRIMARY KEY,
+  widget_type TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  state_json TEXT NOT NULL,
+  updated_at_unix_ms INTEGER NOT NULL
+);
+CREATE INDEX idx_workbench_widget_states_type
+  ON workbench_widget_states(widget_type ASC, widget_id ASC);
+INSERT INTO workbench_widget_states(widget_id, widget_type, revision, state_json, updated_at_unix_ms)
+VALUES ('widget-files-1', 'redeven.files', 1, '{"kind":"files","current_path":"/workspace/src"}', 1700000000200);
+`)
+	if err != nil {
+		t.Fatalf("create v2 db error = %v", err)
 	}
 }
 

@@ -2,6 +2,7 @@
 
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { WORKBENCH_TEXT_FONT_OPTIONS } from '@floegence/floe-webapp-core/workbench';
 
 import { RedevenWorkbenchSurface, type RedevenWorkbenchSurfaceApi } from './RedevenWorkbenchSurface';
 import {
@@ -9,6 +10,8 @@ import {
   REDEVEN_WORKBENCH_WIDGET_ID_ATTR,
   REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR,
 } from './workbenchInputRouting';
+
+const sansTextFont = WORKBENCH_TEXT_FONT_OPTIONS.find((option) => option.id === 'sans') ?? WORKBENCH_TEXT_FONT_OPTIONS[0]!;
 
 const upstreamApiMocks = vi.hoisted(() => ({
   widget: {
@@ -31,13 +34,26 @@ const upstreamApiMocks = vi.hoisted(() => ({
   findWidgetByType: vi.fn(),
   findWidgetById: vi.fn(),
   updateWidgetTitle: vi.fn(),
+  createStickyNote: vi.fn(),
+  findStickyNoteById: vi.fn(),
+  updateStickyNote: vi.fn(),
+  deleteStickyNote: vi.fn(),
+  createTextAnnotation: vi.fn(),
+  findAnnotationById: vi.fn(),
+  updateTextAnnotation: vi.fn(),
+  deleteAnnotation: vi.fn(),
+  createBackgroundLayer: vi.fn(),
+  findBackgroundLayerById: vi.fn(),
+  updateBackgroundLayer: vi.fn(),
+  deleteBackgroundLayer: vi.fn(),
 }));
 
 const sharedSurfaceMocks = vi.hoisted(() => ({
   lastProps: null as any,
 }));
 
-vi.mock('@floegence/floe-webapp-core/workbench', () => ({
+vi.mock('@floegence/floe-webapp-core/workbench', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@floegence/floe-webapp-core/workbench')>()),
   WorkbenchSurface: (props: any) => {
     sharedSurfaceMocks.lastProps = props;
     props.onApiReady?.({
@@ -50,6 +66,18 @@ vi.mock('@floegence/floe-webapp-core/workbench', () => ({
       findWidgetByType: upstreamApiMocks.findWidgetByType,
       findWidgetById: upstreamApiMocks.findWidgetById,
       updateWidgetTitle: upstreamApiMocks.updateWidgetTitle,
+      createStickyNote: upstreamApiMocks.createStickyNote,
+      findStickyNoteById: upstreamApiMocks.findStickyNoteById,
+      updateStickyNote: upstreamApiMocks.updateStickyNote,
+      deleteStickyNote: upstreamApiMocks.deleteStickyNote,
+      createTextAnnotation: upstreamApiMocks.createTextAnnotation,
+      findAnnotationById: upstreamApiMocks.findAnnotationById,
+      updateTextAnnotation: upstreamApiMocks.updateTextAnnotation,
+      deleteAnnotation: upstreamApiMocks.deleteAnnotation,
+      createBackgroundLayer: upstreamApiMocks.createBackgroundLayer,
+      findBackgroundLayerById: upstreamApiMocks.findBackgroundLayerById,
+      updateBackgroundLayer: upstreamApiMocks.updateBackgroundLayer,
+      deleteBackgroundLayer: upstreamApiMocks.deleteBackgroundLayer,
     });
     return (
       <div data-testid="mock-workbench-surface">
@@ -129,6 +157,35 @@ describe('RedevenWorkbenchSurface', () => {
     expect(sharedSurfaceMocks.lastProps.interactionAdapter.widgetIdAttr).toBe(
       REDEVEN_WORKBENCH_WIDGET_ID_ATTR
     );
+    expect(sharedSurfaceMocks.lastProps.textAnnotationDefaults).toEqual({
+      font_family: sansTextFont.fontFamily,
+      font_weight: sansTextFont.fontWeight,
+      font_size: 45,
+      width: 460,
+    });
+  });
+
+  it('allows callers to override shared text annotation defaults', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <RedevenWorkbenchSurface
+        state={() => createWorkbenchState()}
+        setState={() => {}}
+        textAnnotationDefaults={{
+          font_family: 'Serif',
+          font_size: 32,
+          width: 320,
+        }}
+      />
+    ), host);
+
+    expect(sharedSurfaceMocks.lastProps.textAnnotationDefaults).toEqual({
+      font_family: 'Serif',
+      font_size: 32,
+      width: 320,
+    });
   });
 
   it('forwards the context-menu item resolver to the shared surface', () => {
@@ -211,6 +268,9 @@ describe('RedevenWorkbenchSurface', () => {
     capturedApi!.createWidget('redeven.files', { centerViewport: false });
     capturedApi!.findWidgetById('widget-files-1');
     capturedApi!.updateWidgetTitle('widget-files-1', 'README.md');
+    capturedApi!.createTextAnnotation({ worldX: 20, worldY: 30 });
+    capturedApi!.createStickyNote({ worldX: 40, worldY: 50 });
+    capturedApi!.createBackgroundLayer({ worldX: 60, worldY: 70 });
 
     expect(upstreamApiMocks.createWidget).toHaveBeenCalledWith('redeven.files', {
       centerViewport: false,
@@ -220,6 +280,18 @@ describe('RedevenWorkbenchSurface', () => {
       'widget-files-1',
       'README.md'
     );
+    expect(upstreamApiMocks.createTextAnnotation).toHaveBeenCalledWith({
+      worldX: 20,
+      worldY: 30,
+    });
+    expect(upstreamApiMocks.createStickyNote).toHaveBeenCalledWith({
+      worldX: 40,
+      worldY: 50,
+    });
+    expect(upstreamApiMocks.createBackgroundLayer).toHaveBeenCalledWith({
+      worldX: 60,
+      worldY: 70,
+    });
   });
 
   it('exposes a semantic overview entry api that clears selection and resets the viewport', () => {
@@ -258,6 +330,7 @@ describe('RedevenWorkbenchSurface', () => {
         },
       ],
       selectedWidgetId: 'widget-files-1',
+      selectedObject: { kind: 'sticky_note', id: 'note-1' },
     };
 
     capturedApi!.enterOverview();
@@ -265,6 +338,7 @@ describe('RedevenWorkbenchSurface', () => {
     expect(upstreamApiMocks.clearSelection).toHaveBeenCalledTimes(1);
     expect(setState).toHaveBeenCalledTimes(1);
     expect(currentState.selectedWidgetId).toBeNull();
+    expect(currentState.selectedObject).toBeNull();
     expect(currentState.viewport).toEqual({
       x: 367.5,
       y: 239,

@@ -74,7 +74,7 @@ import {
   projectWorkbenchStateFromRuntimeLayout,
   REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE,
   runtimeWorkbenchLayoutIsEmpty,
-  runtimeWorkbenchLayoutWidgetsEqual,
+  runtimeWorkbenchSharedLayoutEqual,
   runtimeWorkbenchWidgetStateById,
   runtimeWorkbenchWidgetStateDataEqual,
   runtimeWorkbenchWidgetStatesEqual,
@@ -403,6 +403,13 @@ function sameWidgetPlacement(
       && widget.width === other.width
       && widget.height === other.height;
   });
+}
+
+function runtimeSharedObjectCount(snapshot: Partial<RuntimeWorkbenchLayoutSnapshot>): number {
+  return (snapshot.widgets ?? []).length
+    + (snapshot.sticky_notes ?? []).length
+    + (snapshot.annotations ?? []).length
+    + (snapshot.background_layers ?? []).length;
 }
 
 function filterRequestRecordByWidgetIds<T extends { widgetId: string }>(
@@ -787,7 +794,7 @@ export function EnvWorkbenchPage() {
       || (
         snapshot.seq === current.seq
         && snapshot.revision === current.revision
-        && runtimeWorkbenchLayoutWidgetsEqual(snapshot.widgets, current.widgets)
+        && runtimeWorkbenchSharedLayoutEqual(snapshot, current)
         && runtimeWorkbenchWidgetStatesEqual(snapshot.widget_states, current.widget_states)
       )
     ) {
@@ -1092,7 +1099,16 @@ export function EnvWorkbenchPage() {
       kind: 'separator',
     };
 
-    if (!context.menu.widgetId) {
+    const menuTarget = context.menu.target;
+    const targetKind = menuTarget?.kind;
+    const targetAllowsWorkbenchTidy = !targetKind
+      || targetKind === 'widget'
+      || (targetKind === 'canvas' && menuTarget.mode === 'work');
+    if (!targetAllowsWorkbenchTidy) {
+      return context.items;
+    }
+
+    if (targetKind !== 'widget' && !context.menu.widgetId) {
       return [tidyItem, separator, ...context.items];
     }
 
@@ -1283,6 +1299,9 @@ export function EnvWorkbenchPage() {
                 snapshot = await putWorkbenchLayout({
                   base_revision: snapshot.revision,
                   widgets: legacyLayout.widgets,
+                  sticky_notes: legacyLayout.sticky_notes,
+                  annotations: legacyLayout.annotations,
+                  background_layers: legacyLayout.background_layers,
                 });
               } catch (error) {
                 if (error instanceof WorkbenchLayoutConflictError) {
@@ -1355,7 +1374,7 @@ export function EnvWorkbenchPage() {
 
     const desiredLayout = extractRuntimeWorkbenchLayoutFromWorkbenchState(workbenchState());
     const currentSnapshot = runtimeSnapshot();
-    if (runtimeWorkbenchLayoutWidgetsEqual(currentSnapshot.widgets, desiredLayout.widgets)) {
+    if (runtimeWorkbenchSharedLayoutEqual(currentSnapshot, desiredLayout)) {
       setSubmitQueued(false);
       return;
     }
@@ -1366,11 +1385,11 @@ export function EnvWorkbenchPage() {
     }
 
     setSubmitQueued(true);
-    const addedWidgets = desiredLayout.widgets.length > currentSnapshot.widgets.length;
-    const delayMs = addedWidgets ? WORKBENCH_LAYOUT_FAST_FLUSH_DELAY_MS : WORKBENCH_LAYOUT_FLUSH_DELAY_MS;
+    const addedObjects = runtimeSharedObjectCount(desiredLayout) > runtimeSharedObjectCount(currentSnapshot);
+    const delayMs = addedObjects ? WORKBENCH_LAYOUT_FAST_FLUSH_DELAY_MS : WORKBENCH_LAYOUT_FLUSH_DELAY_MS;
     const timer = globalThis.setTimeout(async () => {
       const nextDesiredLayout = extractRuntimeWorkbenchLayoutFromWorkbenchState(workbenchState());
-      if (runtimeWorkbenchLayoutWidgetsEqual(runtimeSnapshot().widgets, nextDesiredLayout.widgets)) {
+      if (runtimeWorkbenchSharedLayoutEqual(runtimeSnapshot(), nextDesiredLayout)) {
         setSubmitQueued(false);
         return;
       }
@@ -1380,6 +1399,9 @@ export function EnvWorkbenchPage() {
         const nextSnapshot = await putWorkbenchLayout({
           base_revision: runtimeSnapshot().revision,
           widgets: nextDesiredLayout.widgets,
+          sticky_notes: nextDesiredLayout.sticky_notes,
+          annotations: nextDesiredLayout.annotations,
+          background_layers: nextDesiredLayout.background_layers,
         });
         applyLocalRuntimeSnapshotWhenReady(nextSnapshot);
       } catch (error) {
