@@ -1595,26 +1595,90 @@ describe('EnvWorkbenchPage', () => {
     const page = host.querySelector('[data-testid="redeven-workbench-page"]') as HTMLElement | null;
     expect(page).toBeTruthy();
     expect(page?.dataset.redevenWorkbenchLayoutInteracting).toBe('false');
+    expect(page?.getAttribute('data-redeven-workbench-render-transaction')).toBeNull();
 
     surfaceApiMocks.lastSurfaceProps.onLayoutInteractionStart();
     await flushMicrotasks();
 
     expect(page?.dataset.redevenWorkbenchLayoutInteracting).toBe('true');
     expect(page?.classList.contains('is-layout-interacting')).toBe(true);
+    expect(page?.getAttribute('data-redeven-workbench-render-transaction')).toBeNull();
 
     surfaceApiMocks.lastSurfaceProps.onLayoutInteractionEnd();
     await flushMicrotasks();
 
     expect(page?.dataset.redevenWorkbenchLayoutInteracting).toBe('true');
+    expect(page?.getAttribute('data-redeven-workbench-render-transaction')).toBeNull();
 
     vi.advanceTimersByTime(89);
     await flushMicrotasks();
     expect(page?.dataset.redevenWorkbenchLayoutInteracting).toBe('true');
+    expect(page?.getAttribute('data-redeven-workbench-render-transaction')).toBeNull();
 
     vi.advanceTimersByTime(1);
     await flushMicrotasks();
     expect(page?.dataset.redevenWorkbenchLayoutInteracting).toBe('false');
     expect(page?.classList.contains('is-layout-interacting')).toBe(false);
+    expect(page?.getAttribute('data-redeven-workbench-render-transaction')).toBeNull();
+  });
+
+  it('keeps projected-surface drag interactions out of render transactions', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    const page = host.querySelector('[data-testid="redeven-workbench-page"]') as HTMLElement | null;
+    expect(page).toBeTruthy();
+    expect(page?.getAttribute('data-redeven-workbench-render-transaction')).toBeNull();
+
+    surfaceApiMocks.lastSurfaceProps.onLayoutInteractionStart('widget_drag');
+    surfaceApiMocks.lastSetState((previous: any) => ({
+      ...previous,
+      widgets: previous.widgets,
+      viewport: {
+        ...previous.viewport,
+        x: previous.viewport.x + 24,
+        y: previous.viewport.y + 12,
+      },
+    }));
+    await flushMicrotasks();
+
+    expect(page?.dataset.redevenWorkbenchLayoutInteracting).toBe('true');
+    expect(page?.getAttribute('data-redeven-workbench-render-transaction')).toBeNull();
+
+    surfaceApiMocks.lastSurfaceProps.onLayoutInteractionEnd('widget_drag');
+    vi.advanceTimersByTime(90);
+    await flushMicrotasks();
+
+    expect(page?.dataset.redevenWorkbenchLayoutInteracting).toBe('false');
+    expect(page?.getAttribute('data-redeven-workbench-render-transaction')).toBeNull();
+  });
+
+  it('opens a short render transaction only when the workbench composition mode changes', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    const page = host.querySelector('[data-testid="redeven-workbench-page"]') as HTMLElement | null;
+    expect(page).toBeTruthy();
+    expect(page?.getAttribute('data-redeven-workbench-render-transaction')).toBeNull();
+
+    surfaceApiMocks.lastSetState((previous: any) => ({
+      ...previous,
+      mode: 'annotation',
+    }));
+    await flushMicrotasks();
+
+    expect(page?.getAttribute('data-redeven-workbench-render-transaction')).toBe('mode');
+
+    vi.advanceTimersByTime(16);
+    await flushMicrotasks();
+
+    expect(page?.getAttribute('data-redeven-workbench-render-transaction')).toBeNull();
   });
 
   it('keeps registered workbench terminal cores live during layout interactions', async () => {
