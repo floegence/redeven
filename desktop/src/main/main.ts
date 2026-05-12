@@ -79,6 +79,7 @@ import { resolveBundledRuntimePath, resolveSessionPreloadPath, resolveUtilityPre
 import { loadExternalLocalUIStartup } from './runtimeState';
 import { desktopSessionRuntimeHandleFromManagedRuntime, type DesktopSessionRuntimeHandle } from './sessionRuntime';
 import { DesktopSSHRuntimeCanceledError, startManagedSSHRuntime } from './sshRuntime';
+import { startDesktopAIBroker, type ManagedDesktopAIBroker } from './desktopAIBroker';
 import { PUBLIC_REDEVEN_RELEASE_BASE_URL } from './sshReleaseAssets';
 import { installStdioBrokenPipeGuards } from './stdio';
 import type { StartupReport } from './startup';
@@ -2590,7 +2591,29 @@ async function startSSHEnvironmentRuntimeRecord(
 
   const task = (async () => {
     let operationSettled = false;
+    let desktopAIBroker: ManagedDesktopAIBroker | null = null;
     try {
+      try {
+        const executablePath = resolveBundledRuntimePath({
+          isPackaged: app.isPackaged,
+          resourcesPath: process.resourcesPath,
+          appPath: app.getAppPath(),
+        });
+        desktopAIBroker = await startDesktopAIBroker({
+          executablePath,
+          stateRoot: preferencesPaths().stateRoot,
+          runtimeKey,
+          tempRoot: app.getPath('temp'),
+          onLog: (stream, chunk) => {
+            const text = String(chunk ?? '').trim();
+            if (text) console.log(`[redeven:ai-broker:${stream}] ${text}`);
+          },
+        });
+      } catch (brokerError) {
+        const message = brokerError instanceof Error ? brokerError.message : String(brokerError);
+        console.warn(`[redeven:ai-broker] Desktop AI Broker unavailable for ${runtimeKey}: ${message}`);
+        desktopAIBroker = null;
+      }
       const managedSSHRuntime = await startManagedSSHRuntime({
         target: sshDetails,
         runtimeReleaseTag: resolveSSHRuntimeReleaseTag(),
@@ -2601,6 +2624,15 @@ async function startSSHEnvironmentRuntimeRecord(
           : undefined,
         tempRoot: app.getPath('temp'),
         assetCacheRoot: path.join(app.getPath('userData'), 'ssh-runtime-cache'),
+        aiBroker: desktopAIBroker
+          ? {
+              local_url: desktopAIBroker.url,
+              token: desktopAIBroker.token,
+              session_id: desktopAIBroker.sessionID,
+              ssh_runtime_key: runtimeKey,
+              expires_at_unix_ms: desktopAIBroker.expiresAtUnixMs,
+            }
+          : null,
         signal,
         onLog: (stream, chunk) => {
           const text = String(chunk ?? '').trim();
@@ -2627,6 +2659,7 @@ async function startSSHEnvironmentRuntimeRecord(
         });
         try {
           await managedSSHRuntime.stop();
+          await desktopAIBroker?.stop();
           launcherOperations.finish(runtimeKey, 'canceled', {
             phase: 'deleted_connection_cleaned',
             title: 'Startup canceled',
@@ -2655,8 +2688,14 @@ async function startSSHEnvironmentRuntimeRecord(
         startup: managedSSHRuntime.startup,
         local_forward_url: managedSSHRuntime.local_forward_url,
         runtime_handle: managedSSHRuntime.runtime_handle,
-        disconnect: managedSSHRuntime.disconnect,
-        stop: managedSSHRuntime.stop,
+        disconnect: async () => {
+          await managedSSHRuntime.disconnect();
+          await desktopAIBroker?.stop();
+        },
+        stop: async () => {
+          await managedSSHRuntime.stop();
+          await desktopAIBroker?.stop();
+        },
       };
       sshEnvironmentRuntimeByKey.set(runtimeKey, runtimeRecord);
       launcherOperations.finish(runtimeKey, 'succeeded', {
@@ -2687,6 +2726,7 @@ async function startSSHEnvironmentRuntimeRecord(
         }
         scheduleLauncherOperationRemoval(runtimeKey);
       }
+      await desktopAIBroker?.stop();
       throw error;
     } finally {
       pendingSSHRuntimeStartByKey.delete(runtimeKey);

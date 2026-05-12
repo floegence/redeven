@@ -56,6 +56,21 @@ export type AIConfig = Readonly<{
 
 export type AISecretsView = Readonly<{ provider_api_key_set: Record<string, boolean> }>;
 
+export type AIRuntimeStatus = Readonly<{
+  remote_configured?: boolean;
+  desktop_broker?: Readonly<{
+    connected?: boolean;
+    available?: boolean;
+    model_source?: string;
+    session_id?: string;
+    ssh_runtime_key?: string;
+    expires_at_unix_ms?: number;
+    model_count?: number;
+    missing_key_provider_ids?: string[];
+    last_error?: string;
+  }> | null;
+}>;
+
 export type AgentSettingsResponse = Readonly<{
   config_path: string;
   connection: Readonly<{
@@ -75,6 +90,7 @@ export type AgentSettingsResponse = Readonly<{
   codespaces: Readonly<{ code_server_port_min: number; code_server_port_max: number }>;
   permission_policy: PermissionPolicy | null;
   ai: AIConfig | null;
+  ai_runtime?: AIRuntimeStatus | null;
   ai_secrets?: AISecretsView | null;
 }>;
 

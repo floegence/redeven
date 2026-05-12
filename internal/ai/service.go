@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,7 +43,8 @@ type Options struct {
 	AgentHomeDir string
 	Shell        string
 
-	Config *config.AIConfig
+	Config        *config.AIConfig
+	DesktopBroker *DesktopAIBrokerEndpoint
 
 	// PersistOpTimeout is the per-operation timeout for threadstore persistence
 	// (SQLite reads/writes). It must NOT be tied to a run's overall lifetime, since
@@ -88,7 +88,9 @@ type Service struct {
 	agentHomeDir string
 	shell        string
 
-	cfg *config.AIConfig
+	cfg                         *config.AIConfig
+	desktopBroker               *desktopAIBrokerClient
+	desktopBrokerCurrentModelID string
 
 	persistOpTO time.Duration
 
@@ -133,11 +135,12 @@ type Service struct {
 }
 
 type resolvedRunModel struct {
-	ID         string
-	ProviderID string
-	ModelName  string
-	Provider   config.AIProvider
-	Capability contextmodel.ModelCapability
+	ID                 string
+	ProviderID         string
+	ModelName          string
+	Provider           config.AIProvider
+	Capability         contextmodel.ModelCapability
+	BrokerLocalModelID string
 }
 
 const (
@@ -194,6 +197,10 @@ func NewService(opts Options) (*Service, error) {
 	if resolveWebSearchKey == nil {
 		resolveWebSearchKey = func(string) (string, bool, error) { return "", false, nil }
 	}
+	desktopBroker, err := newDesktopAIBrokerClient(opts.DesktopBroker)
+	if err != nil {
+		return nil, err
+	}
 
 	maxWall := opts.RunMaxWallTime
 	if maxWall <= 0 {
@@ -240,6 +247,7 @@ func NewService(opts Options) (*Service, error) {
 		agentHomeDir:                 agentHomeDir,
 		shell:                        strings.TrimSpace(opts.Shell),
 		cfg:                          opts.Config,
+		desktopBroker:                desktopBroker,
 		persistOpTO:                  persistTO,
 		runMaxWallTime:               maxWall,
 		runIdleTimeout:               idleTO,
@@ -333,9 +341,33 @@ func (s *Service) Enabled() bool {
 		return false
 	}
 	s.mu.Lock()
-	enabled := s.cfg != nil
+	enabled := s.cfg != nil || s.desktopBroker != nil
 	s.mu.Unlock()
 	return enabled
+}
+
+func (s *Service) RuntimeStatus(ctx context.Context) *AIRuntimeStatus {
+	if s == nil {
+		return &AIRuntimeStatus{}
+	}
+	s.mu.Lock()
+	cfg := s.cfg
+	broker := s.desktopBroker
+	s.mu.Unlock()
+	out := &AIRuntimeStatus{RemoteConfigured: cfg != nil}
+	if broker != nil {
+		statusCtx := ctx
+		cancel := func() {}
+		if statusCtx == nil {
+			statusCtx = context.Background()
+		}
+		if _, ok := statusCtx.Deadline(); !ok {
+			statusCtx, cancel = context.WithTimeout(statusCtx, 1500*time.Millisecond)
+		}
+		defer cancel()
+		out.DesktopBroker = broker.Status(statusCtx)
+	}
+	return out
 }
 
 // UpdateConfig updates the in-memory AI config after persisting it via the provided callback.
@@ -414,27 +446,51 @@ func (s *Service) SetCurrentModelID(modelID string, persist func(next *config.AI
 	}
 
 	s.mu.Lock()
-	if s.cfg == nil {
+	cfg := s.cfg
+	broker := s.desktopBroker
+	if cfg == nil && broker == nil {
 		s.mu.Unlock()
 		return ErrNotConfigured
 	}
-	if !s.cfg.IsAllowedModelID(modelID) {
+	if cfg != nil && cfg.IsAllowedModelID(modelID) {
+		next := *cfg
+		next.CurrentModelID = modelID
+		if err := next.Validate(); err != nil {
+			s.mu.Unlock()
+			return err
+		}
+		if err := persist(&next); err != nil {
+			s.mu.Unlock()
+			return err
+		}
+
+		s.cfg = &next
+		s.desktopBrokerCurrentModelID = ""
+		coordinator := s.threadTitleCoordinator
+		s.mu.Unlock()
+		if coordinator != nil {
+			coordinator.Wake()
+		}
+		return nil
+	}
+	if broker == nil || !isDesktopBrokerModelID(modelID) {
 		s.mu.Unlock()
 		return fmt.Errorf("model not allowed: %s", modelID)
 	}
+	s.mu.Unlock()
 
-	next := *s.cfg
-	next.CurrentModelID = modelID
-	if err := next.Validate(); err != nil {
-		s.mu.Unlock()
+	if ok, err := s.desktopBrokerModelAllowed(context.Background(), modelID); err != nil {
 		return err
-	}
-	if err := persist(&next); err != nil {
-		s.mu.Unlock()
-		return err
+	} else if !ok {
+		return fmt.Errorf("model not allowed: %s", modelID)
 	}
 
-	s.cfg = &next
+	s.mu.Lock()
+	if s.desktopBroker == nil {
+		s.mu.Unlock()
+		return ErrNotConfigured
+	}
+	s.desktopBrokerCurrentModelID = modelID
 	coordinator := s.threadTitleCoordinator
 	s.mu.Unlock()
 	if coordinator != nil {
@@ -481,11 +537,116 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 	}
 	s.mu.Lock()
 	cfg := s.cfg
+	broker := s.desktopBroker
+	brokerCurrent := strings.TrimSpace(s.desktopBrokerCurrentModelID)
 	s.mu.Unlock()
-	if cfg == nil {
+	if cfg == nil && broker == nil {
 		return nil, ErrNotConfigured
 	}
 
+	out := &ModelsResponse{
+		Runtime: s.RuntimeStatus(context.Background()),
+	}
+	modelLabelByID, modelOrder, currentModelID, err := configModelLabels(cfg)
+	if err != nil && cfg != nil {
+		return nil, err
+	}
+	seen := make(map[string]struct{}, len(modelOrder))
+	if currentModelID != "" {
+		out.CurrentModel = currentModelID
+		out.Models = append(out.Models, Model{
+			ID:          currentModelID,
+			Label:       strings.TrimSpace(modelLabelByID[currentModelID]),
+			Source:      "runtime_config",
+			SourceLabel: "Remote runtime",
+		})
+		seen[currentModelID] = struct{}{}
+	}
+	for _, id := range modelOrder {
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		out.Models = append(out.Models, Model{
+			ID:          id,
+			Label:       strings.TrimSpace(modelLabelByID[id]),
+			Source:      "runtime_config",
+			SourceLabel: "Remote runtime",
+		})
+		seen[id] = struct{}{}
+	}
+
+	if broker != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		snapshot, brokerErr := broker.ListModels(ctx)
+		cancel()
+		if brokerErr != nil && cfg == nil {
+			return nil, brokerErr
+		}
+		if brokerErr == nil && snapshot != nil {
+			brokerCurrentWire := ""
+			if brokerCurrent != "" && desktopBrokerSnapshotHasWireModel(snapshot, brokerCurrent) {
+				brokerCurrentWire = brokerCurrent
+			} else if wire, ok := desktopBrokerWireModelID(snapshot.CurrentModel); ok {
+				brokerCurrentWire = wire
+			}
+			if brokerCurrentWire == "" {
+				for _, m := range snapshot.Models {
+					if wire, ok := desktopBrokerWireModelID(m.ID); ok {
+						brokerCurrentWire = wire
+						break
+					}
+				}
+			}
+			if brokerCurrentWire != "" && brokerCurrent != "" {
+				out.CurrentModel = brokerCurrentWire
+			} else if out.CurrentModel == "" {
+				out.CurrentModel = brokerCurrentWire
+			}
+			for _, m := range snapshot.Models {
+				wireID, ok := desktopBrokerWireModelID(m.ID)
+				if !ok {
+					continue
+				}
+				if _, exists := seen[wireID]; exists {
+					continue
+				}
+				label := strings.TrimSpace(m.Label)
+				if label == "" {
+					label = strings.TrimSpace(m.ID)
+				}
+				if label != "" {
+					label = "Desktop / " + label
+				}
+				model := Model{
+					ID:          wireID,
+					Label:       label,
+					Source:      "desktop_broker",
+					SourceLabel: "Desktop",
+				}
+				if wireID == brokerCurrentWire && out.CurrentModel == brokerCurrentWire {
+					out.Models = append([]Model{model}, out.Models...)
+				} else {
+					out.Models = append(out.Models, model)
+				}
+				seen[wireID] = struct{}{}
+			}
+		}
+	}
+
+	if len(out.Models) == 0 && cfg != nil {
+		return nil, errors.New("invalid ai config: missing models")
+	}
+
+	return out, nil
+}
+
+func configModelLabels(cfg *config.AIConfig) (map[string]string, []string, string, error) {
+	if cfg == nil {
+		return map[string]string{}, nil, "", nil
+	}
 	providerNameByID := make(map[string]string, len(cfg.Providers))
 	for _, p := range cfg.Providers {
 		id := strings.TrimSpace(p.ID)
@@ -494,35 +655,9 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 		}
 		name := strings.TrimSpace(p.Name)
 		if name == "" {
-			switch strings.ToLower(strings.TrimSpace(p.Type)) {
-			case "openai":
-				name = "OpenAI"
-			case "anthropic":
-				name = "Anthropic"
-			case "chatglm":
-				name = "ChatGLM"
-			case "deepseek":
-				name = "DeepSeek"
-			case "qwen":
-				name = "Qwen"
-			case "openai_compatible":
-				baseURL := strings.TrimSpace(p.BaseURL)
-				if baseURL != "" {
-					if u, err := url.Parse(baseURL); err == nil && u != nil {
-						if host := strings.TrimSpace(u.Host); host != "" {
-							name = host
-						}
-					}
-				}
-				if name == "" {
-					name = "OpenAI compatible"
-				}
-			case "moonshot":
-				name = "Moonshot"
-			}
+			name = defaultProviderDisplayName(p)
 		}
 		if name == "" {
-			// Best-effort fallback: avoid surfacing an unreadable provider id when possible.
 			name = id
 		}
 		providerNameByID[id] = name
@@ -540,56 +675,66 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 		if pn == "" {
 			pn = providerID
 		}
-
 		for _, m := range p.Models {
 			modelName := strings.TrimSpace(m.ModelName)
 			if modelName == "" {
 				continue
 			}
 			id := providerID + "/" + modelName
-			label := pn + " / " + modelName
 			if _, ok := seenModel[id]; ok {
 				continue
 			}
 			seenModel[id] = struct{}{}
 			modelOrder = append(modelOrder, id)
-			if strings.TrimSpace(label) == "" {
-				label = id
-			}
-			modelLabelByID[id] = label
+			modelLabelByID[id] = pn + " / " + modelName
 		}
 	}
-
 	if len(modelOrder) == 0 {
-		return nil, errors.New("invalid ai config: missing models")
+		return modelLabelByID, modelOrder, "", errors.New("invalid ai config: missing models")
 	}
-
 	currentModelID := strings.TrimSpace(cfg.CurrentModelID)
 	if !cfg.IsAllowedModelID(currentModelID) {
 		currentModelID = modelOrder[0]
 	}
 	if currentModelID == "" {
-		return nil, errors.New("invalid ai config: missing current model")
+		return modelLabelByID, modelOrder, "", errors.New("invalid ai config: missing current model")
 	}
+	return modelLabelByID, modelOrder, currentModelID, nil
+}
 
-	out := &ModelsResponse{
-		CurrentModel: currentModelID,
-	}
-	out.Models = append(out.Models, Model{
-		ID:    currentModelID,
-		Label: strings.TrimSpace(modelLabelByID[currentModelID]),
-	})
-	for _, id := range modelOrder {
-		if id == currentModelID {
-			continue
-		}
-		out.Models = append(out.Models, Model{
-			ID:    id,
-			Label: strings.TrimSpace(modelLabelByID[id]),
-		})
-	}
+func desktopBrokerSnapshotHasWireModel(snapshot *DesktopBrokerModelSnapshot, wireModelID string) bool {
+	local, ok := desktopBrokerLocalModelID(wireModelID)
+	return ok && desktopBrokerSnapshotHasModel(snapshot, local)
+}
 
-	return out, nil
+func (s *Service) desktopBrokerModelAllowed(ctx context.Context, modelID string) (bool, error) {
+	if s == nil {
+		return false, ErrNotConfigured
+	}
+	localModelID, ok := desktopBrokerLocalModelID(modelID)
+	if !ok {
+		return false, nil
+	}
+	s.mu.Lock()
+	broker := s.desktopBroker
+	s.mu.Unlock()
+	if broker == nil {
+		return false, nil
+	}
+	checkCtx := ctx
+	cancel := func() {}
+	if checkCtx == nil {
+		checkCtx = context.Background()
+	}
+	if _, ok := checkCtx.Deadline(); !ok {
+		checkCtx, cancel = context.WithTimeout(checkCtx, 3*time.Second)
+	}
+	defer cancel()
+	snapshot, err := broker.ListModels(checkCtx)
+	if err != nil {
+		return false, err
+	}
+	return desktopBrokerSnapshotHasModel(snapshot, localModelID), nil
 }
 
 func (s *Service) skills() (*skillManager, error) {
@@ -887,7 +1032,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	}
 
 	s.mu.Lock()
-	if s.cfg == nil {
+	if s.cfg == nil && s.desktopBroker == nil {
 		s.mu.Unlock()
 		return nil, ErrNotConfigured
 	}
@@ -901,6 +1046,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		return nil, ErrThreadBusy
 	}
 	cfg := s.cfg
+	desktopBroker := s.desktopBroker
 	req.Options.Mode = normalizeRunMode(strings.TrimSpace(th.ExecutionMode), cfg.EffectiveMode())
 	uploadsDir := s.uploadsDir
 	db = s.threadsDB
@@ -920,6 +1066,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		SessionMeta:         metaRef,
 		ResolveProviderKey:  s.resolveProviderKey,
 		ResolveWebSearchKey: s.resolveWebSearchKey,
+		DesktopBroker:       desktopBroker,
 		RunID:               runID,
 		ChannelID:           channelID,
 		EndpointID:          endpointID,
@@ -1487,7 +1634,17 @@ func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, req
 		}
 	}
 	if model == "" {
+		if id, ok := s.resolvedDesktopBrokerOverrideModel(ctx); ok {
+			model = id
+		}
+	}
+	if model == "" && cfg != nil {
 		if id, ok := cfg.ResolvedCurrentModelID(); ok {
+			model = id
+		}
+	}
+	if model == "" && cfg == nil {
+		if id, ok := s.resolvedDesktopBrokerDefaultModel(ctx); ok {
 			model = id
 		}
 	}
@@ -1503,17 +1660,36 @@ func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, req
 	if providerID == "" || modelName == "" {
 		return resolvedRunModel{}, errors.New("invalid model")
 	}
-	if !cfg.IsAllowedModelID(model) {
-		return resolvedRunModel{}, fmt.Errorf("model not allowed: %s", model)
-	}
-
+	brokerLocalModelID := ""
 	providerCfg := config.AIProvider{ID: providerID, Type: providerID}
-	for i := range cfg.Providers {
-		if strings.TrimSpace(cfg.Providers[i].ID) != providerID {
-			continue
+	if isDesktopBrokerProviderID(providerID) {
+		localModelID, ok := desktopBrokerLocalModelID(model)
+		if !ok {
+			return resolvedRunModel{}, fmt.Errorf("model not allowed: %s", model)
 		}
-		providerCfg = cfg.Providers[i]
-		break
+		allowed, err := s.desktopBrokerModelAllowed(ctx, model)
+		if err != nil {
+			return resolvedRunModel{}, err
+		}
+		if !allowed {
+			return resolvedRunModel{}, fmt.Errorf("model not allowed: %s", model)
+		}
+		brokerLocalModelID = localModelID
+		providerCfg = config.AIProvider{ID: providerID, Name: "Desktop", Type: DesktopBrokerProviderType}
+	} else {
+		if cfg == nil {
+			return resolvedRunModel{}, ErrNotConfigured
+		}
+		if !cfg.IsAllowedModelID(model) {
+			return resolvedRunModel{}, fmt.Errorf("model not allowed: %s", model)
+		}
+		for i := range cfg.Providers {
+			if strings.TrimSpace(cfg.Providers[i].ID) != providerID {
+				continue
+			}
+			providerCfg = cfg.Providers[i]
+			break
+		}
 	}
 
 	modelCapability := defaultModelCapability(providerID, modelName)
@@ -1526,12 +1702,79 @@ func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, req
 	}
 
 	return resolvedRunModel{
-		ID:         model,
-		ProviderID: providerID,
-		ModelName:  modelName,
-		Provider:   providerCfg,
-		Capability: modelCapability,
+		ID:                 model,
+		ProviderID:         providerID,
+		ModelName:          modelName,
+		Provider:           providerCfg,
+		Capability:         modelCapability,
+		BrokerLocalModelID: brokerLocalModelID,
 	}, nil
+}
+
+func (s *Service) resolvedDesktopBrokerOverrideModel(ctx context.Context) (string, bool) {
+	if s == nil {
+		return "", false
+	}
+	s.mu.Lock()
+	broker := s.desktopBroker
+	current := strings.TrimSpace(s.desktopBrokerCurrentModelID)
+	s.mu.Unlock()
+	if broker == nil {
+		return "", false
+	}
+	if current == "" {
+		return "", false
+	}
+	checkCtx := ctx
+	cancel := func() {}
+	if checkCtx == nil {
+		checkCtx = context.Background()
+	}
+	if _, ok := checkCtx.Deadline(); !ok {
+		checkCtx, cancel = context.WithTimeout(checkCtx, 3*time.Second)
+	}
+	defer cancel()
+	snapshot, err := broker.ListModels(checkCtx)
+	if err != nil || snapshot == nil {
+		return "", false
+	}
+	if desktopBrokerSnapshotHasWireModel(snapshot, current) {
+		return current, true
+	}
+	return "", false
+}
+
+func (s *Service) resolvedDesktopBrokerDefaultModel(ctx context.Context) (string, bool) {
+	if s == nil {
+		return "", false
+	}
+	s.mu.Lock()
+	broker := s.desktopBroker
+	current := strings.TrimSpace(s.desktopBrokerCurrentModelID)
+	s.mu.Unlock()
+	if broker == nil {
+		return "", false
+	}
+	checkCtx := ctx
+	cancel := func() {}
+	if checkCtx == nil {
+		checkCtx = context.Background()
+	}
+	if _, ok := checkCtx.Deadline(); !ok {
+		checkCtx, cancel = context.WithTimeout(checkCtx, 3*time.Second)
+	}
+	defer cancel()
+	snapshot, err := broker.ListModels(checkCtx)
+	if err != nil || snapshot == nil {
+		return "", false
+	}
+	if current != "" && desktopBrokerSnapshotHasWireModel(snapshot, current) {
+		return current, true
+	}
+	if wire, ok := desktopBrokerWireModelID(snapshot.CurrentModel); ok {
+		return wire, true
+	}
+	return "", false
 }
 
 func (s *Service) classifyRunPolicyByModel(ctx context.Context, resolved resolvedRunModel, userInput string, openGoal string, structuredResponse bool) (runPolicyDecision, error) {

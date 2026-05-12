@@ -179,7 +179,7 @@ Assistant locality values:
 
 - `auto`: the router should use the best currently available assistant runtime.
 - `current_runtime`: execute in the current Env App runtime.
-- `local_model_remote_target`: use a local model while binding tools to a remote target.
+- `local_model_remote_target`: use a local model source while binding tools to a remote target. In Redeven Desktop SSH Host sessions this is implemented by the Desktop AI Broker: model calls use the Desktop Local Environment's provider config and secrets, while file, terminal, Git, monitor, and port tools still execute inside the SSH-hosted runtime.
 - `remote_runtime`: execute in the target runtime.
 
 The current UI maps existing Ask Flower entries into `assistant.ask.flower` envelopes. This keeps compatibility while giving additional assistant providers the same context structure.

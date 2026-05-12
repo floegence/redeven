@@ -28,6 +28,7 @@ import (
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/accessproxy"
 	"github.com/floegence/redeven/internal/accessrpc"
+	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/auditlog"
 	"github.com/floegence/redeven/internal/codeapp"
 	"github.com/floegence/redeven/internal/config"
@@ -85,7 +86,8 @@ type Options struct {
 	// EffectiveRunMode reports the current runtime mode exposed to the UI/control plane.
 	EffectiveRunMode string
 	// RemoteEnabled reports whether the current process has the remote control channel enabled.
-	RemoteEnabled bool
+	RemoteEnabled   bool
+	DesktopAIBroker *ai.DesktopAIBrokerEndpoint
 
 	Version   string
 	Commit    string
@@ -268,6 +270,7 @@ func New(opts Options) (*Agent, error) {
 		AgentHomeDir:        agentHomeAbs,
 		Shell:               shell,
 		AIConfig:            opts.Config.AI,
+		DesktopAIBroker:     opts.DesktopAIBroker,
 		Audit:               auditStore,
 		Diagnostics:         a.diag,
 		Terminal:            a.term,

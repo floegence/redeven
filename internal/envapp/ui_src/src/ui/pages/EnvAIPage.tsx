@@ -1812,7 +1812,7 @@ export function EnvAIPage() {
   const canRWX = createMemo(() => hasRWXPermissions(env.env()));
   const canRWXReady = createMemo(() => permissionReady() && canRWX());
   const canInteract = createMemo(
-    () => protocol.status() === 'connected' && ai.aiEnabled() && ai.modelsReady() && canRWXReady(),
+    () => protocol.status() === 'connected' && ai.aiEnabled() && ai.modelsReady() && ai.modelOptions().length > 0 && canRWXReady(),
   );
   const hasActiveThread = createMemo(() => !!String(ai.activeThreadId() ?? '').trim());
   const headerModelControlDisabled = createMemo(() => ai.models.loading || !!ai.models.error || !canRWXReady());
@@ -1833,6 +1833,25 @@ export function EnvAIPage() {
     return modelLabelById().get(id) ?? id;
   };
   const activeThreadModelLabel = createMemo(() => formatModelLabel(ai.selectedThreadModel()));
+  const selectedModelSourceLabel = createMemo(() => {
+    const selected = String(hasActiveThread() ? ai.selectedThreadModel() : ai.selectedDefaultModel()).trim();
+    const option = ai.modelOptions().find((item) => String(item.value ?? '').trim() === selected);
+    return String(option?.sourceLabel ?? '').trim() || (option?.source === 'desktop_broker' ? 'Desktop' : 'Remote runtime');
+  });
+  const desktopBrokerMissingKeys = createMemo(() => (
+    ai.settings()?.ai_runtime?.desktop_broker?.missing_key_provider_ids?.filter(Boolean) ?? []
+  ));
+  const desktopBrokerConnected = createMemo(() => !!ai.settings()?.ai_runtime?.desktop_broker?.connected);
+  const noUsableModelMessage = createMemo(() => {
+    const missing = desktopBrokerMissingKeys();
+    if (desktopBrokerConnected() && missing.length > 0) {
+      return `Desktop model providers need API keys: ${missing.join(', ')}.`;
+    }
+    if (desktopBrokerConnected()) {
+      return 'Desktop is connected, but no usable model is available.';
+    }
+    return 'Configure an AI provider in Runtime Settings to start using Flower.';
+  });
   const ensureRWX = (): boolean => {
     if (!permissionReady()) {
       notify.error('Not ready', 'Loading environment permissions...');
@@ -1847,6 +1866,9 @@ export function EnvAIPage() {
   const chatInputPlaceholder = createMemo((): string => {
     if (!ai.aiEnabled()) {
       return 'Configure AI in settings to start...';
+    }
+    if (ai.modelsReady() && ai.modelOptions().length === 0) {
+      return 'Configure a usable model to start...';
     }
     if (!permissionReady()) {
       return 'Loading permissions...';
@@ -3173,7 +3195,7 @@ export function EnvAIPage() {
       throw new Error('Read/write/execute permission required.');
     }
     if (!ai.aiEnabled()) {
-      notify.error('AI not configured', 'Open Runtime Settings to enable AI.');
+      notify.error('AI not configured', 'Configure a model in Runtime Settings or open this SSH Host through Desktop with a local model broker.');
       rollbackRejectedComposerSend(context);
       throw new Error('AI is not configured.');
     }
@@ -3564,7 +3586,7 @@ export function EnvAIPage() {
                       />
                       <div class="text-lg font-semibold text-foreground mb-2">Flower is not configured</div>
                       <div class="text-sm text-muted-foreground mb-6 max-w-[320px]">
-                        Configure an AI provider in Runtime Settings to start using Flower.
+                        Configure an AI provider in Runtime Settings or Local Environment Settings to start using Flower.
                       </div>
                       <Button size="md" variant="default" onClick={() => env.openSettings('ai')}>
                         <Settings class="w-4 h-4 mr-2" />
@@ -3609,6 +3631,15 @@ export function EnvAIPage() {
                     <span class="truncate font-medium">{ai.activeThreadTitle()}</span>
                   </div>
                   <div class="flower-chat-header-actions">
+                    <Show when={ai.aiEnabled()}>
+                      <div class="hidden md:inline-flex max-w-full items-center gap-2 rounded-full border border-border/70 bg-muted/20 px-2 py-1 text-[11px]">
+                        <span class="text-[10px] font-medium uppercase text-muted-foreground">Model</span>
+                        <span class="max-w-[96px] truncate font-medium text-foreground">{selectedModelSourceLabel()}</span>
+                        <span class="h-3 w-px bg-border" />
+                        <span class="text-[10px] font-medium uppercase text-muted-foreground">Tools</span>
+                        <span class="font-medium text-foreground">SSH Host</span>
+                      </div>
+                    </Show>
                     <Show when={ai.aiEnabled() && ai.modelOptions().length > 0}>
                       <Show
                         when={hasActiveThread()}
@@ -3703,6 +3734,17 @@ export function EnvAIPage() {
 
                 <div class="flower-chat-main">
                   <div class="flower-chat-transcript">
+                    <Show when={ai.aiEnabled() && ai.modelsReady() && ai.modelOptions().length === 0}>
+                      <div class="mx-3 mt-3 px-4 py-3 text-xs rounded-xl shadow-sm bg-warning/5 border border-warning/25">
+                        <div class="flex items-center gap-2 font-medium text-foreground">
+                          <Settings class="w-4 h-4 shrink-0 text-warning" />
+                          No usable Flower model
+                        </div>
+                        <div class="mt-1 text-muted-foreground pl-6">
+                          {noUsableModelMessage()}
+                        </div>
+                      </div>
+                    </Show>
                     <Show when={ai.settings.error || (ai.models.error && ai.aiEnabled())}>
                       <div class="flower-chat-status-stack">
                         {/* Error banner: Settings unavailable */}

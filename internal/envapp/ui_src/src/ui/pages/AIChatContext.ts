@@ -34,11 +34,28 @@ import {
 
 export type ModelsResponse = Readonly<{
   current_model: string;
-  models: Array<{ id: string; label?: string }>;
+  models: Array<{ id: string; label?: string; source?: string; source_label?: string }>;
+  runtime?: AIRuntimeStatus | null;
+}>;
+
+export type AIRuntimeStatus = Readonly<{
+  remote_configured?: boolean;
+  desktop_broker?: Readonly<{
+    connected?: boolean;
+    available?: boolean;
+    model_source?: string;
+    session_id?: string;
+    ssh_runtime_key?: string;
+    expires_at_unix_ms?: number;
+    model_count?: number;
+    missing_key_provider_ids?: string[];
+    last_error?: string;
+  }> | null;
 }>;
 
 export type SettingsResponse = Readonly<{
   ai: any | null;
+  ai_runtime?: AIRuntimeStatus | null;
 }>;
 
 export type ThreadRunStatus = 'idle' | 'accepted' | 'running' | 'waiting_approval' | 'recovering' | 'finalizing' | 'waiting_user' | 'success' | 'failed' | 'canceled' | 'timed_out';
@@ -272,7 +289,7 @@ export interface AIChatContextValue {
   selectThreadModel: (modelID: string) => void;
   selectedSendModel: Accessor<string>;
   activeThreadModelLocked: Accessor<boolean>;
-  modelOptions: Accessor<Array<{ value: string; label: string }>>;
+  modelOptions: Accessor<Array<{ value: string; label: string; source?: string; sourceLabel?: string }>>;
 
   // Threads
   threads: Resource<ListThreadsResponse | null>;
@@ -348,7 +365,12 @@ export function createAIChatContextValue(): AIChatContextValue {
     () => settingsKey(),
     async (k) => (k == null ? null : await fetchGatewayJSON<SettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' })),
   );
-  const aiEnabled = createMemo(() => !!settings()?.ai);
+  const aiEnabled = createMemo(() => {
+    const s = settings();
+    if (!s) return false;
+    if (s.ai) return true;
+    return !!s.ai_runtime?.desktop_broker?.connected;
+  });
 
   // Models resource
   const modelsKey = createMemo<number | null>(() => {
@@ -412,6 +434,8 @@ export function createAIChatContextValue(): AIChatContextValue {
     return m.models.map((it) => ({
       value: it.id,
       label: it.label ?? it.id,
+      source: it.source,
+      sourceLabel: it.source_label,
     }));
   });
 
@@ -1313,8 +1337,15 @@ export function createAIChatContextValue(): AIChatContextValue {
       notify.error('Permission denied', 'Read/write/execute permission required.');
       return null;
     }
-    if (!aiEnabled()) {
-      notify.error('AI not configured', 'Open Runtime Settings to enable AI.');
+    if (!aiEnabled() || modelOptions().length === 0) {
+      const broker = settings()?.ai_runtime?.desktop_broker;
+      const missing = broker?.missing_key_provider_ids?.filter(Boolean) ?? [];
+      notify.error(
+        'AI not configured',
+        missing.length > 0
+          ? `Desktop has model providers without API keys: ${missing.join(', ')}. Open Local Environment Settings on this computer.`
+          : 'Open Runtime Settings or Local Environment Settings to configure a model.',
+      );
       return null;
     }
 

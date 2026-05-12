@@ -66,6 +66,8 @@ const gatewayMocks = vi.hoisted(() => ({
   fetchGatewayJSON: vi.fn(async () => null),
 }));
 
+let settingsResponse: any = null;
+
 const codeRuntimeMocks = vi.hoisted(() => ({
   fetchCodeRuntimeStatus: vi.fn(async () => null),
   installCodeRuntime: vi.fn(async () => undefined),
@@ -289,8 +291,16 @@ describe('EnvSettingsPage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    protocolMocks.status.mockReturnValue('disconnected');
+    settingsResponse = null;
     host = document.createElement('div');
     document.body.appendChild(host);
+    (gatewayMocks.fetchGatewayJSON as any).mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/settings') {
+        return structuredClone(settingsResponse);
+      }
+      return null;
+    });
   });
 
   afterEach(() => {
@@ -374,5 +384,28 @@ describe('EnvSettingsPage', () => {
     expect(runtimeStatus?.textContent).toContain('3 terminals, 2 sessions, 1 task, 4 web services');
     expect(runtimeStatus?.textContent).toContain('Runtime protocol');
     expect(runtimeStatus?.textContent).toContain('redeven-runtime-v1');
+  });
+
+  it('shows Desktop broker status when remote AI config is missing', async () => {
+    protocolMocks.status.mockReturnValue('connected');
+    settingsResponse = {
+      ai: null,
+      ai_runtime: {
+        desktop_broker: {
+          connected: true,
+          available: true,
+          model_source: 'desktop_local_environment',
+          missing_key_provider_ids: [],
+        },
+      },
+    };
+
+    render(() => <EnvSettingsPage />, host);
+    await vi.waitFor(() => {
+      expect(host.querySelector('[data-settings-card="Flower"]')?.textContent).toContain('Desktop is providing a session model bridge for this SSH environment.');
+    });
+
+    const flowerCard = host.querySelector('[data-settings-card="Flower"]');
+    expect(flowerCard?.textContent).toContain('Desktop is providing a session model bridge for this SSH environment.');
   });
 });

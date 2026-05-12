@@ -17,8 +17,10 @@ import (
 )
 
 type Model struct {
-	ID    string `json:"id"`
-	Label string `json:"label,omitempty"`
+	ID          string `json:"id"`
+	Label       string `json:"label,omitempty"`
+	Source      string `json:"source,omitempty"`
+	SourceLabel string `json:"source_label,omitempty"`
 }
 
 type RequestUserInputPrompt struct {
@@ -150,8 +152,9 @@ type SubmitStructuredPromptResponseResponse struct {
 // --- HTTP API types (snake_case, stable) ---
 
 type ModelsResponse struct {
-	CurrentModel string  `json:"current_model"`
-	Models       []Model `json:"models"`
+	CurrentModel string           `json:"current_model"`
+	Models       []Model          `json:"models"`
+	Runtime      *AIRuntimeStatus `json:"runtime,omitempty"`
 }
 
 type ThreadView struct {

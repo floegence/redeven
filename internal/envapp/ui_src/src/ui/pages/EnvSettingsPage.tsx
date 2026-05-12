@@ -802,6 +802,16 @@ export function EnvSettingsPage() {
   const [aiError, setAiError] = createSignal<string | null>(null);
 
   const aiEnabled = createMemo(() => !!settings()?.ai);
+  const desktopBrokerStatus = createMemo(() => settings()?.ai_runtime?.desktop_broker ?? null);
+  const flowerBadge = createMemo(() => {
+    if (aiEnabled()) return 'Remote config';
+    if (desktopBrokerStatus()?.available) return 'Desktop broker';
+    if (desktopBrokerStatus()?.connected) return 'Desktop connected';
+    return 'Disabled';
+  });
+  const flowerBadgeVariant = createMemo<'default' | 'success'>(() => (
+    aiEnabled() || desktopBrokerStatus()?.available ? 'success' : 'default'
+  ));
   const codexStatusError = createMemo(() => {
     const payloadError = String(codexStatus()?.error ?? '').trim();
     if (payloadError) return payloadError;
@@ -3367,8 +3377,8 @@ export function EnvSettingsPage() {
               icon={FlowerIcon}
               title="Flower"
               description="Configure Flower providers, models, execution safeguards, and local AI secrets. Changes are auto-saved when the form is valid."
-              badge={aiEnabled() ? 'Enabled' : 'Disabled'}
-              badgeVariant={aiEnabled() ? 'success' : 'default'}
+              badge={flowerBadge()}
+              badgeVariant={flowerBadgeVariant()}
               error={aiError()}
               actions={
                 <>
@@ -3392,7 +3402,11 @@ export function EnvSettingsPage() {
                 <div class="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-4">
                   <Zap class="h-5 w-5 text-muted-foreground" />
                   <div class="text-sm text-muted-foreground">
-                    Flower is currently disabled. Once the settings below become valid, Flower will be enabled automatically.
+                    {desktopBrokerStatus()?.available
+                      ? 'Desktop is providing a session model bridge for this SSH environment. Remote provider settings remain local to this host.'
+                      : desktopBrokerStatus()?.connected
+                        ? 'Desktop is connected, but no usable model is available yet. Configure the local API key on this computer.'
+                      : 'Flower is currently disabled. Once the settings below become valid, Flower will be enabled automatically.'}
                   </div>
                 </div>
               </Show>

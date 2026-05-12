@@ -94,6 +94,7 @@ type RecentLogs = Readonly<{
   master_stderr: string;
   control_stdout: string;
   control_stderr: string;
+  reverse_forward_stderr: string;
   forward_stderr: string;
 }>;
 
@@ -101,6 +102,7 @@ type MutableRecentLogs = {
   master_stderr: string;
   control_stdout: string;
   control_stderr: string;
+  reverse_forward_stderr: string;
   forward_stderr: string;
 };
 
@@ -138,6 +140,14 @@ export type ManagedSSHRuntime = Readonly<{
   stop: () => Promise<void>;
 }>;
 
+export type ManagedSSHRuntimeAIBroker = Readonly<{
+  local_url: string;
+  token: string;
+  session_id: string;
+  ssh_runtime_key: `ssh:${string}`;
+  expires_at_unix_ms: number;
+}>;
+
 type ManagedSSHRemoteStartup = Readonly<{
   startup: StartupReport;
   launch_mode: DesktopSessionRuntimeLaunchMode;
@@ -156,8 +166,9 @@ export type StartManagedSSHRuntimeArgs = Readonly<{
   stopTimeoutMs?: number;
   connectTimeoutSeconds?: number;
   probeTimeoutMs?: number;
+  aiBroker?: ManagedSSHRuntimeAIBroker | null;
   signal?: AbortSignal;
-  onLog?: (stream: 'master_stderr' | 'control_stdout' | 'control_stderr' | 'forward_stderr', chunk: string) => void;
+  onLog?: (stream: 'master_stderr' | 'control_stdout' | 'control_stderr' | 'reverse_forward_stderr' | 'forward_stderr', chunk: string) => void;
   onProgress?: (progress: DesktopSSHRuntimeProgress) => void;
 }>;
 
@@ -568,6 +579,11 @@ export function buildManagedSSHStartScript(): string {
     'local_environment_root="${install_root%/}/local-environment"',
     'state_root="${local_environment_root}/state"',
     'session_token="$3"',
+    'broker_url="${4:-}"',
+    'broker_token="${5:-}"',
+    'broker_session_id="${6:-}"',
+    'broker_ssh_runtime_key="${7:-}"',
+    'broker_expires_at_unix_ms="${8:-0}"',
     'session_dir="${local_environment_root}/sessions/${session_token}"',
     'report_path="${session_dir}/startup-report.json"',
     'log_dir="${local_environment_root}/logs"',
@@ -578,10 +594,15 @@ export function buildManagedSSHStartScript(): string {
     '  echo "Redeven runtime is not installed at ${binary}" >&2',
     '  exit 1',
     'fi',
-    'if command -v setsid >/dev/null 2>&1; then',
-    '  setsid "$binary" run --state-root "$state_root" --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path" >>"$log_path" 2>&1 </dev/null &',
+    'if [ -n "$broker_url" ] && [ -n "$broker_token" ]; then',
+    '  broker_env="env REDEVEN_DESKTOP_AI_BROKER_URL=$broker_url REDEVEN_DESKTOP_AI_BROKER_TOKEN=$broker_token REDEVEN_DESKTOP_AI_BROKER_SESSION_ID=$broker_session_id REDEVEN_DESKTOP_AI_BROKER_SSH_RUNTIME_KEY=$broker_ssh_runtime_key REDEVEN_DESKTOP_AI_BROKER_EXPIRES_AT_UNIX_MS=$broker_expires_at_unix_ms"',
     'else',
-    '  nohup "$binary" run --state-root "$state_root" --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path" >>"$log_path" 2>&1 </dev/null &',
+    '  broker_env="env"',
+    'fi',
+    'if command -v setsid >/dev/null 2>&1; then',
+    '  setsid $broker_env "$binary" run --state-root "$state_root" --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path" >>"$log_path" 2>&1 </dev/null &',
+    'else',
+    '  nohup $broker_env "$binary" run --state-root "$state_root" --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path" >>"$log_path" 2>&1 </dev/null &',
     'fi',
     'printf "%s\\n" "$!" > "${session_dir}/launcher.pid"',
   ].join('\n');
@@ -964,6 +985,87 @@ async function stopRemoteRuntimeProcess(args: Readonly<{
     'control_stderr',
     args.onLog,
   );
+}
+
+function localPortFromBrokerURL(rawURL: string): number {
+  const parsed = new URL(rawURL);
+  const host = parsed.hostname.toLowerCase();
+  if (parsed.protocol !== 'http:' || (host !== '127.0.0.1' && host !== 'localhost' && host !== '[::1]' && host !== '::1')) {
+    throw new Error('Desktop AI Broker must listen on local HTTP loopback.');
+  }
+  const port = Number(parsed.port);
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    throw new Error('Desktop AI Broker URL is missing a valid port.');
+  }
+  return port;
+}
+
+async function openDesktopAIBrokerReverseForward(args: Readonly<{
+  sshBinary: string;
+  target: DesktopSSHEnvironmentDetails;
+  controlSocketPath: string;
+  connectTimeoutSeconds: number;
+  auth: SSHCommandAuthContext;
+  broker: ManagedSSHRuntimeAIBroker;
+  startupTimeoutMs: number;
+  logs: MutableRecentLogs;
+  onLog: StartManagedSSHRuntimeArgs['onLog'];
+  signal?: AbortSignal;
+}>): Promise<Readonly<{ process: SpawnedSSHProcess; remoteURL: string }>> {
+  const localPort = localPortFromBrokerURL(args.broker.local_url);
+  const proc = spawnSSHProcess(args.sshBinary, [
+    ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds, args.auth.mode),
+    '-o', 'ExitOnForwardFailure=yes',
+    '-N',
+    '-R', `127.0.0.1:0:127.0.0.1:${localPort}`,
+    ...sshTargetArgs(args.target),
+  ], args.auth, undefined, args.signal);
+
+  let spawnError: Error | null = null;
+  proc.once('error', (error) => {
+    spawnError = error instanceof Error ? error : new Error(String(error));
+  });
+
+  const deadline = Date.now() + args.startupTimeoutMs;
+  let allocatedPort: number | null = null;
+  const observe = (chunk: string) => {
+    args.logs.reverse_forward_stderr = appendRecentLog(args.logs.reverse_forward_stderr, chunk);
+    args.onLog?.('reverse_forward_stderr', chunk);
+    const match = args.logs.reverse_forward_stderr.match(/Allocated port\s+(\d+)/iu);
+    if (match) {
+      const parsed = Number(match[1]);
+      if (Number.isInteger(parsed) && parsed > 0 && parsed <= 65535) {
+        allocatedPort = parsed;
+      }
+    }
+  };
+  proc.stderr.setEncoding('utf8');
+  proc.stderr.on('data', observe);
+  if (proc.stdout) {
+    proc.stdout.setEncoding('utf8');
+    proc.stdout.on('data', observe);
+  }
+
+  for (;;) {
+    throwIfSSHRuntimeCanceled(args.signal);
+    if (spawnError) {
+      throw spawnError;
+    }
+    if (allocatedPort !== null) {
+      return {
+        process: proc,
+        remoteURL: `http://127.0.0.1:${allocatedPort}`,
+      };
+    }
+    if (proc.exitCode !== null || proc.signalCode) {
+      const exitReason = proc.exitCode !== null ? `exit code ${proc.exitCode}` : `signal ${proc.signalCode}`;
+      throw readinessFailure(`Desktop AI Broker reverse forward failed before allocation (${exitReason}).`, args.logs);
+    }
+    if (Date.now() >= deadline) {
+      throw readinessFailure('Timed out waiting for Desktop AI Broker reverse forward allocation.', args.logs);
+    }
+    await delay(DEFAULT_SSH_POLL_INTERVAL_MS);
+  }
 }
 
 async function waitForMasterReady(args: Readonly<{
@@ -1705,6 +1807,7 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
     master_stderr: '',
     control_stdout: '',
     control_stderr: '',
+    reverse_forward_stderr: '',
     forward_stderr: '',
   };
 
@@ -1737,7 +1840,9 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
   bindRecentLog(masterProcess.stderr, 'master_stderr', logs, args.onLog);
 
   let controlProcess: SpawnedSSHProcess | null = null;
+  let reverseForwardProcess: SpawnedSSHProcess | null = null;
   let forwardProcess: SpawnedSSHProcess | null = null;
+  let remoteBrokerURL = '';
   let remoteRuntimePID: number | null = null;
   let remoteStopAttempted = false;
   let transportDisconnected = false;
@@ -1748,6 +1853,7 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
     }
     transportDisconnected = true;
     await stopChildProcess(forwardProcess, stopTimeoutMs).catch(() => undefined);
+    await stopChildProcess(reverseForwardProcess, stopTimeoutMs).catch(() => undefined);
     await stopChildProcess(controlProcess, stopTimeoutMs).catch(() => undefined);
     await stopChildProcess(masterProcess, stopTimeoutMs).catch(() => undefined);
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
@@ -1809,6 +1915,34 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       signal: args.signal,
     });
 
+    if (args.aiBroker) {
+      try {
+        emitSSHRuntimeProgress(
+          args.onProgress,
+          'ssh_opening_tunnel',
+          'Opening Desktop AI bridge',
+          'Desktop is attaching the local model broker to this SSH session.',
+        );
+        const reverse = await openDesktopAIBrokerReverseForward({
+          sshBinary,
+          target,
+          controlSocketPath,
+          connectTimeoutSeconds,
+          auth,
+          broker: args.aiBroker,
+          startupTimeoutMs,
+          logs,
+          onLog: args.onLog,
+          signal: args.signal,
+        });
+        reverseForwardProcess = reverse.process;
+        remoteBrokerURL = reverse.remoteURL;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(`[redeven:ssh-ai-broker] Desktop AI Broker is unavailable for ${args.aiBroker.ssh_runtime_key}: ${message}`);
+      }
+    }
+
     emitSSHRuntimeProgress(
       args.onProgress,
       'ssh_starting_runtime',
@@ -1822,6 +1956,15 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
         target.remote_install_dir,
         runtimeReleaseTag,
         sessionToken,
+        ...(remoteBrokerURL && args.aiBroker
+          ? [
+              remoteBrokerURL,
+              args.aiBroker.token,
+              args.aiBroker.session_id,
+              args.aiBroker.ssh_runtime_key,
+              String(args.aiBroker.expires_at_unix_ms),
+            ]
+          : ['', '', '', '', '0']),
       ]),
     ], auth, undefined, args.signal);
     let controlSpawnError: Error | null = null;

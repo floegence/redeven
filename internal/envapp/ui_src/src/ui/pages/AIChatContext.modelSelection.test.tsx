@@ -87,6 +87,7 @@ let modelsState: MutableModelsResponse;
 let threadsState: ThreadView[];
 let currentModelError: Error | null;
 let threadPatchError: Error | null;
+let settingsState: any;
 let currentModelRequests: Array<{ model_id: string }>;
 let threadPatchRequests: Array<{ threadId: string; body: { model_id?: string } }>;
 let createThreadBodies: Array<Record<string, unknown>>;
@@ -160,13 +161,14 @@ describe('AIChatContext model selection', () => {
     threadsState = [];
     currentModelError = null;
     threadPatchError = null;
+    settingsState = { ai: { enabled: true } };
     currentModelRequests = [];
     threadPatchRequests = [];
     createThreadBodies = [];
     fetchGatewayJSONMock.mockReset();
     fetchGatewayJSONMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/settings') {
-        return { ai: { enabled: true } };
+        return structuredClone(settingsState);
       }
       if (url === '/_redeven_proxy/api/ai/models') {
         return structuredClone(modelsState);
@@ -256,6 +258,28 @@ describe('AIChatContext model selection', () => {
       expect(currentModelRequests).toEqual([{ model_id: 'openai/model-b' }]);
       expect(modelsState.current_model).toBe('openai/model-b');
     });
+
+    dispose();
+  });
+
+  it('keeps Flower available when Desktop broker is connected and remote AI config is missing', async () => {
+    settingsState = {
+      ai: null,
+      ai_runtime: {
+        desktop_broker: {
+          connected: true,
+          available: true,
+          model_source: 'desktop_local_environment',
+          missing_key_provider_ids: [],
+        },
+      },
+    };
+
+    const { ctx, dispose } = await renderContext();
+
+    expect(ctx.aiEnabled()).toBe(true);
+    expect(ctx.modelOptions().map((item) => item.value)).toEqual(['openai/model-a', 'openai/model-b']);
+    expect(ctx.modelOptions()[0].source).toBeUndefined();
 
     dispose();
   });

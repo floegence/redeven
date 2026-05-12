@@ -121,6 +121,16 @@ It does not introduce a second SSH-native file or terminal protocol. Instead, El
 9. Opens the forwarded `127.0.0.1:<port>` origin as a normal Desktop session.
 10. Marks the Env App session as `ssh_environment` so Web Services treat `localhost` targets as remote-host loopback and open through `/pf/<forward_id>/` instead of the user's browser loopback.
 
+If the Desktop Local Environment has usable Flower provider settings, Desktop also starts a short-lived loopback-only AI broker on the user's machine before launching the SSH runtime. The broker reads the Desktop Local Environment's `config.json` and `secrets.json`, exposes only model-list and model-stream endpoints, and never exposes files, terminals, ports, or Desktop IPC to the remote host. Desktop attaches that broker to the same SSH control connection with a reverse-forwarded loopback endpoint and injects only the forwarded broker URL plus a short-lived token into the remote runtime process. The remote runtime reads that endpoint at startup, immediately removes the broker environment variables from its process environment, and keeps the token only in memory.
+
+This Desktop AI Broker is a session capability, not a persisted remote configuration:
+
+- Provider API keys stay in the Desktop Local Environment's local `secrets.json`.
+- The SSH host's `local-environment/state/config.json` does not receive an `ai` block, an `enabled` flag, or any provider secret.
+- Remote tools still run inside the SSH-hosted runtime and remain governed by the remote session's `session_meta` plus local `permission_policy`.
+- If the broker is unavailable, the SSH runtime still starts and Flower falls back to the remote runtime's own AI config if one exists.
+- Env App surfaces the split explicitly as model source `Desktop` and tools location `SSH Host`.
+
 ### SSH Host Environment
 
 SSH bootstrap is intentionally transport-light and runtime-heavy:
