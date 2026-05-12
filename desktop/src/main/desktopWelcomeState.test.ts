@@ -47,6 +47,26 @@ describe('desktopWelcomeState', () => {
         local_ui_password: 'secret',
         local_ui_password_configured: true,
       }),
+      currentRuntime: {
+        local_ui_url: 'http://localhost:23998/',
+        desktop_managed: true,
+        effective_run_mode: 'desktop',
+        runtime_service: {
+          protocol_version: 'redeven-runtime-v1',
+          service_owner: 'desktop',
+          desktop_managed: true,
+          effective_run_mode: 'desktop',
+          remote_enabled: true,
+          compatibility: 'compatible',
+          open_readiness: { state: 'openable' },
+          active_workload: {
+            terminal_count: 0,
+            session_count: 0,
+            task_count: 0,
+            port_forward_count: 0,
+          },
+        },
+      },
     });
 
     const snapshot = buildDesktopWelcomeSnapshot({
@@ -57,7 +77,6 @@ describe('desktopWelcomeState', () => {
             id: 'http://192.168.1.12:24000/',
             label: 'Staging',
             local_ui_url: 'http://192.168.1.12:24000/',
-            source: 'saved',
             pinned: false,
             last_used_at_ms: 200,
           },
@@ -65,14 +84,9 @@ describe('desktopWelcomeState', () => {
             id: 'http://192.168.1.11:24000/',
             label: 'Laptop',
             local_ui_url: 'http://192.168.1.11:24000/',
-            source: 'recent_auto',
             pinned: false,
             last_used_at_ms: 100,
           },
-        ],
-        recent_external_local_ui_urls: [
-          'http://192.168.1.12:24000/',
-          'http://192.168.1.11:24000/',
         ],
         control_plane_refresh_tokens: {
           'https://cp.example.invalid|example_control_plane': 'refresh-123',
@@ -154,7 +168,6 @@ describe('desktopWelcomeState', () => {
         open_action_label: 'Focus',
         can_edit: true,
         can_delete: false,
-        can_save: false,
         local_environment_kind: 'local',
         local_environment_ui_bind: '0.0.0.0:24000',
         local_environment_runtime_state: 'running_desktop',
@@ -183,7 +196,6 @@ describe('desktopWelcomeState', () => {
         open_action_label: 'Focus',
         can_edit: true,
         can_delete: true,
-        can_save: false,
       }),
       expect.objectContaining({
         id: 'http://192.168.1.11:24000/',
@@ -191,13 +203,12 @@ describe('desktopWelcomeState', () => {
         label: 'Laptop',
         local_ui_url: 'http://192.168.1.11:24000/',
         pinned: false,
-        tag: 'Recent',
-        category: 'recent_auto',
+        tag: 'Saved',
+        category: 'saved',
         is_open: false,
         open_action_label: 'Open',
         can_edit: true,
         can_delete: true,
-        can_save: true,
       }),
     ]));
     expect(snapshot.control_planes).toEqual([
@@ -322,7 +333,6 @@ describe('desktopWelcomeState', () => {
           id: 'http://192.168.1.20:24000/',
           label: 'Team Host',
           local_ui_url: 'http://192.168.1.20:24000/',
-          source: 'saved',
           pinned: false,
           last_used_at_ms: 200,
         }],
@@ -366,7 +376,7 @@ describe('desktopWelcomeState', () => {
     ]));
   });
 
-  it('adds transient open remote environments when they are not yet saved', () => {
+  it('keeps unsaved open remote sessions out of the saved environment list', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences(),
       openSessions: [
@@ -382,19 +392,16 @@ describe('desktopWelcomeState', () => {
       ],
     });
 
-    expect(snapshot.environments).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'local', kind: 'local_environment' }),
+    expect(snapshot.open_windows).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        id: 'http://192.168.1.77:24000/',
-        kind: 'external_local_ui',
-        tag: 'Open',
-        category: 'open_unsaved',
-        is_open: true,
-        can_edit: true,
-        can_delete: false,
-        can_save: true,
+        session_key: 'url:http://192.168.1.77:24000/',
+        target_kind: 'external_local_ui',
+        environment_id: 'http://192.168.1.77:24000/',
       }),
     ]));
+    expect(snapshot.environments).toEqual([
+      expect.objectContaining({ id: 'local', kind: 'local_environment' }),
+    ]);
     expect(snapshot.suggested_remote_url).toBe('http://192.168.1.77:24000/');
   });
 
@@ -420,13 +427,9 @@ describe('desktopWelcomeState', () => {
       }),
     ]));
     expect(snapshot.environments).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'http://192.168.1.88:24000/',
-        is_open: false,
-        is_opening: true,
-        open_action_label: 'Opening…',
-      }),
+      expect.objectContaining({ id: 'local', kind: 'local_environment' }),
     ]));
+    expect(snapshot.environments.some((environment) => environment.id === 'http://192.168.1.88:24000/')).toBe(false);
   });
 
   it('builds saved and open SSH environments without replacing them with forwarded localhost urls', () => {
@@ -442,7 +445,6 @@ describe('desktopWelcomeState', () => {
           bootstrap_strategy: 'desktop_upload',
           release_base_url: 'https://mirror.example.invalid/releases',
           connect_timeout_seconds: 10,
-          source: 'saved',
           pinned: true,
           last_used_at_ms: 100,
         }],
@@ -516,7 +518,6 @@ describe('desktopWelcomeState', () => {
           bootstrap_strategy: 'desktop_upload',
           release_base_url: '',
           connect_timeout_seconds: 10,
-          source: 'saved',
           pinned: false,
           last_used_at_ms: 100,
         }],

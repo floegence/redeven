@@ -77,13 +77,11 @@ describe('DesktopWelcomeShell', () => {
             id: 'http://192.168.1.11:24000/',
             label: '192.168.1.11:24000',
             local_ui_url: 'http://192.168.1.11:24000/',
-            source: 'saved',
             pinned: false,
             last_used_at_ms: 10,
           },
         ],
         saved_ssh_environments: [],
-        recent_external_local_ui_urls: ['http://192.168.1.11:24000/'],
       }),
       surface: 'connect_environment',
     });
@@ -153,7 +151,6 @@ describe('DesktopWelcomeShell', () => {
             id: 'http://192.168.1.12:24000/',
             label: 'Staging',
             local_ui_url: 'http://192.168.1.12:24000/',
-            source: 'saved',
             pinned: false,
             last_used_at_ms: 20,
           },
@@ -161,16 +158,11 @@ describe('DesktopWelcomeShell', () => {
             id: 'http://192.168.1.11:24000/',
             label: 'Laptop',
             local_ui_url: 'http://192.168.1.11:24000/',
-            source: 'recent_auto',
             pinned: false,
             last_used_at_ms: 10,
           },
         ],
         saved_ssh_environments: [],
-        recent_external_local_ui_urls: [
-          'http://192.168.1.12:24000/',
-          'http://192.168.1.11:24000/',
-        ],
       }),
       controlPlanes: [{
         provider: {
@@ -464,6 +456,8 @@ describe('DesktopWelcomeShell', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain('Connect Environment');
+    expect(appSrc).toContain('Open Redeven Dashboard');
+    expect(appSrc).toContain('function openRedevenDashboard');
     expect(appSrc).toContain('Environments');
     expect(appSrc).toContain('Providers');
     expect(appSrc).toContain('Search environments...');
@@ -507,6 +501,8 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain('function EnvironmentSplitActionButton');
     expect(appSrc).toContain('function EnvironmentPrimaryActionPanel');
+    expect(appSrc).toContain('const renderPrimaryButton = () => (');
+    expect(appSrc).not.toContain('const primaryButton = (');
     expect(appSrc).toContain('function serveRuntimeLocally');
     expect(appSrc).not.toContain('function openProviderLocalServeDialog');
     expect(appSrc).toContain('openSettingsSurface(environment.id);');

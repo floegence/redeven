@@ -1,5 +1,4 @@
 import type { DesktopSettingsSurfaceSnapshot } from './desktopSettingsSurface';
-import type { DesktopSavedEnvironmentSource } from './desktopConnectionTypes';
 import type { DesktopControlPlaneSummary } from './controlPlaneProvider';
 import { normalizeControlPlaneOrigin } from './controlPlaneProvider';
 import { normalizeDesktopSSHConnectTimeoutSeconds, type DesktopSSHEnvironmentDetails } from './desktopSSH';
@@ -26,8 +25,8 @@ export type DesktopWelcomeEntryReason = 'app_launch' | 'switch_environment' | 'c
 export type DesktopWelcomeIssueScope = 'local_environment' | 'remote_environment' | 'startup';
 export type DesktopLauncherSurface = 'connect_environment' | 'environment_settings';
 export type DesktopEnvironmentEntryKind = 'local_environment' | 'provider_environment' | 'external_local_ui' | 'ssh_environment';
-export type DesktopEnvironmentEntryTag = 'Open' | 'Recent' | 'Saved' | 'Local' | 'Provider' | '';
-export type DesktopEnvironmentEntryCategory = 'local' | 'provider' | 'open_unsaved' | DesktopSavedEnvironmentSource;
+export type DesktopEnvironmentEntryTag = 'Open' | 'Saved' | 'Local' | 'Provider' | '';
+export type DesktopEnvironmentEntryCategory = 'local' | 'provider' | 'saved';
 export type DesktopLocalEnvironmentStateRoute = 'local_host' | 'remote_desktop';
 export type DesktopLocalRuntimeState = 'not_running' | 'running_desktop' | 'running_external';
 export type DesktopLocalCloseBehavior = 'stops_runtime' | 'detaches' | 'not_applicable';
@@ -204,7 +203,6 @@ export type DesktopEnvironmentEntry = Readonly<{
   open_action_label: 'Open' | 'Opening…' | 'Focus';
   can_edit: boolean;
   can_delete: boolean;
-  can_save: boolean;
   last_used_at_ms: number;
 }>;
 

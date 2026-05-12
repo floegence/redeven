@@ -15,8 +15,122 @@ import { hydrateWelcomeLocalEnvironmentRuntimeState } from './desktopWelcomeRunt
 const validEnvAppShellHTML = '<!doctype html><html><body><div id="root"></div><script type="module" src="/_redeven_proxy/env/assets/index.js"></script></body></html>';
 
 describe('desktopWelcomeRuntimeState', () => {
-  it('hydrates local runtime ownership from an open external Local Environment session', async () => {
+  it('hydrates local runtime ownership from a probed open external Local Environment session', async () => {
+    const server = http.createServer((request, response) => {
+      if (request.url === '/api/local/runtime/health') {
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({
+          ok: true,
+          data: {
+            status: 'online',
+            password_required: true,
+            runtime_service: {
+              runtime_version: 'v1.4.0',
+              service_owner: 'external',
+              desktop_managed: false,
+              effective_run_mode: 'local',
+              remote_enabled: false,
+              compatibility: 'compatible',
+              open_readiness: { state: 'openable' },
+              active_workload: {
+                terminal_count: 0,
+                session_count: 0,
+                task_count: 0,
+                port_forward_count: 0,
+              },
+            },
+          },
+        }));
+        return;
+      }
+      if (request.url === '/_redeven_proxy/env/') {
+        response.writeHead(200, { 'Content-Type': 'text/html' });
+        response.end(validEnvAppShellHTML);
+        return;
+      }
+      if (request.url === '/_redeven_proxy/env/assets/index.js') {
+        response.writeHead(200, { 'Content-Type': 'application/javascript' });
+        response.end(request.method === 'HEAD' ? undefined : 'console.log("env");');
+        return;
+      }
+      response.writeHead(404);
+      response.end('not found');
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      server.listen(0, '127.0.0.1', () => resolve());
+      server.once('error', reject);
+    });
+
     const environment = testLocalEnvironment();
+    const preferences = testDesktopPreferences({
+      local_environment: environment,
+    });
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('expected a TCP server address');
+      }
+      const localUIURL = `http://127.0.0.1:${address.port}/`;
+
+      const hydrated = await hydrateWelcomeLocalEnvironmentRuntimeState(
+        preferences,
+        [
+          testLocalEnvironmentSession(
+            environment,
+            localUIURL,
+            'open',
+            {
+              desktop_managed: false,
+              password_required: true,
+              effective_run_mode: 'local',
+              pid: 4242,
+            },
+            {
+              runtimeLifecycleOwner: 'external',
+              runtimeLaunchMode: 'attached',
+            },
+          ),
+        ],
+      );
+
+      expect(hydrated.local_environment.local_hosting.current_runtime).toEqual({
+        local_ui_url: localUIURL,
+        effective_run_mode: 'local',
+        remote_enabled: false,
+        desktop_managed: false,
+        password_required: true,
+        diagnostics_enabled: false,
+        pid: 4242,
+        runtime_service: expect.objectContaining({
+          open_readiness: { state: 'openable' },
+        }),
+      });
+      expect(hydrated.local_environment.local_hosting.current_runtime?.runtime_service).toMatchObject({
+        service_owner: 'external',
+        desktop_managed: false,
+        effective_run_mode: 'local',
+        remote_enabled: false,
+        open_readiness: { state: 'openable' },
+      });
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      });
+    }
+  });
+
+  it('does not hydrate an open Local Environment session when the runtime probe fails', async () => {
+    const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-welcome-runtime-missing-'));
+    const environment = testLocalEnvironment({
+      stateDir,
+    });
     const preferences = testDesktopPreferences({
       local_environment: environment,
     });
@@ -26,41 +140,22 @@ describe('desktopWelcomeRuntimeState', () => {
       [
         testLocalEnvironmentSession(
           environment,
-          'http://127.0.0.1:23998/',
+          'http://127.0.0.1:9/',
           'open',
           {
-            desktop_managed: false,
-            password_required: true,
-            effective_run_mode: 'local',
+            desktop_managed: true,
+            password_required: false,
+            effective_run_mode: 'desktop',
             pid: 4242,
-          },
-          {
-            runtimeLifecycleOwner: 'external',
-            runtimeLaunchMode: 'attached',
           },
         ),
       ],
+      {
+        probeTimeoutMs: 50,
+      },
     );
 
-    expect(hydrated.local_environment.local_hosting.current_runtime).toEqual({
-      local_ui_url: 'http://127.0.0.1:23998/',
-      effective_run_mode: 'local',
-      remote_enabled: false,
-      desktop_managed: false,
-      password_required: true,
-      diagnostics_enabled: false,
-      pid: 4242,
-      runtime_service: expect.objectContaining({
-        open_readiness: { state: 'openable' },
-      }),
-    });
-    expect(hydrated.local_environment.local_hosting.current_runtime?.runtime_service).toMatchObject({
-      service_owner: 'external',
-      desktop_managed: false,
-      effective_run_mode: 'local',
-      remote_enabled: false,
-      open_readiness: { state: 'openable' },
-    });
+    expect(hydrated.local_environment.local_hosting.current_runtime).toBeUndefined();
   });
 
   it('probes a managed runtime from the Local Environment state file', async () => {

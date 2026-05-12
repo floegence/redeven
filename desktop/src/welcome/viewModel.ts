@@ -307,10 +307,6 @@ export function environmentSourceLabel(environment: DesktopEnvironmentEntry): st
       return 'Local Environment';
     case 'provider':
       return 'Provider';
-    case 'open_unsaved':
-      return 'Open window';
-    case 'recent_auto':
-      return 'Recent';
     case 'saved':
       return 'Saved';
     default:

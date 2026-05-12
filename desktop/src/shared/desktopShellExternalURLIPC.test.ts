@@ -1,11 +1,21 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DESKTOP_DASHBOARD_URL,
   normalizeDesktopShellOpenExternalURLRequest,
   normalizeDesktopShellOpenExternalURLResponse,
 } from './desktopShellExternalURLIPC';
 
 describe('desktopShellExternalURLIPC', () => {
+  it('defines the semantic dashboard target for desktop brand navigation', () => {
+    const dashboardURL = new URL(DESKTOP_DASHBOARD_URL);
+    const publicInstallURL = new URL('https://redeven.com/install.sh');
+
+    expect(dashboardURL.protocol).toBe(publicInstallURL.protocol);
+    expect(dashboardURL.host).toBe(publicInstallURL.host);
+    expect(dashboardURL.pathname).toBe('/dashboard');
+  });
+
   it('accepts absolute http and https urls only', () => {
     expect(normalizeDesktopShellOpenExternalURLRequest({ url: 'http://127.0.0.1:43123/cs/demo/' })).toEqual({
       url: 'http://127.0.0.1:43123/cs/demo/',

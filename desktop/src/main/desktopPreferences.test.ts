@@ -24,15 +24,13 @@ import {
   deleteSavedControlPlane,
   deleteSavedEnvironment,
   deleteSavedSSHEnvironment,
-  deriveRecentExternalLocalUIURLs,
   desktopEnvironmentID,
   desktopPreferencesToDraft,
   findLocalEnvironmentByID,
   loadDesktopPreferences,
   localEnvironmentDesktopLaunchKey,
-  normalizeRecentExternalLocalUIURLs,
-  rememberRecentExternalLocalUITarget,
-  rememberRecentSSHEnvironmentTarget,
+  markSavedEnvironmentUsed,
+  markSavedSSHEnvironmentUsed,
   rememberProviderEnvironmentUse,
   saveDesktopPreferences,
   setLocalEnvironmentPinned,
@@ -192,18 +190,17 @@ describe('desktopPreferences', () => {
       const codec = createPlaintextSecretCodec();
       const preferences: DesktopPreferences = testDesktopPreferences({
         local_environment: testLocalEnvironment({
-            access: testLocalAccess({
-              local_ui_bind: '0.0.0.0:23998',
-              local_ui_password: 'super-secret',
-              local_ui_password_configured: true,
-            }),
+          access: testLocalAccess({
+            local_ui_bind: '0.0.0.0:23998',
+            local_ui_password: 'super-secret',
+            local_ui_password_configured: true,
           }),
+        }),
         saved_environments: [
           {
             id: 'http://192.168.1.12:24000/',
             label: 'Staging',
             local_ui_url: 'http://192.168.1.12:24000/',
-            source: 'saved',
             pinned: true,
             last_used_at_ms: 100,
           },
@@ -219,12 +216,10 @@ describe('desktopPreferences', () => {
             bootstrap_strategy: 'desktop_upload',
             release_base_url: 'https://mirror.example.invalid/releases',
             connect_timeout_seconds: 10,
-            source: 'saved',
             pinned: false,
             last_used_at_ms: 90,
           },
         ],
-        recent_external_local_ui_urls: ['http://192.168.1.12:24000/'],
       });
 
       await saveDesktopPreferences(paths, preferences, codec);
@@ -253,7 +248,6 @@ describe('desktopPreferences', () => {
           remote_install_dir: 'remote_default',
           bootstrap_strategy: 'desktop_upload',
           release_base_url: 'https://mirror.example.invalid/releases',
-          source: 'saved',
           pinned: false,
           last_used_at_ms: 90,
         }, null, 2)}\n`,
@@ -269,7 +263,6 @@ describe('desktopPreferences', () => {
         remote_install_dir: 'remote_default',
         bootstrap_strategy: 'desktop_upload',
         release_base_url: 'https://mirror.example.invalid/releases',
-        source: 'saved',
         pinned: false,
       }));
       expect(loaded.saved_ssh_environments[0].id).toBe('ssh:devbox:2222:key_agent:remote_default');
@@ -347,7 +340,6 @@ describe('desktopPreferences', () => {
       expect(loaded).toEqual(expect.objectContaining({
         saved_environments: [],
         saved_ssh_environments: [],
-        recent_external_local_ui_urls: [],
         control_plane_refresh_tokens: preferences.control_plane_refresh_tokens,
         control_planes: preferences.control_planes,
       }));
@@ -447,7 +439,6 @@ describe('desktopPreferences', () => {
       expect(loaded).toEqual(expect.objectContaining({
         saved_environments: [],
         saved_ssh_environments: [],
-        recent_external_local_ui_urls: [],
         control_plane_refresh_tokens: {},
         control_planes: [],
       }));
@@ -474,7 +465,6 @@ describe('desktopPreferences', () => {
       expect(loaded).toEqual(expect.objectContaining({
         saved_environments: [],
         saved_ssh_environments: [],
-        recent_external_local_ui_urls: [],
         control_plane_refresh_tokens: {},
         control_planes: [],
       }));
@@ -505,7 +495,6 @@ describe('desktopPreferences', () => {
       expect(loaded).toEqual(expect.objectContaining({
         saved_environments: [],
         saved_ssh_environments: [],
-        recent_external_local_ui_urls: [],
         control_plane_refresh_tokens: {},
         control_planes: [],
       }));
@@ -546,7 +535,6 @@ describe('desktopPreferences', () => {
       expect(loaded).toEqual(expect.objectContaining({
         saved_environments: [],
         saved_ssh_environments: [],
-        recent_external_local_ui_urls: [],
         control_plane_refresh_tokens: {},
         control_planes: [],
       }));
@@ -564,16 +552,18 @@ describe('desktopPreferences', () => {
     });
   });
 
-  it('upserts, promotes, orders, and deletes saved environments while deriving recent URLs', () => {
-    const remembered = rememberRecentExternalLocalUITarget(defaultDesktopPreferences(), 'http://192.168.1.11:24000/');
-    const updated = upsertSavedEnvironment(remembered, {
+  it('upserts, marks, orders, and deletes saved URL environments', () => {
+    const first = upsertSavedEnvironment(defaultDesktopPreferences(), {
       environment_id: desktopEnvironmentID('http://192.168.1.11:24000/'),
-      label: 'Laptop Updated',
+      label: 'Laptop',
       local_ui_url: 'http://192.168.1.11:24000/',
-      source: 'saved',
+      last_used_at_ms: 100,
+    });
+    const marked = markSavedEnvironmentUsed(first, {
+      local_ui_url: 'http://192.168.1.11:24000/_redeven_proxy/env/',
       last_used_at_ms: 300,
     });
-    const second = upsertSavedEnvironment(updated, {
+    const second = upsertSavedEnvironment(marked, {
       environment_id: '',
       label: '',
       local_ui_url: 'http://192.168.1.12:24000/_redeven_proxy/env/',
@@ -583,9 +573,8 @@ describe('desktopPreferences', () => {
     expect(second.saved_environments).toEqual([
       {
         id: 'http://192.168.1.11:24000/',
-        label: 'Laptop Updated',
+        label: 'Laptop',
         local_ui_url: 'http://192.168.1.11:24000/',
-        source: 'saved',
         pinned: false,
         last_used_at_ms: 300,
       },
@@ -593,57 +582,30 @@ describe('desktopPreferences', () => {
         id: 'http://192.168.1.12:24000/',
         label: defaultSavedEnvironmentLabel('http://192.168.1.12:24000/'),
         local_ui_url: 'http://192.168.1.12:24000/',
-        source: 'saved',
         pinned: false,
         last_used_at_ms: 200,
       },
-    ]);
-    expect(second.recent_external_local_ui_urls).toEqual([
-      'http://192.168.1.11:24000/',
-      'http://192.168.1.12:24000/',
     ]);
 
     expect(deleteSavedEnvironment(second, 'http://192.168.1.12:24000/').saved_environments).toEqual([
       {
         id: 'http://192.168.1.11:24000/',
-        label: 'Laptop Updated',
+        label: 'Laptop',
         local_ui_url: 'http://192.168.1.11:24000/',
-        source: 'saved',
         pinned: false,
         last_used_at_ms: 300,
       },
     ]);
+
+    const empty = defaultDesktopPreferences();
+    expect(markSavedEnvironmentUsed(empty, {
+      local_ui_url: 'http://192.168.1.99:24000/',
+      last_used_at_ms: 900,
+    })).toBe(empty);
   });
 
-  it('remembers, saves, and deletes SSH environments through the saved catalog', () => {
-    const remembered = rememberRecentSSHEnvironmentTarget(defaultDesktopPreferences(), {
-      ssh_destination: 'devbox',
-      ssh_port: 2222,
-      auth_mode: 'key_agent',
-      remote_install_dir: 'remote_default',
-      bootstrap_strategy: 'auto',
-      release_base_url: '',
-      label: 'Lab',
-    });
-
-    expect(remembered.saved_ssh_environments).toEqual([
-      {
-        id: 'ssh:devbox:2222:key_agent:remote_default',
-        label: 'Lab',
-        ssh_destination: 'devbox',
-        ssh_port: 2222,
-        auth_mode: 'key_agent',
-        remote_install_dir: 'remote_default',
-        bootstrap_strategy: 'auto',
-        release_base_url: '',
-        connect_timeout_seconds: 10,
-        source: 'recent_auto',
-        pinned: false,
-        last_used_at_ms: expect.any(Number),
-      },
-    ]);
-
-    const saved = upsertSavedSSHEnvironment(remembered, {
+  it('marks and deletes saved SSH environments without creating catalog entries', () => {
+    const saved = upsertSavedSSHEnvironment(defaultDesktopPreferences(), {
       environment_id: '',
       label: 'SSH Lab',
       ssh_destination: 'devbox',
@@ -652,11 +614,41 @@ describe('desktopPreferences', () => {
       remote_install_dir: 'remote_default',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example.invalid/releases',
-      source: 'saved',
+      last_used_at_ms: 100,
+    });
+    const marked = markSavedSSHEnvironmentUsed(saved, {
+      environment_id: 'ssh:devbox:2222:key_agent:remote_default',
       last_used_at_ms: 500,
     });
 
-    expect(deleteSavedSSHEnvironment(saved, 'ssh:devbox:2222:key_agent:remote_default').saved_ssh_environments).toEqual([]);
+    expect(marked.saved_ssh_environments).toEqual([
+      {
+        id: 'ssh:devbox:2222:key_agent:remote_default',
+        label: 'SSH Lab',
+        ssh_destination: 'devbox',
+        ssh_port: 2222,
+        auth_mode: 'key_agent',
+        remote_install_dir: 'remote_default',
+        bootstrap_strategy: 'desktop_upload',
+        release_base_url: 'https://mirror.example.invalid/releases',
+        connect_timeout_seconds: 10,
+        pinned: false,
+        last_used_at_ms: 500,
+      },
+    ]);
+
+    const empty = defaultDesktopPreferences();
+    expect(markSavedSSHEnvironmentUsed(empty, {
+      ssh_destination: 'devbox',
+      ssh_port: 2222,
+      auth_mode: 'key_agent',
+      remote_install_dir: 'remote_default',
+      bootstrap_strategy: 'desktop_upload',
+      release_base_url: 'https://mirror.example.invalid/releases',
+      last_used_at_ms: 900,
+    })).toBe(empty);
+
+    expect(deleteSavedSSHEnvironment(marked, 'ssh:devbox:2222:key_agent:remote_default').saved_ssh_environments).toEqual([]);
   });
 
   it('persists pin state for managed, URL, and SSH environments', () => {
@@ -666,7 +658,6 @@ describe('desktopPreferences', () => {
         id: 'http://192.168.1.12:24000/',
         label: 'Staging',
         local_ui_url: 'http://192.168.1.12:24000/',
-        source: 'saved',
         pinned: false,
         last_used_at_ms: 20,
       }],
@@ -680,7 +671,6 @@ describe('desktopPreferences', () => {
         bootstrap_strategy: 'desktop_upload',
         release_base_url: '',
         connect_timeout_seconds: 10,
-        source: 'saved',
         pinned: false,
         last_used_at_ms: 10,
       }],
@@ -724,54 +714,6 @@ describe('desktopPreferences', () => {
         last_used_at_ms: expect.any(Number),
       }),
     );
-  });
-
-  it('normalizes recent URLs and derives them from saved environments ordered by last use', () => {
-    expect(normalizeRecentExternalLocalUIURLs([
-      'http://192.168.1.11:24000/',
-      'http://192.168.1.12:24000/',
-      'http://192.168.1.13:24000/',
-      'http://192.168.1.14:24000/',
-      'http://192.168.1.15:24000/',
-      'http://192.168.1.16:24000/',
-    ])).toEqual([
-      'http://192.168.1.11:24000/',
-      'http://192.168.1.12:24000/',
-      'http://192.168.1.13:24000/',
-      'http://192.168.1.14:24000/',
-      'http://192.168.1.15:24000/',
-    ]);
-
-    expect(deriveRecentExternalLocalUIURLs([
-      {
-        id: 'env-c',
-        label: 'C',
-        local_ui_url: 'http://192.168.1.13:24000/',
-        source: 'saved',
-        pinned: false,
-        last_used_at_ms: 10,
-      },
-      {
-        id: 'env-a',
-        label: 'A',
-        local_ui_url: 'http://192.168.1.11:24000/',
-        source: 'saved',
-        pinned: true,
-        last_used_at_ms: 30,
-      },
-      {
-        id: 'env-b',
-        label: 'B',
-        local_ui_url: 'http://192.168.1.12:24000/',
-        source: 'recent_auto',
-        pinned: false,
-        last_used_at_ms: 20,
-      },
-    ])).toEqual([
-      'http://192.168.1.11:24000/',
-      'http://192.168.1.12:24000/',
-      'http://192.168.1.13:24000/',
-    ]);
   });
 
   it('keeps provider environments in the control-plane catalog instead of materializing managed records', () => {

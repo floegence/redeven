@@ -28,8 +28,8 @@ import {
   loadDesktopPreferences,
   rememberLocalEnvironmentUse,
   rememberProviderEnvironmentUse,
-  rememberRecentExternalLocalUITarget,
-  rememberRecentSSHEnvironmentTarget,
+  markSavedEnvironmentUsed,
+  markSavedSSHEnvironmentUsed,
   saveDesktopPreferences,
   setLocalEnvironmentPinned,
   setProviderEnvironmentPinned,
@@ -173,6 +173,8 @@ import {
   type DesktopShellRuntimeActionResponse,
 } from '../shared/desktopShellRuntimeIPC';
 import {
+  DESKTOP_DASHBOARD_URL,
+  DESKTOP_SHELL_OPEN_DASHBOARD_CHANNEL,
   DESKTOP_SHELL_OPEN_EXTERNAL_URL_CHANNEL,
   normalizeDesktopShellOpenExternalURLRequest,
   type DesktopShellOpenExternalURLResponse,
@@ -2506,16 +2508,19 @@ function resolveSSHRuntimeReleaseTag(): string {
   return clean.startsWith('v') ? clean : `v${clean}`;
 }
 
-async function rememberRecentExternalTarget(rawURL: string): Promise<void> {
+async function markSavedExternalTargetUsed(environmentID: string, rawURL: string): Promise<void> {
   const preferences = await loadDesktopPreferencesCached();
-  await persistDesktopPreferences(rememberRecentExternalLocalUITarget(preferences, rawURL));
+  await persistDesktopPreferences(markSavedEnvironmentUsed(preferences, {
+    environment_id: environmentID,
+    local_ui_url: rawURL,
+  }));
 }
 
-async function rememberRecentSSHTarget(
-  input: DesktopSSHEnvironmentDetails & Readonly<{ label?: string; environmentID?: string }>,
+async function markSavedSSHTargetUsed(
+  input: DesktopSSHEnvironmentDetails & Readonly<{ environmentID?: string }>,
 ): Promise<void> {
   const preferences = await loadDesktopPreferencesCached();
-  await persistDesktopPreferences(rememberRecentSSHEnvironmentTarget(preferences, {
+  await persistDesktopPreferences(markSavedSSHEnvironmentUsed(preferences, {
     ssh_destination: input.ssh_destination,
     ssh_port: input.ssh_port,
     auth_mode: input.auth_mode,
@@ -2523,7 +2528,6 @@ async function rememberRecentSSHTarget(
     bootstrap_strategy: input.bootstrap_strategy,
     release_base_url: input.release_base_url,
     connect_timeout_seconds: input.connect_timeout_seconds,
-    label: input.label,
     environment_id: input.environmentID,
   }));
 }
@@ -3892,7 +3896,7 @@ async function openRemoteEnvironmentFromLauncher(
       };
     }
     resetLauncherIssueState();
-    await rememberRecentExternalTarget(optimisticSession.startup.local_ui_url);
+    await markSavedExternalTargetUsed(optimisticSession.target.environment_id, optimisticSession.startup.local_ui_url);
     focusEnvironmentSession(optimisticSession.session_key, { stealAppFocus: true });
     return launcherActionSuccess('focused_environment_window', {
       sessionKey: optimisticSession.session_key,
@@ -3926,7 +3930,7 @@ async function openRemoteEnvironmentFromLauncher(
     }
     existingSession.target = target;
     resetLauncherIssueState();
-    await rememberRecentExternalTarget(existingSession.startup.local_ui_url);
+    await markSavedExternalTargetUsed(existingSession.target.environment_id, existingSession.startup.local_ui_url);
     focusEnvironmentSession(existingSession.session_key, { stealAppFocus: true });
     broadcastDesktopWelcomeSnapshots();
     return launcherActionSuccess('focused_environment_window', {
@@ -3943,7 +3947,7 @@ async function openRemoteEnvironmentFromLauncher(
     });
   }
   resetLauncherIssueState();
-  await rememberRecentExternalTarget(prepared.startup.local_ui_url);
+  await markSavedExternalTargetUsed(target.environment_id, prepared.startup.local_ui_url);
   return launcherActionSuccess('opened_environment_window', {
     sessionKey: target.session_key,
   });
@@ -3975,9 +3979,8 @@ async function openSSHEnvironmentFromLauncher(
       };
     }
     resetLauncherIssueState();
-    await rememberRecentSSHTarget({
+    await markSavedSSHTargetUsed({
       ...sshDetails,
-      label: request.label,
       environmentID: request.environment_id,
     });
     focusEnvironmentSession(optimisticSession.session_key, { stealAppFocus: true });
@@ -4017,9 +4020,8 @@ async function openSSHEnvironmentFromLauncher(
     }
     existingSession.target = target;
     resetLauncherIssueState();
-    await rememberRecentSSHTarget({
+    await markSavedSSHTargetUsed({
       ...sshDetails,
-      label: request.label,
       environmentID: request.environment_id,
     });
     focusEnvironmentSession(existingSession.session_key, { stealAppFocus: true });
@@ -4043,9 +4045,8 @@ async function openSSHEnvironmentFromLauncher(
     });
   }
   resetLauncherIssueState();
-  await rememberRecentSSHTarget({
+  await markSavedSSHTargetUsed({
     ...sshDetails,
-    label: target.label,
     environmentID: target.environment_id,
   });
   return launcherActionSuccess('opened_environment_window', {
@@ -4087,10 +4088,9 @@ async function startEnvironmentRuntimeFromLauncher(
         forceRuntimeUpdate: request.force_runtime_update === true,
       });
       resetLauncherIssueState();
-      await rememberRecentSSHTarget({
+      await markSavedSSHTargetUsed({
         ...runtimeRecord.details,
         environmentID: runtimeRecord.environment_id,
-        label: runtimeRecord.label,
       });
       broadcastDesktopWelcomeSnapshots();
       return launcherActionSuccess('started_environment_runtime');
@@ -4876,7 +4876,6 @@ async function upsertSavedEnvironmentFromWelcome(
     environment_id: environmentID,
     label,
     local_ui_url: externalLocalUIURL,
-    source: 'saved',
     last_used_at_ms: existing?.last_used_at_ms ?? Date.now(),
   });
   await persistDesktopPreferences(next);
@@ -4915,7 +4914,6 @@ async function upsertSavedSSHEnvironmentFromWelcome(
     bootstrap_strategy: details.bootstrap_strategy,
     release_base_url: details.release_base_url,
     connect_timeout_seconds: details.connect_timeout_seconds,
-    source: 'saved',
     last_used_at_ms: existing?.last_used_at_ms ?? Date.now(),
   });
   await persistDesktopPreferences(next);
@@ -5631,6 +5629,19 @@ if (!app.requestSingleInstanceLock()) {
 
     try {
       await openExternalURL(normalized.url);
+      return {
+        ok: true,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
+  });
+  ipcMain.handle(DESKTOP_SHELL_OPEN_DASHBOARD_CHANNEL, async (): Promise<DesktopShellOpenExternalURLResponse> => {
+    try {
+      await openExternalURL(DESKTOP_DASHBOARD_URL);
       return {
         ok: true,
       };

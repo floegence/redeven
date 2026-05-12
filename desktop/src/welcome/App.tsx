@@ -226,6 +226,7 @@ declare global {
     redevenDesktopSettings?: DesktopSettingsBridge;
     redevenDesktopShell?: Readonly<{
       openConnectionCenter?: () => Promise<void>;
+      openDashboard?: () => Promise<unknown>;
       openWindow?: (kind: unknown) => Promise<void>;
     }>;
   }
@@ -1124,6 +1125,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (typeof window.redevenDesktopShell?.openWindow === 'function') {
       void window.redevenDesktopShell.openWindow('connection_center');
     }
+  }
+
+  function openRedevenDashboard(): void {
+    void window.redevenDesktopShell?.openDashboard?.();
   }
 
   function openSettingsSurface(environmentID = selectedSettingsEnvironmentEntry()?.id ?? ''): void {
@@ -2158,40 +2163,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
   }
 
-  async function saveEnvironmentFromLibrary(environment: DesktopEnvironmentEntry): Promise<void> {
-    if (environment.kind === 'local_environment') {
-      setErrorMessage('connect', 'The Local Environment is already saved on this device.');
-      return;
-    }
-    if (environment.kind === 'ssh_environment') {
-      const details = environment.ssh_details;
-      if (!details) {
-        setErrorMessage('connect', 'SSH connection details are missing.');
-        return;
-      }
-      await upsertSavedSSHEnvironment({
-        environment_id: environment.id,
-        label: environment.label,
-        details,
-        errorTarget: 'connect',
-        successMessage: environment.category === 'saved'
-          ? 'Connection updated.'
-          : 'Connection saved to Environment Library.',
-      });
-      return;
-    }
-
-    await upsertSavedEnvironment({
-      environment_id: environment.id,
-      label: environment.label,
-      external_local_ui_url: environment.local_ui_url,
-      errorTarget: 'connect',
-      successMessage: environment.category === 'saved'
-        ? 'Connection updated.'
-        : 'Connection saved to Environment Library.',
-    });
-  }
-
   function validateConnectionDialogFields(state: ConnectionDialogState): Partial<Record<string, string>> {
     const errors: Partial<Record<string, string>> = {};
     if (!trimString(state?.label ?? '')) {
@@ -2281,7 +2252,18 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       }, 'dialog');
       return;
     }
-    await openRemoteEnvironment(state.external_local_ui_url, 'dialog');
+    const saved = await upsertSavedEnvironment({
+      environment_id: state.environment_id,
+      label: state.label,
+      external_local_ui_url: state.external_local_ui_url,
+      errorTarget: 'dialog',
+      successMessage: state.mode === 'edit'
+        ? 'Connection updated.'
+        : 'Connection saved to Environment Library.',
+    });
+    if (saved) {
+      await openRemoteEnvironment(state.external_local_ui_url, 'dialog');
+    }
   }
 
   async function toggleEnvironmentPinned(environment: DesktopEnvironmentEntry): Promise<void> {
@@ -2421,7 +2403,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         skipLinkLabel={DESKTOP_SKIP_LINK_LABEL}
         topBarLabel={DESKTOP_TOP_BAR_LABEL}
         logo={(
-          <TopBarIconButton label="Connect Environment" onClick={() => showConnectEnvironment()}>
+          <TopBarIconButton label="Open Redeven Dashboard" onClick={() => openRedevenDashboard()}>
             <img
               src={headerLogoSrc()}
               alt="Redeven"
@@ -2485,7 +2467,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           runEnvironmentGuidanceAction={runEnvironmentGuidanceAction}
           toggleEnvironmentPinned={toggleEnvironmentPinned}
           copyEnvironmentValue={copyEnvironmentValue}
-          saveEnvironmentFromLibrary={saveEnvironmentFromLibrary}
           editEnvironment={startEditingEnvironment}
           deleteEnvironment={setDeleteTarget}
           controlPlanes={controlPlanes()}
@@ -2801,7 +2782,6 @@ function ConnectEnvironmentSurface(props: Readonly<{
   ) => Promise<EnvironmentGuidanceActionResolution>;
   toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
-  saveEnvironmentFromLibrary: (environment: DesktopEnvironmentEntry) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
   controlPlanes: readonly DesktopControlPlaneSummary[];
@@ -3077,7 +3057,6 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
                 toggleEnvironmentPinned={props.toggleEnvironmentPinned}
                 copyEnvironmentValue={props.copyEnvironmentValue}
-                saveEnvironment={props.saveEnvironmentFromLibrary}
                 editEnvironment={props.editEnvironment}
                 deleteEnvironment={props.deleteEnvironment}
                 environmentFailures={props.environmentFailures}
@@ -3119,7 +3098,6 @@ function EnvironmentCardsPanel(props: Readonly<{
   ) => Promise<EnvironmentGuidanceActionResolution>;
   toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
-  saveEnvironment: (environment: DesktopEnvironmentEntry) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
   environmentFailures: ReadonlyMap<string, EnvironmentFailureState>;
@@ -3290,7 +3268,6 @@ function EnvironmentCardsPanel(props: Readonly<{
                     runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
                     toggleEnvironmentPinned={props.toggleEnvironmentPinned}
                     copyEnvironmentValue={props.copyEnvironmentValue}
-                    saveEnvironment={props.saveEnvironment}
                     editEnvironment={props.editEnvironment}
                     deleteEnvironment={props.deleteEnvironment}
                     setGuidanceSession={(nextSession) => setGuidanceSessionState(nextSession)}
@@ -3322,7 +3299,6 @@ function EnvironmentCardsPanel(props: Readonly<{
                     runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
                     toggleEnvironmentPinned={props.toggleEnvironmentPinned}
                     copyEnvironmentValue={props.copyEnvironmentValue}
-                    saveEnvironment={props.saveEnvironment}
                     editEnvironment={props.editEnvironment}
                     deleteEnvironment={props.deleteEnvironment}
                     setGuidanceSession={(nextSession) => setGuidanceSessionState(nextSession)}
@@ -3797,11 +3773,11 @@ function EnvironmentSplitActionButton(props: Readonly<{
   const primaryButtonClass = createMemo(() => (
     cn('w-full justify-center', hasMenuActions() && 'rounded-r-none border-r-0')
   ));
-  const primaryActionIcon = createMemo(() => (
+  const renderPrimaryActionIcon = () => (
     props.presentation.primary_action.intent === 'reconnect_provider'
       ? <ShieldCheck class="mr-1 h-3.5 w-3.5" />
       : null
-  ));
+  );
   let rootRef: HTMLDivElement | undefined;
   let menuRef: HTMLDivElement | undefined;
   let menuFocusFrame = 0;
@@ -3856,7 +3832,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
     menuRef = undefined;
   });
 
-  const primaryButton = (
+  const renderPrimaryButton = () => (
     <Button
       size="sm"
       variant={props.presentation.primary_action.variant}
@@ -3869,7 +3845,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
         props.onRunAction(props.presentation.primary_action);
       }}
     >
-      {primaryActionIcon()}
+      {renderPrimaryActionIcon()}
       {props.presentation.primary_action.label}
     </Button>
   );
@@ -3877,7 +3853,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
   return (
     <div ref={rootRef} class="redeven-split-action flex-1">
       <div class="redeven-split-action-primary">
-        <Show when={primaryActionOverlay()} fallback={primaryButton}>
+        <Show when={primaryActionOverlay()} fallback={renderPrimaryButton()}>
           <Show
             when={popoverOverlay()}
             fallback={(
@@ -3886,7 +3862,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
                 placement="top"
                 anchorClass="flex w-full"
               >
-                {primaryButton}
+                {renderPrimaryButton()}
               </DesktopTooltip>
             )}
           >
@@ -4092,7 +4068,6 @@ function EnvironmentConnectionCard(props: Readonly<{
   ) => Promise<EnvironmentGuidanceActionResolution>;
   toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
-  saveEnvironment: (environment: DesktopEnvironmentEntry) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
   environmentFailure: EnvironmentFailureState | null;
@@ -4264,19 +4239,6 @@ function EnvironmentConnectionCard(props: Readonly<{
               <Pin class="h-3.5 w-3.5" />
             </ConsoleActionIconButton>
           </DesktopTooltip>
-          <Show when={props.environment.can_save}>
-            <DesktopTooltip content="Save" placement="top">
-              <ConsoleActionIconButton
-                title="Save connection"
-                aria-label={`Save ${props.environment.label}`}
-                onClick={() => {
-                  void props.saveEnvironment(props.environment);
-                }}
-              >
-                <Save class="h-3.5 w-3.5" />
-              </ConsoleActionIconButton>
-            </DesktopTooltip>
-          </Show>
           <Show when={props.environment.can_edit}>
             <DesktopTooltip
               content="Settings"

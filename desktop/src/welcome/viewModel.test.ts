@@ -14,6 +14,7 @@ import {
 import type { RuntimeServiceOpenReadiness, RuntimeServiceSnapshot } from '../shared/runtimeService';
 import {
   testDesktopPreferences,
+  testProviderEnvironment,
   testProviderBoundLocalEnvironment,
   testLocalEnvironment,
   testLocalEnvironmentSession,
@@ -160,7 +161,30 @@ function providerRuntimeService(openReadiness: RuntimeServiceOpenReadiness = { s
 
 describe('buildEnvironmentCardModel', () => {
   it('builds local, provider, URL, and SSH cards from the aggregated launcher entries', () => {
-    const local = testLocalEnvironment();
+    const local = testLocalEnvironment({
+      currentRuntime: {
+        local_ui_url: 'http://localhost:23998/',
+        desktop_managed: true,
+        effective_run_mode: 'desktop',
+        remote_enabled: true,
+        runtime_service: {
+          runtime_version: 'v1.4.2',
+          protocol_version: 'redeven-runtime-v1',
+          service_owner: 'desktop',
+          desktop_managed: true,
+          effective_run_mode: 'desktop',
+          remote_enabled: true,
+          compatibility: 'compatible',
+          open_readiness: { state: 'openable' },
+          active_workload: {
+            terminal_count: 2,
+            session_count: 1,
+            task_count: 0,
+            port_forward_count: 1,
+          },
+        },
+      },
+    });
     const localServe = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo', {
       label: 'Demo Local Serve',
     });
@@ -173,7 +197,6 @@ describe('buildEnvironmentCardModel', () => {
             id: 'http://192.168.1.12:24000/',
             label: 'Staging',
             local_ui_url: 'http://192.168.1.12:24000/',
-            source: 'saved',
             pinned: false,
             last_used_at_ms: 20,
           },
@@ -188,12 +211,10 @@ describe('buildEnvironmentCardModel', () => {
             remote_install_dir: '/opt/redeven-desktop/runtime',
             bootstrap_strategy: 'desktop_upload',
             release_base_url: '',
-            source: 'saved',
             pinned: false,
             last_used_at_ms: 30,
           },
         ],
-        recent_external_local_ui_urls: ['http://192.168.1.12:24000/'],
       }),
       controlPlanes: [controlPlane],
       openSessions: [
@@ -319,9 +340,9 @@ describe('buildEnvironmentCardModel', () => {
     }));
     expect(buildEnvironmentCardModel(providerEntry!)).toEqual(expect.objectContaining({
       kind_label: 'Provider',
-      status_label: 'RUNTIME READY',
-      target_primary: 'http://127.0.0.1:24001/',
-      target_secondary: 'https://cp.example.invalid/env/env_demo',
+      status_label: 'RUNTIME OFFLINE',
+      target_primary: 'https://cp.example.invalid/env/env_demo',
+      target_secondary: '',
     }));
     expect(buildEnvironmentCardModel(urlEntry!)).toEqual(expect.objectContaining({
       kind_label: 'Redeven URL',
@@ -343,9 +364,6 @@ describe('buildEnvironmentCardModel', () => {
     ]);
     expect(buildEnvironmentCardFactsModel(providerEntry!)).toEqual([
       defaultFact('RUNS ON', 'This device'),
-      defaultFact('RUNTIME SERVICE', 'Running'),
-      defaultFact('VERSION', 'v1.4.2'),
-      defaultFact('ACTIVE WORK', '1 terminal, 1 session'),
       defaultFact('PROVIDER', 'Demo Control Plane'),
       defaultFact('SOURCE ENV', 'env_demo'),
     ]);
@@ -364,12 +382,6 @@ describe('buildEnvironmentCardModel', () => {
     ]);
 
     expect(buildEnvironmentCardEndpointsModel(providerEntry!)).toEqual([
-      {
-        label: 'LOCAL',
-        value: 'http://127.0.0.1:24001/',
-        monospace: true,
-        copy_label: 'Copy local endpoint',
-      },
       {
         label: 'REMOTE',
         value: 'https://cp.example.invalid/env/env_demo',
@@ -403,7 +415,6 @@ describe('buildEnvironmentCardModel', () => {
           id: 'http://192.168.1.12:24000/',
           label: 'Staging',
           local_ui_url: 'http://192.168.1.12:24000/',
-          source: 'saved',
           pinned: false,
           last_used_at_ms: 20,
         }],
@@ -416,7 +427,6 @@ describe('buildEnvironmentCardModel', () => {
           remote_install_dir: '/opt/redeven-desktop/runtime',
           bootstrap_strategy: 'desktop_upload',
           release_base_url: '',
-          source: 'saved',
           pinned: false,
           last_used_at_ms: 30,
         }],
@@ -440,7 +450,30 @@ describe('buildEnvironmentCardModel', () => {
   });
 
   it('shows runtime maintenance state in the stable card fact slot', () => {
-    const local = testLocalEnvironment();
+    const local = testLocalEnvironment({
+      currentRuntime: {
+        local_ui_url: 'http://localhost:23998/',
+        desktop_managed: true,
+        effective_run_mode: 'desktop',
+        remote_enabled: true,
+        runtime_service: {
+          runtime_version: 'v1.4.3',
+          protocol_version: 'redeven-runtime-v1',
+          service_owner: 'desktop',
+          desktop_managed: true,
+          effective_run_mode: 'desktop',
+          remote_enabled: true,
+          compatibility: 'update_available',
+          open_readiness: { state: 'openable' },
+          active_workload: {
+            terminal_count: 1,
+            session_count: 0,
+            task_count: 0,
+            port_forward_count: 0,
+          },
+        },
+      },
+    });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: local,
@@ -492,7 +525,6 @@ describe('buildEnvironmentCardModel', () => {
           remote_install_dir: '/opt/redeven-desktop/runtime',
           bootstrap_strategy: 'desktop_upload',
           release_base_url: '',
-          source: 'saved',
           pinned: false,
           last_used_at_ms: 30,
         }],
@@ -621,7 +653,6 @@ describe('buildEnvironmentCardModel', () => {
           remote_install_dir: '/opt/redeven-desktop/runtime',
           bootstrap_strategy: 'desktop_upload',
           release_base_url: '',
-          source: 'saved',
           pinned: false,
           last_used_at_ms: 30,
         }],
@@ -670,6 +701,88 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildProviderBackedEnvironmentActionModel(entry!).action_presentation.primary_action_overlay).toMatchObject({
       kind: 'popover',
       title: 'Runtime update required',
+    });
+  });
+
+  it('keeps offline runtime controls separate from the primary Open action', () => {
+    const localSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment(),
+      }),
+    });
+    const localEntry = localSnapshot.environments.find((environment) => environment.kind === 'local_environment');
+    expect(localEntry).toBeTruthy();
+    expect(buildProviderBackedEnvironmentActionModel(localEntry!)).toMatchObject({
+      status_label: 'RUNTIME OFFLINE',
+      status_tone: 'warning',
+      action_presentation: {
+        primary_action: {
+          intent: 'open',
+          label: 'Open',
+          enabled: false,
+          variant: 'default',
+        },
+        primary_action_overlay: {
+          kind: 'popover',
+          tone: 'warning',
+          eyebrow: 'Runtime offline',
+          title: 'Start the local runtime to continue',
+          detail: 'Open becomes available once the runtime is ready on this device.',
+          actions: [
+            {
+              label: 'Start runtime locally',
+              emphasis: 'primary',
+              action: {
+                intent: 'start_runtime',
+                label: 'Start runtime',
+                enabled: true,
+                variant: 'outline',
+              },
+            },
+            {
+              label: 'Refresh status',
+              emphasis: 'secondary',
+              action: {
+                intent: 'refresh_runtime',
+                label: 'Refresh runtime status',
+                enabled: true,
+                variant: 'outline',
+              },
+            },
+          ],
+        },
+      },
+    });
+
+    const externalSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        saved_environments: [{
+          id: 'http://192.168.1.77:24000/',
+          label: 'Offline URL',
+          local_ui_url: 'http://192.168.1.77:24000/',
+          pinned: false,
+          last_used_at_ms: 20,
+        }],
+      }),
+    });
+    const externalEntry = externalSnapshot.environments.find((environment) => environment.kind === 'external_local_ui');
+    expect(externalEntry).toBeTruthy();
+    expect(buildProviderBackedEnvironmentActionModel(externalEntry!)).toMatchObject({
+      status_label: 'RUNTIME OFFLINE',
+      status_tone: 'warning',
+      action_presentation: {
+        primary_action: {
+          intent: 'open',
+          label: 'Open',
+          enabled: false,
+          variant: 'default',
+        },
+        primary_action_overlay: {
+          kind: 'tooltip',
+          tone: 'warning',
+          message: 'Runtime is offline or unavailable right now. Start it from its source, then refresh status.',
+        },
+      },
     });
   });
 
@@ -774,7 +887,15 @@ describe('buildEnvironmentCardModel', () => {
 
     const openLocalServeSnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        local_environment: testLocalEnvironment(),
+        local_environment: testLocalEnvironment({
+          currentRuntime: {
+            local_ui_url: 'http://127.0.0.1:24001/',
+            desktop_managed: true,
+            effective_run_mode: 'desktop',
+            ...providerRuntimeState('env_demo'),
+            runtime_service: providerRuntimeService(),
+          },
+        }),
         control_planes: [controlPlane],
       }),
       controlPlanes: [controlPlane],
@@ -835,20 +956,45 @@ describe('buildEnvironmentCardModel', () => {
     });
     const readyEntry = readySnapshot.environments.find((environment) => environment.kind === 'provider_environment');
     expect(buildProviderBackedEnvironmentActionModel(readyEntry!)).toEqual({
-      status_label: 'RUNTIME PREPARING',
+      status_label: 'RUNTIME OFFLINE',
       status_tone: 'warning',
       action_presentation: {
         kind: 'split_button',
         primary_action: {
           intent: 'open',
-          label: 'Preparing…',
+          label: 'Open',
           enabled: false,
           variant: 'default',
         },
         primary_action_overlay: {
-          kind: 'tooltip',
+          kind: 'popover',
           tone: 'warning',
-          message: 'Runtime readiness is not available yet.',
+          eyebrow: 'Runtime offline',
+          title: 'Use Local Environment to continue',
+          detail: 'Desktop will link this Local Environment profile to the provider Environment, then open it locally.',
+          actions: [
+            {
+              label: 'Use Locally',
+              emphasis: 'primary',
+              action: {
+                intent: 'serve_runtime_locally',
+                label: 'Use Locally',
+                enabled: true,
+                variant: 'outline',
+                route: 'local_host',
+              },
+            },
+            {
+              label: 'Refresh status',
+              emphasis: 'secondary',
+              action: {
+                intent: 'refresh_runtime',
+                label: 'Refresh runtime status',
+                enabled: true,
+                variant: 'outline',
+              },
+            },
+          ],
         },
         menu_button_label: 'Runtime actions',
         menu_actions: [
@@ -885,6 +1031,43 @@ describe('buildEnvironmentCardModel', () => {
             },
           },
         ],
+      },
+    });
+  });
+
+  it('shows provider remote readiness only when the effective provider route is remote', () => {
+    const readyControlPlane = buildControlPlaneSummary({
+      status: 'online',
+      lifecycleStatus: 'active',
+    });
+    const remotePreferred = testProviderEnvironment('https://cp.example.invalid', 'env_demo', {
+      preferredOpenRoute: 'remote_desktop',
+    });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment(),
+        control_planes: [readyControlPlane],
+        provider_environments: [remotePreferred],
+      }),
+      controlPlanes: [readyControlPlane],
+    });
+    const entry = snapshot.environments.find((environment) => environment.kind === 'provider_environment');
+
+    expect(entry).toMatchObject({
+      provider_default_open_route: 'remote_desktop',
+      runtime_health: expect.objectContaining({
+        status: 'online',
+        source: 'provider_batch_probe',
+      }),
+    });
+    expect(buildProviderBackedEnvironmentActionModel(entry!)).toMatchObject({
+      status_label: 'RUNTIME PREPARING',
+      action_presentation: {
+        primary_action: {
+          intent: 'open',
+          label: 'Preparing…',
+          enabled: false,
+        },
       },
     });
   });
@@ -1002,7 +1185,15 @@ describe('buildEnvironmentCardModel', () => {
 
     const focusableLocalServe = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        local_environment: testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo'),
+        local_environment: testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo', {
+          currentRuntime: {
+            local_ui_url: 'http://127.0.0.1:24001/',
+            desktop_managed: true,
+            effective_run_mode: 'desktop',
+            ...providerRuntimeState('env_demo'),
+            runtime_service: providerRuntimeService(),
+          },
+        }),
       }),
       controlPlanes: [buildControlPlaneSummary({})],
       openSessions: [
@@ -1065,7 +1256,15 @@ describe('buildEnvironmentCardModel', () => {
   });
 
   it('treats opening managed sessions as a disabled Opening state instead of Focus', () => {
-    const localServe = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_opening');
+    const localServe = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_opening', {
+      currentRuntime: {
+        local_ui_url: 'http://localhost:23998/',
+        desktop_managed: true,
+        effective_run_mode: 'desktop',
+        ...providerRuntimeState('env_opening'),
+        runtime_service: providerRuntimeService(),
+      },
+    });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: localServe,
@@ -1205,7 +1404,6 @@ describe('buildEnvironmentCardModel', () => {
           id: 'http://192.168.1.12:24000/',
           label: 'Staging',
           local_ui_url: 'http://192.168.1.12:24000/',
-          source: 'saved',
           pinned: true,
           last_used_at_ms: 20,
         }],
