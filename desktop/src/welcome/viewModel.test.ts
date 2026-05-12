@@ -340,7 +340,7 @@ describe('buildEnvironmentCardModel', () => {
     }));
     expect(buildEnvironmentCardModel(providerEntry!)).toEqual(expect.objectContaining({
       kind_label: 'Provider',
-      status_label: 'RUNTIME OFFLINE',
+      status_label: 'RUNTIME READY',
       target_primary: 'https://cp.example.invalid/env/env_demo',
       target_secondary: '',
     }));
@@ -804,46 +804,18 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(providerOnlyEntry).toBeTruthy();
     expect(buildProviderBackedEnvironmentActionModel(providerOnlyEntry!)).toEqual({
-      status_label: 'RUNTIME OFFLINE',
-      status_tone: 'warning',
+      status_label: 'RUNTIME READY',
+      status_tone: 'success',
       action_presentation: {
         kind: 'split_button',
         primary_action: {
           intent: 'open',
           label: 'Open',
-          enabled: false,
+          enabled: true,
           variant: 'default',
+          route: 'local_host',
         },
-        primary_action_overlay: {
-          kind: 'popover',
-          tone: 'warning',
-          eyebrow: 'Runtime offline',
-          title: 'Use Local Environment to continue',
-          detail: 'Desktop will link this Local Environment profile to the provider Environment, then open it locally.',
-          actions: [
-            {
-              label: 'Use Locally',
-              emphasis: 'primary',
-              action: {
-                intent: 'serve_runtime_locally',
-                label: 'Use Locally',
-                enabled: true,
-                variant: 'outline',
-                route: 'local_host',
-              },
-            },
-            {
-              label: 'Refresh status',
-              emphasis: 'secondary',
-              action: {
-                intent: 'refresh_runtime',
-                label: 'Refresh runtime status',
-                enabled: true,
-                variant: 'outline',
-              },
-            },
-          ],
-        },
+        primary_action_overlay: undefined,
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
@@ -884,6 +856,40 @@ describe('buildEnvironmentCardModel', () => {
     const savedLocalServeProviderEntry = savedLocalServeSnapshot.environments.find((environment) => environment.kind === 'provider_environment');
     expect(savedLocalServeProviderEntry?.provider_local_runtime_state).toBe('not_running');
     expect(buildProviderBackedEnvironmentActionModel(savedLocalServeProviderEntry!)).toEqual(buildProviderBackedEnvironmentActionModel(providerOnlyEntry!));
+
+    const unboundRuntimeSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment({
+          currentRuntime: {
+            local_ui_url: 'http://127.0.0.1:24001/',
+            desktop_managed: true,
+            effective_run_mode: 'desktop',
+            runtime_service: providerRuntimeService(),
+          },
+        }),
+        control_planes: [controlPlane],
+      }),
+      controlPlanes: [controlPlane],
+    });
+    const unboundRuntimeProviderEntry = unboundRuntimeSnapshot.environments.find((environment) => environment.kind === 'provider_environment');
+    expect(unboundRuntimeProviderEntry?.provider_local_runtime_plan).toMatchObject({
+      state: 'restart_to_bind',
+      can_open: true,
+      requires_restart: true,
+    });
+    expect(buildProviderBackedEnvironmentActionModel(unboundRuntimeProviderEntry!)).toMatchObject({
+      status_label: 'RUNTIME READY',
+      status_tone: 'success',
+      action_presentation: {
+        primary_action: {
+          intent: 'open',
+          label: 'Open',
+          enabled: true,
+          route: 'local_host',
+        },
+        primary_action_overlay: undefined,
+      },
+    });
 
     const openLocalServeSnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
@@ -956,46 +962,18 @@ describe('buildEnvironmentCardModel', () => {
     });
     const readyEntry = readySnapshot.environments.find((environment) => environment.kind === 'provider_environment');
     expect(buildProviderBackedEnvironmentActionModel(readyEntry!)).toEqual({
-      status_label: 'RUNTIME OFFLINE',
-      status_tone: 'warning',
+      status_label: 'RUNTIME READY',
+      status_tone: 'success',
       action_presentation: {
         kind: 'split_button',
         primary_action: {
           intent: 'open',
           label: 'Open',
-          enabled: false,
+          enabled: true,
           variant: 'default',
+          route: 'local_host',
         },
-        primary_action_overlay: {
-          kind: 'popover',
-          tone: 'warning',
-          eyebrow: 'Runtime offline',
-          title: 'Use Local Environment to continue',
-          detail: 'Desktop will link this Local Environment profile to the provider Environment, then open it locally.',
-          actions: [
-            {
-              label: 'Use Locally',
-              emphasis: 'primary',
-              action: {
-                intent: 'serve_runtime_locally',
-                label: 'Use Locally',
-                enabled: true,
-                variant: 'outline',
-                route: 'local_host',
-              },
-            },
-            {
-              label: 'Refresh status',
-              emphasis: 'secondary',
-              action: {
-                intent: 'refresh_runtime',
-                label: 'Refresh runtime status',
-                enabled: true,
-                variant: 'outline',
-              },
-            },
-          ],
-        },
+        primary_action_overlay: undefined,
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
@@ -1031,6 +1009,77 @@ describe('buildEnvironmentCardModel', () => {
             },
           },
         ],
+      },
+    });
+  });
+
+  it('blocks provider Open when relinking the singleton runtime would interrupt active work', () => {
+    const controlPlane = buildControlPlaneSummary({
+      status: 'offline',
+      lifecycleStatus: 'suspended',
+    });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment({
+          currentRuntime: {
+            local_ui_url: 'http://127.0.0.1:24001/',
+            desktop_managed: true,
+            effective_run_mode: 'desktop',
+            runtime_service: providerRuntimeService({
+              state: 'openable',
+            }),
+          },
+        }),
+        control_planes: [controlPlane],
+      }),
+      controlPlanes: [controlPlane],
+    });
+    const entry = snapshot.environments.find((environment) => environment.kind === 'provider_environment');
+    const busyRuntimeService = {
+      ...providerRuntimeService(),
+      active_workload: {
+        terminal_count: 1,
+        session_count: 0,
+        task_count: 0,
+        port_forward_count: 0,
+      },
+    };
+    const busySnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment({
+          currentRuntime: {
+            local_ui_url: 'http://127.0.0.1:24001/',
+            desktop_managed: true,
+            effective_run_mode: 'desktop',
+            runtime_service: busyRuntimeService,
+          },
+        }),
+        control_planes: [controlPlane],
+      }),
+      controlPlanes: [controlPlane],
+    });
+    const busyEntry = busySnapshot.environments.find((environment) => environment.kind === 'provider_environment');
+
+    expect(entry?.provider_local_runtime_plan?.state).toBe('restart_to_bind');
+    expect(busyEntry?.provider_local_runtime_plan).toMatchObject({
+      state: 'blocked_active_work',
+      can_open: false,
+      requires_confirmation: true,
+    });
+    expect(buildProviderBackedEnvironmentActionModel(busyEntry!)).toMatchObject({
+      status_label: 'RUNTIME BUSY',
+      status_tone: 'warning',
+      action_presentation: {
+        primary_action: {
+          intent: 'open',
+          label: 'Open',
+          enabled: false,
+          route: 'local_host',
+        },
+        primary_action_overlay: {
+          kind: 'popover',
+          title: 'Runtime is busy',
+        },
       },
     });
   });
@@ -1155,6 +1204,7 @@ describe('buildEnvironmentCardModel', () => {
           label: 'Open',
           enabled: true,
           variant: 'default',
+          route: 'local_host',
         },
         primary_action_overlay: undefined,
         menu_button_label: 'Runtime actions',

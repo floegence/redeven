@@ -630,6 +630,21 @@ function runtimeStatusLabel(environment: DesktopEnvironmentEntry): string {
   if (environment.kind === 'provider_environment' && environment.control_plane_sync_state === 'auth_required') {
     return 'RECONNECT REQUIRED';
   }
+  const localRuntimePlan = providerPrimaryLocalRuntimePlan(environment);
+  if (localRuntimePlan) {
+    if (localRuntimePlan.can_open) {
+      if (localRuntimePlan.state === 'restart_to_update') {
+        return 'UPDATE READY';
+      }
+      return 'RUNTIME READY';
+    }
+    if (localRuntimePlan.state === 'blocked_active_work') {
+      return 'RUNTIME BUSY';
+    }
+    if (localRuntimePlan.state === 'blocked_external_runtime') {
+      return 'EXTERNAL RUNTIME';
+    }
+  }
   if (environment.runtime_health.status !== 'online') {
     return 'RUNTIME OFFLINE';
   }
@@ -646,9 +661,23 @@ function runtimeStatusLabel(environment: DesktopEnvironmentEntry): string {
 }
 
 function runtimeStatusTone(environment: DesktopEnvironmentEntry): EnvironmentCardTone {
+  if (environment.kind === 'provider_environment' && environment.control_plane_sync_state === 'auth_required') {
+    return 'warning';
+  }
+  const localRuntimePlan = providerPrimaryLocalRuntimePlan(environment);
+  if (localRuntimePlan) {
+    return localRuntimePlan.can_open ? 'success' : 'warning';
+  }
   return environment.runtime_health.status === 'online' && runtimeServiceIsOpenable(environmentRuntimeService(environment))
     ? 'success'
     : 'warning';
+}
+
+function providerPrimaryLocalRuntimePlan(environment: DesktopEnvironmentEntry) {
+  if (environment.kind !== 'provider_environment' || providerPrimaryRoute(environment) !== 'local_host') {
+    return undefined;
+  }
+  return environment.provider_local_runtime_plan;
 }
 
 function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentActionModel {
@@ -669,14 +698,20 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
     };
   }
   const snapshot = environmentRuntimeService(environment);
+  const localRuntimePlan = providerPrimaryLocalRuntimePlan(environment);
+  const canOpenProviderLocalRuntime = localRuntimePlan?.can_open === true;
   const blocked = snapshot?.open_readiness?.state === 'blocked';
+  const primaryRoute = environment.kind === 'provider_environment' ? providerPrimaryRoute(environment) : '';
   return {
     intent: 'open',
-    label: environment.runtime_health.status === 'online' && !runtimeServiceIsOpenable(snapshot)
+    label: environment.runtime_health.status === 'online' && !runtimeServiceIsOpenable(snapshot) && !canOpenProviderLocalRuntime
       ? blocked ? 'Open' : 'Preparing…'
       : 'Open',
-    enabled: environment.runtime_health.status === 'online' && runtimeServiceIsOpenable(snapshot),
+    enabled: canOpenProviderLocalRuntime || (environment.runtime_health.status === 'online' && runtimeServiceIsOpenable(snapshot)),
     variant: 'default',
+    ...(primaryRoute
+      ? { route: primaryRoute }
+      : {}),
   };
 }
 
@@ -974,6 +1009,26 @@ function primaryActionOverlay(
       kind: 'tooltip',
       tone: 'warning',
       message: 'Desktop needs fresh provider authorization before it can request a one-time Local Environment bootstrap ticket for this Environment.',
+    };
+  }
+  const localRuntimePlan = providerPrimaryLocalRuntimePlan(environment);
+  if (localRuntimePlan) {
+    if (localRuntimePlan.can_open) {
+      return undefined;
+    }
+    return {
+      kind: 'popover',
+      tone: 'warning',
+      eyebrow: localRuntimePlan.state === 'blocked_external_runtime' ? 'Runtime managed externally' : 'Runtime blocked',
+      title: localRuntimePlan.state === 'blocked_active_work'
+        ? 'Runtime is busy'
+        : localRuntimePlan.state === 'blocked_external_runtime'
+          ? 'Runtime is managed elsewhere'
+          : 'Runtime cannot open yet',
+      detail: localRuntimePlan.message,
+      actions: blockedPrimaryActionRefreshGuidanceAction(menuActions)
+        ? [blockedPrimaryActionRefreshGuidanceAction(menuActions)!]
+        : [],
     };
   }
   if (environment.runtime_health.status === 'online') {

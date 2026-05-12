@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import {
   testDesktopPreferences,
+  testLocalEnvironment,
+  testProviderEnvironment,
   testProviderBoundLocalEnvironment,
   testLocalEnvironmentSession,
 } from '../testSupport/desktopTestHelpers';
@@ -76,10 +78,34 @@ describe('environmentGuidanceSession', () => {
     });
   });
 
-  it('keeps the panel open with a warning when refresh still resolves to an offline environment', () => {
+  it('keeps the panel open with plan guidance when refresh still resolves to a blocked environment', () => {
     const environment = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        local_environment: testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo'),
+        local_environment: testLocalEnvironment({
+          currentRuntime: {
+            local_ui_url: 'http://127.0.0.1:24001/',
+            desktop_managed: true,
+            effective_run_mode: 'desktop',
+            runtime_service: {
+              protocol_version: 'redeven-runtime-v1',
+              service_owner: 'desktop',
+              desktop_managed: true,
+              effective_run_mode: 'desktop',
+              remote_enabled: false,
+              compatibility: 'compatible',
+              open_readiness: { state: 'openable' },
+              active_workload: {
+                terminal_count: 1,
+                session_count: 0,
+                task_count: 0,
+                port_forward_count: 0,
+              },
+            },
+          },
+        }),
+        provider_environments: [
+          testProviderEnvironment('https://cp.example.invalid', 'env_demo'),
+        ],
       }),
     }).environments.find((entry) => entry.kind === 'provider_environment');
 
@@ -92,8 +118,8 @@ describe('environmentGuidanceSession', () => {
       pending_intent: null,
       feedback: {
         tone: 'warning',
-        title: 'Runtime is still offline',
-        detail: 'The runtime is still offline on this device. Start it from its source, then try again.',
+        title: 'Runtime is busy',
+        detail: 'The Local Runtime is busy. Close active runtime work before Desktop relinks it to this provider Environment.',
       },
     }));
   });

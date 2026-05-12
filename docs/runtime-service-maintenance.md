@@ -161,6 +161,8 @@ Env App protocol SDK types.
 | `managed_elsewhere` | Desktop cannot own lifecycle | Stable card state + toast on blocked action |
 | `unknown` | Metadata unavailable | Quiet degraded state; diagnostics available |
 
+Desktop treats the runtime as a singleton per Local Environment profile. When a provider Environment reuses that singleton locally, the launcher `Open` action may start or restart the Desktop-managed runtime only when active work is empty. If active workload exists, Desktop keeps the action blocked until the user finishes or stops that work. External-managed runtimes stay outside Desktop ownership and are never silently replaced.
+
 ## Desktop Launcher UI
 
 Desktop launcher cards keep their current dense SaaS tool layout:
@@ -174,10 +176,10 @@ Desktop launcher cards keep their current dense SaaS tool layout:
   - `Active work`: `3 terminals, 1 web service`
 - Primary actions remain route-aware:
   - compatible: `Open`
-  - not running: `Start Runtime`
-  - update required: `Plan maintenance`
+  - not running: `Open`
+  - update required: `Open` with restart plan when idle
   - desktop too old: `Update Desktop`
-  - managed elsewhere: `Try again` or the current safe action
+  - managed elsewhere: `Open` stays blocked with owner guidance
 - Action feedback continues through Desktop toasts. No launcher content should
   shift when a version event arrives.
 

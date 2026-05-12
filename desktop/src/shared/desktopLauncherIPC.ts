@@ -13,6 +13,7 @@ import type {
   DesktopRuntimeControlCapability,
   DesktopRuntimeHealth,
 } from './desktopRuntimeHealth';
+import type { DesktopLocalRuntimeOpenPlan } from './localRuntimeSupervisor';
 import type { RuntimeServiceSnapshot } from './runtimeService';
 
 export const DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL = 'redeven-desktop:launcher-get-snapshot';
@@ -173,6 +174,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   provider_local_runtime_configured?: boolean;
   provider_local_runtime_state?: DesktopLocalRuntimeState;
   provider_local_runtime_url?: string;
+  provider_local_runtime_plan?: DesktopLocalRuntimeOpenPlan;
   provider_runtime_service?: RuntimeServiceSnapshot;
   provider_local_close_behavior?: DesktopLocalCloseBehavior;
   provider_origin?: string;
