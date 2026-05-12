@@ -26,6 +26,7 @@ import {
   createWorkbenchTerminalSession,
   deleteWorkbenchTerminalSession,
   getWorkbenchLayoutSnapshot,
+  openWorkbenchPreview,
   putWorkbenchLayout,
   putWorkbenchWidgetState,
   WorkbenchLayoutConflictError,
@@ -46,7 +47,6 @@ import {
   buildWorkbenchFileBrowserTitle,
   buildWorkbenchFilePreviewTitle,
   buildWorkbenchInstanceStorageKey,
-  findWorkbenchPreviewWidgetIdByPath,
   isRedevenWorkbenchMultiInstanceWidgetType,
   pickLatestWorkbenchWidget,
   reconcileWorkbenchInstanceState,
@@ -82,6 +82,7 @@ import {
   sanitizePersistedWorkbenchLocalState,
   type PersistedWorkbenchLocalState,
   type RuntimeWorkbenchLayoutSnapshot,
+  type RuntimeWorkbenchOpenPreviewStrategy,
   type RuntimeWorkbenchPreviewItem,
   type RuntimeWorkbenchTerminalSessionInfo,
   type RuntimeWorkbenchWidgetState,
@@ -535,6 +536,16 @@ function runtimePreviewItemToFileItem(item: RuntimeWorkbenchPreviewItem): FileIt
   };
 }
 
+function fileItemToRuntimePreviewItem(item: FileItem): RuntimeWorkbenchPreviewItem {
+  return {
+    id: compact(item.id) || item.path,
+    type: 'file',
+    path: item.path,
+    name: compact(item.name) || basenameFromAbsolutePath(item.path) || 'File',
+    ...(typeof item.size === 'number' ? { size: item.size } : {}),
+  };
+}
+
 function readPersistedWorkbenchState(storageKey: string): WorkbenchState {
   return sanitizeWorkbenchState(
     readUIStorageJSON(storageKey, null),
@@ -689,10 +700,6 @@ export function EnvWorkbenchPage() {
   const workbenchCurtainMessage = createMemo(() => (
     env.connectionOverlayVisible() ? env.connectionOverlayMessage() : undefined
   ));
-  const knownPreviewItemsByWidgetId = createMemo<Record<string, FileItem>>(() => ({
-    ...instanceState().previewItemsByWidgetId,
-    ...runtimePreviewItemsByWidgetId(),
-  }));
   const selectedWidget = createMemo(() => {
     const selectedWidgetId = compact(workbenchState().selectedWidgetId);
     if (!selectedWidgetId) {
@@ -1812,7 +1819,7 @@ export function EnvWorkbenchPage() {
     const request = env.workbenchFilePreviewActivation();
     const requestId = compact(request?.requestId);
     const api = surfaceApi();
-    if (!requestId || !request || !api) {
+    if (!requestId || !request || !api || !runtimeLayoutReady()) {
       return;
     }
     env.consumeWorkbenchFilePreviewActivation(requestId);
@@ -1823,7 +1830,7 @@ export function EnvWorkbenchPage() {
     }
 
     const centerViewport = request.centerViewport ?? request.ensureVisible ?? true;
-    const openStrategy = request.openStrategy ?? 'same_file_or_create';
+    const openStrategy: RuntimeWorkbenchOpenPreviewStrategy = request.openStrategy ?? 'same_file_or_create';
     const normalizedItem: FileItem = {
       ...request.item,
       id: compact(request.item?.id) || previewPath,
@@ -1831,66 +1838,73 @@ export function EnvWorkbenchPage() {
       path: previewPath,
       name: compact(request.item?.name) || basenameFromAbsolutePath(previewPath) || 'File',
     };
+    const previewDefinition = redevenWorkbenchWidgets.find((definition) => definition.type === 'redeven.preview');
+    const frameSize = resolveCanvasFrameSize();
+    const viewportCenter = resolveViewportWorldCenter(workbenchState().viewport, frameSize);
+    const defaultWidth = Number(previewDefinition?.defaultSize?.width);
+    const defaultHeight = Number(previewDefinition?.defaultSize?.height);
 
-    let widget = null;
-    if (openStrategy !== 'create_new') {
-      const matchingWidgetId = findWorkbenchPreviewWidgetIdByPath(
-        workbenchState().widgets,
-        knownPreviewItemsByWidgetId(),
-        previewPath,
-      );
-      const matchingWidget = matchingWidgetId ? api.findWidgetById(matchingWidgetId) : null;
-      if (matchingWidget?.type === 'redeven.preview') {
-        widget = matchingWidget;
-      }
-    }
-
-    if (!widget) {
-      if (openStrategy === 'focus_latest_or_create') {
-        const latestWidgetId = instanceState().latestWidgetIdByType['redeven.preview'] ?? null;
-        const latestWidget = latestWidgetId ? api.findWidgetById(latestWidgetId) : null;
-        widget = latestWidget?.type === 'redeven.preview'
-          ? latestWidget
-          : pickLatestWorkbenchWidget(workbenchState().widgets, 'redeven.preview') ?? api.findWidgetByType('redeven.preview');
-      }
-      if (!widget) {
-        const release = terminalVisualCoordinator.beginInteraction('widget_create');
+    void openWorkbenchPreview({
+      request_id: requestId,
+      item: fileItemToRuntimePreviewItem(normalizedItem),
+      open_strategy: openStrategy,
+      viewport: {
+        ...(viewportCenter ? {
+          center_x: viewportCenter.x,
+          center_y: viewportCenter.y,
+        } : {}),
+        ...(Number.isFinite(defaultWidth) && defaultWidth > 0 ? { default_width: defaultWidth } : {}),
+        ...(Number.isFinite(defaultHeight) && defaultHeight > 0 ? { default_height: defaultHeight } : {}),
+      },
+    })
+      .then((result) => {
+        const release = result.created
+          ? terminalVisualCoordinator.beginInteraction('widget_create')
+          : null;
         try {
-          widget = api.createWidget('redeven.preview', { centerViewport });
+          applyRuntimeSnapshot(result.snapshot);
+          applyRuntimeWidgetState(result.widget_state);
         } finally {
-          requestPostInteractionFrame(() => release.end());
+          if (release) {
+            requestPostInteractionFrame(() => release.end());
+          }
         }
-      }
-    }
 
-    if (!widget) {
-      return;
-    }
+        const widget = api.findWidgetById(result.widget_id)
+          ?? workbenchState().widgets.find((entry) => entry.id === result.widget_id && entry.type === 'redeven.preview')
+          ?? null;
+        if (!widget) {
+          return;
+        }
 
-    if (request.focus !== false) {
-      api.focusWidget(widget, { centerViewport });
-    }
+        if (request.focus !== false) {
+          api.focusWidget(widget, { centerViewport });
+        }
 
-    setInstanceState((previous) => ({
-      ...previous,
-      latestWidgetIdByType: {
-        ...previous.latestWidgetIdByType,
-        [widget.type]: widget.id,
-      },
-      previewItemsByWidgetId: {
-        ...previous.previewItemsByWidgetId,
-        [widget.id]: normalizedItem,
-      },
-    }));
-    updateWidgetTitle(widget.id, buildWorkbenchFilePreviewTitle(normalizedItem));
-    setPreviewOpenRequests((previous) => ({
-      ...previous,
-      [widget.id]: {
-        requestId,
-        widgetId: widget.id,
-        item: normalizedItem,
-      },
-    }));
+        setInstanceState((previous) => ({
+          ...previous,
+          latestWidgetIdByType: {
+            ...previous.latestWidgetIdByType,
+            [widget.type]: widget.id,
+          },
+          previewItemsByWidgetId: {
+            ...previous.previewItemsByWidgetId,
+            [widget.id]: normalizedItem,
+          },
+        }));
+        updateWidgetTitle(widget.id, buildWorkbenchFilePreviewTitle(normalizedItem));
+        setPreviewOpenRequests((previous) => ({
+          ...previous,
+          [widget.id]: {
+            requestId,
+            widgetId: widget.id,
+            item: normalizedItem,
+          },
+        }));
+      })
+      .catch((error) => {
+        console.warn('Failed to open workbench preview:', error);
+      });
   });
 
   const updateWidgetTitle = (widgetId: string, title: string) => {

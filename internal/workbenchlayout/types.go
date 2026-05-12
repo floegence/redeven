@@ -21,6 +21,13 @@ const (
 	WidgetStateKindTerminal = "terminal"
 	WidgetStateKindPreview  = "preview"
 
+	OpenPreviewStrategySameFileOrCreate    = "same_file_or_create"
+	OpenPreviewStrategyFocusLatestOrCreate = "focus_latest_or_create"
+	OpenPreviewStrategyCreateNew           = "create_new"
+
+	DefaultPreviewWidgetWidth  = 900
+	DefaultPreviewWidgetHeight = 620
+
 	TerminalMinFontSize = 10
 	TerminalMaxFontSize = 20
 
@@ -157,6 +164,28 @@ type PutWidgetStateRequest struct {
 	State        WidgetStateData `json:"state"`
 }
 
+type OpenPreviewRequest struct {
+	RequestID    string                  `json:"request_id,omitempty"`
+	Item         PreviewItem             `json:"item"`
+	OpenStrategy string                  `json:"open_strategy,omitempty"`
+	Viewport     OpenPreviewViewportHint `json:"viewport,omitempty"`
+}
+
+type OpenPreviewViewportHint struct {
+	CenterX       *float64 `json:"center_x,omitempty"`
+	CenterY       *float64 `json:"center_y,omitempty"`
+	DefaultWidth  float64  `json:"default_width,omitempty"`
+	DefaultHeight float64  `json:"default_height,omitempty"`
+}
+
+type OpenPreviewResponse struct {
+	RequestID   string      `json:"request_id,omitempty"`
+	WidgetID    string      `json:"widget_id"`
+	Created     bool        `json:"created"`
+	Snapshot    Snapshot    `json:"snapshot"`
+	WidgetState WidgetState `json:"widget_state"`
+}
+
 type WidgetStateRevisionConflictError struct {
 	WidgetID        string
 	CurrentRevision int64
@@ -269,6 +298,66 @@ func normalizePutWidgetStateRequest(widgetID string, req PutWidgetStateRequest) 
 		BaseRevision: req.BaseRevision,
 		WidgetType:   widgetType,
 		State:        state,
+	}, nil
+}
+
+func normalizeOpenPreviewRequest(req OpenPreviewRequest, nowUnixMs int64) (OpenPreviewRequest, error) {
+	requestID := strings.TrimSpace(req.RequestID)
+	if len(requestID) > 128 {
+		return OpenPreviewRequest{}, &ValidationError{Message: "request_id is too long"}
+	}
+	item, err := normalizePreviewItem(&req.Item)
+	if err != nil {
+		return OpenPreviewRequest{}, err
+	}
+	if item == nil {
+		return OpenPreviewRequest{}, &ValidationError{Message: "item is required"}
+	}
+	strategy := strings.TrimSpace(req.OpenStrategy)
+	if strategy == "" {
+		strategy = OpenPreviewStrategySameFileOrCreate
+	}
+	switch strategy {
+	case OpenPreviewStrategySameFileOrCreate, OpenPreviewStrategyFocusLatestOrCreate, OpenPreviewStrategyCreateNew:
+	default:
+		return OpenPreviewRequest{}, &ValidationError{Message: "unsupported open_strategy"}
+	}
+	viewport, err := normalizeOpenPreviewViewportHint(req.Viewport, nowUnixMs)
+	if err != nil {
+		return OpenPreviewRequest{}, err
+	}
+	return OpenPreviewRequest{
+		RequestID:    requestID,
+		Item:         *item,
+		OpenStrategy: strategy,
+		Viewport:     viewport,
+	}, nil
+}
+
+func normalizeOpenPreviewViewportHint(hint OpenPreviewViewportHint, nowUnixMs int64) (OpenPreviewViewportHint, error) {
+	var centerX *float64
+	if hint.CenterX != nil {
+		if !isFinite(*hint.CenterX) {
+			return OpenPreviewViewportHint{}, &ValidationError{Message: "viewport.center_x must be finite"}
+		}
+		value := *hint.CenterX
+		centerX = &value
+	}
+	var centerY *float64
+	if hint.CenterY != nil {
+		if !isFinite(*hint.CenterY) {
+			return OpenPreviewViewportHint{}, &ValidationError{Message: "viewport.center_y must be finite"}
+		}
+		value := *hint.CenterY
+		centerY = &value
+	}
+	width := normalizePositiveFloat(hint.DefaultWidth, DefaultPreviewWidgetWidth)
+	height := normalizePositiveFloat(hint.DefaultHeight, DefaultPreviewWidgetHeight)
+	return OpenPreviewViewportHint{
+		CenterX:       centerX,
+		CenterY:       centerY,
+		DefaultWidth:  width,
+		DefaultHeight: height,
 	}, nil
 }
 

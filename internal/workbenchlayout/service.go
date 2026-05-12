@@ -2,10 +2,12 @@ package workbenchlayout
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -109,6 +111,18 @@ func (s *Service) PutWidgetState(ctx context.Context, widgetID string, req PutWi
 	}
 	s.broadcast(event)
 	return state, nil
+}
+
+func (s *Service) OpenPreview(ctx context.Context, req OpenPreviewRequest) (OpenPreviewResponse, error) {
+	if s == nil || s.store == nil {
+		return OpenPreviewResponse{}, errors.New("workbench layout service not initialized")
+	}
+	resp, events, err := s.store.openPreview(ctx, req)
+	if err != nil {
+		return OpenPreviewResponse{}, err
+	}
+	s.broadcastEvents(events)
+	return resp, nil
 }
 
 func (s *Service) AppendTerminalSession(ctx context.Context, widgetID string, sessionID string) (WidgetState, error) {
@@ -389,6 +403,149 @@ func (s *Store) putWidgetState(ctx context.Context, widgetID string, req PutWidg
 	return nextState, event, nil
 }
 
+func (s *Store) openPreview(ctx context.Context, req OpenPreviewRequest) (OpenPreviewResponse, []Event, error) {
+	nowUnixMs := time.Now().UnixMilli()
+	normalizedReq, err := normalizeOpenPreviewRequest(req, nowUnixMs)
+	if err != nil {
+		return OpenPreviewResponse{}, nil, err
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return OpenPreviewResponse{}, nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	current, err := snapshotTx(ctx, tx)
+	if err != nil {
+		return OpenPreviewResponse{}, nil, err
+	}
+
+	widget, created, err := resolveOpenPreviewWidget(current, normalizedReq, nowUnixMs)
+	if err != nil {
+		return OpenPreviewResponse{}, nil, err
+	}
+	if created {
+		if _, err := tx.ExecContext(
+			ctx,
+			`INSERT INTO workbench_layout_widgets(
+  widget_id,
+  widget_type,
+  x,
+  y,
+  width,
+  height,
+  z_index,
+  created_at_unix_ms
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			widget.WidgetID,
+			widget.WidgetType,
+			widget.X,
+			widget.Y,
+			widget.Width,
+			widget.Height,
+			widget.ZIndex,
+			widget.CreatedAtUnixMs,
+		); err != nil {
+			return OpenPreviewResponse{}, nil, err
+		}
+	}
+
+	desiredState := WidgetStateData{
+		Kind: WidgetStateKindPreview,
+		Item: &normalizedReq.Item,
+	}
+	currentState, err := loadWidgetStateByIDTx(ctx, tx, widget.WidgetID)
+	if err != nil {
+		return OpenPreviewResponse{}, nil, err
+	}
+	currentRevision := int64(0)
+	if currentState != nil {
+		currentRevision = currentState.Revision
+	}
+	nextState := WidgetState{
+		WidgetID:        widget.WidgetID,
+		WidgetType:      WidgetTypePreview,
+		Revision:        currentRevision + 1,
+		UpdatedAtUnixMs: nowUnixMs,
+		State:           desiredState,
+	}
+
+	events := make([]Event, 0, 1)
+	if created {
+		if err := upsertWidgetStateRowTx(ctx, tx, nextState); err != nil {
+			return OpenPreviewResponse{}, nil, err
+		}
+		seq, err := insertEventRowTx(ctx, tx, EventTypeLayoutReplaced, nowUnixMs)
+		if err != nil {
+			return OpenPreviewResponse{}, nil, err
+		}
+		if err := updateSnapshotHeadTx(ctx, tx, current.Revision+1, seq, nowUnixMs); err != nil {
+			return OpenPreviewResponse{}, nil, err
+		}
+		nextSnapshot, err := snapshotTx(ctx, tx)
+		if err != nil {
+			return OpenPreviewResponse{}, nil, err
+		}
+		payload, err := json.Marshal(nextSnapshot)
+		if err != nil {
+			return OpenPreviewResponse{}, nil, err
+		}
+		if err := updateEventPayloadTx(ctx, tx, seq, payload); err != nil {
+			return OpenPreviewResponse{}, nil, err
+		}
+		if err := tx.Commit(); err != nil {
+			return OpenPreviewResponse{}, nil, err
+		}
+		events = append(events, Event{
+			Seq:             seq,
+			Type:            EventTypeLayoutReplaced,
+			CreatedAtUnixMs: nowUnixMs,
+			Payload:         payload,
+		})
+		return OpenPreviewResponse{
+			RequestID:   normalizedReq.RequestID,
+			WidgetID:    widget.WidgetID,
+			Created:     true,
+			Snapshot:    nextSnapshot,
+			WidgetState: nextState,
+		}, events, nil
+	}
+
+	if currentState != nil && widgetStateDataEqual(currentState.State, desiredState) {
+		if err := tx.Commit(); err != nil {
+			return OpenPreviewResponse{}, nil, err
+		}
+		return OpenPreviewResponse{
+			RequestID:   normalizedReq.RequestID,
+			WidgetID:    widget.WidgetID,
+			Created:     false,
+			Snapshot:    current,
+			WidgetState: *currentState,
+		}, nil, nil
+	}
+
+	event, err := upsertWidgetStateTx(ctx, tx, nextState)
+	if err != nil {
+		return OpenPreviewResponse{}, nil, err
+	}
+	nextSnapshot, err := snapshotTx(ctx, tx)
+	if err != nil {
+		return OpenPreviewResponse{}, nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return OpenPreviewResponse{}, nil, err
+	}
+	events = append(events, event)
+	return OpenPreviewResponse{
+		RequestID:   normalizedReq.RequestID,
+		WidgetID:    widget.WidgetID,
+		Created:     false,
+		Snapshot:    nextSnapshot,
+		WidgetState: nextState,
+	}, events, nil
+}
+
 func (s *Store) appendTerminalSession(ctx context.Context, widgetID string, sessionID string) (WidgetState, Event, error) {
 	nowUnixMs := time.Now().UnixMilli()
 	normalizedSessionIDs := normalizeSessionIDs([]string{sessionID})
@@ -626,6 +783,112 @@ ORDER BY widget_id ASC`,
 		return nil, nil, err
 	}
 	return updatedStates, events, nil
+}
+
+func resolveOpenPreviewWidget(snapshot Snapshot, req OpenPreviewRequest, nowUnixMs int64) (WidgetLayout, bool, error) {
+	previewWidgets := previewWidgetsByLatest(snapshot.Widgets)
+	if req.OpenStrategy == OpenPreviewStrategySameFileOrCreate {
+		stateByWidgetID := make(map[string]WidgetState, len(snapshot.WidgetStates))
+		for _, state := range snapshot.WidgetStates {
+			stateByWidgetID[state.WidgetID] = state
+		}
+		for _, widget := range previewWidgets {
+			state, ok := stateByWidgetID[widget.WidgetID]
+			if !ok || state.WidgetType != WidgetTypePreview || state.State.Kind != WidgetStateKindPreview || state.State.Item == nil {
+				continue
+			}
+			if state.State.Item.Path == req.Item.Path {
+				return widget, false, nil
+			}
+		}
+	}
+	if req.OpenStrategy == OpenPreviewStrategyFocusLatestOrCreate && len(previewWidgets) > 0 {
+		return previewWidgets[0], false, nil
+	}
+	widget, err := newPreviewWidget(snapshot.Widgets, req.Viewport, nowUnixMs)
+	if err != nil {
+		return WidgetLayout{}, false, err
+	}
+	return widget, true, nil
+}
+
+func previewWidgetsByLatest(widgets []WidgetLayout) []WidgetLayout {
+	next := make([]WidgetLayout, 0)
+	for _, widget := range widgets {
+		if widget.WidgetType == WidgetTypePreview {
+			next = append(next, widget)
+		}
+	}
+	sort.Slice(next, func(left int, right int) bool {
+		if next[left].ZIndex != next[right].ZIndex {
+			return next[left].ZIndex > next[right].ZIndex
+		}
+		if next[left].CreatedAtUnixMs != next[right].CreatedAtUnixMs {
+			return next[left].CreatedAtUnixMs > next[right].CreatedAtUnixMs
+		}
+		return next[left].WidgetID > next[right].WidgetID
+	})
+	return next
+}
+
+func newPreviewWidget(widgets []WidgetLayout, hint OpenPreviewViewportHint, nowUnixMs int64) (WidgetLayout, error) {
+	width := normalizePositiveFloat(hint.DefaultWidth, DefaultPreviewWidgetWidth)
+	height := normalizePositiveFloat(hint.DefaultHeight, DefaultPreviewWidgetHeight)
+	x := 96 + float64(len(widgets))*32
+	y := 72 + float64(len(widgets))*28
+	if hint.CenterX != nil && hint.CenterY != nil {
+		x = *hint.CenterX - width/2
+		y = *hint.CenterY - height/2
+	}
+	maxZ := 0
+	widgetIDs := make(map[string]struct{}, len(widgets))
+	for _, widget := range widgets {
+		if widget.ZIndex > maxZ {
+			maxZ = widget.ZIndex
+		}
+		widgetIDs[widget.WidgetID] = struct{}{}
+	}
+	widgetID, err := uniquePreviewWidgetID(widgetIDs)
+	if err != nil {
+		return WidgetLayout{}, err
+	}
+	return WidgetLayout{
+		WidgetID:        widgetID,
+		WidgetType:      WidgetTypePreview,
+		X:               x,
+		Y:               y,
+		Width:           width,
+		Height:          height,
+		ZIndex:          maxZ + 1,
+		CreatedAtUnixMs: nowUnixMs,
+	}, nil
+}
+
+func uniquePreviewWidgetID(existing map[string]struct{}) (string, error) {
+	for range 32 {
+		token, err := randomWorkbenchIDToken()
+		if err != nil {
+			return "", err
+		}
+		id := fmt.Sprintf("widget-preview-%s", token)
+		if _, ok := existing[id]; !ok {
+			return id, nil
+		}
+	}
+	return "", errors.New("unable to allocate unique preview widget id")
+}
+
+func randomWorkbenchIDToken() (string, error) {
+	const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	out := make([]byte, 0, 16)
+	for i := 0; i < 16; i++ {
+		out = append(out, alphabet[int(buf[i])%len(alphabet)])
+	}
+	return string(out), nil
 }
 
 func (s *Store) eventsAfter(ctx context.Context, afterSeq int64) ([]Event, error) {
@@ -944,25 +1207,7 @@ ORDER BY z_index ASC, created_at_unix_ms ASC, id ASC`,
 }
 
 func upsertWidgetStateTx(ctx context.Context, tx *sql.Tx, state WidgetState) (Event, error) {
-	stateJSON, err := json.Marshal(state.State)
-	if err != nil {
-		return Event{}, err
-	}
-	if _, err := tx.ExecContext(
-		ctx,
-		`INSERT INTO workbench_widget_states(widget_id, widget_type, revision, state_json, updated_at_unix_ms)
-VALUES (?, ?, ?, ?, ?)
-ON CONFLICT(widget_id) DO UPDATE SET
-  widget_type = excluded.widget_type,
-  revision = excluded.revision,
-  state_json = excluded.state_json,
-  updated_at_unix_ms = excluded.updated_at_unix_ms`,
-		state.WidgetID,
-		state.WidgetType,
-		state.Revision,
-		string(stateJSON),
-		state.UpdatedAtUnixMs,
-	); err != nil {
+	if err := upsertWidgetStateRowTx(ctx, tx, state); err != nil {
 		return Event{}, err
 	}
 
@@ -986,6 +1231,31 @@ ON CONFLICT(widget_id) DO UPDATE SET
 		CreatedAtUnixMs: state.UpdatedAtUnixMs,
 		Payload:         payload,
 	}, nil
+}
+
+func upsertWidgetStateRowTx(ctx context.Context, tx *sql.Tx, state WidgetState) error {
+	stateJSON, err := json.Marshal(state.State)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(
+		ctx,
+		`INSERT INTO workbench_widget_states(widget_id, widget_type, revision, state_json, updated_at_unix_ms)
+VALUES (?, ?, ?, ?, ?)
+ON CONFLICT(widget_id) DO UPDATE SET
+  widget_type = excluded.widget_type,
+  revision = excluded.revision,
+  state_json = excluded.state_json,
+  updated_at_unix_ms = excluded.updated_at_unix_ms`,
+		state.WidgetID,
+		state.WidgetType,
+		state.Revision,
+		string(stateJSON),
+		state.UpdatedAtUnixMs,
+	); err != nil {
+		return err
+	}
+	return nil
 }
 
 func insertEventRowTx(ctx context.Context, tx *sql.Tx, eventType string, nowUnixMs int64) (int64, error) {

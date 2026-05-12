@@ -8,6 +8,7 @@ import (
 	"math"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -124,6 +125,14 @@ func sampleLayeredLayoutRequest() PutLayoutRequest {
 }
 
 func intPtr(value int) *int {
+	return &value
+}
+
+func int64Ptr(value int64) *int64 {
+	return &value
+}
+
+func float64Ptr(value float64) *float64 {
 	return &value
 }
 
@@ -491,6 +500,156 @@ func TestServiceReplaceRejectsInvalidAndDuplicateLayeredObjects(t *testing.T) {
 	}
 	if !errors.As(err, &validation) {
 		t.Fatalf("error = %v, want ValidationError", err)
+	}
+}
+
+func TestServiceOpenPreviewCreatesWidgetAndStateAtomically(t *testing.T) {
+	t.Parallel()
+
+	svc := openTestService(t)
+	ctx := context.Background()
+
+	resp, err := svc.OpenPreview(ctx, OpenPreviewRequest{
+		RequestID: "request-open-preview",
+		Item: PreviewItem{
+			Path: "/workspace/src/main.go",
+			Name: "main.go",
+			Size: int64Ptr(128),
+		},
+		Viewport: OpenPreviewViewportHint{
+			CenterX:       float64Ptr(640),
+			CenterY:       float64Ptr(420),
+			DefaultWidth:  900,
+			DefaultHeight: 620,
+		},
+	})
+	if err != nil {
+		t.Fatalf("OpenPreview() error = %v", err)
+	}
+	if !resp.Created {
+		t.Fatalf("created = false, want true")
+	}
+	if resp.RequestID != "request-open-preview" {
+		t.Fatalf("request_id = %q, want request-open-preview", resp.RequestID)
+	}
+	if resp.WidgetID == "" || resp.WidgetState.WidgetID != resp.WidgetID {
+		t.Fatalf("widget ids = %q/%q, want populated and matching", resp.WidgetID, resp.WidgetState.WidgetID)
+	}
+	if !strings.HasPrefix(resp.WidgetID, "widget-preview-") {
+		t.Fatalf("widget_id = %q, want runtime-generated preview id", resp.WidgetID)
+	}
+	if resp.WidgetState.State.Item == nil || resp.WidgetState.State.Item.Path != "/workspace/src/main.go" {
+		t.Fatalf("widget state item = %#v, want preview item", resp.WidgetState.State.Item)
+	}
+	if resp.Snapshot.Revision != 1 || resp.Snapshot.Seq != 1 {
+		t.Fatalf("snapshot revision/seq = %d/%d, want 1/1", resp.Snapshot.Revision, resp.Snapshot.Seq)
+	}
+	if len(resp.Snapshot.Widgets) != 1 || resp.Snapshot.Widgets[0].WidgetID != resp.WidgetID {
+		t.Fatalf("snapshot widgets = %#v, want created preview widget", resp.Snapshot.Widgets)
+	}
+	if got := resp.Snapshot.Widgets[0]; got.WidgetType != WidgetTypePreview || got.X != 190 || got.Y != 110 || got.Width != 900 || got.Height != 620 || got.ZIndex != 1 || got.CreatedAtUnixMs <= 0 {
+		t.Fatalf("created widget = %#v, want centered preview geometry", got)
+	}
+	if len(resp.Snapshot.WidgetStates) != 1 || resp.Snapshot.WidgetStates[0].WidgetID != resp.WidgetID {
+		t.Fatalf("snapshot widget states = %#v, want preview state in same snapshot", resp.Snapshot.WidgetStates)
+	}
+
+	baseline, _, err := svc.Subscribe(ctx, 0)
+	if err != nil {
+		t.Fatalf("Subscribe() error = %v", err)
+	}
+	if len(baseline) != 1 || baseline[0].Type != EventTypeLayoutReplaced {
+		t.Fatalf("baseline events = %#v, want one layout.replaced event", baseline)
+	}
+	var payload Snapshot
+	if err := json.Unmarshal(baseline[0].Payload, &payload); err != nil {
+		t.Fatalf("json.Unmarshal(payload) error = %v", err)
+	}
+	if len(payload.Widgets) != 1 || len(payload.WidgetStates) != 1 {
+		t.Fatalf("event payload = %#v, want widget and preview state together", payload)
+	}
+	if payload.WidgetStates[0].WidgetID != payload.Widgets[0].WidgetID {
+		t.Fatalf("event payload widget/state ids = %q/%q, want atomic match", payload.Widgets[0].WidgetID, payload.WidgetStates[0].WidgetID)
+	}
+}
+
+func TestServiceOpenPreviewReusesSameFileWidget(t *testing.T) {
+	t.Parallel()
+
+	svc := openTestService(t)
+	ctx := context.Background()
+
+	first, err := svc.OpenPreview(ctx, OpenPreviewRequest{
+		Item: PreviewItem{Path: "/workspace/demo.txt", Name: "demo.txt"},
+	})
+	if err != nil {
+		t.Fatalf("first OpenPreview() error = %v", err)
+	}
+	second, err := svc.OpenPreview(ctx, OpenPreviewRequest{
+		Item: PreviewItem{Path: "/workspace/demo.txt", Name: "demo.txt"},
+	})
+	if err != nil {
+		t.Fatalf("second OpenPreview() error = %v", err)
+	}
+	if second.Created {
+		t.Fatalf("second created = true, want reuse")
+	}
+	if second.WidgetID != first.WidgetID {
+		t.Fatalf("second widget_id = %q, want %q", second.WidgetID, first.WidgetID)
+	}
+	if second.Snapshot.Revision != first.Snapshot.Revision || second.WidgetState.Revision != first.WidgetState.Revision {
+		t.Fatalf("second response = %#v, want no-op reuse of first %#v", second, first)
+	}
+}
+
+func TestServiceOpenPreviewStrategies(t *testing.T) {
+	t.Parallel()
+
+	svc := openTestService(t)
+	ctx := context.Background()
+
+	first, err := svc.OpenPreview(ctx, OpenPreviewRequest{
+		Item: PreviewItem{Path: "/workspace/first.txt", Name: "first.txt"},
+	})
+	if err != nil {
+		t.Fatalf("first OpenPreview() error = %v", err)
+	}
+	second, err := svc.OpenPreview(ctx, OpenPreviewRequest{
+		Item: PreviewItem{Path: "/workspace/second.txt", Name: "second.txt"},
+	})
+	if err != nil {
+		t.Fatalf("second OpenPreview() error = %v", err)
+	}
+	if !second.Created || second.WidgetID == first.WidgetID {
+		t.Fatalf("second response = %#v, want new widget for different file", second)
+	}
+
+	reuseLatest, err := svc.OpenPreview(ctx, OpenPreviewRequest{
+		Item:         PreviewItem{Path: "/workspace/third.txt", Name: "third.txt"},
+		OpenStrategy: OpenPreviewStrategyFocusLatestOrCreate,
+	})
+	if err != nil {
+		t.Fatalf("reuse latest OpenPreview() error = %v", err)
+	}
+	if reuseLatest.Created || reuseLatest.WidgetID != second.WidgetID {
+		t.Fatalf("reuse latest response = %#v, want latest widget %q", reuseLatest, second.WidgetID)
+	}
+	if reuseLatest.WidgetState.State.Item == nil || reuseLatest.WidgetState.State.Item.Path != "/workspace/third.txt" {
+		t.Fatalf("reuse latest state item = %#v, want third file", reuseLatest.WidgetState.State.Item)
+	}
+
+	forced, err := svc.OpenPreview(ctx, OpenPreviewRequest{
+		Item:         PreviewItem{Path: "/workspace/third.txt", Name: "third.txt"},
+		OpenStrategy: OpenPreviewStrategyCreateNew,
+	})
+	if err != nil {
+		t.Fatalf("create_new OpenPreview() error = %v", err)
+	}
+	if !forced.Created || forced.WidgetID == reuseLatest.WidgetID {
+		t.Fatalf("forced response = %#v, want a new widget", forced)
+	}
+	if len(forced.Snapshot.Widgets) != 3 {
+		t.Fatalf("forced snapshot widgets = %#v, want 3 preview widgets", forced.Snapshot.Widgets)
 	}
 }
 

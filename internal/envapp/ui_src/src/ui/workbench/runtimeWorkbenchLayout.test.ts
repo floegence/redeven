@@ -13,6 +13,7 @@ import {
   derivePersistedWorkbenchLocalState,
   extractRuntimeWorkbenchLayoutFromWorkbenchState,
   normalizeRuntimeWorkbenchLayoutSnapshot,
+  normalizeRuntimeWorkbenchOpenPreviewResponse,
   projectWorkbenchStateFromRuntimeLayout,
   REDEVEN_WORKBENCH_TEXT_ANNOTATION_DEFAULT_FONT_SIZE,
   runtimeWorkbenchAnnotationsEqual,
@@ -901,6 +902,103 @@ describe('runtimeWorkbenchLayout', () => {
         name: 'demo.txt',
       },
     });
+  });
+
+  it('normalizes authoritative workbench preview open responses', () => {
+    const response = normalizeRuntimeWorkbenchOpenPreviewResponse({
+      request_id: ' request-open-preview ',
+      widget_id: 'widget-preview-1',
+      created: true,
+      snapshot: {
+        seq: 8,
+        revision: 4,
+        updated_at_unix_ms: 500,
+        widgets: [
+          {
+            widget_id: 'widget-preview-1',
+            widget_type: 'redeven.preview',
+            x: 120,
+            y: 80,
+            width: 900,
+            height: 620,
+            z_index: 2,
+            created_at_unix_ms: 400,
+          },
+        ],
+        widget_states: [
+          {
+            widget_id: 'widget-preview-1',
+            widget_type: 'redeven.preview',
+            revision: 1,
+            updated_at_unix_ms: 510,
+            state: {
+              kind: 'preview',
+              item: {
+                path: '/workspace/demo.txt',
+                name: '',
+                type: 'file',
+              },
+            },
+          },
+        ],
+      },
+      widget_state: {
+        widget_id: 'widget-preview-1',
+        widget_type: 'redeven.preview',
+        revision: 1,
+        updated_at_unix_ms: 510,
+        state: {
+          kind: 'preview',
+          item: {
+            path: '/workspace/demo.txt',
+            name: '',
+            type: 'file',
+          },
+        },
+      },
+    });
+
+    expect(response).toMatchObject({
+      request_id: 'request-open-preview',
+      widget_id: 'widget-preview-1',
+      created: true,
+      widget_state: {
+        widget_id: 'widget-preview-1',
+        widget_type: 'redeven.preview',
+        state: {
+          kind: 'preview',
+          item: {
+            id: '/workspace/demo.txt',
+            path: '/workspace/demo.txt',
+            name: 'demo.txt',
+          },
+        },
+      },
+    });
+    expect(response?.snapshot.widgets).toHaveLength(1);
+  });
+
+  it('rejects preview open responses that do not contain the authoritative preview shell', () => {
+    expect(normalizeRuntimeWorkbenchOpenPreviewResponse({
+      widget_id: 'widget-preview-1',
+      snapshot: {
+        widgets: [],
+        widget_states: [],
+      },
+      widget_state: {
+        widget_id: 'widget-preview-1',
+        widget_type: 'redeven.preview',
+        revision: 1,
+        updated_at_unix_ms: 1,
+        state: {
+          kind: 'preview',
+          item: {
+            path: '/workspace/demo.txt',
+            type: 'file',
+          },
+        },
+      },
+    })).toBeNull();
   });
 
   it('compares widget states by semantic data', () => {

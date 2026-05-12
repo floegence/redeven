@@ -82,12 +82,31 @@ export type RuntimeWorkbenchLayoutPutRequest = Readonly<{
   background_layers: WorkbenchBackgroundLayer[];
 }>;
 
+export type RuntimeWorkbenchOpenPreviewStrategy =
+  | 'same_file_or_create'
+  | 'focus_latest_or_create'
+  | 'create_new';
+
 export type RuntimeWorkbenchPreviewItem = Readonly<{
   id: string;
   type: 'file';
   path: string;
   name: string;
   size?: number;
+}>;
+
+export type RuntimeWorkbenchOpenPreviewViewportHint = Readonly<{
+  center_x?: number;
+  center_y?: number;
+  default_width?: number;
+  default_height?: number;
+}>;
+
+export type RuntimeWorkbenchOpenPreviewRequest = Readonly<{
+  request_id?: string;
+  item: RuntimeWorkbenchPreviewItem;
+  open_strategy?: RuntimeWorkbenchOpenPreviewStrategy;
+  viewport?: RuntimeWorkbenchOpenPreviewViewportHint;
 }>;
 
 export type RuntimeWorkbenchWidgetStateData =
@@ -107,6 +126,14 @@ export type RuntimeWorkbenchWidgetStatePutRequest = Readonly<{
   base_revision: number;
   widget_type: string;
   state: RuntimeWorkbenchWidgetStateData;
+}>;
+
+export type RuntimeWorkbenchOpenPreviewResponse = Readonly<{
+  request_id: string;
+  widget_id: string;
+  created: boolean;
+  snapshot: RuntimeWorkbenchLayoutSnapshot;
+  widget_state: RuntimeWorkbenchWidgetState;
 }>;
 
 export type RuntimeWorkbenchTerminalCreateSessionRequest = Readonly<{
@@ -532,6 +559,33 @@ export function normalizeRuntimeWorkbenchLayoutEvent(value: unknown): RuntimeWor
     type: eventType,
     created_at_unix_ms: Math.max(0, Math.trunc(finiteNumber(value.created_at_unix_ms, 0))),
     payload,
+  };
+}
+
+export function normalizeRuntimeWorkbenchOpenPreviewResponse(value: unknown): RuntimeWorkbenchOpenPreviewResponse | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const widgetID = compact(value.widget_id);
+  const snapshot = normalizeRuntimeWorkbenchLayoutSnapshot(value.snapshot);
+  const widgetState = normalizeRuntimeWorkbenchWidgetState(value.widget_state);
+  if (
+    !widgetID
+    || !widgetState
+    || widgetState.widget_id !== widgetID
+    || widgetState.widget_type !== 'redeven.preview'
+    || widgetState.state.kind !== 'preview'
+    || !widgetState.state.item
+    || !snapshot.widgets.some((widget) => widget.widget_id === widgetID && widget.widget_type === 'redeven.preview')
+  ) {
+    return null;
+  }
+  return {
+    request_id: compact(value.request_id),
+    widget_id: widgetID,
+    created: Boolean(value.created),
+    snapshot,
+    widget_state: widgetState,
   };
 }
 
