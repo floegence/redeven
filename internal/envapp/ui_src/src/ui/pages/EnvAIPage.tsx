@@ -14,7 +14,7 @@ import {
 } from '@floegence/floe-webapp-core/icons';
 import { FlowerIcon } from '../icons/FlowerIcon';
 import { FlowerSoftAuraIcon } from '../icons/FlowerSoftAuraIcon';
-import { LoadingOverlay, SnakeLoader } from '@floegence/floe-webapp-core/loading';
+import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { Button, ConfirmDialog, Dialog, Dropdown, Input, Select, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 import {
   AttachmentPreview,
@@ -90,6 +90,7 @@ import { createAIThreadRenderController } from './createAIThreadRenderController
 import { createAIContextTelemetryController } from './createAIContextTelemetryController';
 import { CompactContextSummary } from './AIContextSummary';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
+import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 
 type ExecutionMode = 'act' | 'plan';
 
@@ -3508,6 +3509,30 @@ export function EnvAIPage() {
     }
   };
 
+  const loadingCurtain = createMemo(() => {
+    if (env.connectionOverlayVisible()) {
+      return {
+        visible: true,
+        surface: 'page' as const,
+        eyebrow: 'Runtime',
+        message: env.connectionOverlayMessage(),
+      };
+    }
+    if (ai.settings.loading && protocol.status() === 'connected') {
+      return { visible: true, surface: undefined, eyebrow: 'Flower', message: 'Loading settings...' };
+    }
+    if (ai.models.loading && ai.aiEnabled()) {
+      return { visible: true, surface: undefined, eyebrow: 'Flower', message: 'Loading models...' };
+    }
+    if (ai.threads.loading && ai.aiEnabled() && !ai.threads()) {
+      return { visible: true, surface: undefined, eyebrow: 'Flower', message: 'Loading chats...' };
+    }
+    if (messagesLoading() && ai.aiEnabled() && !activeThreadRunning()) {
+      return { visible: true, surface: undefined, eyebrow: 'Flower', message: 'Loading chat...' };
+    }
+    return { visible: false, surface: undefined, eyebrow: 'Flower', message: '' };
+  });
+
   return (
     <div class="h-full min-h-0 overflow-hidden relative">
       <ChatProvider
@@ -4339,13 +4364,12 @@ export function EnvAIPage() {
         </ConfirmDialog>
       </ChatProvider>
 
-      <LoadingOverlay visible={env.connectionOverlayVisible()} message={env.connectionOverlayMessage()} />
-      <LoadingOverlay visible={ai.settings.loading && protocol.status() === 'connected'} message="Loading settings..." />
-      <LoadingOverlay visible={ai.models.loading && ai.aiEnabled()} message="Loading models..." />
-      {/* Show global loading only on first load (no cached data); hide it for background refreshes. */}
-      <LoadingOverlay visible={ai.threads.loading && ai.aiEnabled() && !ai.threads()} message="Loading chats..." />
-      {/* Do not show message loading overlay while a run is active to avoid flicker. */}
-      <LoadingOverlay visible={messagesLoading() && ai.aiEnabled() && !activeThreadRunning()} message="Loading chat..." />
+      <RedevenLoadingCurtain
+        visible={loadingCurtain().visible}
+        surface={loadingCurtain().surface}
+        eyebrow={loadingCurtain().eyebrow}
+        message={loadingCurtain().message}
+      />
     </div>
   );
 }

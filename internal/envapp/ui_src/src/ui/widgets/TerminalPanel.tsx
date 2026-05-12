@@ -2,7 +2,6 @@ import { For, Index, Show, batch, createEffect, createMemo, createSignal, onClea
 import { useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
 import { Copy, Folder, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
-import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import {
   Button,
   Dropdown,
@@ -77,6 +76,7 @@ import { TerminalShellIntegrationParser, type TerminalShellIntegrationEvent } fr
 import { createTerminalTabActivityTracker, type TerminalSessionWorkState, type TerminalTabVisualState } from '../services/terminalTabActivity';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
 import { FloatingContextMenu, type FloatingContextMenuItem } from './FloatingContextMenu';
+import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 
 type session_loading_state = 'idle' | 'initializing' | 'attaching' | 'loading_history';
 type pending_terminal_session_status = 'creating' | 'failed';
@@ -1280,8 +1280,9 @@ function TerminalSessionView(props: terminal_session_view_props) {
         }}
       />
 
-      <LoadingOverlay
+      <RedevenLoadingCurtain
         visible={showLoading()}
+        eyebrow="Terminal"
         message={loadingMessage()}
       />
 
@@ -3662,7 +3663,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
           </Show>
 
           <Show when={sessionsLoading() && sessions().length === 0}>
-            <LoadingOverlay visible message="Loading sessions..." />
+            <RedevenLoadingCurtain visible eyebrow="Terminal" message="Loading sessions..." />
           </Show>
 
           <Show when={!sessionsLoading() && sessions().length === 0 && visiblePendingTerminalSessions().length === 0}>

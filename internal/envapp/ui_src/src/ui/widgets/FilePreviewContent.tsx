@@ -1,9 +1,9 @@
 import { Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { Check, Copy, Download, Loader2, Pencil, Save, X } from '@floegence/floe-webapp-core/icons';
-import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { FlowerNavigationIcon } from '../icons/FlowerSoftAuraIcon';
 import { renderRedevenFilePreviewBody } from '../file-preview/rendererRegistry';
+import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import type { FilePreviewDescriptor } from '../utils/filePreview';
 import { readSelectionTextFromPreview } from '../utils/filePreviewSelection';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
@@ -217,7 +217,7 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
           </div>
         </Show>
 
-        <LoadingOverlay visible={!!props.loading} message={props.message || 'Loading file...'} />
+        <RedevenLoadingCurtain visible={!!props.loading} eyebrow="Preview" message={props.message || 'Loading file...'} />
       </div>
     </div>
   );

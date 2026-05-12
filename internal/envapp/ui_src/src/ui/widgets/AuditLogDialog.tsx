@@ -1,8 +1,8 @@
 import { For, Show, createMemo, createResource } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
-import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 
+import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { listAgentAuditLogs, type AgentAuditEntry } from '../services/auditApi';
 
 function fmtTime(iso: string): string {
@@ -250,7 +250,7 @@ export function AuditLogDialog(props: { open: boolean; envId: string; onClose: (
         </Show>
 
         <div class="relative" style={{ 'min-height': '160px' }}>
-          <LoadingOverlay visible={entries.loading} message="Loading audit log..." />
+          <RedevenLoadingCurtain visible={entries.loading} eyebrow="Audit" message="Loading audit log..." />
 
           <Show when={!entries.loading}>
             <Show when={(entries() ?? []).length > 0} fallback={<div class="text-xs text-muted-foreground">No audit entries.</div>}>

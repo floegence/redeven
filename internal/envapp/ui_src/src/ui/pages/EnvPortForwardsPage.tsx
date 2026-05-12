@@ -2,7 +2,7 @@ import { For, Show, createMemo, createResource, createSignal } from 'solid-js';
 import { cn, useNotification } from '@floegence/floe-webapp-core';
 import { ExternalLink, Globe, Plus, RefreshIcon, Trash } from '@floegence/floe-webapp-core/icons';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
-import { LoadingOverlay, SnakeLoader } from '@floegence/floe-webapp-core/loading';
+import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import {
   Button,
   Card,
@@ -32,6 +32,7 @@ import { FLOE_APP_PORT_FORWARD } from '../services/floeproxyContract';
 import { fetchGatewayJSON } from '../services/gatewayApi';
 import { trustedLauncherOriginFromSandboxLocation } from '../services/sandboxOrigins';
 import { registerSandboxWindow } from '../services/sandboxWindowRegistry';
+import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { Tooltip } from '../primitives/Tooltip';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
@@ -751,7 +752,7 @@ export function EnvPortForwardsPage() {
 
           {/* Services list */}
           <div class="relative" style={{ 'min-height': '200px' }}>
-            <LoadingOverlay visible={forwards.loading} message="Loading web services..." />
+            <RedevenLoadingCurtain visible={forwards.loading} eyebrow="Web Services" message="Loading web services..." />
 
             <Show when={forwards.error}>
               <div class="flex items-center gap-2 text-sm text-destructive p-4">
@@ -830,7 +831,7 @@ export function EnvPortForwardsPage() {
       </ConfirmDialog>
 
       {/* Global loading overlay for opening operations */}
-      <LoadingOverlay visible={!!busyID() && !!busyText()} message={busyText() || 'Working...'} />
+      <RedevenLoadingCurtain visible={!!busyID() && !!busyText()} eyebrow="Web Services" message={busyText() || 'Working...'} />
     </div>
   );
 }

@@ -11,7 +11,6 @@ import {
   Terminal,
   Zap,
 } from '@floegence/floe-webapp-core/icons';
-import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { Sidebar, SidebarContent, SidebarItem, SidebarItemList, SidebarSection } from '@floegence/floe-webapp-core/layout';
 import { Button, Checkbox, ConfirmDialog, Dialog, Input, Select } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
@@ -37,6 +36,7 @@ import { FlowerIcon } from '../icons/FlowerIcon';
 import { CodexIcon } from '../icons/CodexIcon';
 import { useEnvContext, type EnvSettingsSection } from './EnvContext';
 import { EnvDebugConsoleSettingsPanel } from './EnvDebugConsoleSettingsPanel';
+import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { AIProviderDialog } from './settings/AIProviderDialog';
 import { CodeRuntimeSettingsCard } from './settings/CodeRuntimeSettingsCard';
 import {
@@ -591,6 +591,30 @@ export function EnvSettingsPage() {
   };
 
   const connectOverlayMessage = createMemo(() => (maintaining() ? 'Runtime restarting...' : env.connectionOverlayMessage()));
+  const loadingCurtain = createMemo(() => {
+    if (env.connectionOverlayVisible()) {
+      return {
+        visible: true,
+        surface: 'page' as const,
+        eyebrow: 'Runtime',
+        message: connectOverlayMessage(),
+      };
+    }
+    if (settings.loading && protocol.status() === 'connected') {
+      return {
+        visible: true,
+        surface: undefined,
+        eyebrow: 'Settings',
+        message: 'Loading settings...',
+      };
+    }
+    return {
+      visible: false,
+      surface: undefined,
+      eyebrow: 'Settings',
+      message: '',
+    };
+  });
 
   // View mode signals
   const [configView, setConfigView] = createSignal<ViewMode>('ui');
@@ -4263,8 +4287,12 @@ export function EnvSettingsPage() {
       </ConfirmDialog>
 
       {/* Loading Overlays */}
-      <LoadingOverlay visible={env.connectionOverlayVisible()} message={connectOverlayMessage()} />
-      <LoadingOverlay visible={settings.loading && protocol.status() === 'connected'} message="Loading settings..." />
+      <RedevenLoadingCurtain
+        visible={loadingCurtain().visible}
+        surface={loadingCurtain().surface}
+        eyebrow={loadingCurtain().eyebrow}
+        message={loadingCurtain().message}
+      />
     </div>
   );
 }

@@ -9,7 +9,6 @@ import {
   type FileBrowserRevealRequest,
   type FileItem,
 } from '@floegence/floe-webapp-core/file-browser';
-import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { Button, ConfirmDialog, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 import type { Client } from '@floegence/flowersec-core';
 import { RpcError, useProtocol } from '@floegence/floe-webapp-protocol';
@@ -57,6 +56,7 @@ import { type GitHistoryMode } from './GitHistoryModeSwitch';
 import { FileBrowserWorkspace, type FileBrowserPathSubmitResult } from './FileBrowserWorkspace';
 import { FlowerContextMenuIcon } from '../icons/FlowerSoftAuraIcon';
 import { GitStashWindow } from './GitStashWindow';
+import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { GitWorkspace } from './GitWorkspace';
 import {
   WORKSPACE_VIEW_SECTIONS,
@@ -4725,8 +4725,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         )}
       </Show>
 
-      <LoadingOverlay visible={pageMode() === 'files' && loading()} message="Loading files..." />
-      <LoadingOverlay visible={dragMoveLoading()} message="Moving..." />
+      <RedevenLoadingCurtain visible={pageMode() === 'files' && loading()} eyebrow="Files" message="Loading files..." />
+      <RedevenLoadingCurtain visible={dragMoveLoading()} eyebrow="Files" message="Moving..." />
 
       <GitStashWindow
         open={stashWindowOpen()}

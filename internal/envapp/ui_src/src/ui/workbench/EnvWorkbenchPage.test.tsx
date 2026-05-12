@@ -853,7 +853,7 @@ describe('EnvWorkbenchPage', () => {
 
     const curtain = host.querySelector('.redeven-workbench-progress-curtain') as HTMLElement | null;
     expect(curtain).toBeTruthy();
-    expect(curtain?.getAttribute('data-redeven-workbench-progress-stage')).toBe('layout');
+    expect(curtain?.getAttribute('data-redeven-loading-curtain-stage')).toBe('layout');
     expect(host.querySelector('.workbench-entry-intro')).toBeNull();
     expect(host.querySelector('.redeven-workbench-intro-preparing')).toBeNull();
     expect(host.textContent).toContain('Loading layout');

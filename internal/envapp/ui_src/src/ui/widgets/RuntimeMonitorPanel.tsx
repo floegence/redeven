@@ -1,7 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
 import { Copy, Trash } from '@floegence/floe-webapp-core/icons';
-import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
 import { MonitoringChart } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
@@ -22,6 +21,7 @@ import { isPermissionDeniedError } from '../utils/permission';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { FloatingContextMenu, type FloatingContextMenuItem } from './FloatingContextMenu';
 import { PermissionEmptyState } from './PermissionEmptyState';
+import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 
 export type RuntimeMonitorPanelVariant = 'page' | 'deck' | 'workbench';
 
@@ -799,7 +799,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
             </PanelContent>
           </Panel>
         </div>
-          <LoadingOverlay visible={loading() && !data()} message="Loading monitoring data..." />
+          <RedevenLoadingCurtain visible={loading() && !data()} eyebrow="Monitoring" message="Loading monitoring data..." />
         </div>
 
         <Show when={processContextMenu()} keyed>

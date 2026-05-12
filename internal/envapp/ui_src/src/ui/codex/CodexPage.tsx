@@ -1,7 +1,7 @@
 import { Show, createEffect, onCleanup } from 'solid-js';
 import { deferAfterPaint, useViewActivation } from '@floegence/floe-webapp-core';
-import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 
+import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { useCodexContext } from './CodexProvider';
 import { CodexPageShell } from './CodexPageShell';
 
@@ -46,7 +46,7 @@ export function CodexPage() {
   return (
     <div class="relative flex h-full min-h-0 flex-col">
       <Show when={codex.statusLoading()}>
-        <LoadingOverlay visible message="Loading Codex..." />
+        <RedevenLoadingCurtain visible eyebrow="Codex" message="Loading Codex..." />
       </Show>
       <CodexPageShell />
     </div>

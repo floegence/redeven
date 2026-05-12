@@ -1,5 +1,5 @@
-import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { useEnvContext } from './EnvContext';
+import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { TerminalPanel } from '../widgets/TerminalPanel';
 
 export function EnvTerminalPage() {
@@ -12,7 +12,12 @@ export function EnvTerminalPage() {
         openSessionRequest={env.openTerminalInDirectoryRequest()}
         onOpenSessionRequestHandled={env.consumeOpenTerminalInDirectoryRequest}
       />
-      <LoadingOverlay visible={env.connectionOverlayVisible()} message={env.connectionOverlayMessage()} />
+      <RedevenLoadingCurtain
+        visible={env.connectionOverlayVisible()}
+        surface="page"
+        eyebrow="Runtime"
+        message={env.connectionOverlayMessage()}
+      />
     </div>
   );
 }

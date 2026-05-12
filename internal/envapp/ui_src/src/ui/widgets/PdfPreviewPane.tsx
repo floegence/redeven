@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
-import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { Button } from '@floegence/floe-webapp-core/ui';
 
+import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
 import {
   isPDFRenderCancelled,
@@ -719,7 +719,7 @@ export function PdfPreviewPane(props: PdfPreviewPaneProps) {
           </div>
         </Show>
 
-        <LoadingOverlay visible={documentLoading()} message="Loading PDF..." />
+        <RedevenLoadingCurtain visible={documentLoading()} eyebrow="Preview" message="Loading PDF..." />
       </div>
     </div>
   );

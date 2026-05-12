@@ -1,9 +1,9 @@
 import { createEffect } from 'solid-js';
 import { deferAfterPaint, useDeckDrag } from '@floegence/floe-webapp-core';
 import { DeckGrid, DeckTopBar } from '@floegence/floe-webapp-core/deck';
-import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 
 import { useEnvContext } from './EnvContext';
+import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 
 export function EnvDeckPage() {
   const env = useEnvContext();
@@ -32,7 +32,12 @@ export function EnvDeckPage() {
       <DeckTopBar />
       <div class="relative min-h-0 flex-1 overflow-hidden">
         <DeckGrid class="p-0" />
-        <LoadingOverlay visible={env.connectionOverlayVisible()} message={env.connectionOverlayMessage()} />
+        <RedevenLoadingCurtain
+          visible={env.connectionOverlayVisible()}
+          surface="page"
+          eyebrow="Runtime"
+          message={env.connectionOverlayMessage()}
+        />
       </div>
     </div>
   );
