@@ -43,6 +43,12 @@ export type RuntimeServiceSnapshot = Readonly<{
   active_workload: RuntimeServiceWorkload;
 }>;
 
+export type RuntimeServiceIdentity = Readonly<{
+  runtime_version?: string;
+  runtime_commit?: string;
+  runtime_build_time?: string;
+}>;
+
 export const RUNTIME_SERVICE_PROTOCOL_VERSION = 'redeven-runtime-v1';
 export const RUNTIME_SERVICE_ENV_APP_SHELL_UNAVAILABLE_REASON = 'env_app_shell_unavailable';
 
@@ -204,6 +210,25 @@ export function runtimeServiceIsOpenable(snapshot: RuntimeServiceSnapshot | null
     return false;
   }
   return snapshot.open_readiness?.state === 'openable';
+}
+
+export function runtimeServiceMatchesIdentity(
+  snapshot: RuntimeServiceSnapshot | null | undefined,
+  expected: RuntimeServiceIdentity | null | undefined,
+): boolean {
+  if (!expected) {
+    return true;
+  }
+  const comparisons = [
+    [snapshot?.runtime_version, expected.runtime_version],
+    [snapshot?.runtime_commit, expected.runtime_commit],
+    [snapshot?.runtime_build_time, expected.runtime_build_time],
+  ] as const;
+  return comparisons.every(([observed, wanted]) => {
+    const cleanObserved = compact(observed);
+    const cleanWanted = compact(wanted);
+    return cleanWanted === '' || cleanObserved === cleanWanted;
+  });
 }
 
 export function runtimeServiceNeedsRuntimeUpdate(snapshot: RuntimeServiceSnapshot | null | undefined): boolean {

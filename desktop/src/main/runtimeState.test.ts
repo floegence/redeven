@@ -29,6 +29,7 @@ describe('runtimeState', () => {
           data: {
             status: 'online',
             password_required: true,
+            desktop_owner_id: 'desktop-owner-health',
             runtime_service: {
               runtime_version: 'v1.2.3',
               service_owner: 'desktop',
@@ -81,6 +82,7 @@ describe('runtimeState', () => {
         effective_run_mode: 'hybrid',
         remote_enabled: true,
         desktop_managed: true,
+        desktop_owner_id: 'desktop-owner-state',
         state_dir: undefined,
         diagnostics_enabled: undefined,
         pid: 4242,
@@ -108,6 +110,7 @@ describe('runtimeState', () => {
         effective_run_mode: 'hybrid',
         remote_enabled: true,
         desktop_managed: true,
+        desktop_owner_id: 'desktop-owner-health',
         pid: 4242,
         runtime_service: {
           runtime_version: 'v1.2.3',

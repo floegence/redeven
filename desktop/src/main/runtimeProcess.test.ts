@@ -23,6 +23,7 @@ function runtimeStatePayload(baseURL: string, pid: number = process.pid): Record
     effective_run_mode: 'local',
     remote_enabled: false,
     desktop_managed: true,
+    desktop_owner_id: 'desktop-owner-1',
     diagnostics_enabled: true,
     pid,
     runtime_service: {
@@ -60,8 +61,10 @@ function startHealthServer(options: Readonly<{
         response.end(JSON.stringify({
           data: {
             status: 'online',
-            password_required: false,
-            runtime_service: {
+              password_required: false,
+              desktop_managed: true,
+              desktop_owner_id: 'desktop-owner-1',
+              runtime_service: {
               protocol_version: 'redeven-runtime-v1',
               service_owner: 'desktop',
               desktop_managed: true,
@@ -229,6 +232,7 @@ describe('runtimeProcess', () => {
       effective_run_mode: 'hybrid',
       remote_enabled: true,
       desktop_managed: true,
+      desktop_owner_id: undefined,
       state_dir: '/Users/tester/.redeven',
       diagnostics_enabled: true,
       pid: 4242,
@@ -346,6 +350,7 @@ describe('runtimeProcess', () => {
         runtimeAttachTimeoutMs: 200,
         runtimeStabilityWindowMs: 500,
         runtimeStabilityPollMs: 30,
+        desktopOwnerID: 'desktop-owner-1',
       });
 
       expect(launch.kind).toBe('ready');
@@ -428,6 +433,7 @@ describe('runtimeProcess', () => {
         runtimeAttachTimeoutMs: 200,
         runtimeStabilityWindowMs: 0,
         runtimeStabilityPollMs: 30,
+        desktopOwnerID: 'desktop-owner-1',
       })).rejects.toThrow(/not ready to open yet|Env App gateway is starting/);
     } finally {
       await server.close();

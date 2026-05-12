@@ -19,6 +19,7 @@ func TestWriteDesktopLaunchReportReady(t *testing.T) {
 		EffectiveRunMode: "hybrid",
 		RemoteEnabled:    true,
 		DesktopManaged:   true,
+		DesktopOwnerID:   "desktop-owner-report",
 		RuntimeService: runtimeservice.Snapshot{
 			RuntimeVersion:   "v1.2.3",
 			ProtocolVersion:  runtimeservice.ProtocolVersion,
@@ -57,7 +58,7 @@ func TestWriteDesktopLaunchReportReady(t *testing.T) {
 	if !report.PasswordRequired {
 		t.Fatalf("PasswordRequired = false, want true")
 	}
-	if !report.RemoteEnabled || !report.DesktopManaged || report.EffectiveRunMode != "hybrid" {
+	if !report.RemoteEnabled || !report.DesktopManaged || report.DesktopOwnerID != "desktop-owner-report" || report.EffectiveRunMode != "hybrid" {
 		t.Fatalf("unexpected report: %#v", report)
 	}
 	if report.RuntimeService.RuntimeVersion != "v1.2.3" || report.RuntimeService.ActiveWorkload.TerminalCount != 1 {

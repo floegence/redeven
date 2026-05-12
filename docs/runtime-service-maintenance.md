@@ -161,7 +161,9 @@ Env App protocol SDK types.
 | `managed_elsewhere` | Desktop cannot own lifecycle | Stable card state + toast on blocked action |
 | `unknown` | Metadata unavailable | Quiet degraded state; diagnostics available |
 
-Desktop treats the runtime as a singleton per Local Environment profile. When a provider Environment reuses that singleton locally, the launcher `Open` action may start or restart the Desktop-managed runtime only when active work is empty. If active workload exists, Desktop keeps the action blocked until the user finishes or stops that work. External-managed runtimes stay outside Desktop ownership and are never silently replaced.
+Desktop treats the runtime as a singleton per Local Environment profile. Desktop-managed ownership is a lease, not a heuristic: Electron persists one `desktop_owner_id` under `userData`, passes it to managed child processes with `REDEVEN_DESKTOP_OWNER_ID`, and only owns an attached runtime when the runtime reports the same id through startup reports, `runtime/local-ui.json`, and Local UI health/runtime endpoints.
+
+When a provider Environment reuses that singleton locally, the launcher `Open` action may start or restart the Desktop-managed runtime only when active work is empty and Desktop can stop the reported process id. If active workload exists, Desktop keeps the action blocked until the user finishes or stops that work. External-managed runtimes and runtimes leased to another Desktop instance stay outside Desktop ownership and are never silently replaced. Legacy Desktop-managed runtimes without a lease id are restart-reclaimable only when idle.
 
 ## Desktop Launcher UI
 
@@ -177,6 +179,7 @@ Desktop launcher cards keep their current dense SaaS tool layout:
 - Primary actions remain route-aware:
   - compatible: `Open`
   - not running: `Open`
+  - idle legacy managed runtime: `Open` with a restart-reclaim plan
   - update required: `Open` with restart plan when idle
   - desktop too old: `Update Desktop`
   - managed elsewhere: `Open` stays blocked with owner guidance

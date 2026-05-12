@@ -8,7 +8,14 @@ import type { Readable, Writable } from 'node:stream';
 import { parseLaunchReport, type LaunchBlockedReport, type LaunchReport } from './launchReport';
 import { defaultRuntimeStatePath, loadAttachableRuntimeState } from './runtimeState';
 import { type StartupReport } from './startup';
-import { runtimeServiceOpenReadinessLabel, runtimeServiceIsOpenable } from '../shared/runtimeService';
+import {
+  runtimeServiceHasActiveWork,
+  runtimeServiceMatchesIdentity,
+  runtimeServiceNeedsRuntimeUpdate,
+  runtimeServiceOpenReadinessLabel,
+  runtimeServiceIsOpenable,
+  type RuntimeServiceIdentity,
+} from '../shared/runtimeService';
 
 const STARTUP_REPORT_POLL_MS = 100;
 const DEFAULT_STARTUP_TIMEOUT_MS = 30_000;
@@ -40,6 +47,8 @@ export type StartManagedRuntimeArgs = Readonly<{
   runtimeAttachTimeoutMs?: number;
   runtimeStabilityWindowMs?: number;
   runtimeStabilityPollMs?: number;
+  desktopOwnerID?: string;
+  expectedRuntimeIdentity?: RuntimeServiceIdentity | null;
   passwordStdin?: string;
   onLog?: (stream: 'stdout' | 'stderr', chunk: string) => void;
 }>;
@@ -235,6 +244,11 @@ function runtimePIDExited(startup: StartupReport): boolean {
   return Number.isInteger(pid) && pid > 0 && !processExists(pid);
 }
 
+function runtimeReportsStoppablePID(startup: StartupReport): boolean {
+  const pid = Number(startup.pid ?? Number.NaN);
+  return Number.isInteger(pid) && pid > 0;
+}
+
 function assertRuntimePIDAlive(startup: StartupReport, logs: RecentLogs): void {
   if (!runtimePIDExited(startup)) {
     return;
@@ -385,6 +399,67 @@ function attachedStop(startup: StartupReport, timeoutMs: number): () => Promise<
   };
 }
 
+type ManagedRuntimeAttachPolicy =
+  | Readonly<{ action: 'reuse' }>
+  | Readonly<{ action: 'replace' }>
+  | Readonly<{ action: 'block'; message: string }>;
+
+function managedRuntimeOwnership(
+  startup: StartupReport,
+  desktopOwnerID: string,
+): 'owned' | 'managed_elsewhere' | 'legacy_unleased' | 'external' {
+  if (startup.desktop_managed !== true) {
+    return 'external';
+  }
+  const cleanDesktopOwnerID = String(desktopOwnerID ?? '').trim();
+  const startupOwnerID = String(startup.desktop_owner_id ?? '').trim();
+  if (cleanDesktopOwnerID !== '' && startupOwnerID !== '' && startupOwnerID === cleanDesktopOwnerID) {
+    return 'owned';
+  }
+  return startupOwnerID === '' ? 'legacy_unleased' : 'managed_elsewhere';
+}
+
+function managedRuntimeAttachPolicy(
+  startup: StartupReport,
+  args: Readonly<{
+    desktopOwnerID?: string;
+    expectedRuntimeIdentity?: RuntimeServiceIdentity | null;
+  }>,
+): ManagedRuntimeAttachPolicy {
+  const ownership = managedRuntimeOwnership(startup, String(args.desktopOwnerID ?? ''));
+  if (ownership === 'external') {
+    return { action: 'reuse' };
+  }
+  if (ownership === 'managed_elsewhere') {
+    return {
+      action: 'block',
+      message: 'The running Desktop-managed runtime is owned by another Desktop instance.',
+    };
+  }
+
+  const runtimeNeedsRestart = ownership === 'legacy_unleased'
+    || runtimeServiceNeedsRuntimeUpdate(startup.runtime_service)
+    || !runtimeServiceMatchesIdentity(startup.runtime_service, args.expectedRuntimeIdentity);
+  if (!runtimeNeedsRestart) {
+    return { action: 'reuse' };
+  }
+  if (runtimeServiceHasActiveWork(startup.runtime_service)) {
+    return {
+      action: 'block',
+      message: ownership === 'legacy_unleased'
+        ? 'An older Desktop-managed runtime has active work. Close active runtime work before Desktop restarts it.'
+        : 'The Desktop-managed runtime needs to restart before opening, but active work is still running.',
+    };
+  }
+  if (!runtimeReportsStoppablePID(startup)) {
+    return {
+      action: 'block',
+      message: 'The Desktop-managed runtime needs to restart before opening, but it did not report a process id Desktop can stop.',
+    };
+  }
+  return { action: 'replace' };
+}
+
 async function writePasswordToStdin(child: SpawnedRuntimeProcess, password: string): Promise<void> {
   const stdin = child.stdin;
   if (!stdin || stdin.destroyed || !stdin.writable) {
@@ -420,19 +495,29 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
   const existingRuntime = await loadAttachableRuntimeState(runtimeStateFile, runtimeAttachTimeoutMs);
   if (existingRuntime) {
     assertRuntimePIDAlive(existingRuntime, { stdout: '', stderr: '' });
-    assertRuntimeOpenable(existingRuntime, { stdout: '', stderr: '' });
-    return {
-      kind: 'ready',
-      managedRuntime: {
-        child: null,
-        startup: existingRuntime,
-        reportDir: null,
-        reportFile: null,
-        attached: true,
-        stop: attachedStop(existingRuntime, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS),
-      },
-      spawned: false,
-    };
+    const attachPolicy = managedRuntimeAttachPolicy(existingRuntime, {
+      desktopOwnerID: args.desktopOwnerID,
+      expectedRuntimeIdentity: args.expectedRuntimeIdentity,
+    });
+    if (attachPolicy.action === 'block') {
+      throw readinessFailure(attachPolicy.message, { stdout: '', stderr: '' });
+    }
+    if (attachPolicy.action === 'reuse') {
+      assertRuntimeOpenable(existingRuntime, { stdout: '', stderr: '' });
+      return {
+        kind: 'ready',
+        managedRuntime: {
+          child: null,
+          startup: existingRuntime,
+          reportDir: null,
+          reportFile: null,
+          attached: true,
+          stop: attachedStop(existingRuntime, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS),
+        },
+        spawned: false,
+      };
+    }
+    await attachedStop(existingRuntime, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS)();
   }
 
   const reportDir = await fs.mkdtemp(path.join(args.tempRoot ?? os.tmpdir(), 'redeven-desktop-'));
@@ -503,7 +588,20 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
         probeTimeoutMs: runtimeAttachTimeoutMs,
         logs: recentLogs,
         unavailableMessage: 'Start Runtime did not complete because the attached runtime is no longer online.',
+        requireOpenable: false,
       });
+      const attachPolicy = managedRuntimeAttachPolicy(attachedStartup, {
+        desktopOwnerID: args.desktopOwnerID,
+        expectedRuntimeIdentity: args.expectedRuntimeIdentity,
+      });
+      if (attachPolicy.action === 'block') {
+        throw readinessFailure(attachPolicy.message, recentLogs);
+      }
+      if (attachPolicy.action === 'replace') {
+        await attachedStop(attachedStartup, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS)();
+        return startManagedRuntime(args);
+      }
+      assertRuntimeOpenable(attachedStartup, recentLogs);
       return {
         kind: 'ready',
         managedRuntime: {
@@ -528,6 +626,18 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
       }
       await fs.rm(reportDir, { recursive: true, force: true }).catch(() => undefined);
       assertRuntimePIDAlive(attachedStartup, recentLogs);
+      const attachPolicy = managedRuntimeAttachPolicy(attachedStartup, {
+        desktopOwnerID: args.desktopOwnerID,
+        expectedRuntimeIdentity: args.expectedRuntimeIdentity,
+      });
+      if (attachPolicy.action === 'block') {
+        throw readinessFailure(attachPolicy.message, recentLogs);
+      }
+      if (attachPolicy.action === 'replace') {
+        await attachedStop(attachedStartup, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS)();
+        return startManagedRuntime(args);
+      }
+      assertRuntimeOpenable(attachedStartup, recentLogs);
       return {
         kind: 'ready',
         managedRuntime: {

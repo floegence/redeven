@@ -25,6 +25,8 @@ type RuntimeProbeResponse = Readonly<{
 type RuntimeProbeStatus = Readonly<{
   status: 'online';
   password_required: boolean;
+  desktop_managed?: boolean;
+  desktop_owner_id?: string;
   runtime_service?: RuntimeServiceSnapshot;
 }>;
 
@@ -119,6 +121,8 @@ function parseLocalRuntimeHealthResponse(raw: string): RuntimeProbeStatus | null
     return {
       status: 'online',
       password_required: data.password_required,
+      ...(typeof data.desktop_managed === 'boolean' ? { desktop_managed: data.desktop_managed } : {}),
+      ...(String(data.desktop_owner_id ?? '').trim() !== '' ? { desktop_owner_id: String(data.desktop_owner_id).trim() } : {}),
       ...(data.runtime_service ? { runtime_service: normalizeRuntimeServiceSnapshot(data.runtime_service) } : {}),
     };
   } catch {
@@ -250,6 +254,8 @@ export async function loadExternalLocalUIStartup(
     local_ui_url: normalizedBaseURL,
     local_ui_urls: [normalizedBaseURL],
     password_required: status.password_required,
+    ...(typeof status.desktop_managed === 'boolean' ? { desktop_managed: status.desktop_managed } : {}),
+    ...(String(status.desktop_owner_id ?? '').trim() !== '' ? { desktop_owner_id: String(status.desktop_owner_id).trim() } : {}),
     ...(status.runtime_service ? { runtime_service: status.runtime_service } : {}),
   };
 }
@@ -290,7 +296,7 @@ export async function loadAttachableRuntimeState(
 
   for (const candidateURL of candidateStartupURLs(startup)) {
     const status = await probeRedevenLocalUI(candidateURL, timeoutMs);
-      if (status) {
+    if (status) {
       const providerBindingFields = Object.fromEntries(
         PROVIDER_BINDING_STARTUP_FIELDS.flatMap((key) => (
           startup[key] ? [[key, startup[key]]] : []
@@ -305,6 +311,8 @@ export async function loadAttachableRuntimeState(
           local_ui_url: candidateURL,
         }),
         password_required: status.password_required,
+        ...(typeof status.desktop_managed === 'boolean' ? { desktop_managed: status.desktop_managed } : {}),
+        ...(String(status.desktop_owner_id ?? '').trim() !== '' ? { desktop_owner_id: String(status.desktop_owner_id).trim() } : {}),
         ...(status.runtime_service ? { runtime_service: status.runtime_service } : {}),
       };
     }

@@ -71,6 +71,8 @@ import {
 import { hydrateWelcomeLocalEnvironmentRuntimeState } from './desktopWelcomeRuntimeState';
 import { defaultDesktopStateStorePath, DesktopStateStore } from './desktopStateStore';
 import { DesktopThemeState } from './desktopThemeState';
+import { loadOrCreateDesktopRuntimeOwnerID } from './desktopRuntimeOwner';
+import { readBundledDesktopRuntimeIdentity, type DesktopRuntimeIdentity } from './desktopRuntimeIdentity';
 import { DesktopDiagnosticsRecorder } from './diagnostics';
 import { LauncherOperationRegistry, launcherOperationProgress } from './launcherOperations';
 import { buildLocalUIEnvAppEntryURL } from './localUIURL';
@@ -397,6 +399,8 @@ let quitPhase: 'idle' | 'confirming' | 'requested' | 'shutting_down' = 'idle';
 let desktopPreferencesCache: DesktopPreferences | null = null;
 let desktopStateStoreCache: DesktopStateStore | null = null;
 let desktopThemeStateCache: DesktopThemeState | null = null;
+let desktopRuntimeOwnerIDTask: Promise<string> | null = null;
+let bundledRuntimeIdentityCache: DesktopRuntimeIdentity | null | undefined;
 const controlPlaneAccessStateByKey = new Map<string, DesktopControlPlaneAccessState>();
 const controlPlaneSyncStateByKey = new Map<string, DesktopControlPlaneSyncRecord>();
 const providerRuntimeHealthByControlPlaneKey = new Map<string, Map<string, DesktopProviderEnvironmentRuntimeHealth>>();
@@ -433,6 +437,33 @@ installStdioBrokenPipeGuards();
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+function bundledRuntimeExecutablePath(): string {
+  return resolveBundledRuntimePath({
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    appPath: app.getAppPath(),
+  });
+}
+
+function bundledRuntimeIdentity(): DesktopRuntimeIdentity | null {
+  if (bundledRuntimeIdentityCache !== undefined) {
+    return bundledRuntimeIdentityCache;
+  }
+  try {
+    bundledRuntimeIdentityCache = readBundledDesktopRuntimeIdentity(bundledRuntimeExecutablePath());
+  } catch {
+    bundledRuntimeIdentityCache = null;
+  }
+  return bundledRuntimeIdentityCache;
+}
+
+async function desktopRuntimeOwnerID(): Promise<string> {
+  if (!desktopRuntimeOwnerIDTask) {
+    desktopRuntimeOwnerIDTask = loadOrCreateDesktopRuntimeOwnerID(app.getPath('userData'));
+  }
+  return desktopRuntimeOwnerIDTask;
 }
 
 type LocalRuntimeProviderBinding = DesktopLocalRuntimeBinding;
@@ -484,6 +515,10 @@ function localRuntimeMatchesProvider(
 function providerLocalRuntimeOpenPlan(
   startup: StartupReport | null | undefined,
   environment: DesktopProviderEnvironmentRecord | DesktopLocalEnvironmentState,
+  options: Readonly<{
+    desktopOwnerID?: string;
+    expectedRuntimeIdentity?: DesktopRuntimeIdentity | null;
+  }> = {},
 ): DesktopLocalRuntimeOpenPlan {
   const binding = providerBindingForEnvironment(environment);
   return buildDesktopLocalRuntimeOpenPlan(
@@ -491,9 +526,13 @@ function providerLocalRuntimeOpenPlan(
       ? {
         kind: 'provider_environment',
         ...binding,
-      }
+    }
       : { kind: 'local_environment' },
     startup,
+    {
+      desktopOwnerID: options.desktopOwnerID,
+      expectedRuntimeIdentity: options.expectedRuntimeIdentity,
+    },
   );
 }
 
@@ -579,9 +618,14 @@ async function ensureProviderLocalEnvironmentRuntime(
   const localEnvironment = localEnvironmentForProviderBinding(preferences, environment);
   let runtimeRecord = await attachLocalEnvironmentRuntime(localEnvironment);
   let replacedRuntime = false;
+  const ownerID = await desktopRuntimeOwnerID();
+  const expectedRuntimeIdentity = bundledRuntimeIdentity();
 
   if (runtimeRecord) {
-    const runtimePlan = providerLocalRuntimeOpenPlan(runtimeRecord.startup, environment);
+    const runtimePlan = providerLocalRuntimeOpenPlan(runtimeRecord.startup, environment, {
+      desktopOwnerID: ownerID,
+      expectedRuntimeIdentity,
+    });
     if (!runtimePlan.can_open) {
       return {
         ok: false,
@@ -589,14 +633,16 @@ async function ensureProviderLocalEnvironmentRuntime(
       };
     }
     if (runtimePlan.requires_restart) {
-      if (runtimeRecord.runtime_handle.lifecycle_owner !== 'desktop' || !runtimePlan.desktop_can_manage) {
+      if (!runtimePlan.desktop_can_manage) {
         return {
           ok: false,
           failure: externalProviderLocalEnvironmentRebindFailure(environment, runtimeRecord.startup),
         };
       }
       await closeLocalEnvironmentLocalHostSessions();
-      await runtimeRecord.runtime_handle.stop();
+      if (runtimeRecord.runtime_handle.lifecycle_owner === 'desktop') {
+        await runtimeRecord.runtime_handle.stop();
+      }
       clearLocalEnvironmentRuntimeRecord(localEnvironment);
       runtimeRecord = null;
       replacedRuntime = true;
@@ -636,6 +682,7 @@ async function ensureProviderLocalEnvironmentRuntime(
       prepared.launch.managedRuntime.startup,
       desktopSessionRuntimeHandleFromManagedRuntime(prepared.launch.managedRuntime, {
         persistedOwner: localEnvironment.local_hosting?.owner,
+        desktopOwnerID: await desktopRuntimeOwnerID(),
       }),
     );
   }
@@ -1407,7 +1454,10 @@ async function buildCurrentDesktopWelcomeSnapshot(
 ) {
   const preferences = await loadDesktopPreferencesCached();
   const openSessions = openSessionSummaries();
-  const welcomePreferences = await hydrateWelcomeLocalEnvironmentRuntimeState(preferences, openSessions);
+  const welcomePreferences = await hydrateWelcomeLocalEnvironmentRuntimeState(preferences, openSessions, {
+    desktopOwnerID: await desktopRuntimeOwnerID(),
+    expectedRuntimeIdentity: bundledRuntimeIdentity(),
+  });
   const [savedExternalRuntimeHealth, savedSSHRuntimeHealth] = await Promise.all([
     collectSavedExternalRuntimeHealth(welcomePreferences),
     collectSavedSSHRuntimeHealth(welcomePreferences),
@@ -2285,19 +2335,19 @@ type PrepareManagedTargetOptions = Readonly<{
 async function prepareManagedTarget(
   options: PrepareManagedTargetOptions,
 ): Promise<PreparedManagedTargetResult> {
-  const executablePath = resolveBundledRuntimePath({
-    isPackaged: app.isPackaged,
-    resourcesPath: process.resourcesPath,
-    appPath: app.getAppPath(),
-  });
+  const executablePath = bundledRuntimeExecutablePath();
+  const desktopOwnerID = await desktopRuntimeOwnerID();
   const launchPlan = buildDesktopRuntimeLaunchPlan(options.environment, process.env, {
     localUIBind: options.localUIBind,
     bootstrap: options.bootstrap,
+    desktopOwnerID,
   });
   const launch = await startManagedRuntime({
     executablePath,
     runtimeArgs: launchPlan.args,
     env: launchPlan.env,
+    desktopOwnerID,
+    expectedRuntimeIdentity: bundledRuntimeIdentity(),
     runtimeStateFile: launchPlan.state_layout.runtimeStateFile,
     passwordStdin: launchPlan.password_stdin,
     tempRoot: app.getPath('temp'),
@@ -2340,6 +2390,10 @@ async function attachLocalEnvironmentRuntime(
             local_ui_url: startup.local_ui_url,
             local_ui_urls: startup.local_ui_urls,
             password_required: startup.password_required,
+            desktop_managed: startup.desktop_managed ?? existingRecord.startup.desktop_managed,
+            desktop_owner_id: startup.desktop_owner_id ?? existingRecord.startup.desktop_owner_id,
+            effective_run_mode: startup.effective_run_mode ?? existingRecord.startup.effective_run_mode,
+            remote_enabled: startup.remote_enabled ?? existingRecord.startup.remote_enabled,
             runtime_service: startup.runtime_service ?? existingRecord.startup.runtime_service,
           },
         };
@@ -2364,6 +2418,7 @@ async function attachLocalEnvironmentRuntime(
     attachedRuntime.startup,
     desktopSessionRuntimeHandleFromManagedRuntime(attachedRuntime, {
       persistedOwner: environment.local_hosting?.owner,
+      desktopOwnerID: await desktopRuntimeOwnerID(),
     }),
   );
 }
@@ -3628,14 +3683,81 @@ async function openLocalEnvironmentRecord(
     });
   }
 
-  const runtimeRecord = await attachLocalEnvironmentRuntime(environment);
+  let runtimeRecord = await attachLocalEnvironmentRuntime(environment);
+  const ownerID = await desktopRuntimeOwnerID();
+  const expectedRuntimeIdentity = bundledRuntimeIdentity();
   if (!runtimeRecord) {
+    const bootstrap = await resolveLocalEnvironmentBootstrap(preferences, environment);
+    const prepared = await prepareManagedTarget({
+      environment,
+      bootstrap,
+    });
+    if (!prepared.ok) {
+      return launcherActionFailure(
+        'action_invalid',
+        'environment',
+        prepared.issue.message,
+        {
+          environmentID: environment.id,
+          providerOrigin: localEnvironmentProviderOrigin(environment),
+          providerID: localEnvironmentProviderID(environment),
+          envPublicID: localEnvironmentPublicID(environment),
+        },
+      );
+    }
+    runtimeRecord = updateLocalEnvironmentRuntimeRecord(
+      environment,
+      prepared.launch.managedRuntime.startup,
+      desktopSessionRuntimeHandleFromManagedRuntime(prepared.launch.managedRuntime, {
+        persistedOwner: environment.local_hosting?.owner,
+        desktopOwnerID: ownerID,
+      }),
+    );
+  }
+  const runtimePlan = buildDesktopLocalRuntimeOpenPlan(
+    { kind: 'local_environment' },
+    runtimeRecord.startup,
+    {
+      desktopOwnerID: ownerID,
+      expectedRuntimeIdentity,
+    },
+  );
+  if (runtimePlan.requires_restart && runtimePlan.can_open) {
+    clearLocalEnvironmentRuntimeRecord(environment);
+    const bootstrap = await resolveLocalEnvironmentBootstrap(preferences, environment);
+    const prepared = await prepareManagedTarget({ environment, bootstrap });
+    if (!prepared.ok) {
+      return launcherActionFailure(
+        'action_invalid',
+        'environment',
+        prepared.issue.message,
+        {
+          environmentID: environment.id,
+          providerOrigin: localEnvironmentProviderOrigin(environment),
+          providerID: localEnvironmentProviderID(environment),
+          envPublicID: localEnvironmentPublicID(environment),
+        },
+      );
+    }
+    runtimeRecord = updateLocalEnvironmentRuntimeRecord(
+      environment,
+      prepared.launch.managedRuntime.startup,
+      desktopSessionRuntimeHandleFromManagedRuntime(prepared.launch.managedRuntime, {
+        persistedOwner: environment.local_hosting?.owner,
+        desktopOwnerID: ownerID,
+      }),
+    );
+  } else if (!runtimePlan.can_open) {
     return launcherActionFailure(
-      'runtime_not_started',
+      'runtime_not_ready',
       'environment',
-      'Serve the runtime first.',
+      runtimePlan.message,
       {
         environmentID: environment.id,
+        providerOrigin: localEnvironmentProviderOrigin(environment),
+        providerID: localEnvironmentProviderID(environment),
+        envPublicID: localEnvironmentPublicID(environment),
+        shouldRefreshSnapshot: true,
       },
     );
   }
@@ -4232,6 +4354,7 @@ async function startEnvironmentRuntimeFromLauncher(
       prepared.launch.managedRuntime.startup,
       desktopSessionRuntimeHandleFromManagedRuntime(prepared.launch.managedRuntime, {
         persistedOwner: environment.local_hosting?.owner,
+        desktopOwnerID: await desktopRuntimeOwnerID(),
       }),
     );
     resetLauncherIssueState();
@@ -4606,7 +4729,10 @@ async function openProviderEnvironmentFromLauncher(
       return openProviderLocalEnvironmentRecord(preferences, environment, { stealAppFocus: true });
     }
     const runtimeRecord = await attachLocalEnvironmentRuntime(localLocalEnvironment);
-    const runtimePlan = providerLocalRuntimeOpenPlan(runtimeRecord?.startup, environment);
+    const runtimePlan = providerLocalRuntimeOpenPlan(runtimeRecord?.startup, environment, {
+      desktopOwnerID: await desktopRuntimeOwnerID(),
+      expectedRuntimeIdentity: bundledRuntimeIdentity(),
+    });
     if (desktopLocalRuntimePlanAllowsAutoLocalOpen(runtimePlan, environment.preferred_open_route)) {
       return openProviderLocalEnvironmentRecord(preferences, environment, { stealAppFocus: true });
     }
@@ -4841,6 +4967,7 @@ async function restartManagedRuntimeFromShell(webContentsID: number): Promise<De
 
   sessionRecord.runtime_handle = desktopSessionRuntimeHandleFromManagedRuntime(prepared.launch.managedRuntime, {
     persistedOwner: environment.local_hosting?.owner,
+    desktopOwnerID: await desktopRuntimeOwnerID(),
   });
   sessionRecord.startup = prepared.launch.managedRuntime.startup;
   updateLocalEnvironmentRuntimeRecord(environment, sessionRecord.startup, sessionRecord.runtime_handle);

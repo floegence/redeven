@@ -508,6 +508,9 @@ function localRuntimeState(
   if (!currentRuntime?.local_ui_url) {
     return 'not_running';
   }
+  if (currentRuntime.desktop_ownership) {
+    return currentRuntime.desktop_ownership === 'owned' ? 'running_desktop' : 'running_external';
+  }
   return currentRuntime.desktop_managed === true ? 'running_desktop' : 'running_external';
 }
 
@@ -681,6 +684,10 @@ function buildLocalEnvironmentEntry(
   const resolvedLocalRuntimeState = localRuntimeState(environment);
   const resolvedLocalRuntimeURL = localRuntimeURL(environment);
   const runtimeService = preferredRuntimeService(localEnvironmentRuntimeService(environment), undefined);
+  const localRuntimePlan = buildDesktopLocalRuntimeOpenPlan(
+    { kind: 'local_environment' },
+    environment.local_hosting?.current_runtime,
+  );
   const resolvedLocalCloseBehavior = localCloseBehavior(environment, resolvedLocalRuntimeState);
   const runtimeHealth = localEnvironmentRuntimeHealth(resolvedLocalRuntimeState, resolvedLocalRuntimeURL, runtimeService);
   const resolvedLocalRouteState = localRouteState(environment, localSession);
@@ -712,6 +719,7 @@ function buildLocalEnvironmentEntry(
     local_environment_owner: environment.local_hosting?.owner,
     local_environment_runtime_state: resolvedLocalRuntimeState,
     local_environment_runtime_url: resolvedLocalRuntimeURL || undefined,
+    local_environment_runtime_plan: localRuntimePlan,
     local_environment_runtime_service: runtimeService,
     local_environment_close_behavior: resolvedLocalCloseBehavior,
     local_environment_has_local_hosting: true,
@@ -868,6 +876,9 @@ function providerLocalRuntimeState(
   const currentRuntime = localEnvironment.local_hosting?.current_runtime;
   if (!providerRuntimeBindingMatches(environment, currentRuntime) || !currentRuntime?.local_ui_url) {
     return 'not_running';
+  }
+  if (currentRuntime.desktop_ownership) {
+    return currentRuntime.desktop_ownership === 'owned' ? 'running_desktop' : 'running_external';
   }
   return currentRuntime.desktop_managed === true ? 'running_desktop' : 'running_external';
 }

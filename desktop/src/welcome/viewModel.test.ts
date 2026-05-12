@@ -335,22 +335,22 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(buildEnvironmentCardModel(localEntry!)).toEqual(expect.objectContaining({
       kind_label: 'Local',
-      status_label: 'RUNTIME READY',
+      status_label: 'Open',
       target_primary: 'http://localhost:23998/',
     }));
     expect(buildEnvironmentCardModel(providerEntry!)).toEqual(expect.objectContaining({
       kind_label: 'Provider',
-      status_label: 'RUNTIME READY',
+      status_label: 'Open',
       target_primary: 'https://cp.example.invalid/env/env_demo',
       target_secondary: '',
     }));
     expect(buildEnvironmentCardModel(urlEntry!)).toEqual(expect.objectContaining({
       kind_label: 'Redeven URL',
-      status_label: 'RUNTIME READY',
+      status_label: 'Open',
     }));
     expect(buildEnvironmentCardModel(sshEntry!)).toEqual(expect.objectContaining({
       kind_label: 'SSH Host',
-      status_label: 'RUNTIME READY',
+      status_label: 'Open',
       target_primary: 'ops@example.internal:2222',
       target_secondary: 'http://127.0.0.1:24111/',
     }));
@@ -704,7 +704,7 @@ describe('buildEnvironmentCardModel', () => {
     });
   });
 
-  it('keeps offline runtime controls separate from the primary Open action', () => {
+  it('uses Open as the primary action for a stopped local runtime', () => {
     const localSnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: testLocalEnvironment(),
@@ -713,44 +713,16 @@ describe('buildEnvironmentCardModel', () => {
     const localEntry = localSnapshot.environments.find((environment) => environment.kind === 'local_environment');
     expect(localEntry).toBeTruthy();
     expect(buildProviderBackedEnvironmentActionModel(localEntry!)).toMatchObject({
-      status_label: 'RUNTIME OFFLINE',
-      status_tone: 'warning',
+      status_label: 'Open',
+      status_tone: 'success',
       action_presentation: {
         primary_action: {
           intent: 'open',
           label: 'Open',
-          enabled: false,
+          enabled: true,
           variant: 'default',
         },
-        primary_action_overlay: {
-          kind: 'popover',
-          tone: 'warning',
-          eyebrow: 'Runtime offline',
-          title: 'Start the local runtime to continue',
-          detail: 'Open becomes available once the runtime is ready on this device.',
-          actions: [
-            {
-              label: 'Start runtime locally',
-              emphasis: 'primary',
-              action: {
-                intent: 'start_runtime',
-                label: 'Start runtime',
-                enabled: true,
-                variant: 'outline',
-              },
-            },
-            {
-              label: 'Refresh status',
-              emphasis: 'secondary',
-              action: {
-                intent: 'refresh_runtime',
-                label: 'Refresh runtime status',
-                enabled: true,
-                variant: 'outline',
-              },
-            },
-          ],
-        },
+        primary_action_overlay: undefined,
       },
     });
 
@@ -804,7 +776,7 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(providerOnlyEntry).toBeTruthy();
     expect(buildProviderBackedEnvironmentActionModel(providerOnlyEntry!)).toEqual({
-      status_label: 'RUNTIME READY',
+      status_label: 'Open',
       status_tone: 'success',
       action_presentation: {
         kind: 'split_button',
@@ -878,7 +850,7 @@ describe('buildEnvironmentCardModel', () => {
       requires_restart: true,
     });
     expect(buildProviderBackedEnvironmentActionModel(unboundRuntimeProviderEntry!)).toMatchObject({
-      status_label: 'RUNTIME READY',
+      status_label: 'Open',
       status_tone: 'success',
       action_presentation: {
         primary_action: {
@@ -912,7 +884,7 @@ describe('buildEnvironmentCardModel', () => {
     const openLocalServeProviderEntry = openLocalServeSnapshot.environments.find((environment) => environment.kind === 'provider_environment');
     expect(openLocalServeProviderEntry?.provider_local_runtime_state).toBe('running_desktop');
     expect(buildProviderBackedEnvironmentActionModel(openLocalServeProviderEntry!)).toEqual({
-      status_label: 'RUNTIME READY',
+      status_label: 'Open',
       status_tone: 'success',
       action_presentation: {
         kind: 'split_button',
@@ -962,7 +934,7 @@ describe('buildEnvironmentCardModel', () => {
     });
     const readyEntry = readySnapshot.environments.find((environment) => environment.kind === 'provider_environment');
     expect(buildProviderBackedEnvironmentActionModel(readyEntry!)).toEqual({
-      status_label: 'RUNTIME READY',
+      status_label: 'Open',
       status_tone: 'success',
       action_presentation: {
         kind: 'split_button',
@@ -1195,7 +1167,7 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(attachableLocalServe).toBeTruthy();
     expect(buildProviderBackedEnvironmentActionModel(attachableLocalServe!)).toEqual({
-      status_label: 'RUNTIME READY',
+      status_label: 'Open',
       status_tone: 'success',
       action_presentation: {
         kind: 'split_button',
@@ -1256,7 +1228,7 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(focusableLocalServe).toBeTruthy();
     expect(buildProviderBackedEnvironmentActionModel(focusableLocalServe!)).toEqual({
-      status_label: 'RUNTIME READY',
+      status_label: 'Open',
       status_tone: 'success',
       action_presentation: {
         kind: 'split_button',
@@ -1333,7 +1305,7 @@ describe('buildEnvironmentCardModel', () => {
     }));
 
     expect(buildProviderBackedEnvironmentActionModel(entry!)).toEqual({
-      status_label: 'RUNTIME READY',
+      status_label: 'Open',
       status_tone: 'success',
       action_presentation: {
         kind: 'split_button',
@@ -1371,7 +1343,7 @@ describe('buildEnvironmentCardModel', () => {
     });
   });
 
-  it('keeps Open disabled while an online runtime is still preparing Env App readiness', () => {
+  it('keeps local Open available when a provider-bound runtime can be safely rebound', () => {
     const local = testLocalEnvironment({
       currentRuntime: {
         local_ui_url: 'http://127.0.0.1:24001/',
@@ -1394,19 +1366,15 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(entry).toBeTruthy();
     expect(buildProviderBackedEnvironmentActionModel(entry!)).toMatchObject({
-      status_label: 'RUNTIME PREPARING',
-      status_tone: 'warning',
+      status_label: 'Open',
+      status_tone: 'success',
       action_presentation: {
         primary_action: {
           intent: 'open',
-          label: 'Preparing…',
-          enabled: false,
+          label: 'Open',
+          enabled: true,
         },
-        primary_action_overlay: {
-          kind: 'tooltip',
-          tone: 'warning',
-          message: 'Env App gateway is starting.',
-        },
+        primary_action_overlay: undefined,
       },
     });
   });

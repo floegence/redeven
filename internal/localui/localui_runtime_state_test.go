@@ -31,6 +31,8 @@ func TestServerStartWritesAndCloseRemovesRuntimeState(t *testing.T) {
 		stateDir:         filepath.Dir(cfgPath),
 		runtimeStatePath: localuiruntime.RuntimeStatePath(cfgPath),
 		version:          "dev",
+		desktopManaged:   true,
+		desktopOwnerID:   "desktop-owner-state",
 		gw:               newTestGateway(t, cfgPath),
 		diag: func() *diagnostics.Store {
 			store, err := diagnostics.New(diagnostics.Options{
@@ -70,6 +72,9 @@ func TestServerStartWritesAndCloseRemovesRuntimeState(t *testing.T) {
 	}
 	if state.StateDir != filepath.Dir(cfgPath) || !state.DiagnosticsEnabled {
 		t.Fatalf("unexpected diagnostics metadata: %#v", state)
+	}
+	if !state.DesktopManaged || state.DesktopOwnerID != "desktop-owner-state" {
+		t.Fatalf("unexpected desktop ownership metadata: %#v", state)
 	}
 
 	if err := s.Close(); err != nil {

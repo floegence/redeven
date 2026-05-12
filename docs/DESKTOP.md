@@ -81,17 +81,21 @@ Desktop may add user-configured startup flags on top of that base command:
 - `--controlplane <url>`
 - `--env-id <env_public_id>`
 - `--bootstrap-ticket-env REDEVEN_DESKTOP_BOOTSTRAP_TICKET`
+- `REDEVEN_DESKTOP_OWNER_ID` in the child process environment
 
 Behavior:
 
 - Local UI always starts for the Desktop-owned Local Environment runtime that Desktop owns locally.
 - `--password-stdin` is the non-interactive desktop-managed password transport.
+- Desktop creates one stable, non-secret runtime owner id in Electron `userData` and passes it only to Desktop-managed runtimes through `REDEVEN_DESKTOP_OWNER_ID`.
 - Desktop resolves the managed state root before spawn and passes it explicitly to `redeven run`.
 - The Desktop-owned local runtime uses `~/.redeven/local-environment/config.json`.
 - Desktop startup flows that include a bootstrap target write the same Local Environment config and replace the previous provider binding for that Local Environment profile.
 - Desktop attach probing reads `runtime/local-ui.json` from the same resolved state root as the spawned config path.
 - Provider `Open` uses a Local Runtime open plan instead of a shallow health check. The plan contains the desired target, the observed singleton runtime binding, whether Desktop owns the process, whether active work exists, and whether opening requires start, restart, provider bootstrap, or an update restart.
+- A Desktop-managed runtime is lifecycle-owned by this Desktop only when `desktop_owner_id` matches the current Desktop owner id. A managed runtime with a different owner is treated as owned by another Desktop instance; a managed runtime with no owner id is a legacy unleased runtime and can be reclaimed only by an idle restart that Desktop can actually stop.
 - When the singleton runtime is Desktop-managed, unbound, bound to another provider Environment, or running an older bundled binary, Desktop may stop and restart it automatically only when the Runtime Service snapshot reports no active workload.
+- Desktop compares the running Runtime Service identity (`runtime_version`, `runtime_commit`, `runtime_build_time`) with the bundled runtime identity. After a Desktop upgrade, an older idle Desktop-owned runtime is restarted before `Open` proceeds.
 - If active workload is present, Desktop keeps `Open` blocked and shows interruption-safe guidance instead of closing terminals, sessions, tasks, or port forwards implicitly.
 - If the singleton runtime is external-managed, Desktop never silently takes ownership. The user must stop or relaunch that runtime from its owner before Desktop can bind the Local Environment profile to a provider Environment.
 - The Local UI password stays out of process args and environment variables.
@@ -489,7 +493,8 @@ Desktop semantics:
 - One Local Environment runtime may be active for the signed-in user / profile state root. Linking another provider Environment replaces the prior local provider binding.
 - Provider environments never persist provider-specific local runtime configuration; Desktop derives linked-local readiness from the single Local Environment runtime and its current provider binding.
 - If Desktop attaches to a runtime that was started by standalone runtime / CLI mode, that attached runtime stays externally owned: closing the Desktop session only detaches, and restart/update stay delegated to the host process that owns that runtime.
-- Launcher runtime ownership is explicit on the environment card: externally owned runtimes surface as attachable local runtimes, while the Local Environment surfaces as the Desktop-owned local runtime.
+- Launcher runtime ownership is explicit on the environment card: only current-owner Desktop runtimes surface as Desktop-owned local runtimes; externally owned, another-Desktop-owned, and busy legacy runtimes surface with blocked owner guidance instead of a misleading ready state.
+- Environment cards label openable local runtime targets as `Open`, matching the primary action the user can safely take.
 - Launcher Runtime Service details are stable card facts, not banners. When a runtime snapshot is available, all runtime types can show service state, runtime version, and active work counts in the existing fact grid.
 - Standalone runtime / CLI and Desktop sessions stay interoperable because both read and write the same Local Environment runtime layout.
 
@@ -501,7 +506,7 @@ Runtime Service snapshots are carried through the same attach and startup paths 
 - `/api/local/runtime`
 - `sys.ping` after Env App connects
 
-The snapshot is intentionally non-secret and uses snake_case fields such as `runtime_version`, `protocol_version`, `service_owner`, `desktop_managed`, `effective_run_mode`, `remote_enabled`, `compatibility`, and `active_workload`. Desktop treats it as service identity and maintenance context, not as a second runtime protocol.
+The snapshot is intentionally non-secret and uses snake_case fields such as `runtime_version`, `runtime_commit`, `runtime_build_time`, `protocol_version`, `service_owner`, `desktop_managed`, `desktop_owner_id`, `effective_run_mode`, `remote_enabled`, `compatibility`, and `active_workload`. Desktop treats it as service identity and maintenance context, not as a second runtime protocol.
 
 Target validation rules:
 
@@ -697,7 +702,7 @@ Desktop-specific outcomes from this implementation:
 
 ## Env App Behavior
 
-- Desktop-managed Local UI exposes `desktop_managed`, `effective_run_mode`, `remote_enabled`, and the normalized Runtime Service snapshot through local runtime/version endpoints.
+- Desktop-managed Local UI exposes `desktop_managed`, `desktop_owner_id`, `effective_run_mode`, `remote_enabled`, and the normalized Runtime Service snapshot through local runtime/version endpoints.
 - When the runtime reports a desktop-owned release policy, Env App turns `Update Redeven` into `Manage in Desktop`.
 - Env App keeps `Restart runtime` only for Desktop-owned managed runtimes.
 - When Desktop is attached to an externally owned local runtime, restart and update hand off to the owning host process instead of trying to stop that runtime from Electron, and Desktop quit warnings do not claim that external runtime as a Desktop-owned shutdown.

@@ -17,6 +17,8 @@ export type DesktopLocalEnvironmentRuntimeState = Readonly<{
   effective_run_mode: string;
   remote_enabled: boolean;
   desktop_managed: boolean;
+  desktop_owner_id?: string;
+  desktop_ownership?: 'owned' | 'managed_elsewhere' | 'legacy_unleased' | 'external';
   controlplane_base_url?: string;
   controlplane_provider_id?: string;
   env_public_id?: string;
@@ -116,6 +118,14 @@ function normalizeRuntimeState(
     effective_run_mode: compact(value.effective_run_mode),
     remote_enabled: value.remote_enabled === true,
     desktop_managed: value.desktop_managed === true,
+    desktop_owner_id: compact(value.desktop_owner_id) || undefined,
+    desktop_ownership: (() => {
+      const ownership = compact(value.desktop_ownership);
+      if (ownership === 'owned' || ownership === 'managed_elsewhere' || ownership === 'legacy_unleased' || ownership === 'external') {
+        return ownership;
+      }
+      return undefined;
+    })(),
     controlplane_base_url: compact(value.controlplane_base_url) || undefined,
     controlplane_provider_id: compact(value.controlplane_provider_id) || undefined,
     env_public_id: compact(value.env_public_id) || undefined,

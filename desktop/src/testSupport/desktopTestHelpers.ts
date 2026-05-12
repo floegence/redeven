@@ -70,6 +70,19 @@ type TestProviderEnvironmentOptions = Readonly<{
   lastUsedAtMS?: number;
 }>;
 
+function testCurrentRuntime(
+  runtime: Partial<DesktopLocalEnvironmentRuntimeState> | null | undefined,
+): Partial<DesktopLocalEnvironmentRuntimeState> | null | undefined {
+  if (!runtime || runtime.desktop_managed !== true || runtime.desktop_ownership) {
+    return runtime;
+  }
+  return {
+    ...runtime,
+    desktop_owner_id: runtime.desktop_owner_id ?? 'desktop-owner-test',
+    desktop_ownership: 'owned',
+  };
+}
+
 export function testLocalAccess(
   overrides: TestLocalAccessOverrides = {},
 ): DesktopLocalEnvironmentAccess {
@@ -88,7 +101,7 @@ export function testLocalEnvironment(
     stateDir: options.stateDir ?? localEnvironmentStateLayout().stateDir,
     owner: options.owner,
     preferredOpenRoute: options.preferredOpenRoute,
-    currentRuntime: options.currentRuntime,
+    currentRuntime: testCurrentRuntime(options.currentRuntime),
     createdAtMS: options.createdAtMS,
     updatedAtMS: options.updatedAtMS,
     lastUsedAtMS: options.lastUsedAtMS,
@@ -117,7 +130,7 @@ export function testProviderBoundLocalEnvironment(
       access: options.access,
       owner: options.owner ?? 'desktop',
       stateDir: options.stateDir ?? layout.stateDir,
-      currentRuntime: options.currentRuntime,
+      currentRuntime: testCurrentRuntime(options.currentRuntime),
       createdAtMS: options.createdAtMS,
       updatedAtMS: options.updatedAtMS,
       lastUsedAtMS: options.lastUsedAtMS,

@@ -15,6 +15,8 @@ const providerTarget: DesktopLocalRuntimeTarget = {
   env_public_id: 'env_demo',
 };
 
+const DESKTOP_OWNER_ID = 'desktop-owner-1';
+
 function runtimeService(overrides: Partial<RuntimeServiceSnapshot> = {}): RuntimeServiceSnapshot {
   return {
     protocol_version: 'redeven-runtime-v1',
@@ -38,9 +40,20 @@ function runtime(overrides: Partial<DesktopLocalRuntimeObservation> = {}): Deskt
   return {
     local_ui_url: 'http://localhost:23998/',
     desktop_managed: true,
+    desktop_owner_id: DESKTOP_OWNER_ID,
     runtime_service: runtimeService(),
     ...overrides,
   };
+}
+
+function buildPlan(
+  observedRuntime: DesktopLocalRuntimeObservation | null | undefined,
+  options: Parameters<typeof buildDesktopLocalRuntimeOpenPlan>[2] = {},
+) {
+  return buildDesktopLocalRuntimeOpenPlan(providerTarget, observedRuntime, {
+    desktopOwnerID: DESKTOP_OWNER_ID,
+    ...options,
+  });
 }
 
 describe('localRuntimeSupervisor', () => {
@@ -56,7 +69,7 @@ describe('localRuntimeSupervisor', () => {
   });
 
   it('marks matching provider runtimes as directly openable', () => {
-    expect(buildDesktopLocalRuntimeOpenPlan(providerTarget, runtime({
+    expect(buildPlan(runtime({
       controlplane_base_url: 'https://cp.example.invalid',
       controlplane_provider_id: 'example_control_plane',
       env_public_id: 'env_demo',
@@ -71,7 +84,7 @@ describe('localRuntimeSupervisor', () => {
   });
 
   it('plans a Desktop-managed restart when the singleton runtime needs provider binding', () => {
-    expect(buildDesktopLocalRuntimeOpenPlan(providerTarget, runtime())).toMatchObject({
+    expect(buildPlan(runtime())).toMatchObject({
       state: 'restart_to_bind',
       runtime_running: true,
       runtime_matches_target: false,
@@ -83,7 +96,7 @@ describe('localRuntimeSupervisor', () => {
   });
 
   it('plans a Desktop-managed restart when the running runtime needs the bundled update', () => {
-    expect(buildDesktopLocalRuntimeOpenPlan(providerTarget, runtime({
+    expect(buildPlan(runtime({
       controlplane_base_url: 'https://cp.example.invalid',
       controlplane_provider_id: 'example_control_plane',
       env_public_id: 'env_demo',
@@ -104,8 +117,33 @@ describe('localRuntimeSupervisor', () => {
     });
   });
 
+  it('plans a Desktop-managed restart when the runtime identity does not match the bundled runtime', () => {
+    expect(buildPlan(runtime({
+      controlplane_base_url: 'https://cp.example.invalid',
+      controlplane_provider_id: 'example_control_plane',
+      env_public_id: 'env_demo',
+      runtime_service: runtimeService({
+        runtime_version: 'v1.0.0',
+        runtime_commit: 'old-commit',
+        runtime_build_time: 'old-build',
+      }),
+    }), {
+      expectedRuntimeIdentity: {
+        runtime_version: 'v2.0.0',
+        runtime_commit: 'new-commit',
+        runtime_build_time: 'new-build',
+      },
+    })).toMatchObject({
+      state: 'restart_to_update',
+      runtime_matches_target: true,
+      can_open: true,
+      can_prepare: true,
+      requires_restart: true,
+    });
+  });
+
   it('treats a running runtime without service metadata as needing the bundled update', () => {
-    expect(buildDesktopLocalRuntimeOpenPlan(providerTarget, runtime({
+    expect(buildPlan(runtime({
       runtime_service: undefined,
     }))).toMatchObject({
       state: 'restart_to_update',
@@ -116,7 +154,7 @@ describe('localRuntimeSupervisor', () => {
   });
 
   it('blocks automatic restart when active work would be interrupted', () => {
-    expect(buildDesktopLocalRuntimeOpenPlan(providerTarget, runtime({
+    expect(buildPlan(runtime({
       runtime_service: runtimeService({
         active_workload: {
           terminal_count: 1,
@@ -135,8 +173,9 @@ describe('localRuntimeSupervisor', () => {
   });
 
   it('blocks silent takeover of an external-managed runtime', () => {
-    expect(buildDesktopLocalRuntimeOpenPlan(providerTarget, runtime({
+    expect(buildPlan(runtime({
       desktop_managed: false,
+      desktop_owner_id: undefined,
       runtime_service: runtimeService({
         service_owner: 'external',
         desktop_managed: false,
@@ -147,6 +186,50 @@ describe('localRuntimeSupervisor', () => {
       can_open: false,
       can_prepare: false,
       requires_restart: true,
+    });
+  });
+
+  it('blocks a Desktop-managed runtime leased to another Desktop', () => {
+    expect(buildPlan(runtime({
+      desktop_owner_id: 'other-desktop-owner',
+    }))).toMatchObject({
+      state: 'blocked_external_runtime',
+      desktop_can_manage: false,
+      can_open: false,
+      can_prepare: false,
+      requires_restart: true,
+    });
+  });
+
+  it('reclaims an idle legacy Desktop-managed runtime without a lease owner', () => {
+    expect(buildPlan(runtime({
+      desktop_owner_id: undefined,
+    }))).toMatchObject({
+      state: 'restart_to_reclaim',
+      desktop_can_manage: true,
+      can_open: true,
+      can_prepare: true,
+      requires_restart: true,
+    });
+  });
+
+  it('blocks reclaiming a legacy Desktop-managed runtime while active work exists', () => {
+    expect(buildPlan(runtime({
+      desktop_owner_id: undefined,
+      runtime_service: runtimeService({
+        active_workload: {
+          terminal_count: 0,
+          session_count: 1,
+          task_count: 0,
+          port_forward_count: 0,
+        },
+      }),
+    }))).toMatchObject({
+      state: 'blocked_active_work',
+      can_open: false,
+      can_prepare: false,
+      requires_restart: true,
+      requires_confirmation: true,
     });
   });
 

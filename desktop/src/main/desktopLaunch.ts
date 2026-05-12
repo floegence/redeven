@@ -8,6 +8,7 @@ import {
 } from './statePaths';
 
 export const BOOTSTRAP_TICKET_ENV_NAME = 'REDEVEN_DESKTOP_BOOTSTRAP_TICKET';
+export const DESKTOP_OWNER_ID_ENV_NAME = 'REDEVEN_DESKTOP_OWNER_ID';
 
 export type DesktopRuntimeBootstrap = Readonly<
   {
@@ -84,7 +85,10 @@ export function buildDesktopRuntimeArgs(
 export function buildDesktopRuntimeEnvironment(
   _environment: DesktopLocalEnvironmentState,
   baseEnv: NodeJS.ProcessEnv = process.env,
-  options?: Readonly<{ bootstrap?: DesktopRuntimeBootstrap | null }>,
+  options?: Readonly<{
+    bootstrap?: DesktopRuntimeBootstrap | null;
+    desktopOwnerID?: string;
+  }>,
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     ...baseEnv,
@@ -96,6 +100,12 @@ export function buildDesktopRuntimeEnvironment(
   } else {
     delete env[BOOTSTRAP_TICKET_ENV_NAME];
   }
+  const desktopOwnerID = String(options?.desktopOwnerID ?? '').trim();
+  if (desktopOwnerID !== '') {
+    env[DESKTOP_OWNER_ID_ENV_NAME] = desktopOwnerID;
+  } else {
+    delete env[DESKTOP_OWNER_ID_ENV_NAME];
+  }
 
   return env;
 }
@@ -106,10 +116,14 @@ function buildDesktopRuntimePlan(
   options?: Readonly<{
     localUIBind?: string;
     bootstrap?: DesktopRuntimeBootstrap | null;
+    desktopOwnerID?: string;
   }>,
 ): DesktopRuntimeLaunchPlan {
   const stateLayout = resolveDesktopLocalEnvironmentStateLayout(environment, baseEnv);
-  const env = buildDesktopRuntimeEnvironment(environment, baseEnv, { bootstrap: options?.bootstrap });
+  const env = buildDesktopRuntimeEnvironment(environment, baseEnv, {
+    bootstrap: options?.bootstrap,
+    desktopOwnerID: options?.desktopOwnerID,
+  });
   const args = buildDesktopRuntimeArgs(environment, {
     localUIBind: options?.localUIBind,
     bootstrap: options?.bootstrap,
@@ -133,6 +147,7 @@ export function buildDesktopRuntimeLaunchPlan(
   options?: Readonly<{
     localUIBind?: string;
     bootstrap?: DesktopRuntimeBootstrap | null;
+    desktopOwnerID?: string;
   }>,
 ): DesktopRuntimeLaunchPlan {
   return buildDesktopRuntimePlan(environment, baseEnv, options);
@@ -145,6 +160,7 @@ export function buildDesktopRuntimeSpawnPlan(
   options?: Readonly<{
     localUIBind?: string;
     bootstrap?: DesktopRuntimeBootstrap | null;
+    desktopOwnerID?: string;
   }>,
 ): DesktopRuntimeSpawnPlan {
   const launchPlan = buildDesktopRuntimeLaunchPlan(environment, baseEnv, options);

@@ -2,7 +2,9 @@ import { normalizeControlPlaneOrigin } from './controlPlaneProvider';
 import {
   runtimeServiceHasActiveWork,
   runtimeServiceIsOpenable,
+  runtimeServiceMatchesIdentity,
   runtimeServiceNeedsRuntimeUpdate,
+  type RuntimeServiceIdentity,
   type RuntimeServiceSnapshot,
 } from './runtimeService';
 
@@ -26,6 +28,7 @@ export type DesktopLocalRuntimeOpenPlanState =
   | 'openable'
   | 'starting'
   | 'restart_to_bind'
+  | 'restart_to_reclaim'
   | 'restart_to_update'
   | 'blocked_active_work'
   | 'blocked_external_runtime'
@@ -34,11 +37,19 @@ export type DesktopLocalRuntimeOpenPlanState =
 export type DesktopLocalRuntimeObservation = Readonly<{
   local_ui_url?: string;
   desktop_managed?: boolean;
+  desktop_owner_id?: string;
+  desktop_ownership?: DesktopLocalRuntimeOwnership;
   controlplane_base_url?: string;
   controlplane_provider_id?: string;
   env_public_id?: string;
   runtime_service?: RuntimeServiceSnapshot;
 }>;
+
+export type DesktopLocalRuntimeOwnership =
+  | 'owned'
+  | 'managed_elsewhere'
+  | 'legacy_unleased'
+  | 'external';
 
 export type DesktopLocalRuntimeOpenPlan = Readonly<{
   target: DesktopLocalRuntimeTarget;
@@ -115,6 +126,25 @@ export function desktopLocalRuntimeBindingsMatch(
   );
 }
 
+function desktopLocalRuntimeOwnership(
+  runtime: DesktopLocalRuntimeObservation | null | undefined,
+  desktopOwnerID: string | undefined,
+): DesktopLocalRuntimeOwnership {
+  const declared = compact(runtime?.desktop_ownership);
+  if (declared === 'owned' || declared === 'managed_elsewhere' || declared === 'legacy_unleased' || declared === 'external') {
+    return declared;
+  }
+  if (runtime?.desktop_managed !== true) {
+    return 'external';
+  }
+  const expectedOwnerID = compact(desktopOwnerID);
+  const observedOwnerID = compact(runtime.desktop_owner_id);
+  if (expectedOwnerID !== '' && observedOwnerID !== '' && expectedOwnerID === observedOwnerID) {
+    return 'owned';
+  }
+  return observedOwnerID === '' ? 'legacy_unleased' : 'managed_elsewhere';
+}
+
 function plan(
   input: Readonly<{
     target: DesktopLocalRuntimeTarget;
@@ -154,10 +184,15 @@ function plan(
 export function buildDesktopLocalRuntimeOpenPlan(
   target: DesktopLocalRuntimeTarget,
   runtime: DesktopLocalRuntimeObservation | null | undefined,
+  options: Readonly<{
+    desktopOwnerID?: string;
+    expectedRuntimeIdentity?: RuntimeServiceIdentity | null;
+  }> = {},
 ): DesktopLocalRuntimeOpenPlan {
   const runtimeURL = compact(runtime?.local_ui_url);
   const runtimeRunning = runtimeURL !== '';
-  const desktopCanManage = runtime?.desktop_managed === true;
+  const runtimeOwnership = desktopLocalRuntimeOwnership(runtime, options.desktopOwnerID);
+  const desktopCanManage = runtimeOwnership === 'owned' || runtimeOwnership === 'legacy_unleased';
   const currentBinding = desktopLocalRuntimeBindingFromObservation(runtime);
   const targetBinding = desktopLocalRuntimeBindingFromTarget(target);
   const runtimeMatchesTarget = target.kind === 'local_environment'
@@ -165,7 +200,9 @@ export function buildDesktopLocalRuntimeOpenPlan(
     : desktopLocalRuntimeBindingsMatch(currentBinding, targetBinding);
   const requiresBootstrap = target.kind === 'provider_environment';
   const runtimeService = runtime?.runtime_service;
-  const runtimeNeedsUpdate = !runtimeService || runtimeServiceNeedsRuntimeUpdate(runtimeService);
+  const runtimeNeedsUpdate = !runtimeService
+    || runtimeServiceNeedsRuntimeUpdate(runtimeService)
+    || !runtimeServiceMatchesIdentity(runtimeService, options.expectedRuntimeIdentity);
   const runtimeHasActiveWork = runtimeServiceHasActiveWork(runtimeService);
 
   if (!runtimeRunning) {
@@ -187,7 +224,63 @@ export function buildDesktopLocalRuntimeOpenPlan(
     });
   }
 
-  if (runtimeMatchesTarget && runtimeServiceIsOpenable(runtimeService)) {
+  if (runtimeOwnership === 'managed_elsewhere') {
+    return plan({
+      target,
+      state: 'blocked_external_runtime',
+      runtimeRunning,
+      runtimeMatchesTarget,
+      desktopCanManage: false,
+      canOpen: false,
+      canPrepare: false,
+      requiresBootstrap,
+      requiresRestart: true,
+      requiresConfirmation: false,
+      currentBinding: currentBinding ?? undefined,
+      targetBinding: targetBinding ?? undefined,
+      runtimeURL,
+      message: 'This Desktop-managed Local Runtime is owned by another Desktop instance. Stop that runtime from its owner, then refresh status.',
+    });
+  }
+
+  if (runtimeOwnership === 'legacy_unleased') {
+    if (runtimeHasActiveWork) {
+      return plan({
+        target,
+        state: 'blocked_active_work',
+        runtimeRunning,
+        runtimeMatchesTarget,
+        desktopCanManage,
+        canOpen: false,
+        canPrepare: false,
+        requiresBootstrap,
+        requiresRestart: true,
+        requiresConfirmation: true,
+        currentBinding: currentBinding ?? undefined,
+        targetBinding: targetBinding ?? undefined,
+        runtimeURL,
+        message: 'This older Desktop-managed runtime needs to be restarted before Desktop can own it. Close active runtime work before restarting.',
+      });
+    }
+    return plan({
+      target,
+      state: 'restart_to_reclaim',
+      runtimeRunning,
+      runtimeMatchesTarget,
+      desktopCanManage,
+      canOpen: true,
+      canPrepare: true,
+      requiresBootstrap,
+      requiresRestart: true,
+      requiresConfirmation: false,
+      currentBinding: currentBinding ?? undefined,
+      targetBinding: targetBinding ?? undefined,
+      runtimeURL,
+      message: 'Desktop will restart the Local Runtime before opening.',
+    });
+  }
+
+  if (runtimeMatchesTarget && !runtimeNeedsUpdate && runtimeServiceIsOpenable(runtimeService)) {
     return plan({
       target,
       state: 'openable',

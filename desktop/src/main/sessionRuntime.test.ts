@@ -73,7 +73,7 @@ describe('sessionRuntime', () => {
     expect(stop).not.toHaveBeenCalled();
   });
 
-  it('preserves stop control for desktop-owned attached runtimes', async () => {
+  it('preserves stop control for attached runtimes leased to this Desktop', async () => {
     const stop = vi.fn<() => Promise<void>>().mockResolvedValue();
     const runtime: ManagedRuntime = {
       child: null,
@@ -81,6 +81,7 @@ describe('sessionRuntime', () => {
         local_ui_url: 'http://localhost:23998/',
         local_ui_urls: ['http://localhost:23998/'],
         desktop_managed: true,
+        desktop_owner_id: 'desktop-owner-1',
       },
       reportDir: null,
       reportFile: null,
@@ -90,11 +91,39 @@ describe('sessionRuntime', () => {
 
     const handle = desktopSessionRuntimeHandleFromManagedRuntime(runtime, {
       persistedOwner: 'agent',
+      desktopOwnerID: 'desktop-owner-1',
     });
 
     expect(handle.lifecycle_owner).toBe('desktop');
 
     await handle.stop();
     expect(stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('detaches from attached Desktop-managed runtimes leased to another Desktop', async () => {
+    const stop = vi.fn<() => Promise<void>>().mockResolvedValue();
+    const runtime: ManagedRuntime = {
+      child: null,
+      startup: {
+        local_ui_url: 'http://localhost:23998/',
+        local_ui_urls: ['http://localhost:23998/'],
+        desktop_managed: true,
+        desktop_owner_id: 'other-desktop-owner',
+      },
+      reportDir: null,
+      reportFile: null,
+      attached: true,
+      stop,
+    };
+
+    const handle = desktopSessionRuntimeHandleFromManagedRuntime(runtime, {
+      persistedOwner: 'desktop',
+      desktopOwnerID: 'desktop-owner-1',
+    });
+
+    expect(handle.lifecycle_owner).toBe('external');
+
+    await handle.stop();
+    expect(stop).not.toHaveBeenCalled();
   });
 });
