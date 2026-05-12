@@ -285,6 +285,16 @@ func TestGatewayWorkbenchLayoutWriteRequiresPermission(t *testing.T) {
 	if rr.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403, body = %s", rr.Code, rr.Body.String())
 	}
+
+	openResp := performWorkbenchLayoutRequest(t, gw, http.MethodPost, "/_redeven_proxy/api/workbench/actions/open_preview", `{
+  "item": {
+    "path": "/workspace/demo.txt",
+    "name": "demo.txt"
+  }
+}`)
+	if openResp.Code != http.StatusForbidden {
+		t.Fatalf("open preview status = %d, want 403, body = %s", openResp.Code, openResp.Body.String())
+	}
 }
 
 func TestGatewayWorkbenchLayoutReadRequiresPermission(t *testing.T) {
@@ -399,6 +409,90 @@ func TestGatewayWorkbenchWidgetStateFlow(t *testing.T) {
 	}
 	if resp.ErrorCode != workbenchWidgetStateConflictErrorCode {
 		t.Fatalf("error_code = %q, want %q", resp.ErrorCode, workbenchWidgetStateConflictErrorCode)
+	}
+}
+
+func TestGatewayWorkbenchOpenPreviewAction(t *testing.T) {
+	t.Parallel()
+
+	svc := openGatewayWorkbenchLayoutService(t)
+	gw := newWorkbenchLayoutGatewayForTest(t, svc, config.PermissionSet{Read: true, Write: true, Execute: true})
+
+	createResp := performWorkbenchLayoutRequest(t, gw, http.MethodPost, "/_redeven_proxy/api/workbench/actions/open_preview", `{
+  "request_id": "request-preview-create",
+  "item": {
+    "path": "/workspace/demo.txt",
+    "name": "demo.txt",
+    "size": 42
+  },
+  "viewport": {
+    "center_x": 640,
+    "center_y": 420,
+    "default_width": 900,
+    "default_height": 620
+  }
+}`)
+	if createResp.Code != http.StatusOK {
+		t.Fatalf("create status = %d, body = %s", createResp.Code, createResp.Body.String())
+	}
+	created := decodeWorkbenchLayoutResponse[workbenchlayout.OpenPreviewResponse](t, createResp)
+	if !created.Created || created.WidgetID == "" || created.WidgetState.State.Item == nil {
+		t.Fatalf("created response = %#v, want created preview widget and state", created)
+	}
+	if created.RequestID != "request-preview-create" {
+		t.Fatalf("request_id = %q, want request-preview-create", created.RequestID)
+	}
+	if len(created.Snapshot.Widgets) != 1 || len(created.Snapshot.WidgetStates) != 1 {
+		t.Fatalf("snapshot = %#v, want widget and widget state", created.Snapshot)
+	}
+	if created.Snapshot.Widgets[0].WidgetID != created.Snapshot.WidgetStates[0].WidgetID {
+		t.Fatalf("snapshot widget/state ids = %q/%q, want atomic preview shell", created.Snapshot.Widgets[0].WidgetID, created.Snapshot.WidgetStates[0].WidgetID)
+	}
+
+	reuseResp := performWorkbenchLayoutRequest(t, gw, http.MethodPost, "/_redeven_proxy/api/workbench/actions/open_preview", `{
+  "item": {
+    "path": "/workspace/demo.txt",
+    "name": "demo.txt"
+  }
+}`)
+	if reuseResp.Code != http.StatusOK {
+		t.Fatalf("reuse status = %d, body = %s", reuseResp.Code, reuseResp.Body.String())
+	}
+	reused := decodeWorkbenchLayoutResponse[workbenchlayout.OpenPreviewResponse](t, reuseResp)
+	if reused.Created || reused.WidgetID != created.WidgetID {
+		t.Fatalf("reuse response = %#v, want existing widget %q", reused, created.WidgetID)
+	}
+
+	forceResp := performWorkbenchLayoutRequest(t, gw, http.MethodPost, "/_redeven_proxy/api/workbench/actions/open_preview", `{
+  "item": {
+    "path": "/workspace/demo.txt",
+    "name": "demo.txt"
+  },
+  "open_strategy": "create_new"
+}`)
+	if forceResp.Code != http.StatusOK {
+		t.Fatalf("force status = %d, body = %s", forceResp.Code, forceResp.Body.String())
+	}
+	forced := decodeWorkbenchLayoutResponse[workbenchlayout.OpenPreviewResponse](t, forceResp)
+	if !forced.Created || forced.WidgetID == created.WidgetID || len(forced.Snapshot.Widgets) != 2 {
+		t.Fatalf("force response = %#v, want second preview widget", forced)
+	}
+}
+
+func TestGatewayWorkbenchOpenPreviewRejectsInvalidInput(t *testing.T) {
+	t.Parallel()
+
+	svc := openGatewayWorkbenchLayoutService(t)
+	gw := newWorkbenchLayoutGatewayForTest(t, svc, config.PermissionSet{Read: true, Write: true, Execute: true})
+
+	resp := performWorkbenchLayoutRequest(t, gw, http.MethodPost, "/_redeven_proxy/api/workbench/actions/open_preview", `{
+  "item": {
+    "path": "relative.txt",
+    "name": "relative.txt"
+  }
+}`)
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400, body = %s", resp.Code, resp.Body.String())
 	}
 }
 

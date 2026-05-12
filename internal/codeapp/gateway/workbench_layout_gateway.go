@@ -48,6 +48,23 @@ func (g *Gateway) handleWorkbenchLayoutAPI(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: snapshot})
 		return true
 
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/workbench/actions/open_preview":
+		if _, ok := g.requirePermission(w, r, requiredPermissionWrite); !ok {
+			return true
+		}
+		var body workbenchlayout.OpenPreviewRequest
+		if err := decodeWorkbenchLayoutJSON(r.Body, &body); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return true
+		}
+		resp, err := g.layouts.OpenPreview(r.Context(), body)
+		if err != nil {
+			writeWorkbenchLayoutError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: resp})
+		return true
+
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/workbench/layout/events":
 		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
 			return true

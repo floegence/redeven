@@ -1,9 +1,12 @@
 import { prepareGatewayRequestInit } from './gatewayApi';
 import {
   normalizeRuntimeWorkbenchLayoutEvent,
+  normalizeRuntimeWorkbenchOpenPreviewResponse,
   normalizeRuntimeWorkbenchLayoutSnapshot,
   normalizeRuntimeWorkbenchWidgetState,
   type RuntimeWorkbenchLayoutEvent,
+  type RuntimeWorkbenchOpenPreviewRequest,
+  type RuntimeWorkbenchOpenPreviewResponse,
   type RuntimeWorkbenchLayoutPutRequest,
   type RuntimeWorkbenchLayoutSnapshot,
   type RuntimeWorkbenchTerminalCreateSessionRequest,
@@ -107,6 +110,21 @@ export async function putWorkbenchWidgetState(
     throw new Error('Invalid workbench widget state response');
   }
   return state;
+}
+
+export async function openWorkbenchPreview(
+  input: RuntimeWorkbenchOpenPreviewRequest,
+): Promise<RuntimeWorkbenchOpenPreviewResponse> {
+  const response = normalizeRuntimeWorkbenchOpenPreviewResponse(
+    await fetchWorkbenchLayoutJSON('/_redeven_proxy/api/workbench/actions/open_preview', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  );
+  if (!response) {
+    throw new Error('Invalid workbench preview open response');
+  }
+  return response;
 }
 
 export async function createWorkbenchTerminalSession(
