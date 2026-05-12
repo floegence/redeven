@@ -429,7 +429,6 @@ Desktop keeps one current persisted preference model for the profile's Local Env
 - `provider_environments`
 - `saved_environments`
 - `saved_ssh_environments`
-- `recent_external_local_ui_urls`
 - `control_plane_refresh_tokens`
 - `control_planes`
 
@@ -451,9 +450,9 @@ Semantics:
   - `pinned`
   - `last_used_at_ms`
 - Desktop never sends the stored Local UI password plaintext back to the renderer. The shell UI edits only a write-only replacement draft plus explicit keep/replace/remove intent.
-- `saved_environments` stores user-visible labels, normalized Local UI URLs, an origin marker (`saved` vs `recent_auto`), pin state, and `last_used_at_ms`.
-- `saved_ssh_environments` stores user-visible labels, normalized SSH destination data, the remote install directory, the SSH bootstrap delivery mode, the optional release mirror base URL, an origin marker (`saved` vs `recent_auto`), pin state, and `last_used_at_ms`.
-- `recent_external_local_ui_urls` is a normalized derived summary from `saved_environments`.
+- `saved_environments` stores user-visible labels, normalized Local UI URLs, pin state, and `last_used_at_ms`.
+- `saved_ssh_environments` stores user-visible labels, normalized SSH destination data, the remote install directory, the SSH bootstrap delivery mode, the optional release mirror base URL, pin state, and `last_used_at_ms`.
+- `last_used_at_ms` is the only recency signal for saved connections; Desktop sorts and refreshes the saved catalog from that timestamp instead of maintaining a separate derived catalog.
 - `control_plane_refresh_tokens` stores per-provider opaque refresh tokens in the local secrets file, separate from visible provider/account metadata.
 - `control_planes` stores normalized provider discovery data, the desktop-owned display label, the desktop account snapshot, the cached environment list, and the last sync time.
 - Provider refresh reconciles canonical provider identity across `provider_environments`, but does not materialize remote-only provider environments into Local Environment state.
