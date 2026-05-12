@@ -103,7 +103,6 @@ describe('environmentLibraryOverlayState', () => {
           id: 'http://192.168.1.12:24000/',
           label: 'Staging',
           local_ui_url: 'http://192.168.1.12:24000/',
-          source: 'saved',
           pinned: false,
           last_used_at_ms: 200,
         }],

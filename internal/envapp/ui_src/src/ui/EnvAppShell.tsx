@@ -103,6 +103,7 @@ import { buildDesktopShellCommandPaletteEntries } from './services/desktopShellC
 import {
   desktopShellBridgeAvailable,
   openConnectionCenter,
+  openDashboardInDesktopShell,
   restartDesktopManagedRuntime,
 } from './services/desktopShellBridge';
 import {
@@ -2132,6 +2133,23 @@ export function EnvAppShell() {
     }
   }
 
+  async function openDashboard(): Promise<void> {
+    const desktopShellAvailable = desktopShellBridgeAvailable();
+    const result = await openDashboardInDesktopShell();
+    if (result?.ok) {
+      return;
+    }
+    if (desktopShellAvailable) {
+      notify.error(
+        'Failed to open dashboard',
+        result?.message || 'Desktop could not open the system browser.',
+      );
+      return;
+    }
+    const dashboardURL = `${consoleOrigin()}/dashboard`;
+    window.location.assign(dashboardURL);
+  }
+
   // Env App command palette commands (navigation + common actions).
   // Note: register commands once per Shell lifecycle to avoid duplicates during HMR/remount.
   createEffect(() => {
@@ -2291,7 +2309,9 @@ export function EnvAppShell() {
         category: 'Navigation',
         keybind: 'mod+shift+e',
         icon: Grid3x3,
-        execute: () => window.location.assign(`${consoleOrigin()}/dashboard`),
+        execute: () => {
+          void openDashboard();
+        },
       },
       {
         id: 'redeven.env.openRuntimeSettings',
@@ -2595,7 +2615,9 @@ export function EnvAppShell() {
     <TopBarBrandButton
       label="Back to dashboard"
       tooltip={topBarTooltip('Back to dashboard')}
-      onClick={() => window.location.assign(`${consoleOrigin()}/dashboard`)}
+      onClick={() => {
+        void openDashboard();
+      }}
     >
       <img
         src={headerLogoSrc()}

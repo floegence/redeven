@@ -35,6 +35,7 @@ describe('bootstrapDesktopShellBridge', () => {
     expect(typeof bridge.toggleMaximizeWindow).toBe('function');
     expect(typeof bridge.toggleFullScreenWindow).toBe('function');
     expect(typeof bridge.openExternalURL).toBe('function');
+    expect(typeof bridge.openDashboard).toBe('function');
     expect(typeof bridge.restartManagedRuntime).toBe('function');
 
     await bridge.openConnectionCenter();
@@ -49,6 +50,7 @@ describe('bootstrapDesktopShellBridge', () => {
     await bridge.toggleMaximizeWindow();
     await bridge.toggleFullScreenWindow();
     await bridge.openExternalURL('http://127.0.0.1:43123/cs/demo/');
+    await bridge.openDashboard();
     await bridge.restartManagedRuntime();
 
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(1, 'redeven-desktop:shell-open-window', { kind: 'connection_center' });
@@ -61,7 +63,8 @@ describe('bootstrapDesktopShellBridge', () => {
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(8, 'redeven-desktop:shell-window-command', { command: 'toggle_maximize' });
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(9, 'redeven-desktop:shell-window-command', { command: 'toggle_full_screen' });
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(10, 'redeven-desktop:shell-open-external-url', { url: 'http://127.0.0.1:43123/cs/demo/' });
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(11, 'redeven-desktop:shell-runtime-action', { action: 'restart_managed_runtime' });
-    expect(ipcRendererInvoke).toHaveBeenCalledTimes(11);
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(11, 'redeven-desktop:shell-open-dashboard');
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(12, 'redeven-desktop:shell-runtime-action', { action: 'restart_managed_runtime' });
+    expect(ipcRendererInvoke).toHaveBeenCalledTimes(12);
   });
 });

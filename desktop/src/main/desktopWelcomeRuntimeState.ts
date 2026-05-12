@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import { loadAttachableRuntimeState } from './runtimeState';
+import { loadAttachableRuntimeState, loadExternalLocalUIStartup } from './runtimeState';
 import type { StartupReport } from './startup';
 import type { DesktopPreferences } from './desktopPreferences';
 import type { DesktopSessionSummary } from './desktopTarget';
@@ -59,9 +59,10 @@ function localManagedSessionByEnvironmentID(
   );
 }
 
-function currentRuntimeFromLocalSession(
+async function currentRuntimeFromLocalSession(
   session: DesktopSessionSummary | null | undefined,
-): DesktopLocalEnvironmentRuntimeState | undefined {
+  probeTimeoutMs: number,
+): Promise<DesktopLocalEnvironmentRuntimeState | undefined> {
   if (
     !session
     || session.target.kind !== 'local_environment'
@@ -70,12 +71,33 @@ function currentRuntimeFromLocalSession(
   ) {
     return undefined;
   }
-  return runtimeStateFromStartup(
-    session.startup,
-    session.runtime_lifecycle_owner === 'desktop' || session.startup.desktop_managed === true,
+  const candidateURLs = [
     session.entry_url,
-    session.runtime_lifecycle_owner,
-  );
+    session.startup.local_ui_url,
+    ...session.startup.local_ui_urls,
+  ];
+  const seen = new Set<string>();
+  for (const candidateURL of candidateURLs) {
+    const cleanURL = compact(candidateURL);
+    if (cleanURL === '' || seen.has(cleanURL)) {
+      continue;
+    }
+    seen.add(cleanURL);
+    const startup = await loadExternalLocalUIStartup(cleanURL, probeTimeoutMs).catch(() => null);
+    if (!startup) {
+      continue;
+    }
+    return runtimeStateFromStartup(
+      {
+        ...session.startup,
+        ...startup,
+      },
+      session.runtime_lifecycle_owner === 'desktop' || session.startup.desktop_managed === true,
+      startup.local_ui_url,
+      session.runtime_lifecycle_owner,
+    );
+  }
+  return undefined;
 }
 
 async function currentRuntimeFromProbeStateDir(
@@ -147,7 +169,7 @@ export async function hydrateWelcomeLocalEnvironmentRuntimeState(
   const probeTimeoutMs = options.probeTimeoutMs ?? DEFAULT_WELCOME_RUNTIME_PROBE_TIMEOUT_MS;
   const localSessionsByEnvironmentID = localManagedSessionByEnvironmentID(openSessions);
   const localEnvironment = preferences.local_environment;
-  const currentRuntime = currentRuntimeFromLocalSession(localSessionsByEnvironmentID.get(localEnvironment.id))
+  const currentRuntime = await currentRuntimeFromLocalSession(localSessionsByEnvironmentID.get(localEnvironment.id), probeTimeoutMs)
     ?? await currentRuntimeFromProbe(localEnvironment, probeTimeoutMs);
   return {
     ...preferences,

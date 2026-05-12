@@ -463,6 +463,7 @@ beforeEach(() => {
   resumeCalls = [];
   layoutIsMobile = false;
   sidebarActiveTabValue = 'deck';
+  delete window.redevenDesktopShell;
   setSidebarActiveTabMock.mockClear();
   setSidebarCollapsedMock.mockClear();
   reloadCurrentPageMock.mockReset();
@@ -601,6 +602,33 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(logoImage?.getAttribute('src')).toContain('logo-dark.svg');
     } finally {
       dispose();
+    }
+  });
+
+  it('opens the dashboard through the system browser bridge in Desktop', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const openDashboardMock = vi.fn().mockResolvedValue({ ok: true });
+    window.redevenDesktopShell = {
+      openDashboard: openDashboardMock,
+    };
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+
+      const logoButton = host.querySelector('button[aria-label="Back to dashboard"]') as HTMLButtonElement | null;
+      expect(logoButton).toBeTruthy();
+
+      logoButton?.click();
+      await flushAsync();
+
+      expect(openDashboardMock).toHaveBeenCalledTimes(1);
+    } finally {
+      dispose();
+      delete window.redevenDesktopShell;
     }
   });
 

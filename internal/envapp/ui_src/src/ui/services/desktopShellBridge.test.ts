@@ -9,6 +9,7 @@ import {
   minimizeDesktopWindow,
   openAdvancedSettings,
   openConnectionCenter,
+  openDashboardInDesktopShell,
   openExternalURLInDesktopShell,
   restartDesktopManagedRuntime,
   toggleDesktopWindowFullScreen,
@@ -186,5 +187,21 @@ describe('desktopShellBridge', () => {
       message: 'Opened in the system browser.',
     });
     expect(openExternalURLBridge).toHaveBeenCalledWith('http://127.0.0.1:43123/cs/demo/');
+  });
+
+  it('forwards dashboard requests through the semantic desktop bridge method', async () => {
+    const openDashboardBridge = vi.fn().mockResolvedValue({
+      ok: true,
+      message: 'Opened in the system browser.',
+    });
+    window.redevenDesktopShell = {
+      openDashboard: openDashboardBridge,
+    };
+
+    await expect(openDashboardInDesktopShell()).resolves.toEqual({
+      ok: true,
+      message: 'Opened in the system browser.',
+    });
+    expect(openDashboardBridge).toHaveBeenCalledTimes(1);
   });
 });

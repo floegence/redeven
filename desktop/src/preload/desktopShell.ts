@@ -16,6 +16,7 @@ import {
   normalizeDesktopShellRuntimeActionResponse,
 } from '../shared/desktopShellRuntimeIPC';
 import {
+  DESKTOP_SHELL_OPEN_DASHBOARD_CHANNEL,
   DESKTOP_SHELL_OPEN_EXTERNAL_URL_CHANNEL,
   normalizeDesktopShellOpenExternalURLResponse,
 } from '../shared/desktopShellExternalURLIPC';
@@ -58,6 +59,9 @@ export function bootstrapDesktopShellBridge(): void {
     ),
     openExternalURL: async (url: string) => normalizeDesktopShellOpenExternalURLResponse(
       await ipcRenderer.invoke(DESKTOP_SHELL_OPEN_EXTERNAL_URL_CHANNEL, { url }),
+    ),
+    openDashboard: async () => normalizeDesktopShellOpenExternalURLResponse(
+      await ipcRenderer.invoke(DESKTOP_SHELL_OPEN_DASHBOARD_CHANNEL),
     ),
     restartManagedRuntime: async () => normalizeDesktopShellRuntimeActionResponse(
       await ipcRenderer.invoke(DESKTOP_SHELL_RUNTIME_ACTION_CHANNEL, { action: 'restart_managed_runtime' }),

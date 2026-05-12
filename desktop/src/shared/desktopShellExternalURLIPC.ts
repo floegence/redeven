@@ -1,4 +1,9 @@
 export const DESKTOP_SHELL_OPEN_EXTERNAL_URL_CHANNEL = 'redeven-desktop:shell-open-external-url';
+export const DESKTOP_SHELL_OPEN_DASHBOARD_CHANNEL = 'redeven-desktop:shell-open-dashboard';
+
+const REDEVEN_PUBLIC_INSTALL_SCRIPT_URL = 'https://redeven.com/install.sh';
+
+export const DESKTOP_DASHBOARD_URL = new URL('/dashboard', REDEVEN_PUBLIC_INSTALL_SCRIPT_URL).toString();
 
 export type DesktopShellOpenExternalURLRequest = Readonly<{
   url: string;

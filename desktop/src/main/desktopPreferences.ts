@@ -8,8 +8,10 @@ import {
   parseLocalUIBind,
 } from './localUIBind';
 import { normalizeLocalUIBaseURL } from './localUIURL';
-import type { DesktopSavedEnvironmentSource } from '../shared/desktopConnectionTypes';
 import {
+  DEFAULT_DESKTOP_SSH_AUTH_MODE,
+  DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
+  DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
   defaultSavedSSHEnvironmentLabel,
   normalizeDesktopSSHAuthMode,
   desktopSSHEnvironmentID,
@@ -67,7 +69,6 @@ export type DesktopSavedEnvironment = Readonly<{
   id: string;
   label: string;
   local_ui_url: string;
-  source: DesktopSavedEnvironmentSource;
   pinned: boolean;
   last_used_at_ms: number;
 }>;
@@ -75,7 +76,6 @@ export type DesktopSavedEnvironment = Readonly<{
 export type DesktopSavedSSHEnvironment = Readonly<DesktopSSHEnvironmentDetails & {
   id: string;
   label: string;
-  source: DesktopSavedEnvironmentSource;
   pinned: boolean;
   last_used_at_ms: number;
 }>;
@@ -93,7 +93,6 @@ export type DesktopPreferences = Readonly<{
   provider_environments: readonly DesktopProviderEnvironmentRecord[];
   saved_environments: readonly DesktopSavedEnvironment[];
   saved_ssh_environments: readonly DesktopSavedSSHEnvironment[];
-  recent_external_local_ui_urls: readonly string[];
   control_plane_refresh_tokens: Readonly<Record<string, string>>;
   control_planes: readonly DesktopSavedControlPlane[];
 }>;
@@ -147,7 +146,6 @@ type DesktopSavedEnvironmentFile = Readonly<{
   id?: unknown;
   label?: unknown;
   local_ui_url?: unknown;
-  source?: unknown;
   pinned?: unknown;
   last_used_at_ms?: unknown;
 }>;
@@ -162,7 +160,6 @@ type DesktopSavedSSHEnvironmentFile = Readonly<{
   bootstrap_strategy?: unknown;
   release_base_url?: unknown;
   connect_timeout_seconds?: unknown;
-  source?: unknown;
   pinned?: unknown;
   last_used_at_ms?: unknown;
 }>;
@@ -208,7 +205,6 @@ type DesktopConnectionCatalogFile = Readonly<{
   bootstrap_strategy?: unknown;
   release_base_url?: unknown;
   connect_timeout_seconds?: unknown;
-  source?: unknown;
   pinned?: unknown;
   last_used_at_ms?: unknown;
 }>;
@@ -299,7 +295,6 @@ export type UpsertDesktopSavedEnvironmentInput = Readonly<{
   environment_id: string;
   label: string;
   local_ui_url: string;
-  source?: DesktopSavedEnvironmentSource;
   pinned?: boolean;
   last_used_at_ms?: number;
 }>;
@@ -307,7 +302,6 @@ export type UpsertDesktopSavedEnvironmentInput = Readonly<{
 export type UpsertDesktopSavedSSHEnvironmentInput = Readonly<DesktopSSHEnvironmentDetails & {
   environment_id: string;
   label: string;
-  source?: DesktopSavedEnvironmentSource;
   pinned?: boolean;
   last_used_at_ms?: number;
 }>;
@@ -321,7 +315,6 @@ export type UpsertDesktopSavedControlPlaneInput = Readonly<{
   refresh_token?: string;
 }>;
 
-const MAX_RECENT_EXTERNAL_LOCAL_UI_URLS = 5;
 const MAX_SAVED_ENVIRONMENTS = 20;
 const MAX_SAVED_SSH_ENVIRONMENTS = 20;
 
@@ -365,17 +358,9 @@ export function defaultDesktopPreferences(): DesktopPreferences {
     provider_environments: [],
     saved_environments: [],
     saved_ssh_environments: [],
-    recent_external_local_ui_urls: [],
     control_plane_refresh_tokens: {},
     control_planes: [],
   };
-}
-
-function normalizeSavedEnvironmentSource(
-  value: unknown,
-  fallback: DesktopSavedEnvironmentSource = 'saved',
-): DesktopSavedEnvironmentSource {
-  return value === 'recent_auto' ? 'recent_auto' : fallback;
 }
 
 export function defaultDesktopPreferencesPaths(
@@ -592,7 +577,6 @@ function normalizeSavedEnvironmentCandidate(
     id: environmentID,
     label,
     local_ui_url: normalizedURL,
-    source: normalizeSavedEnvironmentSource(candidate.source, 'saved'),
     pinned: normalizePinned(candidate.pinned),
     last_used_at_ms: normalizeLastUsedAtMS(candidate.last_used_at_ms, fallbackLastUsedAtMS),
   };
@@ -641,7 +625,6 @@ function normalizeSavedSSHEnvironmentCandidate(
       bootstrap_strategy: details.bootstrap_strategy,
       release_base_url: details.release_base_url,
       connect_timeout_seconds: details.connect_timeout_seconds,
-      source: normalizeSavedEnvironmentSource(candidate.source, 'saved'),
       pinned: normalizePinned(candidate.pinned),
       last_used_at_ms: normalizeLastUsedAtMS(candidate.last_used_at_ms, fallbackLastUsedAtMS),
     },
@@ -688,36 +671,6 @@ function normalizeSavedControlPlaneCandidate(
     display_label: normalizeControlPlaneDisplayLabel(candidate.display_label, provider.provider_origin),
     last_synced_at_ms: normalizeLastUsedAtMS(candidate.last_synced_at_ms, fallbackLastSyncedAtMS),
   };
-}
-
-export function normalizeRecentExternalLocalUIURLs(values: readonly unknown[] | null | undefined): readonly string[] {
-  if (!Array.isArray(values) || values.length === 0) {
-    return [];
-  }
-
-  const normalized: string[] = [];
-  const seen = new Set<string>();
-  for (const value of values) {
-    const clean = compact(value);
-    if (clean === '') {
-      continue;
-    }
-    let url = '';
-    try {
-      url = normalizeLocalUIBaseURL(clean);
-    } catch {
-      continue;
-    }
-    if (seen.has(url)) {
-      continue;
-    }
-    seen.add(url);
-    normalized.push(url);
-    if (normalized.length >= MAX_RECENT_EXTERNAL_LOCAL_UI_URLS) {
-      break;
-    }
-  }
-  return normalized;
 }
 
 export function normalizeSavedEnvironments(
@@ -1069,16 +1022,6 @@ function providerEnvironmentBelongsToControlPlane(
     && providerIDMatchesCanonicalIdentity(normalizedProviderOrigin, environment.provider_id, providerID);
 }
 
-export function deriveRecentExternalLocalUIURLs(
-  savedEnvironments: readonly DesktopSavedEnvironment[],
-): readonly string[] {
-  return normalizeRecentExternalLocalUIURLs(
-    sortSavedEnvironmentsByLastUsed(
-      savedEnvironments.filter((environment) => environment.source === 'saved' || environment.source === 'recent_auto'),
-    ).map((environment) => environment.local_ui_url),
-  );
-}
-
 function providerIDMatchesCanonicalIdentity(
   providerOrigin: string,
   actualProviderID: string,
@@ -1326,15 +1269,10 @@ export function upsertSavedEnvironment(
     environment.id === environmentID || environment.local_ui_url === normalizedURL
   ));
   const label = compact(input.label) || existing?.label || defaultSavedEnvironmentLabel(normalizedURL);
-  const requestedSource = input.source;
-  const source: DesktopSavedEnvironmentSource = existing?.source === 'saved' || requestedSource === 'saved'
-    ? 'saved'
-    : normalizeSavedEnvironmentSource(requestedSource, existing?.source ?? 'saved');
   const nextEnvironment: DesktopSavedEnvironment = {
     id: environmentID,
     label,
     local_ui_url: normalizedURL,
-    source,
     pinned: input.pinned ?? existing?.pinned ?? false,
     last_used_at_ms: normalizeLastUsedAtMS(input.last_used_at_ms, Date.now()),
   };
@@ -1349,7 +1287,6 @@ export function upsertSavedEnvironment(
   return {
     ...preferences,
     saved_environments: savedEnvironments,
-    recent_external_local_ui_urls: deriveRecentExternalLocalUIURLs(savedEnvironments),
   };
 }
 
@@ -1369,10 +1306,6 @@ export function upsertSavedSSHEnvironment(
     )
   ));
   const label = compact(input.label) || existing?.label || defaultSavedSSHEnvironmentLabel(details);
-  const requestedSource = input.source;
-  const source: DesktopSavedEnvironmentSource = existing?.source === 'saved' || requestedSource === 'saved'
-    ? 'saved'
-    : normalizeSavedEnvironmentSource(requestedSource, existing?.source ?? 'saved');
   const nextEnvironment: DesktopSavedSSHEnvironment = {
     id: environmentID,
     label,
@@ -1383,7 +1316,6 @@ export function upsertSavedSSHEnvironment(
     bootstrap_strategy: details.bootstrap_strategy,
     release_base_url: details.release_base_url,
     connect_timeout_seconds: details.connect_timeout_seconds,
-    source,
     pinned: input.pinned ?? existing?.pinned ?? false,
     last_used_at_ms: normalizeLastUsedAtMS(input.last_used_at_ms, Date.now()),
   };
@@ -1467,7 +1399,6 @@ export function setSavedEnvironmentPinned(
     environment_id: input.environment_id,
     label: input.label,
     local_ui_url: input.local_ui_url,
-    source: 'saved',
     pinned: input.pinned,
     last_used_at_ms: input.last_used_at_ms,
   });
@@ -1492,7 +1423,6 @@ export function setSavedSSHEnvironmentPinned(
     bootstrap_strategy: input.bootstrap_strategy,
     release_base_url: input.release_base_url,
     connect_timeout_seconds: input.connect_timeout_seconds,
-    source: 'saved',
     pinned: input.pinned,
     last_used_at_ms: input.last_used_at_ms,
   });
@@ -1507,7 +1437,6 @@ export function deleteSavedEnvironment(
   return {
     ...preferences,
     saved_environments: savedEnvironments,
-    recent_external_local_ui_urls: deriveRecentExternalLocalUIURLs(savedEnvironments),
   };
 }
 
@@ -1520,6 +1449,100 @@ export function deleteSavedSSHEnvironment(
     ...preferences,
     saved_ssh_environments: preferences.saved_ssh_environments.filter((environment) => environment.id !== cleanEnvironmentID),
   };
+}
+
+export function markSavedEnvironmentUsed(
+  preferences: DesktopPreferences,
+  input: Readonly<{
+    environment_id?: string;
+    local_ui_url?: string;
+    last_used_at_ms?: number;
+  }>,
+): DesktopPreferences {
+  const normalizedURL = (() => {
+    const raw = compact(input.local_ui_url);
+    if (raw === '') {
+      return '';
+    }
+    try {
+      return normalizeLocalUIBaseURL(raw);
+    } catch {
+      return '';
+    }
+  })();
+  const environmentID = compact(input.environment_id);
+  const existing = preferences.saved_environments.find((environment) => (
+    (environmentID !== '' && environment.id === environmentID)
+    || (normalizedURL !== '' && environment.local_ui_url === normalizedURL)
+  ));
+  if (!existing) {
+    return preferences;
+  }
+  return upsertSavedEnvironment(preferences, {
+    environment_id: existing.id,
+    label: existing.label,
+    local_ui_url: existing.local_ui_url,
+    pinned: existing.pinned,
+    last_used_at_ms: input.last_used_at_ms ?? Date.now(),
+  });
+}
+
+export function markSavedSSHEnvironmentUsed(
+  preferences: DesktopPreferences,
+  input: Readonly<{
+    environment_id?: string;
+    ssh_destination?: string;
+    ssh_port?: number | null;
+    auth_mode?: DesktopSSHEnvironmentDetails['auth_mode'];
+    remote_install_dir?: string;
+    bootstrap_strategy?: DesktopSSHEnvironmentDetails['bootstrap_strategy'];
+    release_base_url?: string;
+    connect_timeout_seconds?: number | null;
+    last_used_at_ms?: number;
+  }>,
+): DesktopPreferences {
+  const environmentID = compact(input.environment_id);
+  const normalizedDetails = (
+    compact(input.ssh_destination) !== ''
+      ? normalizeDesktopSSHEnvironmentDetails({
+          ssh_destination: input.ssh_destination ?? '',
+          ssh_port: input.ssh_port ?? null,
+          auth_mode: input.auth_mode ?? DEFAULT_DESKTOP_SSH_AUTH_MODE,
+          remote_install_dir: input.remote_install_dir ?? DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
+          bootstrap_strategy: input.bootstrap_strategy ?? DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
+          release_base_url: input.release_base_url ?? '',
+          connect_timeout_seconds: input.connect_timeout_seconds ?? null,
+        })
+      : null
+  );
+  const existing = preferences.saved_ssh_environments.find((environment) => (
+    environmentID !== ''
+      ? environment.id === environmentID
+      : normalizedDetails != null
+        && environment.ssh_destination === normalizedDetails.ssh_destination
+        && environment.ssh_port === normalizedDetails.ssh_port
+        && environment.auth_mode === normalizedDetails.auth_mode
+        && environment.remote_install_dir === normalizedDetails.remote_install_dir
+        && environment.bootstrap_strategy === normalizedDetails.bootstrap_strategy
+        && environment.release_base_url === normalizedDetails.release_base_url
+        && environment.connect_timeout_seconds === normalizedDetails.connect_timeout_seconds
+  ));
+  if (!existing) {
+    return preferences;
+  }
+  return upsertSavedSSHEnvironment(preferences, {
+    environment_id: existing.id,
+    label: existing.label,
+    ssh_destination: existing.ssh_destination,
+    ssh_port: existing.ssh_port,
+    auth_mode: existing.auth_mode,
+    remote_install_dir: existing.remote_install_dir,
+    bootstrap_strategy: existing.bootstrap_strategy,
+    release_base_url: existing.release_base_url,
+    connect_timeout_seconds: existing.connect_timeout_seconds,
+    pinned: existing.pinned,
+    last_used_at_ms: input.last_used_at_ms ?? Date.now(),
+  });
 }
 
 export function deleteSavedControlPlane(
@@ -1545,38 +1568,6 @@ export function deleteSavedControlPlane(
       )),
     ),
   };
-}
-
-export function rememberRecentExternalLocalUITarget(
-  preferences: DesktopPreferences,
-  rawURL: string,
-): DesktopPreferences {
-  return upsertSavedEnvironment(preferences, {
-    environment_id: desktopEnvironmentID(rawURL),
-    label: '',
-    local_ui_url: rawURL,
-    source: 'recent_auto',
-    last_used_at_ms: Date.now(),
-  });
-}
-
-export function rememberRecentSSHEnvironmentTarget(
-  preferences: DesktopPreferences,
-  input: DesktopSSHEnvironmentDetails & Readonly<{ label?: string; environment_id?: string }>,
-): DesktopPreferences {
-  return upsertSavedSSHEnvironment(preferences, {
-    environment_id: compact(input.environment_id),
-    label: compact(input.label),
-    ssh_destination: input.ssh_destination,
-    ssh_port: input.ssh_port,
-    auth_mode: input.auth_mode,
-    remote_install_dir: input.remote_install_dir,
-    bootstrap_strategy: input.bootstrap_strategy,
-    release_base_url: input.release_base_url,
-    connect_timeout_seconds: input.connect_timeout_seconds,
-    source: 'recent_auto',
-    last_used_at_ms: Date.now(),
-  });
 }
 
 export function localEnvironmentDesktopLaunchKey(preferences: DesktopPreferences): string {
@@ -1891,7 +1882,6 @@ function serializeSavedEnvironmentCatalog(environment: DesktopSavedEnvironment):
     id: environment.id,
     label: environment.label,
     local_ui_url: environment.local_ui_url,
-    source: environment.source,
     pinned: environment.pinned,
     last_used_at_ms: environment.last_used_at_ms,
   };
@@ -1911,7 +1901,6 @@ function serializeSavedSSHEnvironmentCatalog(environment: DesktopSavedSSHEnviron
     bootstrap_strategy: environment.bootstrap_strategy,
     release_base_url: environment.release_base_url,
     connect_timeout_seconds: environment.connect_timeout_seconds,
-    source: environment.source,
     pinned: environment.pinned,
     last_used_at_ms: environment.last_used_at_ms,
   };
@@ -2024,7 +2013,6 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
     provider_environments: providerEnvironments,
     saved_environments: savedEnvironments,
     saved_ssh_environments: savedSSHEnvironments,
-    recent_external_local_ui_urls: deriveRecentExternalLocalUIURLs(savedEnvironments),
     control_plane_refresh_tokens: Object.fromEntries(controlPlaneRefreshTokensByKey),
     control_planes: controlPlanes,
   };

@@ -63,6 +63,7 @@ describe('desktop persistence wiring', () => {
     expect(mainSrc).toContain('DESKTOP_SHELL_WINDOW_COMMAND_CHANNEL');
     expect(mainSrc).toContain('normalizeDesktopShellWindowCommandRequest');
     expect(mainSrc).toContain('DESKTOP_SHELL_OPEN_EXTERNAL_URL_CHANNEL');
+    expect(mainSrc).toContain('DESKTOP_SHELL_OPEN_DASHBOARD_CHANNEL');
     expect(mainSrc).toContain('normalizeDesktopShellOpenExternalURLRequest');
     expect(mainSrc).toContain('const utilityWindowKindByWebContentsID = new Map<number, DesktopUtilityWindowKind>();');
     expect(mainSrc).toContain("from './windowRecord';");

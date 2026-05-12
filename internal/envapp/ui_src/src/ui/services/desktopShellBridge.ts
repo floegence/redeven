@@ -24,6 +24,7 @@ export interface DesktopShellBridge {
   toggleMaximizeWindow?: () => Promise<DesktopShellWindowCommandResponse>;
   toggleFullScreenWindow?: () => Promise<DesktopShellWindowCommandResponse>;
   openExternalURL?: (url: string) => Promise<DesktopShellExternalURLOpenResult>;
+  openDashboard?: () => Promise<DesktopShellExternalURLOpenResult>;
   restartManagedRuntime?: () => Promise<DesktopManagedRuntimeRestartResult>;
   manageDesktopUpdate?: () => Promise<DesktopManagedRuntimeRestartResult>;
 }
@@ -52,6 +53,7 @@ function desktopShellBridge(): DesktopShellBridge | null {
       && typeof candidate.toggleMaximizeWindow !== 'function'
       && typeof candidate.toggleFullScreenWindow !== 'function'
       && typeof candidate.openExternalURL !== 'function'
+      && typeof candidate.openDashboard !== 'function'
       && typeof candidate.restartManagedRuntime !== 'function'
       && typeof candidate.manageDesktopUpdate !== 'function'
     )
@@ -171,6 +173,14 @@ export async function openExternalURLInDesktopShell(url: string): Promise<Deskto
     return null;
   }
   return bridge.openExternalURL(url);
+}
+
+export async function openDashboardInDesktopShell(): Promise<DesktopShellExternalURLOpenResult | null> {
+  const bridge = desktopShellBridge();
+  if (!bridge || typeof bridge.openDashboard !== 'function') {
+    return null;
+  }
+  return bridge.openDashboard();
 }
 
 export async function restartDesktopManagedRuntime(): Promise<DesktopManagedRuntimeRestartResult | null> {
