@@ -21,7 +21,7 @@ func TestHandleDesktopLockConflictWritesAttachedReportWhenRuntimeIsAvailable(t *
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"data":{"status":"online","password_required":true,"runtime_service":{"protocol_version":"redeven-runtime-v1","service_owner":"desktop","desktop_managed":true,"compatibility":"compatible","open_readiness":{"state":"openable"},"active_workload":{}}}}`))
+		_, _ = w.Write([]byte(`{"data":{"status":"online","password_required":true,"desktop_managed":true,"desktop_owner_id":"desktop-owner-health","runtime_service":{"protocol_version":"redeven-runtime-v1","service_owner":"desktop","desktop_managed":true,"compatibility":"compatible","open_readiness":{"state":"openable"},"active_workload":{}}}}`))
 	}))
 	defer server.Close()
 
@@ -52,6 +52,9 @@ func TestHandleDesktopLockConflictWritesAttachedReportWhenRuntimeIsAvailable(t *
 	}
 	if report.StateDir != filepath.Dir(cfgPath) || !report.DiagnosticsEnabled {
 		t.Fatalf("unexpected diagnostics report: %#v", report)
+	}
+	if report.DesktopOwnerID != "desktop-owner-health" {
+		t.Fatalf("DesktopOwnerID = %q", report.DesktopOwnerID)
 	}
 	if report.RuntimeService.OpenReadiness.State != "openable" {
 		t.Fatalf("OpenReadiness.State = %q", report.RuntimeService.OpenReadiness.State)
@@ -107,6 +110,7 @@ func writeRuntimeStateForTest(path string, localUIURL string) error {
 		"effective_run_mode":  "hybrid",
 		"remote_enabled":      true,
 		"desktop_managed":     true,
+		"desktop_owner_id":    "desktop-owner-state",
 		"state_dir":           filepath.Dir(filepath.Dir(path)),
 		"diagnostics_enabled": true,
 	}, "", "  ")

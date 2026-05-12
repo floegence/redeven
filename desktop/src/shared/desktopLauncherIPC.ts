@@ -155,6 +155,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   local_environment_owner?: 'desktop' | 'agent' | 'unknown';
   local_environment_runtime_state?: DesktopLocalRuntimeState;
   local_environment_runtime_url?: string;
+  local_environment_runtime_plan?: DesktopLocalRuntimeOpenPlan;
   local_environment_runtime_service?: RuntimeServiceSnapshot;
   local_environment_close_behavior?: DesktopLocalCloseBehavior;
   local_environment_has_local_hosting?: boolean;

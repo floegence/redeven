@@ -7,6 +7,7 @@ export type StartupReport = Readonly<{
   effective_run_mode?: string;
   remote_enabled?: boolean;
   desktop_managed?: boolean;
+  desktop_owner_id?: string;
   controlplane_base_url?: string;
   controlplane_provider_id?: string;
   env_public_id?: string;
@@ -34,6 +35,7 @@ export function parseStartupReport(raw: string): StartupReport {
     effective_run_mode: String(parsed.effective_run_mode ?? '').trim() || undefined,
     remote_enabled: typeof parsed.remote_enabled === 'boolean' ? parsed.remote_enabled : undefined,
     desktop_managed: typeof parsed.desktop_managed === 'boolean' ? parsed.desktop_managed : undefined,
+    desktop_owner_id: String(parsed.desktop_owner_id ?? '').trim() || undefined,
     controlplane_base_url: String(parsed.controlplane_base_url ?? '').trim() || undefined,
     controlplane_provider_id: String(parsed.controlplane_provider_id ?? '').trim() || undefined,
     env_public_id: String(parsed.env_public_id ?? '').trim() || undefined,

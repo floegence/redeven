@@ -14,6 +14,71 @@ import { hydrateWelcomeLocalEnvironmentRuntimeState } from './desktopWelcomeRunt
 
 const validEnvAppShellHTML = '<!doctype html><html><body><div id="root"></div><script type="module" src="/_redeven_proxy/env/assets/index.js"></script></body></html>';
 
+async function startRuntimeServer(healthData: Record<string, unknown>) {
+  const server = http.createServer((request, response) => {
+    if (request.url === '/api/local/runtime/health') {
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({
+        ok: true,
+        data: healthData,
+      }));
+      return;
+    }
+    if (request.url === '/_redeven_proxy/env/') {
+      response.writeHead(200, { 'Content-Type': 'text/html' });
+      response.end(validEnvAppShellHTML);
+      return;
+    }
+    if (request.url === '/_redeven_proxy/env/assets/index.js') {
+      response.writeHead(200, { 'Content-Type': 'application/javascript' });
+      response.end(request.method === 'HEAD' ? undefined : 'console.log("env");');
+      return;
+    }
+    response.writeHead(404);
+    response.end('not found');
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    server.listen(0, '127.0.0.1', () => resolve());
+    server.once('error', reject);
+  });
+  const address = server.address();
+  if (!address || typeof address === 'string') {
+    throw new Error('expected a TCP server address');
+  }
+  return {
+    localUIURL: `http://127.0.0.1:${address.port}/`,
+    close: () => new Promise<void>((resolve, reject) => {
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    }),
+  };
+}
+
+function runtimeService(overrides: Record<string, unknown> = {}) {
+  return {
+    runtime_version: 'v1.4.0',
+    service_owner: 'desktop',
+    desktop_managed: true,
+    effective_run_mode: 'desktop',
+    remote_enabled: true,
+    compatibility: 'compatible',
+    open_readiness: { state: 'openable' },
+    active_workload: {
+      terminal_count: 0,
+      session_count: 0,
+      task_count: 0,
+      port_forward_count: 0,
+    },
+    ...overrides,
+  };
+}
+
 describe('desktopWelcomeRuntimeState', () => {
   it('hydrates local runtime ownership from a probed open external Local Environment session', async () => {
     const server = http.createServer((request, response) => {
@@ -99,6 +164,7 @@ describe('desktopWelcomeRuntimeState', () => {
         effective_run_mode: 'local',
         remote_enabled: false,
         desktop_managed: false,
+        desktop_ownership: 'external',
         password_required: true,
         diagnostics_enabled: false,
         pid: 4242,
@@ -123,6 +189,114 @@ describe('desktopWelcomeRuntimeState', () => {
           resolve();
         });
       });
+    }
+  });
+
+  it('classifies a probed Desktop-managed runtime leased to another Desktop', async () => {
+    const server = await startRuntimeServer({
+      status: 'online',
+      password_required: false,
+      desktop_managed: true,
+      desktop_owner_id: 'other-desktop-owner',
+      runtime_service: runtimeService(),
+    });
+    const environment = testLocalEnvironment();
+    const preferences = testDesktopPreferences({
+      local_environment: environment,
+    });
+
+    try {
+      const hydrated = await hydrateWelcomeLocalEnvironmentRuntimeState(
+        preferences,
+        [
+          testLocalEnvironmentSession(
+            environment,
+            server.localUIURL,
+            'open',
+            {
+              desktop_managed: true,
+              desktop_owner_id: 'other-desktop-owner',
+              effective_run_mode: 'desktop',
+              pid: 4242,
+            },
+            {
+              runtimeLifecycleOwner: 'external',
+              runtimeLaunchMode: 'attached',
+            },
+          ),
+        ],
+        {
+          desktopOwnerID: 'desktop-owner-1',
+        },
+      );
+
+      expect(hydrated.local_environment.local_hosting.current_runtime).toEqual(expect.objectContaining({
+        local_ui_url: server.localUIURL,
+        desktop_managed: true,
+        desktop_owner_id: 'other-desktop-owner',
+        desktop_ownership: 'managed_elsewhere',
+      }));
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('marks an owned Desktop-managed runtime for update when bundled identity differs', async () => {
+    const server = await startRuntimeServer({
+      status: 'online',
+      password_required: false,
+      desktop_managed: true,
+      desktop_owner_id: 'desktop-owner-1',
+      runtime_service: runtimeService({
+        runtime_version: 'v1.4.0',
+        runtime_commit: 'old-commit',
+        runtime_build_time: 'old-build',
+      }),
+    });
+    const environment = testLocalEnvironment();
+    const preferences = testDesktopPreferences({
+      local_environment: environment,
+    });
+
+    try {
+      const hydrated = await hydrateWelcomeLocalEnvironmentRuntimeState(
+        preferences,
+        [
+          testLocalEnvironmentSession(
+            environment,
+            server.localUIURL,
+            'open',
+            {
+              desktop_managed: true,
+              desktop_owner_id: 'desktop-owner-1',
+              effective_run_mode: 'desktop',
+              pid: 4242,
+            },
+          ),
+        ],
+        {
+          desktopOwnerID: 'desktop-owner-1',
+          expectedRuntimeIdentity: {
+            runtime_version: 'v2.0.0',
+            runtime_commit: 'new-commit',
+            runtime_build_time: 'new-build',
+          },
+        },
+      );
+
+      expect(hydrated.local_environment.local_hosting.current_runtime).toEqual(expect.objectContaining({
+        desktop_ownership: 'owned',
+        runtime_service: expect.objectContaining({
+          compatibility: 'update_required',
+          open_readiness: {
+            state: 'blocked',
+            reason_code: 'runtime_update_required',
+            message: 'Desktop has a newer bundled runtime. Restart the Local Runtime before opening.',
+          },
+        }),
+      }));
+    } finally {
+      await server.close();
     }
   });
 
@@ -167,6 +341,7 @@ describe('desktopWelcomeRuntimeState', () => {
           data: {
             status: 'online',
             password_required: false,
+            desktop_owner_id: 'desktop-owner-1',
             runtime_service: {
               runtime_version: 'v1.4.0',
               service_owner: 'desktop',
@@ -222,6 +397,7 @@ describe('desktopWelcomeRuntimeState', () => {
           remote_enabled: true,
           effective_run_mode: 'desktop',
           pid: 5252,
+          desktop_owner_id: 'desktop-owner-state',
         }),
         'utf8',
       );
@@ -235,6 +411,7 @@ describe('desktopWelcomeRuntimeState', () => {
 
       const hydrated = await hydrateWelcomeLocalEnvironmentRuntimeState(preferences, [], {
         probeTimeoutMs: 200,
+        desktopOwnerID: 'desktop-owner-1',
       });
 
       expect(hydrated.local_environment.local_hosting.current_runtime).toEqual({
@@ -242,6 +419,8 @@ describe('desktopWelcomeRuntimeState', () => {
         effective_run_mode: 'desktop',
         remote_enabled: true,
         desktop_managed: true,
+        desktop_owner_id: 'desktop-owner-1',
+        desktop_ownership: 'owned',
         password_required: false,
         diagnostics_enabled: false,
         pid: 5252,

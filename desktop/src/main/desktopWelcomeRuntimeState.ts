@@ -8,7 +8,12 @@ import type {
   DesktopLocalEnvironmentState,
   DesktopLocalEnvironmentRuntimeState,
 } from '../shared/desktopLocalEnvironmentState';
-import { normalizeRuntimeServiceSnapshot, type RuntimeServiceOwner } from '../shared/runtimeService';
+import {
+  normalizeRuntimeServiceSnapshot,
+  runtimeServiceMatchesIdentity,
+  type RuntimeServiceIdentity,
+  type RuntimeServiceOwner,
+} from '../shared/runtimeService';
 
 const DEFAULT_WELCOME_RUNTIME_PROBE_TIMEOUT_MS = 200;
 
@@ -16,9 +21,26 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
+function runtimeOwnedByCurrentDesktop(startup: StartupReport, desktopOwnerID: string): boolean {
+  const cleanOwnerID = compact(desktopOwnerID);
+  const startupOwnerID = compact(startup.desktop_owner_id);
+  return startup.desktop_managed === true && cleanOwnerID !== '' && startupOwnerID !== '' && startupOwnerID === cleanOwnerID;
+}
+
+function runtimeDesktopOwnership(startup: StartupReport, desktopOwnerID: string): DesktopLocalEnvironmentRuntimeState['desktop_ownership'] {
+  if (startup.desktop_managed !== true) {
+    return 'external';
+  }
+  if (runtimeOwnedByCurrentDesktop(startup, desktopOwnerID)) {
+    return 'owned';
+  }
+  return compact(startup.desktop_owner_id) === '' ? 'legacy_unleased' : 'managed_elsewhere';
+}
+
 function runtimeStateFromStartup(
   startup: StartupReport,
-  desktopManaged: boolean,
+  desktopOwnerID: string,
+  expectedRuntimeIdentity: RuntimeServiceIdentity | null | undefined,
   localUIURLOverride?: string,
   serviceOwner?: RuntimeServiceOwner,
 ): DesktopLocalEnvironmentRuntimeState | undefined {
@@ -27,23 +49,40 @@ function runtimeStateFromStartup(
     return undefined;
   }
   const pid = Number(startup.pid);
-  const serviceDesktopManaged = startup.runtime_service?.desktop_managed ?? desktopManaged;
+  const rawDesktopManaged = startup.desktop_managed === true;
+  const serviceDesktopManaged = startup.runtime_service?.desktop_managed ?? rawDesktopManaged;
+  const runtimeService = normalizeRuntimeServiceSnapshot(startup.runtime_service ?? { service_owner: serviceOwner }, {
+    desktopManaged: serviceDesktopManaged,
+    effectiveRunMode: startup.effective_run_mode,
+    remoteEnabled: startup.remote_enabled === true,
+  });
+  const desktopRuntimeIdentityMismatch = rawDesktopManaged
+    && !runtimeServiceMatchesIdentity(runtimeService, expectedRuntimeIdentity);
   return {
     local_ui_url: localUIURL,
     effective_run_mode: compact(startup.effective_run_mode),
     remote_enabled: startup.remote_enabled === true,
-    desktop_managed: desktopManaged,
+    desktop_managed: rawDesktopManaged,
+    desktop_owner_id: compact(startup.desktop_owner_id) || undefined,
+    desktop_ownership: runtimeDesktopOwnership(startup, desktopOwnerID),
     controlplane_base_url: compact(startup.controlplane_base_url) || undefined,
     controlplane_provider_id: compact(startup.controlplane_provider_id) || undefined,
     env_public_id: compact(startup.env_public_id) || undefined,
     password_required: startup.password_required === true,
     diagnostics_enabled: startup.diagnostics_enabled === true,
     pid: Number.isInteger(pid) && pid > 0 ? pid : 0,
-    runtime_service: normalizeRuntimeServiceSnapshot(startup.runtime_service ?? { service_owner: serviceOwner }, {
-      desktopManaged: serviceDesktopManaged,
-      effectiveRunMode: startup.effective_run_mode,
-      remoteEnabled: startup.remote_enabled === true,
-    }),
+    runtime_service: desktopRuntimeIdentityMismatch
+      ? normalizeRuntimeServiceSnapshot({
+          ...runtimeService,
+          compatibility: 'update_required',
+          compatibility_message: 'Desktop has a newer bundled runtime. Restart the Local Runtime before opening.',
+          open_readiness: {
+            state: 'blocked',
+            reason_code: 'runtime_update_required',
+            message: 'Desktop has a newer bundled runtime. Restart the Local Runtime before opening.',
+          },
+        })
+      : runtimeService,
   };
 }
 
@@ -62,6 +101,8 @@ function localManagedSessionByEnvironmentID(
 async function currentRuntimeFromLocalSession(
   session: DesktopSessionSummary | null | undefined,
   probeTimeoutMs: number,
+  desktopOwnerID: string,
+  expectedRuntimeIdentity: RuntimeServiceIdentity | null | undefined,
 ): Promise<DesktopLocalEnvironmentRuntimeState | undefined> {
   if (
     !session
@@ -92,7 +133,8 @@ async function currentRuntimeFromLocalSession(
         ...session.startup,
         ...startup,
       },
-      session.runtime_lifecycle_owner === 'desktop' || session.startup.desktop_managed === true,
+      desktopOwnerID,
+      expectedRuntimeIdentity,
       startup.local_ui_url,
       session.runtime_lifecycle_owner,
     );
@@ -103,6 +145,8 @@ async function currentRuntimeFromLocalSession(
 async function currentRuntimeFromProbeStateDir(
   stateDir: string,
   probeTimeoutMs: number,
+  desktopOwnerID: string,
+  expectedRuntimeIdentity: RuntimeServiceIdentity | null | undefined,
 ): Promise<DesktopLocalEnvironmentRuntimeState | undefined> {
   const cleanStateDir = compact(stateDir);
   if (cleanStateDir === '') {
@@ -115,14 +159,20 @@ async function currentRuntimeFromProbeStateDir(
   if (!startup) {
     return undefined;
   }
-  return runtimeStateFromStartup(startup, startup.desktop_managed === true);
+  return runtimeStateFromStartup(
+    startup,
+    desktopOwnerID,
+    expectedRuntimeIdentity,
+  );
 }
 
 async function currentRuntimeFromProbe(
   environment: DesktopLocalEnvironmentState,
   probeTimeoutMs: number,
+  desktopOwnerID: string,
+  expectedRuntimeIdentity: RuntimeServiceIdentity | null | undefined,
 ): Promise<DesktopLocalEnvironmentRuntimeState | undefined> {
-  return currentRuntimeFromProbeStateDir(environment.local_hosting?.state_dir ?? '', probeTimeoutMs);
+  return currentRuntimeFromProbeStateDir(environment.local_hosting?.state_dir ?? '', probeTimeoutMs, desktopOwnerID, expectedRuntimeIdentity);
 }
 
 function withCurrentRuntime(
@@ -138,6 +188,8 @@ function withCurrentRuntime(
   if (
     existingURL === nextURL
     && (existingRuntime?.desktop_managed ?? false) === (currentRuntime?.desktop_managed ?? false)
+    && (existingRuntime?.desktop_owner_id ?? '') === (currentRuntime?.desktop_owner_id ?? '')
+    && (existingRuntime?.desktop_ownership ?? '') === (currentRuntime?.desktop_ownership ?? '')
     && (existingRuntime?.controlplane_base_url ?? '') === (currentRuntime?.controlplane_base_url ?? '')
     && (existingRuntime?.controlplane_provider_id ?? '') === (currentRuntime?.controlplane_provider_id ?? '')
     && (existingRuntime?.env_public_id ?? '') === (currentRuntime?.env_public_id ?? '')
@@ -164,13 +216,22 @@ export async function hydrateWelcomeLocalEnvironmentRuntimeState(
   openSessions: readonly DesktopSessionSummary[],
   options: Readonly<{
     probeTimeoutMs?: number;
+    desktopOwnerID?: string;
+    expectedRuntimeIdentity?: RuntimeServiceIdentity | null;
   }> = {},
 ): Promise<DesktopPreferences> {
   const probeTimeoutMs = options.probeTimeoutMs ?? DEFAULT_WELCOME_RUNTIME_PROBE_TIMEOUT_MS;
+  const desktopOwnerID = compact(options.desktopOwnerID);
+  const expectedRuntimeIdentity = options.expectedRuntimeIdentity ?? null;
   const localSessionsByEnvironmentID = localManagedSessionByEnvironmentID(openSessions);
   const localEnvironment = preferences.local_environment;
-  const currentRuntime = await currentRuntimeFromLocalSession(localSessionsByEnvironmentID.get(localEnvironment.id), probeTimeoutMs)
-    ?? await currentRuntimeFromProbe(localEnvironment, probeTimeoutMs);
+  const currentRuntime = await currentRuntimeFromLocalSession(
+    localSessionsByEnvironmentID.get(localEnvironment.id),
+    probeTimeoutMs,
+    desktopOwnerID,
+    expectedRuntimeIdentity,
+  )
+    ?? await currentRuntimeFromProbe(localEnvironment, probeTimeoutMs, desktopOwnerID, expectedRuntimeIdentity);
   return {
     ...preferences,
     local_environment: withCurrentRuntime(localEnvironment, currentRuntime),

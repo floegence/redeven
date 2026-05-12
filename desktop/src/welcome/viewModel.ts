@@ -630,13 +630,13 @@ function runtimeStatusLabel(environment: DesktopEnvironmentEntry): string {
   if (environment.kind === 'provider_environment' && environment.control_plane_sync_state === 'auth_required') {
     return 'RECONNECT REQUIRED';
   }
-  const localRuntimePlan = providerPrimaryLocalRuntimePlan(environment);
+  const localRuntimePlan = primaryLocalRuntimePlan(environment);
   if (localRuntimePlan) {
     if (localRuntimePlan.can_open) {
       if (localRuntimePlan.state === 'restart_to_update') {
         return 'UPDATE READY';
       }
-      return 'RUNTIME READY';
+      return 'Open';
     }
     if (localRuntimePlan.state === 'blocked_active_work') {
       return 'RUNTIME BUSY';
@@ -650,7 +650,7 @@ function runtimeStatusLabel(environment: DesktopEnvironmentEntry): string {
   }
   const snapshot = environmentRuntimeService(environment);
   if (runtimeServiceIsOpenable(snapshot)) {
-    return 'RUNTIME READY';
+    return 'Open';
   }
   if (snapshot?.open_readiness?.state === 'blocked') {
     return runtimeServiceNeedsRuntimeUpdate(snapshot)
@@ -664,13 +664,20 @@ function runtimeStatusTone(environment: DesktopEnvironmentEntry): EnvironmentCar
   if (environment.kind === 'provider_environment' && environment.control_plane_sync_state === 'auth_required') {
     return 'warning';
   }
-  const localRuntimePlan = providerPrimaryLocalRuntimePlan(environment);
+  const localRuntimePlan = primaryLocalRuntimePlan(environment);
   if (localRuntimePlan) {
     return localRuntimePlan.can_open ? 'success' : 'warning';
   }
   return environment.runtime_health.status === 'online' && runtimeServiceIsOpenable(environmentRuntimeService(environment))
     ? 'success'
     : 'warning';
+}
+
+function primaryLocalRuntimePlan(environment: DesktopEnvironmentEntry) {
+  if (environment.kind === 'local_environment') {
+    return environment.local_environment_runtime_plan;
+  }
+  return providerPrimaryLocalRuntimePlan(environment);
 }
 
 function providerPrimaryLocalRuntimePlan(environment: DesktopEnvironmentEntry) {
@@ -698,7 +705,7 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
     };
   }
   const snapshot = environmentRuntimeService(environment);
-  const localRuntimePlan = providerPrimaryLocalRuntimePlan(environment);
+  const localRuntimePlan = primaryLocalRuntimePlan(environment);
   const canOpenProviderLocalRuntime = localRuntimePlan?.can_open === true;
   const blocked = snapshot?.open_readiness?.state === 'blocked';
   const primaryRoute = environment.kind === 'provider_environment' ? providerPrimaryRoute(environment) : '';
@@ -1011,7 +1018,7 @@ function primaryActionOverlay(
       message: 'Desktop needs fresh provider authorization before it can request a one-time Local Environment bootstrap ticket for this Environment.',
     };
   }
-  const localRuntimePlan = providerPrimaryLocalRuntimePlan(environment);
+  const localRuntimePlan = primaryLocalRuntimePlan(environment);
   if (localRuntimePlan) {
     if (localRuntimePlan.can_open) {
       return undefined;

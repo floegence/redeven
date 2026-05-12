@@ -20,6 +20,7 @@ func TestWriteState(t *testing.T) {
 		EffectiveRunMode:   "hybrid",
 		RemoteEnabled:      true,
 		DesktopManaged:     true,
+		DesktopOwnerID:     "desktop-owner-1",
 		StateDir:           "/Users/tester/.redeven",
 		DiagnosticsEnabled: true,
 		PID:                42,
@@ -62,6 +63,9 @@ func TestWriteState(t *testing.T) {
 	if !state.RemoteEnabled || !state.DesktopManaged || state.EffectiveRunMode != "hybrid" || state.PID != 42 {
 		t.Fatalf("unexpected state: %#v", state)
 	}
+	if state.DesktopOwnerID != "desktop-owner-1" {
+		t.Fatalf("DesktopOwnerID = %q", state.DesktopOwnerID)
+	}
 	if state.StateDir != "/Users/tester/.redeven" || !state.DiagnosticsEnabled {
 		t.Fatalf("unexpected diagnostics state: %#v", state)
 	}
@@ -88,7 +92,7 @@ func TestLoadAttachable(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok":true,"data":{"status":"online","password_required":true,"runtime_service":{"runtime_version":"v9.9.9","protocol_version":"redeven-runtime-v1","service_owner":"desktop","desktop_managed":true,"effective_run_mode":"hybrid","remote_enabled":true,"compatibility":"compatible","open_readiness":{"state":"starting","reason_code":"env_app_gateway_starting","message":"Env App gateway is starting."},"active_workload":{"terminal_count":4,"session_count":2,"task_count":1,"port_forward_count":3}}}}`))
+		_, _ = w.Write([]byte(`{"ok":true,"data":{"status":"online","password_required":true,"desktop_managed":true,"desktop_owner_id":"desktop-owner-health","runtime_service":{"runtime_version":"v9.9.9","protocol_version":"redeven-runtime-v1","service_owner":"desktop","desktop_managed":true,"effective_run_mode":"hybrid","remote_enabled":true,"compatibility":"compatible","open_readiness":{"state":"starting","reason_code":"env_app_gateway_starting","message":"Env App gateway is starting."},"active_workload":{"terminal_count":4,"session_count":2,"task_count":1,"port_forward_count":3}}}}`))
 	}))
 
 	runtimePath := filepath.Join(t.TempDir(), "runtime", "local-ui.json")
@@ -97,6 +101,7 @@ func TestLoadAttachable(t *testing.T) {
 		EffectiveRunMode:   "hybrid",
 		RemoteEnabled:      true,
 		DesktopManaged:     true,
+		DesktopOwnerID:     "desktop-owner-state",
 		StateDir:           "/tmp/redeven",
 		DiagnosticsEnabled: true,
 		PID:                42,
@@ -119,6 +124,9 @@ func TestLoadAttachable(t *testing.T) {
 	}
 	if !state.RemoteEnabled || !state.DesktopManaged || state.EffectiveRunMode != "hybrid" || state.PID != 42 {
 		t.Fatalf("unexpected state: %#v", state)
+	}
+	if state.DesktopOwnerID != "desktop-owner-health" {
+		t.Fatalf("DesktopOwnerID = %q", state.DesktopOwnerID)
 	}
 	if state.StateDir != "/tmp/redeven" || !state.DiagnosticsEnabled {
 		t.Fatalf("unexpected diagnostics metadata: %#v", state)

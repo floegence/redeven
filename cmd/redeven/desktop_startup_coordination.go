@@ -48,6 +48,7 @@ func writeDesktopReadyLaunchReport(reportPath string, startup runtimeStartupRepo
 		EffectiveRunMode:       startup.EffectiveRunMode,
 		RemoteEnabled:          startup.RemoteEnabled,
 		DesktopManaged:         startup.DesktopManaged,
+		DesktopOwnerID:         startup.DesktopOwnerID,
 		ControlplaneBaseURL:    startup.ControlplaneBaseURL,
 		ControlplaneProviderID: startup.ControlplaneProviderID,
 		EnvPublicID:            startup.EnvPublicID,
@@ -65,6 +66,7 @@ type runtimeStartupReport struct {
 	EffectiveRunMode       string
 	RemoteEnabled          bool
 	DesktopManaged         bool
+	DesktopOwnerID         string
 	ControlplaneBaseURL    string
 	ControlplaneProviderID string
 	EnvPublicID            string
@@ -82,6 +84,7 @@ func buildRuntimeStartupReport(state *localuiruntime.Snapshot) runtimeStartupRep
 		EffectiveRunMode:       state.EffectiveRunMode,
 		RemoteEnabled:          state.RemoteEnabled,
 		DesktopManaged:         state.DesktopManaged,
+		DesktopOwnerID:         state.DesktopOwnerID,
 		ControlplaneBaseURL:    state.ControlplaneBaseURL,
 		ControlplaneProviderID: state.ControlplaneProviderID,
 		EnvPublicID:            state.EnvPublicID,

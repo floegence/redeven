@@ -30,6 +30,8 @@ var (
 	BuildTime = "unknown"
 )
 
+const desktopOwnerIDEnvName = "REDEVEN_DESKTOP_OWNER_ID"
+
 type cli struct {
 	stdin  io.Reader
 	stdout io.Writer
@@ -482,6 +484,10 @@ func (c *cli) runCmd(args []string) int {
 
 	localUIBindLabel := localUIBind.ListenLabel()
 	localUIURLs := localUIBind.DisplayURLs()
+	desktopOwnerID := ""
+	if *desktopManaged {
+		desktopOwnerID = strings.TrimSpace(os.Getenv(desktopOwnerIDEnvName))
+	}
 	if err := config.WriteEnvironmentCatalogRecord(stateLayout, cfg, localUIBindLabel, accessGate.Enabled()); err != nil {
 		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to update environment catalog: %v", err))
 	}
@@ -545,6 +551,7 @@ func (c *cli) runCmd(args []string) int {
 		srv, err := localui.New(localui.Options{
 			Bind:                   localUIBind,
 			DesktopManaged:         *desktopManaged,
+			DesktopOwnerID:         desktopOwnerID,
 			EffectiveRunMode:       string(effectiveRunMode),
 			RemoteEnabled:          controlChannelEnabled,
 			ControlplaneBaseURL:    cfg.ControlplaneBaseURL,
@@ -576,6 +583,7 @@ func (c *cli) runCmd(args []string) int {
 				EffectiveRunMode:       string(effectiveRunMode),
 				RemoteEnabled:          controlChannelEnabled,
 				DesktopManaged:         *desktopManaged,
+				DesktopOwnerID:         desktopOwnerID,
 				ControlplaneBaseURL:    cfg.ControlplaneBaseURL,
 				ControlplaneProviderID: cfg.ControlplaneProviderID,
 				EnvPublicID:            cfg.EnvironmentID,

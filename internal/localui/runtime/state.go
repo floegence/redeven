@@ -21,6 +21,7 @@ type State struct {
 	EffectiveRunMode       string                  `json:"effective_run_mode,omitempty"`
 	RemoteEnabled          bool                    `json:"remote_enabled"`
 	DesktopManaged         bool                    `json:"desktop_managed"`
+	DesktopOwnerID         string                  `json:"desktop_owner_id,omitempty"`
 	ControlplaneBaseURL    string                  `json:"controlplane_base_url,omitempty"`
 	ControlplaneProviderID string                  `json:"controlplane_provider_id,omitempty"`
 	EnvPublicID            string                  `json:"env_public_id,omitempty"`
@@ -37,6 +38,7 @@ type Snapshot struct {
 	EffectiveRunMode       string
 	RemoteEnabled          bool
 	DesktopManaged         bool
+	DesktopOwnerID         string
 	ControlplaneBaseURL    string
 	ControlplaneProviderID string
 	EnvPublicID            string
@@ -72,6 +74,7 @@ func WriteState(path string, state State) error {
 		state.LocalUIURLs = []string{state.LocalUIURL}
 	}
 	state.EffectiveRunMode = strings.TrimSpace(state.EffectiveRunMode)
+	state.DesktopOwnerID = strings.TrimSpace(state.DesktopOwnerID)
 	state.ControlplaneBaseURL = strings.TrimSpace(state.ControlplaneBaseURL)
 	state.ControlplaneProviderID = strings.TrimSpace(state.ControlplaneProviderID)
 	state.EnvPublicID = strings.TrimSpace(state.EnvPublicID)
@@ -164,6 +167,7 @@ func parseState(raw []byte) (*Snapshot, error) {
 		EffectiveRunMode:       strings.TrimSpace(state.EffectiveRunMode),
 		RemoteEnabled:          state.RemoteEnabled,
 		DesktopManaged:         state.DesktopManaged,
+		DesktopOwnerID:         strings.TrimSpace(state.DesktopOwnerID),
 		ControlplaneBaseURL:    strings.TrimSpace(state.ControlplaneBaseURL),
 		ControlplaneProviderID: strings.TrimSpace(state.ControlplaneProviderID),
 		EnvPublicID:            strings.TrimSpace(state.EnvPublicID),
@@ -200,6 +204,8 @@ type localRuntimeHealthEnvelope struct {
 type localRuntimeHealthPayload struct {
 	Status           *string                  `json:"status"`
 	PasswordRequired *bool                    `json:"password_required"`
+	DesktopManaged   *bool                    `json:"desktop_managed"`
+	DesktopOwnerID   *string                  `json:"desktop_owner_id"`
 	RuntimeService   *runtimeservice.Snapshot `json:"runtime_service"`
 }
 
@@ -271,6 +277,12 @@ func LoadAttachable(path string, timeout time.Duration) (*Snapshot, error) {
 			snapshot.LocalUIURL = candidateURL
 			snapshot.LocalUIURLs = compactStrings(append([]string{candidateURL}, snapshot.LocalUIURLs...))
 			snapshot.PasswordRequired = status.PasswordRequired != nil && *status.PasswordRequired
+			if status.DesktopManaged != nil {
+				snapshot.DesktopManaged = *status.DesktopManaged
+			}
+			if status.DesktopOwnerID != nil {
+				snapshot.DesktopOwnerID = strings.TrimSpace(*status.DesktopOwnerID)
+			}
 			if status.RuntimeService != nil {
 				snapshot.RuntimeService = runtimeservice.NormalizeSnapshot(*status.RuntimeService)
 			}

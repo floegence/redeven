@@ -268,6 +268,8 @@ func TestServer_handleRuntimeHealth_reportsOnlineWithoutUnlock(t *testing.T) {
 		Data struct {
 			Status           string `json:"status"`
 			PasswordRequired bool   `json:"password_required"`
+			DesktopManaged   bool   `json:"desktop_managed"`
+			DesktopOwnerID   string `json:"desktop_owner_id"`
 			RuntimeService   struct {
 				OpenReadiness struct {
 					State string `json:"state"`
@@ -286,6 +288,9 @@ func TestServer_handleRuntimeHealth_reportsOnlineWithoutUnlock(t *testing.T) {
 	}
 	if !payload.Data.PasswordRequired {
 		t.Fatalf("password_required = false, want true")
+	}
+	if payload.Data.DesktopManaged || payload.Data.DesktopOwnerID != "" {
+		t.Fatalf("unexpected desktop ownership metadata: %#v", payload.Data)
 	}
 	if payload.Data.RuntimeService.OpenReadiness.State != "starting" {
 		t.Fatalf("open_readiness.state = %q, want starting", payload.Data.RuntimeService.OpenReadiness.State)
@@ -636,6 +641,7 @@ func TestServer_handleFavicon_redirect(t *testing.T) {
 func TestServer_handleRuntime_reportsDesktopManagedMetadata(t *testing.T) {
 	s := newTestServer(t, nil)
 	s.desktopManaged = true
+	s.desktopOwnerID = "desktop-owner-runtime"
 	s.effectiveRunMode = "hybrid"
 	s.remoteEnabled = true
 
@@ -651,7 +657,7 @@ func TestServer_handleRuntime_reportsDesktopManagedMetadata(t *testing.T) {
 	if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
-	if !body.DesktopManaged || body.EffectiveRunMode != "hybrid" || !body.RemoteEnabled {
+	if !body.DesktopManaged || body.DesktopOwnerID != "desktop-owner-runtime" || body.EffectiveRunMode != "hybrid" || !body.RemoteEnabled {
 		t.Fatalf("unexpected runtime body: %#v", body)
 	}
 	if body.RuntimeService.ProtocolVersion != "redeven-runtime-v1" ||

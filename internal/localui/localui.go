@@ -52,6 +52,7 @@ type Options struct {
 	Bind   BindSpec
 
 	DesktopManaged         bool
+	DesktopOwnerID         string
 	EffectiveRunMode       string
 	RemoteEnabled          bool
 	ControlplaneBaseURL    string
@@ -87,6 +88,7 @@ type Server struct {
 	runtimeStatePath       string
 	version                string
 	desktopManaged         bool
+	desktopOwnerID         string
 	effectiveRunMode       string
 	remoteEnabled          bool
 	controlplaneBaseURL    string
@@ -182,6 +184,7 @@ func New(opts Options) (*Server, error) {
 		runtimeStatePath:       localuiruntime.RuntimeStatePath(configPath),
 		version:                strings.TrimSpace(opts.Version),
 		desktopManaged:         opts.DesktopManaged,
+		desktopOwnerID:         strings.TrimSpace(opts.DesktopOwnerID),
 		effectiveRunMode:       strings.TrimSpace(opts.EffectiveRunMode),
 		remoteEnabled:          opts.RemoteEnabled,
 		controlplaneBaseURL:    strings.TrimSpace(opts.ControlplaneBaseURL),
@@ -254,6 +257,7 @@ func (s *Server) Start(ctx context.Context) error {
 		EffectiveRunMode:       s.effectiveRunMode,
 		RemoteEnabled:          s.remoteEnabled,
 		DesktopManaged:         s.desktopManaged,
+		DesktopOwnerID:         s.desktopOwnerID,
 		ControlplaneBaseURL:    s.controlplaneBaseURL,
 		ControlplaneProviderID: s.controlplaneProviderID,
 		EnvPublicID:            s.envPublicID,
@@ -339,6 +343,8 @@ type accessStatusResp struct {
 type runtimeHealthResp struct {
 	Status           string                  `json:"status"`
 	PasswordRequired bool                    `json:"password_required"`
+	DesktopManaged   bool                    `json:"desktop_managed,omitempty"`
+	DesktopOwnerID   string                  `json:"desktop_owner_id,omitempty"`
 	RuntimeService   runtimeservice.Snapshot `json:"runtime_service"`
 }
 
@@ -652,6 +658,8 @@ func (s *Server) handleRuntimeHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, apiResp{OK: true, Data: runtimeHealthResp{
 		Status:           "online",
 		PasswordRequired: s.accessEnabled(),
+		DesktopManaged:   s.desktopManaged,
+		DesktopOwnerID:   s.desktopOwnerID,
 		RuntimeService:   s.runtimeServiceSnapshot(),
 	}})
 }
@@ -843,6 +851,7 @@ type runtimeResp struct {
 	EnvPublicID      string                  `json:"env_public_id"`
 	DirectWSURL      string                  `json:"direct_ws_url"`
 	DesktopManaged   bool                    `json:"desktop_managed,omitempty"`
+	DesktopOwnerID   string                  `json:"desktop_owner_id,omitempty"`
 	EffectiveRunMode string                  `json:"effective_run_mode,omitempty"`
 	RemoteEnabled    bool                    `json:"remote_enabled,omitempty"`
 	RuntimeService   runtimeservice.Snapshot `json:"runtime_service"`
@@ -865,6 +874,7 @@ func (s *Server) handleRuntime(w http.ResponseWriter, r *http.Request) {
 		EnvPublicID:      LocalEnvPublicID,
 		DirectWSURL:      wsURL,
 		DesktopManaged:   s.desktopManaged,
+		DesktopOwnerID:   s.desktopOwnerID,
 		EffectiveRunMode: s.resolvedEffectiveRunMode(),
 		RemoteEnabled:    s.remoteEnabled,
 		RuntimeService:   s.runtimeServiceSnapshot(),
