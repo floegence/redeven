@@ -988,6 +988,12 @@ describe('desktopWelcomeState', () => {
         control_plane_sync_state: 'ready',
         provider_local_runtime_configured: true,
         provider_local_runtime_state: 'not_running',
+        provider_local_runtime_plan: expect.objectContaining({
+          state: 'not_running',
+          can_open: true,
+          can_prepare: true,
+          requires_bootstrap: true,
+        }),
         remote_route_state: 'offline',
         remote_catalog_freshness: 'fresh',
         remote_state_reason: 'The provider currently reports this environment as offline.',
@@ -997,6 +1003,55 @@ describe('desktopWelcomeState', () => {
       expect.objectContaining({
         sync_state: 'ready',
         catalog_freshness: 'fresh',
+      }),
+    ]));
+  });
+
+  it('describes singleton runtime rebind plans for provider entries without exposing the unbound endpoint as provider-local', () => {
+    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment({
+          currentRuntime: {
+            local_ui_url: 'http://localhost:23998/',
+            desktop_managed: true,
+            effective_run_mode: 'desktop',
+            runtime_service: {
+              protocol_version: 'redeven-runtime-v1',
+              service_owner: 'desktop',
+              desktop_managed: true,
+              effective_run_mode: 'desktop',
+              remote_enabled: false,
+              compatibility: 'compatible',
+              open_readiness: { state: 'openable' },
+              active_workload: {
+                terminal_count: 0,
+                session_count: 0,
+                task_count: 0,
+                port_forward_count: 0,
+              },
+            },
+          },
+        }),
+        provider_environments: [providerEnvironment],
+      }),
+    });
+
+    expect(snapshot.environments).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: providerEnvironment.id,
+        kind: 'provider_environment',
+        provider_local_runtime_state: 'not_running',
+        provider_local_runtime_url: undefined,
+        provider_local_runtime_plan: expect.objectContaining({
+          state: 'restart_to_bind',
+          runtime_running: true,
+          runtime_matches_target: false,
+          can_open: true,
+          can_prepare: true,
+          requires_restart: true,
+          runtime_url: 'http://localhost:23998/',
+        }),
       }),
     ]));
   });

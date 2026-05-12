@@ -1702,7 +1702,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     errorTarget: 'connect' | 'dialog' = 'connect',
     route: 'auto' | DesktopLocalEnvironmentStateRoute = 'auto',
   ): Promise<boolean> {
-    if (environment.window_state === 'closed' && environment.runtime_health.status !== 'online') {
+    const providerLocalOpenPlanCanPrepare = environment.kind === 'provider_environment'
+      && (route === 'local_host' || (route === 'auto' && environment.provider_default_open_route === 'local_host'))
+      && environment.provider_local_runtime_plan?.can_open === true;
+    if (
+      environment.window_state === 'closed'
+      && environment.runtime_health.status !== 'online'
+      && !providerLocalOpenPlanCanPrepare
+    ) {
       const message = runtimeUnavailableMessage(environment);
       setErrorMessage(errorTarget, message);
       setEnvironmentFailures((current) => {

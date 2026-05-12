@@ -27,6 +27,7 @@ This document describes the public Electron desktop shell that ships with each `
 - Desktop owns one Local Environment for the current OS user / Redeven profile state root:
   - the runtime config is stored at `~/.redeven/local-environment/config.json`
   - provider environments may be listed in the catalog, but only one provider Environment can be linked to the Local Environment at a time
+- Desktop treats the Local Environment runtime as one profile-scoped singleton. Provider cards do not require a second runtime instance; they compare the observed singleton runtime with the target provider Environment and decide whether `Open` can use it directly, start it, restart it with a provider bootstrap ticket, or block safely.
 - Each Desktop session window also receives a Desktop-owned session context snapshot:
   - `local_environment_id`
   - `renderer_storage_scope_id`
@@ -89,6 +90,10 @@ Behavior:
 - The Desktop-owned local runtime uses `~/.redeven/local-environment/config.json`.
 - Desktop startup flows that include a bootstrap target write the same Local Environment config and replace the previous provider binding for that Local Environment profile.
 - Desktop attach probing reads `runtime/local-ui.json` from the same resolved state root as the spawned config path.
+- Provider `Open` uses a Local Runtime open plan instead of a shallow health check. The plan contains the desired target, the observed singleton runtime binding, whether Desktop owns the process, whether active work exists, and whether opening requires start, restart, provider bootstrap, or an update restart.
+- When the singleton runtime is Desktop-managed, unbound, bound to another provider Environment, or running an older bundled binary, Desktop may stop and restart it automatically only when the Runtime Service snapshot reports no active workload.
+- If active workload is present, Desktop keeps `Open` blocked and shows interruption-safe guidance instead of closing terminals, sessions, tasks, or port forwards implicitly.
+- If the singleton runtime is external-managed, Desktop never silently takes ownership. The user must stop or relaunch that runtime from its owner before Desktop can bind the Local Environment profile to a provider Environment.
 - The Local UI password stays out of process args and environment variables.
 - The one-time bootstrap ticket also stays out of process args and is passed only through a desktop-owned environment variable.
 - Desktop startup reports and attachable runtime state include a non-secret `password_required` boolean so launcher and attach flows can describe whether the current runtime is protected.

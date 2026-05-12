@@ -5,6 +5,7 @@ import {
   testDesktopPreferences,
   testProviderBoundLocalEnvironment,
   testLocalEnvironment,
+  testProviderEnvironment,
   testLocalEnvironmentSession,
 } from '../testSupport/desktopTestHelpers';
 import {
@@ -51,7 +52,30 @@ describe('environmentLibraryOverlayState', () => {
   it('keeps a guidance overlay open across refresh while the same environment still exposes popover guidance', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        local_environment: testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo'),
+        local_environment: testLocalEnvironment({
+          currentRuntime: {
+            local_ui_url: 'http://127.0.0.1:24001/',
+            desktop_managed: true,
+            runtime_service: {
+              protocol_version: 'redeven-runtime-v1',
+              service_owner: 'desktop',
+              desktop_managed: true,
+              effective_run_mode: 'desktop',
+              remote_enabled: false,
+              compatibility: 'compatible',
+              open_readiness: { state: 'openable' },
+              active_workload: {
+                terminal_count: 1,
+                session_count: 0,
+                task_count: 0,
+                port_forward_count: 0,
+              },
+            },
+          },
+        }),
+        provider_environments: [
+          testProviderEnvironment('https://cp.example.invalid', 'env_demo'),
+        ],
       }),
     });
     const providerEntry = snapshot.environments.find((environment) => environment.kind === 'provider_environment');

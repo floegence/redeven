@@ -2,6 +2,7 @@ import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
 import {
   buildProviderBackedEnvironmentActionModel,
   type EnvironmentActionIntent,
+  type EnvironmentPrimaryActionOverlayModel,
 } from './viewModel';
 
 export type EnvironmentGuidancePendingIntent = Extract<
@@ -99,6 +100,13 @@ function runtimeStillOfflineDetail(environment: DesktopEnvironmentEntry): string
   return 'The runtime is still offline on this device. Start it from its source, then try again.';
 }
 
+function environmentGuidancePopover(
+  environment: DesktopEnvironmentEntry,
+): Extract<EnvironmentPrimaryActionOverlayModel, Readonly<{ kind: 'popover' }>> | null {
+  const overlay = buildProviderBackedEnvironmentActionModel(environment).action_presentation.primary_action_overlay;
+  return overlay?.kind === 'popover' ? overlay : null;
+}
+
 function runtimeReadyDetail(environment: DesktopEnvironmentEntry): string {
   if (environment.window_state === 'open') {
     return 'The environment window is open and ready to focus.';
@@ -153,7 +161,8 @@ export function completeEnvironmentGuidanceRefresh(
   if (!environment) {
     return null;
   }
-  if (!environmentSupportsGuidancePopover(environment)) {
+  const popover = environmentGuidancePopover(environment);
+  if (!popover) {
     return completeEnvironmentGuidanceSuccess(state, environment);
   }
   return {
@@ -161,8 +170,8 @@ export function completeEnvironmentGuidanceRefresh(
     pending_intent: null,
     feedback: {
       tone: 'warning',
-      title: 'Runtime is still offline',
-      detail: runtimeStillOfflineDetail(environment),
+      title: popover.title || 'Runtime still needs attention',
+      detail: popover.detail || runtimeStillOfflineDetail(environment),
     },
   };
 }
@@ -231,5 +240,5 @@ export function reconcileEnvironmentGuidanceSession(
 export function environmentSupportsGuidancePopover(
   environment: DesktopEnvironmentEntry,
 ): boolean {
-  return buildProviderBackedEnvironmentActionModel(environment).action_presentation.primary_action_overlay?.kind === 'popover';
+  return environmentGuidancePopover(environment) !== null;
 }

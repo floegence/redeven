@@ -50,6 +50,12 @@ import {
   normalizeRuntimeServiceSnapshot,
   type RuntimeServiceSnapshot,
 } from '../shared/runtimeService';
+import {
+  buildDesktopLocalRuntimeOpenPlan,
+  desktopLocalRuntimeBindingFromObservation,
+  desktopLocalRuntimeBindingsMatch,
+  normalizeDesktopLocalRuntimeBinding,
+} from '../shared/localRuntimeSupervisor';
 import { normalizeLocalUIBaseURL } from './localUIURL';
 
 export type BuildDesktopWelcomeSnapshotArgs = Readonly<{
@@ -388,11 +394,13 @@ function providerRuntimeBindingMatches(
     env_public_id?: string;
   }> | null | undefined,
 ): boolean {
-  return Boolean(
-    runtime
-    && compact(runtime.controlplane_base_url) === environment.provider_origin
-    && compact(runtime.controlplane_provider_id) === environment.provider_id
-    && compact(runtime.env_public_id) === environment.env_public_id,
+  return desktopLocalRuntimeBindingsMatch(
+    desktopLocalRuntimeBindingFromObservation(runtime),
+    normalizeDesktopLocalRuntimeBinding({
+      provider_origin: environment.provider_origin,
+      provider_id: environment.provider_id,
+      env_public_id: environment.env_public_id,
+    }),
   );
 }
 
@@ -884,6 +892,22 @@ function providerRuntimeService(
     : undefined;
 }
 
+function providerLocalRuntimeOpenPlan(
+  environment: DesktopProviderEnvironmentRecord,
+  localEnvironment: DesktopLocalEnvironmentState,
+  localSession: DesktopSessionSummary | null,
+): DesktopEnvironmentEntry['provider_local_runtime_plan'] {
+  const sessionStartup = providerRuntimeBindingMatches(environment, localSession?.startup)
+    ? localSession?.startup
+    : undefined;
+  return buildDesktopLocalRuntimeOpenPlan({
+    kind: 'provider_environment',
+    provider_origin: environment.provider_origin,
+    provider_id: environment.provider_id,
+    env_public_id: environment.env_public_id,
+  }, sessionStartup ?? localEnvironment.local_hosting?.current_runtime);
+}
+
 function providerLocalCloseBehavior(
   _environment: DesktopProviderEnvironmentRecord,
   runtimeState: DesktopLocalRuntimeState,
@@ -928,6 +952,7 @@ function buildProviderEnvironmentEntry(
   const localRuntimeState = providerLocalRuntimeState(environment, localEnvironment);
   const localRuntimeURL = providerLocalRuntimeURL(environment, localEnvironment);
   const runtimeService = providerRuntimeService(environment, localEnvironment);
+  const localRuntimePlan = providerLocalRuntimeOpenPlan(environment, localEnvironment, localSession);
   const localCloseBehavior = providerLocalCloseBehavior(environment, localRuntimeState);
   const localRouteState = providerLocalRouteState(environment, localEnvironment, localSession);
   const localRuntimeHealth = localEnvironmentRuntimeHealth(localRuntimeState, localRuntimeURL, runtimeService);
@@ -987,6 +1012,7 @@ function buildProviderEnvironmentEntry(
     provider_local_runtime_configured: localEnvironmentSupportsLocalHosting(localEnvironment),
     provider_local_runtime_state: localRuntimeState,
     provider_local_runtime_url: localRuntimeURL || undefined,
+    provider_local_runtime_plan: localRuntimePlan,
     provider_runtime_service: preferredRuntimeService(runtimeService, localRuntimeHealth),
     provider_local_close_behavior: localCloseBehavior,
     provider_origin: environment.provider_origin,

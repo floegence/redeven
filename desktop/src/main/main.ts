@@ -230,6 +230,15 @@ import {
   runtimeServiceIsOpenable,
   type RuntimeServiceSnapshot,
 } from '../shared/runtimeService';
+import {
+  buildDesktopLocalRuntimeOpenPlan,
+  desktopLocalRuntimePlanAllowsAutoLocalOpen,
+  desktopLocalRuntimeBindingFromObservation,
+  desktopLocalRuntimeBindingsMatch,
+  normalizeDesktopLocalRuntimeBinding,
+  type DesktopLocalRuntimeBinding,
+  type DesktopLocalRuntimeOpenPlan,
+} from '../shared/localRuntimeSupervisor';
 import { loadDesktopSSHConfigHosts } from './sshConfigHosts';
 
 type OpenDesktopWelcomeOptions = Readonly<{
@@ -426,11 +435,7 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-type LocalRuntimeProviderBinding = Readonly<{
-  provider_origin: string;
-  provider_id: string;
-  env_public_id: string;
-}>;
+type LocalRuntimeProviderBinding = DesktopLocalRuntimeBinding;
 
 function localEnvironmentRuntimeStateFile(environment: DesktopLocalEnvironmentState): string {
   const stateDir = compact(environment.local_hosting.state_dir);
@@ -441,52 +446,32 @@ function providerBindingForEnvironment(
   environment: DesktopProviderEnvironmentRecord | DesktopLocalEnvironmentState,
 ): LocalRuntimeProviderBinding | null {
   if ('provider_origin' in environment) {
-    return {
-      provider_origin: normalizeControlPlaneOrigin(environment.provider_origin),
+    return normalizeDesktopLocalRuntimeBinding({
+      provider_origin: environment.provider_origin,
       provider_id: compact(environment.provider_id),
       env_public_id: compact(environment.env_public_id),
-    };
+    });
   }
   const binding = environment.current_provider_binding;
   if (!binding) {
     return null;
   }
-  return {
-    provider_origin: normalizeControlPlaneOrigin(binding.provider_origin),
+  return normalizeDesktopLocalRuntimeBinding({
+    provider_origin: binding.provider_origin,
     provider_id: compact(binding.provider_id),
     env_public_id: compact(binding.env_public_id),
-  };
+  });
 }
 
 function startupProviderBinding(startup: StartupReport | null | undefined): LocalRuntimeProviderBinding | null {
-  const providerOrigin = compact(startup?.controlplane_base_url);
-  const providerID = compact(startup?.controlplane_provider_id);
-  const envPublicID = compact(startup?.env_public_id);
-  if (providerOrigin === '' || providerID === '' || envPublicID === '') {
-    return null;
-  }
-  try {
-    return {
-      provider_origin: normalizeControlPlaneOrigin(providerOrigin),
-      provider_id: providerID,
-      env_public_id: envPublicID,
-    };
-  } catch {
-    return null;
-  }
+  return desktopLocalRuntimeBindingFromObservation(startup);
 }
 
 function providerBindingsMatch(
   left: LocalRuntimeProviderBinding | null | undefined,
   right: LocalRuntimeProviderBinding | null | undefined,
 ): boolean {
-  return Boolean(
-    left
-    && right
-    && left.provider_origin === right.provider_origin
-    && left.provider_id === right.provider_id
-    && left.env_public_id === right.env_public_id,
-  );
+  return desktopLocalRuntimeBindingsMatch(left, right);
 }
 
 function localRuntimeMatchesProvider(
@@ -494,6 +479,22 @@ function localRuntimeMatchesProvider(
   environment: DesktopProviderEnvironmentRecord | DesktopLocalEnvironmentState,
 ): boolean {
   return providerBindingsMatch(startupProviderBinding(startup), providerBindingForEnvironment(environment));
+}
+
+function providerLocalRuntimeOpenPlan(
+  startup: StartupReport | null | undefined,
+  environment: DesktopProviderEnvironmentRecord | DesktopLocalEnvironmentState,
+): DesktopLocalRuntimeOpenPlan {
+  const binding = providerBindingForEnvironment(environment);
+  return buildDesktopLocalRuntimeOpenPlan(
+    binding
+      ? {
+        kind: 'provider_environment',
+        ...binding,
+      }
+      : { kind: 'local_environment' },
+    startup,
+  );
 }
 
 function localRuntimeProviderBindingFailure(
@@ -542,6 +543,22 @@ function externalProviderLocalEnvironmentRebindFailure(
   );
 }
 
+function providerLocalRuntimeOpenPlanFailure(
+  environment: DesktopProviderEnvironmentRecord,
+  startup: StartupReport | null | undefined,
+  plan: DesktopLocalRuntimeOpenPlan,
+): DesktopLauncherActionFailure {
+  if (plan.state === 'blocked_external_runtime') {
+    return externalProviderLocalEnvironmentRebindFailure(environment, startup);
+  }
+  return launcherActionFailure(
+    'runtime_not_ready',
+    'environment',
+    plan.message,
+    providerEnvironmentFailureContext(environment),
+  );
+}
+
 async function closeLocalEnvironmentLocalHostSessions(): Promise<void> {
   for (const sessionRecord of sessionsByKey.values()) {
     if (
@@ -563,18 +580,27 @@ async function ensureProviderLocalEnvironmentRuntime(
   let runtimeRecord = await attachLocalEnvironmentRuntime(localEnvironment);
   let replacedRuntime = false;
 
-  if (runtimeRecord && !localRuntimeMatchesProvider(runtimeRecord.startup, environment)) {
-    if (runtimeRecord.runtime_handle.lifecycle_owner !== 'desktop') {
+  if (runtimeRecord) {
+    const runtimePlan = providerLocalRuntimeOpenPlan(runtimeRecord.startup, environment);
+    if (!runtimePlan.can_open) {
       return {
         ok: false,
-        failure: externalProviderLocalEnvironmentRebindFailure(environment, runtimeRecord.startup),
+        failure: providerLocalRuntimeOpenPlanFailure(environment, runtimeRecord.startup, runtimePlan),
       };
     }
-    await closeLocalEnvironmentLocalHostSessions();
-    await runtimeRecord.runtime_handle.stop();
-    clearLocalEnvironmentRuntimeRecord(localEnvironment);
-    runtimeRecord = null;
-    replacedRuntime = true;
+    if (runtimePlan.requires_restart) {
+      if (runtimeRecord.runtime_handle.lifecycle_owner !== 'desktop' || !runtimePlan.desktop_can_manage) {
+        return {
+          ok: false,
+          failure: externalProviderLocalEnvironmentRebindFailure(environment, runtimeRecord.startup),
+        };
+      }
+      await closeLocalEnvironmentLocalHostSessions();
+      await runtimeRecord.runtime_handle.stop();
+      clearLocalEnvironmentRuntimeRecord(localEnvironment);
+      runtimeRecord = null;
+      replacedRuntime = true;
+    }
   }
 
   if (!runtimeRecord) {
@@ -3679,7 +3705,7 @@ async function openProviderLocalEnvironmentRecord(
   let runtimeRecord = await attachLocalEnvironmentRuntime(localEnvironment);
   if (!runtimeRecord || !localRuntimeMatchesProvider(runtimeRecord.startup, environment)) {
     try {
-      const ensured = await ensureProviderLocalEnvironmentRuntime(preferences, environment, { startIfMissing: false });
+      const ensured = await ensureProviderLocalEnvironmentRuntime(preferences, environment, { startIfMissing: true });
       if (!ensured.ok) {
         return ensured.failure;
       }
@@ -4580,7 +4606,8 @@ async function openProviderEnvironmentFromLauncher(
       return openProviderLocalEnvironmentRecord(preferences, environment, { stealAppFocus: true });
     }
     const runtimeRecord = await attachLocalEnvironmentRuntime(localLocalEnvironment);
-    if (runtimeRecord && localRuntimeMatchesProvider(runtimeRecord.startup, environment)) {
+    const runtimePlan = providerLocalRuntimeOpenPlan(runtimeRecord?.startup, environment);
+    if (desktopLocalRuntimePlanAllowsAutoLocalOpen(runtimePlan, environment.preferred_open_route)) {
       return openProviderLocalEnvironmentRecord(preferences, environment, { stealAppFocus: true });
     }
   }
