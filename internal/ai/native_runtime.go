@@ -1937,7 +1937,7 @@ func (r *run) shouldUseNativeRuntime(provider *config.AIProvider) bool {
 		return false
 	}
 	switch strings.ToLower(strings.TrimSpace(provider.Type)) {
-	case "openai", "anthropic", "moonshot", "chatglm", "deepseek", "qwen", "openai_compatible":
+	case "openai", "anthropic", "moonshot", "chatglm", "deepseek", "qwen", "openai_compatible", DesktopBrokerProviderType:
 		return true
 	default:
 		return false
@@ -2042,7 +2042,7 @@ func shouldUseStrictOpenAIToolSchema(providerType string, baseURL string) bool {
 	return host == "api.openai.com"
 }
 
-func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.AIProvider, apiKey string, taskObjective string) error {
+func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.AIProvider, apiKey string, taskObjective string, adapterOverride ...Provider) error {
 	if r == nil {
 		return errors.New("nil run")
 	}
@@ -2103,9 +2103,15 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 
 	execCtx := ctx
 
-	adapter, err := newProviderAdapter(providerType, strings.TrimSpace(providerCfg.BaseURL), strings.TrimSpace(apiKey), providerCfg.StrictToolSchema)
-	if err != nil {
-		return r.failRun("Failed to initialize provider adapter", err)
+	var adapter Provider
+	if len(adapterOverride) > 0 && adapterOverride[0] != nil {
+		adapter = adapterOverride[0]
+	} else {
+		var err error
+		adapter, err = newProviderAdapter(providerType, strings.TrimSpace(providerCfg.BaseURL), strings.TrimSpace(apiKey), providerCfg.StrictToolSchema)
+		if err != nil {
+			return r.failRun("Failed to initialize provider adapter", err)
+		}
 	}
 
 	webSearchCapability := resolveProviderWebSearchCapability(providerCfg, modelName)

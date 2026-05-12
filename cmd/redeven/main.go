@@ -9,11 +9,13 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/floegence/redeven/internal/agent"
+	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/localui"
 	"github.com/floegence/redeven/internal/lockfile"
@@ -60,6 +62,8 @@ func (c *cli) run(args []string) int {
 		return c.bootstrapCmd(args[1:])
 	case "run":
 		return c.runCmd(args[1:])
+	case "desktop-ai-broker":
+		return c.desktopAIBrokerCmd(args[1:])
 	case "search":
 		return c.searchCmd(args[1:])
 	case "knowledge":
@@ -492,6 +496,9 @@ func (c *cli) runCmd(args []string) int {
 		})
 	}
 
+	desktopAIBroker := desktopAIBrokerEndpointFromEnv(os.Environ())
+	clearDesktopAIBrokerEndpointEnv()
+
 	a, err := agent.New(agent.Options{
 		Config:                cfg,
 		ConfigPath:            stateLayout.ConfigPath,
@@ -499,6 +506,7 @@ func (c *cli) runCmd(args []string) int {
 		LocalUIEnabled:        localUIEnabled,
 		ControlChannelEnabled: controlChannelEnabled,
 		DesktopManaged:        *desktopManaged,
+		DesktopAIBroker:       desktopAIBroker,
 		EffectiveRunMode:      string(effectiveRunMode),
 		RemoteEnabled:         controlChannelEnabled,
 		Version:               Version,
@@ -645,6 +653,50 @@ func buildRunBootstrapArgs(
 		args.LogLevel = "info"
 	}
 	return args
+}
+
+var desktopAIBrokerEndpointEnvNames = []string{
+	"REDEVEN_DESKTOP_AI_BROKER_URL",
+	"REDEVEN_DESKTOP_AI_BROKER_TOKEN",
+	"REDEVEN_DESKTOP_AI_BROKER_SESSION_ID",
+	"REDEVEN_DESKTOP_AI_BROKER_SSH_RUNTIME_KEY",
+	"REDEVEN_DESKTOP_AI_BROKER_EXPIRES_AT_UNIX_MS",
+}
+
+func desktopAIBrokerEndpointFromEnv(environ []string) *ai.DesktopAIBrokerEndpoint {
+	values := make(map[string]string, len(environ))
+	for _, item := range environ {
+		k, v, ok := strings.Cut(item, "=")
+		if !ok {
+			continue
+		}
+		values[strings.TrimSpace(k)] = strings.TrimSpace(v)
+	}
+	url := strings.TrimSpace(values["REDEVEN_DESKTOP_AI_BROKER_URL"])
+	token := strings.TrimSpace(values["REDEVEN_DESKTOP_AI_BROKER_TOKEN"])
+	if url == "" || token == "" {
+		return nil
+	}
+	expiresAt := int64(0)
+	if raw := strings.TrimSpace(values["REDEVEN_DESKTOP_AI_BROKER_EXPIRES_AT_UNIX_MS"]); raw != "" {
+		if parsed, err := strconv.ParseInt(raw, 10, 64); err == nil {
+			expiresAt = parsed
+		}
+	}
+	return &ai.DesktopAIBrokerEndpoint{
+		URL:             url,
+		Token:           token,
+		SessionID:       values["REDEVEN_DESKTOP_AI_BROKER_SESSION_ID"],
+		SSHRuntimeKey:   values["REDEVEN_DESKTOP_AI_BROKER_SSH_RUNTIME_KEY"],
+		ExpiresAtUnixMS: expiresAt,
+		ModelSource:     "desktop_local_environment",
+	}
+}
+
+func clearDesktopAIBrokerEndpointEnv() {
+	for _, name := range desktopAIBrokerEndpointEnvNames {
+		_ = os.Unsetenv(name)
+	}
 }
 
 func (c *cli) printNotBootstrappedGuidance(reason error) int {

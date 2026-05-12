@@ -905,7 +905,7 @@ export function EnvAppShell() {
     const first = String(options[0]?.id ?? '').trim();
     if (first && allowed.has(first)) return first;
 
-    throw new Error('No available model. Configure AI in Runtime Settings first.');
+    throw new Error('No available model. Configure AI in Runtime Settings or Local Environment Settings first.');
   };
 
   const validateAskFlowerWorkingDir = async (workingDir: string): Promise<string> => {

@@ -71,6 +71,8 @@ Redeven gives you a secure workspace for a real Environment. Open it from the br
 | SSH host bootstrap 🚀 | Let Desktop prepare or install the matching Redeven release onto a reachable host over SSH | Bring a host online as a Redeven workspace without a manual preinstall |
 | AI-assisted operations 🌸 | Enable optional AI assistance for file, terminal, search, and task work | Keep AI help attached to the same Environment context and permission model |
 
+When an SSH Host Environment is opened from Redeven Desktop, Flower can use the Desktop Local Environment's model configuration through a short-lived local broker while tools still execute on the SSH host. Provider API keys stay on the user's machine and are never copied into the remote runtime config.
+
 ## Quick start
 
 From zero to a live endpoint in a few minutes.

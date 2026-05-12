@@ -1171,6 +1171,7 @@ func (m *subagentManager) runTask(task *subagentTask, firstInput string) {
 			SessionMeta:           m.parent.sessionMeta,
 			ResolveProviderKey:    m.parent.resolveProviderKey,
 			ResolveWebSearchKey:   m.parent.resolveWebSearchKey,
+			DesktopBroker:         m.parent.desktopBroker,
 			RunID:                 runID,
 			ChannelID:             m.parent.channelID,
 			EndpointID:            m.parent.endpointID,

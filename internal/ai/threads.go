@@ -247,12 +247,26 @@ func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title st
 		if _, _, ok := strings.Cut(modelID, "/"); !ok {
 			return nil, errors.New("invalid model")
 		}
-		if cfg != nil && !cfg.IsAllowedModelID(modelID) {
+		if cfg != nil && cfg.IsAllowedModelID(modelID) {
+			// The model is provided by the runtime config.
+		} else if ok, err := s.desktopBrokerModelAllowed(ctx, modelID); err != nil {
+			return nil, err
+		} else if !ok {
 			return nil, fmt.Errorf("model not allowed: %s", modelID)
+		}
+	}
+	if modelID == "" {
+		if id, ok := s.resolvedDesktopBrokerOverrideModel(ctx); ok {
+			modelID = id
 		}
 	}
 	if modelID == "" && cfg != nil {
 		if id, ok := cfg.ResolvedCurrentModelID(); ok {
+			modelID = id
+		}
+	}
+	if modelID == "" && cfg == nil {
+		if id, ok := s.resolvedDesktopBrokerDefaultModel(ctx); ok {
 			modelID = id
 		}
 	}
@@ -401,10 +415,14 @@ func (s *Service) SetThreadModel(ctx context.Context, meta *session.Meta, thread
 	if db == nil {
 		return errors.New("threads store not ready")
 	}
-	if cfg == nil {
+	if cfg == nil && !isDesktopBrokerModelID(modelID) {
 		return ErrNotConfigured
 	}
-	if !cfg.IsAllowedModelID(modelID) {
+	if cfg != nil && cfg.IsAllowedModelID(modelID) {
+		// The model is provided by the runtime config.
+	} else if ok, err := s.desktopBrokerModelAllowed(ctx, modelID); err != nil {
+		return err
+	} else if !ok {
 		return fmt.Errorf("model not allowed: %s", modelID)
 	}
 	th, err := db.GetThread(ctx, endpointID, threadID)

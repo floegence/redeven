@@ -53,10 +53,11 @@ type Options struct {
 	AgentHomeDir string
 	Shell        string
 
-	AIConfig    *config.AIConfig
-	Audit       *auditlog.Store
-	Diagnostics *diagnostics.Store
-	Terminal    *terminal.Manager
+	AIConfig        *config.AIConfig
+	DesktopAIBroker *ai.DesktopAIBrokerEndpoint
+	Audit           *auditlog.Store
+	Diagnostics     *diagnostics.Store
+	Terminal        *terminal.Manager
 	// LocalUIEnabled enables Local UI-specific runtime behavior such as shorter
 	// code-server reconnection grace and local gateway routing.
 	LocalUIEnabled          bool
@@ -196,11 +197,12 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	secrets := settings.NewSecretsStore(filepath.Join(stateAbs, "secrets.json"))
 
 	aiSvc, err := ai.NewService(ai.Options{
-		Logger:       logger,
-		StateDir:     stateAbs,
-		AgentHomeDir: agentHomeDir,
-		Shell:        strings.TrimSpace(opts.Shell),
-		Config:       opts.AIConfig,
+		Logger:        logger,
+		StateDir:      stateAbs,
+		AgentHomeDir:  agentHomeDir,
+		Shell:         strings.TrimSpace(opts.Shell),
+		Config:        opts.AIConfig,
+		DesktopBroker: opts.DesktopAIBroker,
 		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
 			return secrets.GetAIProviderAPIKey(providerID)
 		},

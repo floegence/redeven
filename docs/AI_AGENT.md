@@ -13,6 +13,7 @@ High-level design:
   - Moonshot: `openai-go` (Chat Completions API on Moonshot base URL)
   - Anthropic: `anthropic-sdk-go` (Messages API)
 - GLM/Z.ai, DeepSeek, and Qwen: `openai-go` against provider OpenAI-compatible endpoints with provider-specific request decoration. Qwen3.6 Plus/Flash use the provider Responses API `web_search` tool.
+- In Desktop-managed SSH Host sessions, the runtime may also use a Desktop AI Broker adapter. The broker performs model calls on the user's machine with the Desktop Local Environment's provider config and secrets, while the SSH-hosted runtime still owns context gathering, permission checks, and tool execution on the SSH host.
 - OpenAI Responses continuation is treated as an optimization layer rather than a second context system: Flower resumes with `previous_response_id` only when the same thread stays on a compatible OpenAI provider/model/base URL fingerprint, and otherwise falls back to the canonical local `PromptPack` replay path.
 
 ## Prompt architecture
@@ -45,11 +46,14 @@ Flower task prompts are built through a section-oriented runtime prompt builder 
 
 Enable Flower by adding an `ai` section to the runtime config file (default Local Environment config: `~/.redeven/local-environment/config.json`).
 
+For an SSH Host Environment opened from Redeven Desktop, the remote runtime can be Flower-capable without a remote `ai` section when Desktop attaches an active AI Broker session. That broker session is runtime-only and expires with the Desktop/SSH session; it is not written into remote config and it does not introduce an `ai.enabled` flag.
+
 Notes:
 
 - Providers own their model list: `ai.providers[].models[]` is the allow-list shown in the Chat UI.
 - `ai.current_model_id` points to the default model for new chats.
 - The wire model id remains `<provider_id>/<model_name>` and each thread stores its own `model_id`.
+- Desktop-brokered models are exposed to the remote runtime with the source metadata `desktop_broker` and a wire id prefix of `desktop-broker:<provider_id>/<model_name>` to avoid collisions with remote runtime providers.
 - Changing the model on an existing thread is thread-scoped only; it does not rewrite `ai.current_model_id`.
 - `providers[].base_url` is optional for `openai` / `anthropic`, and **required** for `moonshot` / `chatglm` / `deepseek` / `qwen` / `openai_compatible`.
 - Native provider presets are explicit allow-lists, not prefix matches:

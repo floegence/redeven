@@ -626,6 +626,7 @@ type settingsView struct {
 
 	PermissionPolicy *config.PermissionPolicy `json:"permission_policy"`
 	AI               *config.AIConfig         `json:"ai"`
+	AIRuntime        *ai.AIRuntimeStatus      `json:"ai_runtime,omitempty"`
 	AISecrets        *settingsAISecretsView   `json:"ai_secrets,omitempty"`
 }
 
@@ -1058,7 +1059,15 @@ func writeCodexSSEEvent(w io.Writer, ev codexbridge.Event) error {
 	return err
 }
 
-func toSettingsView(cfg *config.Config, configPath string, secrets *settings.SecretsStore) settingsView {
+func (g *Gateway) toSettingsView(cfg *config.Config) settingsView {
+	configPath := ""
+	secrets := (*settings.SecretsStore)(nil)
+	aiSvc := (*ai.Service)(nil)
+	if g != nil {
+		configPath = g.configPath
+		secrets = g.secrets
+		aiSvc = g.ai
+	}
 	var direct settingsDirectView
 	if cfg != nil && cfg.Direct != nil {
 		direct = settingsDirectView{
@@ -1093,6 +1102,9 @@ func toSettingsView(cfg *config.Config, configPath string, secrets *settings.Sec
 		}
 		out.PermissionPolicy = cfg.PermissionPolicy
 		out.AI = cfg.AI
+		if aiSvc != nil {
+			out.AIRuntime = aiSvc.RuntimeStatus(context.Background())
+		}
 
 		if secrets != nil && cfg.AI != nil && len(cfg.AI.Providers) > 0 {
 			ids := make([]string, 0, len(cfg.AI.Providers))
@@ -1596,7 +1608,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: err.Error()})
 			return
 		}
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: toSettingsView(cfg, g.configPath, g.secrets)})
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: g.toSettingsView(cfg)})
 		return
 
 	case r.Method == http.MethodPut && r.URL.Path == "/_redeven_proxy/api/settings":
@@ -1794,7 +1806,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{
 			OK: true,
 			Data: settingsUpdateView{
-				Settings: toSettingsView(updated, g.configPath, g.secrets),
+				Settings: g.toSettingsView(updated),
 				AIUpdate: aiUpdate,
 			},
 		})

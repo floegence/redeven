@@ -123,6 +123,10 @@ Public contract (category level):
 | Port forward lifecycle | `execute` |
 | AI runs, uploads, and thread operations | `read + write + execute` |
 
+Notes:
+- Desktop AI Broker traffic is not a new permission category. It is an implementation detail of Desktop-managed SSH Host sessions that moves model calls to the user's machine while keeping tool execution on the SSH host.
+- The broker can only return model metadata and stream model responses. It must not widen file, terminal, monitor, or settings permissions beyond the authoritative `session_meta` plus local `permission_policy` checks already enforced by the runtime.
+
 For maintainability and security hygiene, this document keeps the permission contract public but does not enumerate
 the complete management endpoint inventory. Exact endpoint paths remain discoverable in source:
 

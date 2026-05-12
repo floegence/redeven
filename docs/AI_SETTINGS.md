@@ -133,11 +133,26 @@ For each run the Go runtime:
 3. never writes the key back into `config.json` or API responses
 4. resolves a Brave API key only when the selected OpenAI-compatible provider uses `web_search.mode = "brave"`
 
-## 6. UI behavior
+## 6. Desktop broker sessions for SSH Host Environments
+
+When Redeven Desktop opens an SSH Host Environment, the remote runtime may use the Desktop Local Environment's Flower model configuration through a short-lived Desktop AI Broker session.
+
+This is deliberately different from copying settings to the SSH host:
+
+- The Desktop Local Environment keeps provider API keys in its own `secrets.json`.
+- The SSH host receives only a forwarded loopback broker URL plus a short-lived bearer token for that Desktop session.
+- The remote runtime stores that broker endpoint in memory only and clears the startup environment variables immediately after reading them.
+- The SSH host's `config.json` does not gain an `ai` section, provider keys, or an `enabled` boolean.
+- Remote tools, file reads, terminal commands, Git operations, and permission checks still execute in the SSH-hosted runtime.
+
+The API response field `ai_runtime.desktop_broker` reports broker session status separately from the persisted `ai` config. Env App uses that field to show whether the model is coming from `Desktop` while tools are running on `SSH Host`.
+
+## 7. UI behavior
 
 Current Runtime Settings UI behavior is:
 
 - Flower lives under Runtime Settings -> `AI & Extensions` as its own card, while permission policy and diagnostics stay in separate top-level groups.
+- On SSH Host sessions, the Flower card separates persisted remote provider settings from the Desktop broker session capability.
 - Add Provider generates a provider id automatically.
 - Provider id is shown as read-only.
 - API keys are stored locally and shown only as status (`Key set` / `Key not set`).
@@ -148,7 +163,7 @@ Current Runtime Settings UI behavior is:
 - In an active unlocked thread, the chat model picker updates only that thread's `model_id`.
 - Locked threads show the current thread model as read-only instead of as an editable picker.
 
-## 7. Permissions
+## 8. Permissions
 
 Current permission policy is:
 
@@ -157,7 +172,7 @@ Current permission policy is:
 
 This keeps local secret writes behind endpoint-owner or admin control.
 
-## 8. Execution policy
+## 9. Execution policy
 
 `ai.execution_policy` defines optional hard guardrails:
 

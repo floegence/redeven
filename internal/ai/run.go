@@ -40,6 +40,7 @@ type runOptions struct {
 	SessionMeta         *session.Meta
 	ResolveProviderKey  func(providerID string) (string, bool, error)
 	ResolveWebSearchKey func(providerID string) (string, bool, error)
+	DesktopBroker       *desktopAIBrokerClient
 
 	RunID        string
 	ChannelID    string
@@ -83,6 +84,7 @@ type run struct {
 	sessionMeta         *session.Meta
 	resolveProviderKey  func(providerID string) (string, bool, error)
 	resolveWebSearchKey func(providerID string) (string, bool, error)
+	desktopBroker       *desktopAIBrokerClient
 
 	id           string
 	channelID    string
@@ -196,6 +198,7 @@ func newRun(opts runOptions) *run {
 		sessionMeta:               runMeta,
 		resolveProviderKey:        opts.ResolveProviderKey,
 		resolveWebSearchKey:       opts.ResolveWebSearchKey,
+		desktopBroker:             opts.DesktopBroker,
 		id:                        runID,
 		channelID:                 strings.TrimSpace(opts.ChannelID),
 		endpointID:                strings.TrimSpace(opts.EndpointID),
@@ -1155,9 +1158,6 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 	r.currentModelID = modelID
 	providerID, _, ok := strings.Cut(modelID, "/")
 	providerID = strings.TrimSpace(providerID)
-	if r.cfg == nil {
-		return r.failRun("AI not configured", errors.New("ai not configured"))
-	}
 	workingDirAbs, rootErr := r.workingDirAbs()
 	if rootErr != nil {
 		return r.failRun("AI working directory not configured", rootErr)
@@ -1177,6 +1177,24 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 	)
 	if !ok || providerID == "" {
 		return r.failRun("Invalid model id", fmt.Errorf("invalid model id %q", modelID))
+	}
+	if isDesktopBrokerProviderID(providerID) {
+		if r.desktopBroker == nil {
+			return r.failRun("Desktop AI broker is not connected", ErrNotConfigured)
+		}
+		localModelID, ok := desktopBrokerLocalModelID(modelID)
+		if !ok {
+			return r.failRun("Invalid desktop broker model", fmt.Errorf("invalid desktop broker model id %q", modelID))
+		}
+		providerCfg := config.AIProvider{
+			ID:   providerID,
+			Name: "Desktop",
+			Type: DesktopBrokerProviderType,
+		}
+		return r.runNative(execCtx, req, providerCfg, "", strings.TrimSpace(taskObjective), r.desktopBroker.Provider(localModelID))
+	}
+	if r.cfg == nil {
+		return r.failRun("AI not configured", errors.New("ai not configured"))
 	}
 	var providerCfg *config.AIProvider
 	for i := range r.cfg.Providers {

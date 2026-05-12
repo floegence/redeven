@@ -25,8 +25,10 @@ describe('sshRuntime', () => {
     expect(buildManagedSSHStartScript()).toContain('--state-root "$state_root"');
     expect(buildManagedSSHStartScript()).toContain('--mode desktop');
     expect(buildManagedSSHStartScript()).toContain('--startup-report-file "$report_path"');
-    expect(buildManagedSSHStartScript()).toContain('setsid "$binary" run');
-    expect(buildManagedSSHStartScript()).toContain('nohup "$binary" run');
+    expect(buildManagedSSHStartScript()).toContain('broker_url="${4:-}"');
+    expect(buildManagedSSHStartScript()).toContain('REDEVEN_DESKTOP_AI_BROKER_URL=$broker_url');
+    expect(buildManagedSSHStartScript()).toContain('setsid $broker_env "$binary" run');
+    expect(buildManagedSSHStartScript()).toContain('nohup $broker_env "$binary" run');
     expect(buildManagedSSHStartScript()).toContain('printf "%s\\n" "$!" > "${session_dir}/launcher.pid"');
     expect(buildManagedSSHStartScript()).not.toContain('exec "$binary" run');
     expect(buildManagedSSHStartScript()).not.toContain('trap cleanup');

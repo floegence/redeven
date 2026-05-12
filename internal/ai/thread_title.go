@@ -182,6 +182,22 @@ func (s *Service) initStructuredOutputProvider(resolved resolvedRunModel) (Provi
 	providerType := strings.ToLower(strings.TrimSpace(resolved.Provider.Type))
 	switch providerType {
 	case "openai", "anthropic", "moonshot", "chatglm", "deepseek", "qwen", "openai_compatible":
+	case DesktopBrokerProviderType:
+		s.mu.Lock()
+		broker := s.desktopBroker
+		s.mu.Unlock()
+		if broker == nil {
+			return nil, "", ErrNotConfigured
+		}
+		localModelID := strings.TrimSpace(resolved.BrokerLocalModelID)
+		if localModelID == "" {
+			var ok bool
+			localModelID, ok = desktopBrokerLocalModelID(resolved.ID)
+			if !ok {
+				return nil, "", fmt.Errorf("invalid desktop broker model %q", resolved.ID)
+			}
+		}
+		return broker.Provider(localModelID), "json_object", nil
 	default:
 		return nil, "", fmt.Errorf("unsupported provider type %q", strings.TrimSpace(resolved.Provider.Type))
 	}
@@ -764,10 +780,11 @@ func (s *Service) applyAutoThreadTitleOnce(ctx context.Context, req autoThreadTi
 	s.mu.Lock()
 	db := s.threadsDB
 	cfg := s.cfg
+	broker := s.desktopBroker
 	persistTO := s.persistOpTO
 	logger := s.log
 	s.mu.Unlock()
-	if db == nil || cfg == nil {
+	if db == nil || (cfg == nil && broker == nil) {
 		return autoThreadTitleApplyResult{Status: autoThreadTitleApplyStatusRetry, Reason: "service_not_ready"}
 	}
 	if persistTO <= 0 {
