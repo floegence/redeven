@@ -1081,8 +1081,8 @@ function buildSavedEnvironmentEntry(
     && localRuntimeURLMatches(openSession?.entry_url ?? openSession?.startup?.local_ui_url, environment.local_ui_url)
     ? onlineRuntimeHealth('external_local_ui_probe', openSession?.entry_url ?? openSession?.startup?.local_ui_url ?? environment.local_ui_url, openSession?.startup?.runtime_service)
     : undefined;
-  const runtimeHealth = savedRuntimeHealth
-    ?? sessionRuntimeHealth
+  const runtimeHealth = sessionRuntimeHealth
+    ?? savedRuntimeHealth
     ?? offlineRuntimeHealth(
       'external_local_ui_probe',
       'external_unreachable',
@@ -1122,8 +1122,8 @@ function buildSavedSSHEnvironmentEntry(
   const sessionRuntimeHealth = (isOpen || isOpening)
     ? onlineRuntimeHealth('ssh_runtime_probe', openSession?.entry_url ?? openSession?.startup?.local_ui_url ?? '', openSession?.startup?.runtime_service)
     : undefined;
-  const runtimeHealth = savedRuntimeHealth
-    ?? sessionRuntimeHealth
+  const runtimeHealth = sessionRuntimeHealth
+    ?? savedRuntimeHealth
     ?? offlineRuntimeHealth(
       'ssh_runtime_probe',
       'not_started',

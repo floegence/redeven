@@ -2229,9 +2229,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
   }
 
-  async function connectFromDialog(): Promise<void> {
+  async function saveAndConnectURLFromDialog(): Promise<void> {
     const state = connectionDialogState();
-    if (!state) {
+    if (!state || state.connection_kind !== 'external_local_ui') {
       return;
     }
     const errors = validateConnectionDialogFields(state);
@@ -2240,18 +2240,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return;
     }
     setConnectionDialogFieldErrors({});
-    if (state.connection_kind === 'ssh_environment') {
-      await openSSHEnvironment({
-        ssh_destination: state.ssh_destination,
-        ssh_port: trimString(state.ssh_port) === '' ? null : Number.parseInt(state.ssh_port, 10),
-        auth_mode: state.auth_mode,
-        remote_install_dir: trimString(state.remote_install_dir) || DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
-        bootstrap_strategy: state.bootstrap_strategy,
-        release_base_url: trimString(state.release_base_url),
-        connect_timeout_seconds: trimString(state.connect_timeout_seconds) === '' ? null : Number(trimString(state.connect_timeout_seconds)),
-      }, 'dialog');
-      return;
-    }
     const saved = await upsertSavedEnvironment({
       environment_id: state.environment_id,
       label: state.label,
@@ -2530,7 +2518,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         switchKind={switchConnectionDialogKind}
         switchBootstrapStrategy={switchSSHBootstrapStrategy}
         clearFieldErrors={() => setConnectionDialogFieldErrors({})}
-        onConnect={connectFromDialog}
+        onConnect={saveAndConnectURLFromDialog}
         onSave={saveConnectionFromDialog}
       />
 

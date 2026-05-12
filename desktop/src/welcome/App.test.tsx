@@ -722,6 +722,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('does not store the SSH password');
     expect(appSrc).toContain("const showCreateConnectAction = createMemo(() => isCreate() && connectionKind() !== 'ssh_environment');");
     expect(appSrc).toContain('<Show when={showCreateConnectAction()}>');
+    expect(appSrc).toContain('async function saveAndConnectURLFromDialog()');
+    expect(appSrc).not.toContain('async function ' + 'connectFrom' + 'Dialog()');
     expect(appSrc).toContain("label: 'Automatic'");
     expect(appSrc).toContain("label: 'Desktop Upload'");
     expect(appSrc).toContain("label: 'Remote Install'");
