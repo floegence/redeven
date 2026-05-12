@@ -130,6 +130,8 @@ const envContextValue = {
   connect: async () => undefined,
   connecting: () => false,
   connectError: () => null,
+  connectionOverlayVisible: () => false,
+  connectionOverlayMessage: () => '',
   goActivity: () => {},
   filesSidebarOpen: () => false,
   setFilesSidebarOpen: () => {},
@@ -277,10 +279,22 @@ function applyMockRealtimeEvent(event: any): void {
   }
 }
 
+type MockResource<T> = (() => T | null) & {
+  loading: boolean;
+  error: unknown;
+};
+
+function createMockResource<T>(value: T | null = null, loading = false, error: unknown = null): MockResource<T> {
+  const resource = (() => value) as MockResource<T>;
+  resource.loading = loading;
+  resource.error = error;
+  return resource;
+}
+
 const aiContextValue = new Proxy({
-  settings: { loading: false, error: null },
-  models: { loading: false, error: null },
-  threads: { loading: false, error: null },
+  settings: createMockResource(),
+  models: createMockResource(),
+  threads: createMockResource(),
   aiEnabled: () => true,
   modelsReady: () => true,
   modelOptions: () => [{ value: 'model-test', label: 'Model Test' }],
@@ -613,9 +627,9 @@ function resetScenario() {
   envResource.latest.permissions.can_execute = true;
   envResource.latest.permissions.can_admin = true;
   envResource.latest.permissions.is_owner = true;
-  aiContextValue.settings = { loading: false, error: null };
-  aiContextValue.models = { loading: false, error: null };
-  aiContextValue.threads = { loading: false, error: null };
+  aiContextValue.settings = createMockResource();
+  aiContextValue.models = createMockResource();
+  aiContextValue.threads = createMockResource();
   aiContextValue.aiEnabled = () => true;
   aiContextValue.modelsReady = () => true;
   aiContextValue.selectedDefaultModel = () => 'model-test';
@@ -979,7 +993,7 @@ export function registerEnvAIPageSendTests() {
   describe('EnvAIPage empty states', () => {
     it('uses a circular flower badge when Flower is not configured', async () => {
       aiContextValue.aiEnabled = () => false;
-      aiContextValue.settings = { loading: false, error: null };
+      aiContextValue.settings = createMockResource();
 
       const { host, dispose } = await renderPage();
       try {

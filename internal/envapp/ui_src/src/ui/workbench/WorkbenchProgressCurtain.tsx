@@ -1,5 +1,6 @@
-import { Motion } from 'solid-motionone';
-import { Show, createMemo } from 'solid-js';
+import { createMemo } from 'solid-js';
+
+import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 
 export type WorkbenchProgressCurtainStage =
   | 'connecting'
@@ -30,32 +31,13 @@ export function WorkbenchProgressCurtain(props: WorkbenchProgressCurtainProps) {
   );
 
   return (
-    <Show when={props.visible}>
-      <div
-        class="redeven-workbench-progress-curtain"
-        role="status"
-        aria-live="polite"
-        aria-busy="true"
-        data-redeven-workbench-progress-stage={props.stage}
-      >
-        <Motion.div
-          initial={{ opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, easing: 'ease-out' }}
-        >
-          <div class="redeven-workbench-progress-curtain__panel">
-            <div class="redeven-workbench-progress-curtain__eyebrow">Workbench</div>
-            <div
-              class="redeven-workbench-progress-curtain__indicator"
-              role="progressbar"
-              aria-label={statusText()}
-            >
-              <div class="redeven-workbench-progress-curtain__indicator-bar" />
-            </div>
-            <div class="redeven-workbench-progress-curtain__message">{statusText()}</div>
-          </div>
-        </Motion.div>
-      </div>
-    </Show>
+    <RedevenLoadingCurtain
+      visible={props.visible}
+      surface="page"
+      eyebrow="Workbench"
+      message={statusText()}
+      class="redeven-workbench-progress-curtain"
+      dataStage={props.stage}
+    />
   );
 }

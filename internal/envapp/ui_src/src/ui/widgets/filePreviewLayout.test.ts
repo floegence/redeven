@@ -41,7 +41,7 @@ describe('file preview wiring', () => {
     expect(docxPaneSrc).toContain('inWrapper: true');
     expect(docxPaneSrc).toContain('Fit');
     expect(docxPaneSrc).toContain('Zoom in docx preview');
-    expect(pdfPaneSrc).toContain("import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';");
+    expect(pdfPaneSrc).toContain("import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';");
     expect(pdfPaneSrc).toContain('loadPDFDocument');
     expect(pdfPaneSrc).toContain('Zoom in PDF preview');
     expect(pdfPaneSrc).toContain('Fit PDF preview to width');

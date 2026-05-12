@@ -3502,19 +3502,34 @@ a.chat-sources-cell-url:focus-visible {
   }
 }
 
-.redeven-workbench-progress-curtain {
+.redeven-loading-curtain {
   position: absolute;
   inset: 0;
   z-index: 45;
   display: grid;
   place-items: center;
-  padding: clamp(1.5rem, 5vw, 4rem);
+  padding: clamp(1rem, 4vw, 3rem);
   pointer-events: auto;
   color: var(--foreground);
-  background: var(--background);
+  background: color-mix(in srgb, var(--background) 88%, transparent);
+  backdrop-filter: blur(1.5px);
 }
 
-.redeven-workbench-progress-curtain__panel {
+.redeven-loading-curtain--page {
+  padding: clamp(1.5rem, 5vw, 4rem);
+  background: color-mix(in srgb, var(--background) 94%, transparent);
+}
+
+.redeven-loading-curtain--fullscreen {
+  position: fixed;
+  z-index: 50;
+}
+
+.redeven-loading-curtain--passive {
+  pointer-events: none;
+}
+
+.redeven-loading-curtain__panel {
   width: min(24rem, 100%);
   display: grid;
   justify-items: center;
@@ -3522,7 +3537,7 @@ a.chat-sources-cell-url:focus-visible {
   gap: 1rem;
 }
 
-.redeven-workbench-progress-curtain__eyebrow {
+.redeven-loading-curtain__eyebrow {
   color: color-mix(in srgb, var(--foreground) 38%, transparent);
   font-size: 0.6875rem;
   font-weight: 700;
@@ -3531,7 +3546,7 @@ a.chat-sources-cell-url:focus-visible {
   text-transform: uppercase;
 }
 
-.redeven-workbench-progress-curtain__indicator {
+.redeven-loading-curtain__indicator {
   width: 10rem;
   height: 2px;
   border-radius: 999px;
@@ -3539,7 +3554,7 @@ a.chat-sources-cell-url:focus-visible {
   overflow: hidden;
 }
 
-.redeven-workbench-progress-curtain__indicator-bar {
+.redeven-loading-curtain__indicator-bar {
   width: 50%;
   height: 100%;
   border-radius: inherit;
@@ -3549,11 +3564,11 @@ a.chat-sources-cell-url:focus-visible {
     color-mix(in srgb, var(--foreground) 30%, transparent) 50%,
     transparent
   );
-  animation: redeven-workbench-curtain-sweep 2s ease-in-out infinite;
+  animation: redeven-loading-curtain-sweep 2s ease-in-out infinite;
   will-change: transform;
 }
 
-@keyframes redeven-workbench-curtain-sweep {
+@keyframes redeven-loading-curtain-sweep {
   0% {
     transform: translateX(-100%);
   }
@@ -3564,11 +3579,20 @@ a.chat-sources-cell-url:focus-visible {
   }
 }
 
-.redeven-workbench-progress-curtain__message {
+.redeven-loading-curtain__message {
   color: color-mix(in srgb, var(--foreground) 55%, transparent);
   font-size: 0.8125rem;
   line-height: 1.5;
   font-weight: 480;
+}
+
+html.dark .redeven-loading-curtain {
+  background: color-mix(in srgb, var(--background) 90%, transparent);
+}
+
+.redeven-workbench-progress-curtain {
+  background: var(--background);
+  backdrop-filter: none;
 }
 
 html.dark .redeven-workbench-progress-curtain {
@@ -3578,7 +3602,7 @@ html.dark .redeven-workbench-progress-curtain {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .redeven-workbench-progress-curtain__indicator-bar {
+  .redeven-loading-curtain__indicator-bar {
     animation: none;
     background: color-mix(in srgb, var(--foreground) 15%, transparent);
     width: 100%;

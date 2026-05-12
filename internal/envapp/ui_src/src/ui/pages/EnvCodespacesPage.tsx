@@ -3,7 +3,7 @@ import { cn, useNotification } from "@floegence/floe-webapp-core";
 import { Terminal } from "@floegence/floe-webapp-core/icons";
 import type { FileItem } from "@floegence/floe-webapp-core/file-browser";
 import { Panel, PanelContent } from "@floegence/floe-webapp-core/layout";
-import { LoadingOverlay, SnakeLoader } from "@floegence/floe-webapp-core/loading";
+import { SnakeLoader } from "@floegence/floe-webapp-core/loading";
 import {
   Button,
   Card,
@@ -40,6 +40,7 @@ import { appendLocalAccessResumeQuery } from "../services/localAccessAuth";
 import { trustedLauncherOriginFromSandboxLocation } from "../services/sandboxOrigins";
 import { registerSandboxWindow } from "../services/sandboxWindowRegistry";
 import { desktopShellExternalURLOpenAvailable, openExternalURLInDesktopShell } from "../services/desktopShellBridge";
+import { RedevenLoadingCurtain } from "../primitives/RedevenLoadingCurtain";
 import { buildFilePathAskFlowerIntent } from "../utils/filePathAskFlower";
 import { canOpenDirectoryPathInTerminal, openDirectoryInTerminal } from "../utils/openDirectoryInTerminal";
 import { replacePickerChildren, sortPickerFolderItems, toPickerFolderItem, toPickerTreeAbsolutePath } from "../utils/directoryPickerTree";
@@ -1361,7 +1362,7 @@ export function EnvCodespacesPage() {
 
           {/* Codespaces list */}
           <div class="relative" style={{ "min-height": "200px" }}>
-            <LoadingOverlay visible={spaces.loading} message="Loading codespaces..." />
+            <RedevenLoadingCurtain visible={spaces.loading} eyebrow="Codespaces" message="Loading codespaces..." />
             <Show when={!spaces.loading}>
               <Show when={spaceList().length > 0} fallback={<EmptyState onCreateClick={() => setCreateDialogOpen(true)} />}>
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
