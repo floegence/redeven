@@ -12,7 +12,10 @@ import {
   normalizeDesktopShellWindowCommandResponse,
 } from '../shared/desktopShellWindowCommandIPC';
 import {
+  DESKTOP_SHELL_RUNTIME_MAINTENANCE_CONTEXT_CHANNEL,
   DESKTOP_SHELL_RUNTIME_ACTION_CHANNEL,
+  normalizeDesktopShellRuntimeActionRequest,
+  normalizeDesktopShellRuntimeMaintenanceContext,
   normalizeDesktopShellRuntimeActionResponse,
 } from '../shared/desktopShellRuntimeIPC';
 import {
@@ -63,6 +66,18 @@ export function bootstrapDesktopShellBridge(): void {
     openDashboard: async () => normalizeDesktopShellOpenExternalURLResponse(
       await ipcRenderer.invoke(DESKTOP_SHELL_OPEN_DASHBOARD_CHANNEL),
     ),
+    getRuntimeMaintenanceContext: async () => normalizeDesktopShellRuntimeMaintenanceContext(
+      await ipcRenderer.invoke(DESKTOP_SHELL_RUNTIME_MAINTENANCE_CONTEXT_CHANNEL),
+    ),
+    performRuntimeMaintenanceAction: async (request: unknown) => {
+      const normalized = normalizeDesktopShellRuntimeActionRequest(request);
+      if (!normalized || (normalized.action !== 'restart_runtime' && normalized.action !== 'upgrade_runtime')) {
+        return normalizeDesktopShellRuntimeActionResponse(null);
+      }
+      return normalizeDesktopShellRuntimeActionResponse(
+        await ipcRenderer.invoke(DESKTOP_SHELL_RUNTIME_ACTION_CHANNEL, normalized),
+      );
+    },
     restartManagedRuntime: async () => normalizeDesktopShellRuntimeActionResponse(
       await ipcRenderer.invoke(DESKTOP_SHELL_RUNTIME_ACTION_CHANNEL, { action: 'restart_managed_runtime' }),
     ),

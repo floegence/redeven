@@ -374,8 +374,10 @@ vi.mock('./utils/windowNavigation', () => ({ reloadCurrentPage: vi.fn() }));
 vi.mock('./services/desktopShellCommandPalette', () => ({ buildDesktopShellCommandPaletteEntries: () => [] }));
 vi.mock('./services/desktopShellBridge', () => ({
   desktopShellBridgeAvailable: () => false,
+  getRuntimeMaintenanceContextFromDesktopShell: vi.fn(async () => null),
   openConnectionCenter: vi.fn(async () => false),
-  restartDesktopManagedRuntime: vi.fn(async () => null),
+  performRuntimeMaintenanceActionInDesktopShell: vi.fn(async () => null),
+  runtimeMaintenanceMethodUsesDesktop: () => false,
 }));
 vi.mock('./services/gatewayApi', () => ({
   fetchGatewayJSON: vi.fn(),

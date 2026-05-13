@@ -1,4 +1,5 @@
 import type { AgentLatestVersion } from '../services/controlplaneApi';
+import type { RuntimeMaintenanceContext } from '../services/desktopShellBridge';
 
 export type AgentUpgradePolicy = 'self_upgrade' | 'desktop_release' | 'manual';
 
@@ -6,9 +7,11 @@ export type AgentUpgradeState = Readonly<{
   policy: AgentUpgradePolicy;
   allowsUpgradeAction: boolean;
   automaticPromptAllowed: boolean;
+  requiresTargetVersion: boolean;
   message: string;
   releasePageURL: string;
   actionLabel: string;
+  actionMethod: RuntimeMaintenanceContext['upgrade']['method'];
 }>;
 
 const DEFAULT_DESKTOP_RELEASE_MESSAGE = 'Managed by Redeven Desktop. Update from the desktop release instead of self-upgrade.';
@@ -22,12 +25,18 @@ function normalizeUpgradePolicy(latestMeta: AgentLatestVersion | null | undefine
   return 'manual';
 }
 
-export function resolveAgentUpgradeState(latestMeta: AgentLatestVersion | null | undefined): AgentUpgradeState {
+export function resolveAgentUpgradeState(
+  latestMeta: AgentLatestVersion | null | undefined,
+  maintenanceContext?: RuntimeMaintenanceContext | null,
+): AgentUpgradeState {
   const policy = normalizeUpgradePolicy(latestMeta);
   const rawMessage = String(latestMeta?.message ?? '').trim();
   const releasePageURL = String(latestMeta?.release_page_url ?? '').trim();
+  const upgradePlan = maintenanceContext?.upgrade ?? null;
+  const upgradeAvailable = upgradePlan ? upgradePlan.availability === 'available' : true;
+  const actionMethod = upgradePlan?.method ?? (policy === 'self_upgrade' ? 'runtime_rpc_upgrade' : 'manual');
 
-  let message = rawMessage;
+  let message = upgradePlan?.message || rawMessage;
   if (!message && policy === 'desktop_release') {
     message = DEFAULT_DESKTOP_RELEASE_MESSAGE;
   }
@@ -37,10 +46,12 @@ export function resolveAgentUpgradeState(latestMeta: AgentLatestVersion | null |
 
   return {
     policy,
-    allowsUpgradeAction: true,
+    allowsUpgradeAction: upgradeAvailable,
     automaticPromptAllowed: policy === 'self_upgrade',
+    requiresTargetVersion: upgradePlan?.requires_target_version ?? policy !== 'desktop_release',
     message,
-    releasePageURL,
-    actionLabel: policy === 'desktop_release' ? 'Manage in Desktop' : 'Update Redeven',
+    releasePageURL: upgradePlan?.release_page_url || releasePageURL,
+    actionLabel: upgradePlan?.label || (policy === 'desktop_release' ? 'Manage in Desktop' : 'Update Redeven'),
+    actionMethod,
   };
 }

@@ -36,6 +36,8 @@ describe('bootstrapDesktopShellBridge', () => {
     expect(typeof bridge.toggleFullScreenWindow).toBe('function');
     expect(typeof bridge.openExternalURL).toBe('function');
     expect(typeof bridge.openDashboard).toBe('function');
+    expect(typeof bridge.getRuntimeMaintenanceContext).toBe('function');
+    expect(typeof bridge.performRuntimeMaintenanceAction).toBe('function');
     expect(typeof bridge.restartManagedRuntime).toBe('function');
 
     await bridge.openConnectionCenter();
@@ -51,6 +53,8 @@ describe('bootstrapDesktopShellBridge', () => {
     await bridge.toggleFullScreenWindow();
     await bridge.openExternalURL('http://127.0.0.1:43123/cs/demo/');
     await bridge.openDashboard();
+    await bridge.getRuntimeMaintenanceContext();
+    await bridge.performRuntimeMaintenanceAction({ action: 'restart' });
     await bridge.restartManagedRuntime();
 
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(1, 'redeven-desktop:shell-open-window', { kind: 'connection_center' });
@@ -64,7 +68,9 @@ describe('bootstrapDesktopShellBridge', () => {
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(9, 'redeven-desktop:shell-window-command', { command: 'toggle_full_screen' });
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(10, 'redeven-desktop:shell-open-external-url', { url: 'http://127.0.0.1:43123/cs/demo/' });
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(11, 'redeven-desktop:shell-open-dashboard');
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(12, 'redeven-desktop:shell-runtime-action', { action: 'restart_managed_runtime' });
-    expect(ipcRendererInvoke).toHaveBeenCalledTimes(12);
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(12, 'redeven-desktop:shell-runtime-maintenance-context');
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(13, 'redeven-desktop:shell-runtime-action', { action: 'restart_runtime' });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(14, 'redeven-desktop:shell-runtime-action', { action: 'restart_managed_runtime' });
+    expect(ipcRendererInvoke).toHaveBeenCalledTimes(14);
   });
 });

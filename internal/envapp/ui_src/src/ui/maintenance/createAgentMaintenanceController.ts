@@ -41,6 +41,8 @@ type CreateAgentMaintenanceControllerArgs = Readonly<{
   notify: NotificationApi;
   rpc: MaintenanceRpc;
   startRestartRequest?: () => Promise<SysRestartResponse>;
+  startUpgradeRequest?: (targetVersion: string) => Promise<SysUpgradeResponse>;
+  upgradeRequiresTargetVersion?: Accessor<boolean>;
   refetchCurrentVersion: () => Promise<SysPingResponse | null>;
   refetchEnvironment?: () => Promise<EnvironmentDetail | null>;
   getEnvironment?: (envId: string) => Promise<EnvironmentDetail | null>;
@@ -134,7 +136,8 @@ export function createAgentMaintenanceController(args: CreateAgentMaintenanceCon
     }
 
     const cleanTargetVersion = String(requestedTargetVersion ?? '').trim();
-    if (nextKind === 'upgrade' && !isReleaseVersion(cleanTargetVersion)) {
+    const requiresUpgradeTargetVersion = args.upgradeRequiresTargetVersion ? args.upgradeRequiresTargetVersion() : true;
+    if (nextKind === 'upgrade' && requiresUpgradeTargetVersion && !isReleaseVersion(cleanTargetVersion)) {
       const message = 'Target version must be a valid release tag (for example: v1.2.3).';
       setError(message);
       args.notify.error('Update failed', message);
@@ -162,7 +165,7 @@ export function createAgentMaintenanceController(args: CreateAgentMaintenanceCon
     try {
       const response: SysUpgradeResponse | SysRestartResponse =
         nextKind === 'upgrade'
-          ? await args.rpc.sys.upgrade({ targetVersion: cleanTargetVersion })
+          ? await (args.startUpgradeRequest ? args.startUpgradeRequest(cleanTargetVersion) : args.rpc.sys.upgrade({ targetVersion: cleanTargetVersion }))
           : await (args.startRestartRequest ? args.startRestartRequest() : args.rpc.sys.restart());
 
       if (!response?.ok) {

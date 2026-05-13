@@ -102,9 +102,12 @@ import { resolveEnvSidebarVisibilityMotion, shouldEnvTabOpenSidebar } from './en
 import { buildDesktopShellCommandPaletteEntries } from './services/desktopShellCommandPalette';
 import {
   desktopShellBridgeAvailable,
+  getRuntimeMaintenanceContextFromDesktopShell,
   openConnectionCenter,
   openDashboardInDesktopShell,
-  restartDesktopManagedRuntime,
+  performRuntimeMaintenanceActionInDesktopShell,
+  runtimeMaintenanceMethodUsesDesktop,
+  type RuntimeMaintenanceContext,
 } from './services/desktopShellBridge';
 import {
   fetchGatewayJSON,
@@ -1230,6 +1233,21 @@ export function EnvAppShell() {
     rpc,
   });
 
+  const [runtimeMaintenanceContext, setRuntimeMaintenanceContext] = createSignal<RuntimeMaintenanceContext | null>(null);
+  const refetchRuntimeMaintenanceContext = async (): Promise<RuntimeMaintenanceContext | null> => {
+    const nextContext = await getRuntimeMaintenanceContextFromDesktopShell();
+    setRuntimeMaintenanceContext(nextContext);
+    return nextContext;
+  };
+
+  createEffect(() => {
+    if (!desktopShellBridgeAvailable() || protocol.status() !== 'connected') {
+      setRuntimeMaintenanceContext(null);
+      return;
+    }
+    void refetchRuntimeMaintenanceContext().catch(() => setRuntimeMaintenanceContext(null));
+  });
+
   let lastDesktopReadyState = '';
   createEffect(() => {
     const nextReadyState = accessGateVisible()
@@ -1251,13 +1269,14 @@ export function EnvAppShell() {
   });
 
   const startRuntimeRestart = async () => {
-    const runtime = localRuntime();
-    if (runtime && runtime.desktop_managed === true) {
-      const result = await restartDesktopManagedRuntime();
+    const context = await refetchRuntimeMaintenanceContext();
+    const restartPlan = context?.restart ?? null;
+    if (restartPlan?.availability === 'available' && runtimeMaintenanceMethodUsesDesktop(restartPlan.method)) {
+      const result = await performRuntimeMaintenanceActionInDesktopShell({ action: 'restart' });
       if (!result) {
         return {
           ok: false,
-          message: 'Managed runtime restart is only available from Redeven Desktop.',
+          message: 'Runtime restart is only available from Redeven Desktop.',
         };
       }
       return {
@@ -1267,6 +1286,37 @@ export function EnvAppShell() {
     }
 
     return rpc.sys.restart();
+  };
+
+  const startRuntimeUpgrade = async (targetVersion: string) => {
+    const context = await refetchRuntimeMaintenanceContext();
+    const upgradePlan = context?.upgrade ?? null;
+    if (upgradePlan?.availability === 'available' && runtimeMaintenanceMethodUsesDesktop(upgradePlan.method)) {
+      const result = await performRuntimeMaintenanceActionInDesktopShell({
+        action: 'upgrade',
+        target_version: targetVersion,
+      });
+      if (!result) {
+        return {
+          ok: false,
+          message: 'Runtime update is only available from Redeven Desktop.',
+        };
+      }
+      return {
+        ok: result.ok && result.started,
+        message: result.message,
+      };
+    }
+
+    return rpc.sys.upgrade({ targetVersion });
+  };
+
+  const upgradeRequiresTargetVersion = () => {
+    const upgradePlan = runtimeMaintenanceContext()?.upgrade ?? null;
+    if (upgradePlan?.availability === 'available' && runtimeMaintenanceMethodUsesDesktop(upgradePlan.method)) {
+      return upgradePlan.requires_target_version === true;
+    }
+    return true;
   };
 
   const agentMaintenanceController = createAgentMaintenanceController({
@@ -1279,8 +1329,11 @@ export function EnvAppShell() {
     notify,
     rpc,
     startRestartRequest: startRuntimeRestart,
+    startUpgradeRequest: startRuntimeUpgrade,
+    upgradeRequiresTargetVersion,
     refetchCurrentVersion: agentVersionModel.refetchCurrentVersion,
     refetchEnvironment: async () => {
+      await refetchRuntimeMaintenanceContext().catch(() => undefined);
       const next = await refetchEnv();
       return next ?? null;
     },
@@ -2854,6 +2907,8 @@ export function EnvAppShell() {
             value={{
               version: agentVersionModel,
               maintenance: agentMaintenanceController,
+              maintenanceContext: runtimeMaintenanceContext,
+              refetchMaintenanceContext: refetchRuntimeMaintenanceContext,
             }}
           >
             <FloeRegistryRuntime components={components()}>
