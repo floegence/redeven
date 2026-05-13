@@ -124,13 +124,13 @@ It does not introduce a second SSH-native file or terminal protocol. Instead, El
    - `desktop_upload`
    - `remote_install`
    - `auto`
-6. Opens a reverse-forwarded loopback endpoint for the Desktop AI Broker when the Desktop Local Environment has usable Flower provider settings.
+6. Optionally opens a reverse-forwarded loopback endpoint for the Desktop model source when the Desktop Local Environment has usable Flower provider settings.
 7. Starts `redeven run --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0` as a detached background process on the SSH host with its mutable runtime state rooted at `local-environment/state/`.
 8. Waits for the remote startup report under `local-environment/sessions/<session_token>/startup-report.json`.
 9. Evaluates the final running Runtime Service snapshot from that report, including runtime identity, compatibility, active workload, and required binding capabilities.
 10. Creates a local SSH port forward to that remote Local UI port.
 11. Verifies the forwarded Local UI runtime snapshot.
-12. Binds the Desktop AI Broker through runtime-control when requested, then verifies `runtime_service.bindings.desktop_ai_broker`.
+12. Optionally binds the Desktop model source through runtime-control, then refreshes `runtime_service.bindings.desktop_ai_broker`.
 13. Opens the forwarded `127.0.0.1:<port>` origin as a normal Desktop session.
 14. Marks the Env App session as `ssh_environment` so Web Services treat `localhost` targets as remote-host loopback and open through `/pf/<forward_id>/` instead of the user's browser loopback.
 
@@ -141,8 +141,9 @@ This Desktop AI Broker is a session capability, not a persisted remote configura
 - Provider API keys stay in the Desktop Local Environment's local `secrets.json`.
 - The SSH host's `local-environment/state/config.json` does not receive an `ai` block, an `enabled` flag, or any provider secret.
 - Remote tools still run inside the SSH-hosted runtime and remain governed by the remote session's `session_meta` plus local `permission_policy`.
-- If the broker is unavailable, the SSH runtime still starts; Flower uses the remote runtime's own AI config only when that config exists.
-- Env App surfaces the split explicitly as model source `Desktop`, tools location `SSH Host`, and Runtime Service binding state `bound` / `unbound` / `unsupported` / `error` / `expired`.
+- If the Desktop source is unavailable or binding fails, the SSH runtime still starts; Flower uses the remote runtime's own AI config only when that config exists.
+- Env App surfaces the split explicitly as model sources `Remote runtime` and `Desktop`, tools location `SSH Host`, and Runtime Service binding state `bound` / `unbound` / `unsupported` / `error` / `expired`.
+- The SSH connection progress UI treats Desktop model preparation as optional. Stopping the progress overlay means stopping the opening attempt, not disabling a model source permanently.
 
 ### SSH Host Environment
 

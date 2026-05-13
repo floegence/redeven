@@ -47,7 +47,7 @@ const STORAGE_KEYS = [
 
 type MutableModelsResponse = {
   current_model: string;
-  models: Array<{ id: string; label?: string }>;
+  models: Array<{ id: string; label?: string; source?: string; source_label?: string }>;
 };
 
 const baseModels = (): MutableModelsResponse => ({
@@ -279,7 +279,41 @@ describe('AIChatContext model selection', () => {
 
     expect(ctx.aiEnabled()).toBe(true);
     expect(ctx.modelOptions().map((item) => item.value)).toEqual(['openai/model-a', 'openai/model-b']);
-    expect(ctx.modelOptions()[0].source).toBeUndefined();
+    expect(ctx.modelOptions()[0].source).toBe('runtime_config');
+    expect(ctx.modelSourceGroups().map((group) => group.source)).toEqual(['runtime_config']);
+
+    dispose();
+  });
+
+  it('groups Remote runtime and Desktop model sources from the model list', async () => {
+    modelsState = {
+      current_model: 'remote/model-a',
+      models: [
+        { id: 'remote/model-a', label: 'Remote A', source: 'runtime_config', source_label: 'Remote runtime' },
+        { id: 'desktop-broker:local/model-b', label: 'Desktop B', source: 'desktop_broker', source_label: 'Desktop' },
+      ],
+    };
+
+    const { ctx, dispose } = await renderContext();
+
+    expect(ctx.modelOptions()).toEqual([
+      { value: 'remote/model-a', label: 'Remote A', source: 'runtime_config', sourceLabel: 'Remote runtime' },
+      { value: 'desktop-broker:local/model-b', label: 'Desktop B', source: 'desktop_broker', sourceLabel: 'Desktop' },
+    ]);
+    expect(ctx.modelSourceGroups()).toEqual([
+      {
+        source: 'runtime_config',
+        sourceLabel: 'Remote runtime',
+        available: true,
+        models: [{ value: 'remote/model-a', label: 'Remote A', source: 'runtime_config', sourceLabel: 'Remote runtime' }],
+      },
+      {
+        source: 'desktop_broker',
+        sourceLabel: 'Desktop',
+        available: true,
+        models: [{ value: 'desktop-broker:local/model-b', label: 'Desktop B', source: 'desktop_broker', sourceLabel: 'Desktop' }],
+      },
+    ]);
 
     dispose();
   });

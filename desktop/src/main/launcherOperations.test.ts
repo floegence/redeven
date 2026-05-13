@@ -20,6 +20,9 @@ describe('LauncherOperationRegistry', () => {
       title: 'Opening SSH control connection',
       detail: 'Connecting to devbox.',
       cancelable: true,
+      interrupt_label: 'Stop opening',
+      interrupt_detail: 'Stops this SSH opening attempt.',
+      interrupt_kind: 'stop_opening',
     });
 
     expect(operation.subject_generation).toBe(0);
@@ -31,6 +34,8 @@ describe('LauncherOperationRegistry', () => {
         subject_id: operation.subject_id,
         status: 'running',
         cancelable: true,
+        interrupt_label: 'Stop opening',
+        interrupt_kind: 'stop_opening',
       }),
     ]);
     expect(changed).toEqual([`${operation.operation_key}:running:ssh_connecting`]);
@@ -87,6 +92,8 @@ describe('LauncherOperationRegistry', () => {
       status: 'canceling',
       cancelable: false,
       phase: 'canceling',
+      interrupt_label: undefined,
+      interrupt_kind: undefined,
     }));
     registry.finish(operation.operation_key, 'canceled', {
       phase: 'canceled',

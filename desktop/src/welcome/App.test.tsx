@@ -584,7 +584,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('activeProgressForEnvironment(props.environment.id, props.busyState, props.actionProgress)');
     expect(appSrc).toContain('function SSHRuntimeActivityOverlay');
     expect(appSrc).toContain('<Portal>');
-    expect(appSrc).toContain('Starting SSH Runtime');
+    expect(appSrc).toContain('Opening SSH Host');
     expect(appSrc).not.toContain('function SSHRuntimeProgressPanel');
     expect(styles).toContain('.redeven-ssh-runtime-activity');
     expect(styles).toContain('position: fixed;');
@@ -605,7 +605,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('progress.cancelable === true && progress.status === \'running\'');
     expect(appSrc).toContain('onClick={() => props.cancelOperation(progress)}');
     expect(appSrc).toContain('<Stop class="h-3 w-3" />');
-    expect(appSrc).toContain('Cancel');
+    expect(appSrc).toContain("{progress.interrupt_label || 'Stop'}");
+    expect(appSrc).not.toContain('Cancel\n                      </Button>\n                    </Show>');
   });
 
   it('includes Control Plane management copy inside the launcher source', () => {

@@ -46,6 +46,7 @@ describe('desktopAIBroker', () => {
     expect(broker.url).toBe('http://127.0.0.1:41234');
     expect(broker.token).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(broker.sessionID).toMatch(/^broker_[a-f0-9]+$/);
+    expect(broker.configured).toBe(true);
     expect(broker.modelCount).toBe(1);
     expect(broker.missingKeyProviderIDs).toEqual(['anthropic']);
 

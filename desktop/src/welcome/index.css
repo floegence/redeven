@@ -697,7 +697,7 @@ body {
 }
 
 .redeven-ssh-runtime-activity {
-  pointer-events: none;
+  pointer-events: auto;
   position: fixed;
   right: 1rem;
   bottom: 1rem;

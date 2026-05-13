@@ -133,9 +133,14 @@ For each run the Go runtime:
 3. never writes the key back into `config.json` or API responses
 4. resolves a Brave API key only when the selected OpenAI-compatible provider uses `web_search.mode = "brave"`
 
-## 6. Desktop broker sessions for SSH Host Environments
+## 6. AI model sources for SSH Host Environments
 
-When Redeven Desktop opens an SSH Host Environment, the remote runtime may use the Desktop Local Environment's Flower model configuration through a short-lived Desktop AI Broker session.
+When Redeven Desktop opens an SSH Host Environment, Flower may have two independent model sources:
+
+- `Remote runtime`: the SSH host runtime's own persisted Flower settings.
+- `Desktop`: the user's Desktop Local Environment model settings, exposed through a short-lived Desktop AI Broker session.
+
+The user can choose either source whenever that source has at least one usable model. Env App hides a source when it is unavailable, and switching a thread model still updates only that thread's `model_id`.
 
 This is deliberately different from copying settings to the SSH host:
 
@@ -146,14 +151,16 @@ This is deliberately different from copying settings to the SSH host:
 - The SSH host's `config.json` does not gain an `ai` section, provider keys, or an `enabled` boolean.
 - Remote tools, file reads, terminal commands, Git operations, and permission checks still execute in the SSH-hosted runtime.
 
-The API response field `ai_runtime.desktop_broker` reports broker session status separately from the persisted `ai` config. Env App also reads `runtime_service.bindings.desktop_ai_broker` so the Flower card can distinguish `bound`, `unbound`, `unsupported`, `error`, and `expired` instead of collapsing every remote mismatch into `ai not configured`.
+The API response field `ai_runtime.desktop_broker` reports the `Desktop` source status separately from the persisted `ai` config. Env App also reads `runtime_service.bindings.desktop_ai_broker` so the Flower card can distinguish `bound`, `unbound`, `unsupported`, `error`, and `expired` instead of collapsing every remote mismatch into `ai not configured`.
 
 ## 7. UI behavior
 
 Current Runtime Settings UI behavior is:
 
 - Flower lives under Runtime Settings -> `AI & Extensions` as its own card, while permission policy and diagnostics stay in separate top-level groups.
-- On SSH Host sessions, the Flower card separates persisted remote provider settings from the Desktop broker session capability.
+- On SSH Host sessions, the Flower card separates persisted `Remote runtime` provider settings from the `Desktop` source session capability.
+- When both `Remote runtime` and `Desktop` have usable models, the chat header shows a source selector before the model selector.
+- When only one model source has usable models, the chat header shows only the model selector for that source.
 - Add Provider generates a provider id automatically.
 - Provider id is shown as read-only.
 - API keys are stored locally and shown only as status (`Key set` / `Key not set`).

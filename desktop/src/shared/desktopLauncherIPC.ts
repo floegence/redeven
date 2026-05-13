@@ -241,6 +241,9 @@ export type DesktopLauncherOperationSnapshot = Readonly<{
   title: string;
   detail: string;
   cancelable: boolean;
+  interrupt_label?: string;
+  interrupt_detail?: string;
+  interrupt_kind?: 'stop_opening' | 'cleanup_deleted_subject' | 'generic';
   deleted_subject: boolean;
   error_message?: string;
 }>;
@@ -395,6 +398,9 @@ export type DesktopLauncherActionProgress = Readonly<{
   title: string;
   detail: string;
   cancelable?: boolean;
+  interrupt_label?: string;
+  interrupt_detail?: string;
+  interrupt_kind?: 'stop_opening' | 'cleanup_deleted_subject' | 'generic';
   deleted_subject?: boolean;
   error_message?: string;
 }>;

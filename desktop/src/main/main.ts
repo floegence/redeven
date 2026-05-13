@@ -2668,9 +2668,12 @@ async function startSSHEnvironmentRuntimeRecord(
     environment_id: environmentID,
     environment_label: label,
     phase: 'ssh_preparing_start',
-    title: 'Preparing SSH runtime',
-    detail: 'Desktop is preparing the SSH bootstrap task and will keep this progress visible until it finishes.',
+    title: 'Preparing SSH host',
+    detail: 'Desktop is preparing the secure SSH session and local tunnel.',
     cancelable: true,
+    interrupt_label: 'Stop opening',
+    interrupt_detail: 'Stops this SSH opening attempt and cleans up local startup resources.',
+    interrupt_kind: 'stop_opening',
   });
   const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
 
@@ -2697,6 +2700,14 @@ async function startSSHEnvironmentRuntimeRecord(
       } catch (brokerError) {
         const message = brokerError instanceof Error ? brokerError.message : String(brokerError);
         console.warn(`[redeven:ai-broker] Desktop AI Broker unavailable for ${runtimeKey}: ${message}`);
+        desktopAIBroker = null;
+      }
+      if (desktopAIBroker && desktopAIBroker.modelCount <= 0) {
+        const missing = desktopAIBroker.missingKeyProviderIDs.length > 0
+          ? ` Missing provider keys: ${desktopAIBroker.missingKeyProviderIDs.join(', ')}.`
+          : '';
+        console.warn(`[redeven:ai-broker] Desktop AI Broker has no usable models for ${runtimeKey}.${missing}`);
+        await desktopAIBroker.stop().catch(() => undefined);
         desktopAIBroker = null;
       }
       const managedSSHRuntime = await startManagedSSHRuntime({
@@ -4405,7 +4416,7 @@ async function cancelLauncherOperationFromLauncher(
       },
     );
   }
-  launcherOperations.cancel(request.operation_key, 'Desktop is canceling this background task.');
+  launcherOperations.cancel(request.operation_key, operation.interrupt_detail || 'Desktop is stopping this background task.');
   broadcastDesktopWelcomeSnapshots();
   return launcherActionSuccess('canceled_launcher_operation');
 }

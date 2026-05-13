@@ -3561,7 +3561,7 @@ function SSHRuntimeActivityOverlay(props: Readonly<{
           <div class="redeven-ssh-runtime-activity__header">
             <div class="redeven-ssh-runtime-activity__title">
               <Terminal class="h-3.5 w-3.5" />
-              <span>Starting SSH Runtime</span>
+              <span>Opening SSH Host</span>
             </div>
             <span class="redeven-ssh-runtime-activity__count">
               {props.progressItems.length === 1 ? '1 active task' : `${props.progressItems.length} active tasks`}
@@ -3599,10 +3599,11 @@ function SSHRuntimeActivityOverlay(props: Readonly<{
                         size="sm"
                         variant="outline"
                         class="h-7 gap-1.5 px-2 text-[11px]"
+                        title={progress.interrupt_detail || 'Stop this background task.'}
                         onClick={() => props.cancelOperation(progress)}
                       >
                         <Stop class="h-3 w-3" />
-                        Cancel
+                        {progress.interrupt_label || 'Stop'}
                       </Button>
                     </Show>
                   </div>

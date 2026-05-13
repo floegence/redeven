@@ -30,6 +30,8 @@ type FakeSSHScenario =
   | 'attached_unsupported_active'
   | 'forwarded_blocked_readiness'
   | 'forwarded_invalid_env_shell'
+  | 'binding_error'
+  | 'reverse_forward_error'
   | 'remote_install'
   | 'desktop_upload'
   | 'no_report'
@@ -345,6 +347,27 @@ function startForward() {
       request.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
       request.on('end', () => {
         const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+        if (scenario === 'binding_error') {
+          appendLog('bind_desktop_ai_broker_failed', {
+            session_id: String(body.session_id || ''),
+            ssh_runtime_key: String(body.ssh_runtime_key || ''),
+          });
+          response.writeHead(200, { 'content-type': 'application/json' });
+          response.end(JSON.stringify({
+            ok: true,
+            data: {
+              ai_runtime: {
+                desktop_broker: {
+                  binding_state: 'error',
+                  connected: true,
+                  available: false,
+                  last_error: 'simulated binding failure',
+                },
+              },
+            },
+          }));
+          return;
+        }
         const state = readState();
         writeState({
           ...state,
@@ -400,6 +423,10 @@ function startForward() {
 function startReverseForward() {
   const spec = args[args.indexOf('-R') + 1] || '';
   appendLog('reverse_forward_start', { spec });
+  if (scenario === 'reverse_forward_error') {
+    process.stderr.write('remote port forwarding failed\n');
+    process.exit(255);
+  }
   process.stderr.write('Allocated port 41234 for remote forward to 127.0.0.1\n');
   terminateLater('reverse_forward_terminated');
 }
@@ -801,6 +828,62 @@ describe('sshRuntime integration', () => {
       has_token: true,
     }));
     expect(events.map((event) => event.event)).not.toContain('stop_runtime');
+    await removeFakeSSHFixture(fixture);
+  });
+
+  it('keeps opening the SSH runtime when Desktop AI Broker binding fails', async () => {
+    const fixture = await createFakeSSHFixture('binding_error');
+    let runtime: ManagedSSHRuntime | null = null;
+    try {
+      runtime = await startWithFakeSSH(fixture, 'auto', {
+        aiBroker: {
+          local_url: 'http://127.0.0.1:41234',
+          token: 'broker-token',
+          session_id: 'broker-session',
+          ssh_runtime_key: 'ssh:devbox',
+          expires_at_unix_ms: futureExpiryUnixMS(),
+        },
+      });
+      expect(runtime.startup.local_ui_url).toBe(runtime.local_forward_url);
+      expect(runtime.startup.runtime_service?.bindings?.desktop_ai_broker?.state).toBe('unbound');
+    } finally {
+      await runtime?.disconnect();
+    }
+
+    const events = await readFakeSSHEvents(fixture);
+    expect(events.map((event) => event.event)).toEqual(expect.arrayContaining([
+      'reverse_forward_start',
+      'start_runtime',
+      'bind_desktop_ai_broker_failed',
+    ]));
+    await removeFakeSSHFixture(fixture);
+  });
+
+  it('keeps opening the SSH runtime when the Desktop model reverse bridge fails', async () => {
+    const fixture = await createFakeSSHFixture('reverse_forward_error');
+    let runtime: ManagedSSHRuntime | null = null;
+    try {
+      runtime = await startWithFakeSSH(fixture, 'auto', {
+        aiBroker: {
+          local_url: 'http://127.0.0.1:41234',
+          token: 'broker-token',
+          session_id: 'broker-session',
+          ssh_runtime_key: 'ssh:devbox',
+          expires_at_unix_ms: futureExpiryUnixMS(),
+        },
+      });
+      expect(runtime.startup.local_ui_url).toBe(runtime.local_forward_url);
+      expect(runtime.startup.runtime_service?.bindings?.desktop_ai_broker?.state).toBe('unbound');
+    } finally {
+      await runtime?.disconnect();
+    }
+
+    const events = await readFakeSSHEvents(fixture);
+    expect(events.map((event) => event.event)).toEqual(expect.arrayContaining([
+      'reverse_forward_start',
+      'start_runtime',
+    ]));
+    expect(events.map((event) => event.event)).not.toContain('bind_desktop_ai_broker');
     await removeFakeSSHFixture(fixture);
   });
 

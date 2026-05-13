@@ -423,7 +423,7 @@ function formatDesktopBrokerNotice(bindingState: unknown, status: { connected?: 
   switch (String(bindingState ?? '').trim()) {
     case 'bound':
       if (status?.available) {
-        return 'Desktop is providing a session model bridge for this SSH environment. Remote provider settings remain local to this host.';
+        return 'The Desktop model source is available for this SSH environment. Remote provider settings remain local to this host.';
       }
       return 'Desktop is connected, but no usable model is available yet. Configure the local API key on this computer.';
     case 'unsupported':
@@ -436,7 +436,7 @@ function formatDesktopBrokerNotice(bindingState: unknown, status: { connected?: 
         : 'Desktop model bridge binding failed. Reopen the SSH environment to retry.';
     default:
       if (status?.available) {
-        return 'Desktop is providing a session model bridge for this SSH environment. Remote provider settings remain local to this host.';
+        return 'The Desktop model source is available for this SSH environment. Remote provider settings remain local to this host.';
       }
       if (status?.connected) {
         return 'Desktop is connected, but no usable model is available yet. Configure the local API key on this computer.';
@@ -906,10 +906,10 @@ export function EnvSettingsPage() {
     String(desktopBrokerStatus()?.binding_state ?? runtimeDesktopBrokerBinding()?.state ?? '').trim()
   ));
   const flowerBadge = createMemo(() => {
-    if (aiEnabled()) return 'Remote config';
-    if (desktopBrokerBindingState() === 'bound' && desktopBrokerStatus()?.available) return 'Desktop broker';
+    if (aiEnabled()) return 'Remote runtime';
+    if (desktopBrokerBindingState() === 'bound' && desktopBrokerStatus()?.available) return 'Desktop source';
     if (desktopBrokerBindingState() === 'bound') return 'Desktop bound';
-    if (desktopBrokerStatus()?.available) return 'Desktop broker';
+    if (desktopBrokerStatus()?.available) return 'Desktop source';
     if (desktopBrokerStatus()?.connected) return 'Desktop connected';
     return 'Disabled';
   });
@@ -2964,14 +2964,14 @@ export function EnvSettingsPage() {
                     <SettingsTableCell class="text-[11px] text-muted-foreground">Service identity protocol reported by the runtime.</SettingsTableCell>
                   </SettingsTableRow>
                   <SettingsTableRow>
-                    <SettingsTableCell class="font-medium text-muted-foreground">Desktop AI Broker</SettingsTableCell>
+                    <SettingsTableCell class="font-medium text-muted-foreground">Desktop model source</SettingsTableCell>
                     <SettingsTableCell>
                       <SettingsPill tone={desktopBrokerBindingTone(runtimeDesktopBrokerBinding()?.state)}>
                         {formatDesktopBrokerBindingState(runtimeDesktopBrokerBinding()?.state)}
                       </SettingsPill>
                     </SettingsTableCell>
                     <SettingsTableCell class="text-[11px] text-muted-foreground">
-                      {runtimeDesktopBrokerBinding()?.lastError || 'Runtime Service binding state for Desktop-provided Flower models.'}
+                      {runtimeDesktopBrokerBinding()?.lastError || 'Session binding state for Desktop-provided Flower models.'}
                     </SettingsTableCell>
                   </SettingsTableRow>
                   <Show when={upgradeState().allowsUpgradeAction && upgradeState().requiresTargetVersion}>
