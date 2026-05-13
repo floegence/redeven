@@ -1,20 +1,21 @@
 {
   "schema_version": 1,
   "release_review": {
-    "release_version": "v0.6.5",
-    "previous_release": "v0.6.4",
+    "release_version": "v0.6.6",
+    "previous_release": "v0.6.5",
     "reviewed_at": "2026-05-13",
     "review_id": "runtime-attach-binding-contract-v1",
-    "summary": "Runtime Service attach contract update: Desktop now records capability/binding state for the local Flower model bridge and treats the final running runtime snapshot as the source of truth for SSH attach decisions.",
+    "summary": "Runtime maintenance routing now flows through an explicit Desktop/Env App maintenance context, while SSH restart and update actions still rely on the same runtime service compatibility window.",
+    "same_window_rationale": "This release changes who owns maintenance routing and runtime attach decisions, not the runtime protocol wire contract itself. The compatibility window stays valid because the protocol version, compatibility epoch, and minimum Desktop and Runtime versions are unchanged, and the reviewed surfaces cover the affected attach, health, startup, settings, and SSH bootstrap paths.",
     "checked_surfaces": [
       "Runtime Service snapshot capability and binding state normalization",
-      "Desktop SSH attach and final runtime identity validation",
-      "Desktop AI Broker runtime-control binding RPC",
-      "Env App Flower settings and runtime status presentation",
+      "Desktop shell runtime maintenance context IPC and action resolution",
+      "Desktop SSH attach, restart, and update runtime ownership validation",
+      "Desktop AI Broker runtime-control binding RPC and final runtime identity checks",
+      "Env App maintenance controller and settings action routing",
       "Env App local runtime health and startup report carriers",
-      "Desktop AI Broker model bridge startup and expiry handling",
-      "SSH-managed runtime bootstrap and attach flow",
-      "Env App sys.ping runtime service payload",
+      "Env App sys.ping runtime service payload and compatibility rendering",
+      "SSH-managed runtime bootstrap restart and update flow",
       "published npm dependency lockfile reproducibility"
     ]
   },
