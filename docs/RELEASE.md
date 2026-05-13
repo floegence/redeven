@@ -32,7 +32,7 @@ bootstrap surfaces that could be affected.
 
 ## GitHub Release notes quality baseline
 
-Each GitHub Release must include both:
+Each GitHub Release must include:
 
 1. A short release highlights section that explains what changed in this version.
 2. A curated operator-facing preface (install/upgrade commands, asset list, verification snippet).
@@ -43,7 +43,7 @@ Implementation in this repository:
 - Notes preface generator: `scripts/generate_release_notes.sh`
 - Workflow integration: `.github/workflows/release.yml` (preface file + GitHub Release Notes API)
 
-The highlights section is generated from commits since the previous `v*` tag and grouped into product-facing themes such as Codex workspace, Workspace UI, Git tools, or Maintenance. If a release only contains maintenance work, the highlights section must still say so explicitly instead of leaving the release without a short summary.
+The highlights section is generated from commits since the previous `v*` tag. If a release only contains maintenance work, the highlights section must still say so explicitly instead of leaving the release without a short summary.
 
 This keeps every release self-service for operators while preserving a complete change history for open source transparency.
 

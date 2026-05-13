@@ -29,11 +29,6 @@
   <a href="https://github.com/floegence/redeven/releases"><img alt="Releases" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
 </p>
 
-<p align="center">
-  <!-- TODO: add product screenshots -->
-  <em>Screenshots coming soon — workspace overview, Desktop launcher, and SSH host bootstrap.</em>
-</p>
-
 ## What is Redeven?
 
 Redeven is a single binary that gives every machine a complete control panel you open in the browser. Instead of juggling SSH terminals, file browsers, monitoring dashboards, port forwarding, and IDE windows, you get one unified workspace.
@@ -80,7 +75,7 @@ It runs on your machine, your remote servers, or any reachable SSH host. Your fi
 | Port forwarding | ✅ built-in | ✅ manual | ✅ manual | ❌ |
 | Browser IDE (code-server) | ✅ on-demand install | ❌ requires self-setup | ✅ VS Code only | ❌ |
 | Built-in AI assistant | ✅ on-device, multi-provider | ❌ | ❌ | ❌ |
-| Desktop app | ✅ macOS / Windows / Linux | ❌ | ❌ | ❌ |
+| Desktop app | ✅ macOS / Linux | ❌ | ❌ | ❌ |
 | SSH host auto-bootstrap | ✅ one-click from Desktop | ❌ | ❌ | ❌ |
 | End-to-end encryption | ✅ Flowersec | ❌ | ❌ | ❌ |
 | Granular permissions | ✅ read / write / execute / admin | ❌ | ❌ | ❌ |
@@ -129,49 +124,15 @@ Bootstrap writes your Local Environment config to `~/.redeven/local-environment/
 
 ## What you can do
 
-### Browse and manage files
-
-A full file browser with upload, download, inline preview, and permission-aware access. Right-click any file or folder to send it to the terminal or AI assistant. The Git browser shows folder-scoped changes, staged diffs, and stash workflows without leaving the workspace.
-
-→ [`docs/ENV_APP.md`](docs/ENV_APP.md)
-
-### Run terminals where you need them
-
-Open multi-tab terminals in any directory, directly from the file browser. The terminal inherits the same permission model as the rest of the workspace — no separate SSH key management or jump host configuration.
-
-→ [`docs/ENV_APP.md`](docs/ENV_APP.md)
-
-### Monitor system health
-
-Built-in dashboards for CPU, memory, disk, network, and processes. Start investigating from the Environment itself instead of switching to a separate monitoring tool.
-
-→ [`docs/ENV_APP.md`](docs/ENV_APP.md)
-
-### Develop in the browser
-
-Start a full VS Code workspace via code-server — installed and managed on demand from within the workspace UI. Each codespace gets its own isolated state directory. No bundling, no remote agent protocol, no Node.js dependency unless you explicitly choose to install code-server.
-
-→ [`docs/CODE_APP.md`](docs/CODE_APP.md)
-
-### Forward ports and preview services
-
-Expose running services through Redeven-managed access. Inspect a web app, API, or database GUI without hand-wiring SSH tunnels or sharing random local URLs.
-
-→ [`docs/ENV_APP.md`](docs/ENV_APP.md), [`docs/CODE_APP.md`](docs/CODE_APP.md)
-
-### Bring AI into your workflow
-
-Optional on-device AI assistant (Flower) integrated directly into the workspace. Reads files, edits code, runs terminal commands, delegates to subagents — all validated by the runtime against the same permission policy. Supports OpenAI, Anthropic, DeepSeek, Qwen, and more.
-
-When an SSH Host Environment is opened from Desktop, Flower can use your local machine's model configuration through a short-lived broker — provider API keys stay on your machine and are never copied to the remote runtime.
-
-→ [`docs/AI_AGENT.md`](docs/AI_AGENT.md), [`docs/AI_SETTINGS.md`](docs/AI_SETTINGS.md), [`docs/CODEX_UI.md`](docs/CODEX_UI.md)
-
-### Manage everything from Desktop
-
-A native Electron app for macOS, Windows, and Linux. One launcher for all your environments — local, provider-hosted, SSH-bootstrapped, or saved URLs. Handles PKCE provider auth, session lifecycle, SSH host bootstrap, and shell-owned theme state.
-
-→ [`docs/DESKTOP.md`](docs/DESKTOP.md)
+| Surface | What it gives you | Read |
+|---|---|---|
+| Files and Git | File upload/download, inline preview/edit, folder-scoped Git changes, diffs, and stash workflows. | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
+| Terminal | Multi-tab terminals rooted in the directories you are working with, under the same runtime permission model. | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
+| Monitor | CPU, memory, disk, network, and process views from the endpoint runtime. | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
+| Code App | code-server workspaces installed and managed on demand, isolated per codespace. | [`docs/CODE_APP.md`](docs/CODE_APP.md) |
+| Web Services | Runtime-managed service registration and port-forward access without hand-written SSH tunnels. | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
+| Flower and Codex | Optional AI surfaces that use runtime-validated tools and local model/host configuration. | [`docs/AI_AGENT.md`](docs/AI_AGENT.md), [`docs/AI_SETTINGS.md`](docs/AI_SETTINGS.md), [`docs/CODEX_UI.md`](docs/CODEX_UI.md) |
+| Desktop | Native launcher for local, provider-hosted, SSH-bootstrapped, and saved Local UI environments. | [`docs/DESKTOP.md`](docs/DESKTOP.md) |
 
 ## Security, without stealing the spotlight
 
@@ -223,7 +184,7 @@ Build, lint, and verify from source.
 - Go `1.25.9`
 - Node.js `24`
 - npm
-- pnpm (or Node.js `corepack`)
+- pnpm or Node.js `corepack`
 
 ### Build
 
@@ -246,46 +207,18 @@ Notes:
 - `internal/**/dist/` assets are generated and embedded via Go `embed`.
 - Frontend `dist` assets are not checked into git. The tracked exception is `internal/knowledge/dist/*`, which stays committed as verifiable knowledge bundle release metadata.
 - `THIRD_PARTY_NOTICES.md` is generated from Go modules and JavaScript lockfiles. Run `node scripts/generate_third_party_notices.mjs` after dependency changes, then keep `--check` green.
-- `./scripts/lint_ui.sh` validates the Environment workspace and browser IDE source packages before asset bundling.
-- `./scripts/check_desktop.sh` validates the Electron desktop shell package.
-- `./scripts/dev_desktop.sh` stops any existing Redeven Desktop process, then starts Desktop from the current checkout or worktree with a freshly bundled runtime. It leaves existing runtime processes running unless you explicitly pass `--stop-runtimes`. For SSH Host bootstrap, it exports `REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG` from the development bundle version unless you set that variable explicitly.
-- `cd desktop && npm run start` and `cd desktop && npm run package` prepare `desktop/.bundle/<goos>-<goarch>/redeven` from the current repository before Electron starts or packages the desktop shell.
+- `./scripts/lint_ui.sh`, `./scripts/check_desktop.sh`, `./scripts/build_assets.sh`, and `go test ./...` are the main source-level checks.
+- `./scripts/dev_desktop.sh` starts Desktop from the current checkout or worktree with a freshly bundled runtime.
+- `cd desktop && npm run start` and `cd desktop && npm run package` prepare `desktop/.bundle/<goos>-<goarch>/redeven` before Electron starts or packages the desktop shell.
 
 </details>
 
 <details>
 <summary>Local state, release paths, and troubleshooting</summary>
 
-### Common local files
-
-- `~/.redeven/local-environment/config.json`
-- `~/.redeven/local-environment/secrets.json`
-- `~/.redeven/local-environment/agent.lock`
-- `~/.redeven/local-environment/audit/events.jsonl`
-- `~/.redeven/local-environment/diagnostics/agent-events.jsonl`
-- `~/.redeven/local-environment/diagnostics/desktop-events.jsonl`
-- `~/.redeven/local-environment/apps/code/...`
-
-Desktop and standalone runtime mode also share one profile-scoped catalog:
-
-- `~/.redeven/catalog/local-environment.json`
-- `~/.redeven/catalog/provider-environments/*.json`
-- `~/.redeven/catalog/connections/*.json`
-- `~/.redeven/catalog/providers/*.json`
-
-### Public release contract
-
-- GitHub Release is the source of truth for versioned CLI tarballs, desktop installers, checksums, and signatures.
-- `scripts/install.sh` resolves versions from GitHub Releases and downloads release assets directly from GitHub.
-- The public installer endpoint used by runtime self-upgrade is documented in [`docs/RELEASE.md`](docs/RELEASE.md).
-
-### Common troubleshooting entry points
-
-- `bootstrap failed` or `missing direct connect info`: verify `--controlplane`, `--env-id`, and your bootstrap credential.
-- `code-server runtime missing or unusable`: open workspace settings → `code-server Runtime`, then install or select a runtime.
-- `Missing init payload` in the browser IDE: reopen the browser IDE so a new entry ticket can be minted.
-- Desktop lock conflict: stop the other runtime instance that owns `~/.redeven`, or restart it in a Local UI mode, then retry.
-- Requests feel slow: open Runtime Settings → Debug Console and compare desktop, gateway, and UI timing.
+- Local Environment state defaults to `~/.redeven/local-environment/`; Desktop and standalone runtime mode also share the profile catalog under `~/.redeven/catalog/`.
+- GitHub Releases are the public source of truth for versioned CLI tarballs, Desktop installers, checksums, and signatures. See [`docs/RELEASE.md`](docs/RELEASE.md).
+- For feature-specific troubleshooting, start with [`docs/ENV_APP.md`](docs/ENV_APP.md), [`docs/CODE_APP.md`](docs/CODE_APP.md), and [`docs/DESKTOP.md`](docs/DESKTOP.md).
 
 </details>
 
