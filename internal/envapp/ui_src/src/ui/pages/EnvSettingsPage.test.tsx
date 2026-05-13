@@ -60,6 +60,8 @@ const runtimeUpdateMocks = vi.hoisted(() => ({
     startUpgrade: vi.fn(async () => undefined),
     startRestart: vi.fn(async () => undefined),
   },
+  maintenanceContext: vi.fn(() => null),
+  refetchMaintenanceContext: vi.fn(async () => null),
 }));
 
 const gatewayMocks = vi.hoisted(() => ({
@@ -161,9 +163,12 @@ vi.mock('../maintenance/RuntimeUpdateContext', () => ({
 vi.mock('../maintenance/agentUpgradeState', () => ({
   resolveAgentUpgradeState: () => ({
     allowsUpgradeAction: true,
+    requiresTargetVersion: true,
     message: '',
     policy: 'local',
     releasePageURL: '',
+    actionLabel: 'Update Redeven',
+    actionMethod: 'runtime_rpc_upgrade',
   }),
 }));
 
@@ -391,6 +396,8 @@ describe('EnvSettingsPage', () => {
     const runtimeStatus = host.querySelector('[data-settings-card="Runtime Status"]');
     expect(runtimeStatus?.textContent).toContain('Service owner');
     expect(runtimeStatus?.textContent).toContain('Redeven Desktop');
+    expect(runtimeStatus?.textContent).toContain('Maintenance authority');
+    expect(runtimeStatus?.textContent).toContain('Runtime RPC');
     expect(runtimeStatus?.textContent).toContain('Compatibility');
     expect(runtimeStatus?.textContent).toContain('Restart recommended');
     expect(runtimeStatus?.textContent).toContain('Restart when your work is idle.');

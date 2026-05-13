@@ -101,6 +101,20 @@ describe('main routing', () => {
     expect(mainSrc).toContain('The SSH host resolved its runtime directory to /root');
   });
 
+  it('routes runtime maintenance through an explicit Desktop session contract', () => {
+    const mainSrc = readMainSource();
+
+    expect(mainSrc).toContain('DESKTOP_SHELL_RUNTIME_MAINTENANCE_CONTEXT_CHANNEL');
+    expect(mainSrc).toContain('function runtimeMaintenanceContextFromSession(');
+    expect(mainSrc).toContain("authority: 'desktop_ssh'");
+    expect(mainSrc).toContain("method: 'desktop_ssh_restart'");
+    expect(mainSrc).toContain("method: 'desktop_ssh_force_update'");
+    expect(mainSrc).toContain('async function restartSSHRuntimeFromShell(');
+    expect(mainSrc).toContain('forceRuntimeUpdate: options.forceRuntimeUpdate === true');
+    expect(mainSrc).toContain("if (normalized.action === 'restart_runtime')");
+    expect(mainSrc).toContain("if (normalized.action === 'upgrade_runtime')");
+  });
+
   it('keeps delete actions non-blocking while preventing stale SSH and provider tasks from resurrecting entries', () => {
     const mainSrc = readMainSource();
     const sshDeleteStart = mainSrc.indexOf('async function deleteSavedSSHEnvironmentFromWelcome');

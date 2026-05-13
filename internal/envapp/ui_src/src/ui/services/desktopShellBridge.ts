@@ -2,6 +2,14 @@ import {
   normalizeDesktopShellWindowCommandResponse,
   type DesktopShellWindowCommandResponse,
 } from '../../../../../../desktop/src/shared/desktopShellWindowCommandIPC';
+import {
+  desktopShellRuntimeMaintenanceMethodUsesDesktop,
+  normalizeDesktopShellRuntimeActionResponse,
+  normalizeDesktopShellRuntimeMaintenanceContext,
+  type DesktopShellRuntimeActionResponse,
+  type DesktopShellRuntimeMaintenanceContext,
+  type DesktopShellRuntimeMaintenanceMethod,
+} from '../../../../../../desktop/src/shared/desktopShellRuntimeIPC';
 
 export type DesktopShellExternalURLOpenResult = Readonly<{
   ok: boolean;
@@ -14,6 +22,8 @@ export type DesktopManagedRuntimeRestartResult = Readonly<{
   message?: string;
 }>;
 
+export type RuntimeMaintenanceContext = DesktopShellRuntimeMaintenanceContext;
+
 export interface DesktopShellBridge {
   openConnectionCenter?: () => Promise<void>;
   openAdvancedSettings?: () => Promise<void>;
@@ -25,6 +35,8 @@ export interface DesktopShellBridge {
   toggleFullScreenWindow?: () => Promise<DesktopShellWindowCommandResponse>;
   openExternalURL?: (url: string) => Promise<DesktopShellExternalURLOpenResult>;
   openDashboard?: () => Promise<DesktopShellExternalURLOpenResult>;
+  getRuntimeMaintenanceContext?: () => Promise<DesktopShellRuntimeMaintenanceContext>;
+  performRuntimeMaintenanceAction?: (request: unknown) => Promise<DesktopManagedRuntimeRestartResult>;
   restartManagedRuntime?: () => Promise<DesktopManagedRuntimeRestartResult>;
   manageDesktopUpdate?: () => Promise<DesktopManagedRuntimeRestartResult>;
 }
@@ -54,6 +66,8 @@ function desktopShellBridge(): DesktopShellBridge | null {
       && typeof candidate.toggleFullScreenWindow !== 'function'
       && typeof candidate.openExternalURL !== 'function'
       && typeof candidate.openDashboard !== 'function'
+      && typeof candidate.getRuntimeMaintenanceContext !== 'function'
+      && typeof candidate.performRuntimeMaintenanceAction !== 'function'
       && typeof candidate.restartManagedRuntime !== 'function'
       && typeof candidate.manageDesktopUpdate !== 'function'
     )
@@ -181,6 +195,28 @@ export async function openDashboardInDesktopShell(): Promise<DesktopShellExterna
     return null;
   }
   return bridge.openDashboard();
+}
+
+export async function getRuntimeMaintenanceContextFromDesktopShell(): Promise<DesktopShellRuntimeMaintenanceContext | null> {
+  const bridge = desktopShellBridge();
+  if (!bridge || typeof bridge.getRuntimeMaintenanceContext !== 'function') {
+    return null;
+  }
+  return normalizeDesktopShellRuntimeMaintenanceContext(await bridge.getRuntimeMaintenanceContext());
+}
+
+export async function performRuntimeMaintenanceActionInDesktopShell(
+  request: Readonly<{ action: 'restart' | 'upgrade'; target_version?: string }>,
+): Promise<DesktopShellRuntimeActionResponse | null> {
+  const bridge = desktopShellBridge();
+  if (!bridge || typeof bridge.performRuntimeMaintenanceAction !== 'function') {
+    return null;
+  }
+  return normalizeDesktopShellRuntimeActionResponse(await bridge.performRuntimeMaintenanceAction(request));
+}
+
+export function runtimeMaintenanceMethodUsesDesktop(method: DesktopShellRuntimeMaintenanceMethod): boolean {
+  return desktopShellRuntimeMaintenanceMethodUsesDesktop(method);
 }
 
 export async function restartDesktopManagedRuntime(): Promise<DesktopManagedRuntimeRestartResult | null> {

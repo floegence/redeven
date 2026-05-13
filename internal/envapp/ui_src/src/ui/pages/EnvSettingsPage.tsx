@@ -20,7 +20,10 @@ import { resolveAgentUpgradeState } from '../maintenance/agentUpgradeState';
 import { isReleaseVersion } from '../maintenance/agentVersion';
 import { formatAgentStatusLabel, formatUnknownError } from '../maintenance/shared';
 import type { RuntimeServiceSnapshot } from '../protocol/redeven_v1/sdk/sys';
-import { manageDesktopUpdate, openExternalURLInDesktopShell } from '../services/desktopShellBridge';
+import {
+  performRuntimeMaintenanceActionInDesktopShell,
+  runtimeMaintenanceMethodUsesDesktop,
+} from '../services/desktopShellBridge';
 import { fetchGatewayJSON } from '../services/gatewayApi';
 import {
   cancelCodeRuntimeOperation,
@@ -527,7 +530,8 @@ export function EnvSettingsPage() {
   const latestVersion = createMemo(() => runtimeUpdate.version.latestMeta());
   const latestVersionLoading = createMemo(() => runtimeUpdate.version.latestMetaLoading());
   const latestVersionError = createMemo(() => runtimeUpdate.version.latestMetaError());
-  const upgradeState = createMemo(() => resolveAgentUpgradeState(latestVersion()));
+  const maintenanceContext = createMemo(() => runtimeUpdate.maintenanceContext());
+  const upgradeState = createMemo(() => resolveAgentUpgradeState(latestVersion(), maintenanceContext()));
   const displayedStatus = createMemo(() => runtimeUpdate.maintenance.displayedStatus());
   const maintenanceStage = createMemo(() => runtimeUpdate.maintenance.stage());
   const maintenanceError = createMemo(() => runtimeUpdate.maintenance.error());
@@ -593,6 +597,7 @@ export function EnvSettingsPage() {
     await Promise.allSettled([
       refetch(),
       runtimeUpdate.version.refetchLatestVersion(),
+      runtimeUpdate.refetchMaintenanceContext(),
     ]);
   };
 
@@ -613,7 +618,7 @@ export function EnvSettingsPage() {
     if (maintaining()) return false;
     if (!upgradeState().allowsUpgradeAction) return false;
     if (protocol.status() !== 'connected') return false;
-    if (!targetUpgradeVersionValid()) return false;
+    if (upgradeState().requiresTargetVersion && !targetUpgradeVersionValid()) return false;
     if (!canAdmin()) return false;
     return controlplaneStatus() === 'online';
   });
@@ -627,10 +632,23 @@ export function EnvSettingsPage() {
 
   const startUpgrade = async () => {
     try {
-      if (upgradeState().policy === 'desktop_release') {
-        const desktopResult = await manageDesktopUpdate();
-        if (!desktopResult?.ok && upgradeState().releasePageURL) {
-          await openExternalURLInDesktopShell(upgradeState().releasePageURL);
+      const state = upgradeState();
+      if (
+        state.actionMethod === 'desktop_local_update_handoff'
+        || (
+          runtimeMaintenanceMethodUsesDesktop(state.actionMethod)
+          && !state.requiresTargetVersion
+          && state.actionMethod !== 'desktop_ssh_force_update'
+        )
+      ) {
+        const desktopResult = await performRuntimeMaintenanceActionInDesktopShell({
+          action: 'upgrade',
+          target_version: targetUpgradeVersion(),
+        });
+        if (desktopResult?.ok) {
+          notify.success('Desktop handoff started', desktopResult.message || 'Redeven Desktop is handling this update.');
+        } else {
+          notify.error('Update failed', desktopResult?.message || state.message || 'Redeven Desktop could not start this update.');
         }
         return;
       }
@@ -2920,6 +2938,11 @@ export function EnvSettingsPage() {
                     <SettingsTableCell class="text-[11px] text-muted-foreground">Lifecycle owner for this persistent Runtime Service.</SettingsTableCell>
                   </SettingsTableRow>
                   <SettingsTableRow>
+                    <SettingsTableCell class="font-medium text-muted-foreground">Maintenance authority</SettingsTableCell>
+                    <SettingsTableCell>{maintenanceContext()?.authority ? String(maintenanceContext()!.authority).replace(/_/g, ' ') : 'Runtime RPC'}</SettingsTableCell>
+                    <SettingsTableCell class="text-[11px] text-muted-foreground">Current owner for restart and update actions in this session.</SettingsTableCell>
+                  </SettingsTableRow>
+                  <SettingsTableRow>
                     <SettingsTableCell class="font-medium text-muted-foreground">Compatibility</SettingsTableCell>
                     <SettingsTableCell>
                       <SettingsPill tone={runtimeServiceCompatibilityTone(runtimeService())}>
@@ -2951,7 +2974,7 @@ export function EnvSettingsPage() {
                       {runtimeDesktopBrokerBinding()?.lastError || 'Runtime Service binding state for Desktop-provided Flower models.'}
                     </SettingsTableCell>
                   </SettingsTableRow>
-                  <Show when={upgradeState().allowsUpgradeAction && upgradeState().policy !== 'desktop_release'}>
+                  <Show when={upgradeState().allowsUpgradeAction && upgradeState().requiresTargetVersion}>
                     <SettingsTableRow>
                       <SettingsTableCell class="font-medium text-muted-foreground">Target version</SettingsTableCell>
                       <SettingsTableCell>
@@ -2978,7 +3001,7 @@ export function EnvSettingsPage() {
               </SettingsTable>
 
               <div class="space-y-2">
-                <Show when={targetUpgradeVersion() && !targetUpgradeVersionValid()}>
+                <Show when={upgradeState().requiresTargetVersion && targetUpgradeVersion() && !targetUpgradeVersionValid()}>
                   <div class="text-xs text-destructive">Use a valid release tag, for example: v1.2.3.</div>
                 </Show>
                 <Show when={upgradeState().message}>
@@ -3996,14 +4019,14 @@ export function EnvSettingsPage() {
       <ConfirmDialog
         open={upgradeOpen()}
         onOpenChange={(open) => setUpgradeOpen(open)}
-        title={upgradeState().policy === 'desktop_release' ? 'Update Redeven Desktop?' : 'Update Runtime Service?'}
-        confirmText={upgradeState().policy === 'desktop_release' ? 'Continue' : 'Update'}
+        title={maintenanceContext()?.upgrade.title || (upgradeState().policy === 'desktop_release' ? 'Update Redeven Desktop?' : 'Update Runtime Service?')}
+        confirmText={maintenanceContext()?.upgrade.confirm_label || (upgradeState().policy === 'desktop_release' ? 'Continue' : 'Update')}
         loading={isUpgrading()}
         onConfirm={() => void startUpgrade()}
       >
         <div class="space-y-3">
           <Show
-            when={upgradeState().policy === 'desktop_release'}
+            when={!upgradeState().requiresTargetVersion}
             fallback={(
               <>
                 <p class="text-sm">This Runtime Service is persistent and may have live work.</p>
@@ -4019,10 +4042,12 @@ export function EnvSettingsPage() {
               </>
             )}
           >
-            <p class="text-sm">This Runtime Service is managed by Redeven Desktop.</p>
+            <p class="text-sm">{upgradeState().message || 'This Runtime Service is managed by Redeven Desktop.'}</p>
             <p class="text-xs text-muted-foreground">Active work: {activeWorkSummary()}.</p>
-            <p class="text-xs text-muted-foreground">Desktop will explain whether this update only rebinds this managed runtime or requires installing a newer desktop release first.</p>
-            <p class="text-xs text-muted-foreground">If Desktop cannot complete the update directly, it will open the matching release page for this host.</p>
+            <Show when={maintenanceContext()?.upgrade.detail}>
+              <p class="text-xs text-muted-foreground">{maintenanceContext()?.upgrade.detail}</p>
+            </Show>
+            <p class="text-xs text-muted-foreground">You will reconnect automatically if this action restarts the Runtime Service.</p>
           </Show>
         </div>
       </ConfirmDialog>

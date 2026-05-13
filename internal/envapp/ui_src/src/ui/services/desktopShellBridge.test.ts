@@ -6,11 +6,13 @@ import {
   closeDesktopWindow,
   desktopShellExternalURLOpenAvailable,
   desktopShellBridgeAvailable,
+  getRuntimeMaintenanceContextFromDesktopShell,
   minimizeDesktopWindow,
   openAdvancedSettings,
   openConnectionCenter,
   openDashboardInDesktopShell,
   openExternalURLInDesktopShell,
+  performRuntimeMaintenanceActionInDesktopShell,
   restartDesktopManagedRuntime,
   toggleDesktopWindowFullScreen,
   toggleDesktopWindowMaximize,
@@ -169,6 +171,55 @@ describe('desktopShellBridge', () => {
       message: 'Desktop restarted the managed runtime.',
     });
     expect(restartManagedRuntimeBridge).toHaveBeenCalledTimes(1);
+  });
+
+  it('forwards runtime maintenance context and action requests through the desktop bridge', async () => {
+    const getRuntimeMaintenanceContextBridge = vi.fn().mockResolvedValue({
+      available: true,
+      authority: 'desktop_ssh',
+      runtime_kind: 'ssh',
+      lifecycle_owner: 'external',
+      service_owner: 'desktop',
+      desktop_managed: true,
+      upgrade_policy: 'desktop_release',
+      restart: {
+        availability: 'available',
+        method: 'desktop_ssh_restart',
+        label: 'Restart SSH runtime',
+        confirm_label: 'Restart',
+        title: 'Restart SSH Runtime?',
+        message: 'Desktop will restart the SSH runtime.',
+      },
+      upgrade: {
+        availability: 'available',
+        method: 'desktop_ssh_force_update',
+        label: 'Update SSH runtime',
+        confirm_label: 'Update',
+        title: 'Update SSH Runtime?',
+        message: 'Desktop will reinstall the SSH runtime.',
+        requires_target_version: false,
+      },
+    });
+    const performRuntimeMaintenanceActionBridge = vi.fn().mockResolvedValue({
+      ok: true,
+      started: true,
+      message: 'Desktop restarted the SSH runtime.',
+    });
+    window.redevenDesktopShell = {
+      getRuntimeMaintenanceContext: getRuntimeMaintenanceContextBridge,
+      performRuntimeMaintenanceAction: performRuntimeMaintenanceActionBridge,
+    };
+
+    await expect(getRuntimeMaintenanceContextFromDesktopShell()).resolves.toEqual(expect.objectContaining({
+      authority: 'desktop_ssh',
+      runtime_kind: 'ssh',
+    }));
+    await expect(performRuntimeMaintenanceActionInDesktopShell({ action: 'restart' })).resolves.toEqual({
+      ok: true,
+      started: true,
+      message: 'Desktop restarted the SSH runtime.',
+    });
+    expect(performRuntimeMaintenanceActionBridge).toHaveBeenCalledWith({ action: 'restart' });
   });
 
   it('forwards external browser requests when the desktop bridge exposes them', async () => {

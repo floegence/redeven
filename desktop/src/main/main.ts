@@ -171,8 +171,12 @@ import {
   type DesktopShellWindowCommandResponse,
 } from '../shared/desktopShellWindowCommandIPC';
 import {
+  DESKTOP_SHELL_RUNTIME_MAINTENANCE_CONTEXT_CHANNEL,
   DESKTOP_SHELL_RUNTIME_ACTION_CHANNEL,
   normalizeDesktopShellRuntimeActionRequest,
+  type DesktopShellRuntimeMaintenanceActionPlan,
+  type DesktopShellRuntimeMaintenanceContext,
+  type DesktopShellRuntimeMaintenanceMethod,
   type DesktopShellRuntimeActionResponse,
 } from '../shared/desktopShellRuntimeIPC';
 import {
@@ -4835,6 +4839,222 @@ async function focusEnvironmentWindow(sessionKey: string): Promise<DesktopLaunch
   });
 }
 
+function runtimeMaintenanceActionPlan(args: Readonly<{
+  availability: DesktopShellRuntimeMaintenanceActionPlan['availability'];
+  method: DesktopShellRuntimeMaintenanceMethod;
+  label: string;
+  confirmLabel: string;
+  title: string;
+  message: string;
+  detail?: string;
+  unavailableReasonCode?: string;
+  requiresTargetVersion?: boolean;
+}>): DesktopShellRuntimeMaintenanceActionPlan {
+  return {
+    availability: args.availability,
+    method: args.method,
+    label: args.label,
+    confirm_label: args.confirmLabel,
+    title: args.title,
+    message: args.message,
+    detail: args.detail,
+    unavailable_reason_code: args.unavailableReasonCode,
+    requires_target_version: args.requiresTargetVersion,
+  };
+}
+
+function unavailableRuntimeMaintenanceAction(
+  kind: 'restart' | 'upgrade',
+  message: string,
+  reasonCode: string,
+  availability: DesktopShellRuntimeMaintenanceActionPlan['availability'] = 'unavailable',
+): DesktopShellRuntimeMaintenanceActionPlan {
+  return runtimeMaintenanceActionPlan({
+    availability,
+    method: availability === 'external' ? 'host_device_handoff' : 'manual',
+    label: kind === 'restart' ? 'Restart runtime' : 'Update Redeven',
+    confirmLabel: kind === 'restart' ? 'Restart' : 'Update',
+    title: kind === 'restart' ? 'Restart Runtime Service?' : 'Update Runtime Service?',
+    message,
+    unavailableReasonCode: reasonCode,
+    requiresTargetVersion: kind === 'upgrade',
+  });
+}
+
+function runtimeRPCMaintenanceAction(kind: 'restart' | 'upgrade'): DesktopShellRuntimeMaintenanceActionPlan {
+  return runtimeMaintenanceActionPlan({
+    availability: 'available',
+    method: kind === 'restart' ? 'runtime_rpc_restart' : 'runtime_rpc_upgrade',
+    label: kind === 'restart' ? 'Restart runtime' : 'Update Redeven',
+    confirmLabel: kind === 'restart' ? 'Restart' : 'Update',
+    title: kind === 'restart' ? 'Restart Runtime Service?' : 'Update Runtime Service?',
+    message: kind === 'restart'
+      ? 'The Runtime Service will restart itself through its secure runtime RPC.'
+      : 'The Runtime Service will install the requested release through its secure runtime RPC.',
+    requiresTargetVersion: kind === 'upgrade',
+  });
+}
+
+function runtimeServiceOwnerForSession(sessionRecord: DesktopSessionRecord): DesktopShellRuntimeMaintenanceContext['service_owner'] {
+  const owner = sessionRecord.startup.runtime_service?.service_owner;
+  if (owner === 'desktop' || owner === 'external') {
+    return owner;
+  }
+  return sessionRecord.startup.desktop_managed === true ? 'desktop' : 'unknown';
+}
+
+function runtimeMaintenanceContextFromSession(
+  sessionRecord: DesktopSessionRecord | null,
+): DesktopShellRuntimeMaintenanceContext {
+  const missingMessage = 'Runtime maintenance is not available from this Desktop session.';
+  if (!sessionRecord) {
+    return {
+      available: false,
+      authority: 'manual',
+      runtime_kind: 'unknown',
+      lifecycle_owner: 'unknown',
+      service_owner: 'unknown',
+      desktop_managed: false,
+      upgrade_policy: 'manual',
+      restart: unavailableRuntimeMaintenanceAction('restart', missingMessage, 'desktop_session_missing'),
+      upgrade: unavailableRuntimeMaintenanceAction('upgrade', missingMessage, 'desktop_session_missing'),
+    };
+  }
+
+  const runtimeHandle = sessionRecord.runtime_handle;
+  const runtimeService = sessionRecord.startup.runtime_service;
+  const desktopManaged = sessionRecord.startup.desktop_managed === true || runtimeService?.desktop_managed === true;
+  const activeWorkload = runtimeService?.active_workload;
+  const base = {
+    current_version: runtimeService?.runtime_version,
+    active_workload: activeWorkload,
+  };
+
+  if (sessionRecord.target.kind === 'ssh_environment' && runtimeHandle?.runtime_kind === 'ssh') {
+    return {
+      ...base,
+      available: true,
+      authority: 'desktop_ssh',
+      runtime_kind: 'ssh',
+      lifecycle_owner: runtimeHandle.lifecycle_owner,
+      service_owner: runtimeServiceOwnerForSession(sessionRecord),
+      desktop_managed: desktopManaged,
+      upgrade_policy: 'desktop_release',
+      restart: runtimeMaintenanceActionPlan({
+        availability: 'available',
+        method: 'desktop_ssh_restart',
+        label: 'Restart SSH runtime',
+        confirmLabel: 'Restart',
+        title: 'Restart SSH Runtime?',
+        message: 'Redeven Desktop will restart the SSH-hosted Runtime Service and reopen this session through a new local tunnel.',
+        detail: 'Active work on the remote host may be interrupted while the runtime stops and starts again.',
+        requiresTargetVersion: false,
+      }),
+      upgrade: runtimeMaintenanceActionPlan({
+        availability: 'available',
+        method: 'desktop_ssh_force_update',
+        label: 'Update SSH runtime',
+        confirmLabel: 'Update',
+        title: 'Update SSH Runtime?',
+        message: 'Redeven Desktop will reinstall the SSH-hosted Runtime Service from the Desktop-managed release and reopen this session.',
+        detail: 'The existing SSH bootstrap path, release asset cache, and remote install strategy are reused for this update.',
+        requiresTargetVersion: false,
+      }),
+    };
+  }
+
+  if (
+    sessionRecord.target.kind === 'local_environment'
+    && sessionRecord.target.route === 'local_host'
+    && runtimeHandle?.runtime_kind === 'local_environment'
+    && runtimeHandle.lifecycle_owner === 'desktop'
+  ) {
+    return {
+      ...base,
+      available: true,
+      authority: 'desktop_local',
+      runtime_kind: 'local_environment',
+      lifecycle_owner: 'desktop',
+      service_owner: runtimeServiceOwnerForSession(sessionRecord),
+      desktop_managed: desktopManaged,
+      upgrade_policy: 'desktop_release',
+      restart: runtimeMaintenanceActionPlan({
+        availability: 'available',
+        method: 'desktop_local_restart',
+        label: 'Restart runtime',
+        confirmLabel: 'Restart',
+        title: 'Restart Runtime Service?',
+        message: 'Redeven Desktop will restart this local Runtime Service and reopen the current session.',
+        detail: 'Active work may be interrupted while the persistent service restarts.',
+        requiresTargetVersion: false,
+      }),
+      upgrade: runtimeMaintenanceActionPlan({
+        availability: 'available',
+        method: 'desktop_local_update_handoff',
+        label: 'Manage in Desktop',
+        confirmLabel: 'Continue',
+        title: 'Update Redeven Desktop?',
+        message: 'This Runtime Service is bundled with Redeven Desktop. Desktop will explain whether a newer app release is required.',
+        detail: 'Desktop keeps this Environment bound to the same Local Environment profile after the update handoff.',
+        requiresTargetVersion: false,
+      }),
+    };
+  }
+
+  if (sessionRecord.target.kind === 'local_environment' && sessionRecord.target.route === 'remote_desktop') {
+    const message = 'This Environment is hosted on another device. Run restart or update from the host device.';
+    return {
+      ...base,
+      available: false,
+      authority: 'host_device',
+      runtime_kind: runtimeHandle?.runtime_kind ?? 'unknown',
+      lifecycle_owner: runtimeHandle?.lifecycle_owner ?? 'unknown',
+      service_owner: runtimeServiceOwnerForSession(sessionRecord),
+      desktop_managed: desktopManaged,
+      upgrade_policy: 'manual',
+      restart: unavailableRuntimeMaintenanceAction('restart', message, 'host_device_required', 'external'),
+      upgrade: unavailableRuntimeMaintenanceAction('upgrade', message, 'host_device_required', 'external'),
+    };
+  }
+
+  if (!desktopManaged) {
+    return {
+      ...base,
+      available: true,
+      authority: 'runtime_rpc',
+      runtime_kind: runtimeHandle?.runtime_kind ?? (sessionRecord.target.kind === 'external_local_ui' ? 'external' : 'unknown'),
+      lifecycle_owner: runtimeHandle?.lifecycle_owner ?? 'unknown',
+      service_owner: runtimeServiceOwnerForSession(sessionRecord),
+      desktop_managed: false,
+      upgrade_policy: 'self_upgrade',
+      restart: runtimeRPCMaintenanceAction('restart'),
+      upgrade: runtimeRPCMaintenanceAction('upgrade'),
+    };
+  }
+
+  const message = 'This Runtime Service is managed by another Redeven host process. Run maintenance from that host process.';
+  return {
+    ...base,
+    available: false,
+    authority: 'host_device',
+    runtime_kind: runtimeHandle?.runtime_kind ?? (sessionRecord.target.kind === 'external_local_ui' ? 'external' : 'unknown'),
+    lifecycle_owner: runtimeHandle?.lifecycle_owner ?? 'unknown',
+    service_owner: runtimeServiceOwnerForSession(sessionRecord),
+    desktop_managed: desktopManaged,
+    upgrade_policy: 'manual',
+    restart: unavailableRuntimeMaintenanceAction('restart', message, 'managed_elsewhere', 'external'),
+    upgrade: unavailableRuntimeMaintenanceAction('upgrade', message, 'managed_elsewhere', 'external'),
+  };
+}
+
+function desktopShellRuntimeActionUnavailable(message: string): DesktopShellRuntimeActionResponse {
+  return {
+    ok: false,
+    started: false,
+    message,
+  };
+}
+
 async function restartManagedRuntimeFromShell(webContentsID: number): Promise<DesktopShellRuntimeActionResponse> {
   const sessionRecord = sessionRecordForWebContentsID(webContentsID);
   if (!sessionRecord || sessionRecord.target.kind !== 'local_environment' || !sessionRecord.runtime_handle || sessionRecord.runtime_handle.runtime_kind !== 'local_environment') {
@@ -5003,6 +5223,112 @@ async function restartManagedRuntimeFromShell(webContentsID: number): Promise<De
   };
 }
 
+async function restartSSHRuntimeFromShell(
+  sessionRecord: DesktopSessionRecord,
+  options: Readonly<{ forceRuntimeUpdate?: boolean }> = {},
+): Promise<DesktopShellRuntimeActionResponse> {
+  if (sessionRecord.target.kind !== 'ssh_environment' || sessionRecord.runtime_handle?.runtime_kind !== 'ssh') {
+    return desktopShellRuntimeActionUnavailable('SSH runtime maintenance is not active for this session.');
+  }
+
+  const previousRuntimeHandle = sessionRecord.runtime_handle;
+  const previousTarget = sessionRecord.target;
+  const sshDetails = normalizeDesktopSSHEnvironmentDetails({
+    ssh_destination: previousTarget.ssh_destination,
+    ssh_port: previousTarget.ssh_port,
+    auth_mode: previousTarget.auth_mode,
+    remote_install_dir: previousTarget.remote_install_dir,
+    bootstrap_strategy: previousTarget.bootstrap_strategy,
+    release_base_url: previousTarget.release_base_url,
+    connect_timeout_seconds: previousTarget.connect_timeout_seconds,
+  });
+  const runtimeKey = sshDesktopSessionKey(sshDetails);
+  const existingRuntimeRecord = sshEnvironmentRuntimeByKey.get(runtimeKey) ?? null;
+
+  for (const childWindow of sessionRecord.child_windows.values()) {
+    sessionKeyByWebContentsID.delete(childWindow.webContentsID);
+    const browserWindow = liveTrackedBrowserWindow(childWindow);
+    if (browserWindow) {
+      browserWindow.close();
+    }
+  }
+  sessionRecord.child_windows.clear();
+
+  try {
+    await sessionRecord.diagnostics.recordLifecycle(
+      options.forceRuntimeUpdate === true ? 'target_updating' : 'target_restarting',
+      options.forceRuntimeUpdate === true
+        ? 'desktop requested an SSH runtime update'
+        : 'desktop requested an SSH runtime restart',
+      {
+        ssh_runtime_key: runtimeKey,
+      },
+    );
+    sshEnvironmentRuntimeByKey.delete(runtimeKey);
+    if (existingRuntimeRecord) {
+      await existingRuntimeRecord.stop();
+    } else {
+      await previousRuntimeHandle.stop();
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return desktopShellRuntimeActionUnavailable(message || 'Failed to stop the SSH runtime.');
+  }
+
+  sessionRecord.runtime_handle = null;
+  sessionRecord.diagnostics.clearRuntime();
+
+  let runtimeRecord: SSHEnvironmentRuntimeRecord;
+  try {
+    runtimeRecord = await startSSHEnvironmentRuntimeRecord(sshDetails, {
+      environmentID: previousTarget.environment_id,
+      label: previousTarget.label,
+      forceRuntimeUpdate: options.forceRuntimeUpdate === true,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return desktopShellRuntimeActionUnavailable(firstDisplayLine(message) || 'Desktop could not start the SSH runtime.');
+  }
+
+  sessionRecord.runtime_handle = runtimeRecord.runtime_handle;
+  sessionRecord.startup = runtimeRecord.startup;
+  sessionRecord.allowed_base_url = runtimeRecord.local_forward_url;
+  sessionRecord.target = buildSSHDesktopTarget(runtimeRecord.details, {
+    environmentID: runtimeRecord.environment_id,
+    label: runtimeRecord.label,
+    forwardedLocalUIURL: runtimeRecord.local_forward_url,
+  });
+  sessionRecord.entry_url = desktopSessionEntryURL(sessionRecord.target, sessionRecord.startup);
+  await sessionRecord.diagnostics.configureRuntime(sessionRecord.startup, sessionRecord.allowed_base_url);
+  await sessionRecord.diagnostics.recordLifecycle(
+    options.forceRuntimeUpdate === true ? 'runtime_updated' : 'runtime_started',
+    options.forceRuntimeUpdate === true
+      ? 'desktop updated and reopened an SSH runtime'
+      : 'desktop restarted an SSH runtime',
+    {
+      ssh_runtime_key: runtimeKey,
+      runtime_launch_mode: runtimeRecord.runtime_handle.launch_mode,
+      effective_run_mode: runtimeRecord.startup.effective_run_mode ?? '',
+    },
+  );
+
+  const rootWindow = liveTrackedBrowserWindow(sessionRecord.root_window);
+  if (!rootWindow) {
+    return desktopShellRuntimeActionUnavailable(DESKTOP_STALE_WINDOW_MESSAGE);
+  }
+  await rootWindow.loadURL(sessionRecord.entry_url);
+  focusEnvironmentSession(sessionRecord.session_key, { stealAppFocus: true });
+  broadcastDesktopWelcomeSnapshots();
+
+  return {
+    ok: true,
+    started: true,
+    message: options.forceRuntimeUpdate === true
+      ? 'Desktop updated the SSH runtime.'
+      : 'Desktop restarted the SSH runtime.',
+  };
+}
+
 async function manageDesktopUpdateFromShell(webContentsID: number): Promise<DesktopShellRuntimeActionResponse> {
   const sessionRecord = sessionRecordForWebContentsID(webContentsID);
   if (!sessionRecord || sessionRecord.target.kind !== 'local_environment') {
@@ -5057,6 +5383,36 @@ async function manageDesktopUpdateFromShell(webContentsID: number): Promise<Desk
     started: false,
     message: 'Desktop opened the update handoff.',
   };
+}
+
+async function performRuntimeMaintenanceFromShell(
+  webContentsID: number,
+  action: 'restart' | 'upgrade',
+): Promise<DesktopShellRuntimeActionResponse> {
+  const sessionRecord = sessionRecordForWebContentsID(webContentsID);
+  const context = runtimeMaintenanceContextFromSession(sessionRecord);
+  const plan = action === 'restart' ? context.restart : context.upgrade;
+  if (!sessionRecord || plan.availability !== 'available') {
+    return desktopShellRuntimeActionUnavailable(plan.message);
+  }
+
+  switch (plan.method) {
+    case 'desktop_local_restart':
+      return restartManagedRuntimeFromShell(webContentsID);
+    case 'desktop_local_update_handoff':
+      return manageDesktopUpdateFromShell(webContentsID);
+    case 'desktop_ssh_restart':
+      return restartSSHRuntimeFromShell(sessionRecord, { forceRuntimeUpdate: false });
+    case 'desktop_ssh_force_update':
+      return restartSSHRuntimeFromShell(sessionRecord, { forceRuntimeUpdate: true });
+    case 'runtime_rpc_restart':
+    case 'runtime_rpc_upgrade':
+      return desktopShellRuntimeActionUnavailable('Use the Runtime Service secure RPC for this maintenance action.');
+    case 'host_device_handoff':
+    case 'manual':
+    default:
+      return desktopShellRuntimeActionUnavailable(plan.message);
+  }
 }
 
 async function upsertSavedEnvironmentFromWelcome(
@@ -5846,6 +6202,10 @@ if (!app.requestSingleInstanceLock()) {
       };
     }
   });
+  ipcMain.handle(DESKTOP_SHELL_RUNTIME_MAINTENANCE_CONTEXT_CHANNEL, async (event): Promise<DesktopShellRuntimeMaintenanceContext> => {
+    const sessionRecord = sessionRecordForWebContentsID(event.sender.id);
+    return runtimeMaintenanceContextFromSession(sessionRecord);
+  });
   ipcMain.handle(DESKTOP_SHELL_RUNTIME_ACTION_CHANNEL, async (event, request): Promise<DesktopShellRuntimeActionResponse> => {
     const normalized = normalizeDesktopShellRuntimeActionRequest(request);
     if (!normalized) {
@@ -5861,6 +6221,12 @@ if (!app.requestSingleInstanceLock()) {
     }
     if (normalized.action === 'manage_desktop_update') {
       return manageDesktopUpdateFromShell(event.sender.id);
+    }
+    if (normalized.action === 'restart_runtime') {
+      return performRuntimeMaintenanceFromShell(event.sender.id, 'restart');
+    }
+    if (normalized.action === 'upgrade_runtime') {
+      return performRuntimeMaintenanceFromShell(event.sender.id, 'upgrade');
     }
 
     return {

@@ -233,9 +233,58 @@ The existing `Runtime Status` settings card remains the main detailed surface.
 It should add rows instead of banners:
 
 - `Service owner`
+- `Maintenance authority`
 - `Compatibility`
 - `Active work`
 - `Runtime protocol`
+
+### Runtime Maintenance Authority
+
+Env App must not infer lifecycle actions from `desktop_managed`,
+`runtime_kind`, or version policy alone. Desktop exposes an explicit Runtime
+Maintenance Context for the current session:
+
+```ts
+type RuntimeMaintenanceAuthority =
+  | 'runtime_rpc'
+  | 'desktop_local'
+  | 'desktop_ssh'
+  | 'host_device'
+  | 'manual';
+
+type RuntimeMaintenanceAction = {
+  availability: 'available' | 'unavailable' | 'external';
+  method:
+    | 'runtime_rpc_restart'
+    | 'runtime_rpc_upgrade'
+    | 'desktop_local_restart'
+    | 'desktop_local_update_handoff'
+    | 'desktop_ssh_restart'
+    | 'desktop_ssh_force_update'
+    | 'host_device_handoff'
+    | 'manual';
+  label: string;
+  confirm_label: string;
+  title: string;
+  message: string;
+  detail?: string;
+  unavailable_reason_code?: string;
+  requires_target_version?: boolean;
+};
+```
+
+Runtime Service snapshots continue to report service facts. The maintenance
+context reports who is allowed to act on this particular session. Env App uses
+the context to choose between Desktop shell actions and secure Runtime RPC:
+
+- `runtime_rpc`: call `sys.restart` or `sys.upgrade`.
+- `desktop_local`: ask Desktop to restart the local managed service or open the
+  Desktop release handoff.
+- `desktop_ssh`: ask Desktop to restart the SSH-managed service or force the SSH
+  bootstrap installer to refresh the remote runtime.
+- `host_device`: show host-device guidance and do not attempt local Desktop
+  lifecycle control.
+- `manual`: disable direct maintenance actions with the provided reason.
 
 Actions:
 
@@ -322,6 +371,45 @@ sequenceDiagram
   R-->>D: startup report ready
   D-->>E: Session reload/reconnect
   E->>U: Toast success
+```
+
+### SSH-Managed Restart
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant E as Env App
+  participant D as Desktop Main
+  participant S as SSH Host
+  participant R as Runtime Service
+  U->>E: Click Restart SSH runtime
+  E->>D: performRuntimeMaintenanceAction(restart)
+  D->>R: Stop current SSH-managed runtime
+  D->>S: Reopen SSH control connection and tunnels
+  D->>R: Start runtime without force update
+  R-->>D: startup report ready
+  D-->>E: Reload session through new forwarded Local UI URL
+  E->>U: Toast success after reconnect
+```
+
+### SSH-Managed Update
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant E as Env App
+  participant D as Desktop Main
+  participant S as SSH Host
+  participant R as Runtime Service
+  U->>E: Confirm Update SSH runtime
+  E->>D: performRuntimeMaintenanceAction(upgrade)
+  D->>R: Stop current SSH-managed runtime
+  D->>S: Run existing SSH bootstrap with forceRuntimeUpdate=true
+  D->>S: Reuse release cache, upload, or remote install strategy
+  D->>R: Start refreshed runtime
+  R-->>D: startup report ready
+  D-->>E: Reload session through new forwarded Local UI URL
+  E->>U: Toast success after reconnect
 ```
 
 ### Self-Upgrade Runtime
@@ -443,3 +531,28 @@ sequenceDiagram
   permits.
 - [x] Leave changes uncommitted in the feature worktree for review.
 - [x] Start the dev Desktop app from the worktree for manual acceptance testing.
+
+## SSH Maintenance Contract Addendum
+
+This follow-up closes the gap where SSH-managed runtimes reported
+`desktop_managed=true`, but Env App could only call local Desktop-managed
+restart/update bridges. The new contract keeps service facts and lifecycle
+authority separate.
+
+- [x] Add Desktop shell runtime maintenance context IPC types and normalizers.
+- [x] Expose `getRuntimeMaintenanceContext` and
+  `performRuntimeMaintenanceAction` from the session preload bridge.
+- [x] Resolve Desktop session maintenance authority in main process for
+  `runtime_rpc`, `desktop_local`, `desktop_ssh`, `host_device`, and `manual`.
+- [x] Route local managed restart/update through the unified action entry while
+  preserving the existing Desktop update handoff.
+- [x] Route SSH restart/update through the existing SSH bootstrap path, using
+  `forceRuntimeUpdate=true` only for update.
+- [x] Make Env App restart/update decisions from the maintenance context instead
+  of `desktop_managed`.
+- [x] Add Runtime Status UI copy for maintenance authority and context-driven
+  confirmation dialogs.
+- [x] Add/update shared IPC, preload, Desktop main, Env App bridge, maintenance
+  controller, and Runtime Status tests for the explicit contract.
+- [x] Update this Markdown document with the context data shape and SSH
+  restart/update sequences.
