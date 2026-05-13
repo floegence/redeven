@@ -93,11 +93,12 @@ describe('main routing', () => {
     expect(mainSrc).toContain('sshRuntimeMaintenanceByKey.delete(runtimeKey)');
     expect(mainSrc).toContain('const operation = launcherOperations.create({');
     expect(mainSrc).toContain("phase: 'ssh_preparing_start'");
-    expect(mainSrc).toContain("title: 'Preparing SSH host'");
+    expect(mainSrc).toContain("title: 'Preparing SSH runtime'");
     expect(mainSrc).toContain("action: 'start_environment_runtime'");
     expect(mainSrc).toContain("subject_kind: 'ssh_environment'");
     expect(mainSrc).toContain('cancelable: true');
-    expect(mainSrc).toContain("interrupt_label: 'Stop opening'");
+    expect(mainSrc).toContain("interrupt_label: 'Stop startup'");
+    expect(mainSrc).toContain('signal,');
     expect(mainSrc).toContain("interrupt_kind: 'stop_opening'");
     expect(mainSrc).toContain('const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;');
     expect(mainSrc).toContain('environment_label: label');

@@ -131,8 +131,9 @@ It does not introduce a second SSH-native file or terminal protocol. Instead, El
 10. Creates a local SSH port forward to that remote Local UI port.
 11. Verifies the forwarded Local UI runtime snapshot.
 12. Optionally binds the Desktop model source through runtime-control, then refreshes `runtime_service.bindings.desktop_ai_broker`.
-13. Opens the forwarded `127.0.0.1:<port>` origin as a normal Desktop session.
-14. Marks the Env App session as `ssh_environment` so Web Services treat `localhost` targets as remote-host loopback and open through `/pf/<forward_id>/` instead of the user's browser loopback.
+13. Marks the runtime ready for the saved SSH Host entry.
+14. Waits for the user to choose `Open`; opening the forwarded `127.0.0.1:<port>` origin remains a separate Desktop session action.
+15. Marks the Env App session as `ssh_environment` so Web Services treat `localhost` targets as remote-host loopback and open through `/pf/<forward_id>/` instead of the user's browser loopback.
 
 If the Desktop Local Environment has usable Flower provider settings, Desktop also starts a short-lived loopback-only AI broker on the user's machine before launching or attaching the SSH runtime. The broker reads the Desktop Local Environment's `config.json` and `secrets.json`, exposes only model-list and model-stream endpoints, and never exposes files, terminals, ports, or Desktop IPC to the remote host. Desktop attaches that broker to the same SSH control connection with a reverse-forwarded loopback endpoint, then binds the forwarded broker URL plus a short-lived token to the running runtime over the trusted Local UI runtime-control route. The broker token is never passed as a remote `redeven run` command argument and is not written to remote config, secrets, or logs.
 
@@ -181,8 +182,9 @@ SSH bootstrap is intentionally transport-light and runtime-heavy:
 - Session identity is derived from SSH destination, SSH port, authentication mode, and remote install directory so reconnecting does not create duplicates just because the forwarded local port changed.
 - Closing the Desktop session window, losing the local forward, or quitting Desktop disconnects only the SSH transport. The SSH-hosted runtime keeps running until the user explicitly stops it or the remote host/process exits.
 - SSH runtime stop is an explicit launcher/runtime-menu action. If startup is still pending, `Stop runtime` cancels that startup operation instead of reporting that no runtime exists yet. Desktop may reuse an existing live forward or recreate the forward on the next `Open`.
-- Long-running SSH bootstrap is represented as a launcher operation with a stable operation key, subject generation, cancel state, and progress snapshot. The renderer receives both the legacy `action_progress` projection and the richer `operations` list.
-- Canceling an SSH bootstrap passes an `AbortSignal` through local probes, SSH child processes, remote install/upload commands, startup-report polling, and tunnel verification. Local SSH transport cleanup is bounded; remote upload temp paths are removed best-effort.
+- Long-running SSH runtime startup is represented as a launcher operation with a stable operation key, subject generation, stop-request state, cleanup state, and progress snapshot. The renderer receives both the legacy `action_progress` projection and the richer `operations` list.
+- Stopping SSH runtime startup passes one `AbortSignal` through Desktop AI Broker readiness, release manifest/archive downloads, local source-runtime build commands, SSH child processes, remote install/upload commands, startup-report polling, model-source binding, and tunnel verification. The Welcome activity changes from `Starting` to `Stopping` immediately, then shows `Cleaning SSH startup resources` while Desktop closes local tunnels, broker processes, and temporary files.
+- Successful startup stop is a terminal canceled operation that auto-removes after a short confirmation interval. Cleanup failures remain visible as `Cleanup needs attention` so users see a real problem instead of a stuck cancellation.
 - `SSH Destination` accepts either a direct `user@host` target or a Host alias from the user's local SSH config. When a selected Host has a configured `Port`, Desktop fills the Port field while still allowing the user to edit or clear that override.
 - SSH bootstrap supports key/agent authentication and a Desktop-owned password prompt mode. Key/agent mode keeps `BatchMode=yes` so missing keys or host-key trust issues surface as actionable launcher errors. Password prompt mode disables batch auth, asks through the OS askpass flow only while starting the runtime, and does not store the SSH password.
 

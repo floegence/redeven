@@ -34,6 +34,7 @@ export type DesktopSSHVerifiedReleaseManifest = Readonly<{
 
 export type DesktopSSHReleaseFetchPolicy = Readonly<{
   timeout_ms: number;
+  signal?: AbortSignal;
 }>;
 
 type EnsureDesktopSSHReleaseAssetArgs = Readonly<{
@@ -188,24 +189,59 @@ function normalizeFetchPolicy(fetchPolicy?: DesktopSSHReleaseFetchPolicy): Deskt
   }
   return {
     timeout_ms: timeoutMs,
+    signal: fetchPolicy?.signal,
   };
 }
 
-async function fetchReleaseAsset(sourceURL: string, fetchPolicy?: DesktopSSHReleaseFetchPolicy): Promise<Response> {
+function releaseFetchCanceledError(): DOMException {
+  return new DOMException('SSH runtime startup was canceled while downloading release assets.', 'AbortError');
+}
+
+function throwIfReleaseFetchCanceled(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw releaseFetchCanceledError();
+  }
+}
+
+async function withFetchedReleaseAsset<T>(
+  sourceURL: string,
+  fetchPolicy: DesktopSSHReleaseFetchPolicy | undefined,
+  consume: (response: Response, signal: AbortSignal | undefined) => Promise<T>,
+): Promise<T> {
   const policy = normalizeFetchPolicy(fetchPolicy);
-  const signal = AbortSignal.timeout(policy.timeout_ms);
+  throwIfReleaseFetchCanceled(policy.signal);
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, policy.timeout_ms);
+  const abort = () => controller.abort();
+  policy.signal?.addEventListener('abort', abort, { once: true });
   try {
-    const response = await fetch(sourceURL, { signal });
+    const response = await fetch(sourceURL, { signal: controller.signal });
     if (!response.ok) {
       throw new Error(`Download failed (${response.status}) for ${sourceURL}`);
     }
-    return response;
+    throwIfReleaseFetchCanceled(policy.signal);
+    const result = await consume(response, policy.signal);
+    throwIfReleaseFetchCanceled(policy.signal);
+    return result;
   } catch (error) {
     const nodeError = error as NodeJS.ErrnoException | DOMException | undefined;
-    if (signal.aborted || nodeError?.name === 'AbortError' || nodeError?.name === 'TimeoutError') {
+    if (policy.signal?.aborted) {
+      throw releaseFetchCanceledError();
+    }
+    if (timedOut || nodeError?.name === 'TimeoutError') {
       throw new Error(`Timed out after ${policy.timeout_ms}ms downloading ${sourceURL}`);
     }
+    if (nodeError?.name === 'AbortError') {
+      throw releaseFetchCanceledError();
+    }
     throw error;
+  } finally {
+    clearTimeout(timer);
+    policy.signal?.removeEventListener('abort', abort);
   }
 }
 
@@ -214,19 +250,28 @@ async function downloadURLToPath(
   targetPath: string,
   fetchPolicy?: DesktopSSHReleaseFetchPolicy,
 ): Promise<void> {
-  const response = await fetchReleaseAsset(sourceURL, fetchPolicy);
-  const data = Buffer.from(await response.arrayBuffer());
+  const data = await withFetchedReleaseAsset(sourceURL, fetchPolicy, async (response, signal) => {
+    const buffer = Buffer.from(await response.arrayBuffer());
+    throwIfReleaseFetchCanceled(signal);
+    return buffer;
+  });
   await fs.writeFile(targetPath, data);
 }
 
 async function downloadText(sourceURL: string, fetchPolicy?: DesktopSSHReleaseFetchPolicy): Promise<string> {
-  const response = await fetchReleaseAsset(sourceURL, fetchPolicy);
-  return response.text();
+  return withFetchedReleaseAsset(sourceURL, fetchPolicy, async (response, signal) => {
+    const text = await response.text();
+    throwIfReleaseFetchCanceled(signal);
+    return text;
+  });
 }
 
 async function downloadBuffer(sourceURL: string, fetchPolicy?: DesktopSSHReleaseFetchPolicy): Promise<Buffer> {
-  const response = await fetchReleaseAsset(sourceURL, fetchPolicy);
-  return Buffer.from(await response.arrayBuffer());
+  return withFetchedReleaseAsset(sourceURL, fetchPolicy, async (response, signal) => {
+    const data = Buffer.from(await response.arrayBuffer());
+    throwIfReleaseFetchCanceled(signal);
+    return data;
+  });
 }
 
 async function readOptionalBuffer(filePath: string): Promise<Buffer | null> {

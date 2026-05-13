@@ -20,8 +20,8 @@ describe('LauncherOperationRegistry', () => {
       title: 'Opening SSH control connection',
       detail: 'Connecting to devbox.',
       cancelable: true,
-      interrupt_label: 'Stop opening',
-      interrupt_detail: 'Stops this SSH opening attempt.',
+      interrupt_label: 'Stop startup',
+      interrupt_detail: 'Stops this SSH runtime startup.',
       interrupt_kind: 'stop_opening',
     });
 
@@ -34,7 +34,7 @@ describe('LauncherOperationRegistry', () => {
         subject_id: operation.subject_id,
         status: 'running',
         cancelable: true,
-        interrupt_label: 'Stop opening',
+        interrupt_label: 'Stop startup',
         interrupt_kind: 'stop_opening',
       }),
     ]);
@@ -91,14 +91,15 @@ describe('LauncherOperationRegistry', () => {
     expect(canceled).toEqual(expect.objectContaining({
       status: 'canceling',
       cancelable: false,
-      phase: 'canceling',
+      phase: 'ssh_stopping_startup',
+      title: 'Stopping SSH runtime startup',
       interrupt_label: undefined,
       interrupt_kind: undefined,
     }));
     registry.finish(operation.operation_key, 'canceled', {
       phase: 'canceled',
       title: 'Startup canceled',
-      detail: 'Desktop canceled the SSH startup task.',
+      detail: 'Desktop stopped the SSH runtime startup.',
     });
     expect(registry.progressItems()[0]).toEqual(expect.objectContaining({
       status: 'canceled',

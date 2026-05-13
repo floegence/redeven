@@ -6,6 +6,21 @@ import { describe, expect, it } from 'vitest';
 
 import { startDesktopAIBroker } from './desktopAIBroker';
 
+async function waitForFileText(filePath: string, timeoutMs = 1_000): Promise<string> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      return await fs.readFile(filePath, 'utf8');
+    } catch (error) {
+      const nodeError = error as NodeJS.ErrnoException;
+      if (nodeError.code !== 'ENOENT' || Date.now() >= deadline) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+  }
+}
+
 describe('desktopAIBroker', () => {
   it('creates a session, injects a token, and shuts down cleanly', async () => {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-ai-broker-test-'));
@@ -51,5 +66,43 @@ describe('desktopAIBroker', () => {
     expect(broker.missingKeyProviderIDs).toEqual(['anthropic']);
 
     await expect(broker.stop()).resolves.toBeUndefined();
+  });
+
+  it('cancels broker readiness waits and cleans up the child process', async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-ai-broker-cancel-test-'));
+    const stateRoot = path.join(tempRoot, 'state');
+    const startedPath = path.join(tempRoot, 'broker-started');
+    const markerPath = path.join(tempRoot, 'broker-exited');
+    const scriptPath = path.join(tempRoot, 'slow-broker.cjs');
+    await fs.writeFile(
+      scriptPath,
+      [
+        '#!/usr/bin/env node',
+        "const fs = require('node:fs');",
+        `fs.writeFileSync(${JSON.stringify(startedPath)}, 'started');`,
+        `const marker = ${JSON.stringify(markerPath)};`,
+        "process.on('SIGTERM', () => { fs.writeFileSync(marker, 'terminated'); process.exit(0); });",
+        'setInterval(() => {}, 1000);',
+      ].join('\n'),
+      'utf8',
+    );
+    await fs.chmod(scriptPath, 0o755);
+    const controller = new AbortController();
+
+    const startup = startDesktopAIBroker({
+      executablePath: scriptPath,
+      stateRoot,
+      runtimeKey: 'ssh:devbox:22:key_agent:remote_default',
+      tempRoot,
+      startupTimeoutMs: 5_000,
+      stopTimeoutMs: 1_000,
+      signal: controller.signal,
+    });
+
+    await expect(waitForFileText(startedPath)).resolves.toBe('started');
+    controller.abort();
+    await expect(startup).rejects.toMatchObject({ name: 'AbortError' });
+    await expect(waitForFileText(markerPath)).resolves.toBe('terminated');
+    await fs.rm(tempRoot, { recursive: true, force: true });
   });
 });
