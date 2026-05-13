@@ -704,7 +704,7 @@ describe('buildEnvironmentCardModel', () => {
     });
   });
 
-  it('uses Open as the primary action for a stopped local runtime', () => {
+  it('keeps offline runtime controls separate from the primary Open action', () => {
     const localSnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: testLocalEnvironment(),
@@ -713,16 +713,44 @@ describe('buildEnvironmentCardModel', () => {
     const localEntry = localSnapshot.environments.find((environment) => environment.kind === 'local_environment');
     expect(localEntry).toBeTruthy();
     expect(buildProviderBackedEnvironmentActionModel(localEntry!)).toMatchObject({
-      status_label: 'Open',
-      status_tone: 'success',
+      status_label: 'RUNTIME OFFLINE',
+      status_tone: 'warning',
       action_presentation: {
         primary_action: {
           intent: 'open',
           label: 'Open',
-          enabled: true,
+          enabled: false,
           variant: 'default',
         },
-        primary_action_overlay: undefined,
+        primary_action_overlay: {
+          kind: 'popover',
+          tone: 'warning',
+          eyebrow: 'Runtime offline',
+          title: 'Start the local runtime to continue',
+          detail: 'Open becomes available once the runtime is ready on this device.',
+          actions: [
+            {
+              label: 'Start runtime locally',
+              emphasis: 'primary',
+              action: {
+                intent: 'start_runtime',
+                label: 'Start runtime',
+                enabled: true,
+                variant: 'outline',
+              },
+            },
+            {
+              label: 'Refresh status',
+              emphasis: 'secondary',
+              action: {
+                intent: 'refresh_runtime',
+                label: 'Refresh runtime status',
+                enabled: true,
+                variant: 'outline',
+              },
+            },
+          ],
+        },
       },
     });
 
@@ -1343,7 +1371,7 @@ describe('buildEnvironmentCardModel', () => {
     });
   });
 
-  it('keeps local Open available when a provider-bound runtime can be safely rebound', () => {
+  it('keeps Open disabled while an online runtime is still preparing Env App readiness', () => {
     const local = testLocalEnvironment({
       currentRuntime: {
         local_ui_url: 'http://127.0.0.1:24001/',
@@ -1366,15 +1394,19 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(entry).toBeTruthy();
     expect(buildProviderBackedEnvironmentActionModel(entry!)).toMatchObject({
-      status_label: 'Open',
-      status_tone: 'success',
+      status_label: 'RUNTIME PREPARING',
+      status_tone: 'warning',
       action_presentation: {
         primary_action: {
           intent: 'open',
-          label: 'Open',
-          enabled: true,
+          label: 'Preparing…',
+          enabled: false,
         },
-        primary_action_overlay: undefined,
+        primary_action_overlay: {
+          kind: 'tooltip',
+          tone: 'warning',
+          message: 'Env App gateway is starting.',
+        },
       },
     });
   });
