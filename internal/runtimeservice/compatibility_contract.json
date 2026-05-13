@@ -1,19 +1,19 @@
 {
   "schema_version": 1,
   "release_review": {
-    "release_version": "v0.6.3",
-    "previous_release": "v0.6.2",
-    "reviewed_at": "2026-05-12",
-    "review_id": "desktop-envapp-access-v1",
-    "summary": "Patch release: opens Env App web services through the active access context, tightens Desktop welcome environment and runtime-state semantics, keeps Workbench text defaults aligned, and completes dependency/security notice updates. No Runtime Service protocol or compatibility window changes.",
-    "same_window_rationale": "The release does not add or change Runtime Service snapshot fields, sys.ping payload semantics, attach/start contracts, startup report carriers, Desktop IPC compatibility payloads, Workbench persisted layout schema versions, Env App shell readiness, or SSH bootstrap requirements. The changes stay within Env App navigation/access-context handling, Desktop welcome state selection, UI defaults, documentation, and dependency lock/notice maintenance, so the existing protocol version, compatibility epoch, minimum Desktop version, and minimum Runtime version remain valid.",
+    "release_version": "v0.6.4",
+    "previous_release": "v0.6.3",
+    "reviewed_at": "2026-05-13",
+    "review_id": "workbench-preview-motion-v1",
+    "summary": "Patch release: stabilizes Workbench preview open handoff, consumes floe-webapp v0.36.48 widget entry motion, preserves runtime-authoritative preview state, and includes the existing Desktop runtime ownership, SSH runtime model broker, and loading-curtain improvements. No Runtime Service protocol or compatibility window changes.",
+    "same_window_rationale": "The release does not add or change Runtime Service snapshot fields, sys.ping payload semantics, attach/start contracts, startup report carriers, Desktop IPC compatibility payloads, Workbench persisted layout schema versions, Env App shell readiness, or SSH bootstrap requirements. The Workbench changes stay within Env App UI state handoff and published floe-webapp rendering behavior, while the Desktop changes already operate inside the existing runtime ownership, local UI, and SSH bootstrap contracts, so the existing protocol version, compatibility epoch, minimum Desktop version, and minimum Runtime version remain valid.",
     "checked_surfaces": [
-      "Env App web service opening through desktop, local, and remote access contexts",
-      "Env App port forwards page local-access routing and copy/open actions",
-      "Code App local UI gateway external URL resolution and local-access origin handling",
-      "Desktop welcome environment catalog, live runtime-state preference, and view model semantics",
-      "Desktop persistence, preload, shell bridge, and session-context IPC wiring",
-      "Env App Workbench default text annotation sizing and background layer defaults",
+      "Env App Workbench preview open request batching and runtime snapshot handoff",
+      "Env App Workbench file preview widget hydration and shared preview item lifecycle",
+      "floe-webapp Workbench widget entry motion through published v0.36.48 packages",
+      "Desktop local runtime ownership, lease lifecycle, and open guidance",
+      "Desktop reusable loading curtain and first-screen readiness presentation",
+      "SSH runtime model broker behavior across Desktop-managed runtimes",
       "Runtime Workbench layout schema migration and snapshot/event APIs",
       "Runtime Workbench durable widget-state persistence",
       "Desktop managed runtime start, attach, and open gating",
@@ -22,7 +22,7 @@
       "Env App sys.ping runtime service payload",
       "Env App desktop first-screen readiness IPC",
       "SSH-managed runtime bootstrap and attach flow",
-      "open-source hygiene, third-party notices, and npm lockfile security updates"
+      "published npm dependency lockfile reproducibility"
     ]
   },
   "runtime_protocol_version": "redeven-runtime-v1",
