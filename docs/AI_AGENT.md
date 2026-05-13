@@ -13,7 +13,7 @@ High-level design:
   - Moonshot: `openai-go` (Chat Completions API on Moonshot base URL)
   - Anthropic: `anthropic-sdk-go` (Messages API)
 - GLM/Z.ai, DeepSeek, and Qwen: `openai-go` against provider OpenAI-compatible endpoints with provider-specific request decoration. Qwen3.6 Plus/Flash use the provider Responses API `web_search` tool.
-- In Desktop-managed SSH Host sessions, the runtime may also use a Desktop AI Broker adapter. The broker performs model calls on the user's machine with the Desktop Local Environment's provider config and secrets, while the SSH-hosted runtime still owns context gathering, permission checks, and tool execution on the SSH host.
+- In Desktop-managed SSH Host sessions, the runtime may also use a Desktop AI Broker adapter. Desktop binds that adapter through runtime-control after the running SSH runtime reports the `desktop_ai_broker` capability. The broker performs model calls on the user's machine with the Desktop Local Environment's provider config and secrets, while the SSH-hosted runtime still owns context gathering, permission checks, and tool execution on the SSH host.
 - OpenAI Responses continuation is treated as an optimization layer rather than a second context system: Flower resumes with `previous_response_id` only when the same thread stays on a compatible OpenAI provider/model/base URL fingerprint, and otherwise falls back to the canonical local `PromptPack` replay path.
 
 ## Prompt architecture
@@ -46,7 +46,7 @@ Flower task prompts are built through a section-oriented runtime prompt builder 
 
 Enable Flower by adding an `ai` section to the runtime config file (default Local Environment config: `~/.redeven/local-environment/config.json`).
 
-For an SSH Host Environment opened from Redeven Desktop, the remote runtime can be Flower-capable without a remote `ai` section when Desktop attaches an active AI Broker session. That broker session is runtime-only and expires with the Desktop/SSH session; it is not written into remote config and it does not introduce an `ai.enabled` flag.
+For an SSH Host Environment opened from Redeven Desktop, the remote runtime can be Flower-capable without a remote `ai` section when Desktop binds an active AI Broker session. That broker session is runtime-only and expires with the Desktop/SSH session; it is not written into remote config, is never passed as a startup command argument, and it does not introduce an `ai.enabled` flag. The binding state is reported through `runtime_service.bindings.desktop_ai_broker` and `ai_runtime.desktop_broker.binding_state`.
 
 Notes:
 

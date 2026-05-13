@@ -26,7 +26,14 @@ import {
   type DesktopSSHBootstrapStrategy,
   type DesktopSSHEnvironmentDetails,
 } from '../shared/desktopSSH';
-import { runtimeServiceIsOpenable } from '../shared/runtimeService';
+import {
+  runtimeServiceHasActiveWork,
+  runtimeServiceIsOpenable,
+  runtimeServiceMatchesIdentity,
+  runtimeServiceNeedsRuntimeUpdate,
+  runtimeServiceSupportsDesktopAIBrokerBinding,
+  type RuntimeServiceIdentity,
+} from '../shared/runtimeService';
 
 const PUBLIC_INSTALL_SCRIPT_URL = 'https://redeven.com/install.sh';
 const DEFAULT_SSH_STARTUP_TIMEOUT_MS = 45_000;
@@ -83,6 +90,7 @@ export type DesktopSSHRuntimeProgressPhase =
   | 'ssh_starting_runtime'
   | 'ssh_waiting_report'
   | 'ssh_opening_tunnel'
+  | 'ssh_binding_ai_broker'
   | 'ssh_verifying_tunnel';
 export type DesktopSSHRuntimeProgress = Readonly<{
   phase: DesktopSSHRuntimeProgressPhase;
@@ -579,11 +587,6 @@ export function buildManagedSSHStartScript(): string {
     'local_environment_root="${install_root%/}/local-environment"',
     'state_root="${local_environment_root}/state"',
     'session_token="$3"',
-    'broker_url="${4:-}"',
-    'broker_token="${5:-}"',
-    'broker_session_id="${6:-}"',
-    'broker_ssh_runtime_key="${7:-}"',
-    'broker_expires_at_unix_ms="${8:-0}"',
     'session_dir="${local_environment_root}/sessions/${session_token}"',
     'report_path="${session_dir}/startup-report.json"',
     'log_dir="${local_environment_root}/logs"',
@@ -594,15 +597,10 @@ export function buildManagedSSHStartScript(): string {
     '  echo "Redeven runtime is not installed at ${binary}" >&2',
     '  exit 1',
     'fi',
-    'if [ -n "$broker_url" ] && [ -n "$broker_token" ]; then',
-    '  broker_env="env REDEVEN_DESKTOP_AI_BROKER_URL=$broker_url REDEVEN_DESKTOP_AI_BROKER_TOKEN=$broker_token REDEVEN_DESKTOP_AI_BROKER_SESSION_ID=$broker_session_id REDEVEN_DESKTOP_AI_BROKER_SSH_RUNTIME_KEY=$broker_ssh_runtime_key REDEVEN_DESKTOP_AI_BROKER_EXPIRES_AT_UNIX_MS=$broker_expires_at_unix_ms"',
-    'else',
-    '  broker_env="env"',
-    'fi',
     'if command -v setsid >/dev/null 2>&1; then',
-    '  setsid $broker_env "$binary" run --state-root "$state_root" --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path" >>"$log_path" 2>&1 </dev/null &',
+    '  setsid "$binary" run --state-root "$state_root" --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path" >>"$log_path" 2>&1 </dev/null &',
     'else',
-    '  nohup $broker_env "$binary" run --state-root "$state_root" --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path" >>"$log_path" 2>&1 </dev/null &',
+    '  nohup "$binary" run --state-root "$state_root" --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path" >>"$log_path" 2>&1 </dev/null &',
     'fi',
     'printf "%s\\n" "$!" > "${session_dir}/launcher.pid"',
   ].join('\n');
@@ -1791,6 +1789,161 @@ async function waitForRemoteStartupReport(args: Readonly<{
   }
 }
 
+type ManagedSSHRuntimeAttachPolicy =
+  | Readonly<{ action: 'reuse' }>
+  | Readonly<{ action: 'replace'; message: string }>
+  | Readonly<{ action: 'block'; message: string }>;
+
+function startupReportsStoppablePID(startup: StartupReport): boolean {
+  const pid = Number(startup.pid ?? Number.NaN);
+  return Number.isInteger(pid) && pid > 0;
+}
+
+function managedSSHRuntimeAttachPolicy(
+  startup: StartupReport,
+  args: Readonly<{
+    expectedRuntimeIdentity: RuntimeServiceIdentity;
+    requireDesktopAIBrokerBinding: boolean;
+  }>,
+): ManagedSSHRuntimeAttachPolicy {
+  const runtimeService = startup.runtime_service;
+  const identityMismatch = !runtimeServiceMatchesIdentity(runtimeService, args.expectedRuntimeIdentity);
+  const needsRuntimeUpdate = runtimeServiceNeedsRuntimeUpdate(runtimeService);
+  const brokerBindingUnsupported = args.requireDesktopAIBrokerBinding
+    && !runtimeServiceSupportsDesktopAIBrokerBinding(runtimeService);
+
+  if (!identityMismatch && !needsRuntimeUpdate && !brokerBindingUnsupported) {
+    return { action: 'reuse' };
+  }
+
+  if (runtimeServiceHasActiveWork(runtimeService)) {
+    return {
+      action: 'block',
+      message: brokerBindingUnsupported
+        ? 'This SSH runtime needs to restart before Desktop can bind the local Flower model bridge, but active work is still running.'
+        : 'This SSH runtime needs to restart before Desktop can open it, but active work is still running.',
+    };
+  }
+  if (!startupReportsStoppablePID(startup)) {
+    return {
+      action: 'block',
+      message: brokerBindingUnsupported
+        ? 'This SSH runtime needs to restart before Desktop can bind the local Flower model bridge, but it did not report a process id Desktop can stop.'
+        : 'This SSH runtime needs to restart before Desktop can open it, but it did not report a process id Desktop can stop.',
+    };
+  }
+  return {
+    action: 'replace',
+    message: brokerBindingUnsupported
+      ? 'Restarting SSH runtime so Desktop can bind the local Flower model bridge.'
+      : 'Restarting SSH runtime so Desktop can open the requested runtime version.',
+  };
+}
+
+type RuntimeDesktopAIBrokerBindResponse = Readonly<{
+  ok?: boolean;
+  error?: string;
+  data?: Readonly<{
+    ai_runtime?: Readonly<{
+      desktop_broker?: Readonly<{
+        binding_state?: string;
+        connected?: boolean;
+        last_error?: string;
+      }> | null;
+    }> | null;
+  }>;
+}>;
+
+async function postJSONToForwardedLocalUI<T>(
+  baseURL: string,
+  pathName: string,
+  body: unknown,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<T> {
+  throwIfSSHRuntimeCanceled(signal);
+  const url = new URL(pathName, baseURL);
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, Math.max(1, timeoutMs));
+  const abort = () => controller.abort();
+  signal?.addEventListener('abort', abort, { once: true });
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    let payload: unknown = null;
+    if (text.trim() !== '') {
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        payload = null;
+      }
+    }
+    if (!response.ok) {
+      const record = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {};
+      const message = compact(record.error) || `HTTP ${response.status}`;
+      throw new Error(message);
+    }
+    return payload as T;
+  } catch (error) {
+    if (isAbortError(error) && signal?.aborted) {
+      throw new DesktopSSHRuntimeCanceledError();
+    }
+    if (isAbortError(error) && timedOut) {
+      throw new Error('Timed out waiting for Runtime Control to bind the Desktop AI Broker.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', abort);
+  }
+}
+
+async function bindDesktopAIBrokerToForwardedRuntime(args: Readonly<{
+  forwardedURL: string;
+  remoteBrokerURL: string;
+  broker: ManagedSSHRuntimeAIBroker;
+  timeoutMs: number;
+  signal?: AbortSignal;
+  onProgress: StartManagedSSHRuntimeArgs['onProgress'];
+}>): Promise<void> {
+  emitSSHRuntimeProgress(
+    args.onProgress,
+    'ssh_binding_ai_broker',
+    'Binding Desktop model bridge',
+    'Desktop is binding the local Flower model bridge to the SSH runtime over Runtime Control.',
+  );
+  const payload = await postJSONToForwardedLocalUI<RuntimeDesktopAIBrokerBindResponse>(
+    args.forwardedURL,
+    '/_redeven_proxy/api/runtime/bindings/desktop-ai-broker',
+    {
+      url: args.remoteBrokerURL,
+      token: args.broker.token,
+      session_id: args.broker.session_id,
+      ssh_runtime_key: args.broker.ssh_runtime_key,
+      expires_at_unix_ms: args.broker.expires_at_unix_ms,
+      model_source: 'desktop_local_environment',
+    },
+    args.timeoutMs,
+    args.signal,
+  );
+  if (!payload?.ok) {
+    throw new Error(compact(payload?.error) || 'Runtime Control did not accept the Desktop AI Broker binding.');
+  }
+  const status = payload.data?.ai_runtime?.desktop_broker ?? null;
+  if (!status?.connected || compact(status.binding_state) !== 'bound') {
+    throw new Error(compact(status?.last_error) || 'Runtime Control did not bind the Desktop AI Broker.');
+  }
+}
+
 export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): Promise<ManagedSSHRuntime> {
   throwIfSSHRuntimeCanceled(args.signal);
   const target = normalizeDesktopSSHEnvironmentDetails(args.target);
@@ -1916,81 +2069,105 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
     });
 
     if (args.aiBroker) {
-      try {
-        emitSSHRuntimeProgress(
-          args.onProgress,
-          'ssh_opening_tunnel',
-          'Opening Desktop AI bridge',
-          'Desktop is attaching the local model broker to this SSH session.',
-        );
-        const reverse = await openDesktopAIBrokerReverseForward({
-          sshBinary,
-          target,
-          controlSocketPath,
-          connectTimeoutSeconds,
-          auth,
-          broker: args.aiBroker,
-          startupTimeoutMs,
-          logs,
-          onLog: args.onLog,
-          signal: args.signal,
-        });
-        reverseForwardProcess = reverse.process;
-        remoteBrokerURL = reverse.remoteURL;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        console.warn(`[redeven:ssh-ai-broker] Desktop AI Broker is unavailable for ${args.aiBroker.ssh_runtime_key}: ${message}`);
+      emitSSHRuntimeProgress(
+        args.onProgress,
+        'ssh_opening_tunnel',
+        'Opening Desktop AI bridge',
+        'Desktop is attaching the local model broker to this SSH session.',
+      );
+      const reverse = await openDesktopAIBrokerReverseForward({
+        sshBinary,
+        target,
+        controlSocketPath,
+        connectTimeoutSeconds,
+        auth,
+        broker: args.aiBroker,
+        startupTimeoutMs,
+        logs,
+        onLog: args.onLog,
+        signal: args.signal,
+      });
+      reverseForwardProcess = reverse.process;
+      remoteBrokerURL = reverse.remoteURL;
+    }
+
+    let remoteLaunch: ManagedSSHRemoteStartup | null = null;
+    let replacementAttempted = false;
+    for (;;) {
+      emitSSHRuntimeProgress(
+        args.onProgress,
+        'ssh_starting_runtime',
+        replacementAttempted ? 'Restarting remote runtime' : 'Starting remote runtime',
+        replacementAttempted
+          ? 'Desktop is restarting Redeven on the SSH host so the running Runtime Service matches this session.'
+          : 'Desktop is launching Redeven on the SSH host.',
+      );
+      controlProcess = spawnSSHProcess(sshBinary, [
+        ...sshSharedArgs(controlSocketPath, connectTimeoutSeconds, auth.mode),
+        ...sshTargetArgs(target),
+        remoteShellCommand(buildManagedSSHStartScript(), 'redeven-ssh-start', [
+          target.remote_install_dir,
+          runtimeReleaseTag,
+          sessionToken,
+        ]),
+      ], auth, undefined, args.signal);
+      let controlSpawnError: Error | null = null;
+      controlProcess.once('error', (error) => {
+        controlSpawnError = error instanceof Error ? error : new Error(String(error));
+      });
+      bindRecentLog(controlProcess.stdout, 'control_stdout', logs, args.onLog);
+      bindRecentLog(controlProcess.stderr, 'control_stderr', logs, args.onLog);
+      if (controlSpawnError) {
+        throw controlSpawnError;
       }
-    }
 
-    emitSSHRuntimeProgress(
-      args.onProgress,
-      'ssh_starting_runtime',
-      'Starting remote runtime',
-      'Desktop is launching Redeven on the SSH host.',
-    );
-    controlProcess = spawnSSHProcess(sshBinary, [
-      ...sshSharedArgs(controlSocketPath, connectTimeoutSeconds, auth.mode),
-      ...sshTargetArgs(target),
-      remoteShellCommand(buildManagedSSHStartScript(), 'redeven-ssh-start', [
-        target.remote_install_dir,
-        runtimeReleaseTag,
+      const launch = await waitForRemoteStartupReport({
+        sshBinary,
+        target,
+        controlSocketPath,
+        connectTimeoutSeconds,
+        auth,
         sessionToken,
-        ...(remoteBrokerURL && args.aiBroker
-          ? [
-              remoteBrokerURL,
-              args.aiBroker.token,
-              args.aiBroker.session_id,
-              args.aiBroker.ssh_runtime_key,
-              String(args.aiBroker.expires_at_unix_ms),
-            ]
-          : ['', '', '', '', '0']),
-      ]),
-    ], auth, undefined, args.signal);
-    let controlSpawnError: Error | null = null;
-    controlProcess.once('error', (error) => {
-      controlSpawnError = error instanceof Error ? error : new Error(String(error));
-    });
-    bindRecentLog(controlProcess.stdout, 'control_stdout', logs, args.onLog);
-    bindRecentLog(controlProcess.stderr, 'control_stderr', logs, args.onLog);
-    if (controlSpawnError) {
-      throw controlSpawnError;
+        startupTimeoutMs,
+        logs,
+        onLog: args.onLog,
+        onProgress: args.onProgress,
+        signal: args.signal,
+        getControlProcess: () => controlProcess,
+      });
+      remoteRuntimePID = launch.startup.pid ?? null;
+      const attachPolicy = managedSSHRuntimeAttachPolicy(launch.startup, {
+        expectedRuntimeIdentity: { runtime_version: runtimeReleaseTag },
+        requireDesktopAIBrokerBinding: !!args.aiBroker,
+      });
+      if (attachPolicy.action === 'block') {
+        throw readinessFailure(attachPolicy.message, logs);
+      }
+      if (attachPolicy.action === 'reuse') {
+        remoteLaunch = launch;
+        break;
+      }
+      if (replacementAttempted) {
+        throw readinessFailure('Desktop restarted the SSH runtime, but the running Runtime Service still does not match this session.', logs);
+      }
+      replacementAttempted = true;
+      await stopRemoteRuntimeProcess({
+        sshBinary,
+        target,
+        controlSocketPath,
+        connectTimeoutSeconds,
+        auth,
+        pid: remoteRuntimePID ?? 0,
+        logs,
+        onLog: args.onLog,
+      });
+      await stopChildProcess(controlProcess, stopTimeoutMs).catch(() => undefined);
+      controlProcess = null;
+      remoteRuntimePID = null;
     }
-
-    const remoteLaunch = await waitForRemoteStartupReport({
-      sshBinary,
-      target,
-      controlSocketPath,
-      connectTimeoutSeconds,
-      auth,
-      sessionToken,
-      startupTimeoutMs,
-      logs,
-      onLog: args.onLog,
-      onProgress: args.onProgress,
-      signal: args.signal,
-      getControlProcess: () => controlProcess,
-    });
+    if (!remoteLaunch) {
+      throw readinessFailure('Desktop could not resolve the final SSH Runtime Service startup report.', logs);
+    }
     const remoteStartup = remoteLaunch.startup;
     remoteRuntimePID = remoteStartup.pid ?? null;
 
@@ -2025,13 +2202,31 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       'Verifying forwarded Local UI',
       `Checking ${forwardedURL} before opening the environment window.`,
     );
-    const forwardedStartup = await waitForForwardedLocalUIOpenable(
+    let forwardedStartup = await waitForForwardedLocalUIOpenable(
       forwardedURL,
       args.probeTimeoutMs ?? startupTimeoutMs,
       args.signal,
     );
     if (!forwardedStartup) {
       throw readinessFailure('Desktop created the SSH port forward but could not reach the forwarded Redeven Local UI.', logs);
+    }
+    if (args.aiBroker) {
+      if (!remoteBrokerURL) {
+        throw readinessFailure('Desktop AI Broker reverse forward was not available for the requested SSH runtime binding.', logs);
+      }
+      await bindDesktopAIBrokerToForwardedRuntime({
+        forwardedURL,
+        remoteBrokerURL,
+        broker: args.aiBroker,
+        timeoutMs: args.probeTimeoutMs ?? startupTimeoutMs,
+        signal: args.signal,
+        onProgress: args.onProgress,
+      });
+      forwardedStartup = await waitForForwardedLocalUIOpenable(
+        forwardedURL,
+        args.probeTimeoutMs ?? startupTimeoutMs,
+        args.signal,
+      ) ?? forwardedStartup;
     }
     const startup: StartupReport = {
       ...remoteStartup,

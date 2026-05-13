@@ -7,10 +7,12 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/settings"
 )
 
@@ -128,6 +130,76 @@ func TestServiceListModelsUsesDesktopBrokerWithoutRemoteConfig(t *testing.T) {
 	}
 	if out.Runtime == nil || out.Runtime.RemoteConfigured {
 		t.Fatalf("Runtime=%#v, want broker-only runtime status", out.Runtime)
+	}
+}
+
+func TestServiceBindDesktopBrokerReportsRuntimeBinding(t *testing.T) {
+	t.Parallel()
+
+	expiresAt := time.Now().Add(time.Hour).UnixMilli()
+	var statusRequests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/status" {
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer broker-token" {
+			t.Fatalf("Authorization=%q", r.Header.Get("Authorization"))
+		}
+		statusRequests++
+		_ = json.NewEncoder(w).Encode(DesktopAIBrokerStatus{
+			Connected:             true,
+			Available:             true,
+			ModelSource:           "desktop_local_environment",
+			SessionID:             "broker-session",
+			SSHRuntimeKey:         "ssh:devbox",
+			ExpiresAtUnixMS:       expiresAt,
+			ModelCount:            2,
+			MissingKeyProviderIDs: []string{"anthropic"},
+		})
+	}))
+	defer server.Close()
+
+	svc, err := NewService(Options{
+		StateDir:     t.TempDir(),
+		AgentHomeDir: t.TempDir(),
+		Shell:        "/bin/sh",
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = svc.Close()
+	})
+
+	status, err := svc.BindDesktopBroker(&DesktopAIBrokerEndpoint{
+		URL:             server.URL,
+		Token:           "broker-token",
+		SessionID:       "broker-session",
+		SSHRuntimeKey:   "ssh:devbox",
+		ExpiresAtUnixMS: expiresAt,
+	})
+	if err != nil {
+		t.Fatalf("BindDesktopBroker: %v", err)
+	}
+	if status.DesktopBroker == nil || status.DesktopBroker.BindingState != string(runtimeservice.BindingStateBound) {
+		t.Fatalf("DesktopBroker status=%#v, want bound", status.DesktopBroker)
+	}
+	binding := svc.DesktopBrokerBindingStatus(context.Background())
+	if binding.State != runtimeservice.BindingStateBound {
+		t.Fatalf("binding.State=%q, want %q", binding.State, runtimeservice.BindingStateBound)
+	}
+	if binding.ModelCount != 2 || strings.Join(binding.MissingKeyProviderIDs, ",") != "anthropic" {
+		t.Fatalf("binding model snapshot not propagated: %#v", binding)
+	}
+	raw, err := json.Marshal(status)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if strings.Contains(string(raw), "broker-token") {
+		t.Fatalf("runtime status leaked broker token: %s", raw)
+	}
+	if statusRequests == 0 {
+		t.Fatalf("broker status endpoint was not called")
 	}
 }
 

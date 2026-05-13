@@ -32,6 +32,26 @@ export type RuntimeServiceWorkload = {
   portForwardCount: number;
 };
 
+export type RuntimeServiceCapability = {
+  supported: boolean;
+  bindMethod?: string;
+  reasonCode?: string;
+  message?: string;
+};
+
+export type RuntimeServiceBindingState = 'unbound' | 'bound' | 'unsupported' | 'error' | 'expired';
+
+export type RuntimeServiceBinding = {
+  state: RuntimeServiceBindingState;
+  sessionId?: string;
+  sshRuntimeKey?: string;
+  expiresAtUnixMs?: number;
+  modelSource?: string;
+  modelCount?: number;
+  missingKeyProviderIds?: string[];
+  lastError?: string;
+};
+
 export type RuntimeServiceSnapshot = {
   runtimeVersion?: string;
   runtimeCommit?: string;
@@ -49,6 +69,12 @@ export type RuntimeServiceSnapshot = {
   compatibilityReviewId?: string;
   openReadiness?: RuntimeServiceOpenReadiness;
   activeWorkload: RuntimeServiceWorkload;
+  capabilities?: {
+    desktopAiBroker: RuntimeServiceCapability;
+  };
+  bindings?: {
+    desktopAiBroker: RuntimeServiceBinding;
+  };
 };
 
 export type SysPingResponse = {

@@ -3,10 +3,12 @@ import { describe, expect, it } from 'vitest';
 import {
   envAppShellUnavailableOpenReadiness,
   normalizeRuntimeServiceSnapshot,
+  runtimeServiceDesktopAIBrokerBindingState,
   runtimeServiceIsOpenable,
   runtimeServiceMatchesIdentity,
   runtimeServiceNeedsRuntimeUpdate,
   runtimeServiceOpenReadinessLabel,
+  runtimeServiceSupportsDesktopAIBrokerBinding,
 } from './runtimeService';
 
 describe('runtimeService', () => {
@@ -84,5 +86,39 @@ describe('runtimeService', () => {
     }), {
       runtime_version: 'v1.2.3',
     })).toBe(false);
+  });
+
+  it('normalizes Desktop AI Broker capability and binding status', () => {
+    const snapshot = normalizeRuntimeServiceSnapshot({
+      runtime_version: 'v1.2.3',
+      compatibility: 'compatible',
+      open_readiness: { state: 'openable' },
+      capabilities: {
+        desktop_ai_broker: {
+          supported: true,
+        },
+      },
+      bindings: {
+        desktop_ai_broker: {
+          state: 'bound',
+          session_id: ' broker-session ',
+          ssh_runtime_key: ' ssh:devbox ',
+          model_count: 2,
+          missing_key_provider_ids: ['openai', '', 'anthropic', 'openai'],
+        },
+      },
+      active_workload: {},
+    });
+
+    expect(runtimeServiceSupportsDesktopAIBrokerBinding(snapshot)).toBe(true);
+    expect(runtimeServiceDesktopAIBrokerBindingState(snapshot)).toBe('bound');
+    expect(snapshot.capabilities?.desktop_ai_broker.bind_method).toBe('runtime_control_v1');
+    expect(snapshot.bindings?.desktop_ai_broker).toMatchObject({
+      state: 'bound',
+      session_id: 'broker-session',
+      ssh_runtime_key: 'ssh:devbox',
+      model_count: 2,
+      missing_key_provider_ids: ['anthropic', 'openai'],
+    });
   });
 });

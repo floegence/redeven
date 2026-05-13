@@ -644,6 +644,15 @@ type settingsAISecretsView struct {
 	ProviderAPIKeySet map[string]bool `json:"provider_api_key_set"`
 }
 
+type runtimeDesktopAIBrokerBindRequest struct {
+	URL             string `json:"url"`
+	Token           string `json:"token"`
+	SessionID       string `json:"session_id"`
+	SSHRuntimeKey   string `json:"ssh_runtime_key"`
+	ExpiresAtUnixMS int64  `json:"expires_at_unix_ms"`
+	ModelSource     string `json:"model_source"`
+}
+
 type settingsConnectionView struct {
 	ControlplaneBaseURL string             `json:"controlplane_base_url"`
 	EnvironmentID       string             `json:"environment_id"`
@@ -1609,6 +1618,36 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: g.toSettingsView(cfg)})
+		return
+
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/runtime/bindings/desktop-ai-broker":
+		if _, ok := g.requirePermission(w, r, requiredPermissionAdmin); !ok {
+			return
+		}
+		if g.ai == nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			return
+		}
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		var body runtimeDesktopAIBrokerBindRequest
+		if err := dec.Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		status, err := g.ai.BindDesktopBroker(&ai.DesktopAIBrokerEndpoint{
+			URL:             body.URL,
+			Token:           body.Token,
+			SessionID:       body.SessionID,
+			SSHRuntimeKey:   body.SSHRuntimeKey,
+			ExpiresAtUnixMS: body.ExpiresAtUnixMS,
+			ModelSource:     body.ModelSource,
+		})
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"ai_runtime": status}})
 		return
 
 	case r.Method == http.MethodPut && r.URL.Path == "/_redeven_proxy/api/settings":

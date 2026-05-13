@@ -59,6 +59,7 @@ export type AISecretsView = Readonly<{ provider_api_key_set: Record<string, bool
 export type AIRuntimeStatus = Readonly<{
   remote_configured?: boolean;
   desktop_broker?: Readonly<{
+    binding_state?: string;
     connected?: boolean;
     available?: boolean;
     model_source?: string;

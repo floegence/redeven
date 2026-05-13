@@ -369,6 +369,20 @@ describe('EnvSettingsPage', () => {
         taskCount: 1,
         portForwardCount: 4,
       },
+      capabilities: {
+        desktopAiBroker: {
+          supported: true,
+          bindMethod: 'runtime_control_v1',
+        },
+      },
+      bindings: {
+        desktopAiBroker: {
+          state: 'bound',
+          sessionId: 'broker-session',
+          sshRuntimeKey: 'ssh:devbox',
+          modelCount: 2,
+        },
+      },
     });
 
     render(() => <EnvSettingsPage />, host);
@@ -384,6 +398,8 @@ describe('EnvSettingsPage', () => {
     expect(runtimeStatus?.textContent).toContain('3 terminals, 2 sessions, 1 task, 4 web services');
     expect(runtimeStatus?.textContent).toContain('Runtime protocol');
     expect(runtimeStatus?.textContent).toContain('redeven-runtime-v1');
+    expect(runtimeStatus?.textContent).toContain('Desktop AI Broker');
+    expect(runtimeStatus?.textContent).toContain('Bound');
   });
 
   it('shows Desktop broker status when remote AI config is missing', async () => {
@@ -392,6 +408,7 @@ describe('EnvSettingsPage', () => {
       ai: null,
       ai_runtime: {
         desktop_broker: {
+          binding_state: 'bound',
           connected: true,
           available: true,
           model_source: 'desktop_local_environment',

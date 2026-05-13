@@ -20,11 +20,14 @@ import {
   DesktopSSHRuntimeCanceledError,
   startManagedSSHRuntime,
   type ManagedSSHRuntime,
+  type ManagedSSHRuntimeAIBroker,
 } from './sshRuntime';
 import type { DesktopSSHBootstrapStrategy, DesktopSSHEnvironmentDetails } from '../shared/desktopSSH';
 
 type FakeSSHScenario =
   | 'ready'
+  | 'attached_unsupported_idle'
+  | 'attached_unsupported_active'
   | 'forwarded_blocked_readiness'
   | 'forwarded_invalid_env_shell'
   | 'remote_install'
@@ -73,6 +76,82 @@ function readState() {
 function writeState(next) {
   fs.mkdirSync(path.dirname(statePath), { recursive: true });
   fs.writeFileSync(statePath, JSON.stringify(next));
+}
+
+function futureExpiryUnixMS() {
+  return Date.now() + 24 * 60 * 60 * 1000;
+}
+
+function currentRuntimeService() {
+  const state = readState();
+  return {
+    runtime_version: 'v1.2.3',
+    protocol_version: 'redeven-runtime-v1',
+    service_owner: 'desktop',
+    desktop_managed: true,
+    effective_run_mode: 'desktop',
+    remote_enabled: false,
+    compatibility: 'compatible',
+    open_readiness: { state: 'openable' },
+    active_workload: {
+      terminal_count: 0,
+      session_count: 0,
+      task_count: 0,
+      port_forward_count: 0,
+    },
+    capabilities: {
+      desktop_ai_broker: {
+        supported: true,
+        bind_method: 'runtime_control_v1',
+      },
+    },
+    bindings: {
+      desktop_ai_broker: state.broker_bound
+        ? {
+            state: 'bound',
+            session_id: state.broker_session_id || 'broker-session',
+            ssh_runtime_key: state.broker_ssh_runtime_key || 'ssh:devbox',
+            expires_at_unix_ms: state.broker_expires_at_unix_ms || futureExpiryUnixMS(),
+            model_source: 'desktop_local_environment',
+            model_count: 1,
+          }
+        : { state: 'unbound' },
+    },
+  };
+}
+
+function oldUnsupportedRuntimeService(active) {
+  return {
+    runtime_version: 'v0.5.9',
+    protocol_version: 'redeven-runtime-v1',
+    service_owner: 'desktop',
+    desktop_managed: true,
+    effective_run_mode: 'desktop',
+    remote_enabled: false,
+    compatibility: 'compatible',
+    open_readiness: {
+      state: 'blocked',
+      reason_code: 'runtime_open_readiness_unavailable',
+      message: 'This running runtime is older than this Desktop. Install the update, then restart the runtime when it is safe to interrupt active work.',
+    },
+    active_workload: {
+      terminal_count: active ? 1 : 0,
+      session_count: active ? 1 : 0,
+      task_count: 0,
+      port_forward_count: active ? 1 : 0,
+    },
+  };
+}
+
+function runtimeServiceForScenario() {
+  const state = readState();
+  if (scenario === 'attached_unsupported_idle' && !state.stopped) {
+    return oldUnsupportedRuntimeService(false);
+  }
+  if (scenario === 'attached_unsupported_active') {
+    return oldUnsupportedRuntimeService(true);
+  }
+  return currentRuntimeService();
 }
 
 function controlSocketPath() {
@@ -224,43 +303,6 @@ function startForward() {
   const parts = spec.split(':');
   const localPort = Number(parts[1]);
   const remotePort = Number(parts[3]);
-  const runtimeService = scenario === 'forwarded_blocked_readiness'
-    ? {
-        runtime_version: 'v0.5.9',
-        protocol_version: 'redeven-runtime-v1',
-        service_owner: 'desktop',
-        desktop_managed: true,
-        effective_run_mode: 'desktop',
-        remote_enabled: false,
-        compatibility: 'compatible',
-        open_readiness: {
-          state: 'blocked',
-          reason_code: 'runtime_open_readiness_unavailable',
-          message: 'This running runtime is older than this Desktop. Install the update, then restart the runtime when it is safe to interrupt active work.',
-        },
-        active_workload: {
-          terminal_count: 1,
-          session_count: 1,
-          task_count: 0,
-          port_forward_count: 1,
-        },
-      }
-    : {
-        runtime_version: 'v1.2.3',
-        protocol_version: 'redeven-runtime-v1',
-        service_owner: 'desktop',
-        desktop_managed: true,
-        effective_run_mode: 'desktop',
-        remote_enabled: false,
-        compatibility: 'compatible',
-        open_readiness: { state: 'openable' },
-        active_workload: {
-          terminal_count: 0,
-          session_count: 0,
-          task_count: 0,
-          port_forward_count: 0,
-        },
-      };
   const server = http.createServer((request, response) => {
     if (request.url === '/api/local/runtime/health') {
       response.writeHead(200, { 'content-type': 'application/json' });
@@ -269,9 +311,69 @@ function startForward() {
         data: {
           status: 'online',
           password_required: false,
-          runtime_service: runtimeService,
+          runtime_service: scenario === 'forwarded_blocked_readiness'
+            ? {
+                ...currentRuntimeService(),
+                open_readiness: {
+                  state: 'blocked',
+                  reason_code: 'runtime_open_readiness_unavailable',
+                  message: 'This running runtime is older than this Desktop. Install the update, then restart the runtime when it is safe to interrupt active work.',
+                },
+                active_workload: {
+                  terminal_count: 1,
+                  session_count: 1,
+                  task_count: 0,
+                  port_forward_count: 1,
+                },
+              }
+            : scenario === 'forwarded_invalid_env_shell'
+            ? {
+                ...runtimeServiceForScenario(),
+                open_readiness: {
+                  state: 'blocked',
+                  reason_code: 'env_app_shell_unavailable',
+                  message: 'The Environment App shell is not available in this runtime build. Install the update, then restart the runtime when it is safe to interrupt active work.',
+                },
+              }
+            : runtimeServiceForScenario(),
         },
       }));
+      return;
+    }
+    if (request.url === '/_redeven_proxy/api/runtime/bindings/desktop-ai-broker' && request.method === 'POST') {
+      const chunks = [];
+      request.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+      request.on('end', () => {
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+        const state = readState();
+        writeState({
+          ...state,
+          broker_bound: true,
+          broker_session_id: String(body.session_id || ''),
+          broker_ssh_runtime_key: String(body.ssh_runtime_key || ''),
+          broker_expires_at_unix_ms: Number(body.expires_at_unix_ms || 0),
+        });
+        appendLog('bind_desktop_ai_broker', {
+          url: String(body.url || ''),
+          has_token: Boolean(body.token),
+          session_id: String(body.session_id || ''),
+          ssh_runtime_key: String(body.ssh_runtime_key || ''),
+        });
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({
+          ok: true,
+          data: {
+            ai_runtime: {
+              desktop_broker: {
+                binding_state: 'bound',
+                connected: true,
+                available: true,
+                model_count: 1,
+              },
+            },
+          },
+        }));
+      });
       return;
     }
     if (request.url === '/_redeven_proxy/env/') {
@@ -295,6 +397,13 @@ function startForward() {
   terminateLater('forward_terminated', () => server.close());
 }
 
+function startReverseForward() {
+  const spec = args[args.indexOf('-R') + 1] || '';
+  appendLog('reverse_forward_start', { spec });
+  process.stderr.write('Allocated port 41234 for remote forward to 127.0.0.1\n');
+  terminateLater('reverse_forward_terminated');
+}
+
 if (args.includes('-O') && args.includes('check')) {
   appendLog('master_check', { socket: controlSocketPath() });
   process.exit(0);
@@ -315,6 +424,8 @@ if (args.includes('-M') && args.includes('-N')) {
   terminateLater('master_terminated');
 } else if (args.includes('-L')) {
   startForward();
+} else if (args.includes('-R')) {
+  startReverseForward();
 } else {
   switch (marker()) {
     case 'redeven-ssh-runtime-probe':
@@ -382,18 +493,24 @@ if (args.includes('-M') && args.includes('-N')) {
         }));
         process.exit(0);
       }
+      const state = readState();
+      const attachedUnsupported = (scenario === 'attached_unsupported_idle' && !state.stopped)
+        || scenario === 'attached_unsupported_active';
       process.stdout.write(JSON.stringify({
+        ...(attachedUnsupported ? { status: 'attached' } : {}),
         local_ui_url: 'http://127.0.0.1:39001/',
         local_ui_urls: ['http://127.0.0.1:39001/'],
         password_required: true,
         effective_run_mode: 'local',
         desktop_managed: true,
         pid: 4242,
+        runtime_service: runtimeServiceForScenario(),
       }));
       process.exit(0);
       break;
     case 'redeven-ssh-stop':
       appendLog('stop_runtime', { pid: remoteScriptArgs()[0] || args[args.length - 1] || '' });
+      writeState({ ...readState(), stopped: true });
       process.exit(0);
       break;
     default:
@@ -413,6 +530,10 @@ if (args.includes('-M') && args.includes('-N')) {
 }
 `;
 
+function futureExpiryUnixMS(): number {
+  return Date.now() + 24 * 60 * 60 * 1000;
+}
+
 async function createFakeSSHFixture(scenario: FakeSSHScenario): Promise<FakeSSHFixture> {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-fake-ssh-'));
   const sshBinary = path.join(root, 'fake-ssh.js');
@@ -421,6 +542,8 @@ async function createFakeSSHFixture(scenario: FakeSSHScenario): Promise<FakeSSHF
   await fs.writeFile(sshBinary, FAKE_SSH_SCRIPT, { mode: 0o755 });
   await fs.writeFile(statePath, JSON.stringify({
     installed: scenario === 'ready'
+      || scenario === 'attached_unsupported_idle'
+      || scenario === 'attached_unsupported_active'
       || scenario === 'forwarded_blocked_readiness'
       || scenario === 'forwarded_invalid_env_shell'
       || scenario === 'no_report'
@@ -513,6 +636,7 @@ async function startWithFakeSSH(
     target?: DesktopSSHEnvironmentDetails;
     sourceRuntimeRoot?: string;
     forceRuntimeUpdate?: boolean;
+    aiBroker?: ManagedSSHRuntimeAIBroker | null;
     signal?: AbortSignal;
   }> = {},
 ): Promise<ManagedSSHRuntime> {
@@ -528,6 +652,7 @@ async function startWithFakeSSH(
     probeTimeoutMs: options.probeTimeoutMs ?? 2_500,
     stopTimeoutMs: 500,
     connectTimeoutSeconds: 1,
+    aiBroker: options.aiBroker ?? null,
     signal: options.signal,
   }));
 }
@@ -632,6 +757,53 @@ describe('sshRuntime integration', () => {
     await removeFakeSSHFixture(fixture);
   });
 
+  it('binds the Desktop AI Broker after the forwarded runtime opens', async () => {
+    const fixture = await createFakeSSHFixture('ready');
+    let runtime: ManagedSSHRuntime | null = null;
+    try {
+      runtime = await startWithFakeSSH(fixture, 'auto', {
+        aiBroker: {
+          local_url: 'http://127.0.0.1:41234',
+          token: 'broker-token',
+          session_id: 'broker-session',
+          ssh_runtime_key: 'ssh:devbox',
+          expires_at_unix_ms: futureExpiryUnixMS(),
+        },
+      });
+      expect(runtime.startup.runtime_service).toMatchObject({
+        capabilities: {
+          desktop_ai_broker: {
+            supported: true,
+            bind_method: 'runtime_control_v1',
+          },
+        },
+        bindings: {
+          desktop_ai_broker: {
+            state: 'bound',
+            session_id: 'broker-session',
+            ssh_runtime_key: 'ssh:devbox',
+          },
+        },
+      });
+    } finally {
+      await runtime?.disconnect();
+    }
+
+    const events = await readFakeSSHEvents(fixture);
+    expect(events.map((event) => event.event)).toEqual(expect.arrayContaining([
+      'reverse_forward_start',
+      'bind_desktop_ai_broker',
+    ]));
+    const bindEvent = events.find((event) => event.event === 'bind_desktop_ai_broker');
+    expect(bindEvent?.data).toEqual(expect.objectContaining({
+      session_id: 'broker-session',
+      ssh_runtime_key: 'ssh:devbox',
+      has_token: true,
+    }));
+    expect(events.map((event) => event.event)).not.toContain('stop_runtime');
+    await removeFakeSSHFixture(fixture);
+  });
+
   it('stops the remote runtime only when the user explicitly stops the SSH runtime', async () => {
     const fixture = await createFakeSSHFixture('ready');
     let runtime: ManagedSSHRuntime | null = null;
@@ -693,7 +865,7 @@ describe('sshRuntime integration', () => {
       expect(runtime.startup.local_ui_url).toBe(runtime.local_forward_url);
       expect(runtime.runtime_handle.launch_mode).toBe('spawned');
       expect(runtime.startup.runtime_service).toMatchObject({
-        runtime_version: 'v0.5.9',
+        runtime_version: 'v1.2.3',
         open_readiness: {
           state: 'blocked',
           reason_code: 'runtime_open_readiness_unavailable',
@@ -720,6 +892,59 @@ describe('sshRuntime integration', () => {
       'master_terminated',
     ]));
     expect(eventNames).not.toContain('stop_runtime');
+    await removeFakeSSHFixture(fixture);
+  });
+
+  it('replaces an idle attached runtime that does not yet support Desktop AI Broker binding', async () => {
+    const fixture = await createFakeSSHFixture('attached_unsupported_idle');
+    let runtime: ManagedSSHRuntime | null = null;
+    try {
+      runtime = await startWithFakeSSH(fixture, 'auto', {
+        aiBroker: {
+          local_url: 'http://127.0.0.1:41234',
+          token: 'broker-token',
+          session_id: 'broker-session',
+          ssh_runtime_key: 'ssh:devbox',
+          expires_at_unix_ms: futureExpiryUnixMS(),
+        },
+      });
+      expect(runtime.runtime_handle.launch_mode).toBe('spawned');
+      expect(runtime.startup.runtime_service).toMatchObject({
+        runtime_version: 'v1.2.3',
+        bindings: {
+          desktop_ai_broker: {
+            state: 'bound',
+          },
+        },
+      });
+    } finally {
+      await runtime?.disconnect();
+    }
+
+    const events = await readFakeSSHEvents(fixture);
+    expect(events.map((event) => event.event)).toEqual(expect.arrayContaining([
+      'start_runtime',
+      'stop_runtime',
+      'bind_desktop_ai_broker',
+    ]));
+    await removeFakeSSHFixture(fixture);
+  });
+
+  it('blocks an attached runtime that needs Desktop AI Broker binding but still has active work', async () => {
+    const fixture = await createFakeSSHFixture('attached_unsupported_active');
+    await expect(startWithFakeSSH(fixture, 'auto', {
+        aiBroker: {
+          local_url: 'http://127.0.0.1:41234',
+          token: 'broker-token',
+          session_id: 'broker-session',
+          ssh_runtime_key: 'ssh:devbox',
+          expires_at_unix_ms: futureExpiryUnixMS(),
+        },
+    })).rejects.toThrow('needs to restart before Desktop can bind the local Flower model bridge');
+
+    const events = await readFakeSSHEvents(fixture);
+    expect(events.map((event) => event.event)).toContain('start_runtime');
+    expect(events.map((event) => event.event)).not.toContain('stop_runtime');
     await removeFakeSSHFixture(fixture);
   });
 

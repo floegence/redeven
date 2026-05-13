@@ -74,7 +74,7 @@ paths that Desktop can read before adopting a process:
   "runtime_commit": "abc123",
   "runtime_build_time": "2026-05-02T00:00:00Z",
   "protocol_version": "redeven-runtime-v1",
-  "compatibility_epoch": 1,
+  "compatibility_epoch": 2,
   "service_owner": "desktop",
   "desktop_managed": true,
   "effective_run_mode": "hybrid",
@@ -84,6 +84,19 @@ paths that Desktop can read before adopting a process:
   "minimum_desktop_version": "v0.5.8",
   "minimum_runtime_version": "v0.5.8",
   "compatibility_review_id": "runtime-service-maintenance-v1",
+  "capabilities": {
+    "desktop_ai_broker": {
+      "supported": true,
+      "bind_method": "runtime_control_v1"
+    }
+  },
+  "bindings": {
+    "desktop_ai_broker": {
+      "state": "bound",
+      "session_id": "broker_xxx",
+      "ssh_runtime_key": "ssh:..."
+    }
+  },
   "active_workload": {
     "terminal_count": 3,
     "session_count": 2,
@@ -113,6 +126,26 @@ type RuntimeServiceWorkload = {
   port_forward_count: number;
 };
 
+type RuntimeServiceCapability = {
+  supported: boolean;
+  bind_method?: string;
+  reason_code?: string;
+  message?: string;
+};
+
+type RuntimeServiceBindingState = 'unbound' | 'bound' | 'unsupported' | 'error' | 'expired';
+
+type RuntimeServiceBinding = {
+  state: RuntimeServiceBindingState;
+  session_id?: string;
+  ssh_runtime_key?: string;
+  expires_at_unix_ms?: number;
+  model_source?: string;
+  model_count?: number;
+  missing_key_provider_ids?: string[];
+  last_error?: string;
+};
+
 type RuntimeServiceIdentity = {
   runtime_version: string;
   runtime_commit: string;
@@ -127,6 +160,12 @@ type RuntimeServiceIdentity = {
   minimum_runtime_version: string;
   compatibility_review_id: string;
   active_workload: RuntimeServiceWorkload;
+  capabilities: {
+    desktop_ai_broker: RuntimeServiceCapability;
+  };
+  bindings: {
+    desktop_ai_broker: RuntimeServiceBinding;
+  };
 };
 ```
 
@@ -136,6 +175,8 @@ contract's protocol version, compatibility epoch, minimum Desktop version,
 minimum Runtime version, and review id into every Runtime Service snapshot.
 Desktop and Env App render those fields as maintenance context; they should not
 invent a second compatibility policy in UI-only code.
+
+The same snapshot now also carries `capabilities.desktop_ai_broker` and `bindings.desktop_ai_broker`, which Desktop uses to decide whether an attached SSH runtime can accept a broker binding without falling back to string-based heuristics.
 
 ### Contract Carriers
 

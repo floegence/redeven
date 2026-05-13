@@ -1,6 +1,9 @@
 package runtimeservice
 
-import "strings"
+import (
+	"sort"
+	"strings"
+)
 
 const ProtocolVersion = "redeven-runtime-v1"
 
@@ -49,6 +52,44 @@ type Workload struct {
 	PortForwardCount int `json:"port_forward_count"`
 }
 
+const RuntimeControlBindMethodV1 = "runtime_control_v1"
+
+type Capability struct {
+	Supported  bool   `json:"supported"`
+	BindMethod string `json:"bind_method,omitempty"`
+	ReasonCode string `json:"reason_code,omitempty"`
+	Message    string `json:"message,omitempty"`
+}
+
+type Capabilities struct {
+	DesktopAIBroker Capability `json:"desktop_ai_broker"`
+}
+
+type BindingState string
+
+const (
+	BindingStateUnbound     BindingState = "unbound"
+	BindingStateBound       BindingState = "bound"
+	BindingStateUnsupported BindingState = "unsupported"
+	BindingStateError       BindingState = "error"
+	BindingStateExpired     BindingState = "expired"
+)
+
+type Binding struct {
+	State                 BindingState `json:"state"`
+	SessionID             string       `json:"session_id,omitempty"`
+	SSHRuntimeKey         string       `json:"ssh_runtime_key,omitempty"`
+	ExpiresAtUnixMS       int64        `json:"expires_at_unix_ms,omitempty"`
+	ModelSource           string       `json:"model_source,omitempty"`
+	ModelCount            int          `json:"model_count,omitempty"`
+	MissingKeyProviderIDs []string     `json:"missing_key_provider_ids,omitempty"`
+	LastError             string       `json:"last_error,omitempty"`
+}
+
+type Bindings struct {
+	DesktopAIBroker Binding `json:"desktop_ai_broker"`
+}
+
 type Snapshot struct {
 	RuntimeVersion        string        `json:"runtime_version,omitempty"`
 	RuntimeCommit         string        `json:"runtime_commit,omitempty"`
@@ -66,6 +107,8 @@ type Snapshot struct {
 	CompatibilityReviewID string        `json:"compatibility_review_id,omitempty"`
 	OpenReadiness         OpenReadiness `json:"open_readiness"`
 	ActiveWorkload        Workload      `json:"active_workload"`
+	Capabilities          Capabilities  `json:"capabilities"`
+	Bindings              Bindings      `json:"bindings"`
 }
 
 // NormalizeSnapshotForEndpoint applies endpoint-level facts that older or
@@ -147,7 +190,59 @@ func NormalizeSnapshot(snapshot Snapshot) Snapshot {
 	snapshot.ActiveWorkload.SessionCount = normalizeCount(snapshot.ActiveWorkload.SessionCount)
 	snapshot.ActiveWorkload.TaskCount = normalizeCount(snapshot.ActiveWorkload.TaskCount)
 	snapshot.ActiveWorkload.PortForwardCount = normalizeCount(snapshot.ActiveWorkload.PortForwardCount)
+	snapshot.Capabilities = NormalizeCapabilities(snapshot.Capabilities)
+	snapshot.Bindings = NormalizeBindings(snapshot.Bindings, snapshot.Capabilities)
 	return snapshot
+}
+
+func NormalizeCapabilities(capabilities Capabilities) Capabilities {
+	capabilities.DesktopAIBroker = NormalizeCapability(capabilities.DesktopAIBroker)
+	return capabilities
+}
+
+func NormalizeCapability(capability Capability) Capability {
+	capability.BindMethod = strings.TrimSpace(capability.BindMethod)
+	capability.ReasonCode = strings.TrimSpace(capability.ReasonCode)
+	capability.Message = strings.TrimSpace(capability.Message)
+	if !capability.Supported {
+		capability.BindMethod = ""
+	}
+	if capability.Supported && capability.BindMethod == "" {
+		capability.BindMethod = RuntimeControlBindMethodV1
+	}
+	return capability
+}
+
+func NormalizeBindings(bindings Bindings, capabilities Capabilities) Bindings {
+	bindings.DesktopAIBroker = NormalizeBinding(bindings.DesktopAIBroker, capabilities.DesktopAIBroker)
+	return bindings
+}
+
+func NormalizeBinding(binding Binding, capability Capability) Binding {
+	binding.State = BindingState(strings.TrimSpace(string(binding.State)))
+	binding.SessionID = strings.TrimSpace(binding.SessionID)
+	binding.SSHRuntimeKey = strings.TrimSpace(binding.SSHRuntimeKey)
+	binding.ModelSource = strings.TrimSpace(binding.ModelSource)
+	binding.LastError = strings.TrimSpace(binding.LastError)
+	if binding.ExpiresAtUnixMS < 0 {
+		binding.ExpiresAtUnixMS = 0
+	}
+	binding.ModelCount = normalizeCount(binding.ModelCount)
+	binding.MissingKeyProviderIDs = compactSortedStrings(binding.MissingKeyProviderIDs)
+
+	if !capability.Supported {
+		binding.State = BindingStateUnsupported
+		return binding
+	}
+	switch binding.State {
+	case BindingStateUnbound, BindingStateBound, BindingStateUnsupported, BindingStateError, BindingStateExpired:
+	default:
+		binding.State = BindingStateUnbound
+	}
+	if binding.State == BindingStateUnsupported {
+		binding.State = BindingStateUnbound
+	}
+	return binding
 }
 
 func NormalizeOpenReadiness(readiness OpenReadiness, snapshot Snapshot) OpenReadiness {
@@ -220,4 +315,25 @@ func normalizeCount(value int) int {
 		return 0
 	}
 	return value
+}
+
+func compactSortedStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	sort.Strings(out)
+	return out
 }

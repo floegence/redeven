@@ -33,6 +33,21 @@ describe('sys codec', () => {
           task_count: 1,
           port_forward_count: 4,
         },
+        capabilities: {
+          desktop_ai_broker: {
+            supported: true,
+            bind_method: 'runtime_control_v1',
+          },
+        },
+        bindings: {
+          desktop_ai_broker: {
+            state: 'bound',
+            session_id: 'broker-session',
+            ssh_runtime_key: 'ssh:devbox',
+            model_count: 2,
+            missing_key_provider_ids: ['openai', 'anthropic', 'openai'],
+          },
+        },
       },
     })).toMatchObject({
       serverTimeMs: 42,
@@ -62,6 +77,21 @@ describe('sys codec', () => {
           sessionCount: 2,
           taskCount: 1,
           portForwardCount: 4,
+        },
+        capabilities: {
+          desktopAiBroker: {
+            supported: true,
+            bindMethod: 'runtime_control_v1',
+          },
+        },
+        bindings: {
+          desktopAiBroker: {
+            state: 'bound',
+            sessionId: 'broker-session',
+            sshRuntimeKey: 'ssh:devbox',
+            modelCount: 2,
+            missingKeyProviderIds: ['anthropic', 'openai'],
+          },
         },
       },
     });
@@ -102,6 +132,26 @@ describe('sys codec', () => {
         sessionCount: 2,
         taskCount: 0,
         portForwardCount: 1,
+      },
+      capabilities: {
+        desktopAiBroker: {
+          supported: false,
+          bindMethod: undefined,
+          reasonCode: undefined,
+          message: undefined,
+        },
+      },
+      bindings: {
+        desktopAiBroker: {
+          state: 'unsupported',
+          sessionId: undefined,
+          sshRuntimeKey: undefined,
+          expiresAtUnixMs: undefined,
+          modelSource: undefined,
+          modelCount: 0,
+          missingKeyProviderIds: undefined,
+          lastError: undefined,
+        },
       },
     });
   });

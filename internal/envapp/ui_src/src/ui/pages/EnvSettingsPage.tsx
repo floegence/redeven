@@ -386,6 +386,62 @@ function formatRuntimeServiceWorkload(snapshot: RuntimeServiceSnapshot | undefin
   return parts.length > 0 ? parts.join(', ') : 'No active work';
 }
 
+function formatDesktopBrokerBindingState(value: unknown): string {
+  switch (String(value ?? '').trim()) {
+    case 'bound':
+      return 'Bound';
+    case 'unbound':
+      return 'Unbound';
+    case 'unsupported':
+      return 'Unsupported';
+    case 'expired':
+      return 'Expired';
+    case 'error':
+      return 'Error';
+    default:
+      return 'Unknown';
+  }
+}
+
+function desktopBrokerBindingTone(value: unknown): 'default' | 'warning' | 'success' {
+  switch (String(value ?? '').trim()) {
+    case 'bound':
+      return 'success';
+    case 'unsupported':
+    case 'expired':
+    case 'error':
+      return 'warning';
+    default:
+      return 'default';
+  }
+}
+
+function formatDesktopBrokerNotice(bindingState: unknown, status: { connected?: boolean; available?: boolean; last_error?: string } | null): string {
+  switch (String(bindingState ?? '').trim()) {
+    case 'bound':
+      if (status?.available) {
+        return 'Desktop is providing a session model bridge for this SSH environment. Remote provider settings remain local to this host.';
+      }
+      return 'Desktop is connected, but no usable model is available yet. Configure the local API key on this computer.';
+    case 'unsupported':
+      return 'This SSH runtime does not support Desktop model bridge binding yet. Restart the remote runtime, then try again when it is safe to interrupt active work.';
+    case 'expired':
+      return 'Desktop model bridge access expired. Reopen the SSH environment to bind a fresh session.';
+    case 'error':
+      return status?.last_error
+        ? `Desktop model bridge binding failed: ${status.last_error}`
+        : 'Desktop model bridge binding failed. Reopen the SSH environment to retry.';
+    default:
+      if (status?.available) {
+        return 'Desktop is providing a session model bridge for this SSH environment. Remote provider settings remain local to this host.';
+      }
+      if (status?.connected) {
+        return 'Desktop is connected, but no usable model is available yet. Configure the local API key on this computer.';
+      }
+      return 'Flower is currently disabled. Once the settings below become valid, Flower will be enabled automatically.';
+  }
+}
+
 // ============================================================================
 // Main Component
 // ============================================================================
@@ -480,6 +536,7 @@ export function EnvSettingsPage() {
   const isRestarting = createMemo(() => runtimeUpdate.maintenance.isRestarting());
   const runtimeService = createMemo(() => runtimeUpdate.version.runtimeService());
   const activeWorkSummary = createMemo(() => formatRuntimeServiceWorkload(runtimeService()));
+  const runtimeDesktopBrokerBinding = createMemo(() => runtimeService()?.bindings?.desktopAiBroker);
 
   createEffect(() => {
     if (codeRuntimeStatus()?.operation.state !== 'running') return;
@@ -827,15 +884,24 @@ export function EnvSettingsPage() {
 
   const aiEnabled = createMemo(() => !!settings()?.ai);
   const desktopBrokerStatus = createMemo(() => settings()?.ai_runtime?.desktop_broker ?? null);
+  const desktopBrokerBindingState = createMemo(() => (
+    String(desktopBrokerStatus()?.binding_state ?? runtimeDesktopBrokerBinding()?.state ?? '').trim()
+  ));
   const flowerBadge = createMemo(() => {
     if (aiEnabled()) return 'Remote config';
+    if (desktopBrokerBindingState() === 'bound' && desktopBrokerStatus()?.available) return 'Desktop broker';
+    if (desktopBrokerBindingState() === 'bound') return 'Desktop bound';
     if (desktopBrokerStatus()?.available) return 'Desktop broker';
     if (desktopBrokerStatus()?.connected) return 'Desktop connected';
     return 'Disabled';
   });
-  const flowerBadgeVariant = createMemo<'default' | 'success'>(() => (
-    aiEnabled() || desktopBrokerStatus()?.available ? 'success' : 'default'
-  ));
+  const flowerBadgeVariant = createMemo<'default' | 'warning' | 'success'>(() => {
+    if (aiEnabled() || desktopBrokerBindingState() === 'bound' || desktopBrokerStatus()?.available) return 'success';
+    if (desktopBrokerBindingState() === 'unsupported' || desktopBrokerBindingState() === 'expired' || desktopBrokerBindingState() === 'error') {
+      return 'warning';
+    }
+    return 'default';
+  });
   const codexStatusError = createMemo(() => {
     const payloadError = String(codexStatus()?.error ?? '').trim();
     if (payloadError) return payloadError;
@@ -2874,6 +2940,17 @@ export function EnvSettingsPage() {
                     <SettingsTableCell class="font-mono text-[11px]">{runtimeService()?.protocolVersion || '—'}</SettingsTableCell>
                     <SettingsTableCell class="text-[11px] text-muted-foreground">Service identity protocol reported by the runtime.</SettingsTableCell>
                   </SettingsTableRow>
+                  <SettingsTableRow>
+                    <SettingsTableCell class="font-medium text-muted-foreground">Desktop AI Broker</SettingsTableCell>
+                    <SettingsTableCell>
+                      <SettingsPill tone={desktopBrokerBindingTone(runtimeDesktopBrokerBinding()?.state)}>
+                        {formatDesktopBrokerBindingState(runtimeDesktopBrokerBinding()?.state)}
+                      </SettingsPill>
+                    </SettingsTableCell>
+                    <SettingsTableCell class="text-[11px] text-muted-foreground">
+                      {runtimeDesktopBrokerBinding()?.lastError || 'Runtime Service binding state for Desktop-provided Flower models.'}
+                    </SettingsTableCell>
+                  </SettingsTableRow>
                   <Show when={upgradeState().allowsUpgradeAction && upgradeState().policy !== 'desktop_release'}>
                     <SettingsTableRow>
                       <SettingsTableCell class="font-medium text-muted-foreground">Target version</SettingsTableCell>
@@ -3426,11 +3503,7 @@ export function EnvSettingsPage() {
                 <div class="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-4">
                   <Zap class="h-5 w-5 text-muted-foreground" />
                   <div class="text-sm text-muted-foreground">
-                    {desktopBrokerStatus()?.available
-                      ? 'Desktop is providing a session model bridge for this SSH environment. Remote provider settings remain local to this host.'
-                      : desktopBrokerStatus()?.connected
-                        ? 'Desktop is connected, but no usable model is available yet. Configure the local API key on this computer.'
-                      : 'Flower is currently disabled. Once the settings below become valid, Flower will be enabled automatically.'}
+                    {formatDesktopBrokerNotice(desktopBrokerBindingState(), desktopBrokerStatus())}
                   </div>
                 </div>
               </Show>
