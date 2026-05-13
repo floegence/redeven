@@ -39,7 +39,7 @@ import {
 } from '../chat/askUserContract';
 import { RpcError, useProtocol } from '@floegence/floe-webapp-protocol';
 import { useEnvContext } from './EnvContext';
-import { useAIChatContext } from './AIChatContext';
+import { useAIChatContext, type AIModelOption, type AIModelSourceKey } from './AIChatContext';
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import { Tooltip } from '../primitives/Tooltip';
 import { fetchGatewayJSON, prepareGatewayRequestInit, uploadGatewayFile } from '../services/gatewayApi';
@@ -1834,11 +1834,42 @@ export function EnvAIPage() {
     return modelLabelById().get(id) ?? id;
   };
   const activeThreadModelLabel = createMemo(() => formatModelLabel(ai.selectedThreadModel()));
+  const modelOptionById = createMemo(() => {
+    const map = new Map<string, AIModelOption>();
+    for (const option of ai.modelOptions()) {
+      const value = String(option.value ?? '').trim();
+      if (value) map.set(value, option);
+    }
+    return map;
+  });
+  const selectedHeaderModelId = createMemo(() => (
+    String(hasActiveThread() ? ai.selectedThreadModel() : ai.selectedDefaultModel()).trim()
+  ));
+  const selectedModelSource = createMemo<AIModelSourceKey | ''>(() => {
+    const selected = modelOptionById().get(selectedHeaderModelId());
+    if (selected) return selected.source;
+    return ai.modelSourceGroups()[0]?.source ?? '';
+  });
+  const selectedSourceModelOptions = createMemo<AIModelOption[]>(() => {
+    const source = selectedModelSource();
+    const group = ai.modelSourceGroups().find((item) => item.source === source);
+    return group?.models.slice() ?? ai.modelOptions();
+  });
   const selectedModelSourceLabel = createMemo(() => {
-    const selected = String(hasActiveThread() ? ai.selectedThreadModel() : ai.selectedDefaultModel()).trim();
-    const option = ai.modelOptions().find((item) => String(item.value ?? '').trim() === selected);
+    const option = modelOptionById().get(selectedHeaderModelId());
     return String(option?.sourceLabel ?? '').trim() || (option?.source === 'desktop_broker' ? 'Desktop' : 'Remote runtime');
   });
+  const selectModelSource = (source: AIModelSourceKey): void => {
+    const group = ai.modelSourceGroups().find((item) => item.source === source);
+    const firstModel = group?.models[0]?.value ?? '';
+    if (!firstModel) return;
+    if (group?.models.some((item) => item.value === selectedHeaderModelId())) return;
+    if (hasActiveThread()) {
+      ai.selectThreadModel(firstModel);
+      return;
+    }
+    ai.selectDefaultModel(firstModel);
+  };
   const desktopBrokerMissingKeys = createMemo(() => (
     ai.settings()?.ai_runtime?.desktop_broker?.missing_key_provider_ids?.filter(Boolean) ?? []
   ));
@@ -3196,7 +3227,7 @@ export function EnvAIPage() {
       throw new Error('Read/write/execute permission required.');
     }
     if (!ai.aiEnabled()) {
-      notify.error('AI not configured', 'Configure a model in Runtime Settings or open this SSH Host through Desktop with a local model broker.');
+      notify.error('AI not configured', 'Configure a model in Runtime Settings or open this SSH Host through Desktop with an available Desktop model source.');
       rollbackRejectedComposerSend(context);
       throw new Error('AI is not configured.');
     }
@@ -3676,10 +3707,32 @@ export function EnvAIPage() {
                             <span class="hidden sm:inline text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
                               Default model
                             </span>
+                            <Show when={ai.modelSourceGroups().length > 1}>
+                              <div data-testid="default-model-source-selector" class="inline-flex shrink-0 rounded-full border border-border/70 bg-background/60 p-0.5">
+                                <For each={ai.modelSourceGroups()}>
+                                  {(sourceGroup) => (
+                                    <button
+                                      type="button"
+                                      class={cn(
+                                        'h-6 rounded-full px-2 text-[10px] font-medium transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50',
+                                        selectedModelSource() === sourceGroup.source
+                                          ? 'bg-primary text-primary-foreground shadow-sm'
+                                          : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground',
+                                      )}
+                                      disabled={defaultModelControlDisabled()}
+                                      aria-pressed={selectedModelSource() === sourceGroup.source}
+                                      onClick={() => selectModelSource(sourceGroup.source)}
+                                    >
+                                      {sourceGroup.sourceLabel}
+                                    </button>
+                                  )}
+                                </For>
+                              </div>
+                            </Show>
                             <Select
                               value={ai.selectedDefaultModel()}
                               onChange={(v) => ai.selectDefaultModel(String(v ?? '').trim())}
-                              options={ai.modelOptions()}
+                              options={selectedSourceModelOptions()}
                               placeholder="Select default model..."
                               disabled={defaultModelControlDisabled()}
                               class="ai-model-select-trigger flower-chat-model-select min-w-[120px] max-w-[160px] sm:min-w-[140px] sm:max-w-[200px] h-7 text-[11px]"
@@ -3710,10 +3763,32 @@ export function EnvAIPage() {
                             <span class="hidden sm:inline text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
                               Thread model
                             </span>
+                            <Show when={ai.modelSourceGroups().length > 1}>
+                              <div data-testid="thread-model-source-selector" class="inline-flex shrink-0 rounded-full border border-border/70 bg-background/60 p-0.5">
+                                <For each={ai.modelSourceGroups()}>
+                                  {(sourceGroup) => (
+                                    <button
+                                      type="button"
+                                      class={cn(
+                                        'h-6 rounded-full px-2 text-[10px] font-medium transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50',
+                                        selectedModelSource() === sourceGroup.source
+                                          ? 'bg-primary text-primary-foreground shadow-sm'
+                                          : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground',
+                                      )}
+                                      disabled={threadModelControlDisabled()}
+                                      aria-pressed={selectedModelSource() === sourceGroup.source}
+                                      onClick={() => selectModelSource(sourceGroup.source)}
+                                    >
+                                      {sourceGroup.sourceLabel}
+                                    </button>
+                                  )}
+                                </For>
+                              </div>
+                            </Show>
                             <Select
                               value={ai.selectedThreadModel()}
                               onChange={(v) => ai.selectThreadModel(String(v ?? '').trim())}
-                              options={ai.modelOptions()}
+                              options={selectedSourceModelOptions()}
                               placeholder="Select thread model..."
                               disabled={threadModelControlDisabled()}
                               class="ai-model-select-trigger flower-chat-model-select min-w-[120px] max-w-[160px] sm:min-w-[140px] sm:max-w-[200px] h-7 text-[11px]"

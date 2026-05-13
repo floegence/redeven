@@ -38,6 +38,23 @@ export type ModelsResponse = Readonly<{
   runtime?: AIRuntimeStatus | null;
 }>;
 
+export type AIModelSourceKey = 'runtime_config' | 'desktop_broker';
+
+export type AIModelOption = Readonly<{
+  value: string;
+  label: string;
+  source: AIModelSourceKey;
+  sourceLabel: string;
+}>;
+
+export type AIModelSourceGroup = Readonly<{
+  source: AIModelSourceKey;
+  sourceLabel: string;
+  available: boolean;
+  reason?: string;
+  models: readonly AIModelOption[];
+}>;
+
 export type AIRuntimeStatus = Readonly<{
   remote_configured?: boolean;
   desktop_broker?: Readonly<{
@@ -259,6 +276,16 @@ function patchThreadReadStatus(thread: ThreadView, readStatus: ThreadReadStatus)
   };
 }
 
+const MODEL_SOURCE_ORDER: readonly AIModelSourceKey[] = ['runtime_config', 'desktop_broker'];
+
+function normalizeAIModelSource(raw: unknown): AIModelSourceKey {
+  return String(raw ?? '').trim() === 'desktop_broker' ? 'desktop_broker' : 'runtime_config';
+}
+
+function defaultModelSourceLabel(source: AIModelSourceKey): string {
+  return source === 'desktop_broker' ? 'Desktop' : 'Remote runtime';
+}
+
 function threadNeedsReadMark(readStatus: ThreadReadStatus | null | undefined): boolean {
   if (!readStatus) return false;
   return (
@@ -290,7 +317,8 @@ export interface AIChatContextValue {
   selectThreadModel: (modelID: string) => void;
   selectedSendModel: Accessor<string>;
   activeThreadModelLocked: Accessor<boolean>;
-  modelOptions: Accessor<Array<{ value: string; label: string; source?: string; sourceLabel?: string }>>;
+  modelOptions: Accessor<AIModelOption[]>;
+  modelSourceGroups: Accessor<AIModelSourceGroup[]>;
 
   // Threads
   threads: Resource<ListThreadsResponse | null>;
@@ -429,15 +457,42 @@ export function createAIChatContextValue(): AIChatContextValue {
     setDraftModelId(next);
   });
 
-  const modelOptions = createMemo(() => {
+  const modelOptions = createMemo<AIModelOption[]>(() => {
     const m = models();
     if (!m) return [];
-    return m.models.map((it) => ({
-      value: it.id,
-      label: it.label ?? it.id,
-      source: it.source,
-      sourceLabel: it.source_label,
-    }));
+    return m.models
+      .map((it) => {
+        const value = String(it.id ?? '').trim();
+        const source = normalizeAIModelSource(it.source);
+        return {
+          value,
+          label: String(it.label ?? value).trim() || value,
+          source,
+          sourceLabel: String(it.source_label ?? '').trim() || defaultModelSourceLabel(source),
+        };
+      })
+      .filter((it) => it.value !== '');
+  });
+
+  const modelSourceGroups = createMemo<AIModelSourceGroup[]>(() => {
+    const bySource = new Map<AIModelSourceKey, AIModelOption[]>();
+    for (const option of modelOptions()) {
+      const list = bySource.get(option.source) ?? [];
+      list.push(option);
+      bySource.set(option.source, list);
+    }
+    return MODEL_SOURCE_ORDER
+      .map((source) => {
+        const sourceModels = bySource.get(source) ?? [];
+        const first = sourceModels[0];
+        return {
+          source,
+          sourceLabel: first?.sourceLabel || defaultModelSourceLabel(source),
+          available: sourceModels.length > 0,
+          models: sourceModels,
+        };
+      })
+      .filter((group) => group.available);
   });
 
   // Threads resource
@@ -1420,6 +1475,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     selectedSendModel,
     activeThreadModelLocked,
     modelOptions,
+    modelSourceGroups,
     threads,
     bumpThreadsSeq,
     activeThreadId,

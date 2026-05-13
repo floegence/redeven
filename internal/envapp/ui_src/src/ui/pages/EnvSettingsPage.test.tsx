@@ -405,7 +405,7 @@ describe('EnvSettingsPage', () => {
     expect(runtimeStatus?.textContent).toContain('3 terminals, 2 sessions, 1 task, 4 web services');
     expect(runtimeStatus?.textContent).toContain('Runtime protocol');
     expect(runtimeStatus?.textContent).toContain('redeven-runtime-v1');
-    expect(runtimeStatus?.textContent).toContain('Desktop AI Broker');
+    expect(runtimeStatus?.textContent).toContain('Desktop model source');
     expect(runtimeStatus?.textContent).toContain('Bound');
   });
 
@@ -426,10 +426,11 @@ describe('EnvSettingsPage', () => {
 
     render(() => <EnvSettingsPage />, host);
     await vi.waitFor(() => {
-      expect(host.querySelector('[data-settings-card="Flower"]')?.textContent).toContain('Desktop is providing a session model bridge for this SSH environment.');
+      expect(host.querySelector('[data-settings-card="Flower"]')?.textContent).toContain('The Desktop model source is available for this SSH environment.');
     });
 
     const flowerCard = host.querySelector('[data-settings-card="Flower"]');
-    expect(flowerCard?.textContent).toContain('Desktop is providing a session model bridge for this SSH environment.');
+    expect(flowerCard?.textContent).toContain('The Desktop model source is available for this SSH environment.');
+    expect(host.textContent).toContain('Desktop model source');
   });
 });

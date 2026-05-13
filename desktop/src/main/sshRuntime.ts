@@ -2072,23 +2072,31 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       emitSSHRuntimeProgress(
         args.onProgress,
         'ssh_opening_tunnel',
-        'Opening Desktop AI bridge',
-        'Desktop is attaching the local model broker to this SSH session.',
+        'Preparing Desktop models',
+        'Desktop is creating a private SSH bridge for local model calls.',
       );
-      const reverse = await openDesktopAIBrokerReverseForward({
-        sshBinary,
-        target,
-        controlSocketPath,
-        connectTimeoutSeconds,
-        auth,
-        broker: args.aiBroker,
-        startupTimeoutMs,
-        logs,
-        onLog: args.onLog,
-        signal: args.signal,
-      });
-      reverseForwardProcess = reverse.process;
-      remoteBrokerURL = reverse.remoteURL;
+      try {
+        const reverse = await openDesktopAIBrokerReverseForward({
+          sshBinary,
+          target,
+          controlSocketPath,
+          connectTimeoutSeconds,
+          auth,
+          broker: args.aiBroker,
+          startupTimeoutMs,
+          logs,
+          onLog: args.onLog,
+          signal: args.signal,
+        });
+        reverseForwardProcess = reverse.process;
+        remoteBrokerURL = reverse.remoteURL;
+      } catch (error) {
+        if (error instanceof DesktopSSHRuntimeCanceledError || isAbortError(error) || args.signal?.aborted) {
+          throw error;
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        args.onLog?.('reverse_forward_stderr', `Desktop model bridge unavailable: ${message}\n`);
+      }
     }
 
     let remoteLaunch: ManagedSSHRemoteStartup | null = null;
@@ -2211,22 +2219,30 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       throw readinessFailure('Desktop created the SSH port forward but could not reach the forwarded Redeven Local UI.', logs);
     }
     if (args.aiBroker) {
-      if (!remoteBrokerURL) {
-        throw readinessFailure('Desktop AI Broker reverse forward was not available for the requested SSH runtime binding.', logs);
+      if (remoteBrokerURL) {
+        try {
+          await bindDesktopAIBrokerToForwardedRuntime({
+            forwardedURL,
+            remoteBrokerURL,
+            broker: args.aiBroker,
+            timeoutMs: args.probeTimeoutMs ?? startupTimeoutMs,
+            signal: args.signal,
+            onProgress: args.onProgress,
+          });
+        } catch (error) {
+          if (error instanceof DesktopSSHRuntimeCanceledError || isAbortError(error) || args.signal?.aborted) {
+            throw error;
+          }
+          const message = error instanceof Error ? error.message : String(error);
+          args.onLog?.('control_stderr', `Desktop model bridge unavailable: ${message}\n`);
+        } finally {
+          forwardedStartup = await waitForForwardedLocalUIOpenable(
+            forwardedURL,
+            args.probeTimeoutMs ?? startupTimeoutMs,
+            args.signal,
+          ) ?? forwardedStartup;
+        }
       }
-      await bindDesktopAIBrokerToForwardedRuntime({
-        forwardedURL,
-        remoteBrokerURL,
-        broker: args.aiBroker,
-        timeoutMs: args.probeTimeoutMs ?? startupTimeoutMs,
-        signal: args.signal,
-        onProgress: args.onProgress,
-      });
-      forwardedStartup = await waitForForwardedLocalUIOpenable(
-        forwardedURL,
-        args.probeTimeoutMs ?? startupTimeoutMs,
-        args.signal,
-      ) ?? forwardedStartup;
     }
     const startup: StartupReport = {
       ...remoteStartup,

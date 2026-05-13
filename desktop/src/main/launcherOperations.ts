@@ -21,6 +21,9 @@ type CreateLauncherOperationInput = Readonly<{
   title: string;
   detail: string;
   cancelable?: boolean;
+  interrupt_label?: string;
+  interrupt_detail?: string;
+  interrupt_kind?: DesktopLauncherOperationSnapshot['interrupt_kind'];
 }>;
 
 function compact(value: unknown): string {
@@ -46,6 +49,9 @@ function operationProgress(snapshot: DesktopLauncherOperationSnapshot): DesktopL
     title: snapshot.title,
     detail: snapshot.detail,
     cancelable: snapshot.cancelable,
+    interrupt_label: snapshot.interrupt_label,
+    interrupt_detail: snapshot.interrupt_detail,
+    interrupt_kind: snapshot.interrupt_kind,
     deleted_subject: snapshot.deleted_subject,
     error_message: snapshot.error_message,
   };
@@ -97,6 +103,9 @@ export class LauncherOperationRegistry {
       title: compact(input.title),
       detail: compact(input.detail),
       cancelable: input.cancelable === true,
+      interrupt_label: compact(input.interrupt_label) || undefined,
+      interrupt_detail: compact(input.interrupt_detail) || undefined,
+      interrupt_kind: input.interrupt_kind,
       deleted_subject: false,
     };
     this.operationsByKey.set(operationKey, snapshot);
@@ -206,9 +215,12 @@ export class LauncherOperationRegistry {
     return this.update(key, {
       status: 'canceling',
       phase: snapshot.deleted_subject ? 'canceling_deleted_connection' : 'canceling',
-      title: snapshot.deleted_subject ? 'Connection removed' : 'Canceling operation',
-      detail: compact(reason) || 'Desktop is canceling this background task.',
+      title: snapshot.deleted_subject ? 'Connection removed' : 'Stopping operation',
+      detail: compact(reason) || 'Desktop is stopping this background task.',
       cancelable: false,
+      interrupt_label: undefined,
+      interrupt_detail: undefined,
+      interrupt_kind: undefined,
     });
   }
 }

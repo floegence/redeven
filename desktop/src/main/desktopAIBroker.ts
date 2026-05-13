@@ -26,6 +26,7 @@ export type ManagedDesktopAIBroker = Readonly<{
   token: string;
   sessionID: string;
   expiresAtUnixMs: number;
+  configured: boolean;
   modelCount: number;
   missingKeyProviderIDs: readonly string[];
   stop: () => Promise<void>;
@@ -148,6 +149,7 @@ export async function startDesktopAIBroker(args: StartDesktopAIBrokerArgs): Prom
           token,
           sessionID,
           expiresAtUnixMs,
+          configured: report.configured === true,
           modelCount: Math.max(0, Math.floor(Number(report.model_count ?? 0))),
           missingKeyProviderIDs: report.missing_key_provider_ids ?? [],
           stop: cleanup,

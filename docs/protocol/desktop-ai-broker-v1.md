@@ -1,13 +1,14 @@
 # Desktop AI Broker v1
 
-This document describes the local-only broker used by Redeven Desktop to serve model calls for Desktop-managed SSH Host Environments.
+This document describes the local-only broker used by Redeven Desktop to expose the `Desktop` model source for Desktop-managed SSH Host Environments.
 
 ## Goals
 
 - Keep provider API keys on the user's machine.
-- Let SSH Host Environments reuse Desktop's local Flower model configuration without writing secrets into the remote runtime config.
+- Let SSH Host Environments reuse Desktop's local Flower model configuration as an explicit `Desktop` source without writing secrets into the remote runtime config.
 - Expose only model-oriented endpoints.
 - Keep tool execution on the SSH host runtime.
+- Keep SSH host opening independent from this optional model source.
 
 ## Transport
 
@@ -16,6 +17,8 @@ This document describes the local-only broker used by Redeven Desktop to serve m
 - Lifetime: bound to the Desktop/SSH session that created it
 
 Desktop binds the broker to the running SSH runtime through runtime-control after the Local UI forward is verified. The remote runtime receives only the forwarded broker URL and short-lived token for that live session, keeps them in memory, and does not persist them to config, secrets, logs, or startup command arguments.
+
+Binding failure is non-fatal for the SSH connection. It only removes the `Desktop` source from the usable model-source list until the session is reopened or rebound; `Remote runtime` models remain available when the remote runtime has its own AI settings.
 
 Runtime-control binding endpoint:
 

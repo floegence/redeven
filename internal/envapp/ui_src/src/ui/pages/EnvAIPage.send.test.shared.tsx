@@ -297,7 +297,13 @@ const aiContextValue = new Proxy({
   threads: createMockResource(),
   aiEnabled: () => true,
   modelsReady: () => true,
-  modelOptions: () => [{ value: 'model-test', label: 'Model Test' }],
+  modelOptions: () => [{ value: 'model-test', label: 'Model Test', source: 'runtime_config', sourceLabel: 'Remote runtime' }],
+  modelSourceGroups: () => [{
+    source: 'runtime_config',
+    sourceLabel: 'Remote runtime',
+    available: true,
+    models: [{ value: 'model-test', label: 'Model Test', source: 'runtime_config', sourceLabel: 'Remote runtime' }],
+  }],
   selectedDefaultModel: () => 'model-test',
   selectDefaultModel: vi.fn(),
   selectedThreadModel: () => String(aiState.activeThread?.model_id ?? 'model-test').trim() || 'model-test',
@@ -632,6 +638,13 @@ function resetScenario() {
   aiContextValue.threads = createMockResource();
   aiContextValue.aiEnabled = () => true;
   aiContextValue.modelsReady = () => true;
+  aiContextValue.modelOptions = () => [{ value: 'model-test', label: 'Model Test', source: 'runtime_config', sourceLabel: 'Remote runtime' }];
+  aiContextValue.modelSourceGroups = () => [{
+    source: 'runtime_config',
+    sourceLabel: 'Remote runtime',
+    available: true,
+    models: [{ value: 'model-test', label: 'Model Test', source: 'runtime_config', sourceLabel: 'Remote runtime' }],
+  }];
   aiContextValue.selectedDefaultModel = () => 'model-test';
   aiContextValue.selectDefaultModel = vi.fn();
   aiContextValue.selectedThreadModel = () => String(aiState.activeThread?.model_id ?? 'model-test').trim() || 'model-test';
@@ -1034,9 +1047,15 @@ export function registerEnvAIPageSendTests() {
       aiState.activeThreadId = '';
       aiState.activeThread = null;
       aiContextValue.modelOptions = () => [
-        { value: 'model-test', label: 'Model Test' },
-        { value: 'model-next', label: 'Model Next' },
+        { value: 'model-test', label: 'Model Test', source: 'runtime_config', sourceLabel: 'Remote runtime' },
+        { value: 'model-next', label: 'Model Next', source: 'runtime_config', sourceLabel: 'Remote runtime' },
       ];
+      aiContextValue.modelSourceGroups = () => [{
+        source: 'runtime_config',
+        sourceLabel: 'Remote runtime',
+        available: true,
+        models: aiContextValue.modelOptions(),
+      }];
       aiContextValue.selectedDefaultModel = () => 'model-test';
       aiContextValue.selectDefaultModel = vi.fn();
 
@@ -1058,11 +1077,54 @@ export function registerEnvAIPageSendTests() {
       }
     }, 20000);
 
+    it('shows a source selector and scopes new-chat model options to the selected source', async () => {
+      aiState.activeThreadId = '';
+      aiState.activeThread = null;
+      const remoteModels = [
+        { value: 'remote/model-a', label: 'Remote A', source: 'runtime_config' as const, sourceLabel: 'Remote runtime' },
+      ];
+      const desktopModels = [
+        { value: 'desktop-broker:local/model-b', label: 'Desktop B', source: 'desktop_broker' as const, sourceLabel: 'Desktop' },
+      ];
+      aiContextValue.modelOptions = () => [...remoteModels, ...desktopModels];
+      aiContextValue.modelSourceGroups = () => [
+        { source: 'runtime_config', sourceLabel: 'Remote runtime', available: true, models: remoteModels },
+        { source: 'desktop_broker', sourceLabel: 'Desktop', available: true, models: desktopModels },
+      ];
+      aiContextValue.selectedDefaultModel = () => 'remote/model-a';
+      aiContextValue.selectDefaultModel = vi.fn();
+
+      const { host, dispose } = await renderPage();
+      try {
+        const sourceSelector = host.querySelector('[data-testid="default-model-source-selector"]');
+        const defaultControl = host.querySelector('[data-testid="default-model-control"]');
+        const defaultSelect = defaultControl?.querySelector('select') as HTMLSelectElement | null;
+
+        expect(sourceSelector?.textContent).toContain('Remote runtime');
+        expect(sourceSelector?.textContent).toContain('Desktop');
+        expect(Array.from(defaultSelect?.options ?? []).map((option) => option.value).filter(Boolean)).toEqual(['remote/model-a']);
+
+        const desktopButton = Array.from(sourceSelector?.querySelectorAll('button') ?? [])
+          .find((button) => button.textContent?.includes('Desktop'));
+        desktopButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+        expect(aiContextValue.selectDefaultModel).toHaveBeenCalledWith('desktop-broker:local/model-b');
+      } finally {
+        dispose();
+      }
+    }, 20000);
+
     it('shows a thread-model picker for an unlocked active thread and wires it to selectThreadModel', async () => {
       aiContextValue.modelOptions = () => [
-        { value: 'model-test', label: 'Model Test' },
-        { value: 'model-next', label: 'Model Next' },
+        { value: 'model-test', label: 'Model Test', source: 'runtime_config', sourceLabel: 'Remote runtime' },
+        { value: 'model-next', label: 'Model Next', source: 'runtime_config', sourceLabel: 'Remote runtime' },
       ];
+      aiContextValue.modelSourceGroups = () => [{
+        source: 'runtime_config',
+        sourceLabel: 'Remote runtime',
+        available: true,
+        models: aiContextValue.modelOptions(),
+      }];
       aiContextValue.selectedThreadModel = () => 'model-test';
       aiContextValue.selectThreadModel = vi.fn();
       aiContextValue.activeThreadModelLocked = () => false;
@@ -1085,6 +1147,44 @@ export function registerEnvAIPageSendTests() {
       }
     }, 20000);
 
+    it('switches active thread source without mutating the default model', async () => {
+      const remoteModels = [
+        { value: 'remote/model-a', label: 'Remote A', source: 'runtime_config' as const, sourceLabel: 'Remote runtime' },
+      ];
+      const desktopModels = [
+        { value: 'desktop-broker:local/model-b', label: 'Desktop B', source: 'desktop_broker' as const, sourceLabel: 'Desktop' },
+      ];
+      aiContextValue.modelOptions = () => [...remoteModels, ...desktopModels];
+      aiContextValue.modelSourceGroups = () => [
+        { source: 'runtime_config', sourceLabel: 'Remote runtime', available: true, models: remoteModels },
+        { source: 'desktop_broker', sourceLabel: 'Desktop', available: true, models: desktopModels },
+      ];
+      aiContextValue.selectedThreadModel = () => 'remote/model-a';
+      aiContextValue.selectThreadModel = vi.fn();
+      aiContextValue.selectDefaultModel = vi.fn();
+      aiContextValue.activeThreadModelLocked = () => false;
+
+      const { host, dispose } = await renderPage();
+      try {
+        const sourceSelector = host.querySelector('[data-testid="thread-model-source-selector"]');
+        const threadControl = host.querySelector('[data-testid="thread-model-control"]');
+        const threadSelect = threadControl?.querySelector('select') as HTMLSelectElement | null;
+
+        expect(sourceSelector?.textContent).toContain('Remote runtime');
+        expect(sourceSelector?.textContent).toContain('Desktop');
+        expect(Array.from(threadSelect?.options ?? []).map((option) => option.value).filter(Boolean)).toEqual(['remote/model-a']);
+
+        const desktopButton = Array.from(sourceSelector?.querySelectorAll('button') ?? [])
+          .find((button) => button.textContent?.includes('Desktop'));
+        desktopButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+        expect(aiContextValue.selectThreadModel).toHaveBeenCalledWith('desktop-broker:local/model-b');
+        expect(aiContextValue.selectDefaultModel).not.toHaveBeenCalled();
+      } finally {
+        dispose();
+      }
+    }, 20000);
+
     it('shows a locked thread model badge instead of an editable picker', async () => {
       aiState.activeThread = {
         ...(aiState.activeThread ?? {
@@ -1098,7 +1198,13 @@ export function registerEnvAIPageSendTests() {
         }),
         model_id: 'model-locked',
       };
-      aiContextValue.modelOptions = () => [{ value: 'model-locked', label: 'Locked Model' }];
+      aiContextValue.modelOptions = () => [{ value: 'model-locked', label: 'Locked Model', source: 'runtime_config', sourceLabel: 'Remote runtime' }];
+      aiContextValue.modelSourceGroups = () => [{
+        source: 'runtime_config',
+        sourceLabel: 'Remote runtime',
+        available: true,
+        models: aiContextValue.modelOptions(),
+      }];
       aiContextValue.selectedThreadModel = () => 'model-locked';
       aiContextValue.activeThreadModelLocked = () => true;
 

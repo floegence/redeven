@@ -176,7 +176,7 @@ minimum Runtime version, and review id into every Runtime Service snapshot.
 Desktop and Env App render those fields as maintenance context; they should not
 invent a second compatibility policy in UI-only code.
 
-The same snapshot now also carries `capabilities.desktop_ai_broker` and `bindings.desktop_ai_broker`, which Desktop uses to decide whether an attached SSH runtime can accept a broker binding without falling back to string-based heuristics.
+The same snapshot now also carries `capabilities.desktop_ai_broker` and `bindings.desktop_ai_broker`, which Desktop uses to decide whether an attached SSH runtime can accept the optional `Desktop` model-source binding without falling back to string-based heuristics. A binding error should be shown as model-source availability state, not as a Runtime Service startup failure.
 
 ### Contract Carriers
 

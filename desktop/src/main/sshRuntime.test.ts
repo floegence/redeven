@@ -114,6 +114,8 @@ describe('sshRuntime', () => {
     expect(source).toContain('async function waitForForwardedLocalUIOpenable(');
     expect(source).toContain('managedSSHRuntimeAttachPolicy(');
     expect(source).toContain('/_redeven_proxy/api/runtime/bindings/desktop-ai-broker');
+    expect(source).toContain('Desktop is creating a private SSH bridge for local model calls.');
+    expect(source).toContain('Desktop model bridge unavailable: ${message}');
     expect(source).toContain('let forwardedStartup = await waitForForwardedLocalUIOpenable(');
     expect(source).toContain('runtimeServiceIsOpenable(startup.runtime_service)');
     expect(source).not.toContain('Desktop reached the forwarded Redeven Local UI, but the runtime is not ready to open yet');
