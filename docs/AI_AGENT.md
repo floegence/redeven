@@ -44,98 +44,15 @@ Flower task prompts are built through a section-oriented runtime prompt builder 
 
 ## Configuration
 
-Enable Flower by adding an `ai` section to the runtime config file (default Local Environment config: `~/.redeven/local-environment/config.json`).
+Enable Flower by adding an `ai` section to the runtime config file (default Local Environment config: `~/.redeven/local-environment/config.json`). The detailed provider schema, model allow-lists, web-search policy, examples, and secret-handling rules live in [`AI_SETTINGS.md`](AI_SETTINGS.md).
 
-For an SSH Host Environment opened from Redeven Desktop, the remote runtime can be Flower-capable without a remote `ai` section when Desktop binds an active AI Broker session. That broker session is runtime-only and expires with the Desktop/SSH session; it is not written into remote config, is never passed as a startup command argument, and it does not introduce an `ai.enabled` flag. The binding state is reported through `runtime_service.bindings.desktop_ai_broker` and `ai_runtime.desktop_broker.binding_state`.
+The core runtime contract is:
 
-Notes:
-
-- Providers own their model list: `ai.providers[].models[]` is the allow-list shown in the Chat UI.
-- `ai.current_model_id` points to the default model for new chats.
-- The wire model id remains `<provider_id>/<model_name>` and each thread stores its own `model_id`.
-- Desktop-brokered models are exposed to the remote runtime with the source metadata `desktop_broker` and a wire id prefix of `desktop-broker:<provider_id>/<model_name>` to avoid collisions with remote runtime providers.
-- Changing the model on an existing thread is thread-scoped only; it does not rewrite `ai.current_model_id`.
-- `providers[].base_url` is optional for `openai` / `anthropic`, and **required** for `moonshot` / `chatglm` / `deepseek` / `qwen` / `openai_compatible`.
-- Native provider presets are explicit allow-lists, not prefix matches:
-  - Moonshot: `kimi-k2.6`
-  - GLM/Z.ai: `glm-5.1`
-  - DeepSeek: `deepseek-v4-pro`, `deepseek-v4-flash`
-  - Qwen: `qwen3.6-plus`, `qwen3.6-plus-2026-04-02`, `qwen3.6-flash`, `qwen3.6-flash-2026-04-16`
-- OpenAI, Moonshot, GLM/Z.ai, DeepSeek, and Qwen derive web-search capability from provider type plus the explicit model allow-list. They do not expose extra web-search configuration in Settings.
-- Only `openai_compatible` providers may set `providers[].web_search.mode`:
-  - `disabled`: no web-search tool is exposed.
-  - `openai_builtin`: attach OpenAI Responses-style hosted web search.
-  - `brave`: expose Flower's Brave-backed `web.search` tool.
-
-API keys:
-
-- Keys are stored in the Local Environment state's `secrets.json` (for example `~/.redeven/local-environment/secrets.json`, chmod `0600`) and never returned in plaintext.
-- You can configure keys from the Env App UI: Runtime Settings -> `AI & Extensions` -> Flower -> Provider -> API key.
-- Multiple provider keys can be stored at the same time (keyed by `providers[].id`).
-- At runtime, Go resolves the provider key from local secrets per run and injects it directly into the provider SDK client.
-
-Example:
-
-```json
-{
-  "controlplane_base_url": "https://<redeven-environment-host>",
-  "environment_id": "env_xxx",
-  "agent_instance_id": "ai_xxx",
-  "direct": {
-    "ws_url": "wss://...",
-    "channel_id": "ch_..."
-  },
-  "permission_policy": {
-    "schema_version": 1,
-    "local_max": { "read": true, "write": true, "execute": true }
-  },
-  "ai": {
-    "execution_policy": {
-      "require_user_approval": false,
-      "block_dangerous_commands": false
-    },
-    "current_model_id": "openai/gpt-5.5",
-    "providers": [
-      {
-        "id": "openai",
-        "type": "openai",
-        "name": "OpenAI",
-        "base_url": "https://api.openai.com/v1",
-        "models": [
-          { "model_name": "gpt-5.5", "context_window": 1050000, "max_output_tokens": 128000 },
-          { "model_name": "gpt-5.4-mini", "context_window": 400000, "max_output_tokens": 128000 }
-        ]
-      },
-      {
-        "id": "moonshot",
-        "type": "moonshot",
-        "name": "Moonshot",
-        "base_url": "https://api.moonshot.cn/v1",
-        "models": [
-          { "model_name": "kimi-k2.6", "context_window": 256000, "max_output_tokens": 96000 }
-        ]
-      },
-      {
-        "id": "compat",
-        "type": "openai_compatible",
-        "name": "Custom Gateway",
-        "base_url": "https://gateway.example/v1",
-        "web_search": { "mode": "disabled" },
-        "models": [
-          { "model_name": "custom-model", "context_window": 128000 }
-        ]
-      }
-    ]
-  }
-}
-```
-
-Provider web-search source references:
-
-- Moonshot Kimi model list and K2.6 web-search docs: `https://platform.kimi.ai/docs/models`, `https://platform.kimi.ai/docs/guide/use-web-search`
-- GLM/Z.ai `glm-5.1` and web-search tool docs: `https://docs.bigmodel.cn/cn/guide/models/text/glm-5.1`, `https://docs.bigmodel.cn/cn/guide/tools/web-search`
-- DeepSeek model list and chat completion docs: `https://api-docs.deepseek.com/api/list-models/`, `https://api-docs.deepseek.com/api/create-chat-completion`
-- Qwen text-generation and web-search docs: `https://help.aliyun.com/zh/model-studio/text-generation-model/`, `https://help.aliyun.com/zh/model-studio/web-search`
+- Providers own their allowed model list in `ai.providers[].models[]`.
+- `ai.current_model_id` selects the default model for new chats.
+- The wire model id remains `<provider_id>/<model_name>`, and each thread stores its own `model_id`.
+- Provider API keys are stored in the Local Environment state's `secrets.json`, never in `config.json`, and are never returned to the browser in plaintext.
+- For Desktop-managed SSH Host sessions, the remote runtime can use a short-lived Desktop AI Broker source without copying the Desktop Local Environment's `ai` config or secrets onto the SSH host.
 
 ## Tooling and execution policy
 
@@ -197,71 +114,17 @@ Behavior summary:
 - In `plan`, HTTP commands that write local files/state or send request bodies/uploads are mutating and blocked (for example `curl -o`, `curl -d`, `curl -F`, `curl -T`, `wget -O file`, `wget --post-data`).
 - Execution mode is a thread-level server state (`execution_mode`) and is authoritative for every run.
 - If execution is needed in `plan`, Flower should use `exit_plan_mode` to request switching the thread to `act`.
-- `exit_plan_mode` is converted runtime-side into the existing waiting-user prompt UI with deterministic `set_mode` actions; the model no longer needs to handcraft a manual mode-switch `ask_user` payload.
-- Runtime-owned signal tools such as `ask_user` and `exit_plan_mode` are still persisted as successful tool-call records so evals, audits, and transcript recovery can observe them consistently.
-- Every `ask_user` question should use the canonical question-level response contract. Each question declares `response_mode`, `choices[]` contains fixed options only, and any choice-based question must also declare `choices_exhaustive`.
-- `ask_user` is the canonical structured-input primitive both for true blockers and for guided structured interaction turns such as questionnaires, interviews, quizzes, guessing games, decision trees, and other option-driven conversations.
-- Guided structured interactions should be front-loaded into an explicit interaction contract classified with the run policy, then preserved consistently across prompts, gates, waiting-user rendering, and completion.
-- Run policy is split into `intent` and `execution_contract`:
-  - `intent` describes user-facing semantics (`social`, `creative`, `task`).
-  - `execution_contract` describes runtime shape (`direct_reply`, `hybrid_first_turn`, `agentic_loop`).
-- `task` intent no longer implies explicit-completion by itself. Flower may start a task run in `hybrid_first_turn`, answer directly in the first turn when the request is fully resolved, and only promote into `agentic_loop` when durable multi-step execution is actually needed.
-- Implicit reply completion is provider-finish-aware, not text-presence-only. A reply may auto-complete only after a clean terminal provider outcome; truncation must continue/recover, and blocked provider finishes such as `content_filter` must fail visibly instead of being relabeled as a successful answer.
-- When a validated structured prompt response continues an existing guided objective, Flower should reuse that continuation context deterministically instead of spending extra classifier turns to rediscover `task + continue`.
-- Persisted waiting-prompt interaction contracts are the durable source of truth for those guided continuations; the runtime should reuse them directly and mark observability payloads explicitly when seed reuse is taken.
-- The run-policy classifier should prefer a single synthetic tool call with an explicit schema, including `interaction_contract`, and only fall back to text JSON parsing when tool calls are unavailable, so reasoning-heavy providers do not leak prose into classifier payloads.
-- Flower should preserve explicit interaction-shape constraints from the user, such as fixed options, clickable choices, one-question-at-a-time, or indirect questioning.
-- When the active interaction contract requires fixed choices plus an open fallback, Flower should keep `response_mode:"select_or_write"` with `choices_exhaustive:false` instead of regressing to exhaustive `select` or pure `write`.
-- When the active interaction contract requires indirect questioning, Flower should not directly name, bucket, or reveal the hidden target attribute in either the question text or the fixed choices.
-- For guided questionnaires, quizzes, guessing games, or hidden-target inference about the user's real-world state, Flower should usually narrow the next turn with fixed choices plus a typed fallback rather than a pure write-only question.
-- Use `response_mode:"select"` only when fixed choices are genuinely exhaustive by construction and `choices_exhaustive:true`.
-- Use `response_mode:"select_or_write"` when fixed choices are not exhaustive and `choices_exhaustive:false`, so the UI preserves a standardized typed fallback such as `None of the above: ___`.
-- Use `response_mode:"write"` for direct-input questions with no fixed choices.
-- If the user explicitly asks for answer choices or clickable options, Flower should not silently downgrade the turn into a pure `response_mode:"write"` question.
-- When Flower offers fixed options about a user's real-world state, preferences, habits, background, or other non-exhaustive situations, it should treat the set as non-exhaustive by default and use `response_mode:"select_or_write"` with `choices_exhaustive:false` instead of pretending the list is exhaustive.
-- Use `write_label` and optional `write_placeholder` to control the standardized typed fallback wording when `response_mode:"select_or_write"` is used.
-- A `response_mode:"write"` or `response_mode:"select_or_write"` path is incomplete until the user provides its text payload.
-- If a turn is going to end in `waiting_user` via `ask_user`, Flower should put the user-facing question inside the structured `ask_user` payload rather than first emitting a duplicated standalone markdown questionnaire or option list.
-- Intent routing should classify guided structured interactions that need `ask_user` as `task`, not `social`; `social` is reserved for casual freeform chat without structured interaction needs.
-- In no-user-interaction runs, Flower cannot ask for a mode switch and must finish through `task_complete`.
-- Top-level no-user-interaction runs should stay user-facing (`main_autonomous`), while delegated child runs should stay parent-facing (`subagent_autonomous`).
+- `ask_user`, `exit_plan_mode`, and `task_complete` are runtime-owned signal tools. They are persisted and deterministically validated before the thread enters `waiting_user` or a terminal state.
+- `ask_user` uses the canonical question-level response contract (`response_mode`, `choices[]`, and `choices_exhaustive` for choice-based questions). The visible question belongs inside the structured payload, not in a duplicate markdown questionnaire.
+- Guided structured interactions are classified into an interaction contract and preserved across prompts, validation, waiting-user rendering, and continuation turns.
+- No-user-interaction runs must finish through `task_complete`; delegated child runs use the `subagent_autonomous` prompt profile and report to their parent, not directly to the end user.
 - The Env App shows approval prompts only when `require_user_approval` is enabled.
-- `write_todos` is expected for multi-step tasks; exactly one todo should stay in `in_progress`.
-- `task_complete` is rejected when todo tracking is active and open todos still exist.
-- Structured protocol runs may also finish through runtime-assisted closeout after verified tool work plus a strong final answer, even if the model forgot to emit `task_complete`; this keeps compatibility with weaker tool-using models without removing explicit completion support.
-- Runtime-assisted closeout is only a clean in-band completion recovery path. Interrupted, canceled, or timed-out runs must keep their interruption outcome even if partial final text and verified tool work already exist.
-- Flower keeps exactly one canonical visible answer slot per assistant run. Later answer revisions replace the current candidate instead of being appended as additional final-answer turns.
-- In the Env App UI, that canonical answer slot is rendered through two coordinated surfaces: settled transcript rows for persisted history, and a dedicated live assistant tail for the current in-flight answer. The runtime must never let both surfaces show the same assistant message at once.
-- Draft text produced inside the same run must stay separate from assistant history. Flower may stream draft markdown to the active answer block, but it must not feed that draft back into the next provider turn as if it were a committed assistant transcript message.
-- When a run completes through `task_complete`, its `task_complete.result` is the canonical final assistant completion text. Persisted assistant transcript snapshots must keep that canonical completion text aligned with the single user-visible markdown answer even if the run streamed mixed `thinking`, `tool-call`, and `markdown` blocks before completion.
-- `ask_user` follows a structured contract (`questions`, `reason_code`, `required_from_user`, `evidence_refs`) and is deterministically validated before entering `waiting_user`; runtime enforcement is limited to capability, schema, evidence, todo, and interaction-contract consistency checks rather than a second semantic policy classifier.
-- When a run completes into `waiting_user` through `ask_user`, the final assistant transcript must canonically converge to the structured waiting interaction instead of keeping provisional text-only markdown from earlier no-tool turns.
-- Structured prompt answers are submitted through a dedicated prompt-response action rather than the plain chat `sendMessage` path.
-- The Env App may auto-submit a waiting prompt only for the narrow single-question, non-secret, pure-choice case with no extra detail requirement or option action; every richer interaction still uses explicit structured submission.
-- When a thread is still `waiting_user`, the waiting prompt snapshot in `ai_threads.waiting_user_input_json` should stay aligned with the assistant transcript `ask_user` block; read/write paths recover from the latest persisted assistant transcript when that snapshot is missing or invalid.
-- The Env App must distinguish a resolved prompt from a still-waiting thread whose active prompt details are temporarily unavailable; missing prompt state must not be rendered as already handled.
-- Thread `title` and `last_message_preview` serve different purposes: `title` is a durable conversation label, while `last_message_preview` is the latest sidebar snippet.
-- Thread runtime metadata also carries `last_context_run_id`, which identifies the latest run whose persisted context telemetry should be recoverable after the live run has already ended.
-- Empty thread titles stay empty until a dedicated auto-title generator summarizes public user intent; persisting the raw first user message as `title` is not allowed.
-- Auto titles are generated from public user-visible text only, recorded with title metadata (`title_source`, input message id, model id, prompt version), and may only fill a still-untitled thread.
-- Auto-title generation is a single-purpose background flow with bounded retry backoff. Inside one generation pass, the runtime may retry once with a larger output budget when a reasoning-heavy model exhausts the first budget before emitting visible JSON title text; if three generation passes still fail, the runtime should stop provider retries, fall back to a truncated first user message as a temporary title, and allow a later user message in that thread to trigger a fresh auto-title attempt.
-- Service startup performs a recovery scan for recent still-untitled threads and re-enqueues title generation from the latest persisted public user message, so a runtime restart does not strand blank titles.
-- Manual rename always wins. Once a thread is manually renamed, later automatic generation must not overwrite that user-owned title state, even if the user intentionally renamed it to blank.
-- no-tool backpressure defaults to 3 rounds, but active guided structured continuations may jump directly into a signal-only recovery turn (`ask_user` / `task_complete`) once the threshold is hit so Flower does not waste another generic text-only round.
-- Runtime observability for these fast paths should stay explicit through `interaction.contract.classified.classification_mode`, `ask_user.attempt.validation_mode`, and `signal.recovery.attempt`.
-- `terminal.exec` output is rendered with structured shell blocks in the Env App (no markdown fallback conversion).
-- Live assistant `block-delta` transport must preserve complete user-visible markdown/reasoning content. Provider adapters must keep provider-emitted visible whitespace semantics intact for streamed reasoning fragments so persisted transcripts and live blocks stay human-readable.
-- Active-run snapshots are a recovery path for the in-flight assistant turn, not a second transcript source. Once the assistant message has been appended to persisted transcript history, snapshot reads must return empty for that turn so the UI cannot render duplicate assistant answers from both transcript and live state.
-- The live assistant surface is intentionally outside transcript virtualization so streaming markdown growth, phase-label changes, and context telemetry ornament updates do not thrash transcript row measurement or remount settled history during a run.
-- The realtime sink may coalesce low-priority assistant/context updates, but the active thread UI must still converge to the canonical persisted assistant transcript when the run reaches a terminal state, even if some tail realtime frames were missed.
-- Subagents are for parallelizable or independently reviewable work. Simple local inspection tasks should stay in the main Flower run instead of spawning subagents.
-- Ask Flower handoffs from Files, Terminal, Monitor, and Git now carry a Context Action envelope alongside the compatibility Ask Flower intent. The envelope preserves source surface, target locality, structured context items, and suggested working directory without asking each surface to author assistant-specific prompt policy.
-- Flower thread read/unread state is runtime-authoritative, not browser-local:
-  - the gateway persists a per-user watermark keyed by `endpoint_id + user_public_id + surface + thread_id`;
-  - thread list/detail payloads include `read_status` with `{is_unread, snapshot, read_state}`;
-  - `POST /_redeven_proxy/api/ai/threads/:id/read` advances the user's read watermark monotonically from the browser-visible snapshot;
-  - the gateway validates that submitted read snapshots do not move beyond the current backend thread state;
-  - when a user has no stored watermark yet, the runtime seeds the current snapshot as the initial baseline so historical threads do not all light up as unread after rollout.
+- `write_todos` is expected for multi-step tasks; exactly one todo should stay in `in_progress`, and `task_complete` is rejected while tracked todos remain open.
+- Runtime-assisted closeout can recover a clean completion after verified work, but interrupted, canceled, or timed-out runs keep their interruption outcome.
+- Flower keeps one canonical visible answer slot per assistant run. The Env App renders settled transcript rows separately from one live assistant tail and must not display the same assistant message through both surfaces.
+- Thread titles are generated by a dedicated auto-title flow from public user-visible text only; manual rename always wins.
+- Ask Flower handoffs from Files, Terminal, Monitor, and Git use Context Action envelopes for source surface, target locality, structured context items, and suggested working directory.
+- Flower thread read/unread state is runtime-authoritative through per-user read watermarks and `read_status` payloads, not browser-local storage.
 
 Installer note:
 

@@ -137,11 +137,14 @@ The explicit install flow is:
 
 - `active_runtime`: the runtime currently selected for Codespaces (`managed`, `system`, `env_override`, or `none`)
 - `managed_runtime`: the managed version currently selected for this Local Environment, whether or not it is active
+- `managed_prefix`: the selected managed runtime install prefix, when available
 - `managed_runtime_version`: the managed version selected by this Local Environment
 - `managed_runtime_source`: `managed` or `none`
 - `shared_runtime_root`: the Local Environment-scoped shared runtime directory
 - `installed_versions[]`: every managed version installed for this Local Environment, including current selection, removability, and health
+- `installer_script_url`: the code-server install script URL used by the managed installer
 - `operation`: the current or most recent explicit management operation (`install` / `remove_local_environment_version`) plus stage, error, target version, and log tail
+- `updated_at_unix_ms`: the runtime-status snapshot timestamp
 
 This split exists so Settings can truthfully show managed inventory, the current Local Environment selection, and active runtime precedence without inferring hidden state on the client.
 

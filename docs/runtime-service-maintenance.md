@@ -119,23 +119,35 @@ type RuntimeServiceCompatibility =
   | 'managed_elsewhere'
   | 'unknown';
 
-type RuntimeServiceWorkload = {
+type RuntimeServiceOpenReadinessState = 'starting' | 'openable' | 'blocked';
+
+type RuntimeServiceOpenReadiness = Readonly<{
+  state: RuntimeServiceOpenReadinessState;
+  reason_code?: string;
+  message?: string;
+}>;
+
+type RuntimeServiceWorkload = Readonly<{
   terminal_count: number;
   session_count: number;
   task_count: number;
   port_forward_count: number;
-};
+}>;
 
-type RuntimeServiceCapability = {
+type RuntimeServiceCapability = Readonly<{
   supported: boolean;
   bind_method?: string;
   reason_code?: string;
   message?: string;
-};
+}>;
+
+type RuntimeServiceCapabilities = Readonly<{
+  desktop_ai_broker: RuntimeServiceCapability;
+}>;
 
 type RuntimeServiceBindingState = 'unbound' | 'bound' | 'unsupported' | 'error' | 'expired';
 
-type RuntimeServiceBinding = {
+type RuntimeServiceBinding = Readonly<{
   state: RuntimeServiceBindingState;
   session_id?: string;
   ssh_runtime_key?: string;
@@ -144,29 +156,38 @@ type RuntimeServiceBinding = {
   model_count?: number;
   missing_key_provider_ids?: string[];
   last_error?: string;
-};
+}>;
 
-type RuntimeServiceIdentity = {
-  runtime_version: string;
-  runtime_commit: string;
-  runtime_build_time: string;
-  protocol_version: 'redeven-runtime-v1';
-  compatibility_epoch: number;
+type RuntimeServiceBindings = Readonly<{
+  desktop_ai_broker: RuntimeServiceBinding;
+}>;
+
+type RuntimeServiceSnapshot = Readonly<{
+  runtime_version?: string;
+  runtime_commit?: string;
+  runtime_build_time?: string;
+  protocol_version?: string;
+  compatibility_epoch?: number;
   service_owner: RuntimeServiceOwner;
   desktop_managed: boolean;
+  effective_run_mode?: string;
+  remote_enabled: boolean;
   compatibility: RuntimeServiceCompatibility;
-  compatibility_message: string;
-  minimum_desktop_version: string;
-  minimum_runtime_version: string;
-  compatibility_review_id: string;
+  compatibility_message?: string;
+  minimum_desktop_version?: string;
+  minimum_runtime_version?: string;
+  compatibility_review_id?: string;
+  open_readiness?: RuntimeServiceOpenReadiness;
   active_workload: RuntimeServiceWorkload;
-  capabilities: {
-    desktop_ai_broker: RuntimeServiceCapability;
-  };
-  bindings: {
-    desktop_ai_broker: RuntimeServiceBinding;
-  };
-};
+  capabilities?: RuntimeServiceCapabilities;
+  bindings?: RuntimeServiceBindings;
+}>;
+
+type RuntimeServiceIdentity = Readonly<{
+  runtime_version?: string;
+  runtime_commit?: string;
+  runtime_build_time?: string;
+}>;
 ```
 
 Compatibility is product-owned by the Runtime Service compatibility contract in

@@ -14,7 +14,6 @@
   <a href="https://github.com/floegence/redeven/releases">Download Desktop</a> |
   <a href="#quick-start">Install CLI</a> |
   <a href="#what-you-can-do">Features</a> |
-  <a href="#how-it-compares">Comparisons</a> |
   <a href="#security">Security</a> |
   <a href="#documentation">Docs</a>
 </p>
@@ -40,46 +39,6 @@ It runs on your machine, your remote servers, or any reachable SSH host. Your fi
 - **AI that works where your data lives** — optional on-device AI assistance reads files, runs commands, and completes tasks under the same permission model as the rest of the workspace.
 
 ![Redeven architecture overview](docs/images/readme-architecture-overview.jpeg)
-
-## Why Redeven?
-
-<p align="center">
-  <table>
-    <tr>
-      <td><strong>🌐&nbsp; Access anywhere</strong></td>
-      <td><strong>🧩&nbsp; All tools in one tab</strong></td>
-    </tr>
-    <tr>
-      <td>Open your workspace from a browser, Desktop app, or local URL. Same experience whether the machine is local, provider-hosted, or reachable only over SSH.</td>
-      <td>File browser, terminal, system monitor, port forwarding, Git browser, notes, browser IDE, and AI — no more switching between six different tools.</td>
-    </tr>
-    <tr>
-      <td><strong>🔐&nbsp; Your machine, your data</strong></td>
-      <td><strong>🚀&nbsp; Zero-friction onboarding</strong></td>
-    </tr>
-    <tr>
-      <td>End-to-end encrypted via <a href="https://github.com/floegence/flowersec">Flowersec</a>. Plaintext never leaves your endpoint. Permissions are clamped by local policy you control.</td>
-      <td>Bootstrap a new machine with a single ticket. Desktop auto-installs the matching Redeven release on remote SSH hosts — no manual preinstall, no copy-pasting configs.</td>
-    </tr>
-  </table>
-</p>
-
-## How Redeven compares
-
-| Capability | Redeven | SSH + tmux | VS Code Remote | Tailscale |
-|---|---|---|---|---|
-| Browser-based access | ✅ | ❌ | ❌ | ❌ |
-| File browser (GUI) | ✅ | ❌ CLI only | ✅ | ❌ |
-| Terminal | ✅ | ✅ | ✅ | ❌ |
-| System monitoring (GUI) | ✅ | ❌ CLI tools, manual | ❌ | ❌ |
-| Port forwarding | ✅ built-in | ✅ manual | ✅ manual | ❌ |
-| Browser IDE (code-server) | ✅ on-demand install | ❌ requires self-setup | ✅ VS Code only | ❌ |
-| Built-in AI assistant | ✅ on-device, multi-provider | ❌ | ❌ | ❌ |
-| Desktop app | ✅ macOS / Linux | ❌ | ❌ | ❌ |
-| SSH host auto-bootstrap | ✅ one-click from Desktop | ❌ | ❌ | ❌ |
-| End-to-end encryption | ✅ Flowersec | ❌ | ❌ | ❌ |
-| Granular permissions | ✅ read / write / execute / admin | ❌ | ❌ | ❌ |
-| Open source | ✅ MIT | ✅ | ✅ | Partial |
 
 ## Quick start
 
@@ -162,15 +121,6 @@ Read the full contract in [`docs/CAPABILITY_PERMISSIONS.md`](docs/CAPABILITY_PER
 | Integrate a compatible control plane provider | [`RCPP v1 spec`](docs/protocol/rcpp-v1.md), [`RCPP v1 OpenAPI`](docs/openapi/rcpp-v1.yaml) |
 | Refresh or audit the embedded knowledge bundle | [`docs/KNOWLEDGE.md`](docs/KNOWLEDGE.md) |
 | Verify releases and artifacts | [`docs/RELEASE.md`](docs/RELEASE.md) |
-
-### By role
-
-| I am a... | Start here |
-|---|---|
-| User who wants to work with an Environment | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
-| Developer who needs a browser IDE | [`docs/CODE_APP.md`](docs/CODE_APP.md) |
-| Operator managing Redeven deployments | [`docs/DESKTOP.md`](docs/DESKTOP.md), [`docs/RELEASE.md`](docs/RELEASE.md) |
-| Integrator building against the protocol | [`RCPP v1 spec`](docs/protocol/rcpp-v1.md), [`RCPP v1 OpenAPI`](docs/openapi/rcpp-v1.yaml) |
 
 ## For developers
 
