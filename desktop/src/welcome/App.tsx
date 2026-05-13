@@ -275,6 +275,13 @@ type EnvironmentFailureState = Readonly<{
   tone: 'error' | 'warning';
 }>;
 
+type RuntimeMaintenanceConfirmationAction = 'stop' | 'restart' | 'update';
+
+type RuntimeMaintenanceConfirmationState = Readonly<{
+  environment: DesktopEnvironmentEntry;
+  action: RuntimeMaintenanceConfirmationAction;
+}>;
+
 const DESKTOP_FLOE_STORAGE_NAMESPACE = 'redeven-desktop-shell';
 const DESKTOP_FLOE_THEME_STORAGE_KEY = 'theme';
 const DESKTOP_SKIP_LINK_LABEL = 'Skip to Redeven Desktop content';
@@ -711,8 +718,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [sshConfigHostsLoaded, setSSHConfigHostsLoaded] = createSignal(false);
   const [controlPlaneDialogState, setControlPlaneDialogState] = createSignal<ControlPlaneDialogState>(null);
   const [deleteTarget, setDeleteTarget] = createSignal<DesktopEnvironmentEntry | null>(null);
-  const [stopRuntimeTarget, setStopRuntimeTarget] = createSignal<DesktopEnvironmentEntry | null>(null);
-  const [restartRuntimeAfterStop, setRestartRuntimeAfterStop] = createSignal(false);
+  const [runtimeMaintenanceConfirmation, setRuntimeMaintenanceConfirmation] = createSignal<RuntimeMaintenanceConfirmationState | null>(null);
   const [deleteControlPlaneTarget, setDeleteControlPlaneTarget] = createSignal<DesktopControlPlaneSummary | null>(null);
   const deleteTargetOperation = createMemo(() => {
     const target = deleteTarget();
@@ -787,10 +793,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     )
   ));
   const stopRuntimeSnapshot = createMemo<RuntimeServiceSnapshot | undefined>(() => (
-    environmentRuntimeServiceSnapshot(stopRuntimeTarget())
+    environmentRuntimeServiceSnapshot(runtimeMaintenanceConfirmation()?.environment ?? null)
   ));
-  const stopRuntimeActiveWorkLabel = createMemo(() => formatRuntimeServiceWorkload(stopRuntimeSnapshot()));
-  const stopRuntimeHasActiveWork = createMemo(() => runtimeServiceHasActiveWork(stopRuntimeSnapshot()));
+  const stopRuntimeActiveWorkLabel = createMemo(() => (
+    runtimeMaintenanceConfirmation()?.environment.runtime_maintenance?.active_work_label
+    || formatRuntimeServiceWorkload(stopRuntimeSnapshot())
+  ));
+  const stopRuntimeHasActiveWork = createMemo(() => (
+    runtimeMaintenanceConfirmation()?.environment.runtime_maintenance?.has_active_work
+    ?? runtimeServiceHasActiveWork(stopRuntimeSnapshot())
+  ));
   const activeActionProgress = createMemo(() => snapshot().action_progress);
   const sshRuntimeProgressItems = createMemo(() => (
     activeActionProgress()
@@ -1603,21 +1615,36 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return stopped || canceled;
   }
 
-  async function confirmStopRuntime(): Promise<void> {
-    const target = stopRuntimeTarget();
-    if (!target) {
+  function requestRuntimeMaintenanceConfirmation(
+    environment: DesktopEnvironmentEntry,
+    action: RuntimeMaintenanceConfirmationAction,
+  ): void {
+    setRuntimeMaintenanceConfirmation({
+      environment,
+      action,
+    });
+  }
+
+  async function confirmRuntimeMaintenance(): Promise<void> {
+    const confirmation = runtimeMaintenanceConfirmation();
+    if (!confirmation) {
       return;
     }
-    const shouldRestart = restartRuntimeAfterStop();
+    const target = confirmation.environment;
+    if (confirmation.action === 'update') {
+      setRuntimeMaintenanceConfirmation(null);
+      const latestTarget = await loadLatestEnvironmentEntry(target.id) ?? target;
+      await startEnvironmentRuntime(latestTarget, 'connect', { forceRuntimeUpdate: true });
+      return;
+    }
     const stopped = await stopEnvironmentRuntime(target, 'connect');
     if (!stopped) {
       return;
     }
-    setStopRuntimeTarget(null);
-    setRestartRuntimeAfterStop(false);
-    if (shouldRestart) {
+    setRuntimeMaintenanceConfirmation(null);
+    if (confirmation.action === 'restart') {
       const latestTarget = await loadLatestEnvironmentEntry(target.id) ?? target;
-      await startEnvironmentRuntime(latestTarget, 'connect', { forceRuntimeUpdate: true });
+      await startEnvironmentRuntime(latestTarget, 'connect');
     }
   }
 
@@ -1748,12 +1775,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       case 'start_runtime':
         return startEnvironmentRuntime(environment, errorTarget);
       case 'stop_runtime':
-        setRestartRuntimeAfterStop(false);
-        setStopRuntimeTarget(environment);
+        requestRuntimeMaintenanceConfirmation(environment, 'stop');
         return true;
       case 'restart_runtime':
-        setRestartRuntimeAfterStop(true);
-        setStopRuntimeTarget(environment);
+        requestRuntimeMaintenanceConfirmation(environment, 'restart');
+        return true;
+      case 'update_runtime':
+        requestRuntimeMaintenanceConfirmation(environment, 'update');
         return true;
       case 'refresh_runtime':
         return refreshEnvironmentRuntime(environment, errorTarget);
@@ -1819,8 +1847,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
 
     if (action.intent === 'stop_runtime') {
-      setRestartRuntimeAfterStop(false);
-      setStopRuntimeTarget(environment);
+      requestRuntimeMaintenanceConfirmation(environment, 'stop');
       return {
         close_panel: true,
         next_session: null,
@@ -1828,8 +1855,15 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
 
     if (action.intent === 'restart_runtime') {
-      setRestartRuntimeAfterStop(true);
-      setStopRuntimeTarget(environment);
+      requestRuntimeMaintenanceConfirmation(environment, 'restart');
+      return {
+        close_panel: true,
+        next_session: null,
+      };
+    }
+
+    if (action.intent === 'update_runtime') {
+      requestRuntimeMaintenanceConfirmation(environment, 'update');
       return {
         close_panel: true,
         next_session: null,
@@ -2592,36 +2626,55 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       </ConfirmDialog>
 
       <ConfirmDialog
-        open={stopRuntimeTarget() !== null}
+        open={runtimeMaintenanceConfirmation() !== null}
         onOpenChange={(open) => {
           if (!open) {
-            setStopRuntimeTarget(null);
-            setRestartRuntimeAfterStop(false);
+            setRuntimeMaintenanceConfirmation(null);
           }
         }}
-        title={restartRuntimeAfterStop() ? 'Restart Runtime' : 'Stop Runtime'}
-        confirmText={restartRuntimeAfterStop() ? 'Stop and Restart' : 'Stop Runtime'}
+        title={runtimeMaintenanceConfirmation()?.action === 'update'
+          ? 'Update SSH Runtime'
+          : runtimeMaintenanceConfirmation()?.action === 'restart'
+            ? 'Restart Runtime'
+            : 'Stop Runtime'}
+        confirmText={runtimeMaintenanceConfirmation()?.action === 'update'
+          ? 'Update and Restart'
+          : runtimeMaintenanceConfirmation()?.action === 'restart'
+            ? 'Stop and Restart'
+            : 'Stop Runtime'}
         variant="destructive"
         loading={busyStateMatchesAction(busyState(), 'stop_environment_runtime')}
-        onConfirm={() => void confirmStopRuntime()}
+        onConfirm={() => void confirmRuntimeMaintenance()}
       >
         <div class="space-y-2">
           <p class="text-sm">
             <Show
-              when={restartRuntimeAfterStop()}
+              when={runtimeMaintenanceConfirmation()?.action !== 'stop'}
               fallback={(
-                <>Stop the runtime for <span class="font-semibold">{stopRuntimeTarget()?.label}</span>?</>
+                <>Stop the runtime for <span class="font-semibold">{runtimeMaintenanceConfirmation()?.environment.label}</span>?</>
               )}
             >
-              Stop and restart the runtime for <span class="font-semibold">{stopRuntimeTarget()?.label}</span>?
+              <Show
+                when={runtimeMaintenanceConfirmation()?.action === 'update'}
+                fallback={(
+                  <>Stop and restart the runtime for <span class="font-semibold">{runtimeMaintenanceConfirmation()?.environment.label}</span>?</>
+                )}
+              >
+                Update and restart the SSH runtime for <span class="font-semibold">{runtimeMaintenanceConfirmation()?.environment.label}</span>?
+              </Show>
             </Show>
           </p>
           <p class="text-xs text-muted-foreground">
             This interrupts the background runtime service for this environment. Open terminals, sessions, tasks, and port forwards may be disconnected.
           </p>
-          <Show when={restartRuntimeAfterStop()}>
+          <Show when={runtimeMaintenanceConfirmation()?.action === 'restart'}>
             <p class="text-xs text-muted-foreground">
-              Desktop will start the managed runtime again after the current process stops, so the newly installed runtime can take effect.
+              Desktop will start the managed runtime again after the current process stops. Open remains separate and becomes available after the runtime is ready.
+            </p>
+          </Show>
+          <Show when={runtimeMaintenanceConfirmation()?.action === 'update'}>
+            <p class="text-xs text-muted-foreground">
+              Desktop will install the bundled Redeven runtime and start it again on this SSH host. Open remains separate after the update.
             </p>
           </Show>
           <p class="text-xs text-muted-foreground">
@@ -3699,6 +3752,8 @@ function splitMenuIcon(intent: EnvironmentActionIntent): ((props?: { class?: str
     case 'start_runtime':
       return Play;
     case 'restart_runtime':
+      return Refresh;
+    case 'update_runtime':
       return Refresh;
     case 'refresh_runtime':
       return Refresh;

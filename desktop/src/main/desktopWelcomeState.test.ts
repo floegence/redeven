@@ -626,6 +626,62 @@ describe('desktopWelcomeState', () => {
     ]));
   });
 
+  it('preserves SSH runtime maintenance requirements before a window is open', () => {
+    const sshID = 'ssh:devbox:2222:key_agent:remote_default';
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        saved_ssh_environments: [{
+          id: sshID,
+          label: 'SSH Lab',
+          ssh_destination: 'devbox',
+          ssh_port: 2222,
+          auth_mode: 'key_agent',
+          remote_install_dir: 'remote_default',
+          bootstrap_strategy: 'desktop_upload',
+          release_base_url: '',
+          connect_timeout_seconds: 10,
+          pinned: false,
+          last_used_at_ms: 100,
+        }],
+      }),
+      savedSSHRuntimeHealth: {
+        [sshID]: {
+          status: 'online',
+          checked_at_unix_ms: 1000,
+          source: 'ssh_runtime_probe',
+          runtime_maintenance: {
+            kind: 'desktop_model_source_requires_runtime_update',
+            required_for: 'desktop_model_source',
+            can_desktop_restart: true,
+            has_active_work: true,
+            active_work_label: '2 sessions',
+            current_runtime_version: 'v0.5.9',
+            target_runtime_version: 'v0.6.7',
+            message: 'Update and restart this SSH runtime before Desktop can make your local model settings available here.',
+          },
+        },
+      },
+    });
+
+    expect(snapshot.environments).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: sshID,
+        kind: 'ssh_environment',
+        runtime_health: expect.objectContaining({
+          status: 'online',
+          runtime_maintenance: expect.objectContaining({
+            kind: 'desktop_model_source_requires_runtime_update',
+            active_work_label: '2 sessions',
+          }),
+        }),
+        runtime_maintenance: expect.objectContaining({
+          kind: 'desktop_model_source_requires_runtime_update',
+          target_runtime_version: 'v0.6.7',
+        }),
+      }),
+    ]));
+  });
+
   it('prefers an open SSH session over a stale saved SSH probe', () => {
     const sshID = 'ssh:devbox:2222:key_agent:remote_default';
     const snapshot = buildDesktopWelcomeSnapshot({

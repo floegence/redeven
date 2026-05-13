@@ -86,6 +86,11 @@ describe('main routing', () => {
     expect(mainSrc).toContain('operations: launcherOperations.operations()');
     expect(mainSrc).toContain('const pendingStart = pendingSSHRuntimeStartByKey.get(runtimeKey) ?? null;');
     expect(mainSrc).toContain('return pendingStart.task;');
+    expect(mainSrc).toContain('const sshRuntimeMaintenanceByKey = new Map');
+    expect(mainSrc).toContain('error instanceof DesktopSSHRuntimeMaintenanceRequiredError');
+    expect(mainSrc).toContain('sshRuntimeMaintenanceByKey.set(runtimeKey, error.maintenance)');
+    expect(mainSrc).toContain('runtime_maintenance: maintenance');
+    expect(mainSrc).toContain('sshRuntimeMaintenanceByKey.delete(runtimeKey)');
     expect(mainSrc).toContain('const operation = launcherOperations.create({');
     expect(mainSrc).toContain("phase: 'ssh_preparing_start'");
     expect(mainSrc).toContain("title: 'Preparing SSH host'");

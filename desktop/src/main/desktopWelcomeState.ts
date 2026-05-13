@@ -47,6 +47,9 @@ import {
 } from '../shared/providerEnvironmentState';
 import type { DesktopRuntimeHealth } from '../shared/desktopRuntimeHealth';
 import {
+  normalizeDesktopRuntimeMaintenanceRequirement,
+} from '../shared/desktopRuntimeHealth';
+import {
   normalizeRuntimeServiceSnapshot,
   type RuntimeServiceSnapshot,
 } from '../shared/runtimeService';
@@ -528,6 +531,12 @@ function localEnvironmentRuntimeService(
 
 function runtimeServiceFromHealth(health: DesktopRuntimeHealth | undefined): RuntimeServiceSnapshot | undefined {
   return health?.runtime_service ? normalizeRuntimeServiceSnapshot(health.runtime_service) : undefined;
+}
+
+function runtimeMaintenanceFromHealth(
+  health: DesktopRuntimeHealth | null | undefined,
+): DesktopEnvironmentEntry['runtime_maintenance'] {
+  return normalizeDesktopRuntimeMaintenanceRequirement(health?.runtime_maintenance);
 }
 
 function preferredRuntimeService(
@@ -1139,6 +1148,7 @@ function buildSavedEnvironmentEntry(
     is_opening: isOpening,
     runtime_health: runtimeHealth,
     runtime_service: preferredRuntimeService(openSession?.startup?.runtime_service, savedRuntimeHealth),
+    runtime_maintenance: runtimeMaintenanceFromHealth(runtimeHealth),
     runtime_control_capability: 'observe_only',
     open_session_key: openSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(openSession),
@@ -1191,6 +1201,7 @@ function buildSavedSSHEnvironmentEntry(
     is_opening: isOpening,
     runtime_health: runtimeHealth,
     runtime_service: preferredRuntimeService(openSession?.startup?.runtime_service, savedRuntimeHealth),
+    runtime_maintenance: runtimeMaintenanceFromHealth(runtimeHealth),
     runtime_control_capability: 'start_stop',
     open_session_key: openSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(openSession),

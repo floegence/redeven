@@ -412,6 +412,8 @@ sequenceDiagram
   E->>U: Toast success after reconnect
 ```
 
+Welcome can run the same SSH-managed update before an Env App window exists. In that case the Welcome card records the SSH runtime maintenance requirement, asks the user to confirm the update/restart from the card, then calls the launcher start action with `forceRuntimeUpdate=true`. That confirmed start lets the SSH bootstrap replace the active remote runtime even when automatic replacement was previously blocked by active work. Welcome does not auto-open the environment after maintenance; it only unlocks `Open` once the refreshed Runtime Service snapshot is openable.
+
 ### Self-Upgrade Runtime
 
 ```mermaid

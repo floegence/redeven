@@ -80,7 +80,11 @@ import { isAllowedAppNavigation } from './navigation';
 import { resolveBundledRuntimePath, resolveSessionPreloadPath, resolveUtilityPreloadPath, resolveWelcomeRendererPath } from './paths';
 import { loadExternalLocalUIStartup } from './runtimeState';
 import { desktopSessionRuntimeHandleFromManagedRuntime, type DesktopSessionRuntimeHandle } from './sessionRuntime';
-import { DesktopSSHRuntimeCanceledError, startManagedSSHRuntime } from './sshRuntime';
+import {
+  DesktopSSHRuntimeCanceledError,
+  DesktopSSHRuntimeMaintenanceRequiredError,
+  startManagedSSHRuntime,
+} from './sshRuntime';
 import { startDesktopAIBroker, type ManagedDesktopAIBroker } from './desktopAIBroker';
 import { PUBLIC_REDEVEN_RELEASE_BASE_URL } from './sshReleaseAssets';
 import { installStdioBrokenPipeGuards } from './stdio';
@@ -223,7 +227,10 @@ import {
   normalizeDesktopSSHEnvironmentDetails,
   type DesktopSSHEnvironmentDetails,
 } from '../shared/desktopSSH';
-import type { DesktopRuntimeHealth } from '../shared/desktopRuntimeHealth';
+import type {
+  DesktopRuntimeHealth,
+  DesktopRuntimeMaintenanceRequirement,
+} from '../shared/desktopRuntimeHealth';
 import {
   desktopProviderCatalogFreshness,
   desktopProviderRemoteRouteState,
@@ -416,6 +423,7 @@ const controlPlaneSyncTaskByKey = new Map<string, Promise<Readonly<{
 let localEnvironmentRuntimeRecord: LocalEnvironmentRuntimeRecord | null = null;
 const sshEnvironmentRuntimeByKey = new Map<`ssh:${string}`, SSHEnvironmentRuntimeRecord>();
 const pendingSSHRuntimeStartByKey = new Map<`ssh:${string}`, PendingSSHRuntimeStart>();
+const sshRuntimeMaintenanceByKey = new Map<`ssh:${string}`, DesktopRuntimeMaintenanceRequirement>();
 const launcherOperationRemovalTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const launcherOperations = new LauncherOperationRegistry(handleLauncherOperationChange);
 const desktopDevToolsEnabled = ['1', 'true', 'yes', 'on'].includes(
@@ -1344,6 +1352,7 @@ function onlineRuntimeHealth(
   source: DesktopRuntimeHealth['source'],
   localUIURL: string,
   runtimeService?: RuntimeServiceSnapshot,
+  runtimeMaintenance?: DesktopRuntimeMaintenanceRequirement,
 ): DesktopRuntimeHealth {
   return {
     status: 'online',
@@ -1351,6 +1360,7 @@ function onlineRuntimeHealth(
     source,
     local_ui_url: localUIURL,
     ...(runtimeService ? { runtime_service: normalizeRuntimeServiceSnapshot(runtimeService) } : {}),
+    ...(runtimeMaintenance ? { runtime_maintenance: runtimeMaintenance } : {}),
   };
 }
 
@@ -1411,8 +1421,20 @@ async function collectSavedSSHRuntimeHealth(
 ): Promise<Readonly<Record<string, DesktopRuntimeHealth>>> {
   const entries = await Promise.all(preferences.saved_ssh_environments.map(async (environment) => {
     const runtimeKey = sshDesktopSessionKey(environment);
+    const maintenance = sshRuntimeMaintenanceByKey.get(runtimeKey);
     const runtimeRecord = sshEnvironmentRuntimeByKey.get(runtimeKey) ?? null;
     if (!runtimeRecord) {
+      if (maintenance) {
+        return [
+          environment.id,
+          {
+            status: 'online',
+            checked_at_unix_ms: Date.now(),
+            source: 'ssh_runtime_probe',
+            runtime_maintenance: maintenance,
+          },
+        ] as const;
+      }
       return [
         environment.id,
         offlineRuntimeHealth('ssh_runtime_probe', 'not_started', 'Serve the runtime first'),
@@ -1439,10 +1461,28 @@ async function collectSavedSSHRuntimeHealth(
         },
         local_forward_url: startup.local_ui_url,
       });
-      return [environment.id, onlineRuntimeHealth('ssh_runtime_probe', startup.local_ui_url, startup.runtime_service ?? runtimeRecord.startup.runtime_service)] as const;
+      const nextRuntimeService = startup.runtime_service ?? runtimeRecord.startup.runtime_service;
+      const runtimeMaintenance = maintenance && !runtimeServiceIsOpenable(nextRuntimeService)
+        ? maintenance
+        : undefined;
+      if (!runtimeMaintenance) {
+        sshRuntimeMaintenanceByKey.delete(runtimeKey);
+      }
+      return [environment.id, onlineRuntimeHealth('ssh_runtime_probe', startup.local_ui_url, nextRuntimeService, runtimeMaintenance)] as const;
     } catch {
       await runtimeRecord.disconnect().catch(() => undefined);
       sshEnvironmentRuntimeByKey.delete(runtimeKey);
+      if (maintenance) {
+        return [
+          environment.id,
+          {
+            status: 'online',
+            checked_at_unix_ms: Date.now(),
+            source: 'ssh_runtime_probe',
+            runtime_maintenance: maintenance,
+          },
+        ] as const;
+      }
       return [
         environment.id,
         offlineRuntimeHealth('ssh_runtime_probe', 'probe_failed', 'Serve the runtime first'),
@@ -2646,6 +2686,9 @@ async function startSSHEnvironmentRuntimeRecord(
           local_forward_url: startup.local_ui_url,
         };
         sshEnvironmentRuntimeByKey.set(runtimeKey, updatedRecord);
+        if (runtimeServiceIsOpenable(updatedRecord.startup.runtime_service)) {
+          sshRuntimeMaintenanceByKey.delete(runtimeKey);
+        }
         return updatedRecord;
       }
     } catch {
@@ -2794,6 +2837,7 @@ async function startSSHEnvironmentRuntimeRecord(
         },
       };
       sshEnvironmentRuntimeByKey.set(runtimeKey, runtimeRecord);
+      sshRuntimeMaintenanceByKey.delete(runtimeKey);
       launcherOperations.finish(runtimeKey, 'succeeded', {
         phase: 'ssh_runtime_started',
         title: 'SSH runtime ready',
@@ -2813,10 +2857,19 @@ async function startSSHEnvironmentRuntimeRecord(
           });
         } else {
           const message = error instanceof Error ? error.message : String(error);
+          if (error instanceof DesktopSSHRuntimeMaintenanceRequiredError) {
+            sshRuntimeMaintenanceByKey.set(runtimeKey, error.maintenance);
+          }
           launcherOperations.finish(runtimeKey, 'failed', {
             phase: 'failed',
-            title: 'SSH runtime start failed',
-            detail: firstDisplayLine(message) || 'Desktop could not start the SSH runtime.',
+            title: error instanceof DesktopSSHRuntimeMaintenanceRequiredError
+              ? 'SSH runtime needs attention'
+              : 'SSH runtime start failed',
+            detail: firstDisplayLine(message) || (
+              error instanceof DesktopSSHRuntimeMaintenanceRequiredError
+                ? 'Update or restart the SSH runtime from the Welcome page.'
+                : 'Desktop could not start the SSH runtime.'
+            ),
             error_message: message,
           });
         }
@@ -4468,6 +4521,7 @@ async function stopEnvironmentRuntimeFromLauncher(
     }
     await runtimeRecord.stop();
     sshEnvironmentRuntimeByKey.delete(runtimeKey);
+    sshRuntimeMaintenanceByKey.delete(runtimeKey);
     resetLauncherIssueState();
     broadcastDesktopWelcomeSnapshots();
     return launcherActionSuccess('stopped_environment_runtime');
@@ -5276,6 +5330,7 @@ async function restartSSHRuntimeFromShell(
       },
     );
     sshEnvironmentRuntimeByKey.delete(runtimeKey);
+    sshRuntimeMaintenanceByKey.delete(runtimeKey);
     if (existingRuntimeRecord) {
       await existingRuntimeRecord.stop();
     } else {
@@ -5557,6 +5612,7 @@ async function deleteSavedSSHEnvironmentFromWelcome(environmentID: string): Prom
   }
   await persistDesktopPreferences(deleteSavedSSHEnvironment(preferences, environmentID));
   if (runtimeKey) {
+    sshRuntimeMaintenanceByKey.delete(runtimeKey);
     const pendingStart = pendingSSHRuntimeStartByKey.get(runtimeKey) ?? null;
     if (pendingStart) {
       launcherOperations.cancel(pendingStart.operation_key, 'Connection removed. Desktop is canceling the SSH startup task in the background.');
@@ -5753,6 +5809,7 @@ async function shutdownDesktopWindowsAndSessions(): Promise<void> {
   const sessionClosePromises = [...sessionsByKey.keys()].map((sessionKey) => finalizeSessionClosure(sessionKey));
   const sshDisconnectPromises = [...sshEnvironmentRuntimeByKey.values()].map((runtimeRecord) => runtimeRecord.disconnect());
   sshEnvironmentRuntimeByKey.clear();
+  sshRuntimeMaintenanceByKey.clear();
   for (const kind of UTILITY_WINDOW_KINDS) {
     const windowRecord = utilityWindows.get(kind) ?? null;
     const win = liveTrackedBrowserWindow(windowRecord);

@@ -73,6 +73,7 @@ export type EnvironmentActionIntent =
   | 'start_runtime'
   | 'stop_runtime'
   | 'restart_runtime'
+  | 'update_runtime'
   | 'refresh_runtime'
   | 'serve_runtime_locally'
   | 'focus_local_serve'
@@ -494,6 +495,28 @@ function runtimeServiceLabel(snapshot: RuntimeServiceSnapshot | undefined): stri
   return 'Unknown';
 }
 
+function environmentRuntimeMaintenance(environment: DesktopEnvironmentEntry) {
+  return environment.runtime_maintenance;
+}
+
+function runtimeMaintenanceActionIntent(
+  environment: DesktopEnvironmentEntry,
+): Extract<EnvironmentActionIntent, 'restart_runtime' | 'update_runtime'> | null {
+  const maintenance = environmentRuntimeMaintenance(environment);
+  if (!maintenance) {
+    return null;
+  }
+  return maintenance.kind === 'ssh_runtime_restart_required' ? 'restart_runtime' : 'update_runtime';
+}
+
+function runtimeMaintenanceActionLabel(environment: DesktopEnvironmentEntry): string | null {
+  const maintenance = environmentRuntimeMaintenance(environment);
+  if (!maintenance) {
+    return null;
+  }
+  return maintenance.kind === 'ssh_runtime_restart_required' ? 'Restart runtime…' : 'Update and restart…';
+}
+
 function runtimeServiceVersionLabel(snapshot: RuntimeServiceSnapshot | undefined): string {
   return compact(snapshot?.runtime_version) || 'Unknown';
 }
@@ -648,6 +671,11 @@ function runtimeStatusLabel(environment: DesktopEnvironmentEntry): string {
   if (environment.runtime_health.status !== 'online') {
     return 'RUNTIME OFFLINE';
   }
+  if (environmentRuntimeMaintenance(environment)) {
+    return environmentRuntimeMaintenance(environment)?.kind === 'ssh_runtime_restart_required'
+      ? 'RESTART REQUIRED'
+      : 'RUNTIME NEEDS UPDATE';
+  }
   const snapshot = environmentRuntimeService(environment);
   if (runtimeServiceIsOpenable(snapshot)) {
     return 'Open';
@@ -701,10 +729,13 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
   const localRuntimePlan = providerPrimaryLocalRuntimePlan(environment);
   const canOpenProviderLocalRuntime = localRuntimePlan?.can_open === true;
   const blocked = snapshot?.open_readiness?.state === 'blocked';
+  const maintenance = environmentRuntimeMaintenance(environment);
   const primaryRoute = environment.kind === 'provider_environment' ? providerPrimaryRoute(environment) : '';
   return {
     intent: 'open',
-    label: environment.runtime_health.status === 'online' && !runtimeServiceIsOpenable(snapshot) && !canOpenProviderLocalRuntime
+    label: maintenance
+      ? 'Open'
+      : environment.runtime_health.status === 'online' && !runtimeServiceIsOpenable(snapshot) && !canOpenProviderLocalRuntime
       ? blocked ? 'Open' : 'Preparing…'
       : 'Open',
     enabled: canOpenProviderLocalRuntime || (environment.runtime_health.status === 'online' && runtimeServiceIsOpenable(snapshot)),
@@ -850,9 +881,13 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
     const providerNeedsLocalBinding = environment.kind === 'provider_environment'
       && environment.provider_local_runtime_state === 'not_running';
     if (!providerNeedsLocalBinding) {
+      const maintenanceIntent = runtimeMaintenanceActionIntent(environment);
+      const maintenanceLabel = runtimeMaintenanceActionLabel(environment);
       const runtimeAction: EnvironmentActionModel = {
-        intent: environment.runtime_health.status === 'online' ? 'stop_runtime' : 'start_runtime',
-        label: environment.runtime_health.status === 'online' ? 'Stop runtime' : 'Start runtime',
+        intent: maintenanceIntent
+          ?? (environment.runtime_health.status === 'online' ? 'stop_runtime' : 'start_runtime'),
+        label: maintenanceLabel
+          ?? (environment.runtime_health.status === 'online' ? 'Stop runtime' : 'Start runtime'),
         enabled: true,
         variant: 'outline',
       };
@@ -927,19 +962,31 @@ function blockedPrimaryActionRefreshGuidanceAction(
 }
 
 function blockedRuntimePrimaryActionGuidanceActions(
+  environment: DesktopEnvironmentEntry,
   menuActions: readonly EnvironmentActionMenuItemModel[],
 ): readonly EnvironmentGuidanceActionModel[] {
-  const restartSource = menuActions.find((item) => item.action.intent === 'stop_runtime');
+  const restartSource = menuActions.find((item) => (
+    item.action.intent === 'update_runtime'
+    || item.action.intent === 'restart_runtime'
+    || item.action.intent === 'stop_runtime'
+  ));
   const refreshSource = menuActions.find((item) => item.action.intent === 'refresh_runtime');
+  const maintenance = environmentRuntimeMaintenance(environment);
+  const primaryLabel = maintenance?.kind === 'ssh_runtime_restart_required'
+    ? 'Restart runtime…'
+    : 'Update and restart…';
+  const primaryIntent = maintenance?.kind === 'ssh_runtime_restart_required'
+    ? 'restart_runtime'
+    : 'update_runtime';
   return [
     restartSource
       ? {
-          label: 'Restart after update…',
+          label: maintenance ? primaryLabel : 'Restart after update…',
           emphasis: 'primary',
           action: {
             ...restartSource.action,
-            intent: 'restart_runtime' as const,
-            label: 'Restart after update…',
+            intent: maintenance ? primaryIntent : 'restart_runtime',
+            label: maintenance ? primaryLabel : 'Restart after update…',
           },
         }
       : null,
@@ -954,8 +1001,19 @@ function blockedRuntimePrimaryActionGuidanceActions(
 }
 
 function blockedRuntimePrimaryActionTitle(
+  environment: DesktopEnvironmentEntry,
   snapshot: RuntimeServiceSnapshot | undefined,
 ): string {
+  const maintenance = environmentRuntimeMaintenance(environment);
+  if (maintenance?.kind === 'desktop_model_source_requires_runtime_update') {
+    return 'Desktop model source needs update';
+  }
+  if (maintenance?.kind === 'ssh_runtime_restart_required') {
+    return 'Runtime restart required';
+  }
+  if (maintenance?.kind === 'ssh_runtime_update_required') {
+    return 'Runtime update required';
+  }
   return runtimeServiceNeedsRuntimeUpdate(snapshot)
     ? 'Runtime update required'
     : 'Runtime cannot open yet';
@@ -965,6 +1023,16 @@ function blockedRuntimePrimaryActionDetail(
   environment: DesktopEnvironmentEntry,
   snapshot: RuntimeServiceSnapshot | undefined,
 ): string {
+  const maintenance = environmentRuntimeMaintenance(environment);
+  if (maintenance) {
+    if (maintenance.kind === 'desktop_model_source_requires_runtime_update') {
+      return 'This SSH host is reachable, but the running runtime needs an update before Desktop can make your local model settings available here. Update and restart the runtime first; Open stays separate and becomes available after the runtime is ready.';
+    }
+    if (maintenance.kind === 'ssh_runtime_restart_required') {
+      return 'This SSH host is reachable, but the running runtime needs a confirmed restart before it can open this environment. Open stays locked until the runtime restarts and reports ready.';
+    }
+    return 'This SSH host is reachable, but the running runtime needs an update before it can open this environment. Update and restart the runtime first; Open stays separate and becomes available after the runtime is ready.';
+  }
   if (runtimeServiceNeedsRuntimeUpdate(snapshot)) {
     return environment.kind === 'ssh_environment'
       ? 'SSH is connected, but the running runtime on this host needs an update before it can open the Environment App. Open will stay locked until the runtime is updated and restarted when active work can be interrupted.'
@@ -1036,14 +1104,14 @@ function primaryActionOverlay(
     if (runtimeServiceIsOpenable(snapshot)) {
       return undefined;
     }
-    if (snapshot?.open_readiness?.state === 'blocked') {
+    if (environmentRuntimeMaintenance(environment) || snapshot?.open_readiness?.state === 'blocked') {
       return {
         kind: 'popover',
         tone: 'warning',
         eyebrow: 'Runtime blocked',
-        title: blockedRuntimePrimaryActionTitle(snapshot),
+        title: blockedRuntimePrimaryActionTitle(environment, snapshot),
         detail: blockedRuntimePrimaryActionDetail(environment, snapshot),
-        actions: blockedRuntimePrimaryActionGuidanceActions(menuActions),
+        actions: blockedRuntimePrimaryActionGuidanceActions(environment, menuActions),
       };
     }
     return {
