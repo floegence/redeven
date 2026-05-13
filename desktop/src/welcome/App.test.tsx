@@ -584,7 +584,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('activeProgressForEnvironment(props.environment.id, props.busyState, props.actionProgress)');
     expect(appSrc).toContain('function SSHRuntimeActivityOverlay');
     expect(appSrc).toContain('<Portal>');
-    expect(appSrc).toContain('Opening SSH Host');
+    expect(appSrc).toContain('Starting SSH Runtime');
     expect(appSrc).not.toContain('function SSHRuntimeProgressPanel');
     expect(styles).toContain('.redeven-ssh-runtime-activity');
     expect(styles).toContain('position: fixed;');
@@ -597,7 +597,7 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain('async function cancelLauncherOperation(progress: DesktopLauncherActionProgress): Promise<void>');
     expect(appSrc).toContain("kind: 'cancel_launcher_operation'");
-    expect(appSrc).toContain("showActionToast('Background task is canceling.', 'info');");
+    expect(appSrc).toContain("showActionToast('SSH runtime startup is stopping.', 'info');");
     expect(appSrc).toContain('cancelOperation={cancelLauncherOperation}');
     expect(appSrc).toContain('cancelOperation: (progress: DesktopLauncherActionProgress) => void;');
     expect(appSrc).toContain("progress.deleted_subject\n                        ? 'Connection removed'");

@@ -93,7 +93,8 @@ export type DesktopSSHRuntimeProgressPhase =
   | 'ssh_waiting_report'
   | 'ssh_opening_tunnel'
   | 'ssh_binding_ai_broker'
-  | 'ssh_verifying_tunnel';
+  | 'ssh_verifying_tunnel'
+  | 'ssh_cleaning_startup_resources';
 export type DesktopSSHRuntimeProgress = Readonly<{
   phase: DesktopSSHRuntimeProgressPhase;
   title: string;
@@ -933,8 +934,10 @@ async function runLocalCommand(
   options: Readonly<{
     cwd: string;
     env?: NodeJS.ProcessEnv;
+    signal?: AbortSignal;
   }>,
 ): Promise<LocalCommandResult> {
+  throwIfSSHRuntimeCanceled(options.signal);
   return new Promise<LocalCommandResult>((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: options.cwd,
@@ -943,6 +946,7 @@ async function runLocalCommand(
         ...options.env,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
+      signal: options.signal,
     });
     let stdout = '';
     let stderr = '';
@@ -955,8 +959,18 @@ async function runLocalCommand(
     child.stderr?.on('data', (chunk: string) => {
       stderr += chunk;
     });
-    child.once('error', reject);
+    child.once('error', (error) => {
+      if (isAbortError(error) || options.signal?.aborted) {
+        reject(new DesktopSSHRuntimeCanceledError());
+        return;
+      }
+      reject(error);
+    });
     child.once('close', (exitCode, signal) => {
+      if (options.signal?.aborted) {
+        reject(new DesktopSSHRuntimeCanceledError());
+        return;
+      }
       if (exitCode === 0 && !signal) {
         resolve({ stdout, stderr });
         return;
@@ -977,6 +991,7 @@ async function stopRemoteRuntimeProcess(args: Readonly<{
   pid: number;
   logs: MutableRecentLogs;
   onLog: StartManagedSSHRuntimeArgs['onLog'];
+  signal?: AbortSignal;
 }>): Promise<void> {
   if (!Number.isInteger(args.pid) || args.pid <= 0) {
     return;
@@ -994,6 +1009,8 @@ async function stopRemoteRuntimeProcess(args: Readonly<{
     args.logs,
     'control_stderr',
     args.onLog,
+    undefined,
+    args.signal,
   );
 }
 
@@ -1286,6 +1303,7 @@ async function removeRemotePath(args: Readonly<{
   remotePath: string;
   logs: MutableRecentLogs;
   onLog: StartManagedSSHRuntimeArgs['onLog'];
+  signal?: AbortSignal;
 }>): Promise<void> {
   if (compact(args.remotePath) === '') {
     return;
@@ -1303,6 +1321,8 @@ async function removeRemotePath(args: Readonly<{
     args.logs,
     'control_stderr',
     args.onLog,
+    undefined,
+    args.signal,
   ).catch(() => undefined);
 }
 
@@ -1409,26 +1429,27 @@ function createSingleFileTarGzip(fileName: string, data: Buffer, mode: number): 
   ]));
 }
 
-async function readSourceRuntimeCommit(sourceRoot: string): Promise<string> {
+async function readSourceRuntimeCommit(sourceRoot: string, signal?: AbortSignal): Promise<string> {
   const envCommit = compact(process.env.REDEVEN_DESKTOP_BUNDLE_COMMIT);
   if (envCommit !== '') {
     return envCommit;
   }
   try {
-    const result = await runLocalCommand('git', ['rev-parse', '--short=12', 'HEAD'], { cwd: sourceRoot });
+    const result = await runLocalCommand('git', ['rev-parse', '--short=12', 'HEAD'], { cwd: sourceRoot, signal });
     return compact(result.stdout) || 'unknown';
   } catch {
+    throwIfSSHRuntimeCanceled(signal);
     return 'unknown';
   }
 }
 
-async function buildSourceRuntimeAssets(sourceRoot: string): Promise<void> {
+async function buildSourceRuntimeAssets(sourceRoot: string, signal?: AbortSignal): Promise<void> {
   const scriptPath = path.join(sourceRoot, 'scripts', 'build_assets.sh');
   const scriptStat = await fs.stat(scriptPath).catch(() => null);
   if (!scriptStat?.isFile()) {
     throw new Error(`Redeven asset build script is missing: ${scriptPath}`);
   }
-  await runLocalCommand(scriptPath, [], { cwd: sourceRoot });
+  await runLocalCommand(scriptPath, [], { cwd: sourceRoot, signal });
 }
 
 async function prepareSourceRuntimeUploadAsset(args: Readonly<{
@@ -1436,7 +1457,9 @@ async function prepareSourceRuntimeUploadAsset(args: Readonly<{
   runtimeReleaseTag: string;
   assetCacheRoot: string;
   platform: DesktopSSHRemotePlatform;
+  signal?: AbortSignal;
 }>): Promise<PreparedDesktopSSHUploadAsset | null> {
+  throwIfSSHRuntimeCanceled(args.signal);
   const sourceRoot = compact(args.sourceRuntimeRoot);
   if (sourceRoot === '') {
     return null;
@@ -1455,8 +1478,8 @@ async function prepareSourceRuntimeUploadAsset(args: Readonly<{
     const binaryPath = path.join(buildRoot, 'redeven');
     const buildTime = compact(process.env.REDEVEN_DESKTOP_BUNDLE_BUILD_TIME)
       || new Date().toISOString().replace(/\.\d{3}Z$/u, 'Z');
-    const commit = await readSourceRuntimeCommit(sourceRoot);
-    await buildSourceRuntimeAssets(sourceRoot);
+    const commit = await readSourceRuntimeCommit(sourceRoot, args.signal);
+    await buildSourceRuntimeAssets(sourceRoot, args.signal);
     await runLocalCommand('go', [
       'build',
       '-trimpath',
@@ -1472,7 +1495,9 @@ async function prepareSourceRuntimeUploadAsset(args: Readonly<{
         GOARCH: args.platform.goarch,
         CGO_ENABLED: '0',
       },
+      signal: args.signal,
     });
+    throwIfSSHRuntimeCanceled(args.signal);
 
     return {
       archiveData: createSingleFileTarGzip('redeven', await fs.readFile(binaryPath), 0o755),
@@ -1509,6 +1534,7 @@ async function prepareDesktopSSHUploadAsset(args: Readonly<{
       runtimeReleaseTag: args.runtimeReleaseTag,
       assetCacheRoot: args.assetCacheRoot,
       platform: args.platform,
+      signal: args.signal,
     });
     if (sourceAsset) {
       throwIfSSHRuntimeCanceled(args.signal);
@@ -1519,7 +1545,10 @@ async function prepareDesktopSSHUploadAsset(args: Readonly<{
       releaseBaseURL: args.target.release_base_url,
       platform: args.platform,
       cacheRoot: args.assetCacheRoot,
-      fetchPolicy: args.fetchPolicy,
+      fetchPolicy: {
+        ...args.fetchPolicy,
+        signal: args.signal,
+      },
     });
     return {
       archiveData: await fs.readFile(asset.archive_path),
@@ -2040,6 +2069,12 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       return;
     }
     transportDisconnected = true;
+    emitSSHRuntimeProgress(
+      args.onProgress,
+      'ssh_cleaning_startup_resources',
+      'Cleaning SSH startup resources',
+      'Desktop is closing local SSH tunnels and temporary startup files.',
+    );
     await stopChildProcess(forwardProcess, stopTimeoutMs).catch(() => undefined);
     await stopChildProcess(reverseForwardProcess, stopTimeoutMs).catch(() => undefined);
     await stopChildProcess(controlProcess, stopTimeoutMs).catch(() => undefined);
@@ -2060,6 +2095,7 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
           pid: remoteRuntimePID,
           logs,
           onLog: args.onLog,
+          signal: args.signal,
         });
       }
     } finally {
@@ -2208,6 +2244,7 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
         pid: remoteRuntimePID ?? 0,
         logs,
         onLog: args.onLog,
+        signal: args.signal,
       });
       await stopChildProcess(controlProcess, stopTimeoutMs).catch(() => undefined);
       controlProcess = null;

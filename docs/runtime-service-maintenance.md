@@ -414,6 +414,16 @@ sequenceDiagram
 
 Welcome can run the same SSH-managed update before an Env App window exists. In that case the Welcome card records the SSH runtime maintenance requirement, asks the user to confirm the update/restart from the card, then calls the launcher start action with `forceRuntimeUpdate=true`. That confirmed start lets the SSH bootstrap replace the active remote runtime even when automatic replacement was previously blocked by active work. Welcome does not auto-open the environment after maintenance; it only unlocks `Open` once the refreshed Runtime Service snapshot is openable.
 
+SSH startup cancellation uses the same runtime-lifecycle contract. The Welcome
+activity labels the task as SSH Runtime startup, not Environment opening, and
+`Stop startup` requests cancellation for the current start/update operation
+without invoking `Open`. Desktop immediately moves the operation to a stopping
+phase, broadcasts the shared cancellation signal through broker preparation,
+release downloads, local build commands, SSH commands, binding requests, and
+polling loops, then enters cleanup while it closes owned local resources. A
+successful stop becomes a short-lived canceled operation; only cleanup failures
+remain visible for user attention.
+
 ### Self-Upgrade Runtime
 
 ```mermaid

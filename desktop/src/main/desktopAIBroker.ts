@@ -39,11 +39,35 @@ export type StartDesktopAIBrokerArgs = Readonly<{
   tempRoot?: string;
   startupTimeoutMs?: number;
   stopTimeoutMs?: number;
+  signal?: AbortSignal;
   onLog?: (stream: 'stdout' | 'stderr', chunk: string) => void;
 }>;
 
-async function delay(ms: number): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, ms));
+function brokerStartupCanceledError(): DOMException {
+  return new DOMException('Desktop AI Broker startup was canceled.', 'AbortError');
+}
+
+function throwIfBrokerStartupCanceled(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw brokerStartupCanceledError();
+  }
+}
+
+async function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  throwIfBrokerStartupCanceled(signal);
+  let abort: (() => void) | null = null;
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    abort = () => {
+      clearTimeout(timer);
+      reject(brokerStartupCanceledError());
+    };
+    signal?.addEventListener('abort', abort, { once: true });
+  }).finally(() => {
+    if (abort) {
+      signal?.removeEventListener('abort', abort);
+    }
+  });
 }
 
 function normalizeReport(raw: unknown): DesktopAIBrokerStartupReport | null {
@@ -95,6 +119,7 @@ async function stopProcess(child: BrokerProcess, timeoutMs: number): Promise<voi
 }
 
 export async function startDesktopAIBroker(args: StartDesktopAIBrokerArgs): Promise<ManagedDesktopAIBroker> {
+  throwIfBrokerStartupCanceled(args.signal);
   const tempDir = await fs.mkdtemp(path.join(args.tempRoot ?? os.tmpdir(), 'redeven-ai-broker-'));
   const reportFile = path.join(tempDir, 'startup-report.json');
   const token = randomBytes(32).toString('base64url');
@@ -118,6 +143,7 @@ export async function startDesktopAIBroker(args: StartDesktopAIBrokerArgs): Prom
     reportFile,
   ], {
     stdio: ['ignore', 'pipe', 'pipe'],
+    signal: args.signal,
     env: {
       ...process.env,
       [TOKEN_ENV_NAME]: token,
@@ -126,6 +152,10 @@ export async function startDesktopAIBroker(args: StartDesktopAIBrokerArgs): Prom
 
   let spawnError: Error | null = null;
   child.once('error', (error) => {
+    if (args.signal?.aborted || (error as Partial<Error> & Readonly<{ code?: string }>)?.name === 'AbortError') {
+      spawnError = brokerStartupCanceledError();
+      return;
+    }
     spawnError = error instanceof Error ? error : new Error(String(error));
   });
   child.stdout?.setEncoding('utf8');
@@ -141,6 +171,7 @@ export async function startDesktopAIBroker(args: StartDesktopAIBrokerArgs): Prom
   try {
     const deadline = Date.now() + (args.startupTimeoutMs ?? DEFAULT_BROKER_STARTUP_TIMEOUT_MS);
     for (;;) {
+      throwIfBrokerStartupCanceled(args.signal);
       if (spawnError) throw spawnError;
       const report = await readStartupReport(reportFile);
       if (report) {
@@ -161,7 +192,7 @@ export async function startDesktopAIBroker(args: StartDesktopAIBrokerArgs): Prom
       if (Date.now() >= deadline) {
         throw new Error('Timed out waiting for Desktop AI Broker readiness.');
       }
-      await delay(STARTUP_REPORT_POLL_MS);
+      await delay(STARTUP_REPORT_POLL_MS, args.signal);
     }
   } catch (error) {
     await cleanup();

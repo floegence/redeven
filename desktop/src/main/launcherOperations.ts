@@ -57,6 +57,32 @@ function operationProgress(snapshot: DesktopLauncherOperationSnapshot): DesktopL
   };
 }
 
+function cancelPhaseForSnapshot(snapshot: DesktopLauncherOperationSnapshot): Readonly<{
+  phase: string;
+  title: string;
+  detail: string;
+}> {
+  if (snapshot.deleted_subject) {
+    return {
+      phase: 'canceling_deleted_connection',
+      title: 'Connection removed',
+      detail: 'Desktop is stopping the startup task for this deleted connection.',
+    };
+  }
+  if (snapshot.subject_kind === 'ssh_environment' && snapshot.action === 'start_environment_runtime') {
+    return {
+      phase: 'ssh_stopping_startup',
+      title: 'Stopping SSH runtime startup',
+      detail: 'Desktop is stopping the SSH runtime startup and cleaning up resources already created.',
+    };
+  }
+  return {
+    phase: 'canceling',
+    title: 'Stopping operation',
+    detail: 'Desktop is stopping this background task.',
+  };
+}
+
 export class LauncherOperationRegistry {
   private readonly operationsByKey = new Map<string, DesktopLauncherOperationSnapshot>();
   private readonly abortControllersByKey = new Map<string, AbortController>();
@@ -212,11 +238,12 @@ export class LauncherOperationRegistry {
     if (controller && !controller.signal.aborted) {
       controller.abort(compact(reason) || 'Operation canceled.');
     }
+    const cancelPhase = cancelPhaseForSnapshot(snapshot);
     return this.update(key, {
       status: 'canceling',
-      phase: snapshot.deleted_subject ? 'canceling_deleted_connection' : 'canceling',
-      title: snapshot.deleted_subject ? 'Connection removed' : 'Stopping operation',
-      detail: compact(reason) || 'Desktop is stopping this background task.',
+      phase: cancelPhase.phase,
+      title: cancelPhase.title,
+      detail: compact(reason) || cancelPhase.detail,
       cancelable: false,
       interrupt_label: undefined,
       interrupt_detail: undefined,

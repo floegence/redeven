@@ -208,6 +208,35 @@ describe('sshReleaseAssets', () => {
     }
   });
 
+  it('lets SSH startup cancellation interrupt release manifest downloads before the timeout', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-ssh-release-cancel-'));
+    const controller = new AbortController();
+    const fetchMock = vi.fn((_input: string | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      const signal = init?.signal;
+      if (!signal) {
+        reject(new Error('Missing fetch signal.'));
+        return;
+      }
+      signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const manifest = ensureDesktopSSHVerifiedReleaseManifest({
+        releaseTag: 'v1.2.3',
+        releaseBaseURL: 'https://mirror.example.invalid/releases',
+        cacheRoot: root,
+        fetchPolicy: {
+          timeout_ms: 30_000,
+          signal: controller.signal,
+        },
+      });
+      controller.abort();
+      await expect(manifest).rejects.toMatchObject({ name: 'AbortError' });
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('downloads release archives into source-partitioned cache directories', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-ssh-release-assets-'));
     try {

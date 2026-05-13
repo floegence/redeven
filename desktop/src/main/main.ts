@@ -2711,11 +2711,11 @@ async function startSSHEnvironmentRuntimeRecord(
     environment_id: environmentID,
     environment_label: label,
     phase: 'ssh_preparing_start',
-    title: 'Preparing SSH host',
+    title: 'Preparing SSH runtime',
     detail: 'Desktop is preparing the secure SSH session and local tunnel.',
     cancelable: true,
-    interrupt_label: 'Stop opening',
-    interrupt_detail: 'Stops this SSH opening attempt and cleans up local startup resources.',
+    interrupt_label: 'Stop startup',
+    interrupt_detail: 'Stops this SSH runtime startup and closes the local resources already created.',
     interrupt_kind: 'stop_opening',
   });
   const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
@@ -2735,12 +2735,16 @@ async function startSSHEnvironmentRuntimeRecord(
           stateRoot: preferencesPaths().stateRoot,
           runtimeKey,
           tempRoot: app.getPath('temp'),
+          signal,
           onLog: (stream, chunk) => {
             const text = String(chunk ?? '').trim();
             if (text) console.log(`[redeven:ai-broker:${stream}] ${text}`);
           },
         });
       } catch (brokerError) {
+        if (brokerError instanceof DOMException && brokerError.name === 'AbortError') {
+          throw new DesktopSSHRuntimeCanceledError();
+        }
         const message = brokerError instanceof Error ? brokerError.message : String(brokerError);
         console.warn(`[redeven:ai-broker] Desktop AI Broker unavailable for ${runtimeKey}: ${message}`);
         desktopAIBroker = null;
@@ -2849,10 +2853,19 @@ async function startSSHEnvironmentRuntimeRecord(
     } catch (error) {
       if (!operationSettled) {
         if (error instanceof DesktopSSHRuntimeCanceledError || signal?.aborted) {
+          launcherOperations.update(runtimeKey, {
+            status: 'cleanup_running',
+            phase: 'ssh_cleaning_startup_resources',
+            title: 'Cleaning SSH startup resources',
+            detail: 'Desktop is closing local startup resources for this SSH runtime.',
+            cancelable: false,
+          });
+          await desktopAIBroker?.stop();
+          desktopAIBroker = null;
           launcherOperations.finish(runtimeKey, 'canceled', {
             phase: 'canceled',
             title: 'Startup canceled',
-            detail: 'Desktop canceled the SSH startup task.',
+            detail: 'Desktop stopped the SSH runtime startup and cleaned up local startup resources.',
             deleted_subject: launcherOperations.get(runtimeKey)?.deleted_subject === true,
           });
         } else {

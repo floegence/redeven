@@ -1395,7 +1395,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       operation_key: operationKey,
     });
     if (result?.outcome === 'canceled_launcher_operation') {
-      showActionToast('Background task is canceling.', 'info');
+      showActionToast('SSH runtime startup is stopping.', 'info');
     }
   }
 
@@ -3614,7 +3614,7 @@ function SSHRuntimeActivityOverlay(props: Readonly<{
           <div class="redeven-ssh-runtime-activity__header">
             <div class="redeven-ssh-runtime-activity__title">
               <Terminal class="h-3.5 w-3.5" />
-              <span>Opening SSH Host</span>
+              <span>Starting SSH Runtime</span>
             </div>
             <span class="redeven-ssh-runtime-activity__count">
               {props.progressItems.length === 1 ? '1 active task' : `${props.progressItems.length} active tasks`}
@@ -3640,7 +3640,7 @@ function SSHRuntimeActivityOverlay(props: Readonly<{
                       {progress.deleted_subject
                         ? 'Connection removed'
                         : progress.status === 'canceling'
-                          ? 'Canceling'
+                          ? 'Stopping'
                           : progress.status === 'cleanup_failed'
                             ? 'Cleanup needs attention'
                             : progress.status === 'canceled'
