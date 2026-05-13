@@ -2590,10 +2590,17 @@ describe('EnvWorkbenchPage', () => {
         size: 18,
       },
     }));
+    const previewBodyObservations: Array<{ item: any; request: any }> = [];
     widgetBodyMocks.renderPreviewBody = (bodyProps: any) => {
       const workbench = useEnvWorkbenchInstancesContext();
       createEffect(() => {
-        contextProbeState.previewOpenRequest = workbench.previewOpenRequest(bodyProps.widgetId);
+        const item = workbench.previewItem(bodyProps.widgetId);
+        const request = workbench.previewOpenRequest(bodyProps.widgetId);
+        if (bodyProps.widgetId === newWidget.id) {
+          previewBodyObservations.push({ item, request });
+        }
+        contextProbeState.previewItem = item;
+        contextProbeState.previewOpenRequest = request;
       });
       return null;
     };
@@ -2645,6 +2652,19 @@ describe('EnvWorkbenchPage', () => {
         path: '/workspace/other.txt',
         name: 'other.txt',
       },
+    });
+    expect(contextProbeState.previewItem).toMatchObject({
+      path: '/workspace/other.txt',
+      name: 'other.txt',
+    });
+    expect(previewBodyObservations.length).toBeGreaterThan(0);
+    expect(previewBodyObservations[0]?.request).toMatchObject({
+      requestId: 'request-preview-other',
+      widgetId: newWidget.id,
+    });
+    expect(previewBodyObservations[0]?.item).toMatchObject({
+      path: '/workspace/other.txt',
+      name: 'other.txt',
     });
   });
 

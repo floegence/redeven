@@ -118,17 +118,26 @@ async function flush() {
   await Promise.resolve();
 }
 
-function renderPreviewWidget() {
-  const [controllerItem, setControllerItem] = createSignal<any>({
+function renderPreviewWidget(options: {
+  initialControllerItem?: any;
+  initialDirty?: boolean;
+  initialOpenRequest?: any;
+} = {}) {
+  const defaultControllerItem = {
     id: '/workspace/local.ts',
     type: 'file',
     path: '/workspace/local.ts',
     name: 'local.ts',
-  });
-  const [dirty, setDirty] = createSignal(true);
+  };
+  const [controllerItem, setControllerItem] = createSignal<any>(
+    Object.prototype.hasOwnProperty.call(options, 'initialControllerItem')
+      ? options.initialControllerItem
+      : defaultControllerItem,
+  );
+  const [dirty, setDirty] = createSignal(options.initialDirty ?? true);
   const [sharedItem, setSharedItem] = createSignal<RuntimeWorkbenchPreviewItem | null>(null);
   const [pendingItem, setPendingItem] = createSignal<RuntimeWorkbenchPreviewItem | null>(null);
-  const [openRequest, setOpenRequest] = createSignal<any>(null);
+  const [openRequest, setOpenRequest] = createSignal<any>(options.initialOpenRequest ?? null);
   const host = document.createElement('div');
   document.body.appendChild(host);
 
@@ -338,6 +347,50 @@ describe('WorkbenchFilePreviewWidget', () => {
 
       expect(controllerStore.openPreview).toHaveBeenCalledTimes(1);
       expect(controllerStore.item?.()?.path).toBe('/workspace/target.ts');
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  it('does not clear the shared preview item while a direct open request is hydrating', async () => {
+    const targetItem: RuntimeWorkbenchPreviewItem = {
+      id: '/workspace/target.ts',
+      type: 'file',
+      path: '/workspace/target.ts',
+      name: 'target.ts',
+    };
+    let resolveOpen: () => void = () => {
+      throw new Error('open promise was not created');
+    };
+    controllerStore.openPreview.mockImplementationOnce((async (item: any) => {
+      await new Promise<void>((resolve) => {
+        resolveOpen = resolve;
+      });
+      controllerStore.setItem?.(item);
+      controllerStore.setDirty?.(false);
+    }) as any);
+    const harness = renderPreviewWidget({
+      initialControllerItem: null,
+      initialDirty: false,
+      initialOpenRequest: {
+        requestId: 'request-target-preview',
+        widgetId: 'widget-preview-1',
+        item: targetItem,
+      },
+    });
+
+    try {
+      await flush();
+
+      expect(workbenchStore.consumePreviewOpenRequest).toHaveBeenCalledWith('request-target-preview');
+      expect(controllerStore.openPreview).toHaveBeenCalledWith(targetItem);
+      expect(workbenchStore.updatePreviewItem).not.toHaveBeenCalled();
+
+      resolveOpen();
+      await flush();
+
+      expect(workbenchStore.updatePreviewItem).toHaveBeenCalledWith('widget-preview-1', targetItem);
+      expect(workbenchStore.updatePreviewItem).not.toHaveBeenCalledWith('widget-preview-1', null);
     } finally {
       harness.dispose();
     }

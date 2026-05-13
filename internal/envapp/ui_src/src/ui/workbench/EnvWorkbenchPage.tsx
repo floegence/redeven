@@ -1862,8 +1862,30 @@ export function EnvWorkbenchPage() {
           ? terminalVisualCoordinator.beginInteraction('widget_create')
           : null;
         try {
-          applyRuntimeSnapshot(result.snapshot);
-          applyRuntimeWidgetState(result.widget_state);
+          batch(() => {
+            applyRuntimeSnapshot(result.snapshot);
+            applyRuntimeWidgetState(result.widget_state);
+            setInstanceState((previous) => ({
+              ...previous,
+              latestWidgetIdByType: {
+                ...previous.latestWidgetIdByType,
+                'redeven.preview': result.widget_id,
+              },
+              previewItemsByWidgetId: {
+                ...previous.previewItemsByWidgetId,
+                [result.widget_id]: normalizedItem,
+              },
+            }));
+            updateWidgetTitle(result.widget_id, buildWorkbenchFilePreviewTitle(normalizedItem));
+            setPreviewOpenRequests((previous) => ({
+              ...previous,
+              [result.widget_id]: {
+                requestId,
+                widgetId: result.widget_id,
+                item: normalizedItem,
+              },
+            }));
+          });
         } finally {
           if (release) {
             requestPostInteractionFrame(() => release.end());
@@ -1880,27 +1902,6 @@ export function EnvWorkbenchPage() {
         if (request.focus !== false) {
           api.focusWidget(widget, { centerViewport });
         }
-
-        setInstanceState((previous) => ({
-          ...previous,
-          latestWidgetIdByType: {
-            ...previous.latestWidgetIdByType,
-            [widget.type]: widget.id,
-          },
-          previewItemsByWidgetId: {
-            ...previous.previewItemsByWidgetId,
-            [widget.id]: normalizedItem,
-          },
-        }));
-        updateWidgetTitle(widget.id, buildWorkbenchFilePreviewTitle(normalizedItem));
-        setPreviewOpenRequests((previous) => ({
-          ...previous,
-          [widget.id]: {
-            requestId,
-            widgetId: widget.id,
-            item: normalizedItem,
-          },
-        }));
       })
       .catch((error) => {
         console.warn('Failed to open workbench preview:', error);
