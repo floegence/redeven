@@ -1,4 +1,15 @@
-import type { RuntimeServiceCompatibility, RuntimeServiceOpenReadiness, RuntimeServiceOwner, RuntimeServiceSnapshot, SysMaintenanceSnapshot, SysPingResponse, SysRestartResponse, SysUpgradeRequest, SysUpgradeResponse } from '../sdk/sys';
+import type {
+  RuntimeServiceBindingState,
+  RuntimeServiceCompatibility,
+  RuntimeServiceOpenReadiness,
+  RuntimeServiceOwner,
+  RuntimeServiceSnapshot,
+  SysMaintenanceSnapshot,
+  SysPingResponse,
+  SysRestartResponse,
+  SysUpgradeRequest,
+  SysUpgradeResponse,
+} from '../sdk/sys';
 import type { wire_sys_ping_resp, wire_sys_restart_req, wire_sys_restart_resp, wire_sys_upgrade_req, wire_sys_upgrade_resp } from '../wire/sys';
 
 function fromWireSysMaintenanceSnapshot(resp: wire_sys_ping_resp['maintenance']): SysMaintenanceSnapshot | undefined {
@@ -41,6 +52,26 @@ function normalizeCount(value: unknown): number {
   return Math.max(0, Math.floor(count));
 }
 
+function normalizeRuntimeServiceBindingState(value: unknown, supported: boolean): RuntimeServiceBindingState {
+  if (!supported) return 'unsupported';
+  const state = String(value ?? '').trim();
+  switch (state) {
+    case 'unbound':
+    case 'bound':
+    case 'error':
+    case 'expired':
+      return state;
+    default:
+      return 'unbound';
+  }
+}
+
+function compactStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out = Array.from(new Set(value.map((item) => String(item ?? '').trim()).filter(Boolean))).sort();
+  return out.length > 0 ? out : undefined;
+}
+
 function fromWireRuntimeServiceOpenReadiness(value: unknown): RuntimeServiceOpenReadiness | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const record = value as { state?: unknown; reason_code?: unknown; message?: unknown };
@@ -57,6 +88,11 @@ function fromWireRuntimeServiceOpenReadiness(value: unknown): RuntimeServiceOpen
 function fromWireRuntimeServiceSnapshot(resp: wire_sys_ping_resp['runtime_service']): RuntimeServiceSnapshot | undefined {
   if (!resp) return undefined;
   const workload = resp.active_workload ?? {};
+  const capabilities = resp.capabilities ?? {};
+  const desktopAiBrokerCapability = capabilities.desktop_ai_broker ?? {};
+  const desktopAiBrokerSupported = desktopAiBrokerCapability.supported === true;
+  const bindings = resp.bindings ?? {};
+  const desktopAiBrokerBinding = bindings.desktop_ai_broker ?? {};
   const desktopManaged = resp.desktop_managed === true;
   return {
     runtimeVersion: resp.runtime_version ? String(resp.runtime_version) : undefined,
@@ -79,6 +115,28 @@ function fromWireRuntimeServiceSnapshot(resp: wire_sys_ping_resp['runtime_servic
       sessionCount: normalizeCount(workload.session_count),
       taskCount: normalizeCount(workload.task_count),
       portForwardCount: normalizeCount(workload.port_forward_count),
+    },
+    capabilities: {
+      desktopAiBroker: {
+        supported: desktopAiBrokerSupported,
+        bindMethod: desktopAiBrokerSupported
+          ? (String(desktopAiBrokerCapability.bind_method ?? '').trim() || 'runtime_control_v1')
+          : undefined,
+        reasonCode: String(desktopAiBrokerCapability.reason_code ?? '').trim() || undefined,
+        message: String(desktopAiBrokerCapability.message ?? '').trim() || undefined,
+      },
+    },
+    bindings: {
+      desktopAiBroker: {
+        state: normalizeRuntimeServiceBindingState(desktopAiBrokerBinding.state, desktopAiBrokerSupported),
+        sessionId: String(desktopAiBrokerBinding.session_id ?? '').trim() || undefined,
+        sshRuntimeKey: String(desktopAiBrokerBinding.ssh_runtime_key ?? '').trim() || undefined,
+        expiresAtUnixMs: normalizeCount(desktopAiBrokerBinding.expires_at_unix_ms) || undefined,
+        modelSource: String(desktopAiBrokerBinding.model_source ?? '').trim() || undefined,
+        modelCount: normalizeCount(desktopAiBrokerBinding.model_count),
+        missingKeyProviderIds: compactStringArray(desktopAiBrokerBinding.missing_key_provider_ids),
+        lastError: String(desktopAiBrokerBinding.last_error ?? '').trim() || undefined,
+      },
     },
   };
 }

@@ -159,7 +159,7 @@ describe('desktopWelcomeRuntimeState', () => {
         ],
       );
 
-      expect(hydrated.local_environment.local_hosting.current_runtime).toEqual({
+      expect(hydrated.local_environment.local_hosting.current_runtime).toMatchObject({
         local_ui_url: localUIURL,
         effective_run_mode: 'local',
         remote_enabled: false,
@@ -414,7 +414,7 @@ describe('desktopWelcomeRuntimeState', () => {
         desktopOwnerID: 'desktop-owner-1',
       });
 
-      expect(hydrated.local_environment.local_hosting.current_runtime).toEqual({
+      expect(hydrated.local_environment.local_hosting.current_runtime).toMatchObject({
         local_ui_url: `http://127.0.0.1:${address.port}/`,
         effective_run_mode: 'desktop',
         remote_enabled: true,

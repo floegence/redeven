@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/settings"
 )
 
@@ -40,6 +41,7 @@ type DesktopAIBrokerEndpoint struct {
 }
 
 type DesktopAIBrokerStatus struct {
+	BindingState          string   `json:"binding_state,omitempty"`
 	Connected             bool     `json:"connected"`
 	Available             bool     `json:"available"`
 	ModelSource           string   `json:"model_source,omitempty"`
@@ -166,7 +168,13 @@ func (c *desktopAIBrokerClient) endpointStatus(snapshot *DesktopBrokerModelSnaps
 	if c == nil {
 		return nil
 	}
+	binding := c.bindingSnapshot(time.Now())
+	if lastErr != nil && binding.State != runtimeservice.BindingStateExpired {
+		binding.State = runtimeservice.BindingStateError
+		binding.LastError = strings.TrimSpace(lastErr.Error())
+	}
 	status := &DesktopAIBrokerStatus{
+		BindingState:    string(binding.State),
 		Connected:       lastErr == nil,
 		Available:       snapshot != nil && len(snapshot.Models) > 0,
 		ModelSource:     firstNonEmpty(c.endpoint.ModelSource, "desktop_local_environment"),
@@ -179,7 +187,7 @@ func (c *desktopAIBrokerClient) endpointStatus(snapshot *DesktopBrokerModelSnaps
 		status.MissingKeyProviderIDs = append([]string(nil), snapshot.MissingKeyProviderIDs...)
 	}
 	if lastErr != nil {
-		status.LastError = strings.TrimSpace(lastErr.Error())
+		status.LastError = binding.LastError
 	}
 	return status
 }
@@ -217,7 +225,25 @@ func (c *desktopAIBrokerClient) Status(ctx context.Context) *DesktopAIBrokerStat
 	if out.ExpiresAtUnixMS == 0 {
 		out.ExpiresAtUnixMS = c.endpoint.ExpiresAtUnixMS
 	}
+	out.BindingState = string(c.bindingSnapshot(time.Now()).State)
 	return &out
+}
+
+func (c *desktopAIBrokerClient) bindingSnapshot(now time.Time) runtimeservice.Binding {
+	if c == nil {
+		return runtimeservice.Binding{State: runtimeservice.BindingStateUnsupported}
+	}
+	state := runtimeservice.BindingStateBound
+	if c.endpoint.ExpiresAtUnixMS > 0 && now.UnixMilli() >= c.endpoint.ExpiresAtUnixMS {
+		state = runtimeservice.BindingStateExpired
+	}
+	return runtimeservice.Binding{
+		State:           state,
+		SessionID:       c.endpoint.SessionID,
+		SSHRuntimeKey:   c.endpoint.SSHRuntimeKey,
+		ExpiresAtUnixMS: c.endpoint.ExpiresAtUnixMS,
+		ModelSource:     firstNonEmpty(c.endpoint.ModelSource, "desktop_local_environment"),
+	}
 }
 
 func (c *desktopAIBrokerClient) Provider(defaultLocalModelID string) Provider {

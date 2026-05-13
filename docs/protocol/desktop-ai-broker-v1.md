@@ -15,7 +15,15 @@ This document describes the local-only broker used by Redeven Desktop to serve m
 - Authentication: short-lived bearer token in the `Authorization` header
 - Lifetime: bound to the Desktop/SSH session that created it
 
-The remote runtime receives the broker URL and token only for startup. It must clear the broker environment variables from its process environment after reading them.
+Desktop binds the broker to the running SSH runtime through runtime-control after the Local UI forward is verified. The remote runtime receives only the forwarded broker URL and short-lived token for that live session, keeps them in memory, and does not persist them to config, secrets, logs, or startup command arguments.
+
+Runtime-control binding endpoint:
+
+```text
+POST /_redeven_proxy/api/runtime/bindings/desktop-ai-broker
+```
+
+The endpoint is available through the trusted Local UI route and updates `runtime_service.bindings.desktop_ai_broker`.
 
 ## Endpoints
 
@@ -58,7 +66,7 @@ Example response:
 }
 ```
 
-Model ids remain the runtime wire form `<provider_id>/<model_name>` at the broker boundary. The remote runtime rewrites them to the internal `desktop-broker:<provider_id>/<model_name>` wire form when it needs to preserve source metadata.
+Model ids remain the runtime wire form `<provider_id>/<model_name>` at the broker boundary. The runtime rewrites them to the internal `desktop-broker:<provider_id>/<model_name>` wire form when it needs to preserve source metadata.
 
 ### `POST /v1/stream`
 
@@ -114,3 +122,4 @@ Typical codes:
 - No file, terminal, monitor, or port-forward RPCs.
 - No API key transmission to the SSH host.
 - No persisted remote `ai.enabled` flag or remote broker config.
+- No runtime-control binding state in remote config; binding lives in the runtime snapshot and in memory only.

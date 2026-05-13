@@ -141,11 +141,12 @@ This is deliberately different from copying settings to the SSH host:
 
 - The Desktop Local Environment keeps provider API keys in its own `secrets.json`.
 - The SSH host receives only a forwarded loopback broker URL plus a short-lived bearer token for that Desktop session.
-- The remote runtime stores that broker endpoint in memory only and clears the startup environment variables immediately after reading them.
+- Desktop binds that endpoint through the forwarded Local UI runtime-control route after the final running runtime has reported support for `desktop_ai_broker`.
+- The remote runtime stores that broker endpoint in memory only.
 - The SSH host's `config.json` does not gain an `ai` section, provider keys, or an `enabled` boolean.
 - Remote tools, file reads, terminal commands, Git operations, and permission checks still execute in the SSH-hosted runtime.
 
-The API response field `ai_runtime.desktop_broker` reports broker session status separately from the persisted `ai` config. Env App uses that field to show whether the model is coming from `Desktop` while tools are running on `SSH Host`.
+The API response field `ai_runtime.desktop_broker` reports broker session status separately from the persisted `ai` config. Env App also reads `runtime_service.bindings.desktop_ai_broker` so the Flower card can distinguish `bound`, `unbound`, `unsupported`, `error`, and `expired` instead of collapsing every remote mismatch into `ai not configured`.
 
 ## 7. UI behavior
 

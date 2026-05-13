@@ -24,6 +24,34 @@ export type RuntimeServiceWorkload = Readonly<{
   port_forward_count: number;
 }>;
 
+export type RuntimeServiceCapability = Readonly<{
+  supported: boolean;
+  bind_method?: string;
+  reason_code?: string;
+  message?: string;
+}>;
+
+export type RuntimeServiceCapabilities = Readonly<{
+  desktop_ai_broker: RuntimeServiceCapability;
+}>;
+
+export type RuntimeServiceBindingState = 'unbound' | 'bound' | 'unsupported' | 'error' | 'expired';
+
+export type RuntimeServiceBinding = Readonly<{
+  state: RuntimeServiceBindingState;
+  session_id?: string;
+  ssh_runtime_key?: string;
+  expires_at_unix_ms?: number;
+  model_source?: string;
+  model_count?: number;
+  missing_key_provider_ids?: string[];
+  last_error?: string;
+}>;
+
+export type RuntimeServiceBindings = Readonly<{
+  desktop_ai_broker: RuntimeServiceBinding;
+}>;
+
 export type RuntimeServiceSnapshot = Readonly<{
   runtime_version?: string;
   runtime_commit?: string;
@@ -41,6 +69,8 @@ export type RuntimeServiceSnapshot = Readonly<{
   compatibility_review_id?: string;
   open_readiness?: RuntimeServiceOpenReadiness;
   active_workload: RuntimeServiceWorkload;
+  capabilities?: RuntimeServiceCapabilities;
+  bindings?: RuntimeServiceBindings;
 }>;
 
 export type RuntimeServiceIdentity = Readonly<{
@@ -161,6 +191,39 @@ function normalizeOpenReadiness(
   return missingOpenReadinessFromCompatibility(compatibility, compatibilityMessage);
 }
 
+function normalizeCapability(value: unknown): RuntimeServiceCapability {
+  const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const supported = record.supported === true;
+  const bindMethod = compact(record.bind_method);
+  return {
+    supported,
+    bind_method: supported ? (bindMethod || 'runtime_control_v1') : undefined,
+    reason_code: compact(record.reason_code) || undefined,
+    message: compact(record.message) || undefined,
+  };
+}
+
+function normalizeBinding(value: unknown, capability: RuntimeServiceCapability): RuntimeServiceBinding {
+  const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const state = compact(record.state) as RuntimeServiceBindingState;
+  const missingKeyProviderIDs = Array.isArray(record.missing_key_provider_ids)
+    ? Array.from(new Set(record.missing_key_provider_ids.map((item) => compact(item)).filter(Boolean))).sort()
+    : [];
+  const normalizedState: RuntimeServiceBindingState = capability.supported
+    ? (state === 'bound' || state === 'error' || state === 'expired' || state === 'unbound' ? state : 'unbound')
+    : 'unsupported';
+  return {
+    state: normalizedState,
+    session_id: compact(record.session_id) || undefined,
+    ssh_runtime_key: compact(record.ssh_runtime_key) || undefined,
+    expires_at_unix_ms: normalizeCount(record.expires_at_unix_ms),
+    model_source: compact(record.model_source) || undefined,
+    model_count: normalizeCount(record.model_count),
+    missing_key_provider_ids: missingKeyProviderIDs.length > 0 ? missingKeyProviderIDs : undefined,
+    last_error: compact(record.last_error) || undefined,
+  };
+}
+
 export function normalizeRuntimeServiceSnapshot(
   value: unknown,
   fallback: Readonly<{
@@ -172,6 +235,13 @@ export function normalizeRuntimeServiceSnapshot(
   const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
   const workload = record.active_workload && typeof record.active_workload === 'object'
     ? record.active_workload as Record<string, unknown>
+    : {};
+  const capabilitiesRecord = record.capabilities && typeof record.capabilities === 'object'
+    ? record.capabilities as Record<string, unknown>
+    : {};
+  const desktopAIBrokerCapability = normalizeCapability(capabilitiesRecord.desktop_ai_broker);
+  const bindingsRecord = record.bindings && typeof record.bindings === 'object'
+    ? record.bindings as Record<string, unknown>
     : {};
   const desktopManaged = typeof record.desktop_managed === 'boolean'
     ? record.desktop_managed
@@ -201,6 +271,12 @@ export function normalizeRuntimeServiceSnapshot(
       session_count: normalizeCount(workload.session_count),
       task_count: normalizeCount(workload.task_count),
       port_forward_count: normalizeCount(workload.port_forward_count),
+    },
+    capabilities: {
+      desktop_ai_broker: desktopAIBrokerCapability,
+    },
+    bindings: {
+      desktop_ai_broker: normalizeBinding(bindingsRecord.desktop_ai_broker, desktopAIBrokerCapability),
     },
   };
 }
@@ -269,6 +345,19 @@ export function runtimeServiceHasActiveWork(snapshot: RuntimeServiceSnapshot | n
     || workload.session_count > 0
     || workload.task_count > 0
     || workload.port_forward_count > 0;
+}
+
+export function runtimeServiceDesktopAIBrokerBindingState(snapshot: RuntimeServiceSnapshot | null | undefined): RuntimeServiceBindingState {
+  const capability = snapshot?.capabilities?.desktop_ai_broker;
+  if (!capability?.supported) {
+    return 'unsupported';
+  }
+  return snapshot?.bindings?.desktop_ai_broker?.state || 'unbound';
+}
+
+export function runtimeServiceSupportsDesktopAIBrokerBinding(snapshot: RuntimeServiceSnapshot | null | undefined): boolean {
+  return snapshot?.capabilities?.desktop_ai_broker?.supported === true
+    && (snapshot.capabilities.desktop_ai_broker.bind_method || 'runtime_control_v1') === 'runtime_control_v1';
 }
 
 export function formatRuntimeServiceWorkload(snapshot: RuntimeServiceSnapshot | null | undefined): string {

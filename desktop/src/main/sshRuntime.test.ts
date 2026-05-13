@@ -25,10 +25,9 @@ describe('sshRuntime', () => {
     expect(buildManagedSSHStartScript()).toContain('--state-root "$state_root"');
     expect(buildManagedSSHStartScript()).toContain('--mode desktop');
     expect(buildManagedSSHStartScript()).toContain('--startup-report-file "$report_path"');
-    expect(buildManagedSSHStartScript()).toContain('broker_url="${4:-}"');
-    expect(buildManagedSSHStartScript()).toContain('REDEVEN_DESKTOP_AI_BROKER_URL=$broker_url');
-    expect(buildManagedSSHStartScript()).toContain('setsid $broker_env "$binary" run');
-    expect(buildManagedSSHStartScript()).toContain('nohup $broker_env "$binary" run');
+    expect(buildManagedSSHStartScript()).not.toContain('REDEVEN_DESKTOP_AI_BROKER_TOKEN');
+    expect(buildManagedSSHStartScript()).toContain('setsid "$binary" run');
+    expect(buildManagedSSHStartScript()).toContain('nohup "$binary" run');
     expect(buildManagedSSHStartScript()).toContain('printf "%s\\n" "$!" > "${session_dir}/launcher.pid"');
     expect(buildManagedSSHStartScript()).not.toContain('exec "$binary" run');
     expect(buildManagedSSHStartScript()).not.toContain('trap cleanup');
@@ -113,7 +112,9 @@ describe('sshRuntime', () => {
     expect(source).toContain("path.join(sourceRoot, 'scripts', 'build_assets.sh')");
     expect(source).toContain('await buildSourceRuntimeAssets(sourceRoot);');
     expect(source).toContain('async function waitForForwardedLocalUIOpenable(');
-    expect(source).toContain('const forwardedStartup = await waitForForwardedLocalUIOpenable(');
+    expect(source).toContain('managedSSHRuntimeAttachPolicy(');
+    expect(source).toContain('/_redeven_proxy/api/runtime/bindings/desktop-ai-broker');
+    expect(source).toContain('let forwardedStartup = await waitForForwardedLocalUIOpenable(');
     expect(source).toContain('runtimeServiceIsOpenable(startup.runtime_service)');
     expect(source).not.toContain('Desktop reached the forwarded Redeven Local UI, but the runtime is not ready to open yet');
     expect(source).toContain('runtime_service: forwardedStartup.runtime_service ?? remoteStartup.runtime_service');

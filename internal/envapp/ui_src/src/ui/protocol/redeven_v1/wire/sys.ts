@@ -41,6 +41,26 @@ export type wire_sys_ping_resp = {
       task_count?: number;
       port_forward_count?: number;
     };
+    capabilities?: {
+      desktop_ai_broker?: {
+        supported?: boolean;
+        bind_method?: string;
+        reason_code?: string;
+        message?: string;
+      };
+    };
+    bindings?: {
+      desktop_ai_broker?: {
+        state?: string;
+        session_id?: string;
+        ssh_runtime_key?: string;
+        expires_at_unix_ms?: number;
+        model_source?: string;
+        model_count?: number;
+        missing_key_provider_ids?: string[];
+        last_error?: string;
+      };
+    };
   };
 };
 

@@ -25,6 +25,7 @@ import (
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/pathutil"
+	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -368,6 +369,121 @@ func (s *Service) RuntimeStatus(ctx context.Context) *AIRuntimeStatus {
 		out.DesktopBroker = broker.Status(statusCtx)
 	}
 	return out
+}
+
+func (s *Service) BindDesktopBroker(endpoint *DesktopAIBrokerEndpoint) (*AIRuntimeStatus, error) {
+	if s == nil {
+		return nil, errors.New("nil service")
+	}
+	client, err := newDesktopAIBrokerClient(endpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	s.desktopBroker = client
+	s.desktopBrokerCurrentModelID = ""
+	coordinator := s.threadTitleCoordinator
+	s.mu.Unlock()
+	if coordinator != nil {
+		coordinator.Wake()
+	}
+	return s.RuntimeStatus(context.Background()), nil
+}
+
+func (s *Service) ClearDesktopBroker() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.desktopBroker = nil
+	s.desktopBrokerCurrentModelID = ""
+	coordinator := s.threadTitleCoordinator
+	s.mu.Unlock()
+	if coordinator != nil {
+		coordinator.Wake()
+	}
+}
+
+func (s *Service) DesktopBrokerBindingStatus(ctx context.Context) runtimeservice.Binding {
+	if s == nil {
+		return runtimeservice.Binding{State: runtimeservice.BindingStateUnsupported}
+	}
+
+	s.mu.Lock()
+	broker := s.desktopBroker
+	s.mu.Unlock()
+	if broker == nil {
+		return runtimeservice.Binding{State: runtimeservice.BindingStateUnbound}
+	}
+
+	binding := broker.bindingSnapshot(time.Now())
+	statusCtx := ctx
+	cancel := func() {}
+	if statusCtx == nil {
+		statusCtx = context.Background()
+	}
+	if _, ok := statusCtx.Deadline(); !ok {
+		statusCtx, cancel = context.WithTimeout(statusCtx, 1500*time.Millisecond)
+	}
+	defer cancel()
+
+	status := broker.Status(statusCtx)
+	if status == nil {
+		if binding.State == runtimeservice.BindingStateBound {
+			binding.State = runtimeservice.BindingStateError
+		}
+		return runtimeservice.NormalizeBinding(binding, runtimeservice.Capability{
+			Supported:  true,
+			BindMethod: runtimeservice.RuntimeControlBindMethodV1,
+		})
+	}
+
+	if status.BindingState != "" {
+		switch runtimeservice.BindingState(strings.TrimSpace(status.BindingState)) {
+		case runtimeservice.BindingStateExpired:
+			binding.State = runtimeservice.BindingStateExpired
+		case runtimeservice.BindingStateError:
+			binding.State = runtimeservice.BindingStateError
+			binding.LastError = strings.TrimSpace(status.LastError)
+		case runtimeservice.BindingStateUnsupported:
+			binding.State = runtimeservice.BindingStateUnbound
+		case runtimeservice.BindingStateUnbound:
+			binding.State = runtimeservice.BindingStateUnbound
+		case runtimeservice.BindingStateBound:
+			binding.State = runtimeservice.BindingStateBound
+		}
+	}
+	if status.Connected && binding.State != runtimeservice.BindingStateExpired {
+		binding.State = runtimeservice.BindingStateBound
+		binding.ModelCount = status.ModelCount
+		binding.MissingKeyProviderIDs = append([]string(nil), status.MissingKeyProviderIDs...)
+		binding.LastError = ""
+	} else if !status.Connected && binding.State != runtimeservice.BindingStateExpired {
+		binding.State = runtimeservice.BindingStateError
+		binding.LastError = strings.TrimSpace(status.LastError)
+	}
+	if status.SessionID != "" {
+		binding.SessionID = strings.TrimSpace(status.SessionID)
+	}
+	if status.SSHRuntimeKey != "" {
+		binding.SSHRuntimeKey = strings.TrimSpace(status.SSHRuntimeKey)
+	}
+	if status.ExpiresAtUnixMS > 0 {
+		binding.ExpiresAtUnixMS = status.ExpiresAtUnixMS
+	}
+	if status.ModelSource != "" {
+		binding.ModelSource = strings.TrimSpace(status.ModelSource)
+	}
+
+	return runtimeservice.NormalizeBinding(binding, runtimeservice.Capability{
+		Supported:  true,
+		BindMethod: runtimeservice.RuntimeControlBindMethodV1,
+	})
+}
+
+func (s *Service) DesktopBrokerBindingSnapshot() runtimeservice.Binding {
+	return s.DesktopBrokerBindingStatus(context.Background())
 }
 
 // UpdateConfig updates the in-memory AI config after persisting it via the provided callback.

@@ -252,7 +252,7 @@ describe('runtimeProcess', () => {
           port_forward_count: 3,
         },
       },
-    }))).toEqual({
+    }))).toMatchObject({
       local_ui_url: 'http://127.0.0.1:43123/',
       local_ui_urls: ['http://127.0.0.1:43123/'],
       password_required: true,

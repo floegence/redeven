@@ -41,6 +41,7 @@ export type ModelsResponse = Readonly<{
 export type AIRuntimeStatus = Readonly<{
   remote_configured?: boolean;
   desktop_broker?: Readonly<{
+    binding_state?: string;
     connected?: boolean;
     available?: boolean;
     model_source?: string;
