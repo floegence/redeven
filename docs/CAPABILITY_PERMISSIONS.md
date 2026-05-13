@@ -121,7 +121,7 @@ Public contract (category level):
 | Audit log access | `admin` |
 | Settings read/write | `read` / `admin` |
 | Codespace metadata management | `read` / `admin` |
-| Codespace runtime operations (start/stop) | `execute` |
+| Codespace runtime operations (start/stop) | `read + write + execute` |
 | Port forward lifecycle | `execute` |
 | AI runs, uploads, and thread operations | `read + write + execute` |
 

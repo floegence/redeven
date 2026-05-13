@@ -12,18 +12,8 @@ Key points:
 - Workbench has explicit ownership boundaries: shell chrome handles selection/drag, while widget bodies own text selection, local dialogs, context menus, and component focus. Wheel routing remains selected-widget guarded and scroll-viewport explicit.
 - Runtime-shared Workbench state is limited to durable scene/widget facts. Per-client camera, selection, drafts, scroll position, and transient gesture state stay local.
 - Redeven Desktop supplies session context, shell-owned theme/window chrome, titlebar-safe floating surfaces, and system-browser handoff for browser-app windows such as Codespaces.
-- Runtime Settings uses an explicit information architecture so users can find endpoint controls by intent rather than by implementation detail:
-  - `Overview`: `Config File`, `Connection`, `Runtime Status`
-  - `Runtime Configuration`: `Shell & Workspace`, `Logging`
-  - `Codespaces & Tooling`: `code-server Runtime`, `Codespaces Ports`
-  - `Security`: `Permission Policy`
-  - `AI & Extensions`: `Flower`, `Skills`, `Codex`
-  - `Diagnostics`: `Debug Console`
-- Runtime Settings -> `Overview` -> `Runtime Status` is the stable maintenance surface for Runtime Service ownership, compatibility, active work, and protocol. Optional update notices use toasts; risky restart/update actions always require confirmation.
-- Web Services is the user-facing registry for HTTP services reachable from the runtime host. The persisted runtime entity remains `port_forward`, but the Env App treats each row as a service registration and chooses the open route from the current access context:
-  - same-device local mode opens browser-safe loopback targets directly;
-  - URL and SSH Local UI sessions open through the Local UI `/pf/<forward_id>/` proxy;
-  - remote Provider / sandbox sessions keep using the isolated Flowersec E2EE port-forward tunnel.
+- Runtime Settings groups endpoint controls by user intent: overview/runtime status, runtime configuration, Codespaces tooling, security, AI/extensions, and diagnostics.
+- Web Services is the user-facing registry for HTTP services reachable from the runtime host. Same-device local mode can open safe loopback targets directly; URL/SSH Local UI sessions use `/pf/<forward_id>/`; remote Provider sessions use the isolated Flowersec E2EE port-forward tunnel.
 - Codex is a separate optional AI runtime with its own activity-bar entry and gateway namespace. It is not a Flower mode/provider, and Runtime Settings reports Codex host status without persisting Codex approval, sandbox, model, or binary defaults.
 - File Browser keeps Monaco as the single text preview/edit surface where possible, treats symbolic links explicitly, and enforces `fs/read_file` as file-only before raw bytes are streamed.
 - Terminal sessions are runtime-owned and may be attached by multiple Env App surfaces; only the focused surface emits resize ownership updates after attach.
@@ -31,62 +21,28 @@ Key points:
 
 ## Notes overlay
 
-Env App now exposes a product-owned **Notes overlay** that floats above the current workspace instead of introducing a new top-level activity page.
+Env App exposes a product-owned **Notes overlay** above the current workspace instead of adding another top-level activity page.
 
-- Notes opens from the shell top bar and closes from a dedicated top-right close button inside the overlay.
-- Notes also exposes a shell-level `Cmd/Ctrl+.` command so users can open or dismiss the overlay without leaving the current workspace flow, even while typing in another editor/input.
-- Opening the overlay does not auto-focus an editor field; users can keep their current input focus until they explicitly create or edit a note.
-- Env App enables the shared floe-webapp Notes surface in `interactionMode="floating"`, so the overlay stays non-modal over the current workspace instead of trapping focus like a settings dialog.
-- On pages that keep the shell conversation sidebar visible, Notes still spans the full workspace viewport (`sidebar + main`) instead of shrinking to the main pane only.
-- In floating mode, `Escape` dismisses the full overlay when focus is outside the Notes surface, and clicking outside the Notes-owned surface also dismisses the overlay without swallowing the underlying click target.
-- A fresh Notes runtime boots with a default `Welcome` topic and one welcome note so first-time users land in a useful board instead of an empty shell.
-- The overlay keeps a narrow topic rail with product-owned icons, inline rename/delete actions, and compact counts for live notes plus trash.
-- Each topic renders on an infinite-style pan/zoom board:
-  - wheel zooms around the cursor;
-  - dragging the canvas or a note pans the board;
-  - clicking a note without dragging copies the full note body and promotes that note to the top z-layer;
-  - right-click (or long-press on touch) opens a Notes-specific context menu instead of the browser/system menu.
-- Notes persist semantic style DSL fields (`style_version`, `color_token`, `size_bucket`) in the runtime so different Env App clients render the same card size/color footprint.
-- Note preview size is derived from text length and capped to five stable size buckets; the card preview intentionally truncates large note bodies instead of expanding arbitrarily.
-- Deleting a note moves it into a runtime-managed trash area with a fixed 72-hour retention window. Trash opens as a floating panel from the bottom-right dock icon, groups deleted notes by topic, preserves original color/size/coordinates for restore, supports per-topic clear, and also supports per-note `Delete now` for items already in trash.
-- Notes state is runtime-authoritative: Env App fetches a snapshot from `/_redeven_proxy/api/notes/snapshot`, subscribes to ordered SSE updates from `/_redeven_proxy/api/notes/events`, and projects the same ordered topic/note/trash stream into every connected client.
-- Workbench runtime state now follows the same runtime-authoritative pattern for cross-terminal consistency: Env App fetches `/_redeven_proxy/api/workbench/layout/snapshot`, subscribes to `/_redeven_proxy/api/workbench/layout/events`, persists shared layout replacements through `PUT /_redeven_proxy/api/workbench/layout`, opens preview widgets through the atomic `POST /_redeven_proxy/api/workbench/actions/open_preview` command, persists semantic widget state through `PUT /_redeven_proxy/api/workbench/widgets/:widget_id/state`, and drives shared terminal tab membership through `POST` / `DELETE /_redeven_proxy/api/workbench/widgets/:widget_id/terminal/sessions`, while the runtime stores the shared scene in `<state_dir>/apps/workbench/layout.sqlite`.
-- Runtime trash deletion semantics stay explicit:
-  - `DELETE /_redeven_proxy/api/notes/items/:note_id` moves an active note into trash and emits `item.deleted`.
-  - `DELETE /_redeven_proxy/api/notes/trash/items/:note_id` permanently removes one trashed note and emits `item.removed`.
-  - `DELETE /_redeven_proxy/api/notes/trash/topics/:topic_id` clears all trashed notes for one topic and emits `trash.topic_cleared`.
-  - When the last trashed note of a deleted topic is permanently removed, the runtime removes that deleted topic row as part of the same ordered event flow.
+- Notes opens from the shell top bar or `Cmd/Ctrl+.` and remains non-modal over the current workspace.
+- Opening Notes does not steal focus from the user's current editor/input; editing starts only after an explicit note action.
+- A fresh runtime seeds a default `Welcome` topic and note.
+- Notes use a runtime-authoritative snapshot + SSE stream under `/_redeven_proxy/api/notes/*`, so connected clients converge on the same topics, notes, style tokens, and trash state.
+- Deleted notes move to runtime-managed trash with a fixed 72-hour retention window before permanent removal.
 
 ## Workbench surface ownership
 
-Deck and Workbench reuse released floe-webapp layout/workbench primitives, and Redeven now keeps only a thin product-owned interaction adapter plus business-widget bodies on top of the shared workbench surface.
+Deck and Workbench reuse released floe-webapp layout/workbench primitives. Redeven keeps product-owned interaction adapters and business-widget bodies on top of those shared surfaces.
 
-- Runtime-shared workbench state is intentionally narrow but no longer layout-only: widget identity/type plus geometry (`x`, `y`, `width`, `height`, `z_index`, `created_at_unix_ms`) are shared alongside durable layered canvas objects (`sticky_notes`, `annotations`, and `background_layers`), and a separate widget-state layer also shares only durable semantic widget data (`Files.current_path`, `Terminal.session_ids`, `Preview.current_item`). Viewport pan/zoom, `mode`, `activeTool`, current object/widget selection, transient drag/resize state, dynamic titles, terminal active tab, file-browser `show_hidden` / `page_mode` / `git_subview`, preview cursor/selection/scroll, and unsaved preview draft state stay local to each client.
-- Workbench Terminal preserves live UI behavior: multiple visible terminal widgets may keep Ghostty renderers, output subscriptions, and realtime TUI state active at the same time. Env App scales the resize path by coalescing duplicate terminal resize notifications before they reach the shared RPC notify transport instead of silently pausing inactive terminal widgets.
-- Workbench Terminal interaction performance follows a live-state / coordinated-frame split. During canvas pan/zoom, widget drag/resize, layer switching, maximize/minimize, creation, and close transitions, Env App keeps every mounted terminal live and relies on `@floegence/floeterm-terminal-web` to batch demand renders through its shared scheduler. PTY output, buffer state, shell integration, tab status, cwd, unread/running state, selection, search, and cursor rendering continue without a snapshot/freeze/catch-up phase; Workbench only tracks layout interaction handles for shell-level visual affordances and owner handoff timing.
-- Runtime workbench synchronization is split by ownership: geometry changes still flow through ordered `layout.replaced` snapshot events, while durable widget-internal state flows through ordered `widget_state.upserted` events. This keeps the runtime-authoritative stream deterministic without coupling transient browser UI state to the runtime store.
-- Workbench preview opens are runtime commands, not client-fabricated layout edits. `POST /_redeven_proxy/api/workbench/actions/open_preview` chooses same-file reuse, latest-widget reuse, or fresh widget creation inside one runtime transaction, writes the preview target state with the widget shell, and returns the authoritative snapshot plus widget state to the initiating window. File bytes still load asynchronously after the authoritative preview widget mounts, so slow preview rendering cannot remove or race the window topology.
-- Remote workbench updates must not move the local camera. Env App reapplies the shared widget scene while preserving each terminal's own viewport and local-only widget interaction state, so cross-terminal consistency covers opened components, their positions, shared Files paths, shared Terminal session membership, and shared Preview targets without stealing the current viewing or editing context.
-- Layout persistence is interaction-gated for performance. Drag and resize update only local UI during the live gesture, and Env App flushes one runtime layout PUT after the interaction ends instead of streaming layout writes while the pointer is still moving.
-- Widget shell chrome is explicit. Redeven configures the shared workbench shell through its interaction adapter, so shell focus and workbench context-menu interception still happen only from shell-owned affordances instead of the entire widget subtree.
-- Widget-local activation stays opt-in and component-owned, and Redeven now consumes the released floe-webapp activation contract instead of mirroring that guard logic locally. A primary body click on a widget-local, non-focusable, non-overlay surface may emit a small `activation` payload to the business widget body, but the shell still does not steal DOM focus from widget-local content. Virtual-input surfaces such as Terminal can use this to reclaim their own internal focus on the first click, while native inputs, buttons, dropdowns, dialogs, and local overlays keep their existing browser/component-owned focus behavior.
-- Pointer/context-menu ownership and wheel ownership are separate contracts. `data-floe-local-interaction-surface="true"` descendants still keep local pointer/context-menu ownership unconditionally, while wheel ownership in workbench mode follows the selected-widget guard plus explicit viewport contract: the selected widget boundary blocks canvas zoom, but only a marked, real constrained local scroll viewport may produce `local_surface` scrolling.
-- Workbench-local overlays stay upstream and surface-scoped. `Dialog`, `FileContextMenu`, and `Dropdown` now reuse floe-webapp's shared surface portal scope, so portaled menus/submenus still mount inside the active widget host and keep clicks, outside-dismiss, and local hot-interaction boundaries truthful to that widget instead of escaping back to the document body.
-- Workbench wheel routing is selection-first but not subtree-scroll-first. Blank canvas and unselected widget bounds keep cursor-centered canvas zoom. Inside the selected widget, explicitly marked local scroll viewports scroll locally; all other selected-widget body regions resolve to `ignore:selected_widget_boundary`, which prevents accidental canvas zoom without pretending that a non-scrollable region can scroll.
-- Workbench wheel routing timing is intentionally narrow: browser `wheel` reaches the shared Workbench surface, Redeven's interaction adapter resolves the target widget and selected widget id, terminal early-capture paths call the same resolver, and the final decision is only one of canvas zoom, local surface, or ignore. This keeps Git Browser, Files, Preview, Terminal, Flower/Codex rails, Codespaces, and Web Services on the same data-driven contract.
-- Workbench production scroll viewports must use the exported props from `workbenchWheelInteractive.ts`, and `pnpm run check:workbench-wheel` guards against raw wheel attributes or bounded scroll containers without an explicit local-scroll/layout-only role.
-- Blank-canvas pointer-down is the explicit deselection boundary for workbench mode, so panning/zooming the scene also clears stale widget selection instead of leaving an invisible local wheel owner behind.
-- Heavy workbench widgets now opt into floe-webapp's shared projected-surface path. Files, Terminal, Preview, Codespaces, Flower, and Codex render their business DOM through `renderMode: 'projected_surface'`, while the persisted runtime model remains the same world-space widget geometry and lighter widgets can stay on the default `canvas_scaled` path.
-- The projected-surface host itself is upstream-owned and stable-mounted. Released floe-webapp now keeps projected widget bodies keyed by `widget.id`, feeds viewport and shell geometry through shared accessors, and avoids remounting or broad body rerenders during canvas pan/zoom or projected drag updates. Redeven must keep consuming that released contract instead of reviving a local workbench canvas/widget fork, a viewport render callback bridge, or widget-specific throttle patches.
-- Header shell affordance is widened on purpose: the entire widget header is draggable, while `Focus`, `Overview`, and `Remove` stay as explicit shell-action buttons that do not start drags.
-- Keyboard dismissal stays focus-scoped. `Escape` may close a local dialog/modal only when focus currently lives inside that widget-owned host boundary; it must not broadcast across unrelated widgets or global surfaces.
-- Workbench persistence order and CSS stacking stay separated. Persisted `z_index` remains the long-lived ordering key in workbench state, while rendering consumes floe-webapp's normalized dense render layers so app-owned floating surfaces can keep stable semantic layers above widgets even after many bring-to-front operations.
-- Workbench multi-instance state is product-owned. Generic floe-webapp workbench state still owns widget geometry, selection, and filters, while Redeven keeps a separate instance-state layer for `latestWidgetIdByType`, local active terminal tab, and other local widget-only affordances so multi-instance routing stays explicit without turning every workbench widget interaction into shared runtime state.
-- Workbench Terminal windows are widget-scoped shared session groups rather than mirrored views of one global session strip. Runtime terminal sessions still live in the shared coordinator, each workbench Terminal widget owns one shared visible `session_ids` list, and closing one tab removes only that session from the owning widget so sibling tabs in the same Terminal widget stay intact. The active tab selection itself remains local per window.
-- Workbench terminal close is lifecycle-managed by the runtime instead of PTY-bound by the foreground request. The widget `session_ids` list is updated first, the terminal manager marks the target session `closing`, hides it from normal `listSessions` results, rejects attach/input/resize/history/clear/stats for that hidden session, and then cleans up the PTY asynchronously. If cleanup fails, the session stays hidden as `close_failed_hidden`; Env App surfaces a diagnostic notification without restoring the tab to the foreground.
-- Workbench Files windows use runtime-shared `current_path` plus local widget-scoped view preferences, so each Files widget stays on the same directory across windows while `show_hidden`, `page_mode`, and `git_subview` remain local to the current client.
-- Workbench Preview widgets share only the current preview target. Preview window creation/reuse is committed by the runtime `open_preview` action before the browser renders the widget shell; clean previews follow the synced file immediately, while dirty previews keep the local unsaved draft and show an explicit pending synced file prompt before switching.
-- App-owned floating surfaces such as Preview, File Browser, Ask Flower, stash confirmations, and Debug Console must use the centralized `ENV_APP_FLOATING_LAYER` contract instead of raw per-file `z-index` literals. Runtime update prompts are intentionally toast-driven and must not use an app-owned floating window.
+- Runtime-shared state is deliberately narrow: widget identity/type, geometry, ordering, durable canvas objects, and semantic widget data such as Files current path, Terminal session ids, and Preview target.
+- Per-client camera, shell mode, selection, transient gestures, active terminal tab, file-browser view preferences, preview cursor/scroll, and unsaved drafts stay local.
+- Geometry changes and widget semantic state flow through ordered runtime snapshot/event streams. Preview opens are runtime commands, not client-fabricated layout edits.
+- Remote Workbench updates must not move the local camera or steal current editing context.
+- Drag/resize persistence is interaction-gated: the browser updates live UI during the gesture and flushes one runtime write after the interaction ends.
+- Widget shell chrome and widget-local content remain separate. Shell affordances own selection, drag, focus/overview/remove, and shell context menus; widget bodies own local focus, dialogs, dropdowns, text selection, and component context menus.
+- Wheel routing is selection-first: blank canvas and unselected widgets keep canvas zoom; selected widget boundaries block canvas zoom; only explicit local scroll viewports scroll locally.
+- Production local scroll candidates must use the exported Workbench wheel props so the static `check:workbench-wheel` gate can catch accidental bypasses.
+- Heavy widgets such as Files, Terminal, Preview, Codespaces, Flower, and Codex use floe-webapp's projected-surface render path while preserving the same world-space layout model.
+- App-owned floating surfaces such as Preview, File Browser, Ask Flower, stash confirmations, and Debug Console use the centralized `ENV_APP_FLOATING_LAYER` contract.
 
 ## Accessibility baseline
 
@@ -212,17 +168,10 @@ Safety and refresh behavior:
 
 Browser side:
 
-- A sandbox bootstrap window (`env-<env_id>.<region>.<base-sandbox-domain>`, for example `env-demo.dev.redeven-sandbox.test`) creates a runtime-mode proxy:
-  - A Service Worker forwards `fetch()` to the proxy runtime via `postMessage + MessageChannel`.
-  - The runtime forwards HTTP/WS traffic over Flowersec E2EE to the Redeven runtime.
-- The bootstrap then loads the Env App UI via a same-origin iframe:
-  - `/_redeven_proxy/env/`
-- This same-origin iframe pattern is specific to the trusted Env App origin.
-  - When that iframe is hosted inside Redeven Desktop remote sessions, Env App publishes desktop drag-region rectangles for its header, while the Desktop session preload in the top-level document owns the actual native drag overlays.
-  - Codespace windows and remote Web Service tunnel windows opened from Env App use a different path:
-    a trusted launcher origin -> an isolated runtime origin -> an untrusted app origin.
-  - The untrusted app never runs on the same origin as the Env App runtime window.
-- In Local UI mode, Web Services can also open through the same Local UI origin at `/pf/<forward_id>/`. That route is protected by the Local UI access gate and proxies to the registered target from the runtime host, so SSH and URL access modes do not leak a remote `localhost` assumption into the user's browser.
+- A trusted bootstrap origin creates the runtime-mode proxy and loads the Env App UI from `/_redeven_proxy/env/`.
+- Browser `fetch()` / WebSocket traffic is forwarded through the proxy runtime and then over Flowersec E2EE to the Redeven runtime.
+- Trusted Env App documents may use a same-origin iframe pattern; untrusted app windows such as Codespaces and remote Web Services use a separate launcher/runtime/app-origin split.
+- In Local UI mode, Web Services can also open through `/pf/<forward_id>/`, protected by the Local UI access gate and resolved from the runtime host.
 
 Runtime side:
 
@@ -231,22 +180,10 @@ Runtime side:
 - Session binding for gateway APIs is carried on a trusted runtime-local hop (`X-Redeven-Session-Channel`) instead of overloading the browser-visible sandbox host labels.
 - The Env App UI talks to the runtime using **Flowersec RPC/streams** (fs/terminal/monitor domains).
 - Codex uses a separate browser-facing gateway contract under `/_redeven_proxy/api/codex/*`; the browser never connects directly to `codex app-server`, and the runtime resolves the host `codex` binary on demand instead of mirroring Codex runtime defaults into `config.json`.
-- Codex transcript scrolling uses an explicit follow-bottom controller: thread switches and sends re-enter follow mode, late transcript reflow keeps the viewport at the latest output while following, and manual user scroll-away pauses bottom following until the user returns near the bottom or triggers a new explicit bottom intent.
-- Codex-only bottom intents are split by semantics: system restore paths (`bootstrap`, `thread_switch`) stay instant, while explicit user intents (`send`, manual return-to-bottom) may animate smoothly when reduced motion is not requested.
-- The Codex controller follows the real bottom scroll target (`scrollHeight - clientHeight`) and keeps this behavior scoped to the Codex surface, so Flower and other Env App pages do not inherit the motion change.
-- Flower assistant live rendering strictly separates the settled transcript from the in-flight assistant surface. Persisted transcript rows stay in the virtualized message list, while the active assistant run renders through one dedicated non-virtualized tail surface inside the same scroll container until transcript persistence catches up.
-- Flower assistant live output no longer creates synthetic pending transcript messages, transient display rows, or frontend-only message-id adoption. Empty output, hidden-only `thinking`, visible answer text, recovery snapshots, and terminal handoff are inner states of the same mounted live surface.
-- Flower assistant live output keeps `thinking` hidden from the default transcript view. Before transcript persistence catches up, visible live answer text may render inline as live content; settled markdown rendering remains a transcript concern once the canonical assistant message lands.
-- Active-run snapshots are recovery-only input for the live assistant tail. If the persisted transcript already contains the same assistant `message.id`, the UI must suppress the live tail and rely on the settled transcript row only.
-- Run progress is shown on the active live assistant tail through the message ornament contract. The ornament component and avatar shell must stay stably mounted across streaming deltas so the UI does not flash while the phase label updates.
-- Transcript-only affordances such as message timestamps and copy actions stay attached to settled transcript messages. The live assistant tail hides those footer actions until the canonical transcript row replaces it.
-- Follow-bottom and virtualization operate on transcript rows only. Live-tail growth can still move the scroll height, but it must not mutate the virtual row-height cache or force transcript row remounts during streaming.
-- Flower follow-bottom uses motion-aware intents: explicit user bottom intents such as send/return-to-bottom may animate into the latest output, while system restore paths such as thread switch, refresh bootstrap, transcript reset, and baseline recovery must stay instant.
-- Flower's Env App composer now uses a transparent bottom-dock shell plus a centered floating card surface instead of a solid footer panel, but it still remains in normal document flow rather than covering the transcript.
-- Flower transcript clearance for that floating composer is measured from the real bottom-dock height and written back into the transcript inset contract, so autosizing textareas, attachment strips, pending-input rails, and mobile safe-area changes cannot hide the newest visible transcript output under the composer.
+- Flower and Codex keep independent gateway, controller, transcript, and follow-bottom contracts. Flower's settled transcript and live assistant tail are separate surfaces; Codex projects host app-server state into its own thread/session model.
 - Detached desktop child windows keep using the same Env App runtime, access gate, and Flowersec protocol path; only the scene rendered inside the window changes.
 - Terminal initializes new users with the `Dark` color theme and `Monaco` font while still preserving any saved per-user overrides.
-- On mobile, Terminal defaults to the built-in Floe keyboard, keeps taps from auto-triggering the system IME in Floe mode, and offers suggestion rails for recent commands, common commands, scripts, and paths. The default mobile input mode is chosen in Terminal settings as a strict `Floe Keyboard` / `System IME` toggle, while the More menu only exposes temporary show/hide actions when Floe Keyboard mode is active. Floe Keyboard stays as a bottom overlay, the terminal viewport aligns itself to the measured keyboard inset instead of reserving a separate blank spacer above it, and vertical touch drags on the terminal surface are translated into native terminal scrolling on mobile.
+- On mobile, Terminal defaults to the built-in Floe keyboard, exposes a strict `Floe Keyboard` / `System IME` setting, and translates terminal touch drags into native terminal scrolling.
 
 ## Session bootstrap contract used by the Env App UI
 
@@ -361,28 +298,15 @@ The Env App UI manages local codespaces via the local runtime gateway API:
 - `POST /_redeven_proxy/api/code-runtime/remove-version`
 - `POST /_redeven_proxy/api/code-runtime/cancel`
 
-When opening a codespace, the Env App mints a one-time ticket for `com.floegence.redeven.code`, then opens:
-
-- `https://cs-<code_space_id>.<region>.<base-sandbox-domain>/_redeven_boot/#redeven=<b64url(init)>`
-
 Notes:
 
-- Codespace/3rd-party app windows never receive long-lived control-plane credentials. They only get short-lived bootstrap credentials scoped to the requested app launch.
-- In normal browser sessions, Env App still uses a pre-opened popup/tab so user-triggered navigation stays within browser popup-blocker rules.
-- In Redeven Desktop, Codespaces `Open` does not stay inside Electron. Env App asks the desktop shell bridge to open the final Codespaces URL in the system browser, while keeping the same short-lived bootstrap contract.
-- If the desktop-managed Local UI is password-protected, the first protected Local UI request can still start from a `redeven_access_resume` token. Local UI exchanges that resume token into the standard local access cookie before returning the protected Codespaces page so later same-origin asset requests do not need to keep carrying the token.
-- If a codespace window is refreshed after the hash is cleared, it can request a fresh bootstrap credential from the opener Env App via `postMessage` handshake.
-- If the desktop-opened browser window no longer has an opener, the trusted launcher still keeps `?env=` so the existing independent-open recovery flow can redirect back through the control plane / Env App bootstrap when needed.
-- Codespaces cards also expose right-click `Ask Flower` and `Open in Terminal` actions. `Ask Flower` stays first to match the broader Env App handoff ordering, while `Open in Terminal` opens a terminal session rooted at `workspace_path`. The `Ask Flower` action sends that same `workspace_path` as directory context so the composer keeps the same folder-oriented prompt copy used by File Browser directory launches.
-- Codespaces does **not** auto-install `code-server`. When the runtime is missing or unusable, Env App shows an explicit install UI and waits for the user to click `Install and use for this Local Environment` or `Install latest and use for this Local Environment`.
-- Runtime Settings -> `Codespaces & Tooling` also exposes a dedicated `code-server Runtime` management card. It separates steady runtime status from transient management activity:
-  - when no usable runtime is available, Settings renders a compact installable state instead of a dense `Not detected` table dump,
-  - the steady state clearly separates `Current Local Environment`, `Installed for this Local Environment`, and `Recent runtime operation`,
-  - users can reuse an installed version for the current Local Environment or remove one Local Environment version when it is not selected,
-  - while install or Local Environment version removal is running, Settings switches to a focused operation panel with optional recent output,
-  - after a successful install or Local Environment version removal, Settings returns to the normal steady state instead of leaving a persistent success audit block on screen,
-  - failed or cancelled actions keep their recent output visible so the user can recover explicitly.
-- The Codespaces install flow displays the same explicit source and progress details inside Env App before the user continues to the pending `Start` or `Open` action.
+- Codespace windows receive only short-lived bootstrap credentials scoped to the requested app launch.
+- Browser sessions use a user-triggered popup/tab flow to satisfy popup-blocker rules.
+- Redeven Desktop opens Codespaces in the system browser while preserving the same short-lived bootstrap contract.
+- Password-protected Desktop-managed Local UI can resume the first protected Codespaces request through `redeven_access_resume`, then exchange it for the normal local access cookie.
+- Codespace cards expose right-click `Ask Flower` and `Open in Terminal` actions rooted at `workspace_path`.
+- Codespaces does **not** auto-install `code-server`. Missing or unusable runtime state is handled by explicit install/select UI in Codespaces and Runtime Settings -> `Codespaces & Tooling` -> `code-server Runtime`.
+- Runtime management UI separates steady inventory/status from transient install, remove, cancel, failure, and recovery activity. See [`CODE_APP.md`](CODE_APP.md) for the full managed code-server contract.
 
 ## Build
 

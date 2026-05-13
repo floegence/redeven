@@ -76,24 +76,43 @@ Agents must check `ok` before using `data`.
 
 ```json
 {
-  "targets": [
-    {
-      "id": "local:local",
-      "kind": "local_environment",
-      "label": "Local Environment",
-      "status": "available",
-      "state_root": "/Users/alice/.redeven",
-      "state_dir": "/Users/alice/.redeven/local-environment",
-      "config_path": "/Users/alice/.redeven/local-environment/config.json",
-      "runtime_state_path": "/Users/alice/.redeven/local-environment/runtime/local-ui.json",
-      "local_ui_url": "http://127.0.0.1:23998/",
-      "env_public_id": "env_123",
-      "local_environment_public_id": "le_123",
-      "capabilities": ["codex_gateway", "files", "flower", "git", "local_ui", "monitor", "remote_control", "terminal"]
-    }
-  ]
+  "schema_version": 1,
+  "ok": true,
+  "data": {
+    "targets": [
+      {
+        "id": "local:local",
+        "kind": "local_environment",
+        "label": "Local Environment",
+        "status": "available",
+        "state_root": "/Users/alice/.redeven",
+        "state_dir": "/Users/alice/.redeven/local-environment",
+        "config_path": "/Users/alice/.redeven/local-environment/config.json",
+        "runtime_state_path": "/Users/alice/.redeven/local-environment/runtime/local-ui.json",
+        "local_ui_url": "http://127.0.0.1:23998/",
+        "local_ui_urls": ["http://127.0.0.1:23998/"],
+        "password_required": true,
+        "effective_run_mode": "hybrid",
+        "remote_enabled": true,
+        "desktop_managed": false,
+        "controlplane_base_url": "https://provider.example",
+        "controlplane_provider_id": "provider_demo",
+        "env_public_id": "env_123",
+        "local_environment_public_id": "le_123",
+        "agent_home_dir": "/Users/alice",
+        "shell": "/bin/zsh",
+        "capabilities": ["codex_gateway", "files", "flower", "git", "local_ui", "monitor", "remote_control", "terminal"]
+      }
+    ]
+  },
+  "trace": {
+    "request_id": "req_0123456789abcdef",
+    "source": "redeven_cli"
+  }
 }
 ```
+
+`redeven targets resolve --target <target> --json` uses the same envelope, with `data` set to one target descriptor and `trace.target_id` set to the resolved target id.
 
 Status values:
 
