@@ -10,6 +10,7 @@ import type {
 } from './providerEnvironmentState';
 import type {
   DesktopEnvironmentWindowState,
+  DesktopRuntimeMaintenanceRequirement,
   DesktopRuntimeControlCapability,
   DesktopRuntimeHealth,
 } from './desktopRuntimeHealth';
@@ -200,6 +201,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   is_opening: boolean;
   runtime_health: DesktopRuntimeHealth;
   runtime_service?: RuntimeServiceSnapshot;
+  runtime_maintenance?: DesktopRuntimeMaintenanceRequirement;
   runtime_control_capability: DesktopRuntimeControlCapability;
   open_session_key: string;
   open_session_lifecycle?: DesktopLauncherSessionLifecycle;

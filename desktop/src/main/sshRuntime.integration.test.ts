@@ -150,7 +150,7 @@ function runtimeServiceForScenario() {
   if (scenario === 'attached_unsupported_idle' && !state.stopped) {
     return oldUnsupportedRuntimeService(false);
   }
-  if (scenario === 'attached_unsupported_active') {
+  if (scenario === 'attached_unsupported_active' && !state.stopped) {
     return oldUnsupportedRuntimeService(true);
   }
   return currentRuntimeService();
@@ -521,8 +521,10 @@ if (args.includes('-M') && args.includes('-N')) {
         process.exit(0);
       }
       const state = readState();
-      const attachedUnsupported = (scenario === 'attached_unsupported_idle' && !state.stopped)
-        || scenario === 'attached_unsupported_active';
+      const attachedUnsupported = (
+        (scenario === 'attached_unsupported_idle' || scenario === 'attached_unsupported_active')
+        && !state.stopped
+      );
       process.stdout.write(JSON.stringify({
         ...(attachedUnsupported ? { status: 'attached' } : {}),
         local_ui_url: 'http://127.0.0.1:39001/',
@@ -1023,7 +1025,7 @@ describe('sshRuntime integration', () => {
           ssh_runtime_key: 'ssh:devbox',
           expires_at_unix_ms: futureExpiryUnixMS(),
         },
-    })).rejects.toThrow('needs to restart before Desktop can bind the local Flower model bridge');
+    })).rejects.toThrow('needs to update before Desktop can prepare the Desktop model source');
 
     const events = await readFakeSSHEvents(fixture);
     expect(events.map((event) => event.event)).toContain('start_runtime');
@@ -1145,6 +1147,35 @@ describe('sshRuntime integration', () => {
       'forward_start',
     ]));
     expect(eventNames.filter((event) => event === 'remote_install')).toHaveLength(1);
+    await removeFakeSSHFixture(fixture);
+  });
+
+  it('replaces an active unsupported runtime after the user explicitly confirms an update', async () => {
+    const fixture = await createFakeSSHFixture('attached_unsupported_active');
+    let runtime: ManagedSSHRuntime | null = null;
+    try {
+      runtime = await startWithFakeSSH(fixture, 'auto', {
+        forceRuntimeUpdate: true,
+        aiBroker: {
+          local_url: 'http://127.0.0.1:41234',
+          token: 'broker-token',
+          session_id: 'broker-session',
+          ssh_runtime_key: 'ssh:devbox',
+          expires_at_unix_ms: futureExpiryUnixMS(),
+        },
+      });
+    } finally {
+      await runtime?.stop();
+    }
+
+    const events = await readFakeSSHEvents(fixture);
+    const eventNames = events.map((event) => event.event);
+    expect(eventNames).toEqual(expect.arrayContaining([
+      'start_runtime',
+      'stop_runtime',
+      'forward_start',
+    ]));
+    expect(eventNames.filter((event) => event === 'start_runtime')).toHaveLength(2);
     await removeFakeSSHFixture(fixture);
   });
 

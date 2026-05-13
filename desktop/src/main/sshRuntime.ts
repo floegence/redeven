@@ -27,6 +27,7 @@ import {
   type DesktopSSHEnvironmentDetails,
 } from '../shared/desktopSSH';
 import {
+  formatRuntimeServiceWorkload,
   runtimeServiceHasActiveWork,
   runtimeServiceIsOpenable,
   runtimeServiceMatchesIdentity,
@@ -34,6 +35,7 @@ import {
   runtimeServiceSupportsDesktopAIBrokerBinding,
   type RuntimeServiceIdentity,
 } from '../shared/runtimeService';
+import type { DesktopRuntimeMaintenanceRequirement } from '../shared/desktopRuntimeHealth';
 
 const PUBLIC_INSTALL_SCRIPT_URL = 'https://redeven.com/install.sh';
 const DEFAULT_SSH_STARTUP_TIMEOUT_MS = 45_000;
@@ -137,6 +139,16 @@ export class DesktopSSHRuntimeCanceledError extends Error {
   constructor(message = 'SSH runtime startup was canceled.') {
     super(message);
     this.name = 'DesktopSSHRuntimeCanceledError';
+  }
+}
+
+export class DesktopSSHRuntimeMaintenanceRequiredError extends Error {
+  readonly maintenance: DesktopRuntimeMaintenanceRequirement;
+
+  constructor(message: string, maintenance: DesktopRuntimeMaintenanceRequirement, details = '') {
+    super(details.trim() === '' ? message : `${message}\n\n${details}`);
+    this.name = 'DesktopSSHRuntimeMaintenanceRequiredError';
+    this.maintenance = maintenance;
   }
 }
 
@@ -1792,7 +1804,7 @@ async function waitForRemoteStartupReport(args: Readonly<{
 type ManagedSSHRuntimeAttachPolicy =
   | Readonly<{ action: 'reuse' }>
   | Readonly<{ action: 'replace'; message: string }>
-  | Readonly<{ action: 'block'; message: string }>;
+  | Readonly<{ action: 'block'; message: string; maintenance: DesktopRuntimeMaintenanceRequirement }>;
 
 function startupReportsStoppablePID(startup: StartupReport): boolean {
   const pid = Number(startup.pid ?? Number.NaN);
@@ -1804,6 +1816,7 @@ function managedSSHRuntimeAttachPolicy(
   args: Readonly<{
     expectedRuntimeIdentity: RuntimeServiceIdentity;
     requireDesktopAIBrokerBinding: boolean;
+    allowActiveWorkReplacement: boolean;
   }>,
 ): ManagedSSHRuntimeAttachPolicy {
   const runtimeService = startup.runtime_service;
@@ -1816,26 +1829,48 @@ function managedSSHRuntimeAttachPolicy(
     return { action: 'reuse' };
   }
 
-  if (runtimeServiceHasActiveWork(runtimeService)) {
+  const maintenanceKind = brokerBindingUnsupported
+    ? 'desktop_model_source_requires_runtime_update'
+    : needsRuntimeUpdate
+      ? 'ssh_runtime_update_required'
+      : 'ssh_runtime_restart_required';
+  const maintenance: DesktopRuntimeMaintenanceRequirement = {
+    kind: maintenanceKind,
+    required_for: brokerBindingUnsupported ? 'desktop_model_source' : 'open',
+    can_desktop_restart: startupReportsStoppablePID(startup),
+    has_active_work: runtimeServiceHasActiveWork(runtimeService),
+    active_work_label: formatRuntimeServiceWorkload(runtimeService),
+    current_runtime_version: runtimeService?.runtime_version,
+    target_runtime_version: args.expectedRuntimeIdentity.runtime_version,
+    message: brokerBindingUnsupported
+      ? 'Update and restart this SSH runtime before Desktop can make your local model settings available here.'
+      : needsRuntimeUpdate
+        ? 'Update and restart this SSH runtime before opening this environment.'
+        : 'Restart this SSH runtime before opening this environment.',
+  };
+
+  if (runtimeServiceHasActiveWork(runtimeService) && !args.allowActiveWorkReplacement) {
     return {
       action: 'block',
       message: brokerBindingUnsupported
-        ? 'This SSH runtime needs to restart before Desktop can bind the local Flower model bridge, but active work is still running.'
+        ? 'This SSH runtime needs to update before Desktop can prepare the Desktop model source, but active work is still running.'
         : 'This SSH runtime needs to restart before Desktop can open it, but active work is still running.',
+      maintenance,
     };
   }
   if (!startupReportsStoppablePID(startup)) {
     return {
       action: 'block',
       message: brokerBindingUnsupported
-        ? 'This SSH runtime needs to restart before Desktop can bind the local Flower model bridge, but it did not report a process id Desktop can stop.'
+        ? 'This SSH runtime needs to update before Desktop can prepare the Desktop model source, but it did not report a process id Desktop can stop.'
         : 'This SSH runtime needs to restart before Desktop can open it, but it did not report a process id Desktop can stop.',
+      maintenance,
     };
   }
   return {
     action: 'replace',
     message: brokerBindingUnsupported
-      ? 'Restarting SSH runtime so Desktop can bind the local Flower model bridge.'
+      ? 'Restarting SSH runtime so Desktop can prepare the Desktop model source.'
       : 'Restarting SSH runtime so Desktop can open the requested runtime version.',
   };
 }
@@ -1918,8 +1953,8 @@ async function bindDesktopAIBrokerToForwardedRuntime(args: Readonly<{
   emitSSHRuntimeProgress(
     args.onProgress,
     'ssh_binding_ai_broker',
-    'Binding Desktop model bridge',
-    'Desktop is binding the local Flower model bridge to the SSH runtime over Runtime Control.',
+    'Preparing Desktop model source',
+    'Desktop is making your local model settings available to the SSH runtime.',
   );
   const payload = await postJSONToForwardedLocalUI<RuntimeDesktopAIBrokerBindResponse>(
     args.forwardedURL,
@@ -2072,7 +2107,7 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       emitSSHRuntimeProgress(
         args.onProgress,
         'ssh_opening_tunnel',
-        'Preparing Desktop models',
+        'Preparing Desktop model source',
         'Desktop is creating a private SSH bridge for local model calls.',
       );
       try {
@@ -2147,9 +2182,14 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       const attachPolicy = managedSSHRuntimeAttachPolicy(launch.startup, {
         expectedRuntimeIdentity: { runtime_version: runtimeReleaseTag },
         requireDesktopAIBrokerBinding: !!args.aiBroker,
+        allowActiveWorkReplacement: args.forceRuntimeUpdate === true,
       });
       if (attachPolicy.action === 'block') {
-        throw readinessFailure(attachPolicy.message, logs);
+        throw new DesktopSSHRuntimeMaintenanceRequiredError(
+          attachPolicy.message,
+          attachPolicy.maintenance,
+          formatRecentLogs(logs),
+        );
       }
       if (attachPolicy.action === 'reuse') {
         remoteLaunch = launch;
@@ -2267,6 +2307,9 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
     await disconnect();
     if (error instanceof DesktopSSHRuntimeCanceledError || isAbortError(error) || args.signal?.aborted) {
       throw new DesktopSSHRuntimeCanceledError();
+    }
+    if (error instanceof DesktopSSHRuntimeMaintenanceRequiredError) {
+      throw error;
     }
     const nodeError = error as NodeJS.ErrnoException;
     if (nodeError?.code === 'ENOENT') {

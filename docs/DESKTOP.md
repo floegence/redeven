@@ -515,6 +515,8 @@ The snapshot is intentionally non-secret and uses snake_case fields such as `run
 
 For SSH Host sessions, Desktop validates the final running snapshot before reusing an attached runtime. If the session requires `desktop_ai_broker` and the attached runtime does not support `runtime_control_v1`, Desktop replaces that runtime only when the reported workload is idle and a stoppable process id is available. Otherwise Desktop blocks the open path with a restart-required message instead of presenting Flower as configured.
 
+When Desktop cannot safely replace the SSH runtime automatically, the Welcome card carries that as a structured runtime maintenance requirement instead of treating it as a generic startup failure. The card keeps `Open` disabled, shows `RUNTIME NEEDS UPDATE` or `RESTART REQUIRED`, and offers a confirmed `Update and restart...` or `Restart runtime...` action plus `Refresh status`. A confirmed SSH update uses the existing start-runtime launcher action with `force_runtime_update=true`, which makes the SSH bootstrap perform the user-approved replacement of the remote runtime. The update flow never opens the Environment App automatically; after the runtime reports ready, the user still chooses `Open` explicitly.
+
 Target validation rules:
 
 - External targets must use an absolute `http://` or `https://` URL.

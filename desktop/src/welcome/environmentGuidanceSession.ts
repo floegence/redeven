@@ -7,7 +7,7 @@ import {
 
 export type EnvironmentGuidancePendingIntent = Extract<
   EnvironmentActionIntent,
-  'refresh_runtime' | 'start_runtime' | 'serve_runtime_locally'
+  'refresh_runtime' | 'start_runtime' | 'serve_runtime_locally' | 'update_runtime'
 >;
 
 export type EnvironmentGuidanceFeedbackTone = 'info' | 'warning' | 'error' | 'success';
@@ -31,7 +31,8 @@ export function isEnvironmentGuidancePendingIntent(
 ): intent is EnvironmentGuidancePendingIntent {
   return intent === 'refresh_runtime'
     || intent === 'start_runtime'
-    || intent === 'serve_runtime_locally';
+    || intent === 'serve_runtime_locally'
+    || intent === 'update_runtime';
 }
 
 export function openEnvironmentGuidanceSession(
@@ -73,11 +74,15 @@ export function failEnvironmentGuidanceIntent(
 
   const title = state.pending_intent === 'start_runtime'
     ? 'Runtime start failed'
+    : state.pending_intent === 'update_runtime'
+      ? 'Runtime update failed'
     : state.pending_intent === 'serve_runtime_locally'
       ? 'Local runtime action failed'
       : 'Status refresh failed';
   const fallbackDetail = state.pending_intent === 'start_runtime'
     ? 'Desktop could not start the runtime for this environment.'
+    : state.pending_intent === 'update_runtime'
+      ? 'Desktop could not update and restart the runtime for this environment.'
     : state.pending_intent === 'serve_runtime_locally'
       ? 'Desktop could not continue with the local runtime flow for this environment.'
       : 'Desktop could not refresh the runtime status.';
@@ -212,6 +217,12 @@ export function guidanceSessionNotice(
         tone: 'info',
         title: 'Preparing local runtime…',
         detail: 'Desktop is routing you to the next local runtime step for this environment.',
+      };
+    case 'update_runtime':
+      return {
+        tone: 'info',
+        title: 'Updating runtime…',
+        detail: 'Desktop is waiting for the SSH runtime update and restart to complete.',
       };
     default:
       return state.feedback;

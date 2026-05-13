@@ -535,6 +535,16 @@ describe('buildEnvironmentCardModel', () => {
           checked_at_unix_ms: Date.now(),
           source: 'ssh_runtime_probe',
           local_ui_url: 'http://127.0.0.1:24111/',
+          runtime_maintenance: {
+            kind: 'ssh_runtime_update_required',
+            required_for: 'open',
+            can_desktop_restart: true,
+            has_active_work: true,
+            active_work_label: '1 terminal, 1 session, 1 port forward',
+            current_runtime_version: 'v0.5.9',
+            target_runtime_version: 'v0.6.7',
+            message: 'Update and restart this SSH runtime before opening this environment.',
+          },
           runtime_service: {
             runtime_version: 'v0.5.9',
             protocol_version: 'redeven-runtime-v1',
@@ -590,14 +600,14 @@ describe('buildEnvironmentCardModel', () => {
           tone: 'warning',
           eyebrow: 'Runtime blocked',
           title: 'Runtime update required',
-          detail: 'SSH is connected, but the running runtime on this host needs an update before it can open the Environment App. Open will stay locked until the runtime is updated and restarted when active work can be interrupted.',
+          detail: 'This SSH host is reachable, but the running runtime needs an update before it can open this environment. Update and restart the runtime first; Open stays separate and becomes available after the runtime is ready.',
           actions: [
             {
-              label: 'Restart after update…',
+              label: 'Update and restart…',
               emphasis: 'primary',
               action: {
-                intent: 'restart_runtime',
-                label: 'Restart after update…',
+                intent: 'update_runtime',
+                label: 'Update and restart…',
                 enabled: true,
                 variant: 'outline',
               },
@@ -617,11 +627,11 @@ describe('buildEnvironmentCardModel', () => {
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
-            id: 'stop_runtime',
-            label: 'Stop runtime',
+            id: 'update_runtime',
+            label: 'Update and restart…',
             action: {
-              intent: 'stop_runtime',
-              label: 'Stop runtime',
+              intent: 'update_runtime',
+              label: 'Update and restart…',
               enabled: true,
               variant: 'outline',
             },
