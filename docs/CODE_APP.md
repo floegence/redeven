@@ -125,21 +125,11 @@ Env App uses the local gateway runtime endpoints before it tries to start Code A
 The explicit install flow is:
 
 1. Env App reads runtime status.
-2. Env App Settings exposes a dedicated `code-server Runtime` management card that shows:
-   - the current Local Environment managed selection,
-   - the Local Environment runtime version inventory,
-   - a focused running/error panel for explicit install or Local Environment version removal actions,
-   - recent output only while an operation is running or when the last action failed or was cancelled.
-3. If the runtime is missing or unusable, Env App Codespaces shows a dedicated install UI instead of trying to start a codespace.
-4. After the user explicitly clicks `Install and use for this Local Environment` or `Install latest and use for this Local Environment`, the runtime:
-   - downloads the official upstream `install.sh` latest-stable entrypoint,
-   - runs it with `--method=standalone --prefix <shared staging prefix>`,
-   - validates the staged binary and resolves the upstream `code-server` version,
-   - promotes that install into `shared/code-server/<os>-<arch>/versions/<version>/`,
-   - selects that version for the current Local Environment.
-5. If the resolved latest version is already installed for the Local Environment, Redeven reuses it and only updates the current Local Environment selection instead of running a second install.
-6. `POST /remove-version` deletes only one Local Environment runtime version, and only when it is not the current Local Environment selection.
-7. Env App shows focused progress while the action is running, then returns to the calm steady state after success. Failed or cancelled actions keep their recent output visible for recovery.
+2. If the runtime is missing or unusable, Env App blocks Codespace startup and shows explicit install/select actions.
+3. User-triggered install runs the official upstream `install.sh` in standalone mode into a staged shared runtime root.
+4. Redeven validates the staged binary, promotes it to `shared/code-server/<os>-<arch>/versions/<version>/`, and selects it for the current Local Environment.
+5. Existing usable versions are reused instead of reinstalled; `POST /remove-version` deletes only a non-selected Local Environment version.
+6. Running, failed, or cancelled operations keep focused status/recent output visible so the user can recover explicitly.
 
 ## Runtime status model
 
@@ -233,8 +223,8 @@ This is conservative: code-server is not designed to enforce a partial permissio
 
 - "code-server did not start listening on 127.0.0.1:PORT":
   - Check the per-codespace logs under:
-    - `~/.redeven/apps/code/spaces/<code_space_id>/codeserver/stdout.log`
-    - `~/.redeven/apps/code/spaces/<code_space_id>/codeserver/stderr.log`
+    - `~/.redeven/local-environment/apps/code/spaces/<code_space_id>/codeserver/stdout.log`
+    - `~/.redeven/local-environment/apps/code/spaces/<code_space_id>/codeserver/stderr.log`
   - Verify `code-server` runs on the host (`code-server --version`).
   - If Homebrew installs `code-server` as a Node.js script, ensure `node` works, or set `REDEVEN_CODE_SERVER_NODE_BIN`.
   - If startup is slow on the host (first launch, heavy extensions, slow disk), increase `REDEVEN_CODE_SERVER_STARTUP_TIMEOUT`.
@@ -245,7 +235,7 @@ This is conservative: code-server is not designed to enforce a partial permissio
   - In Local UI mode, Redeven also shortens extension-host reconnection grace to 30s by default to reduce long-lived stale locks.
   - You can tune this per Local Environment via `REDEVEN_CODE_SERVER_RECONNECTION_GRACE_TIME`.
   - If reconnect loops persist, inspect `remoteagent.log` and `exthost*/remoteexthost.log` under:
-    - `~/.redeven/apps/code/spaces/<code_space_id>/codeserver/user-data/logs/<timestamp>/`
+    - `~/.redeven/local-environment/apps/code/spaces/<code_space_id>/codeserver/user-data/logs/<timestamp>/`
 
 - "Handshake timed out":
   - Ensure the launcher/runtime bootstrap can load the configured Redeven bootstrap routes.

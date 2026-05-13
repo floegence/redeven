@@ -13,50 +13,14 @@ This document describes the public Electron desktop shell that ships with each `
 
 ## Architecture
 
-- Electron is a thin shell around Redeven Local UI.
-- `redeven run --mode desktop --desktop-managed` remains the only bundled-runtime entrypoint.
-- Desktop keeps one singleton shell-owned utility window:
-  - `Connect Environment` launcher
-- `Environment Settings` renders as a launcher-owned modal dialog instead of a second native window.
-- Each opened Environment owns its own top-level session window, plus any session child windows opened by allowed in-app navigation.
-- Session deduplication happens in Electron main through a canonical session key:
-  - `env:<environment_id>:local_host` for a locally hosted Local Environment or linked-local window
-  - `env:<environment_id>:remote_desktop` for a remote desktop window opened through a Control Plane provider
-  - `url:<normalized-local-ui-origin>` for remote Local UI targets
-  - `ssh:<normalized-ssh-environment-id>` for SSH-hosted environment instances
-- Desktop owns one Local Environment for the current OS user / Redeven profile state root:
-  - the runtime config is stored at `~/.redeven/local-environment/config.json`
-  - provider environments may be listed in the catalog, but only one provider Environment can be linked to the Local Environment at a time
-- Desktop treats the Local Environment runtime as one profile-scoped singleton. Provider cards do not require a second runtime instance; they compare the observed singleton runtime with the target provider Environment and decide whether `Open` can use it directly, start it, restart it with a provider bootstrap ticket, or block safely.
-- Each Desktop session window also receives a Desktop-owned session context snapshot:
-  - `local_environment_id`
-  - `renderer_storage_scope_id`
-  - `target_kind` (`local_environment`, `external_local_ui`, or `ssh_environment`)
-  - `target_route` (`local_host` or `remote_desktop`) when the target is a managed Local Environment
-- Env App uses `renderer_storage_scope_id` only for renderer-scoped persisted UI state such as File Browser history and active thread context. Intentionally global shell/UI preferences remain global.
-- Env App uses `target_kind` / `target_route` to choose Web Services open routes. Managed same-device local sessions can open loopback services directly, saved Redeven URL and SSH Host sessions use the Local UI `/pf/<forward_id>/` proxy, and remote Provider sessions keep using the Flowersec E2EE tunnel.
-- `provider_id` is the canonical discovery identity from `/.well-known/redeven-provider.json` and is used for provider protocol payloads, provider catalogs, and provider bindings.
-- Desktop and standalone runtime / CLI mode also share one profile-scoped catalog:
-  - `~/.redeven/catalog/local-environment.json`
-  - `~/.redeven/catalog/provider-environments/*.json`
-  - `~/.redeven/catalog/connections/*.json`
-  - `~/.redeven/catalog/providers/*.json`
-- In the shared catalog, `provider_id` and `current_provider_binding.provider_id` always mean the canonical discovery `provider_id`.
-- Saved Redeven URL and SSH Host entries are connection records only. SSH Host entries persist host-access details and do not own an additional Desktop-private local runtime state directory.
-- Desktop and standalone runtime / CLI mode resolve the same Local Environment state directory. Desktop does not invent a second local runtime state root.
-- The provider / control-plane model remains environment-first. Whether a provider Environment is linked to the Local Environment for this OS user / Redeven profile state root is a local runtime/Desktop fact, not a provider-side device resource.
-- The shell keeps `Top Bar`, `Activity Bar`, and `Bottom Bar` visible before an environment is opened, so startup and active-session flows share the same frame.
-- Every cold desktop launch opens the welcome launcher first.
-- The launcher always asks the user what to open in this desktop session:
-  - the Local Environment
-  - compatible provider environments from the catalog
-  - a remembered recent Environment
-  - a saved Redeven Local UI URL
-  - a saved SSH Host entry that Desktop bootstraps on demand
-- Reopening the launcher from an active session does not disconnect anything. Existing Environment windows stay live until the user closes those specific session windows.
-- Common startup failures return to the launcher with inline context instead of bouncing users to a separate blocked-first flow.
-- Electron only allows session-owned navigation to the exact reported Local UI origin for that session and opens all other URLs in the system browser.
-- Control Plane providers use one fixed public protocol surface (`RCPP v1`). Desktop does not negotiate capability matrices with providers.
+- Electron is a thin shell around Redeven Local UI. The bundled-runtime entrypoint is `redeven run --mode desktop --desktop-managed`.
+- Desktop owns one Local Environment for the current OS user / Redeven profile state root. Desktop and standalone CLI/runtime mode share the same state directory and profile catalog under `~/.redeven/`.
+- The launcher is a singleton shell-owned window. Each opened Environment owns its own session window, and reopening the launcher never disconnects existing sessions.
+- Session identity is keyed by target type: managed Local Environment/provider route, saved Local UI URL, or SSH Host entry.
+- Provider integrations use the fixed public RCPP v1 contract. `provider_id` comes from discovery and is reused in protocol payloads, catalog records, and bindings.
+- Saved Redeven URL and SSH Host entries are connection records. SSH Host entries persist host-access details but do not create a separate Desktop-private runtime state root.
+- Env App receives a Desktop-owned session context so it can scope renderer UI state and choose the correct Web Services route for local, remote, or SSH-hosted sessions.
+- Common startup failures return to the launcher with contextual recovery actions; Electron allows session-owned navigation only to the reported Local UI origin and opens unrelated URLs in the system browser.
 
 ## Runtime Contract
 
@@ -224,177 +188,18 @@ Rules:
 
 `Connect Environment` is the primary shell-owned startup surface.
 
-Visual hierarchy:
+Launcher model:
 
-- shell title: `Redeven Desktop`
-- shell surface title: `Connect Environment`
-- compact launcher header:
-  - `Environments / Providers` tabs
-  - shell-wide open-window and card counts
-  - add / close actions
-- `Environments` tab:
-  - one shared card grid for:
-    - the canonical Local Environment
-    - provider environment cards stored in `provider_environments` and refreshed from connected providers
-    - saved Redeven URL connections
-    - saved SSH Host connections
-  - compact search + source filter toolbar for `All`, `Local`, `Provider`, `Redeven URL`, `SSH Host`, plus connected-provider filters
-  - when pinned entries exist, the launcher keeps explicit `Pinned` and `Environments` sections
-  - those sections must still share one measured environment-library column model, so pinning only changes grouping order and never changes card width
-  - provider filters and search only change which cards are shown; they must not collapse the underlying card-width system for the current library scope
-- `Providers` tab:
-  - provider action shelves only
-  - provider counts, sync state, and provider-to-environment shortcuts
-- activity bar:
-  - one item: `Connect Environment`
-
-Interaction rules:
-
-- Cold launch never auto-opens a remembered target.
-- Environment choice is always a launcher action, never a side effect of saving settings.
-- The Local Environment is one protected first-class card for the current OS user / Redeven profile state root.
-- `Environment Settings` opens or focuses the launcher, then presents a modal dialog inside that same window for the selected Local Environment or provider Environment card.
-- The `Add` action opens a dialog that can either connect immediately or save a new Environment into the library.
-- `New Environment` is a two-mode dialog:
-  - `Redeven URL`
-  - `SSH Host`
-- Local Environment runtime settings are edited from the protected Local Environment card and do not create additional local runtime identities.
-- Provider environments stay one card:
-  - the route menu may expose `Open remotely`
-  - the route menu may expose `Use locally` when the provider Environment can be linked to the Local Environment
-  - local access configuration remains owned by the Local Environment settings surface
-  - after linking, the same provider card can `Open Local`, `Start runtime`, `Stop runtime`, or `Open remotely`
-- Desktop never creates a second visible card or provider-specific local runtime just because a provider Environment is used locally
-- SSH Host mode keeps the same compact launcher shell but adds:
-  - `Name`
-  - `SSH Destination`, as a free-entry combobox backed by concrete Host aliases from the user's local SSH config
-  - optional `Port`, displayed beside `SSH Destination` and auto-filled when the selected Host alias defines one
-  - `Bootstrap Delivery`
-  - compact `Advanced` section for:
-    - `Remote Install Directory`
-    - `Release Base URL`
-- The SSH Host `Advanced` disclosure initializes from the saved connection state once and then stays user-owned while editing, so typing in `Release Base URL` or `Remote Install Directory` does not auto-collapse the section.
-- SSH Host mode explains the actual behavior inline:
-  - Desktop reuses shared release artifacts for the exact Desktop-managed version and lets the remote host own its own runtime state.
-- `Add Provider` opens a separate dialog that accepts:
-  - a user-owned local `Name`
-  - a `Provider URL`
-  - the default `Name` is derived from the provider hostname until the user edits it explicitly
-- The launcher defaults to the `Environments` tab and treats opening or rebinding a workspace as the primary task.
-- `Providers` moves into its own tab so provider management does not compete with the main workspace open/rebind path.
-- Environment cards own the primary actions, so open sessions are reflected through `Open` / `Focus` state directly on the relevant card instead of a separate session rail.
-- The Local Environment, provider environments, Redeven URLs, and SSH Host entries all render in the `Environments` tab.
-- Connecting or refreshing a Provider updates the provider catalog immediately while the profile keeps its single Local Environment state record.
-- `Providers` stays provider-management-only. Each shelf offers `View Environments`, `Reconnect`, `Refresh`, and `Delete`.
-- Environment Library cards use one fixed-height layout:
-  - header with label, relative timestamp, pin/unpin icon, and status badge
-  - compact facts rows tailored to the card family
-  - an `Endpoint` block with readonly inputs plus `Copy`
-  - pinned and regular sections align to the same card columns whenever both are visible
-  - footer actions aligned vertically across card types
-- Environment Library pinning is first-class:
-  - pinned cards render once inside a dedicated `Pinned` section
-  - unpinned cards remain in the regular `Environments` section
-- pinning an open unsaved Redeven URL or SSH Host entry implicitly promotes it into the saved Environment Library
-- The Local Environment card surfaces:
-  - `RUNS ON`
-  - `RUNTIME SERVICE`
-  - `VERSION`
-  - `ACTIVE WORK`
-  - `CONTROL PLANE`
-- Provider environment cards surface:
-  - `RUNS ON`
-  - `RUNTIME SERVICE`
-  - `VERSION`
-  - `ACTIVE WORK`
-  - `CONTROL PLANE`
-  - `SOURCE ENV`
-- Redeven URL cards surface:
-  - `RUNS ON`
-  - `RUNTIME SERVICE`
-  - `VERSION`
-  - `ACTIVE WORK`
-- SSH Host cards surface:
-  - `RUNS ON`
-  - `RUNTIME SERVICE`
-  - `VERSION`
-  - `ACTIVE WORK`
-  - `BOOTSTRAP`
-Runtime Service rows render only after Desktop has a runtime snapshot for that
-card. They use the same stable fact slots across local, provider, Redeven URL,
-and SSH Host runtimes; window state stays in action/status chrome instead of
-duplicating as a low-value fact row.
-- Provider shelves still keep the raw provider runtime details (`status`, `lifecycle_status`, `last_seen_at`) visible in the detail rows, but the primary badge stays consistent with the Environment Library.
-- Provider-backed state is freshness-aware instead of being treated as timeless cache:
-  - Desktop marks provider catalogs as `fresh`, `stale`, or `unknown`
-  - opening the launcher, refocusing it, and waking the device all trigger best-effort provider refresh
-  - while the launcher stays visible, Desktop also polls stale providers in the background
-- Launcher state is split explicitly between runtime health and window state:
-  - every Environment card shows `RUNTIME ONLINE` or `RUNTIME OFFLINE`
-  - the primary button is window-only and uses `Open`, `Opening…`, or `Focus`
-  - the primary button never starts or stops a runtime implicitly
-  - blocked `Open` states can surface either:
-    - a click-driven guidance action panel with recovery actions such as `Start Local Environment`, `Start runtime`, or `Use locally`
-    - the guidance panel keeps transient inline feedback for `Refresh status` and recovery actions instead of closing through hover/focus loss
-    - opening the guidance panel moves keyboard focus into the first recovery action so the panel works as a real interactive surface instead of a hover-only overlay
-    - the launcher keeps a dedicated guidance-session state per active blocked environment, so a refresh can stay in context and either show `Runtime is still offline`, render an inline failure, or dismiss itself once `Open` becomes available
-    - the launcher also scopes busy state to the affected environment or control plane, so unrelated cards do not inherit disabled/loading affordances during another card's action
-    - or a simple unavailable tooltip when Desktop cannot offer a direct local recovery path
-  - the Local Environment, the provider Environment currently linked to that profile, and SSH Host entries expose `Start runtime` / `Stop runtime` plus `Refresh runtime status` from the adjacent runtime menu
-- provider environments keep route selection explicit in the same menu, including `Open remotely`
-  - remote-only provider and Redeven URL entries treat runtime control as observe-only and expose `Refresh runtime status` from the runtime menu
-- Runtime health probing uses dedicated contracts instead of route/access inference:
-  - the Local Environment, linked-local sessions, SSH forwards, and direct Redeven URLs probe `GET /api/local/runtime/health`
-  - Control Plane provider environments use the RCPP batch runtime-health query endpoint
-  - per-card refresh and the launcher-wide refresh button re-probe runtime health without mutating window state
-- Managed session action state is lifecycle-aware:
-  - `Focus` only appears for a session whose lifecycle is truly `open`
-  - `Opening…` is disabled and does not imply the window is ready yet
-  - closing or failed sessions stop contributing `Focus` immediately
-- Environment cards stay concise:
-  - card bodies avoid explanatory helper prose under the actions
-  - only concrete identifiers, runtime details, badges, explicit `None` placeholders, and notices stay visible inside the card
-- Provider Environment cards keep the current Local Environment link target visible even when the source provider environment is offline or later removed.
-- Direct Redeven URL cards surface whether the target is a saved record, a recent record, or an open window, and whether it points at this device, a LAN host, or a remote host.
-- Direct SSH Host cards keep their type-specific bootstrap facts and forwarded endpoints visible.
-- Deleting an Environment Library entry is a first-class action:
-  - Desktop blocks deletion while a window for that entry is still open
-  - the Local Environment entry is protected and is not deletable from the launcher
-  - unlinking a provider Environment clears only that provider binding; the provider card remains if the provider still publishes that Environment
-  - deleting a saved Redeven URL or SSH Host entry persists the removal immediately; runtime shutdown, SSH startup cancelation, tunnel disconnect, or remote cleanup never blocks the deletion result
-  - if a saved SSH Host is deleted while its bootstrap is running, the card disappears immediately, the operation is marked as belonging to a deleted subject, and Desktop cancels or cleans the startup in the background
-  - stale operations must not resurrect deleted connections through recent-entry writes, catalog writes, or old preference snapshots
-- Remote library entries distinguish:
-  - unsaved remote sessions that are already open
-  - auto-remembered recent connections
-  - explicitly saved connections
-- Open launcher entries switch their primary action from `Open` to `Focus`.
-- Recent remote Environments stay one click away after a successful connection.
-- Saved remote Environments render in a card grid and can be opened, edited, saved, or deleted inline.
-- Saved SSH Host environments render in that same card grid, with the SSH host (`destination[:port]`) and forwarded Local UI both exposed through the Endpoint copy rows.
-- Saved Providers render in a separate tab with compact provider-level reconnect/refresh/delete shelves and no nested environment card grid.
-- Deleting a Provider persists the local removal immediately, clears local provider transient state, and then revokes the remote authorization and closes provider sessions best-effort in the background. In-flight provider sync checks the provider subject generation before writing preferences or sync errors, so a deleted Provider cannot be restored by an older sync response.
-- Provider shelves show the Desktop display label as the primary title while still surfacing the provider product name, origin, published environment count, unified-catalog count, and local-host count.
-- Dense repeated controls use compact visible labels such as `Open`, `Focus`, `Add`, and `Save`; hover and accessibility metadata keep the full descriptive meaning.
-- Field-validation errors stay inline inside the active launcher dialog, while transient launcher/open failures render as toasts instead of entering page flow.
-- Expected launcher failures no longer rely on raw IPC exception text:
-  - stale session focus returns a structured `session_stale` result
-  - environment/control-plane missing states return structured launcher failures
-  - remote provider failures return structured reconnect / refresh / retry states
-  - the renderer refreshes its snapshot and maps transient environment-scoped failures to toast feedback
-- Environment-scoped recovery copy stays action-oriented instead of surfacing Electron IPC internals:
-  - `That window was already closed. Desktop refreshed the environment list.`
-  - `Remote status is stale. Refresh the provider to confirm the latest state.`
-  - `This environment is currently offline in the provider.`
-- Transient operation confirmations stay out of page flow:
-  - success and info feedback such as `Refreshed this provider.` render as toast notifications
-  - launcher/opening failures such as `Unable to open that Environment` also render as toasts
-  - Desktop does not insert transient success/info/error banners or card-inline notices into the launcher content area
-- The shell frame remains visible before connection, but the activity bar keeps only the single `Connect Environment` entry.
-- The launcher close action means:
-  - `Quit` when no environment is open yet
-  - `Close Launcher` when one or more Environment windows are already open
-- Quit and last-window-close confirmation models include pending background operations. On quit, Desktop cancels pending SSH startup operations and waits only for bounded best-effort cleanup before exiting.
+- Cold launch never auto-opens a remembered target. Environment choice is always a user action.
+- The `Environments` view contains the protected Local Environment, provider environments, saved Redeven URL entries, and saved SSH Host entries. Provider management stays separate from the main open/rebind path.
+- `Environment Settings` is launcher-owned and edits startup behavior for the profile Local Environment; saving settings never switches Environments or creates another local runtime identity.
+- Provider cards keep route choice explicit. A provider Environment may open remotely or link/use the singleton Local Environment locally, but Desktop never creates a second provider-specific local runtime.
+- SSH Host entries store the destination, optional port, bootstrap delivery mode, remote install directory, and optional release mirror base URL. Desktop reuses release artifacts for the exact Desktop-managed version and lets the remote host own its runtime state.
+- Runtime health and window state are separate. Cards may show runtime status/version/workload from runtime snapshots, while primary actions stay window-scoped (`Open`, `Opening...`, `Focus`).
+- Runtime health is probed through explicit contracts: Local UI health for local/URL/SSH targets and RCPP runtime-health queries for provider environments.
+- Deleting library entries is immediate and subject-owned: Local Environment is protected, open entries cannot be deleted, provider unlink clears only the local binding, and deleting saved URL/SSH entries cannot be blocked by background runtime cleanup.
+- Transient success/failure feedback uses toasts. Blocking recovery uses explicit actions instead of raw IPC errors or hover-only UI.
+- Quit and last-window-close confirmation models include pending background operations; SSH startup cancellation is bounded and cleanup failures remain visible.
 
 ## Session Child Windows
 
@@ -451,39 +256,23 @@ Rules:
 
 Desktop keeps one current persisted preference model for the profile's Local Environment, provider catalog cards, and saved remote connections. The Electron user-data `desktop-preferences.json` file is only a lightweight version marker; the durable current schema lives in the shared catalog and secrets files:
 
-- `local_environment`
-- `provider_environments`
-- `saved_environments`
-- `saved_ssh_environments`
-- `control_plane_refresh_tokens`
-- `control_planes`
+Durable preference categories:
+
+- `local_environment`: the protected Local Environment entry and its local-hosting access configuration.
+- `provider_environments`: first-class provider-backed environment records keyed by provider origin/id and environment id.
+- `saved_environments`: saved Local UI URL connections.
+- `saved_ssh_environments`: saved SSH Host connections and their bootstrap settings.
+- `control_planes`: provider discovery/account/catalog metadata.
+- `control_plane_refresh_tokens`: opaque provider refresh tokens in the local secrets file.
 
 Semantics:
 
-- Loading preferences reads only the current catalog schema.
-- Saving preferences writes only the canonical `catalog/local-environment.json`, `catalog/provider-environments/*.json`, connection/provider catalog files, and `desktop-secrets.json.local_environment`.
-- Desktop does not persist a remembered current target for the next launch.
-- Open Environment windows are runtime-only desktop session state.
-- Runtime health is a separate launcher snapshot concern. Window closure alone must not be used as a proxy for stopping a runtime.
-- `local_environment` stores the protected Local Environment entry for this OS user / Redeven profile state root:
-  - Local Environment local-hosting access configuration
-  - user-visible title (persisted internally as `label`)
-  - pin and timestamp metadata
-- `provider_environments` stores one first-class record per provider-backed environment:
-  - `{ provider_origin, provider_id, env_public_id }`
-  - provider-published metadata and cached remote catalog state
-  - `preferred_open_route`
-  - `pinned`
-  - `last_used_at_ms`
+- Loading preferences reads the current catalog schema; Desktop does not persist a remembered current target for the next launch.
+- Open Environment windows are runtime-only session state. Runtime health is a separate launcher snapshot and window closure alone never means the runtime stopped.
 - Desktop never sends the stored Local UI password plaintext back to the renderer. The shell UI edits only a write-only replacement draft plus explicit keep/replace/remove intent.
-- `saved_environments` stores user-visible labels, normalized Local UI URLs, pin state, and `last_used_at_ms`.
-- `saved_ssh_environments` stores user-visible labels, normalized SSH destination data, the remote install directory, the SSH bootstrap delivery mode, the optional release mirror base URL, pin state, and `last_used_at_ms`.
-- `last_used_at_ms` is the only recency signal for saved connections; Desktop sorts and refreshes the saved catalog from that timestamp instead of maintaining a separate derived catalog.
-- `control_plane_refresh_tokens` stores per-provider opaque refresh tokens in the local secrets file, separate from visible provider/account metadata.
-- `control_planes` stores normalized provider discovery data, the desktop-owned display label, the desktop account snapshot, the cached environment list, and the last sync time.
-- Provider refresh reconciles canonical provider identity across `provider_environments`, but does not materialize remote-only provider environments into Local Environment state.
-- Secrets are stored in Desktop’s local settings files and use Electron `safeStorage` encryption when the host platform provides it; otherwise the files remain local-only user data owned by the current account.
-- The Local Environment entry remains always available in Desktop; ordinary editing changes only local access settings and never creates another local runtime identity.
+- Secrets live in Desktop local settings files and use Electron `safeStorage` encryption when the host platform provides it; otherwise they remain local-only user data owned by the current account.
+- Provider refresh reconciles canonical provider identity across provider environment records, but does not materialize remote-only provider environments into Local Environment state.
+- The Local Environment entry remains always available; ordinary editing changes only local access settings and never creates another local runtime identity.
 
 Desktop maps user-facing local-access decisions back onto the same runtime contract:
 
@@ -728,20 +517,9 @@ Desktop-specific outcomes from this implementation:
 
 ## Release Assets
 
-Each public `vX.Y.Z` release includes:
+Desktop packages are part of the public GitHub Release artifact set; see [`RELEASE.md`](RELEASE.md) for the authoritative asset list and verification contract.
 
-- `redeven_linux_amd64.tar.gz`
-- `redeven_linux_arm64.tar.gz`
-- `redeven_darwin_amd64.tar.gz`
-- `redeven_darwin_arm64.tar.gz`
-- `Redeven-Desktop-X.Y.Z-linux-x64.deb`
-- `Redeven-Desktop-X.Y.Z-linux-x64.rpm`
-- `Redeven-Desktop-X.Y.Z-linux-arm64.deb`
-- `Redeven-Desktop-X.Y.Z-linux-arm64.rpm`
-- `Redeven-Desktop-X.Y.Z-mac-x64.dmg`
-- `Redeven-Desktop-X.Y.Z-mac-arm64.dmg`
-
-Windows is intentionally out of scope for this repository.
+Windows Desktop packaging is intentionally out of scope for this repository.
 
 ## Local Development
 

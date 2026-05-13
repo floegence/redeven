@@ -68,6 +68,7 @@ See also: [`PERMISSION_POLICY.md`](PERMISSION_POLICY.md).
 | FS | Rename (file/dir) | `1004` | `write` | `internal/fs/service.go` |
 | FS | Copy (file/dir) | `1005` | `write` | `internal/fs/service.go` |
 | FS | Delete (file/dir) | `1006` | `write` | `internal/fs/service.go` |
+| FS | Make directory | `1007` | `write` | `internal/fs/service.go` |
 | Terminal | Create session | `2001` | `execute` | `internal/terminal/manager.go` |
 | Terminal | List sessions | `2002` | `execute` | `internal/terminal/manager.go` |
 | Terminal | Attach session | `2003` | `execute` | `internal/terminal/manager.go` |
@@ -81,6 +82,7 @@ See also: [`PERMISSION_POLICY.md`](PERMISSION_POLICY.md).
 | Terminal | Session stats | `2011` | `execute` | `internal/terminal/manager.go` |
 | Terminal | Sessions changed notify | `2012` | `execute` | `internal/terminal/manager.go` |
 | Monitor | System monitor snapshot | `3001` | `execute` | `internal/monitor/service.go` |
+| Monitor | Kill process | `3002` | `execute` | `internal/monitor/service.go` |
 | Sys | Ping | `4001` | `none (session required)` | `internal/sys/service.go` |
 | Sys | Upgrade | `4002` | `admin` | `internal/sys/service.go` |
 | Sys | Restart | `4003` | `admin` | `internal/sys/service.go` |

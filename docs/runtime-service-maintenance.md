@@ -5,9 +5,9 @@ must expose that service model clearly while keeping version compatibility and
 maintenance decisions product-owned instead of pushing component mechanics onto
 users.
 
-This document is the implementation plan and rollout checklist for the Runtime
-Service Maintenance UX. The checklist is updated as the work lands so the
-implementation remains traceable to the chosen product contract.
+This document is the stable product and data contract for Runtime Service
+maintenance. Implementation tasks, rollout checklists, and historical execution
+notes should stay out of this document once the behavior has landed.
 
 ## Goals
 
@@ -331,240 +331,21 @@ Body structure:
 runtime lacks idle detection. The UI contract still reserves this action for the
 future so the product model remains stable.
 
-## Business Flow Sequences
+## Maintenance Flow
 
-### Desktop Attach
+The stable flow is intentionally small:
 
-```mermaid
-sequenceDiagram
-  participant D as Desktop Main
-  participant S as runtime/local-ui.json
-  participant H as /api/local/runtime/health
-  participant R as Runtime Service
-  D->>S: Read attach state
-  D->>H: Probe health
-  H-->>D: Runtime service snapshot
-  D->>D: Resolve owner, workload, compatibility
-  alt compatible or safe attach
-    D->>R: Attach session window
-  else update required
-    D->>D: Show stable card state + toast
-  else managed elsewhere
-    D->>D: Keep lifecycle actions disabled
-  end
-```
+1. Probe or receive a Runtime Service snapshot.
+2. Resolve compatibility, active workload, and the current maintenance authority.
+3. Keep stable facts in launcher cards or Runtime Settings rows.
+4. For disruptive actions, show a confirmation dialog with active-work impact.
+5. Execute through the resolved authority:
+   - `runtime_rpc`: call `sys.restart` or `sys.upgrade`.
+   - `desktop_local`: ask Desktop to restart the local managed service or open the Desktop release handoff.
+   - `desktop_ssh`: ask Desktop to restart the SSH-managed service or rerun SSH bootstrap with force update.
+   - `host_device` / `manual`: show guidance and keep direct actions disabled.
+6. Reconnect through the normal Env App recovery path and surface completion/failure through toast feedback.
 
-### Desktop-Managed Restart
+Welcome can run SSH-managed restart/update before an Env App window exists. The card records the runtime maintenance requirement, asks for explicit confirmation, then reruns the launcher start path. It does not auto-open the Environment after maintenance; it unlocks `Open` once the refreshed snapshot is openable.
 
-```mermaid
-sequenceDiagram
-  participant U as User
-  participant E as Env App
-  participant D as Desktop Main
-  participant R as Runtime Service
-  U->>E: Click Restart runtime
-  E->>E: Open impact dialog
-  U->>E: Confirm Restart now
-  E->>D: restartManagedRuntime bridge
-  D->>R: Stop Desktop-owned runtime
-  D->>R: Start bundled runtime with same scope
-  R-->>D: startup report ready
-  D-->>E: Session reload/reconnect
-  E->>U: Toast success
-```
-
-### SSH-Managed Restart
-
-```mermaid
-sequenceDiagram
-  participant U as User
-  participant E as Env App
-  participant D as Desktop Main
-  participant S as SSH Host
-  participant R as Runtime Service
-  U->>E: Click Restart SSH runtime
-  E->>D: performRuntimeMaintenanceAction(restart)
-  D->>R: Stop current SSH-managed runtime
-  D->>S: Reopen SSH control connection and tunnels
-  D->>R: Start runtime without force update
-  R-->>D: startup report ready
-  D-->>E: Reload session through new forwarded Local UI URL
-  E->>U: Toast success after reconnect
-```
-
-### SSH-Managed Update
-
-```mermaid
-sequenceDiagram
-  participant U as User
-  participant E as Env App
-  participant D as Desktop Main
-  participant S as SSH Host
-  participant R as Runtime Service
-  U->>E: Confirm Update SSH runtime
-  E->>D: performRuntimeMaintenanceAction(upgrade)
-  D->>R: Stop current SSH-managed runtime
-  D->>S: Run existing SSH bootstrap with forceRuntimeUpdate=true
-  D->>S: Reuse release cache, upload, or remote install strategy
-  D->>R: Start refreshed runtime
-  R-->>D: startup report ready
-  D-->>E: Reload session through new forwarded Local UI URL
-  E->>U: Toast success after reconnect
-```
-
-Welcome can run the same SSH-managed update before an Env App window exists. In that case the Welcome card records the SSH runtime maintenance requirement, asks the user to confirm the update/restart from the card, then calls the launcher start action with `forceRuntimeUpdate=true`. That confirmed start lets the SSH bootstrap replace the active remote runtime even when automatic replacement was previously blocked by active work. Welcome does not auto-open the environment after maintenance; it only unlocks `Open` once the refreshed Runtime Service snapshot is openable.
-
-SSH startup cancellation uses the same runtime-lifecycle contract. The Welcome
-activity labels the task as SSH Runtime startup, not Environment opening, and
-`Stop startup` requests cancellation for the current start/update operation
-without invoking `Open`. Desktop immediately moves the operation to a stopping
-phase, broadcasts the shared cancellation signal through broker preparation,
-release downloads, local build commands, SSH commands, binding requests, and
-polling loops, then enters cleanup while it closes owned local resources. A
-successful stop becomes a short-lived canceled operation; only cleanup failures
-remain visible for user attention.
-
-### Self-Upgrade Runtime
-
-```mermaid
-sequenceDiagram
-  participant U as User
-  participant E as Env App
-  participant R as Runtime Service
-  U->>E: Confirm Update now
-  E->>R: sys.upgrade(target_version)
-  R->>R: Run official installer in upgrade mode
-  R->>R: Restart into target version
-  E->>R: Poll sys.ping
-  R-->>E: New process/version
-  E->>U: Toast success
-```
-
-### Runtime Newer Than Desktop
-
-```mermaid
-sequenceDiagram
-  participant D as Desktop Main
-  participant R as Runtime Service
-  participant U as User
-  D->>R: Probe service identity
-  R-->>D: runtime_version > desktop-supported version
-  D->>U: Toast update Desktop
-  U->>D: Open release page
-  D->>U: System browser release handoff
-```
-
-## Implementation Checklist
-
-### Documentation
-
-- [x] Add this design document with UX model, data structures, and sequence
-  diagrams.
-- [x] Update `docs/DESKTOP.md` with the Runtime Service Maintenance contract.
-- [x] Update `docs/ENV_APP.md` with the toast/Dialog maintenance UI contract.
-- [x] Update release/update wording if any release policy docs still imply
-  desktop-managed runtime self-upgrades.
-- [x] Add Runtime/Desktop compatibility release rules to `AGENTS.md` so future
-  releases must update and review the contract before tagging.
-
-### Runtime / Local UI
-
-- [x] Add normalized Runtime Service snapshot/workload structs in
-  `internal/runtimeservice`, and wire them through `internal/localui` and
-  `internal/localui/runtime`.
-- [x] Add a versioned compatibility contract in
-  `internal/runtimeservice/compatibility_contract.json`.
-- [x] Stamp compatibility epoch, minimum Desktop version, minimum Runtime
-  version, and review id into every Runtime Service snapshot.
-- [x] Add a release/source gate that verifies the compatibility contract and
-  challenges unchanged compatibility windows before public tags.
-- [x] Include service identity and workload in runtime state file writes.
-- [x] Include service identity and workload in startup reports.
-- [x] Include service identity and workload in `/api/local/runtime/health`.
-- [x] Include service identity and workload in `/api/local/runtime`.
-- [x] Extend `sys.ping` with the same service identity/workload data for Env
-  App E2EE mode.
-- [x] Source active terminal/session counts from runtime managers without
-  introducing expensive polling or authorization leaks.
-- [x] Normalize missing or partial snapshots with safe defaults so older or
-  blocked paths degrade to `unknown` rather than breaking attach.
-
-### Desktop Main / Launcher
-
-- [x] Extend `StartupReport` parsing with runtime service identity/workload.
-- [x] Extend desktop-managed and provider runtime state normalization.
-- [x] Preserve runtime service metadata from saved Redeven URL and SSH health
-  probes before a window is open.
-- [x] Hydrate launcher runtime state from session and probe data.
-- [x] Add service state/version/workload facts to environment card models.
-- [x] Remove low-value `SOURCE` and `WINDOW` fact rows from launcher cards while
-  keeping provider `SOURCE ENV` as the provider environment identifier.
-- [x] Show `VERSION` for any runtime type when a Runtime Service snapshot is
-  available, including Redeven URL and SSH runtimes.
-- [x] Add compatibility-aware labels without inserting dynamic banners.
-- [x] Route blocked maintenance-related launcher failures to existing toast
-  delivery.
-
-### Env App UI
-
-- [x] Extend `SysPingResponse` SDK/codec with service identity/workload.
-- [x] Expose service identity through `AgentVersionModel` or a dedicated
-  maintenance model.
-- [x] Replace automatic runtime update floating prompt with toast-driven
-  notification behavior.
-- [x] Add Runtime Status rows for service owner, compatibility, active work,
-  and protocol.
-- [x] Add confirmation dialog copy for restart/update impact.
-- [x] Ensure existing buttons keep pointer cursor behavior through existing
-  Button primitives and disabled states remain non-interactive.
-
-### Tests
-
-- [x] Add Go tests for runtime state serialization/parsing with service
-  identity/workload.
-- [x] Add Go tests for `/api/local/runtime/health`, `/api/local/runtime`, and
-  `sys.ping` service identity payloads.
-- [x] Add Desktop TS tests for startup parsing, welcome hydration, and card
-  model facts.
-- [x] Add Env App TS tests for sys codec, maintenance model, Runtime Status
-  rows, and toast prompt behavior.
-- [x] Update existing tests that assume update prompts render as floating
-  windows.
-
-### Final Review And Gates
-
-- [x] Review changed code for consistency with this document and existing UI
-  patterns.
-- [x] Review `.md` docs for stale terminology (`agent` vs `Runtime Service`)
-  where user-facing wording is involved.
-- [x] Run targeted Go tests for touched packages.
-- [x] Run targeted Desktop/Env App tests and typecheck where feasible.
-- [x] Run broader local quality gates required by the touched surface when time
-  permits.
-- [x] Leave changes uncommitted in the feature worktree for review.
-- [x] Start the dev Desktop app from the worktree for manual acceptance testing.
-
-## SSH Maintenance Contract Addendum
-
-This follow-up closes the gap where SSH-managed runtimes reported
-`desktop_managed=true`, but Env App could only call local Desktop-managed
-restart/update bridges. The new contract keeps service facts and lifecycle
-authority separate.
-
-- [x] Add Desktop shell runtime maintenance context IPC types and normalizers.
-- [x] Expose `getRuntimeMaintenanceContext` and
-  `performRuntimeMaintenanceAction` from the session preload bridge.
-- [x] Resolve Desktop session maintenance authority in main process for
-  `runtime_rpc`, `desktop_local`, `desktop_ssh`, `host_device`, and `manual`.
-- [x] Route local managed restart/update through the unified action entry while
-  preserving the existing Desktop update handoff.
-- [x] Route SSH restart/update through the existing SSH bootstrap path, using
-  `forceRuntimeUpdate=true` only for update.
-- [x] Make Env App restart/update decisions from the maintenance context instead
-  of `desktop_managed`.
-- [x] Add Runtime Status UI copy for maintenance authority and context-driven
-  confirmation dialogs.
-- [x] Add/update shared IPC, preload, Desktop main, Env App bridge, maintenance
-  controller, and Runtime Status tests for the explicit contract.
-- [x] Update this Markdown document with the context data shape and SSH
-  restart/update sequences.
+SSH startup cancellation uses the same lifecycle model. `Stop startup` cancels the current start/update operation, broadcasts the shared cancellation signal through owned subprocesses, downloads, SSH commands, broker preparation, binding requests, and polling loops, then cleans up local resources. Successful cancellation is short-lived; cleanup failures remain visible for user attention.
