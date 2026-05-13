@@ -5,9 +5,9 @@
 # Redeven
 
 <p align="center">
-  <strong>One browser tab for everything on your server.</strong><br>
-  File browser, terminal, system monitor, port forwarding, browser IDE, and AI assistant —
-  <br>all in one place, end-to-end encrypted.
+  <strong>Your computers &amp; servers, in one browser tab.</strong><br>
+  Terminal, file browser, IDE, and AI —
+  <br>all on your own hardware, end-to-end encrypted.
 </p>
 
 <p align="center">
@@ -30,7 +30,7 @@
 
 ## What is Redeven?
 
-Redeven is a single binary that gives every machine a complete control panel you open in the browser. Instead of juggling SSH terminals, file browsers, monitoring dashboards, port forwarding, and IDE windows, you get one unified workspace.
+Redeven is a single binary that brings your computers and servers into one browser tab. Instead of juggling SSH terminals, file browsers, monitoring dashboards, port forwarding, and IDE windows, you get one unified workspace on the hardware you already control.
 
 It runs on your machine, your remote servers, or any reachable SSH host. Your files, processes, API keys, and credentials stay where they belong — Redeven does not move your plaintext through anyone else's infrastructure.
 
