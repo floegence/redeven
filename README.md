@@ -5,17 +5,18 @@
 # Redeven
 
 <p align="center">
-  <strong>Secure the real Environment, not just the browser tab.</strong><br>
-  Turn any host into a secure Environment for files, terminals, monitoring, ports, browser development, desktop access, and optional AI-assisted work.
+  <strong>One browser tab for everything on your server.</strong><br>
+  File browser, terminal, system monitor, port forwarding, browser IDE, and AI assistant —
+  <br>all in one place, end-to-end encrypted.
 </p>
 
 <p align="center">
-  <a href="https://github.com/floegence/redeven/releases">Get Desktop</a> |
+  <a href="https://github.com/floegence/redeven/releases">Download Desktop</a> |
   <a href="#quick-start">Install CLI</a> |
-  <a href="#what-redeven-lets-you-do">See what it does</a> |
-  <a href="#common-workflows">Common workflows</a> |
-  <a href="#docs-by-task">Docs</a> |
-  <a href="#license">License</a>
+  <a href="#what-you-can-do">Features</a> |
+  <a href="#how-it-compares">Comparisons</a> |
+  <a href="#security">Security</a> |
+  <a href="#documentation">Docs</a>
 </p>
 
 <p align="center">
@@ -28,125 +29,187 @@
   <a href="https://github.com/floegence/redeven/releases"><img alt="Releases" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
 </p>
 
-Redeven runs on the host where your Environment lives. Open that Environment from the browser, from Redeven Desktop, or from a local URL while the real files, terminals, processes, services, and app state stay where they belong: in that Environment.
+<p align="center">
+  <!-- TODO: add product screenshots -->
+  <em>Screenshots coming soon — workspace overview, Desktop launcher, and SSH host bootstrap.</em>
+</p>
 
-**Why it feels different**
-- 🔐 Real Environment first — you operate the actual runtime state, not a thin illusion of it.
-- 🧭 One place to work — files, terminal, monitoring, ports, notes, and browser development sit together instead of splintering across separate tools.
-- ⚡ Fast entry from browser or desktop — choose the Environment, open the workspace, and start with the context already nearby.
-- 📦 Distribution stays auditable — the same project ships as CLI and Desktop through public GitHub Releases with checksums and signatures.
+## What is Redeven?
+
+Redeven is a single binary that gives every machine a complete control panel you open in the browser. Instead of juggling SSH terminals, file browsers, monitoring dashboards, port forwarding, and IDE windows, you get one unified workspace.
+
+It runs on your machine, your remote servers, or any reachable SSH host. Your files, processes, API keys, and credentials stay where they belong — Redeven does not move your plaintext through anyone else's infrastructure.
+
+- **Browser or Desktop** — open your workspace from any browser, or use the native Desktop app for local and remote sessions.
+- **No agent protocol, no remote Node.js** — the runtime is a single Go binary. The optional browser IDE (code-server) is installed on demand, not bundled.
+- **AI that works where your data lives** — optional on-device AI assistance reads files, runs commands, and completes tasks under the same permission model as the rest of the workspace.
 
 ![Redeven architecture overview](docs/images/readme-architecture-overview.jpeg)
 
-## What Redeven lets you do
+## Why Redeven?
 
-Redeven gives you a secure workspace for a real Environment. Open it from the browser or desktop, then inspect files, run commands, watch processes, reach services, start a browser IDE, and bring AI into the task without leaving the Environment context.
+<p align="center">
+  <table>
+    <tr>
+      <td><strong>🌐&nbsp; Access anywhere</strong></td>
+      <td><strong>🧩&nbsp; All tools in one tab</strong></td>
+    </tr>
+    <tr>
+      <td>Open your workspace from a browser, Desktop app, or local URL. Same experience whether the machine is local, provider-hosted, or reachable only over SSH.</td>
+      <td>File browser, terminal, system monitor, port forwarding, Git browser, notes, browser IDE, and AI — no more switching between six different tools.</td>
+    </tr>
+    <tr>
+      <td><strong>🔐&nbsp; Your machine, your data</strong></td>
+      <td><strong>🚀&nbsp; Zero-friction onboarding</strong></td>
+    </tr>
+    <tr>
+      <td>End-to-end encrypted via <a href="https://github.com/floegence/flowersec">Flowersec</a>. Plaintext never leaves your endpoint. Permissions are clamped by local policy you control.</td>
+      <td>Bootstrap a new machine with a single ticket. Desktop auto-installs the matching Redeven release on remote SSH hosts — no manual preinstall, no copy-pasting configs.</td>
+    </tr>
+  </table>
+</p>
 
-| When you need to... | Redeven lets you... | Why it helps | Details |
-| --- | --- | --- | --- |
-| Open an environment from anywhere | Choose your Local Environment, a provider Environment, a saved local URL, or a reachable SSH host | You stop juggling SSH tabs, copied tokens, temporary tunnels, and scattered dashboards | [`Workspace`](docs/ENV_APP.md), [`Desktop`](docs/DESKTOP.md) |
-| Understand what is happening | Browse files, inspect logs, open terminals, watch CPU, memory, network, and processes, and keep notes beside the work | Investigation starts from the Environment itself instead of from disconnected tools | [`Workspace`](docs/ENV_APP.md) |
-| Fix something quickly | Edit granted files, open a terminal in the folder you are viewing, run commands, and keep nearby context visible | Small fixes do not require switching between a file browser, a shell, a monitor, and a notes app | [`Workspace`](docs/ENV_APP.md) |
-| Develop in the browser | Start a full browser IDE for the same environment only when you need deeper coding tools | You get browser-based development without making the browser the place where environment state lives | [`Browser IDE`](docs/CODE_APP.md) |
-| Reach a running service | Open ports and app previews through Redeven-managed access | You can inspect a service without hand-wiring tunnels or sharing random local URLs | [`Workspace`](docs/ENV_APP.md), [`Browser IDE`](docs/CODE_APP.md) |
-| Bring an SSH host online | Let the desktop app prepare a reachable host and install the matching Redeven release | An existing host can become a managed Environment without a manual preinstall ritual | [`Desktop`](docs/DESKTOP.md) |
-| Add AI help to Environment work | Let optional AI assistance read files, run commands, search, and help complete tasks under the same access rules | AI joins the real workspace instead of becoming a separate, overpowered side channel | [`AI`](docs/AI_AGENT.md), [`Settings`](docs/AI_SETTINGS.md), [`Codex`](docs/CODEX_UI.md) |
+## How Redeven compares
 
-## A typical session
-
-1. Choose an Environment from the browser or desktop.
-2. Check files, logs, resource usage, and running processes.
-3. Open a terminal exactly where the problem is.
-4. Start a browser IDE only when you need deeper code editing.
-5. Open ports or app previews from the same workspace.
-6. Ask AI for help when the task benefits from it.
-
-## Common workflows
-
-| Use case | Flow | Outcome |
-| --- | --- | --- |
-| Secure Environment access 🔐 | Open a workspace, inspect files, attach terminals, and watch monitoring panels | Operate on the real Environment without pushing plaintext application traffic through the control plane |
-| Browser-based development ⚙️ | Start the browser IDE, install or select the managed `code-server` runtime if needed, and keep terminals, files, and ports nearby | Reach a full coding workspace through the same Environment access path |
-| Desktop-managed operations 🖥️ | Start Redeven Desktop and choose your Local Environment, a provider Environment, a saved local URL, or an SSH host | Use one native launcher for local and remote sessions |
-| SSH host bootstrap 🚀 | Let Desktop prepare or install the matching Redeven release onto a reachable host over SSH | Bring a host online as a Redeven workspace without a manual preinstall |
-| AI-assisted operations 🌸 | Enable optional AI assistance for file, terminal, search, and task work | Keep AI help attached to the same Environment context and permission model |
-
-When an SSH Host Environment is opened from Redeven Desktop, Flower can use the Desktop Local Environment's model configuration through a short-lived local broker while tools still execute on the SSH host. Provider API keys stay on the user's machine and are never copied into the remote runtime config.
+| Capability | Redeven | SSH + tmux | VS Code Remote | Tailscale |
+|---|---|---|---|---|
+| Browser-based access | ✅ | ❌ | ❌ | ❌ |
+| File browser (GUI) | ✅ | ❌ CLI only | ✅ | ❌ |
+| Terminal | ✅ | ✅ | ✅ | ❌ |
+| System monitoring (GUI) | ✅ | ❌ CLI tools, manual | ❌ | ❌ |
+| Port forwarding | ✅ built-in | ✅ manual | ✅ manual | ❌ |
+| Browser IDE (code-server) | ✅ on-demand install | ❌ requires self-setup | ✅ VS Code only | ❌ |
+| Built-in AI assistant | ✅ on-device, multi-provider | ❌ | ❌ | ❌ |
+| Desktop app | ✅ macOS / Windows / Linux | ❌ | ❌ | ❌ |
+| SSH host auto-bootstrap | ✅ one-click from Desktop | ❌ | ❌ | ❌ |
+| End-to-end encryption | ✅ Flowersec | ❌ | ❌ | ❌ |
+| Granular permissions | ✅ read / write / execute / admin | ❌ | ❌ | ❌ |
+| Open source | ✅ MIT | ✅ | ✅ | Partial |
 
 ## Quick start
 
-From zero to a live endpoint in a few minutes.
+Two paths to get started: Desktop (recommended for most users) or CLI.
 
-### 1. Install the CLI
+### Desktop App
+
+1. Download Redeven Desktop from [GitHub Releases](https://github.com/floegence/redeven/releases).
+2. Open the app. Choose your environment: Local, Provider, SSH Host, or a saved URL.
+3. Start working — the workspace opens in your browser automatically.
+
+For remote machines: Desktop can auto-install the matching Redeven release over SSH. No manual setup on the remote host. See [`docs/DESKTOP.md`](docs/DESKTOP.md) for details.
+
+### CLI
 
 ```bash
+# 1. Install
 curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
-```
 
-Prefer a native shell? Download Redeven Desktop from [GitHub Releases](https://github.com/floegence/redeven/releases).
-
-Redeven Desktop keeps environment entry simple on purpose: one launcher, one card system, and one place to open your Local Environment, compatible provider environments, saved Redeven Local UI URLs, and SSH hosts.
-
-### 2. Bootstrap once
-
-```bash
+# 2. Bootstrap (one-time, requires a ticket from your provider)
 redeven bootstrap \
-  --controlplane https://<redeven-environment-host> \
+  --controlplane https://<your-provider> \
   --env-id <env_public_id> \
   --bootstrap-ticket <bootstrap_ticket>
-```
 
-Bootstrap writes the Local Environment config to `~/.redeven/local-environment/config.json` by default. Each OS user / Redeven profile state root has one Local Environment identity, and that Local Environment is bound to one provider Environment at a time; running bootstrap again with a fresh one-time ticket rebinds that Local Environment.
-
-Desktop and browser-assisted flows use the same one-time `bootstrap_ticket` contract. The desktop/runtime exchange contract is described in [`docs/DESKTOP.md`](docs/DESKTOP.md).
-
-### 3. Run the endpoint
-
-```bash
+# 3. Run
 redeven run --mode hybrid
+
+# 4. Open http://localhost:23998 in your browser.
 ```
 
-Expected result:
+Bootstrap writes your Local Environment config to `~/.redeven/local-environment/config.json`. Each OS user has one Local Environment identity, bound to one provider Environment at a time. Desktop and browser flows use the same one-time ticket contract.
 
-- `redeven run` starts without config validation errors.
-- The endpoint shows online in the control plane.
-- The browser workspace can open basic file and terminal actions.
-
-### 4. Pick how this Environment should run
+**Run modes at a glance:**
 
 | Goal | Command |
-| --- | --- |
-| Local UI only on this device | `redeven run --mode local` |
-| Local UI plus remote control channel | `redeven run --mode hybrid` |
+|---|---|
+| Local UI only (this device) | `redeven run --mode local` |
+| Local UI + remote control channel | `redeven run --mode hybrid` |
 | Desktop-managed runtime | `redeven run --mode desktop --desktop-managed --local-ui-bind localhost:23998` |
-| Expose Local UI to another trusted device | `REDEVEN_LOCAL_UI_PASSWORD=<long-password> redeven run --mode hybrid --local-ui-bind 0.0.0.0:23998 --password-env REDEVEN_LOCAL_UI_PASSWORD` |
+| Expose to another trusted device | `REDEVEN_LOCAL_UI_PASSWORD=<password> redeven run --mode hybrid --local-ui-bind 0.0.0.0:23998 --password-env REDEVEN_LOCAL_UI_PASSWORD` |
+
+## What you can do
+
+### Browse and manage files
+
+A full file browser with upload, download, inline preview, and permission-aware access. Right-click any file or folder to send it to the terminal or AI assistant. The Git browser shows folder-scoped changes, staged diffs, and stash workflows without leaving the workspace.
+
+→ [`docs/ENV_APP.md`](docs/ENV_APP.md)
+
+### Run terminals where you need them
+
+Open multi-tab terminals in any directory, directly from the file browser. The terminal inherits the same permission model as the rest of the workspace — no separate SSH key management or jump host configuration.
+
+→ [`docs/ENV_APP.md`](docs/ENV_APP.md)
+
+### Monitor system health
+
+Built-in dashboards for CPU, memory, disk, network, and processes. Start investigating from the Environment itself instead of switching to a separate monitoring tool.
+
+→ [`docs/ENV_APP.md`](docs/ENV_APP.md)
+
+### Develop in the browser
+
+Start a full VS Code workspace via code-server — installed and managed on demand from within the workspace UI. Each codespace gets its own isolated state directory. No bundling, no remote agent protocol, no Node.js dependency unless you explicitly choose to install code-server.
+
+→ [`docs/CODE_APP.md`](docs/CODE_APP.md)
+
+### Forward ports and preview services
+
+Expose running services through Redeven-managed access. Inspect a web app, API, or database GUI without hand-wiring SSH tunnels or sharing random local URLs.
+
+→ [`docs/ENV_APP.md`](docs/ENV_APP.md), [`docs/CODE_APP.md`](docs/CODE_APP.md)
+
+### Bring AI into your workflow
+
+Optional on-device AI assistant (Flower) integrated directly into the workspace. Reads files, edits code, runs terminal commands, delegates to subagents — all validated by the runtime against the same permission policy. Supports OpenAI, Anthropic, DeepSeek, Qwen, and more.
+
+When an SSH Host Environment is opened from Desktop, Flower can use your local machine's model configuration through a short-lived broker — provider API keys stay on your machine and are never copied to the remote runtime.
+
+→ [`docs/AI_AGENT.md`](docs/AI_AGENT.md), [`docs/AI_SETTINGS.md`](docs/AI_SETTINGS.md), [`docs/CODEX_UI.md`](docs/CODEX_UI.md)
+
+### Manage everything from Desktop
+
+A native Electron app for macOS, Windows, and Linux. One launcher for all your environments — local, provider-hosted, SSH-bootstrapped, or saved URLs. Handles PKCE provider auth, session lifecycle, SSH host bootstrap, and shell-owned theme state.
+
+→ [`docs/DESKTOP.md`](docs/DESKTOP.md)
 
 ## Security, without stealing the spotlight
 
-Redeven leads with capability, but the runtime is still the trust boundary because it owns the real Environment.
+Redeven leads with capability, but the runtime is still the trust boundary because it owns the real host.
 
 - The runtime lives on the endpoint and keeps plaintext there.
 - The control plane issues bootstrap payloads, grants, and immutable session metadata.
 - [Flowersec](https://github.com/floegence/flowersec) carries encrypted bytes between the client and the endpoint runtime.
-- Effective permissions come from server-issued session grants, clamped by the local permission policy.
+- Effective permissions come from server-issued session grants, clamped by the local permission policy (`read`, `write`, `execute`, `admin` — no category implies any other).
 - Local config, E2EE material, audit logs, and diagnostics stay in the endpoint state directory.
 - GitHub Releases remain the public source of truth for binaries, checksums, and signatures.
 
 Read the full contract in [`docs/CAPABILITY_PERMISSIONS.md`](docs/CAPABILITY_PERMISSIONS.md), [`docs/PERMISSION_POLICY.md`](docs/PERMISSION_POLICY.md), and [`docs/RELEASE.md`](docs/RELEASE.md).
 
-## Docs by task
+## Documentation
+
+### By task
 
 | I want to... | Read |
-| --- | --- |
+|---|---|
 | Work with files, terminals, monitoring, notes, ports, and settings | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
 | Run a browser IDE through Redeven | [`docs/CODE_APP.md`](docs/CODE_APP.md) |
 | Package, operate, or debug Redeven Desktop | [`docs/DESKTOP.md`](docs/DESKTOP.md) |
 | Configure optional AI assistance | [`docs/AI_AGENT.md`](docs/AI_AGENT.md), [`docs/AI_SETTINGS.md`](docs/AI_SETTINGS.md) |
-| Connect Codex to the same Environment workspace | [`docs/CODEX_UI.md`](docs/CODEX_UI.md) |
+| Connect Codex to the same workspace | [`docs/CODEX_UI.md`](docs/CODEX_UI.md) |
 | Review permissions and trust boundaries | [`docs/CAPABILITY_PERMISSIONS.md`](docs/CAPABILITY_PERMISSIONS.md), [`docs/PERMISSION_POLICY.md`](docs/PERMISSION_POLICY.md) |
 | Integrate a compatible control plane provider | [`RCPP v1 spec`](docs/protocol/rcpp-v1.md), [`RCPP v1 OpenAPI`](docs/openapi/rcpp-v1.yaml) |
 | Refresh or audit the embedded knowledge bundle | [`docs/KNOWLEDGE.md`](docs/KNOWLEDGE.md) |
 | Verify releases and artifacts | [`docs/RELEASE.md`](docs/RELEASE.md) |
+
+### By role
+
+| I am a... | Start here |
+|---|---|
+| User who wants to work with an Environment | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
+| Developer who needs a browser IDE | [`docs/CODE_APP.md`](docs/CODE_APP.md) |
+| Operator managing Redeven deployments | [`docs/DESKTOP.md`](docs/DESKTOP.md), [`docs/RELEASE.md`](docs/RELEASE.md) |
+| Integrator building against the protocol | [`RCPP v1 spec`](docs/protocol/rcpp-v1.md), [`RCPP v1 OpenAPI`](docs/openapi/rcpp-v1.yaml) |
 
 ## For developers
 
@@ -219,10 +282,10 @@ Desktop and standalone runtime mode also share one profile-scoped catalog:
 ### Common troubleshooting entry points
 
 - `bootstrap failed` or `missing direct connect info`: verify `--controlplane`, `--env-id`, and your bootstrap credential.
-- `code-server runtime missing or unusable`: open workspace settings -> `code-server Runtime`, then install or select a runtime.
+- `code-server runtime missing or unusable`: open workspace settings → `code-server Runtime`, then install or select a runtime.
 - `Missing init payload` in the browser IDE: reopen the browser IDE so a new entry ticket can be minted.
 - Desktop lock conflict: stop the other runtime instance that owns `~/.redeven`, or restart it in a Local UI mode, then retry.
-- Requests feel slow: open Runtime Settings -> Debug Console and compare desktop, gateway, and UI timing.
+- Requests feel slow: open Runtime Settings → Debug Console and compare desktop, gateway, and UI timing.
 
 </details>
 
