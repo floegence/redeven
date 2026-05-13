@@ -144,6 +144,9 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
   createEffect(() => {
     const item = controller.item();
     if (!item || item.type !== 'file') {
+      if (pendingOpenRequestPath()) {
+        return;
+      }
       workbench.updatePreviewItem(props.widgetId, null);
       return;
     }
