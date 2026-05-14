@@ -272,7 +272,7 @@ function normalizeProviderLinkBinding(
     env_public_id: compact(record.env_public_id) || undefined,
     local_environment_public_id: compact(record.local_environment_public_id) || undefined,
     binding_generation: normalizeCount(record.binding_generation) || undefined,
-    remote_enabled: state === 'linked',
+    remote_enabled: state === 'linked' && record.remote_enabled === true,
     last_connected_at_unix_ms: normalizeCount(record.last_connected_at_unix_ms) || undefined,
     last_disconnected_at_unix_ms: normalizeCount(record.last_disconnected_at_unix_ms) || undefined,
     last_error_code: compact(record.last_error_code) || undefined,

@@ -2842,7 +2842,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           </Show>
           <Show when={providerRuntimeLinkConfirmation()?.action === 'connect' && providerRuntimeLinkMatches()}>
             <p class="text-xs text-muted-foreground">
-              This runtime already reports a matching provider link. Confirming will refresh Desktop's local state without restarting the runtime.
+              This runtime already reports a matching provider link. Confirming will ensure the provider control connection is enabled without restarting the runtime.
             </p>
           </Show>
           <Show when={providerRuntimeLinkConfirmation()?.action === 'disconnect'}>

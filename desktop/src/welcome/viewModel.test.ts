@@ -160,7 +160,7 @@ function providerRuntimeService(
     env_public_id: providerLink?.env_public_id,
     local_environment_public_id: providerLink?.local_environment_public_id,
     binding_generation: providerLink?.binding_generation,
-    remote_enabled: providerLink?.state === 'linked',
+    remote_enabled: providerLink?.remote_enabled ?? providerLink?.state === 'linked',
     last_connected_at_unix_ms: providerLink?.last_connected_at_unix_ms,
     last_disconnected_at_unix_ms: providerLink?.last_disconnected_at_unix_ms,
     last_error_code: providerLink?.last_error_code,
@@ -171,7 +171,7 @@ function providerRuntimeService(
     service_owner: 'desktop',
     desktop_managed: true,
     effective_run_mode: 'desktop',
-    remote_enabled: false,
+    remote_enabled: providerLinkBinding.remote_enabled,
     compatibility: 'compatible',
     open_readiness: openReadiness,
     active_workload: {
@@ -1054,6 +1054,8 @@ describe('buildEnvironmentCardModel', () => {
         runtime_target_id: 'local:local',
         runtime_kind: 'local_environment',
         label: 'Local Environment',
+        provider_link_remote_enabled: true,
+        runtime_remote_enabled: true,
       },
     });
     expect(buildProviderBackedEnvironmentActionModel(openLocalServeProviderEntry!)).toMatchObject({
@@ -1083,6 +1085,61 @@ describe('buildEnvironmentCardModel', () => {
           action: {
             intent: 'disconnect_provider_runtime',
             label: 'Disconnect from provider',
+            enabled: true,
+            variant: 'outline',
+          },
+        }]),
+      },
+    });
+
+    const localOnlyLinkedSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment({
+          currentRuntime: {
+            local_ui_url: 'http://127.0.0.1:24001/',
+            desktop_managed: true,
+            effective_run_mode: 'desktop',
+            ...providerRuntimeState('env_demo'),
+            runtime_control: {
+              protocol_version: 'redeven-runtime-control-v1',
+              base_url: 'http://127.0.0.1:25000/',
+              token: 'runtime-control-token',
+              desktop_owner_id: 'desktop-owner-test',
+            },
+            runtime_service: providerRuntimeService({ state: 'openable' }, {
+              state: 'linked',
+              provider_origin: 'https://cp.example.invalid',
+              provider_id: 'example_control_plane',
+              env_public_id: 'env_demo',
+              remote_enabled: false,
+            }),
+          },
+        }),
+        control_planes: [controlPlane],
+      }),
+      controlPlanes: [controlPlane],
+    });
+    const localOnlyProviderEntry = localOnlyLinkedSnapshot.environments.find((environment) => environment.kind === 'provider_environment');
+    const localOnlyEntry = localOnlyLinkedSnapshot.environments.find((environment) => environment.kind === 'local_environment');
+    expect(buildEnvironmentCardFactsModel(localOnlyProviderEntry!)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        label: 'LOCAL LINK',
+        value: 'Linked to Local Environment, needs connect',
+      }),
+    ]));
+    const localOnlyProviderMenuActionIDs = buildProviderBackedEnvironmentActionModel(localOnlyProviderEntry!)
+      .action_presentation.menu_actions.map((item) => item.id);
+    for (const action of DESKTOP_PROVIDER_CARD_FORBIDDEN_ACTIONS) {
+      expect(localOnlyProviderMenuActionIDs).not.toContain(action);
+    }
+    expect(buildProviderBackedEnvironmentActionModel(localOnlyEntry!)).toMatchObject({
+      action_presentation: {
+        menu_actions: expect.arrayContaining([{
+          id: 'connect_provider_runtime',
+          label: 'Connect to provider',
+          action: {
+            intent: 'connect_provider_runtime',
+            label: 'Connect to provider',
             enabled: true,
             variant: 'outline',
           },

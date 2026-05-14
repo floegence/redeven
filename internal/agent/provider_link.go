@@ -61,6 +61,17 @@ type ProviderLinkResponse struct {
 	Binding runtimeservice.ProviderLinkBinding
 }
 
+func (a *Agent) enableProviderControlChannelLocked() runtimeservice.ProviderLinkBinding {
+	a.controlChannelEnabled = true
+	a.remoteEnabled = true
+	a.effectiveRunMode = "hybrid"
+	return a.providerLinkBindingLocked("")
+}
+
+func (a *Agent) providerControlChannelActiveLocked() bool {
+	return a.controlChannelEnabled && a.remoteEnabled && strings.TrimSpace(a.effectiveRunMode) == "hybrid"
+}
+
 func (a *Agent) ProviderLinkBinding() runtimeservice.ProviderLinkBinding {
 	if a == nil || a.cfg == nil {
 		return runtimeservice.ProviderLinkBinding{State: runtimeservice.ProviderLinkStateUnbound}
@@ -190,13 +201,20 @@ func (a *Agent) ConnectProvider(ctx context.Context, req ProviderLinkRequest) (*
 
 	a.mu.Lock()
 	current := a.providerLinkBindingLocked("")
-	if current.State == runtimeservice.ProviderLinkStateLinked && providerLinkMatches(current, req) {
+	matchingCurrent := current.State == runtimeservice.ProviderLinkStateLinked && providerLinkMatches(current, req)
+	// IMPORTANT: A persisted provider link only records user intent and
+	// authorization. Re-confirming a saved link while this process is local-only
+	// must redeem the new provider bootstrap ticket, persist fresh control-channel
+	// credentials, and enable the control channel without a runtime restart.
+	if matchingCurrent && a.providerControlChannelActiveLocked() {
 		a.mu.Unlock()
 		return &ProviderLinkResponse{Binding: current}, nil
 	}
-	if linkErr := a.providerLinkCanReplaceCurrentLocked(req); linkErr != nil {
-		a.mu.Unlock()
-		return nil, linkErr
+	if !matchingCurrent {
+		if linkErr := a.providerLinkCanReplaceCurrentLocked(req); linkErr != nil {
+			a.mu.Unlock()
+			return nil, linkErr
+		}
 	}
 	a.mu.Unlock()
 
@@ -237,10 +255,7 @@ func (a *Agent) ConnectProvider(ctx context.Context, req ProviderLinkRequest) (*
 		}
 	}
 	a.cfg = cfg
-	a.controlChannelEnabled = true
-	a.remoteEnabled = true
-	a.effectiveRunMode = "hybrid"
-	binding := a.providerLinkBindingLocked("")
+	binding := a.enableProviderControlChannelLocked()
 	a.mu.Unlock()
 	if a.code != nil {
 		_ = a.code.SetControlplaneBaseURL(providerOrigin)

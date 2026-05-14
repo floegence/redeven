@@ -14,6 +14,7 @@ export type DesktopProviderRuntimeLinkPlanState =
   | 'target_not_running'
   | 'runtime_control_missing'
   | 'provider_link_unsupported'
+  | 'linked_but_remote_disabled'
   | 'already_linked'
   | 'linked_elsewhere'
   | 'blocked_active_work'
@@ -57,6 +58,8 @@ function planMessage(
       return `${runtimeLabel} does not expose Desktop runtime-control. Restart it from Desktop, then connect again.`;
     case 'provider_link_unsupported':
       return `${runtimeLabel} does not support provider linking. Restart it with the current Desktop runtime, then connect again.`;
+    case 'linked_but_remote_disabled':
+      return `${runtimeLabel} is linked to ${providerEnvironment.label}, but its provider control connection is not enabled in this running process. Connect again to enable it without restarting the runtime.`;
     case 'already_linked':
       return `${runtimeLabel} is already connected to ${providerEnvironment.label}.`;
     case 'linked_elsewhere':
@@ -94,9 +97,17 @@ export function buildDesktopProviderRuntimeLinkPlan(
       return 'provider_link_unsupported';
     }
     if (binding?.state === 'linked') {
-      return runtimeMatchesProvider
-        ? 'already_linked'
-        : runtimeServiceHasActiveWork(runtimeTarget.runtime_service)
+      // IMPORTANT: A saved provider binding is not proof that this process has
+      // enabled the provider control channel. Keep "linked" and "remote enabled"
+      // separate so Local/SSH cards can repair local-only processes without
+      // giving Provider cards runtime management powers.
+      if (runtimeMatchesProvider) {
+        return binding.remote_enabled === true
+          && runtimeTarget.runtime_service?.remote_enabled === true
+          ? 'already_linked'
+          : 'linked_but_remote_disabled';
+      }
+      return runtimeServiceHasActiveWork(runtimeTarget.runtime_service)
           ? 'blocked_active_work'
           : 'linked_elsewhere';
     }
@@ -112,9 +123,9 @@ export function buildDesktopProviderRuntimeLinkPlan(
     provider_environment_id: providerEnvironment.provider_environment_id,
     runtime_running: runtimeTarget.runtime_running,
     runtime_matches_provider: runtimeMatchesProvider,
-    requires_confirmation: state === 'target_ready' || state === 'already_linked',
-    can_connect: state === 'target_ready',
-    can_disconnect: state === 'already_linked',
+    requires_confirmation: state === 'target_ready' || state === 'linked_but_remote_disabled' || state === 'already_linked',
+    can_connect: state === 'target_ready' || state === 'linked_but_remote_disabled',
+    can_disconnect: state === 'already_linked' || state === 'linked_but_remote_disabled',
     ...(binding ? { current_binding: binding } : {}),
     target_binding: {
       provider_origin: providerEnvironment.provider_origin,

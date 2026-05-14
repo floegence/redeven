@@ -159,7 +159,7 @@ describe('runtimeService', () => {
       env_public_id: 'env_demo',
       local_environment_public_id: 'lenv_demo',
       binding_generation: 5,
-      remote_enabled: true,
+      remote_enabled: false,
       last_connected_at_unix_ms: 1778750000000,
     });
     expect(runtimeServiceProviderLinkMatches(snapshot, {

@@ -199,3 +199,72 @@ func TestConnectProviderRechecksActiveWorkBeforePersistingConfig(t *testing.T) {
 		t.Fatalf("ProviderLinkBinding() changed after blocked relink: %#v", binding)
 	}
 }
+
+func TestConnectProviderEnablesControlChannelForExistingMatchingBinding(t *testing.T) {
+	server := providerLinkTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		writeProviderLinkBootstrapResponse(t, w, r, "ch_refreshed")
+	})
+	defer server.Close()
+
+	cfg := &config.Config{
+		ControlplaneBaseURL:      server.URL,
+		ControlplaneProviderID:   "example_control_plane",
+		EnvironmentID:            "env_demo",
+		LocalEnvironmentPublicID: "le_existing",
+		BindingGeneration:        3,
+		AgentInstanceID:          "ai_existing",
+		Direct: &directv1.DirectConnectInfo{
+			WsUrl:                    "ws://127.0.0.1:1/control/ws",
+			ChannelId:                "ch_existing",
+			E2eePskB64u:              "cHNr",
+			ChannelInitExpireAtUnixS: 4102444800,
+		},
+		AgentHomeDir: t.TempDir(),
+	}
+	cfgPath := filepath.Join(t.TempDir(), "config.json")
+	if err := config.Save(cfgPath, cfg); err != nil {
+		t.Fatalf("config.Save() error = %v", err)
+	}
+	a := newProviderLinkTestAgent(t, cfgPath, cfg)
+
+	before := a.RuntimeServiceSnapshot()
+	if before.RemoteEnabled {
+		t.Fatalf("RemoteEnabled before connect = true, want false")
+	}
+	if before.EffectiveRunMode != "desktop" {
+		t.Fatalf("EffectiveRunMode before connect = %q, want desktop", before.EffectiveRunMode)
+	}
+	if before.Bindings.ProviderLink.State != runtimeservice.ProviderLinkStateLinked || before.Bindings.ProviderLink.RemoteEnabled {
+		t.Fatalf("ProviderLink before connect = %#v, want linked but remote disabled", before.Bindings.ProviderLink)
+	}
+
+	resp, err := a.ConnectProvider(context.Background(), ProviderLinkRequest{
+		ProviderOrigin:  server.URL,
+		ProviderID:      "example_control_plane",
+		EnvPublicID:     "env_demo",
+		BootstrapTicket: "ticket-123",
+	})
+	if err != nil {
+		t.Fatalf("ConnectProvider() error = %v", err)
+	}
+	if resp.Binding.State != runtimeservice.ProviderLinkStateLinked || !resp.Binding.RemoteEnabled {
+		t.Fatalf("ConnectProvider() binding = %#v, want linked with remote enabled", resp.Binding)
+	}
+	after := a.RuntimeServiceSnapshot()
+	if !after.RemoteEnabled || after.EffectiveRunMode != "hybrid" {
+		t.Fatalf("RuntimeServiceSnapshot() after connect = %#v, want hybrid remote enabled", after)
+	}
+	if after.Bindings.ProviderLink.State != runtimeservice.ProviderLinkStateLinked || !after.Bindings.ProviderLink.RemoteEnabled {
+		t.Fatalf("ProviderLink after connect = %#v, want linked remote enabled", after.Bindings.ProviderLink)
+	}
+	saved, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	if saved.Direct == nil || saved.Direct.ChannelId != "ch_refreshed" {
+		t.Fatalf("saved Direct = %#v, want refreshed channel", saved.Direct)
+	}
+	if saved.BindingGeneration != 7 {
+		t.Fatalf("BindingGeneration = %d, want refreshed generation 7", saved.BindingGeneration)
+	}
+}

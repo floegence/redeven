@@ -181,7 +181,7 @@ func TestNormalizeSnapshotNormalizesProviderLinkCapabilityAndBinding(t *testing.
 		t.Fatalf("BindMethod = %q", snapshot.Capabilities.ProviderLink.BindMethod)
 	}
 	binding := snapshot.Bindings.ProviderLink
-	if binding.State != ProviderLinkStateLinked || !binding.RemoteEnabled {
+	if binding.State != ProviderLinkStateLinked || binding.RemoteEnabled {
 		t.Fatalf("unexpected provider-link state: %#v", binding)
 	}
 	if binding.ProviderOrigin != "https://cp.example.invalid" ||
@@ -189,6 +189,35 @@ func TestNormalizeSnapshotNormalizesProviderLinkCapabilityAndBinding(t *testing.
 		binding.EnvPublicID != "env_demo" ||
 		binding.LocalEnvironmentPublicID != "lenv_demo" {
 		t.Fatalf("provider-link identity was not normalized: %#v", binding)
+	}
+}
+
+func TestNormalizeSnapshotPreservesProviderLinkRemoteEnabledFact(t *testing.T) {
+	snapshot := NormalizeSnapshot(Snapshot{
+		ProtocolVersion: ProtocolVersion,
+		ServiceOwner:    OwnerDesktop,
+		DesktopManaged:  true,
+		Compatibility:   CompatibilityCompatible,
+		RemoteEnabled:   false,
+		Capabilities: Capabilities{
+			ProviderLink: Capability{Supported: true},
+		},
+		Bindings: Bindings{
+			ProviderLink: ProviderLinkBinding{
+				State:          ProviderLinkStateLinked,
+				ProviderOrigin: "https://cp.example.invalid",
+				ProviderID:     "example_control_plane",
+				EnvPublicID:    "env_demo",
+				RemoteEnabled:  false,
+			},
+		},
+	})
+
+	if snapshot.Bindings.ProviderLink.State != ProviderLinkStateLinked {
+		t.Fatalf("State = %q, want %q", snapshot.Bindings.ProviderLink.State, ProviderLinkStateLinked)
+	}
+	if snapshot.Bindings.ProviderLink.RemoteEnabled {
+		t.Fatalf("ProviderLink.RemoteEnabled = true, want false")
 	}
 }
 

@@ -184,6 +184,8 @@ export type DesktopEnvironmentEntry = Readonly<{
     runtime_target_id: DesktopProviderRuntimeLinkTargetID;
     runtime_kind: DesktopProviderRuntimeLinkTarget['kind'];
     label: string;
+    provider_link_remote_enabled?: boolean;
+    runtime_remote_enabled?: boolean;
   }>;
   provider_origin?: string;
   provider_id?: string;
