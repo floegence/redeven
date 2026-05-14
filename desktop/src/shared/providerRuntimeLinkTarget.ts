@@ -1,9 +1,9 @@
-import type { DesktopRuntimeControlEndpoint } from './runtimeControl';
 import type {
   RuntimeServiceProviderLinkBinding,
   RuntimeServiceProviderLinkState,
   RuntimeServiceSnapshot,
 } from './runtimeService';
+import type { DesktopRuntimeControlStatus } from './desktopRuntimePresence';
 
 export type DesktopProviderRuntimeLinkTargetKind = 'local_environment' | 'ssh_environment';
 
@@ -30,8 +30,7 @@ export type DesktopProviderRuntimeLinkTarget = Readonly<{
   runtime_url: string;
   runtime_running: boolean;
   runtime_openable: boolean;
-  runtime_control_available: boolean;
-  runtime_control?: DesktopRuntimeControlEndpoint;
+  runtime_control_status: DesktopRuntimeControlStatus;
   runtime_service?: RuntimeServiceSnapshot;
   provider_link_state: RuntimeServiceProviderLinkState;
   provider_link_binding?: RuntimeServiceProviderLinkBinding;

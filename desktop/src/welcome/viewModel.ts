@@ -21,6 +21,9 @@ import {
   desktopEntryKindOwnsRuntimeManagement,
   desktopProviderEnvironmentOpenRoute,
 } from '../shared/environmentManagementPrinciples';
+import {
+  desktopManagedRuntimeLifecycleActions,
+} from '../shared/desktopRuntimePresence';
 
 export type DesktopWelcomeShellViewModel = Readonly<{
   shell_title: 'Redeven Desktop';
@@ -412,6 +415,9 @@ function buildPlaceholderEnvironmentCardFact(
 
 const ENVIRONMENT_CARD_FACT_ORDER = [
   'RUNS ON',
+  'CONTAINER',
+  'ENGINE',
+  'OWNER',
   'RUNTIME SERVICE',
   'VERSION',
   'ACTIVE WORK',
@@ -497,24 +503,6 @@ function environmentRuntimeMaintenance(environment: DesktopEnvironmentEntry) {
   return environment.runtime_maintenance;
 }
 
-function runtimeMaintenanceActionIntent(
-  environment: DesktopEnvironmentEntry,
-): Extract<EnvironmentActionIntent, 'restart_runtime' | 'update_runtime'> | null {
-  const maintenance = environmentRuntimeMaintenance(environment);
-  if (!maintenance) {
-    return null;
-  }
-  return maintenance.kind === 'ssh_runtime_restart_required' ? 'restart_runtime' : 'update_runtime';
-}
-
-function runtimeMaintenanceActionLabel(environment: DesktopEnvironmentEntry): string | null {
-  const maintenance = environmentRuntimeMaintenance(environment);
-  if (!maintenance) {
-    return null;
-  }
-  return maintenance.kind === 'ssh_runtime_restart_required' ? 'Restart runtime…' : 'Update and restart…';
-}
-
 function runtimeServiceVersionLabel(snapshot: RuntimeServiceSnapshot | undefined): string {
   return compact(snapshot?.runtime_version) || 'Unknown';
 }
@@ -528,6 +516,18 @@ function runtimeServiceFacts(environment: DesktopEnvironmentEntry): readonly Env
     buildEnvironmentCardFact('RUNTIME SERVICE', runtimeServiceLabel(snapshot)),
     buildEnvironmentCardFact('VERSION', runtimeServiceVersionLabel(snapshot)),
     buildEnvironmentCardFact('ACTIVE WORK', formatRuntimeServiceWorkload(snapshot)),
+  ];
+}
+
+function runtimePlacementFacts(environment: DesktopEnvironmentEntry): readonly EnvironmentCardFactModel[] {
+  const placement = environment.managed_runtime_placement;
+  if (placement?.kind !== 'container_process') {
+    return [];
+  }
+  return [
+    buildEnvironmentCardFact('CONTAINER', placement.container_label || placement.container_id),
+    buildEnvironmentCardFact('ENGINE', placement.container_engine === 'podman' ? 'Podman' : 'Docker'),
+    buildEnvironmentCardFact('OWNER', placement.container_owner === 'desktop' ? 'Desktop-owned' : 'External'),
   ];
 }
 
@@ -553,6 +553,7 @@ export function buildEnvironmentCardFactsModel(
   if (environment.kind === 'local_environment') {
     return orderEnvironmentCardFacts([
       buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment)),
+      ...runtimePlacementFacts(environment),
       ...runtimeServiceFacts(environment),
       buildPlaceholderEnvironmentCardFact('PROVIDER'),
     ]);
@@ -571,6 +572,7 @@ export function buildEnvironmentCardFactsModel(
   if (environment.kind === 'ssh_environment') {
     return orderEnvironmentCardFacts([
       buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment)),
+      ...runtimePlacementFacts(environment),
       ...runtimeServiceFacts(environment),
       buildEnvironmentCardFact('BOOTSTRAP', sshBootstrapSummary(environment) || 'Automatic bootstrap'),
     ]);
@@ -578,6 +580,7 @@ export function buildEnvironmentCardFactsModel(
 
   return orderEnvironmentCardFacts([
     buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment)),
+    ...runtimePlacementFacts(environment),
     ...runtimeServiceFacts(environment),
   ]);
 }
@@ -859,21 +862,28 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
   }
   if (environment.runtime_control_capability === 'start_stop') {
     if (desktopEntryKindOwnsRuntimeManagement(environment.kind)) {
-      const maintenanceIntent = runtimeMaintenanceActionIntent(environment);
-      const maintenanceLabel = runtimeMaintenanceActionLabel(environment);
-      const runtimeAction: EnvironmentActionModel = {
-        intent: maintenanceIntent
-          ?? (environment.runtime_health.status === 'online' ? 'stop_runtime' : 'start_runtime'),
-        label: maintenanceLabel
-          ?? (environment.runtime_health.status === 'online' ? 'Stop runtime' : 'Start runtime'),
-        enabled: true,
-        variant: 'outline',
-      };
-      items.push({
-        id: runtimeAction.intent,
-        label: runtimeAction.label,
-        action: runtimeAction,
+      const lifecycleActions = desktopManagedRuntimeLifecycleActions({
+        running: environment.runtime_health.status === 'online',
+        lifecycle_control: 'start_stop',
+        maintenance: environmentRuntimeMaintenance(environment),
+        placement: environment.managed_runtime_placement ?? { kind: 'host_process', install_dir: '' },
       });
+      for (const lifecycleAction of lifecycleActions) {
+        if (lifecycleAction.intent === 'refresh_runtime') {
+          continue;
+        }
+        const runtimeAction: EnvironmentActionModel = {
+          intent: lifecycleAction.intent,
+          label: lifecycleAction.label,
+          enabled: true,
+          variant: 'outline',
+        };
+        items.push({
+          id: runtimeAction.intent,
+          label: runtimeAction.label,
+          action: runtimeAction,
+        });
+      }
     }
   } else if (desktopEntryKindOwnsRuntimeManagement(environment.kind) && !remoteRouteAction) {
     items.push({

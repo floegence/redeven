@@ -53,12 +53,9 @@ function target(overrides: Partial<DesktopProviderRuntimeLinkTarget> = {}): Desk
     runtime_url: 'http://127.0.0.1:24000/',
     runtime_running: true,
     runtime_openable: true,
-    runtime_control_available: true,
-    runtime_control: {
-      protocol_version: 'redeven-runtime-control-v1',
-      base_url: 'http://127.0.0.1:39002/',
-      token: 'token',
-      desktop_owner_id: 'desktop-owner',
+    runtime_control_status: {
+      state: 'available',
+      owner: 'current_desktop',
     },
     runtime_service: service,
     provider_link_state: service.bindings!.provider_link.state,
@@ -142,10 +139,26 @@ describe('buildDesktopProviderRuntimeLinkPlan', () => {
 
   it('blocks when runtime-control is missing', () => {
     expect(buildDesktopProviderRuntimeLinkPlan(target({
-      runtime_control_available: false,
-      runtime_control: undefined,
+      runtime_control_status: {
+        state: 'missing',
+        reason_code: 'not_reported',
+        message: 'Restart this runtime from Desktop so runtime-control can be prepared.',
+      },
     }), provider())).toMatchObject({
       state: 'runtime_control_missing',
+      can_connect: false,
+    });
+  });
+
+  it('blocks runtime-control owned by another Desktop instance', () => {
+    expect(buildDesktopProviderRuntimeLinkPlan(target({
+      runtime_control_status: {
+        state: 'owner_mismatch',
+        owner: 'other_desktop',
+        message: 'This runtime is owned by another Desktop instance.',
+      },
+    }), provider())).toMatchObject({
+      state: 'blocked_owner_mismatch',
       can_connect: false,
     });
   });

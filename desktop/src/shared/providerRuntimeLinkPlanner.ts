@@ -87,10 +87,10 @@ export function buildDesktopProviderRuntimeLinkPlan(
     if (!runtimeTarget.runtime_running) {
       return 'target_not_running';
     }
-    if (!runtimeTarget.runtime_control_available || !runtimeTarget.runtime_control) {
+    if (runtimeTarget.runtime_control_status.state === 'missing') {
       return 'runtime_control_missing';
     }
-    if (runtimeTarget.runtime_control.desktop_owner_id === '') {
+    if (runtimeTarget.runtime_control_status.state === 'owner_mismatch') {
       return 'blocked_owner_mismatch';
     }
     if (!runtimeServiceSupportsProviderLink(runtimeTarget.runtime_service)) {

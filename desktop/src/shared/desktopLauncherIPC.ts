@@ -16,6 +16,13 @@ import type {
 } from './desktopRuntimeHealth';
 import type { DesktopLocalRuntimeOpenPlan } from './localRuntimeSupervisor';
 import type { RuntimeServiceSnapshot } from './runtimeService';
+import {
+  normalizeDesktopRuntimeHostAccess,
+  normalizeDesktopRuntimePlacement,
+  type DesktopRuntimeHostAccess,
+  type DesktopRuntimePlacement,
+  type DesktopRuntimeTargetID,
+} from './desktopRuntimePlacement';
 import type {
   DesktopProviderEnvironmentCandidate,
   DesktopProviderRuntimeLinkTarget,
@@ -144,6 +151,10 @@ export type DesktopOpenEnvironmentWindow = Readonly<{
 
 export type DesktopLauncherRuntimeTarget = Readonly<
   Partial<{
+    runtime_target_id: DesktopRuntimeTargetID;
+    placement_target_id: DesktopRuntimeTargetID;
+    host_access: DesktopRuntimeHostAccess;
+    placement: DesktopRuntimePlacement;
     environment_id: string;
     provider_origin: string;
     provider_id: string;
@@ -181,6 +192,10 @@ export type DesktopEnvironmentEntry = Readonly<{
   open_remote_session_lifecycle?: DesktopLauncherSessionLifecycle;
   provider_runtime_link_target?: DesktopProviderRuntimeLinkTarget;
   provider_environment_candidates?: readonly DesktopProviderEnvironmentCandidate[];
+  managed_runtime_target_id?: DesktopRuntimeTargetID;
+  managed_runtime_placement_target_id?: DesktopRuntimeTargetID;
+  managed_runtime_host_access?: DesktopRuntimeHostAccess;
+  managed_runtime_placement?: DesktopRuntimePlacement;
   provider_linked_runtime_summary?: Readonly<{
     runtime_target_id: DesktopProviderRuntimeLinkTargetID;
     runtime_kind: DesktopProviderRuntimeLinkTarget['kind'];
@@ -445,6 +460,24 @@ function compact(value: unknown): string {
 function normalizeDesktopLauncherRuntimeTarget(
   candidate: Record<string, unknown>,
 ): DesktopLauncherRuntimeTarget | null {
+  const runtimeTargetID = compact(candidate.runtime_target_id);
+  const placementTargetID = compact(candidate.placement_target_id);
+  let hostAccess: DesktopRuntimeHostAccess | undefined;
+  let placement: DesktopRuntimePlacement | undefined;
+  if (candidate.host_access != null) {
+    try {
+      hostAccess = normalizeDesktopRuntimeHostAccess(candidate.host_access);
+    } catch {
+      return null;
+    }
+  }
+  if (candidate.placement != null) {
+    try {
+      placement = normalizeDesktopRuntimePlacement(candidate.placement);
+    } catch {
+      return null;
+    }
+  }
   const environmentID = compact(candidate.environment_id);
   const providerOriginRaw = compact(candidate.provider_origin);
   const providerID = compact(candidate.provider_id);
@@ -468,6 +501,14 @@ function normalizeDesktopLauncherRuntimeTarget(
   }
 
   const target: DesktopLauncherRuntimeTarget = {
+    ...(runtimeTargetID.startsWith('local:') || runtimeTargetID.startsWith('ssh:')
+      ? { runtime_target_id: runtimeTargetID as DesktopRuntimeTargetID }
+      : {}),
+    ...(placementTargetID.startsWith('local:') || placementTargetID.startsWith('ssh:')
+      ? { placement_target_id: placementTargetID as DesktopRuntimeTargetID }
+      : {}),
+    ...(hostAccess ? { host_access: hostAccess } : {}),
+    ...(placement ? { placement } : {}),
     ...(environmentID !== '' ? { environment_id: environmentID } : {}),
     ...(providerOrigin !== '' ? { provider_origin: providerOrigin } : {}),
     ...(providerID !== '' ? { provider_id: providerID } : {}),
@@ -493,6 +534,7 @@ function normalizeDesktopLauncherRuntimeTarget(
 
   if (
     !target.environment_id
+    && !target.runtime_target_id
     && !target.provider_origin
     && !target.external_local_ui_url
     && !target.ssh_destination

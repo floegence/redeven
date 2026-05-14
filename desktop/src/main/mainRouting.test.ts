@@ -149,9 +149,31 @@ describe('main routing', () => {
     const openSSHEnd = mainSrc.indexOf('const optimisticSessionKey = sshDesktopSessionKey(sshDetails);', openSSHStart);
     expect(mainSrc.slice(openSSHStart, openSSHEnd)).toContain('connect_timeout_seconds: request.connect_timeout_seconds');
 
-    const startRuntimeStart = mainSrc.indexOf('async function startEnvironmentRuntimeFromLauncher(');
-    const startRuntimeEnd = mainSrc.indexOf('if (normalizedSSHTarget)', startRuntimeStart);
+    const startRuntimeStart = mainSrc.indexOf('function sshDetailsFromRuntimeTargetRequest(');
+    const startRuntimeEnd = mainSrc.indexOf('async function startEnvironmentRuntimeFromLauncher(', startRuntimeStart);
     expect(mainSrc.slice(startRuntimeStart, startRuntimeEnd)).toContain('connect_timeout_seconds: request.connect_timeout_seconds');
+  });
+
+  it('keeps runtime lifecycle dispatch target-first and blocks unbridged container placement', () => {
+    const mainSrc = readMainSource();
+    expect(mainSrc).toContain('function launcherActionFailureForUnsupportedRuntimePlacement(');
+    expect(mainSrc).toContain('placement.kind !== \'container_process\'');
+    expect(mainSrc).toContain('runtimeTargetIDNamesContainerPlacement(request.runtime_target_id)');
+    expect(mainSrc).toContain('Managed runtime lifecycle dispatch must honor host_access and');
+    expect(mainSrc).toContain('it must not silently');
+    expect(mainSrc).toContain('fall back to the host-process Local/SSH runtime path');
+
+    const startRuntimeStart = mainSrc.indexOf('async function startEnvironmentRuntimeFromLauncher(');
+    const startRuntimeEnd = mainSrc.indexOf('async function connectProviderRuntimeFromLauncher(', startRuntimeStart);
+    const startRuntimeSrc = mainSrc.slice(startRuntimeStart, startRuntimeEnd);
+    expect(startRuntimeSrc).toContain("launcherActionFailureForUnsupportedRuntimePlacement(request, 'Start Runtime')");
+    expect(startRuntimeSrc).toContain('const normalizedSSHTarget = sshDetailsFromRuntimeTargetRequest(request);');
+
+    const stopRuntimeStart = mainSrc.indexOf('async function stopEnvironmentRuntimeFromLauncher(');
+    const stopRuntimeEnd = mainSrc.indexOf('async function refreshEnvironmentRuntimeFromLauncher(', stopRuntimeStart);
+    const stopRuntimeSrc = mainSrc.slice(stopRuntimeStart, stopRuntimeEnd);
+    expect(stopRuntimeSrc).toContain("launcherActionFailureForUnsupportedRuntimePlacement(request, 'Stop Runtime')");
+    expect(stopRuntimeSrc).toContain('const sshDetails = sshDetailsFromRuntimeTargetRequest(request);');
   });
 
   it('keeps provider-link tickets separate from remote open route readiness', () => {
