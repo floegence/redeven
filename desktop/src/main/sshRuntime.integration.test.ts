@@ -106,6 +106,10 @@ function currentRuntimeService() {
         supported: true,
         bind_method: 'runtime_control_v1',
       },
+      provider_link: {
+        supported: true,
+        bind_method: 'runtime_control_v1',
+      },
     },
     bindings: {
       desktop_ai_broker: state.broker_bound
@@ -116,8 +120,9 @@ function currentRuntimeService() {
             expires_at_unix_ms: state.broker_expires_at_unix_ms || futureExpiryUnixMS(),
             model_source: 'desktop_local_environment',
             model_count: 1,
-          }
+        }
         : { state: 'unbound' },
+      provider_link: { state: 'unbound' },
     },
   };
 }
@@ -305,7 +310,18 @@ function startForward() {
   const parts = spec.split(':');
   const localPort = Number(parts[1]);
   const remotePort = Number(parts[3]);
+  const isRuntimeControlForward = remotePort === 39002;
   const server = http.createServer((request, response) => {
+    if (isRuntimeControlForward && request.url === '/v1/runtime-control/health') {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({
+        success: true,
+        data: {
+          protocol_version: 'redeven-runtime-control-v1',
+        },
+      }));
+      return;
+    }
     if (request.url === '/api/local/runtime/health') {
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(JSON.stringify({
@@ -415,9 +431,9 @@ function startForward() {
     response.end('not found');
   });
   server.listen(localPort, '127.0.0.1', () => {
-    appendLog('forward_start', { local_port: localPort, remote_port: remotePort });
+    appendLog(isRuntimeControlForward ? 'runtime_control_forward_start' : 'forward_start', { local_port: localPort, remote_port: remotePort });
   });
-  terminateLater('forward_terminated', () => server.close());
+  terminateLater(isRuntimeControlForward ? 'runtime_control_forward_terminated' : 'forward_terminated', () => server.close());
 }
 
 function startReverseForward() {
@@ -529,6 +545,13 @@ if (args.includes('-M') && args.includes('-N')) {
         ...(attachedUnsupported ? { status: 'attached' } : {}),
         local_ui_url: 'http://127.0.0.1:39001/',
         local_ui_urls: ['http://127.0.0.1:39001/'],
+        runtime_control: {
+          protocol_version: 'redeven-runtime-control-v1',
+          base_url: 'http://127.0.0.1:39002/',
+          token: 'runtime-control-token',
+          desktop_owner_id: 'desktop-owner-test',
+          expires_at_unix_ms: Date.now() + 60 * 60 * 1000,
+        },
         password_required: true,
         effective_run_mode: 'local',
         desktop_managed: true,
@@ -672,6 +695,7 @@ async function startWithFakeSSH(
   return withFakeSSHEnv(fixture, () => startManagedSSHRuntime({
     target: options.target ?? targetFor(strategy),
     runtimeReleaseTag: 'v1.2.3',
+    desktopOwnerID: 'desktop-owner-test',
     sshBinary: fixture.sshBinary,
     sourceRuntimeRoot: options.sourceRuntimeRoot,
     forceRuntimeUpdate: options.forceRuntimeUpdate,

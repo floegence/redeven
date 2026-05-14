@@ -238,7 +238,7 @@ invent a second compatibility policy in UI-only code.
 The same snapshot also carries explicit runtime-control surfaces:
 
 - `capabilities.desktop_ai_broker` and `bindings.desktop_ai_broker` let Desktop decide whether an attached SSH runtime can accept the optional `Desktop` model-source binding without falling back to string-based heuristics. A binding error should be shown as model-source availability state, not as a Runtime Service startup failure.
-- `capabilities.provider_link` and `bindings.provider_link` describe whether a Desktop-managed Local Runtime can accept an explicit provider-link command and which provider Environment, if any, is currently connected.
+- `capabilities.provider_link` and `bindings.provider_link` describe whether a Desktop-managed Local or SSH runtime can accept an explicit provider-link command and which provider Environment, if any, is currently connected.
 
 ### Contract Carriers
 
@@ -266,7 +266,7 @@ Env App protocol SDK types.
 
 Desktop treats the runtime as a singleton per Local Environment profile. Desktop-managed ownership is a lease, not a heuristic: Electron persists one `desktop_owner_id` under `userData`, passes it to managed child processes with `REDEVEN_DESKTOP_OWNER_ID`, and only owns an attached runtime when the runtime reports the same id through startup reports, `runtime/local-ui.json`, and Local UI health/runtime endpoints.
 
-When a provider Environment reuses that singleton locally, provider binding is an explicit `Connect Local Runtime` action, not a side effect of `Open` and not a runtime restart plan. Welcome `Start Runtime` starts the singleton Local Runtime local-only. `Connect Local Runtime` obtains provider open-session material, sends the one-time provider-link ticket to the running runtime over runtime-control, and lets the runtime start or replace only the provider control-channel goroutine. Active provider-originated work blocks relink. External-managed runtimes and runtimes leased to another Desktop instance stay outside Desktop ownership and are never silently replaced. Legacy Desktop-managed runtimes without a lease id are restart-reclaimable only when idle for lifecycle maintenance, not for provider binding.
+Provider binding is an explicit runtime-card action, not a side effect of `Open` and not a runtime restart plan. Provider cards always open through the provider tunnel and never manage runtime lifecycle. Welcome `Start Runtime` starts only the Local or SSH runtime represented by that runtime card. `Connect to provider...` obtains provider open-session material, sends the one-time provider-link ticket to the selected running Local/SSH runtime over runtime-control, and lets the runtime start or replace only the provider control-channel goroutine. Active provider-originated work blocks relink. External-managed runtimes and runtimes leased to another Desktop instance stay outside Desktop ownership and are never silently replaced. Legacy Desktop-managed runtimes without a lease id are restart-reclaimable only when idle for lifecycle maintenance, not for provider binding.
 
 ## Desktop Launcher UI
 

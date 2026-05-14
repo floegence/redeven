@@ -7,7 +7,6 @@ import {
   Check,
   ChevronDown,
   Copy,
-  ExternalLink,
   Globe,
   Lock,
   Moon,
@@ -288,6 +287,7 @@ type ProviderRuntimeLinkConfirmationAction = 'connect' | 'disconnect';
 type ProviderRuntimeLinkConfirmationState = Readonly<{
   environment: DesktopEnvironmentEntry;
   action: ProviderRuntimeLinkConfirmationAction;
+  provider_environment_id?: string;
 }>;
 
 const DESKTOP_FLOE_STORAGE_NAMESPACE = 'redeven-desktop-shell';
@@ -438,9 +438,6 @@ function environmentRuntimeServiceSnapshot(
   }
   if (environment.kind === 'local_environment') {
     return environment.local_environment_runtime_service;
-  }
-  if (environment.kind === 'provider_environment') {
-    return environment.provider_runtime_service;
   }
   return undefined;
 }
@@ -813,7 +810,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     ?? runtimeServiceHasActiveWork(stopRuntimeSnapshot())
   ));
   const providerRuntimeLinkActionLabel = createMemo(() => (
-    providerRuntimeLinkConfirmation()?.action === 'disconnect' ? 'Disconnect Local Runtime' : 'Connect Local Runtime'
+    providerRuntimeLinkConfirmation()?.action === 'disconnect' ? 'Disconnect from provider' : 'Connect to provider'
   ));
   const providerRuntimeLinkSnapshot = createMemo<RuntimeServiceSnapshot | undefined>(() => (
     environmentRuntimeServiceSnapshot(providerRuntimeLinkConfirmation()?.environment ?? null)
@@ -828,6 +825,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     return providerRuntimeLinkMatchesEnvironment(confirmation.environment);
   });
+  const providerRuntimeLinkCandidates = createMemo(() => (
+    providerRuntimeLinkConfirmation()?.environment.provider_environment_candidates ?? []
+  ));
   const activeActionProgress = createMemo(() => snapshot().action_progress);
   const sshRuntimeProgressItems = createMemo(() => (
     activeActionProgress()
@@ -1487,26 +1487,22 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function openProviderEnvironment(
     environment: DesktopEnvironmentEntry,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
-    route: 'auto' | DesktopLocalEnvironmentStateRoute = 'auto',
+    _route: 'auto' | DesktopLocalEnvironmentStateRoute = 'auto',
   ): Promise<boolean> {
     if (environment.kind !== 'provider_environment') {
       return openEnvironment(environment, errorTarget === 'settings' ? 'connect' : errorTarget);
     }
-    const openLocalSessionKey = trimString(environment.open_local_session_key);
     const openRemoteSessionKey = trimString(environment.open_remote_session_key);
-    if (route === 'local_host' && openLocalSessionKey !== '') {
-      return focusEnvironmentWindow(openLocalSessionKey, errorTarget);
-    }
-    if (route === 'remote_desktop' && openRemoteSessionKey !== '') {
+    if (openRemoteSessionKey !== '') {
       return focusEnvironmentWindow(openRemoteSessionKey, errorTarget);
     }
-    if (route === 'auto' && trimString(environment.open_session_key) !== '') {
+    if (trimString(environment.open_session_key) !== '') {
       return focusEnvironmentWindow(trimString(environment.open_session_key), errorTarget);
     }
     const result = await performLauncherAction({
       kind: 'open_provider_environment',
       environment_id: environment.id,
-      route,
+      route: 'remote_desktop',
     }, errorTarget);
     return result?.outcome === 'opened_environment_window' || result?.outcome === 'focused_environment_window';
   }
@@ -1691,33 +1687,19 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return refreshed;
   }
 
-  async function serveRuntimeLocally(
-    environment: DesktopEnvironmentEntry,
-    errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
-  ): Promise<boolean> {
-    if (environment.kind !== 'provider_environment') {
-      return false;
-    }
-
-    const openLocalSessionKey = trimString(environment.open_local_session_key);
-    if (openLocalSessionKey !== '') {
-      return focusEnvironmentWindow(openLocalSessionKey, errorTarget);
-    }
-    if (environment.provider_local_runtime_plan?.runtime_matches_target === true) {
-      return openProviderEnvironment(environment, errorTarget, 'local_host');
-    }
-    setErrorMessage(errorTarget === 'settings' ? 'settings' : errorTarget, 'Connect Local Runtime to this provider Environment before opening it locally.');
-    return false;
-  }
-
   function providerRuntimeLinkMatchesEnvironment(environment: DesktopEnvironmentEntry): boolean {
-    if (environment.kind !== 'provider_environment') {
+    const target = environment.provider_runtime_link_target;
+    if (!target || !target.provider_origin || !target.provider_id || !target.env_public_id) {
       return false;
     }
-    return runtimeServiceProviderLinkMatches(environmentRuntimeServiceSnapshot(environment), {
-      provider_origin: environment.provider_origin,
-      provider_id: environment.provider_id,
-      env_public_id: environment.env_public_id,
+    const confirmation = providerRuntimeLinkConfirmation();
+    const providerEnvironment = confirmation?.provider_environment_id
+      ? snapshot().environments.find((entry) => entry.id === confirmation.provider_environment_id)
+      : null;
+    return runtimeServiceProviderLinkMatches(target.runtime_service, {
+      provider_origin: providerEnvironment?.provider_origin ?? target.provider_origin,
+      provider_id: providerEnvironment?.provider_id ?? target.provider_id,
+      env_public_id: providerEnvironment?.env_public_id ?? target.env_public_id,
     });
   }
 
@@ -1725,13 +1707,38 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     environment: DesktopEnvironmentEntry,
     action: ProviderRuntimeLinkConfirmationAction,
   ): void {
-    if (environment.kind !== 'provider_environment') {
+    if (environment.kind !== 'local_environment' && environment.kind !== 'ssh_environment') {
+      return;
+    }
+    const target = environment.provider_runtime_link_target;
+    if (!target) {
+      setErrorMessage('connect', 'Desktop could not resolve that runtime target.');
+      return;
+    }
+    if (action === 'connect' && (environment.provider_environment_candidates?.length ?? 0) === 0) {
+      setErrorMessage('connect', 'No provider environments are available to connect.');
       return;
     }
     setProviderRuntimeLinkConfirmation({
       environment,
       action,
+      provider_environment_id: action === 'disconnect'
+        ? providerEnvironmentIDForRuntimeTarget(environment)
+        : undefined,
     });
+  }
+
+  function providerEnvironmentIDForRuntimeTarget(environment: DesktopEnvironmentEntry): string {
+    const target = environment.provider_runtime_link_target;
+    if (!target?.provider_origin || !target.provider_id || !target.env_public_id) {
+      return '';
+    }
+    return snapshot().environments.find((entry) => (
+      entry.kind === 'provider_environment'
+      && entry.provider_origin === target.provider_origin
+      && entry.provider_id === target.provider_id
+      && entry.env_public_id === target.env_public_id
+    ))?.id ?? '';
   }
 
   async function confirmProviderRuntimeLinkAction(): Promise<void> {
@@ -1740,46 +1747,59 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return;
     }
     const latestEnvironment = await loadLatestEnvironmentEntry(confirmation.environment.id) ?? confirmation.environment;
+    const providerEnvironmentID = confirmation.provider_environment_id ?? '';
+    if (providerEnvironmentID === '') {
+      setErrorMessage('connect', 'Choose a provider environment first.');
+      return;
+    }
     const ok = confirmation.action === 'disconnect'
-      ? await disconnectProviderLocalRuntime(latestEnvironment, 'connect')
-      : await connectProviderLocalRuntime(latestEnvironment, 'connect');
+      ? await disconnectProviderRuntime(latestEnvironment, providerEnvironmentID, 'connect')
+      : await connectProviderRuntime(latestEnvironment, providerEnvironmentID, 'connect');
     if (ok) {
       setProviderRuntimeLinkConfirmation(null);
     }
   }
 
-  async function connectProviderLocalRuntime(
+  async function connectProviderRuntime(
     environment: DesktopEnvironmentEntry,
+    providerEnvironmentID: string,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
   ): Promise<boolean> {
-    if (environment.kind !== 'provider_environment') {
+    const target = environment.provider_runtime_link_target;
+    if (!target) {
+      setErrorMessage(errorTarget === 'settings' ? 'settings' : errorTarget, 'Desktop could not resolve that runtime target.');
       return false;
     }
     const result = await performLauncherAction({
-      kind: 'connect_provider_local_runtime',
-      environment_id: environment.id,
+      kind: 'connect_provider_runtime',
+      provider_environment_id: providerEnvironmentID,
+      runtime_target_id: target.id,
     }, errorTarget);
-    const connected = result?.outcome === 'connected_provider_local_runtime';
+    const connected = result?.outcome === 'connected_provider_runtime';
     if (connected) {
-      showActionToast(`Local Runtime connected to ${environment.label}.`, 'success');
+      showActionToast(`${environment.label} connected to provider.`, 'success');
     }
     return connected;
   }
 
-  async function disconnectProviderLocalRuntime(
+  async function disconnectProviderRuntime(
     environment: DesktopEnvironmentEntry,
+    providerEnvironmentID: string,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
   ): Promise<boolean> {
-    if (environment.kind !== 'provider_environment') {
+    const target = environment.provider_runtime_link_target;
+    if (!target) {
+      setErrorMessage(errorTarget === 'settings' ? 'settings' : errorTarget, 'Desktop could not resolve that runtime target.');
       return false;
     }
     const result = await performLauncherAction({
-      kind: 'disconnect_provider_local_runtime',
-      environment_id: environment.id,
+      kind: 'disconnect_provider_runtime',
+      provider_environment_id: providerEnvironmentID,
+      runtime_target_id: target.id,
     }, errorTarget);
-    const disconnected = result?.outcome === 'disconnected_provider_local_runtime';
+    const disconnected = result?.outcome === 'disconnected_provider_runtime';
     if (disconnected) {
-      showActionToast(`Local Runtime disconnected from ${environment.label}.`, 'info');
+      showActionToast(`${environment.label} disconnected from provider.`, 'info');
     }
     return disconnected;
   }
@@ -1826,13 +1846,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     errorTarget: 'connect' | 'dialog' = 'connect',
     route: 'auto' | DesktopLocalEnvironmentStateRoute = 'auto',
   ): Promise<boolean> {
-    const providerLocalOpenPlanCanPrepare = environment.kind === 'provider_environment'
-      && (route === 'local_host' || (route === 'auto' && environment.provider_default_open_route === 'local_host'))
-      && environment.provider_local_runtime_plan?.can_open === true;
     if (
       environment.window_state === 'closed'
       && environment.runtime_health.status !== 'online'
-      && !providerLocalOpenPlanCanPrepare
     ) {
       const message = runtimeUnavailableMessage(environment);
       setErrorMessage(errorTarget, message);
@@ -1890,9 +1906,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       case 'disconnect_provider_runtime':
         requestProviderRuntimeLinkConfirmation(environment, 'disconnect');
         return true;
-      case 'serve_runtime_locally':
-      case 'focus_local_serve':
-        return serveRuntimeLocally(environment, errorTarget);
       case 'opening':
       default:
         return false;
@@ -2041,57 +2054,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return {
         close_panel: true,
         next_session: null,
-      };
-    }
-
-    if (action.intent === 'serve_runtime_locally' || action.intent === 'focus_local_serve') {
-      const canOpenLocalWindow = trimString(environment.open_local_session_key) !== ''
-        || environment.provider_local_runtime_state === 'running_desktop'
-        || environment.provider_local_runtime_state === 'running_external';
-      const served = await serveRuntimeLocally(environment, 'connect');
-      if (!served) {
-        return {
-          close_panel: false,
-          next_session: failEnvironmentGuidanceIntent(
-            currentSession,
-            'Desktop could not continue with the local runtime flow.',
-          ),
-        };
-      }
-      if (canOpenLocalWindow) {
-        return {
-          close_panel: true,
-          next_session: null,
-        };
-      }
-
-      const nextEnvironment = await loadLatestEnvironmentEntry(environment.id);
-      const reconciledSession = nextEnvironment
-        ? reconcileEnvironmentGuidanceSession(currentSession, [nextEnvironment])
-        : null;
-      if (reconciledSession?.feedback?.tone === 'success') {
-        return {
-          close_panel: false,
-          next_session: reconciledSession,
-        };
-      }
-      if (!nextEnvironment || !reconciledSession) {
-        return {
-          close_panel: true,
-          next_session: null,
-        };
-      }
-      return {
-        close_panel: false,
-        next_session: {
-          ...currentSession,
-          pending_intent: null,
-          feedback: {
-            tone: 'info',
-            title: 'Local runtime start requested',
-            detail: 'Desktop is waiting for the provider-backed local runtime to report ready status.',
-          },
-        },
       };
     }
 
@@ -2813,8 +2775,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         confirmText={providerRuntimeLinkActionLabel()}
         variant={providerRuntimeLinkConfirmation()?.action === 'disconnect' ? 'destructive' : 'default'}
         loading={providerRuntimeLinkConfirmation()?.action === 'disconnect'
-          ? busyStateMatchesAction(busyState(), 'disconnect_provider_local_runtime')
-          : busyStateMatchesAction(busyState(), 'connect_provider_local_runtime')}
+          ? busyStateMatchesAction(busyState(), 'disconnect_provider_runtime')
+          : busyStateMatchesAction(busyState(), 'connect_provider_runtime')}
         onConfirm={() => void confirmProviderRuntimeLinkAction()}
       >
         <div class="space-y-2">
@@ -2822,23 +2784,51 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             <Show
               when={providerRuntimeLinkConfirmation()?.action === 'disconnect'}
               fallback={(
-                <>Connect the Local Runtime to <span class="font-semibold">{providerRuntimeLinkConfirmation()?.environment.label}</span>?</>
+                <>Connect <span class="font-semibold">{providerRuntimeLinkConfirmation()?.environment.label}</span> to a provider?</>
               )}
             >
-              Disconnect the Local Runtime from <span class="font-semibold">{providerRuntimeLinkConfirmation()?.environment.label}</span>?
+              Disconnect <span class="font-semibold">{providerRuntimeLinkConfirmation()?.environment.label}</span> from its provider?
             </Show>
           </p>
-          <p class="text-xs text-muted-foreground">
-            Provider: <span class="font-medium text-foreground">{providerRuntimeLinkConfirmation()?.environment.control_plane_label || providerRuntimeLinkConfirmation()?.environment.provider_origin || 'Unknown provider'}</span>
-          </p>
-          <p class="text-xs text-muted-foreground">
-            Source environment: <span class="font-mono text-foreground">{providerRuntimeLinkConfirmation()?.environment.env_public_id || 'unknown'}</span>
-          </p>
+          <Show when={providerRuntimeLinkConfirmation()?.action === 'connect'}>
+            <div class="space-y-1">
+              <p class="text-xs font-medium text-muted-foreground">Provider Environment</p>
+              <div class="space-y-1">
+                <For each={providerRuntimeLinkCandidates()}>
+                  {(candidate) => (
+                    <label class="flex cursor-pointer items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted/60">
+                      <span>
+                        <span class="block font-medium">{candidate.label}</span>
+                        <span class="block text-xs text-muted-foreground">{candidate.provider_label || candidate.provider_origin} · {candidate.env_public_id}</span>
+                      </span>
+                      <input
+                        type="radio"
+                        name="provider-runtime-link-target"
+                        checked={providerRuntimeLinkConfirmation()?.provider_environment_id === candidate.provider_environment_id}
+                        onChange={() => setProviderRuntimeLinkConfirmation((current) => current ? {
+                          ...current,
+                          provider_environment_id: candidate.provider_environment_id,
+                        } : current)}
+                      />
+                    </label>
+                  )}
+                </For>
+              </div>
+            </div>
+          </Show>
+          <Show when={providerRuntimeLinkConfirmation()?.action === 'disconnect'}>
+            <p class="text-xs text-muted-foreground">
+              Provider: <span class="font-medium text-foreground">{providerRuntimeLinkConfirmation()?.environment.provider_runtime_link_target?.provider_origin || 'Unknown provider'}</span>
+            </p>
+            <p class="text-xs text-muted-foreground">
+              Source environment: <span class="font-mono text-foreground">{providerRuntimeLinkConfirmation()?.environment.provider_runtime_link_target?.env_public_id || 'unknown'}</span>
+            </p>
+          </Show>
           <Show
             when={providerRuntimeLinkConfirmation()?.action === 'disconnect'}
             fallback={(
               <p class="text-xs text-muted-foreground">
-                After the link is established, this provider can request sessions through the running Local Runtime. Existing local work keeps running.
+                After the link is established, the selected provider can request sessions through this running runtime. Existing local work keeps running.
               </p>
             )}
           >
@@ -2848,7 +2838,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           </Show>
           <Show when={providerRuntimeLinkConfirmation()?.action === 'connect' && providerRuntimeLinkMatches()}>
             <p class="text-xs text-muted-foreground">
-              This Local Runtime already reports a matching provider link. Confirming will refresh Desktop's local state without restarting the runtime.
+              This runtime already reports a matching provider link. Confirming will refresh Desktop's local state without restarting the runtime.
             </p>
           </Show>
           <Show when={providerRuntimeLinkConfirmation()?.action === 'disconnect'}>
@@ -3747,21 +3737,14 @@ function isEnvironmentActionBusy(
     case 'start_runtime':
       return busyStateMatchesEnvironment(busyState, environmentID, ['start_environment_runtime']);
     case 'connect_provider_runtime':
-      return busyStateMatchesEnvironment(busyState, environmentID, ['connect_provider_local_runtime']);
+      return busyStateMatchesEnvironment(busyState, environmentID, ['connect_provider_runtime']);
     case 'disconnect_provider_runtime':
-      return busyStateMatchesEnvironment(busyState, environmentID, ['disconnect_provider_local_runtime']);
+      return busyStateMatchesEnvironment(busyState, environmentID, ['disconnect_provider_runtime']);
     case 'stop_runtime':
       return busyStateMatchesEnvironment(busyState, environmentID, ['stop_environment_runtime']);
     case 'refresh_runtime':
       return busyStateMatchesEnvironment(busyState, environmentID, ['refresh_environment_runtime'])
         || busyStateMatchesAction(busyState, 'refresh_all_environment_runtimes');
-    case 'serve_runtime_locally':
-      return busyStateMatchesEnvironment(busyState, environmentID, [
-        'start_environment_runtime',
-        'connect_provider_local_runtime',
-        'open_provider_environment',
-        'focus_environment_window',
-      ]);
     default:
       return false;
   }
@@ -3954,8 +3937,6 @@ function splitMenuIcon(intent: EnvironmentActionIntent): ((props?: { class?: str
       return ShieldCheck;
     case 'disconnect_provider_runtime':
       return Shield;
-    case 'focus_local_serve':
-      return ExternalLink;
     default:
       return null;
   }
@@ -4630,7 +4611,7 @@ function controlPlaneLocalEnvironmentStats(
   ));
   return {
     online_count: desktopProviderOnlineEnvironmentCount(controlPlane.environments),
-    local_host_count: matchedEntries.filter((environment) => environment.local_route_state !== 'unavailable').length,
+    local_host_count: 0,
     open_count: matchedEntries.filter((environment) => environment.is_open).length,
   };
 }

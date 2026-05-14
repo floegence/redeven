@@ -503,10 +503,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('function EnvironmentPrimaryActionPanel');
     expect(appSrc).toContain('const renderPrimaryButton = () => (');
     expect(appSrc).not.toContain('const primaryButton = (');
-    expect(appSrc).toContain('function serveRuntimeLocally');
     expect(appSrc).not.toContain('function openProviderLocalServeDialog');
     expect(appSrc).toContain('openSettingsSurface(environment.id);');
-    expect(appSrc).toContain("return openProviderEnvironment(environment, errorTarget, 'local_host');");
+    expect(appSrc).toContain("route: 'remote_desktop'");
     expect(appSrc).toContain('return startEnvironmentRuntime(environment, errorTarget);');
     expect(appSrc).toContain('Refresh runtime status');
     expect(appSrc).toContain('Refresh runtime statuses');
@@ -558,7 +557,6 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("case 'restart_runtime':");
     expect(appSrc).toContain("case 'update_runtime':");
     expect(appSrc).toContain("case 'refresh_runtime':");
-    expect(appSrc).toContain("case 'serve_runtime_locally':");
     expect(appSrc).toContain('openEnvironmentLibraryOverlayState');
     expect(appSrc).not.toContain('openRuntimeMenuEnvironmentID');
     expect(appSrc).toContain('aria-label={props.presentation.menu_button_label}');
@@ -688,11 +686,11 @@ describe('DesktopWelcomeShell', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain('providerRuntimeLinkConfirmation');
-    expect(appSrc).toContain('Connect Local Runtime');
-    expect(appSrc).toContain('Disconnect Local Runtime');
-    expect(appSrc).toContain('Provider: <span');
+    expect(appSrc).toContain('Connect to provider');
+    expect(appSrc).toContain('Disconnect from provider');
+    expect(appSrc).toContain('Provider Environment');
     expect(appSrc).toContain('Source environment: <span');
-    expect(appSrc).toContain('this provider can request sessions through the running Local Runtime');
+    expect(appSrc).toContain('the selected provider can request sessions through this running runtime');
     expect(appSrc).toContain('Existing local work keeps running');
     expect(appSrc).toContain('without restarting the runtime');
   });
@@ -773,8 +771,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('resolveLocalEnvironmentBindingResolution');
     expect(appSrc).not.toContain('provider_local_serve');
     expect(appSrc).not.toContain('use_control_plane_binding');
-    expect(appSrc).toContain('function serveRuntimeLocally');
-    expect(appSrc).toContain("case 'serve_runtime_locally':");
+    expect(appSrc).not.toContain('function serveRuntimeLocally');
+    expect(appSrc).not.toContain("case 'serve_runtime_locally':");
   });
 
   it('keeps Local UI access controls inside Local Environment Settings', () => {
