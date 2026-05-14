@@ -21,7 +21,7 @@ function compact(value: unknown): string {
 function controlPlaneAuthRequiredMessage(failure: DesktopLauncherActionFailure): string {
   const envPublicID = compact(failure.env_public_id);
   if (envPublicID !== '') {
-    return 'Desktop needs fresh provider authorization before it can request a one-time Local Environment bootstrap ticket for this Environment.';
+    return 'Desktop needs fresh provider authorization before it can open or connect this provider Environment.';
   }
   return 'Desktop authorization for this provider expired. Reconnect the provider, then try the action again.';
 }
@@ -111,6 +111,7 @@ export function launcherActionFailurePresentation(
     case 'provider_environment_removed':
     case 'provider_unreachable':
     case 'provider_invalid_response':
+    case 'provider_link_failed':
       return {
         message: failure.message,
         tone: 'warning',

@@ -24,9 +24,21 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 			ReasonCode: "ai_service_unavailable",
 			Message:    "Desktop AI Broker binding is not available in this runtime service.",
 		},
+		ProviderLink: runtimeservice.Capability{
+			Supported:  a.desktopManaged,
+			BindMethod: runtimeservice.RuntimeControlBindMethodV1,
+		},
+	}
+	if !a.desktopManaged {
+		capabilities.ProviderLink = runtimeservice.Capability{
+			Supported:  false,
+			ReasonCode: "runtime_not_desktop_managed",
+			Message:    "Provider linking is only available for Desktop-managed runtimes.",
+		}
 	}
 	bindings := runtimeservice.Bindings{
 		DesktopAIBroker: runtimeservice.Binding{State: runtimeservice.BindingStateUnsupported},
+		ProviderLink:    a.ProviderLinkBinding(),
 	}
 	if a.code != nil {
 		if aiSvc := a.code.AI(); aiSvc != nil {

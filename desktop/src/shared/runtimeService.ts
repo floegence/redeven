@@ -33,6 +33,7 @@ export type RuntimeServiceCapability = Readonly<{
 
 export type RuntimeServiceCapabilities = Readonly<{
   desktop_ai_broker: RuntimeServiceCapability;
+  provider_link: RuntimeServiceCapability;
 }>;
 
 export type RuntimeServiceBindingState = 'unbound' | 'bound' | 'unsupported' | 'error' | 'expired';
@@ -50,6 +51,29 @@ export type RuntimeServiceBinding = Readonly<{
 
 export type RuntimeServiceBindings = Readonly<{
   desktop_ai_broker: RuntimeServiceBinding;
+  provider_link: RuntimeServiceProviderLinkBinding;
+}>;
+
+export type RuntimeServiceProviderLinkState =
+  | 'unbound'
+  | 'linking'
+  | 'linked'
+  | 'disconnecting'
+  | 'unsupported'
+  | 'error';
+
+export type RuntimeServiceProviderLinkBinding = Readonly<{
+  state: RuntimeServiceProviderLinkState;
+  provider_origin?: string;
+  provider_id?: string;
+  env_public_id?: string;
+  local_environment_public_id?: string;
+  binding_generation?: number;
+  remote_enabled: boolean;
+  last_connected_at_unix_ms?: number;
+  last_disconnected_at_unix_ms?: number;
+  last_error_code?: string;
+  last_error_message?: string;
 }>;
 
 export type RuntimeServiceSnapshot = Readonly<{
@@ -224,6 +248,38 @@ function normalizeBinding(value: unknown, capability: RuntimeServiceCapability):
   };
 }
 
+function normalizeProviderLinkBinding(
+  value: unknown,
+  capability: RuntimeServiceCapability,
+): RuntimeServiceProviderLinkBinding {
+  const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const rawState = compact(record.state);
+  const state: RuntimeServiceProviderLinkState = capability.supported
+    ? (
+        rawState === 'linked'
+        || rawState === 'linking'
+        || rawState === 'disconnecting'
+        || rawState === 'error'
+        || rawState === 'unbound'
+          ? rawState
+          : 'unbound'
+      )
+    : 'unsupported';
+  return {
+    state,
+    provider_origin: compact(record.provider_origin) || undefined,
+    provider_id: compact(record.provider_id) || undefined,
+    env_public_id: compact(record.env_public_id) || undefined,
+    local_environment_public_id: compact(record.local_environment_public_id) || undefined,
+    binding_generation: normalizeCount(record.binding_generation) || undefined,
+    remote_enabled: state === 'linked',
+    last_connected_at_unix_ms: normalizeCount(record.last_connected_at_unix_ms) || undefined,
+    last_disconnected_at_unix_ms: normalizeCount(record.last_disconnected_at_unix_ms) || undefined,
+    last_error_code: compact(record.last_error_code) || undefined,
+    last_error_message: compact(record.last_error_message) || undefined,
+  };
+}
+
 export function normalizeRuntimeServiceSnapshot(
   value: unknown,
   fallback: Readonly<{
@@ -240,6 +296,7 @@ export function normalizeRuntimeServiceSnapshot(
     ? record.capabilities as Record<string, unknown>
     : {};
   const desktopAIBrokerCapability = normalizeCapability(capabilitiesRecord.desktop_ai_broker);
+  const providerLinkCapability = normalizeCapability(capabilitiesRecord.provider_link);
   const bindingsRecord = record.bindings && typeof record.bindings === 'object'
     ? record.bindings as Record<string, unknown>
     : {};
@@ -274,9 +331,11 @@ export function normalizeRuntimeServiceSnapshot(
     },
     capabilities: {
       desktop_ai_broker: desktopAIBrokerCapability,
+      provider_link: providerLinkCapability,
     },
     bindings: {
       desktop_ai_broker: normalizeBinding(bindingsRecord.desktop_ai_broker, desktopAIBrokerCapability),
+      provider_link: normalizeProviderLinkBinding(bindingsRecord.provider_link, providerLinkCapability),
     },
   };
 }
@@ -358,6 +417,33 @@ export function runtimeServiceDesktopAIBrokerBindingState(snapshot: RuntimeServi
 export function runtimeServiceSupportsDesktopAIBrokerBinding(snapshot: RuntimeServiceSnapshot | null | undefined): boolean {
   return snapshot?.capabilities?.desktop_ai_broker?.supported === true
     && (snapshot.capabilities.desktop_ai_broker.bind_method || 'runtime_control_v1') === 'runtime_control_v1';
+}
+
+export function runtimeServiceProviderLinkBinding(
+  snapshot: RuntimeServiceSnapshot | null | undefined,
+): RuntimeServiceProviderLinkBinding {
+  const capability = snapshot?.capabilities?.provider_link;
+  return normalizeProviderLinkBinding(snapshot?.bindings?.provider_link, capability ?? { supported: false });
+}
+
+export function runtimeServiceSupportsProviderLink(snapshot: RuntimeServiceSnapshot | null | undefined): boolean {
+  return snapshot?.capabilities?.provider_link?.supported === true
+    && (snapshot.capabilities.provider_link.bind_method || 'runtime_control_v1') === 'runtime_control_v1';
+}
+
+export function runtimeServiceProviderLinkMatches(
+  snapshot: RuntimeServiceSnapshot | null | undefined,
+  expected: Readonly<{
+    provider_origin?: string;
+    provider_id?: string;
+    env_public_id?: string;
+  }> | null | undefined,
+): boolean {
+  const binding = runtimeServiceProviderLinkBinding(snapshot);
+  return binding.state === 'linked'
+    && compact(binding.provider_origin) === compact(expected?.provider_origin)
+    && compact(binding.provider_id) === compact(expected?.provider_id)
+    && compact(binding.env_public_id) === compact(expected?.env_public_id);
 }
 
 export function formatRuntimeServiceWorkload(snapshot: RuntimeServiceSnapshot | null | undefined): string {

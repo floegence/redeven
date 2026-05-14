@@ -38,6 +38,10 @@ describe('sys codec', () => {
             supported: true,
             bind_method: 'runtime_control_v1',
           },
+          provider_link: {
+            supported: true,
+            bind_method: 'runtime_control_v1',
+          },
         },
         bindings: {
           desktop_ai_broker: {
@@ -46,6 +50,16 @@ describe('sys codec', () => {
             ssh_runtime_key: 'ssh:devbox',
             model_count: 2,
             missing_key_provider_ids: ['openai', 'anthropic', 'openai'],
+          },
+          provider_link: {
+            state: 'linked',
+            provider_origin: ' https://dev.redeven.test ',
+            provider_id: ' dev_redeven ',
+            env_public_id: ' env_demo ',
+            local_environment_public_id: ' le_demo ',
+            binding_generation: 7,
+            remote_enabled: true,
+            last_connected_at_unix_ms: 1778750000000,
           },
         },
       },
@@ -83,6 +97,10 @@ describe('sys codec', () => {
             supported: true,
             bindMethod: 'runtime_control_v1',
           },
+          providerLink: {
+            supported: true,
+            bindMethod: 'runtime_control_v1',
+          },
         },
         bindings: {
           desktopAiBroker: {
@@ -91,6 +109,16 @@ describe('sys codec', () => {
             sshRuntimeKey: 'ssh:devbox',
             modelCount: 2,
             missingKeyProviderIds: ['anthropic', 'openai'],
+          },
+          providerLink: {
+            state: 'linked',
+            providerOrigin: 'https://dev.redeven.test',
+            providerId: 'dev_redeven',
+            envPublicId: 'env_demo',
+            localEnvironmentPublicId: 'le_demo',
+            bindingGeneration: 7,
+            remoteEnabled: true,
+            lastConnectedAtUnixMs: 1778750000000,
           },
         },
       },
@@ -140,6 +168,12 @@ describe('sys codec', () => {
           reasonCode: undefined,
           message: undefined,
         },
+        providerLink: {
+          supported: false,
+          bindMethod: undefined,
+          reasonCode: undefined,
+          message: undefined,
+        },
       },
       bindings: {
         desktopAiBroker: {
@@ -151,6 +185,19 @@ describe('sys codec', () => {
           modelCount: 0,
           missingKeyProviderIds: undefined,
           lastError: undefined,
+        },
+        providerLink: {
+          state: 'unsupported',
+          providerOrigin: undefined,
+          providerId: undefined,
+          envPublicId: undefined,
+          localEnvironmentPublicId: undefined,
+          bindingGeneration: undefined,
+          remoteEnabled: false,
+          lastConnectedAtUnixMs: undefined,
+          lastDisconnectedAtUnixMs: undefined,
+          lastErrorCode: undefined,
+          lastErrorMessage: undefined,
         },
       },
     });

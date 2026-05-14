@@ -70,6 +70,8 @@ export type EnvironmentActionIntent =
   | 'focus'
   | 'opening'
   | 'reconnect_provider'
+  | 'connect_provider_runtime'
+  | 'disconnect_provider_runtime'
   | 'start_runtime'
   | 'stop_runtime'
   | 'restart_runtime'
@@ -410,6 +412,7 @@ const ENVIRONMENT_CARD_FACT_ORDER = [
   'VERSION',
   'ACTIVE WORK',
   'PROVIDER',
+  'LOCAL LINK',
   'SOURCE ENV',
   'BOOTSTRAP',
 ] as const;
@@ -432,10 +435,10 @@ function environmentRunsOnLabel(environment: DesktopEnvironmentEntry): string {
     return 'This device';
   }
   if (environment.kind === 'provider_environment') {
-    const localRuntimeOnline = environment.provider_local_runtime_state === 'running_desktop'
-      || environment.provider_local_runtime_state === 'running_external';
+    const localRuntimeLinked = environment.provider_local_runtime_plan?.runtime_matches_target === true
+      && environment.provider_local_runtime_plan.runtime_running === true;
     const localWindowActive = environment.provider_effective_window_route === 'local_host';
-    if (localRuntimeOnline || localWindowActive || environment.remote_route_state !== 'ready') {
+    if (localRuntimeLinked || localWindowActive || environment.remote_route_state !== 'ready') {
       return 'This device';
     }
     return 'Provider remote';
@@ -533,6 +536,26 @@ function runtimeServiceFacts(environment: DesktopEnvironmentEntry): readonly Env
   ];
 }
 
+function providerLocalLinkLabel(environment: DesktopEnvironmentEntry): string {
+  if (environment.kind !== 'provider_environment') {
+    return '';
+  }
+  const plan = environment.provider_local_runtime_plan;
+  if (plan?.runtime_matches_target && plan.runtime_running) {
+    return 'Connected';
+  }
+  if (plan?.state === 'linked_elsewhere') {
+    return 'Connected elsewhere';
+  }
+  if (plan?.state === 'blocked_external_runtime') {
+    return 'Managed elsewhere';
+  }
+  if (!plan?.runtime_running) {
+    return 'Runtime offline';
+  }
+  return 'Not connected';
+}
+
 export function buildEnvironmentCardFactsModel(
   environment: DesktopEnvironmentEntry,
 ): readonly EnvironmentCardFactModel[] {
@@ -549,6 +572,7 @@ export function buildEnvironmentCardFactsModel(
       buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment)),
       ...runtimeServiceFacts(environment),
       buildEnvironmentCardFact('PROVIDER', controlPlaneDisplayLabel(environment) || 'Unavailable'),
+      buildEnvironmentCardFact('LOCAL LINK', providerLocalLinkLabel(environment)),
       buildEnvironmentCardFact('SOURCE ENV', environment.env_public_id ?? 'Unknown'),
     ]);
   }
@@ -668,6 +692,24 @@ function runtimeStatusLabel(environment: DesktopEnvironmentEntry): string {
       return 'EXTERNAL RUNTIME';
     }
   }
+  if (environment.kind === 'provider_environment' && providerPrimaryRoute(environment) === 'remote_desktop') {
+    switch (environment.remote_route_state) {
+      case 'ready':
+        return 'Open';
+      case 'offline':
+        return 'REMOTE OFFLINE';
+      case 'auth_required':
+        return 'RECONNECT REQUIRED';
+      case 'provider_unreachable':
+        return 'SYNC FAILED';
+      case 'provider_invalid':
+        return 'INVALID PROVIDER';
+      case 'removed':
+        return 'REMOVED';
+      default:
+        return 'REFRESH NEEDED';
+    }
+  }
   if (environment.runtime_health.status !== 'online') {
     return 'RUNTIME OFFLINE';
   }
@@ -696,6 +738,9 @@ function runtimeStatusTone(environment: DesktopEnvironmentEntry): EnvironmentCar
   if (localRuntimePlan) {
     return localRuntimePlan.can_open ? 'success' : 'warning';
   }
+  if (environment.kind === 'provider_environment' && providerPrimaryRoute(environment) === 'remote_desktop') {
+    return environment.remote_route_state === 'ready' ? 'success' : 'warning';
+  }
   return environment.runtime_health.status === 'online' && runtimeServiceIsOpenable(environmentRuntimeService(environment))
     ? 'success'
     : 'warning';
@@ -712,7 +757,7 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
   if (environment.window_state === 'open') {
     return {
       intent: 'focus',
-      label: 'Focus',
+      label: 'Open',
       enabled: true,
       variant: 'default',
     };
@@ -720,7 +765,7 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
   if (environment.window_state === 'opening') {
     return {
       intent: 'opening',
-      label: 'Opening…',
+      label: 'Open',
       enabled: false,
       variant: 'default',
     };
@@ -728,17 +773,16 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
   const snapshot = environmentRuntimeService(environment);
   const localRuntimePlan = providerPrimaryLocalRuntimePlan(environment);
   const canOpenProviderLocalRuntime = localRuntimePlan?.can_open === true;
-  const blocked = snapshot?.open_readiness?.state === 'blocked';
-  const maintenance = environmentRuntimeMaintenance(environment);
   const primaryRoute = environment.kind === 'provider_environment' ? providerPrimaryRoute(environment) : '';
+  const canOpenProviderRemoteRoute = environment.kind === 'provider_environment'
+    && primaryRoute === 'remote_desktop'
+    && environment.remote_route_state === 'ready';
   return {
     intent: 'open',
-    label: maintenance
-      ? 'Open'
-      : environment.runtime_health.status === 'online' && !runtimeServiceIsOpenable(snapshot) && !canOpenProviderLocalRuntime
-      ? blocked ? 'Open' : 'Preparing…'
-      : 'Open',
-    enabled: canOpenProviderLocalRuntime || (environment.runtime_health.status === 'online' && runtimeServiceIsOpenable(snapshot)),
+    label: 'Open',
+    enabled: canOpenProviderRemoteRoute
+      || canOpenProviderLocalRuntime
+      || (environment.kind !== 'provider_environment' && environment.runtime_health.status === 'online' && runtimeServiceIsOpenable(snapshot)),
     variant: 'default',
     ...(primaryRoute
       ? { route: primaryRoute }
@@ -760,8 +804,14 @@ function providerLocalRuntimeMenuAction(
     return null;
   }
   const primaryRoute = providerPrimaryRoute(environment);
+  const localRuntimePlan = environment.provider_local_runtime_plan;
   const localRuntimeOnline = environment.provider_local_runtime_state === 'running_desktop'
     || environment.provider_local_runtime_state === 'running_external';
+  const connectableLocalRuntimeOnline = localRuntimePlan?.runtime_running === true
+    && localRuntimePlan.desktop_can_manage === true
+    && localRuntimePlan.state !== 'blocked_active_work'
+    && localRuntimePlan.state !== 'blocked_external_runtime'
+    && localRuntimePlan.state !== 'linked_elsewhere';
 
   if (environment.open_local_session_lifecycle === 'open' && primaryRoute !== 'local_host') {
     return {
@@ -794,29 +844,56 @@ function providerLocalRuntimeMenuAction(
     return null;
   }
 
-  return localRuntimeOnline && primaryRoute !== 'local_host'
-    ? {
-        id: 'open_local_runtime',
-        label: 'Open Local',
-        action: {
-          intent: 'open',
-          label: 'Open Local',
-          enabled: true,
-          variant: 'outline',
-          route: 'local_host',
-        },
-      }
-    : {
-        id: 'use_locally',
-        label: 'Use Locally',
-        action: {
-          intent: 'serve_runtime_locally',
-          label: 'Use Locally',
-          enabled: true,
-          variant: 'outline',
-          route: 'local_host',
-        },
-      };
+  if (localRuntimeOnline && environment.provider_local_runtime_plan?.runtime_matches_target === true) {
+    return primaryRoute !== 'local_host'
+      ? {
+          id: 'open_local_runtime',
+          label: 'Open locally',
+          action: {
+            intent: 'open',
+            label: 'Open locally',
+            enabled: true,
+            variant: 'outline',
+            route: 'local_host',
+          },
+        }
+      : null;
+  }
+
+  return {
+    id: 'connect_provider_local_runtime',
+    label: 'Connect Local Runtime',
+    action: {
+      intent: 'connect_provider_runtime',
+      label: 'Connect Local Runtime',
+      enabled: connectableLocalRuntimeOnline,
+      variant: 'outline',
+      route: 'local_host',
+    },
+  };
+}
+
+function providerDisconnectRuntimeMenuAction(
+  environment: DesktopEnvironmentEntry,
+): EnvironmentActionMenuItemModel | null {
+  if (
+    environment.kind !== 'provider_environment'
+    || environment.provider_local_runtime_plan?.runtime_matches_target !== true
+    || environment.provider_local_runtime_plan.runtime_running !== true
+  ) {
+    return null;
+  }
+  return {
+    id: 'disconnect_provider_local_runtime',
+    label: 'Disconnect Local Runtime',
+    action: {
+      intent: 'disconnect_provider_runtime',
+      label: 'Disconnect Local Runtime',
+      enabled: true,
+      variant: 'outline',
+      route: 'local_host',
+    },
+  };
 }
 
 function providerRemoteRouteMenuAction(
@@ -871,16 +948,18 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
   const items: EnvironmentActionMenuItemModel[] = [];
   const localServeAction = providerLocalRuntimeMenuAction(environment);
   const remoteRouteAction = providerRemoteRouteMenuAction(environment);
+  const providerDisconnectAction = providerDisconnectRuntimeMenuAction(environment);
   if (localServeAction) {
     items.push(localServeAction);
   }
   if (remoteRouteAction) {
     items.push(remoteRouteAction);
   }
+  if (providerDisconnectAction) {
+    items.push(providerDisconnectAction);
+  }
   if (environment.runtime_control_capability === 'start_stop') {
-    const providerNeedsLocalBinding = environment.kind === 'provider_environment'
-      && environment.provider_local_runtime_state === 'not_running';
-    if (!providerNeedsLocalBinding) {
+    if (environment.kind !== 'provider_environment') {
       const maintenanceIntent = runtimeMaintenanceActionIntent(environment);
       const maintenanceLabel = runtimeMaintenanceActionLabel(environment);
       const runtimeAction: EnvironmentActionModel = {
@@ -928,14 +1007,15 @@ function blockedPrimaryActionGuidanceAction(
 ): EnvironmentGuidanceActionModel | null {
   const recoveryAction = menuActions.find((item) => (
     item.action.intent === 'start_runtime'
+      || item.action.intent === 'connect_provider_runtime'
       || item.action.intent === 'serve_runtime_locally'
   ));
   if (!recoveryAction) {
     return null;
   }
-  if (recoveryAction.action.intent === 'serve_runtime_locally') {
+  if (recoveryAction.action.intent === 'connect_provider_runtime') {
     return {
-      label: 'Use Locally',
+      label: 'Connect Local Runtime',
       emphasis: 'primary',
       action: recoveryAction.action,
     };
@@ -1048,6 +1128,9 @@ function blockedPrimaryActionTitle(
   if (action.intent === 'serve_runtime_locally') {
     return 'Use Local Environment to continue';
   }
+  if (action.intent === 'connect_provider_runtime') {
+    return 'Connect Local Runtime to continue';
+  }
   return environment.kind === 'ssh_environment'
     ? 'Start the runtime to continue'
     : 'Start the local runtime to continue';
@@ -1058,7 +1141,10 @@ function blockedPrimaryActionDetail(
   action: EnvironmentActionModel,
 ): string {
   if (action.intent === 'serve_runtime_locally') {
-    return 'Desktop will link this Local Environment profile to the provider Environment, then open it locally.';
+    return 'Connect the running Local Runtime to this provider Environment first. Open stays separate and becomes available after the link is ready.';
+  }
+  if (action.intent === 'connect_provider_runtime') {
+    return 'Connect the running Local Runtime to this provider Environment first. Open stays separate and becomes available after the link is ready.';
   }
   return environment.kind === 'ssh_environment'
     ? 'Open becomes available once the runtime is ready on this SSH host.'
@@ -1076,7 +1162,7 @@ function primaryActionOverlay(
     return {
       kind: 'tooltip',
       tone: 'warning',
-      message: 'Desktop needs fresh provider authorization before it can request a one-time Local Environment bootstrap ticket for this Environment.',
+      message: 'Desktop needs fresh provider authorization before it can open or connect this provider Environment.',
     };
   }
   const localRuntimePlan = providerPrimaryLocalRuntimePlan(environment);
@@ -1087,16 +1173,53 @@ function primaryActionOverlay(
     return {
       kind: 'popover',
       tone: 'warning',
-      eyebrow: localRuntimePlan.state === 'blocked_external_runtime' ? 'Runtime managed externally' : 'Runtime blocked',
+      eyebrow: localRuntimePlan.state === 'blocked_external_runtime'
+        ? 'Runtime managed externally'
+        : localRuntimePlan.state === 'not_running'
+          ? 'Runtime offline'
+          : 'Runtime blocked',
       title: localRuntimePlan.state === 'blocked_active_work'
         ? 'Runtime is busy'
         : localRuntimePlan.state === 'blocked_external_runtime'
           ? 'Runtime is managed elsewhere'
-          : 'Runtime cannot open yet',
+          : localRuntimePlan.state === 'not_running'
+            ? 'Start Local Runtime first'
+            : 'Runtime cannot open yet',
       detail: localRuntimePlan.message,
-      actions: blockedPrimaryActionRefreshGuidanceAction(menuActions)
-        ? [blockedPrimaryActionRefreshGuidanceAction(menuActions)!]
-        : [],
+      actions: [
+        ...(
+          blockedPrimaryActionGuidanceAction(environment, menuActions)
+            ? [blockedPrimaryActionGuidanceAction(environment, menuActions)!]
+            : []
+        ),
+        ...(
+          blockedPrimaryActionRefreshGuidanceAction(menuActions)
+            ? [blockedPrimaryActionRefreshGuidanceAction(menuActions)!]
+            : []
+        ),
+      ],
+    };
+  }
+  if (environment.kind === 'provider_environment' && providerPrimaryRoute(environment) === 'remote_desktop') {
+    if (environment.remote_route_state === 'ready') {
+      return undefined;
+    }
+    const refreshAction = blockedPrimaryActionRefreshGuidanceAction(menuActions);
+    return {
+      kind: 'popover',
+      tone: 'warning',
+      eyebrow: 'Remote route unavailable',
+      title: environment.remote_route_state === 'offline'
+        ? 'Provider reports offline'
+        : environment.remote_route_state === 'provider_unreachable'
+          ? 'Provider is unreachable'
+          : environment.remote_route_state === 'provider_invalid'
+            ? 'Provider response is invalid'
+            : environment.remote_route_state === 'removed'
+              ? 'Environment removed'
+              : 'Refresh provider status',
+      detail: environment.remote_state_reason || 'Remote open is not ready yet. Open stays separate from runtime start and provider link actions.',
+      actions: refreshAction ? [refreshAction] : [],
     };
   }
   if (environment.runtime_health.status === 'online') {

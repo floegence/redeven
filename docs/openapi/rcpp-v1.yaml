@@ -192,6 +192,7 @@ paths:
       tags: [Desktop]
       operationId: createDesktopOpenSession
       summary: Return the current desktop open session materials for one environment.
+      description: Returns remote desktop material and/or a one-time provider-link ticket. Desktop may hand the ticket to a running Local Runtime through desktop-only runtime-control after an explicit Connect Local Runtime action; providers must not treat the ticket as renderer-visible material.
       security:
         - bearerAuth: []
       parameters:
@@ -222,8 +223,8 @@ paths:
     post:
       tags: [Runtime]
       operationId: exchangeRuntimeBootstrapTicket
-      summary: Exchange a one-time bootstrap ticket for direct runtime connection info.
-      description: Confirms the current user's Local Environment binding for the requested environment and returns direct control-channel credentials.
+      summary: Exchange a one-time provider-link bootstrap ticket for direct runtime connection info.
+      description: Confirms the current user's Local Environment binding for the requested environment and returns direct control-channel credentials. Desktop may trigger this exchange inside an already-running Local Runtime through its desktop-only runtime-control endpoint.
       security:
         - bearerAuth: []
       requestBody:
@@ -453,6 +454,7 @@ components:
       properties:
         bootstrap_ticket:
           type: string
+          description: One-time provider-link ticket. Desktop may hand it to a running Local Runtime through runtime-control or to an explicit bootstrap exchange. It is not exposed to renderer code.
         remote_session_url:
           type: string
           format: uri

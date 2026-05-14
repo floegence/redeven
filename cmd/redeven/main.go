@@ -18,6 +18,7 @@ import (
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/localui"
+	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
 	"github.com/floegence/redeven/internal/lockfile"
 )
 
@@ -463,7 +464,7 @@ func (c *cli) runCmd(args []string) int {
 	remoteErr := cfg.ValidateRemoteStrict()
 	remoteEnabled := remoteErr == nil
 
-	controlChannelEnabled := mode == runModeRemote || mode == runModeHybrid || (mode == runModeDesktop && remoteEnabled)
+	controlChannelEnabled := mode == runModeRemote || mode == runModeHybrid || (mode == runModeDesktop && remoteEnabled && !*desktopManaged)
 	localUIEnabled := mode != runModeRemote
 	effectiveRunMode := mode
 	if mode == runModeDesktop {
@@ -577,8 +578,21 @@ func (c *cli) runCmd(args []string) int {
 		}
 		if reportPath := strings.TrimSpace(*startupReportFile); reportPath != "" {
 			if err := writeDesktopReadyLaunchReport(reportPath, runtimeStartupReport{
-				LocalUIURL:             firstNonEmptyString(localUIURLs),
-				LocalUIURLs:            append([]string(nil), localUIURLs...),
+				LocalUIURL:  firstNonEmptyString(localUIURLs),
+				LocalUIURLs: append([]string(nil), localUIURLs...),
+				RuntimeControl: func() *runtimeControlEndpoint {
+					state, err := localuiruntime.Load(srv.RuntimeStatePath())
+					if err != nil || state == nil || state.RuntimeControl == nil {
+						return nil
+					}
+					return &runtimeControlEndpoint{
+						ProtocolVersion: state.RuntimeControl.ProtocolVersion,
+						BaseURL:         state.RuntimeControl.BaseURL,
+						Token:           state.RuntimeControl.Token,
+						DesktopOwnerID:  state.RuntimeControl.DesktopOwnerID,
+						ExpiresAtUnixMS: state.RuntimeControl.ExpiresAtUnixMS,
+					}
+				}(),
 				PasswordRequired:       accessGate != nil && accessGate.Enabled(),
 				EffectiveRunMode:       string(effectiveRunMode),
 				RemoteEnabled:          controlChannelEnabled,

@@ -104,7 +104,9 @@ describe('environmentGuidanceSession', () => {
           },
         }),
         provider_environments: [
-          testProviderEnvironment('https://cp.example.invalid', 'env_demo'),
+          testProviderEnvironment('https://cp.example.invalid', 'env_demo', {
+            preferredOpenRoute: 'local_host',
+          }),
         ],
       }),
     }).environments.find((entry) => entry.kind === 'provider_environment');
@@ -118,8 +120,8 @@ describe('environmentGuidanceSession', () => {
       pending_intent: null,
       feedback: {
         tone: 'warning',
-        title: 'Runtime is busy',
-        detail: 'The Local Runtime is busy. Close active runtime work before Desktop relinks it to this provider Environment.',
+        title: 'Runtime cannot open yet',
+        detail: 'Connect Local Runtime to this provider Environment before opening it locally.',
       },
     }));
   });

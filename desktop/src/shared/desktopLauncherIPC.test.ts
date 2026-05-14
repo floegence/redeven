@@ -33,6 +33,20 @@ describe('desktopLauncherIPC', () => {
       environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
       force_runtime_update: true,
     });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'connect_provider_local_runtime',
+      environment_id: ' cp:https%3A%2F%2Fcp.example.invalid:env:env_demo ',
+    })).toEqual({
+      kind: 'connect_provider_local_runtime',
+      environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'disconnect_provider_local_runtime',
+      environment_id: ' cp:https%3A%2F%2Fcp.example.invalid:env:env_demo ',
+    })).toEqual({
+      kind: 'disconnect_provider_local_runtime',
+      environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+    });
     expect(normalizeDesktopLauncherActionRequest({ kind: 'close_launcher_or_quit' })).toEqual({ kind: 'close_launcher_or_quit' });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'save_local_environment_settings',
@@ -209,6 +223,8 @@ describe('desktopLauncherIPC', () => {
     expect(normalizeDesktopLauncherActionRequest({ kind: 'open_advanced_settings' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'open_local_environment' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'stop_environment_runtime', environment_id: '   ' })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'connect_provider_local_runtime', environment_id: '   ' })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'disconnect_provider_local_runtime', environment_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'focus_environment_window', session_key: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'cancel_launcher_operation', operation_key: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({

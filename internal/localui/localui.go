@@ -109,6 +109,8 @@ type Server struct {
 
 	listeners []net.Listener
 	srv       *http.Server
+
+	runtimeControl *runtimeControlServer
 }
 
 type pendingDirect struct {
@@ -250,28 +252,62 @@ func (s *Server) Start(ctx context.Context) error {
 		}()
 	}
 
-	if err := localuiruntime.WriteState(s.runtimeStatePath, localuiruntime.State{
-		LocalUIURL:             firstNonEmptyString(s.DisplayURLs()),
-		LocalUIURLs:            s.DisplayURLs(),
-		PasswordRequired:       s.accessEnabled(),
-		EffectiveRunMode:       s.effectiveRunMode,
-		RemoteEnabled:          s.remoteEnabled,
-		DesktopManaged:         s.desktopManaged,
-		DesktopOwnerID:         s.desktopOwnerID,
-		ControlplaneBaseURL:    s.controlplaneBaseURL,
-		ControlplaneProviderID: s.controlplaneProviderID,
-		EnvPublicID:            s.envPublicID,
-		StateDir:               s.stateDir,
-		DiagnosticsEnabled:     s.diag != nil && s.diag.Enabled(),
-		PID:                    os.Getpid(),
-		RuntimeService:         s.runtimeServiceSnapshot(),
-	}); err != nil {
+	if s.desktopManaged && strings.TrimSpace(s.desktopOwnerID) != "" {
+		runtimeControl, err := newRuntimeControlServer(s.a, s.desktopOwnerID, s.log, func() {
+			if err := s.writeRuntimeState(); err != nil {
+				s.log.Warn("failed to refresh local runtime state", "path", s.runtimeStatePath, "error", err)
+			}
+		})
+		if err != nil {
+			_ = s.Close()
+			return fmt.Errorf("init runtime-control: %w", err)
+		}
+		if err := runtimeControl.Start(ctx); err != nil {
+			_ = s.Close()
+			return fmt.Errorf("start runtime-control: %w", err)
+		}
+		s.runtimeControl = runtimeControl
+	}
+
+	if err := s.writeRuntimeState(); err != nil {
 		_ = s.Close()
 		return fmt.Errorf("write local runtime state: %w", err)
 	}
 
 	s.log.Info("local ui listening", "bind", s.ListenLabel())
 	return nil
+}
+
+func (s *Server) writeRuntimeState() error {
+	if s == nil {
+		return nil
+	}
+	runtimeService := s.runtimeServiceSnapshot()
+	providerLink := runtimeService.Bindings.ProviderLink
+	return localuiruntime.WriteState(s.runtimeStatePath, localuiruntime.State{
+		LocalUIURL:             firstNonEmptyString(s.DisplayURLs()),
+		LocalUIURLs:            s.DisplayURLs(),
+		RuntimeControl:         runtimeControlEndpoint(s.runtimeControl),
+		PasswordRequired:       s.accessEnabled(),
+		EffectiveRunMode:       runtimeService.EffectiveRunMode,
+		RemoteEnabled:          runtimeService.RemoteEnabled,
+		DesktopManaged:         s.desktopManaged,
+		DesktopOwnerID:         s.desktopOwnerID,
+		ControlplaneBaseURL:    providerLink.ProviderOrigin,
+		ControlplaneProviderID: providerLink.ProviderID,
+		EnvPublicID:            providerLink.EnvPublicID,
+		StateDir:               s.stateDir,
+		DiagnosticsEnabled:     s.diag != nil && s.diag.Enabled(),
+		PID:                    os.Getpid(),
+		RuntimeService:         runtimeService,
+	})
+}
+
+func runtimeControlEndpoint(srv *runtimeControlServer) *localuiruntime.RuntimeControlEndpoint {
+	if srv == nil {
+		return nil
+	}
+	return srv.Endpoint()
 }
 
 func (s *Server) Close() error {
@@ -283,6 +319,9 @@ func (s *Server) Close() error {
 		defer cancel()
 		_ = s.srv.Shutdown(ctx)
 	}
+	if s.runtimeControl != nil {
+		_ = s.runtimeControl.Close()
+	}
 	for _, ln := range s.listeners {
 		_ = ln.Close()
 	}
@@ -291,6 +330,7 @@ func (s *Server) Close() error {
 	}
 	s.srv = nil
 	s.listeners = nil
+	s.runtimeControl = nil
 	return nil
 }
 
@@ -314,6 +354,13 @@ func (s *Server) ListenLabel() string {
 		return ""
 	}
 	return s.bind.ListenLabelForPort(s.Port())
+}
+
+func (s *Server) RuntimeStatePath() string {
+	if s == nil {
+		return ""
+	}
+	return s.runtimeStatePath
 }
 
 func (s *Server) DisplayURLs() []string {

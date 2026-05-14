@@ -71,6 +71,7 @@ function runtimeStateFromStartup(
     password_required: startup.password_required === true,
     diagnostics_enabled: startup.diagnostics_enabled === true,
     pid: Number.isInteger(pid) && pid > 0 ? pid : 0,
+    runtime_control: startup.runtime_control,
     runtime_service: desktopRuntimeIdentityMismatch
       ? normalizeRuntimeServiceSnapshot({
           ...runtimeService,
@@ -198,6 +199,7 @@ function withCurrentRuntime(
     && (existingRuntime?.remote_enabled ?? false) === (currentRuntime?.remote_enabled ?? false)
     && (existingRuntime?.diagnostics_enabled ?? false) === (currentRuntime?.diagnostics_enabled ?? false)
     && (existingRuntime?.pid ?? 0) === (currentRuntime?.pid ?? 0)
+    && JSON.stringify(existingRuntime?.runtime_control ?? null) === JSON.stringify(currentRuntime?.runtime_control ?? null)
     && JSON.stringify(existingRuntime?.runtime_service ?? null) === JSON.stringify(currentRuntime?.runtime_service ?? null)
   ) {
     return environment;

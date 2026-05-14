@@ -48,6 +48,12 @@ export type wire_sys_ping_resp = {
         reason_code?: string;
         message?: string;
       };
+      provider_link?: {
+        supported?: boolean;
+        bind_method?: string;
+        reason_code?: string;
+        message?: string;
+      };
     };
     bindings?: {
       desktop_ai_broker?: {
@@ -59,6 +65,19 @@ export type wire_sys_ping_resp = {
         model_count?: number;
         missing_key_provider_ids?: string[];
         last_error?: string;
+      };
+      provider_link?: {
+        state?: string;
+        provider_origin?: string;
+        provider_id?: string;
+        env_public_id?: string;
+        local_environment_public_id?: string;
+        binding_generation?: number;
+        remote_enabled?: boolean;
+        last_connected_at_unix_ms?: number;
+        last_disconnected_at_unix_ms?: number;
+        last_error_code?: string;
+        last_error_message?: string;
       };
     };
   };

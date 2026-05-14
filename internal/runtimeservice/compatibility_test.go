@@ -151,3 +151,67 @@ func TestNormalizeSnapshotMarksDesktopAIBrokerBindingUnsupportedWithoutCapabilit
 		t.Fatalf("State = %q, want %q", snapshot.Bindings.DesktopAIBroker.State, BindingStateUnsupported)
 	}
 }
+
+func TestNormalizeSnapshotNormalizesProviderLinkCapabilityAndBinding(t *testing.T) {
+	snapshot := NormalizeSnapshot(Snapshot{
+		ProtocolVersion: ProtocolVersion,
+		ServiceOwner:    OwnerDesktop,
+		DesktopManaged:  true,
+		Compatibility:   CompatibilityCompatible,
+		Capabilities: Capabilities{
+			ProviderLink: Capability{Supported: true},
+		},
+		Bindings: Bindings{
+			ProviderLink: ProviderLinkBinding{
+				State:                    ProviderLinkState(" linked "),
+				ProviderOrigin:           " https://cp.example.invalid ",
+				ProviderID:               " example_control_plane ",
+				EnvPublicID:              " env_demo ",
+				LocalEnvironmentPublicID: " lenv_demo ",
+				BindingGeneration:        3,
+				LastConnectedAtUnixMS:    1778750000000,
+			},
+		},
+	})
+
+	if !snapshot.Capabilities.ProviderLink.Supported {
+		t.Fatalf("ProviderLink.Supported = false, want true")
+	}
+	if snapshot.Capabilities.ProviderLink.BindMethod != RuntimeControlBindMethodV1 {
+		t.Fatalf("BindMethod = %q", snapshot.Capabilities.ProviderLink.BindMethod)
+	}
+	binding := snapshot.Bindings.ProviderLink
+	if binding.State != ProviderLinkStateLinked || !binding.RemoteEnabled {
+		t.Fatalf("unexpected provider-link state: %#v", binding)
+	}
+	if binding.ProviderOrigin != "https://cp.example.invalid" ||
+		binding.ProviderID != "example_control_plane" ||
+		binding.EnvPublicID != "env_demo" ||
+		binding.LocalEnvironmentPublicID != "lenv_demo" {
+		t.Fatalf("provider-link identity was not normalized: %#v", binding)
+	}
+}
+
+func TestNormalizeSnapshotMarksProviderLinkUnsupportedWithoutCapability(t *testing.T) {
+	snapshot := NormalizeSnapshot(Snapshot{
+		ProtocolVersion: ProtocolVersion,
+		ServiceOwner:    OwnerDesktop,
+		DesktopManaged:  true,
+		Compatibility:   CompatibilityCompatible,
+		Bindings: Bindings{
+			ProviderLink: ProviderLinkBinding{
+				State:          ProviderLinkStateLinked,
+				ProviderOrigin: "https://cp.example.invalid",
+				ProviderID:     "example_control_plane",
+				EnvPublicID:    "env_demo",
+				RemoteEnabled:  true,
+			},
+		},
+	})
+	if snapshot.Bindings.ProviderLink.State != ProviderLinkStateUnsupported {
+		t.Fatalf("State = %q, want %q", snapshot.Bindings.ProviderLink.State, ProviderLinkStateUnsupported)
+	}
+	if snapshot.Bindings.ProviderLink.RemoteEnabled {
+		t.Fatalf("RemoteEnabled = true, want false")
+	}
+}

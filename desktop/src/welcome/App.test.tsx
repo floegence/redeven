@@ -549,6 +549,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Active work:');
     expect(appSrc).toContain('formatRuntimeServiceWorkload');
     expect(appSrc).toContain("case 'start_runtime':");
+    expect(appSrc).toContain("case 'connect_provider_runtime':");
+    expect(appSrc).toContain("case 'disconnect_provider_runtime':");
     expect(appSrc).toContain("case 'stop_runtime':");
     expect(appSrc).toContain("case 'restart_runtime':");
     expect(appSrc).toContain("case 'update_runtime':");
@@ -677,6 +679,19 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain('Open the selected Local Environment window');
     expect(appSrc).toContain("case 'start_runtime':");
+  });
+
+  it('keeps provider runtime link confirmation explicit and source-scoped', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain('providerRuntimeLinkConfirmation');
+    expect(appSrc).toContain('Connect Local Runtime');
+    expect(appSrc).toContain('Disconnect Local Runtime');
+    expect(appSrc).toContain('Provider: <span');
+    expect(appSrc).toContain('Source environment: <span');
+    expect(appSrc).toContain('this provider can request sessions through the running Local Runtime');
+    expect(appSrc).toContain('Existing local work keeps running');
+    expect(appSrc).toContain('without restarting the runtime');
   });
 
   it('keeps transient action feedback out of page flow by using a toast viewport', () => {

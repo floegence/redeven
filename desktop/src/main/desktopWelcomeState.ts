@@ -51,6 +51,7 @@ import {
 } from '../shared/desktopRuntimeHealth';
 import {
   normalizeRuntimeServiceSnapshot,
+  runtimeServiceProviderLinkMatches,
   type RuntimeServiceSnapshot,
 } from '../shared/runtimeService';
 import {
@@ -395,8 +396,16 @@ function providerRuntimeBindingMatches(
     controlplane_base_url?: string;
     controlplane_provider_id?: string;
     env_public_id?: string;
+    runtime_service?: RuntimeServiceSnapshot;
   }> | null | undefined,
 ): boolean {
+  if (runtimeServiceProviderLinkMatches(runtime?.runtime_service, {
+    provider_origin: environment.provider_origin,
+    provider_id: environment.provider_id,
+    env_public_id: environment.env_public_id,
+  })) {
+    return true;
+  }
   return desktopLocalRuntimeBindingsMatch(
     desktopLocalRuntimeBindingFromObservation(runtime),
     normalizeDesktopLocalRuntimeBinding({
@@ -697,6 +706,7 @@ function buildLocalEnvironmentEntry(
     { kind: 'local_environment' },
     environment.local_hosting?.current_runtime,
   );
+  const providerLink = runtimeService?.bindings?.provider_link;
   const resolvedLocalCloseBehavior = localCloseBehavior(environment, resolvedLocalRuntimeState);
   const runtimeHealth = localEnvironmentRuntimeHealth(resolvedLocalRuntimeState, resolvedLocalRuntimeURL, runtimeService);
   const resolvedLocalRouteState = localRouteState(environment, localSession);
@@ -737,9 +747,21 @@ function buildLocalEnvironmentEntry(
     default_open_route: 'local_host',
     open_local_session_key: localSession?.session_key,
     open_local_session_lifecycle: sessionLifecycle(localSession),
-    provider_origin: kind === 'controlplane' ? providerOrigin : undefined,
-    provider_id: kind === 'controlplane' ? providerID : undefined,
-    env_public_id: kind === 'controlplane' ? envPublicID : undefined,
+    provider_origin: providerLink?.state === 'linked'
+      ? providerLink.provider_origin
+      : kind === 'controlplane'
+        ? providerOrigin
+        : undefined,
+    provider_id: providerLink?.state === 'linked'
+      ? providerLink.provider_id
+      : kind === 'controlplane'
+        ? providerID
+        : undefined,
+    env_public_id: providerLink?.state === 'linked'
+      ? providerLink.env_public_id
+      : kind === 'controlplane'
+        ? envPublicID
+        : undefined,
     remote_environment_url: kind === 'controlplane' ? (remoteEnvironmentURL || undefined) : undefined,
     provider_status: remoteRoute.providerEnvironment?.status,
     provider_lifecycle_status: remoteRoute.providerEnvironment?.lifecycle_status,
@@ -875,7 +897,10 @@ function providerLocalRouteState(
       return 'opening';
     }
   }
-  return localEnvironmentSupportsLocalHosting(localEnvironment) ? 'ready' : 'unavailable';
+  const currentRuntime = localEnvironment.local_hosting?.current_runtime;
+  return localEnvironmentSupportsLocalHosting(localEnvironment) && providerRuntimeBindingMatches(environment, currentRuntime)
+    ? 'ready'
+    : 'unavailable';
 }
 
 function providerLocalRuntimeState(
@@ -942,18 +967,17 @@ function defaultProviderOpenRoute(
 ): DesktopLocalEnvironmentStateRoute {
   if (
     environment.preferred_open_route === 'local_host'
-    && localRouteState !== 'unavailable'
   ) {
     return 'local_host';
   }
-  if (
-    environment.preferred_open_route === 'remote_desktop'
-    && remoteRouteState === 'ready'
-  ) {
+  if (environment.preferred_open_route === 'remote_desktop' && remoteRouteState === 'ready') {
     return 'remote_desktop';
   }
-  if (localRouteState !== 'unavailable') {
+  if (localRouteState === 'ready' || localRouteState === 'open' || localRouteState === 'opening') {
     return 'local_host';
+  }
+  if (remoteRouteState === 'ready') {
+    return 'remote_desktop';
   }
   return 'remote_desktop';
 }
@@ -999,7 +1023,7 @@ function buildProviderEnvironmentEntry(
       ? remoteSession
       : null;
   const effectiveRoute = effectiveWindowRoute || defaultOpenRoute;
-  const runtimeHealth = defaultOpenRoute === 'local_host'
+  const runtimeHealth = effectiveRoute === 'local_host'
     ? localRuntimeHealth ?? remoteRuntimeHealth
     : remoteRuntimeHealth;
   const remoteEnvironmentURL = compact(routeDetails.providerEnvironment?.environment_url)

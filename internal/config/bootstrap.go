@@ -39,6 +39,27 @@ type BootstrapArgs struct {
 	PermissionPolicyPreset string
 }
 
+type ProviderLinkBootstrapArgs struct {
+	ConfigPath string
+
+	ControlplaneBaseURL    string
+	ControlplaneProviderID string
+	EnvironmentID          string
+	BootstrapTicket        string
+	RuntimeVersion         string
+	PermissionPolicyPreset string
+	AgentHomeDir           string
+	Shell                  string
+	LogFormat              string
+	LogLevel               string
+
+	RuntimeHostname string
+	RuntimeGOOS     string
+	RuntimeGOARCH   string
+
+	PreservePermissionPolicy bool
+}
+
 type bootstrapResponse struct {
 	Direct                  *directv1.DirectConnectInfo `json:"direct"`
 	LocalEnvironmentBinding *LocalEnvironmentBinding    `json:"local_environment_binding"`
@@ -71,28 +92,75 @@ type bootstrapTicketExchangeRequest struct {
 }
 
 func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath string, err error) {
-	baseURL := strings.TrimSpace(args.ControlplaneBaseURL)
-	envID := strings.TrimSpace(args.EnvironmentID)
-	bootstrapTicket := normalizeBearerToken(args.BootstrapTicket)
 	layout, err := resolveBootstrapStateLayout(args)
 	if err != nil {
 		return "", err
 	}
-	cfgPath := layout.ConfigPath
+	linkArgs := providerLinkArgsFromBootstrapArgs(args)
+	linkArgs.ConfigPath = layout.ConfigPath
+	cfg, err := ResolveProviderLinkConfig(ctx, linkArgs)
+	if err != nil {
+		return "", err
+	}
+	if err := Save(layout.ConfigPath, cfg); err != nil {
+		return "", err
+	}
+	return filepath.Clean(layout.ConfigPath), nil
+}
 
+func providerLinkArgsFromBootstrapArgs(args BootstrapArgs) ProviderLinkBootstrapArgs {
+	return ProviderLinkBootstrapArgs{
+		ControlplaneBaseURL:      args.ControlplaneBaseURL,
+		ControlplaneProviderID:   args.ControlplaneProviderID,
+		EnvironmentID:            args.EnvironmentID,
+		BootstrapTicket:          args.BootstrapTicket,
+		RuntimeVersion:           args.RuntimeVersion,
+		PermissionPolicyPreset:   args.PermissionPolicyPreset,
+		AgentHomeDir:             args.AgentHomeDir,
+		Shell:                    args.Shell,
+		LogFormat:                args.LogFormat,
+		LogLevel:                 args.LogLevel,
+		RuntimeHostname:          hostnameBestEffort(),
+		RuntimeGOOS:              runtime.GOOS,
+		RuntimeGOARCH:            runtime.GOARCH,
+		PreservePermissionPolicy: strings.TrimSpace(args.PermissionPolicyPreset) == "",
+	}
+}
+
+func BootstrapProviderLink(ctx context.Context, args ProviderLinkBootstrapArgs) (*Config, error) {
+	cfgPath := strings.TrimSpace(args.ConfigPath)
+	if cfgPath == "" {
+		return nil, errors.New("missing config path")
+	}
+	cfg, err := ResolveProviderLinkConfig(ctx, args)
+	if err != nil {
+		return nil, err
+	}
+	if err := Save(cfgPath, cfg); err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
+
+func ResolveProviderLinkConfig(ctx context.Context, args ProviderLinkBootstrapArgs) (*Config, error) {
+	baseURL := strings.TrimSpace(args.ControlplaneBaseURL)
+	envID := strings.TrimSpace(args.EnvironmentID)
+	bootstrapTicket := normalizeBearerToken(args.BootstrapTicket)
+	cfgPath := strings.TrimSpace(args.ConfigPath)
+	if cfgPath == "" {
+		return nil, errors.New("missing config path")
+	}
 	if baseURL == "" || envID == "" {
-		return "", errors.New("missing controlplane/env-id")
+		return nil, errors.New("missing controlplane/env-id")
 	}
 	if bootstrapTicket == "" {
-		return "", errors.New("missing bootstrap ticket")
+		return nil, errors.New("missing bootstrap ticket")
 	}
 
-	// Load previous config if present to preserve stable agent_instance_id.
 	var prev *Config
 	if c, loadErr := Load(cfgPath); loadErr == nil {
 		prev = c
 	}
-
 	agentInstanceID := ""
 	localEnvironmentPublicID := ""
 	if prev != nil {
@@ -100,15 +168,17 @@ func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath strin
 		localEnvironmentPublicID = strings.TrimSpace(prev.LocalEnvironmentPublicID)
 	}
 	if agentInstanceID == "" {
+		var err error
 		agentInstanceID, err = newAgentInstanceID()
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 	}
 	if localEnvironmentPublicID == "" {
+		var err error
 		localEnvironmentPublicID, err = newLocalEnvironmentPublicID()
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 	}
 
@@ -116,30 +186,30 @@ func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath strin
 		EnvPublicID:              envID,
 		LocalEnvironmentPublicID: localEnvironmentPublicID,
 		AgentInstanceID:          agentInstanceID,
-		Hostname:                 hostnameBestEffort(),
-		OS:                       runtime.GOOS,
-		Arch:                     runtime.GOARCH,
+		Hostname:                 firstNonEmpty(args.RuntimeHostname, hostnameBestEffort()),
+		OS:                       firstNonEmpty(args.RuntimeGOOS, runtime.GOOS),
+		Arch:                     firstNonEmpty(args.RuntimeGOARCH, runtime.GOARCH),
 		RuntimeVersion:           strings.TrimSpace(args.RuntimeVersion),
 	})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	direct := bootstrap.Direct
 	binding := bootstrap.LocalEnvironmentBinding
 	if binding == nil {
-		return "", errors.New("invalid bootstrap exchange response: missing local_environment_binding")
+		return nil, errors.New("invalid bootstrap exchange response: missing local_environment_binding")
 	}
 	if strings.TrimSpace(binding.LocalEnvironmentPublicID) != localEnvironmentPublicID {
-		return "", errors.New("invalid bootstrap exchange response: local_environment_public_id mismatch")
+		return nil, errors.New("invalid bootstrap exchange response: local_environment_public_id mismatch")
 	}
 	if strings.TrimSpace(binding.EnvPublicID) != envID {
-		return "", errors.New("invalid bootstrap exchange response: env_public_id mismatch")
+		return nil, errors.New("invalid bootstrap exchange response: env_public_id mismatch")
 	}
 	if binding.Generation <= 0 {
-		return "", errors.New("invalid bootstrap exchange response: missing binding generation")
+		return nil, errors.New("invalid bootstrap exchange response: missing binding generation")
 	}
 	if direct == nil || strings.TrimSpace(direct.WsUrl) == "" {
-		return "", errors.New("invalid bootstrap response: missing direct.ws_url")
+		return nil, errors.New("invalid bootstrap response: missing direct.ws_url")
 	}
 
 	providerID := strings.TrimSpace(args.ControlplaneProviderID)
@@ -195,10 +265,10 @@ func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath strin
 	if strings.TrimSpace(args.PermissionPolicyPreset) != "" {
 		p, err := ParsePermissionPolicyPreset(args.PermissionPolicyPreset)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 		cfg.PermissionPolicy = p
-	} else if prev != nil && prev.PermissionPolicy != nil {
+	} else if args.PreservePermissionPolicy && prev != nil && prev.PermissionPolicy != nil {
 		cfg.PermissionPolicy = prev.PermissionPolicy
 	} else {
 		cfg.PermissionPolicy = defaultPermissionPolicy()
@@ -214,11 +284,17 @@ func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath strin
 		cfg.CodeServerPortMin = prev.CodeServerPortMin
 		cfg.CodeServerPortMax = prev.CodeServerPortMax
 	}
+	return cfg, nil
+}
 
-	if err := Save(cfgPath, cfg); err != nil {
-		return "", err
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value
+		}
 	}
-	return filepath.Clean(cfgPath), nil
+	return ""
 }
 
 func resolveBootstrapStateLayout(args BootstrapArgs) (StateLayout, error) {

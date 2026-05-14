@@ -44,6 +44,7 @@ func writeDesktopReadyLaunchReport(reportPath string, startup runtimeStartupRepo
 		Status:                 status,
 		LocalUIURL:             startup.LocalUIURL,
 		LocalUIURLs:            append([]string(nil), startup.LocalUIURLs...),
+		RuntimeControl:         startup.RuntimeControl,
 		PasswordRequired:       startup.PasswordRequired,
 		EffectiveRunMode:       startup.EffectiveRunMode,
 		RemoteEnabled:          startup.RemoteEnabled,
@@ -62,6 +63,7 @@ func writeDesktopReadyLaunchReport(reportPath string, startup runtimeStartupRepo
 type runtimeStartupReport struct {
 	LocalUIURL             string
 	LocalUIURLs            []string
+	RuntimeControl         *runtimeControlEndpoint
 	PasswordRequired       bool
 	EffectiveRunMode       string
 	RemoteEnabled          bool
@@ -78,8 +80,20 @@ type runtimeStartupReport struct {
 
 func buildRuntimeStartupReport(state *localuiruntime.Snapshot) runtimeStartupReport {
 	return runtimeStartupReport{
-		LocalUIURL:             state.LocalUIURL,
-		LocalUIURLs:            append([]string(nil), state.LocalUIURLs...),
+		LocalUIURL:  state.LocalUIURL,
+		LocalUIURLs: append([]string(nil), state.LocalUIURLs...),
+		RuntimeControl: func() *runtimeControlEndpoint {
+			if state.RuntimeControl == nil {
+				return nil
+			}
+			return &runtimeControlEndpoint{
+				ProtocolVersion: state.RuntimeControl.ProtocolVersion,
+				BaseURL:         state.RuntimeControl.BaseURL,
+				Token:           state.RuntimeControl.Token,
+				DesktopOwnerID:  state.RuntimeControl.DesktopOwnerID,
+				ExpiresAtUnixMS: state.RuntimeControl.ExpiresAtUnixMS,
+			}
+		}(),
 		PasswordRequired:       state.PasswordRequired,
 		EffectiveRunMode:       state.EffectiveRunMode,
 		RemoteEnabled:          state.RemoteEnabled,

@@ -311,6 +311,7 @@ export async function loadAttachableRuntimeState(
           local_ui_url: candidateURL,
         }),
         password_required: status.password_required,
+        runtime_control: startup.runtime_control,
         ...(typeof status.desktop_managed === 'boolean' ? { desktop_managed: status.desktop_managed } : {}),
         ...(String(status.desktop_owner_id ?? '').trim() !== '' ? { desktop_owner_id: String(status.desktop_owner_id).trim() } : {}),
         ...(status.runtime_service ? { runtime_service: status.runtime_service } : {}),

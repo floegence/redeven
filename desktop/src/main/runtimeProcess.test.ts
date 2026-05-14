@@ -228,6 +228,13 @@ describe('runtimeProcess', () => {
     expect(parseStartupReport(JSON.stringify({
       local_ui_url: 'http://127.0.0.1:43123/',
       local_ui_urls: ['http://127.0.0.1:43123/'],
+      runtime_control: {
+        protocol_version: 'redeven-runtime-control-v1',
+        base_url: 'http://127.0.0.1:43124',
+        token: 'rtctl_test',
+        desktop_owner_id: 'desktop-owner-1',
+        expires_at_unix_ms: 1778750000000,
+      },
       password_required: true,
       effective_run_mode: 'hybrid',
       remote_enabled: true,
@@ -255,6 +262,13 @@ describe('runtimeProcess', () => {
     }))).toMatchObject({
       local_ui_url: 'http://127.0.0.1:43123/',
       local_ui_urls: ['http://127.0.0.1:43123/'],
+      runtime_control: {
+        protocol_version: 'redeven-runtime-control-v1',
+        base_url: 'http://127.0.0.1:43124',
+        token: 'rtctl_test',
+        desktop_owner_id: 'desktop-owner-1',
+        expires_at_unix_ms: 1778750000000,
+      },
       password_required: true,
       effective_run_mode: 'hybrid',
       remote_enabled: true,

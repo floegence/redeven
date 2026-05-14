@@ -75,6 +75,7 @@ import {
   formatRuntimeServiceWorkload,
   runtimeServiceHasActiveWork,
   runtimeServiceIsOpenable,
+  runtimeServiceProviderLinkMatches,
   type RuntimeServiceSnapshot,
 } from '../shared/runtimeService';
 import {
@@ -280,6 +281,13 @@ type RuntimeMaintenanceConfirmationAction = 'stop' | 'restart' | 'update';
 type RuntimeMaintenanceConfirmationState = Readonly<{
   environment: DesktopEnvironmentEntry;
   action: RuntimeMaintenanceConfirmationAction;
+}>;
+
+type ProviderRuntimeLinkConfirmationAction = 'connect' | 'disconnect';
+
+type ProviderRuntimeLinkConfirmationState = Readonly<{
+  environment: DesktopEnvironmentEntry;
+  action: ProviderRuntimeLinkConfirmationAction;
 }>;
 
 const DESKTOP_FLOE_STORAGE_NAMESPACE = 'redeven-desktop-shell';
@@ -719,6 +727,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [controlPlaneDialogState, setControlPlaneDialogState] = createSignal<ControlPlaneDialogState>(null);
   const [deleteTarget, setDeleteTarget] = createSignal<DesktopEnvironmentEntry | null>(null);
   const [runtimeMaintenanceConfirmation, setRuntimeMaintenanceConfirmation] = createSignal<RuntimeMaintenanceConfirmationState | null>(null);
+  const [providerRuntimeLinkConfirmation, setProviderRuntimeLinkConfirmation] = createSignal<ProviderRuntimeLinkConfirmationState | null>(null);
   const [deleteControlPlaneTarget, setDeleteControlPlaneTarget] = createSignal<DesktopControlPlaneSummary | null>(null);
   const deleteTargetOperation = createMemo(() => {
     const target = deleteTarget();
@@ -803,6 +812,22 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     runtimeMaintenanceConfirmation()?.environment.runtime_maintenance?.has_active_work
     ?? runtimeServiceHasActiveWork(stopRuntimeSnapshot())
   ));
+  const providerRuntimeLinkActionLabel = createMemo(() => (
+    providerRuntimeLinkConfirmation()?.action === 'disconnect' ? 'Disconnect Local Runtime' : 'Connect Local Runtime'
+  ));
+  const providerRuntimeLinkSnapshot = createMemo<RuntimeServiceSnapshot | undefined>(() => (
+    environmentRuntimeServiceSnapshot(providerRuntimeLinkConfirmation()?.environment ?? null)
+  ));
+  const providerRuntimeLinkActiveWorkLabel = createMemo(() => (
+    formatRuntimeServiceWorkload(providerRuntimeLinkSnapshot())
+  ));
+  const providerRuntimeLinkMatches = createMemo(() => {
+    const confirmation = providerRuntimeLinkConfirmation();
+    if (!confirmation) {
+      return false;
+    }
+    return providerRuntimeLinkMatchesEnvironment(confirmation.environment);
+  });
   const activeActionProgress = createMemo(() => snapshot().action_progress);
   const sshRuntimeProgressItems = createMemo(() => (
     activeActionProgress()
@@ -1678,13 +1703,85 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (openLocalSessionKey !== '') {
       return focusEnvironmentWindow(openLocalSessionKey, errorTarget);
     }
-    if (
-      environment.provider_local_runtime_state === 'running_desktop'
-      || environment.provider_local_runtime_state === 'running_external'
-    ) {
+    if (environment.provider_local_runtime_plan?.runtime_matches_target === true) {
       return openProviderEnvironment(environment, errorTarget, 'local_host');
     }
-    return startEnvironmentRuntime(environment, errorTarget);
+    setErrorMessage(errorTarget === 'settings' ? 'settings' : errorTarget, 'Connect Local Runtime to this provider Environment before opening it locally.');
+    return false;
+  }
+
+  function providerRuntimeLinkMatchesEnvironment(environment: DesktopEnvironmentEntry): boolean {
+    if (environment.kind !== 'provider_environment') {
+      return false;
+    }
+    return runtimeServiceProviderLinkMatches(environmentRuntimeServiceSnapshot(environment), {
+      provider_origin: environment.provider_origin,
+      provider_id: environment.provider_id,
+      env_public_id: environment.env_public_id,
+    });
+  }
+
+  function requestProviderRuntimeLinkConfirmation(
+    environment: DesktopEnvironmentEntry,
+    action: ProviderRuntimeLinkConfirmationAction,
+  ): void {
+    if (environment.kind !== 'provider_environment') {
+      return;
+    }
+    setProviderRuntimeLinkConfirmation({
+      environment,
+      action,
+    });
+  }
+
+  async function confirmProviderRuntimeLinkAction(): Promise<void> {
+    const confirmation = providerRuntimeLinkConfirmation();
+    if (!confirmation) {
+      return;
+    }
+    const latestEnvironment = await loadLatestEnvironmentEntry(confirmation.environment.id) ?? confirmation.environment;
+    const ok = confirmation.action === 'disconnect'
+      ? await disconnectProviderLocalRuntime(latestEnvironment, 'connect')
+      : await connectProviderLocalRuntime(latestEnvironment, 'connect');
+    if (ok) {
+      setProviderRuntimeLinkConfirmation(null);
+    }
+  }
+
+  async function connectProviderLocalRuntime(
+    environment: DesktopEnvironmentEntry,
+    errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
+  ): Promise<boolean> {
+    if (environment.kind !== 'provider_environment') {
+      return false;
+    }
+    const result = await performLauncherAction({
+      kind: 'connect_provider_local_runtime',
+      environment_id: environment.id,
+    }, errorTarget);
+    const connected = result?.outcome === 'connected_provider_local_runtime';
+    if (connected) {
+      showActionToast(`Local Runtime connected to ${environment.label}.`, 'success');
+    }
+    return connected;
+  }
+
+  async function disconnectProviderLocalRuntime(
+    environment: DesktopEnvironmentEntry,
+    errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
+  ): Promise<boolean> {
+    if (environment.kind !== 'provider_environment') {
+      return false;
+    }
+    const result = await performLauncherAction({
+      kind: 'disconnect_provider_local_runtime',
+      environment_id: environment.id,
+    }, errorTarget);
+    const disconnected = result?.outcome === 'disconnected_provider_local_runtime';
+    if (disconnected) {
+      showActionToast(`Local Runtime disconnected from ${environment.label}.`, 'info');
+    }
+    return disconnected;
   }
 
   async function refreshAllEnvironmentRuntimes(): Promise<void> {
@@ -1787,6 +1884,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         return refreshEnvironmentRuntime(environment, errorTarget);
       case 'reconnect_provider':
         return reconnectProviderForEnvironment(environment, action, errorTarget);
+      case 'connect_provider_runtime':
+        requestProviderRuntimeLinkConfirmation(environment, 'connect');
+        return true;
+      case 'disconnect_provider_runtime':
+        requestProviderRuntimeLinkConfirmation(environment, 'disconnect');
+        return true;
       case 'serve_runtime_locally':
       case 'focus_local_serve':
         return serveRuntimeLocally(environment, errorTarget);
@@ -1922,6 +2025,22 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             detail: 'Desktop started the local runtime and is waiting for the next status update.',
           },
         },
+      };
+    }
+
+    if (action.intent === 'connect_provider_runtime') {
+      requestProviderRuntimeLinkConfirmation(environment, 'connect');
+      return {
+        close_panel: true,
+        next_session: null,
+      };
+    }
+
+    if (action.intent === 'disconnect_provider_runtime') {
+      requestProviderRuntimeLinkConfirmation(environment, 'disconnect');
+      return {
+        close_panel: true,
+        next_session: null,
       };
     }
 
@@ -2680,6 +2799,63 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           <p class="text-xs text-muted-foreground">
             Active work: <span class={cn('font-medium', stopRuntimeHasActiveWork() ? 'text-foreground' : 'text-muted-foreground')}>{stopRuntimeActiveWorkLabel()}</span>
           </p>
+        </div>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={providerRuntimeLinkConfirmation() !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setProviderRuntimeLinkConfirmation(null);
+          }
+        }}
+        title={providerRuntimeLinkActionLabel()}
+        confirmText={providerRuntimeLinkActionLabel()}
+        variant={providerRuntimeLinkConfirmation()?.action === 'disconnect' ? 'destructive' : 'default'}
+        loading={providerRuntimeLinkConfirmation()?.action === 'disconnect'
+          ? busyStateMatchesAction(busyState(), 'disconnect_provider_local_runtime')
+          : busyStateMatchesAction(busyState(), 'connect_provider_local_runtime')}
+        onConfirm={() => void confirmProviderRuntimeLinkAction()}
+      >
+        <div class="space-y-2">
+          <p class="text-sm">
+            <Show
+              when={providerRuntimeLinkConfirmation()?.action === 'disconnect'}
+              fallback={(
+                <>Connect the Local Runtime to <span class="font-semibold">{providerRuntimeLinkConfirmation()?.environment.label}</span>?</>
+              )}
+            >
+              Disconnect the Local Runtime from <span class="font-semibold">{providerRuntimeLinkConfirmation()?.environment.label}</span>?
+            </Show>
+          </p>
+          <p class="text-xs text-muted-foreground">
+            Provider: <span class="font-medium text-foreground">{providerRuntimeLinkConfirmation()?.environment.control_plane_label || providerRuntimeLinkConfirmation()?.environment.provider_origin || 'Unknown provider'}</span>
+          </p>
+          <p class="text-xs text-muted-foreground">
+            Source environment: <span class="font-mono text-foreground">{providerRuntimeLinkConfirmation()?.environment.env_public_id || 'unknown'}</span>
+          </p>
+          <Show
+            when={providerRuntimeLinkConfirmation()?.action === 'disconnect'}
+            fallback={(
+              <p class="text-xs text-muted-foreground">
+                After the link is established, this provider can request sessions through the running Local Runtime. Existing local work keeps running.
+              </p>
+            )}
+          >
+            <p class="text-xs text-muted-foreground">
+              Existing local-only work keeps running. Provider-originated sessions, tasks, or grants may stop receiving remote control updates after disconnect.
+            </p>
+          </Show>
+          <Show when={providerRuntimeLinkConfirmation()?.action === 'connect' && providerRuntimeLinkMatches()}>
+            <p class="text-xs text-muted-foreground">
+              This Local Runtime already reports a matching provider link. Confirming will refresh Desktop's local state without restarting the runtime.
+            </p>
+          </Show>
+          <Show when={providerRuntimeLinkConfirmation()?.action === 'disconnect'}>
+            <p class="text-xs text-muted-foreground">
+              Active work: <span class="font-medium text-foreground">{providerRuntimeLinkActiveWorkLabel()}</span>
+            </p>
+          </Show>
         </div>
       </ConfirmDialog>
     </>
@@ -3570,6 +3746,10 @@ function isEnvironmentActionBusy(
         && busyState.action === 'start_control_plane_connect';
     case 'start_runtime':
       return busyStateMatchesEnvironment(busyState, environmentID, ['start_environment_runtime']);
+    case 'connect_provider_runtime':
+      return busyStateMatchesEnvironment(busyState, environmentID, ['connect_provider_local_runtime']);
+    case 'disconnect_provider_runtime':
+      return busyStateMatchesEnvironment(busyState, environmentID, ['disconnect_provider_local_runtime']);
     case 'stop_runtime':
       return busyStateMatchesEnvironment(busyState, environmentID, ['stop_environment_runtime']);
     case 'refresh_runtime':
@@ -3578,6 +3758,7 @@ function isEnvironmentActionBusy(
     case 'serve_runtime_locally':
       return busyStateMatchesEnvironment(busyState, environmentID, [
         'start_environment_runtime',
+        'connect_provider_local_runtime',
         'open_provider_environment',
         'focus_environment_window',
       ]);
@@ -3757,6 +3938,10 @@ function splitMenuIcon(intent: EnvironmentActionIntent): ((props?: { class?: str
       return Refresh;
     case 'refresh_runtime':
       return Refresh;
+    case 'connect_provider_runtime':
+      return ShieldCheck;
+    case 'disconnect_provider_runtime':
+      return Shield;
     case 'focus_local_serve':
       return ExternalLink;
     default:
@@ -3769,7 +3954,10 @@ function splitMenuItemTone(intent: EnvironmentActionIntent): string {
     case 'stop_runtime':
       return 'light-dark(#dc2626, #f87171)';
     case 'start_runtime':
+    case 'connect_provider_runtime':
       return 'light-dark(#2563eb, #60a5fa)';
+    case 'disconnect_provider_runtime':
+      return 'light-dark(#7c3aed, #a78bfa)';
     default:
       return '';
   }

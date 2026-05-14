@@ -127,11 +127,14 @@ type Agent struct {
 	maintenanceOp    atomic.Int32
 	maintenanceState maintenanceSnapshotStore
 
-	mu       sync.Mutex
-	sessions map[string]*activeSession // channel_id -> session
+	providerLinkMu sync.Mutex
+	mu             sync.Mutex
+	sessions       map[string]*activeSession // channel_id -> session
 
 	controlConnectedOnce sync.Once
 	onControlConnected   func()
+	runCtx               context.Context
+	controlCancel        context.CancelFunc
 
 	localUIEnabled        bool
 	controlChannelEnabled bool
@@ -328,6 +331,7 @@ func (a *Agent) Run(ctx context.Context) error {
 	a.StartBackgroundServices(ctx)
 
 	defer func() {
+		a.stopControlChannel()
 		if a != nil && a.code != nil {
 			_ = a.code.Close()
 		}
@@ -344,44 +348,19 @@ func (a *Agent) Run(ctx context.Context) error {
 		"goarch", runtime.GOARCH,
 	)
 
-	if !a.controlChannelEnabled {
+	a.mu.Lock()
+	a.runCtx = ctx
+	a.mu.Unlock()
+	if a.controlChannelEnabled {
+		a.startControlChannel(ctx)
+	} else {
 		a.log.Info("control channel disabled; running without remote connection")
-		<-ctx.Done()
-		a.stopAllSessions()
-		return ctx.Err()
 	}
 
-	if a.cfg == nil {
-		return errors.New("missing config")
-	}
-	if err := a.cfg.ValidateRemoteStrict(); err != nil {
-		return err
-	}
-
-	backoff := newBackoff()
-	for {
-		if ctx.Err() != nil {
-			a.stopAllSessions()
-			return ctx.Err()
-		}
-
-		err := a.runControlOnce(ctx)
-		if ctx.Err() != nil {
-			a.stopAllSessions()
-			return ctx.Err()
-		}
-		a.log.Warn("control channel disconnected; retrying", "error", err)
-
-		d := backoff.Next()
-		timer := time.NewTimer(d)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			a.stopAllSessions()
-			return ctx.Err()
-		case <-timer.C:
-		}
-	}
+	<-ctx.Done()
+	a.stopControlChannel()
+	a.stopAllSessions()
+	return ctx.Err()
 }
 
 func (a *Agent) StartBackgroundServices(ctx context.Context) {
@@ -393,13 +372,96 @@ func (a *Agent) StartBackgroundServices(ctx context.Context) {
 	}
 }
 
+func (a *Agent) startOrRestartControlChannel() {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	ctx := a.runCtx
+	a.mu.Unlock()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	a.startControlChannel(ctx)
+}
+
+func (a *Agent) startControlChannel(ctx context.Context) {
+	if a == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	a.mu.Lock()
+	if a.controlCancel != nil {
+		a.controlCancel()
+		a.controlCancel = nil
+	}
+	controlCtx, cancel := context.WithCancel(ctx)
+	a.controlCancel = cancel
+	a.mu.Unlock()
+	go a.runControlLoop(controlCtx)
+}
+
+func (a *Agent) stopControlChannel() {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	cancel := a.controlCancel
+	a.controlCancel = nil
+	a.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+func (a *Agent) runControlLoop(ctx context.Context) {
+	if a == nil {
+		return
+	}
+	cfg := a.remoteConfigSnapshot()
+	if cfg == nil {
+		a.log.Warn("control channel not started: missing config")
+		return
+	}
+	if err := cfg.ValidateRemoteStrict(); err != nil {
+		a.log.Warn("control channel not started: invalid remote config", "error", err)
+		return
+	}
+	backoff := newBackoff()
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		err := a.runControlOnce(ctx)
+		if ctx.Err() != nil {
+			return
+		}
+		a.log.Warn("control channel disconnected; retrying", "error", err)
+
+		d := backoff.Next()
+		timer := time.NewTimer(d)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
+	}
+}
+
 func (a *Agent) runControlOnce(ctx context.Context) error {
-	origin, err := origin.FromWSURL(a.cfg.Direct.WsUrl)
+	cfg := a.remoteConfigSnapshot()
+	if cfg == nil {
+		return errors.New("missing config")
+	}
+	origin, err := origin.FromWSURL(cfg.Direct.WsUrl)
 	if err != nil {
 		return err
 	}
 
-	c, err := fsclient.ConnectDirect(ctx, a.cfg.Direct,
+	c, err := fsclient.ConnectDirect(ctx, cfg.Direct,
 		fsclient.WithOrigin(origin),
 		fsclient.WithKeepaliveInterval(15*time.Second),
 	)
@@ -420,10 +482,10 @@ func (a *Agent) runControlOnce(ctx context.Context) error {
 
 	// Register (best-effort; required for server-side online state).
 	_, err = rpcutil.CallJSON[registerReq, registerResp](ctx, rpcC, controlRPCTypeRegister, &registerReq{
-		EnvPublicID:              a.cfg.EnvironmentID,
-		LocalEnvironmentPublicID: a.cfg.LocalEnvironmentPublicID,
-		BindingGeneration:        a.cfg.BindingGeneration,
-		AgentInstanceID:          a.cfg.AgentInstanceID,
+		EnvPublicID:              cfg.EnvironmentID,
+		LocalEnvironmentPublicID: cfg.LocalEnvironmentPublicID,
+		BindingGeneration:        cfg.BindingGeneration,
+		AgentInstanceID:          cfg.AgentInstanceID,
 		Version:                  a.version,
 		OS:                       runtime.GOOS,
 		Arch:                     runtime.GOARCH,
@@ -451,7 +513,7 @@ func (a *Agent) runControlOnce(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-t.C:
-			if shouldRenewDirectCredentials(a.cfg.Direct, time.Now()) {
+			if shouldRenewDirectCredentials(cfg.Direct, time.Now()) {
 				if err := a.renewDirectCredentials(ctx, rpcC); err != nil {
 					return err
 				}
@@ -465,6 +527,19 @@ func (a *Agent) runControlOnce(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+func (a *Agent) remoteConfigSnapshot() *config.Config {
+	if a == nil {
+		return nil
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.cfg == nil {
+		return nil
+	}
+	cfg := *a.cfg
+	return &cfg
 }
 
 func shouldRenewDirectCredentials(direct *directv1.DirectConnectInfo, now time.Time) bool {

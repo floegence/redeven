@@ -1,26 +1,24 @@
 {
   "schema_version": 1,
   "release_review": {
-    "release_version": "v0.6.7",
-    "previous_release": "v0.6.6",
-    "reviewed_at": "2026-05-13",
-    "review_id": "ssh-ai-source-selection-contract-v1",
-    "summary": "Desktop-managed SSH Host sessions now expose Remote runtime and Desktop model sources as explicit user-selectable choices while keeping Desktop model-source binding failures non-fatal for SSH startup.",
-    "same_window_rationale": "This release changes Desktop and Env App source-selection behavior around an existing runtime-service capability and binding payload, but it does not add a new runtime protocol version, compatibility epoch, minimum Desktop version, or minimum Runtime version. The unchanged window stays safe because older compatible runtimes already report the desktop_ai_broker capability and binding state, while unavailable or failed Desktop source binding now degrades to source availability instead of changing startup or wire-contract requirements.",
+    "release_version": "unreleased",
+    "previous_release": "v0.6.7",
+    "reviewed_at": "2026-05-14",
+    "review_id": "desktop-provider-link-runtime-control-v1",
+    "summary": "Desktop Local Runtime startup is local-only, while provider-local use moves to an explicit runtime-control provider-link contract with observable Runtime Service capability and binding state.",
     "checked_surfaces": [
-      "Runtime Service snapshot capability and binding state normalization",
-      "Desktop SSH Host startup progress and stop-opening operation semantics",
-      "Desktop AI Broker startup report model availability and configured-state propagation",
-      "Desktop AI Broker reverse-forward failure handling during SSH bootstrap",
-      "Desktop AI Broker runtime-control binding failure handling after Local UI forward verification",
-      "Env App Remote runtime and Desktop model-source grouping and selection",
-      "Env App default model and active thread model source switching",
-      "Env App Runtime Settings Desktop model-source status and binding-state rendering",
-      "SSH-managed runtime bootstrap, Local UI health, and startup report refresh paths"
+      "Runtime Service provider_link capability and binding normalization",
+      "Desktop startup reports and attachable runtime state runtime_control metadata",
+      "Desktop Welcome Local Environment Open and Start Runtime separation",
+      "Desktop Welcome provider Connect Local Runtime and Disconnect Local Runtime actions",
+      "Runtime-control provider-link HTTP authorization and structured errors",
+      "Runtime provider bootstrap exchange, config persistence, and control-channel lifecycle",
+      "RCPP desktop open-session bootstrap_ticket semantics",
+      "Local UI health and runtime state token exposure boundaries"
     ]
   },
   "runtime_protocol_version": "redeven-runtime-v1",
-  "compatibility_epoch": 2,
-  "minimum_desktop_version": "v0.5.8",
-  "minimum_runtime_version": "v0.5.11"
+  "compatibility_epoch": 3,
+  "minimum_desktop_version": "v0.6.8",
+  "minimum_runtime_version": "v0.6.8"
 }

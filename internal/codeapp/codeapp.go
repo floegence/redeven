@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/floegence/redeven/internal/ai"
@@ -73,7 +74,8 @@ type Service struct {
 	// Control plane origin is the environment URL base (scheme + <region>.<base-domain>).
 	// Trusted launcher origins are derived from it as:
 	//   <sandbox_id>.<region>.<base-sandbox-domain>
-	cpOrigin controlplaneOrigin
+	cpOriginMu sync.RWMutex
+	cpOrigin   controlplaneOrigin
 
 	codePortMin int
 	codePortMax int
@@ -382,6 +384,34 @@ func (s *Service) AI() *ai.Service {
 	return s.ai
 }
 
+func ValidateControlplaneBaseURL(raw string) error {
+	_, err := parseControlplaneBase(strings.TrimSpace(raw))
+	return err
+}
+
+func (s *Service) SetControlplaneBaseURL(raw string) error {
+	if s == nil {
+		return errors.New("nil service")
+	}
+	cpOrigin, err := parseControlplaneBase(strings.TrimSpace(raw))
+	if err != nil {
+		return err
+	}
+	s.cpOriginMu.Lock()
+	s.cpOrigin = cpOrigin
+	s.cpOriginMu.Unlock()
+	return nil
+}
+
+func (s *Service) controlplaneOrigin() controlplaneOrigin {
+	if s == nil {
+		return controlplaneOrigin{}
+	}
+	s.cpOriginMu.RLock()
+	defer s.cpOriginMu.RUnlock()
+	return s.cpOrigin
+}
+
 func (s *Service) ExternalOriginForCodeSpace(codeSpaceID string) (string, error) {
 	if s == nil {
 		return "", errors.New("nil service")
@@ -393,7 +423,7 @@ func (s *Service) ExternalOriginForCodeSpace(codeSpaceID string) (string, error)
 	if !IsValidCodeSpaceID(id) {
 		return "", fmt.Errorf("invalid codeSpaceID: %q", id)
 	}
-	return s.cpOrigin.trustedLauncherOrigin("cs-" + id)
+	return s.controlplaneOrigin().trustedLauncherOrigin("cs-" + id)
 }
 
 func (s *Service) ExternalOriginForPortForward(forwardID string) (string, error) {
@@ -407,7 +437,7 @@ func (s *Service) ExternalOriginForPortForward(forwardID string) (string, error)
 	if !portforward.IsValidForwardID(id) {
 		return "", fmt.Errorf("invalid forwardID: %q", id)
 	}
-	return s.cpOrigin.trustedLauncherOrigin("pf-" + id)
+	return s.controlplaneOrigin().trustedLauncherOrigin("pf-" + id)
 }
 
 func (s *Service) ExternalOriginForEnvApp(envPublicID string) (string, error) {
@@ -418,7 +448,7 @@ func (s *Service) ExternalOriginForEnvApp(envPublicID string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return s.cpOrigin.trustedLauncherOrigin(sandboxID)
+	return s.controlplaneOrigin().trustedLauncherOrigin(sandboxID)
 }
 
 func envSandboxIDFromEnvPublicID(envPublicID string) (string, error) {
