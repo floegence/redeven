@@ -168,6 +168,17 @@ export function normalizeDesktopSSHEnvironmentDetails(
   return normalizeDesktopSSHHostAccessDetails(value);
 }
 
+export function desktopSSHRuntimeAffectingSettingsMatch(
+  left: DesktopSSHEnvironmentDetails,
+  right: DesktopSSHEnvironmentDetails,
+): boolean {
+  const normalizedLeft = normalizeDesktopSSHEnvironmentDetails(left);
+  const normalizedRight = normalizeDesktopSSHEnvironmentDetails(right);
+  return normalizedLeft.bootstrap_strategy === normalizedRight.bootstrap_strategy
+    && normalizedLeft.release_base_url === normalizedRight.release_base_url
+    && normalizedLeft.connect_timeout_seconds === normalizedRight.connect_timeout_seconds;
+}
+
 export function desktopSSHAuthority(value: DesktopSSHHostAccessDetails): string {
   const normalized = normalizeDesktopSSHHostAccessDetails(value);
   if (normalized.ssh_port === null) {

@@ -124,6 +124,34 @@ describe('main routing', () => {
     expect(mainSrc).toContain("if (normalized.action === 'upgrade_runtime')");
   });
 
+  it('uses fresh provider health and SSH runtime-affecting settings for launcher routing', () => {
+    const mainSrc = readMainSource();
+    const routeSnapshotStart = mainSrc.indexOf('function controlPlaneRouteSnapshot(');
+    const routeSnapshotEnd = mainSrc.indexOf('function launcherActionFailureForRemoteRouteState', routeSnapshotStart);
+    expect(routeSnapshotStart).toBeGreaterThanOrEqual(0);
+    expect(routeSnapshotEnd).toBeGreaterThan(routeSnapshotStart);
+    const routeSnapshotSrc = mainSrc.slice(routeSnapshotStart, routeSnapshotEnd);
+    expect(routeSnapshotSrc).toContain('const summary = controlPlaneSummary(controlPlane);');
+    expect(routeSnapshotSrc).toContain('summary.environments.find');
+    expect(routeSnapshotSrc).not.toContain('controlPlane.environments.find');
+
+    const sshStartStart = mainSrc.indexOf('async function startSSHEnvironmentRuntimeRecord(');
+    const sshStartEnd = mainSrc.indexOf('const pendingStart = pendingSSHRuntimeStartByKey.get(runtimeKey)', sshStartStart);
+    expect(sshStartStart).toBeGreaterThanOrEqual(0);
+    expect(sshStartEnd).toBeGreaterThan(sshStartStart);
+    const sshStartSrc = mainSrc.slice(sshStartStart, sshStartEnd);
+    expect(sshStartSrc).toContain('options.forceRuntimeUpdate !== true');
+    expect(sshStartSrc).toContain('desktopSSHRuntimeAffectingSettingsMatch(existingRecord.details, sshDetails)');
+
+    const openSSHStart = mainSrc.indexOf('async function openSSHEnvironmentFromLauncher(');
+    const openSSHEnd = mainSrc.indexOf('const optimisticSessionKey = sshDesktopSessionKey(sshDetails);', openSSHStart);
+    expect(mainSrc.slice(openSSHStart, openSSHEnd)).toContain('connect_timeout_seconds: request.connect_timeout_seconds');
+
+    const startRuntimeStart = mainSrc.indexOf('async function startEnvironmentRuntimeFromLauncher(');
+    const startRuntimeEnd = mainSrc.indexOf('if (normalizedSSHTarget)', startRuntimeStart);
+    expect(mainSrc.slice(startRuntimeStart, startRuntimeEnd)).toContain('connect_timeout_seconds: request.connect_timeout_seconds');
+  });
+
   it('keeps delete actions non-blocking while preventing stale SSH and provider tasks from resurrecting entries', () => {
     const mainSrc = readMainSource();
     const sshDeleteStart = mainSrc.indexOf('async function deleteSavedSSHEnvironmentFromWelcome');

@@ -227,6 +227,7 @@ import {
   type DesktopProviderEnvironmentRuntimeHealth,
 } from '../shared/controlPlaneProvider';
 import {
+  desktopSSHRuntimeAffectingSettingsMatch,
   defaultSavedSSHEnvironmentLabel,
   normalizeDesktopSSHEnvironmentDetails,
   type DesktopSSHEnvironmentDetails,
@@ -2547,28 +2548,33 @@ async function startSSHEnvironmentRuntimeRecord(
   const label = compact(options.label) || defaultSavedSSHEnvironmentLabel(sshDetails);
   const existingRecord = sshEnvironmentRuntimeByKey.get(runtimeKey) ?? null;
   if (existingRecord) {
-    try {
-      const startup = await loadExternalLocalUIStartup(existingRecord.local_forward_url, DESKTOP_RUNTIME_PROBE_TIMEOUT_MS);
-      if (startup) {
-        const updatedRecord = {
-          ...existingRecord,
-          startup: {
-            ...existingRecord.startup,
-            local_ui_url: startup.local_ui_url,
-            local_ui_urls: startup.local_ui_urls,
-            password_required: startup.password_required,
-            runtime_service: startup.runtime_service ?? existingRecord.startup.runtime_service,
-          },
-          local_forward_url: startup.local_ui_url,
-        };
-        sshEnvironmentRuntimeByKey.set(runtimeKey, updatedRecord);
-        if (runtimeServiceIsOpenable(updatedRecord.startup.runtime_service)) {
-          sshRuntimeMaintenanceByKey.delete(runtimeKey);
+    const canReuseExisting = options.forceRuntimeUpdate !== true
+      && desktopSSHRuntimeAffectingSettingsMatch(existingRecord.details, sshDetails);
+    if (canReuseExisting) {
+      try {
+        const startup = await loadExternalLocalUIStartup(existingRecord.local_forward_url, DESKTOP_RUNTIME_PROBE_TIMEOUT_MS);
+        if (startup) {
+          const updatedRecord = {
+            ...existingRecord,
+            details: sshDetails,
+            startup: {
+              ...existingRecord.startup,
+              local_ui_url: startup.local_ui_url,
+              local_ui_urls: startup.local_ui_urls,
+              password_required: startup.password_required,
+              runtime_service: startup.runtime_service ?? existingRecord.startup.runtime_service,
+            },
+            local_forward_url: startup.local_ui_url,
+          };
+          sshEnvironmentRuntimeByKey.set(runtimeKey, updatedRecord);
+          if (runtimeServiceIsOpenable(updatedRecord.startup.runtime_service)) {
+            sshRuntimeMaintenanceByKey.delete(runtimeKey);
+          }
+          return updatedRecord;
         }
-        return updatedRecord;
+      } catch {
+        // Restart below if the cached runtime is no longer reachable.
       }
-    } catch {
-      // Restart below if the cached runtime is no longer reachable.
     }
     await existingRecord.disconnect().catch(() => undefined);
     sshEnvironmentRuntimeByKey.delete(runtimeKey);
@@ -3448,7 +3454,7 @@ function controlPlaneRouteSnapshot(
     };
   }
   const summary = controlPlaneSummary(controlPlane);
-  const environment = controlPlane.environments.find((entry) => entry.env_public_id === envPublicID) ?? null;
+  const environment = summary.environments.find((entry) => entry.env_public_id === envPublicID) ?? null;
   return {
     controlPlane,
     summary,
@@ -4079,6 +4085,7 @@ async function openSSHEnvironmentFromLauncher(
     remote_install_dir: request.remote_install_dir,
     bootstrap_strategy: request.bootstrap_strategy,
     release_base_url: request.release_base_url,
+    connect_timeout_seconds: request.connect_timeout_seconds,
   });
   const optimisticSessionKey = sshDesktopSessionKey(sshDetails);
   const optimisticSession = liveSession(optimisticSessionKey);
@@ -4194,6 +4201,7 @@ async function startEnvironmentRuntimeFromLauncher(
       remote_install_dir: request.remote_install_dir,
       bootstrap_strategy: request.bootstrap_strategy,
       release_base_url: request.release_base_url,
+      connect_timeout_seconds: request.connect_timeout_seconds,
     })
     : null;
   if (normalizedSSHTarget) {
@@ -5269,11 +5277,15 @@ async function restartSSHRuntimeFromShell(
   sessionRecord.runtime_handle = runtimeRecord.runtime_handle;
   sessionRecord.startup = runtimeRecord.startup;
   sessionRecord.allowed_base_url = runtimeRecord.local_forward_url;
-  sessionRecord.target = buildSSHDesktopTarget(runtimeRecord.details, {
+  const nextTarget = buildSSHDesktopTarget(runtimeRecord.details, {
     environmentID: runtimeRecord.environment_id,
     label: runtimeRecord.label,
     forwardedLocalUIURL: runtimeRecord.local_forward_url,
   });
+  if (nextTarget.session_key !== sessionRecord.session_key) {
+    return desktopShellRuntimeActionUnavailable('SSH runtime restart changed the session identity; close and reopen this Environment.');
+  }
+  sessionRecord.target = nextTarget;
   sessionRecord.entry_url = desktopSessionEntryURL(sessionRecord.target, sessionRecord.startup);
   await sessionRecord.diagnostics.configureRuntime(sessionRecord.startup, sessionRecord.allowed_base_url);
   await sessionRecord.diagnostics.recordLifecycle(
