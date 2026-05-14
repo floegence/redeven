@@ -76,7 +76,11 @@ func (h *networkHistory) CalculateSpeed(now time.Time) (receivedSpeed float64, s
 		return 0, 0
 	}
 
-	receivedSpeed = float64(newest.bytesReceived-oldest.bytesReceived) / dt
-	sentSpeed = float64(newest.bytesSent-oldest.bytesSent) / dt
+	if newest.bytesReceived >= oldest.bytesReceived {
+		receivedSpeed = float64(newest.bytesReceived-oldest.bytesReceived) / dt
+	}
+	if newest.bytesSent >= oldest.bytesSent {
+		sentSpeed = float64(newest.bytesSent-oldest.bytesSent) / dt
+	}
 	return receivedSpeed, sentSpeed
 }

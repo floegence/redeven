@@ -221,6 +221,28 @@ func TestServiceReplaceWritesSnapshotAndEvent(t *testing.T) {
 	}
 }
 
+func TestNormalizeAbsolutePathUsesHostNativePathRules(t *testing.T) {
+	t.Parallel()
+
+	cleaned := normalizeAbsolutePath(filepath.Join(string(filepath.Separator), "tmp", "repo", "..", "repo", "file.txt"))
+	want := filepath.Join(string(filepath.Separator), "tmp", "repo", "file.txt")
+	if cleaned != want {
+		t.Fatalf("normalizeAbsolutePath() = %q, want %q", cleaned, want)
+	}
+
+	if got := normalizeAbsolutePath("relative/path"); got != "" {
+		t.Fatalf("relative normalizeAbsolutePath() = %q, want empty", got)
+	}
+
+	if filepath.Separator == '\\' {
+		if got := normalizeAbsolutePath(`C:\Users\demo\repo`); got == "" {
+			t.Fatalf("Windows absolute path should be accepted")
+		}
+	} else if got := normalizeAbsolutePath(`C:\Users\demo\repo`); got != "" {
+		t.Fatalf("non-native Windows-looking path = %q, want empty", got)
+	}
+}
+
 func TestServiceReplaceWritesLayeredObjectsAndEventPayload(t *testing.T) {
 	t.Parallel()
 

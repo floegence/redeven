@@ -18,6 +18,7 @@ import {
   getMonitorProcessMemoryUsagePresentation,
 } from '../utils/monitorProcessUsageTone';
 import { isPermissionDeniedError } from '../utils/permission';
+import { isInternalEnvAppSessionKind } from '../services/floeproxyContract';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { FloatingContextMenu, type FloatingContextMenuItem } from './FloatingContextMenu';
 import { PermissionEmptyState } from './PermissionEmptyState';
@@ -145,7 +146,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
     return copied;
   });
 
-  const isInternalSession = (s: ActiveSession): boolean => String(s.sessionKind ?? '').trim() === 'envapp_proxy';
+  const isInternalSession = (s: ActiveSession): boolean => isInternalEnvAppSessionKind(s.sessionKind);
 
   const sortedSessions = createMemo<ActiveSession[]>(() => {
     const list = sessions() ?? [];

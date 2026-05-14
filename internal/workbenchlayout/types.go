@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -673,14 +674,12 @@ func normalizeWidgetStateData(widgetType string, state WidgetStateData) (WidgetS
 
 func normalizeAbsolutePath(value string) string {
 	path := strings.TrimSpace(value)
-	if path == "" || !strings.HasPrefix(path, "/") {
+	if path == "" || !filepath.IsAbs(path) {
 		return ""
 	}
-	for strings.Contains(path, "//") {
-		path = strings.ReplaceAll(path, "//", "/")
-	}
+	path = filepath.Clean(path)
 	if len(path) > 1 {
-		path = strings.TrimRight(path, "/")
+		path = strings.TrimRight(path, string(filepath.Separator))
 	}
 	if len(path) > 4096 {
 		return ""

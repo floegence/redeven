@@ -226,6 +226,74 @@ describe('RuntimeMonitorPanel', () => {
     expect(host.textContent).toContain('Direct (no tunnel)');
   });
 
+  it('hides current env app RPC and legacy proxy sessions by default', async () => {
+    rpcMocks.monitor.getSysMonitor.mockResolvedValue(makeSnapshot(1));
+    rpcMocks.sessions.listActiveSessions.mockResolvedValue({
+      sessions: [
+        {
+          channelId: 'ch-env-rpc',
+          userPublicID: 'user_env',
+          userEmail: 'env@example.com',
+          floeApp: 'com.floegence.redeven.agent',
+          codeSpaceID: 'env-ui',
+          sessionKind: 'envapp_rpc',
+          tunnelUrl: '',
+          createdAtUnixMs: 1,
+          connectedAtUnixMs: 3,
+          canRead: true,
+          canWrite: false,
+          canExecute: true,
+        },
+        {
+          channelId: 'ch-env-proxy',
+          userPublicID: 'user_env',
+          userEmail: 'env@example.com',
+          floeApp: 'com.floegence.redeven.agent',
+          codeSpaceID: 'env-ui',
+          sessionKind: 'envapp_proxy',
+          tunnelUrl: '',
+          createdAtUnixMs: 1,
+          connectedAtUnixMs: 2,
+          canRead: true,
+          canWrite: false,
+          canExecute: true,
+        },
+        {
+          channelId: 'ch-code',
+          userPublicID: 'user_code',
+          userEmail: 'code@example.com',
+          floeApp: 'com.floegence.redeven.code',
+          codeSpaceID: 'code-1',
+          sessionKind: 'codeapp',
+          tunnelUrl: '',
+          createdAtUnixMs: 1,
+          connectedAtUnixMs: 1,
+          canRead: true,
+          canWrite: true,
+          canExecute: true,
+        },
+      ],
+    });
+
+    render(() => <RuntimeMonitorPanel variant="deck" />, host);
+    await flushPanel();
+
+    expect(host.textContent).toContain('Show internal (2)');
+    expect(host.textContent).toContain('ch-code');
+    expect(host.textContent).not.toContain('ch-env-rpc');
+    expect(host.textContent).not.toContain('ch-env-proxy');
+
+    const showInternalButton = Array.from(host.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Show internal')
+    );
+    expect(showInternalButton).toBeTruthy();
+    showInternalButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushPanel();
+
+    expect(host.textContent).toContain('ch-env-rpc');
+    expect(host.textContent).toContain('ch-env-proxy');
+  });
+
   it('kills a process from the row context menu and refreshes monitoring', async () => {
     rpcMocks.monitor.getSysMonitor.mockResolvedValue(
       makeSnapshot(1, [

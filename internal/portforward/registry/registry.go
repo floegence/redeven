@@ -13,6 +13,8 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+var ErrForwardNotFound = errors.New("port forward not found")
+
 type Forward struct {
 	ForwardID          string `json:"forward_id"`
 	TargetURL          string `json:"target_url"`
@@ -248,8 +250,18 @@ func (r *Registry) UpdateForward(ctx context.Context, forwardID string, patch Up
 
 	args = append(args, id)
 	q := fmt.Sprintf("UPDATE port_forwards SET %s WHERE forward_id = ?", strings.Join(set, ", "))
-	_, err := r.db.ExecContext(ctx, q, args...)
-	return err
+	res, err := r.db.ExecContext(ctx, q, args...)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrForwardNotFound
+	}
+	return nil
 }
 
 func (r *Registry) DeleteForward(ctx context.Context, forwardID string) error {
@@ -263,8 +275,18 @@ func (r *Registry) DeleteForward(ctx context.Context, forwardID string) error {
 	if id == "" {
 		return errors.New("missing forward_id")
 	}
-	_, err := r.db.ExecContext(ctx, `DELETE FROM port_forwards WHERE forward_id = ?`, id)
-	return err
+	res, err := r.db.ExecContext(ctx, `DELETE FROM port_forwards WHERE forward_id = ?`, id)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrForwardNotFound
+	}
+	return nil
 }
 
 func (r *Registry) TouchLastOpened(ctx context.Context, forwardID string) error {
@@ -279,12 +301,22 @@ func (r *Registry) TouchLastOpened(ctx context.Context, forwardID string) error 
 		return errors.New("missing forward_id")
 	}
 	now := time.Now().UnixMilli()
-	_, err := r.db.ExecContext(ctx, `
+	res, err := r.db.ExecContext(ctx, `
 UPDATE port_forwards
 SET last_opened_at_unix_ms = ?, updated_at_unix_ms = ?
 WHERE forward_id = ?
 `, now, now, id)
-	return err
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrForwardNotFound
+	}
+	return nil
 }
 
 func boolToInt(b bool) int {
