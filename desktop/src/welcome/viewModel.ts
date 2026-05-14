@@ -535,6 +535,13 @@ function providerLocalLinkLabel(environment: DesktopEnvironmentEntry): string {
   if (environment.kind !== 'provider_environment') {
     return '';
   }
+  const linkedRuntime = environment.provider_linked_runtime_summary;
+  if (
+    linkedRuntime
+    && (linkedRuntime.provider_link_remote_enabled !== true || linkedRuntime.runtime_remote_enabled !== true)
+  ) {
+    return `Linked to ${linkedRuntime.label}, needs connect`;
+  }
   return environment.provider_linked_runtime_summary
     ? `Linked to ${environment.provider_linked_runtime_summary.label}`
     : 'No managed runtime linked';
@@ -799,7 +806,13 @@ function runtimeProviderLinkMenuAction(
   if (!target) {
     return null;
   }
-  if (target.provider_link_state === 'linked') {
+  // IMPORTANT: A runtime can have a saved provider binding while the running
+  // process is still local-only. In that state the Local/SSH card must expose
+  // Connect so the user can enable provider control explicitly; Provider cards
+  // remain remote-access-only.
+  const linkedButRemoteDisabled = target.provider_link_state === 'linked'
+    && (target.provider_link_binding?.remote_enabled !== true || target.runtime_service?.remote_enabled !== true);
+  if (target.provider_link_state === 'linked' && !linkedButRemoteDisabled) {
     return {
       id: 'disconnect_provider_runtime',
       label: 'Disconnect from provider',
@@ -812,12 +825,13 @@ function runtimeProviderLinkMenuAction(
     };
   }
   const canConnect = runtimeProviderLinkCanConnect(environment, target);
+  const label = linkedButRemoteDisabled ? 'Connect to provider' : 'Connect to provider...';
   return {
     id: 'connect_provider_runtime',
-    label: 'Connect to provider...',
+    label,
     action: {
       intent: 'connect_provider_runtime',
-      label: 'Connect to provider...',
+      label,
       enabled: canConnect,
       variant: 'outline',
     },

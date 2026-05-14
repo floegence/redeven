@@ -958,6 +958,8 @@ describe('desktopWelcomeState', () => {
         runtime_target_id: 'local:local',
         runtime_kind: 'local_environment',
         label: 'Local Environment',
+        provider_link_remote_enabled: true,
+        runtime_remote_enabled: true,
       },
       runtime_health: expect.objectContaining({
         status: 'online',
@@ -1175,6 +1177,87 @@ describe('desktopWelcomeState', () => {
         ]),
       }),
     ]));
+  });
+
+  it('keeps local-only linked runtimes connectable from Local cards while Provider cards stay remote-only', () => {
+    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment({
+          currentRuntime: {
+            local_ui_url: 'http://localhost:23998/',
+            desktop_managed: true,
+            effective_run_mode: 'desktop',
+            ...providerRuntimeState('env_demo'),
+            runtime_control: {
+              protocol_version: 'redeven-runtime-control-v1',
+              base_url: 'http://127.0.0.1:25000/',
+              token: 'runtime-control-token',
+              desktop_owner_id: 'desktop-owner-test',
+            },
+            runtime_service: {
+              protocol_version: 'redeven-runtime-v1',
+              service_owner: 'desktop',
+              desktop_managed: true,
+              effective_run_mode: 'desktop',
+              remote_enabled: false,
+              compatibility: 'compatible',
+              open_readiness: { state: 'openable' },
+              active_workload: {
+                terminal_count: 0,
+                session_count: 0,
+                task_count: 0,
+                port_forward_count: 0,
+              },
+              capabilities: {
+                desktop_ai_broker: { supported: false },
+                provider_link: {
+                  supported: true,
+                  bind_method: 'runtime_control_v1',
+                },
+              },
+              bindings: {
+                desktop_ai_broker: { state: 'unsupported' },
+                provider_link: {
+                  state: 'linked',
+                  provider_origin: 'https://cp.example.invalid',
+                  provider_id: 'example_control_plane',
+                  env_public_id: 'env_demo',
+                  remote_enabled: false,
+                },
+              },
+            },
+          },
+        }),
+        provider_environments: [providerEnvironment],
+      }),
+    });
+
+    const providerEntry = snapshot.environments.find((entry) => (
+      entry.id === providerEnvironment.id && entry.kind === 'provider_environment'
+    ));
+    expect(providerEntry?.provider_runtime_link_target).toBeUndefined();
+    expect(providerEntry?.provider_environment_candidates).toBeUndefined();
+    expect(providerEntry).toMatchObject({
+      provider_linked_runtime_summary: {
+        runtime_target_id: 'local:local',
+        runtime_kind: 'local_environment',
+        label: 'Local Environment',
+        provider_link_remote_enabled: false,
+        runtime_remote_enabled: false,
+      },
+    });
+
+    const localEntry = snapshot.environments.find((entry) => entry.kind === 'local_environment');
+    expect(localEntry?.provider_runtime_link_target).toMatchObject({
+      id: 'local:local',
+      provider_link_state: 'linked',
+      provider_origin: 'https://cp.example.invalid',
+      provider_id: 'example_control_plane',
+      env_public_id: 'env_demo',
+      can_connect_provider: true,
+      can_disconnect_provider: true,
+    });
   });
 
   it('keeps dual-route entries visible when remote access is removed and marks their Local Environment state as controlplane', () => {

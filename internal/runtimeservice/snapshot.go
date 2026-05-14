@@ -283,9 +283,6 @@ func NormalizeProviderLinkBinding(binding ProviderLinkBinding, capability Capabi
 	if binding.State != ProviderLinkStateLinked {
 		binding.RemoteEnabled = false
 	}
-	if binding.State == ProviderLinkStateLinked {
-		binding.RemoteEnabled = true
-	}
 	return binding
 }
 

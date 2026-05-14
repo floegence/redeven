@@ -538,7 +538,11 @@ function buildProviderRuntimeLinkTarget(input: Readonly<{
     provider_origin: providerLinkBinding.provider_origin,
     provider_id: providerLinkBinding.provider_id,
     env_public_id: providerLinkBinding.env_public_id,
-    can_connect_provider: blockedReasonCode === '' && providerLinkBinding.state !== 'linked',
+    can_connect_provider: blockedReasonCode === '' && (
+      providerLinkBinding.state !== 'linked'
+      || providerLinkBinding.remote_enabled !== true
+      || runtimeService?.remote_enabled !== true
+    ),
     can_disconnect_provider: providerLinkBinding.state === 'linked',
     ...(blockedReasonCode !== '' ? { blocked_reason_code: blockedReasonCode } : {}),
     ...(blockedReason !== '' ? { blocked_reason: blockedReason } : {}),
@@ -1019,6 +1023,8 @@ function buildProviderEnvironmentEntry(
           runtime_target_id: linkedRuntime.id,
           runtime_kind: linkedRuntime.kind,
           label: linkedRuntime.label,
+          provider_link_remote_enabled: linkedRuntime.provider_link_binding?.remote_enabled === true,
+          runtime_remote_enabled: linkedRuntime.runtime_service?.remote_enabled === true,
         }
       : undefined,
     provider_origin: environment.provider_origin,

@@ -22,7 +22,7 @@ function runtimeService(binding: RuntimeServiceProviderLinkBinding): RuntimeServ
     service_owner: 'desktop',
     desktop_managed: true,
     effective_run_mode: 'desktop',
-    remote_enabled: binding.state === 'linked',
+    remote_enabled: binding.state === 'linked' && binding.remote_enabled === true,
     compatibility: 'compatible',
     open_readiness: { state: 'openable' },
     active_workload: {
@@ -94,6 +94,28 @@ describe('buildDesktopProviderRuntimeLinkPlan', () => {
     }), provider())).toMatchObject({
       state: 'already_linked',
       can_connect: false,
+      can_disconnect: true,
+      runtime_matches_provider: true,
+    });
+  });
+
+  it('allows a matching saved provider link to enable the remote control connection', () => {
+    const binding = {
+      state: 'linked' as const,
+      provider_origin: 'https://cp.example.invalid',
+      provider_id: 'example_control_plane',
+      env_public_id: 'env_demo',
+      remote_enabled: false,
+    };
+    expect(buildDesktopProviderRuntimeLinkPlan(target({
+      runtime_service: runtimeService(binding),
+      provider_link_state: 'linked',
+      provider_link_binding: binding,
+      can_connect_provider: true,
+      can_disconnect_provider: true,
+    }), provider())).toMatchObject({
+      state: 'linked_but_remote_disabled',
+      can_connect: true,
       can_disconnect: true,
       runtime_matches_provider: true,
     });
