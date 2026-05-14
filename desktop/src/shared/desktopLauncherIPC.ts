@@ -151,6 +151,7 @@ export type DesktopLauncherRuntimeTarget = Readonly<
     external_local_ui_url: string;
     label: string;
     force_runtime_update: boolean;
+    allow_active_work_replacement: boolean;
   }>
   & Partial<DesktopSSHEnvironmentDetails>
 >;
@@ -487,6 +488,7 @@ function normalizeDesktopLauncherRuntimeTarget(
     ...(releaseBaseURL !== '' ? { release_base_url: releaseBaseURL } : {}),
     ...(candidate.connect_timeout_seconds != null ? { connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds(candidate.connect_timeout_seconds) } : {}),
     ...(candidate.force_runtime_update === true ? { force_runtime_update: true } : {}),
+    ...(candidate.allow_active_work_replacement === true ? { allow_active_work_replacement: true } : {}),
   };
 
   if (

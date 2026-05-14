@@ -114,7 +114,8 @@ describe('sshRuntime', () => {
     expect(source).toContain('async function waitForForwardedLocalUIOpenable(');
     expect(source).toContain('managedSSHRuntimeAttachPolicy(');
     expect(source).toContain('DesktopSSHRuntimeMaintenanceRequiredError');
-    expect(source).toContain('allowActiveWorkReplacement: args.forceRuntimeUpdate === true');
+    expect(source).toContain('allowActiveWorkReplacement?: boolean;');
+    expect(source).toContain('allowActiveWorkReplacement: args.allowActiveWorkReplacement === true');
     expect(source).toContain('/_redeven_proxy/api/runtime/bindings/desktop-ai-broker');
     expect(source).toContain('Desktop is creating a private SSH bridge for local model calls.');
     expect(source).toContain('Desktop model bridge unavailable: ${message}');

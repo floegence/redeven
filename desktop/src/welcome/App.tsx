@@ -288,7 +288,6 @@ type ProviderRuntimeLinkConfirmationAction = 'connect' | 'disconnect';
 type ProviderRuntimeLinkConfirmationState = Readonly<{
   environment: DesktopEnvironmentEntry;
   action: ProviderRuntimeLinkConfirmationAction;
-  provider_environment_id?: string;
 }>;
 
 const DESKTOP_FLOE_STORAGE_NAMESPACE = 'redeven-desktop-shell';
@@ -726,6 +725,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [deleteTarget, setDeleteTarget] = createSignal<DesktopEnvironmentEntry | null>(null);
   const [runtimeMaintenanceConfirmation, setRuntimeMaintenanceConfirmation] = createSignal<RuntimeMaintenanceConfirmationState | null>(null);
   const [providerRuntimeLinkConfirmation, setProviderRuntimeLinkConfirmation] = createSignal<ProviderRuntimeLinkConfirmationState | null>(null);
+  const [providerRuntimeLinkProviderEnvironmentID, setProviderRuntimeLinkProviderEnvironmentID] = createSignal('');
   const [deleteControlPlaneTarget, setDeleteControlPlaneTarget] = createSignal<DesktopControlPlaneSummary | null>(null);
   const deleteTargetOperation = createMemo(() => {
     const target = deleteTarget();
@@ -813,6 +813,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const providerRuntimeLinkActionLabel = createMemo(() => (
     providerRuntimeLinkConfirmation()?.action === 'disconnect' ? 'Disconnect from provider' : 'Connect to provider'
   ));
+  const providerRuntimeLinkDialogOpen = createMemo(() => providerRuntimeLinkConfirmation() !== null);
   const providerRuntimeLinkSnapshot = createMemo<RuntimeServiceSnapshot | undefined>(() => (
     environmentRuntimeServiceSnapshot(providerRuntimeLinkConfirmation()?.environment ?? null)
   ));
@@ -1517,7 +1518,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   function runtimeActionRequest(
     environment: DesktopEnvironmentEntry,
     kind: 'start_environment_runtime' | 'stop_environment_runtime' | 'refresh_environment_runtime',
-    options: Readonly<{ forceRuntimeUpdate?: boolean }> = {},
+    options: Readonly<{ forceRuntimeUpdate?: boolean; allowActiveWorkReplacement?: boolean }> = {},
   ): DesktopLauncherActionRequest | null {
     if (environment.kind === 'local_environment') {
       return {
@@ -1525,6 +1526,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         environment_id: environment.id,
         label: environment.label,
         ...(options.forceRuntimeUpdate ? { force_runtime_update: true } : {}),
+        ...(options.allowActiveWorkReplacement ? { allow_active_work_replacement: true } : {}),
       };
     }
     if (environment.kind === 'provider_environment') {
@@ -1533,6 +1535,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         environment_id: environment.id,
         label: environment.label,
         ...(options.forceRuntimeUpdate ? { force_runtime_update: true } : {}),
+        ...(options.allowActiveWorkReplacement ? { allow_active_work_replacement: true } : {}),
       };
     }
     if (environment.kind === 'external_local_ui') {
@@ -1542,6 +1545,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         external_local_ui_url: environment.local_ui_url,
         label: environment.label,
         ...(options.forceRuntimeUpdate ? { force_runtime_update: true } : {}),
+        ...(options.allowActiveWorkReplacement ? { allow_active_work_replacement: true } : {}),
       };
     }
     if (!environment.ssh_details) {
@@ -1559,6 +1563,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       release_base_url: environment.ssh_details.release_base_url,
       connect_timeout_seconds: environment.ssh_details.connect_timeout_seconds,
       ...(options.forceRuntimeUpdate ? { force_runtime_update: true } : {}),
+      ...(options.allowActiveWorkReplacement ? { allow_active_work_replacement: true } : {}),
     };
   }
 
@@ -1599,10 +1604,15 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function startEnvironmentRuntime(
     environment: DesktopEnvironmentEntry,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
-    options: Readonly<{ announceSuccess?: boolean; forceRuntimeUpdate?: boolean }> = {},
+    options: Readonly<{
+      announceSuccess?: boolean;
+      forceRuntimeUpdate?: boolean;
+      allowActiveWorkReplacement?: boolean;
+    }> = {},
   ): Promise<boolean> {
     const request = runtimeActionRequest(environment, 'start_environment_runtime', {
       forceRuntimeUpdate: options.forceRuntimeUpdate,
+      allowActiveWorkReplacement: options.allowActiveWorkReplacement,
     });
     if (!request) {
       setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', 'Desktop could not resolve that runtime target.');
@@ -1656,7 +1666,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (confirmation.action === 'update') {
       setRuntimeMaintenanceConfirmation(null);
       const latestTarget = await loadLatestEnvironmentEntry(target.id) ?? target;
-      await startEnvironmentRuntime(latestTarget, 'connect', { forceRuntimeUpdate: true });
+      await startEnvironmentRuntime(latestTarget, 'connect', {
+        forceRuntimeUpdate: true,
+        allowActiveWorkReplacement: true,
+      });
+      return;
+    }
+    if (confirmation.action === 'restart' && target.kind === 'ssh_environment' && target.runtime_maintenance) {
+      setRuntimeMaintenanceConfirmation(null);
+      const latestTarget = await loadLatestEnvironmentEntry(target.id) ?? target;
+      await startEnvironmentRuntime(latestTarget, 'connect', { allowActiveWorkReplacement: true });
       return;
     }
     const stopped = await stopEnvironmentRuntime(target, 'connect');
@@ -1666,7 +1685,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setRuntimeMaintenanceConfirmation(null);
     if (confirmation.action === 'restart') {
       const latestTarget = await loadLatestEnvironmentEntry(target.id) ?? target;
-      await startEnvironmentRuntime(latestTarget, 'connect');
+      await startEnvironmentRuntime(latestTarget, 'connect', { allowActiveWorkReplacement: true });
     }
   }
 
@@ -1693,9 +1712,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (!target || !target.provider_origin || !target.provider_id || !target.env_public_id) {
       return false;
     }
-    const confirmation = providerRuntimeLinkConfirmation();
-    const providerEnvironment = confirmation?.provider_environment_id
-      ? snapshot().environments.find((entry) => entry.id === confirmation.provider_environment_id)
+    const providerEnvironmentID = providerRuntimeLinkProviderEnvironmentID();
+    const providerEnvironment = providerEnvironmentID
+      ? snapshot().environments.find((entry) => entry.id === providerEnvironmentID)
       : null;
     return runtimeServiceProviderLinkMatches(target.runtime_service, {
       provider_origin: providerEnvironment?.provider_origin ?? target.provider_origin,
@@ -1723,13 +1742,18 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       setErrorMessage('connect', 'No provider environments are available to connect.');
       return;
     }
+    setProviderRuntimeLinkProviderEnvironmentID(action === 'disconnect'
+      ? providerEnvironmentIDForRuntimeTarget(environment)
+      : '');
     setProviderRuntimeLinkConfirmation({
       environment,
       action,
-      provider_environment_id: action === 'disconnect'
-        ? providerEnvironmentIDForRuntimeTarget(environment)
-        : undefined,
     });
+  }
+
+  function closeProviderRuntimeLinkConfirmation(): void {
+    setProviderRuntimeLinkConfirmation(null);
+    setProviderRuntimeLinkProviderEnvironmentID('');
   }
 
   function providerEnvironmentIDForRuntimeTarget(environment: DesktopEnvironmentEntry): string {
@@ -1751,7 +1775,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return;
     }
     const latestEnvironment = await loadLatestEnvironmentEntry(confirmation.environment.id) ?? confirmation.environment;
-    const providerEnvironmentID = confirmation.provider_environment_id ?? '';
+    const providerEnvironmentID = providerRuntimeLinkProviderEnvironmentID();
     if (providerEnvironmentID === '') {
       setErrorMessage('connect', 'Choose a provider environment first.');
       return;
@@ -1760,7 +1784,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       ? await disconnectProviderRuntime(latestEnvironment, providerEnvironmentID, 'connect')
       : await connectProviderRuntime(latestEnvironment, providerEnvironmentID, 'connect');
     if (ok) {
-      setProviderRuntimeLinkConfirmation(null);
+      closeProviderRuntimeLinkConfirmation();
     }
   }
 
@@ -2769,10 +2793,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       </ConfirmDialog>
 
       <ConfirmDialog
-        open={providerRuntimeLinkConfirmation() !== null}
+        open={providerRuntimeLinkDialogOpen()}
         onOpenChange={(open) => {
           if (!open) {
-            setProviderRuntimeLinkConfirmation(null);
+            closeProviderRuntimeLinkConfirmation();
           }
         }}
         title={providerRuntimeLinkActionLabel()}
@@ -2808,11 +2832,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                       <input
                         type="radio"
                         name="provider-runtime-link-target"
-                        checked={providerRuntimeLinkConfirmation()?.provider_environment_id === candidate.provider_environment_id}
-                        onChange={() => setProviderRuntimeLinkConfirmation((current) => current ? {
-                          ...current,
-                          provider_environment_id: candidate.provider_environment_id,
-                        } : current)}
+                        checked={providerRuntimeLinkProviderEnvironmentID() === candidate.provider_environment_id}
+                        onChange={() => setProviderRuntimeLinkProviderEnvironmentID(candidate.provider_environment_id)}
                       />
                     </label>
                   )}
