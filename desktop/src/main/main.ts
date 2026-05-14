@@ -566,15 +566,32 @@ function localRuntimeProviderBindingFailure(
   );
 }
 
-async function providerOpenSessionForEnvironment(
-  preferences: DesktopPreferences,
-  environment: DesktopProviderEnvironmentRecord,
-): Promise<Readonly<{
+type ProviderDesktopSessionMaterial = Readonly<{
   preferences: DesktopPreferences;
   controlPlane: DesktopSavedControlPlane;
   bootstrapTicket: string;
   remoteSessionURL: string;
   label: string;
+}>;
+
+function launcherActionFailureForMissingProviderEnvironment(
+  environment: DesktopProviderEnvironmentRecord,
+): DesktopLauncherActionFailure {
+  return launcherActionFailure(
+    'control_plane_missing',
+    'control_plane',
+    'This provider is no longer saved in Desktop. Reconnect the provider, then try this Environment again.',
+    providerEnvironmentFailureContext(environment),
+  );
+}
+
+async function resolveProviderDesktopSessionTarget(
+  preferences: DesktopPreferences,
+  environment: DesktopProviderEnvironmentRecord,
+): Promise<Readonly<{
+  preferences: DesktopPreferences;
+  controlPlane: DesktopSavedControlPlane;
+  environmentLabel: string;
 }>> {
   const initialState = controlPlaneRouteSnapshot(
     preferences,
@@ -583,12 +600,7 @@ async function providerOpenSessionForEnvironment(
     environment.env_public_id,
   );
   if (!initialState.controlPlane) {
-    throw launcherActionFailure(
-      'control_plane_missing',
-      'control_plane',
-      'This provider is no longer saved in Desktop. Reconnect the provider, then try this Environment again.',
-      providerEnvironmentFailureContext(environment),
-    );
+    throw launcherActionFailureForMissingProviderEnvironment(environment);
   }
   let synchronized = {
     preferences,
@@ -607,16 +619,22 @@ async function providerOpenSessionForEnvironment(
     environment.provider_id,
     environment.env_public_id,
   );
-  const routeFailure = launcherActionFailureForRemoteRouteState(latestState.remoteRouteState, {
-    environmentID: environment.id,
-    providerOrigin: environment.provider_origin,
-    providerID: environment.provider_id,
-    envPublicID: environment.env_public_id,
-  });
-  if (routeFailure) {
-    throw routeFailure;
+  if (!latestState.controlPlane) {
+    throw launcherActionFailureForMissingProviderEnvironment(environment);
   }
-  const authorized = await ensureControlPlaneAccessToken(synchronized.preferences, synchronized.controlPlane);
+  return {
+    preferences: synchronized.preferences,
+    controlPlane: latestState.controlPlane,
+    environmentLabel: latestState.environment?.label ?? environment.label,
+  };
+}
+
+async function requestProviderDesktopSessionMaterial(
+  preferences: DesktopPreferences,
+  environment: DesktopProviderEnvironmentRecord,
+): Promise<ProviderDesktopSessionMaterial> {
+  const target = await resolveProviderDesktopSessionTarget(preferences, environment);
+  const authorized = await ensureControlPlaneAccessToken(target.preferences, target.controlPlane);
   const openSession = await requestDesktopOpenSession(
     authorized.controlPlane.provider,
     authorized.accessToken,
@@ -627,7 +645,42 @@ async function providerOpenSessionForEnvironment(
     controlPlane: authorized.controlPlane,
     bootstrapTicket: compact(openSession.bootstrap_ticket),
     remoteSessionURL: compact(openSession.remote_session_url),
-    label: latestState.environment?.label ?? environment.label,
+    label: target.environmentLabel,
+  };
+}
+
+async function prepareProviderRemoteOpenSession(
+  preferences: DesktopPreferences,
+  environment: DesktopProviderEnvironmentRecord,
+): Promise<ProviderDesktopSessionMaterial> {
+  const target = await resolveProviderDesktopSessionTarget(preferences, environment);
+  const latestState = controlPlaneRouteSnapshot(
+    target.preferences,
+    environment.provider_origin,
+    environment.provider_id,
+    environment.env_public_id,
+  );
+  const routeFailure = launcherActionFailureForRemoteRouteState(latestState.remoteRouteState, {
+    environmentID: environment.id,
+    providerOrigin: environment.provider_origin,
+    providerID: environment.provider_id,
+    envPublicID: environment.env_public_id,
+  });
+  if (routeFailure) {
+    throw routeFailure;
+  }
+  const authorized = await ensureControlPlaneAccessToken(target.preferences, target.controlPlane);
+  const openSession = await requestDesktopOpenSession(
+    authorized.controlPlane.provider,
+    authorized.accessToken,
+    environment.env_public_id,
+  );
+  return {
+    preferences: authorized.preferences,
+    controlPlane: authorized.controlPlane,
+    bootstrapTicket: compact(openSession.bootstrap_ticket),
+    remoteSessionURL: compact(openSession.remote_session_url),
+    label: target.environmentLabel,
   };
 }
 
@@ -4350,7 +4403,7 @@ async function connectProviderLocalRuntimeFromLauncher(
   }
 
   try {
-    const providerSession = await providerOpenSessionForEnvironment(preferences, environment);
+    const providerSession = await requestProviderDesktopSessionMaterial(preferences, environment);
     if (!providerSession.bootstrapTicket) {
       return launcherActionFailure(
         'provider_invalid_response',
@@ -4813,7 +4866,7 @@ async function openProviderEnvironmentFromLauncher(
   }
 
   try {
-    const openSession = await providerOpenSessionForEnvironment(preferences, environment);
+    const openSession = await prepareProviderRemoteOpenSession(preferences, environment);
     return openProviderEnvironmentWithOpenSession({
       providerOrigin: openSession.controlPlane.provider.provider_origin,
       providerID: openSession.controlPlane.provider.provider_id,
