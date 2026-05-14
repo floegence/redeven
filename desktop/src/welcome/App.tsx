@@ -3885,19 +3885,31 @@ function EnvironmentPrimaryActionPanel(props: Readonly<{
             {(item) => {
               const loading = () => isEnvironmentActionBusy(item.action, props.busyState, props.environmentID);
               const isSecondary = item.emphasis === 'secondary';
+              const secondaryIconOnly = () => isSecondary && props.overlay.actions.length > 1;
+              const showsRefreshIcon = item.action.intent === 'refresh_runtime';
               return (
-                <div class={isSecondary ? 'relative' : 'relative flex-1'}>
+                <div class={secondaryIconOnly() ? 'relative' : 'relative flex-1'}>
                   <Button
                     size="sm"
                     variant={item.emphasis === 'primary' ? 'default' : 'outline'}
-                    class={isSecondary ? 'aspect-square p-0' : 'w-full justify-center'}
+                    class={secondaryIconOnly() ? 'aspect-square p-0' : cn('w-full justify-center', showsRefreshIcon && 'gap-1.5')}
                     loading={loading()}
                     disabled={panelBusy() && !loading()}
                     onClick={() => props.onRunAction(item.action)}
-                    title={isSecondary ? item.label : undefined}
-                    aria-label={isSecondary ? item.label : undefined}
+                    title={secondaryIconOnly() ? item.label : undefined}
+                    aria-label={secondaryIconOnly() ? item.label : undefined}
                   >
-                    <Show when={isSecondary} fallback={item.label}>
+                    <Show
+                      when={secondaryIconOnly()}
+                      fallback={(
+                        <>
+                          <Show when={showsRefreshIcon}>
+                            <Refresh class="h-3.5 w-3.5" />
+                          </Show>
+                          {item.label}
+                        </>
+                      )}
+                    >
                       <Refresh class="h-3.5 w-3.5" />
                     </Show>
                   </Button>
