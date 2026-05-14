@@ -7,7 +7,7 @@ import {
 
 export type EnvironmentGuidancePendingIntent = Extract<
   EnvironmentActionIntent,
-  'refresh_runtime' | 'start_runtime' | 'connect_provider_runtime' | 'disconnect_provider_runtime' | 'serve_runtime_locally' | 'update_runtime'
+  'refresh_runtime' | 'start_runtime' | 'connect_provider_runtime' | 'disconnect_provider_runtime' | 'update_runtime'
 >;
 
 export type EnvironmentGuidanceFeedbackTone = 'info' | 'warning' | 'error' | 'success';
@@ -33,7 +33,6 @@ export function isEnvironmentGuidancePendingIntent(
     || intent === 'start_runtime'
     || intent === 'connect_provider_runtime'
     || intent === 'disconnect_provider_runtime'
-    || intent === 'serve_runtime_locally'
     || intent === 'update_runtime';
 }
 
@@ -79,23 +78,19 @@ export function failEnvironmentGuidanceIntent(
     : state.pending_intent === 'update_runtime'
       ? 'Runtime update failed'
       : state.pending_intent === 'connect_provider_runtime'
-        ? 'Provider link failed'
-        : state.pending_intent === 'disconnect_provider_runtime'
-          ? 'Provider unlink failed'
-          : state.pending_intent === 'serve_runtime_locally'
-            ? 'Local runtime action failed'
-            : 'Status refresh failed';
+      ? 'Provider link failed'
+      : state.pending_intent === 'disconnect_provider_runtime'
+        ? 'Provider unlink failed'
+        : 'Status refresh failed';
   const fallbackDetail = state.pending_intent === 'start_runtime'
     ? 'Desktop could not start the runtime for this environment.'
     : state.pending_intent === 'update_runtime'
       ? 'Desktop could not update and restart the runtime for this environment.'
       : state.pending_intent === 'connect_provider_runtime'
-        ? 'Desktop could not connect the Local Runtime to this provider Environment.'
-        : state.pending_intent === 'disconnect_provider_runtime'
-          ? 'Desktop could not disconnect the Local Runtime from this provider Environment.'
-          : state.pending_intent === 'serve_runtime_locally'
-            ? 'Desktop could not continue with the local runtime flow for this environment.'
-            : 'Desktop could not refresh the runtime status.';
+        ? 'Desktop could not connect this runtime to the provider Environment.'
+      : state.pending_intent === 'disconnect_provider_runtime'
+          ? 'Desktop could not disconnect this runtime from its provider Environment.'
+          : 'Desktop could not refresh the runtime status.';
 
   return {
     ...state,
@@ -222,23 +217,17 @@ export function guidanceSessionNotice(
         title: 'Starting runtime…',
         detail: 'Desktop is starting the local runtime and waiting for the next status update.',
       };
-    case 'serve_runtime_locally':
-      return {
-        tone: 'info',
-        title: 'Preparing local runtime…',
-        detail: 'Desktop is routing you to the next local runtime step for this environment.',
-      };
     case 'connect_provider_runtime':
       return {
         tone: 'info',
-        title: 'Connecting Local Runtime…',
-        detail: 'Desktop is requesting a provider link ticket and connecting the running Local Runtime.',
+        title: 'Connecting runtime…',
+        detail: 'Desktop is requesting a provider link ticket and connecting the selected runtime.',
       };
     case 'disconnect_provider_runtime':
       return {
         tone: 'info',
-        title: 'Disconnecting Local Runtime…',
-        detail: 'Desktop is disconnecting the running Local Runtime from this provider.',
+        title: 'Disconnecting runtime…',
+        detail: 'Desktop is disconnecting the selected runtime from its provider.',
       };
     case 'update_runtime':
       return {

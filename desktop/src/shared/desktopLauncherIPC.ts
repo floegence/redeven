@@ -16,6 +16,12 @@ import type {
 } from './desktopRuntimeHealth';
 import type { DesktopLocalRuntimeOpenPlan } from './localRuntimeSupervisor';
 import type { RuntimeServiceSnapshot } from './runtimeService';
+import type {
+  DesktopProviderEnvironmentCandidate,
+  DesktopProviderRuntimeLinkTarget,
+  DesktopProviderRuntimeLinkTargetID,
+} from './providerRuntimeLinkTarget';
+import { normalizeDesktopProviderRuntimeLinkTargetID } from './providerRuntimeLinkTarget';
 
 export const DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL = 'redeven-desktop:launcher-get-snapshot';
 export const DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL = 'redeven-desktop:launcher-perform-action';
@@ -50,8 +56,8 @@ export type DesktopLauncherActionOutcome =
   | 'opened_environment_window'
   | 'focused_environment_window'
   | 'started_environment_runtime'
-  | 'connected_provider_local_runtime'
-  | 'disconnected_provider_local_runtime'
+  | 'connected_provider_runtime'
+  | 'disconnected_provider_runtime'
   | 'stopped_environment_runtime'
   | 'canceled_launcher_operation'
   | 'refreshed_environment_runtime'
@@ -95,8 +101,8 @@ export type DesktopLauncherActionKind =
   | 'open_remote_environment'
   | 'open_ssh_environment'
   | 'start_environment_runtime'
-  | 'connect_provider_local_runtime'
-  | 'disconnect_provider_local_runtime'
+  | 'connect_provider_runtime'
+  | 'disconnect_provider_runtime'
   | 'stop_environment_runtime'
   | 'refresh_environment_runtime'
   | 'refresh_all_environment_runtimes'
@@ -172,18 +178,13 @@ export type DesktopEnvironmentEntry = Readonly<{
   open_local_session_lifecycle?: DesktopLauncherSessionLifecycle;
   open_remote_session_key?: string;
   open_remote_session_lifecycle?: DesktopLauncherSessionLifecycle;
-  provider_local_ui_bind?: string;
-  provider_local_ui_password_configured?: boolean;
-  provider_local_owner?: 'desktop' | 'agent' | 'unknown';
-  provider_preferred_open_route?: 'auto' | DesktopLocalEnvironmentStateRoute;
-  provider_default_open_route?: DesktopLocalEnvironmentStateRoute;
-  provider_effective_window_route?: DesktopLocalEnvironmentStateRoute | '';
-  provider_local_runtime_configured?: boolean;
-  provider_local_runtime_state?: DesktopLocalRuntimeState;
-  provider_local_runtime_url?: string;
-  provider_local_runtime_plan?: DesktopLocalRuntimeOpenPlan;
-  provider_runtime_service?: RuntimeServiceSnapshot;
-  provider_local_close_behavior?: DesktopLocalCloseBehavior;
+  provider_runtime_link_target?: DesktopProviderRuntimeLinkTarget;
+  provider_environment_candidates?: readonly DesktopProviderEnvironmentCandidate[];
+  provider_linked_runtime_summary?: Readonly<{
+    runtime_target_id: DesktopProviderRuntimeLinkTargetID;
+    runtime_kind: DesktopProviderRuntimeLinkTarget['kind'];
+    label: string;
+  }>;
   provider_origin?: string;
   provider_id?: string;
   env_public_id?: string;
@@ -281,13 +282,15 @@ export type DesktopLauncherActionRequest = Readonly<
       kind: 'start_environment_runtime';
     } & DesktopLauncherRuntimeTarget)
   | {
-      kind: 'connect_provider_local_runtime';
-      environment_id: string;
-    }
+      kind: 'connect_provider_runtime';
+      provider_environment_id: string;
+      runtime_target_id: DesktopProviderRuntimeLinkTargetID;
+  }
   | {
-      kind: 'disconnect_provider_local_runtime';
-      environment_id: string;
-    }
+      kind: 'disconnect_provider_runtime';
+      provider_environment_id: string;
+      runtime_target_id: DesktopProviderRuntimeLinkTargetID;
+  }
   | ({
       kind: 'stop_environment_runtime';
     } & DesktopLauncherRuntimeTarget)
@@ -528,18 +531,24 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           : {}),
       };
     }
+    case 'connect_provider_runtime':
+    case 'disconnect_provider_runtime': {
+      const providerEnvironmentID = compact((candidate as { provider_environment_id?: unknown }).provider_environment_id);
+      const runtimeTargetID = normalizeDesktopProviderRuntimeLinkTargetID(
+        (candidate as { runtime_target_id?: unknown }).runtime_target_id,
+      );
+      if (providerEnvironmentID === '' || !runtimeTargetID) {
+        return null;
+      }
+      return {
+        kind,
+        provider_environment_id: providerEnvironmentID,
+        runtime_target_id: runtimeTargetID,
+      } as DesktopLauncherActionRequest;
+    }
     case 'start_environment_runtime':
-    case 'connect_provider_local_runtime':
-    case 'disconnect_provider_local_runtime':
     case 'stop_environment_runtime':
     case 'refresh_environment_runtime': {
-      if (kind === 'connect_provider_local_runtime' || kind === 'disconnect_provider_local_runtime') {
-        const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
-        if (environmentID === '') {
-          return null;
-        }
-        return { kind, environment_id: environmentID } as DesktopLauncherActionRequest;
-      }
       const target = normalizeDesktopLauncherRuntimeTarget(candidate as Record<string, unknown>);
       if (!target) {
         return null;

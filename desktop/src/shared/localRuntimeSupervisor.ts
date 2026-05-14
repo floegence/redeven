@@ -1,35 +1,21 @@
-import { normalizeControlPlaneOrigin } from './controlPlaneProvider';
 import {
   runtimeServiceHasActiveWork,
   runtimeServiceIsOpenable,
   runtimeServiceMatchesIdentity,
   runtimeServiceNeedsRuntimeUpdate,
-  runtimeServiceProviderLinkBinding,
   type RuntimeServiceIdentity,
+  type RuntimeServiceProviderLinkBinding,
   type RuntimeServiceSnapshot,
 } from './runtimeService';
 
-export type DesktopLocalRuntimeBinding = Readonly<{
-  provider_origin: string;
-  provider_id: string;
-  env_public_id: string;
+export type DesktopLocalRuntimeTarget = Readonly<{
+  kind: 'local_environment';
 }>;
-
-export type DesktopLocalRuntimeTarget = Readonly<
-  | {
-    kind: 'local_environment';
-  }
-  | ({
-    kind: 'provider_environment';
-  } & DesktopLocalRuntimeBinding)
->;
 
 export type DesktopLocalRuntimeOpenPlanState =
   | 'not_running'
   | 'openable'
   | 'starting'
-  | 'needs_provider_link'
-  | 'linked_elsewhere'
   | 'restart_to_reclaim'
   | 'restart_to_update'
   | 'blocked_active_work'
@@ -64,75 +50,29 @@ export type DesktopLocalRuntimeOpenPlan = Readonly<{
   requires_bootstrap: boolean;
   requires_restart: boolean;
   requires_confirmation: boolean;
-  current_binding?: DesktopLocalRuntimeBinding;
-  target_binding?: DesktopLocalRuntimeBinding;
   runtime_url?: string;
   message: string;
 }>;
 
-export type DesktopProviderPreferredOpenRoute = 'auto' | 'local_host' | 'remote_desktop';
+export type DesktopLocalRuntimeProviderBinding = Readonly<{
+  provider_origin: string;
+  provider_id: string;
+  env_public_id: string;
+}>;
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-export function normalizeDesktopLocalRuntimeBinding(
-  value: Readonly<Partial<DesktopLocalRuntimeBinding>> | null | undefined,
-): DesktopLocalRuntimeBinding | null {
-  const providerOrigin = compact(value?.provider_origin);
-  const providerID = compact(value?.provider_id);
-  const envPublicID = compact(value?.env_public_id);
-  if (providerOrigin === '' || providerID === '' || envPublicID === '') {
-    return null;
-  }
-  try {
-    return {
-      provider_origin: normalizeControlPlaneOrigin(providerOrigin),
-      provider_id: providerID,
-      env_public_id: envPublicID,
-    };
-  } catch {
-    return null;
-  }
-}
-
-export function desktopLocalRuntimeBindingFromObservation(
-  runtime: DesktopLocalRuntimeObservation | null | undefined,
-): DesktopLocalRuntimeBinding | null {
-  const providerLink = runtimeServiceProviderLinkBinding(runtime?.runtime_service);
-  if (providerLink.state === 'linked') {
-    return normalizeDesktopLocalRuntimeBinding({
-      provider_origin: providerLink.provider_origin,
-      provider_id: providerLink.provider_id,
-      env_public_id: providerLink.env_public_id,
-    });
-  }
-  return normalizeDesktopLocalRuntimeBinding({
-    provider_origin: runtime?.controlplane_base_url,
-    provider_id: runtime?.controlplane_provider_id,
-    env_public_id: runtime?.env_public_id,
-  });
-}
-
-export function desktopLocalRuntimeBindingFromTarget(
-  target: DesktopLocalRuntimeTarget,
-): DesktopLocalRuntimeBinding | null {
-  if (target.kind !== 'provider_environment') {
-    return null;
-  }
-  return normalizeDesktopLocalRuntimeBinding(target);
-}
-
-export function desktopLocalRuntimeBindingsMatch(
-  left: DesktopLocalRuntimeBinding | null | undefined,
-  right: DesktopLocalRuntimeBinding | null | undefined,
+export function desktopRuntimeProviderBindingMatches(
+  binding: RuntimeServiceProviderLinkBinding | null | undefined,
+  expected: Readonly<Partial<DesktopLocalRuntimeProviderBinding>> | null | undefined,
 ): boolean {
   return Boolean(
-    left
-    && right
-    && left.provider_origin === right.provider_origin
-    && left.provider_id === right.provider_id
-    && left.env_public_id === right.env_public_id,
+    binding?.state === 'linked'
+    && compact(binding.provider_origin) === compact(expected?.provider_origin)
+    && compact(binding.provider_id) === compact(expected?.provider_id)
+    && compact(binding.env_public_id) === compact(expected?.env_public_id),
   );
 }
 
@@ -167,8 +107,6 @@ function plan(
     requiresBootstrap: boolean;
     requiresRestart: boolean;
     requiresConfirmation: boolean;
-    currentBinding?: DesktopLocalRuntimeBinding;
-    targetBinding?: DesktopLocalRuntimeBinding;
     runtimeURL?: string;
     message: string;
   }>,
@@ -184,8 +122,6 @@ function plan(
     requires_bootstrap: input.requiresBootstrap,
     requires_restart: input.requiresRestart,
     requires_confirmation: input.requiresConfirmation,
-    ...(input.currentBinding ? { current_binding: input.currentBinding } : {}),
-    ...(input.targetBinding ? { target_binding: input.targetBinding } : {}),
     ...(input.runtimeURL ? { runtime_url: input.runtimeURL } : {}),
     message: input.message,
   };
@@ -203,11 +139,7 @@ export function buildDesktopLocalRuntimeOpenPlan(
   const runtimeRunning = runtimeURL !== '';
   const runtimeOwnership = desktopLocalRuntimeOwnership(runtime, options.desktopOwnerID);
   const desktopCanManage = runtimeOwnership === 'owned' || runtimeOwnership === 'legacy_unleased';
-  const currentBinding = desktopLocalRuntimeBindingFromObservation(runtime);
-  const targetBinding = desktopLocalRuntimeBindingFromTarget(target);
-  const runtimeMatchesTarget = target.kind === 'local_environment'
-    ? currentBinding === null
-    : desktopLocalRuntimeBindingsMatch(currentBinding, targetBinding);
+  const runtimeMatchesTarget = true;
   const requiresBootstrap = false;
   const runtimeService = runtime?.runtime_service;
   const runtimeNeedsUpdate = !runtimeService
@@ -227,10 +159,7 @@ export function buildDesktopLocalRuntimeOpenPlan(
       requiresBootstrap,
       requiresRestart: false,
       requiresConfirmation: false,
-      targetBinding: targetBinding ?? undefined,
-      message: target.kind === 'provider_environment'
-        ? 'Start the Local Runtime first, then connect it to this provider Environment.'
-        : 'Desktop will start the Local Runtime before opening the Local Environment.',
+      message: 'Desktop will start the Local Runtime before opening the Local Environment.',
     });
   }
 
@@ -246,8 +175,6 @@ export function buildDesktopLocalRuntimeOpenPlan(
       requiresBootstrap,
       requiresRestart: true,
       requiresConfirmation: false,
-      currentBinding: currentBinding ?? undefined,
-      targetBinding: targetBinding ?? undefined,
       runtimeURL,
       message: 'This Desktop-managed Local Runtime is owned by another Desktop instance. Stop that runtime from its owner, then refresh status.',
     });
@@ -266,8 +193,6 @@ export function buildDesktopLocalRuntimeOpenPlan(
         requiresBootstrap,
         requiresRestart: true,
         requiresConfirmation: true,
-        currentBinding: currentBinding ?? undefined,
-        targetBinding: targetBinding ?? undefined,
         runtimeURL,
         message: 'This older Desktop-managed runtime needs to be restarted before Desktop can own it. Close active runtime work before restarting.',
       });
@@ -283,8 +208,6 @@ export function buildDesktopLocalRuntimeOpenPlan(
       requiresBootstrap,
       requiresRestart: true,
       requiresConfirmation: false,
-      currentBinding: currentBinding ?? undefined,
-      targetBinding: targetBinding ?? undefined,
       runtimeURL,
       message: 'Desktop will restart the Local Runtime before opening.',
     });
@@ -302,8 +225,6 @@ export function buildDesktopLocalRuntimeOpenPlan(
       requiresBootstrap,
       requiresRestart: false,
       requiresConfirmation: false,
-      currentBinding: currentBinding ?? undefined,
-      targetBinding: targetBinding ?? undefined,
       runtimeURL,
       message: 'Runtime is ready to open.',
     });
@@ -322,8 +243,6 @@ export function buildDesktopLocalRuntimeOpenPlan(
         requiresBootstrap,
         requiresRestart: true,
         requiresConfirmation: false,
-        currentBinding: currentBinding ?? undefined,
-        targetBinding: targetBinding ?? undefined,
         runtimeURL,
         message: 'This runtime needs an update, but it is not managed by Desktop. Restart it from its owner, then refresh status.',
       });
@@ -340,8 +259,6 @@ export function buildDesktopLocalRuntimeOpenPlan(
         requiresBootstrap,
         requiresRestart: true,
         requiresConfirmation: true,
-        currentBinding: currentBinding ?? undefined,
-        targetBinding: targetBinding ?? undefined,
         runtimeURL,
         message: 'This runtime needs an update, but active work is still running. Close or stop that work before restarting the runtime.',
       });
@@ -357,69 +274,8 @@ export function buildDesktopLocalRuntimeOpenPlan(
       requiresBootstrap,
       requiresRestart: true,
       requiresConfirmation: false,
-      currentBinding: currentBinding ?? undefined,
-      targetBinding: targetBinding ?? undefined,
       runtimeURL,
       message: 'Desktop will restart the Local Runtime with the bundled update before opening.',
-    });
-  }
-
-  if (!runtimeMatchesTarget) {
-    if (!desktopCanManage) {
-      return plan({
-        target,
-        state: 'blocked_external_runtime',
-        runtimeRunning,
-        runtimeMatchesTarget,
-        desktopCanManage,
-        canOpen: false,
-        canPrepare: false,
-        requiresBootstrap,
-        requiresRestart: true,
-        requiresConfirmation: false,
-        currentBinding: currentBinding ?? undefined,
-        targetBinding: targetBinding ?? undefined,
-        runtimeURL,
-        message: currentBinding
-          ? 'The Local Runtime is managed outside Desktop and linked to another provider Environment.'
-          : 'The Local Runtime is managed outside Desktop and is not linked to this provider Environment.',
-      });
-    }
-    if (currentBinding && runtimeHasActiveWork) {
-      return plan({
-        target,
-        state: 'blocked_active_work',
-        runtimeRunning,
-        runtimeMatchesTarget,
-        desktopCanManage,
-        canOpen: false,
-        canPrepare: false,
-        requiresBootstrap,
-        requiresRestart: false,
-        requiresConfirmation: true,
-        currentBinding: currentBinding ?? undefined,
-        targetBinding: targetBinding ?? undefined,
-        runtimeURL,
-        message: 'The Local Runtime has active provider work. Disconnect that work before linking another provider Environment.',
-      });
-    }
-    return plan({
-      target,
-      state: currentBinding ? 'linked_elsewhere' : 'needs_provider_link',
-      runtimeRunning,
-      runtimeMatchesTarget,
-      desktopCanManage,
-      canOpen: false,
-      canPrepare: true,
-      requiresBootstrap,
-      requiresRestart: false,
-      requiresConfirmation: false,
-      currentBinding: currentBinding ?? undefined,
-      targetBinding: targetBinding ?? undefined,
-      runtimeURL,
-      message: currentBinding
-        ? 'Local Runtime is connected to another provider Environment. Disconnect it before connecting this one.'
-        : 'Connect Local Runtime to this provider Environment before opening it locally.',
     });
   }
 
@@ -435,8 +291,6 @@ export function buildDesktopLocalRuntimeOpenPlan(
       requiresBootstrap,
       requiresRestart: false,
       requiresConfirmation: false,
-      currentBinding: currentBinding ?? undefined,
-      targetBinding: targetBinding ?? undefined,
       runtimeURL,
       message: runtimeService.open_readiness.message || 'Runtime is preparing the Environment App.',
     });
@@ -453,16 +307,7 @@ export function buildDesktopLocalRuntimeOpenPlan(
     requiresBootstrap,
     requiresRestart: false,
     requiresConfirmation: false,
-    currentBinding: currentBinding ?? undefined,
-    targetBinding: targetBinding ?? undefined,
     runtimeURL,
     message: runtimeService?.open_readiness?.message || 'Runtime cannot open this Environment yet.',
   });
-}
-
-export function desktopLocalRuntimePlanAllowsAutoLocalOpen(
-  plan: DesktopLocalRuntimeOpenPlan,
-  preferredOpenRoute: DesktopProviderPreferredOpenRoute | null | undefined,
-): boolean {
-  return plan.can_open && preferredOpenRoute !== 'remote_desktop';
 }

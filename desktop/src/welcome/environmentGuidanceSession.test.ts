@@ -120,13 +120,13 @@ describe('environmentGuidanceSession', () => {
       pending_intent: null,
       feedback: {
         tone: 'warning',
-        title: 'Runtime cannot open yet',
-        detail: 'Connect Local Runtime to this provider Environment before opening it locally.',
+        title: 'Refresh provider status',
+        detail: 'Reconnect this provider in Desktop to restore remote access.',
       },
     }));
   });
 
-  it('settles the active session once the environment no longer exposes a guidance popover', () => {
+  it('settles the active session once the local runtime no longer exposes a guidance popover', () => {
     const localServe = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo', {
       label: 'Demo Local Serve',
     });
@@ -138,15 +138,15 @@ describe('environmentGuidanceSession', () => {
         testLocalEnvironmentSession(localServe, 'http://127.0.0.1:24001/'),
       ],
     });
-    const providerEntry = snapshot.environments.find((entry) => entry.kind === 'provider_environment');
+    const localEntry = snapshot.environments.find((entry) => entry.kind === 'local_environment');
 
-    expect(providerEntry).toBeTruthy();
-    expect(environmentSupportsGuidancePopover(providerEntry!)).toBe(false);
+    expect(localEntry).toBeTruthy();
+    expect(environmentSupportsGuidancePopover(localEntry!)).toBe(false);
     expect(reconcileEnvironmentGuidanceSession(
-      startEnvironmentGuidanceIntent(null, providerEntry!.id, 'start_runtime'),
+      startEnvironmentGuidanceIntent(null, localEntry!.id, 'start_runtime'),
       snapshot.environments,
     )).toEqual({
-      environment_id: providerEntry!.id,
+      environment_id: localEntry!.id,
       pending_intent: null,
       feedback: {
         tone: 'success',
@@ -168,11 +168,11 @@ describe('environmentGuidanceSession', () => {
         testLocalEnvironmentSession(localServe, 'http://127.0.0.1:24001/'),
       ],
     });
-    const providerEntry = snapshot.environments.find((entry) => entry.kind === 'provider_environment');
+    const localEntry = snapshot.environments.find((entry) => entry.kind === 'local_environment');
 
-    expect(providerEntry).toBeTruthy();
+    expect(localEntry).toBeTruthy();
     const settled = reconcileEnvironmentGuidanceSession(
-      startEnvironmentGuidanceIntent(null, providerEntry!.id, 'start_runtime'),
+      startEnvironmentGuidanceIntent(null, localEntry!.id, 'start_runtime'),
       snapshot.environments,
     );
 

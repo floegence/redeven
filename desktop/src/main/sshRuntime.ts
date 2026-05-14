@@ -18,6 +18,7 @@ import {
 import { loadExternalLocalUIStartup } from './runtimeState';
 import type { DesktopSessionRuntimeHandle, DesktopSessionRuntimeLaunchMode } from './sessionRuntime';
 import type { StartupReport } from './startup';
+import type { DesktopRuntimeControlEndpoint } from '../shared/runtimeControl';
 import { formatBlockedLaunchDiagnostics, parseLaunchReport } from './launchReport';
 import {
   DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
@@ -107,6 +108,7 @@ type RecentLogs = Readonly<{
   control_stderr: string;
   reverse_forward_stderr: string;
   forward_stderr: string;
+  runtime_control_forward_stderr: string;
 }>;
 
 type MutableRecentLogs = {
@@ -115,6 +117,7 @@ type MutableRecentLogs = {
   control_stderr: string;
   reverse_forward_stderr: string;
   forward_stderr: string;
+  runtime_control_forward_stderr: string;
 };
 
 type SSHCommandResult = Readonly<{
@@ -156,6 +159,7 @@ export class DesktopSSHRuntimeMaintenanceRequiredError extends Error {
 export type ManagedSSHRuntime = Readonly<{
   startup: StartupReport;
   local_forward_url: string;
+  runtime_control_forward_url?: string;
   runtime_handle: DesktopSessionRuntimeHandle;
   disconnect: () => Promise<void>;
   stop: () => Promise<void>;
@@ -177,6 +181,7 @@ type ManagedSSHRemoteStartup = Readonly<{
 export type StartManagedSSHRuntimeArgs = Readonly<{
   target: DesktopSSHEnvironmentDetails;
   runtimeReleaseTag: string;
+  desktopOwnerID: string;
   sshBinary?: string;
   installScriptURL?: string;
   sourceRuntimeRoot?: string;
@@ -189,7 +194,16 @@ export type StartManagedSSHRuntimeArgs = Readonly<{
   probeTimeoutMs?: number;
   aiBroker?: ManagedSSHRuntimeAIBroker | null;
   signal?: AbortSignal;
-  onLog?: (stream: 'master_stderr' | 'control_stdout' | 'control_stderr' | 'reverse_forward_stderr' | 'forward_stderr', chunk: string) => void;
+  onLog?: (
+    stream:
+      | 'master_stderr'
+      | 'control_stdout'
+      | 'control_stderr'
+      | 'reverse_forward_stderr'
+      | 'forward_stderr'
+      | 'runtime_control_forward_stderr',
+    chunk: string,
+  ) => void;
   onProgress?: (progress: DesktopSSHRuntimeProgress) => void;
 }>;
 
@@ -600,6 +614,7 @@ export function buildManagedSSHStartScript(): string {
     'local_environment_root="${install_root%/}/local-environment"',
     'state_root="${local_environment_root}/state"',
     'session_token="$3"',
+    'desktop_owner_id="${4:-}"',
     'session_dir="${local_environment_root}/sessions/${session_token}"',
     'report_path="${session_dir}/startup-report.json"',
     'log_dir="${local_environment_root}/logs"',
@@ -610,6 +625,11 @@ export function buildManagedSSHStartScript(): string {
     '  echo "Redeven runtime is not installed at ${binary}" >&2',
     '  exit 1',
     'fi',
+    'if [ -z "$desktop_owner_id" ]; then',
+    '  echo "Desktop owner id is required for SSH runtime-control." >&2',
+    '  exit 1',
+    'fi',
+    'export REDEVEN_DESKTOP_OWNER_ID="$desktop_owner_id"',
     'if command -v setsid >/dev/null 2>&1; then',
     '  setsid "$binary" run --state-root "$state_root" --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path" >>"$log_path" 2>&1 </dev/null &',
     'else',
@@ -761,6 +781,42 @@ function remotePortFromStartup(startup: StartupReport): number {
     throw new Error('Remote Redeven startup report did not include a usable Local UI port.');
   }
   return port;
+}
+
+function isLoopbackRuntimeControlHost(value: string): boolean {
+  const host = compact(value).toLowerCase().replace(/^\[(.*)\]$/u, '$1');
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+}
+
+function remoteRuntimeControlPortFromStartup(startup: StartupReport): number {
+  const endpoint = startup.runtime_control;
+  if (!endpoint) {
+    throw new Error('Remote Redeven startup report did not include Desktop runtime-control. Restart this SSH runtime with the current Desktop runtime before connecting it to a provider.');
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(endpoint.base_url);
+  } catch {
+    throw new Error('Remote Redeven startup report returned an invalid runtime-control URL.');
+  }
+  if (parsed.protocol !== 'http:' || !isLoopbackRuntimeControlHost(parsed.hostname)) {
+    throw new Error('Remote Redeven runtime-control must listen on local HTTP loopback.');
+  }
+  const port = Number.parseInt(compact(parsed.port), 10);
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    throw new Error('Remote Redeven startup report did not include a usable runtime-control port.');
+  }
+  return port;
+}
+
+function forwardedRuntimeControlEndpoint(
+  endpoint: DesktopRuntimeControlEndpoint,
+  localPort: number,
+): DesktopRuntimeControlEndpoint {
+  return {
+    ...endpoint,
+    base_url: localForwardURL(localPort),
+  };
 }
 
 function localForwardURL(port: number): string {
@@ -2012,6 +2068,10 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
   throwIfSSHRuntimeCanceled(args.signal);
   const target = normalizeDesktopSSHEnvironmentDetails(args.target);
   const runtimeReleaseTag = normalizeRuntimeReleaseTag(args.runtimeReleaseTag);
+  const desktopOwnerID = compact(args.desktopOwnerID);
+  if (desktopOwnerID === '') {
+    throw new Error('Desktop owner id is required before starting a managed SSH runtime.');
+  }
   const sshBinary = compact(args.sshBinary) || 'ssh';
   const installScriptURL = compact(args.installScriptURL) || PUBLIC_INSTALL_SCRIPT_URL;
   const tempRoot = compact(args.tempRoot) || os.tmpdir();
@@ -2026,6 +2086,7 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
     control_stderr: '',
     reverse_forward_stderr: '',
     forward_stderr: '',
+    runtime_control_forward_stderr: '',
   };
 
   const tempDir = await fs.mkdtemp(path.join(tempRoot, 'rdv-ssh-'));
@@ -2059,6 +2120,7 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
   let controlProcess: SpawnedSSHProcess | null = null;
   let reverseForwardProcess: SpawnedSSHProcess | null = null;
   let forwardProcess: SpawnedSSHProcess | null = null;
+  let runtimeControlForwardProcess: SpawnedSSHProcess | null = null;
   let remoteBrokerURL = '';
   let remoteRuntimePID: number | null = null;
   let remoteStopAttempted = false;
@@ -2076,6 +2138,7 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       'Desktop is closing local SSH tunnels and temporary startup files.',
     );
     await stopChildProcess(forwardProcess, stopTimeoutMs).catch(() => undefined);
+    await stopChildProcess(runtimeControlForwardProcess, stopTimeoutMs).catch(() => undefined);
     await stopChildProcess(reverseForwardProcess, stopTimeoutMs).catch(() => undefined);
     await stopChildProcess(controlProcess, stopTimeoutMs).catch(() => undefined);
     await stopChildProcess(masterProcess, stopTimeoutMs).catch(() => undefined);
@@ -2188,6 +2251,7 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
           target.remote_install_dir,
           runtimeReleaseTag,
           sessionToken,
+          desktopOwnerID,
         ]),
       ], auth, undefined, args.signal);
       let controlSpawnError: Error | null = null;
@@ -2258,6 +2322,8 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
 
     const localPort = await allocateLocalForwardPort();
     const remotePort = remotePortFromStartup(remoteStartup);
+    const runtimeControlPort = await allocateLocalForwardPort();
+    const remoteRuntimeControlPort = remoteRuntimeControlPortFromStartup(remoteStartup);
     emitSSHRuntimeProgress(
       args.onProgress,
       'ssh_opening_tunnel',
@@ -2280,7 +2346,24 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       throw forwardSpawnError;
     }
 
+    runtimeControlForwardProcess = spawnSSHProcess(sshBinary, [
+      ...sshSharedArgs(controlSocketPath, connectTimeoutSeconds, auth.mode),
+      '-o', 'ExitOnForwardFailure=yes',
+      '-N',
+      '-L', `127.0.0.1:${runtimeControlPort}:127.0.0.1:${remoteRuntimeControlPort}`,
+      ...sshTargetArgs(target),
+    ], auth, undefined, args.signal);
+    let runtimeControlForwardSpawnError: Error | null = null;
+    runtimeControlForwardProcess.once('error', (error) => {
+      runtimeControlForwardSpawnError = error instanceof Error ? error : new Error(String(error));
+    });
+    bindRecentLog(runtimeControlForwardProcess.stderr, 'runtime_control_forward_stderr', logs, args.onLog);
+    if (runtimeControlForwardSpawnError) {
+      throw runtimeControlForwardSpawnError;
+    }
+
     const forwardedURL = localForwardURL(localPort);
+    const runtimeControlForwardURL = localForwardURL(runtimeControlPort);
     emitSSHRuntimeProgress(
       args.onProgress,
       'ssh_verifying_tunnel',
@@ -2326,11 +2409,13 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       local_ui_url: forwardedStartup.local_ui_url,
       local_ui_urls: forwardedStartup.local_ui_urls,
       password_required: forwardedStartup.password_required,
+      runtime_control: forwardedRuntimeControlEndpoint(remoteStartup.runtime_control!, runtimeControlPort),
       runtime_service: forwardedStartup.runtime_service ?? remoteStartup.runtime_service,
     };
     return {
       startup,
       local_forward_url: forwardedURL,
+      runtime_control_forward_url: runtimeControlForwardURL,
       runtime_handle: {
         runtime_kind: 'ssh',
         lifecycle_owner: 'external',

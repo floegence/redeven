@@ -827,7 +827,7 @@ describe('desktopWelcomeState', () => {
     expect(snapshot.settings_surface.next_start_address_display).toBe('localhost:23998');
   });
 
-  it('projects linked-local runtime state onto the aggregated provider card', () => {
+  it('keeps provider cards remote-only while summarizing linked managed runtimes', () => {
     const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
     const managedControlPlane = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo');
     const local = testLocalEnvironment({
@@ -839,9 +839,40 @@ describe('desktopWelcomeState', () => {
         desktop_managed: true,
         effective_run_mode: 'desktop',
         ...providerRuntimeState('env_demo'),
+        runtime_service: {
+          protocol_version: 'redeven-runtime-v1',
+          service_owner: 'desktop',
+          desktop_managed: true,
+          effective_run_mode: 'desktop',
+          remote_enabled: true,
+          compatibility: 'compatible',
+          open_readiness: { state: 'openable' },
+          active_workload: {
+            terminal_count: 0,
+            session_count: 0,
+            task_count: 0,
+            port_forward_count: 0,
+          },
+          capabilities: {
+            desktop_ai_broker: { supported: false },
+            provider_link: {
+              supported: true,
+              bind_method: 'runtime_control_v1',
+            },
+          },
+          bindings: {
+            desktop_ai_broker: { state: 'unsupported' },
+            provider_link: {
+              state: 'linked',
+              provider_origin: 'https://cp.example.invalid',
+              provider_id: 'example_control_plane',
+              env_public_id: 'env_demo',
+              remote_enabled: true,
+            },
+          },
+        },
       },
     });
-    const localTarget = buildProviderEnvironmentDesktopTarget(providerEnvironment, { route: 'local_host' });
     const remoteTarget = buildProviderEnvironmentDesktopTarget(providerEnvironment, { route: 'remote_desktop' });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
@@ -918,17 +949,18 @@ describe('desktopWelcomeState', () => {
     ))).toEqual(expect.objectContaining({
       id: providerEnvironment.id,
       kind: 'provider_environment',
-      open_local_session_key: localTarget.session_key,
+      open_local_session_key: undefined,
       open_remote_session_key: remoteTarget.session_key,
-      open_session_key: localTarget.session_key,
-      local_ui_url: 'http://localhost:23998/',
-      provider_effective_window_route: 'local_host',
-      provider_local_runtime_configured: true,
-      provider_local_runtime_state: 'running_desktop',
-      provider_local_runtime_url: 'http://localhost:23998/',
+      open_session_key: remoteTarget.session_key,
+      local_ui_url: 'https://env.example.invalid/_redeven_boot/#redeven=abc',
+      provider_linked_runtime_summary: {
+        runtime_target_id: 'local:local',
+        runtime_kind: 'local_environment',
+        label: 'Local Environment',
+      },
       runtime_health: expect.objectContaining({
         status: 'online',
-        source: 'local_runtime_probe',
+        source: 'provider_batch_probe',
       }),
     }));
   });
@@ -1042,19 +1074,27 @@ describe('desktopWelcomeState', () => {
         id: providerEnvironment.id,
         kind: 'provider_environment',
         control_plane_sync_state: 'ready',
-        provider_local_runtime_configured: true,
-        provider_local_runtime_state: 'not_running',
-        provider_default_open_route: 'remote_desktop',
-        provider_local_runtime_plan: expect.objectContaining({
-          state: 'not_running',
-          can_open: false,
-          can_prepare: true,
-          requires_bootstrap: false,
-          requires_restart: false,
-        }),
         remote_route_state: 'offline',
         remote_catalog_freshness: 'fresh',
         remote_state_reason: 'The provider currently reports this environment as offline.',
+        open_local_session_key: undefined,
+      }),
+    ]));
+    expect(snapshot.environments).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'local',
+        kind: 'local_environment',
+        provider_runtime_link_target: expect.objectContaining({
+          id: 'local:local',
+          kind: 'local_environment',
+          runtime_key: 'local',
+        }),
+        provider_environment_candidates: expect.arrayContaining([
+          expect.objectContaining({
+            provider_environment_id: providerEnvironment.id,
+            route_state: 'offline',
+          }),
+        ]),
       }),
     ]));
     expect(snapshot.control_planes).toEqual(expect.arrayContaining([
@@ -1065,7 +1105,7 @@ describe('desktopWelcomeState', () => {
     ]));
   });
 
-  it('describes singleton runtime rebind plans for provider entries without exposing the unbound endpoint as provider-local', () => {
+  it('describes provider-link targets on Local cards without exposing unbound runtimes through provider cards', () => {
     const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
@@ -1099,18 +1139,29 @@ describe('desktopWelcomeState', () => {
       expect.objectContaining({
         id: providerEnvironment.id,
         kind: 'provider_environment',
-        provider_local_runtime_state: 'not_running',
-        provider_local_runtime_url: undefined,
-        provider_local_runtime_plan: expect.objectContaining({
-          state: 'needs_provider_link',
-          runtime_running: true,
-          runtime_matches_target: false,
-          can_open: false,
-          can_prepare: true,
-          requires_bootstrap: false,
-          requires_restart: false,
+        open_local_session_key: undefined,
+        provider_linked_runtime_summary: undefined,
+        local_ui_url: '',
+      }),
+      expect.objectContaining({
+        id: 'local',
+        kind: 'local_environment',
+        local_environment_runtime_url: 'http://localhost:23998/',
+        provider_runtime_link_target: expect.objectContaining({
+          id: 'local:local',
           runtime_url: 'http://localhost:23998/',
+          runtime_running: true,
+          runtime_control_available: false,
+          blocked_reason_code: 'runtime_control_missing',
         }),
+        provider_environment_candidates: expect.arrayContaining([
+          expect.objectContaining({
+            provider_environment_id: providerEnvironment.id,
+            provider_origin: 'https://cp.example.invalid',
+            provider_id: 'example_control_plane',
+            env_public_id: 'env_demo',
+          }),
+        ]),
       }),
     ]));
   });
@@ -1162,8 +1213,6 @@ describe('desktopWelcomeState', () => {
       && entry.id === providerEnvironment.id
     ))).toEqual(expect.objectContaining({
       id: providerEnvironment.id,
-      provider_local_runtime_configured: true,
-      provider_local_runtime_state: 'not_running',
       remote_route_state: 'removed',
       remote_state_reason: 'This environment is no longer published by the provider.',
     }));

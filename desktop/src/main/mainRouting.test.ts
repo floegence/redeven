@@ -152,7 +152,7 @@ describe('main routing', () => {
     expect(mainSrc.slice(startRuntimeStart, startRuntimeEnd)).toContain('connect_timeout_seconds: request.connect_timeout_seconds');
   });
 
-  it('keeps provider local-link tickets separate from remote open route readiness', () => {
+  it('keeps provider-link tickets separate from remote open route readiness', () => {
     const mainSrc = readMainSource();
 
     const materialStart = mainSrc.indexOf('async function requestProviderDesktopSessionMaterial(');
@@ -170,8 +170,8 @@ describe('main routing', () => {
     const remoteOpenSrc = mainSrc.slice(remoteOpenStart, remoteOpenEnd);
     expect(remoteOpenSrc).toContain('launcherActionFailureForRemoteRouteState');
 
-    const connectStart = mainSrc.indexOf('async function connectProviderLocalRuntimeFromLauncher(');
-    const connectEnd = mainSrc.indexOf('async function disconnectProviderLocalRuntimeFromLauncher(', connectStart);
+    const connectStart = mainSrc.indexOf('async function connectProviderRuntimeFromLauncher(');
+    const connectEnd = mainSrc.indexOf('async function disconnectProviderRuntimeFromLauncher(', connectStart);
     expect(connectStart).toBeGreaterThanOrEqual(0);
     expect(connectEnd).toBeGreaterThan(connectStart);
     const connectSrc = mainSrc.slice(connectStart, connectEnd);

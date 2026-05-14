@@ -11,7 +11,11 @@ import {
   type DesktopControlPlaneSummary,
   type DesktopProviderEnvironmentRuntimeHealth,
 } from '../shared/controlPlaneProvider';
-import type { RuntimeServiceOpenReadiness, RuntimeServiceSnapshot } from '../shared/runtimeService';
+import type {
+  RuntimeServiceOpenReadiness,
+  RuntimeServiceProviderLinkBinding,
+  RuntimeServiceSnapshot,
+} from '../shared/runtimeService';
 import {
   testDesktopPreferences,
   testProviderEnvironment,
@@ -141,7 +145,23 @@ function providerRuntimeState(envPublicID = 'env_demo') {
   };
 }
 
-function providerRuntimeService(openReadiness: RuntimeServiceOpenReadiness = { state: 'openable' }): RuntimeServiceSnapshot {
+function providerRuntimeService(
+  openReadiness: RuntimeServiceOpenReadiness = { state: 'openable' },
+  providerLink?: Partial<RuntimeServiceProviderLinkBinding>,
+): RuntimeServiceSnapshot {
+  const providerLinkBinding: RuntimeServiceProviderLinkBinding = {
+    state: providerLink?.state ?? 'unbound',
+    provider_origin: providerLink?.provider_origin,
+    provider_id: providerLink?.provider_id,
+    env_public_id: providerLink?.env_public_id,
+    local_environment_public_id: providerLink?.local_environment_public_id,
+    binding_generation: providerLink?.binding_generation,
+    remote_enabled: providerLink?.state === 'linked',
+    last_connected_at_unix_ms: providerLink?.last_connected_at_unix_ms,
+    last_disconnected_at_unix_ms: providerLink?.last_disconnected_at_unix_ms,
+    last_error_code: providerLink?.last_error_code,
+    last_error_message: providerLink?.last_error_message,
+  };
   return {
     protocol_version: 'redeven-runtime-v1',
     service_owner: 'desktop',
@@ -155,6 +175,17 @@ function providerRuntimeService(openReadiness: RuntimeServiceOpenReadiness = { s
       session_count: 0,
       task_count: 0,
       port_forward_count: 0,
+    },
+    capabilities: {
+      desktop_ai_broker: { supported: false },
+      provider_link: {
+        supported: true,
+        bind_method: 'runtime_control_v1',
+      },
+    },
+    bindings: {
+      desktop_ai_broker: { state: 'unsupported' },
+      provider_link: providerLinkBinding,
     },
   };
 }
@@ -251,6 +282,23 @@ describe('buildEnvironmentCardModel', () => {
               session_count: 1,
               task_count: 0,
               port_forward_count: 0,
+            },
+            capabilities: {
+              desktop_ai_broker: { supported: false },
+              provider_link: {
+                supported: true,
+                bind_method: 'runtime_control_v1',
+              },
+            },
+            bindings: {
+              desktop_ai_broker: { state: 'unsupported' },
+              provider_link: {
+                state: 'linked',
+                provider_origin: 'https://cp.example.invalid',
+                provider_id: 'example_control_plane',
+                env_public_id: 'env_demo',
+                remote_enabled: true,
+              },
             },
           },
         }),
@@ -363,9 +411,9 @@ describe('buildEnvironmentCardModel', () => {
       placeholderFact('PROVIDER'),
     ]);
     expect(buildEnvironmentCardFactsModel(providerEntry!)).toEqual([
-      defaultFact('RUNS ON', 'This device'),
+      defaultFact('RUNS ON', 'Provider remote'),
       defaultFact('PROVIDER', 'Demo Control Plane'),
-      defaultFact('LOCAL LINK', 'Connected'),
+      defaultFact('LOCAL LINK', 'No managed runtime linked'),
       defaultFact('SOURCE ENV', 'env_demo'),
     ]);
     expect(buildEnvironmentCardFactsModel(urlEntry!)).toEqual([
@@ -384,7 +432,7 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(buildEnvironmentCardEndpointsModel(providerEntry!)).toEqual([
       {
-        label: 'REMOTE',
+        label: 'PROVIDER',
         value: 'https://cp.example.invalid/env/env_demo',
         monospace: true,
         copy_label: 'Copy environment URL',
@@ -628,6 +676,16 @@ describe('buildEnvironmentCardModel', () => {
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
+            id: 'connect_provider_runtime',
+            label: 'Connect to provider...',
+            action: {
+              intent: 'connect_provider_runtime',
+              label: 'Connect to provider...',
+              enabled: false,
+              variant: 'outline',
+            },
+          },
+          {
             id: 'update_runtime',
             label: 'Update and restart…',
             action: {
@@ -797,7 +855,7 @@ describe('buildEnvironmentCardModel', () => {
     });
   });
 
-  it('builds provider-card actions around runtime availability and local binding state', () => {
+  it('builds provider-card actions around provider remote availability', () => {
     const controlPlane = buildControlPlaneSummary({
       status: 'offline',
       lifecycleStatus: 'suspended',
@@ -837,7 +895,7 @@ describe('buildEnvironmentCardModel', () => {
             emphasis: 'secondary',
             action: {
               intent: 'refresh_runtime',
-              label: 'Refresh runtime status',
+              label: 'Refresh provider status',
               enabled: true,
               variant: 'outline',
             },
@@ -846,22 +904,11 @@ describe('buildEnvironmentCardModel', () => {
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
-            id: 'connect_provider_local_runtime',
-            label: 'Connect Local Runtime',
-            action: {
-              intent: 'connect_provider_runtime',
-              label: 'Connect Local Runtime',
-              enabled: false,
-              variant: 'outline',
-              route: 'local_host',
-            },
-          },
-          {
             id: 'refresh_runtime',
-            label: 'Refresh runtime status',
+            label: 'Refresh provider status',
             action: {
               intent: 'refresh_runtime',
-              label: 'Refresh runtime status',
+              label: 'Refresh provider status',
               enabled: true,
               variant: 'outline',
             },
@@ -870,9 +917,6 @@ describe('buildEnvironmentCardModel', () => {
       },
     });
 
-    const localServe = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo', {
-      label: 'Demo Local Serve',
-    });
     const savedLocalServeSnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: testLocalEnvironment(),
@@ -881,7 +925,6 @@ describe('buildEnvironmentCardModel', () => {
       controlPlanes: [controlPlane],
     });
     const savedLocalServeProviderEntry = savedLocalServeSnapshot.environments.find((environment) => environment.kind === 'provider_environment');
-    expect(savedLocalServeProviderEntry?.provider_local_runtime_state).toBe('not_running');
     expect(buildProviderBackedEnvironmentActionModel(savedLocalServeProviderEntry!)).toEqual(buildProviderBackedEnvironmentActionModel(providerOnlyEntry!));
 
     const staleControlPlane = {
@@ -930,6 +973,12 @@ describe('buildEnvironmentCardModel', () => {
             local_ui_url: 'http://127.0.0.1:24001/',
             desktop_managed: true,
             effective_run_mode: 'desktop',
+            runtime_control: {
+              protocol_version: 'redeven-runtime-control-v1',
+              base_url: 'http://127.0.0.1:25000/',
+              token: 'runtime-control-token',
+              desktop_owner_id: 'desktop-owner-test',
+            },
             runtime_service: providerRuntimeService(),
           },
         }),
@@ -938,11 +987,8 @@ describe('buildEnvironmentCardModel', () => {
       controlPlanes: [controlPlane],
     });
     const unboundRuntimeProviderEntry = unboundRuntimeSnapshot.environments.find((environment) => environment.kind === 'provider_environment');
-    expect(unboundRuntimeProviderEntry?.provider_local_runtime_plan).toMatchObject({
-      state: 'needs_provider_link',
-      can_open: false,
-      requires_restart: false,
-    });
+    const unboundRuntimeLocalEntry = unboundRuntimeSnapshot.environments.find((environment) => environment.kind === 'local_environment');
+    expect(unboundRuntimeProviderEntry?.provider_linked_runtime_summary).toBeUndefined();
     expect(buildProviderBackedEnvironmentActionModel(unboundRuntimeProviderEntry!)).toMatchObject({
       status_label: 'REMOTE OFFLINE',
       status_tone: 'warning',
@@ -953,21 +999,27 @@ describe('buildEnvironmentCardModel', () => {
           enabled: false,
           route: 'remote_desktop',
         },
-        menu_actions: expect.arrayContaining([{
-          id: 'connect_provider_local_runtime',
-          label: 'Connect Local Runtime',
-          action: {
-            intent: 'connect_provider_runtime',
-            label: 'Connect Local Runtime',
-            enabled: true,
-            variant: 'outline',
-            route: 'local_host',
-          },
-        }]),
+        menu_actions: [
+          expect.objectContaining({ id: 'refresh_runtime' }),
+        ],
         primary_action_overlay: {
           kind: 'popover',
           title: 'Provider reports offline',
         },
+      },
+    });
+    expect(buildProviderBackedEnvironmentActionModel(unboundRuntimeLocalEntry!)).toMatchObject({
+      action_presentation: {
+        menu_actions: expect.arrayContaining([{
+          id: 'connect_provider_runtime',
+          label: 'Connect to provider...',
+          action: {
+            intent: 'connect_provider_runtime',
+            label: 'Connect to provider...',
+            enabled: true,
+            variant: 'outline',
+          },
+        }]),
       },
     });
 
@@ -979,54 +1031,53 @@ describe('buildEnvironmentCardModel', () => {
             desktop_managed: true,
             effective_run_mode: 'desktop',
             ...providerRuntimeState('env_demo'),
-            runtime_service: providerRuntimeService(),
+            runtime_service: providerRuntimeService({ state: 'openable' }, {
+              state: 'linked',
+              provider_origin: 'https://cp.example.invalid',
+              provider_id: 'example_control_plane',
+              env_public_id: 'env_demo',
+            }),
           },
         }),
         control_planes: [controlPlane],
       }),
       controlPlanes: [controlPlane],
-      openSessions: [
-        testLocalEnvironmentSession(localServe, 'http://127.0.0.1:24001/'),
-      ],
     });
     const openLocalServeProviderEntry = openLocalServeSnapshot.environments.find((environment) => environment.kind === 'provider_environment');
-    expect(openLocalServeProviderEntry?.provider_local_runtime_state).toBe('running_desktop');
-    expect(buildProviderBackedEnvironmentActionModel(openLocalServeProviderEntry!)).toEqual({
-      status_label: 'Open',
-      status_tone: 'success',
+    const openLocalServeLocalEntry = openLocalServeSnapshot.environments.find((environment) => environment.kind === 'local_environment');
+    expect(openLocalServeProviderEntry).toMatchObject({
+      provider_linked_runtime_summary: {
+        runtime_target_id: 'local:local',
+        runtime_kind: 'local_environment',
+        label: 'Local Environment',
+      },
+    });
+    expect(buildProviderBackedEnvironmentActionModel(openLocalServeProviderEntry!)).toMatchObject({
+      status_label: 'REMOTE OFFLINE',
+      status_tone: 'warning',
       action_presentation: {
-        kind: 'split_button',
         primary_action: {
-          intent: 'focus',
-          label: 'Open',
-          enabled: true,
-          variant: 'default',
+          intent: 'open',
+          route: 'remote_desktop',
+          enabled: false,
         },
-        primary_action_overlay: undefined,
-        menu_button_label: 'Runtime actions',
         menu_actions: [
-          {
-            id: 'disconnect_provider_local_runtime',
-            label: 'Disconnect Local Runtime',
-            action: {
-              intent: 'disconnect_provider_runtime',
-              label: 'Disconnect Local Runtime',
-              enabled: true,
-              variant: 'outline',
-              route: 'local_host',
-            },
-          },
-          {
-            id: 'refresh_runtime',
-            label: 'Refresh runtime status',
-            action: {
-              intent: 'refresh_runtime',
-              label: 'Refresh runtime status',
-              enabled: true,
-              variant: 'outline',
-            },
-          },
+          expect.objectContaining({ id: 'refresh_runtime' }),
         ],
+      },
+    });
+    expect(buildProviderBackedEnvironmentActionModel(openLocalServeLocalEntry!)).toMatchObject({
+      action_presentation: {
+        menu_actions: expect.arrayContaining([{
+          id: 'disconnect_provider_runtime',
+          label: 'Disconnect from provider',
+          action: {
+            intent: 'disconnect_provider_runtime',
+            label: 'Disconnect from provider',
+            enabled: true,
+            variant: 'outline',
+          },
+        }]),
       },
     });
 
@@ -1058,22 +1109,11 @@ describe('buildEnvironmentCardModel', () => {
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
-            id: 'connect_provider_local_runtime',
-            label: 'Connect Local Runtime',
-            action: {
-              intent: 'connect_provider_runtime',
-              label: 'Connect Local Runtime',
-              enabled: false,
-              variant: 'outline',
-              route: 'local_host',
-            },
-          },
-          {
             id: 'refresh_runtime',
-            label: 'Refresh runtime status',
+            label: 'Refresh provider status',
             action: {
               intent: 'refresh_runtime',
-              label: 'Refresh runtime status',
+              label: 'Refresh provider status',
               enabled: true,
               variant: 'outline',
             },
@@ -1083,7 +1123,7 @@ describe('buildEnvironmentCardModel', () => {
     });
   });
 
-  it('blocks provider Open when relinking the singleton runtime would interrupt active work', () => {
+  it('keeps provider Open isolated from busy runtime provider-link state', () => {
     const controlPlane = buildControlPlaneSummary({
       status: 'offline',
       lifecycleStatus: 'suspended',
@@ -1095,6 +1135,12 @@ describe('buildEnvironmentCardModel', () => {
             local_ui_url: 'http://127.0.0.1:24001/',
             desktop_managed: true,
             effective_run_mode: 'desktop',
+            runtime_control: {
+              protocol_version: 'redeven-runtime-control-v1',
+              base_url: 'http://127.0.0.1:25000/',
+              token: 'runtime-control-token',
+              desktop_owner_id: 'desktop-owner-test',
+            },
             runtime_service: providerRuntimeService({
               state: 'openable',
             }),
@@ -1105,8 +1151,14 @@ describe('buildEnvironmentCardModel', () => {
       controlPlanes: [controlPlane],
     });
     const entry = snapshot.environments.find((environment) => environment.kind === 'provider_environment');
+    const localEntry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
     const busyRuntimeService = {
-      ...providerRuntimeService(),
+      ...providerRuntimeService({ state: 'openable' }, {
+        state: 'linked',
+        provider_origin: 'https://other.example.invalid',
+        provider_id: 'other_control_plane',
+        env_public_id: 'other_env',
+      }),
       active_workload: {
         terminal_count: 1,
         session_count: 0,
@@ -1121,6 +1173,12 @@ describe('buildEnvironmentCardModel', () => {
             local_ui_url: 'http://127.0.0.1:24001/',
             desktop_managed: true,
             effective_run_mode: 'desktop',
+            runtime_control: {
+              protocol_version: 'redeven-runtime-control-v1',
+              base_url: 'http://127.0.0.1:25000/',
+              token: 'runtime-control-token',
+              desktop_owner_id: 'desktop-owner-test',
+            },
             runtime_service: busyRuntimeService,
           },
         }),
@@ -1129,12 +1187,19 @@ describe('buildEnvironmentCardModel', () => {
       controlPlanes: [controlPlane],
     });
     const busyEntry = busySnapshot.environments.find((environment) => environment.kind === 'provider_environment');
+    const busyLocalEntry = busySnapshot.environments.find((environment) => environment.kind === 'local_environment');
 
-    expect(entry?.provider_local_runtime_plan?.state).toBe('needs_provider_link');
-    expect(busyEntry?.provider_local_runtime_plan).toMatchObject({
-      state: 'needs_provider_link',
-      can_open: false,
-      requires_confirmation: false,
+    expect(entry?.provider_linked_runtime_summary).toBeUndefined();
+    expect(localEntry?.provider_runtime_link_target).toMatchObject({
+      can_connect_provider: true,
+      runtime_running: true,
+    });
+    expect(busyEntry?.provider_linked_runtime_summary).toBeUndefined();
+    expect(busyLocalEntry?.provider_runtime_link_target).toMatchObject({
+      provider_link_state: 'linked',
+      provider_origin: 'https://other.example.invalid',
+      can_connect_provider: false,
+      can_disconnect_provider: true,
     });
     expect(buildProviderBackedEnvironmentActionModel(busyEntry!)).toMatchObject({
       status_label: 'REMOTE OFFLINE',
@@ -1173,7 +1238,6 @@ describe('buildEnvironmentCardModel', () => {
     const entry = snapshot.environments.find((environment) => environment.kind === 'provider_environment');
 
     expect(entry).toMatchObject({
-      provider_default_open_route: 'remote_desktop',
       runtime_health: expect.objectContaining({
         status: 'online',
         source: 'provider_batch_probe',
@@ -1242,13 +1306,16 @@ describe('buildEnvironmentCardModel', () => {
     });
   });
 
-  it('builds provider cards around effective local-serve routes instead of separate local-serve cards', () => {
+  it('keeps provider cards on the provider tunnel when managed runtimes are linked', () => {
     const providerRuntime = {
       local_ui_url: 'http://127.0.0.1:24001/',
       desktop_managed: false,
       ...providerRuntimeState('env_demo'),
-      runtime_service: providerRuntimeService({
-        state: 'openable',
+      runtime_service: providerRuntimeService({ state: 'openable' }, {
+        state: 'linked',
+        provider_origin: 'https://cp.example.invalid',
+        provider_id: 'example_control_plane',
+        env_public_id: 'env_demo',
       }),
     };
     const attachableLocalServe = buildDesktopWelcomeSnapshot({
@@ -1265,37 +1332,42 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(attachableLocalServe).toBeTruthy();
     expect(buildProviderBackedEnvironmentActionModel(attachableLocalServe!)).toEqual({
-      status_label: 'Open',
-      status_tone: 'success',
+      status_label: 'REMOTE OFFLINE',
+      status_tone: 'warning',
       action_presentation: {
         kind: 'split_button',
         primary_action: {
           intent: 'open',
           label: 'Open',
-          enabled: true,
+          enabled: false,
           variant: 'default',
-          route: 'local_host',
+          route: 'remote_desktop',
         },
-        primary_action_overlay: undefined,
+        primary_action_overlay: {
+          kind: 'popover',
+          tone: 'warning',
+          eyebrow: 'Remote route unavailable',
+          title: 'Provider reports offline',
+          detail: 'The provider currently reports this environment as offline.',
+          actions: [{
+            label: 'Refresh status',
+            emphasis: 'secondary',
+            action: {
+              intent: 'refresh_runtime',
+              label: 'Refresh provider status',
+              enabled: true,
+              variant: 'outline',
+            },
+          }],
+        },
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
-            id: 'disconnect_provider_local_runtime',
-            label: 'Disconnect Local Runtime',
-            action: {
-              intent: 'disconnect_provider_runtime',
-              label: 'Disconnect Local Runtime',
-              enabled: true,
-              variant: 'outline',
-              route: 'local_host',
-            },
-          },
-          {
             id: 'refresh_runtime',
-            label: 'Refresh runtime status',
+            label: 'Refresh provider status',
             action: {
               intent: 'refresh_runtime',
-              label: 'Refresh runtime status',
+              label: 'Refresh provider status',
               enabled: true,
               variant: 'outline',
             },
@@ -1310,7 +1382,12 @@ describe('buildEnvironmentCardModel', () => {
         desktop_managed: true,
         effective_run_mode: 'desktop',
         ...providerRuntimeState('env_demo'),
-        runtime_service: providerRuntimeService(),
+        runtime_service: providerRuntimeService({ state: 'openable' }, {
+          state: 'linked',
+          provider_origin: 'https://cp.example.invalid',
+          provider_id: 'example_control_plane',
+          env_public_id: 'env_demo',
+        }),
       },
     });
     const focusableLocalServe = buildDesktopWelcomeSnapshot({
@@ -1333,42 +1410,21 @@ describe('buildEnvironmentCardModel', () => {
       action_presentation: {
         kind: 'split_button',
         primary_action: {
-          intent: 'focus',
+          intent: 'open',
           label: 'Open',
           enabled: true,
           variant: 'default',
+          route: 'remote_desktop',
         },
         primary_action_overlay: undefined,
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
-            id: 'open_via_control_plane',
-            label: 'Open remotely',
-            action: {
-              intent: 'open',
-              label: 'Open remotely',
-              enabled: true,
-              variant: 'outline',
-              route: 'remote_desktop',
-            },
-          },
-          {
-            id: 'disconnect_provider_local_runtime',
-            label: 'Disconnect Local Runtime',
-            action: {
-              intent: 'disconnect_provider_runtime',
-              label: 'Disconnect Local Runtime',
-              enabled: true,
-              variant: 'outline',
-              route: 'local_host',
-            },
-          },
-          {
             id: 'refresh_runtime',
-            label: 'Refresh runtime status',
+            label: 'Refresh provider status',
             action: {
               intent: 'refresh_runtime',
-              label: 'Refresh runtime status',
+              label: 'Refresh provider status',
               enabled: true,
               variant: 'outline',
             },
@@ -1419,6 +1475,16 @@ describe('buildEnvironmentCardModel', () => {
         primary_action_overlay: undefined,
         menu_button_label: 'Runtime actions',
         menu_actions: [
+          {
+            id: 'connect_provider_runtime',
+            label: 'Connect to provider...',
+            action: {
+              intent: 'connect_provider_runtime',
+              label: 'Connect to provider...',
+              enabled: false,
+              variant: 'outline',
+            },
+          },
           {
             id: 'stop_runtime',
             label: 'Stop runtime',

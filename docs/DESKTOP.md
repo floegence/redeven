@@ -54,12 +54,12 @@ Behavior:
 - The Welcome `Start Runtime` action always starts this runtime local-only. It does not add provider bootstrap flags, request provider open-session material, or connect the runtime to a provider control plane.
 - `--controlplane`, `--env-id`, and `--bootstrap-ticket-env` remain explicit CLI/manual bootstrap inputs. They are not part of the Welcome Local Environment `Start Runtime` path.
 - Desktop attach probing reads `runtime/local-ui.json` from the same resolved state root as the spawned config path.
-- Provider `Open` is a window/navigation action. It can open a remote route or, only after an explicit provider link already exists, open the provider Environment locally. It never silently starts the Local Runtime and never silently connects the Local Runtime to a provider.
+- Provider `Open` is a window/navigation action that always opens the provider Environment through the provider tunnel. It never opens a Local/SSH forwarded UI, never starts a managed runtime, and never connects a runtime to a provider.
 - A Desktop-managed runtime is lifecycle-owned by this Desktop only when `desktop_owner_id` matches the current Desktop owner id. Runtimes owned by another Desktop instance or an external CLI process are not silently adopted.
 - Desktop may restart an older Desktop-owned runtime for lifecycle maintenance only when Runtime Service reports no active workload. Provider binding changes are not implemented by restarting the runtime.
 - If active workload is present, Desktop keeps `Open` blocked and shows interruption-safe guidance instead of closing terminals, sessions, tasks, or port forwards implicitly.
 - The Local UI password stays out of process args and environment variables.
-- Provider one-time bootstrap tickets stay out of process args and renderer state. Welcome provider linking passes them from Electron main to the running runtime through the desktop-only runtime-control endpoint.
+- Provider one-time bootstrap tickets stay out of process args and renderer state. Welcome provider linking is initiated from Local/SSH runtime cards and passes tickets from Electron main to the selected running runtime through the desktop-only runtime-control endpoint.
 - Desktop startup reports and attachable runtime state include a non-secret `password_required` boolean so launcher and attach flows can describe whether the current runtime is protected.
 - Remote provider control is enabled only after a successful explicit provider-link operation or an explicit non-Welcome bootstrap launch.
 - `--desktop-managed` disables CLI self-upgrade semantics.
@@ -84,7 +84,7 @@ When the selected target is `Remote Environment`, Desktop does not start the bun
 Instead it validates and probes the configured Local UI base URL, then opens that exact origin in the shell.
 
 When the selected target is `SSH Host Environment`, Desktop still keeps Redeven Local UI as the only runtime contract.
-It does not introduce a second SSH-native file or terminal protocol. Electron main validates the SSH entry, opens an SSH control connection, installs or reuses the pinned Desktop-managed Redeven release on the host, starts `redeven run --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0` remotely, verifies the reported Runtime Service snapshot, and forwards the remote Local UI back to the user's machine.
+It does not introduce a second SSH-native file or terminal protocol. Electron main validates the SSH entry, opens an SSH control connection, installs or reuses the pinned Desktop-managed Redeven release on the host, starts `redeven run --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0` remotely with Desktop ownership, verifies the reported Runtime Service snapshot, and forwards both the remote Local UI and runtime-control endpoint back to the user's machine.
 
 The SSH Host open flow stays two-step: startup prepares or attaches the runtime, and the user still chooses `Open` before Desktop opens the forwarded Local UI origin. Env App receives an `ssh_environment` session context so Web Services treat remote-host `localhost` targets as remote loopback and open through `/pf/<forward_id>/`.
 
@@ -173,11 +173,10 @@ Launcher model:
 - Cold launch never auto-opens a remembered target. Environment choice is always a user action.
 - The `Environments` view contains the protected Local Environment, provider environments, saved Redeven URL entries, and saved SSH Host entries. Provider management stays separate from the main open/rebind path.
 - `Environment Settings` is launcher-owned and edits startup behavior for the profile Local Environment; saving settings never switches Environments or creates another local runtime identity.
-- Provider cards keep route choice explicit. A provider Environment may open remotely or link/use the singleton Local Environment locally, but Desktop never creates a second provider-specific local runtime.
-- Local and Provider cards have independent action semantics. The primary card action slot is always `Open`; it may open a route or show a prerequisite popup, but it does not change into `Start Runtime`, `Connect`, or `Restart`.
-- `Start Runtime` appears only in the Local Environment card's `Open` prerequisite popup and its dropdown menu. Provider cards do not expose `Start Runtime`.
-- `Connect Local Runtime` appears only on provider Environment controls and is the only Welcome action that connects the running Local Runtime to that provider Environment.
-- If a provider card is configured for local use but the Local Runtime is not linked to that provider Environment, `Open` shows route guidance and an explicit `Connect Local Runtime` action. It does not auto-link and does not auto-start the runtime.
+- Provider cards represent provider-tunnel access only. Their `Open` action always uses the provider tunnel, and their dropdown does not expose runtime lifecycle or provider-link controls.
+- Local and SSH cards represent runtime management. Their primary card action slot is always `Open`; lifecycle actions (`Start Runtime`, `Restart Runtime`, `Stop Runtime`) and provider-link actions (`Connect to provider...`, `Disconnect from provider`) live only on those runtime cards.
+- `Start Runtime` appears only in Local/SSH runtime card popups and dropdown menus. Provider cards do not expose `Start Runtime`.
+- `Connect to provider...` appears only on Local/SSH runtime cards and always requires the user to choose a provider Environment. Desktop does not preselect a provider and does not auto-link from a provider card.
 - SSH Host entries store the destination, optional port, bootstrap delivery mode, remote install directory, and optional release mirror base URL. Desktop reuses release artifacts for the exact Desktop-managed version and lets the remote host own its runtime state.
 - Runtime health and window state are separate. Cards may show runtime status/version/workload from runtime snapshots, while primary actions stay window-scoped (`Open`, `Opening...`, `Focus`).
 - Runtime health is probed through explicit contracts: Local UI health for local/URL/SSH targets and RCPP runtime-health queries for provider environments.
@@ -223,7 +222,7 @@ Rules:
 - The UI maps that intent back onto the existing runtime contract (`local_ui_bind` + `local_ui_password`) before saving, but it keeps port selection as a separate control.
 - The settings dialog always shows the current Local Environment runtime URL separately from the next-start configuration when the Local Environment is already running.
 - Password handling is stateful: the current state is visible, replacement is explicit, and removal is a separate action.
-- Provider environments reuse the same settings surface for local access, but the provider identity itself stays fixed. The editable part is only the Local Environment's Local UI exposure that Desktop will request the next time it links or opens that provider Environment locally.
+- Provider environments use the settings surface only for provider identity and catalog metadata. Local UI exposure belongs to the Local Environment or SSH Host runtime card that manages that runtime.
 
 ## Desktop Preferences
 
@@ -326,11 +325,11 @@ The Control Plane flow is:
 6. Desktop loads `me` and `environments` with the access token.
 7. Desktop stores the provider catalog in `control_planes[*].environments` and reconciles it into first-class `provider_environments` records.
 8. Desktop refreshes access tokens on demand with the stored refresh token.
-9. Desktop requests a provider Environment open session only when it opens a specific provider environment remotely or when the user explicitly connects that provider Environment to the Local Runtime.
+9. Desktop requests a provider Environment open session only when it opens a specific provider environment through the provider tunnel or when the user explicitly connects that provider Environment to a selected Local/SSH runtime card.
 10. For a remote provider card, Desktop opens the returned `remote_session_url` directly without persisting a remote-only Local Environment state first.
     - The top-level remote session page may in turn host the Env App inside a same-origin boot iframe.
     - Embedded same-origin Env App documents must still inherit the desktop shell bridges and window-chrome contract from the owning session window, so titlebar safe areas, theme state, and environment-scoped renderer storage stay identical to direct desktop-hosted sessions.
-11. For an explicit provider-local connection, Desktop sends the returned one-time `bootstrap_ticket` to the running Local Runtime through the desktop-only runtime-control endpoint.
+11. For an explicit provider-link connection, Desktop sends the returned one-time `bootstrap_ticket` to the selected running Local/SSH runtime through the desktop-only runtime-control endpoint.
 12. The runtime exchanges that ticket, persists the provider binding only after the exchange succeeds, and starts the provider control channel without restarting the runtime.
 13. Rebinding is blocked while provider-originated work is active. Desktop never materializes a second local runtime state directory for another provider environment.
 

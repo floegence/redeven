@@ -50,7 +50,7 @@ Two paths to get started: Desktop (recommended for most users) or CLI.
 2. Open the app. Choose your environment: Local, Provider, SSH Host, or a saved URL.
 3. Start working — the workspace opens in your browser automatically.
 
-For remote machines: Desktop can auto-install the matching Redeven release over SSH. No manual setup on the remote host. See [`docs/DESKTOP.md`](docs/DESKTOP.md) for details.
+For remote machines: Desktop can auto-install the matching Redeven release over SSH, then explicitly connect that managed SSH runtime to a provider Environment when you choose to. No manual setup on the remote host. See [`docs/DESKTOP.md`](docs/DESKTOP.md) for details.
 
 ### CLI
 
