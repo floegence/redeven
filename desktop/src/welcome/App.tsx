@@ -77,6 +77,7 @@ import {
   runtimeServiceProviderLinkMatches,
   type RuntimeServiceSnapshot,
 } from '../shared/runtimeService';
+import { desktopEntryKindOwnsRuntimeManagement } from '../shared/environmentManagementPrinciples';
 import {
   DEFAULT_DESKTOP_SSH_AUTH_MODE,
   DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
@@ -1707,7 +1708,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     environment: DesktopEnvironmentEntry,
     action: ProviderRuntimeLinkConfirmationAction,
   ): void {
-    if (environment.kind !== 'local_environment' && environment.kind !== 'ssh_environment') {
+    // IMPORTANT: Provider-link confirmation is intentionally reachable only from
+    // Local/SSH runtime cards. Provider Environment cards must never grant or
+    // revoke provider control over a runtime.
+    if (!desktopEntryKindOwnsRuntimeManagement(environment.kind)) {
       return;
     }
     const target = environment.provider_runtime_link_target;

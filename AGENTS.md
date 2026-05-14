@@ -154,6 +154,13 @@ git config --global merge.conflictstyle zdiff3
 - Target generalized orchestration mechanisms rather than stacking special cases.
 - Keep important intent and policy decisions observable through events or logs.
 
+## IMPORTANT Design Constraints
+
+- `IMPORTANT:` comments mark product, security, or interaction invariants that must stay rare, intentional, and backed by code or tests where practical.
+- If a change would remove, bypass, weaken, or contradict an `IMPORTANT:` comment, discuss the design impact with the user and receive explicit confirmation before implementing that change.
+- Do not work around an `IMPORTANT:` constraint with hidden fallback behavior, alternate entry points, or silent compatibility paths.
+- When adding a new `IMPORTANT:` comment, keep it concise, explain the invariant rather than the implementation detail, and add focused test coverage or another enforceable guard whenever possible.
+
 ## Published Dependency Policy
 
 - `redeven` is a downstream consumer of `floeterm`, `floe-webapp`, and `flowersec`.

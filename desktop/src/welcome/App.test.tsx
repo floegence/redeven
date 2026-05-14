@@ -546,6 +546,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('confirmRuntimeMaintenance');
     expect(appSrc).toContain('force_runtime_update');
     expect(appSrc).toContain('forceRuntimeUpdate: true');
+    expect(appSrc).toContain('IMPORTANT: Provider-link confirmation is intentionally reachable only from');
+    expect(appSrc).toContain('desktopEntryKindOwnsRuntimeManagement(environment.kind)');
     expect(appSrc).toContain('This interrupts the background runtime service for this environment.');
     expect(appSrc).toContain('Desktop will install the bundled Redeven runtime and start it again on this SSH host.');
     expect(appSrc).toContain('Active work:');

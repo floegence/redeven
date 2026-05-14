@@ -259,6 +259,7 @@ import {
   desktopProviderRuntimeLinkTargetRuntimeKey,
   type DesktopProviderRuntimeLinkTargetID,
 } from '../shared/providerRuntimeLinkTarget';
+import { desktopProviderEnvironmentOpenRoute } from '../shared/environmentManagementPrinciples';
 import { loadDesktopSSHConfigHosts } from './sshConfigHosts';
 
 type OpenDesktopWelcomeOptions = Readonly<{
@@ -512,6 +513,9 @@ async function resolveProviderRuntimeLinkTarget(
   preferences: DesktopPreferences,
   runtimeTargetID: DesktopProviderRuntimeLinkTargetID,
 ): Promise<ProviderRuntimeLinkTargetRecord | null> {
+  // IMPORTANT: Provider-link operations must resolve the exact Local/SSH runtime
+  // target selected by the user. Do not search for "any eligible" runtime here;
+  // implicit selection would let provider-card flows affect device-managed work.
   const kind = desktopProviderRuntimeLinkTargetKindFromID(runtimeTargetID);
   const runtimeKey = desktopProviderRuntimeLinkTargetRuntimeKey(runtimeTargetID);
   if (kind === 'local_environment') {
@@ -662,6 +666,9 @@ async function prepareProviderRemoteOpenSession(
   preferences: DesktopPreferences,
   environment: DesktopProviderEnvironmentRecord,
 ): Promise<ProviderDesktopSessionMaterial> {
+  // IMPORTANT: Provider Environment Open is remote-only provider tunnel access.
+  // It must keep route-readiness checks separate from provider-link tickets so
+  // connecting a runtime never depends on, or mutates, the provider Open route.
   const target = await resolveProviderDesktopSessionTarget(preferences, environment);
   const latestState = controlPlaneRouteSnapshot(
     target.preferences,
@@ -4764,6 +4771,14 @@ async function openProviderEnvironmentFromLauncher(
     ? request.route
     : 'auto';
   if (requestedRoute === 'local_host') {
+    return launcherActionFailure(
+      'environment_route_unavailable',
+      'environment',
+      'Provider Environment cards open through the provider tunnel. Use the Local or SSH runtime card to open a managed runtime directly.',
+      providerEnvironmentFailureContext(environment),
+    );
+  }
+  if (requestedRoute !== 'auto' && requestedRoute !== desktopProviderEnvironmentOpenRoute()) {
     return launcherActionFailure(
       'environment_route_unavailable',
       'environment',

@@ -943,10 +943,11 @@ describe('desktopWelcomeState', () => {
       entry.kind === 'local_environment'
       && entry.local_environment_kind === 'controlplane'
     ))).toBeUndefined();
-    expect(snapshot.environments.find((entry) => (
+    const providerEntry = snapshot.environments.find((entry) => (
       entry.kind === 'provider_environment'
       && entry.id === providerEnvironment.id
-    ))).toEqual(expect.objectContaining({
+    ));
+    expect(providerEntry).toEqual(expect.objectContaining({
       id: providerEnvironment.id,
       kind: 'provider_environment',
       open_local_session_key: undefined,
@@ -963,6 +964,9 @@ describe('desktopWelcomeState', () => {
         source: 'provider_batch_probe',
       }),
     }));
+    expect(providerEntry?.local_environment_runtime_plan).toBeUndefined();
+    expect(providerEntry?.provider_runtime_link_target).toBeUndefined();
+    expect(providerEntry?.provider_environment_candidates).toBeUndefined();
   });
 
   it('threads Control Plane runtime state into provider environment library entries', () => {
@@ -1135,14 +1139,21 @@ describe('desktopWelcomeState', () => {
       }),
     });
 
+    const providerEntry = snapshot.environments.find((entry) => (
+      entry.id === providerEnvironment.id && entry.kind === 'provider_environment'
+    ));
+    expect(providerEntry).toEqual(expect.objectContaining({
+      id: providerEnvironment.id,
+      kind: 'provider_environment',
+      open_local_session_key: undefined,
+      provider_linked_runtime_summary: undefined,
+      local_ui_url: '',
+    }));
+    expect(providerEntry?.local_environment_runtime_plan).toBeUndefined();
+    expect(providerEntry?.provider_runtime_link_target).toBeUndefined();
+    expect(providerEntry?.provider_environment_candidates).toBeUndefined();
+
     expect(snapshot.environments).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: providerEnvironment.id,
-        kind: 'provider_environment',
-        open_local_session_key: undefined,
-        provider_linked_runtime_summary: undefined,
-        local_ui_url: '',
-      }),
       expect.objectContaining({
         id: 'local',
         kind: 'local_environment',

@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import {
+  DESKTOP_PROVIDER_CARD_FORBIDDEN_ACTIONS,
+  desktopProviderEnvironmentOpenRoute,
+} from '../shared/environmentManagementPrinciples';
+import {
   buildExternalLocalUIDesktopTarget,
   buildLocalEnvironmentDesktopTarget,
   buildSSHDesktopTarget,
@@ -1066,6 +1070,11 @@ describe('buildEnvironmentCardModel', () => {
         ],
       },
     });
+    const linkedProviderMenuActionIDs = buildProviderBackedEnvironmentActionModel(openLocalServeProviderEntry!)
+      .action_presentation.menu_actions.map((item) => item.id);
+    for (const action of DESKTOP_PROVIDER_CARD_FORBIDDEN_ACTIONS) {
+      expect(linkedProviderMenuActionIDs).not.toContain(action);
+    }
     expect(buildProviderBackedEnvironmentActionModel(openLocalServeLocalEntry!)).toMatchObject({
       action_presentation: {
         menu_actions: expect.arrayContaining([{
@@ -1103,7 +1112,7 @@ describe('buildEnvironmentCardModel', () => {
           label: 'Open',
           enabled: true,
           variant: 'default',
-          route: 'remote_desktop',
+          route: desktopProviderEnvironmentOpenRoute(),
         },
         primary_action_overlay: undefined,
         menu_button_label: 'Runtime actions',
@@ -1121,6 +1130,11 @@ describe('buildEnvironmentCardModel', () => {
         ],
       },
     });
+    const readyProviderMenuActionIDs = buildProviderBackedEnvironmentActionModel(readyEntry!)
+      .action_presentation.menu_actions.map((item) => item.id);
+    for (const action of DESKTOP_PROVIDER_CARD_FORBIDDEN_ACTIONS) {
+      expect(readyProviderMenuActionIDs).not.toContain(action);
+    }
   });
 
   it('keeps provider Open isolated from busy runtime provider-link state', () => {

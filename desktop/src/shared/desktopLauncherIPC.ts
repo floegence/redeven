@@ -21,7 +21,7 @@ import type {
   DesktopProviderRuntimeLinkTarget,
   DesktopProviderRuntimeLinkTargetID,
 } from './providerRuntimeLinkTarget';
-import { normalizeDesktopProviderRuntimeLinkTargetID } from './providerRuntimeLinkTarget';
+import { normalizeDesktopProviderRuntimeLinkRequestTarget } from './environmentManagementPrinciples';
 
 export const DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL = 'redeven-desktop:launcher-get-snapshot';
 export const DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL = 'redeven-desktop:launcher-perform-action';
@@ -533,17 +533,19 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
     }
     case 'connect_provider_runtime':
     case 'disconnect_provider_runtime': {
-      const providerEnvironmentID = compact((candidate as { provider_environment_id?: unknown }).provider_environment_id);
-      const runtimeTargetID = normalizeDesktopProviderRuntimeLinkTargetID(
-        (candidate as { runtime_target_id?: unknown }).runtime_target_id,
-      );
-      if (providerEnvironmentID === '' || !runtimeTargetID) {
+      // IMPORTANT: Provider-link IPC must preserve the exact runtime target the
+      // user selected from a Local/SSH card. Do not infer or fallback to another
+      // runtime from the provider environment alone.
+      const target = normalizeDesktopProviderRuntimeLinkRequestTarget({
+        provider_environment_id: (candidate as { provider_environment_id?: unknown }).provider_environment_id,
+        runtime_target_id: (candidate as { runtime_target_id?: unknown }).runtime_target_id,
+      });
+      if (!target) {
         return null;
       }
       return {
         kind,
-        provider_environment_id: providerEnvironmentID,
-        runtime_target_id: runtimeTargetID,
+        ...target,
       } as DesktopLauncherActionRequest;
     }
     case 'start_environment_runtime':
