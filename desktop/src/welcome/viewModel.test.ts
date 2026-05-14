@@ -20,6 +20,7 @@ import type {
   RuntimeServiceProviderLinkBinding,
   RuntimeServiceSnapshot,
 } from '../shared/runtimeService';
+import type { DesktopManagedRuntimePresence } from '../shared/desktopRuntimePresence';
 import {
   testDesktopPreferences,
   testProviderEnvironment,
@@ -191,6 +192,33 @@ function providerRuntimeService(
       desktop_ai_broker: { state: 'unsupported' },
       provider_link: providerLinkBinding,
     },
+  };
+}
+
+function localRuntimePresence(
+  runtimeService: RuntimeServiceSnapshot | undefined,
+  overrides: Partial<DesktopManagedRuntimePresence> = {},
+): DesktopManagedRuntimePresence {
+  return {
+    target_id: 'local:local',
+    placement_target_id: 'local:host:local',
+    kind: 'local_environment',
+    environment_id: 'local',
+    label: 'Local Environment',
+    runtime_key: 'local',
+    host_access: { kind: 'local_host' },
+    placement: { kind: 'host_process', install_dir: '' },
+    running: true,
+    local_ui_url: 'http://127.0.0.1:24001/',
+    openable: true,
+    lifecycle_control: 'start_stop',
+    ...(runtimeService ? { runtime_service: runtimeService } : {}),
+    runtime_control_status: {
+      state: 'available',
+      owner: 'current_desktop',
+    },
+    checked_at_unix_ms: Date.now(),
+    ...overrides,
   };
 }
 
@@ -566,6 +594,64 @@ describe('buildEnvironmentCardModel', () => {
     ]);
   });
 
+  it('shows container placement facts and avoids implicit starts for external stopped containers', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment(),
+      }),
+      managedRuntimePresenceByTargetID: {
+        'local:local': localRuntimePresence(undefined, {
+          placement_target_id: 'local:container:docker:container-stable-id:abc12345',
+          placement: {
+            kind: 'container_process',
+            container_engine: 'docker',
+            container_id: 'container-stable-id',
+            container_label: 'dev-container',
+            container_owner: 'external',
+            runtime_root: '/workspace/.redeven',
+            bridge_strategy: 'exec_stream',
+          },
+          running: false,
+          local_ui_url: '',
+          openable: false,
+          runtime_control_status: {
+            state: 'missing',
+            reason_code: 'not_started',
+            message: 'Start this runtime before connecting it to a provider.',
+          },
+        }),
+      },
+    });
+    const localEntry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
+
+    expect(localEntry).toMatchObject({
+      managed_runtime_placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'container-stable-id',
+        container_label: 'dev-container',
+        container_owner: 'external',
+      },
+    });
+    expect(buildEnvironmentCardFactsModel(localEntry!)).toEqual(expect.arrayContaining([
+      defaultFact('RUNS ON', 'This device'),
+      defaultFact('CONTAINER', 'dev-container'),
+      defaultFact('ENGINE', 'Docker'),
+      defaultFact('OWNER', 'External'),
+    ]));
+    const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);
+    expect(actionModel.action_presentation.menu_actions.map((item) => item.id)).not.toContain('start_runtime');
+    expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'refresh_runtime',
+        action: expect.objectContaining({
+          intent: 'refresh_runtime',
+          enabled: true,
+        }),
+      }),
+    ]));
+  });
+
   it('keeps an online SSH runtime visible but blocks Open when the running runtime needs an update', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
@@ -686,6 +772,16 @@ describe('buildEnvironmentCardModel', () => {
               intent: 'connect_provider_runtime',
               label: 'Connect to provider...',
               enabled: false,
+              variant: 'outline',
+            },
+          },
+          {
+            id: 'stop_runtime',
+            label: 'Stop runtime',
+            action: {
+              intent: 'stop_runtime',
+              label: 'Stop runtime',
+              enabled: true,
               variant: 'outline',
             },
           },
@@ -1058,6 +1154,9 @@ describe('buildEnvironmentCardModel', () => {
         control_planes: [controlPlane],
       }),
       controlPlanes: [controlPlane],
+      managedRuntimePresenceByTargetID: {
+        'local:local': localRuntimePresence(providerRuntimeService()),
+      },
     });
     const unboundRuntimeProviderEntry = unboundRuntimeSnapshot.environments.find((environment) => environment.kind === 'provider_environment');
     const unboundRuntimeLocalEntry = unboundRuntimeSnapshot.environments.find((environment) => environment.kind === 'local_environment');
@@ -1095,6 +1194,30 @@ describe('buildEnvironmentCardModel', () => {
         }]),
       },
     });
+
+    const observeOnlySnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment({
+          currentRuntime: {
+            local_ui_url: 'http://127.0.0.1:24001/',
+            desktop_managed: false,
+            effective_run_mode: 'desktop',
+            runtime_service: providerRuntimeService(),
+          },
+        }),
+      }),
+      managedRuntimePresenceByTargetID: {
+        'local:local': localRuntimePresence(providerRuntimeService(), {
+          lifecycle_control: 'observe_only',
+        }),
+      },
+    });
+    const observeOnlyLocalEntry = observeOnlySnapshot.environments.find((environment) => environment.kind === 'local_environment');
+    const observeOnlyMenuActionIDs = buildProviderBackedEnvironmentActionModel(observeOnlyLocalEntry!)
+      .action_presentation.menu_actions.map((item) => item.id);
+    expect(observeOnlyMenuActionIDs).toContain('runtime_managed_externally');
+    expect(observeOnlyMenuActionIDs).not.toContain('stop_runtime');
+    expect(observeOnlyMenuActionIDs).not.toContain('start_runtime');
 
     const openLocalServeSnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
@@ -1161,6 +1284,13 @@ describe('buildEnvironmentCardModel', () => {
       },
     });
 
+    const localOnlyRuntimeService = providerRuntimeService({ state: 'openable' }, {
+      state: 'linked',
+      provider_origin: 'https://cp.example.invalid',
+      provider_id: 'example_control_plane',
+      env_public_id: 'env_demo',
+      remote_enabled: false,
+    });
     const localOnlyLinkedSnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: testLocalEnvironment({
@@ -1175,18 +1305,15 @@ describe('buildEnvironmentCardModel', () => {
               token: 'runtime-control-token',
               desktop_owner_id: 'desktop-owner-test',
             },
-            runtime_service: providerRuntimeService({ state: 'openable' }, {
-              state: 'linked',
-              provider_origin: 'https://cp.example.invalid',
-              provider_id: 'example_control_plane',
-              env_public_id: 'env_demo',
-              remote_enabled: false,
-            }),
+            runtime_service: localOnlyRuntimeService,
           },
         }),
         control_planes: [controlPlane],
       }),
       controlPlanes: [controlPlane],
+      managedRuntimePresenceByTargetID: {
+        'local:local': localRuntimePresence(localOnlyRuntimeService),
+      },
     });
     const localOnlyProviderEntry = localOnlyLinkedSnapshot.environments.find((environment) => environment.kind === 'provider_environment');
     const localOnlyEntry = localOnlyLinkedSnapshot.environments.find((environment) => environment.kind === 'local_environment');
@@ -1268,6 +1395,9 @@ describe('buildEnvironmentCardModel', () => {
       status: 'offline',
       lifecycleStatus: 'suspended',
     });
+    const runtimeService = providerRuntimeService({
+      state: 'openable',
+    });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: testLocalEnvironment({
@@ -1281,14 +1411,15 @@ describe('buildEnvironmentCardModel', () => {
               token: 'runtime-control-token',
               desktop_owner_id: 'desktop-owner-test',
             },
-            runtime_service: providerRuntimeService({
-              state: 'openable',
-            }),
+            runtime_service: runtimeService,
           },
         }),
         control_planes: [controlPlane],
       }),
       controlPlanes: [controlPlane],
+      managedRuntimePresenceByTargetID: {
+        'local:local': localRuntimePresence(runtimeService),
+      },
     });
     const entry = snapshot.environments.find((environment) => environment.kind === 'provider_environment');
     const localEntry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
@@ -1325,6 +1456,9 @@ describe('buildEnvironmentCardModel', () => {
         control_planes: [controlPlane],
       }),
       controlPlanes: [controlPlane],
+      managedRuntimePresenceByTargetID: {
+        'local:local': localRuntimePresence(busyRuntimeService),
+      },
     });
     const busyEntry = busySnapshot.environments.find((environment) => environment.kind === 'provider_environment');
     const busyLocalEntry = busySnapshot.environments.find((environment) => environment.kind === 'local_environment');

@@ -1520,9 +1520,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     kind: 'start_environment_runtime' | 'stop_environment_runtime' | 'refresh_environment_runtime',
     options: Readonly<{ forceRuntimeUpdate?: boolean; allowActiveWorkReplacement?: boolean }> = {},
   ): DesktopLauncherActionRequest | null {
+    const runtimeTarget = {
+      ...(environment.managed_runtime_target_id ? { runtime_target_id: environment.managed_runtime_target_id } : {}),
+      ...(environment.managed_runtime_placement_target_id ? { placement_target_id: environment.managed_runtime_placement_target_id } : {}),
+      ...(environment.managed_runtime_host_access ? { host_access: environment.managed_runtime_host_access } : {}),
+      ...(environment.managed_runtime_placement ? { placement: environment.managed_runtime_placement } : {}),
+    };
     if (environment.kind === 'local_environment') {
       return {
         kind,
+        ...runtimeTarget,
         environment_id: environment.id,
         label: environment.label,
         ...(options.forceRuntimeUpdate ? { force_runtime_update: true } : {}),
@@ -1532,6 +1539,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (environment.kind === 'provider_environment') {
       return {
         kind,
+        ...runtimeTarget,
         environment_id: environment.id,
         label: environment.label,
         ...(options.forceRuntimeUpdate ? { force_runtime_update: true } : {}),
@@ -1541,6 +1549,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (environment.kind === 'external_local_ui') {
       return {
         kind,
+        ...runtimeTarget,
         environment_id: environment.id,
         external_local_ui_url: environment.local_ui_url,
         label: environment.label,
@@ -1553,6 +1562,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     return {
       kind,
+      ...runtimeTarget,
       environment_id: environment.id,
       label: environment.label,
       ssh_destination: environment.ssh_details.ssh_destination,

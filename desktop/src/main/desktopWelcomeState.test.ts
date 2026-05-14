@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { normalizeDesktopControlPlaneProvider } from '../shared/controlPlaneProvider';
+import type { DesktopManagedRuntimePresence } from '../shared/desktopRuntimePresence';
 import {
   testDesktopPreferences,
   testLocalAccess,
@@ -36,6 +37,114 @@ function providerRuntimeState(envPublicID = 'env_demo') {
     controlplane_base_url: 'https://cp.example.invalid',
     controlplane_provider_id: 'example_control_plane',
     env_public_id: envPublicID,
+  };
+}
+
+function sshRuntimePresence(
+  overrides: Partial<DesktopManagedRuntimePresence> = {},
+): DesktopManagedRuntimePresence {
+  return {
+    target_id: 'ssh:ssh:devbox:2222:key_agent:remote_default',
+    placement_target_id: 'ssh:host:devbox%3A2222:remote_default',
+    kind: 'ssh_environment',
+    environment_id: 'ssh:devbox:2222:key_agent:remote_default',
+    label: 'SSH Lab',
+    runtime_key: 'ssh:devbox:2222:key_agent:remote_default',
+    host_access: {
+      kind: 'ssh_host',
+      ssh: {
+        ssh_destination: 'devbox',
+        ssh_port: 2222,
+        auth_mode: 'key_agent',
+        remote_install_dir: 'remote_default',
+        bootstrap_strategy: 'desktop_upload',
+        release_base_url: '',
+        connect_timeout_seconds: 10,
+      },
+    },
+    placement: {
+      kind: 'host_process',
+      install_dir: 'remote_default',
+    },
+    running: true,
+    local_ui_url: 'http://127.0.0.1:40111/',
+    openable: true,
+    lifecycle_control: 'start_stop',
+    runtime_service: {
+      protocol_version: 'redeven-runtime-v1',
+      service_owner: 'desktop',
+      desktop_managed: true,
+      effective_run_mode: 'desktop',
+      remote_enabled: false,
+      compatibility: 'compatible',
+      open_readiness: { state: 'openable' },
+      active_workload: {
+        terminal_count: 0,
+        session_count: 0,
+        task_count: 0,
+        port_forward_count: 0,
+      },
+      capabilities: {
+        desktop_ai_broker: { supported: false },
+        provider_link: {
+          supported: true,
+          bind_method: 'runtime_control_v1',
+        },
+      },
+    },
+    runtime_control_status: {
+      state: 'available',
+      owner: 'current_desktop',
+    },
+    checked_at_unix_ms: 1000,
+    ...overrides,
+  };
+}
+
+function localRuntimePresence(
+  overrides: Partial<DesktopManagedRuntimePresence> = {},
+): DesktopManagedRuntimePresence {
+  return {
+    target_id: 'local:local',
+    placement_target_id: 'local:host:local',
+    kind: 'local_environment',
+    environment_id: 'local',
+    label: 'Local Environment',
+    runtime_key: 'local',
+    host_access: { kind: 'local_host' },
+    placement: { kind: 'host_process', install_dir: '' },
+    running: true,
+    local_ui_url: 'http://localhost:23998/',
+    openable: true,
+    lifecycle_control: 'start_stop',
+    runtime_service: {
+      protocol_version: 'redeven-runtime-v1',
+      service_owner: 'desktop',
+      desktop_managed: true,
+      effective_run_mode: 'desktop',
+      remote_enabled: false,
+      compatibility: 'compatible',
+      open_readiness: { state: 'openable' },
+      active_workload: {
+        terminal_count: 0,
+        session_count: 0,
+        task_count: 0,
+        port_forward_count: 0,
+      },
+      capabilities: {
+        desktop_ai_broker: { supported: false },
+        provider_link: {
+          supported: true,
+          bind_method: 'runtime_control_v1',
+        },
+      },
+    },
+    runtime_control_status: {
+      state: 'available',
+      owner: 'current_desktop',
+    },
+    checked_at_unix_ms: 1000,
+    ...overrides,
   };
 }
 
@@ -626,6 +735,82 @@ describe('desktopWelcomeState', () => {
     ]));
   });
 
+  it('keeps a running SSH runtime connectable before a window is open', () => {
+    const sshID = 'ssh:devbox:2222:key_agent:remote_default';
+    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        saved_ssh_environments: [{
+          id: sshID,
+          label: 'SSH Lab',
+          ssh_destination: 'devbox',
+          ssh_port: 2222,
+          auth_mode: 'key_agent',
+          remote_install_dir: 'remote_default',
+          bootstrap_strategy: 'desktop_upload',
+          release_base_url: '',
+          connect_timeout_seconds: 10,
+          pinned: false,
+          last_used_at_ms: 100,
+        }],
+        provider_environments: [providerEnvironment],
+      }),
+      managedRuntimePresenceByTargetID: {
+        'ssh:ssh:devbox:2222:key_agent:remote_default': sshRuntimePresence(),
+      },
+    });
+
+    const sshEntry = snapshot.environments.find((entry) => entry.kind === 'ssh_environment');
+    expect(sshEntry).toMatchObject({
+      is_open: false,
+      local_ui_url: 'http://127.0.0.1:40111/',
+      managed_runtime_target_id: 'ssh:ssh:devbox:2222:key_agent:remote_default',
+      managed_runtime_placement_target_id: 'ssh:host:devbox%3A2222:remote_default',
+      managed_runtime_host_access: expect.objectContaining({
+        kind: 'ssh_host',
+      }),
+      managed_runtime_placement: {
+        kind: 'host_process',
+        install_dir: 'remote_default',
+      },
+      provider_runtime_link_target: {
+        runtime_running: true,
+        runtime_control_status: {
+          state: 'available',
+          owner: 'current_desktop',
+        },
+        can_connect_provider: true,
+      },
+    });
+    expect(JSON.stringify(sshEntry?.provider_runtime_link_target)).not.toContain('runtime-control-token');
+    expect(JSON.stringify(sshEntry?.provider_runtime_link_target)).not.toContain('base_url');
+  });
+
+  it('uses managed runtime presence as the renderer-facing lifecycle capability source', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment({
+          currentRuntime: {
+            local_ui_url: 'http://localhost:23998/',
+            desktop_managed: false,
+            effective_run_mode: 'desktop',
+          },
+        }),
+      }),
+      managedRuntimePresenceByTargetID: {
+        'local:local': localRuntimePresence({
+          lifecycle_control: 'observe_only',
+        }),
+      },
+    });
+
+    const localEntry = snapshot.environments.find((entry) => entry.kind === 'local_environment');
+    expect(localEntry).toMatchObject({
+      runtime_control_capability: 'observe_only',
+      managed_runtime_target_id: 'local:local',
+    });
+  });
+
   it('preserves SSH runtime maintenance requirements before a window is open', () => {
     const sshID = 'ssh:devbox:2222:key_agent:remote_default';
     const snapshot = buildDesktopWelcomeSnapshot({
@@ -969,6 +1154,9 @@ describe('desktopWelcomeState', () => {
     expect(providerEntry?.local_environment_runtime_plan).toBeUndefined();
     expect(providerEntry?.provider_runtime_link_target).toBeUndefined();
     expect(providerEntry?.provider_environment_candidates).toBeUndefined();
+    expect(providerEntry?.managed_runtime_target_id).toBeUndefined();
+    expect(providerEntry?.managed_runtime_host_access).toBeUndefined();
+    expect(providerEntry?.managed_runtime_placement).toBeUndefined();
   });
 
   it('threads Control Plane runtime state into provider environment library entries', () => {
@@ -1164,7 +1352,9 @@ describe('desktopWelcomeState', () => {
           id: 'local:local',
           runtime_url: 'http://localhost:23998/',
           runtime_running: true,
-          runtime_control_available: false,
+          runtime_control_status: expect.objectContaining({
+            state: 'missing',
+          }),
           blocked_reason_code: 'runtime_control_missing',
         }),
         provider_environment_candidates: expect.arrayContaining([
@@ -1231,6 +1421,42 @@ describe('desktopWelcomeState', () => {
         }),
         provider_environments: [providerEnvironment],
       }),
+      managedRuntimePresenceByTargetID: {
+        'local:local': localRuntimePresence({
+          runtime_service: {
+            protocol_version: 'redeven-runtime-v1',
+            service_owner: 'desktop',
+            desktop_managed: true,
+            effective_run_mode: 'desktop',
+            remote_enabled: false,
+            compatibility: 'compatible',
+            open_readiness: { state: 'openable' },
+            active_workload: {
+              terminal_count: 0,
+              session_count: 0,
+              task_count: 0,
+              port_forward_count: 0,
+            },
+            capabilities: {
+              desktop_ai_broker: { supported: false },
+              provider_link: {
+                supported: true,
+                bind_method: 'runtime_control_v1',
+              },
+            },
+            bindings: {
+              desktop_ai_broker: { state: 'unsupported' },
+              provider_link: {
+                state: 'linked',
+                provider_origin: 'https://cp.example.invalid',
+                provider_id: 'example_control_plane',
+                env_public_id: 'env_demo',
+                remote_enabled: false,
+              },
+            },
+          },
+        }),
+      },
     });
 
     const providerEntry = snapshot.environments.find((entry) => (
@@ -1249,6 +1475,12 @@ describe('desktopWelcomeState', () => {
     });
 
     const localEntry = snapshot.environments.find((entry) => entry.kind === 'local_environment');
+    expect(localEntry).toMatchObject({
+      managed_runtime_target_id: 'local:local',
+      managed_runtime_placement_target_id: 'local:host:local',
+      managed_runtime_host_access: { kind: 'local_host' },
+      managed_runtime_placement: { kind: 'host_process', install_dir: '' },
+    });
     expect(localEntry?.provider_runtime_link_target).toMatchObject({
       id: 'local:local',
       provider_link_state: 'linked',
