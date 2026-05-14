@@ -26,3 +26,13 @@ export function sessionKindForLauncherApp(floeApp: string): LauncherSessionKind 
 export function isEnvAppTarget(floeApp: string, codeSpaceId: string): boolean {
   return String(floeApp ?? '').trim() === FLOE_APP_AGENT && String(codeSpaceId ?? '').trim() === CODE_SPACE_ID_ENV_UI;
 }
+
+export function isInternalEnvAppSessionKind(sessionKind: string | null | undefined): boolean {
+  switch (String(sessionKind ?? '').trim()) {
+    case SESSION_KIND_ENVAPP_RPC:
+    case SESSION_KIND_ENVAPP_PROXY:
+      return true;
+    default:
+      return false;
+  }
+}

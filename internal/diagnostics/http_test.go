@@ -85,12 +85,32 @@ func TestStatusWriterTracksStatusAndForwardsOptionalInterfaces(t *testing.T) {
 	if !raw.hijacked {
 		t.Fatalf("expected Hijack() to reach the wrapped writer")
 	}
+	if wrapped.StatusCode() != http.StatusOK {
+		t.Fatalf("StatusCode() after committed hijack = %d, want %d", wrapped.StatusCode(), http.StatusOK)
+	}
 
 	if err := wrapped.Push("/next", nil); err != nil {
 		t.Fatalf("Push() error = %v", err)
 	}
 	if raw.pushedTarget != "/next" {
 		t.Fatalf("raw.pushedTarget = %q, want %q", raw.pushedTarget, "/next")
+	}
+}
+
+func TestStatusWriterHijackMarksSwitchingProtocolsWhenUncommitted(t *testing.T) {
+	t.Parallel()
+
+	raw := &testResponseWriter{}
+	wrapped := NewStatusWriter(raw)
+
+	if _, _, err := wrapped.Hijack(); err != nil {
+		t.Fatalf("Hijack() error = %v", err)
+	}
+	if wrapped.StatusCode() != http.StatusSwitchingProtocols {
+		t.Fatalf("StatusCode() after Hijack = %d, want %d", wrapped.StatusCode(), http.StatusSwitchingProtocols)
+	}
+	if raw.writeHeaderCalls != 0 {
+		t.Fatalf("hijack should not write an HTTP header, got %d calls", raw.writeHeaderCalls)
 	}
 }
 

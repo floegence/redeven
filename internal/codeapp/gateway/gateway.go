@@ -162,12 +162,13 @@ type Gateway struct {
 	resolveSessionMeta      func(channelID string) (*session.Meta, bool)
 	resolveSessionTunnelURL func(channelID string) (string, bool)
 
-	configPath         string
-	stateDir           string
-	localPermissionCap *config.PermissionSet
-	configMu           sync.Mutex
-	secrets            *settings.SecretsStore
-	threadReadState    *threadreadstate.Store
+	configPath            string
+	stateDir              string
+	localPermissionPolicy *config.PermissionPolicy
+	localPermissionCap    *config.PermissionSet
+	configMu              sync.Mutex
+	secrets               *settings.SecretsStore
+	threadReadState       *threadreadstate.Store
 
 	agentHomeDir string
 
@@ -266,12 +267,7 @@ func New(opts Options) (*Gateway, error) {
 	}
 
 	stateDir := filepath.Dir(strings.TrimSpace(opts.ConfigPath))
-	localPermissionCap := config.ResolvePermissionCapFromConfigPath(
-		strings.TrimSpace(opts.ConfigPath),
-		localUserPublicID,
-		localFloeAppAgent,
-		config.PermissionSet{Read: true, Write: false, Execute: true},
-	)
+	localPermissionPolicy := loadLocalPermissionPolicySnapshot(strings.TrimSpace(opts.ConfigPath))
 	return &Gateway{
 		log:                     logger,
 		agentHomeDir:            opts.AgentHomeDir,
@@ -288,7 +284,7 @@ func New(opts Options) (*Gateway, error) {
 		resolveSessionTunnelURL: opts.ResolveSessionTunnelURL,
 		configPath:              strings.TrimSpace(opts.ConfigPath),
 		stateDir:                stateDir,
-		localPermissionCap:      &localPermissionCap,
+		localPermissionPolicy:   localPermissionPolicy,
 		secrets:                 secrets,
 		threadReadState:         opts.ThreadReadStateStore,
 		distFS:                  opts.DistFS,
@@ -354,6 +350,18 @@ func (g *Gateway) URL() string {
 		return ""
 	}
 	return "http://" + g.ln.Addr().String()
+}
+
+func loadLocalPermissionPolicySnapshot(configPath string) *config.PermissionPolicy {
+	cfg, err := config.Load(strings.TrimSpace(configPath))
+	if err != nil || cfg == nil || cfg.PermissionPolicy == nil {
+		policy, presetErr := config.ParsePermissionPolicyPreset("execute_read")
+		if presetErr != nil {
+			return nil
+		}
+		return policy
+	}
+	return cfg.PermissionPolicy
 }
 
 func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -458,6 +466,11 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		g.handleCodeServerProxy(w, r)
 		return
 	case originRolePortForward:
+		if localUI {
+			if _, ok := g.requirePermission(w, r, requiredPermissionExecute); !ok {
+				return
+			}
+		}
 		g.handlePortForwardProxy(w, r)
 		return
 	default:
@@ -1183,6 +1196,40 @@ const (
 	requiredPermissionFull
 )
 
+func requireSessionPermission(w http.ResponseWriter, meta *session.Meta, perm requiredPermission) bool {
+	switch perm {
+	case requiredPermissionRead:
+		if !meta.CanRead {
+			writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "read permission denied"})
+			return false
+		}
+	case requiredPermissionWrite:
+		if !meta.CanWrite {
+			writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "write permission denied"})
+			return false
+		}
+	case requiredPermissionExecute:
+		if !meta.CanExecute {
+			writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "execute permission denied"})
+			return false
+		}
+	case requiredPermissionAdmin:
+		if !meta.CanAdmin {
+			writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "admin permission denied"})
+			return false
+		}
+	case requiredPermissionFull:
+		if !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
+			writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "read/write/execute permission denied"})
+			return false
+		}
+	default:
+		writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "permission denied"})
+		return false
+	}
+	return true
+}
+
 func (g *Gateway) requirePermission(w http.ResponseWriter, r *http.Request, perm requiredPermission) (*session.Meta, bool) {
 	if g == nil || w == nil || r == nil {
 		return nil, false
@@ -1190,40 +1237,13 @@ func (g *Gateway) requirePermission(w http.ResponseWriter, r *http.Request, perm
 
 	// Local UI mode: inject a fixed local session_meta so the Env App gateway APIs can work
 	// without the env-/ch- origin labels used in Standard Mode.
-	if _, ok := localUIRouteFromRequest(r); ok {
-		meta := g.localSessionMeta()
+	if route, ok := localUIRouteFromRequest(r); ok {
+		meta := g.localSessionMeta(route)
 		if meta == nil {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "gateway not ready"})
 			return nil, false
 		}
-		switch perm {
-		case requiredPermissionRead:
-			if !meta.CanRead {
-				writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "read permission denied"})
-				return nil, false
-			}
-		case requiredPermissionWrite:
-			if !meta.CanWrite {
-				writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "write permission denied"})
-				return nil, false
-			}
-		case requiredPermissionExecute:
-			if !meta.CanExecute {
-				writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "execute permission denied"})
-				return nil, false
-			}
-		case requiredPermissionAdmin:
-			if !meta.CanAdmin {
-				writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "admin permission denied"})
-				return nil, false
-			}
-		case requiredPermissionFull:
-			if !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
-				writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "read/write/execute permission denied"})
-				return nil, false
-			}
-		default:
-			writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "permission denied"})
+		if !requireSessionPermission(w, meta, perm) {
 			return nil, false
 		}
 		return meta, true
@@ -1246,62 +1266,68 @@ func (g *Gateway) requirePermission(w http.ResponseWriter, r *http.Request, perm
 		return nil, false
 	}
 
-	switch perm {
-	case requiredPermissionRead:
-		if !meta.CanRead {
-			writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "read permission denied"})
-			return nil, false
-		}
-	case requiredPermissionWrite:
-		if !meta.CanWrite {
-			writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "write permission denied"})
-			return nil, false
-		}
-	case requiredPermissionExecute:
-		if !meta.CanExecute {
-			writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "execute permission denied"})
-			return nil, false
-		}
-	case requiredPermissionAdmin:
-		if !meta.CanAdmin {
-			writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "admin permission denied"})
-			return nil, false
-		}
-	case requiredPermissionFull:
-		if !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
-			writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "read/write/execute permission denied"})
-			return nil, false
-		}
-	default:
-		writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "permission denied"})
+	if !requireSessionPermission(w, meta, perm) {
 		return nil, false
 	}
 
 	return meta, true
 }
 
+func (g *Gateway) requireLocalAppPermission(w http.ResponseWriter, r *http.Request, floeApp string, perm requiredPermission) (*session.Meta, bool) {
+	if _, ok := localUIRouteFromRequest(r); !ok {
+		return g.requirePermission(w, r, perm)
+	}
+	route := localUIRoute{kind: localUIRouteEnv}
+	switch strings.TrimSpace(floeApp) {
+	case localFloeAppCode:
+		route.kind = localUIRouteCodeSpace
+	case localFloeAppPortForward:
+		route.kind = localUIRoutePortForward
+	}
+	meta := g.localSessionMeta(route)
+	if meta == nil {
+		writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "gateway not ready"})
+		return nil, false
+	}
+	if !requireSessionPermission(w, meta, perm) {
+		return nil, false
+	}
+	return meta, true
+}
+
 const (
-	localEnvPublicID       = "env_local"
-	localNamespacePublicID = "ns_local"
-	localUserPublicID      = "user_local"
-	localUserEmail         = "local@redeven"
-	localFloeAppAgent      = "com.floegence.redeven.agent"
+	localEnvPublicID        = "env_local"
+	localNamespacePublicID  = "ns_local"
+	localUserPublicID       = "user_local"
+	localUserEmail          = "local@redeven"
+	localFloeAppAgent       = "com.floegence.redeven.agent"
+	localFloeAppCode        = "com.floegence.redeven.code"
+	localFloeAppPortForward = "com.floegence.redeven.portforward"
 )
 
-func (g *Gateway) localSessionMeta() *session.Meta {
-	// Local UI permissions follow the current process snapshot and only change after
-	// an explicit agent restart, matching the rest of the runtime.
-	cap := config.PermissionSet{Read: true, Write: false, Execute: true}
-	if g != nil && g.localPermissionCap != nil {
-		cap = *g.localPermissionCap
+func (g *Gateway) localSessionMeta(route localUIRoute) *session.Meta {
+	floeApp := localFloeAppAgent
+	codeSpaceID := "env-ui"
+	sessionKind := "envapp_rpc"
+	switch route.kind {
+	case localUIRouteCodeSpace:
+		floeApp = localFloeAppCode
+		codeSpaceID = strings.TrimSpace(route.codeSpaceID)
+		sessionKind = "codeapp"
+	case localUIRoutePortForward:
+		floeApp = localFloeAppPortForward
+		codeSpaceID = strings.TrimSpace(route.forwardID)
+		sessionKind = "portforward"
 	}
+
+	cap := g.localPermissionCapForApp(floeApp)
 
 	return &session.Meta{
 		ChannelID:         "local-ui",
 		EndpointID:        localEnvPublicID,
-		FloeApp:           localFloeAppAgent,
-		CodeSpaceID:       "env-ui",
-		SessionKind:       "envapp_rpc",
+		FloeApp:           floeApp,
+		CodeSpaceID:       codeSpaceID,
+		SessionKind:       sessionKind,
 		UserPublicID:      localUserPublicID,
 		UserEmail:         localUserEmail,
 		NamespacePublicID: localNamespacePublicID,
@@ -1311,6 +1337,24 @@ func (g *Gateway) localSessionMeta() *session.Meta {
 		CanAdmin:          true,
 		CreatedAtUnixMs:   time.Now().UnixMilli(),
 	}
+}
+
+func localPermissionCapFromPolicy(policy *config.PermissionPolicy, userPublicID string, floeApp string) config.PermissionSet {
+	if policy == nil {
+		return config.PermissionSet{Read: true, Write: false, Execute: true}
+	}
+	return policy.ResolveCap(userPublicID, floeApp)
+}
+
+func (g *Gateway) localPermissionCapForApp(floeApp string) config.PermissionSet {
+	if g != nil && g.localPermissionCap != nil {
+		return *g.localPermissionCap
+	}
+	var policy *config.PermissionPolicy
+	if g != nil {
+		policy = g.localPermissionPolicy
+	}
+	return localPermissionCapFromPolicy(policy, localUserPublicID, floeApp)
 }
 
 func sanitizeAuditError(err error) string {
@@ -1840,7 +1884,6 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 			return
 		}
-
 		g.appendAudit(meta, "settings_update", "success", auditDetail, nil)
 		writeJSON(w, http.StatusOK, apiResp{
 			OK: true,
@@ -3746,7 +3789,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/forwards":
-		if _, ok := g.requirePermission(w, r, requiredPermissionExecute); !ok {
+		if _, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionExecute); !ok {
 			return
 		}
 		if g.pf == nil {
@@ -3787,7 +3830,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				defer func() { <-sem }()
-				views[i].Health = probePortForwardHealth(r.Context(), views[i].TargetURL)
+				views[i].Health = probePortForwardHealth(r.Context(), views[i].TargetURL, views[i].HealthPath, views[i].InsecureSkipVerify)
 			}(i)
 		}
 		wg.Wait()
@@ -3796,7 +3839,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/forwards":
-		meta, ok := g.requirePermission(w, r, requiredPermissionExecute)
+		meta, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionExecute)
 		if !ok {
 			return
 		}
@@ -3839,7 +3882,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			CreatedAtUnixMs:    f.CreatedAtUnixMs,
 			UpdatedAtUnixMs:    f.UpdatedAtUnixMs,
 			LastOpenedAtUnixMs: f.LastOpenedAtUnixMs,
-			Health:             probePortForwardHealth(r.Context(), f.TargetURL),
+			Health:             probePortForwardHealth(r.Context(), f.TargetURL, f.HealthPath, f.InsecureSkipVerify),
 		}
 		g.appendAudit(meta, "port_forward_create", "success", auditDetail, nil)
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
@@ -3876,7 +3919,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 
 	default:
 		if strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/forwards/") {
-			meta, ok := g.requirePermission(w, r, requiredPermissionExecute)
+			meta, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionExecute)
 			if !ok {
 				return
 			}
@@ -3902,7 +3945,11 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodDelete && action == "" {
 				if err := g.pf.DeleteForward(r.Context(), id); err != nil {
 					g.appendAudit(meta, "port_forward_delete", "failure", map[string]any{"forward_id": id}, err)
-					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+					status := http.StatusBadRequest
+					if errors.Is(err, portforward.ErrForwardNotFound) {
+						status = http.StatusNotFound
+					}
+					writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
 					return
 				}
 				g.appendAudit(meta, "port_forward_delete", "success", map[string]any{"forward_id": id}, nil)
@@ -3935,7 +3982,11 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				f, err := g.pf.UpdateForward(r.Context(), id, req)
 				if err != nil {
 					g.appendAudit(meta, "port_forward_update", "failure", auditDetail, err)
-					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+					status := http.StatusBadRequest
+					if errors.Is(err, portforward.ErrForwardNotFound) {
+						status = http.StatusNotFound
+					}
+					writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
 					return
 				}
 				if f == nil {
@@ -3953,7 +4004,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 					CreatedAtUnixMs:    f.CreatedAtUnixMs,
 					UpdatedAtUnixMs:    f.UpdatedAtUnixMs,
 					LastOpenedAtUnixMs: f.LastOpenedAtUnixMs,
-					Health:             probePortForwardHealth(r.Context(), f.TargetURL),
+					Health:             probePortForwardHealth(r.Context(), f.TargetURL, f.HealthPath, f.InsecureSkipVerify),
 				}
 				g.appendAudit(meta, "port_forward_update", "success", auditDetail, nil)
 				writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
@@ -3964,7 +4015,11 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				f, err := g.pf.TouchLastOpened(r.Context(), id)
 				if err != nil {
 					g.appendAudit(meta, "port_forward_open", "failure", map[string]any{"forward_id": id}, err)
-					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+					status := http.StatusBadRequest
+					if errors.Is(err, portforward.ErrForwardNotFound) {
+						status = http.StatusNotFound
+					}
+					writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
 					return
 				}
 				if f == nil {
@@ -3988,7 +4043,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 					CreatedAtUnixMs:    f.CreatedAtUnixMs,
 					UpdatedAtUnixMs:    f.UpdatedAtUnixMs,
 					LastOpenedAtUnixMs: f.LastOpenedAtUnixMs,
-					Health:             probePortForwardHealth(r.Context(), f.TargetURL),
+					Health:             probePortForwardHealth(r.Context(), f.TargetURL, f.HealthPath, f.InsecureSkipVerify),
 				}
 				writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
 				return
@@ -4351,7 +4406,7 @@ type portForwardView struct {
 	Health portForwardHealth `json:"health"`
 }
 
-func probePortForwardHealth(ctx context.Context, targetURL string) portForwardHealth {
+func probePortForwardHealth(ctx context.Context, targetURL string, healthPath string, insecureSkipVerify bool) portForwardHealth {
 	out := portForwardHealth{
 		Status:              "unknown",
 		LastCheckedAtUnixMs: time.Now().UnixMilli(),
@@ -4373,6 +4428,52 @@ func probePortForwardHealth(ctx context.Context, targetURL string) portForwardHe
 	defer cancel()
 
 	start := time.Now()
+	if path := normalizePortForwardHealthPath(healthPath); path != "" {
+		healthURL := *u
+		healthURL.Path = path
+		healthURL.RawQuery = ""
+		healthURL.Fragment = ""
+		req, err := http.NewRequestWithContext(probeCtx, http.MethodGet, healthURL.String(), nil)
+		if err != nil {
+			out.Status = "unreachable"
+			out.LastError = truncateErr(err)
+			return out
+		}
+		client := &http.Client{
+			Timeout: 800 * time.Millisecond,
+			Transport: &http.Transport{
+				Proxy: http.ProxyFromEnvironment,
+				DialContext: (&net.Dialer{
+					Timeout:   800 * time.Millisecond,
+					KeepAlive: 30 * time.Second,
+				}).DialContext,
+				ForceAttemptHTTP2:     false,
+				TLSHandshakeTimeout:   800 * time.Millisecond,
+				ResponseHeaderTimeout: 800 * time.Millisecond,
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: insecureSkipVerify,
+				},
+			},
+		}
+		resp, err := client.Do(req)
+		latency := time.Since(start).Milliseconds()
+		out.LatencyMs = latency
+		if err != nil {
+			out.Status = "unreachable"
+			out.LastError = truncateErr(err)
+			return out
+		}
+		defer resp.Body.Close()
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
+		if resp.StatusCode >= 200 && resp.StatusCode < 400 {
+			out.Status = "healthy"
+			return out
+		}
+		out.Status = "unreachable"
+		out.LastError = fmt.Sprintf("health check returned HTTP %d", resp.StatusCode)
+		return out
+	}
+
 	conn, err := (&net.Dialer{Timeout: 800 * time.Millisecond}).DialContext(probeCtx, "tcp", host)
 	latency := time.Since(start).Milliseconds()
 
@@ -4387,6 +4488,17 @@ func probePortForwardHealth(ctx context.Context, targetURL string) portForwardHe
 	out.Status = "healthy"
 	out.LatencyMs = latency
 	return out
+}
+
+func normalizePortForwardHealthPath(value string) string {
+	path := strings.TrimSpace(value)
+	if path == "" {
+		return ""
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	return path
 }
 
 func truncateErr(err error) string {

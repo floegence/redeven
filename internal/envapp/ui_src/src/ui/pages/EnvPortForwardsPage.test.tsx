@@ -35,6 +35,10 @@ const desktopContextMocks = vi.hoisted(() => ({
   readDesktopSessionContextSnapshot: vi.fn(),
 }));
 
+const sandboxWindowRegistryMocks = vi.hoisted(() => ({
+  registerSandboxWindow: vi.fn(),
+}));
+
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...parts: Array<string | false | null | undefined>) => parts.filter(Boolean).join(' '),
   useNotification: () => notificationMocks,
@@ -87,7 +91,7 @@ vi.mock('../services/desktopSessionContext', () => ({
 }));
 
 vi.mock('../services/floeproxyContract', () => ({
-  FLOE_APP_PORT_FORWARD: 'com.floegence.redeven.port-forward',
+  FLOE_APP_PORT_FORWARD: 'com.floegence.redeven.portforward',
 }));
 
 vi.mock('../services/gatewayApi', () => ({
@@ -99,7 +103,7 @@ vi.mock('../services/sandboxOrigins', () => ({
 }));
 
 vi.mock('../services/sandboxWindowRegistry', () => ({
-  registerSandboxWindow: vi.fn(),
+  registerSandboxWindow: sandboxWindowRegistryMocks.registerSandboxWindow,
 }));
 
 vi.mock('../primitives/Tooltip', () => ({
@@ -128,6 +132,11 @@ async function waitForAssertion(assertion: () => void): Promise<void> {
     }
   }
   throw lastError;
+}
+
+function decodeBase64UrlJSON<T>(raw: string): T {
+  const padded = raw.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (raw.length % 4)) % 4);
+  return JSON.parse(atob(padded)) as T;
 }
 
 const localRuntime = {
@@ -229,6 +238,7 @@ describe('EnvPortForwardsPage', () => {
       target_kind: 'local_environment',
       target_route: 'local_host',
     });
+    sandboxWindowRegistryMocks.registerSandboxWindow.mockReset();
     envContextMocks.env = Object.assign(
       () => ({ permissions: { can_execute: true } }),
       { state: 'ready', loading: false, error: null },
@@ -309,6 +319,50 @@ describe('EnvPortForwardsPage', () => {
     await waitForAssertion(() => {
       expect(gatewayMocks.fetchGatewayJSON).toHaveBeenCalledWith('/_redeven_proxy/api/forwards/forward-1/touch', { method: 'POST' });
       expect(assign).toHaveBeenCalledWith('http://localhost:3000');
+    });
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it('opens secure tunnel services with the canonical portforward app id', async () => {
+    controlplaneMocks.getLocalRuntime.mockResolvedValue(null);
+    const assign = vi.fn();
+    const close = vi.fn();
+    const popup = { location: { assign }, close } as unknown as Window;
+    vi.spyOn(window, 'open').mockReturnValue(popup);
+
+    render(() => <EnvPortForwardsPage />, host);
+    await flushPage();
+
+    const openButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Open'));
+    expect(openButton).toBeTruthy();
+    openButton?.click();
+
+    await waitForAssertion(() => {
+      expect(gatewayMocks.fetchGatewayJSON).toHaveBeenCalledWith('/_redeven_proxy/api/forwards/forward-1/touch', { method: 'POST' });
+      expect(sandboxWindowRegistryMocks.registerSandboxWindow).toHaveBeenCalledWith(popup, {
+        origin: 'https://forward.test',
+        floe_app: 'com.floegence.redeven.portforward',
+        code_space_id: 'forward-1',
+        app_path: '/',
+      });
+      expect(controlplaneMocks.mintEnvEntryTicketForApp).toHaveBeenCalledWith({
+        envId: 'env_demo',
+        floeApp: 'com.floegence.redeven.portforward',
+        codeSpaceId: 'forward-1',
+      });
+      expect(assign).toHaveBeenCalledTimes(1);
+    });
+
+    const openedURL = String(assign.mock.calls[0]?.[0] ?? '');
+    const encoded = openedURL.split('#redeven=')[1] ?? '';
+    expect(openedURL).toBe('https://forward.test/_redeven_boot/?env=env_demo#redeven=' + encoded);
+    expect(decodeBase64UrlJSON<Record<string, unknown>>(encoded)).toMatchObject({
+      v: 2,
+      env_public_id: 'env_demo',
+      floe_app: 'com.floegence.redeven.portforward',
+      code_space_id: 'forward-1',
+      app_path: '/',
+      entry_ticket: 'entry-ticket',
     });
     expect(close).not.toHaveBeenCalled();
   });

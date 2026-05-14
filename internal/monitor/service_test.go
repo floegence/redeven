@@ -82,6 +82,20 @@ func Test_networkHistory_CalculateSpeed_windowedAverage(t *testing.T) {
 	}
 }
 
+func Test_networkHistory_CalculateSpeed_handlesCounterReset(t *testing.T) {
+	t.Parallel()
+
+	h := newNetworkHistory(10, 6*time.Second)
+	now := time.Now()
+	h.Add(networkStats{bytesReceived: 1200, bytesSent: 900, at: now.Add(-2 * time.Second)})
+	h.Add(networkStats{bytesReceived: 100, bytesSent: 50, at: now})
+
+	recv, sent := h.CalculateSpeed(now)
+	if recv != 0 || sent != 0 {
+		t.Fatalf("speed after counter reset = (%v,%v), want (0,0)", recv, sent)
+	}
+}
+
 func TestService_StartPublishesCachedSnapshot(t *testing.T) {
 	t.Parallel()
 

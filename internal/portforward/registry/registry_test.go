@@ -3,6 +3,7 @@ package registry
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -133,6 +134,29 @@ func TestRegistry_CRUD(t *testing.T) {
 	}
 	if after != nil {
 		t.Fatalf("expected deleted forward to be nil, got %+v", after)
+	}
+}
+
+func TestRegistry_MissingMutationsReturnNotFound(t *testing.T) {
+	t.Parallel()
+
+	p := filepath.Join(t.TempDir(), "registry.sqlite")
+	r, err := Open(p)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = r.Close() })
+
+	ctx := context.Background()
+	name := "Missing"
+	if err := r.UpdateForward(ctx, "missing", UpdateForwardPatch{Name: &name}); !errors.Is(err, ErrForwardNotFound) {
+		t.Fatalf("UpdateForward error = %v, want ErrForwardNotFound", err)
+	}
+	if err := r.TouchLastOpened(ctx, "missing"); !errors.Is(err, ErrForwardNotFound) {
+		t.Fatalf("TouchLastOpened error = %v, want ErrForwardNotFound", err)
+	}
+	if err := r.DeleteForward(ctx, "missing"); !errors.Is(err, ErrForwardNotFound) {
+		t.Fatalf("DeleteForward error = %v, want ErrForwardNotFound", err)
 	}
 }
 

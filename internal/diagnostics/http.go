@@ -87,7 +87,12 @@ func (w *StatusWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	if !ok {
 		return nil, nil, http.ErrNotSupported
 	}
-	return hijacker.Hijack()
+	conn, rw, err := hijacker.Hijack()
+	if err != nil {
+		return nil, nil, err
+	}
+	w.markCommitted(http.StatusSwitchingProtocols)
+	return conn, rw, nil
 }
 
 func (w *StatusWriter) Push(target string, opts *http.PushOptions) error {

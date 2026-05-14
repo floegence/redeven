@@ -24,6 +24,7 @@ The local cap is designed to protect users from:
 Notes:
 - The local cap only applies to `read/write/execute` (RWX).
 - `can_admin` is a separate namespace-level capability bit delivered in `session_meta`.
+- Local UI uses the same per-app cap model as remote sessions. Env App UI itself resolves as `com.floegence.redeven.agent`, Code App routes resolve as `com.floegence.redeven.code`, and Port Forward routes/API actions resolve as `com.floegence.redeven.portforward`.
 
 ## Config Schema
 
@@ -42,7 +43,9 @@ Notes:
       "user_xxx": { "read": true, "write": false, "execute": false }
     },
     "by_app": {
-      "com.floegence.redeven.agent": { "read": true, "write": true, "execute": true }
+      "com.floegence.redeven.agent": { "read": true, "write": true, "execute": true },
+      "com.floegence.redeven.code": { "read": true, "write": true, "execute": false },
+      "com.floegence.redeven.portforward": { "read": true, "write": true, "execute": false }
     }
   }
 }

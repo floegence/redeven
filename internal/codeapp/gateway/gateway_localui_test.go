@@ -71,6 +71,19 @@ func writeLocalUITestConfig(t *testing.T) string {
 	return cfgPath
 }
 
+func writeLocalUITestConfigWithPolicy(t *testing.T, policy *config.PermissionPolicy) string {
+	t.Helper()
+	cfgPath := filepath.Join(t.TempDir(), "config.json")
+	if err := config.Save(cfgPath, &config.Config{
+		PermissionPolicy: policy,
+		LogFormat:        "json",
+		LogLevel:         "info",
+	}); err != nil {
+		t.Fatalf("config.Save() error = %v", err)
+	}
+	return cfgPath
+}
+
 func TestGateway_LocalUICodespaceRootRedirectsToWorkspace(t *testing.T) {
 	t.Parallel()
 
@@ -211,6 +224,71 @@ func TestGateway_LocalUIAllowsPortForwardManagementAPI(t *testing.T) {
 	}
 }
 
+func TestGateway_LocalUIPortForwardManagementUsesPortForwardAppCap(t *testing.T) {
+	t.Parallel()
+
+	localMax := config.PermissionSet{Read: true, Write: true, Execute: true}
+	portForwardCap := config.PermissionSet{Read: true, Write: true, Execute: false}
+	policy := &config.PermissionPolicy{
+		SchemaVersion: 1,
+		LocalMax:      &localMax,
+		ByApp: map[string]*config.PermissionSet{
+			localFloeAppPortForward: &portForwardCap,
+		},
+	}
+	gw, err := New(Options{
+		Backend:            &stubBackend{},
+		PortForward:        &stubPortForwardBackend{forwards: map[string]pfregistry.Forward{}},
+		DistFS:             fstest.MapFS{"env/index.html": {Data: []byte("<html>env</html>")}},
+		ConfigPath:         writeLocalUITestConfigWithPolicy(t, policy),
+		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/_redeven_proxy/api/forwards", nil)
+	req = WithLocalUIEnvRoute(req)
+	rr := httptest.NewRecorder()
+	gw.serveHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d, body=%s", rr.Code, http.StatusForbidden, rr.Body.String())
+	}
+}
+
+func TestGateway_LocalUICodespaceProxyUsesCodeAppCap(t *testing.T) {
+	t.Parallel()
+
+	localMax := config.PermissionSet{Read: true, Write: true, Execute: true}
+	codeCap := config.PermissionSet{Read: true, Write: true, Execute: false}
+	policy := &config.PermissionPolicy{
+		SchemaVersion: 1,
+		LocalMax:      &localMax,
+		ByApp: map[string]*config.PermissionSet{
+			localFloeAppCode: &codeCap,
+		},
+	}
+	gw, err := New(Options{
+		Backend:            &stubBackend{},
+		DistFS:             fstest.MapFS{"env/index.html": {Data: []byte("<html>env</html>")}},
+		ConfigPath:         writeLocalUITestConfigWithPolicy(t, policy),
+		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/cs/demo/", nil)
+	req = WithLocalUICodeSpaceRoute(req, "demo")
+	rr := httptest.NewRecorder()
+	gw.serveHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d, body=%s", rr.Code, http.StatusForbidden, rr.Body.String())
+	}
+}
+
 func TestGateway_LocalUIPortForwardProxyStripsPathPrefix(t *testing.T) {
 	t.Parallel()
 
@@ -306,5 +384,28 @@ func TestGateway_LocalUIPortForwardProxyKeepsLocalPrefixInTargetRedirects(t *tes
 	}
 	if loc := rr.Header().Get("Location"); loc != "/pf/demo/dashboard" {
 		t.Fatalf("location = %q, want %q", loc, "/pf/demo/dashboard")
+	}
+}
+
+func TestProbePortForwardHealth_UsesConfiguredHealthPath(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/healthz" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		http.Error(w, "root should not be treated as health", http.StatusInternalServerError)
+	}))
+	defer upstream.Close()
+
+	health := probePortForwardHealth(context.Background(), upstream.URL, "healthz", false)
+	if health.Status != "healthy" {
+		t.Fatalf("health.Status=%q want healthy, error=%q", health.Status, health.LastError)
+	}
+
+	unhealthy := probePortForwardHealth(context.Background(), upstream.URL, "/missing", false)
+	if unhealthy.Status != "unreachable" {
+		t.Fatalf("unhealthy.Status=%q want unreachable", unhealthy.Status)
 	}
 }

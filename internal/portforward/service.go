@@ -31,6 +31,8 @@ type UpdateForwardRequest struct {
 	InsecureSkipVerify *bool   `json:"insecure_skip_verify,omitempty"`
 }
 
+var ErrForwardNotFound = registry.ErrForwardNotFound
+
 type Service struct {
 	reg *registry.Registry
 }
@@ -121,6 +123,14 @@ func (s *Service) UpdateForward(ctx context.Context, forwardID string, req Updat
 		return nil, errors.New("missing fields")
 	}
 
+	cur, err := s.reg.GetForward(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if cur == nil {
+		return nil, ErrForwardNotFound
+	}
+
 	var targetURL *string
 	if req.Target != nil {
 		v, err := normalizeTargetURL(strings.TrimSpace(*req.Target))
@@ -133,13 +143,6 @@ func (s *Service) UpdateForward(ctx context.Context, forwardID string, req Updat
 	var name *string
 	var description *string
 	if req.Name != nil || req.Description != nil {
-		cur, err := s.reg.GetForward(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-		if cur == nil {
-			return nil, errors.New("port forward not found")
-		}
 		nextName := cur.Name
 		nextDesc := cur.Description
 		if req.Name != nil {
@@ -177,7 +180,14 @@ func (s *Service) UpdateForward(ctx context.Context, forwardID string, req Updat
 	if err := s.reg.UpdateForward(ctx, id, patch); err != nil {
 		return nil, err
 	}
-	return s.reg.GetForward(ctx, id)
+	updated, err := s.reg.GetForward(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if updated == nil {
+		return nil, ErrForwardNotFound
+	}
+	return updated, nil
 }
 
 func (s *Service) DeleteForward(ctx context.Context, forwardID string) error {
@@ -208,7 +218,14 @@ func (s *Service) TouchLastOpened(ctx context.Context, forwardID string) (*regis
 	if err := s.reg.TouchLastOpened(ctx, id); err != nil {
 		return nil, err
 	}
-	return s.reg.GetForward(ctx, id)
+	f, err := s.reg.GetForward(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if f == nil {
+		return nil, ErrForwardNotFound
+	}
+	return f, nil
 }
 
 func ParseTargetURL(targetURL string) (*url.URL, error) {
