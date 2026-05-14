@@ -1582,7 +1582,7 @@ func lookPathFromLoginShell(shell string, binaryName string) string {
 	if err != nil {
 		return ""
 	}
-	out, err := exec.Command(shellPath, "-l", "-i", "-c", `type -P "$0"`, binaryName).Output()
+	out, err := exec.Command(shellPath, "-l", "-i", "-c", `command -v "$0"`, binaryName).Output()
 	if err != nil {
 		return ""
 	}
