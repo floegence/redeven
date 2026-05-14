@@ -17,6 +17,10 @@ import {
 } from '../shared/runtimeService';
 import { buildDesktopProviderRuntimeLinkPlan } from '../shared/providerRuntimeLinkPlanner';
 import type { DesktopProviderRuntimeLinkTarget } from '../shared/providerRuntimeLinkTarget';
+import {
+  desktopEntryKindOwnsRuntimeManagement,
+  desktopProviderEnvironmentOpenRoute,
+} from '../shared/environmentManagementPrinciples';
 
 export type DesktopWelcomeShellViewModel = Readonly<{
   shell_title: 'Redeven Desktop';
@@ -718,7 +722,7 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
       || (environment.kind !== 'provider_environment' && environment.runtime_health.status === 'online' && runtimeServiceIsOpenable(snapshot)),
     variant: 'default',
     ...(environment.kind === 'provider_environment'
-      ? { route: 'remote_desktop' as const }
+      ? { route: desktopProviderEnvironmentOpenRoute() }
       : primaryRoute
       ? { route: primaryRoute }
       : {}),
@@ -729,7 +733,10 @@ function providerPrimaryRoute(environment: DesktopEnvironmentEntry): DesktopLoca
   if (environment.kind !== 'provider_environment') {
     return '';
   }
-  return 'remote_desktop';
+  // IMPORTANT: A Provider Environment card always opens through the provider
+  // tunnel. Local/SSH runtime cards are the only surfaces that may expose direct
+  // Local UI opening or runtime management.
+  return desktopProviderEnvironmentOpenRoute();
 }
 
 function providerRemoteRouteMenuAction(
@@ -783,7 +790,9 @@ function providerRemoteRouteMenuAction(
 function runtimeProviderLinkMenuAction(
   environment: DesktopEnvironmentEntry,
 ): EnvironmentActionMenuItemModel | null {
-  if (environment.kind !== 'local_environment' && environment.kind !== 'ssh_environment') {
+  // IMPORTANT: Provider-link controls live only on Local/SSH runtime cards.
+  // Provider cards represent remote access permissions, not device management.
+  if (!desktopEntryKindOwnsRuntimeManagement(environment.kind)) {
     return null;
   }
   const target = environment.provider_runtime_link_target;
@@ -835,7 +844,7 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
     items.push(runtimeProviderLinkAction);
   }
   if (environment.runtime_control_capability === 'start_stop') {
-    if (environment.kind !== 'provider_environment') {
+    if (desktopEntryKindOwnsRuntimeManagement(environment.kind)) {
       const maintenanceIntent = runtimeMaintenanceActionIntent(environment);
       const maintenanceLabel = runtimeMaintenanceActionLabel(environment);
       const runtimeAction: EnvironmentActionModel = {
@@ -852,7 +861,7 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
         action: runtimeAction,
       });
     }
-  } else if (environment.kind !== 'provider_environment' && !remoteRouteAction) {
+  } else if (desktopEntryKindOwnsRuntimeManagement(environment.kind) && !remoteRouteAction) {
     items.push({
       id: 'runtime_managed_externally',
       label: 'Runtime managed externally',

@@ -187,6 +187,13 @@ describe('main routing', () => {
     expect(openSrc).toContain('prepareProviderRemoteOpenSession(preferences, environment)');
   });
 
+  it('marks provider environment management boundaries as important source constraints', () => {
+    const mainSrc = readMainSource();
+    expect(mainSrc).toContain('IMPORTANT: Provider-link operations must resolve the exact Local/SSH runtime');
+    expect(mainSrc).toContain('IMPORTANT: Provider Environment Open is remote-only provider tunnel access.');
+    expect(mainSrc).toContain('desktopProviderEnvironmentOpenRoute()');
+  });
+
   it('keeps delete actions non-blocking while preventing stale SSH and provider tasks from resurrecting entries', () => {
     const mainSrc = readMainSource();
     const sshDeleteStart = mainSrc.indexOf('async function deleteSavedSSHEnvironmentFromWelcome');
