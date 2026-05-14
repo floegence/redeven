@@ -120,6 +120,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain("method: 'desktop_ssh_force_update'");
     expect(mainSrc).toContain('async function restartSSHRuntimeFromShell(');
     expect(mainSrc).toContain('forceRuntimeUpdate: options.forceRuntimeUpdate === true');
+    expect(mainSrc).toContain('allowActiveWorkReplacement: true');
     expect(mainSrc).toContain("if (normalized.action === 'restart_runtime')");
     expect(mainSrc).toContain("if (normalized.action === 'upgrade_runtime')");
   });
@@ -141,6 +142,7 @@ describe('main routing', () => {
     expect(sshStartEnd).toBeGreaterThan(sshStartStart);
     const sshStartSrc = mainSrc.slice(sshStartStart, sshStartEnd);
     expect(sshStartSrc).toContain('options.forceRuntimeUpdate !== true');
+    expect(sshStartSrc).toContain('options.allowActiveWorkReplacement !== true');
     expect(sshStartSrc).toContain('desktopSSHRuntimeAffectingSettingsMatch(existingRecord.details, sshDetails)');
 
     const openSSHStart = mainSrc.indexOf('async function openSSHEnvironmentFromLauncher(');

@@ -2611,6 +2611,7 @@ async function startSSHEnvironmentRuntimeRecord(
     environmentID?: string;
     label?: string;
     forceRuntimeUpdate?: boolean;
+    allowActiveWorkReplacement?: boolean;
   }> = {},
 ): Promise<SSHEnvironmentRuntimeRecord> {
   const runtimeKey = sshDesktopSessionKey(sshDetails);
@@ -2619,6 +2620,7 @@ async function startSSHEnvironmentRuntimeRecord(
   const existingRecord = sshEnvironmentRuntimeByKey.get(runtimeKey) ?? null;
   if (existingRecord) {
     const canReuseExisting = options.forceRuntimeUpdate !== true
+      && options.allowActiveWorkReplacement !== true
       && desktopSSHRuntimeAffectingSettingsMatch(existingRecord.details, sshDetails);
     if (canReuseExisting) {
       try {
@@ -2716,6 +2718,7 @@ async function startSSHEnvironmentRuntimeRecord(
         desktopOwnerID: await desktopRuntimeOwnerID(),
         sourceRuntimeRoot: process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT,
         forceRuntimeUpdate: options.forceRuntimeUpdate,
+        allowActiveWorkReplacement: options.allowActiveWorkReplacement,
         connectTimeoutSeconds: typeof sshDetails.connect_timeout_seconds === 'number'
           ? sshDetails.connect_timeout_seconds
           : undefined,
@@ -4208,6 +4211,7 @@ async function startEnvironmentRuntimeFromLauncher(
         environmentID: request.environment_id,
         label: request.label,
         forceRuntimeUpdate: request.force_runtime_update === true,
+        allowActiveWorkReplacement: request.allow_active_work_replacement === true,
       });
       resetLauncherIssueState();
       await markSavedSSHTargetUsed({
@@ -5243,6 +5247,7 @@ async function restartSSHRuntimeFromShell(
       environmentID: previousTarget.environment_id,
       label: previousTarget.label,
       forceRuntimeUpdate: options.forceRuntimeUpdate === true,
+      allowActiveWorkReplacement: true,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

@@ -188,6 +188,7 @@ export type StartManagedSSHRuntimeArgs = Readonly<{
   tempRoot?: string;
   assetCacheRoot?: string;
   forceRuntimeUpdate?: boolean;
+  allowActiveWorkReplacement?: boolean;
   startupTimeoutMs?: number;
   stopTimeoutMs?: number;
   connectTimeoutSeconds?: number;
@@ -786,6 +787,24 @@ function remotePortFromStartup(startup: StartupReport): number {
 function isLoopbackRuntimeControlHost(value: string): boolean {
   const host = compact(value).toLowerCase().replace(/^\[(.*)\]$/u, '$1');
   return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+}
+
+function startupHasForwardableRuntimeControl(startup: StartupReport): boolean {
+  const endpoint = startup.runtime_control;
+  if (!endpoint) {
+    return false;
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(endpoint.base_url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'http:' || !isLoopbackRuntimeControlHost(parsed.hostname)) {
+    return false;
+  }
+  const port = Number.parseInt(compact(parsed.port), 10);
+  return Number.isInteger(port) && port > 0 && port <= 65535;
 }
 
 function remoteRuntimeControlPortFromStartup(startup: StartupReport): number {
@@ -1907,10 +1926,11 @@ function managedSSHRuntimeAttachPolicy(
   const runtimeService = startup.runtime_service;
   const identityMismatch = !runtimeServiceMatchesIdentity(runtimeService, args.expectedRuntimeIdentity);
   const needsRuntimeUpdate = runtimeServiceNeedsRuntimeUpdate(runtimeService);
+  const runtimeControlUnavailable = !startupHasForwardableRuntimeControl(startup);
   const brokerBindingUnsupported = args.requireDesktopAIBrokerBinding
     && !runtimeServiceSupportsDesktopAIBrokerBinding(runtimeService);
 
-  if (!identityMismatch && !needsRuntimeUpdate && !brokerBindingUnsupported) {
+  if (!identityMismatch && !needsRuntimeUpdate && !runtimeControlUnavailable && !brokerBindingUnsupported) {
     return { action: 'reuse' };
   }
 
@@ -1919,19 +1939,23 @@ function managedSSHRuntimeAttachPolicy(
     : needsRuntimeUpdate
       ? 'ssh_runtime_update_required'
       : 'ssh_runtime_restart_required';
+  const maintenanceRequiredFor = brokerBindingUnsupported ? 'desktop_model_source' : 'open';
+  const maintenanceMessage = brokerBindingUnsupported
+    ? 'Update and restart this SSH runtime before Desktop can make your local model settings available here.'
+    : needsRuntimeUpdate
+      ? 'Update and restart this SSH runtime before opening this environment.'
+      : runtimeControlUnavailable
+        ? 'Restart this SSH runtime so Desktop can prepare runtime-control before provider linking or opening this environment.'
+        : 'Restart this SSH runtime before opening this environment.';
   const maintenance: DesktopRuntimeMaintenanceRequirement = {
     kind: maintenanceKind,
-    required_for: brokerBindingUnsupported ? 'desktop_model_source' : 'open',
+    required_for: maintenanceRequiredFor,
     can_desktop_restart: startupReportsStoppablePID(startup),
     has_active_work: runtimeServiceHasActiveWork(runtimeService),
     active_work_label: formatRuntimeServiceWorkload(runtimeService),
     current_runtime_version: runtimeService?.runtime_version,
     target_runtime_version: args.expectedRuntimeIdentity.runtime_version,
-    message: brokerBindingUnsupported
-      ? 'Update and restart this SSH runtime before Desktop can make your local model settings available here.'
-      : needsRuntimeUpdate
-        ? 'Update and restart this SSH runtime before opening this environment.'
-        : 'Restart this SSH runtime before opening this environment.',
+    message: maintenanceMessage,
   };
 
   if (runtimeServiceHasActiveWork(runtimeService) && !args.allowActiveWorkReplacement) {
@@ -1939,7 +1963,9 @@ function managedSSHRuntimeAttachPolicy(
       action: 'block',
       message: brokerBindingUnsupported
         ? 'This SSH runtime needs to update before Desktop can prepare the Desktop model source, but active work is still running.'
-        : 'This SSH runtime needs to restart before Desktop can open it, but active work is still running.',
+        : runtimeControlUnavailable
+          ? 'This SSH runtime needs to restart before Desktop can prepare runtime-control, but active work is still running.'
+          : 'This SSH runtime needs to restart before Desktop can open it, but active work is still running.',
       maintenance,
     };
   }
@@ -1948,7 +1974,9 @@ function managedSSHRuntimeAttachPolicy(
       action: 'block',
       message: brokerBindingUnsupported
         ? 'This SSH runtime needs to update before Desktop can prepare the Desktop model source, but it did not report a process id Desktop can stop.'
-        : 'This SSH runtime needs to restart before Desktop can open it, but it did not report a process id Desktop can stop.',
+        : runtimeControlUnavailable
+          ? 'This SSH runtime needs to restart before Desktop can prepare runtime-control, but it did not report a process id Desktop can stop.'
+          : 'This SSH runtime needs to restart before Desktop can open it, but it did not report a process id Desktop can stop.',
       maintenance,
     };
   }
@@ -1956,7 +1984,9 @@ function managedSSHRuntimeAttachPolicy(
     action: 'replace',
     message: brokerBindingUnsupported
       ? 'Restarting SSH runtime so Desktop can prepare the Desktop model source.'
-      : 'Restarting SSH runtime so Desktop can open the requested runtime version.',
+      : runtimeControlUnavailable
+        ? 'Restarting SSH runtime so Desktop can prepare runtime-control.'
+        : 'Restarting SSH runtime so Desktop can open the requested runtime version.',
   };
 }
 
@@ -2282,7 +2312,7 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       const attachPolicy = managedSSHRuntimeAttachPolicy(launch.startup, {
         expectedRuntimeIdentity: { runtime_version: runtimeReleaseTag },
         requireDesktopAIBrokerBinding: !!args.aiBroker,
-        allowActiveWorkReplacement: args.forceRuntimeUpdate === true,
+        allowActiveWorkReplacement: args.allowActiveWorkReplacement === true,
       });
       if (attachPolicy.action === 'block') {
         throw new DesktopSSHRuntimeMaintenanceRequiredError(

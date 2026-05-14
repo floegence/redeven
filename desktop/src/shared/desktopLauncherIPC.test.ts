@@ -28,10 +28,12 @@ describe('desktopLauncherIPC', () => {
       kind: 'start_environment_runtime',
       environment_id: ' cp:https%3A%2F%2Fcp.example.invalid:env:env_demo ',
       force_runtime_update: true,
+      allow_active_work_replacement: true,
     })).toEqual({
       kind: 'start_environment_runtime',
       environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
       force_runtime_update: true,
+      allow_active_work_replacement: true,
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'connect_provider_runtime',

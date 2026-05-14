@@ -26,6 +26,8 @@ import type { DesktopSSHBootstrapStrategy, DesktopSSHEnvironmentDetails } from '
 
 type FakeSSHScenario =
   | 'ready'
+  | 'missing_runtime_control_idle'
+  | 'missing_runtime_control_active'
   | 'attached_unsupported_idle'
   | 'attached_unsupported_active'
   | 'forwarded_blocked_readiness'
@@ -157,6 +159,17 @@ function runtimeServiceForScenario() {
   }
   if (scenario === 'attached_unsupported_active' && !state.stopped) {
     return oldUnsupportedRuntimeService(true);
+  }
+  if (scenario === 'missing_runtime_control_active' && !state.stopped) {
+    return {
+      ...currentRuntimeService(),
+      active_workload: {
+        terminal_count: 1,
+        session_count: 1,
+        task_count: 0,
+        port_forward_count: 1,
+      },
+    };
   }
   return currentRuntimeService();
 }
@@ -541,17 +554,23 @@ if (args.includes('-M') && args.includes('-N')) {
         (scenario === 'attached_unsupported_idle' || scenario === 'attached_unsupported_active')
         && !state.stopped
       );
+      const reportRuntimeControl = !(
+        (scenario === 'missing_runtime_control_idle' || scenario === 'missing_runtime_control_active')
+        && !state.stopped
+      );
       process.stdout.write(JSON.stringify({
         ...(attachedUnsupported ? { status: 'attached' } : {}),
         local_ui_url: 'http://127.0.0.1:39001/',
         local_ui_urls: ['http://127.0.0.1:39001/'],
-        runtime_control: {
-          protocol_version: 'redeven-runtime-control-v1',
-          base_url: 'http://127.0.0.1:39002/',
-          token: 'runtime-control-token',
-          desktop_owner_id: 'desktop-owner-test',
-          expires_at_unix_ms: Date.now() + 60 * 60 * 1000,
-        },
+        ...(reportRuntimeControl ? {
+          runtime_control: {
+            protocol_version: 'redeven-runtime-control-v1',
+            base_url: 'http://127.0.0.1:39002/',
+            token: 'runtime-control-token',
+            desktop_owner_id: 'desktop-owner-test',
+            expires_at_unix_ms: Date.now() + 60 * 60 * 1000,
+          },
+        } : {}),
         password_required: true,
         effective_run_mode: 'local',
         desktop_managed: true,
@@ -594,6 +613,8 @@ async function createFakeSSHFixture(scenario: FakeSSHScenario): Promise<FakeSSHF
   await fs.writeFile(sshBinary, FAKE_SSH_SCRIPT, { mode: 0o755 });
   await fs.writeFile(statePath, JSON.stringify({
     installed: scenario === 'ready'
+      || scenario === 'missing_runtime_control_idle'
+      || scenario === 'missing_runtime_control_active'
       || scenario === 'attached_unsupported_idle'
       || scenario === 'attached_unsupported_active'
       || scenario === 'forwarded_blocked_readiness'
@@ -688,6 +709,7 @@ async function startWithFakeSSH(
     target?: DesktopSSHEnvironmentDetails;
     sourceRuntimeRoot?: string;
     forceRuntimeUpdate?: boolean;
+    allowActiveWorkReplacement?: boolean;
     aiBroker?: ManagedSSHRuntimeAIBroker | null;
     signal?: AbortSignal;
   }> = {},
@@ -699,6 +721,7 @@ async function startWithFakeSSH(
     sshBinary: fixture.sshBinary,
     sourceRuntimeRoot: options.sourceRuntimeRoot,
     forceRuntimeUpdate: options.forceRuntimeUpdate,
+    allowActiveWorkReplacement: options.allowActiveWorkReplacement,
     tempRoot: fixture.root,
     assetCacheRoot: path.join(fixture.root, 'asset-cache'),
     startupTimeoutMs: options.startupTimeoutMs ?? 2_500,
@@ -1039,6 +1062,87 @@ describe('sshRuntime integration', () => {
     await removeFakeSSHFixture(fixture);
   });
 
+  it('restarts an idle SSH runtime that is missing Desktop runtime-control before opening tunnels', async () => {
+    const fixture = await createFakeSSHFixture('missing_runtime_control_idle');
+    let runtime: ManagedSSHRuntime | null = null;
+    try {
+      runtime = await startWithFakeSSH(fixture, 'auto');
+      expect(runtime.startup.runtime_control).toEqual(expect.objectContaining({
+        protocol_version: 'redeven-runtime-control-v1',
+        desktop_owner_id: 'desktop-owner-test',
+      }));
+      expect(runtime.runtime_control_forward_url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/$/u);
+    } finally {
+      await runtime?.disconnect();
+    }
+
+    const events = await readFakeSSHEvents(fixture);
+    const eventNames = events.map((event) => event.event);
+    expect(eventNames).toEqual(expect.arrayContaining([
+      'start_runtime',
+      'stop_runtime',
+      'runtime_control_forward_start',
+      'forward_start',
+    ]));
+    expect(eventNames.filter((event) => event === 'start_runtime')).toHaveLength(2);
+    expect(eventNames.indexOf('stop_runtime')).toBeLessThan(eventNames.indexOf('runtime_control_forward_start'));
+    await removeFakeSSHFixture(fixture);
+  });
+
+  it('surfaces restart maintenance when an active SSH runtime is missing Desktop runtime-control', async () => {
+    const fixture = await createFakeSSHFixture('missing_runtime_control_active');
+    await expect(startWithFakeSSH(fixture, 'auto')).rejects.toMatchObject({
+      name: 'DesktopSSHRuntimeMaintenanceRequiredError',
+      maintenance: expect.objectContaining({
+        kind: 'ssh_runtime_restart_required',
+        required_for: 'open',
+        can_desktop_restart: true,
+        has_active_work: true,
+        active_work_label: '1 terminal, 1 session, 1 port forward',
+      }),
+    });
+
+    const events = await readFakeSSHEvents(fixture);
+    const eventNames = events.map((event) => event.event);
+    expect(eventNames).toContain('start_runtime');
+    expect(eventNames).toContain('read_report');
+    expect(eventNames).not.toContain('stop_runtime');
+    expect(eventNames).not.toContain('runtime_control_forward_start');
+    await removeFakeSSHFixture(fixture);
+  });
+
+  it('restarts an active SSH runtime missing Desktop runtime-control after explicit user confirmation', async () => {
+    const fixture = await createFakeSSHFixture('missing_runtime_control_active');
+    let runtime: ManagedSSHRuntime | null = null;
+    try {
+      runtime = await startWithFakeSSH(fixture, 'auto', {
+        allowActiveWorkReplacement: true,
+      });
+      expect(runtime.startup.runtime_control).toEqual(expect.objectContaining({
+        protocol_version: 'redeven-runtime-control-v1',
+        desktop_owner_id: 'desktop-owner-test',
+      }));
+      expect(runtime.runtime_control_forward_url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/$/u);
+    } finally {
+      await runtime?.disconnect();
+    }
+
+    const events = await readFakeSSHEvents(fixture);
+    const eventNames = events.map((event) => event.event);
+    expect(eventNames).toEqual(expect.arrayContaining([
+      'probe_runtime',
+      'start_runtime',
+      'stop_runtime',
+      'runtime_control_forward_start',
+      'forward_start',
+    ]));
+    expect(eventNames.filter((event) => event === 'start_runtime')).toHaveLength(2);
+    expect(eventNames.filter((event) => event === 'remote_install')).toHaveLength(0);
+    expect(eventNames.filter((event) => event === 'upload_install')).toHaveLength(0);
+    expect(eventNames.indexOf('stop_runtime')).toBeLessThan(eventNames.indexOf('runtime_control_forward_start'));
+    await removeFakeSSHFixture(fixture);
+  });
+
   it('blocks an attached runtime that needs Desktop AI Broker binding but still has active work', async () => {
     const fixture = await createFakeSSHFixture('attached_unsupported_active');
     await expect(startWithFakeSSH(fixture, 'auto', {
@@ -1180,6 +1284,7 @@ describe('sshRuntime integration', () => {
     try {
       runtime = await startWithFakeSSH(fixture, 'auto', {
         forceRuntimeUpdate: true,
+        allowActiveWorkReplacement: true,
         aiBroker: {
           local_url: 'http://127.0.0.1:41234',
           token: 'broker-token',

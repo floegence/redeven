@@ -546,6 +546,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('confirmRuntimeMaintenance');
     expect(appSrc).toContain('force_runtime_update');
     expect(appSrc).toContain('forceRuntimeUpdate: true');
+    expect(appSrc).toContain('allow_active_work_replacement');
+    expect(appSrc).toContain('allowActiveWorkReplacement: true');
     expect(appSrc).toContain('IMPORTANT: Provider-link confirmation is intentionally reachable only from');
     expect(appSrc).toContain('desktopEntryKindOwnsRuntimeManagement(environment.kind)');
     expect(appSrc).toContain('This interrupts the background runtime service for this environment.');
@@ -695,6 +697,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('the selected provider can request sessions through this running runtime');
     expect(appSrc).toContain('Existing local work keeps running');
     expect(appSrc).toContain('without restarting the runtime');
+    expect(appSrc).toContain("const [providerRuntimeLinkProviderEnvironmentID, setProviderRuntimeLinkProviderEnvironmentID] = createSignal('');");
   });
 
   it('keeps transient action feedback out of page flow by using a toast viewport', () => {
@@ -832,5 +835,21 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toMatch(/<Dialog\b[^>]*open=\{props\.state\s*!==\s*null\}/);
     expect(appSrc).toMatch(/const isOpen = createMemo\(\(\) => props\.state !== null\)/);
     expect(appSrc).toMatch(/const isOpen = createMemo\(\(\) => props\.open\)/);
+
+    // Provider runtime link dialog: selecting a provider environment is an
+    // in-dialog choice, not an open/close transition. Keep it out of the
+    // confirmation object tracked by the dialog open prop so the overlay mask
+    // and focus trap do not unmount/remount when the radio changes.
+    expect(appSrc).toContain('const providerRuntimeLinkDialogOpen = createMemo(() => providerRuntimeLinkConfirmation() !== null);');
+    expect(appSrc).toContain('open={providerRuntimeLinkDialogOpen()}');
+    expect(appSrc).not.toMatch(/<ConfirmDialog\b[^>]*open=\{providerRuntimeLinkConfirmation\(\) !== null\}/);
+    expect(appSrc).not.toContain('setProviderRuntimeLinkConfirmation((current) => current ? {');
+  });
+
+  it('restarts SSH runtime maintenance through the SSH start flow when no runtime record exists yet', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain("confirmation.action === 'restart' && target.kind === 'ssh_environment' && target.runtime_maintenance");
+    expect(appSrc).toContain("await startEnvironmentRuntime(latestTarget, 'connect', { allowActiveWorkReplacement: true });");
   });
 });

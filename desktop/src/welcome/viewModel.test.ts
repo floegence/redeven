@@ -777,6 +777,75 @@ describe('buildEnvironmentCardModel', () => {
     });
   });
 
+  it('guides SSH runtime-control maintenance through Restart instead of Start', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        saved_ssh_environments: [{
+          id: 'ssh_saved',
+          label: 'Dev SSH',
+          ssh_destination: 'dev@example.internal',
+          ssh_port: 22,
+          auth_mode: 'key_agent',
+          remote_install_dir: '/opt/redeven-desktop/runtime',
+          bootstrap_strategy: 'desktop_upload',
+          release_base_url: '',
+          pinned: false,
+          last_used_at_ms: 30,
+        }],
+      }),
+      savedSSHRuntimeHealth: {
+        ssh_saved: {
+          status: 'online',
+          checked_at_unix_ms: Date.now(),
+          source: 'ssh_runtime_probe',
+          runtime_maintenance: {
+            kind: 'ssh_runtime_restart_required',
+            required_for: 'open',
+            can_desktop_restart: true,
+            has_active_work: true,
+            active_work_label: '1 terminal, 1 session, 1 port forward',
+            current_runtime_version: 'v0.0.0-dev',
+            target_runtime_version: 'v0.0.0-dev',
+            message: 'Restart this SSH runtime so Desktop can prepare runtime-control before provider linking or opening this environment.',
+          },
+        },
+      },
+    });
+    const entry = snapshot.environments.find((environment) => environment.kind === 'ssh_environment');
+
+    expect(entry).toBeTruthy();
+    const actionModel = buildProviderBackedEnvironmentActionModel(entry!);
+    const overlay = actionModel.action_presentation.primary_action_overlay;
+    expect(actionModel.status_label).toBe('RESTART REQUIRED');
+    expect(overlay).toMatchObject({
+      kind: 'popover',
+      title: 'Runtime restart required',
+    });
+    expect(overlay?.kind).toBe('popover');
+    if (overlay?.kind !== 'popover') {
+      throw new Error('expected runtime-control maintenance overlay to be a popover');
+    }
+    expect(overlay.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        label: 'Restart runtime…',
+        action: expect.objectContaining({
+          intent: 'restart_runtime',
+          label: 'Restart runtime…',
+          enabled: true,
+        }),
+      }),
+    ]));
+    expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'restart_runtime',
+        action: expect.objectContaining({
+          intent: 'restart_runtime',
+          enabled: true,
+        }),
+      }),
+    ]));
+  });
+
   it('keeps offline runtime controls separate from the primary Open action', () => {
     const localSnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
