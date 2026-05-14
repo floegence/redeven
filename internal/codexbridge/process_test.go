@@ -10,9 +10,10 @@ import (
 
 func TestBuildAppServerCommand_UsesConfiguredShellWithLoginInteractiveFlags(t *testing.T) {
 	shellPath := writeExecutable(t, "preferred-shell")
-	t.Setenv("SHELL", shellPath)
+	fallbackShell := writeExecutable(t, "fallback-shell")
+	t.Setenv("SHELL", fallbackShell)
 
-	cmd, err := buildAppServerCommand("/opt/homebrew/bin/codex")
+	cmd, err := buildAppServerCommand(shellPath, "/opt/homebrew/bin/codex")
 	if err != nil {
 		t.Fatalf("buildAppServerCommand: %v", err)
 	}
@@ -30,9 +31,9 @@ func TestBuildAppServerCommand_ResolvesConfiguredShellFromPath(t *testing.T) {
 	dir := t.TempDir()
 	shellPath := writeExecutableAt(t, dir, "custom-shell")
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("SHELL", "custom-shell")
+	t.Setenv("SHELL", "")
 
-	cmd, err := buildAppServerCommand("/opt/homebrew/bin/codex")
+	cmd, err := buildAppServerCommand("custom-shell", "/opt/homebrew/bin/codex")
 	if err != nil {
 		t.Fatalf("buildAppServerCommand: %v", err)
 	}
@@ -43,11 +44,41 @@ func TestBuildAppServerCommand_ResolvesConfiguredShellFromPath(t *testing.T) {
 	assertCommandArgs(t, cmd, shellPath)
 }
 
-func TestBuildAppServerCommand_FallsBackToBashWhenShellUnset(t *testing.T) {
+func TestBuildAppServerCommand_FallsBackToEnvShellWhenConfiguredShellUnset(t *testing.T) {
+	envShellPath := writeExecutable(t, "env-shell")
+	t.Setenv("SHELL", envShellPath)
+
+	cmd, err := buildAppServerCommand("", "/opt/homebrew/bin/codex")
+	if err != nil {
+		t.Fatalf("buildAppServerCommand: %v", err)
+	}
+
+	if got, want := cmd.Path, envShellPath; got != want {
+		t.Fatalf("cmd.Path=%q want=%q", got, want)
+	}
+	assertCommandArgs(t, cmd, envShellPath)
+}
+
+func TestBuildAppServerCommand_FallsBackToEnvShellWhenConfiguredShellMissing(t *testing.T) {
+	envShellPath := writeExecutable(t, "env-shell")
+	t.Setenv("SHELL", envShellPath)
+
+	cmd, err := buildAppServerCommand(filepath.Join(t.TempDir(), "missing-shell"), "/opt/homebrew/bin/codex")
+	if err != nil {
+		t.Fatalf("buildAppServerCommand: %v", err)
+	}
+
+	if got, want := cmd.Path, envShellPath; got != want {
+		t.Fatalf("cmd.Path=%q want=%q", got, want)
+	}
+	assertCommandArgs(t, cmd, envShellPath)
+}
+
+func TestBuildAppServerCommand_FallsBackToBashWhenNoConfiguredShellAvailable(t *testing.T) {
 	t.Setenv("SHELL", "")
 	bashPath := mustLookPath(t, "bash")
 
-	cmd, err := buildAppServerCommand("/opt/homebrew/bin/codex")
+	cmd, err := buildAppServerCommand("", "/opt/homebrew/bin/codex")
 	if err != nil {
 		t.Fatalf("buildAppServerCommand: %v", err)
 	}
@@ -58,19 +89,19 @@ func TestBuildAppServerCommand_FallsBackToBashWhenShellUnset(t *testing.T) {
 	assertCommandArgs(t, cmd, bashPath)
 }
 
-func TestBuildAppServerCommand_FallsBackToBashWhenConfiguredShellMissing(t *testing.T) {
-	t.Setenv("SHELL", filepath.Join(t.TempDir(), "missing-shell"))
-	bashPath := mustLookPath(t, "bash")
-
-	cmd, err := buildAppServerCommand("/opt/homebrew/bin/codex")
-	if err != nil {
-		t.Fatalf("buildAppServerCommand: %v", err)
+func TestLookPathFromLoginShell_UsesConfiguredShell(t *testing.T) {
+	dir := t.TempDir()
+	codexPath := writeExecutableAt(t, dir, "codex")
+	shellPath := filepath.Join(t.TempDir(), "shell")
+	script := "#!/bin/sh\nif [ \"$1\" = \"-l\" ] && [ \"$2\" = \"-i\" ] && [ \"$3\" = \"-c\" ]; then\n  PATH=\"" + dir + ":$PATH\" /bin/sh -c \"$4\" \"$5\"\n  exit $?\nfi\nexit 64\n"
+	if err := os.WriteFile(shellPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write shell %q: %v", shellPath, err)
 	}
+	t.Setenv("SHELL", "")
 
-	if got, want := cmd.Path, bashPath; got != want {
-		t.Fatalf("cmd.Path=%q want=%q", got, want)
+	if got := lookPathFromLoginShell(shellPath, "codex"); got != codexPath {
+		t.Fatalf("lookPathFromLoginShell()=%q want %q", got, codexPath)
 	}
-	assertCommandArgs(t, cmd, bashPath)
 }
 
 func assertCommandArgs(t *testing.T, cmd *exec.Cmd, shellPath string) {

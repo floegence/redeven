@@ -44,8 +44,8 @@ tasks:
         max_calls: 12
       events:
         hard_fail:
-          - "turn.loop.exhausted"
-          - "task.loop.continue"
+          - "guard.hard_max_steps"
+          - "signal.recovery.attempt"
 
   - id: local_config_plan_escalation
     title: Local-config plan mode escalates before editing
@@ -86,8 +86,8 @@ tasks:
         must_include:
           - "exit_plan_mode.waiting"
         hard_fail:
-          - "turn.loop.exhausted"
-          - "task.loop.continue"
+          - "guard.hard_max_steps"
+          - "signal.recovery.attempt"
 
   - id: local_config_todo_readonly_audit
     title: Local-config readonly audit uses todo discipline
@@ -136,8 +136,8 @@ tasks:
         must_include:
           - "todos.updated"
         hard_fail:
-          - "turn.loop.exhausted"
-          - "task.loop.continue"
+          - "guard.hard_max_steps"
+          - "signal.recovery.attempt"
       todos:
         require_snapshot: true
         require_non_empty: true
@@ -187,8 +187,8 @@ tasks:
         max_calls: 14
       events:
         hard_fail:
-          - "turn.loop.exhausted"
-          - "task.loop.continue"
+          - "guard.hard_max_steps"
+          - "signal.recovery.attempt"
 
   - id: local_config_structured_edit_inside_workspace
     title: Local-config structured file edit performs exact replacement
@@ -236,8 +236,8 @@ tasks:
         max_calls: 12
       events:
         hard_fail:
-          - "turn.loop.exhausted"
-          - "task.loop.continue"
+          - "guard.hard_max_steps"
+          - "signal.recovery.attempt"
 
   - id: local_config_apply_patch_compatibility_inside_workspace
     title: Local-config apply_patch compatibility path still works
@@ -282,8 +282,8 @@ tasks:
         max_calls: 14
       events:
         hard_fail:
-          - "turn.loop.exhausted"
-          - "task.loop.continue"
+          - "guard.hard_max_steps"
+          - "signal.recovery.attempt"
 
   - id: local_config_outside_write_redirect
     title: Local-config outside write request is redirected safely
@@ -327,5 +327,5 @@ tasks:
         max_calls: 12
       events:
         hard_fail:
-          - "turn.loop.exhausted"
-          - "task.loop.continue"
+          - "guard.hard_max_steps"
+          - "signal.recovery.attempt"

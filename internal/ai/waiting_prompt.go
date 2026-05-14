@@ -24,6 +24,7 @@ const (
 	askUserGateReasonMissingChoicesExhaustive   = "missing_choices_exhaustive"
 	askUserGateReasonInconsistentChoiceContract = "inconsistent_choice_contract"
 	askUserGateReasonInteractionShapeMismatch   = "interaction_shape_mismatch"
+	askUserGateReasonLegacyContractShape        = "legacy_contract_shape"
 )
 
 func buildRequestUserInputPromptID(messageID string, toolID string) string {
@@ -273,7 +274,61 @@ func buildCanonicalRequestUserInputQuestion(question RequestUserInputQuestion, l
 }
 
 func requestUserInputQuestionFromRecord(record map[string]any) (RequestUserInputQuestion, bool) {
+	return requestUserInputQuestionFromRecordWithMode(record, true)
+}
+
+func requestUserInputQuestionFromModelRecord(record map[string]any) (RequestUserInputQuestion, string, bool) {
+	question, ok := requestUserInputQuestionFromRecordWithMode(record, false)
+	if !ok {
+		if requestUserInputRecordHasLegacyShape(record) {
+			return RequestUserInputQuestion{}, askUserGateReasonLegacyContractShape, false
+		}
+		return RequestUserInputQuestion{}, "", false
+	}
+	return question, "", true
+}
+
+func requestUserInputRecordHasLegacyShape(record map[string]any) bool {
 	if record == nil {
+		return false
+	}
+	legacyKeys := []string{
+		"options",
+		"is_other",
+		"detail_input_mode",
+		"detail_input_placeholder",
+		"detail_input_required",
+	}
+	for _, key := range legacyKeys {
+		if _, ok := record[key]; ok {
+			return true
+		}
+	}
+	if items := toAnySlice(record["choices"]); len(items) > 0 {
+		for _, item := range items {
+			choice, ok := item.(map[string]any)
+			if !ok || choice == nil {
+				continue
+			}
+			if _, ok := choice["option_id"]; ok {
+				return true
+			}
+			if _, ok := choice["detail_input_mode"]; ok {
+				return true
+			}
+			if _, ok := choice["detail_input_placeholder"]; ok {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func requestUserInputQuestionFromRecordWithMode(record map[string]any, allowLegacy bool) (RequestUserInputQuestion, bool) {
+	if record == nil {
+		return RequestUserInputQuestion{}, false
+	}
+	if !allowLegacy && requestUserInputRecordHasLegacyShape(record) {
 		return RequestUserInputQuestion{}, false
 	}
 	id := strings.TrimSpace(anyToString(record["id"]))
@@ -283,7 +338,7 @@ func requestUserInputQuestionFromRecord(record map[string]any) (RequestUserInput
 		return RequestUserInputQuestion{}, false
 	}
 	choices := parseRequestUserInputChoicesAny(record["choices"])
-	if len(choices) == 0 {
+	if allowLegacy && len(choices) == 0 {
 		choices = parseLegacyRequestUserInputChoices(record["options"], anyToBool(record["is_other"]), header, question)
 	}
 	if len(choices) == 0 {

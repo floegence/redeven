@@ -16,6 +16,7 @@ type askUserSignal struct {
 	ReasonCode       string
 	RequiredFromUser []string
 	EvidenceRefs     []string
+	ContractError    string
 }
 
 func normalizeAskUserSignal(signal askUserSignal) askUserSignal {
@@ -25,6 +26,7 @@ func normalizeAskUserSignal(signal askUserSignal) askUserSignal {
 		ReasonCode:       normalizeAskUserReasonCode(signal.ReasonCode),
 		RequiredFromUser: normalizeAskUserStringList(signal.RequiredFromUser, 8, 200),
 		EvidenceRefs:     normalizeAskUserStringList(signal.EvidenceRefs, 12, 120),
+		ContractError:    strings.TrimSpace(signal.ContractError),
 	}
 	if len(normalized.Questions) > 0 {
 		normalized.Question = strings.TrimSpace(normalized.Questions[0].Question)

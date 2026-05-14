@@ -43,8 +43,8 @@ tasks:
         max_calls: 12
       events:
         hard_fail:
-          - "turn.loop.exhausted"
-          - "task.loop.continue"
+          - "guard.hard_max_steps"
+          - "signal.recovery.attempt"
 
   - id: readonly_review_question
     title: Answer versus act review question
@@ -86,8 +86,8 @@ tasks:
         max_calls: 10
       events:
         hard_fail:
-          - "turn.loop.exhausted"
-          - "task.loop.continue"
+          - "guard.hard_max_steps"
+          - "signal.recovery.attempt"
 
   - id: plan_mode_requests_act_switch
     title: Plan mode asks user to switch to act
@@ -125,8 +125,8 @@ tasks:
         must_include:
           - "ask_user.waiting"
         hard_fail:
-          - "turn.loop.exhausted"
-          - "task.loop.continue"
+          - "guard.hard_max_steps"
+          - "signal.recovery.attempt"
 
   - id: multi_step_todo_discipline
     title: Multi-step readonly task uses todo discipline
@@ -174,8 +174,8 @@ tasks:
         must_include:
           - "todos.updated"
         hard_fail:
-          - "turn.loop.exhausted"
-          - "task.loop.continue"
+          - "guard.hard_max_steps"
+          - "signal.recovery.attempt"
       todos:
         require_snapshot: true
         require_non_empty: true
@@ -224,8 +224,8 @@ tasks:
         max_calls: 14
       events:
         hard_fail:
-          - "turn.loop.exhausted"
-          - "task.loop.continue"
+          - "guard.hard_max_steps"
+          - "signal.recovery.attempt"
 
   - id: no_user_interaction_closeout
     title: No-user-interaction run closes with blockers
@@ -267,5 +267,5 @@ tasks:
         must_not_include:
           - "ask_user.waiting"
         hard_fail:
-          - "turn.loop.exhausted"
-          - "task.loop.continue"
+          - "guard.hard_max_steps"
+          - "signal.recovery.attempt"

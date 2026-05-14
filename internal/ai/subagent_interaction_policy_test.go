@@ -134,11 +134,13 @@ func TestSplitSignalsByPolicy_BlocksAskUserWhenDisallowed(t *testing.T) {
 	calls := []ToolCall{
 		{Name: "ask_user", ID: "tool_ask", Args: map[string]any{
 			"questions": []map[string]any{{
-				"id":        "question_1",
-				"header":    "Need input",
-				"question":  "Need input",
-				"is_other":  true,
-				"is_secret": false,
+				"id":                "question_1",
+				"header":            "Need input",
+				"question":          "Need input",
+				"is_secret":         false,
+				"response_mode":     requestUserInputResponseModeWrite,
+				"write_label":       "Your answer",
+				"write_placeholder": "Type your answer",
 			}},
 		}},
 		{Name: "task_complete", ID: "tool_done", Args: map[string]any{"result": "ok"}},

@@ -141,6 +141,7 @@ type QueuedTurn struct {
 	TextContent     string `json:"text_content"`
 	AttachmentsJSON string `json:"attachments_json"`
 	OptionsJSON     string `json:"options_json"`
+	SessionMetaJSON string `json:"session_meta_json"`
 
 	CreatedByUserPublicID string `json:"created_by_user_public_id"`
 	CreatedByUserEmail    string `json:"created_by_user_email"`
@@ -890,12 +891,12 @@ func (s *Store) GetQueuedTurn(ctx context.Context, endpointID string, threadID s
 	}
 
 	row := s.db.QueryRowContext(ctx, `
-SELECT queue_id, endpoint_id, thread_id, channel_id, message_id, model_id, text_content, attachments_json, options_json,
-       created_by_user_public_id, created_by_user_email, created_at_unix_ms
+SELECT queue_id, endpoint_id, thread_id, channel_id, lane, message_id, model_id, text_content, attachments_json, options_json, session_meta_json,
+       created_by_user_public_id, created_by_user_email, sort_index, created_at_unix_ms, updated_at_unix_ms
 FROM ai_queued_turns
-WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
-`, endpointID, threadID, queueID)
-	out, err := scanQueuedTurn(row)
+WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ? AND lane = ?
+	`, endpointID, threadID, queueID, FollowupLaneQueued)
+	out, err := scanFollowup(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, sql.ErrNoRows
@@ -906,88 +907,9 @@ WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
 }
 
 func (s *Store) EnqueueQueuedTurn(ctx context.Context, rec QueuedTurn) (QueuedTurn, int, error) {
-	if s == nil || s.db == nil {
-		return QueuedTurn{}, 0, errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	rec.QueueID = strings.TrimSpace(rec.QueueID)
-	rec.EndpointID = strings.TrimSpace(rec.EndpointID)
-	rec.ThreadID = strings.TrimSpace(rec.ThreadID)
-	rec.ChannelID = strings.TrimSpace(rec.ChannelID)
-	rec.MessageID = strings.TrimSpace(rec.MessageID)
-	rec.ModelID = strings.TrimSpace(rec.ModelID)
-	rec.TextContent = strings.TrimSpace(rec.TextContent)
-	rec.AttachmentsJSON = strings.TrimSpace(rec.AttachmentsJSON)
-	rec.OptionsJSON = strings.TrimSpace(rec.OptionsJSON)
-	rec.CreatedByUserPublicID = strings.TrimSpace(rec.CreatedByUserPublicID)
-	rec.CreatedByUserEmail = strings.TrimSpace(rec.CreatedByUserEmail)
-	if rec.QueueID == "" || rec.EndpointID == "" || rec.ThreadID == "" || rec.ChannelID == "" || rec.MessageID == "" {
-		return QueuedTurn{}, 0, errors.New("invalid request")
-	}
-	if rec.AttachmentsJSON == "" {
-		rec.AttachmentsJSON = "[]"
-	}
-	if rec.OptionsJSON == "" {
-		rec.OptionsJSON = "{}"
-	}
-	if rec.CreatedAtUnixMs <= 0 {
-		rec.CreatedAtUnixMs = time.Now().UnixMilli()
-	}
-
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return QueuedTurn{}, 0, err
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	var exists int
-	if err := tx.QueryRowContext(ctx, `
-SELECT COUNT(1)
-FROM ai_threads
-WHERE endpoint_id = ? AND thread_id = ?
-`, rec.EndpointID, rec.ThreadID).Scan(&exists); err != nil {
-		return QueuedTurn{}, 0, err
-	}
-	if exists == 0 {
-		return QueuedTurn{}, 0, sql.ErrNoRows
-	}
-
-	_, err = tx.ExecContext(ctx, `
-INSERT INTO ai_queued_turns(
-	  queue_id, endpoint_id, thread_id, channel_id, message_id, model_id, text_content, attachments_json, options_json,
-	  created_by_user_public_id, created_by_user_email, created_at_unix_ms
-)
-VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, rec.QueueID, rec.EndpointID, rec.ThreadID, rec.ChannelID, rec.MessageID, rec.ModelID, rec.TextContent, rec.AttachmentsJSON, rec.OptionsJSON,
-		rec.CreatedByUserPublicID, rec.CreatedByUserEmail, rec.CreatedAtUnixMs)
-	if err != nil {
-		if !isUniqueConstraintError(err) {
-			return QueuedTurn{}, 0, err
-		}
-		existing, getErr := getQueuedTurnByMessageIDTx(ctx, tx, rec.EndpointID, rec.ThreadID, rec.MessageID)
-		if getErr != nil {
-			return QueuedTurn{}, 0, err
-		}
-		position, posErr := queuedTurnPositionTx(ctx, tx, rec.EndpointID, rec.ThreadID, existing.QueueID, existing.CreatedAtUnixMs)
-		if posErr != nil {
-			return QueuedTurn{}, 0, posErr
-		}
-		if commitErr := tx.Commit(); commitErr != nil {
-			return QueuedTurn{}, 0, commitErr
-		}
-		return existing, position, nil
-	}
-
-	position, err := queuedTurnPositionTx(ctx, tx, rec.EndpointID, rec.ThreadID, rec.QueueID, rec.CreatedAtUnixMs)
-	if err != nil {
-		return QueuedTurn{}, 0, err
-	}
-	if err := tx.Commit(); err != nil {
-		return QueuedTurn{}, 0, err
-	}
-	return rec, position, nil
+	rec.Lane = FollowupLaneQueued
+	created, position, _, err := s.CreateFollowup(ctx, rec)
+	return created, position, err
 }
 
 func (s *Store) CountQueuedTurns(ctx context.Context, endpointID string, threadID string) (int, error) {
@@ -1006,8 +928,8 @@ func (s *Store) CountQueuedTurns(ctx context.Context, endpointID string, threadI
 	err := s.db.QueryRowContext(ctx, `
 SELECT COUNT(1)
 FROM ai_queued_turns
-WHERE endpoint_id = ? AND thread_id = ?
-`, endpointID, threadID).Scan(&count)
+WHERE endpoint_id = ? AND thread_id = ? AND lane = ?
+`, endpointID, threadID, FollowupLaneQueued).Scan(&count)
 	if err != nil {
 		return 0, err
 	}
@@ -1051,10 +973,11 @@ func (s *Store) CountQueuedTurnsByThread(ctx context.Context, endpointID string,
 		args = append(args, id)
 	}
 
+	args = append(args, FollowupLaneQueued)
 	rows, err := s.db.QueryContext(ctx, `
 SELECT thread_id, COUNT(1)
 FROM ai_queued_turns
-WHERE endpoint_id = ? AND thread_id IN (`+placeholders+`)
+WHERE endpoint_id = ? AND thread_id IN (`+placeholders+`) AND lane = ?
 GROUP BY thread_id
 `, args...)
 	if err != nil {
@@ -1095,31 +1018,7 @@ func (s *Store) ListQueuedTurns(ctx context.Context, endpointID string, threadID
 		limit = 500
 	}
 
-	rows, err := s.db.QueryContext(ctx, `
-SELECT queue_id, endpoint_id, thread_id, channel_id, message_id, model_id, text_content, attachments_json, options_json,
-       created_by_user_public_id, created_by_user_email, created_at_unix_ms
-FROM ai_queued_turns
-WHERE endpoint_id = ? AND thread_id = ?
-ORDER BY created_at_unix_ms ASC, queue_id ASC
-LIMIT ?
-`, endpointID, threadID, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	out := make([]QueuedTurn, 0)
-	for rows.Next() {
-		rec, err := scanQueuedTurn(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, rec)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return out, nil
+	return s.ListFollowupsByLane(ctx, endpointID, threadID, FollowupLaneQueued, limit)
 }
 
 func (s *Store) UpdateQueuedTurn(ctx context.Context, endpointID string, threadID string, queueID string, textContent string) error {
@@ -1136,11 +1035,17 @@ func (s *Store) UpdateQueuedTurn(ctx context.Context, endpointID string, threadI
 	if endpointID == "" || threadID == "" || queueID == "" || textContent == "" {
 		return errors.New("invalid request")
 	}
-	res, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	now := time.Now().UnixMilli()
+	res, err := tx.ExecContext(ctx, `
 UPDATE ai_queued_turns
-SET text_content = ?
-WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
-`, textContent, endpointID, threadID, queueID)
+SET text_content = ?, updated_at_unix_ms = ?
+WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ? AND lane = ?
+`, textContent, now, endpointID, threadID, queueID, FollowupLaneQueued)
 	if err != nil {
 		return err
 	}
@@ -1148,7 +1053,10 @@ WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
 	if n == 0 {
 		return sql.ErrNoRows
 	}
-	return nil
+	if _, err := bumpThreadFollowupsRevisionTx(ctx, tx, endpointID, threadID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) DeleteQueuedTurn(ctx context.Context, endpointID string, threadID string, queueID string) error {
@@ -1164,10 +1072,15 @@ func (s *Store) DeleteQueuedTurn(ctx context.Context, endpointID string, threadI
 	if endpointID == "" || threadID == "" || queueID == "" {
 		return errors.New("invalid request")
 	}
-	res, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	res, err := tx.ExecContext(ctx, `
 DELETE FROM ai_queued_turns
-WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
-`, endpointID, threadID, queueID)
+WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ? AND lane = ?
+`, endpointID, threadID, queueID, FollowupLaneQueued)
 	if err != nil {
 		return err
 	}
@@ -1175,7 +1088,10 @@ WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
 	if n == 0 {
 		return sql.ErrNoRows
 	}
-	return nil
+	if _, err := bumpThreadFollowupsRevisionTx(ctx, tx, endpointID, threadID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) DeleteQueuedTurns(ctx context.Context, endpointID string, threadID string) error {
@@ -1190,11 +1106,25 @@ func (s *Store) DeleteQueuedTurns(ctx context.Context, endpointID string, thread
 	if endpointID == "" || threadID == "" {
 		return errors.New("invalid request")
 	}
-	_, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	res, err := tx.ExecContext(ctx, `
 DELETE FROM ai_queued_turns
-WHERE endpoint_id = ? AND thread_id = ?
-`, endpointID, threadID)
-	return err
+WHERE endpoint_id = ? AND thread_id = ? AND lane = ?
+`, endpointID, threadID, FollowupLaneQueued)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n > 0 {
+		if _, err := bumpThreadFollowupsRevisionTx(ctx, tx, endpointID, threadID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func (s *Store) PopNextQueuedTurn(ctx context.Context, endpointID string, threadID string) (*QueuedTurn, error) {
@@ -1224,8 +1154,11 @@ func (s *Store) PopNextQueuedTurn(ctx context.Context, endpointID string, thread
 	}
 	if _, err := tx.ExecContext(ctx, `
 DELETE FROM ai_queued_turns
-WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
-`, endpointID, threadID, rec.QueueID); err != nil {
+WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ? AND lane = ?
+`, endpointID, threadID, rec.QueueID, FollowupLaneQueued); err != nil {
+		return nil, err
+	}
+	if _, err := bumpThreadFollowupsRevisionTx(ctx, tx, endpointID, threadID); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -1234,62 +1167,16 @@ WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
 	return rec, nil
 }
 
-func scanQueuedTurn(scanner interface{ Scan(...any) error }) (QueuedTurn, error) {
-	var rec QueuedTurn
-	err := scanner.Scan(
-		&rec.QueueID,
-		&rec.EndpointID,
-		&rec.ThreadID,
-		&rec.ChannelID,
-		&rec.MessageID,
-		&rec.ModelID,
-		&rec.TextContent,
-		&rec.AttachmentsJSON,
-		&rec.OptionsJSON,
-		&rec.CreatedByUserPublicID,
-		&rec.CreatedByUserEmail,
-		&rec.CreatedAtUnixMs,
-	)
-	if err != nil {
-		return QueuedTurn{}, err
-	}
-	return rec, nil
-}
-
-func getQueuedTurnByMessageIDTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, messageID string) (QueuedTurn, error) {
-	row := tx.QueryRowContext(ctx, `
-SELECT queue_id, endpoint_id, thread_id, channel_id, message_id, model_id, text_content, attachments_json, options_json,
-       created_by_user_public_id, created_by_user_email, created_at_unix_ms
-FROM ai_queued_turns
-WHERE endpoint_id = ? AND thread_id = ? AND message_id = ?
-`, endpointID, threadID, messageID)
-	return scanQueuedTurn(row)
-}
-
-func queuedTurnPositionTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, queueID string, createdAtUnixMs int64) (int, error) {
-	var count int
-	err := tx.QueryRowContext(ctx, `
-SELECT COUNT(1)
-FROM ai_queued_turns
-WHERE endpoint_id = ? AND thread_id = ?
-  AND (created_at_unix_ms < ? OR (created_at_unix_ms = ? AND queue_id <= ?))
-`, endpointID, threadID, createdAtUnixMs, createdAtUnixMs, queueID).Scan(&count)
-	if err != nil {
-		return 0, err
-	}
-	return count, nil
-}
-
 func getNextQueuedTurnTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string) (*QueuedTurn, error) {
 	row := tx.QueryRowContext(ctx, `
-SELECT queue_id, endpoint_id, thread_id, channel_id, message_id, model_id, text_content, attachments_json, options_json,
-       created_by_user_public_id, created_by_user_email, created_at_unix_ms
+SELECT queue_id, endpoint_id, thread_id, channel_id, lane, message_id, model_id, text_content, attachments_json, options_json, session_meta_json,
+       created_by_user_public_id, created_by_user_email, sort_index, created_at_unix_ms, updated_at_unix_ms
 FROM ai_queued_turns
-WHERE endpoint_id = ? AND thread_id = ?
-ORDER BY created_at_unix_ms ASC, queue_id ASC
+WHERE endpoint_id = ? AND thread_id = ? AND lane = ?
+ORDER BY sort_index ASC, queue_id ASC
 LIMIT 1
-`, endpointID, threadID)
-	rec, err := scanQueuedTurn(row)
+`, endpointID, threadID, FollowupLaneQueued)
+	rec, err := scanFollowup(row)
 	if err != nil {
 		return nil, err
 	}

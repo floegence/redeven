@@ -346,6 +346,7 @@ func (s *Store) CreateFollowupWithUploadRefs(ctx context.Context, rec QueuedTurn
 	rec.TextContent = strings.TrimSpace(rec.TextContent)
 	rec.AttachmentsJSON = strings.TrimSpace(rec.AttachmentsJSON)
 	rec.OptionsJSON = strings.TrimSpace(rec.OptionsJSON)
+	rec.SessionMetaJSON = strings.TrimSpace(rec.SessionMetaJSON)
 	rec.CreatedByUserPublicID = strings.TrimSpace(rec.CreatedByUserPublicID)
 	rec.CreatedByUserEmail = strings.TrimSpace(rec.CreatedByUserEmail)
 	uploadIDs = dedupeNonEmptyStrings(uploadIDs)
@@ -357,6 +358,9 @@ func (s *Store) CreateFollowupWithUploadRefs(ctx context.Context, rec QueuedTurn
 	}
 	if rec.OptionsJSON == "" {
 		rec.OptionsJSON = "{}"
+	}
+	if rec.SessionMetaJSON == "" {
+		rec.SessionMetaJSON = "{}"
 	}
 	now := time.Now().UnixMilli()
 	if rec.CreatedAtUnixMs <= 0 {

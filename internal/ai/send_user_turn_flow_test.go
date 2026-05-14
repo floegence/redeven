@@ -673,6 +673,10 @@ func TestSendUserTurn_ActiveRun_QueuesFollowUpWithoutCanceling(t *testing.T) {
 	if queued[0].ChannelID != meta.ChannelID {
 		t.Fatalf("queued channel_id=%q, want %q", queued[0].ChannelID, meta.ChannelID)
 	}
+	restoredMeta := queuedTurnRecordToSessionMeta(queued[0], "ns_queue")
+	if restoredMeta.CanRead != meta.CanRead || restoredMeta.CanWrite != meta.CanWrite || restoredMeta.CanExecute != meta.CanExecute {
+		t.Fatalf("queued permissions=(%v,%v,%v), want (%v,%v,%v)", restoredMeta.CanRead, restoredMeta.CanWrite, restoredMeta.CanExecute, meta.CanRead, meta.CanWrite, meta.CanExecute)
+	}
 
 	threadView, err := svc.GetThread(ctx, meta, th.ThreadID)
 	if err != nil {
@@ -688,6 +692,117 @@ func TestSendUserTurn_ActiveRun_QueuesFollowUpWithoutCanceling(t *testing.T) {
 	}
 	if len(threads.Threads) != 1 || threads.Threads[0].QueuedTurnCount != 1 {
 		t.Fatalf("ListThreads queued_turn_count mismatch: %+v", threads.Threads)
+	}
+}
+
+func TestSendUserTurn_QueuedDraftSourceMayReuseMessageID(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	th, err := svc.CreateThread(ctx, meta, "queued-draft-source", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	draft, _, _, err := svc.threadsDB.CreateFollowup(ctx, threadstore.QueuedTurn{
+		QueueID:               "draft_reuse_1",
+		EndpointID:            meta.EndpointID,
+		ThreadID:              th.ThreadID,
+		ChannelID:             meta.ChannelID,
+		Lane:                  threadstore.FollowupLaneDraft,
+		MessageID:             "m_reused_draft_message",
+		ModelID:               "openai/gpt-5-mini",
+		TextContent:           "draft text",
+		CreatedByUserPublicID: meta.UserPublicID,
+		CreatedByUserEmail:    meta.UserEmail,
+	})
+	if err != nil {
+		t.Fatalf("CreateFollowup draft: %v", err)
+	}
+
+	activeRunID := "run_active_queue_reuse"
+	thKey := runThreadKey(meta.EndpointID, th.ThreadID)
+	if thKey == "" {
+		t.Fatalf("invalid thread key")
+	}
+	svc.mu.Lock()
+	svc.activeRunByTh[thKey] = activeRunID
+	svc.runs[activeRunID] = &run{
+		id:         activeRunID,
+		channelID:  meta.ChannelID,
+		endpointID: meta.EndpointID,
+		threadID:   th.ThreadID,
+		doneCh:     make(chan struct{}),
+	}
+	svc.mu.Unlock()
+
+	resp, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
+		ThreadID:         th.ThreadID,
+		Model:            "openai/gpt-5-mini",
+		SourceFollowupID: draft.QueueID,
+		Input: RunInput{
+			MessageID: draft.MessageID,
+			Text:      "queued from draft",
+		},
+		Options: RunOptions{MaxSteps: 1},
+	})
+	if err != nil {
+		t.Fatalf("SendUserTurn: %v", err)
+	}
+	if resp.Kind != "queued" {
+		t.Fatalf("resp.Kind=%q, want queued", resp.Kind)
+	}
+
+	queued, err := svc.threadsDB.ListFollowupsByLane(ctx, meta.EndpointID, th.ThreadID, threadstore.FollowupLaneQueued, 10)
+	if err != nil {
+		t.Fatalf("ListFollowupsByLane queued: %v", err)
+	}
+	if len(queued) != 1 {
+		t.Fatalf("len(queued)=%d, want 1", len(queued))
+	}
+	if queued[0].QueueID == draft.QueueID {
+		t.Fatalf("queued followup reused draft queue_id %q", queued[0].QueueID)
+	}
+	if queued[0].MessageID != draft.MessageID {
+		t.Fatalf("queued message_id=%q, want %q", queued[0].MessageID, draft.MessageID)
+	}
+
+	drafts, err := svc.threadsDB.ListFollowupsByLane(ctx, meta.EndpointID, th.ThreadID, threadstore.FollowupLaneDraft, 10)
+	if err != nil {
+		t.Fatalf("ListFollowupsByLane draft: %v", err)
+	}
+	if len(drafts) != 0 {
+		t.Fatalf("len(drafts)=%d, want source draft consumed", len(drafts))
+	}
+}
+
+func TestQueuedTurnRecordToSessionMeta_HistoricalRecordDoesNotEscalatePermissions(t *testing.T) {
+	t.Parallel()
+
+	rec := threadstore.QueuedTurn{
+		QueueID:               "q_legacy",
+		EndpointID:            "env_legacy",
+		ThreadID:              "th_legacy",
+		ChannelID:             "ch_legacy",
+		MessageID:             "m_legacy",
+		ModelID:               "openai/gpt-5-mini",
+		TextContent:           "legacy queued turn",
+		CreatedByUserPublicID: "u_legacy",
+		CreatedByUserEmail:    "legacy@example.com",
+	}
+
+	meta := queuedTurnRecordToSessionMeta(rec, "ns_legacy")
+	if meta == nil {
+		t.Fatalf("meta is nil")
+	}
+	if meta.CanRead || meta.CanWrite || meta.CanExecute {
+		t.Fatalf("legacy queued turn permissions escalated: read=%v write=%v execute=%v", meta.CanRead, meta.CanWrite, meta.CanExecute)
+	}
+	if err := requireRWX(meta); !errors.Is(err, errRWXPermissionDenied) {
+		t.Fatalf("requireRWX legacy meta err=%v, want %v", err, errRWXPermissionDenied)
 	}
 }
 

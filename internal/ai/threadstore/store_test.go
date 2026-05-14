@@ -75,11 +75,13 @@ func TestStore_UpdateThreadRunState(t *testing.T) {
 		"required_from_user": []string{"Choose next step"},
 		"questions": []map[string]any{
 			{
-				"id":        "question_1",
-				"header":    "Need confirmation",
-				"question":  "Need confirmation",
-				"is_other":  true,
-				"is_secret": false,
+				"id":                "question_1",
+				"header":            "Need confirmation",
+				"question":          "Need confirmation",
+				"is_secret":         false,
+				"response_mode":     "write",
+				"write_label":       "Your answer",
+				"write_placeholder": "Type your answer",
 			},
 		},
 	})
@@ -1404,7 +1406,7 @@ func TestBuildPreview_AssistantFallsBackWhenMessageJSONInvalid(t *testing.T) {
 func TestBuildPreview_AssistantFallsBackToAskUserQuestion(t *testing.T) {
 	t.Parallel()
 
-	messageJSON := `{"id":"m1","role":"assistant","blocks":[{"type":"tool-call","toolName":"ask_user","toolId":"tool_1","args":{"questions":[{"id":"question_1","header":"Need guidance","question":"I hit repeated tool failures while inspecting the file. Choose the next direction.","is_other":true}],"reason_code":"conflicting_constraints","required_from_user":["Choose the next direction."],"evidence_refs":["tool:terminal_exec:1"]},"result":{"questions":[{"id":"question_1","header":"Need guidance","question":"I hit repeated tool failures while inspecting the file. Choose the next direction.","is_other":true}],"waiting_user":true}}],"status":"complete","timestamp":1}`
+	messageJSON := `{"id":"m1","role":"assistant","blocks":[{"type":"tool-call","toolName":"ask_user","toolId":"tool_1","args":{"questions":[{"id":"question_1","header":"Need guidance","question":"I hit repeated tool failures while inspecting the file. Choose the next direction.","response_mode":"write","write_label":"Your answer","write_placeholder":"Type your answer"}],"reason_code":"conflicting_constraints","required_from_user":["Choose the next direction."],"evidence_refs":["tool:terminal_exec:1"]},"result":{"questions":[{"id":"question_1","header":"Need guidance","question":"I hit repeated tool failures while inspecting the file. Choose the next direction.","response_mode":"write","write_label":"Your answer","write_placeholder":"Type your answer"}],"waiting_user":true}}],"status":"complete","timestamp":1}`
 
 	preview := buildPreview("assistant", "", messageJSON)
 	if !strings.Contains(preview, "Choose the next direction") {
@@ -1686,6 +1688,7 @@ func TestStore_FollowupsCRUDReorderAndRecover(t *testing.T) {
 		TextContent:           "first queued turn",
 		AttachmentsJSON:       `[{"name":"spec.md","mime_type":"text/markdown","url":"file:///tmp/spec.md"}]`,
 		OptionsJSON:           `{"max_steps":4,"mode":"plan"}`,
+		SessionMetaJSON:       `{"channel_id":"ch_queue","endpoint_id":"env_queue","can_read":true,"can_write":true,"can_execute":true}`,
 		CreatedByUserPublicID: "u_queue",
 		CreatedByUserEmail:    "u_queue@example.com",
 		CreatedAtUnixMs:       1000,
@@ -1698,6 +1701,9 @@ func TestStore_FollowupsCRUDReorderAndRecover(t *testing.T) {
 	}
 	if first.ChannelID != "ch_queue" {
 		t.Fatalf("first.ChannelID=%q, want ch_queue", first.ChannelID)
+	}
+	if !strings.Contains(first.SessionMetaJSON, `"can_execute":true`) {
+		t.Fatalf("first.SessionMetaJSON=%q, want persisted execute permission", first.SessionMetaJSON)
 	}
 	if firstRevision <= 0 {
 		t.Fatalf("firstRevision=%d, want > 0", firstRevision)
@@ -1783,6 +1789,13 @@ func TestStore_FollowupsCRUDReorderAndRecover(t *testing.T) {
 	if queued[0].Lane != FollowupLaneQueued {
 		t.Fatalf("queued[0].Lane=%q, want %q", queued[0].Lane, FollowupLaneQueued)
 	}
+	defaultLimited, err := s.ListFollowupsByLane(ctx, "env_queue", "th_queue", FollowupLaneQueued, 0)
+	if err != nil {
+		t.Fatalf("ListFollowupsByLane default limit: %v", err)
+	}
+	if len(defaultLimited) != 2 {
+		t.Fatalf("len(defaultLimited)=%d, want 2", len(defaultLimited))
+	}
 
 	revision, err := s.GetThreadFollowupsRevision(ctx, "env_queue", "th_queue")
 	if err != nil {
@@ -1790,6 +1803,18 @@ func TestStore_FollowupsCRUDReorderAndRecover(t *testing.T) {
 	}
 	if revision != draftRevision {
 		t.Fatalf("revision=%d, want %d", revision, draftRevision)
+	}
+
+	compatRevisionBefore := revision
+	if err := s.UpdateQueuedTurn(ctx, "env_queue", "th_queue", "fu_1", "compat updated first follow-up"); err != nil {
+		t.Fatalf("UpdateQueuedTurn: %v", err)
+	}
+	revision, err = s.GetThreadFollowupsRevision(ctx, "env_queue", "th_queue")
+	if err != nil {
+		t.Fatalf("GetThreadFollowupsRevision after UpdateQueuedTurn: %v", err)
+	}
+	if revision <= compatRevisionBefore {
+		t.Fatalf("revision after UpdateQueuedTurn=%d, want > %d", revision, compatRevisionBefore)
 	}
 
 	updatedRevision, err := s.UpdateFollowupText(ctx, "env_queue", "th_queue", "fu_2", "updated second follow-up")
@@ -1806,6 +1831,9 @@ func TestStore_FollowupsCRUDReorderAndRecover(t *testing.T) {
 	}
 	if queued[1].TextContent != "updated second follow-up" {
 		t.Fatalf("queued[1].TextContent=%q, want updated second follow-up", queued[1].TextContent)
+	}
+	if queued[0].TextContent != "compat updated first follow-up" {
+		t.Fatalf("queued[0].TextContent=%q, want compat updated first follow-up", queued[0].TextContent)
 	}
 
 	reorderedRevision, err := s.ReorderFollowups(ctx, "env_queue", "th_queue", FollowupLaneQueued, []string{"fu_2", "fu_1"}, updatedRevision)
@@ -1861,12 +1889,39 @@ func TestStore_FollowupsCRUDReorderAndRecover(t *testing.T) {
 		t.Fatalf("unexpected draft order: %+v", drafts)
 	}
 
+	queuedFromDraft, queuedFromDraftPos, queuedFromDraftRevision, err := s.CreateFollowup(ctx, QueuedTurn{
+		QueueID:               "fu_4",
+		EndpointID:            "env_queue",
+		ThreadID:              "th_queue",
+		ChannelID:             "ch_queue",
+		Lane:                  FollowupLaneQueued,
+		MessageID:             "m_draft_1",
+		ModelID:               "openai/gpt-5-mini",
+		TextContent:           "queued copy of draft message",
+		OptionsJSON:           `{"max_steps":2,"mode":"act"}`,
+		CreatedByUserPublicID: "u_queue",
+		CreatedByUserEmail:    "u_queue@example.com",
+		CreatedAtUnixMs:       4000,
+	})
+	if err != nil {
+		t.Fatalf("CreateFollowup queued copy of draft message: %v", err)
+	}
+	if queuedFromDraft.QueueID != "fu_4" || queuedFromDraft.Lane != FollowupLaneQueued {
+		t.Fatalf("queuedFromDraft=%+v, want new queued followup", queuedFromDraft)
+	}
+	if queuedFromDraftPos != 1 {
+		t.Fatalf("queuedFromDraftPos=%d, want 1", queuedFromDraftPos)
+	}
+	if queuedFromDraftRevision <= recoveredRevision {
+		t.Fatalf("queuedFromDraftRevision=%d, want > %d", queuedFromDraftRevision, recoveredRevision)
+	}
+
 	deletedRevision, err := s.DeleteFollowup(ctx, "env_queue", "th_queue", "fu_1")
 	if err != nil {
 		t.Fatalf("DeleteFollowup: %v", err)
 	}
-	if deletedRevision <= recoveredRevision {
-		t.Fatalf("deletedRevision=%d, want > %d", deletedRevision, recoveredRevision)
+	if deletedRevision <= queuedFromDraftRevision {
+		t.Fatalf("deletedRevision=%d, want > %d", deletedRevision, queuedFromDraftRevision)
 	}
 
 	drafts, err = s.ListFollowupsByLane(ctx, "env_queue", "th_queue", FollowupLaneDraft, 10)
@@ -1875,6 +1930,96 @@ func TestStore_FollowupsCRUDReorderAndRecover(t *testing.T) {
 	}
 	if len(drafts) != 2 {
 		t.Fatalf("len(drafts)=%d, want 2", len(drafts))
+	}
+}
+
+func TestStore_QueuedTurnCompatibilityAPIsBumpFollowupsRevision(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_queue_compat", EndpointID: "env_queue_compat", Title: "queue"}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	enqueue := func(queueID string, messageID string, text string) {
+		t.Helper()
+		if _, _, err := s.EnqueueQueuedTurn(ctx, QueuedTurn{
+			QueueID:     queueID,
+			EndpointID:  "env_queue_compat",
+			ThreadID:    "th_queue_compat",
+			ChannelID:   "ch_queue_compat",
+			MessageID:   messageID,
+			TextContent: text,
+		}); err != nil {
+			t.Fatalf("EnqueueQueuedTurn(%s): %v", queueID, err)
+		}
+	}
+	revision := func() int64 {
+		t.Helper()
+		out, err := s.GetThreadFollowupsRevision(ctx, "env_queue_compat", "th_queue_compat")
+		if err != nil {
+			t.Fatalf("GetThreadFollowupsRevision: %v", err)
+		}
+		return out
+	}
+	wantBumped := func(label string, before int64) int64 {
+		t.Helper()
+		after := revision()
+		if after <= before {
+			t.Fatalf("%s revision=%d, want > %d", label, after, before)
+		}
+		return after
+	}
+
+	enqueue("q_1", "m_1", "first")
+	enqueue("q_2", "m_2", "second")
+	rev := revision()
+	if rev != 2 {
+		t.Fatalf("revision=%d, want 2 after two enqueues", rev)
+	}
+
+	if err := s.UpdateQueuedTurn(ctx, "env_queue_compat", "th_queue_compat", "q_1", "updated first"); err != nil {
+		t.Fatalf("UpdateQueuedTurn: %v", err)
+	}
+	rev = wantBumped("UpdateQueuedTurn", rev)
+
+	popped, err := s.PopNextQueuedTurn(ctx, "env_queue_compat", "th_queue_compat")
+	if err != nil {
+		t.Fatalf("PopNextQueuedTurn: %v", err)
+	}
+	if popped == nil || popped.QueueID != "q_1" {
+		t.Fatalf("popped=%+v, want q_1", popped)
+	}
+	rev = wantBumped("PopNextQueuedTurn", rev)
+
+	enqueue("q_3", "m_3", "third")
+	rev = wantBumped("EnqueueQueuedTurn q_3", rev)
+
+	if err := s.DeleteQueuedTurn(ctx, "env_queue_compat", "th_queue_compat", "q_2"); err != nil {
+		t.Fatalf("DeleteQueuedTurn: %v", err)
+	}
+	rev = wantBumped("DeleteQueuedTurn", rev)
+
+	enqueue("q_4", "m_4", "fourth")
+	rev = wantBumped("EnqueueQueuedTurn q_4", rev)
+
+	if err := s.DeleteQueuedTurns(ctx, "env_queue_compat", "th_queue_compat"); err != nil {
+		t.Fatalf("DeleteQueuedTurns: %v", err)
+	}
+	rev = wantBumped("DeleteQueuedTurns", rev)
+
+	if err := s.DeleteQueuedTurns(ctx, "env_queue_compat", "th_queue_compat"); err != nil {
+		t.Fatalf("DeleteQueuedTurns empty: %v", err)
+	}
+	if after := revision(); after != rev {
+		t.Fatalf("empty DeleteQueuedTurns revision=%d, want unchanged %d", after, rev)
 	}
 }
 

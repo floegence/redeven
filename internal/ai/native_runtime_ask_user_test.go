@@ -25,6 +25,10 @@ func TestEvaluateAskUserGate(t *testing.T) {
 		t.Fatalf("empty question => pass=%v reason=%q", pass, reason)
 	}
 
+	if pass, reason := evaluateAskUserGate(askUserSignal{ContractError: askUserGateReasonLegacyContractShape}, runtimeState{}, TaskComplexitySimple); pass || reason != askUserGateReasonLegacyContractShape {
+		t.Fatalf("legacy contract shape => pass=%v reason=%q", pass, reason)
+	}
+
 	if pass, reason := evaluateAskUserGate(testAskUserSignal("Should I proceed?"), runtimeState{}, TaskComplexitySimple); pass || reason != "missing_reason_code" {
 		t.Fatalf("missing reason_code => pass=%v reason=%q", pass, reason)
 	}

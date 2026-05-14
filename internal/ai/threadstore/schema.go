@@ -9,7 +9,7 @@ import (
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore"
-	threadstoreCurrentSchemaVersion = 22
+	threadstoreCurrentSchemaVersion = 24
 )
 
 // CurrentSchemaVersion returns the latest threadstore schema version expected by migrations.
@@ -50,6 +50,8 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 			{FromVersion: 19, ToVersion: 20, Apply: migrateThreadstoreToV20},
 			{FromVersion: 20, ToVersion: 21, Apply: migrateThreadstoreToV21},
 			{FromVersion: 21, ToVersion: 22, Apply: migrateThreadstoreToV22},
+			{FromVersion: 22, ToVersion: 23, Apply: migrateThreadstoreToV23},
+			{FromVersion: 23, ToVersion: 24, Apply: migrateThreadstoreToV24},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -211,6 +213,14 @@ func migrateThreadstoreToV21(tx *sql.Tx) error {
 
 func migrateThreadstoreToV22(tx *sql.Tx) error {
 	return ensureAIThreadStateContinuationColumnsTx(tx)
+}
+
+func migrateThreadstoreToV23(tx *sql.Tx) error {
+	return ensureFollowupSessionMetaJSONTx(tx)
+}
+
+func migrateThreadstoreToV24(tx *sql.Tx) error {
+	return ensureFollowupLaneMessageIDIndexTx(tx)
 }
 
 func ensureAIThreadsModelIDTx(tx *sql.Tx) error {
@@ -602,6 +612,7 @@ CREATE TABLE IF NOT EXISTS ai_queued_turns (
   text_content TEXT NOT NULL DEFAULT '',
   attachments_json TEXT NOT NULL DEFAULT '[]',
   options_json TEXT NOT NULL DEFAULT '{}',
+  session_meta_json TEXT NOT NULL DEFAULT '{}',
   created_by_user_public_id TEXT NOT NULL DEFAULT '',
   created_by_user_email TEXT NOT NULL DEFAULT '',
   created_at_unix_ms INTEGER NOT NULL
@@ -612,6 +623,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_queued_turns_message_id ON ai_queued_tu
 		return err
 	}
 	return ensureColumnTx(tx, "ai_queued_turns", "channel_id", `ALTER TABLE ai_queued_turns ADD COLUMN channel_id TEXT NOT NULL DEFAULT ''`)
+}
+
+func ensureFollowupSessionMetaJSONTx(tx *sql.Tx) error {
+	if err := ensureColumnTx(tx, "ai_queued_turns", "session_meta_json", `ALTER TABLE ai_queued_turns ADD COLUMN session_meta_json TEXT NOT NULL DEFAULT '{}'`); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`UPDATE ai_queued_turns SET session_meta_json = '{}' WHERE TRIM(COALESCE(session_meta_json, '')) = ''`)
+	return err
 }
 
 func ensureFollowupLaneColumnsTx(tx *sql.Tx) error {
@@ -655,7 +674,15 @@ WHERE sort_index <= 0
 	if _, err := tx.Exec(`CREATE INDEX IF NOT EXISTS idx_ai_queued_turns_thread_lane_sort ON ai_queued_turns(endpoint_id, thread_id, lane, sort_index ASC, queue_id ASC)`); err != nil {
 		return err
 	}
-	return nil
+	return ensureFollowupLaneMessageIDIndexTx(tx)
+}
+
+func ensureFollowupLaneMessageIDIndexTx(tx *sql.Tx) error {
+	if _, err := tx.Exec(`DROP INDEX IF EXISTS idx_ai_queued_turns_message_id`); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_queued_turns_lane_message_id ON ai_queued_turns(endpoint_id, thread_id, lane, message_id)`)
+	return err
 }
 
 func ensureUploadTablesTx(tx *sql.Tx) error {
@@ -792,7 +819,7 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		"ai_queued_turns": {
 			"queue_id", "endpoint_id", "thread_id", "channel_id", "lane", "sort_index",
 			"message_id", "model_id", "text_content", "attachments_json", "options_json",
-			"created_by_user_public_id", "created_by_user_email", "created_at_unix_ms",
+			"session_meta_json", "created_by_user_public_id", "created_by_user_email", "created_at_unix_ms",
 			"updated_at_unix_ms",
 		},
 		"transcript_messages": {
@@ -862,7 +889,7 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		"idx_ai_thread_checkpoints_run_id",
 		"idx_ai_queued_turns_thread_created",
 		"idx_ai_queued_turns_thread_lane_sort",
-		"idx_ai_queued_turns_message_id",
+		"idx_ai_queued_turns_lane_message_id",
 		"idx_transcript_messages_thread_id",
 		"idx_conversation_turns_thread_id",
 		"idx_conversation_turns_run_id",

@@ -125,15 +125,15 @@ func assessTaskOutcome(task evalTask, result taskResult) taskOutcome {
 		if turn.PhasePingPong {
 			out.HardFailReasons = append(out.HardFailReasons, "phase_pingpong_detected")
 		}
-		if _, ok := hardEventSet["turn.completion.continue"]; ok && turn.CompletionRetrys > 0 {
+		if hardFailEventConfigured(hardEventSet, "completion.attempt", "turn.completion.continue") && turn.CompletionRetrys > 0 {
 			out.Passed = false
-			out.HardFailReasons = append(out.HardFailReasons, "turn_completion_continue")
+			out.HardFailReasons = append(out.HardFailReasons, "completion_attempt_rejected")
 		}
-		if _, ok := hardEventSet["task.loop.continue"]; ok && turn.TaskLoopContinue > 0 {
+		if hardFailEventConfigured(hardEventSet, "signal.recovery.attempt", "task.loop.continue") && turn.TaskLoopContinue > 0 {
 			out.Passed = false
-			out.HardFailReasons = append(out.HardFailReasons, "task_loop_continue")
+			out.HardFailReasons = append(out.HardFailReasons, "signal_recovery_attempt")
 		}
-		if _, ok := hardEventSet["turn.loop.exhausted"]; ok && turn.LoopExhausted {
+		if hardFailEventConfigured(hardEventSet, "guard.hard_max_steps", "turn.loop.exhausted") && turn.LoopExhausted {
 			out.Passed = false
 		}
 		if strings.TrimSpace(turn.MonitorAbort) != "" {
@@ -277,6 +277,15 @@ func assessTaskOutcome(task evalTask, result taskResult) taskOutcome {
 		out.HardFailReasons = uniqueStrings(out.HardFailReasons)
 	}
 	return out
+}
+
+func hardFailEventConfigured(set map[string]struct{}, names ...string) bool {
+	for _, name := range names {
+		if _, ok := set[normalizeName(name)]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func aggregateSuiteMetrics(results []taskResult) suiteMetrics {

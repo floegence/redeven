@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/floegence/redeven/internal/ai"
@@ -81,7 +82,7 @@ func TestAssessTaskOutcome_PassesStructuredFlowerAssertions(t *testing.T) {
 			},
 			Events: taskEventAssertions{
 				MustInclude: []string{"todos.updated"},
-				HardFail:    []string{"turn.loop.exhausted"},
+				HardFail:    []string{"guard.hard_max_steps"},
 			},
 			Todos: taskTodoAssertions{
 				RequireSnapshot:             true,
@@ -137,7 +138,7 @@ func TestAssessTaskOutcome_FallbackFails(t *testing.T) {
 				Forbidden:       []string{"No response"},
 			},
 			Events: taskEventAssertions{
-				HardFail: []string{"turn.loop.exhausted"},
+				HardFail: []string{"guard.hard_max_steps"},
 			},
 		},
 	}
@@ -155,6 +156,49 @@ func TestAssessTaskOutcome_FallbackFails(t *testing.T) {
 	}
 	if outcome.LoopSafe {
 		t.Fatalf("expected loop unsafe outcome")
+	}
+}
+
+func TestAssessTaskOutcome_CurrentRuntimeEventsFailGate(t *testing.T) {
+	t.Parallel()
+
+	task := evalTask{
+		ID: "current_events",
+		Assertions: taskAssertionsSpec{
+			Events: taskEventAssertions{
+				HardFail: []string{"completion.attempt", "signal.recovery.attempt", "guard.hard_max_steps"},
+			},
+		},
+	}
+	result := taskResult{
+		Task:      task,
+		FinalText: "Final answer with enough content.",
+		Turns: []turnMetrics{{
+			CompletionRetrys: 1,
+			TaskLoopContinue: 1,
+			LoopExhausted:    true,
+		}},
+	}
+	outcome := assessTaskOutcome(task, result)
+	if outcome.Passed {
+		t.Fatalf("expected current hard-fail runtime events to fail")
+	}
+	reasons := strings.Join(outcome.HardFailReasons, ",")
+	for _, want := range []string{"completion_attempt_rejected", "signal_recovery_attempt", "turn_loop_exhausted"} {
+		if !strings.Contains(reasons, want) {
+			t.Fatalf("hard fail reasons %q missing %q", reasons, want)
+		}
+	}
+}
+
+func TestExtractReasonFromPayload_UsesCurrentEventFields(t *testing.T) {
+	t.Parallel()
+
+	if got := extractReasonFromPayload(map[string]any{"gate_reason": "missing_verified_tool_work"}); got != "missing_verified_tool_work" {
+		t.Fatalf("gate reason = %q", got)
+	}
+	if got := extractReasonFromPayload(map[string]any{"source": "text_only_continuation"}); got != "text_only_continuation" {
+		t.Fatalf("source reason = %q", got)
 	}
 }
 
