@@ -386,9 +386,6 @@ func (c *AIConfig) Validate() error {
 	if currentModelID == "" {
 		return errors.New("missing current model (current_model_id)")
 	}
-	if !c.IsAllowedModelID(currentModelID) {
-		return fmt.Errorf("current_model_id %q is not in providers[].models[]", c.CurrentModelID)
-	}
 
 	return nil
 }

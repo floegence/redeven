@@ -250,11 +250,13 @@ func TestSnapshotAssistantMessageJSON_UsesAskUserQuestionWhenMarkdownEmpty(t *te
 				Args: map[string]any{
 					"questions": []any{
 						map[string]any{
-							"id":        "question_1",
-							"header":    question,
-							"question":  question,
-							"is_other":  true,
-							"is_secret": false,
+							"id":                "question_1",
+							"header":            question,
+							"question":          question,
+							"is_secret":         false,
+							"response_mode":     requestUserInputResponseModeWrite,
+							"write_label":       "Your answer",
+							"write_placeholder": "Type your answer",
 						},
 					},
 				},
@@ -262,11 +264,13 @@ func TestSnapshotAssistantMessageJSON_UsesAskUserQuestionWhenMarkdownEmpty(t *te
 				Result: map[string]any{
 					"questions": []any{
 						map[string]any{
-							"id":        "question_1",
-							"header":    question,
-							"question":  question,
-							"is_other":  true,
-							"is_secret": false,
+							"id":                "question_1",
+							"header":            question,
+							"question":          question,
+							"is_secret":         false,
+							"response_mode":     requestUserInputResponseModeWrite,
+							"write_label":       "Your answer",
+							"write_placeholder": "Type your answer",
 						},
 					},
 					"source":       "model_signal",
@@ -335,10 +339,12 @@ func TestSnapshotWaitingPrompt_ExtractsStructuredQuestions(t *testing.T) {
 					"evidence_refs":      []any{"tool_approval_1"},
 					"questions": []any{
 						map[string]any{
-							"id":        "mode_decision",
-							"header":    "Execution mode",
-							"question":  "Need your confirmation",
-							"is_secret": false,
+							"id":                 "mode_decision",
+							"header":             "Execution mode",
+							"question":           "Need your confirmation",
+							"is_secret":          false,
+							"response_mode":      requestUserInputResponseModeSelect,
+							"choices_exhaustive": true,
 							"choices": []any{
 								map[string]any{
 									"choice_id": "switch_to_act",
@@ -358,10 +364,12 @@ func TestSnapshotWaitingPrompt_ExtractsStructuredQuestions(t *testing.T) {
 				Result: map[string]any{
 					"questions": []any{
 						map[string]any{
-							"id":        "mode_decision",
-							"header":    "Execution mode",
-							"question":  "Need your confirmation",
-							"is_secret": false,
+							"id":                 "mode_decision",
+							"header":             "Execution mode",
+							"question":           "Need your confirmation",
+							"is_secret":          false,
+							"response_mode":      requestUserInputResponseModeSelect,
+							"choices_exhaustive": true,
 							"choices": []any{
 								map[string]any{
 									"choice_id": "switch_to_act",
@@ -443,11 +451,13 @@ func TestSnapshotAssistantMessageJSON_PrefersMarkdownOverAskUserQuestion(t *test
 				"args": map[string]any{
 					"questions": []any{
 						map[string]any{
-							"id":        "question_1",
-							"header":    "Please provide more details",
-							"question":  "Please provide more details",
-							"is_other":  true,
-							"is_secret": false,
+							"id":                "question_1",
+							"header":            "Please provide more details",
+							"question":          "Please provide more details",
+							"is_secret":         false,
+							"response_mode":     requestUserInputResponseModeWrite,
+							"write_label":       "Your answer",
+							"write_placeholder": "Type your answer",
 						},
 					},
 				},

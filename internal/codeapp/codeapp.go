@@ -221,6 +221,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	codexSvc, err := codexbridge.NewManager(codexbridge.Options{
 		Logger:       logger,
 		AgentHomeDir: agentHomeDir,
+		Shell:        strings.TrimSpace(opts.Shell),
 		Diagnostics:  opts.Diagnostics,
 	})
 	if err != nil {

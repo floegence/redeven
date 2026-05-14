@@ -41,6 +41,47 @@ func marshalQueuedTurnOptions(opts RunOptions) string {
 	return string(b)
 }
 
+func marshalQueuedTurnSessionMeta(meta *session.Meta) string {
+	if meta == nil {
+		return "{}"
+	}
+	snapshot := session.Meta{
+		ChannelID:         strings.TrimSpace(meta.ChannelID),
+		EndpointID:        strings.TrimSpace(meta.EndpointID),
+		FloeApp:           strings.TrimSpace(meta.FloeApp),
+		CodeSpaceID:       strings.TrimSpace(meta.CodeSpaceID),
+		SessionKind:       strings.TrimSpace(meta.SessionKind),
+		UserPublicID:      strings.TrimSpace(meta.UserPublicID),
+		UserEmail:         strings.TrimSpace(meta.UserEmail),
+		NamespacePublicID: strings.TrimSpace(meta.NamespacePublicID),
+		CanRead:           meta.CanRead,
+		CanWrite:          meta.CanWrite,
+		CanExecute:        meta.CanExecute,
+		CanAdmin:          meta.CanAdmin,
+		CreatedAtUnixMs:   meta.CreatedAtUnixMs,
+	}
+	b, err := json.Marshal(snapshot)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
+}
+
+func unmarshalQueuedTurnSessionMeta(raw string) (session.Meta, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return session.Meta{}, false
+	}
+	var out session.Meta
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		return session.Meta{}, false
+	}
+	if strings.TrimSpace(out.ChannelID) == "" || strings.TrimSpace(out.EndpointID) == "" {
+		return session.Meta{}, false
+	}
+	return out, true
+}
+
 func unmarshalQueuedTurnAttachments(raw string) []RunAttachmentIn {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -123,16 +164,22 @@ func queuedTurnRecordToRunStartRequest(rec threadstore.QueuedTurn, threadExecuti
 }
 
 func queuedTurnRecordToSessionMeta(rec threadstore.QueuedTurn, namespacePublicID string) *session.Meta {
-	return &session.Meta{
-		ChannelID:         strings.TrimSpace(rec.ChannelID),
-		EndpointID:        strings.TrimSpace(rec.EndpointID),
-		NamespacePublicID: strings.TrimSpace(namespacePublicID),
-		UserPublicID:      strings.TrimSpace(rec.CreatedByUserPublicID),
-		UserEmail:         strings.TrimSpace(rec.CreatedByUserEmail),
-		CanRead:           true,
-		CanWrite:          true,
-		CanExecute:        true,
+	meta, ok := unmarshalQueuedTurnSessionMeta(rec.SessionMetaJSON)
+	if !ok {
+		meta = session.Meta{}
 	}
+	meta.ChannelID = strings.TrimSpace(rec.ChannelID)
+	meta.EndpointID = strings.TrimSpace(rec.EndpointID)
+	meta.NamespacePublicID = strings.TrimSpace(namespacePublicID)
+	meta.UserPublicID = strings.TrimSpace(meta.UserPublicID)
+	if meta.UserPublicID == "" {
+		meta.UserPublicID = strings.TrimSpace(rec.CreatedByUserPublicID)
+	}
+	meta.UserEmail = strings.TrimSpace(meta.UserEmail)
+	if meta.UserEmail == "" {
+		meta.UserEmail = strings.TrimSpace(rec.CreatedByUserEmail)
+	}
+	return &meta
 }
 
 func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req SendUserTurnRequest) (threadstore.QueuedTurn, int, error) {
@@ -189,6 +236,7 @@ func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req
 		TextContent:           strings.TrimSpace(normalizedInput.Text),
 		AttachmentsJSON:       marshalQueuedTurnAttachments(normalizedInput.Attachments),
 		OptionsJSON:           marshalQueuedTurnOptions(req.Options),
+		SessionMetaJSON:       marshalQueuedTurnSessionMeta(meta),
 		CreatedByUserPublicID: strings.TrimSpace(meta.UserPublicID),
 		CreatedByUserEmail:    strings.TrimSpace(meta.UserEmail),
 		CreatedAtUnixMs:       createdAtUnixMs,

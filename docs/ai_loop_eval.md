@@ -152,6 +152,14 @@ Metrics:
 
 Gate output is written into `report.json` under `gate`.
 
+Current runtime hard-fail events are:
+
+- `completion.attempt` with `gate_passed=false` for rejected completion attempts
+- `signal.recovery.attempt` for structured signal recovery turns
+- `guard.hard_max_steps` for absolute loop guard exhaustion
+
+The evaluator still accepts the legacy event names `turn.completion.continue`, `task.loop.continue`, and `turn.loop.exhausted` when reading older reports, but task specs should use the current runtime event names.
+
 ## Replay validation
 
 `cmd/ai-loop-replay` replays persisted transcripts and rejects known anti-patterns such as:

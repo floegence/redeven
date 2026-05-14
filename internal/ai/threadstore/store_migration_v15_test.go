@@ -59,6 +59,9 @@ VALUES('q_1', 'env_1', 'th_1', 'ch_1', 'msg_1', 'openai/gpt-5-mini', 'queued fol
 	if queued[0].UpdatedAtUnixMs != queued[0].CreatedAtUnixMs {
 		t.Fatalf("UpdatedAtUnixMs=%d, want %d", queued[0].UpdatedAtUnixMs, queued[0].CreatedAtUnixMs)
 	}
+	if queued[0].SessionMetaJSON != "{}" {
+		t.Fatalf("SessionMetaJSON=%q, want {}", queued[0].SessionMetaJSON)
+	}
 
 	var version int
 	if err := s.db.QueryRowContext(ctx, `PRAGMA user_version;`).Scan(&version); err != nil {
@@ -81,5 +84,27 @@ WHERE type = 'index' AND name = 'idx_ai_queued_turns_thread_lane_sort'
 	}
 	if indexExists != 1 {
 		t.Fatalf("lane index exists=%d, want 1", indexExists)
+	}
+
+	if err := s.db.QueryRowContext(ctx, `
+SELECT COUNT(1)
+FROM sqlite_master
+WHERE type = 'index' AND name = 'idx_ai_queued_turns_lane_message_id'
+`).Scan(&indexExists); err != nil {
+		t.Fatalf("check lane message index: %v", err)
+	}
+	if indexExists != 1 {
+		t.Fatalf("lane message index exists=%d, want 1", indexExists)
+	}
+
+	if err := s.db.QueryRowContext(ctx, `
+SELECT COUNT(1)
+FROM sqlite_master
+WHERE type = 'index' AND name = 'idx_ai_queued_turns_message_id'
+`).Scan(&indexExists); err != nil {
+		t.Fatalf("check legacy message index: %v", err)
+	}
+	if indexExists != 0 {
+		t.Fatalf("legacy message index exists=%d, want 0", indexExists)
 	}
 }

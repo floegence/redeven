@@ -98,6 +98,47 @@ func TestValidateRequestUserInputResponse_LegacyOtherFallbackInfersWriteChoice(t
 	}
 }
 
+func TestRequestUserInputQuestionFromModelRecord_RejectsLegacyShape(t *testing.T) {
+	t.Parallel()
+
+	_, reason, ok := requestUserInputQuestionFromModelRecord(map[string]any{
+		"id":        "direction",
+		"header":    "Direction",
+		"question":  "Choose the next direction.",
+		"is_secret": false,
+		"is_other":  true,
+		"options": []any{
+			map[string]any{"option_id": "default", "label": "Default path"},
+		},
+	})
+	if ok {
+		t.Fatalf("legacy model question unexpectedly accepted")
+	}
+	if reason != askUserGateReasonLegacyContractShape {
+		t.Fatalf("reason=%q, want %q", reason, askUserGateReasonLegacyContractShape)
+	}
+
+	question, reason, ok := requestUserInputQuestionFromModelRecord(map[string]any{
+		"id":                 "direction",
+		"header":             "Direction",
+		"question":           "Choose the next direction.",
+		"is_secret":          false,
+		"response_mode":      "select_or_write",
+		"choices_exhaustive": false,
+		"write_label":        "None of the above",
+		"write_placeholder":  "Type another answer",
+		"choices": []any{
+			map[string]any{"choice_id": "default", "label": "Default path"},
+		},
+	})
+	if !ok || reason != "" {
+		t.Fatalf("canonical model question ok=%v reason=%q question=%+v", ok, reason, question)
+	}
+	if question.ResponseMode != requestUserInputResponseModeSelectText {
+		t.Fatalf("response_mode=%q, want %q", question.ResponseMode, requestUserInputResponseModeSelectText)
+	}
+}
+
 func TestParseRequestUserInputPromptJSON_NormalizesLegacyOptionDetailToWriteChoice(t *testing.T) {
 	t.Parallel()
 

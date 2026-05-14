@@ -2386,6 +2386,9 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		case askUserGateReasonInteractionShapeMismatch:
 			rejectionMsg = "ask_user was rejected because it violated the user's requested interaction shape. Preserve explicit requirements such as fixed options, clickable choices, one-question-at-a-time, and indirect questioning."
 			recoveryOverlay = "[CONTRACT] Preserve the user's requested interaction shape. If the user asked for options or clickable choices, keep fixed choices and use select_or_write when the options are not exhaustive."
+		case askUserGateReasonLegacyContractShape:
+			rejectionMsg = "ask_user was rejected because it used the retired options/is_other/detail_input_* contract. Regenerate the tool call with canonical choices[], response_mode, and choices_exhaustive fields."
+			recoveryOverlay = "[CONTRACT] ask_user no longer accepts options/is_other/detail_input_* for new tool calls. Use questions[].choices[] with choice_id/label, response_mode, and choices_exhaustive."
 		case "missing_evidence_refs":
 			rejectionMsg = "ask_user was rejected because evidence_refs is empty for an evidence-backed reason. Provide concrete evidence refs from tool calls."
 			recoveryOverlay = "[CONTRACT] ask_user requires evidence_refs for this reason_code."
@@ -3168,11 +3171,13 @@ mainLoop:
 
 		if askUserCall != nil {
 			promoteToAgenticLoop(step, "waiting_user_required")
+			questions, questionContractError := extractModelSignalRequestUserInputQuestions(*askUserCall, "questions")
 			signal := askUserSignal{
-				Questions:        extractSignalRequestUserInputQuestions(*askUserCall, "questions"),
+				Questions:        questions,
 				ReasonCode:       extractSignalText(*askUserCall, "reason_code"),
 				RequiredFromUser: extractSignalStringList(*askUserCall, "required_from_user"),
 				EvidenceRefs:     extractSignalStringList(*askUserCall, "evidence_refs"),
+				ContractError:    questionContractError,
 			}
 			ended, askErr := tryAskUser(step, signal, "model_signal")
 			if askErr != nil {
@@ -3516,11 +3521,13 @@ mainLoop:
 			forcedAskUser := forcedSplit.AskUserCall
 			forcedTaskComplete := forcedSplit.TaskCompleteCall
 			if forcedAskUser != nil {
+				questions, questionContractError := extractModelSignalRequestUserInputQuestions(*forcedAskUser, "questions")
 				signal := askUserSignal{
-					Questions:        extractSignalRequestUserInputQuestions(*forcedAskUser, "questions"),
+					Questions:        questions,
 					ReasonCode:       extractSignalText(*forcedAskUser, "reason_code"),
 					RequiredFromUser: extractSignalStringList(*forcedAskUser, "required_from_user"),
 					EvidenceRefs:     extractSignalStringList(*forcedAskUser, "evidence_refs"),
+					ContractError:    questionContractError,
 				}
 				ended, askErr := tryAskUser(step, signal, "model_signal")
 				if askErr != nil {
@@ -5122,6 +5129,33 @@ func extractSignalRequestUserInputQuestions(call ToolCall, key string) []Request
 	return normalizeRequestUserInputQuestions(questions)
 }
 
+func extractModelSignalRequestUserInputQuestions(call ToolCall, key string) ([]RequestUserInputQuestion, string) {
+	if call.Args == nil {
+		return nil, ""
+	}
+	rawItems := toAnySlice(call.Args[key])
+	if len(rawItems) == 0 {
+		return nil, ""
+	}
+	questions := make([]RequestUserInputQuestion, 0, len(rawItems))
+	contractError := ""
+	for _, item := range rawItems {
+		record, ok := item.(map[string]any)
+		if !ok || record == nil {
+			continue
+		}
+		question, reason, ok := requestUserInputQuestionFromModelRecord(record)
+		if !ok {
+			if reason != "" && contractError == "" {
+				contractError = reason
+			}
+			continue
+		}
+		questions = append(questions, question)
+	}
+	return normalizeRequestUserInputQuestions(questions), contractError
+}
+
 func normalizeAskUserOptions(options []string) []string {
 	if len(options) == 0 {
 		return nil
@@ -5316,6 +5350,9 @@ func evaluateTaskCompletionGate(resultText string, state runtimeState, complexit
 func evaluateAskUserGate(signal askUserSignal, state runtimeState, complexity string) (bool, string) {
 	rawQuestions := append([]RequestUserInputQuestion(nil), signal.Questions...)
 	signal = normalizeAskUserSignal(signal)
+	if signal.ContractError != "" {
+		return false, signal.ContractError
+	}
 	if strings.TrimSpace(signal.Question) == "" {
 		return false, "empty_question"
 	}

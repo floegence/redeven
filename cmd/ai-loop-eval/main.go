@@ -558,17 +558,29 @@ func runTask(
 					metrics.ToolErrorCount++
 				case "turn.recovery.triggered":
 					metrics.RecoveryCount++
+				case "completion.attempt":
+					if !payloadFieldBool(ev.Payload, "gate_passed") {
+						metrics.CompletionRetrys++
+						if reason := extractReasonFromPayload(ev.Payload); reason != "" {
+							reasonFlow = append(reasonFlow, "completion:"+reason)
+						}
+					}
 				case "turn.completion.continue":
 					metrics.CompletionRetrys++
 					if reason := extractReasonFromPayload(ev.Payload); reason != "" {
 						reasonFlow = append(reasonFlow, "completion:"+reason)
+					}
+				case "signal.recovery.attempt":
+					metrics.TaskLoopContinue++
+					if reason := extractReasonFromPayload(ev.Payload); reason != "" {
+						reasonFlow = append(reasonFlow, "task:"+reason)
 					}
 				case "task.loop.continue":
 					metrics.TaskLoopContinue++
 					if reason := extractReasonFromPayload(ev.Payload); reason != "" {
 						reasonFlow = append(reasonFlow, "task:"+reason)
 					}
-				case "turn.loop.exhausted":
+				case "guard.hard_max_steps", "turn.loop.exhausted":
 					metrics.LoopExhausted = true
 				case "run.end":
 					metrics.FinalizationReason = payloadFieldString(ev.Payload, "finalization_reason")
@@ -1197,12 +1209,29 @@ func payloadFieldString(payload any, key string) string {
 	return strings.TrimSpace(anyToString(obj[key]))
 }
 
-func extractReasonFromPayload(payload any) string {
-	reason := strings.TrimSpace(strings.ToLower(payloadFieldString(payload, "reason")))
-	if reason == "" {
-		return ""
+func payloadFieldBool(payload any, key string) bool {
+	obj, ok := payload.(map[string]any)
+	if !ok || obj == nil {
+		return false
 	}
-	return reason
+	switch v := obj[key].(type) {
+	case bool:
+		return v
+	case string:
+		return strings.EqualFold(strings.TrimSpace(v), "true")
+	default:
+		return false
+	}
+}
+
+func extractReasonFromPayload(payload any) string {
+	for _, key := range []string{"reason", "gate_reason", "source", "strategy"} {
+		reason := strings.TrimSpace(strings.ToLower(payloadFieldString(payload, key)))
+		if reason != "" {
+			return reason
+		}
+	}
+	return ""
 }
 
 func detectPhasePingPong(flow []string) bool {

@@ -59,19 +59,19 @@ func asRPCMethodError(err error) (*rpcMethodError, bool) {
 	return target, true
 }
 
-func buildAppServerCommand(binaryPath string) (*exec.Cmd, error) {
+func buildAppServerCommand(shell string, binaryPath string) (*exec.Cmd, error) {
 	if strings.TrimSpace(binaryPath) == "" {
 		return nil, errors.New("missing codex binary")
 	}
-	shellPath, err := resolveInteractiveLoginShell()
+	shellPath, err := resolveInteractiveLoginShell(shell)
 	if err != nil {
 		return nil, err
 	}
 	return exec.Command(shellPath, "-l", "-i", "-c", `exec "$0" app-server --listen stdio://`, binaryPath), nil
 }
 
-func startAppServerProcess(logger *slog.Logger, binaryPath string, onEnvelope func(rpcEnvelope)) (*appServerProcess, error) {
-	cmd, err := buildAppServerCommand(binaryPath)
+func startAppServerProcess(logger *slog.Logger, shell string, binaryPath string, onEnvelope func(rpcEnvelope)) (*appServerProcess, error) {
+	cmd, err := buildAppServerCommand(shell, binaryPath)
 	if err != nil {
 		return nil, err
 	}
@@ -273,7 +273,10 @@ func bytesTrimSpace(b []byte) []byte {
 	return []byte(strings.TrimSpace(string(b)))
 }
 
-func resolveInteractiveLoginShell() (string, error) {
+func resolveInteractiveLoginShell(shell string) (string, error) {
+	if shellPath, ok := resolveShellPath(strings.TrimSpace(shell)); ok {
+		return shellPath, nil
+	}
 	if shellPath, ok := resolveShellPath(strings.TrimSpace(os.Getenv("SHELL"))); ok {
 		return shellPath, nil
 	}

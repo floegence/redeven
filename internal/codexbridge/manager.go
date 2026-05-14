@@ -27,12 +27,14 @@ var (
 type Options struct {
 	Logger       *slog.Logger
 	AgentHomeDir string
+	Shell        string
 	Diagnostics  *diagnostics.Store
 }
 
 type Manager struct {
 	log          *slog.Logger
 	agentHomeDir string
+	shell        string
 	diag         *diagnostics.Store
 
 	startMu sync.Mutex
@@ -194,6 +196,7 @@ func NewManager(opts Options) (*Manager, error) {
 	manager := &Manager{
 		log:          logger,
 		agentHomeDir: agentHomeDir,
+		shell:        strings.TrimSpace(opts.Shell),
 		diag:         opts.Diagnostics,
 		threads:      make(map[string]*threadState),
 	}
@@ -938,7 +941,7 @@ func (m *Manager) ensureProcess(ctx context.Context) (*appServerProcess, error) 
 		m.recordError(err)
 		return nil, err
 	}
-	proc, err := startAppServerProcess(m.log, binaryPath, m.handleEnvelope)
+	proc, err := startAppServerProcess(m.log, m.shell, binaryPath, m.handleEnvelope)
 	if err != nil {
 		m.recordError(err)
 		return nil, err
@@ -1560,7 +1563,7 @@ func (m *Manager) resolveBinaryPath() (string, error) {
 	if current != "" {
 		return current, nil
 	}
-	if path := strings.TrimSpace(lookPathFromLoginShell("codex")); path != "" {
+	if path := strings.TrimSpace(lookPathFromLoginShell(m.shell, "codex")); path != "" {
 		return path, nil
 	}
 	path, err := exec.LookPath("codex")
@@ -1570,12 +1573,16 @@ func (m *Manager) resolveBinaryPath() (string, error) {
 	return path, nil
 }
 
-func lookPathFromLoginShell(binaryName string) string {
+func lookPathFromLoginShell(shell string, binaryName string) string {
 	binaryName = strings.TrimSpace(binaryName)
 	if binaryName == "" {
 		return ""
 	}
-	out, err := exec.Command("bash", "-lc", `type -P "$0"`, binaryName).Output()
+	shellPath, err := resolveInteractiveLoginShell(shell)
+	if err != nil {
+		return ""
+	}
+	out, err := exec.Command(shellPath, "-l", "-i", "-c", `type -P "$0"`, binaryName).Output()
 	if err != nil {
 		return ""
 	}

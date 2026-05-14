@@ -36,7 +36,7 @@ func TestAIConfigValidate_RequiresCurrentModel(t *testing.T) {
 	}
 }
 
-func TestAIConfigValidate_RejectsInvalidCurrentModel(t *testing.T) {
+func TestAIConfigValidate_AllowsInvalidCurrentModelForFallback(t *testing.T) {
 	t.Parallel()
 
 	cfg := &AIConfig{
@@ -52,8 +52,12 @@ func TestAIConfigValidate_RejectsInvalidCurrentModel(t *testing.T) {
 		},
 	}
 
-	if err := cfg.Validate(); err == nil {
-		t.Fatalf("expected validation error for invalid current model")
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate should allow invalid current model fallback: %v", err)
+	}
+	modelID, ok := cfg.ResolvedCurrentModelID()
+	if !ok || modelID != "openai/gpt-5-mini" {
+		t.Fatalf("ResolvedCurrentModelID=(%q,%v), want fallback openai/gpt-5-mini", modelID, ok)
 	}
 }
 
@@ -359,6 +363,9 @@ func TestAIConfig_ResolvedCurrentModelID_FallbacksToFirstModel(t *testing.T) {
 	}
 	if modelID != "openai/gpt-5-mini" {
 		t.Fatalf("ResolvedCurrentModelID=%q, want %q", modelID, "openai/gpt-5-mini")
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate should allow fallback current_model_id: %v", err)
 	}
 }
 
