@@ -1217,7 +1217,9 @@ function primaryActionOverlay(
             ? 'Provider response is invalid'
             : environment.remote_route_state === 'removed'
               ? 'Environment removed'
-              : 'Refresh provider status',
+              : environment.remote_route_state === 'stale'
+                ? 'Provider status is stale'
+                : 'Refresh provider status',
       detail: environment.remote_state_reason || 'Remote open is not ready yet. Open stays separate from runtime start and provider link actions.',
       actions: refreshAction ? [refreshAction] : [],
     };

@@ -884,6 +884,45 @@ describe('buildEnvironmentCardModel', () => {
     expect(savedLocalServeProviderEntry?.provider_local_runtime_state).toBe('not_running');
     expect(buildProviderBackedEnvironmentActionModel(savedLocalServeProviderEntry!)).toEqual(buildProviderBackedEnvironmentActionModel(providerOnlyEntry!));
 
+    const staleControlPlane = {
+      ...buildControlPlaneSummary({
+        catalogFreshness: 'stale',
+      }),
+      last_synced_at_ms: 1,
+      last_sync_attempt_at_ms: 1,
+    };
+    const staleProviderSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment(),
+        provider_environments: [
+          testProviderEnvironment('https://cp.example.invalid', 'env_demo', {
+            preferredOpenRoute: 'remote_desktop',
+          }),
+        ],
+        control_planes: [staleControlPlane],
+      }),
+      controlPlanes: [staleControlPlane],
+    });
+    const staleProviderEntry = staleProviderSnapshot.environments.find((environment) => (
+      environment.kind === 'provider_environment' && environment.env_public_id === 'env_demo'
+    ));
+    expect(staleProviderEntry).toBeTruthy();
+    expect(buildProviderBackedEnvironmentActionModel(staleProviderEntry!)).toMatchObject({
+      status_label: 'REFRESH NEEDED',
+      status_tone: 'warning',
+      action_presentation: {
+        primary_action_overlay: {
+          kind: 'popover',
+          title: 'Provider status is stale',
+          detail: 'Remote status is stale. Refresh the provider to confirm the current state.',
+          actions: [{
+            label: 'Refresh status',
+            emphasis: 'secondary',
+          }],
+        },
+      },
+    });
+
     const unboundRuntimeSnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: testLocalEnvironment({

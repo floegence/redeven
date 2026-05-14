@@ -510,6 +510,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('return startEnvironmentRuntime(environment, errorTarget);');
     expect(appSrc).toContain('Refresh runtime status');
     expect(appSrc).toContain('Refresh runtime statuses');
+    expect(appSrc).toContain('const secondaryIconOnly = () => isSecondary && props.overlay.actions.length > 1;');
+    expect(appSrc).toContain("showsRefreshIcon && 'gap-1.5'");
+    expect(appSrc).toContain('<Show when={showsRefreshIcon}>');
     expect(appSrc).toContain('primary_action_overlay');
     expect(appSrc).toContain('<DesktopActionPopover');
     expect(appSrc).toContain('<DesktopAnchoredOverlaySurface');
