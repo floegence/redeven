@@ -63,6 +63,7 @@ type Capability struct {
 
 type Capabilities struct {
 	DesktopAIBroker Capability `json:"desktop_ai_broker"`
+	ProviderLink    Capability `json:"provider_link"`
 }
 
 type BindingState string
@@ -87,7 +88,33 @@ type Binding struct {
 }
 
 type Bindings struct {
-	DesktopAIBroker Binding `json:"desktop_ai_broker"`
+	DesktopAIBroker Binding             `json:"desktop_ai_broker"`
+	ProviderLink    ProviderLinkBinding `json:"provider_link"`
+}
+
+type ProviderLinkState string
+
+const (
+	ProviderLinkStateUnbound       ProviderLinkState = "unbound"
+	ProviderLinkStateLinking       ProviderLinkState = "linking"
+	ProviderLinkStateLinked        ProviderLinkState = "linked"
+	ProviderLinkStateDisconnecting ProviderLinkState = "disconnecting"
+	ProviderLinkStateUnsupported   ProviderLinkState = "unsupported"
+	ProviderLinkStateError         ProviderLinkState = "error"
+)
+
+type ProviderLinkBinding struct {
+	State                    ProviderLinkState `json:"state"`
+	ProviderOrigin           string            `json:"provider_origin,omitempty"`
+	ProviderID               string            `json:"provider_id,omitempty"`
+	EnvPublicID              string            `json:"env_public_id,omitempty"`
+	LocalEnvironmentPublicID string            `json:"local_environment_public_id,omitempty"`
+	BindingGeneration        int64             `json:"binding_generation,omitempty"`
+	RemoteEnabled            bool              `json:"remote_enabled"`
+	LastConnectedAtUnixMS    int64             `json:"last_connected_at_unix_ms,omitempty"`
+	LastDisconnectedAtUnixMS int64             `json:"last_disconnected_at_unix_ms,omitempty"`
+	LastErrorCode            string            `json:"last_error_code,omitempty"`
+	LastErrorMessage         string            `json:"last_error_message,omitempty"`
 }
 
 type Snapshot struct {
@@ -197,6 +224,7 @@ func NormalizeSnapshot(snapshot Snapshot) Snapshot {
 
 func NormalizeCapabilities(capabilities Capabilities) Capabilities {
 	capabilities.DesktopAIBroker = NormalizeCapability(capabilities.DesktopAIBroker)
+	capabilities.ProviderLink = NormalizeCapability(capabilities.ProviderLink)
 	return capabilities
 }
 
@@ -215,7 +243,50 @@ func NormalizeCapability(capability Capability) Capability {
 
 func NormalizeBindings(bindings Bindings, capabilities Capabilities) Bindings {
 	bindings.DesktopAIBroker = NormalizeBinding(bindings.DesktopAIBroker, capabilities.DesktopAIBroker)
+	bindings.ProviderLink = NormalizeProviderLinkBinding(bindings.ProviderLink, capabilities.ProviderLink)
 	return bindings
+}
+
+func NormalizeProviderLinkBinding(binding ProviderLinkBinding, capability Capability) ProviderLinkBinding {
+	binding.State = ProviderLinkState(strings.TrimSpace(string(binding.State)))
+	binding.ProviderOrigin = strings.TrimSpace(binding.ProviderOrigin)
+	binding.ProviderID = strings.TrimSpace(binding.ProviderID)
+	binding.EnvPublicID = strings.TrimSpace(binding.EnvPublicID)
+	binding.LocalEnvironmentPublicID = strings.TrimSpace(binding.LocalEnvironmentPublicID)
+	binding.LastErrorCode = strings.TrimSpace(binding.LastErrorCode)
+	binding.LastErrorMessage = strings.TrimSpace(binding.LastErrorMessage)
+	if binding.BindingGeneration < 0 {
+		binding.BindingGeneration = 0
+	}
+	if binding.LastConnectedAtUnixMS < 0 {
+		binding.LastConnectedAtUnixMS = 0
+	}
+	if binding.LastDisconnectedAtUnixMS < 0 {
+		binding.LastDisconnectedAtUnixMS = 0
+	}
+	if !capability.Supported {
+		return ProviderLinkBinding{State: ProviderLinkStateUnsupported}
+	}
+	switch binding.State {
+	case ProviderLinkStateUnbound,
+		ProviderLinkStateLinking,
+		ProviderLinkStateLinked,
+		ProviderLinkStateDisconnecting,
+		ProviderLinkStateUnsupported,
+		ProviderLinkStateError:
+	default:
+		binding.State = ProviderLinkStateUnbound
+	}
+	if binding.State == ProviderLinkStateUnsupported {
+		binding.State = ProviderLinkStateUnbound
+	}
+	if binding.State != ProviderLinkStateLinked {
+		binding.RemoteEnabled = false
+	}
+	if binding.State == ProviderLinkStateLinked {
+		binding.RemoteEnabled = true
+	}
+	return binding
 }
 
 func NormalizeBinding(binding Binding, capability Capability) Binding {

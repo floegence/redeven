@@ -4,6 +4,7 @@ import {
   runtimeServiceIsOpenable,
   runtimeServiceMatchesIdentity,
   runtimeServiceNeedsRuntimeUpdate,
+  runtimeServiceProviderLinkBinding,
   type RuntimeServiceIdentity,
   type RuntimeServiceSnapshot,
 } from './runtimeService';
@@ -27,7 +28,8 @@ export type DesktopLocalRuntimeOpenPlanState =
   | 'not_running'
   | 'openable'
   | 'starting'
-  | 'restart_to_bind'
+  | 'needs_provider_link'
+  | 'linked_elsewhere'
   | 'restart_to_reclaim'
   | 'restart_to_update'
   | 'blocked_active_work'
@@ -97,6 +99,14 @@ export function normalizeDesktopLocalRuntimeBinding(
 export function desktopLocalRuntimeBindingFromObservation(
   runtime: DesktopLocalRuntimeObservation | null | undefined,
 ): DesktopLocalRuntimeBinding | null {
+  const providerLink = runtimeServiceProviderLinkBinding(runtime?.runtime_service);
+  if (providerLink.state === 'linked') {
+    return normalizeDesktopLocalRuntimeBinding({
+      provider_origin: providerLink.provider_origin,
+      provider_id: providerLink.provider_id,
+      env_public_id: providerLink.env_public_id,
+    });
+  }
   return normalizeDesktopLocalRuntimeBinding({
     provider_origin: runtime?.controlplane_base_url,
     provider_id: runtime?.controlplane_provider_id,
@@ -198,7 +208,7 @@ export function buildDesktopLocalRuntimeOpenPlan(
   const runtimeMatchesTarget = target.kind === 'local_environment'
     ? currentBinding === null
     : desktopLocalRuntimeBindingsMatch(currentBinding, targetBinding);
-  const requiresBootstrap = target.kind === 'provider_environment';
+  const requiresBootstrap = false;
   const runtimeService = runtime?.runtime_service;
   const runtimeNeedsUpdate = !runtimeService
     || runtimeServiceNeedsRuntimeUpdate(runtimeService)
@@ -212,14 +222,14 @@ export function buildDesktopLocalRuntimeOpenPlan(
       runtimeRunning,
       runtimeMatchesTarget: false,
       desktopCanManage: true,
-      canOpen: true,
+      canOpen: target.kind === 'local_environment',
       canPrepare: true,
       requiresBootstrap,
       requiresRestart: false,
       requiresConfirmation: false,
       targetBinding: targetBinding ?? undefined,
-      message: requiresBootstrap
-        ? 'Desktop will start the Local Runtime with this provider Environment before opening it.'
+      message: target.kind === 'provider_environment'
+        ? 'Start the Local Runtime first, then connect it to this provider Environment.'
         : 'Desktop will start the Local Runtime before opening the Local Environment.',
     });
   }
@@ -375,7 +385,7 @@ export function buildDesktopLocalRuntimeOpenPlan(
           : 'The Local Runtime is managed outside Desktop and is not linked to this provider Environment.',
       });
     }
-    if (runtimeHasActiveWork) {
+    if (currentBinding && runtimeHasActiveWork) {
       return plan({
         target,
         state: 'blocked_active_work',
@@ -385,29 +395,31 @@ export function buildDesktopLocalRuntimeOpenPlan(
         canOpen: false,
         canPrepare: false,
         requiresBootstrap,
-        requiresRestart: true,
+        requiresRestart: false,
         requiresConfirmation: true,
         currentBinding: currentBinding ?? undefined,
         targetBinding: targetBinding ?? undefined,
         runtimeURL,
-        message: 'The Local Runtime is busy. Close active runtime work before Desktop relinks it to this provider Environment.',
+        message: 'The Local Runtime has active provider work. Disconnect that work before linking another provider Environment.',
       });
     }
     return plan({
       target,
-      state: 'restart_to_bind',
+      state: currentBinding ? 'linked_elsewhere' : 'needs_provider_link',
       runtimeRunning,
       runtimeMatchesTarget,
       desktopCanManage,
-      canOpen: true,
+      canOpen: false,
       canPrepare: true,
       requiresBootstrap,
-      requiresRestart: true,
+      requiresRestart: false,
       requiresConfirmation: false,
       currentBinding: currentBinding ?? undefined,
       targetBinding: targetBinding ?? undefined,
       runtimeURL,
-      message: 'Desktop will restart the singleton Local Runtime for this provider Environment before opening.',
+      message: currentBinding
+        ? 'Local Runtime is connected to another provider Environment. Disconnect it before connecting this one.'
+        : 'Connect Local Runtime to this provider Environment before opening it locally.',
     });
   }
 

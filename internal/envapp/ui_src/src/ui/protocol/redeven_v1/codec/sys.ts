@@ -3,6 +3,8 @@ import type {
   RuntimeServiceCompatibility,
   RuntimeServiceOpenReadiness,
   RuntimeServiceOwner,
+  RuntimeServiceProviderLinkBinding,
+  RuntimeServiceProviderLinkState,
   RuntimeServiceSnapshot,
   SysMaintenanceSnapshot,
   SysPingResponse,
@@ -66,6 +68,21 @@ function normalizeRuntimeServiceBindingState(value: unknown, supported: boolean)
   }
 }
 
+function normalizeRuntimeServiceProviderLinkState(value: unknown, supported: boolean): RuntimeServiceProviderLinkState {
+  if (!supported) return 'unsupported';
+  const state = String(value ?? '').trim();
+  switch (state) {
+    case 'unbound':
+    case 'linking':
+    case 'linked':
+    case 'disconnecting':
+    case 'error':
+      return state;
+    default:
+      return 'unbound';
+  }
+}
+
 function compactStringArray(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const out = Array.from(new Set(value.map((item) => String(item ?? '').trim()).filter(Boolean))).sort();
@@ -85,14 +102,44 @@ function fromWireRuntimeServiceOpenReadiness(value: unknown): RuntimeServiceOpen
   };
 }
 
+function fromWireRuntimeServiceProviderLinkBinding(
+  value: wire_sys_ping_resp['runtime_service'] extends infer RuntimeService
+    ? RuntimeService extends { bindings?: infer Bindings }
+      ? Bindings extends { provider_link?: infer ProviderLink }
+        ? ProviderLink
+        : unknown
+      : unknown
+    : unknown,
+  supported: boolean,
+): RuntimeServiceProviderLinkBinding {
+  const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const state = normalizeRuntimeServiceProviderLinkState(record.state, supported);
+  return {
+    state,
+    providerOrigin: String(record.provider_origin ?? '').trim() || undefined,
+    providerId: String(record.provider_id ?? '').trim() || undefined,
+    envPublicId: String(record.env_public_id ?? '').trim() || undefined,
+    localEnvironmentPublicId: String(record.local_environment_public_id ?? '').trim() || undefined,
+    bindingGeneration: normalizeCount(record.binding_generation) || undefined,
+    remoteEnabled: state === 'linked',
+    lastConnectedAtUnixMs: normalizeCount(record.last_connected_at_unix_ms) || undefined,
+    lastDisconnectedAtUnixMs: normalizeCount(record.last_disconnected_at_unix_ms) || undefined,
+    lastErrorCode: String(record.last_error_code ?? '').trim() || undefined,
+    lastErrorMessage: String(record.last_error_message ?? '').trim() || undefined,
+  };
+}
+
 function fromWireRuntimeServiceSnapshot(resp: wire_sys_ping_resp['runtime_service']): RuntimeServiceSnapshot | undefined {
   if (!resp) return undefined;
   const workload = resp.active_workload ?? {};
   const capabilities = resp.capabilities ?? {};
   const desktopAiBrokerCapability = capabilities.desktop_ai_broker ?? {};
   const desktopAiBrokerSupported = desktopAiBrokerCapability.supported === true;
+  const providerLinkCapability = capabilities.provider_link ?? {};
+  const providerLinkSupported = providerLinkCapability.supported === true;
   const bindings = resp.bindings ?? {};
   const desktopAiBrokerBinding = bindings.desktop_ai_broker ?? {};
+  const providerLinkBinding = bindings.provider_link ?? {};
   const desktopManaged = resp.desktop_managed === true;
   return {
     runtimeVersion: resp.runtime_version ? String(resp.runtime_version) : undefined,
@@ -125,6 +172,14 @@ function fromWireRuntimeServiceSnapshot(resp: wire_sys_ping_resp['runtime_servic
         reasonCode: String(desktopAiBrokerCapability.reason_code ?? '').trim() || undefined,
         message: String(desktopAiBrokerCapability.message ?? '').trim() || undefined,
       },
+      providerLink: {
+        supported: providerLinkSupported,
+        bindMethod: providerLinkSupported
+          ? (String(providerLinkCapability.bind_method ?? '').trim() || 'runtime_control_v1')
+          : undefined,
+        reasonCode: String(providerLinkCapability.reason_code ?? '').trim() || undefined,
+        message: String(providerLinkCapability.message ?? '').trim() || undefined,
+      },
     },
     bindings: {
       desktopAiBroker: {
@@ -137,6 +192,7 @@ function fromWireRuntimeServiceSnapshot(resp: wire_sys_ping_resp['runtime_servic
         missingKeyProviderIds: compactStringArray(desktopAiBrokerBinding.missing_key_provider_ids),
         lastError: String(desktopAiBrokerBinding.last_error ?? '').trim() || undefined,
       },
+      providerLink: fromWireRuntimeServiceProviderLinkBinding(providerLinkBinding, providerLinkSupported),
     },
   };
 }

@@ -52,6 +52,28 @@ export type RuntimeServiceBinding = {
   lastError?: string;
 };
 
+export type RuntimeServiceProviderLinkState =
+  | 'unbound'
+  | 'linking'
+  | 'linked'
+  | 'disconnecting'
+  | 'unsupported'
+  | 'error';
+
+export type RuntimeServiceProviderLinkBinding = {
+  state: RuntimeServiceProviderLinkState;
+  providerOrigin?: string;
+  providerId?: string;
+  envPublicId?: string;
+  localEnvironmentPublicId?: string;
+  bindingGeneration?: number;
+  remoteEnabled: boolean;
+  lastConnectedAtUnixMs?: number;
+  lastDisconnectedAtUnixMs?: number;
+  lastErrorCode?: string;
+  lastErrorMessage?: string;
+};
+
 export type RuntimeServiceSnapshot = {
   runtimeVersion?: string;
   runtimeCommit?: string;
@@ -71,9 +93,11 @@ export type RuntimeServiceSnapshot = {
   activeWorkload: RuntimeServiceWorkload;
   capabilities?: {
     desktopAiBroker: RuntimeServiceCapability;
+    providerLink: RuntimeServiceCapability;
   };
   bindings?: {
     desktopAiBroker: RuntimeServiceBinding;
+    providerLink: RuntimeServiceProviderLinkBinding;
   };
 };
 

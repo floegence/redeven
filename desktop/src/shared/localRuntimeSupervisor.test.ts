@@ -57,13 +57,13 @@ function buildPlan(
 }
 
 describe('localRuntimeSupervisor', () => {
-  it('allows provider Open to start the singleton runtime when it is not running', () => {
+  it('keeps provider Open from starting or bootstrapping the singleton runtime when it is not running', () => {
     expect(buildDesktopLocalRuntimeOpenPlan(providerTarget, undefined)).toMatchObject({
       state: 'not_running',
       runtime_running: false,
-      can_open: true,
+      can_open: false,
       can_prepare: true,
-      requires_bootstrap: true,
+      requires_bootstrap: false,
       requires_restart: false,
     });
   });
@@ -83,15 +83,15 @@ describe('localRuntimeSupervisor', () => {
     });
   });
 
-  it('plans a Desktop-managed restart when the singleton runtime needs provider binding', () => {
+  it('requires an explicit provider link when the singleton runtime is unbound', () => {
     expect(buildPlan(runtime())).toMatchObject({
-      state: 'restart_to_bind',
+      state: 'needs_provider_link',
       runtime_running: true,
       runtime_matches_target: false,
       desktop_can_manage: true,
-      can_open: true,
+      can_open: false,
       can_prepare: true,
-      requires_restart: true,
+      requires_restart: false,
     });
   });
 
@@ -153,7 +153,7 @@ describe('localRuntimeSupervisor', () => {
     });
   });
 
-  it('blocks automatic restart when active work would be interrupted', () => {
+  it('keeps unbound active local work running instead of restarting to bind a provider', () => {
     expect(buildPlan(runtime({
       runtime_service: runtimeService({
         active_workload: {
@@ -164,11 +164,11 @@ describe('localRuntimeSupervisor', () => {
         },
       }),
     }))).toMatchObject({
-      state: 'blocked_active_work',
+      state: 'needs_provider_link',
       can_open: false,
-      can_prepare: false,
-      requires_restart: true,
-      requires_confirmation: true,
+      can_prepare: true,
+      requires_restart: false,
+      requires_confirmation: false,
     });
   });
 
@@ -236,8 +236,8 @@ describe('localRuntimeSupervisor', () => {
   it('uses the plan as the auto-route authority without overriding explicit remote preference', () => {
     const plan = buildDesktopLocalRuntimeOpenPlan(providerTarget, undefined);
 
-    expect(desktopLocalRuntimePlanAllowsAutoLocalOpen(plan, 'auto')).toBe(true);
-    expect(desktopLocalRuntimePlanAllowsAutoLocalOpen(plan, 'local_host')).toBe(true);
+    expect(desktopLocalRuntimePlanAllowsAutoLocalOpen(plan, 'auto')).toBe(false);
+    expect(desktopLocalRuntimePlanAllowsAutoLocalOpen(plan, 'local_host')).toBe(false);
     expect(desktopLocalRuntimePlanAllowsAutoLocalOpen(plan, 'remote_desktop')).toBe(false);
   });
 });

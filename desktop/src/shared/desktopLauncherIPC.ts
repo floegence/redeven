@@ -50,6 +50,8 @@ export type DesktopLauncherActionOutcome =
   | 'opened_environment_window'
   | 'focused_environment_window'
   | 'started_environment_runtime'
+  | 'connected_provider_local_runtime'
+  | 'disconnected_provider_local_runtime'
   | 'stopped_environment_runtime'
   | 'canceled_launcher_operation'
   | 'refreshed_environment_runtime'
@@ -82,6 +84,7 @@ export type DesktopLauncherActionFailureCode =
   | 'provider_sync_required'
   | 'provider_unreachable'
   | 'provider_invalid_response'
+  | 'provider_link_failed'
   | 'runtime_start_failed'
   | 'operation_missing'
   | 'operation_not_cancelable'
@@ -92,6 +95,8 @@ export type DesktopLauncherActionKind =
   | 'open_remote_environment'
   | 'open_ssh_environment'
   | 'start_environment_runtime'
+  | 'connect_provider_local_runtime'
+  | 'disconnect_provider_local_runtime'
   | 'stop_environment_runtime'
   | 'refresh_environment_runtime'
   | 'refresh_all_environment_runtimes'
@@ -275,6 +280,14 @@ export type DesktopLauncherActionRequest = Readonly<
   | ({
       kind: 'start_environment_runtime';
     } & DesktopLauncherRuntimeTarget)
+  | {
+      kind: 'connect_provider_local_runtime';
+      environment_id: string;
+    }
+  | {
+      kind: 'disconnect_provider_local_runtime';
+      environment_id: string;
+    }
   | ({
       kind: 'stop_environment_runtime';
     } & DesktopLauncherRuntimeTarget)
@@ -516,8 +529,17 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       };
     }
     case 'start_environment_runtime':
+    case 'connect_provider_local_runtime':
+    case 'disconnect_provider_local_runtime':
     case 'stop_environment_runtime':
     case 'refresh_environment_runtime': {
+      if (kind === 'connect_provider_local_runtime' || kind === 'disconnect_provider_local_runtime') {
+        const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
+        if (environmentID === '') {
+          return null;
+        }
+        return { kind, environment_id: environmentID } as DesktopLauncherActionRequest;
+      }
       const target = normalizeDesktopLauncherRuntimeTarget(candidate as Record<string, unknown>);
       if (!target) {
         return null;

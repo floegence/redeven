@@ -89,14 +89,14 @@ describe('launcherActionFeedback', () => {
       ok: false,
       code: 'control_plane_auth_required',
       scope: 'control_plane',
-      message: 'Desktop needs fresh provider authorization before it can request a one-time Local Environment bootstrap ticket for this Environment.',
+      message: 'Desktop needs fresh provider authorization before it can open or connect this provider Environment.',
       provider_origin: 'https://cp.example.invalid',
       provider_id: 'example_control_plane',
       env_public_id: 'env_demo',
       should_refresh_snapshot: true,
     })).toEqual({
       title: 'Provider Authorization Expired',
-      message: 'Desktop needs fresh provider authorization before it can request a one-time Local Environment bootstrap ticket for this Environment.',
+      message: 'Desktop needs fresh provider authorization before it can open or connect this provider Environment.',
       tone: 'warning',
       refresh_snapshot: true,
       delivery: 'toast',
@@ -107,6 +107,21 @@ describe('launcherActionFeedback', () => {
         provider_id: 'example_control_plane',
       },
       auto_dismiss: false,
+    });
+  });
+
+  it('keeps provider-link failures separate from runtime-start failures', () => {
+    expect(launcherActionFailurePresentation({
+      ok: false,
+      code: 'provider_link_failed',
+      scope: 'environment',
+      message: 'Desktop failed to connect the Local Runtime to this provider Environment.',
+      should_refresh_snapshot: true,
+    })).toEqual({
+      message: 'Desktop failed to connect the Local Runtime to this provider Environment.',
+      tone: 'warning',
+      refresh_snapshot: true,
+      delivery: 'toast',
     });
   });
 

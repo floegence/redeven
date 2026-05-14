@@ -8,7 +8,10 @@ import {
   runtimeServiceMatchesIdentity,
   runtimeServiceNeedsRuntimeUpdate,
   runtimeServiceOpenReadinessLabel,
+  runtimeServiceProviderLinkBinding,
+  runtimeServiceProviderLinkMatches,
   runtimeServiceSupportsDesktopAIBrokerBinding,
+  runtimeServiceSupportsProviderLink,
 } from './runtimeService';
 
 describe('runtimeService', () => {
@@ -119,6 +122,79 @@ describe('runtimeService', () => {
       ssh_runtime_key: 'ssh:devbox',
       model_count: 2,
       missing_key_provider_ids: ['anthropic', 'openai'],
+    });
+  });
+
+  it('normalizes Provider Link capability and binding status', () => {
+    const snapshot = normalizeRuntimeServiceSnapshot({
+      runtime_version: 'v1.2.3',
+      compatibility: 'compatible',
+      open_readiness: { state: 'openable' },
+      capabilities: {
+        provider_link: {
+          supported: true,
+        },
+      },
+      bindings: {
+        provider_link: {
+          state: 'linked',
+          provider_origin: ' https://cp.example.invalid ',
+          provider_id: ' example_control_plane ',
+          env_public_id: ' env_demo ',
+          local_environment_public_id: ' lenv_demo ',
+          binding_generation: 5,
+          remote_enabled: false,
+          last_connected_at_unix_ms: 1778750000000,
+        },
+      },
+      active_workload: {},
+    });
+
+    expect(runtimeServiceSupportsProviderLink(snapshot)).toBe(true);
+    expect(snapshot.capabilities?.provider_link.bind_method).toBe('runtime_control_v1');
+    expect(runtimeServiceProviderLinkBinding(snapshot)).toMatchObject({
+      state: 'linked',
+      provider_origin: 'https://cp.example.invalid',
+      provider_id: 'example_control_plane',
+      env_public_id: 'env_demo',
+      local_environment_public_id: 'lenv_demo',
+      binding_generation: 5,
+      remote_enabled: true,
+      last_connected_at_unix_ms: 1778750000000,
+    });
+    expect(runtimeServiceProviderLinkMatches(snapshot, {
+      provider_origin: 'https://cp.example.invalid',
+      provider_id: 'example_control_plane',
+      env_public_id: 'env_demo',
+    })).toBe(true);
+    expect(runtimeServiceProviderLinkMatches(snapshot, {
+      provider_origin: 'https://cp.example.invalid',
+      provider_id: 'example_control_plane',
+      env_public_id: 'env_other',
+    })).toBe(false);
+  });
+
+  it('marks Provider Link unsupported when runtime capability is absent', () => {
+    const snapshot = normalizeRuntimeServiceSnapshot({
+      runtime_version: 'v1.2.3',
+      compatibility: 'compatible',
+      open_readiness: { state: 'openable' },
+      bindings: {
+        provider_link: {
+          state: 'linked',
+          provider_origin: 'https://cp.example.invalid',
+          provider_id: 'example_control_plane',
+          env_public_id: 'env_demo',
+          remote_enabled: true,
+        },
+      },
+      active_workload: {},
+    });
+
+    expect(runtimeServiceSupportsProviderLink(snapshot)).toBe(false);
+    expect(runtimeServiceProviderLinkBinding(snapshot)).toMatchObject({
+      state: 'unsupported',
+      remote_enabled: false,
     });
   });
 });

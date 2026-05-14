@@ -17,6 +17,7 @@ import (
 type State struct {
 	LocalUIURL             string                  `json:"local_ui_url,omitempty"`
 	LocalUIURLs            []string                `json:"local_ui_urls,omitempty"`
+	RuntimeControl         *RuntimeControlEndpoint `json:"runtime_control,omitempty"`
 	PasswordRequired       bool                    `json:"password_required"`
 	EffectiveRunMode       string                  `json:"effective_run_mode,omitempty"`
 	RemoteEnabled          bool                    `json:"remote_enabled"`
@@ -34,6 +35,7 @@ type State struct {
 type Snapshot struct {
 	LocalUIURL             string
 	LocalUIURLs            []string
+	RuntimeControl         *RuntimeControlEndpoint
 	PasswordRequired       bool
 	EffectiveRunMode       string
 	RemoteEnabled          bool
@@ -46,6 +48,14 @@ type Snapshot struct {
 	DiagnosticsEnabled     bool
 	PID                    int
 	RuntimeService         runtimeservice.Snapshot
+}
+
+type RuntimeControlEndpoint struct {
+	ProtocolVersion string `json:"protocol_version"`
+	BaseURL         string `json:"base_url"`
+	Token           string `json:"token"`
+	DesktopOwnerID  string `json:"desktop_owner_id"`
+	ExpiresAtUnixMS int64  `json:"expires_at_unix_ms,omitempty"`
 }
 
 func RuntimeStatePath(configPath string) string {
@@ -64,6 +74,7 @@ func WriteState(path string, state State) error {
 
 	state.LocalUIURL = strings.TrimSpace(state.LocalUIURL)
 	state.LocalUIURLs = compactStrings(state.LocalUIURLs)
+	state.RuntimeControl = normalizeRuntimeControlEndpoint(state.RuntimeControl)
 	if state.LocalUIURL == "" {
 		state.LocalUIURL = firstNonEmptyString(state.LocalUIURLs)
 	}
@@ -163,6 +174,7 @@ func parseState(raw []byte) (*Snapshot, error) {
 	return &Snapshot{
 		LocalUIURL:             state.LocalUIURL,
 		LocalUIURLs:            append([]string(nil), state.LocalUIURLs...),
+		RuntimeControl:         normalizeRuntimeControlEndpoint(state.RuntimeControl),
 		PasswordRequired:       state.PasswordRequired,
 		EffectiveRunMode:       strings.TrimSpace(state.EffectiveRunMode),
 		RemoteEnabled:          state.RemoteEnabled,
@@ -176,6 +188,30 @@ func parseState(raw []byte) (*Snapshot, error) {
 		PID:                    state.PID,
 		RuntimeService:         state.RuntimeService,
 	}, nil
+}
+
+func normalizeRuntimeControlEndpoint(endpoint *RuntimeControlEndpoint) *RuntimeControlEndpoint {
+	if endpoint == nil {
+		return nil
+	}
+	protocolVersion := strings.TrimSpace(endpoint.ProtocolVersion)
+	baseURL := strings.TrimSpace(endpoint.BaseURL)
+	token := strings.TrimSpace(endpoint.Token)
+	desktopOwnerID := strings.TrimSpace(endpoint.DesktopOwnerID)
+	if protocolVersion == "" || baseURL == "" || token == "" || desktopOwnerID == "" {
+		return nil
+	}
+	expiresAt := endpoint.ExpiresAtUnixMS
+	if expiresAt < 0 {
+		expiresAt = 0
+	}
+	return &RuntimeControlEndpoint{
+		ProtocolVersion: protocolVersion,
+		BaseURL:         baseURL,
+		Token:           token,
+		DesktopOwnerID:  desktopOwnerID,
+		ExpiresAtUnixMS: expiresAt,
+	}
 }
 
 func Load(path string) (*Snapshot, error) {

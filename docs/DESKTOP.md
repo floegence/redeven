@@ -42,9 +42,6 @@ Desktop may add user-configured startup flags on top of that base command:
 - `--local-ui-bind <host:port>`
 - `--state-root <absolute-state-root>`
 - `--password-stdin`
-- `--controlplane <url>`
-- `--env-id <env_public_id>`
-- `--bootstrap-ticket-env REDEVEN_DESKTOP_BOOTSTRAP_TICKET`
 - `REDEVEN_DESKTOP_OWNER_ID` in the child process environment
 
 Behavior:
@@ -54,16 +51,17 @@ Behavior:
 - Desktop creates one stable, non-secret runtime owner id in Electron `userData` and passes it only to Desktop-managed runtimes through `REDEVEN_DESKTOP_OWNER_ID`.
 - Desktop resolves the managed state root before spawn and passes it explicitly to `redeven run`.
 - The Desktop-owned local runtime uses `~/.redeven/local-environment/config.json`.
-- Desktop startup flows that include a bootstrap target write the same Local Environment config and replace the previous provider binding for that Local Environment profile.
+- The Welcome `Start Runtime` action always starts this runtime local-only. It does not add provider bootstrap flags, request provider open-session material, or connect the runtime to a provider control plane.
+- `--controlplane`, `--env-id`, and `--bootstrap-ticket-env` remain explicit CLI/manual bootstrap inputs. They are not part of the Welcome Local Environment `Start Runtime` path.
 - Desktop attach probing reads `runtime/local-ui.json` from the same resolved state root as the spawned config path.
-- Provider `Open` uses a Local Runtime open plan that accounts for target binding, Desktop ownership, active work, and whether startup, restart, provider bootstrap, or update restart is required.
+- Provider `Open` is a window/navigation action. It can open a remote route or, only after an explicit provider link already exists, open the provider Environment locally. It never silently starts the Local Runtime and never silently connects the Local Runtime to a provider.
 - A Desktop-managed runtime is lifecycle-owned by this Desktop only when `desktop_owner_id` matches the current Desktop owner id. Runtimes owned by another Desktop instance or an external CLI process are not silently adopted.
-- Desktop may restart an unbound, differently bound, or older Desktop-owned runtime only when Runtime Service reports no active workload.
+- Desktop may restart an older Desktop-owned runtime for lifecycle maintenance only when Runtime Service reports no active workload. Provider binding changes are not implemented by restarting the runtime.
 - If active workload is present, Desktop keeps `Open` blocked and shows interruption-safe guidance instead of closing terminals, sessions, tasks, or port forwards implicitly.
 - The Local UI password stays out of process args and environment variables.
-- The one-time bootstrap ticket also stays out of process args and is passed only through a desktop-owned environment variable.
+- Provider one-time bootstrap tickets stay out of process args and renderer state. Welcome provider linking passes them from Electron main to the running runtime through the desktop-only runtime-control endpoint.
 - Desktop startup reports and attachable runtime state include a non-secret `password_required` boolean so launcher and attach flows can describe whether the current runtime is protected.
-- Remote control is enabled only when the local config is already bootstrapped and remote-valid.
+- Remote provider control is enabled only after a successful explicit provider-link operation or an explicit non-Welcome bootstrap launch.
 - `--desktop-managed` disables CLI self-upgrade semantics.
 - Desktop-owned managed-runtime restart stays available, but it is owned by Electron main rather than runtime self-`exec`.
 - Managed restart reuses Desktop-owned startup preferences, including `--password-stdin`, and preserves the current resolved loopback bind when the saved bind uses the advanced auto-port loopback option such as `127.0.0.1:0`.
@@ -71,6 +69,16 @@ Behavior:
 - On lock conflicts, the runtime first tries to attach to an existing Local UI from the same state directory before reporting a blocked launch outcome.
 - Desktop startup settings do not create a second preference-owned runtime target; the resolved Local Environment state directory remains the runtime source of truth.
 - Desktop-managed runtime state never falls back to the Electron process working directory; if no usable home directory exists and no explicit config path is available, startup fails clearly instead of writing inside an arbitrary repository or shell cwd.
+
+Desktop-managed Local Runtime also exposes a separate runtime-control endpoint when it is started by Desktop:
+
+- It listens on a random loopback-only address (`127.0.0.1:0`).
+- It uses a random bearer token plus the Desktop owner id.
+- The endpoint appears in the startup report and `runtime/local-ui.json` for Electron main to consume.
+- The bearer token is not exposed to the renderer, Env App JavaScript, provider pages, Local UI HTTP responses, or process arguments.
+- Provider link operations use `GET /v1/provider-link`, `POST /v1/provider-link/connect`, and `POST /v1/provider-link/disconnect` on this endpoint.
+- Successful `connect` updates the Local Runtime config and starts or replaces the provider control-channel goroutine without restarting Local UI, local direct sessions, terminals, tasks, or port forwards.
+- `disconnect` stops only the provider control channel and clears the persisted provider binding. It does not stop the Local Runtime.
 
 When the selected target is `Remote Environment`, Desktop does not start the bundled binary.
 Instead it validates and probes the configured Local UI base URL, then opens that exact origin in the shell.
@@ -166,6 +174,10 @@ Launcher model:
 - The `Environments` view contains the protected Local Environment, provider environments, saved Redeven URL entries, and saved SSH Host entries. Provider management stays separate from the main open/rebind path.
 - `Environment Settings` is launcher-owned and edits startup behavior for the profile Local Environment; saving settings never switches Environments or creates another local runtime identity.
 - Provider cards keep route choice explicit. A provider Environment may open remotely or link/use the singleton Local Environment locally, but Desktop never creates a second provider-specific local runtime.
+- Local and Provider cards have independent action semantics. The primary card action slot is always `Open`; it may open a route or show a prerequisite popup, but it does not change into `Start Runtime`, `Connect`, or `Restart`.
+- `Start Runtime` appears only in the Local Environment card's `Open` prerequisite popup and its dropdown menu. Provider cards do not expose `Start Runtime`.
+- `Connect Local Runtime` appears only on provider Environment controls and is the only Welcome action that connects the running Local Runtime to that provider Environment.
+- If a provider card is configured for local use but the Local Runtime is not linked to that provider Environment, `Open` shows route guidance and an explicit `Connect Local Runtime` action. It does not auto-link and does not auto-start the runtime.
 - SSH Host entries store the destination, optional port, bootstrap delivery mode, remote install directory, and optional release mirror base URL. Desktop reuses release artifacts for the exact Desktop-managed version and lets the remote host own its runtime state.
 - Runtime health and window state are separate. Cards may show runtime status/version/workload from runtime snapshots, while primary actions stay window-scoped (`Open`, `Opening...`, `Focus`).
 - Runtime health is probed through explicit contracts: Local UI health for local/URL/SSH targets and RCPP runtime-health queries for provider environments.
@@ -246,7 +258,7 @@ Desktop semantics:
 
 - Visibility and port selection are separate controls.
 - The saved configuration applies to the next managed start; the currently running managed URL is displayed separately when available.
-- One Local Environment runtime may be active for the signed-in user / profile state root. Linking another provider Environment replaces the prior local provider binding.
+- One Local Environment runtime may be active for the signed-in user / profile state root. Connecting a provider Environment is an explicit runtime-control operation against that singleton runtime.
 - Provider environments never persist provider-specific local runtime configuration; Desktop derives linked-local readiness from the single Local Environment runtime and its current provider binding.
 - Standalone runtime / CLI and Desktop sessions stay interoperable because both read and write the same Local Environment runtime layout.
 - Externally owned runtimes stay externally owned: Desktop can attach, but restart/update remain delegated to the owner.
@@ -314,12 +326,13 @@ The Control Plane flow is:
 6. Desktop loads `me` and `environments` with the access token.
 7. Desktop stores the provider catalog in `control_planes[*].environments` and reconciles it into first-class `provider_environments` records.
 8. Desktop refreshes access tokens on demand with the stored refresh token.
-9. Desktop requests a provider Environment open session only when it opens a specific provider environment or needs bootstrap data to link that provider Environment to the Local Environment.
+9. Desktop requests a provider Environment open session only when it opens a specific provider environment remotely or when the user explicitly connects that provider Environment to the Local Runtime.
 10. For a remote provider card, Desktop opens the returned `remote_session_url` directly without persisting a remote-only Local Environment state first.
     - The top-level remote session page may in turn host the Env App inside a same-origin boot iframe.
     - Embedded same-origin Env App documents must still inherit the desktop shell bridges and window-chrome contract from the owning session window, so titlebar safe areas, theme state, and environment-scoped renderer storage stay identical to direct desktop-hosted sessions.
-11. For a provider environment used locally, Desktop uses the returned one-time `bootstrap_ticket` to link the bundled Local Environment runtime for the current profile state root.
-12. Rebinding replaces the previous local provider binding; Desktop never materializes a second local runtime state directory for another provider environment.
+11. For an explicit provider-local connection, Desktop sends the returned one-time `bootstrap_ticket` to the running Local Runtime through the desktop-only runtime-control endpoint.
+12. The runtime exchanges that ticket, persists the provider binding only after the exchange succeeds, and starts the provider control channel without restarting the runtime.
+13. Rebinding is blocked while provider-originated work is active. Desktop never materializes a second local runtime state directory for another provider environment.
 
 Browser pages may also open Desktop through a custom protocol link:
 

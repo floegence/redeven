@@ -49,6 +49,7 @@ type desktopLaunchReport struct {
 
 	LocalUIURL             string                  `json:"local_ui_url,omitempty"`
 	LocalUIURLs            []string                `json:"local_ui_urls,omitempty"`
+	RuntimeControl         *runtimeControlEndpoint `json:"runtime_control,omitempty"`
 	PasswordRequired       bool                    `json:"password_required"`
 	EffectiveRunMode       string                  `json:"effective_run_mode,omitempty"`
 	RemoteEnabled          bool                    `json:"remote_enabled"`
@@ -64,6 +65,14 @@ type desktopLaunchReport struct {
 
 	LockOwner   *desktopLaunchLockOwner   `json:"lock_owner,omitempty"`
 	Diagnostics *desktopLaunchDiagnostics `json:"diagnostics,omitempty"`
+}
+
+type runtimeControlEndpoint struct {
+	ProtocolVersion string `json:"protocol_version"`
+	BaseURL         string `json:"base_url"`
+	Token           string `json:"token"`
+	DesktopOwnerID  string `json:"desktop_owner_id"`
+	ExpiresAtUnixMS int64  `json:"expires_at_unix_ms,omitempty"`
 }
 
 func writeDesktopLaunchReport(path string, report desktopLaunchReport) error {

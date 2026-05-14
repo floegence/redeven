@@ -15,7 +15,13 @@ import (
 func TestWriteState(t *testing.T) {
 	runtimePath := filepath.Join(t.TempDir(), "runtime", "local-ui.json")
 	err := WriteState(runtimePath, State{
-		LocalUIURLs:        []string{"http://127.0.0.1:43123/", "", "http://127.0.0.1:43123/"},
+		LocalUIURLs: []string{"http://127.0.0.1:43123/", "", "http://127.0.0.1:43123/"},
+		RuntimeControl: &RuntimeControlEndpoint{
+			ProtocolVersion: "redeven-runtime-control-v1",
+			BaseURL:         "http://127.0.0.1:43124",
+			Token:           "rtctl_test",
+			DesktopOwnerID:  "desktop-owner-1",
+		},
 		PasswordRequired:   true,
 		EffectiveRunMode:   "hybrid",
 		RemoteEnabled:      true,
@@ -57,6 +63,9 @@ func TestWriteState(t *testing.T) {
 	if len(state.LocalUIURLs) != 1 || state.LocalUIURLs[0] != state.LocalUIURL {
 		t.Fatalf("LocalUIURLs = %#v", state.LocalUIURLs)
 	}
+	if state.RuntimeControl == nil || state.RuntimeControl.BaseURL != "http://127.0.0.1:43124" || state.RuntimeControl.Token != "rtctl_test" {
+		t.Fatalf("RuntimeControl = %#v", state.RuntimeControl)
+	}
 	if !state.PasswordRequired {
 		t.Fatalf("PasswordRequired = false, want true")
 	}
@@ -97,7 +106,13 @@ func TestLoadAttachable(t *testing.T) {
 
 	runtimePath := filepath.Join(t.TempDir(), "runtime", "local-ui.json")
 	if err := WriteState(runtimePath, State{
-		LocalUIURLs:        []string{server.URL + "/", "https://example.com/"},
+		LocalUIURLs: []string{server.URL + "/", "https://example.com/"},
+		RuntimeControl: &RuntimeControlEndpoint{
+			ProtocolVersion: "redeven-runtime-control-v1",
+			BaseURL:         "http://127.0.0.1:43124",
+			Token:           "rtctl_test",
+			DesktopOwnerID:  "desktop-owner-state",
+		},
 		EffectiveRunMode:   "hybrid",
 		RemoteEnabled:      true,
 		DesktopManaged:     true,
@@ -127,6 +142,9 @@ func TestLoadAttachable(t *testing.T) {
 	}
 	if state.DesktopOwnerID != "desktop-owner-health" {
 		t.Fatalf("DesktopOwnerID = %q", state.DesktopOwnerID)
+	}
+	if state.RuntimeControl == nil || state.RuntimeControl.Token != "rtctl_test" || state.RuntimeControl.DesktopOwnerID != "desktop-owner-state" {
+		t.Fatalf("RuntimeControl = %#v", state.RuntimeControl)
 	}
 	if state.StateDir != "/tmp/redeven" || !state.DiagnosticsEnabled {
 		t.Fatalf("unexpected diagnostics metadata: %#v", state)

@@ -222,11 +222,13 @@ Semantics:
 
 - Desktop asks for the current open-session materials of one environment.
 - provider may return:
-  - local bootstrap material
+  - a one-time provider-link bootstrap ticket
   - remote desktop session material
   - or both
+- Desktop may use `remote_session_url` to open the provider Environment remotely.
+- Desktop may use `bootstrap_ticket` only for an explicit provider-local connect flow. The Welcome `Open` action must not silently consume the ticket to link a Local Runtime.
 
-### 5.9 Runtime Bootstrap Exchange
+### 5.9 Provider Link / Runtime Bootstrap Exchange
 
 - `POST /api/rcpp/v1/runtime/bootstrap/exchange`
 
@@ -244,11 +246,12 @@ Response:
 
 Semantics:
 
-- runtime exchanges a one-time bootstrap ticket for direct control-channel connection info.
+- runtime exchanges a one-time provider-link bootstrap ticket for direct control-channel connection info.
 - request includes `env_public_id`, `local_environment_public_id`, `agent_instance_id`, and optional host/runtime metadata.
 - response includes `direct` plus `local_environment_binding`.
 - `local_environment_binding.generation` must be persisted by the runtime and echoed in later control-channel register/renewal flows.
-- re-running bootstrap for the same user and `local_environment_public_id` links that user's Local Environment to the new environment; the provider must clear stale binding fields for the previous environment, rotate that environment's direct control-channel credentials, and disconnect its stale control channel.
+- exchanging a new ticket for the same user and `local_environment_public_id` links that user's Local Environment to the new environment; the provider must clear stale binding fields for the previous environment, rotate that environment's direct control-channel credentials, and disconnect its stale control channel.
+- Desktop may deliver the ticket to a running Local Runtime through a desktop-only runtime-control endpoint. Providers do not need a separate protocol branch for startup bootstrap versus hot provider link; the ticket semantics are identical.
 - credential renewal must only advance the generation for the currently matched environment link; it must never create or restore a stale environment binding.
 
 ## 6. Data Model Summary
@@ -356,6 +359,8 @@ Representative error codes:
 - bound to `provider_origin`
 - bound to `env_public_id`
 - exchanged once to link the current user's Local Environment to that environment
+- safe to use either during an explicit bootstrap exchange or during an explicit Desktop runtime-control provider-link command
+- not a renderer credential and not a signal that Desktop should auto-link on `Open`
 
 ## 9. Sequence Flows
 
@@ -378,13 +383,13 @@ Representative error codes:
 3. otherwise Desktop runs the same PKCE authorization flow as section 9.1.
 4. after connect exchange succeeds, Desktop requests `desktop/open-session`.
 5. Desktop decides whether to:
-   - link/open the current user's Local Environment with the bootstrap material
-   - or open `remote_session_url`
+   - open `remote_session_url`
+   - or, only after an explicit user `Connect Local Runtime` action, pass `bootstrap_ticket` to the running Local Runtime through runtime-control
 
-### 9.3 Runtime Bootstrap
+### 9.3 Provider Link / Runtime Bootstrap Exchange
 
 1. Desktop or provider flow obtains a one-time `bootstrap_ticket`.
-2. runtime posts `runtime/bootstrap/exchange`.
+2. runtime posts `runtime/bootstrap/exchange`. Desktop may trigger this in a running Desktop-managed runtime through runtime-control.
 3. provider confirms the Local Environment link and returns direct control-channel connection info.
 4. runtime connects to the provider control channel.
 

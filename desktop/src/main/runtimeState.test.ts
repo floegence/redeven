@@ -79,6 +79,12 @@ describe('runtimeState', () => {
       await fs.writeFile(runtimeStateFile, JSON.stringify({
         local_ui_url: `http://127.0.0.1:${address.port}/`,
         local_ui_urls: [`http://127.0.0.1:${address.port}/`],
+        runtime_control: {
+          protocol_version: 'redeven-runtime-control-v1',
+          base_url: 'http://127.0.0.1:43124',
+          token: 'rtctl_test',
+          desktop_owner_id: 'desktop-owner-state',
+        },
         effective_run_mode: 'hybrid',
         remote_enabled: true,
         desktop_managed: true,
@@ -106,6 +112,12 @@ describe('runtimeState', () => {
       expect(startup).toMatchObject({
         local_ui_url: `http://127.0.0.1:${address.port}/`,
         local_ui_urls: [`http://127.0.0.1:${address.port}/`],
+        runtime_control: {
+          protocol_version: 'redeven-runtime-control-v1',
+          base_url: 'http://127.0.0.1:43124',
+          token: 'rtctl_test',
+          desktop_owner_id: 'desktop-owner-state',
+        },
         password_required: true,
         effective_run_mode: 'hybrid',
         remote_enabled: true,

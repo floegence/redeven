@@ -30,6 +30,12 @@ safe, and `release_review.checked_surfaces` must cover the attach/start,
 Local UI health, startup report, `sys.ping`, Env App maintenance, and SSH
 bootstrap surfaces that could be affected.
 
+Runtime-control capabilities and bindings are release compatibility surfaces.
+Changes to Runtime Service fields such as `capabilities.provider_link`,
+`bindings.provider_link`, startup-report runtime-control metadata, or the
+desktop-only runtime-control provider-link endpoints must be reflected in
+`internal/runtimeservice/compatibility_contract.json` before tagging.
+
 ## GitHub Release notes quality baseline
 
 Each GitHub Release must include:

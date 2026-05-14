@@ -88,6 +88,10 @@ paths that Desktop can read before adopting a process:
     "desktop_ai_broker": {
       "supported": true,
       "bind_method": "runtime_control_v1"
+    },
+    "provider_link": {
+      "supported": true,
+      "bind_method": "runtime_control_v1"
     }
   },
   "bindings": {
@@ -95,6 +99,16 @@ paths that Desktop can read before adopting a process:
       "state": "bound",
       "session_id": "broker_xxx",
       "ssh_runtime_key": "ssh:..."
+    },
+    "provider_link": {
+      "state": "linked",
+      "provider_origin": "https://dev.redeven.test",
+      "provider_id": "dev_redeven",
+      "env_public_id": "env_xxx",
+      "local_environment_public_id": "le_xxx",
+      "binding_generation": 7,
+      "remote_enabled": true,
+      "last_connected_at_unix_ms": 1778750000000
     }
   },
   "active_workload": {
@@ -143,6 +157,7 @@ type RuntimeServiceCapability = Readonly<{
 
 type RuntimeServiceCapabilities = Readonly<{
   desktop_ai_broker: RuntimeServiceCapability;
+  provider_link: RuntimeServiceCapability;
 }>;
 
 type RuntimeServiceBindingState = 'unbound' | 'bound' | 'unsupported' | 'error' | 'expired';
@@ -160,6 +175,29 @@ type RuntimeServiceBinding = Readonly<{
 
 type RuntimeServiceBindings = Readonly<{
   desktop_ai_broker: RuntimeServiceBinding;
+  provider_link: RuntimeServiceProviderLinkBinding;
+}>;
+
+type RuntimeServiceProviderLinkState =
+  | 'unbound'
+  | 'linking'
+  | 'linked'
+  | 'disconnecting'
+  | 'unsupported'
+  | 'error';
+
+type RuntimeServiceProviderLinkBinding = Readonly<{
+  state: RuntimeServiceProviderLinkState;
+  provider_origin?: string;
+  provider_id?: string;
+  env_public_id?: string;
+  local_environment_public_id?: string;
+  binding_generation?: number;
+  remote_enabled: boolean;
+  last_connected_at_unix_ms?: number;
+  last_disconnected_at_unix_ms?: number;
+  last_error_code?: string;
+  last_error_message?: string;
 }>;
 
 type RuntimeServiceSnapshot = Readonly<{
@@ -197,7 +235,10 @@ minimum Runtime version, and review id into every Runtime Service snapshot.
 Desktop and Env App render those fields as maintenance context; they should not
 invent a second compatibility policy in UI-only code.
 
-The same snapshot now also carries `capabilities.desktop_ai_broker` and `bindings.desktop_ai_broker`, which Desktop uses to decide whether an attached SSH runtime can accept the optional `Desktop` model-source binding without falling back to string-based heuristics. A binding error should be shown as model-source availability state, not as a Runtime Service startup failure.
+The same snapshot also carries explicit runtime-control surfaces:
+
+- `capabilities.desktop_ai_broker` and `bindings.desktop_ai_broker` let Desktop decide whether an attached SSH runtime can accept the optional `Desktop` model-source binding without falling back to string-based heuristics. A binding error should be shown as model-source availability state, not as a Runtime Service startup failure.
+- `capabilities.provider_link` and `bindings.provider_link` describe whether a Desktop-managed Local Runtime can accept an explicit provider-link command and which provider Environment, if any, is currently connected.
 
 ### Contract Carriers
 
@@ -225,7 +266,7 @@ Env App protocol SDK types.
 
 Desktop treats the runtime as a singleton per Local Environment profile. Desktop-managed ownership is a lease, not a heuristic: Electron persists one `desktop_owner_id` under `userData`, passes it to managed child processes with `REDEVEN_DESKTOP_OWNER_ID`, and only owns an attached runtime when the runtime reports the same id through startup reports, `runtime/local-ui.json`, and Local UI health/runtime endpoints.
 
-When a provider Environment reuses that singleton locally, the launcher `Open` action may start or restart the Desktop-managed runtime only when active work is empty and Desktop can stop the reported process id. If active workload exists, Desktop keeps the action blocked until the user finishes or stops that work. External-managed runtimes and runtimes leased to another Desktop instance stay outside Desktop ownership and are never silently replaced. Legacy Desktop-managed runtimes without a lease id are restart-reclaimable only when idle.
+When a provider Environment reuses that singleton locally, provider binding is an explicit `Connect Local Runtime` action, not a side effect of `Open` and not a runtime restart plan. Welcome `Start Runtime` starts the singleton Local Runtime local-only. `Connect Local Runtime` obtains provider open-session material, sends the one-time provider-link ticket to the running runtime over runtime-control, and lets the runtime start or replace only the provider control-channel goroutine. Active provider-originated work blocks relink. External-managed runtimes and runtimes leased to another Desktop instance stay outside Desktop ownership and are never silently replaced. Legacy Desktop-managed runtimes without a lease id are restart-reclaimable only when idle for lifecycle maintenance, not for provider binding.
 
 ## Desktop Launcher UI
 
