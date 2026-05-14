@@ -152,6 +152,41 @@ describe('main routing', () => {
     expect(mainSrc.slice(startRuntimeStart, startRuntimeEnd)).toContain('connect_timeout_seconds: request.connect_timeout_seconds');
   });
 
+  it('keeps provider local-link tickets separate from remote open route readiness', () => {
+    const mainSrc = readMainSource();
+
+    const materialStart = mainSrc.indexOf('async function requestProviderDesktopSessionMaterial(');
+    const materialEnd = mainSrc.indexOf('async function prepareProviderRemoteOpenSession(', materialStart);
+    expect(materialStart).toBeGreaterThanOrEqual(0);
+    expect(materialEnd).toBeGreaterThan(materialStart);
+    const materialSrc = mainSrc.slice(materialStart, materialEnd);
+    expect(materialSrc).toContain('requestDesktopOpenSession(');
+    expect(materialSrc).not.toContain('launcherActionFailureForRemoteRouteState');
+
+    const remoteOpenStart = mainSrc.indexOf('async function prepareProviderRemoteOpenSession(');
+    const remoteOpenEnd = mainSrc.indexOf('function providerEnvironmentFailureContext', remoteOpenStart);
+    expect(remoteOpenStart).toBeGreaterThanOrEqual(0);
+    expect(remoteOpenEnd).toBeGreaterThan(remoteOpenStart);
+    const remoteOpenSrc = mainSrc.slice(remoteOpenStart, remoteOpenEnd);
+    expect(remoteOpenSrc).toContain('launcherActionFailureForRemoteRouteState');
+
+    const connectStart = mainSrc.indexOf('async function connectProviderLocalRuntimeFromLauncher(');
+    const connectEnd = mainSrc.indexOf('async function disconnectProviderLocalRuntimeFromLauncher(', connectStart);
+    expect(connectStart).toBeGreaterThanOrEqual(0);
+    expect(connectEnd).toBeGreaterThan(connectStart);
+    const connectSrc = mainSrc.slice(connectStart, connectEnd);
+    expect(connectSrc).toContain('requestProviderDesktopSessionMaterial(preferences, environment)');
+    expect(connectSrc).not.toContain('prepareProviderRemoteOpenSession');
+    expect(connectSrc).not.toContain('launcherActionFailureForRemoteRouteState');
+
+    const openStart = mainSrc.indexOf('async function openProviderEnvironmentFromLauncher(');
+    const openEnd = mainSrc.indexOf('async function focusEnvironmentWindow(', openStart);
+    expect(openStart).toBeGreaterThanOrEqual(0);
+    expect(openEnd).toBeGreaterThan(openStart);
+    const openSrc = mainSrc.slice(openStart, openEnd);
+    expect(openSrc).toContain('prepareProviderRemoteOpenSession(preferences, environment)');
+  });
+
   it('keeps delete actions non-blocking while preventing stale SSH and provider tasks from resurrecting entries', () => {
     const mainSrc = readMainSource();
     const sshDeleteStart = mainSrc.indexOf('async function deleteSavedSSHEnvironmentFromWelcome');
