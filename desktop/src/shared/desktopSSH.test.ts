@@ -5,6 +5,7 @@ import {
   DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
   desktopSSHAuthority,
   desktopSSHEnvironmentID,
+  desktopSSHRuntimeAffectingSettingsMatch,
   normalizeDesktopSSHAuthMode,
   normalizeDesktopSSHBootstrapStrategy,
   normalizeDesktopSSHEnvironmentDetails,
@@ -65,5 +66,36 @@ describe('desktopSSH', () => {
     expect(normalizeDesktopSSHReleaseBaseURL('https://mirror.example.invalid/releases/')).toBe(
       'https://mirror.example.invalid/releases',
     );
+  });
+
+  it('treats release source, bootstrap strategy, and timeout as runtime-affecting settings', () => {
+    const base = normalizeDesktopSSHEnvironmentDetails({
+      ssh_destination: 'devbox',
+      ssh_port: 2222,
+      auth_mode: 'key_agent',
+      remote_install_dir: 'remote_default',
+      bootstrap_strategy: 'auto',
+      release_base_url: '',
+      connect_timeout_seconds: 10,
+    });
+
+    expect(desktopSSHRuntimeAffectingSettingsMatch(base, {
+      ...base,
+      release_base_url: '',
+      bootstrap_strategy: 'auto',
+      connect_timeout_seconds: 10,
+    })).toBe(true);
+    expect(desktopSSHRuntimeAffectingSettingsMatch(base, {
+      ...base,
+      release_base_url: 'https://mirror.example.invalid/releases',
+    })).toBe(false);
+    expect(desktopSSHRuntimeAffectingSettingsMatch(base, {
+      ...base,
+      bootstrap_strategy: 'desktop_upload',
+    })).toBe(false);
+    expect(desktopSSHRuntimeAffectingSettingsMatch(base, {
+      ...base,
+      connect_timeout_seconds: 30,
+    })).toBe(false);
   });
 });
