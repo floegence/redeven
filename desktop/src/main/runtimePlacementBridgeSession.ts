@@ -33,7 +33,7 @@ import {
 } from './runtimePlacementBridgeProtocol';
 
 type BridgeStreamCallbacks = {
-  onData?: (chunk: Buffer) => void;
+  onData?: (chunk: Buffer) => void | Promise<void>;
   onClose?: () => void;
   onError?: (error: Error) => void;
   ready?: Promise<void>;
@@ -41,7 +41,7 @@ type BridgeStreamCallbacks = {
 
 export type RuntimePlacementBridgeStream = Readonly<{
   id: string;
-  onData: (callback: (chunk: Buffer) => void) => void;
+  onData: (callback: (chunk: Buffer) => void | Promise<void>) => void;
   onClose: (callback: () => void) => void;
   onError: (callback: (error: Error) => void) => void;
   write: (chunk: Buffer) => Promise<void>;
@@ -125,6 +125,26 @@ export async function startRuntimePlacementBridgeSession(
   let proxyClose: (() => Promise<void>) | null = null;
 
   bindRecentLog(command.stderr);
+
+  const settleBridgeSession = async (error?: Error) => {
+    if (closed) {
+      return;
+    }
+    closed = true;
+    await proxyClose?.().catch(() => undefined);
+    const callbacksList = [...streams.values()];
+    streams.clear();
+    for (const callbacks of callbacksList) {
+      if (error) {
+        callbacks.onError?.(error);
+      } else {
+        callbacks.onClose?.();
+      }
+    }
+    command.kill('SIGTERM');
+    await command.closed.catch(() => undefined);
+  };
+
   let hello: RuntimePlacementBridgeHello;
   try {
     const firstFrame = await readRuntimePlacementBridgeFrame(command.stdout);
@@ -141,18 +161,21 @@ export async function startRuntimePlacementBridgeSession(
     throw new Error('Runtime Placement Bridge reported Local UI unavailable.');
   }
 
-  void (async () => {
+  const runFrameLoop = async () => {
     for (;;) {
       const frame = await readRuntimePlacementBridgeFrame(command.stdout);
       if (!frame) {
-        break;
+        await settleBridgeSession();
+        return;
       }
       const callbacks = streams.get(frame.header.stream_id);
       if (!callbacks) {
         continue;
       }
       if (frame.header.type === 'stream_data') {
-        callbacks.onData?.(frame.payload);
+        // The stdio bridge has one global flow-control channel; awaiting local
+        // socket writes prevents slow Env App streams from growing unbounded.
+        await callbacks.onData?.(frame.payload);
       } else if (frame.header.type === 'stream_close') {
         streams.delete(frame.header.stream_id);
         callbacks.onClose?.();
@@ -162,21 +185,13 @@ export async function startRuntimePlacementBridgeSession(
         callbacks.onError?.(new Error(`${err.code}: ${err.message}`));
       }
     }
-    if (!closed) {
-      closed = true;
-      for (const callbacks of streams.values()) {
-        callbacks.onClose?.();
-      }
-      streams.clear();
-    }
-  })().catch((error: unknown) => {
-    closed = true;
-    const err = error instanceof Error ? error : new Error(String(error));
-    for (const callbacks of streams.values()) {
-      callbacks.onError?.(err);
-    }
-    streams.clear();
-  });
+  };
+  const startFrameLoop = () => {
+    void runFrameLoop().catch((error: unknown) => {
+      const err = error instanceof Error ? error : new Error(String(error));
+      void settleBridgeSession(err);
+    });
+  };
 
   const bridgeHandle: RuntimePlacementBridgeSessionHandle = {
     openStream: (surface) => {
@@ -209,6 +224,9 @@ export async function startRuntimePlacementBridgeSession(
         },
         write: async (chunk) => {
           await ready;
+          if (closed || !streams.has(streamID)) {
+            throw new Error('Runtime Placement Bridge stream is closed.');
+          }
           await writeRuntimePlacementBridgeFrame(command.stdin, {
             type: 'stream_data',
             stream_id: streamID,
@@ -217,7 +235,10 @@ export async function startRuntimePlacementBridgeSession(
         },
         close: async () => {
           await ready.catch(() => undefined);
-          streams.delete(streamID);
+          const wasOpen = streams.delete(streamID);
+          if (closed || !wasOpen) {
+            return;
+          }
           await writeRuntimePlacementBridgeFrame(command.stdin, {
             type: 'stream_close',
             stream_id: streamID,
@@ -235,6 +256,12 @@ export async function startRuntimePlacementBridgeSession(
     throw error;
   }
   proxyClose = proxy.close;
+  if (closed) {
+    await proxy.close().catch(() => undefined);
+    await closeStreamingCommand(command);
+    throw new Error('Runtime Placement Bridge session closed during startup.');
+  }
+  startFrameLoop();
   const runtimeControl = runtimeControlEndpointFromBridgeHello(hello, proxy.url);
   const runtimeService = hello.runtime_service;
   const placementTargetID = desktopRuntimeTargetID(
@@ -244,17 +271,7 @@ export async function startRuntimePlacementBridgeSession(
   );
 
   const disconnect = async () => {
-    if (closed) {
-      return;
-    }
-    closed = true;
-    await proxyClose?.().catch(() => undefined);
-    for (const callbacks of streams.values()) {
-      callbacks.onClose?.();
-    }
-    streams.clear();
-    command.kill('SIGTERM');
-    await command.closed.catch(() => undefined);
+    await settleBridgeSession();
   };
   const stop = async () => {
     if (!closed) {
@@ -263,7 +280,7 @@ export async function startRuntimePlacementBridgeSession(
         stream_id: 'bridge',
       }).catch(() => undefined);
     }
-    await disconnect();
+    await settleBridgeSession();
   };
 
   const startup: StartupReport = {
