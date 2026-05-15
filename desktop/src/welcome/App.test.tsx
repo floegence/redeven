@@ -886,6 +886,12 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('open={providerRuntimeLinkDialogOpen()}');
     expect(appSrc).not.toMatch(/<ConfirmDialog\b[^>]*open=\{providerRuntimeLinkConfirmation\(\) !== null\}/);
     expect(appSrc).not.toContain('setProviderRuntimeLinkConfirmation((current) => current ? {');
+    expect(appSrc).toContain('const providerRuntimeLinkCandidatePlans = createMemo(() => {');
+    expect(appSrc).toContain('const providerRuntimeLinkSelectedPlan = createMemo(() => (');
+    expect(appSrc).toContain('const providerRuntimeLinkConfirmDisabled = createMemo(() => (');
+    expect(appSrc).toContain('disabled={providerRuntimeLinkConfirmDisabled()}');
+    expect(appSrc).toContain('disabled={!item.canConnect}');
+    expect(appSrc).toContain('<Show when={!item.canConnect}>');
   });
 
   it('restarts SSH runtime maintenance through the SSH start flow when no runtime record exists yet', () => {

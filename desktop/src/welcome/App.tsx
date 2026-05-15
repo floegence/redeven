@@ -93,6 +93,8 @@ import type {
   DesktopContainerEngine,
   DesktopRuntimeHostAccess,
 } from '../shared/desktopRuntimePlacement';
+import { buildDesktopProviderRuntimeLinkPlan } from '../shared/providerRuntimeLinkPlanner';
+import type { DesktopProviderEnvironmentCandidate } from '../shared/providerRuntimeLinkTarget';
 import type { DesktopSSHConfigHost } from '../shared/desktopSSHConfig';
 import type {
   DesktopRuntimeContainerListRequest,
@@ -929,6 +931,41 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   });
   const providerRuntimeLinkCandidates = createMemo(() => (
     providerRuntimeLinkConfirmation()?.environment.provider_environment_candidates ?? []
+  ));
+  const providerRuntimeLinkBusy = createMemo(() => (
+    providerRuntimeLinkConfirmation()?.action === 'disconnect'
+      ? busyStateMatchesAction(busyState(), 'disconnect_provider_runtime')
+      : busyStateMatchesAction(busyState(), 'connect_provider_runtime')
+  ));
+  const providerRuntimeLinkCandidatePlans = createMemo(() => {
+    const target = providerRuntimeLinkConfirmation()?.environment.provider_runtime_link_target;
+    if (!target) {
+      return [] as readonly Readonly<{
+        candidate: DesktopProviderEnvironmentCandidate;
+        canConnect: boolean;
+        message: string;
+      }>[];
+    }
+    return providerRuntimeLinkCandidates().map((candidate) => {
+      const plan = buildDesktopProviderRuntimeLinkPlan(target, candidate);
+      return {
+        candidate,
+        canConnect: plan.can_connect,
+        message: plan.message,
+      };
+    });
+  });
+  const providerRuntimeLinkSelectedPlan = createMemo(() => (
+    providerRuntimeLinkCandidatePlans().find((item) => (
+      item.candidate.provider_environment_id === providerRuntimeLinkProviderEnvironmentID()
+    )) ?? null
+  ));
+  const providerRuntimeLinkConfirmDisabled = createMemo(() => (
+    providerRuntimeLinkBusy()
+    || (
+      providerRuntimeLinkConfirmation()?.action === 'connect'
+      && providerRuntimeLinkSelectedPlan()?.canConnect !== true
+    )
   ));
   const activeActionProgress = createMemo(() => snapshot().action_progress);
   const sshRuntimeProgressItems = createMemo(() => (
@@ -2022,6 +2059,21 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (providerEnvironmentID === '') {
       setErrorMessage('connect', 'Choose a provider environment first.');
       return;
+    }
+    if (confirmation.action === 'connect') {
+      const target = latestEnvironment.provider_runtime_link_target;
+      const providerEnvironment = latestEnvironment.provider_environment_candidates?.find((candidate) => (
+        candidate.provider_environment_id === providerEnvironmentID
+      ));
+      if (!target || !providerEnvironment) {
+        setErrorMessage('connect', 'Desktop could not resolve that provider environment.');
+        return;
+      }
+      const plan = buildDesktopProviderRuntimeLinkPlan(target, providerEnvironment);
+      if (!plan.can_connect) {
+        setErrorMessage('connect', plan.message);
+        return;
+      }
     }
     const ok = confirmation.action === 'disconnect'
       ? await disconnectProviderRuntime(latestEnvironment, providerEnvironmentID, 'connect')
@@ -3173,7 +3225,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         </div>
       </ConfirmDialog>
 
-      <ConfirmDialog
+      <Dialog
         open={providerRuntimeLinkDialogOpen()}
         onOpenChange={(open) => {
           if (!open) {
@@ -3181,12 +3233,25 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           }
         }}
         title={providerRuntimeLinkActionLabel()}
-        confirmText={providerRuntimeLinkActionLabel()}
-        variant={providerRuntimeLinkConfirmation()?.action === 'disconnect' ? 'destructive' : 'default'}
-        loading={providerRuntimeLinkConfirmation()?.action === 'disconnect'
-          ? busyStateMatchesAction(busyState(), 'disconnect_provider_runtime')
-          : busyStateMatchesAction(busyState(), 'connect_provider_runtime')}
-        onConfirm={() => void confirmProviderRuntimeLinkAction()}
+        footer={(
+          <div class="flex justify-end gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => closeProviderRuntimeLinkConfirmation()}
+              disabled={providerRuntimeLinkBusy()}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant={providerRuntimeLinkConfirmation()?.action === 'disconnect' ? 'destructive' : 'primary'}
+              onClick={() => void confirmProviderRuntimeLinkAction()}
+              loading={providerRuntimeLinkBusy()}
+              disabled={providerRuntimeLinkConfirmDisabled()}
+            >
+              {providerRuntimeLinkActionLabel()}
+            </Button>
+          </div>
+        )}
       >
         <div class="space-y-2">
           <p class="text-sm">
@@ -3203,18 +3268,33 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             <div class="space-y-1">
               <p class="text-xs font-medium text-muted-foreground">Provider Environment</p>
               <div class="space-y-1">
-                <For each={providerRuntimeLinkCandidates()}>
-                  {(candidate) => (
-                    <label class="flex cursor-pointer items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted/60">
+                <For each={providerRuntimeLinkCandidatePlans()}>
+                  {(item) => (
+                    <label
+                      class={cn(
+                        'flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-sm',
+                        item.canConnect
+                          ? 'cursor-pointer hover:bg-muted/60'
+                          : 'cursor-not-allowed bg-muted/30 opacity-70',
+                      )}
+                    >
                       <span>
-                        <span class="block font-medium">{candidate.label}</span>
-                        <span class="block text-xs text-muted-foreground">{candidate.provider_label || candidate.provider_origin} · {candidate.env_public_id}</span>
+                        <span class="block font-medium">{item.candidate.label}</span>
+                        <span class="block text-xs text-muted-foreground">{item.candidate.provider_label || item.candidate.provider_origin} · {item.candidate.env_public_id}</span>
+                        <Show when={!item.canConnect}>
+                          <span class="block text-xs text-muted-foreground">{item.message}</span>
+                        </Show>
                       </span>
                       <input
                         type="radio"
                         name="provider-runtime-link-target"
-                        checked={providerRuntimeLinkProviderEnvironmentID() === candidate.provider_environment_id}
-                        onChange={() => setProviderRuntimeLinkProviderEnvironmentID(candidate.provider_environment_id)}
+                        disabled={!item.canConnect}
+                        checked={providerRuntimeLinkProviderEnvironmentID() === item.candidate.provider_environment_id}
+                        onChange={() => {
+                          if (item.canConnect) {
+                            setProviderRuntimeLinkProviderEnvironmentID(item.candidate.provider_environment_id);
+                          }
+                        }}
                       />
                     </label>
                   )}
@@ -3253,7 +3333,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             </p>
           </Show>
         </div>
-      </ConfirmDialog>
+      </Dialog>
     </>
   );
 }

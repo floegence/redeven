@@ -13,6 +13,7 @@ function provider(): DesktopProviderEnvironmentCandidate {
     env_public_id: 'env_demo',
     provider_label: 'Demo Provider',
     route_state: 'online',
+    occupancy: { state: 'available' },
   };
 }
 
@@ -118,6 +119,38 @@ describe('buildDesktopProviderRuntimeLinkPlan', () => {
     });
   });
 
+  it('allows the linked runtime to reconnect even when the provider environment is occupied here', () => {
+    const binding = {
+      state: 'linked' as const,
+      provider_origin: 'https://cp.example.invalid',
+      provider_id: 'example_control_plane',
+      env_public_id: 'env_demo',
+      remote_enabled: false,
+    };
+    expect(buildDesktopProviderRuntimeLinkPlan(target({
+      runtime_service: runtimeService(binding),
+      provider_link_state: 'linked',
+      provider_link_binding: binding,
+      can_connect_provider: true,
+      can_disconnect_provider: true,
+    }), {
+      ...provider(),
+      occupancy: {
+        state: 'linked_here',
+        runtime_target_id: 'ssh:ssh%3Adevbox%3Adefault%3Akey_agent%3Aremote_default',
+        runtime_kind: 'ssh_environment',
+        runtime_label: 'SSH devbox',
+        provider_link_remote_enabled: false,
+        runtime_remote_enabled: false,
+      },
+    })).toMatchObject({
+      state: 'linked_but_remote_disabled',
+      can_connect: true,
+      can_disconnect: true,
+      runtime_matches_provider: true,
+    });
+  });
+
   it('requires disconnecting before linking another provider', () => {
     const binding = {
       state: 'linked' as const,
@@ -134,6 +167,35 @@ describe('buildDesktopProviderRuntimeLinkPlan', () => {
       state: 'linked_elsewhere',
       can_connect: false,
       can_disconnect: false,
+    });
+  });
+
+  it('blocks provider environments already occupied by another managed runtime', () => {
+    expect(buildDesktopProviderRuntimeLinkPlan(target(), {
+      ...provider(),
+      occupancy: {
+        state: 'occupied_by_known_runtime',
+        runtime_target_id: 'local:local',
+        runtime_kind: 'local_environment',
+        runtime_label: 'Local Environment',
+        provider_link_remote_enabled: true,
+        runtime_remote_enabled: true,
+      },
+    })).toMatchObject({
+      state: 'provider_environment_occupied',
+      can_connect: false,
+      message: 'Demo Environment is already connected to Local Environment. Disconnect it from that runtime card before connecting another runtime.',
+    });
+  });
+
+  it('blocks provider environments reported online by the provider when Desktop cannot identify the runtime', () => {
+    expect(buildDesktopProviderRuntimeLinkPlan(target(), {
+      ...provider(),
+      occupancy: { state: 'occupied_by_provider_online_runtime' },
+    })).toMatchObject({
+      state: 'provider_environment_occupied',
+      can_connect: false,
+      message: 'Demo Environment already has an online runtime through the provider. Disconnect that runtime before connecting another runtime.',
     });
   });
 

@@ -844,9 +844,11 @@ function runtimeProviderLinkCanConnect(
   environment: DesktopEnvironmentEntry,
   target: DesktopProviderRuntimeLinkTarget,
 ): boolean {
-  return (environment.provider_environment_candidates ?? []).some((candidate) => (
-    buildDesktopProviderRuntimeLinkPlan(target, candidate).can_connect
+  const plans = (environment.provider_environment_candidates ?? []).map((candidate) => (
+    buildDesktopProviderRuntimeLinkPlan(target, candidate)
   ));
+  return plans.some((plan) => plan.can_connect)
+    || plans.some((plan) => plan.state === 'provider_environment_occupied');
 }
 
 function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly EnvironmentActionMenuItemModel[] {

@@ -786,6 +786,177 @@ describe('desktopWelcomeState', () => {
     expect(JSON.stringify(sshEntry?.provider_runtime_link_target)).not.toContain('base_url');
   });
 
+  it('marks provider environment candidates as occupied per selected runtime target', () => {
+    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
+    const localService = {
+      protocol_version: 'redeven-runtime-v1',
+      service_owner: 'desktop' as const,
+      desktop_managed: true,
+      effective_run_mode: 'desktop',
+      remote_enabled: true,
+      compatibility: 'compatible' as const,
+      open_readiness: { state: 'openable' as const },
+      active_workload: {
+        terminal_count: 0,
+        session_count: 0,
+        task_count: 0,
+        port_forward_count: 0,
+      },
+      capabilities: {
+        desktop_ai_broker: { supported: false },
+        provider_link: {
+          supported: true,
+          bind_method: 'runtime_control_v1',
+        },
+      },
+      bindings: {
+        desktop_ai_broker: { state: 'unsupported' as const },
+        provider_link: {
+          state: 'linked' as const,
+          provider_origin: 'https://cp.example.invalid',
+          provider_id: 'example_control_plane',
+          env_public_id: 'env_demo',
+          remote_enabled: true,
+        },
+      },
+    };
+    const sshID = 'ssh:devbox:2222:key_agent:remote_default';
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        provider_environments: [providerEnvironment],
+        saved_ssh_environments: [{
+          id: sshID,
+          label: 'SSH Lab',
+          ssh_destination: 'devbox',
+          ssh_port: 2222,
+          auth_mode: 'key_agent',
+          remote_install_dir: 'remote_default',
+          bootstrap_strategy: 'desktop_upload',
+          release_base_url: '',
+          connect_timeout_seconds: 10,
+          pinned: false,
+          last_used_at_ms: 100,
+        }],
+      }),
+      managedRuntimePresenceByTargetID: {
+        'local:local': localRuntimePresence({
+          runtime_service: localService,
+        }),
+        'ssh:ssh:devbox:2222:key_agent:remote_default': sshRuntimePresence(),
+      },
+    });
+
+    const localEntry = snapshot.environments.find((entry) => entry.id === 'local');
+    const sshEntry = snapshot.environments.find((entry) => entry.id === sshID);
+    expect(localEntry?.provider_environment_candidates?.[0]).toMatchObject({
+      provider_environment_id: providerEnvironment.id,
+      occupancy: {
+        state: 'linked_here',
+        runtime_target_id: 'local:local',
+        runtime_label: 'Local Environment',
+      },
+    });
+    expect(sshEntry?.provider_environment_candidates?.[0]).toMatchObject({
+      provider_environment_id: providerEnvironment.id,
+      occupancy: {
+        state: 'occupied_by_known_runtime',
+        runtime_target_id: 'local:local',
+        runtime_label: 'Local Environment',
+      },
+    });
+  });
+
+  it('marks provider-reported online environments as occupied when no local runtime identity matches', () => {
+    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
+    const freshSyncAt = Date.now();
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        provider_environments: [providerEnvironment],
+        control_planes: [{
+          provider: testProvider!,
+          account: {
+            provider_id: 'example_control_plane',
+            provider_origin: 'https://cp.example.invalid',
+            display_name: 'Demo Control Plane',
+            user_public_id: 'user_demo',
+            user_display_name: 'Demo User',
+            authorization_expires_at_unix_ms: freshSyncAt + 60_000,
+          },
+          environments: [{
+            provider_id: 'example_control_plane',
+            provider_origin: 'https://cp.example.invalid',
+            env_public_id: 'env_demo',
+            label: 'Demo Environment',
+            environment_url: 'https://cp.example.invalid/env/env_demo',
+            description: 'team sandbox',
+            namespace_public_id: 'ns_demo',
+            namespace_name: 'Demo Team',
+            status: 'online',
+            lifecycle_status: 'active',
+            last_seen_at_unix_ms: freshSyncAt,
+            runtime_health: {
+              env_public_id: 'env_demo',
+              runtime_status: 'online',
+              observed_at_unix_ms: freshSyncAt,
+              last_seen_at_unix_ms: freshSyncAt,
+              offline_reason_code: '',
+              offline_reason: '',
+            },
+          }],
+          display_label: 'Demo Control Plane',
+          last_synced_at_ms: freshSyncAt,
+        }],
+      }),
+      controlPlanes: [{
+        provider: testProvider!,
+        account: {
+          provider_id: 'example_control_plane',
+          provider_origin: 'https://cp.example.invalid',
+          display_name: 'Demo Control Plane',
+          user_public_id: 'user_demo',
+          user_display_name: 'Demo User',
+          authorization_expires_at_unix_ms: freshSyncAt + 60_000,
+        },
+        environments: [{
+          provider_id: 'example_control_plane',
+          provider_origin: 'https://cp.example.invalid',
+          env_public_id: 'env_demo',
+          label: 'Demo Environment',
+          environment_url: 'https://cp.example.invalid/env/env_demo',
+          description: 'team sandbox',
+          namespace_public_id: 'ns_demo',
+          namespace_name: 'Demo Team',
+          status: 'online',
+          lifecycle_status: 'active',
+          last_seen_at_unix_ms: freshSyncAt,
+          runtime_health: {
+            env_public_id: 'env_demo',
+            runtime_status: 'online',
+            observed_at_unix_ms: freshSyncAt,
+            last_seen_at_unix_ms: freshSyncAt,
+            offline_reason_code: '',
+            offline_reason: '',
+          },
+        }],
+        display_label: 'Demo Control Plane',
+        last_synced_at_ms: freshSyncAt,
+        sync_state: 'ready',
+        last_sync_attempt_at_ms: freshSyncAt,
+        last_sync_error_code: '',
+        last_sync_error_message: '',
+        catalog_freshness: 'fresh',
+      }],
+    });
+
+    const localEntry = snapshot.environments.find((entry) => entry.id === 'local');
+    expect(localEntry?.provider_environment_candidates?.[0]).toMatchObject({
+      provider_environment_id: providerEnvironment.id,
+      occupancy: {
+        state: 'occupied_by_provider_online_runtime',
+      },
+    });
+  });
+
   it('projects saved Local and SSH container runtime targets without leaking runtime-control material', () => {
     const localContainerID = 'local:container:docker:container-stable-id:e832df85';
     const sshContainerID = 'ssh:container:devbox%3A2222:docker:container-stable-id:e832df85';

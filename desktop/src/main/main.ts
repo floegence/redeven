@@ -553,6 +553,22 @@ function localRuntimeMatchesProvider(
   );
 }
 
+function runtimeMatchesProvider(
+  startup: StartupReport | null | undefined,
+  providerOrigin: string,
+  providerID: string,
+  envPublicID: string,
+): boolean {
+  return desktopRuntimeProviderBindingMatches(
+    runtimeServiceProviderLinkBinding(startup?.runtime_service),
+    {
+      provider_origin: providerOrigin,
+      provider_id: providerID,
+      env_public_id: envPublicID,
+    },
+  );
+}
+
 function providerRuntimeLinkKindForHostAccess(
   hostAccess: DesktopRuntimeHostAccess,
 ): 'local_environment' | 'ssh_environment' {
@@ -700,6 +716,71 @@ function runtimeTargetProviderBindingFailure(
       : `${runtimeLabel} is not linked to this provider Environment.`,
     providerEnvironmentFailureContext(environment),
   );
+}
+
+function providerEnvironmentOccupiedFailure(
+  environment: DesktopProviderEnvironmentRecord,
+  runtimeLabel: string,
+): DesktopLauncherActionFailure {
+  return launcherActionFailure(
+    'environment_in_use',
+    'environment',
+    `${environment.label || environment.env_public_id} already has an online runtime${runtimeLabel ? ` through ${runtimeLabel}` : ' through the provider'}. Disconnect it before connecting another runtime.`,
+    {
+      ...providerEnvironmentFailureContext(environment),
+      shouldRefreshSnapshot: true,
+    },
+  );
+}
+
+function runtimeTargetRecordMatchesProvider(
+  runtimeTarget: ProviderRuntimeLinkTargetRecord,
+  providerOrigin: string,
+  providerID: string,
+  envPublicID: string,
+): boolean {
+  return runtimeMatchesProvider(runtimeTarget.record.startup, providerOrigin, providerID, envPublicID);
+}
+
+function providerEnvironmentOccupyingRuntime(
+  environment: DesktopProviderEnvironmentRecord,
+  selectedRuntimeTargetID: DesktopProviderRuntimeLinkTargetID,
+): ProviderRuntimeLinkTargetRecord | null {
+  const providerOrigin = compact(environment.provider_origin);
+  const providerID = compact(environment.provider_id);
+  const envPublicID = compact(environment.env_public_id);
+  if (providerOrigin === '' || providerID === '' || envPublicID === '') {
+    return null;
+  }
+  const records: ProviderRuntimeLinkTargetRecord[] = [];
+  if (localEnvironmentRuntimeRecord) {
+    records.push({
+      kind: 'local_environment',
+      id: desktopProviderRuntimeLinkTargetID('local_environment', localEnvironmentRuntimeRecord.environment_id),
+      label: localEnvironmentRuntimeRecord.label,
+      record: localEnvironmentRuntimeRecord,
+    });
+  }
+  for (const record of sshEnvironmentRuntimeByKey.values()) {
+    records.push({
+      kind: 'ssh_environment',
+      id: desktopProviderRuntimeLinkTargetID('ssh_environment', record.runtime_key),
+      label: record.label,
+      record,
+    });
+  }
+  for (const record of runtimePlacementBridgeByTargetID.values()) {
+    records.push({
+      kind: record.session.host_access.kind === 'ssh_host' ? 'ssh_environment' : 'local_environment',
+      id: record.target_id,
+      label: record.label,
+      record,
+    });
+  }
+  return records.find((record) => (
+    record.id !== selectedRuntimeTargetID
+    && runtimeTargetRecordMatchesProvider(record, providerOrigin, providerID, envPublicID)
+  )) ?? null;
 }
 
 type ProviderDesktopSessionMaterial = Readonly<{
@@ -4859,6 +4940,22 @@ async function connectProviderRuntimeFromLauncher(
   const currentBinding = runtimeServiceProviderLinkBinding(runtimeRecord.startup.runtime_service);
   if (currentBinding.state === 'linked' && !localRuntimeMatchesProvider(runtimeRecord.startup, environment)) {
     return runtimeTargetProviderBindingFailure(environment, runtimeTarget.label, runtimeRecord.startup);
+  }
+  const occupyingRuntime = providerEnvironmentOccupyingRuntime(environment, runtimeTarget.id);
+  if (occupyingRuntime) {
+    return providerEnvironmentOccupiedFailure(environment, occupyingRuntime.label);
+  }
+  const providerRoute = controlPlaneRouteSnapshot(
+    preferences,
+    environment.provider_origin,
+    environment.provider_id,
+    environment.env_public_id,
+  );
+  if (
+    providerRoute.environment?.runtime_health?.runtime_status === 'online'
+    && !localRuntimeMatchesProvider(runtimeRecord.startup, environment)
+  ) {
+    return providerEnvironmentOccupiedFailure(environment, '');
   }
   if (!runtimeServiceSupportsProviderLink(runtimeRecord.startup.runtime_service)) {
     return launcherActionFailure(
