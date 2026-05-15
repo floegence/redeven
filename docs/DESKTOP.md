@@ -78,7 +78,7 @@ Desktop-managed Local Runtime also exposes a separate runtime-control endpoint w
 - The bearer token is not exposed to the renderer, Env App JavaScript, provider pages, Local UI HTTP responses, or process arguments.
 - Provider link operations use `GET /v1/provider-link`, `POST /v1/provider-link/connect`, and `POST /v1/provider-link/disconnect` on this endpoint.
 - Successful `connect` updates the Local Runtime config and starts or replaces the provider control-channel goroutine without restarting Local UI, local direct sessions, terminals, tasks, or port forwards.
-- `disconnect` stops only the provider control channel and clears the persisted provider binding. It does not stop the Local Runtime.
+- Successful `disconnect` first sends `runtime_disconnect` over the current provider control channel, waits for the provider to clear the current binding, and only then clears the persisted provider binding and stops that control channel. It does not stop the Local Runtime.
 
 When the selected target is `Remote Environment`, Desktop does not start the bundled binary.
 Instead it validates and probes the configured Local UI base URL, then opens that exact origin in the shell.

@@ -2070,7 +2070,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }, errorTarget);
     const disconnected = result?.outcome === 'disconnected_provider_runtime';
     if (disconnected) {
-      showActionToast(`${environment.label} disconnected from provider.`, 'info');
+      showActionToast('Disconnected from provider.', 'info');
     }
     return disconnected;
   }

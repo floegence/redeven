@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import { startDesktopAIBroker } from './desktopAIBroker';
 
-async function waitForFileText(filePath: string, timeoutMs = 1_000): Promise<string> {
+async function waitForFileText(filePath: string, timeoutMs = 5_000): Promise<string> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     try {

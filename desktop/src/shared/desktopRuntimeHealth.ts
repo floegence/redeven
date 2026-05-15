@@ -22,6 +22,8 @@ export type DesktopRuntimeOfflineReasonCode =
   | 'probe_failed'
   | 'provider_reported_offline'
   | 'provider_unavailable'
+  | 'runtime_disconnected'
+  | 'binding_replaced'
   | 'environment_removed'
   | 'environment_inactive'
   | 'external_unreachable';

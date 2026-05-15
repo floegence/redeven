@@ -1289,6 +1289,69 @@ describe('desktopWelcomeState', () => {
     expect(providerEntry?.managed_runtime_placement).toBeUndefined();
   });
 
+  it('uses provider runtime disconnect reason from provider health', () => {
+    if (!testProvider) {
+      throw new Error('missing test provider');
+    }
+    const provider = testProvider;
+    const providerEnvironment = testProviderEnvironment(provider.provider_origin, 'env_demo', {
+      providerID: provider.provider_id,
+      label: 'Demo Environment',
+    });
+    const now = Date.now();
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        provider_environments: [providerEnvironment],
+        control_planes: [{
+          provider,
+          account: {
+            provider_id: provider.provider_id,
+            provider_origin: provider.provider_origin,
+            display_name: 'Example Control Plane',
+            user_public_id: 'user_demo',
+            user_display_name: 'Demo User',
+            authorization_expires_at_unix_ms: now + 60_000,
+          },
+          environments: [{
+            provider_id: provider.provider_id,
+            provider_origin: provider.provider_origin,
+            env_public_id: 'env_demo',
+            label: 'Demo Environment',
+            environment_url: 'https://cp.example.invalid/env/env_demo',
+            description: 'team sandbox',
+            namespace_public_id: 'ns_demo',
+            namespace_name: 'Demo Team',
+            status: 'offline',
+            lifecycle_status: 'active',
+            last_seen_at_unix_ms: 456,
+            runtime_health: {
+              env_public_id: 'env_demo',
+              runtime_status: 'offline',
+              observed_at_unix_ms: 789,
+              last_seen_at_unix_ms: 456,
+              offline_reason_code: 'runtime_disconnected',
+              offline_reason: 'The runtime disconnected from this provider.',
+            },
+          }],
+          display_label: 'Demo Control Plane',
+          last_synced_at_ms: now,
+        }],
+      }),
+    });
+
+    expect(snapshot.environments).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: providerEnvironment.id,
+        runtime_health: expect.objectContaining({
+          status: 'offline',
+          source: 'provider_batch_probe',
+          offline_reason_code: 'runtime_disconnected',
+          offline_reason: 'The runtime disconnected from this provider.',
+        }),
+      }),
+    ]));
+  });
+
   it('threads Control Plane runtime state into provider environment library entries', () => {
     const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
     const managedControlPlane = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo', {
