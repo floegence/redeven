@@ -594,7 +594,7 @@ describe('buildEnvironmentCardModel', () => {
     ]);
   });
 
-  it('shows container placement facts and avoids implicit starts for external stopped containers', () => {
+  it('shows container placement facts and hides start when the container is unavailable', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: testLocalEnvironment(),
@@ -607,13 +607,13 @@ describe('buildEnvironmentCardModel', () => {
             container_engine: 'docker',
             container_id: 'container-stable-id',
             container_label: 'dev-container',
-            container_owner: 'external',
             runtime_root: '/workspace/.redeven',
             bridge_strategy: 'exec_stream',
           },
           running: false,
           local_ui_url: '',
           openable: false,
+          lifecycle_control: 'observe_only',
           runtime_control_status: {
             state: 'missing',
             reason_code: 'not_started',
@@ -630,14 +630,12 @@ describe('buildEnvironmentCardModel', () => {
         container_engine: 'docker',
         container_id: 'container-stable-id',
         container_label: 'dev-container',
-        container_owner: 'external',
       },
     });
     expect(buildEnvironmentCardFactsModel(localEntry!)).toEqual(expect.arrayContaining([
       defaultFact('RUNS ON', 'This device'),
       defaultFact('CONTAINER', 'dev-container'),
       defaultFact('ENGINE', 'Docker'),
-      defaultFact('OWNER', 'External'),
     ]));
     const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);
     expect(actionModel.action_presentation.menu_actions.map((item) => item.id)).not.toContain('start_runtime');

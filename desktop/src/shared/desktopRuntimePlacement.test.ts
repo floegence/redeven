@@ -35,14 +35,12 @@ describe('desktopRuntimePlacement', () => {
       container_engine: 'Docker',
       container_id: ' abc123 ',
       container_label: ' dev-container ',
-      container_owner: 'external',
       runtime_root: ' /workspace/.redeven ',
     })).toEqual({
       kind: 'container_process',
       container_engine: 'docker',
       container_id: 'abc123',
       container_label: 'dev-container',
-      container_owner: 'external',
       runtime_root: '/workspace/.redeven',
       bridge_strategy: 'exec_stream',
     });
@@ -66,7 +64,6 @@ describe('desktopRuntimePlacement', () => {
       container_engine: 'podman',
       container_id: 'container-stable-id',
       container_label: 'renamable-label',
-      container_owner: 'desktop',
       runtime_root: '/var/lib/redeven/runtime',
     });
 

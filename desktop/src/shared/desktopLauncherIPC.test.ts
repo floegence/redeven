@@ -28,7 +28,6 @@ describe('desktopLauncherIPC', () => {
         container_engine: ' Docker ',
         container_id: ' container-stable-id ',
         container_label: ' Dev Container ',
-        container_owner: 'external',
         runtime_root: ' /workspace/.redeven ',
       },
     })).toEqual({
@@ -42,7 +41,6 @@ describe('desktopLauncherIPC', () => {
         container_engine: 'docker',
         container_id: 'container-stable-id',
         container_label: 'Dev Container',
-        container_owner: 'external',
         runtime_root: '/workspace/.redeven',
         bridge_strategy: 'exec_stream',
       },
@@ -66,7 +64,6 @@ describe('desktopLauncherIPC', () => {
         container_engine: ' Docker ',
         container_id: ' container-stable-id ',
         container_label: ' Dev Container ',
-        container_owner: 'external',
         runtime_root: ' /workspace/.redeven ',
       },
       force_runtime_update: true,
@@ -82,7 +79,6 @@ describe('desktopLauncherIPC', () => {
         container_engine: 'docker',
         container_id: 'container-stable-id',
         container_label: 'Dev Container',
-        container_owner: 'external',
         runtime_root: '/workspace/.redeven',
         bridge_strategy: 'exec_stream',
       },
@@ -240,7 +236,6 @@ describe('desktopLauncherIPC', () => {
         container_engine: 'docker',
         container_id: 'container-stable-id',
         container_label: 'dev-container',
-        container_owner: 'desktop',
         runtime_root: '/workspace/.redeven',
       },
     })).toEqual(expect.objectContaining({
@@ -257,7 +252,6 @@ describe('desktopLauncherIPC', () => {
       }),
       placement: expect.objectContaining({
         kind: 'container_process',
-        container_owner: 'desktop',
         bridge_strategy: 'exec_stream',
       }),
     }));
@@ -340,7 +334,6 @@ describe('desktopLauncherIPC', () => {
         container_engine: 'podman',
         container_id: 'dev',
         container_label: 'dev',
-        container_owner: 'external',
         runtime_root: '/runtime',
         bridge_strategy: 'exec_stream',
       },
@@ -368,7 +361,6 @@ describe('desktopLauncherIPC', () => {
         container_engine: 'podman',
         container_id: 'dev',
         container_label: 'dev',
-        container_owner: 'external',
         runtime_root: '/runtime',
         bridge_strategy: 'exec_stream',
       },

@@ -35,11 +35,25 @@ describe('bootstrapDesktopLauncherBridge', () => {
           },
         ]);
       }
+      if (channel === 'redeven-desktop:launcher-list-runtime-containers') {
+        return Promise.resolve({
+          ok: true,
+          containers: [
+            {
+              engine: 'docker',
+              container_id: 'container-stable-id',
+              container_label: 'dev-container',
+              image: 'redeven-dev:latest',
+              status_text: 'Up 2 minutes',
+            },
+          ],
+        });
+      }
       return Promise.resolve({ ok: true, outcome: 'opened_environment_window' });
     });
   });
 
-  it('exposes snapshot loading, SSH config hosts, action dispatch, and snapshot subscriptions to the renderer', async () => {
+  it('exposes snapshot loading, SSH config hosts, container listing, action dispatch, and snapshot subscriptions to the renderer', async () => {
     const { bootstrapDesktopLauncherBridge } = await import('./desktopLauncher');
 
     bootstrapDesktopLauncherBridge();
@@ -47,6 +61,7 @@ describe('bootstrapDesktopLauncherBridge', () => {
     const [, bridge] = exposeInMainWorld.mock.calls[0] ?? [];
     expect(typeof bridge.getSnapshot).toBe('function');
     expect(typeof bridge.getSSHConfigHosts).toBe('function');
+    expect(typeof bridge.listRuntimeContainers).toBe('function');
     expect(typeof bridge.performAction).toBe('function');
     expect(typeof bridge.subscribeActionProgress).toBe('function');
     expect(typeof bridge.subscribeSnapshot).toBe('function');
@@ -61,6 +76,21 @@ describe('bootstrapDesktopLauncherBridge', () => {
         source_path: '/Users/tester/.ssh/config',
       },
     ]);
+    await expect(bridge.listRuntimeContainers({
+      host_access: { kind: 'local_host' },
+      engine: 'docker',
+    })).resolves.toEqual({
+      ok: true,
+      containers: [
+        {
+          engine: 'docker',
+          container_id: 'container-stable-id',
+          container_label: 'dev-container',
+          image: 'redeven-dev:latest',
+          status_text: 'Up 2 minutes',
+        },
+      ],
+    });
     await bridge.performAction({
       kind: 'open_remote_environment',
       external_local_ui_url: 'http://192.168.1.11:24000/',
@@ -72,13 +102,17 @@ describe('bootstrapDesktopLauncherBridge', () => {
 
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(1, 'redeven-desktop:launcher-get-snapshot');
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(2, 'redeven-desktop:launcher-get-ssh-config-hosts');
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(3, 'redeven-desktop:launcher-perform-action', {
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(3, 'redeven-desktop:launcher-list-runtime-containers', {
+      host_access: { kind: 'local_host' },
+      engine: 'docker',
+    });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(4, 'redeven-desktop:launcher-perform-action', {
       kind: 'open_remote_environment',
       external_local_ui_url: 'http://192.168.1.11:24000/',
       environment_id: 'env-1',
       label: 'Work laptop',
     });
-    expect(ipcRendererInvoke).toHaveBeenCalledTimes(3);
+    expect(ipcRendererInvoke).toHaveBeenCalledTimes(4);
     expect(ipcRendererOn).toHaveBeenCalledWith(
       'redeven-desktop:launcher-action-progress',
       expect.any(Function),

@@ -17,12 +17,25 @@ import {
   normalizeDesktopSSHConfigHosts,
   type DesktopSSHConfigHost,
 } from '../shared/desktopSSHConfig';
+import {
+  DESKTOP_LAUNCHER_LIST_RUNTIME_CONTAINERS_CHANNEL,
+  normalizeDesktopRuntimeContainerListResponse,
+  type DesktopRuntimeContainerListRequest,
+  type DesktopRuntimeContainerListResponse,
+} from '../shared/desktopContainerRuntime';
 
 export function bootstrapDesktopLauncherBridge(): void {
   contextBridge.exposeInMainWorld('redevenDesktopLauncher', {
     getSnapshot: (): Promise<DesktopWelcomeSnapshot> => ipcRenderer.invoke(DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL),
     getSSHConfigHosts: async (): Promise<readonly DesktopSSHConfigHost[]> => (
       normalizeDesktopSSHConfigHosts(await ipcRenderer.invoke(DESKTOP_LAUNCHER_GET_SSH_CONFIG_HOSTS_CHANNEL))
+    ),
+    listRuntimeContainers: async (
+      request: DesktopRuntimeContainerListRequest,
+    ): Promise<DesktopRuntimeContainerListResponse> => (
+      normalizeDesktopRuntimeContainerListResponse(
+        await ipcRenderer.invoke(DESKTOP_LAUNCHER_LIST_RUNTIME_CONTAINERS_CHANNEL, request),
+      )
     ),
     performAction: (request: DesktopLauncherActionRequest): Promise<DesktopLauncherActionResult> =>
       ipcRenderer.invoke(DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL, request),

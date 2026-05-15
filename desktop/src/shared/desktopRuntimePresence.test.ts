@@ -41,7 +41,7 @@ describe('desktopRuntimePresence', () => {
     ]);
   });
 
-  it('does not implicitly start external containers', () => {
+  it('starts only the runtime process for running container placements', () => {
     expect(desktopManagedRuntimeLifecycleActions({
       running: false,
       lifecycle_control: 'start_stop',
@@ -50,7 +50,24 @@ describe('desktopRuntimePresence', () => {
         container_engine: 'docker',
         container_id: 'abc123',
         container_label: 'web',
-        container_owner: 'external',
+        runtime_root: '/runtime',
+        bridge_strategy: 'exec_stream',
+      },
+    })).toEqual([
+      { intent: 'start_runtime', label: 'Start runtime', primary: true },
+      { intent: 'refresh_runtime', label: 'Refresh runtime status', primary: false },
+    ]);
+  });
+
+  it('uses observe-only lifecycle for unavailable containers', () => {
+    expect(desktopManagedRuntimeLifecycleActions({
+      running: false,
+      lifecycle_control: 'observe_only',
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'abc123',
+        container_label: 'web',
         runtime_root: '/runtime',
         bridge_strategy: 'exec_stream',
       },

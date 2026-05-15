@@ -97,8 +97,9 @@ import {
   startManagedSSHRuntime,
 } from './sshRuntime';
 import {
+  containerListCommand,
   containerInspectCommand,
-  containerStartCommand,
+  parseContainerListOutput,
   parseContainerInspectJSON,
 } from './containerRuntime';
 import {
@@ -234,6 +235,11 @@ import {
   type DesktopWelcomeIssue,
 } from '../shared/desktopLauncherIPC';
 import { DESKTOP_LAUNCHER_GET_SSH_CONFIG_HOSTS_CHANNEL } from '../shared/desktopSSHConfig';
+import {
+  DESKTOP_LAUNCHER_LIST_RUNTIME_CONTAINERS_CHANNEL,
+  normalizeDesktopRuntimeContainerListRequest,
+  type DesktopRuntimeContainerListResponse,
+} from '../shared/desktopContainerRuntime';
 import {
   DESKTOP_SESSION_APP_READY_CHANNEL,
   DESKTOP_SESSION_CONTEXT_GET_CHANNEL,
@@ -1003,11 +1009,9 @@ async function inspectSavedRuntimeTargetState(
         'not_started',
         inspected.status === 'running'
           ? 'Start this runtime before connecting it to a provider.'
-          : 'Start the container outside Desktop, then start this runtime.',
+          : 'This container is not running. Start it outside Redeven, then refresh and start the runtime again.',
       ),
-      lifecycle_control: inspected.status === 'stopped' && inspected.owner === 'external'
-        ? 'observe_only'
-        : 'start_stop',
+      lifecycle_control: inspected.status === 'running' ? 'start_stop' : 'observe_only',
     };
   } catch {
     return {
@@ -1015,9 +1019,9 @@ async function inspectSavedRuntimeTargetState(
       local_ui_url: '',
       runtime_control_status: desktopRuntimeControlStatusMissing(
         'not_started',
-        'Refresh this runtime after the container is reachable.',
+        'Refresh this runtime after the container is reachable and running.',
       ),
-      lifecycle_control: target.placement.container_owner === 'external' ? 'observe_only' : 'start_stop',
+      lifecycle_control: 'observe_only',
     };
   }
 }
@@ -4583,7 +4587,21 @@ async function inspectRuntimeTargetContainer(
   return parseContainerInspectJSON(placement.container_engine, result.stdout);
 }
 
-async function startRuntimeTargetContainerIfNeeded(
+function containerUnavailableMessage(
+  placement: Extract<DesktopRuntimePlacement, Readonly<{ kind: 'container_process' }>>,
+  status: string,
+): string {
+  const label = placement.container_label || placement.container_id;
+  if (status === 'missing') {
+    return `Container ${label} was not found. Choose a running container, then try again.`;
+  }
+  if (status === 'no_permission') {
+    return `Desktop does not have permission to inspect ${label}. Check ${placement.container_engine} access, then try again.`;
+  }
+  return `Container ${label} is not running. Start it outside Redeven, then refresh and try again.`;
+}
+
+async function assertRuntimeTargetContainerRunning(
   hostAccess: DesktopRuntimeHostAccess,
   placement: Extract<DesktopRuntimePlacement, Readonly<{ kind: 'container_process' }>>,
 ): Promise<void> {
@@ -4591,19 +4609,7 @@ async function startRuntimeTargetContainerIfNeeded(
   if (inspected.status === 'running') {
     return;
   }
-  if (inspected.status === 'missing') {
-    throw new Error(`Container ${placement.container_label || placement.container_id} was not found.`);
-  }
-  if (inspected.status === 'no_permission') {
-    throw new Error(`Desktop does not have permission to inspect ${placement.container_label || placement.container_id}.`);
-  }
-  if (inspected.owner !== 'desktop') {
-    throw new Error('This external container is stopped. Start it from its container owner, then start the runtime in Desktop.');
-  }
-  const executor = hostAccess.kind === 'ssh_host'
-    ? createSSHRuntimeHostExecutor(hostAccess.ssh)
-    : createLocalRuntimeHostExecutor();
-  await executor.run(containerStartCommand(placement.container_engine, inspected.container_id));
+  throw new Error(containerUnavailableMessage(placement, inspected.status));
 }
 
 async function startRuntimePlacementBridgeRecordFromLauncher(
@@ -4614,7 +4620,7 @@ async function startRuntimePlacementBridgeRecordFromLauncher(
   if (placement.kind !== 'container_process') {
     throw new Error('Runtime Placement Bridge requires a container runtime target.');
   }
-  await startRuntimeTargetContainerIfNeeded(hostAccess, placement);
+  await assertRuntimeTargetContainerRunning(hostAccess, placement);
   const existing = runtimePlacementBridgeByTargetID.get(runtimeTargetIDFromRequest(request)) ?? null;
   if (existing) {
     return existing;
@@ -6080,6 +6086,9 @@ async function setSavedRuntimeTargetPinnedFromWelcome(
 async function upsertSavedRuntimeTargetFromWelcome(
   request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'upsert_saved_runtime_target' }>>,
 ): Promise<void> {
+  if (request.placement.kind === 'container_process') {
+    await assertRuntimeTargetContainerRunning(request.host_access, request.placement);
+  }
   const preferences = await loadDesktopPreferencesCached();
   const next = upsertSavedRuntimeTarget(preferences, {
     id: request.environment_id,
@@ -6132,6 +6141,39 @@ async function deleteSavedRuntimeTargetFromWelcome(environmentID: string): Promi
     }
     await runtimeRecord.session.disconnect().catch(() => undefined);
     runtimePlacementBridgeByTargetID.delete(runtimeTargetID);
+  }
+}
+
+async function listRuntimeContainersFromLauncher(
+  request: unknown,
+): Promise<DesktopRuntimeContainerListResponse> {
+  const normalized = normalizeDesktopRuntimeContainerListRequest(request);
+  if (!normalized) {
+    return {
+      ok: false,
+      message: 'Choose a valid host and container engine first.',
+    };
+  }
+  try {
+    const executor = normalized.host_access.kind === 'ssh_host'
+      ? createSSHRuntimeHostExecutor(normalized.host_access.ssh)
+      : createLocalRuntimeHostExecutor();
+    const result = await executor.run(containerListCommand(normalized.engine), {
+      signal: AbortSignal.timeout(DESKTOP_RUNTIME_PROBE_TIMEOUT_MS),
+    });
+    return {
+      ok: true,
+      containers: parseContainerListOutput(normalized.engine, result.stdout),
+    };
+  } catch (error) {
+    const hostLabel = normalized.host_access.kind === 'ssh_host'
+      ? ` on ${normalized.host_access.ssh.ssh_destination}`
+      : '';
+    const message = firstDisplayLine(error instanceof Error ? error.message : String(error));
+    return {
+      ok: false,
+      message: message || `Desktop could not list running ${normalized.engine} containers${hostLabel}.`,
+    };
   }
 }
 
@@ -6236,8 +6278,16 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       });
       return launcherActionSuccess('saved_environment');
     case 'upsert_saved_runtime_target':
-      await upsertSavedRuntimeTargetFromWelcome(request);
-      return launcherActionSuccess('saved_environment');
+      try {
+        await upsertSavedRuntimeTargetFromWelcome(request);
+        return launcherActionSuccess('saved_environment');
+      } catch (error) {
+        return launcherActionFailure(
+          'action_invalid',
+          'dialog',
+          error instanceof Error ? error.message : String(error),
+        );
+      }
     case 'delete_saved_environment':
       await deleteSavedEnvironmentFromWelcome(request.environment_id);
       return launcherActionSuccess('deleted_environment');
@@ -6719,6 +6769,9 @@ if (!app.requestSingleInstanceLock()) {
   ));
   ipcMain.handle(DESKTOP_LAUNCHER_GET_SSH_CONFIG_HOSTS_CHANNEL, async () => (
     loadDesktopSSHConfigHosts()
+  ));
+  ipcMain.handle(DESKTOP_LAUNCHER_LIST_RUNTIME_CONTAINERS_CHANNEL, async (_event, request): Promise<DesktopRuntimeContainerListResponse> => (
+    listRuntimeContainersFromLauncher(request)
   ));
   ipcMain.handle(DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL, async (_event, request): Promise<DesktopLauncherActionResult> => {
     const normalized = normalizeDesktopLauncherActionRequest(request);

@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   containerInspectCommand,
+  containerListCommand,
   containerRuntimeExecCommand,
-  containerStartCommand,
-  containerStopCommand,
+  parseContainerListOutput,
   parseContainerInspectJSON,
 } from './containerRuntime';
 
@@ -23,7 +23,6 @@ describe('containerRuntime', () => {
       engine: 'docker',
       container_id: 'container-stable-id',
       container_label: 'dev-container',
-      owner: 'desktop',
       status: 'running',
     });
   });
@@ -38,9 +37,41 @@ describe('containerRuntime', () => {
       engine: 'podman',
       container_id: 'podman-stable-id',
       container_label: 'web',
-      owner: 'external',
       status: 'stopped',
     });
+  });
+
+  it('parses running container list output for picker options', () => {
+    expect(parseContainerListOutput('docker', [
+      JSON.stringify({
+        ID: 'container-stable-id',
+        Names: 'dev-container',
+        Image: 'redeven-dev:latest',
+        Status: 'Up 2 minutes',
+      }),
+      '',
+      JSON.stringify({
+        ID: 'other-container-id',
+        Names: 'api,api-alias',
+        Image: 'api:local',
+        Status: 'Up 1 hour',
+      }),
+    ].join('\n'))).toEqual([
+      {
+        engine: 'docker',
+        container_id: 'other-container-id',
+        container_label: 'api',
+        image: 'api:local',
+        status_text: 'Up 1 hour',
+      },
+      {
+        engine: 'docker',
+        container_id: 'container-stable-id',
+        container_label: 'dev-container',
+        image: 'redeven-dev:latest',
+        status_text: 'Up 2 minutes',
+      },
+    ]);
   });
 
   it('builds explicit inspect and exec commands without relying on published ports', () => {
@@ -48,6 +79,13 @@ describe('containerRuntime', () => {
       'docker',
       'inspect',
       'dev-container',
+    ]);
+    expect(containerListCommand('docker')).toEqual([
+      'docker',
+      'ps',
+      '--no-trunc',
+      '--format',
+      '{{json .}}',
     ]);
     expect(containerRuntimeExecCommand({
       engine: 'podman',
@@ -67,21 +105,6 @@ describe('containerRuntime', () => {
       'redeven',
       'desktop-bridge',
     ]);
-  });
-
-  it('builds container lifecycle commands only from explicit container ids', () => {
-    expect(containerStartCommand('docker', 'container-stable-id')).toEqual([
-      'docker',
-      'start',
-      'container-stable-id',
-    ]);
-    expect(containerStopCommand('podman', 'podman-stable-id')).toEqual([
-      'podman',
-      'stop',
-      'podman-stable-id',
-    ]);
-    expect(() => containerStartCommand('docker', '')).toThrow('Container ID');
-    expect(() => containerStopCommand('podman', '')).toThrow('Container ID');
   });
 
   it('rejects malformed command inputs instead of falling back', () => {

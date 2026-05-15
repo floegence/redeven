@@ -14,7 +14,6 @@ export type DesktopRuntimeHostAccess =
     }>;
 
 export type DesktopContainerEngine = 'docker' | 'podman';
-export type DesktopRuntimeContainerOwner = 'desktop' | 'external';
 
 export type DesktopRuntimePlacement =
   | Readonly<{
@@ -26,7 +25,6 @@ export type DesktopRuntimePlacement =
       container_engine: DesktopContainerEngine;
       container_id: string;
       container_label: string;
-      container_owner: DesktopRuntimeContainerOwner;
       runtime_root: string;
       bridge_strategy: 'exec_stream';
     }>;
@@ -70,10 +68,6 @@ export function normalizeDesktopContainerEngine(value: unknown): DesktopContaine
   }
 }
 
-export function normalizeDesktopRuntimeContainerOwner(value: unknown): DesktopRuntimeContainerOwner {
-  return compact(value).toLowerCase() === 'desktop' ? 'desktop' : 'external';
-}
-
 export function normalizeDesktopRuntimeHostAccess(value: unknown): DesktopRuntimeHostAccess {
   const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
   const kind = compact(record.kind);
@@ -115,7 +109,6 @@ export function normalizeDesktopRuntimePlacement(value: unknown): DesktopRuntime
       container_engine: normalizeDesktopContainerEngine(record.container_engine),
       container_id: normalizeTokenComponent(record.container_id, 'Container ID'),
       container_label: compact(record.container_label) || compact(record.container_id),
-      container_owner: normalizeDesktopRuntimeContainerOwner(record.container_owner),
       runtime_root: normalizeTokenComponent(record.runtime_root, 'Container runtime root'),
       bridge_strategy: 'exec_stream',
     };
