@@ -185,7 +185,11 @@ export async function ensureRuntimePlacementReady(
     `Desktop is checking for a compatible Redeven ${runtimeReleaseTag} runtime inside the container.`,
   );
   let probe = await probeContainerRuntime(executor, args.placement, runtimeReleaseTag, args.signal);
-  if (probe.status !== 'ready' || args.force_runtime_update === true) {
+  const sourceRuntimeRoot = compact(args.source_runtime_root);
+  const shouldInstallRuntime = probe.status !== 'ready'
+    || args.force_runtime_update === true
+    || sourceRuntimeRoot !== '';
+  if (shouldInstallRuntime) {
     emitProgress(
       args.on_progress,
       'preparing_runtime_package',
@@ -196,7 +200,7 @@ export async function ensureRuntimePlacementReady(
       runtimeReleaseTag,
       releaseBaseURL: args.release_base_url,
       assetCacheRoot: args.asset_cache_root,
-      sourceRuntimeRoot: args.source_runtime_root,
+      sourceRuntimeRoot,
       platform,
       fetchPolicy: runtimeReleaseFetchPolicy(args.timeout_ms ?? 45_000, args.signal),
       signal: args.signal,
