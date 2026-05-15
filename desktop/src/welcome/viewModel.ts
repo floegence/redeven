@@ -527,7 +527,6 @@ function runtimePlacementFacts(environment: DesktopEnvironmentEntry): readonly E
   return [
     buildEnvironmentCardFact('CONTAINER', placement.container_label || placement.container_id),
     buildEnvironmentCardFact('ENGINE', placement.container_engine === 'podman' ? 'Podman' : 'Docker'),
-    buildEnvironmentCardFact('OWNER', placement.container_owner === 'desktop' ? 'Desktop-owned' : 'External'),
   ];
 }
 

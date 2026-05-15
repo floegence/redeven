@@ -26,7 +26,6 @@ describe('runtimePlacementBridge', () => {
         container_engine: 'docker',
         container_id: 'container-stable-id',
         container_label: 'dev-container',
-        container_owner: 'external',
         runtime_root: '/workspace/.redeven',
         bridge_strategy: 'exec_stream',
       },

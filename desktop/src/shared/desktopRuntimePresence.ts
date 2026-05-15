@@ -120,17 +120,10 @@ export function desktopManagedRuntimeLifecycleActions(
       label: 'Stop runtime',
       primary: true,
     });
-  } else if (presence.placement.kind === 'container_process' && presence.placement.container_owner === 'external') {
-    actions.push({
-      intent: 'refresh_runtime',
-      label: 'Refresh runtime status',
-      primary: false,
-    });
-    return actions;
   } else {
     actions.push({
       intent: 'start_runtime',
-      label: presence.placement.kind === 'container_process' ? 'Start Container and Runtime' : 'Start runtime',
+      label: 'Start runtime',
       primary: true,
     });
   }

@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { Motion, Presence } from 'solid-motionone';
 import { cn, FloeProvider, useCommand, useTheme } from '@floegence/floe-webapp-core';
@@ -91,9 +91,14 @@ import {
 } from '../shared/desktopSSH';
 import type {
   DesktopContainerEngine,
-  DesktopRuntimeContainerOwner,
+  DesktopRuntimeHostAccess,
 } from '../shared/desktopRuntimePlacement';
 import type { DesktopSSHConfigHost } from '../shared/desktopSSHConfig';
+import type {
+  DesktopRuntimeContainerListRequest,
+  DesktopRuntimeContainerListResponse,
+  DesktopRuntimeContainerOption,
+} from '../shared/desktopContainerRuntime';
 import {
   applyDesktopAccessAutoPortToDraft,
   applyDesktopAccessFixedPortToDraft,
@@ -205,6 +210,7 @@ import {
 type DesktopLauncherBridge = Readonly<{
   getSnapshot: () => Promise<DesktopWelcomeSnapshot>;
   getSSHConfigHosts?: () => Promise<readonly DesktopSSHConfigHost[]>;
+  listRuntimeContainers?: (request: DesktopRuntimeContainerListRequest) => Promise<DesktopRuntimeContainerListResponse>;
   performAction: (request: DesktopLauncherActionRequest) => Promise<DesktopLauncherActionResult>;
   subscribeActionProgress?: (listener: (progress: DesktopLauncherActionProgress) => void) => (() => void);
   subscribeSnapshot: (listener: (snapshot: DesktopWelcomeSnapshot) => void) => (() => void);
@@ -274,7 +280,6 @@ type RuntimeContainerConnectionDialogState = Readonly<{
   container_engine: DesktopContainerEngine;
   container_id: string;
   container_label: string;
-  container_owner: DesktopRuntimeContainerOwner;
   runtime_root: string;
 }>;
 
@@ -440,6 +445,47 @@ function formatIssueToastMessage(issue: DesktopWelcomeIssue): string {
   return title !== '' && message !== title ? `${title}: ${message}` : message;
 }
 
+function runtimeContainerHostAccessFromDialogState(
+  state: RuntimeContainerConnectionDialogState,
+): DesktopRuntimeHostAccess | null {
+  if (state.connection_kind === 'local_container_runtime') {
+    return { kind: 'local_host' };
+  }
+  const sshDestination = trimString(state.ssh_destination);
+  if (sshDestination === '') {
+    return null;
+  }
+  const sshPortText = trimString(state.ssh_port);
+  return {
+    kind: 'ssh_host',
+    ssh: {
+      ssh_destination: sshDestination,
+      ssh_port: sshPortText === '' ? null : Number.parseInt(sshPortText, 10),
+      auth_mode: state.auth_mode,
+      remote_install_dir: trimString(state.remote_install_dir) || DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
+      bootstrap_strategy: state.bootstrap_strategy,
+      release_base_url: trimString(state.release_base_url),
+      connect_timeout_seconds: trimString(state.connect_timeout_seconds) === ''
+        ? DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS
+        : Number(trimString(state.connect_timeout_seconds)),
+    },
+  };
+}
+
+function runtimeContainerOptionsRequestKey(state: ConnectionDialogState): string {
+  if (state?.connection_kind !== 'local_container_runtime' && state?.connection_kind !== 'ssh_container_runtime') {
+    return '';
+  }
+  const hostAccess = runtimeContainerHostAccessFromDialogState(state);
+  if (!hostAccess) {
+    return '';
+  }
+  return JSON.stringify({
+    host_access: hostAccess,
+    engine: state.container_engine,
+  });
+}
+
 function issueToastTone(issue: DesktopWelcomeIssue): DesktopActionToastTone {
   if (issue.scope === 'startup' || issue.code === 'state_dir_locked') {
     return 'warning';
@@ -554,7 +600,6 @@ function createRuntimeContainerConnectionDialogState(
     container_engine: overrides.container_engine ?? 'docker',
     container_id: trimString(overrides.container_id),
     container_label: trimString(overrides.container_label),
-    container_owner: overrides.container_owner ?? 'external',
     runtime_root: trimString(overrides.runtime_root) || '/workspace/.redeven',
   };
 }
@@ -770,6 +815,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [connectionDialogState, setConnectionDialogState] = createSignal<ConnectionDialogState>(null);
   const [sshConfigHosts, setSSHConfigHosts] = createSignal<readonly DesktopSSHConfigHost[]>([]);
   const [sshConfigHostsLoaded, setSSHConfigHostsLoaded] = createSignal(false);
+  const [runtimeContainerOptions, setRuntimeContainerOptions] = createSignal<readonly DesktopRuntimeContainerOption[]>([]);
+  const [runtimeContainerOptionsLoading, setRuntimeContainerOptionsLoading] = createSignal(false);
+  const [runtimeContainerOptionsError, setRuntimeContainerOptionsError] = createSignal('');
+  const [runtimeContainerOptionsKey, setRuntimeContainerOptionsKey] = createSignal('');
   const [controlPlaneDialogState, setControlPlaneDialogState] = createSignal<ControlPlaneDialogState>(null);
   const [deleteTarget, setDeleteTarget] = createSignal<DesktopEnvironmentEntry | null>(null);
   const [runtimeMaintenanceConfirmation, setRuntimeMaintenanceConfirmation] = createSignal<RuntimeMaintenanceConfirmationState | null>(null);
@@ -794,6 +843,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   let nextActionToastID = 0;
   let settingsErrorRef: HTMLElement | undefined;
   let sshConfigHostsLoading = false;
+  let runtimeContainerOptionsRequestID = 0;
 
   const visibleSurface = createMemo<DesktopLauncherSurface>(() => snapshot().surface);
   const status = createMemo(() => shellStatus(snapshot()));
@@ -1018,10 +1068,93 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   createEffect(() => {
-    if (connectionDialogState()?.connection_kind === 'ssh_environment' && !sshConfigHostsLoaded()) {
+    const kind = connectionDialogState()?.connection_kind;
+    if ((kind === 'ssh_environment' || kind === 'ssh_container_runtime') && !sshConfigHostsLoaded()) {
       void refreshSSHConfigHosts();
     }
   });
+
+  async function refreshRuntimeContainerOptions(force = false): Promise<void> {
+    const state = connectionDialogState();
+    if (state?.connection_kind !== 'local_container_runtime' && state?.connection_kind !== 'ssh_container_runtime') {
+      setRuntimeContainerOptions([]);
+      setRuntimeContainerOptionsError('');
+      setRuntimeContainerOptionsKey('');
+      setRuntimeContainerOptionsLoading(false);
+      runtimeContainerOptionsRequestID += 1;
+      return;
+    }
+    const key = runtimeContainerOptionsRequestKey(state);
+    if (key === '') {
+      setRuntimeContainerOptions([]);
+      setRuntimeContainerOptionsError('');
+      setRuntimeContainerOptionsKey('');
+      setRuntimeContainerOptionsLoading(false);
+      runtimeContainerOptionsRequestID += 1;
+      return;
+    }
+    if (!force && runtimeContainerOptionsKey() === key) {
+      return;
+    }
+    const hostAccess = runtimeContainerHostAccessFromDialogState(state);
+    if (!hostAccess) {
+      return;
+    }
+    if (!props.runtime.launcher.listRuntimeContainers) {
+      setRuntimeContainerOptions([]);
+      setRuntimeContainerOptionsError('This Desktop build cannot list containers. Update Desktop before creating container runtime targets.');
+      setRuntimeContainerOptionsKey(key);
+      return;
+    }
+    const requestID = runtimeContainerOptionsRequestID + 1;
+    runtimeContainerOptionsRequestID = requestID;
+    setRuntimeContainerOptionsLoading(true);
+    setRuntimeContainerOptionsError('');
+    try {
+      const result = await props.runtime.launcher.listRuntimeContainers({
+        host_access: hostAccess,
+        engine: state.container_engine,
+      });
+      if (requestID !== runtimeContainerOptionsRequestID) {
+        return;
+      }
+      setRuntimeContainerOptionsKey(key);
+      if (result.ok) {
+        setRuntimeContainerOptions(result.containers);
+        setRuntimeContainerOptionsError('');
+        const currentDialogState = connectionDialogState();
+        const selectedID = trimString(
+          currentDialogState?.connection_kind === 'local_container_runtime' || currentDialogState?.connection_kind === 'ssh_container_runtime'
+            ? currentDialogState.container_id
+            : '',
+        );
+        if (selectedID !== '' && !result.containers.some((container) => container.container_id === selectedID)) {
+          setRuntimeContainerOptionsError('The selected container is no longer running. Start it outside Redeven, refresh this list, then choose it again.');
+        }
+      } else {
+        setRuntimeContainerOptions([]);
+        setRuntimeContainerOptionsError(result.message);
+      }
+    } catch (error) {
+      if (requestID !== runtimeContainerOptionsRequestID) {
+        return;
+      }
+      setRuntimeContainerOptions([]);
+      setRuntimeContainerOptionsError(getErrorMessage(error) || 'Desktop could not list running containers.');
+      setRuntimeContainerOptionsKey(key);
+    } finally {
+      if (requestID === runtimeContainerOptionsRequestID) {
+        setRuntimeContainerOptionsLoading(false);
+      }
+    }
+  }
+
+  createEffect(on(
+    () => runtimeContainerOptionsRequestKey(connectionDialogState()),
+    () => {
+      void refreshRuntimeContainerOptions();
+    },
+  ));
 
   function dismissActionToast(toastID: number): void {
     const handle = actionToastTimers.get(toastID);
@@ -1298,7 +1431,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         container_engine: environment.managed_runtime_placement.container_engine,
         container_id: environment.managed_runtime_placement.container_id,
         container_label: environment.managed_runtime_placement.container_label,
-        container_owner: environment.managed_runtime_placement.container_owner,
         runtime_root: environment.managed_runtime_placement.runtime_root,
       }));
     } else if (environment.kind === 'local_environment') {
@@ -1413,7 +1545,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function updateConnectionDialogField(
-    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'remote_install_dir' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_label' | 'container_owner' | 'runtime_root',
+    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'remote_install_dir' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_label' | 'runtime_root',
     value: string,
   ): void {
     setConnectionDialogState((current) => {
@@ -1423,6 +1555,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return {
         ...current,
         [name]: value,
+        ...(
+          (name === 'ssh_destination' || name === 'ssh_port')
+          && current.connection_kind === 'ssh_container_runtime'
+            ? { container_id: '', container_label: '' }
+            : {}
+        ),
       };
     });
   }
@@ -1441,6 +1579,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return {
         ...current,
         bootstrap_strategy: strategy,
+        ...(current.connection_kind === 'ssh_container_runtime' ? { container_id: '', container_label: '' } : {}),
       };
     });
   }
@@ -2462,7 +2601,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           container_engine: request.state.container_engine,
           container_id: trimString(request.state.container_id),
           container_label: trimString(request.state.container_label) || trimString(request.state.container_id),
-          container_owner: request.state.container_owner,
           runtime_root: trimString(request.state.runtime_root),
           bridge_strategy: 'exec_stream',
         },
@@ -2505,7 +2643,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       (state?.connection_kind === 'local_container_runtime' || state?.connection_kind === 'ssh_container_runtime')
       && !trimString(state.container_id)
     ) {
-      errors.container_id = 'Container is required.';
+      errors.container_id = 'Choose a running container.';
+    }
+    if (
+      (state?.connection_kind === 'local_container_runtime' || state?.connection_kind === 'ssh_container_runtime')
+      && trimString(state.container_id)
+      && !runtimeContainerOptions().some((container) => container.container_id === trimString(state.container_id))
+    ) {
+      errors.container_id = 'Choose a running container from the current list.';
     }
     if (
       (state?.connection_kind === 'local_container_runtime' || state?.connection_kind === 'ssh_container_runtime')
@@ -2885,6 +3030,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       <ConnectionDialog
         state={connectionDialogState()}
         sshConfigHosts={sshConfigHosts()}
+        containerOptions={runtimeContainerOptions()}
+        containerOptionsLoading={runtimeContainerOptionsLoading()}
+        containerOptionsError={runtimeContainerOptionsError()}
         error={connectionDialogError()}
         fieldErrors={connectionDialogFieldErrors()}
         busyState={busyState()}
@@ -2894,6 +3042,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           }
         }}
         updateField={updateConnectionDialogField}
+        refreshContainerOptions={() => {
+          void refreshRuntimeContainerOptions(true);
+        }}
         switchKind={switchConnectionDialogKind}
         switchBootstrapStrategy={switchSSHBootstrapStrategy}
         clearFieldErrors={() => setConnectionDialogFieldErrors({})}
@@ -5741,17 +5892,288 @@ function SSHDestinationCombobox(props: Readonly<{
   );
 }
 
+function runtimeContainerSearchText(container: DesktopRuntimeContainerOption): string {
+  return [
+    container.container_label,
+    container.container_id,
+    container.image,
+    container.status_text,
+  ].join(' ').toLowerCase();
+}
+
+function ContainerPicker(props: Readonly<{
+  selectedContainerID: string;
+  selectedContainerLabel: string;
+  containers: readonly DesktopRuntimeContainerOption[];
+  loading: boolean;
+  disabled: boolean;
+  error: string;
+  emptyMessage: string;
+  fieldError: string | undefined;
+  onSelect: (container: DesktopRuntimeContainerOption) => void;
+  onRefresh: () => void;
+}>) {
+  const [open, setOpen] = createSignal(false);
+  const [query, setQuery] = createSignal('');
+  const [highlightedIndex, setHighlightedIndex] = createSignal(0);
+  let closeTimer: number | undefined;
+
+  const selectedLabel = createMemo(() => (
+    trimString(props.selectedContainerLabel)
+    || props.containers.find((container) => container.container_id === props.selectedContainerID)?.container_label
+    || trimString(props.selectedContainerID)
+  ));
+  const filteredContainers = createMemo(() => {
+    const cleanQuery = trimString(query()).toLowerCase();
+    const source = props.containers;
+    return cleanQuery === ''
+      ? source
+      : source.filter((container) => runtimeContainerSearchText(container).includes(cleanQuery));
+  });
+
+  createEffect(() => {
+    const count = filteredContainers().length;
+    if (count <= 0) {
+      setHighlightedIndex(0);
+      return;
+    }
+    if (highlightedIndex() >= count) {
+      setHighlightedIndex(count - 1);
+    }
+  });
+
+  createEffect(on(
+    () => props.selectedContainerID,
+    () => {
+      setQuery('');
+    },
+  ));
+
+  onCleanup(() => {
+    if (closeTimer !== undefined) {
+      window.clearTimeout(closeTimer);
+    }
+  });
+
+  function openMenu(): void {
+    if (props.disabled) {
+      return;
+    }
+    if (closeTimer !== undefined) {
+      window.clearTimeout(closeTimer);
+      closeTimer = undefined;
+    }
+    setOpen(true);
+  }
+
+  function closeMenuSoon(): void {
+    closeTimer = window.setTimeout(() => setOpen(false), 100);
+  }
+
+  function selectContainer(container: DesktopRuntimeContainerOption): void {
+    props.onSelect(container);
+    setOpen(false);
+  }
+
+  function moveHighlight(delta: number): void {
+    const count = filteredContainers().length;
+    if (count <= 0) {
+      return;
+    }
+    setHighlightedIndex((current) => (current + delta + count) % count);
+  }
+
+  return (
+    <div
+      class="space-y-1.5"
+      onFocusOut={(event) => {
+        const nextTarget = event.relatedTarget as Node | null;
+        if (nextTarget && event.currentTarget.contains(nextTarget)) {
+          return;
+        }
+        closeMenuSoon();
+      }}
+    >
+      <div class="flex items-center justify-between gap-2">
+        <label for="environment-container-picker" class="block text-xs font-medium text-foreground">
+          Container <span class="text-destructive">*</span>
+        </label>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          class="h-7 px-2 text-[11px]"
+          loading={props.loading}
+          disabled={props.disabled || props.loading}
+          onClick={props.onRefresh}
+        >
+          <Refresh class="mr-1 h-3.5 w-3.5" />
+          Refresh
+        </Button>
+      </div>
+      <div class="relative">
+        <button
+          id="environment-container-picker"
+          type="button"
+          class={cn(
+            'flex h-8 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-left text-sm transition-colors',
+            props.disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-ring',
+            props.fieldError && 'border-destructive ring-1 ring-destructive/20',
+          )}
+          disabled={props.disabled}
+          onClick={openMenu}
+          onKeyDown={(event) => {
+            if (props.disabled) {
+              return;
+            }
+            if (!open() && (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter')) {
+              event.preventDefault();
+              setOpen(true);
+              return;
+            }
+            if (!open()) {
+              return;
+            }
+            if (event.key === 'ArrowDown') {
+              event.preventDefault();
+              moveHighlight(1);
+            } else if (event.key === 'ArrowUp') {
+              event.preventDefault();
+              moveHighlight(-1);
+            } else if (event.key === 'Enter') {
+              event.preventDefault();
+              const container = filteredContainers()[highlightedIndex()];
+              if (container) {
+                selectContainer(container);
+              }
+            } else if (event.key === 'Escape') {
+              event.preventDefault();
+              setOpen(false);
+            }
+          }}
+          aria-haspopup="listbox"
+          aria-expanded={open() ? 'true' : 'false'}
+          aria-controls="environment-container-picker-options"
+        >
+          <span class={cn('min-w-0 truncate', selectedLabel() ? 'text-foreground' : 'text-muted-foreground')}>
+            {selectedLabel() || (props.loading ? 'Loading running containers...' : 'Choose a running container')}
+          </span>
+          <ChevronDown class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        </button>
+        <Show when={open() && !props.disabled}>
+          <div
+            id="environment-container-picker-options"
+            class="absolute left-0 right-0 z-50 mt-1 overflow-hidden rounded-md border border-border bg-popover shadow-xl"
+            role="listbox"
+          >
+            <div class="border-b border-border/70 p-2">
+              <Input
+                value={query()}
+                onInput={(event) => {
+                  setQuery(event.currentTarget.value);
+                  setHighlightedIndex(0);
+                }}
+                placeholder="Filter containers"
+                size="sm"
+                class="w-full"
+                onKeyDown={(event) => {
+                  if (event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    moveHighlight(1);
+                  } else if (event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    moveHighlight(-1);
+                  }
+                }}
+              />
+            </div>
+            <div
+              class="max-h-64 overflow-auto p-1"
+              onWheel={(event) => {
+                const el = event.currentTarget as HTMLElement;
+                event.stopPropagation();
+                if (el.scrollHeight > el.clientHeight) {
+                  el.scrollTop += event.deltaY;
+                }
+              }}
+            >
+              <Show
+                when={filteredContainers().length > 0}
+                fallback={(
+                  <div class="px-3 py-3 text-xs text-muted-foreground">
+                    {props.emptyMessage}
+                  </div>
+                )}
+              >
+                <For each={filteredContainers()}>
+                  {(container, index) => (
+                    <button
+                      type="button"
+                      id={`environment-container-option-${index()}`}
+                      class={cn(
+                        'flex w-full cursor-pointer items-center justify-between gap-3 rounded px-2.5 py-2 text-left transition-colors',
+                        highlightedIndex() === index()
+                          ? 'bg-accent text-accent-foreground'
+                          : 'text-foreground hover:bg-accent/70 hover:text-accent-foreground',
+                      )}
+                      role="option"
+                      aria-selected={props.selectedContainerID === container.container_id ? 'true' : 'false'}
+                      onMouseEnter={() => setHighlightedIndex(index())}
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        selectContainer(container);
+                      }}
+                    >
+                      <span class="min-w-0">
+                        <span class="block truncate text-xs font-medium">{container.container_label}</span>
+                        <span class="block truncate font-mono text-[11px] text-muted-foreground">{container.container_id}</span>
+                        <Show when={container.image || container.status_text}>
+                          <span class="mt-1 block truncate text-[11px] text-muted-foreground">
+                            {[container.image, container.status_text].filter(Boolean).join(' · ')}
+                          </span>
+                        </Show>
+                      </span>
+                      <Show when={props.selectedContainerID === container.container_id}>
+                        <Check class="h-3.5 w-3.5 shrink-0" />
+                      </Show>
+                    </button>
+                  )}
+                </For>
+              </Show>
+            </div>
+          </div>
+        </Show>
+      </div>
+      <Show when={props.fieldError}>
+        <div class="text-[11px] text-destructive">{props.fieldError}</div>
+      </Show>
+      <Show when={props.error}>
+        <div class="rounded-md border border-destructive/20 bg-destructive/10 px-2.5 py-2 text-[11px] leading-5 text-destructive">
+          {props.error}
+        </div>
+      </Show>
+      <Show when={!props.error && props.containers.length === 0 && !props.loading}>
+        <div class="text-[11px] leading-5 text-muted-foreground">{props.emptyMessage}</div>
+      </Show>
+    </div>
+  );
+}
+
 function ConnectionDialog(props: Readonly<{
   state: ConnectionDialogState;
   sshConfigHosts: readonly DesktopSSHConfigHost[];
+  containerOptions: readonly DesktopRuntimeContainerOption[];
+  containerOptionsLoading: boolean;
+  containerOptionsError: string;
   error: string;
   fieldErrors: Partial<Record<string, string>>;
   busyState: DesktopLauncherBusyState;
   onOpenChange: (open: boolean) => void;
   updateField: (
-    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'remote_install_dir' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_label' | 'container_owner' | 'runtime_root',
+    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'remote_install_dir' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_label' | 'runtime_root',
     value: string,
   ) => void;
+  refreshContainerOptions: () => void;
   switchKind: (kind: ConnectionDialogKind) => void;
   switchBootstrapStrategy: (strategy: DesktopSSHBootstrapStrategy) => void;
   clearFieldErrors: () => void;
@@ -5806,9 +6228,9 @@ function ConnectionDialog(props: Readonly<{
       case 'ssh_environment':
         return 'Deploy a Desktop-owned Local Environment profile to a host you can reach over SSH. Desktop reuses shared release artifacts on that host and keeps one runtime state set there.';
       case 'local_container_runtime':
-        return 'Save a runtime target inside a container on this device. Open remains separate; start the runtime from this card when the container is available.';
+        return 'Save a runtime target inside a running container on this device. Redeven starts only the runtime process inside the selected container.';
       case 'ssh_container_runtime':
-        return 'Save a runtime target inside a container on an SSH host. Desktop manages the runtime through SSH and a bridge stream, not through published container ports.';
+        return 'Save a runtime target inside a running container on an SSH host. Desktop manages the runtime through SSH and a bridge stream, not through published container ports.';
       default:
         return '';
     }
@@ -6116,7 +6538,12 @@ function ConnectionDialog(props: Readonly<{
                   <label class="block text-xs font-medium text-foreground">Engine</label>
                   <SegmentedControl
                     value={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.container_engine : 'docker'}
-                    onChange={(value) => props.updateField('container_engine', value)}
+                    onChange={(value) => {
+                      props.updateField('container_engine', value);
+                      props.updateField('container_id', '');
+                      props.updateField('container_label', '');
+                      props.clearFieldErrors();
+                    }}
                     options={[
                       { value: 'docker', label: 'Docker' },
                       { value: 'podman', label: 'Podman' },
@@ -6124,52 +6551,27 @@ function ConnectionDialog(props: Readonly<{
                     size="sm"
                   />
                 </div>
-                <div class="space-y-1.5">
-                  <label for="environment-container-id" class="block text-xs font-medium text-foreground">
-                    Container <span class="text-destructive">*</span>
-                  </label>
-                  <Input
-                    id="environment-container-id"
-                    value={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.container_id : ''}
-                    onInput={(event) => {
-                      props.updateField('container_id', event.currentTarget.value);
+                <ContainerPicker
+                  selectedContainerID={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.container_id : ''}
+                  selectedContainerLabel={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.container_label : ''}
+                  containers={props.containerOptions}
+                  loading={props.containerOptionsLoading}
+                  disabled={connectionKind() === 'ssh_container_runtime' && trimString((props.state as RuntimeContainerConnectionDialogState | null)?.ssh_destination) === ''}
+                  error={props.containerOptionsError}
+                  emptyMessage={connectionKind() === 'ssh_container_runtime' && trimString((props.state as RuntimeContainerConnectionDialogState | null)?.ssh_destination) === ''
+                    ? 'Choose an SSH destination before listing containers.'
+                    : 'No running containers found. Start the container outside Redeven, then refresh this list.'}
+                  fieldError={props.fieldErrors.container_id}
+                  onRefresh={props.refreshContainerOptions}
+                  onSelect={(container) => {
+                    props.updateField('container_id', container.container_id);
+                    props.updateField('container_label', container.container_label);
+                    if (!trimString(props.state?.label ?? '')) {
+                      props.updateField('label', container.container_label);
+                    }
                       props.clearFieldErrors();
-                    }}
-                    placeholder="container name or ID"
-                    size="sm"
-                    class={cn('w-full', props.fieldErrors.container_id && 'border-destructive ring-1 ring-destructive/20')}
-                    spellcheck={false}
-                  />
-                  <Show when={props.fieldErrors.container_id}>
-                    <div class="text-[11px] text-destructive">{props.fieldErrors.container_id}</div>
-                  </Show>
-                </div>
-              </div>
-              <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem]">
-                <div class="space-y-1.5">
-                  <label for="environment-container-label" class="block text-xs font-medium text-foreground">Container Label</label>
-                  <Input
-                    id="environment-container-label"
-                    value={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.container_label : ''}
-                    onInput={(event) => props.updateField('container_label', event.currentTarget.value)}
-                    placeholder="dev-web"
-                    size="sm"
-                    class="w-full"
-                    spellcheck={false}
-                  />
-                </div>
-                <div class="space-y-1.5">
-                  <label class="block text-xs font-medium text-foreground">Owner</label>
-                  <SegmentedControl
-                    value={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.container_owner : 'external'}
-                    onChange={(value) => props.updateField('container_owner', value)}
-                    options={[
-                      { value: 'external', label: 'External' },
-                      { value: 'desktop', label: 'Desktop' },
-                    ]}
-                    size="sm"
-                  />
-                </div>
+                  }}
+                />
               </div>
               <div class="space-y-1.5">
                 <label for="environment-runtime-root" class="block text-xs font-medium text-foreground">

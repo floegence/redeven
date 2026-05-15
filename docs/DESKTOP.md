@@ -280,10 +280,7 @@ The bridge is a versioned byte-stream transport for Local UI, SSE, WebSocket, an
 
 `runtime_root` is the container-internal Redeven state root. The container must provide a `redeven` binary on its own PATH. Desktop does not mount or reuse the host-bundled binary inside the container namespace.
 
-`container_owner` controls container lifecycle only:
-
-- `external`: Desktop may start/stop the runtime inside a running container, but it does not start a stopped container. The card offers refresh guidance until the owning tool starts the container.
-- `desktop`: Desktop may start the container before starting the runtime. Stopping the runtime does not stop the container unless a separate explicit Stop Container action exists for that Desktop-owned container.
+Container lifecycle is outside Redeven. The creation dialog lists only currently running Docker/Podman containers for the selected local or SSH host access path, saves the selected stable container id, and re-checks that container before saving or starting the runtime. If the container disappears or stops, the card offers refresh/error guidance; the user must start or repair the container with the owning container tool before Redeven can start the runtime process inside it.
 
 The runtime-control token stays in Electron main. Renderer snapshots expose only runtime-control status and provider-link capability.
 

@@ -162,7 +162,12 @@ describe('main routing', () => {
     expect(mainSrc).toContain('runtimePlacementBridgeByTargetID.set(session.placement_target_id, record)');
     expect(mainSrc).toContain('async function openRuntimePlacementBridgeFromLauncher(');
     expect(mainSrc).toContain('Start this runtime first, then open it.');
-    expect(mainSrc).toContain('This external container is stopped. Start it from its container owner, then start the runtime in Desktop.');
+    expect(mainSrc).toContain('Start it outside Redeven, then refresh and try again.');
+    expect(mainSrc).toContain('DESKTOP_LAUNCHER_LIST_RUNTIME_CONTAINERS_CHANNEL');
+    expect(mainSrc).not.toContain('containerStartCommand');
+    expect(mainSrc).not.toContain('containerStopCommand');
+    expect(mainSrc).not.toContain("container_engine, 'start'");
+    expect(mainSrc).not.toContain("container_engine, 'stop'");
 
     const startRuntimeStart = mainSrc.indexOf('async function startEnvironmentRuntimeFromLauncher(');
     const startRuntimeEnd = mainSrc.indexOf('async function connectProviderRuntimeFromLauncher(', startRuntimeStart);

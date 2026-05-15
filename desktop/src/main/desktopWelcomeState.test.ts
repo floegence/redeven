@@ -807,7 +807,6 @@ describe('desktopWelcomeState', () => {
       container_engine: 'docker' as const,
       container_id: 'container-stable-id',
       container_label: 'dev-container',
-      container_owner: 'external' as const,
       runtime_root: '/workspace/.redeven',
       bridge_strategy: 'exec_stream' as const,
     };
