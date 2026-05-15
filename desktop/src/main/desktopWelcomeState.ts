@@ -779,9 +779,24 @@ function providerEnvironmentRuntimeHealth(
     status: 'offline',
     checked_at_unix_ms: providerHealth?.observed_at_unix_ms || Date.now(),
     source: 'provider_batch_probe',
-    offline_reason_code: (providerHealth?.offline_reason_code as DesktopRuntimeHealth['offline_reason_code']) || 'provider_unavailable',
+    offline_reason_code: normalizeProviderRuntimeOfflineReasonCode(providerHealth?.offline_reason_code),
     offline_reason: providerHealth?.offline_reason || 'The runtime offline / unavailable',
   };
+}
+
+function normalizeProviderRuntimeOfflineReasonCode(
+  reasonCode: string | undefined,
+): NonNullable<DesktopRuntimeHealth['offline_reason_code']> {
+  switch (compact(reasonCode)) {
+    case 'runtime_disconnected':
+      return 'runtime_disconnected';
+    case 'binding_replaced':
+      return 'binding_replaced';
+    case 'environment_inactive':
+      return 'environment_inactive';
+    default:
+      return 'provider_unavailable';
+  }
 }
 
 function localEnvironmentOpenActionLabel(input: Readonly<{

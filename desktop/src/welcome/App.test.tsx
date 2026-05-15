@@ -719,6 +719,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('the selected provider can request sessions through this running runtime');
     expect(appSrc).toContain('Existing local work keeps running');
     expect(appSrc).toContain('without restarting the runtime');
+    expect(appSrc).toContain("busyStateMatchesAction(busyState(), 'disconnect_provider_runtime')");
+    expect(appSrc).toContain("showActionToast('Disconnected from provider.', 'info');");
+    expect(appSrc).toContain('if (presentation.refresh_snapshot) {');
     expect(appSrc).toContain("const [providerRuntimeLinkProviderEnvironmentID, setProviderRuntimeLinkProviderEnvironmentID] = createSignal('');");
   });
 

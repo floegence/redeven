@@ -218,6 +218,20 @@ describe('main routing', () => {
     expect(connectSrc).not.toContain('prepareProviderRemoteOpenSession');
     expect(connectSrc).not.toContain('launcherActionFailureForRemoteRouteState');
 
+    const disconnectStart = mainSrc.indexOf('async function disconnectProviderRuntimeFromLauncher(');
+    const disconnectEnd = mainSrc.indexOf('async function cancelLauncherOperationFromLauncher(', disconnectStart);
+    expect(disconnectStart).toBeGreaterThanOrEqual(0);
+    expect(disconnectEnd).toBeGreaterThan(disconnectStart);
+    const disconnectSrc = mainSrc.slice(disconnectStart, disconnectEnd);
+    expect(disconnectSrc).toContain('const unlinked = await disconnectProviderLink(runtimeRecord.startup.runtime_control);');
+    expect(disconnectSrc.indexOf('const unlinked = await disconnectProviderLink(runtimeRecord.startup.runtime_control);')).toBeLessThan(
+      disconnectSrc.indexOf('updateProviderRuntimeTargetStartup(runtimeTarget!, {'),
+    );
+    expect(disconnectSrc).toContain('await refreshProviderEnvironmentRuntimeHealth(');
+    expect(disconnectSrc.indexOf('await refreshProviderEnvironmentRuntimeHealth(')).toBeLessThan(
+      disconnectSrc.indexOf("return launcherActionSuccess('disconnected_provider_runtime');"),
+    );
+
     const openStart = mainSrc.indexOf('async function openProviderEnvironmentFromLauncher(');
     const openEnd = mainSrc.indexOf('async function focusEnvironmentWindow(', openStart);
     expect(openStart).toBeGreaterThanOrEqual(0);

@@ -8,14 +8,76 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	directv1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/direct/v1"
+	rpcwirev1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/rpc/v1"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/session"
 )
+
+type providerDisconnectFakeRPC struct {
+	mu       sync.Mutex
+	typeID   uint32
+	payload  json.RawMessage
+	rpcError *rpcwirev1.RpcError
+	err      error
+}
+
+func (f *providerDisconnectFakeRPC) Call(_ context.Context, typeID uint32, payload json.RawMessage) (json.RawMessage, *rpcwirev1.RpcError, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.typeID = typeID
+	f.payload = append(f.payload[:0], payload...)
+	if f.err != nil || f.rpcError != nil {
+		return nil, f.rpcError, f.err
+	}
+	resp, err := json.Marshal(runtimeDisconnectResp{
+		OK:         true,
+		Cleared:    true,
+		State:      "disconnected",
+		ReasonCode: "runtime_disconnected",
+	})
+	return resp, nil, err
+}
+
+func providerLinkRemoteConfig(t *testing.T, cfgPath string) *config.Config {
+	t.Helper()
+	cfg := &config.Config{
+		ControlplaneBaseURL:      "https://provider.example.test",
+		ControlplaneProviderID:   "example_control_plane",
+		EnvironmentID:            "env_demo",
+		LocalEnvironmentPublicID: "le_existing",
+		BindingGeneration:        7,
+		AgentInstanceID:          "ai_existing",
+		Direct: &directv1.DirectConnectInfo{
+			WsUrl:                    "ws://127.0.0.1:1/control/ws",
+			ChannelId:                "ch_existing",
+			E2eePskB64u:              "cHNr",
+			ChannelInitExpireAtUnixS: 4102444800,
+		},
+		AgentHomeDir: t.TempDir(),
+	}
+	if cfgPath != "" {
+		if err := config.Save(cfgPath, cfg); err != nil {
+			t.Fatalf("config.Save() error = %v", err)
+		}
+	}
+	return cfg
+}
+
+func linkProviderControlForTest(a *Agent, caller *providerDisconnectFakeRPC) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.controlChannelEnabled = true
+	a.remoteEnabled = true
+	a.effectiveRunMode = "hybrid"
+	a.controlRPCSerial++
+	a.controlRPC = caller
+}
 
 func newProviderLinkTestAgent(t *testing.T, cfgPath string, cfg *config.Config) *Agent {
 	t.Helper()
@@ -266,5 +328,119 @@ func TestConnectProviderEnablesControlChannelForExistingMatchingBinding(t *testi
 	}
 	if saved.BindingGeneration != 7 {
 		t.Fatalf("BindingGeneration = %d, want refreshed generation 7", saved.BindingGeneration)
+	}
+}
+
+func TestDisconnectProviderSendsRuntimeDisconnectBeforeClearingConfig(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.json")
+	cfg := providerLinkRemoteConfig(t, cfgPath)
+	a := newProviderLinkTestAgent(t, cfgPath, cfg)
+	fakeRPC := &providerDisconnectFakeRPC{}
+	linkProviderControlForTest(a, fakeRPC)
+
+	resp, err := a.DisconnectProvider(context.Background())
+	if err != nil {
+		t.Fatalf("DisconnectProvider() error = %v", err)
+	}
+	if resp.Binding.State != runtimeservice.ProviderLinkStateUnbound || resp.Binding.LastDisconnectedAtUnixMS <= 0 {
+		t.Fatalf("DisconnectProvider() binding = %#v, want unbound with disconnect time", resp.Binding)
+	}
+
+	fakeRPC.mu.Lock()
+	gotTypeID := fakeRPC.typeID
+	gotPayload := append([]byte(nil), fakeRPC.payload...)
+	fakeRPC.mu.Unlock()
+	if gotTypeID != controlRPCTypeRuntimeDisconnect {
+		t.Fatalf("runtime disconnect RPC type = %d, want %d", gotTypeID, controlRPCTypeRuntimeDisconnect)
+	}
+	var req runtimeDisconnectReq
+	if err := json.Unmarshal(gotPayload, &req); err != nil {
+		t.Fatalf("Unmarshal(runtime disconnect request) error = %v", err)
+	}
+	if req.EnvPublicID != "env_demo" ||
+		req.ProviderID != "example_control_plane" ||
+		req.LocalEnvironmentPublicID != "le_existing" ||
+		req.BindingGeneration != 7 ||
+		req.AgentInstanceID != "ai_existing" ||
+		req.ReasonCode != providerDisconnectReasonUser {
+		t.Fatalf("runtime disconnect request = %#v, want current provider binding snapshot", req)
+	}
+
+	saved, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	if saved.ControlplaneBaseURL != "" ||
+		saved.ControlplaneProviderID != "" ||
+		saved.EnvironmentID != "" ||
+		saved.LocalEnvironmentPublicID != "" ||
+		saved.BindingGeneration != 0 ||
+		saved.Direct != nil {
+		t.Fatalf("saved config after disconnect = %#v, want provider fields cleared", saved)
+	}
+	if saved.AgentInstanceID != "ai_existing" {
+		t.Fatalf("AgentInstanceID = %q, want preserved", saved.AgentInstanceID)
+	}
+	if a.currentControlRPC() != nil {
+		t.Fatalf("currentControlRPC still set after provider disconnect")
+	}
+	binding := a.ProviderLinkBinding()
+	if binding.State != runtimeservice.ProviderLinkStateUnbound {
+		t.Fatalf("ProviderLinkBinding() = %#v, want unbound", binding)
+	}
+}
+
+func TestDisconnectProviderConflictDoesNotClearConfig(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.json")
+	cfg := providerLinkRemoteConfig(t, cfgPath)
+	a := newProviderLinkTestAgent(t, cfgPath, cfg)
+	msg := "local environment binding mismatch"
+	fakeRPC := &providerDisconnectFakeRPC{rpcError: &rpcwirev1.RpcError{Code: 409, Message: &msg}}
+	linkProviderControlForTest(a, fakeRPC)
+
+	_, err := a.DisconnectProvider(context.Background())
+	var linkErr *ProviderLinkError
+	if !errors.As(err, &linkErr) || linkErr.Code != ProviderLinkErrorBindingNotCurrent {
+		t.Fatalf("DisconnectProvider() error = %v, want %s", err, ProviderLinkErrorBindingNotCurrent)
+	}
+
+	saved, loadErr := config.Load(cfgPath)
+	if loadErr != nil {
+		t.Fatalf("config.Load() error = %v", loadErr)
+	}
+	if saved.ControlplaneBaseURL != cfg.ControlplaneBaseURL ||
+		saved.ControlplaneProviderID != cfg.ControlplaneProviderID ||
+		saved.EnvironmentID != cfg.EnvironmentID ||
+		saved.LocalEnvironmentPublicID != cfg.LocalEnvironmentPublicID ||
+		saved.BindingGeneration != cfg.BindingGeneration ||
+		saved.Direct == nil ||
+		saved.Direct.ChannelId != cfg.Direct.ChannelId {
+		t.Fatalf("config changed after rejected disconnect: %#v", saved)
+	}
+	if binding := a.ProviderLinkBinding(); binding.State != runtimeservice.ProviderLinkStateLinked || !binding.RemoteEnabled {
+		t.Fatalf("ProviderLinkBinding() = %#v, want linked remote enabled", binding)
+	}
+}
+
+func TestDisconnectProviderRequiresActiveControlChannel(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.json")
+	cfg := providerLinkRemoteConfig(t, cfgPath)
+	a := newProviderLinkTestAgent(t, cfgPath, cfg)
+
+	_, err := a.DisconnectProvider(context.Background())
+	var linkErr *ProviderLinkError
+	if !errors.As(err, &linkErr) || linkErr.Code != ProviderLinkErrorDisconnectRejected {
+		t.Fatalf("DisconnectProvider() error = %v, want %s", err, ProviderLinkErrorDisconnectRejected)
+	}
+
+	saved, loadErr := config.Load(cfgPath)
+	if loadErr != nil {
+		t.Fatalf("config.Load() error = %v", loadErr)
+	}
+	if saved.ControlplaneBaseURL != cfg.ControlplaneBaseURL ||
+		saved.EnvironmentID != cfg.EnvironmentID ||
+		saved.BindingGeneration != cfg.BindingGeneration ||
+		saved.Direct == nil {
+		t.Fatalf("config changed after inactive-channel disconnect: %#v", saved)
 	}
 }

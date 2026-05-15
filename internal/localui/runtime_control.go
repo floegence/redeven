@@ -307,6 +307,9 @@ func writeRuntimeControlAgentError(w http.ResponseWriter, err error) {
 		if linkErr.Code == "PROVIDER_LINK_ACTIVE_WORK" || linkErr.Code == "PROVIDER_LINK_ALREADY_CONNECTED" {
 			status = http.StatusConflict
 		}
+		if linkErr.Code == "PROVIDER_LINK_NOT_CURRENT" || linkErr.Code == "PROVIDER_LINK_DISCONNECT_REJECTED" {
+			status = http.StatusConflict
+		}
 		writeRuntimeControlError(w, status, linkErr.Code, linkErr.Error())
 		return
 	}

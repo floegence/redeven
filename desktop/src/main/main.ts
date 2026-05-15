@@ -4979,6 +4979,13 @@ async function disconnectProviderRuntimeFromLauncher(
         },
       });
     }
+    await refreshProviderEnvironmentRuntimeHealth(
+      environment.provider_origin,
+      environment.provider_id,
+      [environment.env_public_id],
+    ).catch(() => {
+      // Best-effort provider health refresh should not turn a completed runtime disconnect into a failed action.
+    });
     resetLauncherIssueState();
     broadcastDesktopWelcomeSnapshots();
     return launcherActionSuccess('disconnected_provider_runtime');

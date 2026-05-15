@@ -47,10 +47,11 @@ import (
 )
 
 const (
-	controlRPCTypeRegister        uint32 = 41001
-	controlRPCTypeHeartbeat       uint32 = 41002
-	controlRPCTypeGrantServer     uint32 = 41003 // notify
-	controlRPCTypeCredentialRenew uint32 = 41004
+	controlRPCTypeRegister          uint32 = 41001
+	controlRPCTypeHeartbeat         uint32 = 41002
+	controlRPCTypeGrantServer       uint32 = 41003 // notify
+	controlRPCTypeCredentialRenew   uint32 = 41004
+	controlRPCTypeRuntimeDisconnect uint32 = 41005
 )
 
 // Floe app ids.
@@ -135,6 +136,9 @@ type Agent struct {
 	onControlConnected   func()
 	runCtx               context.Context
 	controlCancel        context.CancelFunc
+	controlRPC           rpcutil.Caller
+	controlRPCSerial     uint64
+	controlRPCCallMu     sync.Mutex
 
 	localUIEnabled        bool
 	controlChannelEnabled bool
@@ -397,6 +401,8 @@ func (a *Agent) startControlChannel(ctx context.Context) {
 		a.controlCancel()
 		a.controlCancel = nil
 	}
+	a.controlRPCSerial++
+	a.controlRPC = nil
 	controlCtx, cancel := context.WithCancel(ctx)
 	a.controlCancel = cancel
 	a.mu.Unlock()
@@ -410,6 +416,8 @@ func (a *Agent) stopControlChannel() {
 	a.mu.Lock()
 	cancel := a.controlCancel
 	a.controlCancel = nil
+	a.controlRPCSerial++
+	a.controlRPC = nil
 	a.mu.Unlock()
 	if cancel != nil {
 		cancel()
@@ -474,6 +482,8 @@ func (a *Agent) runControlOnce(ctx context.Context) error {
 	if rpcC == nil {
 		return errors.New("missing rpc client")
 	}
+	controlRPCSerial := a.setCurrentControlRPC(rpcC)
+	defer a.clearCurrentControlRPC(controlRPCSerial)
 
 	unsub := rpcC.OnNotify(controlRPCTypeGrantServer, func(payload json.RawMessage) {
 		a.handleGrantNotify(ctx, payload)
@@ -481,7 +491,7 @@ func (a *Agent) runControlOnce(ctx context.Context) error {
 	defer unsub()
 
 	// Register (best-effort; required for server-side online state).
-	_, err = rpcutil.CallJSON[registerReq, registerResp](ctx, rpcC, controlRPCTypeRegister, &registerReq{
+	_, err = callControlJSON[registerReq, registerResp](ctx, a, rpcC, controlRPCTypeRegister, &registerReq{
 		EnvPublicID:              cfg.EnvironmentID,
 		LocalEnvironmentPublicID: cfg.LocalEnvironmentPublicID,
 		BindingGeneration:        cfg.BindingGeneration,
@@ -514,12 +524,12 @@ func (a *Agent) runControlOnce(ctx context.Context) error {
 			return ctx.Err()
 		case <-t.C:
 			if shouldRenewDirectCredentials(cfg.Direct, time.Now()) {
-				if err := a.renewDirectCredentials(ctx, rpcC); err != nil {
+				if err := a.renewDirectCredentials(ctx, rpcC, cfg); err != nil {
 					return err
 				}
 				return errors.New("control credentials renewed; reconnecting")
 			}
-			_, err := rpcutil.CallJSON[heartbeatReq, heartbeatResp](ctx, rpcC, controlRPCTypeHeartbeat, &heartbeatReq{
+			_, err := callControlJSON[heartbeatReq, heartbeatResp](ctx, a, rpcC, controlRPCTypeHeartbeat, &heartbeatReq{
 				NowUnixMs: time.Now().UnixMilli(),
 			})
 			if err != nil {
@@ -542,6 +552,48 @@ func (a *Agent) remoteConfigSnapshot() *config.Config {
 	return &cfg
 }
 
+func (a *Agent) setCurrentControlRPC(caller rpcutil.Caller) uint64 {
+	if a == nil {
+		return 0
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.controlRPCSerial++
+	a.controlRPC = caller
+	return a.controlRPCSerial
+}
+
+func (a *Agent) clearCurrentControlRPC(serial uint64) {
+	if a == nil || serial == 0 {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.controlRPCSerial == serial {
+		a.controlRPC = nil
+	}
+}
+
+func (a *Agent) currentControlRPC() rpcutil.Caller {
+	if a == nil {
+		return nil
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.controlRPC
+}
+
+func callControlJSON[TReq any, TResp any](ctx context.Context, a *Agent, caller rpcutil.Caller, typeID uint32, req *TReq) (*TResp, error) {
+	if caller == nil {
+		return nil, errors.New("missing control rpc client")
+	}
+	if a != nil {
+		a.controlRPCCallMu.Lock()
+		defer a.controlRPCCallMu.Unlock()
+	}
+	return rpcutil.CallJSON[TReq, TResp](ctx, caller, typeID, req)
+}
+
 func shouldRenewDirectCredentials(direct *directv1.DirectConnectInfo, now time.Time) bool {
 	if direct == nil || direct.ChannelInitExpireAtUnixS <= 0 {
 		return false
@@ -550,18 +602,18 @@ func shouldRenewDirectCredentials(direct *directv1.DirectConnectInfo, now time.T
 	return now.Add(5 * time.Minute).After(expireAt)
 }
 
-func (a *Agent) renewDirectCredentials(ctx context.Context, rpcC *rpc.Client) error {
-	if a == nil || a.cfg == nil {
+func (a *Agent) renewDirectCredentials(ctx context.Context, rpcC rpcutil.Caller, cfg *config.Config) error {
+	if a == nil || cfg == nil {
 		return errors.New("missing config")
 	}
 	req := &credentialRenewReq{
-		EnvPublicID:              a.cfg.EnvironmentID,
-		LocalEnvironmentPublicID: a.cfg.LocalEnvironmentPublicID,
-		BindingGeneration:        a.cfg.BindingGeneration,
-		AgentInstanceID:          a.cfg.AgentInstanceID,
+		EnvPublicID:              cfg.EnvironmentID,
+		LocalEnvironmentPublicID: cfg.LocalEnvironmentPublicID,
+		BindingGeneration:        cfg.BindingGeneration,
+		AgentInstanceID:          cfg.AgentInstanceID,
 		NowUnixMs:                time.Now().UnixMilli(),
 	}
-	resp, err := rpcutil.CallJSON[credentialRenewReq, credentialRenewResp](ctx, rpcC, controlRPCTypeCredentialRenew, req)
+	resp, err := callControlJSON[credentialRenewReq, credentialRenewResp](ctx, a, rpcC, controlRPCTypeCredentialRenew, req)
 	if err != nil {
 		return fmt.Errorf("renew control credentials: %w", err)
 	}
@@ -575,8 +627,16 @@ func (a *Agent) renewDirectCredentials(ctx context.Context, rpcC *rpc.Client) er
 		resp.Direct.ChannelInitExpireAtUnixS <= 0 {
 		return errors.New("renew control credentials: invalid direct")
 	}
-	if resp.BindingGeneration <= a.cfg.BindingGeneration {
+	if resp.BindingGeneration <= cfg.BindingGeneration {
 		return errors.New("renew control credentials: stale binding generation")
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.cfg == nil ||
+		strings.TrimSpace(a.cfg.EnvironmentID) != strings.TrimSpace(cfg.EnvironmentID) ||
+		strings.TrimSpace(a.cfg.LocalEnvironmentPublicID) != strings.TrimSpace(cfg.LocalEnvironmentPublicID) ||
+		a.cfg.BindingGeneration != cfg.BindingGeneration {
+		return errors.New("renew control credentials: provider binding changed")
 	}
 	next := *a.cfg
 	next.Direct = resp.Direct
@@ -586,6 +646,44 @@ func (a *Agent) renewDirectCredentials(ctx context.Context, rpcC *rpc.Client) er
 	}
 	a.cfg = &next
 	a.log.Info("control credentials renewed", "environment_id", next.EnvironmentID, "local_environment_public_id", next.LocalEnvironmentPublicID, "binding_generation", next.BindingGeneration)
+	return nil
+}
+
+func (a *Agent) sendRuntimeDisconnect(ctx context.Context, snapshot providerDisconnectSnapshot, reasonCode string) error {
+	if a == nil {
+		return errors.New("nil agent")
+	}
+	caller := a.currentControlRPC()
+	if caller == nil {
+		return errProviderControlChannelNotConnected
+	}
+	a.controlRPCCallMu.Lock()
+	defer a.controlRPCCallMu.Unlock()
+	return sendRuntimeDisconnectWithCaller(ctx, caller, snapshot, reasonCode)
+}
+
+func sendRuntimeDisconnectWithCaller(ctx context.Context, caller rpcutil.Caller, snapshot providerDisconnectSnapshot, reasonCode string) error {
+	if caller == nil {
+		return errProviderControlChannelNotConnected
+	}
+	resp, err := rpcutil.CallJSON[runtimeDisconnectReq, runtimeDisconnectResp](ctx, caller, controlRPCTypeRuntimeDisconnect, &runtimeDisconnectReq{
+		EnvPublicID:              snapshot.EnvPublicID,
+		ProviderID:               snapshot.ProviderID,
+		LocalEnvironmentPublicID: snapshot.LocalEnvironmentPublicID,
+		BindingGeneration:        snapshot.BindingGeneration,
+		AgentInstanceID:          snapshot.AgentInstanceID,
+		ReasonCode:               strings.TrimSpace(reasonCode),
+		NowUnixMs:                time.Now().UnixMilli(),
+	})
+	if err != nil {
+		return fmt.Errorf("runtime disconnect rpc: %w", err)
+	}
+	if resp == nil {
+		return errors.New("runtime disconnect rpc: empty response")
+	}
+	if !resp.OK || !resp.Cleared || strings.TrimSpace(resp.State) != "disconnected" {
+		return fmt.Errorf("runtime disconnect rpc: rejected state=%q cleared=%t", resp.State, resp.Cleared)
+	}
 	return nil
 }
 
@@ -1250,6 +1348,23 @@ type credentialRenewReq struct {
 type credentialRenewResp struct {
 	Direct            *directv1.DirectConnectInfo `json:"direct"`
 	BindingGeneration int64                       `json:"binding_generation"`
+}
+
+type runtimeDisconnectReq struct {
+	EnvPublicID              string `json:"env_public_id,omitempty"`
+	ProviderID               string `json:"provider_id"`
+	LocalEnvironmentPublicID string `json:"local_environment_public_id"`
+	BindingGeneration        int64  `json:"binding_generation"`
+	AgentInstanceID          string `json:"agent_instance_id,omitempty"`
+	ReasonCode               string `json:"reason_code"`
+	NowUnixMs                int64  `json:"now_unix_ms,omitempty"`
+}
+
+type runtimeDisconnectResp struct {
+	OK         bool   `json:"ok"`
+	Cleared    bool   `json:"cleared"`
+	State      string `json:"state"`
+	ReasonCode string `json:"reason_code,omitempty"`
 }
 
 // --- helper: backoff ---
