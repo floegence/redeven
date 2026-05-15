@@ -89,6 +89,11 @@ type Options struct {
 	// RemoteEnabled reports whether the current process has the remote control channel enabled.
 	RemoteEnabled   bool
 	DesktopAIBroker *ai.DesktopAIBrokerEndpoint
+	// LogOutput overrides the default runtime log sink.
+	//
+	// IMPORTANT: callers that reserve stdout for a machine protocol must pass
+	// a non-stdout sink so agent services cannot corrupt the protocol stream.
+	LogOutput io.Writer
 
 	Version   string
 	Commit    string
@@ -179,7 +184,7 @@ func New(opts Options) (*Agent, error) {
 		return nil, err
 	}
 
-	logger, err := newLogger(strings.TrimSpace(opts.Config.LogFormat), strings.TrimSpace(opts.Config.LogLevel))
+	logger, err := newLogger(strings.TrimSpace(opts.Config.LogFormat), strings.TrimSpace(opts.Config.LogLevel), opts.LogOutput)
 	if err != nil {
 		return nil, err
 	}
@@ -1412,8 +1417,11 @@ func pow(base float64, exp int) float64 {
 
 // --- logger ---
 
-func newLogger(format string, level string) (*slog.Logger, error) {
+func newLogger(format string, level string, out io.Writer) (*slog.Logger, error) {
 	var h slog.Handler
+	if out == nil {
+		out = os.Stdout
+	}
 
 	var lvl slog.Level
 	switch strings.ToLower(strings.TrimSpace(level)) {
@@ -1433,9 +1441,9 @@ func newLogger(format string, level string) (*slog.Logger, error) {
 
 	switch strings.ToLower(strings.TrimSpace(format)) {
 	case "", "json":
-		h = slog.NewJSONHandler(os.Stdout, opts)
+		h = slog.NewJSONHandler(out, opts)
 	case "text":
-		h = slog.NewTextHandler(os.Stdout, opts)
+		h = slog.NewTextHandler(out, opts)
 	default:
 		return nil, fmt.Errorf("unknown log format: %s", format)
 	}

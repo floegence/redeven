@@ -148,6 +148,7 @@ func (c *cli) prepareDesktopBridgeRuntime(stateRoot string, password string, pas
 		Version:               Version,
 		Commit:                Commit,
 		BuildTime:             BuildTime,
+		LogOutput:             c.stderr,
 		AccessGate:            accessGate,
 	})
 	if err != nil {
