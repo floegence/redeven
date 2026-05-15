@@ -40,6 +40,10 @@ function readDesktopAnchoredOverlaySurfaceSource(): string {
   return fs.readFileSync(path.join(__dirname, 'DesktopAnchoredOverlaySurface.tsx'), 'utf8');
 }
 
+function readDesktopAnchoredListboxSource(): string {
+  return fs.readFileSync(path.join(__dirname, 'DesktopAnchoredListbox.tsx'), 'utf8');
+}
+
 function readWelcomeStyles(): string {
   return fs.readFileSync(path.join(__dirname, 'index.css'), 'utf8');
 }
@@ -450,6 +454,24 @@ describe('DesktopWelcomeShell', () => {
     expect(actionPopoverSrc).toContain('data-redeven-action-popover-anchor=""');
     expect(actionPopoverSrc).toContain("document.addEventListener('focusin', handleFocusIn);");
     expect(actionPopoverSrc).toContain("event.key === 'Escape'");
+  });
+
+  it('renders dialog field listboxes through anchored portals so footers and scroll panes cannot clip them', () => {
+    const appSrc = readWelcomeSource();
+    const listboxSrc = readDesktopAnchoredListboxSource();
+
+    expect(appSrc).toContain("import { DesktopAnchoredListbox } from './DesktopAnchoredListbox';");
+    expect(appSrc).toContain('<DesktopAnchoredListbox');
+    expect(appSrc).toContain('anchorRef={buttonRef}');
+    expect(appSrc).toContain('anchorRef={rootRef}');
+    expect(appSrc).not.toContain('class="absolute left-0 right-0 z-50 mt-1 max-h-56 overflow-auto rounded-md border border-border bg-popover p-1 shadow-xl"');
+    expect(appSrc).not.toContain('class="absolute left-0 right-0 z-50 mt-1 overflow-hidden rounded-md border border-border bg-popover shadow-xl"');
+    expect(listboxSrc).toContain("import { Portal } from 'solid-js/web';");
+    expect(listboxSrc).toContain('<Portal>');
+    expect(listboxSrc).toContain("'fixed z-[240] flex flex-col overflow-hidden");
+    expect(listboxSrc).toContain('style={{');
+    expect(listboxSrc).toContain('resolveDesktopAnchoredListboxGeometry');
+    expect(listboxSrc).toContain('IMPORTANT: Dialog form listboxes must live outside dialog scroll containers.');
   });
 
   it('includes compact environment-card launcher copy inside the source', () => {

@@ -139,6 +139,7 @@ import {
   syncSSHConnectionDialogAdvancedState,
   type SSHConnectionDialogAdvancedState,
 } from './sshConnectionDialogState';
+import { DesktopAnchoredListbox } from './DesktopAnchoredListbox';
 import {
   createDesktopSettingsDraftSession,
   reconcileDesktopSettingsDraftSession,
@@ -5746,6 +5747,8 @@ function SSHDestinationCombobox(props: Readonly<{
   const [open, setOpen] = createSignal(false);
   const [highlightedIndex, setHighlightedIndex] = createSignal(0);
   let closeTimer: number | undefined;
+  let rootRef: HTMLDivElement | undefined;
+  let listboxRef: HTMLDivElement | undefined;
 
   const filteredHosts = createMemo(() => {
     const query = trimString(props.value).toLowerCase();
@@ -5771,6 +5774,10 @@ function SSHDestinationCombobox(props: Readonly<{
       window.clearTimeout(closeTimer);
     }
   });
+
+  function containsTarget(target: EventTarget | null): boolean {
+    return target instanceof Node && (rootRef?.contains(target) === true || listboxRef?.contains(target) === true);
+  }
 
   function openMenu(): void {
     if (closeTimer !== undefined) {
@@ -5798,7 +5805,16 @@ function SSHDestinationCombobox(props: Readonly<{
   }
 
   return (
-    <div class="relative">
+    <div
+      ref={rootRef}
+      class="relative"
+      onFocusOut={(event) => {
+        if (containsTarget(event.relatedTarget)) {
+          return;
+        }
+        closeMenuSoon();
+      }}
+    >
       <Input
         id="environment-ssh-destination"
         value={props.value}
@@ -5807,7 +5823,6 @@ function SSHDestinationCombobox(props: Readonly<{
           openMenu();
         }}
         onFocus={openMenu}
-        onBlur={closeMenuSoon}
         onKeyDown={(event) => {
           if (!open() && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
             setOpen(true);
@@ -5843,50 +5858,60 @@ function SSHDestinationCombobox(props: Readonly<{
         aria-autocomplete="list"
       />
       <Show when={open() && filteredHosts().length > 0}>
-        <div
+        <DesktopAnchoredListbox
           id="environment-ssh-destination-options"
-          class="absolute left-0 right-0 z-50 mt-1 max-h-56 overflow-auto rounded-md border border-border bg-popover p-1 shadow-xl"
+          anchorRef={rootRef}
+          class="p-1"
+          maxHeight={224}
           role="listbox"
-          onWheel={(event) => {
-            const el = event.currentTarget as HTMLElement;
-            event.stopPropagation();
-            if (el.scrollHeight > el.clientHeight) {
-              el.scrollTop += event.deltaY;
-            }
+          open={open() && filteredHosts().length > 0}
+          onOverlayRef={(element) => {
+            listboxRef = element;
           }}
         >
-          <For each={filteredHosts()}>
-            {(host, index) => (
-              <button
-                type="button"
-                id={`environment-ssh-host-option-${index()}`}
-                class={cn(
-                  'flex w-full cursor-pointer items-center justify-between gap-3 rounded px-2.5 py-2 text-left transition-colors',
-                  highlightedIndex() === index()
-                    ? 'bg-accent text-accent-foreground'
-                    : 'text-foreground hover:bg-accent/70 hover:text-accent-foreground',
-                )}
-                role="option"
-                aria-selected={highlightedIndex() === index() ? 'true' : 'false'}
-                onMouseEnter={() => setHighlightedIndex(index())}
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  selectHost(host);
-                }}
-              >
-                <span class="min-w-0">
-                  <span class="block truncate font-mono text-xs">{host.alias}</span>
-                  <span class="block truncate text-[11px] text-muted-foreground">{sshConfigHostEndpointLabel(host)}</span>
-                </span>
-                <Show when={host.port !== null}>
-                  <Tag variant="neutral" tone="soft" size="sm" class="shrink-0 cursor-default whitespace-nowrap">
-                    Port {host.port}
-                  </Tag>
-                </Show>
-              </button>
-            )}
-          </For>
-        </div>
+          <div
+            class="min-h-0 flex-1 overflow-auto"
+            onWheel={(event) => {
+              const el = event.currentTarget as HTMLElement;
+              event.stopPropagation();
+              if (el.scrollHeight > el.clientHeight) {
+                el.scrollTop += event.deltaY;
+              }
+            }}
+          >
+            <For each={filteredHosts()}>
+              {(host, index) => (
+                <button
+                  type="button"
+                  id={`environment-ssh-host-option-${index()}`}
+                  class={cn(
+                    'flex w-full cursor-pointer items-center justify-between gap-3 rounded px-2.5 py-2 text-left transition-colors',
+                    highlightedIndex() === index()
+                      ? 'bg-accent text-accent-foreground'
+                      : 'text-foreground hover:bg-accent/70 hover:text-accent-foreground',
+                  )}
+                  role="option"
+                  aria-selected={highlightedIndex() === index() ? 'true' : 'false'}
+                  onMouseEnter={() => setHighlightedIndex(index())}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    selectHost(host);
+                  }}
+                >
+                  <span class="min-w-0">
+                    <span class="block truncate font-mono text-xs">{host.alias}</span>
+                    <span class="block truncate text-[11px] text-muted-foreground">{sshConfigHostEndpointLabel(host)}</span>
+                  </span>
+                  <Show when={host.port !== null}>
+                    <Tag variant="neutral" tone="soft" size="sm" class="shrink-0 cursor-default whitespace-nowrap">
+                      Port {host.port}
+                    </Tag>
+                  </Show>
+                </button>
+              )}
+            </For>
+          </div>
+        </DesktopAnchoredListbox>
       </Show>
     </div>
   );
@@ -5917,6 +5942,9 @@ function ContainerPicker(props: Readonly<{
   const [query, setQuery] = createSignal('');
   const [highlightedIndex, setHighlightedIndex] = createSignal(0);
   let closeTimer: number | undefined;
+  let rootRef: HTMLDivElement | undefined;
+  let buttonRef: HTMLButtonElement | undefined;
+  let listboxRef: HTMLDivElement | undefined;
 
   const selectedLabel = createMemo(() => (
     trimString(props.selectedContainerLabel)
@@ -5955,6 +5983,10 @@ function ContainerPicker(props: Readonly<{
     }
   });
 
+  function containsTarget(target: EventTarget | null): boolean {
+    return target instanceof Node && (rootRef?.contains(target) === true || listboxRef?.contains(target) === true);
+  }
+
   function openMenu(): void {
     if (props.disabled) {
       return;
@@ -5985,10 +6017,10 @@ function ContainerPicker(props: Readonly<{
 
   return (
     <div
+      ref={rootRef}
       class="space-y-1.5"
       onFocusOut={(event) => {
-        const nextTarget = event.relatedTarget as Node | null;
-        if (nextTarget && event.currentTarget.contains(nextTarget)) {
+        if (containsTarget(event.relatedTarget)) {
           return;
         }
         closeMenuSoon();
@@ -6013,6 +6045,7 @@ function ContainerPicker(props: Readonly<{
       </div>
       <div class="relative">
         <button
+          ref={buttonRef}
           id="environment-container-picker"
           type="button"
           class={cn(
@@ -6061,10 +6094,16 @@ function ContainerPicker(props: Readonly<{
           <ChevronDown class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         </button>
         <Show when={open() && !props.disabled}>
-          <div
+          <DesktopAnchoredListbox
             id="environment-container-picker-options"
-            class="absolute left-0 right-0 z-50 mt-1 overflow-hidden rounded-md border border-border bg-popover shadow-xl"
+            anchorRef={buttonRef}
+            class="shadow-xl"
+            maxHeight={320}
             role="listbox"
+            open={open() && !props.disabled}
+            onOverlayRef={(element) => {
+              listboxRef = element;
+            }}
           >
             <div class="border-b border-border/70 p-2">
               <Input
@@ -6088,7 +6127,7 @@ function ContainerPicker(props: Readonly<{
               />
             </div>
             <div
-              class="max-h-64 overflow-auto p-1"
+              class="min-h-0 flex-1 overflow-auto p-1"
               onWheel={(event) => {
                 const el = event.currentTarget as HTMLElement;
                 event.stopPropagation();
@@ -6141,7 +6180,7 @@ function ContainerPicker(props: Readonly<{
                 </For>
               </Show>
             </div>
-          </div>
+          </DesktopAnchoredListbox>
         </Show>
       </div>
       <Show when={props.fieldError}>
