@@ -9,6 +9,21 @@ export type DesktopProviderRuntimeLinkTargetKind = 'local_environment' | 'ssh_en
 
 export type DesktopProviderRuntimeLinkTargetID = `local:${string}` | `ssh:${string}`;
 
+export type DesktopProviderEnvironmentOccupancyState =
+  | 'available'
+  | 'linked_here'
+  | 'occupied_by_known_runtime'
+  | 'occupied_by_provider_online_runtime';
+
+export type DesktopProviderEnvironmentOccupancy = Readonly<{
+  state: DesktopProviderEnvironmentOccupancyState;
+  runtime_target_id?: DesktopProviderRuntimeLinkTargetID;
+  runtime_kind?: DesktopProviderRuntimeLinkTargetKind;
+  runtime_label?: string;
+  provider_link_remote_enabled?: boolean;
+  runtime_remote_enabled?: boolean;
+}>;
+
 export type DesktopProviderEnvironmentCandidate = Readonly<{
   provider_environment_id: string;
   label: string;
@@ -17,6 +32,7 @@ export type DesktopProviderEnvironmentCandidate = Readonly<{
   env_public_id: string;
   provider_label?: string;
   route_state: 'online' | 'offline' | 'unknown';
+  occupancy: DesktopProviderEnvironmentOccupancy;
   disabled_reason_code?: string;
   disabled_reason?: string;
 }>;

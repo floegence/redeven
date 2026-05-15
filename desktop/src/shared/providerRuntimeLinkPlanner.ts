@@ -16,6 +16,7 @@ export type DesktopProviderRuntimeLinkPlanState =
   | 'provider_link_unsupported'
   | 'linked_but_remote_disabled'
   | 'already_linked'
+  | 'provider_environment_occupied'
   | 'linked_elsewhere'
   | 'blocked_active_work'
   | 'blocked_owner_mismatch'
@@ -62,6 +63,10 @@ function planMessage(
       return `${runtimeLabel} is linked to ${providerEnvironment.label}, but its provider control connection is not enabled in this running process. Connect again to enable it without restarting the runtime.`;
     case 'already_linked':
       return `${runtimeLabel} is already connected to ${providerEnvironment.label}.`;
+    case 'provider_environment_occupied':
+      return providerEnvironment.occupancy.state === 'occupied_by_known_runtime' && providerEnvironment.occupancy.runtime_label
+        ? `${providerEnvironment.label} is already connected to ${providerEnvironment.occupancy.runtime_label}. Disconnect it from that runtime card before connecting another runtime.`
+        : `${providerEnvironment.label} already has an online runtime through the provider. Disconnect that runtime before connecting another runtime.`;
     case 'linked_elsewhere':
       return `${runtimeLabel} is connected to another provider Environment. Disconnect it before connecting this provider.`;
     case 'blocked_active_work':
@@ -95,6 +100,12 @@ export function buildDesktopProviderRuntimeLinkPlan(
     }
     if (!runtimeServiceSupportsProviderLink(runtimeTarget.runtime_service)) {
       return 'provider_link_unsupported';
+    }
+    if (
+      providerEnvironment.occupancy.state === 'occupied_by_known_runtime'
+      || providerEnvironment.occupancy.state === 'occupied_by_provider_online_runtime'
+    ) {
+      return 'provider_environment_occupied';
     }
     if (binding?.state === 'linked') {
       // IMPORTANT: A saved provider binding is not proof that this process has

@@ -70,8 +70,10 @@ import {
 import {
   desktopProviderRuntimeLinkTargetID,
   type DesktopProviderEnvironmentCandidate,
+  type DesktopProviderEnvironmentOccupancy,
   type DesktopProviderRuntimeLinkTargetKind,
   type DesktopProviderRuntimeLinkTarget,
+  type DesktopProviderRuntimeLinkTargetID,
 } from '../shared/providerRuntimeLinkTarget';
 import {
   desktopRuntimeTargetID,
@@ -515,9 +517,17 @@ function providerEnvironmentCandidateRouteState(
 function providerEnvironmentCandidatesForSnapshot(
   environments: readonly DesktopProviderEnvironmentRecord[],
   controlPlanes: readonly DesktopControlPlaneSummary[],
+  runtimeLinkTargets: readonly DesktopProviderRuntimeLinkTarget[],
+  selectedRuntimeTargetID: DesktopProviderRuntimeLinkTargetID,
 ): readonly DesktopProviderEnvironmentCandidate[] {
   return environments.map((environment) => {
     const routeDetails = providerEnvironmentRouteDetails(environment, controlPlanes);
+    const linkedRuntime = linkedRuntimeTargetForProviderEnvironment(environment, runtimeLinkTargets);
+    const occupancy = providerEnvironmentOccupancyForRuntimeTarget(
+      routeDetails,
+      linkedRuntime,
+      selectedRuntimeTargetID,
+    );
     return {
       provider_environment_id: environment.id,
       label: compact(routeDetails.providerEnvironment?.label) || compact(environment.label) || environment.env_public_id,
@@ -526,8 +536,52 @@ function providerEnvironmentCandidatesForSnapshot(
       env_public_id: environment.env_public_id,
       provider_label: compact(routeDetails.controlPlane?.display_label) || environment.provider_origin,
       route_state: providerEnvironmentCandidateRouteState(routeDetails.remoteRouteState),
+      occupancy,
     };
   });
+}
+
+function linkedRuntimeTargetForProviderEnvironment(
+  environment: DesktopProviderEnvironmentRecord,
+  runtimeLinkTargets: readonly DesktopProviderRuntimeLinkTarget[],
+): DesktopProviderRuntimeLinkTarget | null {
+  return runtimeLinkTargets.find((target) => (
+    target.provider_link_state === 'linked'
+    && target.provider_origin === environment.provider_origin
+    && target.provider_id === environment.provider_id
+    && target.env_public_id === environment.env_public_id
+  )) ?? null;
+}
+
+function occupancyFromLinkedRuntimeTarget(
+  linkedRuntime: DesktopProviderRuntimeLinkTarget,
+  state: Extract<DesktopProviderEnvironmentOccupancy['state'], 'linked_here' | 'occupied_by_known_runtime'>,
+): DesktopProviderEnvironmentOccupancy {
+  return {
+    state,
+    runtime_target_id: linkedRuntime.id,
+    runtime_kind: linkedRuntime.kind,
+    runtime_label: linkedRuntime.label,
+    provider_link_remote_enabled: linkedRuntime.provider_link_binding?.remote_enabled === true,
+    runtime_remote_enabled: linkedRuntime.runtime_service?.remote_enabled === true,
+  };
+}
+
+function providerEnvironmentOccupancyForRuntimeTarget(
+  routeDetails: ReturnType<typeof providerEnvironmentRouteDetails>,
+  linkedRuntime: DesktopProviderRuntimeLinkTarget | null,
+  selectedRuntimeTargetID: DesktopProviderRuntimeLinkTargetID,
+): DesktopProviderEnvironmentOccupancy {
+  if (linkedRuntime) {
+    return occupancyFromLinkedRuntimeTarget(
+      linkedRuntime,
+      linkedRuntime.id === selectedRuntimeTargetID ? 'linked_here' : 'occupied_by_known_runtime',
+    );
+  }
+  if (routeDetails.providerEnvironment?.runtime_health?.runtime_status === 'online') {
+    return { state: 'occupied_by_provider_online_runtime' };
+  }
+  return { state: 'available' };
 }
 
 function runtimeControlBlockedReasonCode(
@@ -1113,12 +1167,7 @@ function buildProviderEnvironmentEntry(
   const sessions = openSessionsByProviderEnvironment(openSessions, environment);
   const remoteSession = sessions.remote_desktop ?? null;
   const routeDetails = providerEnvironmentRouteDetails(environment, controlPlanes);
-  const linkedRuntime = runtimeLinkTargets.find((target) => (
-    target.provider_link_state === 'linked'
-    && target.provider_origin === environment.provider_origin
-    && target.provider_id === environment.provider_id
-    && target.env_public_id === environment.env_public_id
-  )) ?? null;
+  const linkedRuntime = linkedRuntimeTargetForProviderEnvironment(environment, runtimeLinkTargets);
   const remoteRuntimeHealth = routeDetails.providerEnvironment
     ? providerEnvironmentRuntimeHealth(routeDetails.providerEnvironment)
     : offlineRuntimeHealthForProviderRoute(routeDetails.remoteRouteState, routeDetails.remoteStateReason);
@@ -1200,7 +1249,6 @@ function buildEnvironmentEntries(
   managedRuntimePresenceByTargetID: Readonly<Record<string, DesktopManagedRuntimePresence>>,
 ): readonly DesktopEnvironmentEntry[] {
   const localLocalEnvironments = [preferences.local_environment];
-  const providerEnvironmentCandidates = providerEnvironmentCandidatesForSnapshot(preferences.provider_environments, controlPlanes);
   const localRuntimeTargetID = desktopProviderRuntimeLinkTargetID('local_environment', preferences.local_environment.id);
   const localPresence = managedRuntimePresenceByTargetID[localRuntimeTargetID];
   const localRuntimeTarget = buildProviderRuntimeLinkTarget({
@@ -1245,6 +1293,14 @@ function buildEnvironmentEntries(
     });
   });
   const runtimeLinkTargets = [localRuntimeTarget, ...sshRuntimeTargets, ...savedRuntimeLinkTargets];
+  const providerEnvironmentCandidatesForTarget = (
+    runtimeTargetID: DesktopProviderRuntimeLinkTargetID,
+  ): readonly DesktopProviderEnvironmentCandidate[] => providerEnvironmentCandidatesForSnapshot(
+    preferences.provider_environments,
+    controlPlanes,
+    runtimeLinkTargets,
+    runtimeTargetID,
+  );
   const entries: DesktopEnvironmentEntry[] = [
     ...localLocalEnvironments
       .map((environment) => (
@@ -1252,7 +1308,7 @@ function buildEnvironmentEntries(
           environment,
           openSessionsByLocalEnvironment(openSessions, environment),
           controlPlanes,
-          providerEnvironmentCandidates,
+          providerEnvironmentCandidatesForTarget(localRuntimeTarget.id),
           localPresence,
         )
       )),
@@ -1281,7 +1337,7 @@ function buildEnvironmentEntries(
       openSessionBySSHEnvironment(openSessions, environment),
       savedSSHRuntimeHealth[environment.id],
       managedRuntimePresenceByTargetID[desktopProviderRuntimeLinkTargetID('ssh_environment', desktopSSHEnvironmentID(environment))],
-      providerEnvironmentCandidates,
+      providerEnvironmentCandidatesForTarget(desktopProviderRuntimeLinkTargetID('ssh_environment', desktopSSHEnvironmentID(environment))),
     ));
   }
   for (const target of preferences.saved_runtime_targets) {
@@ -1291,7 +1347,7 @@ function buildEnvironmentEntries(
       target,
       openSessionByRuntimeTarget(openSessions, target),
       managedRuntimePresenceByTargetID[runtimeTargetID],
-      providerEnvironmentCandidates,
+      providerEnvironmentCandidatesForTarget(runtimeTargetID),
     ));
   }
 
