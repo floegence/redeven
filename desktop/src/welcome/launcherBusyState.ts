@@ -20,6 +20,7 @@ export type BusyAction =
   | 'set_provider_environment_pinned'
   | 'set_saved_environment_pinned'
   | 'set_saved_ssh_environment_pinned'
+  | 'set_saved_runtime_target_pinned'
   | 'delete_control_plane'
   | 'cancel_launcher_operation'
   | 'close_launcher_or_quit'
@@ -58,6 +59,7 @@ export function busyStateForLauncherRequest(
       };
     case 'upsert_saved_environment':
     case 'upsert_saved_ssh_environment':
+    case 'upsert_saved_runtime_target':
       return {
         action: 'save_environment',
         environment_id: request.environment_id ?? '',
@@ -67,6 +69,7 @@ export function busyStateForLauncherRequest(
       };
     case 'delete_saved_environment':
     case 'delete_saved_ssh_environment':
+    case 'delete_saved_runtime_target':
       return {
         action: 'delete_environment',
         environment_id: request.environment_id,

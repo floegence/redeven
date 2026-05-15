@@ -91,6 +91,41 @@ func (s *runtimeControlServer) Start(ctx context.Context) error {
 	return nil
 }
 
+func (s *runtimeControlServer) StartOnListener(ctx context.Context, ln net.Listener) error {
+	if s == nil {
+		return nil
+	}
+	if s.srv != nil {
+		return nil
+	}
+	if ln == nil {
+		return errors.New("missing runtime-control listener")
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/provider-link", s.handleProviderLink)
+	mux.HandleFunc("/v1/provider-link/connect", s.handleProviderLinkConnect)
+	mux.HandleFunc("/v1/provider-link/disconnect", s.handleProviderLinkDisconnect)
+	srv := &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	s.ln = ln
+	s.srv = srv
+	go func() {
+		<-ctx.Done()
+		_ = s.Close()
+	}()
+	go func() {
+		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) && s.log != nil {
+			s.log.Warn("runtime-control server stopped", "error", err)
+		}
+	}()
+	if s.log != nil {
+		s.log.Info("runtime-control listening", "addr", ln.Addr().String())
+	}
+	return nil
+}
+
 func (s *runtimeControlServer) Close() error {
 	if s == nil {
 		return nil

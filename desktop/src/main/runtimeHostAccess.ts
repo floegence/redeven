@@ -1,4 +1,5 @@
-import { spawn, type ChildProcessByStdio } from 'node:child_process';
+import * as childProcess from 'node:child_process';
+import type { ChildProcessByStdio } from 'node:child_process';
 import type { Readable, Writable } from 'node:stream';
 
 import type { DesktopRuntimeHostAccess } from '../shared/desktopRuntimePlacement';
@@ -21,6 +22,15 @@ export type RuntimeHostCommandOptions = Readonly<{
 }>;
 
 type SpawnedCommand = ChildProcessByStdio<Writable | null, Readable | null, Readable | null>;
+type SpawnedStreamingCommand = ChildProcessByStdio<Writable, Readable, Readable>;
+
+export type RuntimeHostStreamingCommand = Readonly<{
+  stdin: Writable;
+  stdout: Readable;
+  stderr: Readable;
+  closed: Promise<void>;
+  kill: (signal?: NodeJS.Signals) => void;
+}>;
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -44,6 +54,20 @@ function sshRemoteCommand(argv: readonly string[]): string {
   return argv.map((part) => shellQuote(String(part ?? ''))).join(' ');
 }
 
+function sshRemoteEnvPrefix(env: NodeJS.ProcessEnv | undefined): string {
+  const entries = Object.entries(env ?? {})
+    .map(([key, value]) => [compact(key), value == null ? '' : String(value)] as const)
+    .filter(([key]) => /^[A-Za-z_][A-Za-z0-9_]*$/u.test(key));
+  if (entries.length === 0) {
+    return '';
+  }
+  return `env ${entries.map(([key, value]) => `${key}=${shellQuote(value)}`).join(' ')} `;
+}
+
+function sshRemoteCommandWithEnv(argv: readonly string[], env: NodeJS.ProcessEnv | undefined): string {
+  return `${sshRemoteEnvPrefix(env)}${sshRemoteCommand(argv)}`;
+}
+
 function spawnCommand(
   command: string,
   args: readonly string[],
@@ -54,7 +78,7 @@ function spawnCommand(
     return Promise.reject(new Error('Runtime host command argv must be non-empty.'));
   }
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
+    const child = childProcess.spawn(command, args, {
       cwd: compact(options.cwd) || undefined,
       env: {
         ...process.env,
@@ -86,6 +110,45 @@ function spawnCommand(
   });
 }
 
+function spawnStreamingCommand(
+  command: string,
+  args: readonly string[],
+  options: RuntimeHostCommandOptions,
+): RuntimeHostStreamingCommand {
+  if (compact(command) === '' || args.some((arg) => compact(arg) === '')) {
+    throw new Error('Runtime host command argv must be non-empty.');
+  }
+  const child = childProcess.spawn(command, args, {
+    cwd: compact(options.cwd) || undefined,
+    env: {
+      ...process.env,
+      ...options.env,
+    },
+    stdio: ['pipe', 'pipe', 'pipe'],
+    signal: options.signal,
+  }) as SpawnedStreamingCommand;
+  const closed = new Promise<void>((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', (exitCode, closeSignal) => {
+      if (exitCode === 0 && !closeSignal) {
+        resolve();
+        return;
+      }
+      const reason = closeSignal ? `signal ${closeSignal}` : `exit code ${exitCode ?? 'unknown'}`;
+      reject(new Error(`${command} failed with ${reason}`));
+    });
+  });
+  return {
+    stdin: child.stdin,
+    stdout: child.stdout,
+    stderr: child.stderr,
+    closed,
+    kill: (signal = 'SIGTERM') => {
+      child.kill(signal);
+    },
+  };
+}
+
 export function createLocalRuntimeHostExecutor(): RuntimeHostAccessExecutor {
   return {
     host_access: { kind: 'local_host' },
@@ -98,6 +161,18 @@ export function createLocalRuntimeHostExecutor(): RuntimeHostAccessExecutor {
     },
   };
 }
+
+export function spawnLocalRuntimeHostCommand(
+  argv: readonly string[],
+  options: RuntimeHostCommandOptions = {},
+): RuntimeHostStreamingCommand {
+  if (argv.length === 0) {
+    throw new Error('Runtime host command argv must be non-empty.');
+  }
+  const [command, ...args] = argv.map((part) => compact(part));
+  return spawnStreamingCommand(command!, args, options);
+}
+
 export function createSSHRuntimeHostExecutor(
   ssh: DesktopSSHEnvironmentDetails,
   options: Readonly<{
@@ -118,9 +193,32 @@ export function createSSHRuntimeHostExecutor(
         `ConnectTimeout=${ssh.connect_timeout_seconds}`,
         ...(ssh.auth_mode === 'key_agent' ? ['-o', 'BatchMode=yes'] : []),
         ...sshTargetArgs(ssh),
-        sshRemoteCommand(argv),
+        sshRemoteCommandWithEnv(argv, commandOptions.env),
       ];
-      return spawnCommand(sshBinary, args, commandOptions);
+      return spawnCommand(sshBinary, args, { ...commandOptions, env: undefined });
     },
   };
+}
+
+export function spawnSSHRuntimeHostCommand(
+  ssh: DesktopSSHEnvironmentDetails,
+  argv: readonly string[],
+  options: RuntimeHostCommandOptions & Readonly<{
+    sshBinary?: string;
+  }> = {},
+): RuntimeHostStreamingCommand {
+  if (argv.length === 0) {
+    throw new Error('Runtime host command argv must be non-empty.');
+  }
+  const sshBinary = compact(options.sshBinary) || 'ssh';
+  const args = [
+    '-T',
+    '-x',
+    '-o',
+    `ConnectTimeout=${ssh.connect_timeout_seconds}`,
+    ...(ssh.auth_mode === 'key_agent' ? ['-o', 'BatchMode=yes'] : []),
+    ...sshTargetArgs(ssh),
+    sshRemoteCommandWithEnv(argv, options.env),
+  ];
+  return spawnStreamingCommand(sshBinary, args, { ...options, env: undefined });
 }

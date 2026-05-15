@@ -12,7 +12,7 @@ describe('runtimePlacementBridge', () => {
       host_access: { kind: 'local_host' },
       placement: { kind: 'host_process', install_dir: '' },
       bridge_kind: 'host_process',
-      command: ['/Applications/Redeven.app/redeven'],
+      command: ['/Applications/Redeven.app/redeven', 'desktop-bridge'],
       requires_published_port: false,
       exposes_loopback_only: true,
     });
@@ -30,9 +30,10 @@ describe('runtimePlacementBridge', () => {
         runtime_root: '/workspace/.redeven',
         bridge_strategy: 'exec_stream',
       },
+      runtime_binary_path: '/Applications/Redeven.app/redeven',
     })).toMatchObject({
       bridge_kind: 'container_exec_stream',
-      command: ['docker', 'exec', '-i', 'container-stable-id', 'redeven', 'desktop-bridge'],
+      command: ['docker', 'exec', '-i', '--env', 'REDEVEN_DESKTOP_OWNER_ID', 'container-stable-id', 'redeven', 'desktop-bridge', '--state-root', '/workspace/.redeven'],
       requires_published_port: false,
       exposes_loopback_only: true,
     });

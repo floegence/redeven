@@ -89,6 +89,10 @@ import {
   type DesktopSSHBootstrapStrategy,
   type DesktopSSHEnvironmentDetails,
 } from '../shared/desktopSSH';
+import type {
+  DesktopContainerEngine,
+  DesktopRuntimeContainerOwner,
+} from '../shared/desktopRuntimePlacement';
 import type { DesktopSSHConfigHost } from '../shared/desktopSSHConfig';
 import {
   applyDesktopAccessAutoPortToDraft,
@@ -255,7 +259,27 @@ type SSHConnectionDialogState = Readonly<{
   connect_timeout_seconds: string;
 }>;
 
-type ConnectionDialogState = ExternalURLConnectionDialogState | SSHConnectionDialogState | null;
+type RuntimeContainerConnectionDialogState = Readonly<{
+  mode: 'create' | 'edit';
+  connection_kind: 'local_container_runtime' | 'ssh_container_runtime';
+  environment_id: string;
+  label: string;
+  ssh_destination: string;
+  ssh_port: string;
+  auth_mode: DesktopSSHAuthMode;
+  remote_install_dir: string;
+  bootstrap_strategy: DesktopSSHBootstrapStrategy;
+  release_base_url: string;
+  connect_timeout_seconds: string;
+  container_engine: DesktopContainerEngine;
+  container_id: string;
+  container_label: string;
+  container_owner: DesktopRuntimeContainerOwner;
+  runtime_root: string;
+}>;
+
+type ConnectionDialogKind = 'external_local_ui' | 'ssh_environment' | 'local_container_runtime' | 'ssh_container_runtime';
+type ConnectionDialogState = ExternalURLConnectionDialogState | SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null;
 
 type ControlPlaneDialogState = Readonly<{
   display_label: string;
@@ -510,6 +534,31 @@ function createSSHConnectionDialogState(
   };
 }
 
+function createRuntimeContainerConnectionDialogState(
+  mode: 'create' | 'edit',
+  kind: RuntimeContainerConnectionDialogState['connection_kind'],
+  overrides: Partial<RuntimeContainerConnectionDialogState> = {},
+): RuntimeContainerConnectionDialogState {
+  return {
+    mode,
+    connection_kind: kind,
+    environment_id: trimString(overrides.environment_id),
+    label: trimString(overrides.label),
+    ssh_destination: trimString(overrides.ssh_destination),
+    ssh_port: trimString(overrides.ssh_port),
+    auth_mode: (trimString(overrides.auth_mode) as DesktopSSHAuthMode) || DEFAULT_DESKTOP_SSH_AUTH_MODE,
+    remote_install_dir: trimString(overrides.remote_install_dir),
+    bootstrap_strategy: (trimString(overrides.bootstrap_strategy) as DesktopSSHBootstrapStrategy) || DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
+    release_base_url: trimString(overrides.release_base_url),
+    connect_timeout_seconds: trimString(overrides.connect_timeout_seconds),
+    container_engine: overrides.container_engine ?? 'docker',
+    container_id: trimString(overrides.container_id),
+    container_label: trimString(overrides.container_label),
+    container_owner: overrides.container_owner ?? 'external',
+    runtime_root: trimString(overrides.runtime_root) || '/workspace/.redeven',
+  };
+}
+
 function createControlPlaneDialogState(
   overrides: Partial<Exclude<ControlPlaneDialogState, null>> = {},
 ): Exclude<ControlPlaneDialogState, null> {
@@ -592,7 +641,7 @@ function desktopSettingsBridge(): DesktopSettingsBridge | null {
 function DesktopCommandRegistrar(props: Readonly<{
   snapshot: () => DesktopWelcomeSnapshot;
   showConnectEnvironment: (message?: string) => void;
-  openCreateConnectionDialog: (message?: string, preferredKind?: 'external_local_ui' | 'ssh_environment') => void;
+  openCreateConnectionDialog: (message?: string, preferredKind?: ConnectionDialogKind) => void;
   openSettingsSurface: (environmentID?: string) => void;
   openLocalEnvironment: () => Promise<void>;
   openEnvironment: (
@@ -640,10 +689,10 @@ function DesktopCommandRegistrar(props: Readonly<{
       {
         id: 'redeven.desktop.focusEnvironmentURL',
         title: 'Connect Another Environment',
-        description: 'Open the New Environment dialog for a Redeven URL or SSH host',
+        description: 'Open the New Environment dialog for a Redeven URL, SSH host, or container runtime target',
         category: 'Desktop',
         icon: Search,
-        execute: () => props.openCreateConnectionDialog('Enter a Redeven URL or add an SSH host.'),
+        execute: () => props.openCreateConnectionDialog('Add a Redeven URL, SSH host, or container runtime target.'),
       },
       {
         id: 'redeven.desktop.closeLauncherOrQuit',
@@ -1196,7 +1245,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   function openCreateConnectionDialog(
     message = '',
-    preferredKind: 'external_local_ui' | 'ssh_environment' = 'external_local_ui',
+    preferredKind: ConnectionDialogKind = 'external_local_ui',
   ): void {
     if (snapshot().surface !== 'connect_environment') {
       showConnectEnvironment(message || 'Open the launcher to add a connection.');
@@ -1212,19 +1261,47 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setConnectionDialogFieldErrors({});
     setControlPlaneDialogError('');
     setControlPlaneDialogState(null);
-    setConnectionDialogState(
-      preferredKind === 'ssh_environment'
-        ? createSSHConnectionDialogState('create', {
-          bootstrap_strategy: DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
-        })
-        : createExternalURLConnectionDialogState('create', {
-          external_local_ui_url: trimString(snapshot().suggested_remote_url),
-        }),
-    );
+    if (preferredKind === 'ssh_environment') {
+      setConnectionDialogState(createSSHConnectionDialogState('create', {
+        bootstrap_strategy: DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
+      }));
+      return;
+    }
+    if (preferredKind === 'local_container_runtime' || preferredKind === 'ssh_container_runtime') {
+      setConnectionDialogState(createRuntimeContainerConnectionDialogState('create', preferredKind, {
+        bootstrap_strategy: DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
+      }));
+      return;
+    }
+    setConnectionDialogState(createExternalURLConnectionDialogState('create', {
+      external_local_ui_url: trimString(snapshot().suggested_remote_url),
+    }));
   }
 
   function startEditingEnvironment(environment: DesktopEnvironmentEntry): void {
-    if (environment.kind === 'local_environment') {
+    if (environment.managed_runtime_placement?.kind === 'container_process' && environment.managed_runtime_host_access) {
+      const isSSHContainer = environment.managed_runtime_host_access.kind === 'ssh_host';
+      setConnectionDialogState(createRuntimeContainerConnectionDialogState('edit', isSSHContainer ? 'ssh_container_runtime' : 'local_container_runtime', {
+        environment_id: environment.id,
+        label: environment.label,
+        ssh_destination: isSSHContainer ? environment.managed_runtime_host_access.ssh.ssh_destination : '',
+        ssh_port: isSSHContainer && environment.managed_runtime_host_access.ssh.ssh_port != null ? String(environment.managed_runtime_host_access.ssh.ssh_port) : '',
+        auth_mode: isSSHContainer ? environment.managed_runtime_host_access.ssh.auth_mode : DEFAULT_DESKTOP_SSH_AUTH_MODE,
+        remote_install_dir: isSSHContainer && environment.managed_runtime_host_access.ssh.remote_install_dir !== DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR
+          ? environment.managed_runtime_host_access.ssh.remote_install_dir
+          : '',
+        bootstrap_strategy: isSSHContainer ? environment.managed_runtime_host_access.ssh.bootstrap_strategy : DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
+        release_base_url: isSSHContainer ? environment.managed_runtime_host_access.ssh.release_base_url : '',
+        connect_timeout_seconds: isSSHContainer && environment.managed_runtime_host_access.ssh.connect_timeout_seconds != null
+          ? String(environment.managed_runtime_host_access.ssh.connect_timeout_seconds)
+          : '',
+        container_engine: environment.managed_runtime_placement.container_engine,
+        container_id: environment.managed_runtime_placement.container_id,
+        container_label: environment.managed_runtime_placement.container_label,
+        container_owner: environment.managed_runtime_placement.container_owner,
+        runtime_root: environment.managed_runtime_placement.runtime_root,
+      }));
+    } else if (environment.kind === 'local_environment') {
       openSettingsSurface(environment.id);
     } else if (environment.kind === 'provider_environment') {
       openSettingsSurface(environment.id);
@@ -1308,7 +1385,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
   }
 
-  function switchConnectionDialogKind(kind: 'external_local_ui' | 'ssh_environment'): void {
+  function switchConnectionDialogKind(kind: ConnectionDialogKind): void {
     setConnectionDialogFieldErrors({});
     setConnectionDialogState((current) => {
       if (!current || current.mode !== 'create' || current.connection_kind === kind) {
@@ -1316,6 +1393,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       }
       if (kind === 'ssh_environment') {
         return createSSHConnectionDialogState('create', {
+          label: current.label,
+          bootstrap_strategy: DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
+        });
+      }
+      if (kind === 'local_container_runtime' || kind === 'ssh_container_runtime') {
+        return createRuntimeContainerConnectionDialogState('create', kind, {
           label: current.label,
           bootstrap_strategy: DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
         });
@@ -1330,7 +1413,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function updateConnectionDialogField(
-    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'remote_install_dir' | 'release_base_url' | 'connect_timeout_seconds',
+    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'remote_install_dir' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_label' | 'container_owner' | 'runtime_root',
     value: string,
   ): void {
     setConnectionDialogState((current) => {
@@ -1346,7 +1429,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   function switchSSHBootstrapStrategy(strategy: DesktopSSHBootstrapStrategy): void {
     setConnectionDialogState((current) => {
-      if (!current || current.connection_kind !== 'ssh_environment') {
+      if (
+        !current
+        || (
+          current.connection_kind !== 'ssh_environment'
+          && current.connection_kind !== 'ssh_container_runtime'
+        )
+      ) {
         return current;
       }
       return {
@@ -1446,6 +1535,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       kind: 'open_local_environment',
       environment_id: environment.id,
       route,
+      ...(environment.managed_runtime_target_id ? { runtime_target_id: environment.managed_runtime_target_id } : {}),
+      ...(environment.managed_runtime_placement_target_id ? { placement_target_id: environment.managed_runtime_placement_target_id } : {}),
+      ...(environment.managed_runtime_host_access ? { host_access: environment.managed_runtime_host_access } : {}),
+      ...(environment.managed_runtime_placement ? { placement: environment.managed_runtime_placement } : {}),
     }, errorTarget);
     return result?.outcome === 'opened_environment_window' || result?.outcome === 'focused_environment_window';
   }
@@ -1864,6 +1957,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       kind: 'open_ssh_environment',
       environment_id: environment?.id,
       label: environment?.label,
+      ...(environment?.managed_runtime_target_id ? { runtime_target_id: environment.managed_runtime_target_id } : {}),
+      ...(environment?.managed_runtime_placement_target_id ? { placement_target_id: environment.managed_runtime_placement_target_id } : {}),
+      ...(environment?.managed_runtime_host_access ? { host_access: environment.managed_runtime_host_access } : {}),
+      ...(environment?.managed_runtime_placement ? { placement: environment.managed_runtime_placement } : {}),
       ssh_destination: details.ssh_destination,
       ssh_port: details.ssh_port,
       auth_mode: details.auth_mode,
@@ -2323,6 +2420,64 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
   }
 
+  async function upsertSavedRuntimeTarget(
+    request: Readonly<{
+      environment_id: string;
+      label: string;
+      state: RuntimeContainerConnectionDialogState;
+      errorTarget: 'connect' | 'dialog';
+      successMessage: string;
+    }>,
+  ): Promise<boolean> {
+    setConnectionDialogError('');
+    setBusyState({
+      action: 'save_environment',
+      environment_id: trimString(request.environment_id),
+      provider_origin: '',
+      provider_id: '',
+      progress: null,
+    });
+    try {
+      const isSSHContainer = request.state.connection_kind === 'ssh_container_runtime';
+      await props.runtime.launcher.performAction({
+        kind: 'upsert_saved_runtime_target',
+        environment_id: trimString(request.environment_id) || undefined,
+        label: trimString(request.label),
+        host_access: isSSHContainer
+          ? {
+              kind: 'ssh_host',
+              ssh: {
+                ssh_destination: request.state.ssh_destination,
+                ssh_port: trimString(request.state.ssh_port) === '' ? null : Number.parseInt(request.state.ssh_port, 10),
+                auth_mode: request.state.auth_mode,
+                remote_install_dir: trimString(request.state.remote_install_dir) || DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
+                bootstrap_strategy: request.state.bootstrap_strategy,
+                release_base_url: trimString(request.state.release_base_url),
+                connect_timeout_seconds: trimString(request.state.connect_timeout_seconds) === '' ? null : Number(trimString(request.state.connect_timeout_seconds)),
+              },
+            }
+          : { kind: 'local_host' },
+        placement: {
+          kind: 'container_process',
+          container_engine: request.state.container_engine,
+          container_id: trimString(request.state.container_id),
+          container_label: trimString(request.state.container_label) || trimString(request.state.container_id),
+          container_owner: request.state.container_owner,
+          runtime_root: trimString(request.state.runtime_root),
+          bridge_strategy: 'exec_stream',
+        },
+      });
+      await refreshSnapshot();
+      showActionToast(request.successMessage);
+      return true;
+    } catch (error) {
+      setErrorMessage(request.errorTarget, getErrorMessage(error));
+      return false;
+    } finally {
+      setBusyState(IDLE_LAUNCHER_BUSY_STATE);
+    }
+  }
+
   function validateConnectionDialogFields(state: ConnectionDialogState): Partial<Record<string, string>> {
     const errors: Partial<Record<string, string>> = {};
     if (!trimString(state?.label ?? '')) {
@@ -2334,11 +2489,29 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (state?.connection_kind === 'ssh_environment' && !trimString(state.ssh_destination)) {
       errors.ssh_destination = 'SSH Destination is required.';
     }
-    if (state?.connection_kind === 'ssh_environment' && trimString(state.ssh_port) !== '') {
+    if (state?.connection_kind === 'ssh_container_runtime' && !trimString(state.ssh_destination)) {
+      errors.ssh_destination = 'SSH Destination is required.';
+    }
+    if (
+      (state?.connection_kind === 'ssh_environment' || state?.connection_kind === 'ssh_container_runtime')
+      && trimString(state.ssh_port) !== ''
+    ) {
       const port = Number.parseInt(state.ssh_port, 10);
       if (!Number.isFinite(port) || port < 1 || port > 65535) {
         errors.ssh_port = 'Port must be 1–65535.';
       }
+    }
+    if (
+      (state?.connection_kind === 'local_container_runtime' || state?.connection_kind === 'ssh_container_runtime')
+      && !trimString(state.container_id)
+    ) {
+      errors.container_id = 'Container is required.';
+    }
+    if (
+      (state?.connection_kind === 'local_container_runtime' || state?.connection_kind === 'ssh_container_runtime')
+      && !trimString(state.runtime_root)
+    ) {
+      errors.runtime_root = 'Runtime root is required.';
     }
     return errors;
   }
@@ -2373,7 +2546,17 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           ? 'Connection updated.'
           : 'Connection saved to Environment Library.',
       });
-    } else {
+    } else if (state.connection_kind === 'local_container_runtime' || state.connection_kind === 'ssh_container_runtime') {
+      saved = await upsertSavedRuntimeTarget({
+        environment_id: state.environment_id,
+        label: state.label,
+        state,
+        errorTarget: 'dialog',
+        successMessage: state.mode === 'edit'
+          ? 'Runtime target updated.'
+          : 'Runtime target saved to Environment Library.',
+      });
+    } else if (state.connection_kind === 'external_local_ui') {
       saved = await upsertSavedEnvironment({
         environment_id: state.environment_id,
         label: state.label,
@@ -2420,6 +2603,20 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       ? `${environment.label} pinned.`
       : `${environment.label} unpinned.`;
     if (environment.kind === 'local_environment') {
+      if (environment.managed_runtime_placement?.kind === 'container_process' && environment.managed_runtime_host_access) {
+        const result = await performLauncherAction({
+          kind: 'set_saved_runtime_target_pinned',
+          environment_id: environment.id,
+          label: environment.label,
+          pinned: nextPinned,
+          host_access: environment.managed_runtime_host_access,
+          placement: environment.managed_runtime_placement,
+        }, 'connect');
+        if (result?.outcome === 'saved_environment') {
+          showActionToast(successMessage);
+        }
+        return;
+      }
       const result = await performLauncherAction({
         kind: 'set_local_environment_pinned',
         environment_id: environment.id,
@@ -2442,6 +2639,20 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return;
     }
     if (environment.kind === 'ssh_environment') {
+      if (environment.managed_runtime_placement?.kind === 'container_process' && environment.managed_runtime_host_access) {
+        const result = await performLauncherAction({
+          kind: 'set_saved_runtime_target_pinned',
+          environment_id: environment.id,
+          label: environment.label,
+          pinned: nextPinned,
+          host_access: environment.managed_runtime_host_access,
+          placement: environment.managed_runtime_placement,
+        }, 'connect');
+        if (result?.outcome === 'saved_environment') {
+          showActionToast(successMessage);
+        }
+        return;
+      }
       const details = environment.ssh_details;
       if (!details) {
         setErrorMessage('connect', 'SSH connection details are missing.');
@@ -2488,7 +2699,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (!target) {
       return;
     }
-    if (target.kind !== 'ssh_environment' && target.kind !== 'external_local_ui') {
+    if (
+      target.kind !== 'ssh_environment'
+      && target.kind !== 'external_local_ui'
+      && !(target.kind === 'local_environment' && target.managed_runtime_placement?.kind === 'container_process')
+    ) {
       throw new Error('Unsupported delete target.');
     }
     const hadBackgroundOperation = deleteTargetOperation() !== null;
@@ -2501,7 +2716,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
     try {
       await props.runtime.launcher.performAction({
-        kind: target.kind === 'ssh_environment' ? 'delete_saved_ssh_environment' : 'delete_saved_environment',
+        kind: target.managed_runtime_placement?.kind === 'container_process'
+          ? 'delete_saved_runtime_target'
+          : target.kind === 'ssh_environment'
+            ? 'delete_saved_ssh_environment'
+            : 'delete_saved_environment',
         environment_id: target.id,
       });
       await refreshSnapshot();
@@ -2998,7 +3217,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
   setLibraryQuery: (value: string) => void;
   openLocalEnvironment: () => Promise<void>;
   openSettingsSurface: (environmentID?: string) => void;
-  openCreateConnectionDialog: (message?: string, preferredKind?: 'external_local_ui' | 'ssh_environment') => void;
+  openCreateConnectionDialog: (message?: string, preferredKind?: ConnectionDialogKind) => void;
   openCreateControlPlaneDialog: (message?: string) => void;
   refreshAllEnvironmentRuntimes: () => Promise<void>;
   openRemoteEnvironment: (
@@ -3326,7 +3545,7 @@ function EnvironmentCardsPanel(props: Readonly<{
   layoutReferenceCardCount: number;
   busyState: DesktopLauncherBusyState;
   actionProgress: readonly DesktopLauncherActionProgress[];
-  openCreateConnectionDialog: (message?: string, preferredKind?: 'external_local_ui' | 'ssh_environment') => void;
+  openCreateConnectionDialog: (message?: string, preferredKind?: ConnectionDialogKind) => void;
   openEnvironment: (
     environment: DesktopEnvironmentEntry,
     errorTarget?: 'connect' | 'dialog',
@@ -4370,8 +4589,11 @@ function EnvironmentConnectionCard(props: Readonly<{
       'set_provider_environment_pinned',
       'set_saved_environment_pinned',
       'set_saved_ssh_environment_pinned',
+      'set_saved_runtime_target_pinned',
     ])
   ));
+  const isContainerRuntimeTarget = createMemo(() => props.environment.managed_runtime_placement?.kind === 'container_process');
+  const deleteTitle = createMemo(() => isContainerRuntimeTarget() ? 'Delete runtime target' : 'Delete connection');
 
   return (
     <Card class={cn(
@@ -4512,8 +4734,8 @@ function EnvironmentConnectionCard(props: Readonly<{
               placement="top"
             >
               <ConsoleActionIconButton
-                title={props.environment.kind === 'local_environment' ? 'Environment settings' : 'Connection settings'}
-                aria-label={props.environment.kind === 'local_environment'
+                title={isContainerRuntimeTarget() ? 'Runtime target settings' : props.environment.kind === 'local_environment' ? 'Environment settings' : 'Connection settings'}
+                aria-label={props.environment.kind === 'local_environment' && !isContainerRuntimeTarget()
                   ? `Settings for ${props.environment.label}`
                   : `Connection settings for ${props.environment.label}`}
                 onClick={() => props.editEnvironment(props.environment)}
@@ -4525,7 +4747,7 @@ function EnvironmentConnectionCard(props: Readonly<{
           <Show when={props.environment.can_delete}>
             <DesktopTooltip content="Delete" placement="top">
               <ConsoleActionIconButton
-                title="Delete connection"
+                title={deleteTitle()}
                 aria-label={`Delete ${props.environment.label}`}
                 danger
                 onClick={() => props.deleteEnvironment(props.environment)}
@@ -4541,7 +4763,7 @@ function EnvironmentConnectionCard(props: Readonly<{
 }
 
 function NewEnvironmentPlaceholderCard(props: Readonly<{
-  openCreateConnectionDialog: (message?: string, preferredKind?: 'external_local_ui' | 'ssh_environment') => void;
+  openCreateConnectionDialog: (message?: string, preferredKind?: ConnectionDialogKind) => void;
 }>) {
   return (
     <Card class={cn(
@@ -4558,9 +4780,9 @@ function NewEnvironmentPlaceholderCard(props: Readonly<{
         </div>
         <div class="space-y-1 text-center">
           <div class="text-sm font-semibold text-foreground">New Environment</div>
-          <div class="text-xs text-muted-foreground">Open a Redeven URL or connect over SSH</div>
+          <div class="text-xs text-muted-foreground">Add URL, SSH, or container runtime targets</div>
         </div>
-        <div class="flex gap-2">
+        <div class="flex flex-wrap justify-center gap-2">
           <ConsoleChipActionButton
             onClick={(event) => {
               event.stopPropagation();
@@ -4576,6 +4798,22 @@ function NewEnvironmentPlaceholderCard(props: Readonly<{
             }}
           >
             SSH
+          </ConsoleChipActionButton>
+          <ConsoleChipActionButton
+            onClick={(event) => {
+              event.stopPropagation();
+              props.openCreateConnectionDialog('', 'local_container_runtime');
+            }}
+          >
+            Local Container
+          </ConsoleChipActionButton>
+          <ConsoleChipActionButton
+            onClick={(event) => {
+              event.stopPropagation();
+              props.openCreateConnectionDialog('', 'ssh_container_runtime');
+            }}
+          >
+            SSH Container
           </ConsoleChipActionButton>
         </div>
       </div>
@@ -5511,10 +5749,10 @@ function ConnectionDialog(props: Readonly<{
   busyState: DesktopLauncherBusyState;
   onOpenChange: (open: boolean) => void;
   updateField: (
-    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'remote_install_dir' | 'release_base_url' | 'connect_timeout_seconds',
+    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'remote_install_dir' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_label' | 'container_owner' | 'runtime_root',
     value: string,
   ) => void;
-  switchKind: (kind: 'external_local_ui' | 'ssh_environment') => void;
+  switchKind: (kind: ConnectionDialogKind) => void;
   switchBootstrapStrategy: (strategy: DesktopSSHBootstrapStrategy) => void;
   clearFieldErrors: () => void;
   onConnect: () => Promise<void>;
@@ -5527,14 +5765,20 @@ function ConnectionDialog(props: Readonly<{
     open: false,
     initialized_for_state_key: 'closed',
   });
-  const showSSHAdvanced = createMemo(() => connectionKind() === 'ssh_environment' && advancedState().open);
+  const isSSHBackedKind = createMemo(() => connectionKind() === 'ssh_environment' || connectionKind() === 'ssh_container_runtime');
+  const isContainerKind = createMemo(() => connectionKind() === 'local_container_runtime' || connectionKind() === 'ssh_container_runtime');
+  const showSSHAdvanced = createMemo(() => isSSHBackedKind() && advancedState().open);
   const sshBootstrapStrategy = createMemo(() => (
-    props.state?.connection_kind === 'ssh_environment'
+    props.state?.connection_kind === 'ssh_environment' || props.state?.connection_kind === 'ssh_container_runtime'
       ? props.state.bootstrap_strategy
       : DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY
   ));
   const sshReleaseBaseURLLabel = createMemo(() => (
-    trimString(props.state?.connection_kind === 'ssh_environment' ? props.state.release_base_url : '') === ''
+    trimString(
+      props.state?.connection_kind === 'ssh_environment' || props.state?.connection_kind === 'ssh_container_runtime'
+        ? props.state.release_base_url
+        : '',
+    ) === ''
       ? DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL_LABEL
       : 'Custom mirror'
   ));
@@ -5548,7 +5792,7 @@ function ConnectionDialog(props: Readonly<{
         return 'Auto';
     }
   });
-  const showCreateConnectAction = createMemo(() => isCreate() && connectionKind() !== 'ssh_environment');
+  const showCreateConnectAction = createMemo(() => isCreate() && connectionKind() === 'external_local_ui');
   const connectionKindDescription = createMemo<JSX.Element>(() => {
     switch (connectionKind()) {
       case 'external_local_ui':
@@ -5561,16 +5805,32 @@ function ConnectionDialog(props: Readonly<{
         );
       case 'ssh_environment':
         return 'Deploy a Desktop-owned Local Environment profile to a host you can reach over SSH. Desktop reuses shared release artifacts on that host and keeps one runtime state set there.';
+      case 'local_container_runtime':
+        return 'Save a runtime target inside a container on this device. Open remains separate; start the runtime from this card when the container is available.';
+      case 'ssh_container_runtime':
+        return 'Save a runtime target inside a container on an SSH host. Desktop manages the runtime through SSH and a bridge stream, not through published container ports.';
       default:
         return '';
     }
   });
 
   createEffect(() => {
-    setAdvancedState((current) => syncSSHConnectionDialogAdvancedState(
-      current,
-      props.state,
-    ));
+    const state = props.state;
+    setAdvancedState((current) => syncSSHConnectionDialogAdvancedState(current, (
+      state?.connection_kind === 'ssh_environment'
+        ? state
+        : state?.connection_kind === 'ssh_container_runtime'
+          ? {
+              mode: state.mode,
+              connection_kind: 'ssh_environment',
+              environment_id: state.environment_id,
+              remote_install_dir: state.remote_install_dir,
+              release_base_url: state.release_base_url,
+            }
+          : state?.connection_kind === 'external_local_ui'
+            ? state
+            : null
+    )));
   });
 
   return (
@@ -5632,12 +5892,14 @@ function ConnectionDialog(props: Readonly<{
         <Show when={isCreate()}>
           <div class="space-y-1.5">
             <label class="block text-xs font-medium text-foreground">Environment Type</label>
-              <SegmentedControl
-                value={connectionKind()}
-                onChange={(value) => props.switchKind(value as 'external_local_ui' | 'ssh_environment')}
-                options={[
-                  { value: 'external_local_ui', label: 'Redeven URL' },
+            <SegmentedControl
+              value={connectionKind()}
+              onChange={(value) => props.switchKind(value as ConnectionDialogKind)}
+              options={[
+                { value: 'external_local_ui', label: 'Redeven URL' },
                 { value: 'ssh_environment', label: 'SSH Host' },
+                { value: 'local_container_runtime', label: 'Local Container' },
+                { value: 'ssh_container_runtime', label: 'SSH Container' },
               ]}
               size="sm"
             />
@@ -5691,10 +5953,12 @@ function ConnectionDialog(props: Readonly<{
           </div>
         </Show>
 
-        <Show when={connectionKind() === 'ssh_environment'}>
+        <Show when={isSSHBackedKind()}>
           <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-3">
             <div class="text-xs leading-5 text-muted-foreground">
-              Desktop reuses only the exact Desktop-managed Redeven release on that host, installs it on demand when needed, and stores runtime state in that host's single runtime profile.
+              {connectionKind() === 'ssh_environment'
+                ? "Desktop reuses only the exact Desktop-managed Redeven release on that host, installs it on demand when needed, and stores runtime state in that host's single runtime profile."
+                : 'Desktop uses this SSH host only as the management channel for the selected container runtime target.'}
             </div>
             <div class="mt-3 space-y-3">
               <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7.5rem]">
@@ -5703,7 +5967,7 @@ function ConnectionDialog(props: Readonly<{
                     SSH Destination <span class="text-destructive">*</span>
                   </label>
                   <SSHDestinationCombobox
-                    value={props.state?.connection_kind === 'ssh_environment' ? props.state.ssh_destination : ''}
+                    value={isSSHBackedKind() ? (props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.ssh_destination ?? '' : ''}
                     hosts={props.sshConfigHosts}
                     autofocus={props.state?.mode === 'create'}
                     class={props.fieldErrors.ssh_destination && 'border-destructive ring-1 ring-destructive/20'}
@@ -5724,7 +5988,7 @@ function ConnectionDialog(props: Readonly<{
                   <label for="environment-ssh-port" class="block text-xs font-medium text-foreground">Port</label>
                   <Input
                     id="environment-ssh-port"
-                    value={props.state?.connection_kind === 'ssh_environment' ? props.state.ssh_port : ''}
+                    value={isSSHBackedKind() ? (props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.ssh_port ?? '' : ''}
                     onInput={(event) => {
                       const raw = event.currentTarget.value.replace(/\D/g, '');
                       props.updateField('ssh_port', raw);
@@ -5743,7 +6007,7 @@ function ConnectionDialog(props: Readonly<{
               <div class="space-y-1.5">
                 <label class="block text-xs font-medium text-foreground">Authentication</label>
                 <SegmentedControl
-                  value={props.state?.connection_kind === 'ssh_environment' ? props.state.auth_mode : DEFAULT_DESKTOP_SSH_AUTH_MODE}
+                  value={isSSHBackedKind() ? (props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.auth_mode ?? DEFAULT_DESKTOP_SSH_AUTH_MODE : DEFAULT_DESKTOP_SSH_AUTH_MODE}
                   onChange={(value) => props.updateField('auth_mode', value)}
                   options={[
                     { value: 'key_agent', label: 'Key / agent' },
@@ -5795,7 +6059,7 @@ function ConnectionDialog(props: Readonly<{
                         <label for="environment-ssh-install-dir" class="block text-xs font-medium text-foreground">Remote Install Directory</label>
                         <Input
                           id="environment-ssh-install-dir"
-                          value={props.state?.connection_kind === 'ssh_environment' ? props.state.remote_install_dir : ''}
+                          value={isSSHBackedKind() ? (props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.remote_install_dir ?? '' : ''}
                           onInput={(event) => props.updateField('remote_install_dir', event.currentTarget.value)}
                           placeholder="/opt/redeven-desktop/runtime"
                           size="sm"
@@ -5810,7 +6074,7 @@ function ConnectionDialog(props: Readonly<{
                         <label for="environment-ssh-release-base-url" class="block text-xs font-medium text-foreground">Release Base URL</label>
                         <Input
                           id="environment-ssh-release-base-url"
-                          value={props.state?.connection_kind === 'ssh_environment' ? props.state.release_base_url : ''}
+                          value={isSSHBackedKind() ? (props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.release_base_url ?? '' : ''}
                           onInput={(event) => props.updateField('release_base_url', event.currentTarget.value)}
                           placeholder="https://github.com/floegence/redeven/releases"
                           size="sm"
@@ -5825,7 +6089,7 @@ function ConnectionDialog(props: Readonly<{
                         <label for="environment-ssh-connect-timeout" class="block text-xs font-medium text-foreground">Connect Timeout (seconds)</label>
                         <Input
                           id="environment-ssh-connect-timeout"
-                          value={props.state?.connection_kind === 'ssh_environment' ? props.state.connect_timeout_seconds : ''}
+                          value={isSSHBackedKind() ? (props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.connect_timeout_seconds ?? '' : ''}
                           onInput={(event) => props.updateField('connect_timeout_seconds', event.currentTarget.value)}
                           placeholder={String(DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS)}
                           size="sm"
@@ -5838,6 +6102,93 @@ function ConnectionDialog(props: Readonly<{
                       </div>
                     </div>
                   </div>
+                </Show>
+              </div>
+            </div>
+          </div>
+        </Show>
+
+        <Show when={isContainerKind()}>
+          <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-3">
+            <div class="space-y-3">
+              <div class="grid gap-3 sm:grid-cols-[10rem_minmax(0,1fr)]">
+                <div class="space-y-1.5">
+                  <label class="block text-xs font-medium text-foreground">Engine</label>
+                  <SegmentedControl
+                    value={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.container_engine : 'docker'}
+                    onChange={(value) => props.updateField('container_engine', value)}
+                    options={[
+                      { value: 'docker', label: 'Docker' },
+                      { value: 'podman', label: 'Podman' },
+                    ]}
+                    size="sm"
+                  />
+                </div>
+                <div class="space-y-1.5">
+                  <label for="environment-container-id" class="block text-xs font-medium text-foreground">
+                    Container <span class="text-destructive">*</span>
+                  </label>
+                  <Input
+                    id="environment-container-id"
+                    value={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.container_id : ''}
+                    onInput={(event) => {
+                      props.updateField('container_id', event.currentTarget.value);
+                      props.clearFieldErrors();
+                    }}
+                    placeholder="container name or ID"
+                    size="sm"
+                    class={cn('w-full', props.fieldErrors.container_id && 'border-destructive ring-1 ring-destructive/20')}
+                    spellcheck={false}
+                  />
+                  <Show when={props.fieldErrors.container_id}>
+                    <div class="text-[11px] text-destructive">{props.fieldErrors.container_id}</div>
+                  </Show>
+                </div>
+              </div>
+              <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem]">
+                <div class="space-y-1.5">
+                  <label for="environment-container-label" class="block text-xs font-medium text-foreground">Container Label</label>
+                  <Input
+                    id="environment-container-label"
+                    value={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.container_label : ''}
+                    onInput={(event) => props.updateField('container_label', event.currentTarget.value)}
+                    placeholder="dev-web"
+                    size="sm"
+                    class="w-full"
+                    spellcheck={false}
+                  />
+                </div>
+                <div class="space-y-1.5">
+                  <label class="block text-xs font-medium text-foreground">Owner</label>
+                  <SegmentedControl
+                    value={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.container_owner : 'external'}
+                    onChange={(value) => props.updateField('container_owner', value)}
+                    options={[
+                      { value: 'external', label: 'External' },
+                      { value: 'desktop', label: 'Desktop' },
+                    ]}
+                    size="sm"
+                  />
+                </div>
+              </div>
+              <div class="space-y-1.5">
+                <label for="environment-runtime-root" class="block text-xs font-medium text-foreground">
+                  Runtime Root <span class="text-destructive">*</span>
+                </label>
+                <Input
+                  id="environment-runtime-root"
+                  value={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.runtime_root : ''}
+                  onInput={(event) => {
+                    props.updateField('runtime_root', event.currentTarget.value);
+                    props.clearFieldErrors();
+                  }}
+                  placeholder="/workspace/.redeven"
+                  size="sm"
+                  class={cn('w-full', props.fieldErrors.runtime_root && 'border-destructive ring-1 ring-destructive/20')}
+                  spellcheck={false}
+                />
+                <Show when={props.fieldErrors.runtime_root}>
+                  <div class="text-[11px] text-destructive">{props.fieldErrors.runtime_root}</div>
                 </Show>
               </div>
             </div>

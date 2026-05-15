@@ -45,6 +45,14 @@ import {
   resolveStateRoot,
 } from './statePaths';
 import {
+  desktopRuntimeTargetID,
+  normalizeDesktopRuntimeHostAccess,
+  normalizeDesktopRuntimePlacement,
+  type DesktopRuntimeHostAccess,
+  type DesktopRuntimePlacement,
+  type DesktopRuntimeTargetID,
+} from '../shared/desktopRuntimePlacement';
+import {
   createDesktopLocalEnvironmentHosting,
   createDesktopLocalProviderBinding,
   createDesktopLocalEnvironmentState,
@@ -80,6 +88,18 @@ export type DesktopSavedSSHEnvironment = Readonly<DesktopSSHEnvironmentDetails &
   last_used_at_ms: number;
 }>;
 
+export type DesktopSavedRuntimeTarget = Readonly<{
+  schema_version: 1;
+  id: DesktopRuntimeTargetID;
+  label: string;
+  host_access: DesktopRuntimeHostAccess;
+  placement: DesktopRuntimePlacement;
+  pinned: boolean;
+  last_used_at_ms: number;
+  created_at_ms: number;
+  updated_at_ms: number;
+}>;
+
 export type DesktopSavedControlPlane = Readonly<{
   provider: DesktopControlPlaneProvider;
   account: DesktopControlPlaneAccount;
@@ -93,6 +113,7 @@ export type DesktopPreferences = Readonly<{
   provider_environments: readonly DesktopProviderEnvironmentRecord[];
   saved_environments: readonly DesktopSavedEnvironment[];
   saved_ssh_environments: readonly DesktopSavedSSHEnvironment[];
+  saved_runtime_targets: readonly DesktopSavedRuntimeTarget[];
   control_plane_refresh_tokens: Readonly<Record<string, string>>;
   control_planes: readonly DesktopSavedControlPlane[];
 }>;
@@ -137,6 +158,11 @@ type SavedSSHEnvironmentNormalizationResult = Readonly<{
   didCanonicalize: boolean;
 }>;
 
+type SavedRuntimeTargetNormalizationResult = Readonly<{
+  targets: readonly DesktopSavedRuntimeTarget[];
+  didCanonicalize: boolean;
+}>;
+
 type StoredSecret = Readonly<{
   encoding: string;
   data: string;
@@ -160,6 +186,10 @@ type DesktopSavedSSHEnvironmentFile = Readonly<{
   bootstrap_strategy?: unknown;
   release_base_url?: unknown;
   connect_timeout_seconds?: unknown;
+  host_access?: unknown;
+  placement?: unknown;
+  created_at_ms?: unknown;
+  updated_at_ms?: unknown;
   pinned?: unknown;
   last_used_at_ms?: unknown;
 }>;
@@ -205,7 +235,11 @@ type DesktopConnectionCatalogFile = Readonly<{
   bootstrap_strategy?: unknown;
   release_base_url?: unknown;
   connect_timeout_seconds?: unknown;
+  host_access?: unknown;
+  placement?: unknown;
   pinned?: unknown;
+  created_at_ms?: unknown;
+  updated_at_ms?: unknown;
   last_used_at_ms?: unknown;
 }>;
 
@@ -306,6 +340,17 @@ export type UpsertDesktopSavedSSHEnvironmentInput = Readonly<DesktopSSHEnvironme
   last_used_at_ms?: number;
 }>;
 
+export type UpsertDesktopSavedRuntimeTargetInput = Readonly<{
+  id?: string;
+  label: string;
+  host_access: DesktopRuntimeHostAccess;
+  placement: DesktopRuntimePlacement;
+  pinned?: boolean;
+  last_used_at_ms?: number;
+  created_at_ms?: number;
+  updated_at_ms?: number;
+}>;
+
 export type UpsertDesktopSavedControlPlaneInput = Readonly<{
   provider: DesktopControlPlaneProvider;
   account: DesktopControlPlaneAccount;
@@ -317,6 +362,7 @@ export type UpsertDesktopSavedControlPlaneInput = Readonly<{
 
 const MAX_SAVED_ENVIRONMENTS = 20;
 const MAX_SAVED_SSH_ENVIRONMENTS = 20;
+const MAX_SAVED_RUNTIME_TARGETS = 40;
 
 export function createPlaintextSecretCodec(): DesktopSecretCodec {
   return {
@@ -358,6 +404,7 @@ export function defaultDesktopPreferences(): DesktopPreferences {
     provider_environments: [],
     saved_environments: [],
     saved_ssh_environments: [],
+    saved_runtime_targets: [],
     control_plane_refresh_tokens: {},
     control_planes: [],
   };
@@ -453,6 +500,17 @@ function sortSavedSSHEnvironmentsByLastUsed(
     || left.ssh_destination.localeCompare(right.ssh_destination)
     || String(left.ssh_port ?? '').localeCompare(String(right.ssh_port ?? ''))
     || left.remote_install_dir.localeCompare(right.remote_install_dir)
+  ));
+}
+
+function sortSavedRuntimeTargetsByLastUsed(
+  targets: readonly DesktopSavedRuntimeTarget[],
+): readonly DesktopSavedRuntimeTarget[] {
+  return [...targets].sort((left, right) => (
+    (left.pinned ? 0 : 1) - (right.pinned ? 0 : 1)
+    || right.last_used_at_ms - left.last_used_at_ms
+    || left.label.localeCompare(right.label)
+    || left.id.localeCompare(right.id)
   ));
 }
 
@@ -632,6 +690,58 @@ function normalizeSavedSSHEnvironmentCandidate(
   };
 }
 
+function defaultSavedRuntimeTargetLabel(
+  hostAccess: DesktopRuntimeHostAccess,
+  placement: DesktopRuntimePlacement,
+): string {
+  if (placement.kind === 'container_process') {
+    const prefix = hostAccess.kind === 'ssh_host' ? 'SSH Container' : 'Local Container';
+    return `${prefix}: ${placement.container_label || placement.container_id}`;
+  }
+  return hostAccess.kind === 'ssh_host' ? defaultSavedSSHEnvironmentLabel(hostAccess.ssh) : defaultDesktopLocalEnvironmentLabel();
+}
+
+function normalizeSavedRuntimeTargetCandidate(
+  value: unknown,
+  fallbackLastUsedAtMS: number,
+): Readonly<{ target: DesktopSavedRuntimeTarget | null; didCanonicalize: boolean }> {
+  if (!value || typeof value !== 'object') {
+    return {
+      target: null,
+      didCanonicalize: false,
+    };
+  }
+  const candidate = value as DesktopConnectionCatalogFile;
+  let hostAccess: DesktopRuntimeHostAccess;
+  let placement: DesktopRuntimePlacement;
+  try {
+    hostAccess = normalizeDesktopRuntimeHostAccess(candidate.host_access);
+    placement = normalizeDesktopRuntimePlacement(candidate.placement);
+  } catch {
+    return {
+      target: null,
+      didCanonicalize: false,
+    };
+  }
+  const computedID = desktopRuntimeTargetID(hostAccess, placement);
+  const rawID = compact(candidate.id);
+  const now = Date.now();
+  return {
+    target: {
+      schema_version: 1,
+      id: computedID,
+      label: compact(candidate.label) || defaultSavedRuntimeTargetLabel(hostAccess, placement),
+      host_access: hostAccess,
+      placement,
+      pinned: normalizePinned(candidate.pinned),
+      last_used_at_ms: normalizeLastUsedAtMS(candidate.last_used_at_ms, fallbackLastUsedAtMS),
+      created_at_ms: normalizeLastUsedAtMS(candidate.created_at_ms, now),
+      updated_at_ms: normalizeLastUsedAtMS(candidate.updated_at_ms, now),
+    },
+    didCanonicalize: rawID !== '' && rawID !== computedID,
+  };
+}
+
 function normalizeSavedControlPlaneCandidate(
   value: unknown,
   refreshTokensByKey: ReadonlyMap<string, string>,
@@ -720,6 +830,36 @@ export function normalizeSavedSSHEnvironments(
   values: readonly unknown[] | null | undefined,
 ): readonly DesktopSavedSSHEnvironment[] {
   return collectSavedSSHEnvironmentNormalizationResult(values).environments;
+}
+
+function collectSavedRuntimeTargetNormalizationResult(
+  values: readonly unknown[] | null | undefined,
+): SavedRuntimeTargetNormalizationResult {
+  const sourceValues = Array.isArray(values) ? values : [];
+  const normalized: DesktopSavedRuntimeTarget[] = [];
+  const seenIDs = new Set<string>();
+  let didCanonicalize = false;
+
+  for (let index = 0; index < sourceValues.length; index += 1) {
+    const result = normalizeSavedRuntimeTargetCandidate(sourceValues[index], sourceValues.length - index);
+    didCanonicalize ||= result.didCanonicalize;
+    if (!result.target || seenIDs.has(result.target.id)) {
+      continue;
+    }
+    seenIDs.add(result.target.id);
+    normalized.push(result.target);
+  }
+
+  return {
+    targets: sortSavedRuntimeTargetsByLastUsed(normalized).slice(0, MAX_SAVED_RUNTIME_TARGETS),
+    didCanonicalize,
+  };
+}
+
+export function normalizeSavedRuntimeTargets(
+  values: readonly unknown[] | null | undefined,
+): readonly DesktopSavedRuntimeTarget[] {
+  return collectSavedRuntimeTargetNormalizationResult(values).targets;
 }
 
 function decodeDesktopControlPlaneRefreshTokens(
@@ -1339,6 +1479,35 @@ export function upsertSavedSSHEnvironment(
   };
 }
 
+export function upsertSavedRuntimeTarget(
+  preferences: DesktopPreferences,
+  input: UpsertDesktopSavedRuntimeTargetInput,
+): DesktopPreferences {
+  const hostAccess = normalizeDesktopRuntimeHostAccess(input.host_access);
+  const placement = normalizeDesktopRuntimePlacement(input.placement);
+  const targetID = desktopRuntimeTargetID(hostAccess, placement);
+  const existing = preferences.saved_runtime_targets.find((target) => target.id === targetID) ?? null;
+  const now = Date.now();
+  const nextTarget: DesktopSavedRuntimeTarget = {
+    schema_version: 1,
+    id: targetID,
+    label: compact(input.label) || existing?.label || defaultSavedRuntimeTargetLabel(hostAccess, placement),
+    host_access: hostAccess,
+    placement,
+    pinned: input.pinned ?? existing?.pinned ?? false,
+    last_used_at_ms: normalizeLastUsedAtMS(input.last_used_at_ms, now),
+    created_at_ms: normalizeLastUsedAtMS(input.created_at_ms, existing?.created_at_ms ?? now),
+    updated_at_ms: normalizeLastUsedAtMS(input.updated_at_ms, now),
+  };
+  return {
+    ...preferences,
+    saved_runtime_targets: sortSavedRuntimeTargetsByLastUsed([
+      nextTarget,
+      ...preferences.saved_runtime_targets.filter((target) => target.id !== targetID),
+    ]).slice(0, MAX_SAVED_RUNTIME_TARGETS),
+  };
+}
+
 export function upsertSavedControlPlane(
   preferences: DesktopPreferences,
   input: UpsertDesktopSavedControlPlaneInput,
@@ -1428,6 +1597,27 @@ export function setSavedSSHEnvironmentPinned(
   });
 }
 
+export function setSavedRuntimeTargetPinned(
+  preferences: DesktopPreferences,
+  input: Readonly<{
+    environment_id: string;
+    label: string;
+    pinned: boolean;
+    host_access: DesktopRuntimeHostAccess;
+    placement: DesktopRuntimePlacement;
+    last_used_at_ms?: number;
+  }>,
+): DesktopPreferences {
+  return upsertSavedRuntimeTarget(preferences, {
+    id: input.environment_id,
+    label: input.label,
+    host_access: input.host_access,
+    placement: input.placement,
+    pinned: input.pinned,
+    last_used_at_ms: input.last_used_at_ms,
+  });
+}
+
 export function deleteSavedEnvironment(
   preferences: DesktopPreferences,
   environmentID: string,
@@ -1448,6 +1638,17 @@ export function deleteSavedSSHEnvironment(
   return {
     ...preferences,
     saved_ssh_environments: preferences.saved_ssh_environments.filter((environment) => environment.id !== cleanEnvironmentID),
+  };
+}
+
+export function deleteSavedRuntimeTarget(
+  preferences: DesktopPreferences,
+  environmentID: string,
+): DesktopPreferences {
+  const cleanEnvironmentID = compact(environmentID);
+  return {
+    ...preferences,
+    saved_runtime_targets: preferences.saved_runtime_targets.filter((target) => target.id !== cleanEnvironmentID),
   };
 }
 
@@ -1541,6 +1742,37 @@ export function markSavedSSHEnvironmentUsed(
     release_base_url: existing.release_base_url,
     connect_timeout_seconds: existing.connect_timeout_seconds,
     pinned: existing.pinned,
+    last_used_at_ms: input.last_used_at_ms ?? Date.now(),
+  });
+}
+
+export function markSavedRuntimeTargetUsed(
+  preferences: DesktopPreferences,
+  input: Readonly<{
+    environment_id?: string;
+    host_access?: DesktopRuntimeHostAccess;
+    placement?: DesktopRuntimePlacement;
+    last_used_at_ms?: number;
+  }>,
+): DesktopPreferences {
+  const environmentID = compact(input.environment_id);
+  const computedID = input.host_access && input.placement
+    ? desktopRuntimeTargetID(input.host_access, input.placement)
+    : '';
+  const existing = preferences.saved_runtime_targets.find((target) => (
+    (environmentID !== '' && target.id === environmentID)
+    || (computedID !== '' && target.id === computedID)
+  )) ?? null;
+  if (!existing) {
+    return preferences;
+  }
+  return upsertSavedRuntimeTarget(preferences, {
+    id: existing.id,
+    label: existing.label,
+    host_access: existing.host_access,
+    placement: existing.placement,
+    pinned: existing.pinned,
+    created_at_ms: existing.created_at_ms,
     last_used_at_ms: input.last_used_at_ms ?? Date.now(),
   });
 }
@@ -1906,6 +2138,22 @@ function serializeSavedSSHEnvironmentCatalog(environment: DesktopSavedSSHEnviron
   };
 }
 
+function serializeSavedRuntimeTargetCatalog(target: DesktopSavedRuntimeTarget): DesktopConnectionCatalogFile {
+  return {
+    schema_version: 1,
+    record_kind: 'connection',
+    kind: 'runtime_target',
+    id: target.id,
+    label: target.label,
+    host_access: target.host_access,
+    placement: target.placement,
+    pinned: target.pinned,
+    created_at_ms: target.created_at_ms,
+    updated_at_ms: target.updated_at_ms,
+    last_used_at_ms: target.last_used_at_ms,
+  };
+}
+
 function serializeSavedControlPlaneCatalog(controlPlane: DesktopSavedControlPlane): DesktopProviderCatalogFile {
   return {
     schema_version: 1,
@@ -1990,6 +2238,12 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
     )),
   );
   const savedSSHEnvironments = savedSSHEnvironmentResult.environments;
+  const savedRuntimeTargetResult = collectSavedRuntimeTargetNormalizationResult(
+    catalogConnections.filter((value) => (
+      !!value && typeof value === 'object' && compact((value as DesktopConnectionCatalogFile).kind) === 'runtime_target'
+    )),
+  );
+  const savedRuntimeTargets = savedRuntimeTargetResult.targets;
   const controlPlanes = normalizeSavedControlPlanes(catalogProviders, controlPlaneRefreshTokensByKey);
   const canonicalProviderIDsByOrigin = buildCanonicalProviderIDByOrigin(controlPlanes);
   const localEnvironmentCatalogResult = normalizeLocalEnvironmentFromCatalog(
@@ -2013,6 +2267,7 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
     provider_environments: providerEnvironments,
     saved_environments: savedEnvironments,
     saved_ssh_environments: savedSSHEnvironments,
+    saved_runtime_targets: savedRuntimeTargets,
     control_plane_refresh_tokens: Object.fromEntries(controlPlaneRefreshTokensByKey),
     control_planes: controlPlanes,
   };
@@ -2022,6 +2277,7 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
     || localEnvironmentCatalogResult.didCanonicalizeProviderIdentity
     || providerEnvironmentCatalogResult.didCanonicalizeProviderIdentity
     || savedSSHEnvironmentResult.didCanonicalize
+    || savedRuntimeTargetResult.didCanonicalize
   ) {
     await saveDesktopPreferences(paths, nextPreferences, codec);
   }
@@ -2039,6 +2295,7 @@ export async function saveDesktopPreferences(
   const providerEnvironments = normalizeProviderEnvironmentCollection(preferences.provider_environments);
   const savedEnvironments = normalizeSavedEnvironments(preferences.saved_environments);
   const savedSSHEnvironments = normalizeSavedSSHEnvironments(preferences.saved_ssh_environments);
+  const savedRuntimeTargets = normalizeSavedRuntimeTargets(preferences.saved_runtime_targets);
   const controlPlanes = sortSavedControlPlanes(preferences.control_planes);
   const preferencesFile: DesktopPreferencesFile = {
     version: 13,
@@ -2084,6 +2341,7 @@ export async function saveDesktopPreferences(
     Object.fromEntries([
       ...savedEnvironments.map((environment) => [environment.id, serializeSavedEnvironmentCatalog(environment)] as const),
       ...savedSSHEnvironments.map((environment) => [environment.id, serializeSavedSSHEnvironmentCatalog(environment)] as const),
+      ...savedRuntimeTargets.map((target) => [target.id, serializeSavedRuntimeTargetCatalog(target)] as const),
     ]),
   );
   await writeCatalogRecords(

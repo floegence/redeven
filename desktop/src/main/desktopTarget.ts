@@ -18,6 +18,7 @@ import {
   type DesktopSSHEnvironmentDetails,
 } from '../shared/desktopSSH';
 import type { DesktopProviderEnvironmentRecord } from '../shared/desktopProviderEnvironment';
+import type { DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 
 export type DesktopTargetKind = 'local_environment' | 'external_local_ui' | 'ssh_environment';
 export type DesktopLocalEnvironmentStateSessionRoute = 'local_host' | 'remote_desktop';
@@ -192,6 +193,26 @@ export function buildProviderEnvironmentDesktopTarget(
   };
 }
 
+export function buildManagedLocalRuntimeDesktopTarget(
+  environmentID: string,
+  label: string,
+): LocalEnvironmentDesktopTarget {
+  const cleanEnvironmentID = compact(environmentID);
+  if (cleanEnvironmentID === '') {
+    throw new Error('Environment ID is required.');
+  }
+  return {
+    kind: 'local_environment',
+    session_key: localEnvironmentDesktopSessionKey(cleanEnvironmentID, 'local_host'),
+    environment_id: cleanEnvironmentID,
+    label: compact(label) || 'Local Runtime',
+    route: 'local_host',
+    local_environment_kind: 'local',
+    has_local_hosting: true,
+    has_remote_desktop: false,
+  };
+}
+
 type BuildExternalLocalUIDesktopTargetOptions = Readonly<{
   environmentID?: string;
   label?: string;
@@ -216,6 +237,7 @@ type BuildSSHDesktopTargetOptions = Readonly<{
   environmentID?: string;
   label?: string;
   forwardedLocalUIURL: string;
+  sessionKeyOverride?: `ssh:${string}`;
 }>;
 
 export function buildSSHDesktopTarget(
@@ -227,7 +249,7 @@ export function buildSSHDesktopTarget(
   const environmentID = compact(options.environmentID) || buildSSHEnvironmentID(details);
   return {
     kind: 'ssh_environment',
-    session_key: sshDesktopSessionKey(details),
+    session_key: options.sessionKeyOverride ?? sshDesktopSessionKey(details),
     environment_id: environmentID,
     label: compact(options.label) || defaultSavedSSHEnvironmentLabel(details),
     ssh_destination: details.ssh_destination,
@@ -239,4 +261,16 @@ export function buildSSHDesktopTarget(
     connect_timeout_seconds: details.connect_timeout_seconds,
     forwarded_local_ui_url: forwardedLocalUIURL,
   };
+}
+
+export function desktopSessionKeyFromRuntimeTargetID(
+  runtimeTargetID: DesktopRuntimeTargetID,
+): DesktopSessionKey {
+  const clean = compact(runtimeTargetID);
+  if (!clean.startsWith('local:') && !clean.startsWith('ssh:')) {
+    throw new Error('Runtime target ID is required.');
+  }
+  return clean.startsWith('ssh:')
+    ? clean as `ssh:${string}`
+    : localEnvironmentDesktopSessionKey(clean, 'local_host');
 }

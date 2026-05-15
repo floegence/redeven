@@ -118,6 +118,7 @@ export type DesktopLauncherActionKind =
   | 'set_provider_environment_pinned'
   | 'set_saved_environment_pinned'
   | 'set_saved_ssh_environment_pinned'
+  | 'set_saved_runtime_target_pinned'
   | 'open_environment_settings'
   | 'focus_environment_window'
   | 'refresh_control_plane'
@@ -125,8 +126,10 @@ export type DesktopLauncherActionKind =
   | 'save_local_environment_settings'
   | 'upsert_saved_environment'
   | 'upsert_saved_ssh_environment'
+  | 'upsert_saved_runtime_target'
   | 'delete_saved_environment'
   | 'delete_saved_ssh_environment'
+  | 'delete_saved_runtime_target'
   | 'cancel_launcher_operation'
   | 'close_launcher_or_quit';
 
@@ -279,7 +282,7 @@ export type DesktopLauncherActionRequest = Readonly<
       kind: 'open_local_environment';
       environment_id: string;
       route?: 'auto' | DesktopLocalEnvironmentStateRoute;
-    }
+    } & DesktopLauncherRuntimeTarget
   | {
       kind: 'open_provider_environment';
       environment_id: string;
@@ -295,7 +298,7 @@ export type DesktopLauncherActionRequest = Readonly<
       kind: 'open_ssh_environment';
       environment_id?: string;
       label?: string;
-    } & DesktopSSHEnvironmentDetails)
+    } & DesktopSSHEnvironmentDetails & DesktopLauncherRuntimeTarget)
   | ({
       kind: 'start_environment_runtime';
     } & DesktopLauncherRuntimeTarget)
@@ -347,6 +350,12 @@ export type DesktopLauncherActionRequest = Readonly<
       pinned: boolean;
     }
     & DesktopSSHEnvironmentDetails)
+  | ({
+      kind: 'set_saved_runtime_target_pinned';
+      environment_id: string;
+      label: string;
+      pinned: boolean;
+    } & Required<Pick<DesktopLauncherRuntimeTarget, 'host_access' | 'placement'>>)
   | {
       kind: 'open_environment_settings';
       environment_id: string;
@@ -382,12 +391,21 @@ export type DesktopLauncherActionRequest = Readonly<
       environment_id: string;
       label: string;
     } & DesktopSSHEnvironmentDetails)
+  | ({
+      kind: 'upsert_saved_runtime_target';
+      environment_id?: string;
+      label: string;
+    } & Required<Pick<DesktopLauncherRuntimeTarget, 'host_access' | 'placement'>>)
   | {
       kind: 'delete_saved_environment';
       environment_id: string;
     }
   | {
       kind: 'delete_saved_ssh_environment';
+      environment_id: string;
+    }
+  | {
+      kind: 'delete_saved_runtime_target';
       environment_id: string;
     }
   | {
@@ -554,8 +572,6 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
   switch (kind) {
     case 'close_launcher_or_quit':
       return { kind };
-    case 'open_local_environment':
-    case 'open_provider_environment':
     case 'open_environment_settings': {
       const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
       if (environmentID === '') {
@@ -564,17 +580,42 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       return {
         kind,
         environment_id: environmentID,
-        ...((kind === 'open_local_environment' || kind === 'open_provider_environment')
-          ? {
-              route: (() => {
-                const route = compact((candidate as { route?: unknown }).route);
-                if (route === 'local_host' || route === 'remote_desktop') {
-                  return route;
-                }
-                return 'auto';
-              })(),
-            }
-          : {}),
+      };
+    }
+    case 'open_local_environment': {
+      const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
+      if (environmentID === '') {
+        return null;
+      }
+      const target = normalizeDesktopLauncherRuntimeTarget(candidate as Record<string, unknown>);
+      return {
+        kind,
+        environment_id: environmentID,
+        ...(target ?? {}),
+        route: (() => {
+          const route = compact((candidate as { route?: unknown }).route);
+          if (route === 'local_host' || route === 'remote_desktop') {
+            return route;
+          }
+          return 'auto';
+        })(),
+      } as DesktopLauncherActionRequest;
+    }
+    case 'open_provider_environment': {
+      const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
+      if (environmentID === '') {
+        return null;
+      }
+      return {
+        kind,
+        environment_id: environmentID,
+        route: (() => {
+          const route = compact((candidate as { route?: unknown }).route);
+          if (route === 'local_host' || route === 'remote_desktop') {
+            return route;
+          }
+          return 'auto';
+        })(),
       };
     }
     case 'connect_provider_runtime':
@@ -618,10 +659,12 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
     case 'open_ssh_environment':
       {
         const sshPortText = compact((candidate as { ssh_port?: unknown }).ssh_port);
+        const target = normalizeDesktopLauncherRuntimeTarget(candidate as Record<string, unknown>);
       return {
         kind,
         environment_id: compact((candidate as { environment_id?: unknown }).environment_id) || undefined,
         label: compact((candidate as { label?: unknown }).label) || undefined,
+        ...(target ?? {}),
         ssh_destination: compact((candidate as { ssh_destination?: unknown }).ssh_destination),
         ssh_port: (candidate as { ssh_port?: unknown }).ssh_port == null || sshPortText === ''
           ? null
@@ -707,6 +750,28 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds((candidate as { connect_timeout_seconds?: unknown }).connect_timeout_seconds),
         };
       }
+    case 'set_saved_runtime_target_pinned': {
+      const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
+      if (environmentID === '') {
+        return null;
+      }
+      let hostAccess: DesktopRuntimeHostAccess;
+      let placement: DesktopRuntimePlacement;
+      try {
+        hostAccess = normalizeDesktopRuntimeHostAccess((candidate as { host_access?: unknown }).host_access);
+        placement = normalizeDesktopRuntimePlacement((candidate as { placement?: unknown }).placement);
+      } catch {
+        return null;
+      }
+      return {
+        kind,
+        environment_id: environmentID,
+        label: compact((candidate as { label?: unknown }).label),
+        pinned: (candidate as { pinned?: unknown }).pinned === true,
+        host_access: hostAccess,
+        placement,
+      };
+    }
     case 'save_local_environment_settings': {
       return {
         kind,
@@ -765,6 +830,23 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds((candidate as { connect_timeout_seconds?: unknown }).connect_timeout_seconds),
       };
       }
+    case 'upsert_saved_runtime_target': {
+      let hostAccess: DesktopRuntimeHostAccess;
+      let placement: DesktopRuntimePlacement;
+      try {
+        hostAccess = normalizeDesktopRuntimeHostAccess((candidate as { host_access?: unknown }).host_access);
+        placement = normalizeDesktopRuntimePlacement((candidate as { placement?: unknown }).placement);
+      } catch {
+        return null;
+      }
+      return {
+        kind,
+        environment_id: compact((candidate as { environment_id?: unknown }).environment_id) || undefined,
+        label: compact((candidate as { label?: unknown }).label),
+        host_access: hostAccess,
+        placement,
+      };
+    }
     case 'delete_saved_environment': {
       const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
       if (environmentID === '') {
@@ -776,6 +858,16 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       };
     }
     case 'delete_saved_ssh_environment': {
+      const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
+      if (environmentID === '') {
+        return null;
+      }
+      return {
+        kind,
+        environment_id: environmentID,
+      };
+    }
+    case 'delete_saved_runtime_target': {
       const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
       if (environmentID === '') {
         return null;

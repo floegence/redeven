@@ -1,3 +1,7 @@
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -28,5 +32,36 @@ describe('runtimeHostAccess', () => {
         ssh_port: 2222,
       },
     });
+  });
+
+  it('passes explicit bridge environment variables to the remote SSH command', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-ssh-test-'));
+    const argsPath = path.join(tempDir, 'ssh-args.json');
+    const fakeSSH = path.join(tempDir, 'ssh');
+    await fs.writeFile(fakeSSH, [
+      '#!/usr/bin/env bash',
+      `node -e "require('node:fs').writeFileSync(process.argv[1], JSON.stringify(process.argv.slice(2)))" ${JSON.stringify(argsPath)} "$@"`,
+    ].join('\n'), { mode: 0o755 });
+
+    const executor = createSSHRuntimeHostExecutor({
+      ssh_destination: 'devbox',
+      ssh_port: null,
+      auth_mode: 'key_agent',
+      remote_install_dir: '/opt/redeven',
+      bootstrap_strategy: 'desktop_upload',
+      release_base_url: '',
+      connect_timeout_seconds: 15,
+    }, { sshBinary: fakeSSH });
+    await executor.run(['docker', 'exec', '-i', 'dev', 'redeven', 'desktop-bridge'], {
+      env: {
+        REDEVEN_DESKTOP_OWNER_ID: 'desktop-owner',
+        'BAD-NAME': 'ignored',
+      },
+    });
+    const args = JSON.parse(await fs.readFile(argsPath, 'utf8')) as string[];
+
+    expect(args.at(-1)).toBe(
+      "env REDEVEN_DESKTOP_OWNER_ID='desktop-owner' 'docker' 'exec' '-i' 'dev' 'redeven' 'desktop-bridge'",
+    );
   });
 });

@@ -29,6 +29,8 @@ Usage:
 Commands:
   bootstrap   Bind the Local Environment to a control-plane environment.
   run         Start the runtime in remote, hybrid, local, or desktop mode.
+  desktop-bridge
+              Run the Desktop runtime placement bridge over stdio.
   targets     Inspect Redeven targets for Agent Skills and local automation.
   search      Run web search using configured provider credentials.
   knowledge   Build or verify embedded knowledge bundle assets.
@@ -52,6 +54,28 @@ Quick start:
 
 Run %[5]s for detailed usage.
 `, exampleControlplaneURL, exampleEnvID, exampleBootstrapTicket, examplePasswordEnv, "`redeven help <command>`"), "\n")
+}
+
+func desktopBridgeHelpText() string {
+	return strings.TrimLeft(`
+redeven desktop-bridge
+
+Run the Desktop runtime placement bridge over stdio.
+
+Usage:
+  redeven desktop-bridge [flags]
+
+This command is intended for Redeven Desktop managed runtime targets. It
+exposes the Local UI and Desktop runtime-control to Desktop through the
+versioned placement bridge protocol without requiring a published container
+port.
+
+Flags:
+  --state-root <path>              State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
+  --password <password>            Access password for the Local UI.
+  --password-env <env_name>        Read the Local UI password from an environment variable.
+  --password-file <path>           Read the Local UI password from a file.
+`, "\n")
 }
 
 func bootstrapHelpText() string {
@@ -347,6 +371,8 @@ func lookupHelpText(args []string) (string, bool) {
 		return bootstrapHelpText(), true
 	case "run":
 		return runHelpText(), true
+	case "desktop-bridge":
+		return desktopBridgeHelpText(), true
 	case "targets":
 		return targetsHelpText(), true
 	case "targets list":
