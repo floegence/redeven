@@ -41,7 +41,8 @@ describe('desktopLauncherIPC', () => {
         container_engine: 'docker',
         container_id: 'container-stable-id',
         container_label: 'Dev Container',
-        runtime_root: '/workspace/.redeven',
+        runtime_install_root: '/workspace/.redeven',
+        runtime_state_root: '/workspace/.redeven',
         bridge_strategy: 'exec_stream',
       },
       route: 'auto',
@@ -79,7 +80,8 @@ describe('desktopLauncherIPC', () => {
         container_engine: 'docker',
         container_id: 'container-stable-id',
         container_label: 'Dev Container',
-        runtime_root: '/workspace/.redeven',
+        runtime_install_root: '/workspace/.redeven',
+        runtime_state_root: '/workspace/.redeven',
         bridge_strategy: 'exec_stream',
       },
       force_runtime_update: true,
@@ -236,7 +238,8 @@ describe('desktopLauncherIPC', () => {
         container_engine: 'docker',
         container_id: 'container-stable-id',
         container_label: 'dev-container',
-        runtime_root: '/workspace/.redeven',
+        runtime_install_root: '/opt/redeven-desktop/runtime',
+        runtime_state_root: '/var/lib/redeven',
       },
     })).toEqual(expect.objectContaining({
       kind: 'open_ssh_environment',
@@ -323,10 +326,12 @@ describe('desktopLauncherIPC', () => {
         kind: 'container_process',
         container_engine: 'podman',
         container_id: 'dev',
-        runtime_root: '/runtime',
+        runtime_install_root: '/opt/redeven-desktop/runtime',
+        runtime_state_root: '/var/lib/redeven',
       },
     })).toEqual({
       kind: 'upsert_saved_runtime_target',
+      environment_id: undefined,
       label: 'Local Container',
       host_access: { kind: 'local_host' },
       placement: {
@@ -334,7 +339,8 @@ describe('desktopLauncherIPC', () => {
         container_engine: 'podman',
         container_id: 'dev',
         container_label: 'dev',
-        runtime_root: '/runtime',
+        runtime_install_root: '/opt/redeven-desktop/runtime',
+        runtime_state_root: '/var/lib/redeven',
         bridge_strategy: 'exec_stream',
       },
     });
@@ -348,7 +354,8 @@ describe('desktopLauncherIPC', () => {
         kind: 'container_process',
         container_engine: 'podman',
         container_id: 'dev',
-        runtime_root: '/runtime',
+        runtime_install_root: '/opt/redeven-desktop/runtime',
+        runtime_state_root: '/var/lib/redeven',
       },
     })).toEqual({
       kind: 'set_saved_runtime_target_pinned',
@@ -361,7 +368,8 @@ describe('desktopLauncherIPC', () => {
         container_engine: 'podman',
         container_id: 'dev',
         container_label: 'dev',
-        runtime_root: '/runtime',
+        runtime_install_root: '/opt/redeven-desktop/runtime',
+        runtime_state_root: '/var/lib/redeven',
         bridge_strategy: 'exec_stream',
       },
     });
@@ -391,7 +399,8 @@ describe('desktopLauncherIPC', () => {
         kind: 'container_process',
         container_engine: 'lxc',
         container_id: 'container-stable-id',
-        runtime_root: '/workspace/.redeven',
+        runtime_install_root: '/opt/redeven-desktop/runtime',
+        runtime_state_root: '/var/lib/redeven',
       },
     })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'focus_environment_window', session_key: '   ' })).toBeNull();

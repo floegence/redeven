@@ -41,7 +41,8 @@ describe('desktopRuntimePlacement', () => {
       container_engine: 'docker',
       container_id: 'abc123',
       container_label: 'dev-container',
-      runtime_root: '/workspace/.redeven',
+      runtime_install_root: '/workspace/.redeven',
+      runtime_state_root: '/workspace/.redeven',
       bridge_strategy: 'exec_stream',
     });
   });
@@ -64,7 +65,8 @@ describe('desktopRuntimePlacement', () => {
       container_engine: 'podman',
       container_id: 'container-stable-id',
       container_label: 'renamable-label',
-      runtime_root: '/var/lib/redeven/runtime',
+      runtime_install_root: '/opt/redeven-desktop/runtime',
+      runtime_state_root: '/var/lib/redeven',
     });
 
     expect(desktopRuntimeTargetID(localHost, { kind: 'host_process', install_dir: '' }, 'local')).toBe('local:host:local');
@@ -77,13 +79,15 @@ describe('desktopRuntimePlacement', () => {
       kind: 'container_process',
       container_engine: 'lxc',
       container_id: 'abc123',
-      runtime_root: '/runtime',
+      runtime_install_root: '/opt/redeven-desktop/runtime',
+      runtime_state_root: '/var/lib/redeven',
     })).toThrow('Container engine');
     expect(() => normalizeDesktopRuntimePlacement({
       kind: 'container_process',
       container_engine: 'docker',
       container_id: '',
-      runtime_root: '/runtime',
+      runtime_install_root: '/opt/redeven-desktop/runtime',
+      runtime_state_root: '/var/lib/redeven',
     })).toThrow('Container ID');
   });
 });

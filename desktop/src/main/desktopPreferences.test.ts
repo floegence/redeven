@@ -227,7 +227,7 @@ describe('desktopPreferences', () => {
         saved_runtime_targets: [
           {
             schema_version: 1,
-            id: 'local:container:docker:container-stable-id:e832df85',
+            id: 'local:container:docker:container-stable-id:b0f0be51',
             label: 'Local Container Runtime',
             host_access: { kind: 'local_host' },
             placement: {
@@ -235,7 +235,8 @@ describe('desktopPreferences', () => {
               container_engine: 'docker',
               container_id: 'container-stable-id',
               container_label: 'dev-container',
-              runtime_root: '/workspace/.redeven',
+              runtime_install_root: '/opt/redeven-desktop/runtime',
+        runtime_state_root: '/var/lib/redeven',
               bridge_strategy: 'exec_stream',
             },
             pinned: false,
@@ -681,7 +682,8 @@ describe('desktopPreferences', () => {
       container_engine: 'docker' as const,
       container_id: 'container-stable-id',
       container_label: 'dev-container',
-      runtime_root: '/workspace/.redeven',
+      runtime_install_root: '/opt/redeven-desktop/runtime',
+        runtime_state_root: '/var/lib/redeven',
       bridge_strategy: 'exec_stream' as const,
     };
     const saved = upsertSavedRuntimeTarget(defaultDesktopPreferences(), {
@@ -692,7 +694,7 @@ describe('desktopPreferences', () => {
       updated_at_ms: 20,
       last_used_at_ms: 30,
     });
-    const targetID = 'local:container:docker:container-stable-id:e832df85';
+    const targetID = 'local:container:docker:container-stable-id:b0f0be51';
 
     expect(saved.saved_runtime_targets).toEqual([
       expect.objectContaining({

@@ -283,7 +283,8 @@ type RuntimeContainerConnectionDialogState = Readonly<{
   container_engine: DesktopContainerEngine;
   container_id: string;
   container_label: string;
-  runtime_root: string;
+  runtime_install_root: string;
+  runtime_state_root: string;
 }>;
 
 type ConnectionDialogKind = 'external_local_ui' | 'ssh_environment' | 'local_container_runtime' | 'ssh_container_runtime';
@@ -603,7 +604,8 @@ function createRuntimeContainerConnectionDialogState(
     container_engine: overrides.container_engine ?? 'docker',
     container_id: trimString(overrides.container_id),
     container_label: trimString(overrides.container_label),
-    runtime_root: trimString(overrides.runtime_root) || '/workspace/.redeven',
+    runtime_install_root: trimString(overrides.runtime_install_root) || '/opt/redeven-desktop/runtime',
+    runtime_state_root: trimString(overrides.runtime_state_root) || '/var/lib/redeven',
   };
 }
 
@@ -1469,7 +1471,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         container_engine: environment.managed_runtime_placement.container_engine,
         container_id: environment.managed_runtime_placement.container_id,
         container_label: environment.managed_runtime_placement.container_label,
-        runtime_root: environment.managed_runtime_placement.runtime_root,
+        runtime_install_root: environment.managed_runtime_placement.runtime_install_root,
+        runtime_state_root: environment.managed_runtime_placement.runtime_state_root,
       }));
     } else if (environment.kind === 'local_environment') {
       openSettingsSurface(environment.id);
@@ -1583,7 +1586,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function updateConnectionDialogField(
-    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'remote_install_dir' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_label' | 'runtime_root',
+    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'remote_install_dir' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_label' | 'runtime_install_root' | 'runtime_state_root',
     value: string,
   ): void {
     setConnectionDialogState((current) => {
@@ -2654,7 +2657,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           container_engine: request.state.container_engine,
           container_id: trimString(request.state.container_id),
           container_label: trimString(request.state.container_label) || trimString(request.state.container_id),
-          runtime_root: trimString(request.state.runtime_root),
+          runtime_install_root: trimString(request.state.runtime_install_root),
+          runtime_state_root: trimString(request.state.runtime_state_root),
           bridge_strategy: 'exec_stream',
         },
       });
@@ -2707,9 +2711,15 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     if (
       (state?.connection_kind === 'local_container_runtime' || state?.connection_kind === 'ssh_container_runtime')
-      && !trimString(state.runtime_root)
+      && !trimString(state.runtime_install_root)
     ) {
-      errors.runtime_root = 'Runtime root is required.';
+      errors.runtime_install_root = 'Runtime install root is required.';
+    }
+    if (
+      (state?.connection_kind === 'local_container_runtime' || state?.connection_kind === 'ssh_container_runtime')
+      && !trimString(state.runtime_state_root)
+    ) {
+      errors.runtime_state_root = 'Runtime state root is required.';
     }
     return errors;
   }
@@ -6289,7 +6299,7 @@ function ConnectionDialog(props: Readonly<{
   busyState: DesktopLauncherBusyState;
   onOpenChange: (open: boolean) => void;
   updateField: (
-    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'remote_install_dir' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_label' | 'runtime_root',
+    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'remote_install_dir' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_label' | 'runtime_install_root' | 'runtime_state_root',
     value: string,
   ) => void;
   refreshContainerOptions: () => void;
@@ -6692,25 +6702,47 @@ function ConnectionDialog(props: Readonly<{
                   }}
                 />
               </div>
-              <div class="space-y-1.5">
-                <label for="environment-runtime-root" class="block text-xs font-medium text-foreground">
-                  Runtime Root <span class="text-destructive">*</span>
-                </label>
-                <Input
-                  id="environment-runtime-root"
-                  value={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.runtime_root : ''}
-                  onInput={(event) => {
-                    props.updateField('runtime_root', event.currentTarget.value);
-                    props.clearFieldErrors();
-                  }}
-                  placeholder="/workspace/.redeven"
-                  size="sm"
-                  class={cn('w-full', props.fieldErrors.runtime_root && 'border-destructive ring-1 ring-destructive/20')}
-                  spellcheck={false}
-                />
-                <Show when={props.fieldErrors.runtime_root}>
-                  <div class="text-[11px] text-destructive">{props.fieldErrors.runtime_root}</div>
-                </Show>
+              <div class="grid gap-3 md:grid-cols-2">
+                <div class="space-y-1.5">
+                  <label for="environment-runtime-root" class="block text-xs font-medium text-foreground">
+                    Runtime Install Root <span class="text-destructive">*</span>
+                  </label>
+                  <Input
+                    id="environment-runtime-root"
+                    value={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.runtime_install_root : ''}
+                    onInput={(event) => {
+                      props.updateField('runtime_install_root', event.currentTarget.value);
+                      props.clearFieldErrors();
+                    }}
+                    placeholder="/opt/redeven-desktop/runtime"
+                    size="sm"
+                    class={cn('w-full', props.fieldErrors.runtime_install_root && 'border-destructive ring-1 ring-destructive/20')}
+                    spellcheck={false}
+                  />
+                  <Show when={props.fieldErrors.runtime_install_root}>
+                    <div class="text-[11px] text-destructive">{props.fieldErrors.runtime_install_root}</div>
+                  </Show>
+                </div>
+                <div class="space-y-1.5">
+                  <label for="environment-runtime-state-root" class="block text-xs font-medium text-foreground">
+                    Runtime State Root <span class="text-destructive">*</span>
+                  </label>
+                  <Input
+                    id="environment-runtime-state-root"
+                    value={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.runtime_state_root : ''}
+                    onInput={(event) => {
+                      props.updateField('runtime_state_root', event.currentTarget.value);
+                      props.clearFieldErrors();
+                    }}
+                    placeholder="/var/lib/redeven"
+                    size="sm"
+                    class={cn('w-full', props.fieldErrors.runtime_state_root && 'border-destructive ring-1 ring-destructive/20')}
+                    spellcheck={false}
+                  />
+                  <Show when={props.fieldErrors.runtime_state_root}>
+                    <div class="text-[11px] text-destructive">{props.fieldErrors.runtime_state_root}</div>
+                  </Show>
+                </div>
               </div>
             </div>
           </div>

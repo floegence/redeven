@@ -1,4 +1,12 @@
 import type { DesktopContainerEngine } from '../shared/desktopRuntimePlacement';
+import {
+  buildManagedSSHRuntimeProbeScript,
+  buildManagedSSHUploadedInstallScript,
+} from './sshRuntime';
+import {
+  resolveDesktopSSHRemotePlatform,
+  type DesktopSSHRemotePlatform,
+} from './sshReleaseAssets';
 
 export type DesktopContainerRuntimeStatus =
   | 'running'
@@ -20,6 +28,8 @@ export type DesktopRuntimeContainerListItem = Readonly<{
   image: string;
   status_text: string;
 }>;
+
+export type DesktopContainerRuntimePlatform = DesktopSSHRemotePlatform;
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -161,6 +171,21 @@ export function containerListCommand(
   return [normalizedEngine, 'ps', '--no-trunc', '--format', '{{json .}}'];
 }
 
+export function parseContainerPlatformProbeOutput(rawOutput: string): DesktopContainerRuntimePlatform {
+  const lines = String(rawOutput ?? '')
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line !== '');
+  if (lines.length < 2) {
+    throw new Error('Container platform probe output did not include operating system and architecture.');
+  }
+  const platform = resolveDesktopSSHRemotePlatform(lines[0], lines[1]);
+  if (platform.goos !== 'linux') {
+    throw new Error(`Container runtime targets require a Linux container, but detected ${platform.platform_label}.`);
+  }
+  return platform;
+}
+
 // IMPORTANT: Container lifecycle belongs to the user's container tooling.
 // Desktop may list, inspect, and exec into running containers, but it must not
 // build docker/podman start or stop commands for runtime target management.
@@ -183,4 +208,68 @@ export function containerRuntimeExecCommand(input: Readonly<{
     .filter(([key]) => /^[A-Za-z_][A-Za-z0-9_]*$/u.test(key))
     .flatMap(([key, value]) => ['--env', value == null ? key : `${key}=${String(value)}`]);
   return [normalizedEngine, 'exec', '-i', ...envArgs, containerID, ...input.argv.map((part) => compact(part))];
+}
+
+export function containerRuntimePlatformProbeCommand(input: Readonly<{
+  engine: DesktopContainerEngine;
+  container_id: string;
+}>): readonly string[] {
+  return containerRuntimeExecCommand({
+    engine: input.engine,
+    container_id: input.container_id,
+    argv: ['sh', '-c', 'set -eu\nuname -s\nuname -m'],
+  });
+}
+
+export function containerRuntimeProbeCommand(input: Readonly<{
+  engine: DesktopContainerEngine;
+  container_id: string;
+  runtime_install_root: string;
+  runtime_release_tag: string;
+}>): readonly string[] {
+  return containerRuntimeExecCommand({
+    engine: input.engine,
+    container_id: input.container_id,
+    argv: [
+      'sh',
+      '-c',
+      buildManagedSSHRuntimeProbeScript(),
+      'redeven-container-runtime-probe',
+      input.runtime_install_root,
+      input.runtime_release_tag,
+    ],
+  });
+}
+
+export function containerRuntimeUploadedInstallCommand(input: Readonly<{
+  engine: DesktopContainerEngine;
+  container_id: string;
+  runtime_install_root: string;
+  runtime_release_tag: string;
+}>): readonly string[] {
+  const installDriver = [
+    'set -eu',
+    'install_root="$1"',
+    'release_tag="$2"',
+    'install_script="$3"',
+    'upload_dir="$(mktemp -d "${TMPDIR:-/tmp}/redeven-container-upload.XXXXXX")"',
+    'archive_path="${upload_dir}/redeven.tar.gz"',
+    'cleanup() { rm -rf "$upload_dir"; }',
+    'trap cleanup EXIT INT TERM',
+    'cat > "$archive_path"',
+    'sh -c "$install_script" redeven-container-upload-install "$install_root" "$release_tag" "$archive_path" "$upload_dir"',
+  ].join('\n');
+  return containerRuntimeExecCommand({
+    engine: input.engine,
+    container_id: input.container_id,
+    argv: [
+      'sh',
+      '-c',
+      installDriver,
+      'redeven-container-upload-driver',
+      input.runtime_install_root,
+      input.runtime_release_tag,
+      buildManagedSSHUploadedInstallScript(),
+    ],
+  });
 }

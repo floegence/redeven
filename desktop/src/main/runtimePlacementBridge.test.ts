@@ -26,13 +26,14 @@ describe('runtimePlacementBridge', () => {
         container_engine: 'docker',
         container_id: 'container-stable-id',
         container_label: 'dev-container',
-        runtime_root: '/workspace/.redeven',
+        runtime_install_root: '/opt/redeven-desktop/runtime',
+        runtime_state_root: '/var/lib/redeven',
         bridge_strategy: 'exec_stream',
       },
-      runtime_binary_path: '/Applications/Redeven.app/redeven',
+      runtime_binary_path: '/opt/redeven-desktop/runtime/releases/v1.2.3/bin/redeven',
     })).toMatchObject({
       bridge_kind: 'container_exec_stream',
-      command: ['docker', 'exec', '-i', '--env', 'REDEVEN_DESKTOP_OWNER_ID', 'container-stable-id', 'redeven', 'desktop-bridge', '--state-root', '/workspace/.redeven'],
+      command: ['docker', 'exec', '-i', '--env', 'REDEVEN_DESKTOP_OWNER_ID', 'container-stable-id', '/opt/redeven-desktop/runtime/releases/v1.2.3/bin/redeven', 'desktop-bridge', '--state-root', '/var/lib/redeven'],
       requires_published_port: false,
       exposes_loopback_only: true,
     });

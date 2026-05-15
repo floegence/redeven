@@ -110,6 +110,9 @@ import {
   startRuntimePlacementBridgeSession,
   type RuntimePlacementBridgeSession,
 } from './runtimePlacementBridgeSession';
+import {
+  ensureRuntimePlacementReady,
+} from './runtimePlacementManager';
 import { startDesktopAIBroker, type ManagedDesktopAIBroker } from './desktopAIBroker';
 import { PUBLIC_REDEVEN_RELEASE_BASE_URL } from './sshReleaseAssets';
 import { installStdioBrokenPipeGuards } from './stdio';
@@ -4701,15 +4704,26 @@ async function startRuntimePlacementBridgeRecordFromLauncher(
   if (placement.kind !== 'container_process') {
     throw new Error('Runtime Placement Bridge requires a container runtime target.');
   }
-  await assertRuntimeTargetContainerRunning(hostAccess, placement);
   const existing = runtimePlacementBridgeByTargetID.get(runtimeTargetIDFromRequest(request)) ?? null;
   if (existing) {
     return existing;
   }
+  const readyPlacement = await ensureRuntimePlacementReady({
+    host_access: hostAccess,
+    placement,
+    runtime_release_tag: resolveSSHRuntimeReleaseTag(),
+    release_base_url: hostAccess.kind === 'ssh_host'
+      ? hostAccess.ssh.release_base_url
+      : PUBLIC_REDEVEN_RELEASE_BASE_URL,
+    source_runtime_root: process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT,
+    asset_cache_root: path.join(app.getPath('userData'), 'runtime-placement-cache'),
+    force_runtime_update: request.force_runtime_update === true,
+    timeout_ms: 45_000,
+  });
   const session = await startRuntimePlacementBridgeSession({
     host_access: hostAccess,
     placement,
-    runtime_binary_path: bundledRuntimeExecutablePath(),
+    runtime_binary_path: readyPlacement.runtime_binary_path,
     desktop_owner_id: await desktopRuntimeOwnerID(),
     fallback_local_id: runtimeTargetEnvironmentIDFromRequest(request),
   });
