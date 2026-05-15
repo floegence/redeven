@@ -64,4 +64,37 @@ describe('runtimeHostAccess', () => {
       "env REDEVEN_DESKTOP_OWNER_ID='desktop-owner' 'docker' 'exec' '-i' 'dev' 'redeven' 'desktop-bridge'",
     );
   });
+
+  it('streams stdin data through local and SSH host executors', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-host-stdin-test-'));
+    const localOut = path.join(tempDir, 'local.bin');
+    await createLocalRuntimeHostExecutor().run([
+      process.execPath,
+      '-e',
+      `const fs=require('node:fs');const chunks=[];process.stdin.on('data',c=>chunks.push(c));process.stdin.on('end',()=>fs.writeFileSync(${JSON.stringify(localOut)}, Buffer.concat(chunks)));`,
+    ], {
+      stdinData: Buffer.from('local-archive'),
+    });
+    expect(await fs.readFile(localOut, 'utf8')).toBe('local-archive');
+
+    const sshOut = path.join(tempDir, 'ssh.bin');
+    const fakeSSH = path.join(tempDir, 'ssh');
+    await fs.writeFile(fakeSSH, [
+      '#!/usr/bin/env bash',
+      `cat > ${JSON.stringify(sshOut)}`,
+    ].join('\n'), { mode: 0o755 });
+    const executor = createSSHRuntimeHostExecutor({
+      ssh_destination: 'devbox',
+      ssh_port: null,
+      auth_mode: 'key_agent',
+      remote_install_dir: '/opt/redeven',
+      bootstrap_strategy: 'desktop_upload',
+      release_base_url: '',
+      connect_timeout_seconds: 15,
+    }, { sshBinary: fakeSSH });
+    await executor.run(['docker', 'exec', '-i', 'dev', 'sh'], {
+      stdinData: Buffer.from('ssh-archive'),
+    });
+    expect(await fs.readFile(sshOut, 'utf8')).toBe('ssh-archive');
+  });
 });

@@ -50,7 +50,8 @@ describe('desktopRuntimePresence', () => {
         container_engine: 'docker',
         container_id: 'abc123',
         container_label: 'web',
-        runtime_root: '/runtime',
+        runtime_install_root: '/opt/redeven-desktop/runtime',
+        runtime_state_root: '/var/lib/redeven',
         bridge_strategy: 'exec_stream',
       },
     })).toEqual([
@@ -68,7 +69,8 @@ describe('desktopRuntimePresence', () => {
         container_engine: 'docker',
         container_id: 'abc123',
         container_label: 'web',
-        runtime_root: '/runtime',
+        runtime_install_root: '/opt/redeven-desktop/runtime',
+        runtime_state_root: '/var/lib/redeven',
         bridge_strategy: 'exec_stream',
       },
     })).toEqual([

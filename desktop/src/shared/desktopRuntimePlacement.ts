@@ -25,7 +25,8 @@ export type DesktopRuntimePlacement =
       container_engine: DesktopContainerEngine;
       container_id: string;
       container_label: string;
-      runtime_root: string;
+      runtime_install_root: string;
+      runtime_state_root: string;
       bridge_strategy: 'exec_stream';
     }>;
 
@@ -55,6 +56,10 @@ function normalizeInstallDir(value: unknown): string {
     throw new Error('Runtime install directory must be a single line.');
   }
   return text;
+}
+
+function normalizeRuntimeRoot(value: unknown, label: string): string {
+  return normalizeTokenComponent(value, label);
 }
 
 export function normalizeDesktopContainerEngine(value: unknown): DesktopContainerEngine {
@@ -104,21 +109,25 @@ export function normalizeDesktopRuntimePlacement(value: unknown): DesktopRuntime
     };
   }
   if (kind === 'container_process') {
+    const legacyRuntimeRoot = compact(record.runtime_root);
+    const runtimeInstallRoot = compact(record.runtime_install_root) || legacyRuntimeRoot;
+    const runtimeStateRoot = compact(record.runtime_state_root) || legacyRuntimeRoot;
     return {
       kind: 'container_process',
       container_engine: normalizeDesktopContainerEngine(record.container_engine),
       container_id: normalizeTokenComponent(record.container_id, 'Container ID'),
       container_label: compact(record.container_label) || compact(record.container_id),
-      runtime_root: normalizeTokenComponent(record.runtime_root, 'Container runtime root'),
+      runtime_install_root: normalizeRuntimeRoot(runtimeInstallRoot, 'Container runtime install root'),
+      runtime_state_root: normalizeRuntimeRoot(runtimeStateRoot, 'Container runtime state root'),
       bridge_strategy: 'exec_stream',
     };
   }
   throw new Error('Runtime placement must be host_process or container_process.');
 }
 
-function hashRuntimeRoot(runtimeRoot: string): string {
+function hashRuntimePlacementRoots(installRoot: string, stateRoot: string): string {
   let hash = 0x811c9dc5;
-  for (const char of runtimeRoot) {
+  for (const char of `${installRoot}\0${stateRoot}`) {
     hash ^= char.codePointAt(0) ?? 0;
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
@@ -143,13 +152,13 @@ export function desktopRuntimeTargetID(
 ): DesktopRuntimeTargetID {
   if (hostAccess.kind === 'local_host') {
     if (placement.kind === 'container_process') {
-      return `local:container:${encoded(placement.container_engine)}:${encoded(placement.container_id)}:${hashRuntimeRoot(placement.runtime_root)}`;
+      return `local:container:${encoded(placement.container_engine)}:${encoded(placement.container_id)}:${hashRuntimePlacementRoots(placement.runtime_install_root, placement.runtime_state_root)}`;
     }
     return `local:host:${encoded(compact(fallbackLocalID) || 'local')}`;
   }
   const sshAuthority = normalizedSSHAuthority(hostAccess.ssh);
   if (placement.kind === 'container_process') {
-    return `ssh:container:${encoded(sshAuthority)}:${encoded(placement.container_engine)}:${encoded(placement.container_id)}:${hashRuntimeRoot(placement.runtime_root)}`;
+    return `ssh:container:${encoded(sshAuthority)}:${encoded(placement.container_engine)}:${encoded(placement.container_id)}:${hashRuntimePlacementRoots(placement.runtime_install_root, placement.runtime_state_root)}`;
   }
   return `ssh:host:${encoded(sshAuthority)}:${encoded(hostAccess.ssh.remote_install_dir)}`;
 }

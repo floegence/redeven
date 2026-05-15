@@ -60,9 +60,10 @@ export function buildRuntimePlacementBridgePlan(input: Readonly<{
         REDEVEN_DESKTOP_OWNER_ID: undefined,
       },
       // IMPORTANT: Container targets execute the runtime binary inside the
-      // container. The Desktop-bundled host path is not valid in that process
-      // namespace, so only the placement state root crosses this boundary.
-      argv: desktopBridgeCommand('redeven', input.placement.runtime_root),
+      // container after placement bootstrap has resolved the container-local
+      // binary path. Do not fall back to PATH lookup; bootstrap owns install
+      // and version readiness before the bridge stream starts.
+      argv: desktopBridgeCommand(runtimeBinaryPath, input.placement.runtime_state_root),
     }),
     requires_published_port: false,
     exposes_loopback_only: true,

@@ -767,7 +767,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Save a runtime target inside a running container on an SSH host.');
     expect(appSrc).toContain('bridge stream, not through published container ports');
     expect(appSrc).toContain('Container <span class="text-destructive">*</span>');
-    expect(appSrc).toContain('Runtime Root <span class="text-destructive">*</span>');
+    expect(appSrc).toContain('Runtime Install Root <span class="text-destructive">*</span>');
+    expect(appSrc).toContain('Runtime State Root <span class="text-destructive">*</span>');
     expect(appSrc).toContain("label: 'Docker'");
     expect(appSrc).toContain("label: 'Podman'");
     expect(appSrc).toContain('function ContainerPicker');

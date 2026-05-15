@@ -272,13 +272,19 @@ Container targets use the Runtime Placement Bridge instead of published containe
 ```text
 Desktop renderer
   -> Desktop main loopback proxy on 127.0.0.1
-  -> docker/podman exec -i [--env REDEVEN_DESKTOP_OWNER_ID] <container> redeven desktop-bridge --state-root <runtime_root>
+  -> placement bootstrap inspects the running container, detects platform, installs/verifies a Desktop-managed Redeven runtime
+  -> docker/podman exec -i [--env REDEVEN_DESKTOP_OWNER_ID] <container> <container_binary_path> desktop-bridge --state-root <runtime_state_root>
   -> Local UI and runtime-control inside the container
 ```
 
 The bridge is a versioned byte-stream transport for Local UI, SSE, WebSocket, and runtime-control traffic. Desktop may execute that container command locally or through SSH host access, but the placement remains `container_process`; it must not fall back to a host-process runtime, provider tunnel, host networking, or a published container port.
 
-`runtime_root` is the container-internal Redeven state root. The container must provide a `redeven` binary on its own PATH. Desktop does not mount or reuse the host-bundled binary inside the container namespace.
+Container placements keep install and state paths separate:
+
+- `runtime_install_root`: the container-internal Desktop-managed release/stamp/bin root.
+- `runtime_state_root`: the container-internal Redeven state root used by `run` and `desktop-bridge`.
+
+Desktop installs the correct Linux runtime package into `runtime_install_root` before starting the bridge. A generic container does not need to provide `redeven` on `PATH`, and Desktop must not copy the host-bundled macOS/Windows binary into the container namespace. The bridge command uses the resolved container-local binary path only after platform, version, and Desktop stamp checks pass.
 
 Container lifecycle is outside Redeven. The creation dialog lists only currently running Docker/Podman containers for the selected local or SSH host access path, saves the selected stable container id, and re-checks that container before saving or starting the runtime. If the container disappears or stops, the card offers refresh/error guidance; the user must start or repair the container with the owning container tool before Redeven can start the runtime process inside it.
 

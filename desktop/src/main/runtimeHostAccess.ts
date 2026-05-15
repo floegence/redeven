@@ -18,6 +18,7 @@ export type RuntimeHostAccessExecutor = Readonly<{
 export type RuntimeHostCommandOptions = Readonly<{
   cwd?: string;
   env?: NodeJS.ProcessEnv;
+  stdinData?: Buffer;
   signal?: AbortSignal;
 }>;
 
@@ -72,7 +73,6 @@ function spawnCommand(
   command: string,
   args: readonly string[],
   options: RuntimeHostCommandOptions,
-  stdin: 'pipe' | 'ignore' = 'ignore',
 ): Promise<RuntimeHostCommandResult> {
   if (compact(command) === '' || args.some((arg) => compact(arg) === '')) {
     return Promise.reject(new Error('Runtime host command argv must be non-empty.'));
@@ -84,7 +84,7 @@ function spawnCommand(
         ...process.env,
         ...options.env,
       },
-      stdio: [stdin, 'pipe', 'pipe'],
+      stdio: [options.stdinData ? 'pipe' : 'ignore', 'pipe', 'pipe'],
       signal: options.signal,
     }) as SpawnedCommand;
     let stdout = '';
@@ -99,6 +99,9 @@ function spawnCommand(
       stderr += chunk;
     });
     child.once('error', reject);
+    if (options.stdinData && child.stdin) {
+      child.stdin.end(options.stdinData);
+    }
     child.once('close', (exitCode, closeSignal) => {
       if (exitCode === 0 && !closeSignal) {
         resolve({ stdout, stderr });

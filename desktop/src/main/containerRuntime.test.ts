@@ -3,9 +3,13 @@ import { describe, expect, it } from 'vitest';
 import {
   containerInspectCommand,
   containerListCommand,
+  containerRuntimePlatformProbeCommand,
+  containerRuntimeProbeCommand,
   containerRuntimeExecCommand,
+  containerRuntimeUploadedInstallCommand,
   parseContainerListOutput,
   parseContainerInspectJSON,
+  parseContainerPlatformProbeOutput,
 } from './containerRuntime';
 
 describe('containerRuntime', () => {
@@ -105,6 +109,52 @@ describe('containerRuntime', () => {
       'redeven',
       'desktop-bridge',
     ]);
+  });
+
+  it('builds container bootstrap commands before bridge startup', () => {
+    expect(parseContainerPlatformProbeOutput('Linux\nx86_64\n')).toMatchObject({
+      platform_id: 'linux_amd64',
+      release_package_name: 'redeven_linux_amd64.tar.gz',
+    });
+    expect(containerRuntimePlatformProbeCommand({
+      engine: 'docker',
+      container_id: 'dev',
+    })).toEqual([
+      'docker',
+      'exec',
+      '-i',
+      'dev',
+      'sh',
+      '-c',
+      'set -eu\nuname -s\nuname -m',
+    ]);
+    expect(containerRuntimeProbeCommand({
+      engine: 'docker',
+      container_id: 'dev',
+      runtime_install_root: '/opt/redeven-desktop/runtime',
+      runtime_release_tag: 'v1.2.3',
+    })).toEqual(expect.arrayContaining([
+      'redeven-container-runtime-probe',
+      '/opt/redeven-desktop/runtime',
+      'v1.2.3',
+    ]));
+    const installCommand = containerRuntimeUploadedInstallCommand({
+      engine: 'podman',
+      container_id: 'dev',
+      runtime_install_root: '/opt/redeven-desktop/runtime',
+      runtime_release_tag: 'v1.2.3',
+    });
+    expect(installCommand).toEqual(expect.arrayContaining([
+      'podman',
+      'exec',
+      '-i',
+      'dev',
+      'redeven-container-upload-driver',
+      '/opt/redeven-desktop/runtime',
+      'v1.2.3',
+    ]));
+    expect(installCommand.join('\n')).toContain('cat > "$archive_path"');
+    expect(installCommand.join('\n')).toContain('write_runtime_stamp "desktop_upload"');
   });
 
   it('rejects malformed command inputs instead of falling back', () => {
