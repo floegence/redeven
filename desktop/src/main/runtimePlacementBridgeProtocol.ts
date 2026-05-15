@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { once } from 'node:events';
 import type { Readable, Writable } from 'node:stream';
 
 import type { DesktopRuntimeControlEndpoint } from '../shared/runtimeControl';
@@ -109,6 +108,55 @@ function writeUint32BE(buffer: Buffer, value: number, offset: number): void {
   buffer.writeUInt32BE(value >>> 0, offset);
 }
 
+function normalizeStreamError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+function waitForReadable(stream: Readable): Promise<'readable' | 'closed'> {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      stream.off('readable', onReadable);
+      stream.off('end', onClosed);
+      stream.off('close', onClosed);
+      stream.off('error', onError);
+    };
+    const onReadable = () => {
+      cleanup();
+      resolve('readable');
+    };
+    const onClosed = () => {
+      cleanup();
+      resolve('closed');
+    };
+    const onError = (error: unknown) => {
+      cleanup();
+      reject(normalizeStreamError(error));
+    };
+    stream.once('readable', onReadable);
+    stream.once('end', onClosed);
+    stream.once('close', onClosed);
+    stream.once('error', onError);
+  });
+}
+
+function chunkToBuffer(chunk: Buffer | string): Buffer {
+  return Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+}
+
+function readAvailableBytes(stream: Readable, maxLength: number): Buffer | null {
+  const exact = stream.read(maxLength) as Buffer | string | null;
+  const chunk = exact ?? stream.read() as Buffer | string | null;
+  if (chunk == null) {
+    return null;
+  }
+  const buffer = chunkToBuffer(chunk);
+  if (buffer.length <= maxLength) {
+    return buffer;
+  }
+  stream.unshift(buffer.subarray(maxLength));
+  return buffer.subarray(0, maxLength);
+}
+
 async function readExactly(stream: Readable, length: number): Promise<Buffer | null> {
   if (length === 0) {
     return Buffer.alloc(0);
@@ -116,26 +164,17 @@ async function readExactly(stream: Readable, length: number): Promise<Buffer | n
   const chunks: Buffer[] = [];
   let total = 0;
   while (total < length) {
-    const chunk = stream.read(length - total) as Buffer | string | null;
+    const chunk = readAvailableBytes(stream, length - total);
     if (chunk != null) {
-      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-      chunks.push(buffer);
-      total += buffer.length;
+      chunks.push(chunk);
+      total += chunk.length;
       continue;
     }
     const state = stream as Readable & Readonly<{ readableEnded?: boolean; destroyed?: boolean }>;
     if (state.readableEnded || state.destroyed) {
       return null;
     }
-    const event = await Promise.race([
-      once(stream, 'readable').then(() => 'readable' as const),
-      once(stream, 'end').then(() => 'end' as const),
-      once(stream, 'close').then(() => 'close' as const),
-      once(stream, 'error').then(([error]) => {
-        throw error instanceof Error ? error : new Error(String(error));
-      }),
-    ]);
-    if (event !== 'readable') {
+    if (await waitForReadable(stream) !== 'readable') {
       return null;
     }
   }
@@ -219,7 +258,28 @@ export async function writeRuntimePlacementBridgeFrame(
   if (stream.write(encoded)) {
     return;
   }
-  await once(stream, 'drain');
+  await new Promise<void>((resolve, reject) => {
+    const cleanup = () => {
+      stream.off('drain', onDrain);
+      stream.off('close', onClose);
+      stream.off('error', onError);
+    };
+    const onDrain = () => {
+      cleanup();
+      resolve();
+    };
+    const onClose = () => {
+      cleanup();
+      reject(new Error('Runtime Placement Bridge writer closed before drain.'));
+    };
+    const onError = (error: unknown) => {
+      cleanup();
+      reject(normalizeStreamError(error));
+    };
+    stream.once('drain', onDrain);
+    stream.once('close', onClose);
+    stream.once('error', onError);
+  });
 }
 
 export function runtimePlacementBridgeStreamID(prefix = 'stream'): string {
