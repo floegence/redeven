@@ -98,4 +98,35 @@ describe('runtimePlacementManager', () => {
       platform: expect.objectContaining({ platform_id: 'linux_amd64' }),
     }));
   });
+
+  it('replaces a ready container runtime when Desktop is using the current source runtime', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-placement-manager-'));
+    const markerPath = await installFakeDocker(tempDir);
+    await fs.writeFile(markerPath, 'old-runtime');
+
+    const ready = await ensureRuntimePlacementReady({
+      host_access: { kind: 'local_host' },
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'dev',
+        container_label: 'dev',
+        runtime_install_root: '/opt/redeven-desktop/runtime',
+        runtime_state_root: '/var/lib/redeven',
+        bridge_strategy: 'exec_stream',
+      },
+      runtime_release_tag: 'v1.2.3',
+      release_base_url: 'https://example.invalid/releases',
+      source_runtime_root: tempDir,
+      asset_cache_root: tempDir,
+    });
+
+    expect(ready.runtime_binary_path).toBe('/opt/redeven-desktop/runtime/releases/v1.2.3/bin/redeven');
+    expect(await fs.readFile(markerPath, 'utf8')).toBe('redeven-archive');
+    expect(uploadAssetMocks.prepareDesktopRuntimeUploadAsset).toHaveBeenCalledWith(expect.objectContaining({
+      runtimeReleaseTag: 'v1.2.3',
+      sourceRuntimeRoot: tempDir,
+      platform: expect.objectContaining({ platform_id: 'linux_amd64' }),
+    }));
+  });
 });
