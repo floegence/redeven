@@ -118,6 +118,7 @@ export function containerRuntimeExecCommand(input: Readonly<{
   engine: DesktopContainerEngine;
   container_id: string;
   argv: readonly string[];
+  env?: Readonly<Record<string, string | undefined>>;
 }>): readonly string[] {
   const normalizedEngine = normalizeContainerEngine(input.engine);
   const containerID = compact(input.container_id);
@@ -127,5 +128,33 @@ export function containerRuntimeExecCommand(input: Readonly<{
   if (input.argv.length === 0 || input.argv.some((part) => compact(part) === '')) {
     throw new Error('Container exec argv must be non-empty.');
   }
-  return [normalizedEngine, 'exec', '-i', containerID, ...input.argv.map((part) => compact(part))];
+  const envArgs = Object.entries(input.env ?? {})
+    .map(([key, value]) => [compact(key), value] as const)
+    .filter(([key]) => /^[A-Za-z_][A-Za-z0-9_]*$/u.test(key))
+    .flatMap(([key, value]) => ['--env', value == null ? key : `${key}=${String(value)}`]);
+  return [normalizedEngine, 'exec', '-i', ...envArgs, containerID, ...input.argv.map((part) => compact(part))];
+}
+
+export function containerStartCommand(
+  engine: DesktopContainerEngine,
+  containerID: string,
+): readonly string[] {
+  const normalizedEngine = normalizeContainerEngine(engine);
+  const id = compact(containerID);
+  if (id === '') {
+    throw new Error('Container ID is required.');
+  }
+  return [normalizedEngine, 'start', id];
+}
+
+export function containerStopCommand(
+  engine: DesktopContainerEngine,
+  containerID: string,
+): readonly string[] {
+  const normalizedEngine = normalizeContainerEngine(engine);
+  const id = compact(containerID);
+  if (id === '') {
+    throw new Error('Container ID is required.');
+  }
+  return [normalizedEngine, 'stop', id];
 }

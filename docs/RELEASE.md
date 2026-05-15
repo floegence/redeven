@@ -36,6 +36,13 @@ Changes to Runtime Service fields such as `capabilities.provider_link`,
 desktop-only runtime-control provider-link endpoints must be reflected in
 `internal/runtimeservice/compatibility_contract.json` before tagging.
 
+The Desktop Runtime Placement Bridge is also a release compatibility surface.
+Changes to `redeven desktop-bridge`, the `redeven-desktop-bridge-v1` frame
+protocol, bridge hello capabilities, Local UI byte-stream forwarding,
+runtime-control over bridge, or the persisted `saved_runtime_targets` placement
+schema must be reflected in `internal/runtimeservice/compatibility_contract.json`
+before tagging.
+
 ## GitHub Release notes quality baseline
 
 Each GitHub Release must include:

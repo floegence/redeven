@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   containerInspectCommand,
   containerRuntimeExecCommand,
+  containerStartCommand,
+  containerStopCommand,
   parseContainerInspectJSON,
 } from './containerRuntime';
 
@@ -51,14 +53,35 @@ describe('containerRuntime', () => {
       engine: 'podman',
       container_id: 'podman-stable-id',
       argv: ['redeven', 'desktop-bridge'],
+      env: {
+        REDEVEN_DESKTOP_OWNER_ID: undefined,
+        'BAD-NAME': 'ignored',
+      },
     })).toEqual([
       'podman',
       'exec',
       '-i',
+      '--env',
+      'REDEVEN_DESKTOP_OWNER_ID',
       'podman-stable-id',
       'redeven',
       'desktop-bridge',
     ]);
+  });
+
+  it('builds container lifecycle commands only from explicit container ids', () => {
+    expect(containerStartCommand('docker', 'container-stable-id')).toEqual([
+      'docker',
+      'start',
+      'container-stable-id',
+    ]);
+    expect(containerStopCommand('podman', 'podman-stable-id')).toEqual([
+      'podman',
+      'stop',
+      'podman-stable-id',
+    ]);
+    expect(() => containerStartCommand('docker', '')).toThrow('Container ID');
+    expect(() => containerStopCommand('podman', '')).toThrow('Container ID');
   });
 
   it('rejects malformed command inputs instead of falling back', () => {

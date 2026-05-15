@@ -234,6 +234,7 @@ Durable preference categories:
 - `provider_environments`: first-class provider-backed environment records keyed by provider origin/id and environment id.
 - `saved_environments`: saved Local UI URL connections.
 - `saved_ssh_environments`: saved SSH Host connections and their bootstrap settings.
+- `saved_runtime_targets`: saved container runtime targets. A target keeps host access (`local_host` or `ssh_host`) separate from placement (`container_process`) so Local Container and SSH Container entries share the same managed-runtime card semantics as Local and SSH host-process runtimes.
 - `control_planes`: provider discovery/account/catalog metadata.
 - `control_plane_refresh_tokens`: opaque provider refresh tokens in the local secrets file.
 
@@ -261,6 +262,30 @@ Desktop semantics:
 - Provider environments never persist provider-specific local runtime configuration; Desktop derives linked-local readiness from the single Local Environment runtime and its current provider binding.
 - Standalone runtime / CLI and Desktop sessions stay interoperable because both read and write the same Local Environment runtime layout.
 - Externally owned runtimes stay externally owned: Desktop can attach, but restart/update remain delegated to the owner.
+
+### Container Runtime Targets
+
+Local Container and SSH Container entries are managed runtime cards. Their primary action slot remains `Open`, lifecycle actions stay in the card popup/dropdown, and provider-link actions remain explicit runtime-card actions. Provider Environment cards do not start, stop, open locally, or connect these runtimes.
+
+Container targets use the Runtime Placement Bridge instead of published container ports:
+
+```text
+Desktop renderer
+  -> Desktop main loopback proxy on 127.0.0.1
+  -> docker/podman exec -i [--env REDEVEN_DESKTOP_OWNER_ID] <container> redeven desktop-bridge --state-root <runtime_root>
+  -> Local UI and runtime-control inside the container
+```
+
+The bridge is a versioned byte-stream transport for Local UI, SSE, WebSocket, and runtime-control traffic. Desktop may execute that container command locally or through SSH host access, but the placement remains `container_process`; it must not fall back to a host-process runtime, provider tunnel, host networking, or a published container port.
+
+`runtime_root` is the container-internal Redeven state root. The container must provide a `redeven` binary on its own PATH. Desktop does not mount or reuse the host-bundled binary inside the container namespace.
+
+`container_owner` controls container lifecycle only:
+
+- `external`: Desktop may start/stop the runtime inside a running container, but it does not start a stopped container. The card offers refresh guidance until the owning tool starts the container.
+- `desktop`: Desktop may start the container before starting the runtime. Stopping the runtime does not stop the container unless a separate explicit Stop Container action exists for that Desktop-owned container.
+
+The runtime-control token stays in Electron main. Renderer snapshots expose only runtime-control status and provider-link capability.
 
 Runtime Service snapshots are carried through the same attach and startup paths that already describe Local UI:
 

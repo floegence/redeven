@@ -147,6 +147,13 @@ func (s *Server) handler() http.Handler {
 	return s.withDiagnostics(mux)
 }
 
+func (s *Server) HandlerForDesktopBridge() http.Handler {
+	if s == nil {
+		return http.NotFoundHandler()
+	}
+	return s.handler()
+}
+
 func New(opts Options) (*Server, error) {
 	if opts.Agent == nil {
 		return nil, errors.New("missing Agent")
@@ -278,6 +285,73 @@ func (s *Server) Start(ctx context.Context) error {
 	return nil
 }
 
+func (s *Server) StartOnListeners(ctx context.Context, listeners []net.Listener, runtimeControlListener net.Listener) error {
+	if s == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if s.srv != nil {
+		return nil
+	}
+	if len(listeners) == 0 {
+		return errors.New("missing Local UI listeners")
+	}
+
+	srv := &http.Server{
+		Handler:           s.handler(),
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	s.srv = srv
+	s.listeners = append([]net.Listener(nil), listeners...)
+
+	go func() {
+		<-ctx.Done()
+		_ = s.Close()
+	}()
+	go s.sweepLoop(ctx)
+
+	for _, ln := range listeners {
+		ln := ln
+		go func() {
+			if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				s.log.Error("local ui server stopped", "addr", ln.Addr().String(), "error", err)
+			}
+		}()
+	}
+
+	if s.desktopManaged && strings.TrimSpace(s.desktopOwnerID) != "" {
+		runtimeControl, err := newRuntimeControlServer(s.a, s.desktopOwnerID, s.log, func() {
+			if err := s.writeRuntimeState(); err != nil {
+				s.log.Warn("failed to refresh local runtime state", "path", s.runtimeStatePath, "error", err)
+			}
+		})
+		if err != nil {
+			_ = s.Close()
+			return fmt.Errorf("init runtime-control: %w", err)
+		}
+		if runtimeControlListener != nil {
+			if err := runtimeControl.StartOnListener(ctx, runtimeControlListener); err != nil {
+				_ = s.Close()
+				return fmt.Errorf("start runtime-control: %w", err)
+			}
+		} else if err := runtimeControl.Start(ctx); err != nil {
+			_ = s.Close()
+			return fmt.Errorf("start runtime-control: %w", err)
+		}
+		s.runtimeControl = runtimeControl
+	}
+
+	if err := s.writeRuntimeState(); err != nil {
+		_ = s.Close()
+		return fmt.Errorf("write local runtime state: %w", err)
+	}
+
+	s.log.Info("local ui listening", "bind", s.ListenLabel())
+	return nil
+}
+
 func (s *Server) writeRuntimeState() error {
 	if s == nil {
 		return nil
@@ -308,6 +382,20 @@ func runtimeControlEndpoint(srv *runtimeControlServer) *localuiruntime.RuntimeCo
 		return nil
 	}
 	return srv.Endpoint()
+}
+
+func (s *Server) RuntimeControlEndpointForDesktopBridge() *localuiruntime.RuntimeControlEndpoint {
+	if s == nil {
+		return nil
+	}
+	return runtimeControlEndpoint(s.runtimeControl)
+}
+
+func (s *Server) RuntimeServiceSnapshotForDesktopBridge() runtimeservice.Snapshot {
+	if s == nil {
+		return runtimeservice.UnknownSnapshot()
+	}
+	return s.runtimeServiceSnapshot()
 }
 
 func (s *Server) Close() error {

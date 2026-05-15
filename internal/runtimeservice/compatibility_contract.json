@@ -3,14 +3,19 @@
   "release_review": {
     "release_version": "unreleased",
     "previous_release": "v0.6.7",
-    "reviewed_at": "2026-05-14",
-    "review_id": "desktop-provider-link-runtime-control-v1",
-    "summary": "Desktop Local Runtime startup is local-only, while provider-local use moves to an explicit runtime-control provider-link contract with observable Runtime Service capability and binding state.",
+    "reviewed_at": "2026-05-15",
+    "review_id": "desktop-runtime-placement-bridge-v1",
+    "summary": "Desktop adds the Runtime Placement Bridge so Local and SSH container runtime targets can expose Local UI and runtime-control through a managed byte-stream transport without published container ports.",
     "checked_surfaces": [
+      "Runtime Placement Bridge CLI command and stdio frame protocol",
+      "Runtime Placement Bridge Local UI byte-stream forwarding for HTTP, SSE, WebSocket, and runtime-control",
+      "Desktop container target host_access plus placement persistence schema",
+      "Desktop Welcome Local Container and SSH Container managed runtime cards",
+      "Desktop provider-link resolver for bridge-backed Local and SSH container targets",
       "Runtime Service provider_link capability and binding normalization",
       "Desktop startup reports and attachable runtime state runtime_control metadata",
-      "Desktop Welcome Local Environment Open and Start Runtime separation",
-      "Desktop Welcome provider Connect Local Runtime and Disconnect Local Runtime actions",
+      "Desktop Welcome Local, SSH, and container Open and Start Runtime separation",
+      "Desktop Welcome provider Connect Runtime and Disconnect Runtime actions",
       "Runtime-control provider-link HTTP authorization and structured errors",
       "Runtime provider bootstrap exchange, config persistence, and control-channel lifecycle",
       "RCPP desktop open-session bootstrap_ticket semantics",
@@ -18,7 +23,7 @@
     ]
   },
   "runtime_protocol_version": "redeven-runtime-v1",
-  "compatibility_epoch": 3,
-  "minimum_desktop_version": "v0.6.8",
-  "minimum_runtime_version": "v0.6.8"
+  "compatibility_epoch": 4,
+  "minimum_desktop_version": "v0.6.9",
+  "minimum_runtime_version": "v0.6.9"
 }

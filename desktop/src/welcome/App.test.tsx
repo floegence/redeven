@@ -673,7 +673,7 @@ describe('DesktopWelcomeShell', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain('content="Settings"');
-    expect(appSrc).toContain("title={props.environment.kind === 'local_environment' ? 'Environment settings' : 'Connection settings'}");
+    expect(appSrc).toContain("title={isContainerRuntimeTarget() ? 'Runtime target settings' : props.environment.kind === 'local_environment' ? 'Environment settings' : 'Connection settings'}");
     expect(appSrc).toContain('Connection settings for ${props.environment.label}');
     expect(appSrc).toContain('<Settings class="h-3.5 w-3.5" />');
     expect(appSrc).not.toContain('<Pencil class="h-3.5 w-3.5" />');
@@ -721,15 +721,16 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('<AnimatedCard');
   });
 
-  it('keeps the New Environment dialog focused on Redeven URLs and SSH hosts', () => {
+  it('keeps the New Environment dialog focused on Redeven URLs, SSH hosts, and managed container targets', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain('Name</label>');
     expect(appSrc).not.toContain('Environment Name');
     expect(appSrc).toContain("label: 'Redeven URL'");
     expect(appSrc).toContain("label: 'SSH Host'");
+    expect(appSrc).toContain("label: 'Local Container'");
+    expect(appSrc).toContain("label: 'SSH Container'");
     expect(appSrc).not.toContain('Run a Desktop-managed Redeven environment on this device.');
-    expect(appSrc).toContain('Open a Redeven URL or connect over SSH');
     expect(appSrc).not.toContain('Create a local serve runtime for this provider environment on this Mac.');
     expect(appSrc).not.toContain('This provider environment card will keep both routes visible on this device: serve local here, or open via Control Plane.');
     expect(appSrc).toContain('Connect straight to a Redeven runtime that already exposes its own Environment URL');
@@ -737,12 +738,21 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Deploy a Desktop-owned Local Environment profile to a host you can reach over SSH.');
     expect(appSrc).toContain('Desktop reuses shared release artifacts on that host and keeps one runtime state set there.');
     expect(appSrc).toContain("Desktop reuses only the exact Desktop-managed Redeven release on that host, installs it on demand when needed, and stores runtime state in that host's single runtime profile.");
+    expect(appSrc).toContain('Save a runtime target inside a container on this device.');
+    expect(appSrc).toContain('Save a runtime target inside a container on an SSH host.');
+    expect(appSrc).toContain('bridge stream, not through published container ports');
+    expect(appSrc).toContain('Container <span class="text-destructive">*</span>');
+    expect(appSrc).toContain('Runtime Root <span class="text-destructive">*</span>');
+    expect(appSrc).toContain("label: 'Docker'");
+    expect(appSrc).toContain("label: 'Podman'");
+    expect(appSrc).toContain("label: 'External'");
+    expect(appSrc).toContain("label: 'Desktop'");
     expect(appSrc).toContain('Bootstrap Delivery');
     expect(appSrc).toContain('Authentication');
     expect(appSrc).toContain("label: 'Key / agent'");
     expect(appSrc).toContain("label: 'Password prompt'");
     expect(appSrc).toContain('does not store the SSH password');
-    expect(appSrc).toContain("const showCreateConnectAction = createMemo(() => isCreate() && connectionKind() !== 'ssh_environment');");
+    expect(appSrc).toContain("const showCreateConnectAction = createMemo(() => isCreate() && connectionKind() === 'external_local_ui');");
     expect(appSrc).toContain('<Show when={showCreateConnectAction()}>');
     expect(appSrc).toContain('async function saveAndConnectURLFromDialog()');
     expect(appSrc).not.toContain('async function ' + 'connectFrom' + 'Dialog()');
@@ -761,11 +771,12 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Leave blank to use the default remote user cache:');
   });
 
-  it('keeps the connection dialog focused on Redeven URLs and SSH hosts', () => {
+  it('keeps the connection dialog source-scoped across URL, SSH, and managed container targets', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain("type ConnectionDialogState = ExternalURLConnectionDialogState | SSHConnectionDialogState | null;");
-    expect(appSrc).toContain("props.switchKind(value as 'external_local_ui' | 'ssh_environment')");
+    expect(appSrc).toContain('type ConnectionDialogState = ExternalURLConnectionDialogState | SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null;');
+    expect(appSrc).toContain('props.switchKind(value as ConnectionDialogKind)');
+    expect(appSrc).toContain('const showCreateConnectAction = createMemo(() => isCreate() && connectionKind() === \'external_local_ui\');');
     expect(appSrc).not.toContain('scope derived from Name.');
   });
 

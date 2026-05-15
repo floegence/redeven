@@ -18,6 +18,37 @@ describe('desktopLauncherIPC', () => {
       route: 'auto',
     });
     expect(normalizeDesktopLauncherActionRequest({
+      kind: 'open_local_environment',
+      environment_id: ' local-container ',
+      runtime_target_id: ' local:container:docker:container-stable-id:e832df85 ',
+      placement_target_id: ' local:container:docker:container-stable-id:e832df85 ',
+      host_access: { kind: 'local_host' },
+      placement: {
+        kind: 'container_process',
+        container_engine: ' Docker ',
+        container_id: ' container-stable-id ',
+        container_label: ' Dev Container ',
+        container_owner: 'external',
+        runtime_root: ' /workspace/.redeven ',
+      },
+    })).toEqual({
+      kind: 'open_local_environment',
+      environment_id: 'local-container',
+      runtime_target_id: 'local:container:docker:container-stable-id:e832df85',
+      placement_target_id: 'local:container:docker:container-stable-id:e832df85',
+      host_access: { kind: 'local_host' },
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'container-stable-id',
+        container_label: 'Dev Container',
+        container_owner: 'external',
+        runtime_root: '/workspace/.redeven',
+        bridge_strategy: 'exec_stream',
+      },
+      route: 'auto',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
       kind: 'open_environment_settings',
       environment_id: ' local ',
     })).toEqual({
@@ -188,6 +219,49 @@ describe('desktopLauncherIPC', () => {
       connect_timeout_seconds: 45,
     });
     expect(normalizeDesktopLauncherActionRequest({
+      kind: 'open_ssh_environment',
+      environment_id: ' ssh-container ',
+      label: ' SSH container ',
+      ssh_destination: ' devbox ',
+      runtime_target_id: ' ssh:container:devbox%3A2222:docker:container-stable-id:e832df85 ',
+      host_access: {
+        kind: 'ssh_host',
+        ssh: {
+          ssh_destination: ' devbox ',
+          ssh_port: ' 2222 ',
+          auth_mode: ' key_agent ',
+          remote_install_dir: ' remote_default ',
+          bootstrap_strategy: ' desktop_upload ',
+          release_base_url: ' ',
+        },
+      },
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'container-stable-id',
+        container_label: 'dev-container',
+        container_owner: 'desktop',
+        runtime_root: '/workspace/.redeven',
+      },
+    })).toEqual(expect.objectContaining({
+      kind: 'open_ssh_environment',
+      environment_id: 'ssh-container',
+      label: 'SSH container',
+      runtime_target_id: 'ssh:container:devbox%3A2222:docker:container-stable-id:e832df85',
+      host_access: expect.objectContaining({
+        kind: 'ssh_host',
+        ssh: expect.objectContaining({
+          ssh_destination: 'devbox',
+          ssh_port: 2222,
+        }),
+      }),
+      placement: expect.objectContaining({
+        kind: 'container_process',
+        container_owner: 'desktop',
+        bridge_strategy: 'exec_stream',
+      }),
+    }));
+    expect(normalizeDesktopLauncherActionRequest({
       kind: 'upsert_saved_ssh_environment',
       environment_id: ' ssh-1 ',
       label: ' SSH lab ',
@@ -246,6 +320,65 @@ describe('desktopLauncherIPC', () => {
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example.invalid/releases/',
       connect_timeout_seconds: 10,
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'upsert_saved_runtime_target',
+      label: ' Local Container ',
+      host_access: { kind: 'local_host' },
+      placement: {
+        kind: 'container_process',
+        container_engine: 'podman',
+        container_id: 'dev',
+        runtime_root: '/runtime',
+      },
+    })).toEqual({
+      kind: 'upsert_saved_runtime_target',
+      label: 'Local Container',
+      host_access: { kind: 'local_host' },
+      placement: {
+        kind: 'container_process',
+        container_engine: 'podman',
+        container_id: 'dev',
+        container_label: 'dev',
+        container_owner: 'external',
+        runtime_root: '/runtime',
+        bridge_strategy: 'exec_stream',
+      },
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'set_saved_runtime_target_pinned',
+      environment_id: ' local:container:podman:dev:12345678 ',
+      label: ' Local Container ',
+      pinned: true,
+      host_access: { kind: 'local_host' },
+      placement: {
+        kind: 'container_process',
+        container_engine: 'podman',
+        container_id: 'dev',
+        runtime_root: '/runtime',
+      },
+    })).toEqual({
+      kind: 'set_saved_runtime_target_pinned',
+      environment_id: 'local:container:podman:dev:12345678',
+      label: 'Local Container',
+      pinned: true,
+      host_access: { kind: 'local_host' },
+      placement: {
+        kind: 'container_process',
+        container_engine: 'podman',
+        container_id: 'dev',
+        container_label: 'dev',
+        container_owner: 'external',
+        runtime_root: '/runtime',
+        bridge_strategy: 'exec_stream',
+      },
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'delete_saved_runtime_target',
+      environment_id: ' local:container:podman:dev:12345678 ',
+    })).toEqual({
+      kind: 'delete_saved_runtime_target',
+      environment_id: 'local:container:podman:dev:12345678',
     });
   });
 

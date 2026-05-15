@@ -23,6 +23,7 @@ import {
   defaultSavedEnvironmentLabel,
   deleteSavedControlPlane,
   deleteSavedEnvironment,
+  deleteSavedRuntimeTarget,
   deleteSavedSSHEnvironment,
   desktopEnvironmentID,
   desktopPreferencesToDraft,
@@ -30,16 +31,19 @@ import {
   loadDesktopPreferences,
   localEnvironmentDesktopLaunchKey,
   markSavedEnvironmentUsed,
+  markSavedRuntimeTargetUsed,
   markSavedSSHEnvironmentUsed,
   rememberProviderEnvironmentUse,
   saveDesktopPreferences,
   setLocalEnvironmentPinned,
   setProviderEnvironmentPinned,
   setSavedEnvironmentPinned,
+  setSavedRuntimeTargetPinned,
   setSavedSSHEnvironmentPinned,
   updateLocalEnvironmentAccess,
   upsertSavedControlPlane,
   upsertSavedEnvironment,
+  upsertSavedRuntimeTarget,
   upsertSavedSSHEnvironment,
   validateDesktopSettingsDraft,
 } from './desktopPreferences';
@@ -184,7 +188,7 @@ describe('desktopPreferences', () => {
     }));
   });
 
-  it('round-trips preferences through the local files with saved environments and SSH targets', async () => {
+  it('round-trips preferences through the local files with saved environments, SSH targets, and saved runtime targets', async () => {
     await withTempPreferencesDir(async (root) => {
       const paths = defaultDesktopPreferencesPaths(root);
       const codec = createPlaintextSecretCodec();
@@ -218,6 +222,27 @@ describe('desktopPreferences', () => {
             connect_timeout_seconds: 10,
             pinned: false,
             last_used_at_ms: 90,
+          },
+        ],
+        saved_runtime_targets: [
+          {
+            schema_version: 1,
+            id: 'local:container:docker:container-stable-id:e832df85',
+            label: 'Local Container Runtime',
+            host_access: { kind: 'local_host' },
+            placement: {
+              kind: 'container_process',
+              container_engine: 'docker',
+              container_id: 'container-stable-id',
+              container_label: 'dev-container',
+              container_owner: 'external',
+              runtime_root: '/workspace/.redeven',
+              bridge_strategy: 'exec_stream',
+            },
+            pinned: false,
+            created_at_ms: 70,
+            updated_at_ms: 80,
+            last_used_at_ms: 95,
           },
         ],
       });
@@ -649,6 +674,67 @@ describe('desktopPreferences', () => {
     })).toBe(empty);
 
     expect(deleteSavedSSHEnvironment(marked, 'ssh:devbox:2222:key_agent:remote_default').saved_ssh_environments).toEqual([]);
+  });
+
+  it('upserts, pins, marks, and deletes saved runtime targets by host access plus placement', () => {
+    const placement = {
+      kind: 'container_process' as const,
+      container_engine: 'docker' as const,
+      container_id: 'container-stable-id',
+      container_label: 'dev-container',
+      container_owner: 'external' as const,
+      runtime_root: '/workspace/.redeven',
+      bridge_strategy: 'exec_stream' as const,
+    };
+    const saved = upsertSavedRuntimeTarget(defaultDesktopPreferences(), {
+      label: 'Local Container Runtime',
+      host_access: { kind: 'local_host' },
+      placement,
+      created_at_ms: 10,
+      updated_at_ms: 20,
+      last_used_at_ms: 30,
+    });
+    const targetID = 'local:container:docker:container-stable-id:e832df85';
+
+    expect(saved.saved_runtime_targets).toEqual([
+      expect.objectContaining({
+        id: targetID,
+        label: 'Local Container Runtime',
+        host_access: { kind: 'local_host' },
+        placement,
+        pinned: false,
+        created_at_ms: 10,
+        updated_at_ms: 20,
+        last_used_at_ms: 30,
+      }),
+    ]);
+
+    const pinned = setSavedRuntimeTargetPinned(saved, {
+      environment_id: targetID,
+      label: 'Local Container Runtime',
+      pinned: true,
+      host_access: { kind: 'local_host' },
+      placement,
+      last_used_at_ms: 40,
+    });
+    expect(pinned.saved_runtime_targets[0]).toEqual(expect.objectContaining({
+      id: targetID,
+      pinned: true,
+      last_used_at_ms: 40,
+    }));
+
+    const marked = markSavedRuntimeTargetUsed(pinned, {
+      environment_id: targetID,
+      last_used_at_ms: 50,
+    });
+    expect(marked.saved_runtime_targets[0]).toEqual(expect.objectContaining({
+      id: targetID,
+      pinned: true,
+      created_at_ms: 10,
+      last_used_at_ms: 50,
+    }));
+
+    expect(deleteSavedRuntimeTarget(marked, targetID).saved_runtime_targets).toEqual([]);
   });
 
   it('persists pin state for managed, URL, and SSH environments', () => {

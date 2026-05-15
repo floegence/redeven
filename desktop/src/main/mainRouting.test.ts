@@ -154,26 +154,36 @@ describe('main routing', () => {
     expect(mainSrc.slice(startRuntimeStart, startRuntimeEnd)).toContain('connect_timeout_seconds: request.connect_timeout_seconds');
   });
 
-  it('keeps runtime lifecycle dispatch target-first and blocks unbridged container placement', () => {
+  it('keeps runtime lifecycle dispatch target-first and opens container placement only through bridge sessions', () => {
     const mainSrc = readMainSource();
-    expect(mainSrc).toContain('function launcherActionFailureForUnsupportedRuntimePlacement(');
-    expect(mainSrc).toContain('placement.kind !== \'container_process\'');
-    expect(mainSrc).toContain('runtimeTargetIDNamesContainerPlacement(request.runtime_target_id)');
-    expect(mainSrc).toContain('Managed runtime lifecycle dispatch must honor host_access and');
-    expect(mainSrc).toContain('it must not silently');
-    expect(mainSrc).toContain('fall back to the host-process Local/SSH runtime path');
+    expect(mainSrc).not.toContain('function launcherActionFailureForUnsupportedRuntimePlacement(');
+    expect(mainSrc).toContain('const runtimePlacementBridgeByTargetID = new Map<DesktopRuntimeTargetID, RuntimePlacementBridgeRecord>();');
+    expect(mainSrc).toContain('startRuntimePlacementBridgeSession({');
+    expect(mainSrc).toContain('runtimePlacementBridgeByTargetID.set(session.placement_target_id, record)');
+    expect(mainSrc).toContain('async function openRuntimePlacementBridgeFromLauncher(');
+    expect(mainSrc).toContain('Start this runtime first, then open it.');
+    expect(mainSrc).toContain('This external container is stopped. Start it from its container owner, then start the runtime in Desktop.');
 
     const startRuntimeStart = mainSrc.indexOf('async function startEnvironmentRuntimeFromLauncher(');
     const startRuntimeEnd = mainSrc.indexOf('async function connectProviderRuntimeFromLauncher(', startRuntimeStart);
     const startRuntimeSrc = mainSrc.slice(startRuntimeStart, startRuntimeEnd);
-    expect(startRuntimeSrc).toContain("launcherActionFailureForUnsupportedRuntimePlacement(request, 'Start Runtime')");
+    expect(startRuntimeSrc).toContain("if (placement.kind === 'container_process')");
+    expect(startRuntimeSrc).toContain('startRuntimePlacementBridgeRecordFromLauncher(request)');
     expect(startRuntimeSrc).toContain('const normalizedSSHTarget = sshDetailsFromRuntimeTargetRequest(request);');
 
     const stopRuntimeStart = mainSrc.indexOf('async function stopEnvironmentRuntimeFromLauncher(');
     const stopRuntimeEnd = mainSrc.indexOf('async function refreshEnvironmentRuntimeFromLauncher(', stopRuntimeStart);
     const stopRuntimeSrc = mainSrc.slice(stopRuntimeStart, stopRuntimeEnd);
-    expect(stopRuntimeSrc).toContain("launcherActionFailureForUnsupportedRuntimePlacement(request, 'Stop Runtime')");
+    expect(stopRuntimeSrc).toContain("if (placement.kind === 'container_process')");
+    expect(stopRuntimeSrc).toContain('await runtimeRecord.session.stop();');
+    expect(stopRuntimeSrc).toContain('runtimePlacementBridgeByTargetID.delete(runtimeRecord.session.placement_target_id)');
     expect(stopRuntimeSrc).toContain('const sshDetails = sshDetailsFromRuntimeTargetRequest(request);');
+
+    const refreshRuntimeStart = mainSrc.indexOf('async function refreshEnvironmentRuntimeFromLauncher(');
+    const refreshRuntimeEnd = mainSrc.indexOf('async function refreshAllEnvironmentRuntimesFromLauncher(', refreshRuntimeStart);
+    const refreshRuntimeSrc = mainSrc.slice(refreshRuntimeStart, refreshRuntimeEnd);
+    expect(refreshRuntimeSrc).toContain("if (placement.kind === 'container_process')");
+    expect(refreshRuntimeSrc).toContain('loadExternalLocalUIStartup(runtimeRecord.startup.local_ui_url');
   });
 
   it('keeps provider-link tickets separate from remote open route readiness', () => {

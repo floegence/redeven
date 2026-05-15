@@ -4,6 +4,7 @@ import {
   findLocalEnvironmentByID,
   findProviderEnvironmentByID,
   type DesktopSavedEnvironment,
+  type DesktopSavedRuntimeTarget,
   type DesktopSavedSSHEnvironment,
   type DesktopPreferences,
 } from './desktopPreferences';
@@ -69,8 +70,13 @@ import {
 import {
   desktopProviderRuntimeLinkTargetID,
   type DesktopProviderEnvironmentCandidate,
+  type DesktopProviderRuntimeLinkTargetKind,
   type DesktopProviderRuntimeLinkTarget,
 } from '../shared/providerRuntimeLinkTarget';
+import {
+  desktopRuntimeTargetID,
+  type DesktopRuntimeHostAccess,
+} from '../shared/desktopRuntimePlacement';
 import { normalizeLocalUIBaseURL } from './localUIURL';
 
 export {
@@ -331,13 +337,13 @@ function buildOpenEnvironmentWindows(
   return sortOpenSessions(sessions)
     .filter((session) => session.lifecycle === 'open')
     .map((session) => ({
-    session_key: session.session_key,
-    target_kind: session.target.kind,
-    environment_id: session.target.environment_id,
-    label: session.target.label,
-    local_ui_url: session.entry_url ?? session.startup?.local_ui_url ?? '',
-    lifecycle: 'open',
-  }));
+      session_key: session.session_key,
+      target_kind: session.target.kind,
+      environment_id: session.target.environment_id,
+      label: session.target.label,
+      local_ui_url: session.entry_url ?? session.startup?.local_ui_url ?? '',
+      lifecycle: 'open',
+    }));
 }
 
 function managedRuntimeEntryFields(
@@ -393,6 +399,22 @@ function openSessionBySSHEnvironment(
         && session.target.remote_install_dir === environment.remote_install_dir
       )
     )
+  )) ?? null;
+}
+
+function providerRuntimeLinkKindForHostAccess(
+  hostAccess: DesktopRuntimeHostAccess,
+): DesktopProviderRuntimeLinkTargetKind {
+  return hostAccess.kind === 'ssh_host' ? 'ssh_environment' : 'local_environment';
+}
+
+function openSessionByRuntimeTarget(
+  sessions: readonly DesktopSessionSummary[],
+  target: DesktopSavedRuntimeTarget,
+): DesktopSessionSummary | null {
+  return sessions.find((session) => (
+    session.target.environment_id === target.id
+    || session.session_key === target.id
   )) ?? null;
 }
 
@@ -1192,7 +1214,22 @@ function buildEnvironmentEntries(
       runtimeService: preferredRuntimeService(undefined, runtimeHealth, presence),
     });
   });
-  const runtimeLinkTargets = [localRuntimeTarget, ...sshRuntimeTargets];
+  const savedRuntimeLinkTargets = preferences.saved_runtime_targets.map((target) => {
+    const targetKind = providerRuntimeLinkKindForHostAccess(target.host_access);
+    const runtimeTargetID = desktopProviderRuntimeLinkTargetID(targetKind, target.id);
+    const presence = managedRuntimePresenceByTargetID[runtimeTargetID];
+    return buildProviderRuntimeLinkTarget({
+      id: runtimeTargetID,
+      kind: targetKind,
+      environmentID: target.id,
+      label: target.label,
+      runtimeKey: target.id,
+      runtimeURL: presence?.local_ui_url ?? '',
+      runtimeControlStatus: presence?.runtime_control_status,
+      runtimeService: preferredRuntimeService(undefined, undefined, presence),
+    });
+  });
+  const runtimeLinkTargets = [localRuntimeTarget, ...sshRuntimeTargets, ...savedRuntimeLinkTargets];
   const entries: DesktopEnvironmentEntry[] = [
     ...localLocalEnvironments
       .map((environment) => (
@@ -1229,6 +1266,16 @@ function buildEnvironmentEntries(
       openSessionBySSHEnvironment(openSessions, environment),
       savedSSHRuntimeHealth[environment.id],
       managedRuntimePresenceByTargetID[desktopProviderRuntimeLinkTargetID('ssh_environment', desktopSSHEnvironmentID(environment))],
+      providerEnvironmentCandidates,
+    ));
+  }
+  for (const target of preferences.saved_runtime_targets) {
+    const targetKind = providerRuntimeLinkKindForHostAccess(target.host_access);
+    const runtimeTargetID = desktopProviderRuntimeLinkTargetID(targetKind, target.id);
+    entries.push(buildSavedRuntimeTargetEntry(
+      target,
+      openSessionByRuntimeTarget(openSessions, target),
+      managedRuntimePresenceByTargetID[runtimeTargetID],
       providerEnvironmentCandidates,
     ));
   }
@@ -1356,6 +1403,87 @@ function buildSavedSSHEnvironmentEntry(
     can_edit: true,
     can_delete: true,
     last_used_at_ms: environment.last_used_at_ms,
+  };
+}
+
+function runtimeTargetSecondaryText(target: DesktopSavedRuntimeTarget): string {
+  if (target.host_access.kind === 'ssh_host') {
+    const ssh = target.host_access.ssh;
+    const authority = ssh.ssh_port === null ? ssh.ssh_destination : `${ssh.ssh_destination}:${ssh.ssh_port}`;
+    if (target.placement.kind === 'container_process') {
+      return `${authority} · ${target.placement.container_label || target.placement.container_id}`;
+    }
+    return authority;
+  }
+  if (target.placement.kind === 'container_process') {
+    return target.placement.container_label || target.placement.container_id;
+  }
+  return 'This device';
+}
+
+function sshDetailsFromRuntimeTarget(target: DesktopSavedRuntimeTarget): DesktopSSHEnvironmentDetails | undefined {
+  return target.host_access.kind === 'ssh_host' ? target.host_access.ssh : undefined;
+}
+
+function buildSavedRuntimeTargetEntry(
+  target: DesktopSavedRuntimeTarget,
+  openSession: DesktopSessionSummary | null,
+  presence: DesktopManagedRuntimePresence | undefined,
+  providerEnvironmentCandidates: readonly DesktopProviderEnvironmentCandidate[],
+): DesktopEnvironmentEntry {
+  const isOpen = sessionIsOpen(openSession);
+  const isOpening = sessionIsOpening(openSession);
+  const runtimeHealth = runtimeHealthFromPresence(
+    target.host_access.kind === 'ssh_host' ? 'ssh_runtime_probe' : 'local_runtime_probe',
+    presence,
+    offlineRuntimeHealth(
+      target.host_access.kind === 'ssh_host' ? 'ssh_runtime_probe' : 'local_runtime_probe',
+      'not_started',
+      'Serve the runtime first',
+    ),
+  );
+  const runtimeService = preferredRuntimeService(openSession?.startup?.runtime_service, runtimeHealth, presence);
+  const targetKind = providerRuntimeLinkKindForHostAccess(target.host_access);
+  const providerRuntimeLinkTarget = buildProviderRuntimeLinkTarget({
+    id: desktopProviderRuntimeLinkTargetID(targetKind, target.id),
+    kind: targetKind,
+    environmentID: target.id,
+    label: target.label,
+    runtimeKey: target.id,
+    runtimeURL: presence?.local_ui_url ?? openSession?.entry_url ?? openSession?.startup?.local_ui_url ?? runtimeHealth.local_ui_url ?? '',
+    runtimeControlStatus: presence?.runtime_control_status,
+    runtimeService,
+  });
+  const localUIURL = presence?.local_ui_url ?? openSession?.entry_url ?? openSession?.startup?.local_ui_url ?? runtimeHealth.local_ui_url ?? '';
+  return {
+    id: target.id,
+    kind: targetKind,
+    label: target.label,
+    local_ui_url: localUIURL,
+    secondary_text: runtimeTargetSecondaryText(target),
+    ssh_details: sshDetailsFromRuntimeTarget(target),
+    pinned: target.pinned,
+    tag: isOpen ? 'Open' : 'Saved',
+    category: 'saved',
+    window_state: environmentWindowState(openSession),
+    is_open: isOpen,
+    is_opening: isOpening,
+    runtime_health: runtimeHealth,
+    runtime_service: runtimeService,
+    runtime_maintenance: runtimeMaintenanceFromHealth(runtimeHealth),
+    provider_runtime_link_target: providerRuntimeLinkTarget,
+    provider_environment_candidates: providerEnvironmentCandidates,
+    managed_runtime_target_id: desktopRuntimeTargetID(target.host_access, target.placement),
+    managed_runtime_placement_target_id: target.id,
+    managed_runtime_host_access: target.host_access,
+    managed_runtime_placement: target.placement,
+    runtime_control_capability: managedRuntimeControlCapability(presence),
+    open_session_key: openSession?.session_key ?? '',
+    open_session_lifecycle: sessionLifecycle(openSession),
+    open_action_label: isOpen ? 'Focus' : isOpening ? 'Opening…' : 'Open',
+    can_edit: true,
+    can_delete: true,
+    last_used_at_ms: target.last_used_at_ms,
   };
 }
 

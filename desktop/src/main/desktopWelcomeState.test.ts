@@ -786,6 +786,137 @@ describe('desktopWelcomeState', () => {
     expect(JSON.stringify(sshEntry?.provider_runtime_link_target)).not.toContain('base_url');
   });
 
+  it('projects saved Local and SSH container runtime targets without leaking runtime-control material', () => {
+    const localContainerID = 'local:container:docker:container-stable-id:e832df85';
+    const sshContainerID = 'ssh:container:devbox%3A2222:docker:container-stable-id:e832df85';
+    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
+    const sshHostAccess = {
+      kind: 'ssh_host' as const,
+      ssh: {
+        ssh_destination: 'devbox',
+        ssh_port: 2222,
+        auth_mode: 'key_agent' as const,
+        remote_install_dir: 'remote_default',
+        bootstrap_strategy: 'desktop_upload' as const,
+        release_base_url: '',
+        connect_timeout_seconds: 10,
+      },
+    };
+    const containerPlacement = {
+      kind: 'container_process' as const,
+      container_engine: 'docker' as const,
+      container_id: 'container-stable-id',
+      container_label: 'dev-container',
+      container_owner: 'external' as const,
+      runtime_root: '/workspace/.redeven',
+      bridge_strategy: 'exec_stream' as const,
+    };
+
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        provider_environments: [providerEnvironment],
+        saved_runtime_targets: [
+          {
+            schema_version: 1,
+            id: localContainerID,
+            label: 'Local Container Runtime',
+            host_access: { kind: 'local_host' },
+            placement: containerPlacement,
+            pinned: false,
+            created_at_ms: 1,
+            updated_at_ms: 2,
+            last_used_at_ms: 30,
+          },
+          {
+            schema_version: 1,
+            id: sshContainerID,
+            label: 'SSH Container Runtime',
+            host_access: sshHostAccess,
+            placement: containerPlacement,
+            pinned: false,
+            created_at_ms: 1,
+            updated_at_ms: 2,
+            last_used_at_ms: 20,
+          },
+        ],
+      }),
+      managedRuntimePresenceByTargetID: {
+        [`local:${localContainerID}`]: localRuntimePresence({
+          target_id: `local:${localContainerID}`,
+          placement_target_id: localContainerID,
+          environment_id: localContainerID,
+          label: 'Local Container Runtime',
+          runtime_key: localContainerID,
+          placement: containerPlacement,
+          local_ui_url: 'http://127.0.0.1:40123/',
+        }),
+        [`ssh:${sshContainerID}`]: sshRuntimePresence({
+          target_id: `ssh:${sshContainerID}`,
+          placement_target_id: sshContainerID,
+          environment_id: sshContainerID,
+          label: 'SSH Container Runtime',
+          runtime_key: sshContainerID,
+          host_access: sshHostAccess,
+          placement: containerPlacement,
+          local_ui_url: 'http://127.0.0.1:40124/',
+        }),
+      },
+    });
+
+    const providerEntry = snapshot.environments.find((entry) => (
+      entry.id === providerEnvironment.id && entry.kind === 'provider_environment'
+    ));
+    expect(providerEntry?.provider_runtime_link_target).toBeUndefined();
+    expect(providerEntry?.managed_runtime_target_id).toBeUndefined();
+
+    const localContainerEntry = snapshot.environments.find((entry) => entry.id === localContainerID);
+    expect(localContainerEntry).toMatchObject({
+      kind: 'local_environment',
+      label: 'Local Container Runtime',
+      local_ui_url: 'http://127.0.0.1:40123/',
+      managed_runtime_target_id: localContainerID,
+      managed_runtime_placement_target_id: localContainerID,
+      managed_runtime_host_access: { kind: 'local_host' },
+      managed_runtime_placement: containerPlacement,
+      provider_runtime_link_target: {
+        id: `local:${localContainerID}`,
+        kind: 'local_environment',
+        runtime_key: localContainerID,
+        runtime_running: true,
+        can_connect_provider: true,
+      },
+      provider_environment_candidates: expect.arrayContaining([
+        expect.objectContaining({
+          provider_environment_id: providerEnvironment.id,
+          route_state: 'offline',
+        }),
+      ]),
+    });
+
+    const sshContainerEntry = snapshot.environments.find((entry) => entry.id === sshContainerID);
+    expect(sshContainerEntry).toMatchObject({
+      kind: 'ssh_environment',
+      label: 'SSH Container Runtime',
+      local_ui_url: 'http://127.0.0.1:40124/',
+      managed_runtime_target_id: sshContainerID,
+      managed_runtime_placement_target_id: sshContainerID,
+      managed_runtime_host_access: expect.objectContaining({ kind: 'ssh_host' }),
+      managed_runtime_placement: containerPlacement,
+      ssh_details: sshHostAccess.ssh,
+      provider_runtime_link_target: {
+        id: `ssh:${sshContainerID}`,
+        kind: 'ssh_environment',
+        runtime_key: sshContainerID,
+        runtime_running: true,
+        can_connect_provider: true,
+      },
+    });
+    expect(JSON.stringify(localContainerEntry?.provider_runtime_link_target)).not.toContain('runtime-control-token');
+    expect(JSON.stringify(localContainerEntry?.provider_runtime_link_target)).not.toContain('base_url');
+    expect(JSON.stringify(sshContainerEntry?.provider_runtime_link_target)).not.toContain('runtime-control-token');
+    expect(JSON.stringify(sshContainerEntry?.provider_runtime_link_target)).not.toContain('base_url');
+  });
+
   it('uses managed runtime presence as the renderer-facing lifecycle capability source', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
