@@ -74,7 +74,6 @@ import {
   formatRuntimeServiceWorkload,
   runtimeServiceHasActiveWork,
   runtimeServiceIsOpenable,
-  runtimeServiceProviderLinkMatches,
   type RuntimeServiceSnapshot,
 } from '../shared/runtimeService';
 import { desktopEntryKindOwnsRuntimeManagement } from '../shared/environmentManagementPrinciples';
@@ -924,13 +923,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const providerRuntimeLinkActiveWorkLabel = createMemo(() => (
     formatRuntimeServiceWorkload(providerRuntimeLinkSnapshot())
   ));
-  const providerRuntimeLinkMatches = createMemo(() => {
-    const confirmation = providerRuntimeLinkConfirmation();
-    if (!confirmation) {
-      return false;
-    }
-    return providerRuntimeLinkMatchesEnvironment(confirmation.environment);
-  });
   const providerRuntimeLinkCandidates = createMemo(() => (
     providerRuntimeLinkConfirmation()?.environment.provider_environment_candidates ?? []
   ));
@@ -1988,22 +1980,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       showActionToast(`Runtime status refreshed for ${environment.label}.`, 'info');
     }
     return refreshed;
-  }
-
-  function providerRuntimeLinkMatchesEnvironment(environment: DesktopEnvironmentEntry): boolean {
-    const target = environment.provider_runtime_link_target;
-    if (!target || !target.provider_origin || !target.provider_id || !target.env_public_id) {
-      return false;
-    }
-    const providerEnvironmentID = providerRuntimeLinkProviderEnvironmentID();
-    const providerEnvironment = providerEnvironmentID
-      ? snapshot().environments.find((entry) => entry.id === providerEnvironmentID)
-      : null;
-    return runtimeServiceProviderLinkMatches(target.runtime_service, {
-      provider_origin: providerEnvironment?.provider_origin ?? target.provider_origin,
-      provider_id: providerEnvironment?.provider_id ?? target.provider_id,
-      env_public_id: providerEnvironment?.env_public_id ?? target.env_public_id,
-    });
   }
 
   function requestProviderRuntimeLinkConfirmation(
@@ -3330,11 +3306,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           >
             <p class="text-xs text-muted-foreground">
               Existing local-only work keeps running. Provider-originated sessions, tasks, or grants may stop receiving remote control updates after disconnect.
-            </p>
-          </Show>
-          <Show when={providerRuntimeLinkConfirmation()?.action === 'connect' && providerRuntimeLinkMatches()}>
-            <p class="text-xs text-muted-foreground">
-              This runtime already reports a matching provider link. Confirming will ensure the provider control connection is enabled without restarting the runtime.
             </p>
           </Show>
           <Show when={providerRuntimeLinkConfirmation()?.action === 'disconnect'}>

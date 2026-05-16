@@ -466,16 +466,11 @@ func (c *cli) runCmd(args []string) int {
 	remoteErr := cfg.ValidateRemoteStrict()
 	remoteEnabled := remoteErr == nil
 
-	controlChannelEnabled := mode == runModeRemote || mode == runModeHybrid || (mode == runModeDesktop && remoteEnabled && !*desktopManaged)
-	localUIEnabled := mode != runModeRemote
-	effectiveRunMode := mode
-	if mode == runModeDesktop {
-		if controlChannelEnabled {
-			effectiveRunMode = runModeHybrid
-		} else {
-			effectiveRunMode = runModeLocal
-		}
-	}
+	launchPolicy := resolveRuntimeLaunchPolicy(mode, *desktopManaged, remoteEnabled)
+	controlChannelEnabled := launchPolicy.controlChannelEnabled
+	localUIEnabled := launchPolicy.localUIEnabled
+	effectiveRunMode := launchPolicy.effectiveRunMode
+	processRemoteEnabled := launchPolicy.remoteEnabled
 
 	if controlChannelEnabled && !remoteEnabled {
 		message := fmt.Sprintf("runtime is not bootstrapped for remote or hybrid mode: %v", remoteErr)
@@ -517,7 +512,7 @@ func (c *cli) runCmd(args []string) int {
 		DesktopManaged:        *desktopManaged,
 		DesktopAIBroker:       desktopAIBroker,
 		EffectiveRunMode:      string(effectiveRunMode),
-		RemoteEnabled:         controlChannelEnabled,
+		RemoteEnabled:         processRemoteEnabled,
 		Version:               Version,
 		Commit:                Commit,
 		BuildTime:             BuildTime,
@@ -556,7 +551,7 @@ func (c *cli) runCmd(args []string) int {
 			DesktopManaged:         *desktopManaged,
 			DesktopOwnerID:         desktopOwnerID,
 			EffectiveRunMode:       string(effectiveRunMode),
-			RemoteEnabled:          controlChannelEnabled,
+			RemoteEnabled:          processRemoteEnabled,
 			ControlplaneBaseURL:    cfg.ControlplaneBaseURL,
 			ControlplaneProviderID: cfg.ControlplaneProviderID,
 			EnvPublicID:            cfg.EnvironmentID,
@@ -597,7 +592,7 @@ func (c *cli) runCmd(args []string) int {
 				}(),
 				PasswordRequired:       accessGate != nil && accessGate.Enabled(),
 				EffectiveRunMode:       string(effectiveRunMode),
-				RemoteEnabled:          controlChannelEnabled,
+				RemoteEnabled:          processRemoteEnabled,
 				DesktopManaged:         *desktopManaged,
 				DesktopOwnerID:         desktopOwnerID,
 				ControlplaneBaseURL:    cfg.ControlplaneBaseURL,
@@ -747,6 +742,64 @@ const (
 	runModeLocal   runMode = "local"
 	runModeDesktop runMode = "desktop"
 )
+
+type runtimeLaunchPolicy struct {
+	localUIEnabled        bool
+	controlChannelEnabled bool
+	effectiveRunMode      runMode
+	remoteEnabled         bool
+}
+
+func resolveRuntimeLaunchPolicy(mode runMode, desktopManaged bool, remoteConfigValid bool) runtimeLaunchPolicy {
+	switch mode {
+	case runModeRemote:
+		return runtimeLaunchPolicy{
+			localUIEnabled:        false,
+			controlChannelEnabled: true,
+			effectiveRunMode:      runModeRemote,
+			remoteEnabled:         true,
+		}
+	case runModeHybrid:
+		return runtimeLaunchPolicy{
+			localUIEnabled:        true,
+			controlChannelEnabled: true,
+			effectiveRunMode:      runModeHybrid,
+			remoteEnabled:         true,
+		}
+	case runModeLocal:
+		return runtimeLaunchPolicy{
+			localUIEnabled:        true,
+			controlChannelEnabled: false,
+			effectiveRunMode:      runModeLocal,
+			remoteEnabled:         false,
+		}
+	case runModeDesktop:
+		if remoteConfigValid {
+			// IMPORTANT: A saved provider link is an explicit user authorization.
+			// Desktop-managed startup must restore that provider control channel;
+			// provider cards still never initiate runtime management.
+			return runtimeLaunchPolicy{
+				localUIEnabled:        true,
+				controlChannelEnabled: true,
+				effectiveRunMode:      runModeHybrid,
+				remoteEnabled:         true,
+			}
+		}
+		return runtimeLaunchPolicy{
+			localUIEnabled:        true,
+			controlChannelEnabled: false,
+			effectiveRunMode:      runModeLocal,
+			remoteEnabled:         false,
+		}
+	default:
+		return runtimeLaunchPolicy{
+			localUIEnabled:        mode != runModeRemote,
+			controlChannelEnabled: false,
+			effectiveRunMode:      mode,
+			remoteEnabled:         false,
+		}
+	}
+}
 
 func parseRunMode(raw string) (runMode, error) {
 	v := strings.ToLower(strings.TrimSpace(raw))

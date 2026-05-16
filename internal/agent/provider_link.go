@@ -240,10 +240,9 @@ func (a *Agent) ConnectProvider(ctx context.Context, req ProviderLinkRequest) (*
 	a.mu.Lock()
 	current := a.providerLinkBindingLocked("")
 	matchingCurrent := current.State == runtimeservice.ProviderLinkStateLinked && providerLinkMatches(current, req)
-	// IMPORTANT: A persisted provider link only records user intent and
-	// authorization. Re-confirming a saved link while this process is local-only
-	// must redeem the new provider bootstrap ticket, persist fresh control-channel
-	// credentials, and enable the control channel without a runtime restart.
+	// IMPORTANT: A persisted provider link is explicit user authorization for
+	// Desktop-managed startup to restore the provider control channel. This
+	// idempotent path exists for explicit refreshes, not as normal UI repair.
 	if matchingCurrent && a.providerControlChannelActiveLocked() {
 		a.mu.Unlock()
 		return &ProviderLinkResponse{Binding: current}, nil

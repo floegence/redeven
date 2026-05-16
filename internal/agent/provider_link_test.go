@@ -262,7 +262,7 @@ func TestConnectProviderRechecksActiveWorkBeforePersistingConfig(t *testing.T) {
 	}
 }
 
-func TestConnectProviderEnablesControlChannelForExistingMatchingBinding(t *testing.T) {
+func TestConnectProviderRefreshesExistingMatchingBindingWhenExplicitlyRequested(t *testing.T) {
 	server := providerLinkTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		writeProviderLinkBootstrapResponse(t, w, r, "ch_refreshed")
 	})

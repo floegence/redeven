@@ -51,7 +51,7 @@ Behavior:
 - Desktop creates one stable, non-secret runtime owner id in Electron `userData` and passes it only to Desktop-managed runtimes through `REDEVEN_DESKTOP_OWNER_ID`.
 - Desktop resolves the managed state root before spawn and passes it explicitly to `redeven run`.
 - The Desktop-owned local runtime uses `~/.redeven/local-environment/config.json`.
-- The Welcome `Start Runtime` action always starts this runtime local-only. It does not add provider bootstrap flags, request provider open-session material, or connect the runtime to a provider control plane.
+- The Welcome `Start Runtime` action does not add provider bootstrap flags or request provider open-session material. If the runtime already has a valid persisted provider binding, startup restores that provider control channel from the saved config; otherwise it starts local-only.
 - `--controlplane`, `--env-id`, and `--bootstrap-ticket-env` remain explicit CLI/manual bootstrap inputs. They are not part of the Welcome Local Environment `Start Runtime` path.
 - Desktop attach probing reads `runtime/local-ui.json` from the same resolved state root as the spawned config path.
 - Provider `Open` is a window/navigation action that always opens the provider Environment through the provider tunnel. It never opens a Local/SSH forwarded UI, never starts a managed runtime, and never connects a runtime to a provider.
@@ -61,7 +61,7 @@ Behavior:
 - The Local UI password stays out of process args and environment variables.
 - Provider one-time bootstrap tickets stay out of process args and renderer state. Welcome provider linking is initiated from Local/SSH runtime cards and passes tickets from Electron main to the selected running runtime through the desktop-only runtime-control endpoint.
 - Desktop startup reports and attachable runtime state include a non-secret `password_required` boolean so launcher and attach flows can describe whether the current runtime is protected.
-- Remote provider control is enabled only after a successful explicit provider-link operation or an explicit non-Welcome bootstrap launch.
+- Remote provider control is enabled after a successful explicit provider-link operation, an explicit non-Welcome bootstrap launch, or a later Desktop-managed startup that restores a valid saved provider binding.
 - `--desktop-managed` disables CLI self-upgrade semantics.
 - Desktop-owned managed-runtime restart stays available, but it is owned by Electron main rather than runtime self-`exec`.
 - Managed restart reuses Desktop-owned startup preferences, including `--password-stdin`, and preserves the current resolved loopback bind when the saved bind uses the advanced auto-port loopback option such as `127.0.0.1:0`.
@@ -176,7 +176,7 @@ Launcher model:
 - Provider cards represent provider-tunnel access only. Their `Open` action always uses the provider tunnel, and their dropdown does not expose runtime lifecycle or provider-link controls.
 - Local and SSH cards represent runtime management. Their primary card action slot is always `Open`; lifecycle actions (`Start Runtime`, `Restart Runtime`, `Stop Runtime`) and provider-link actions (`Connect to provider...`, `Disconnect from provider`) live only on those runtime cards.
 - `Start Runtime` appears only in Local/SSH runtime card popups and dropdown menus. Provider cards do not expose `Start Runtime`.
-- `Connect to provider...` appears only on Local/SSH runtime cards and always requires the user to choose a provider Environment. Desktop does not preselect a provider and does not auto-link from a provider card.
+- `Connect to provider...` appears only on Local/SSH runtime cards and always requires the user to choose a provider Environment. Desktop does not preselect a provider and does not auto-link from a provider card. A saved provider binding is explicit authorization for later managed runtime startup to restore the provider control channel without showing `Connect to provider...` again.
 - SSH Host entries store the destination, optional port, bootstrap delivery mode, remote install directory, and optional release mirror base URL. Desktop reuses release artifacts for the exact Desktop-managed version and lets the remote host own its runtime state.
 - Runtime health and window state are separate. Cards may show runtime status/version/workload from runtime snapshots, while primary actions stay window-scoped (`Open`, `Opening...`, `Focus`).
 - Runtime health is probed through explicit contracts: Local UI health for local/URL/SSH targets and RCPP runtime-health queries for provider environments.
@@ -359,7 +359,8 @@ The Control Plane flow is:
     - Embedded same-origin Env App documents must still inherit the desktop shell bridges and window-chrome contract from the owning session window, so titlebar safe areas, theme state, and environment-scoped renderer storage stay identical to direct desktop-hosted sessions.
 11. For an explicit provider-link connection, Desktop sends the returned one-time `bootstrap_ticket` to the selected running Local/SSH runtime through the desktop-only runtime-control endpoint.
 12. The runtime exchanges that ticket, persists the provider binding only after the exchange succeeds, and starts the provider control channel without restarting the runtime.
-13. Rebinding is blocked while provider-originated work is active. Desktop never materializes a second local runtime state directory for another provider environment.
+13. Later Desktop-managed startup loads that persisted binding and starts Local UI plus the provider control channel as one runtime lifecycle operation.
+14. Rebinding is blocked while provider-originated work is active. Desktop never materializes a second local runtime state directory for another provider environment.
 
 Browser pages may also open Desktop through a custom protocol link:
 

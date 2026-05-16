@@ -1,4 +1,5 @@
 import type {
+  RuntimeServiceProviderConnectionState,
   RuntimeServiceProviderLinkBinding,
   RuntimeServiceProviderLinkState,
   RuntimeServiceSnapshot,
@@ -20,8 +21,7 @@ export type DesktopProviderEnvironmentOccupancy = Readonly<{
   runtime_target_id?: DesktopProviderRuntimeLinkTargetID;
   runtime_kind?: DesktopProviderRuntimeLinkTargetKind;
   runtime_label?: string;
-  provider_link_remote_enabled?: boolean;
-  runtime_remote_enabled?: boolean;
+  provider_connection_state?: RuntimeServiceProviderConnectionState;
 }>;
 
 export type DesktopProviderEnvironmentCandidate = Readonly<{
@@ -48,6 +48,7 @@ export type DesktopProviderRuntimeLinkTarget = Readonly<{
   runtime_openable: boolean;
   runtime_control_status: DesktopRuntimeControlStatus;
   runtime_service?: RuntimeServiceSnapshot;
+  provider_connection_state: RuntimeServiceProviderConnectionState;
   provider_link_state: RuntimeServiceProviderLinkState;
   provider_link_binding?: RuntimeServiceProviderLinkBinding;
   provider_origin?: string;

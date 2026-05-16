@@ -3537,6 +3537,27 @@ async function refreshProviderEnvironmentRuntimeHealth(
   upsertProviderRuntimeHealth(providerOrigin, providerID, runtimeHealth);
 }
 
+async function syncLinkedProviderRuntimeHealthFromService(
+  runtimeService: RuntimeServiceSnapshot | null | undefined,
+): Promise<void> {
+  const binding = runtimeServiceProviderLinkBinding(runtimeService);
+  if (binding.state !== 'linked') {
+    return;
+  }
+  const providerOrigin = compact(binding.provider_origin);
+  const providerID = compact(binding.provider_id);
+  const envPublicID = compact(binding.env_public_id);
+  if (providerOrigin === '' || providerID === '' || envPublicID === '') {
+    return;
+  }
+  try {
+    await refreshProviderEnvironmentRuntimeHealth(providerOrigin, providerID, [envPublicID]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[redeven:provider-link] Provider runtime health sync failed for ${envPublicID}: ${message}`);
+  }
+}
+
 async function refreshAllProviderEnvironmentRuntimeHealth(): Promise<void> {
   const preferences = await loadDesktopPreferencesCached();
   await Promise.all(preferences.control_planes.map(async (controlPlane) => {
@@ -4818,6 +4839,7 @@ async function startEnvironmentRuntimeFromLauncher(
         host_access: runtimeRecord.session.host_access,
         placement: runtimeRecord.session.placement,
       }));
+      await syncLinkedProviderRuntimeHealthFromService(runtimeRecord.startup.runtime_service);
       broadcastDesktopWelcomeSnapshots();
       return launcherActionSuccess('started_environment_runtime');
     } catch (error) {
@@ -4841,6 +4863,7 @@ async function startEnvironmentRuntimeFromLauncher(
         ...runtimeRecord.details,
         environmentID: runtimeRecord.environment_id,
       });
+      await syncLinkedProviderRuntimeHealthFromService(runtimeRecord.startup.runtime_service);
       broadcastDesktopWelcomeSnapshots();
       return launcherActionSuccess('started_environment_runtime');
     } catch (error) {
@@ -4897,6 +4920,7 @@ async function startEnvironmentRuntimeFromLauncher(
       }),
     );
     resetLauncherIssueState();
+    await syncLinkedProviderRuntimeHealthFromService(prepared.launch.managedRuntime.startup.runtime_service);
     broadcastDesktopWelcomeSnapshots();
     return launcherActionSuccess('started_environment_runtime');
   } catch (error) {
@@ -5032,6 +5056,7 @@ async function connectProviderRuntimeFromLauncher(
     await persistDesktopPreferences(runtimeTarget.kind === 'local_environment'
       ? persistLocalEnvironmentProviderBinding(rememberProviderEnvironmentUse(providerSession.preferences, environment.id), environment)
       : rememberProviderEnvironmentUse(providerSession.preferences, environment.id));
+    await syncLinkedProviderRuntimeHealthFromService(linked.runtime_service);
     resetLauncherIssueState();
     broadcastDesktopWelcomeSnapshots();
     return launcherActionSuccess('connected_provider_runtime');
@@ -5263,29 +5288,34 @@ async function refreshEnvironmentRuntimeFromLauncher(
   const placement = runtimePlacementFromRequest(request);
   if (placement.kind === 'container_process') {
     const runtimeRecord = runtimePlacementBridgeRecordForRequest(request);
+    let runtimeServiceForProviderHealth = runtimeRecord?.startup.runtime_service;
     if (runtimeRecord) {
       try {
         const startup = await loadExternalLocalUIStartup(runtimeRecord.startup.local_ui_url, DESKTOP_RUNTIME_PROBE_TIMEOUT_MS);
         if (startup) {
+          const updatedStartup = {
+            ...runtimeRecord.startup,
+            local_ui_url: startup.local_ui_url,
+            local_ui_urls: startup.local_ui_urls,
+            runtime_control: runtimeRecord.startup.runtime_control,
+            password_required: startup.password_required,
+            runtime_service: startup.runtime_service ?? runtimeRecord.startup.runtime_service,
+          };
           runtimePlacementBridgeByTargetID.set(runtimeRecord.session.placement_target_id, {
             ...runtimeRecord,
-            startup: {
-              ...runtimeRecord.startup,
-              local_ui_url: startup.local_ui_url,
-              local_ui_urls: startup.local_ui_urls,
-              runtime_control: runtimeRecord.startup.runtime_control,
-              password_required: startup.password_required,
-              runtime_service: startup.runtime_service ?? runtimeRecord.startup.runtime_service,
-            },
+            startup: updatedStartup,
           });
+          runtimeServiceForProviderHealth = updatedStartup.runtime_service;
         }
       } catch {
         await runtimeRecord.session.disconnect().catch(() => undefined);
         runtimePlacementBridgeByTargetID.delete(runtimeRecord.session.placement_target_id);
+        runtimeServiceForProviderHealth = undefined;
       }
     } else {
       await inspectRuntimeTargetContainer(runtimeHostAccessFromRequest(request), placement).catch(() => undefined);
     }
+    await syncLinkedProviderRuntimeHealthFromService(runtimeServiceForProviderHealth);
     broadcastDesktopWelcomeSnapshots();
     return launcherActionSuccess('refreshed_environment_runtime');
   }
@@ -5309,6 +5339,25 @@ async function refreshEnvironmentRuntimeFromLauncher(
         envPublicID: providerEnvironment.env_public_id,
       }) ?? launcherActionFailureFromUnexpectedError(error);
     }
+    broadcastDesktopWelcomeSnapshots();
+    return launcherActionSuccess('refreshed_environment_runtime');
+  }
+
+  const sshDetails = sshDetailsFromRuntimeTargetRequest(request);
+  if (sshDetails) {
+    const runtimeRecord = sshEnvironmentRuntimeByKey.get(sshDesktopSessionKey(sshDetails)) ?? null;
+    await syncLinkedProviderRuntimeHealthFromService(runtimeRecord?.startup.runtime_service);
+    broadcastDesktopWelcomeSnapshots();
+    return launcherActionSuccess('refreshed_environment_runtime');
+  }
+
+  const localEnvironment = findLocalEnvironmentByID(preferences, compact(request.environment_id));
+  if (localEnvironment?.local_hosting) {
+    const runtimeRecord = currentLocalEnvironmentRuntimeRecord(localEnvironment)
+      ?? await attachLocalEnvironmentRuntime(localEnvironment);
+    await syncLinkedProviderRuntimeHealthFromService(runtimeRecord?.startup.runtime_service);
+    broadcastDesktopWelcomeSnapshots();
+    return launcherActionSuccess('refreshed_environment_runtime');
   }
   broadcastDesktopWelcomeSnapshots();
   return launcherActionSuccess('refreshed_environment_runtime');

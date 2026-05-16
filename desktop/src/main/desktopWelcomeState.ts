@@ -59,6 +59,7 @@ import {
 } from '../shared/desktopRuntimePresence';
 import {
   normalizeRuntimeServiceSnapshot,
+  runtimeServiceProviderConnectionState,
   runtimeServiceProviderLinkBinding,
   runtimeServiceIsOpenable,
   runtimeServiceSupportsProviderLink,
@@ -562,8 +563,7 @@ function occupancyFromLinkedRuntimeTarget(
     runtime_target_id: linkedRuntime.id,
     runtime_kind: linkedRuntime.kind,
     runtime_label: linkedRuntime.label,
-    provider_link_remote_enabled: linkedRuntime.provider_link_binding?.remote_enabled === true,
-    runtime_remote_enabled: linkedRuntime.runtime_service?.remote_enabled === true,
+    provider_connection_state: linkedRuntime.provider_connection_state,
   };
 }
 
@@ -616,6 +616,7 @@ function buildProviderRuntimeLinkTarget(input: Readonly<{
     ? normalizeRuntimeServiceSnapshot(input.runtimeService)
     : undefined;
   const providerLinkBinding = runtimeServiceProviderLinkBinding(runtimeService);
+  const providerConnectionState = runtimeServiceProviderConnectionState(runtimeService);
   const runtimeRunning = runtimeURL !== '';
   const providerLinkSupported = runtimeServiceSupportsProviderLink(runtimeService);
   const runtimeControlStatus = input.runtimeControlStatus ?? defaultRuntimeControlStatusForRunningState(runtimeRunning);
@@ -668,17 +669,14 @@ function buildProviderRuntimeLinkTarget(input: Readonly<{
     runtime_openable: runtimeServiceIsOpenable(runtimeService),
     runtime_control_status: runtimeControlStatus,
     ...(runtimeService ? { runtime_service: runtimeService } : {}),
+    provider_connection_state: providerConnectionState,
     provider_link_state: providerLinkBinding.state,
     provider_link_binding: providerLinkBinding,
     provider_origin: providerLinkBinding.provider_origin,
     provider_id: providerLinkBinding.provider_id,
     env_public_id: providerLinkBinding.env_public_id,
-    can_connect_provider: blockedReasonCode === '' && (
-      providerLinkBinding.state !== 'linked'
-      || providerLinkBinding.remote_enabled !== true
-      || runtimeService?.remote_enabled !== true
-    ),
-    can_disconnect_provider: providerLinkBinding.state === 'linked',
+    can_connect_provider: blockedReasonCode === '' && providerConnectionState === 'unlinked',
+    can_disconnect_provider: providerConnectionState === 'connected',
     ...(blockedReasonCode !== '' ? { blocked_reason_code: blockedReasonCode } : {}),
     ...(blockedReason !== '' ? { blocked_reason: blockedReason } : {}),
   };
@@ -1203,8 +1201,7 @@ function buildProviderEnvironmentEntry(
           runtime_target_id: linkedRuntime.id,
           runtime_kind: linkedRuntime.kind,
           label: linkedRuntime.label,
-          provider_link_remote_enabled: linkedRuntime.provider_link_binding?.remote_enabled === true,
-          runtime_remote_enabled: linkedRuntime.runtime_service?.remote_enabled === true,
+          provider_connection_state: linkedRuntime.provider_connection_state,
         }
       : undefined,
     provider_origin: environment.provider_origin,

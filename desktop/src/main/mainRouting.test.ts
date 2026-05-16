@@ -242,6 +242,40 @@ describe('main routing', () => {
     expect(openSrc).toContain('prepareProviderRemoteOpenSession(preferences, environment)');
   });
 
+  it('syncs linked provider health after runtime lifecycle changes', () => {
+    const mainSrc = readMainSource();
+
+    const helperStart = mainSrc.indexOf('async function syncLinkedProviderRuntimeHealthFromService(');
+    const helperEnd = mainSrc.indexOf('async function refreshAllProviderEnvironmentRuntimeHealth(', helperStart);
+    expect(helperStart).toBeGreaterThanOrEqual(0);
+    expect(helperEnd).toBeGreaterThan(helperStart);
+    const helperSrc = mainSrc.slice(helperStart, helperEnd);
+    expect(helperSrc).toContain("if (binding.state !== 'linked')");
+    expect(helperSrc).toContain('await refreshProviderEnvironmentRuntimeHealth(providerOrigin, providerID, [envPublicID]);');
+
+    const startRuntimeStart = mainSrc.indexOf('async function startEnvironmentRuntimeFromLauncher(');
+    const startRuntimeEnd = mainSrc.indexOf('async function connectProviderRuntimeFromLauncher(', startRuntimeStart);
+    expect(startRuntimeStart).toBeGreaterThanOrEqual(0);
+    expect(startRuntimeEnd).toBeGreaterThan(startRuntimeStart);
+    const startRuntimeSrc = mainSrc.slice(startRuntimeStart, startRuntimeEnd);
+    expect(startRuntimeSrc).toContain('await syncLinkedProviderRuntimeHealthFromService(runtimeRecord.startup.runtime_service);');
+    expect(startRuntimeSrc).toContain('await syncLinkedProviderRuntimeHealthFromService(prepared.launch.managedRuntime.startup.runtime_service);');
+
+    const connectStart = mainSrc.indexOf('async function connectProviderRuntimeFromLauncher(');
+    const connectEnd = mainSrc.indexOf('async function disconnectProviderRuntimeFromLauncher(', connectStart);
+    expect(connectStart).toBeGreaterThanOrEqual(0);
+    expect(connectEnd).toBeGreaterThan(connectStart);
+    expect(mainSrc.slice(connectStart, connectEnd)).toContain('await syncLinkedProviderRuntimeHealthFromService(linked.runtime_service);');
+
+    const refreshRuntimeStart = mainSrc.indexOf('async function refreshEnvironmentRuntimeFromLauncher(');
+    const refreshRuntimeEnd = mainSrc.indexOf('async function refreshAllEnvironmentRuntimesFromLauncher(', refreshRuntimeStart);
+    expect(refreshRuntimeStart).toBeGreaterThanOrEqual(0);
+    expect(refreshRuntimeEnd).toBeGreaterThan(refreshRuntimeStart);
+    const refreshRuntimeSrc = mainSrc.slice(refreshRuntimeStart, refreshRuntimeEnd);
+    expect(refreshRuntimeSrc).toContain('await syncLinkedProviderRuntimeHealthFromService(runtimeServiceForProviderHealth);');
+    expect(refreshRuntimeSrc).toContain('await syncLinkedProviderRuntimeHealthFromService(runtimeRecord?.startup.runtime_service);');
+  });
+
   it('marks provider environment management boundaries as important source constraints', () => {
     const mainSrc = readMainSource();
     expect(mainSrc).toContain('IMPORTANT: Provider-link operations must resolve the exact Local/SSH runtime');
