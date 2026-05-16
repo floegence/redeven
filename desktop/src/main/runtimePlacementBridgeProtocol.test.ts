@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   encodeRuntimePlacementBridgeFrame,
   readRuntimePlacementBridgeFrame,
+  runtimeControlEndpointFromBridgeHello,
   writeRuntimePlacementBridgeFrame,
 } from './runtimePlacementBridgeProtocol';
 
@@ -116,5 +117,27 @@ describe('runtimePlacementBridgeProtocol', () => {
     expect(stream.listenerCount('drain')).toBe(0);
     expect(stream.listenerCount('close')).toBe(0);
     expect(stream.listenerCount('error')).toBe(0);
+  });
+
+  it('builds bridge runtime-control endpoints as service roots with trailing slashes', () => {
+    expect(runtimeControlEndpointFromBridgeHello({
+      protocol_version: 'redeven-desktop-bridge-v1',
+      runtime_version: 'test-runtime',
+      local_ui: {
+        available: true,
+        base_path: '/',
+      },
+      runtime_control: {
+        available: true,
+        protocol_version: 'redeven-runtime-control-v1',
+        token: 'runtime-control-token',
+        desktop_owner_id: 'desktop-owner',
+      },
+    }, 'http://127.0.0.1:41234/')).toEqual({
+      protocol_version: 'redeven-runtime-control-v1',
+      base_url: 'http://127.0.0.1:41234/__redeven_runtime_control/',
+      token: 'runtime-control-token',
+      desktop_owner_id: 'desktop-owner',
+    });
   });
 });

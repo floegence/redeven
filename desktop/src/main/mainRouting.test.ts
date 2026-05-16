@@ -215,8 +215,10 @@ describe('main routing', () => {
     expect(connectEnd).toBeGreaterThan(connectStart);
     const connectSrc = mainSrc.slice(connectStart, connectEnd);
     expect(connectSrc).toContain('requestProviderDesktopSessionMaterial(preferences, environment)');
+    expect(connectSrc).toContain('connectProviderLink(runtimeControl, {');
     expect(connectSrc).not.toContain('prepareProviderRemoteOpenSession');
     expect(connectSrc).not.toContain('launcherActionFailureForRemoteRouteState');
+    expect(connectSrc).not.toContain('openProviderEnvironmentFromLauncher');
 
     const disconnectStart = mainSrc.indexOf('async function disconnectProviderRuntimeFromLauncher(');
     const disconnectEnd = mainSrc.indexOf('async function cancelLauncherOperationFromLauncher(', disconnectStart);

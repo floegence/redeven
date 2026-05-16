@@ -56,7 +56,10 @@ function writeHello(stdout: PassThrough): void {
         base_path: '/',
       },
       runtime_control: {
-        available: false,
+        available: true,
+        protocol_version: 'redeven-runtime-control-v1',
+        token: 'runtime-control-token',
+        desktop_owner_id: 'desktop-owner',
       },
     },
   }));
@@ -138,6 +141,45 @@ describe('runtimePlacementBridgeSession lifecycle', () => {
 
       await expect(readSocketUntilClose(socket)).resolves.toEqual(Buffer.from(
         'HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok',
+        'latin1',
+      ));
+    } finally {
+      socket.destroy();
+      await session.disconnect();
+    }
+  });
+
+  it('bridges runtime-control provider-link traffic through real placement bridge frames', async () => {
+    const command = createMockBridgeCommand();
+    const session = await startMockedSession(command);
+    const socket = await connectLoopback(session.local_ui_url);
+    try {
+      socket.write('POST /__redeven_runtime_control/v1/provider-link/connect HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 2\r\n\r\n{}');
+
+      const openFrame = await readRuntimePlacementBridgeFrame(command.stdin);
+      expect(openFrame?.header.type).toBe('stream_open');
+      const streamID = openFrame?.header.stream_id ?? '';
+      expect(JSON.parse(openFrame?.payload.toString('utf8') ?? '{}')).toEqual({ surface: 'runtime_control' });
+
+      const dataFrame = await readRuntimePlacementBridgeFrame(command.stdin);
+      expect(dataFrame?.header).toMatchObject({
+        stream_id: streamID,
+        type: 'stream_data',
+      });
+      expect(dataFrame?.payload.toString('latin1')).toMatch(/^POST \/v1\/provider-link\/connect HTTP\/1\.1/u);
+
+      command.stdout.write(encodeRuntimePlacementBridgeFrame({
+        type: 'stream_data',
+        stream_id: streamID,
+        payload: 'HTTP/1.1 200 OK\r\nContent-Length: 11\r\nConnection: close\r\n\r\n{"ok":true}',
+      }));
+      command.stdout.write(encodeRuntimePlacementBridgeFrame({
+        type: 'stream_close',
+        stream_id: streamID,
+      }));
+
+      await expect(readSocketUntilClose(socket)).resolves.toEqual(Buffer.from(
+        'HTTP/1.1 200 OK\r\nContent-Length: 11\r\nConnection: close\r\n\r\n{"ok":true}',
         'latin1',
       ));
     } finally {
