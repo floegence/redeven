@@ -9,7 +9,6 @@ import {
   type DesktopControlPlaneSyncState,
 } from '../shared/providerEnvironmentState';
 import {
-  formatRuntimeServiceWorkload,
   runtimeServiceOpenReadinessLabel,
   runtimeServiceIsOpenable,
   runtimeServiceNeedsRuntimeUpdate,
@@ -324,20 +323,6 @@ export function environmentSourceLabel(environment: DesktopEnvironmentEntry): st
   }
 }
 
-function sshBootstrapSummary(environment: DesktopEnvironmentEntry): string {
-  if (environment.kind !== 'ssh_environment') {
-    return '';
-  }
-  switch (environment.ssh_details?.bootstrap_strategy) {
-    case 'desktop_upload':
-      return 'Desktop upload';
-    case 'remote_install':
-      return 'Remote install';
-    default:
-      return 'Automatic bootstrap';
-  }
-}
-
 function normalizeIPAddressHost(value: string): string {
   return value.trim().toLowerCase().replace(/^\[(.*)\]$/, '$1');
 }
@@ -418,13 +403,10 @@ const ENVIRONMENT_CARD_FACT_ORDER = [
   'CONTAINER',
   'ENGINE',
   'OWNER',
-  'RUNTIME SERVICE',
   'VERSION',
-  'ACTIVE WORK',
   'PROVIDER',
   'LOCAL LINK',
-  'SOURCE ENV',
-  'BOOTSTRAP',
+  'ENV ID',
 ] as const;
 
 function orderEnvironmentCardFacts(
@@ -463,60 +445,20 @@ function environmentRuntimeService(environment: DesktopEnvironmentEntry): Runtim
   return undefined;
 }
 
-function runtimeServiceLabel(snapshot: RuntimeServiceSnapshot | undefined): string {
-  if (!snapshot) {
-    return 'Unknown';
-  }
-  if (snapshot.open_readiness?.state === 'blocked') {
-    if (runtimeServiceNeedsRuntimeUpdate(snapshot)) {
-      return 'Needs update';
-    }
-    return 'Blocked';
-  }
-  if (snapshot.open_readiness?.state === 'starting') {
-    return 'Preparing';
-  }
-  switch (snapshot.compatibility) {
-    case 'update_available':
-      return 'Update ready';
-    case 'restart_recommended':
-      return 'Restart recommended';
-    case 'update_required':
-      return 'Needs update';
-    case 'desktop_update_required':
-      return 'Update Desktop';
-    case 'managed_elsewhere':
-      return 'Managed elsewhere';
-    default:
-      break;
-  }
-  if (snapshot.service_owner === 'desktop' || snapshot.desktop_managed) {
-    return 'Running';
-  }
-  if (snapshot.service_owner === 'external') {
-    return 'External service';
-  }
-  return 'Unknown';
-}
-
 function environmentRuntimeMaintenance(environment: DesktopEnvironmentEntry) {
   return environment.runtime_maintenance;
 }
 
 function runtimeServiceVersionLabel(snapshot: RuntimeServiceSnapshot | undefined): string {
-  return compact(snapshot?.runtime_version) || 'Unknown';
+  return compact(snapshot?.runtime_version) || 'UNKNOWN';
 }
 
-function runtimeServiceFacts(environment: DesktopEnvironmentEntry): readonly EnvironmentCardFactModel[] {
+function runtimeVersionFact(environment: DesktopEnvironmentEntry): EnvironmentCardFactModel {
   const snapshot = environmentRuntimeService(environment);
-  if (!snapshot) {
-    return [];
-  }
-  return [
-    buildEnvironmentCardFact('RUNTIME SERVICE', runtimeServiceLabel(snapshot)),
-    buildEnvironmentCardFact('VERSION', runtimeServiceVersionLabel(snapshot)),
-    buildEnvironmentCardFact('ACTIVE WORK', formatRuntimeServiceWorkload(snapshot)),
-  ];
+  const version = runtimeServiceVersionLabel(snapshot);
+  return version === 'UNKNOWN'
+    ? buildPlaceholderEnvironmentCardFact('VERSION', version)
+    : buildEnvironmentCardFact('VERSION', version);
 }
 
 function runtimePlacementFacts(environment: DesktopEnvironmentEntry): readonly EnvironmentCardFactModel[] {
@@ -553,6 +495,13 @@ function providerLocalLinkLabel(environment: DesktopEnvironmentEntry): string {
   }
 }
 
+function providerEnvironmentIDFact(environment: DesktopEnvironmentEntry): EnvironmentCardFactModel {
+  const envID = compact(environment.env_public_id) || 'UNKNOWN';
+  return envID === 'UNKNOWN'
+    ? buildPlaceholderEnvironmentCardFact('ENV ID', envID)
+    : buildEnvironmentCardFact('ENV ID', envID);
+}
+
 export function buildEnvironmentCardFactsModel(
   environment: DesktopEnvironmentEntry,
 ): readonly EnvironmentCardFactModel[] {
@@ -560,7 +509,7 @@ export function buildEnvironmentCardFactsModel(
     return orderEnvironmentCardFacts([
       buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment)),
       ...runtimePlacementFacts(environment),
-      ...runtimeServiceFacts(environment),
+      runtimeVersionFact(environment),
       buildPlaceholderEnvironmentCardFact('PROVIDER'),
     ]);
   }
@@ -568,10 +517,10 @@ export function buildEnvironmentCardFactsModel(
   if (environment.kind === 'provider_environment') {
     return orderEnvironmentCardFacts([
       buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment)),
-      ...runtimeServiceFacts(environment),
+      runtimeVersionFact(environment),
       buildEnvironmentCardFact('PROVIDER', controlPlaneDisplayLabel(environment) || 'Unavailable'),
       buildEnvironmentCardFact('LOCAL LINK', providerLocalLinkLabel(environment)),
-      buildEnvironmentCardFact('SOURCE ENV', environment.env_public_id ?? 'Unknown'),
+      providerEnvironmentIDFact(environment),
     ]);
   }
 
@@ -579,15 +528,14 @@ export function buildEnvironmentCardFactsModel(
     return orderEnvironmentCardFacts([
       buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment)),
       ...runtimePlacementFacts(environment),
-      ...runtimeServiceFacts(environment),
-      buildEnvironmentCardFact('BOOTSTRAP', sshBootstrapSummary(environment) || 'Automatic bootstrap'),
+      runtimeVersionFact(environment),
     ]);
   }
 
   return orderEnvironmentCardFacts([
     buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment)),
     ...runtimePlacementFacts(environment),
-    ...runtimeServiceFacts(environment),
+    runtimeVersionFact(environment),
   ]);
 }
 

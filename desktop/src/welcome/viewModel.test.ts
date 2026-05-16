@@ -437,29 +437,23 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(buildEnvironmentCardFactsModel(localEntry!)).toEqual([
       defaultFact('RUNS ON', 'This device'),
-      defaultFact('RUNTIME SERVICE', 'Running'),
       defaultFact('VERSION', 'v1.4.2'),
-      defaultFact('ACTIVE WORK', '2 terminals, 1 session, 1 port forward'),
       placeholderFact('PROVIDER'),
     ]);
     expect(buildEnvironmentCardFactsModel(providerEntry!)).toEqual([
       defaultFact('RUNS ON', 'Provider remote'),
+      placeholderFact('VERSION', 'UNKNOWN'),
       defaultFact('PROVIDER', 'Demo Control Plane'),
       defaultFact('LOCAL LINK', 'No managed runtime linked'),
-      defaultFact('SOURCE ENV', 'env_demo'),
+      defaultFact('ENV ID', 'env_demo'),
     ]);
     expect(buildEnvironmentCardFactsModel(urlEntry!)).toEqual([
       defaultFact('RUNS ON', 'LAN host'),
-      defaultFact('RUNTIME SERVICE', 'External service'),
       defaultFact('VERSION', 'v1.4.1'),
-      defaultFact('ACTIVE WORK', '1 session'),
     ]);
     expect(buildEnvironmentCardFactsModel(sshEntry!)).toEqual([
       defaultFact('RUNS ON', 'ops@example.internal:2222'),
-      defaultFact('RUNTIME SERVICE', 'Running'),
       defaultFact('VERSION', 'v1.4.0'),
-      defaultFact('ACTIVE WORK', '1 terminal, 1 session'),
-      defaultFact('BOOTSTRAP', 'Desktop upload'),
     ]);
 
     expect(buildEnvironmentCardEndpointsModel(providerEntry!)).toEqual([
@@ -530,7 +524,7 @@ describe('buildEnvironmentCardModel', () => {
     ]);
   });
 
-  it('shows runtime maintenance state in the stable card fact slot', () => {
+  it('keeps runtime version in the stable card fact slot during maintenance states', () => {
     const local = testLocalEnvironment({
       currentRuntime: {
         local_ui_url: 'http://localhost:23998/',
@@ -587,9 +581,23 @@ describe('buildEnvironmentCardModel', () => {
     expect(localEntry).toBeTruthy();
     expect(buildEnvironmentCardFactsModel(localEntry!)).toEqual([
       defaultFact('RUNS ON', 'This device'),
-      defaultFact('RUNTIME SERVICE', 'Update ready'),
       defaultFact('VERSION', 'v1.4.3'),
-      defaultFact('ACTIVE WORK', '1 terminal'),
+      placeholderFact('PROVIDER'),
+    ]);
+  });
+
+  it('keeps version visible when runtime metadata is unavailable', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment(),
+      }),
+    });
+    const localEntry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
+
+    expect(localEntry).toBeTruthy();
+    expect(buildEnvironmentCardFactsModel(localEntry!)).toEqual([
+      defaultFact('RUNS ON', 'This device'),
+      placeholderFact('VERSION', 'UNKNOWN'),
       placeholderFact('PROVIDER'),
     ]);
   });
@@ -717,10 +725,7 @@ describe('buildEnvironmentCardModel', () => {
     }));
     expect(buildEnvironmentCardFactsModel(entry!)).toEqual([
       defaultFact('RUNS ON', 'ops@example.internal:2222'),
-      defaultFact('RUNTIME SERVICE', 'Needs update'),
       defaultFact('VERSION', 'v0.5.9'),
-      defaultFact('ACTIVE WORK', '1 terminal, 1 session, 1 port forward'),
-      defaultFact('BOOTSTRAP', 'Desktop upload'),
     ]);
     expect(buildProviderBackedEnvironmentActionModel(entry!)).toEqual({
       status_label: 'RUNTIME NEEDS UPDATE',
@@ -861,7 +866,7 @@ describe('buildEnvironmentCardModel', () => {
       status_label: 'RUNTIME NEEDS UPDATE',
       status_tone: 'warning',
     });
-    expect(buildEnvironmentCardFactsModel(entry!)).toContainEqual(defaultFact('RUNTIME SERVICE', 'Needs update'));
+    expect(buildEnvironmentCardFactsModel(entry!)).toContainEqual(defaultFact('VERSION', 'v0.0.0-dev'));
     expect(buildProviderBackedEnvironmentActionModel(entry!).action_presentation.primary_action).toMatchObject({
       intent: 'open',
       enabled: false,
