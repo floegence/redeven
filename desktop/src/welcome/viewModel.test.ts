@@ -765,11 +765,11 @@ describe('buildEnvironmentCardModel', () => {
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
-            id: 'connect_provider_runtime',
-            label: 'Connect to provider...',
+            id: 'provider_link_unavailable',
+            label: 'Provider link unavailable',
             action: {
-              intent: 'connect_provider_runtime',
-              label: 'Connect to provider...',
+              intent: 'unavailable',
+              label: 'Provider link unavailable',
               enabled: false,
               variant: 'outline',
             },
@@ -1245,8 +1245,7 @@ describe('buildEnvironmentCardModel', () => {
         runtime_target_id: 'local:local',
         runtime_kind: 'local_environment',
         label: 'Local Environment',
-        provider_link_remote_enabled: true,
-        runtime_remote_enabled: true,
+        provider_connection_state: 'connected',
       },
     });
     expect(buildProviderBackedEnvironmentActionModel(openLocalServeProviderEntry!)).toMatchObject({
@@ -1319,7 +1318,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildEnvironmentCardFactsModel(localOnlyProviderEntry!)).toEqual(expect.arrayContaining([
       expect.objectContaining({
         label: 'LOCAL LINK',
-        value: 'Linked to Local Environment, needs connect',
+        value: 'Local Environment needs attention',
       }),
     ]));
     const localOnlyProviderMenuActionIDs = buildProviderBackedEnvironmentActionModel(localOnlyProviderEntry!)
@@ -1330,12 +1329,12 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildProviderBackedEnvironmentActionModel(localOnlyEntry!)).toMatchObject({
       action_presentation: {
         menu_actions: expect.arrayContaining([{
-          id: 'connect_provider_runtime',
-          label: 'Connect to provider',
+          id: 'provider_link_needs_attention',
+          label: 'Provider link needs attention',
           action: {
-            intent: 'connect_provider_runtime',
-            label: 'Connect to provider',
-            enabled: true,
+            intent: 'unavailable',
+            label: 'Provider link needs attention',
+            enabled: false,
             variant: 'outline',
           },
         }]),

@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import { buildDesktopProviderRuntimeLinkPlan } from './providerRuntimeLinkPlanner';
 import type { DesktopProviderEnvironmentCandidate, DesktopProviderRuntimeLinkTarget } from './providerRuntimeLinkTarget';
-import type { RuntimeServiceProviderLinkBinding, RuntimeServiceSnapshot } from './runtimeService';
+import {
+  runtimeServiceProviderConnectionState,
+  type RuntimeServiceProviderLinkBinding,
+  type RuntimeServiceSnapshot,
+} from './runtimeService';
 
 function provider(): DesktopProviderEnvironmentCandidate {
   return {
@@ -59,6 +63,7 @@ function target(overrides: Partial<DesktopProviderRuntimeLinkTarget> = {}): Desk
       owner: 'current_desktop',
     },
     runtime_service: service,
+    provider_connection_state: runtimeServiceProviderConnectionState(service),
     provider_link_state: service.bindings!.provider_link.state,
     provider_link_binding: service.bindings!.provider_link,
     can_connect_provider: true,
@@ -97,7 +102,7 @@ describe('buildDesktopProviderRuntimeLinkPlan', () => {
     });
   });
 
-  it('allows a matching saved provider link to enable the remote control connection', () => {
+  it('treats a matching saved link without an active provider connection as a runtime inconsistency', () => {
     const binding = {
       state: 'linked' as const,
       provider_origin: 'https://cp.example.invalid',
@@ -112,14 +117,14 @@ describe('buildDesktopProviderRuntimeLinkPlan', () => {
       can_connect_provider: true,
       can_disconnect_provider: true,
     }), provider())).toMatchObject({
-      state: 'linked_but_remote_disabled',
-      can_connect: true,
-      can_disconnect: true,
+      state: 'blocked_runtime',
+      can_connect: false,
+      can_disconnect: false,
       runtime_matches_provider: true,
     });
   });
 
-  it('allows the linked runtime to reconnect even when the provider environment is occupied here', () => {
+  it('does not ask a local-only linked runtime to reconnect when the provider environment is occupied here', () => {
     const binding = {
       state: 'linked' as const,
       provider_origin: 'https://cp.example.invalid',
@@ -140,13 +145,12 @@ describe('buildDesktopProviderRuntimeLinkPlan', () => {
         runtime_target_id: 'ssh:ssh%3Adevbox%3Adefault%3Akey_agent%3Aremote_default',
         runtime_kind: 'ssh_environment',
         runtime_label: 'SSH devbox',
-        provider_link_remote_enabled: false,
-        runtime_remote_enabled: false,
+        provider_connection_state: 'error',
       },
     })).toMatchObject({
-      state: 'linked_but_remote_disabled',
-      can_connect: true,
-      can_disconnect: true,
+      state: 'blocked_runtime',
+      can_connect: false,
+      can_disconnect: false,
       runtime_matches_provider: true,
     });
   });
@@ -178,8 +182,7 @@ describe('buildDesktopProviderRuntimeLinkPlan', () => {
         runtime_target_id: 'local:local',
         runtime_kind: 'local_environment',
         runtime_label: 'Local Environment',
-        provider_link_remote_enabled: true,
-        runtime_remote_enabled: true,
+        provider_connection_state: 'connected',
       },
     })).toMatchObject({
       state: 'provider_environment_occupied',

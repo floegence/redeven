@@ -386,6 +386,76 @@ func TestResolveRunStateLayoutUsesLocalEnvironmentLayoutForInlineBootstrap(t *te
 	}
 }
 
+func TestResolveRuntimeLaunchPolicy(t *testing.T) {
+	tests := []struct {
+		name                  string
+		mode                  runMode
+		desktopManaged        bool
+		remoteConfigValid     bool
+		wantLocalUIEnabled    bool
+		wantControlEnabled    bool
+		wantEffectiveRunMode  runMode
+		wantProcessRemoteMode bool
+	}{
+		{
+			name:                  "desktop managed restores saved provider link",
+			mode:                  runModeDesktop,
+			desktopManaged:        true,
+			remoteConfigValid:     true,
+			wantLocalUIEnabled:    true,
+			wantControlEnabled:    true,
+			wantEffectiveRunMode:  runModeHybrid,
+			wantProcessRemoteMode: true,
+		},
+		{
+			name:                 "desktop without provider link stays local",
+			mode:                 runModeDesktop,
+			desktopManaged:       true,
+			remoteConfigValid:    false,
+			wantLocalUIEnabled:   true,
+			wantControlEnabled:   false,
+			wantEffectiveRunMode: runModeLocal,
+		},
+		{
+			name:                 "local mode remains local even with provider config",
+			mode:                 runModeLocal,
+			desktopManaged:       true,
+			remoteConfigValid:    true,
+			wantLocalUIEnabled:   true,
+			wantControlEnabled:   false,
+			wantEffectiveRunMode: runModeLocal,
+		},
+		{
+			name:                  "hybrid mode requires remote control",
+			mode:                  runModeHybrid,
+			remoteConfigValid:     true,
+			wantLocalUIEnabled:    true,
+			wantControlEnabled:    true,
+			wantEffectiveRunMode:  runModeHybrid,
+			wantProcessRemoteMode: true,
+		},
+		{
+			name:                  "remote mode has no local ui",
+			mode:                  runModeRemote,
+			remoteConfigValid:     true,
+			wantControlEnabled:    true,
+			wantEffectiveRunMode:  runModeRemote,
+			wantProcessRemoteMode: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := resolveRuntimeLaunchPolicy(tt.mode, tt.desktopManaged, tt.remoteConfigValid)
+			if got.localUIEnabled != tt.wantLocalUIEnabled ||
+				got.controlChannelEnabled != tt.wantControlEnabled ||
+				got.effectiveRunMode != tt.wantEffectiveRunMode ||
+				got.remoteEnabled != tt.wantProcessRemoteMode {
+				t.Fatalf("resolveRuntimeLaunchPolicy() = %#v", got)
+			}
+		})
+	}
+}
+
 func TestTargetsCommandJSON(t *testing.T) {
 	stateRoot := t.TempDir()
 	layout, err := config.LocalEnvironmentStateLayout(stateRoot)

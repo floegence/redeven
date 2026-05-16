@@ -1445,8 +1445,7 @@ describe('desktopWelcomeState', () => {
         runtime_target_id: 'local:local',
         runtime_kind: 'local_environment',
         label: 'Local Environment',
-        provider_link_remote_enabled: true,
-        runtime_remote_enabled: true,
+        provider_connection_state: 'connected',
       },
       runtime_health: expect.objectContaining({
         status: 'online',
@@ -1834,8 +1833,7 @@ describe('desktopWelcomeState', () => {
         runtime_target_id: 'local:local',
         runtime_kind: 'local_environment',
         label: 'Local Environment',
-        provider_link_remote_enabled: false,
-        runtime_remote_enabled: false,
+        provider_connection_state: 'error',
       },
     });
 
@@ -1852,8 +1850,9 @@ describe('desktopWelcomeState', () => {
       provider_origin: 'https://cp.example.invalid',
       provider_id: 'example_control_plane',
       env_public_id: 'env_demo',
-      can_connect_provider: true,
-      can_disconnect_provider: true,
+      provider_connection_state: 'error',
+      can_connect_provider: false,
+      can_disconnect_provider: false,
     });
   });
 

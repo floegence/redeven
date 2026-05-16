@@ -8,6 +8,7 @@ import {
   runtimeServiceMatchesIdentity,
   runtimeServiceNeedsRuntimeUpdate,
   runtimeServiceOpenReadinessLabel,
+  runtimeServiceProviderConnectionState,
   runtimeServiceProviderLinkBinding,
   runtimeServiceProviderLinkMatches,
   runtimeServiceSupportsDesktopAIBrokerBinding,
@@ -196,5 +197,55 @@ describe('runtimeService', () => {
       state: 'unsupported',
       remote_enabled: false,
     });
+  });
+
+  it('derives provider connection state from link and runtime remote facts', () => {
+    expect(runtimeServiceProviderConnectionState(normalizeRuntimeServiceSnapshot({
+      compatibility: 'compatible',
+      open_readiness: { state: 'openable' },
+      active_workload: {},
+      capabilities: { provider_link: { supported: true } },
+      bindings: { provider_link: { state: 'unbound' } },
+    }))).toBe('unlinked');
+
+    expect(runtimeServiceProviderConnectionState(normalizeRuntimeServiceSnapshot({
+      compatibility: 'compatible',
+      open_readiness: { state: 'openable' },
+      remote_enabled: true,
+      active_workload: {},
+      capabilities: { provider_link: { supported: true } },
+      bindings: {
+        provider_link: {
+          state: 'linked',
+          provider_origin: 'https://cp.example.invalid',
+          provider_id: 'example_control_plane',
+          env_public_id: 'env_demo',
+          remote_enabled: true,
+        },
+      },
+    }))).toBe('connected');
+
+    expect(runtimeServiceProviderConnectionState(normalizeRuntimeServiceSnapshot({
+      compatibility: 'compatible',
+      open_readiness: { state: 'openable' },
+      remote_enabled: false,
+      active_workload: {},
+      capabilities: { provider_link: { supported: true } },
+      bindings: {
+        provider_link: {
+          state: 'linked',
+          provider_origin: 'https://cp.example.invalid',
+          provider_id: 'example_control_plane',
+          env_public_id: 'env_demo',
+          remote_enabled: false,
+        },
+      },
+    }))).toBe('error');
+
+    expect(runtimeServiceProviderConnectionState(normalizeRuntimeServiceSnapshot({
+      compatibility: 'compatible',
+      open_readiness: { state: 'openable' },
+      active_workload: {},
+    }))).toBe('unsupported');
   });
 });

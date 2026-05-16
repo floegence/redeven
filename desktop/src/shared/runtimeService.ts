@@ -62,6 +62,14 @@ export type RuntimeServiceProviderLinkState =
   | 'unsupported'
   | 'error';
 
+export type RuntimeServiceProviderConnectionState =
+  | 'unlinked'
+  | 'connecting'
+  | 'connected'
+  | 'disconnecting'
+  | 'unsupported'
+  | 'error';
+
 export type RuntimeServiceProviderLinkBinding = Readonly<{
   state: RuntimeServiceProviderLinkState;
   provider_origin?: string;
@@ -429,6 +437,31 @@ export function runtimeServiceProviderLinkBinding(
 export function runtimeServiceSupportsProviderLink(snapshot: RuntimeServiceSnapshot | null | undefined): boolean {
   return snapshot?.capabilities?.provider_link?.supported === true
     && (snapshot.capabilities.provider_link.bind_method || 'runtime_control_v1') === 'runtime_control_v1';
+}
+
+export function runtimeServiceProviderConnectionState(
+  snapshot: RuntimeServiceSnapshot | null | undefined,
+): RuntimeServiceProviderConnectionState {
+  if (!runtimeServiceSupportsProviderLink(snapshot)) {
+    return 'unsupported';
+  }
+  const binding = runtimeServiceProviderLinkBinding(snapshot);
+  switch (binding.state) {
+    case 'unbound':
+      return 'unlinked';
+    case 'linking':
+      return 'connecting';
+    case 'disconnecting':
+      return 'disconnecting';
+    case 'linked':
+      return binding.remote_enabled === true && snapshot?.remote_enabled === true
+        ? 'connected'
+        : 'error';
+    case 'error':
+      return 'error';
+    case 'unsupported':
+      return 'unsupported';
+  }
 }
 
 export function runtimeServiceProviderLinkMatches(

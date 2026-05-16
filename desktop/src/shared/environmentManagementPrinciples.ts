@@ -38,6 +38,8 @@ function compact(value: unknown): string {
 // IMPORTANT: Provider Environment cards are provider-tunnel access surfaces only.
 // Runtime lifecycle and provider-link management belong exclusively to Local/SSH
 // runtime cards so a user never grants provider control from the remote access card.
+// A saved provider link may auto-restore during runtime startup, but that belongs
+// to the managed runtime lifecycle and must not become a Provider card action.
 export function desktopEnvironmentManagementSurface(
   kind: DesktopEnvironmentEntryKind,
 ): DesktopEnvironmentManagementSurface {

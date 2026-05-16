@@ -535,15 +535,22 @@ function providerLocalLinkLabel(environment: DesktopEnvironmentEntry): string {
     return '';
   }
   const linkedRuntime = environment.provider_linked_runtime_summary;
-  if (
-    linkedRuntime
-    && (linkedRuntime.provider_link_remote_enabled !== true || linkedRuntime.runtime_remote_enabled !== true)
-  ) {
-    return `Linked to ${linkedRuntime.label}, needs connect`;
+  if (!linkedRuntime) {
+    return 'No managed runtime linked';
   }
-  return environment.provider_linked_runtime_summary
-    ? `Linked to ${environment.provider_linked_runtime_summary.label}`
-    : 'No managed runtime linked';
+  switch (linkedRuntime.provider_connection_state) {
+    case 'connected':
+      return `Connected through ${linkedRuntime.label}`;
+    case 'connecting':
+      return `Connecting through ${linkedRuntime.label}`;
+    case 'disconnecting':
+      return `Disconnecting from ${linkedRuntime.label}`;
+    case 'error':
+      return `${linkedRuntime.label} needs attention`;
+    case 'unlinked':
+    case 'unsupported':
+      return 'No managed runtime linked';
+  }
 }
 
 export function buildEnvironmentCardFactsModel(
@@ -808,26 +815,70 @@ function runtimeProviderLinkMenuAction(
   if (!target) {
     return null;
   }
-  // IMPORTANT: A runtime can have a saved provider binding while the running
-  // process is still local-only. In that state the Local/SSH card must expose
-  // Connect so the user can enable provider control explicitly; Provider cards
-  // remain remote-access-only.
-  const linkedButRemoteDisabled = target.provider_link_state === 'linked'
-    && (target.provider_link_binding?.remote_enabled !== true || target.runtime_service?.remote_enabled !== true);
-  if (target.provider_link_state === 'linked' && !linkedButRemoteDisabled) {
-    return {
-      id: 'disconnect_provider_runtime',
-      label: 'Disconnect from provider',
-      action: {
-        intent: 'disconnect_provider_runtime',
+  switch (target.provider_connection_state) {
+    case 'connected':
+      return {
+        id: 'disconnect_provider_runtime',
         label: 'Disconnect from provider',
-        enabled: target.can_disconnect_provider,
-        variant: 'outline',
-      },
-    };
+        action: {
+          intent: 'disconnect_provider_runtime',
+          label: 'Disconnect from provider',
+          enabled: target.can_disconnect_provider,
+          variant: 'outline',
+        },
+      };
+    case 'connecting':
+      return {
+        id: 'provider_link_connecting',
+        label: 'Connecting to provider',
+        action: {
+          intent: 'unavailable',
+          label: 'Connecting to provider',
+          enabled: false,
+          variant: 'outline',
+        },
+      };
+    case 'disconnecting':
+      return {
+        id: 'provider_link_disconnecting',
+        label: 'Disconnecting from provider',
+        action: {
+          intent: 'unavailable',
+          label: 'Disconnecting from provider',
+          enabled: false,
+          variant: 'outline',
+        },
+      };
+    case 'error':
+      return {
+        id: 'provider_link_needs_attention',
+        label: 'Provider link needs attention',
+        action: {
+          intent: 'unavailable',
+          label: 'Provider link needs attention',
+          enabled: false,
+          variant: 'outline',
+        },
+      };
+    case 'unsupported':
+      if (target.runtime_running) {
+        return {
+          id: 'provider_link_unavailable',
+          label: 'Provider link unavailable',
+          action: {
+            intent: 'unavailable',
+            label: 'Provider link unavailable',
+            enabled: false,
+            variant: 'outline',
+          },
+        };
+      }
+      break;
+    case 'unlinked':
+      break;
   }
   const canConnect = runtimeProviderLinkCanConnect(environment, target);
-  const label = linkedButRemoteDisabled ? 'Connect to provider' : 'Connect to provider...';
+  const label = 'Connect to provider...';
   return {
     id: 'connect_provider_runtime',
     label,
