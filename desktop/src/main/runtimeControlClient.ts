@@ -28,6 +28,11 @@ type RuntimeControlEnvelope = Readonly<{
   }>;
 }>;
 
+type RuntimeControlServiceRoute =
+  | 'v1/provider-link'
+  | 'v1/provider-link/connect'
+  | 'v1/provider-link/disconnect';
+
 export type RuntimeControlProviderLinkStatus = Readonly<{
   linked?: boolean;
   binding: RuntimeServiceProviderLinkBinding;
@@ -52,9 +57,47 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
+function runtimeControlBodySummary(raw: string): string {
+  return compact(raw).replace(/\s+/gu, ' ').slice(0, 160);
+}
+
+function parseRuntimeControlEnvelope(raw: string): RuntimeControlEnvelope | null {
+  try {
+    return JSON.parse(raw || '{}') as RuntimeControlEnvelope;
+  } catch {
+    return null;
+  }
+}
+
+export function runtimeControlServiceURL(
+  endpoint: DesktopRuntimeControlEndpoint,
+  route: RuntimeControlServiceRoute,
+): URL {
+  const baseURL = compact(endpoint.base_url);
+  if (!baseURL) {
+    throw new RuntimeControlError('RUNTIME_CONTROL_UNAVAILABLE', 'Runtime control endpoint is incomplete.');
+  }
+  if (route.startsWith('/') || /^[a-z][a-z0-9+.-]*:/iu.test(route)) {
+    throw new RuntimeControlError('RUNTIME_CONTROL_INVALID_ROUTE', 'Runtime control route must be relative to the service root.');
+  }
+  let root: URL;
+  try {
+    root = new URL(baseURL);
+  } catch {
+    throw new RuntimeControlError('RUNTIME_CONTROL_INVALID_ENDPOINT', 'Runtime control endpoint URL is invalid.');
+  }
+  if (root.protocol !== 'http:' && root.protocol !== 'https:') {
+    throw new RuntimeControlError('RUNTIME_CONTROL_INVALID_ENDPOINT', 'Runtime control endpoint must use HTTP or HTTPS.');
+  }
+  if (!root.pathname.endsWith('/')) {
+    root.pathname = `${root.pathname}/`;
+  }
+  return new URL(route, root);
+}
+
 function requestRuntimeControl(
   endpoint: DesktopRuntimeControlEndpoint,
-  path: string,
+  route: RuntimeControlServiceRoute,
   options: Readonly<{
     method: 'GET' | 'POST';
     body?: unknown;
@@ -68,7 +111,12 @@ function requestRuntimeControl(
     return Promise.reject(new RuntimeControlError('RUNTIME_CONTROL_UNAVAILABLE', 'Runtime control endpoint is incomplete.'));
   }
 
-  const url = new URL(path, baseURL);
+  let url: URL;
+  try {
+    url = runtimeControlServiceURL(endpoint, route);
+  } catch (error) {
+    return Promise.reject(error);
+  }
   const body = options.body == null ? '' : JSON.stringify(options.body);
   const requestImpl = url.protocol === 'https:' ? https.request : http.request;
   return new Promise((resolve, reject) => {
@@ -91,22 +139,32 @@ function requestRuntimeControl(
         raw += chunk;
       });
       response.on('end', () => {
-        try {
-          const parsed = JSON.parse(raw || '{}') as RuntimeControlEnvelope;
-          if (parsed.ok === false || (response.statusCode ?? 500) >= 400) {
-            const code = compact(parsed.error?.code) || 'RUNTIME_CONTROL_FAILED';
-            const message = compact(parsed.error?.message) || `Runtime control failed with status ${response.statusCode ?? 'unknown'}.`;
-            reject(new RuntimeControlError(code, message, response.statusCode ?? null));
+        const statusCode = response.statusCode ?? 500;
+        const parsed = parseRuntimeControlEnvelope(raw);
+        if (!parsed) {
+          if (statusCode >= 400) {
+            const summary = runtimeControlBodySummary(raw);
+            reject(new RuntimeControlError(
+              'RUNTIME_CONTROL_HTTP_ERROR',
+              `Runtime control returned HTTP ${statusCode}${summary ? `: ${summary}` : '.'}`,
+              statusCode,
+            ));
             return;
           }
-          resolve(parsed);
-        } catch (error) {
           reject(new RuntimeControlError(
             'RUNTIME_CONTROL_INVALID_RESPONSE',
-            error instanceof Error ? error.message : 'Runtime control returned invalid JSON.',
-            response.statusCode ?? null,
+            'Runtime control returned a non-JSON response.',
+            statusCode,
           ));
+          return;
         }
+        if (parsed.ok === false || statusCode >= 400) {
+          const code = compact(parsed.error?.code) || 'RUNTIME_CONTROL_FAILED';
+          const message = compact(parsed.error?.message) || `Runtime control failed with status ${statusCode}.`;
+          reject(new RuntimeControlError(code, message, statusCode));
+          return;
+        }
+        resolve(parsed);
       });
     });
     req.on('timeout', () => {
@@ -141,7 +199,7 @@ function parseProviderLinkStatus(data: unknown): RuntimeControlProviderLinkStatu
 export async function getProviderLinkStatus(
   endpoint: DesktopRuntimeControlEndpoint,
 ): Promise<RuntimeControlProviderLinkStatus> {
-  const envelope = await requestRuntimeControl(endpoint, '/v1/provider-link', { method: 'GET' });
+  const envelope = await requestRuntimeControl(endpoint, 'v1/provider-link', { method: 'GET' });
   return parseProviderLinkStatus(envelope.data);
 }
 
@@ -149,7 +207,7 @@ export async function connectProviderLink(
   endpoint: DesktopRuntimeControlEndpoint,
   request: RuntimeControlProviderLinkRequest,
 ): Promise<RuntimeControlProviderLinkStatus> {
-  const envelope = await requestRuntimeControl(endpoint, '/v1/provider-link/connect', {
+  const envelope = await requestRuntimeControl(endpoint, 'v1/provider-link/connect', {
     method: 'POST',
     body: request,
   });
@@ -159,7 +217,7 @@ export async function connectProviderLink(
 export async function disconnectProviderLink(
   endpoint: DesktopRuntimeControlEndpoint,
 ): Promise<RuntimeControlProviderLinkStatus> {
-  const envelope = await requestRuntimeControl(endpoint, '/v1/provider-link/disconnect', {
+  const envelope = await requestRuntimeControl(endpoint, 'v1/provider-link/disconnect', {
     method: 'POST',
   });
   return parseProviderLinkStatus(envelope.data);
