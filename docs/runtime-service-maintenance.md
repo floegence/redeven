@@ -275,12 +275,12 @@ Container runtime targets use the same Runtime Service maintenance model. A Loca
 Desktop launcher cards keep their current dense SaaS tool layout:
 
 - Status tone continues through `runtime_health` and existing action model.
-- Runtime service facts appear in existing metadata/fact slots, not as new
-  banners:
-  - `Runtime Service`: `Running`, `Update ready`, `Restart recommended`,
-    `Needs update`, `Update Desktop`, `Managed elsewhere`
-  - `Version`: `v1.4.2`
-  - `Active work`: `3 terminals, 1 web service`
+- Runtime version appears in the existing metadata/fact slot, not as a new
+  banner. It is always present; unknown runtime metadata is shown as
+  `Version`: `UNKNOWN`.
+- Runtime lifecycle status and active-work impact stay in the status badge,
+  action model, and maintenance confirmations instead of adding extra card
+  fact rows.
 - Primary actions remain route-aware:
   - compatible: `Open`
   - not running: `Open`
