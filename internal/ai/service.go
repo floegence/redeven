@@ -1668,7 +1668,7 @@ func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, req
 	}
 	providerID, modelName := "", ""
 	desktopModelSourceModelID := ""
-	providerCfg := config.AIProvider{}
+	var providerCfg config.AIProvider
 	if isDesktopModelSourceModelID(model) {
 		allowed, err := s.desktopModelSourceModelAllowed(ctx, model)
 		if err != nil {
