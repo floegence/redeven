@@ -6,6 +6,7 @@ import {
   AlertCircle,
   Check,
   ChevronDown,
+  ChevronRight,
   Copy,
   Globe,
   Lock,
@@ -121,11 +122,14 @@ import {
   LOCAL_ENVIRONMENT_LIBRARY_FILTER,
   PROVIDER_ENVIRONMENT_LIBRARY_FILTER,
   SSH_ENVIRONMENT_LIBRARY_FILTER,
+  runtimeTargetEnvironmentLibraryFilterTargetID,
+  runtimeTargetEnvironmentLibraryFilterValue,
   URL_ENVIRONMENT_LIBRARY_FILTER,
   type EnvironmentActionIntent,
   type EnvironmentActionModel,
   type EnvironmentActionMenuItemModel,
   type EnvironmentCardEndpointModel,
+  type EnvironmentCardFactActionModel,
   type EnvironmentCardFactModel,
   type EnvironmentActionPresentation,
   type EnvironmentCenterTab,
@@ -880,6 +884,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (environmentLibraryCount(snapshot(), '', SSH_ENVIRONMENT_LIBRARY_FILTER) > 0) {
       next.add(SSH_ENVIRONMENT_LIBRARY_FILTER);
     }
+    for (const environment of snapshot().environments) {
+      const runtimeTargetID = environment.provider_runtime_link_target?.id;
+      if (runtimeTargetID) {
+        next.add(runtimeTargetEnvironmentLibraryFilterValue(runtimeTargetID));
+      }
+    }
     for (const controlPlane of controlPlanes()) {
       next.add(controlPlaneFilterValue(controlPlane));
     }
@@ -983,6 +993,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       setLibrarySourceFilter('');
     }
   });
+
+  const runEnvironmentCardFactAction = (action: EnvironmentCardFactActionModel) => {
+    switch (action.kind) {
+      case 'filter_runtime_target':
+        setActiveCenterTab('environments');
+        setLibraryQuery('');
+        setLibrarySourceFilter(runtimeTargetEnvironmentLibraryFilterValue(action.runtime_target_id));
+        break;
+    }
+  };
 
   onCleanup(() => {
     for (const handle of actionToastTimers.values()) {
@@ -3005,6 +3025,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           libraryEntries={libraryEntries()}
           setLibrarySourceFilter={setLibrarySourceFilter}
           setLibraryQuery={setLibraryQuery}
+          runEnvironmentCardFactAction={runEnvironmentCardFactAction}
           openLocalEnvironment={openPrimaryLocalEnvironment}
           openSettingsSurface={openSettingsSurface}
           openCreateConnectionDialog={openCreateConnectionDialog}
@@ -3428,6 +3449,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
   libraryEntries: readonly DesktopEnvironmentEntry[];
   setLibrarySourceFilter: (value: string) => void;
   setLibraryQuery: (value: string) => void;
+  runEnvironmentCardFactAction: (action: EnvironmentCardFactActionModel) => void;
   openLocalEnvironment: () => Promise<void>;
   openSettingsSurface: (environmentID?: string) => void;
   openCreateConnectionDialog: (message?: string, preferredKind?: ConnectionDialogKind) => void;
@@ -3524,10 +3546,20 @@ function ConnectEnvironmentSurface(props: Readonly<{
     }
     return options;
   });
+  const activeRuntimeTargetFilterLabel = createMemo(() => {
+    const runtimeTargetID = runtimeTargetEnvironmentLibraryFilterTargetID(props.librarySourceFilter);
+    if (!runtimeTargetID) {
+      return '';
+    }
+    const environment = props.snapshot.environments.find((entry) => (
+      entry.provider_runtime_link_target?.id === runtimeTargetID
+    ));
+    return environment ? `Linked runtime · ${environment.label}` : 'Linked runtime';
+  });
   const activeSourceFilterLabel = createMemo(() => (
     sourceFilterOptions().find((option) => option.value === props.librarySourceFilter)?.label
     ?? props.controlPlanes.find((controlPlane) => controlPlaneFilterValue(controlPlane) === props.librarySourceFilter)?.display_label
-    ?? ''
+    ?? activeRuntimeTargetFilterLabel()
   ));
   const controlPlaneEnvironmentCount = createMemo(() => (
     props.controlPlanes.reduce((total, controlPlane) => total + controlPlane.environments.length, 0)
@@ -3660,6 +3692,9 @@ function ConnectEnvironmentSurface(props: Readonly<{
                           onChange={(event) => props.setLibrarySourceFilter(trimString(event.currentTarget.value))}
                         >
                           <option value="">All Sources</option>
+                          <Show when={activeRuntimeTargetFilterLabel() !== ''}>
+                            <option value={props.librarySourceFilter}>{activeRuntimeTargetFilterLabel()}</option>
+                          </Show>
                           <For each={sourceFilterOptions()}>
                             {(option) => (
                               <option value={option.value}>
@@ -3736,6 +3771,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 runLocalEnvironmentAction={props.runLocalEnvironmentAction}
                 refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
                 runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
+                runEnvironmentCardFactAction={props.runEnvironmentCardFactAction}
                 toggleEnvironmentPinned={props.toggleEnvironmentPinned}
                 copyEnvironmentValue={props.copyEnvironmentValue}
                 editEnvironment={props.editEnvironment}
@@ -3777,6 +3813,7 @@ function EnvironmentCardsPanel(props: Readonly<{
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
   ) => Promise<EnvironmentGuidanceActionResolution>;
+  runEnvironmentCardFactAction: (action: EnvironmentCardFactActionModel) => void;
   toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
@@ -3947,6 +3984,7 @@ function EnvironmentCardsPanel(props: Readonly<{
                     runLocalEnvironmentAction={props.runLocalEnvironmentAction}
                     refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
                     runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
+                    runEnvironmentCardFactAction={props.runEnvironmentCardFactAction}
                     toggleEnvironmentPinned={props.toggleEnvironmentPinned}
                     copyEnvironmentValue={props.copyEnvironmentValue}
                     editEnvironment={props.editEnvironment}
@@ -3978,6 +4016,7 @@ function EnvironmentCardsPanel(props: Readonly<{
                     runLocalEnvironmentAction={props.runLocalEnvironmentAction}
                     refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
                     runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
+                    runEnvironmentCardFactAction={props.runEnvironmentCardFactAction}
                     toggleEnvironmentPinned={props.toggleEnvironmentPinned}
                     copyEnvironmentValue={props.copyEnvironmentValue}
                     editEnvironment={props.editEnvironment}
@@ -4103,6 +4142,7 @@ function ConsoleChipActionButton(props: Readonly<{
 function EnvironmentCardFactsBlock(props: Readonly<{
   facts: readonly EnvironmentCardFactModel[];
   minRows?: number;
+  onFactAction: (action: EnvironmentCardFactActionModel) => void;
 }>) {
   return (
     <div
@@ -4115,15 +4155,33 @@ function EnvironmentCardFactsBlock(props: Readonly<{
         {(fact) => (
           <div class="redeven-card-fact-row">
             <div class="redeven-card-fact-label">{fact.label}</div>
-            <div
-              class={cn(
-                'redeven-card-fact-value',
-                fact.value_tone === 'placeholder' && 'redeven-card-fact-value--placeholder',
+            <Show
+              when={fact.action}
+              fallback={(
+                <div
+                  class={cn(
+                    'redeven-card-fact-value',
+                    fact.value_tone === 'placeholder' && 'redeven-card-fact-value--placeholder',
+                  )}
+                  title={fact.value}
+                >
+                  {fact.value}
+                </div>
               )}
-              title={fact.value}
             >
-              {fact.value}
-            </div>
+              {(action) => (
+                <button
+                  type="button"
+                  class="redeven-card-fact-value redeven-card-fact-value--action"
+                  title={action().label}
+                  aria-label={action().aria_label}
+                  onClick={() => props.onFactAction(action())}
+                >
+                  <span class="redeven-card-fact-value__text">{fact.value}</span>
+                  <ChevronRight class="redeven-card-fact-value__icon h-3 w-3" aria-hidden="true" />
+                </button>
+              )}
+            </Show>
           </div>
         )}
       </For>
@@ -4765,6 +4823,7 @@ function EnvironmentConnectionCard(props: Readonly<{
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
   ) => Promise<EnvironmentGuidanceActionResolution>;
+  runEnvironmentCardFactAction: (action: EnvironmentCardFactActionModel) => void;
   toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
@@ -4879,7 +4938,11 @@ function EnvironmentConnectionCard(props: Readonly<{
         </div>
       </CardHeader>
       <CardContent class="flex flex-1 flex-col px-3.5 pb-2.5">
-        <EnvironmentCardFactsBlock facts={facts()} minRows={4} />
+        <EnvironmentCardFactsBlock
+          facts={facts()}
+          minRows={4}
+          onFactAction={props.runEnvironmentCardFactAction}
+        />
         <Show when={endpoints().length > 0}>
           <div class="mt-auto">
             <EnvironmentCardEndpointBlock

@@ -69,9 +69,31 @@ describe('providerEnvironmentState', () => {
     })).toBe('removed');
     expect(desktopProviderRemoteRouteState({
       syncState: 'ready',
+      environmentPresent: false,
+      lastSyncedAtMS: 1,
+      now,
+    })).toBe('stale');
+    expect(desktopProviderRemoteRouteState({
+      syncState: 'ready',
       environmentPresent: true,
       providerStatus: 'online',
       providerLifecycleStatus: 'active',
+      lastSyncedAtMS: 1,
+      now,
+    })).toBe('ready');
+    expect(desktopProviderRemoteRouteState({
+      syncState: 'ready',
+      environmentPresent: true,
+      providerStatus: 'offline',
+      providerLifecycleStatus: 'suspended',
+      lastSyncedAtMS: 1,
+      now,
+    })).toBe('offline');
+    expect(desktopProviderRemoteRouteState({
+      syncState: 'ready',
+      environmentPresent: true,
+      providerStatus: '',
+      providerLifecycleStatus: '',
       lastSyncedAtMS: 1,
       now,
     })).toBe('stale');

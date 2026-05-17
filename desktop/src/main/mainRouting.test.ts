@@ -277,6 +277,26 @@ describe('main routing', () => {
     expect(refreshRuntimeSrc).toContain('await syncLinkedProviderRuntimeHealthFromService(runtimeRecord?.startup.runtime_service);');
   });
 
+  it('forces provider catalog sync before refreshing a provider environment card', () => {
+    const mainSrc = readMainSource();
+
+    const refreshRuntimeStart = mainSrc.indexOf('async function refreshEnvironmentRuntimeFromLauncher(');
+    const refreshRuntimeEnd = mainSrc.indexOf('async function refreshAllEnvironmentRuntimesFromLauncher(', refreshRuntimeStart);
+    expect(refreshRuntimeStart).toBeGreaterThanOrEqual(0);
+    expect(refreshRuntimeEnd).toBeGreaterThan(refreshRuntimeStart);
+    const refreshRuntimeSrc = mainSrc.slice(refreshRuntimeStart, refreshRuntimeEnd);
+    const providerBranchStart = refreshRuntimeSrc.indexOf('if (providerEnvironment) {');
+    const providerBranchEnd = refreshRuntimeSrc.indexOf('const sshDetails = sshDetailsFromRuntimeTargetRequest(request);', providerBranchStart);
+    expect(providerBranchStart).toBeGreaterThanOrEqual(0);
+    expect(providerBranchEnd).toBeGreaterThan(providerBranchStart);
+    const providerBranchSrc = refreshRuntimeSrc.slice(providerBranchStart, providerBranchEnd);
+    expect(providerBranchSrc).toContain('await syncSavedControlPlaneAccountWithState(');
+    expect(providerBranchSrc).toContain('{ force: true }');
+    expect(providerBranchSrc.indexOf('await syncSavedControlPlaneAccountWithState(')).toBeLessThan(
+      providerBranchSrc.indexOf('await refreshProviderEnvironmentRuntimeHealth('),
+    );
+  });
+
   it('marks provider environment management boundaries as important source constraints', () => {
     const mainSrc = readMainSource();
     expect(mainSrc).toContain('IMPORTANT: Provider-link operations must resolve the exact Local/SSH runtime');

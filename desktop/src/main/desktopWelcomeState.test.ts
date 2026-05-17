@@ -957,6 +957,41 @@ describe('desktopWelcomeState', () => {
     });
   });
 
+  it('keeps stale provider candidate routes unknown instead of offline', () => {
+    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment(),
+        provider_environments: [providerEnvironment],
+      }),
+      controlPlanes: [{
+        provider: testProvider!,
+        account: {
+          provider_id: 'example_control_plane',
+          provider_origin: 'https://cp.example.invalid',
+          display_name: 'Demo Control Plane',
+          user_public_id: 'user_demo',
+          user_display_name: 'Demo User',
+          authorization_expires_at_unix_ms: Date.now() + 60_000,
+        },
+        environments: [],
+        display_label: 'Demo Control Plane',
+        last_synced_at_ms: 1,
+        sync_state: 'ready',
+        last_sync_attempt_at_ms: 1,
+        last_sync_error_code: '',
+        last_sync_error_message: '',
+        catalog_freshness: 'stale',
+      }],
+    });
+
+    const localEntry = snapshot.environments.find((entry) => entry.id === 'local');
+    expect(localEntry?.provider_environment_candidates?.[0]).toMatchObject({
+      provider_environment_id: providerEnvironment.id,
+      route_state: 'unknown',
+    });
+  });
+
   it('projects saved Local and SSH container runtime targets without leaking runtime-control material', () => {
     const localContainerID = 'local:container:docker:container-stable-id:b0f0be51';
     const sshContainerID = 'ssh:container:devbox%3A2222:docker:container-stable-id:b0f0be51';

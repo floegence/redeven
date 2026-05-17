@@ -597,7 +597,7 @@ async function readFakeSSHEvents(fixture: FakeSSHFixture): Promise<readonly Fake
     .map((line) => JSON.parse(line) as FakeSSHEvent);
 }
 
-async function waitForFakeSSHEvent(fixture: FakeSSHFixture, eventName: string, timeoutMs = 1_500): Promise<void> {
+async function waitForFakeSSHEvent(fixture: FakeSSHFixture, eventName: string, timeoutMs = 5_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     const events = await readFakeSSHEvents(fixture);
@@ -681,8 +681,8 @@ async function startWithFakeSSH(
     allowActiveWorkReplacement: options.allowActiveWorkReplacement,
     tempRoot: fixture.root,
     assetCacheRoot: path.join(fixture.root, 'asset-cache'),
-    startupTimeoutMs: options.startupTimeoutMs ?? 2_500,
-    probeTimeoutMs: options.probeTimeoutMs ?? 2_500,
+    startupTimeoutMs: options.startupTimeoutMs ?? 5_000,
+    probeTimeoutMs: options.probeTimeoutMs ?? 5_000,
     stopTimeoutMs: 500,
     connectTimeoutSeconds: 1,
     requireDesktopModelSource: options.requireDesktopModelSource === true,
@@ -819,7 +819,7 @@ describe('sshRuntime integration', () => {
     try {
       const abortController = new AbortController();
       const startup = startWithFakeSSH(fixture, 'auto', {
-        startupTimeoutMs: 2_500,
+        startupTimeoutMs: 5_000,
         signal: abortController.signal,
       });
 

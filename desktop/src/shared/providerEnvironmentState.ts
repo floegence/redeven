@@ -142,11 +142,8 @@ export function desktopProviderRemoteRouteState(
   if (freshness === 'unknown') {
     return 'unknown';
   }
-  if (freshness === 'stale') {
-    return 'stale';
-  }
   if (!options.environmentPresent) {
-    return 'removed';
+    return freshness === 'stale' ? 'stale' : 'removed';
   }
 
   const availability = desktopProviderEnvironmentAvailability(
@@ -159,6 +156,9 @@ export function desktopProviderRemoteRouteState(
   }
   if (availability === 'offline') {
     return 'offline';
+  }
+  if (freshness === 'stale') {
+    return 'stale';
   }
   return 'unknown';
 }
