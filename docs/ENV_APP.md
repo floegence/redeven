@@ -10,7 +10,7 @@ Key points:
 - Shared shell primitives come from released `@floegence/floe-webapp-*` packages. Redeven owns environment routing, permission gates, persistence wiring, local runtime APIs, and business widget bodies.
 - Cross-surface right-click actions use Context Action Protocol v1. Surfaces provide structured context snapshots, while the shared action layer owns action identity and ordering for `Ask Flower`, `Ask Codex`, `Open in Terminal`, and `Browse Files`. See [`AGENT_SKILLS.md`](AGENT_SKILLS.md).
 - Workbench has explicit ownership boundaries: shell chrome handles selection/drag, while widget bodies own text selection, local dialogs, context menus, and component focus. Wheel routing remains selected-widget guarded and scroll-viewport explicit.
-- Runtime-shared Workbench state is limited to durable scene/widget facts. Per-client camera, selection, drafts, scroll position, and transient gesture state stay local.
+- Runtime-shared Workbench state is the authority for durable scene/widget facts. Per-client camera, selection, drafts, scroll position, and transient gesture state stay local and must not be migrated into runtime layout from renderer storage.
 - Redeven Desktop supplies session context, shell-owned theme/window chrome, titlebar-safe floating surfaces, and system-browser handoff for browser-app windows such as Codespaces.
 - Runtime Settings groups endpoint controls by user intent: overview/runtime status, runtime configuration, Codespaces tooling, security, AI/extensions, and diagnostics.
 - Web Services is the user-facing registry for HTTP services reachable from the runtime host. Same-device local mode can open safe loopback targets directly; URL/SSH Local UI sessions use `/pf/<forward_id>/`; remote Provider sessions use the isolated Flowersec E2EE port-forward tunnel.
@@ -33,8 +33,10 @@ Env App exposes a product-owned **Notes overlay** above the current workspace in
 
 Deck and Workbench reuse released floe-webapp layout/workbench primitives. Redeven keeps product-owned interaction adapters and business-widget bodies on top of those shared surfaces.
 
-- Runtime-shared state is deliberately narrow: widget identity/type, geometry, ordering, durable canvas objects, and semantic widget data such as Files current path, Terminal session ids, and Preview target.
-- Per-client camera, shell mode, selection, transient gestures, active terminal tab, file-browser view preferences, preview cursor/scroll, and unsaved drafts stay local.
+- Runtime-shared state is deliberately narrow and authoritative: widget identity/type, geometry, ordering, durable canvas objects, and semantic widget data such as Files current path, Terminal session ids, and Preview target. Renderer storage is never a source of truth for widget layout, geometry, z-index, viewport layout, or canvas objects.
+- A pristine runtime layout (`revision === 0` and no widgets, sticky notes, annotations, or background layers) is seeded once with the canonical Workbench sample canvas. The seed uses the same `redevenWorkbenchWidgets.defaultSize` catalog as the Add flow, so initial widgets and user-added widgets share sizing.
+- Empty but non-pristine runtime layouts are valid user/runtime state and are not re-seeded. Old renderer layout keys are ignored instead of migrated into runtime layout.
+- Per-client camera, shell mode, selection, transient gestures, active terminal tab, file-browser view preferences, preview cursor/scroll, unsaved drafts, filters, active tool, and theme preference stay local.
 - Geometry changes and widget semantic state flow through ordered runtime snapshot/event streams. Preview opens are runtime commands that atomically choose the Preview widget, update its target, and promote its shared ordering when needed; clients must not fabricate local z-index overrides for that flow.
 - Remote Workbench updates must not move the local camera or steal current editing context.
 - Drag/resize persistence is interaction-gated: the browser updates live UI during the gesture and flushes one runtime write after the interaction ends.

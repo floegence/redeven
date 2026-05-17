@@ -34,7 +34,11 @@ Workbench code must keep ownership boundaries explicit:
 - Wheel routing is selection-gated: unselected widgets do not own wheel input; a selected widget blocks canvas zoom inside its boundary; only marked local scroll viewports scroll locally.
 - Production scroll candidates must use the exported Workbench wheel props and stay compatible with the `check:workbench-wheel` guard.
 
-Runtime-shared Workbench state is intentionally narrow: widget identity/type, geometry, ordering, durable canvas objects, and small semantic widget state such as current Files path, Terminal session ids, and Preview target. Preview opens are runtime-owned actions that return the authoritative shared ordering; UI code must not add local z-index overrides for them. Per-client camera, selection, transient gestures, drafts, scroll position, file-browser view preferences, and active terminal tab remain local.
+Runtime-shared Workbench state is intentionally narrow and authoritative: widget identity/type, geometry, ordering, durable canvas objects, and small semantic widget state such as current Files path, Terminal session ids, and Preview target. Preview opens are runtime-owned actions that return the authoritative shared ordering; UI code must not add local z-index overrides for them. Renderer storage must not persist or restore Workbench widgets, geometry, z-index, canvas objects, or viewport layout as shared state.
+
+When the runtime returns a pristine Workbench layout (`revision === 0` with no widgets, sticky notes, annotations, or background layers), Env App seeds one sample canvas by writing the canonical initial widget set back to the runtime. Those sample widgets are built from the same `redevenWorkbenchWidgets.defaultSize` definitions used by the user-facing Add flow, so the first canvas and later added widgets stay visually consistent. Any non-pristine runtime layout, including an empty layout after the revision has advanced, is displayed as-is and is never re-seeded by renderer storage.
+
+Per-client camera, selection, transient gestures, drafts, scroll position, file-browser view preferences, active terminal tab, Workbench filters, shell mode, active tool, and theme preferences remain local. Local-only Workbench persistence uses explicit preferences and instance-state keys; it is not a layout migration source.
 
 ## AI Surfaces
 

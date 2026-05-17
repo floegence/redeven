@@ -25,7 +25,7 @@ import {
   type WorkbenchWidgetDefinition,
 } from '@floegence/floe-webapp-core/workbench';
 
-import { normalizeWorkbenchTheme } from './workbenchThemeMigration';
+import { normalizeWorkbenchTheme } from './workbenchTheme';
 import {
   normalizeTerminalFontFamilyId,
   normalizeTerminalFontSize,
@@ -156,13 +156,12 @@ export type RuntimeWorkbenchTerminalCreateSessionResponse = Readonly<{
 }>;
 
 export type PersistedWorkbenchLocalState = Readonly<{
-  version: 3;
+  version: 4;
   locked: boolean;
   filters: Record<string, boolean>;
   theme: WorkbenchThemeId;
   mode: WorkbenchInteractionMode;
   activeTool: WorkbenchDockToolId;
-  legacyLayoutMigrated: boolean;
 }>;
 
 const EMPTY_RUNTIME_WORKBENCH_LAYOUT_SNAPSHOT: RuntimeWorkbenchLayoutSnapshot = {
@@ -486,11 +485,6 @@ function normalizeFilters(
   return next;
 }
 
-export function buildWorkbenchLocalStateStorageKey(workbenchStorageKey: string): string {
-  const baseKey = compact(workbenchStorageKey);
-  return baseKey ? `${baseKey}:local_state` : 'workbench:local_state';
-}
-
 export function createEmptyRuntimeWorkbenchLayoutSnapshot(): RuntimeWorkbenchLayoutSnapshot {
   return EMPTY_RUNTIME_WORKBENCH_LAYOUT_SNAPSHOT;
 }
@@ -589,12 +583,9 @@ export function normalizeRuntimeWorkbenchOpenPreviewResponse(value: unknown): Ru
   };
 }
 
-export function derivePersistedWorkbenchLocalState(
-  state: WorkbenchState,
-  legacyLayoutMigrated: boolean,
-): PersistedWorkbenchLocalState {
+export function derivePersistedWorkbenchLocalState(state: WorkbenchState): PersistedWorkbenchLocalState {
   return {
-    version: 3,
+    version: 4,
     locked: Boolean(state.locked),
     filters: Object.fromEntries(
       Object.entries(state.filters ?? {}).map(([key, enabled]) => [key, Boolean(enabled)]),
@@ -602,21 +593,15 @@ export function derivePersistedWorkbenchLocalState(
     theme: normalizeWorkbenchTheme(state.theme),
     mode: normalizeWorkbenchInteractionMode(state.mode),
     activeTool: normalizeWorkbenchDockToolId(state.activeTool),
-    legacyLayoutMigrated,
   };
 }
 
 export function sanitizePersistedWorkbenchLocalState(
   value: unknown,
-  legacyState: WorkbenchState,
   widgetDefinitions: readonly WorkbenchWidgetDefinition[],
-  fallbackTheme?: WorkbenchThemeId,
 ): PersistedWorkbenchLocalState {
-  const fallback = derivePersistedWorkbenchLocalState({
-    ...legacyState,
-    theme: fallbackTheme ?? normalizeWorkbenchTheme(legacyState.theme),
-  }, false);
   const defaultState = createDefaultWorkbenchState(widgetDefinitions);
+  const fallback = derivePersistedWorkbenchLocalState(defaultState);
   if (!isRecord(value)) {
     return {
       ...fallback,
@@ -624,13 +609,12 @@ export function sanitizePersistedWorkbenchLocalState(
     };
   }
   return {
-    version: 3,
+    version: 4,
     locked: typeof value.locked === 'boolean' ? value.locked : fallback.locked,
     filters: normalizeFilters(value.filters, defaultState.filters, widgetDefinitions),
     theme: normalizeWorkbenchTheme(value.theme, fallback.theme),
     mode: normalizeWorkbenchInteractionMode(value.mode, fallback.mode),
     activeTool: normalizeWorkbenchDockToolId(value.activeTool, fallback.activeTool),
-    legacyLayoutMigrated: typeof value.legacyLayoutMigrated === 'boolean' ? value.legacyLayoutMigrated : fallback.legacyLayoutMigrated,
   };
 }
 
@@ -643,7 +627,6 @@ export function samePersistedWorkbenchLocalState(
     || left.theme !== right.theme
     || left.mode !== right.mode
     || left.activeTool !== right.activeTool
-    || left.legacyLayoutMigrated !== right.legacyLayoutMigrated
   ) {
     return false;
   }
@@ -718,7 +701,7 @@ export function createWorkbenchOverviewViewport(args: Readonly<{
   };
 }
 
-export function runtimeWorkbenchLayoutIsEmpty(snapshot: RuntimeWorkbenchLayoutSnapshot): boolean {
+export function runtimeWorkbenchLayoutIsPristine(snapshot: RuntimeWorkbenchLayoutSnapshot): boolean {
   return snapshot.revision === 0
     && (snapshot.widgets ?? []).length <= 0
     && (snapshot.sticky_notes ?? []).length <= 0
@@ -910,7 +893,7 @@ function selectedObjectExists(
   return false;
 }
 
-export function extractRuntimeWorkbenchLayoutFromWorkbenchState(
+export function extractRuntimeWorkbenchLayoutFromSurfaceState(
   state: WorkbenchState,
 ): Readonly<{
   widgets: RuntimeWorkbenchLayoutWidget[];
