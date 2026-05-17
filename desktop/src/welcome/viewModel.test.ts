@@ -715,7 +715,7 @@ describe('buildEnvironmentCardModel', () => {
       detail: 'Open becomes available once Desktop starts the runtime inside this running container.',
       actions: expect.arrayContaining([
         expect.objectContaining({
-          label: 'Start runtime in dev-container',
+          label: 'Start runtime',
         }),
       ]),
     });
@@ -1034,7 +1034,7 @@ describe('buildEnvironmentCardModel', () => {
           detail: 'Open becomes available once the runtime is ready on this device.',
           actions: [
             {
-              label: 'Start runtime locally',
+              label: 'Start runtime',
               emphasis: 'primary',
               action: {
                 intent: 'start_runtime',

@@ -981,16 +981,8 @@ function blockedPrimaryActionGuidanceAction(
       action: recoveryAction.action,
     };
   }
-  const placement = environment.managed_runtime_placement;
-  if (placement?.kind === 'container_process') {
-    return {
-      label: `Start runtime in ${placement.container_label || placement.container_ref || placement.container_id}`,
-      emphasis: 'primary',
-      action: recoveryAction.action,
-    };
-  }
   return {
-    label: environment.kind === 'ssh_environment' ? 'Start runtime' : 'Start runtime locally',
+    label: 'Start runtime',
     emphasis: 'primary',
     action: recoveryAction.action,
   };
