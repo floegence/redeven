@@ -421,11 +421,12 @@ func (s *Store) openPreview(ctx context.Context, req OpenPreviewRequest) (OpenPr
 		return OpenPreviewResponse{}, nil, err
 	}
 
-	widget, created, err := resolveOpenPreviewWidget(current, normalizedReq, nowUnixMs)
+	resolution, err := resolveOpenPreviewWidget(current, normalizedReq, nowUnixMs)
 	if err != nil {
 		return OpenPreviewResponse{}, nil, err
 	}
-	if created {
+	widget := resolution.Widget
+	if resolution.Created {
 		if _, err := tx.ExecContext(
 			ctx,
 			`INSERT INTO workbench_layout_widgets(
@@ -447,6 +448,10 @@ func (s *Store) openPreview(ctx context.Context, req OpenPreviewRequest) (OpenPr
 			widget.ZIndex,
 			widget.CreatedAtUnixMs,
 		); err != nil {
+			return OpenPreviewResponse{}, nil, err
+		}
+	} else if resolution.LayoutChanged {
+		if err := updateWidgetLayoutZIndexTx(ctx, tx, widget.WidgetID, widget.ZIndex); err != nil {
 			return OpenPreviewResponse{}, nil, err
 		}
 	}
@@ -472,9 +477,28 @@ func (s *Store) openPreview(ctx context.Context, req OpenPreviewRequest) (OpenPr
 	}
 
 	events := make([]Event, 0, 1)
-	if created {
-		if err := upsertWidgetStateRowTx(ctx, tx, nextState); err != nil {
+	stateChanged := currentState == nil || !widgetStateDataEqual(currentState.State, desiredState)
+	if !stateChanged && !resolution.LayoutChanged {
+		if err := tx.Commit(); err != nil {
 			return OpenPreviewResponse{}, nil, err
+		}
+		return OpenPreviewResponse{
+			RequestID:   normalizedReq.RequestID,
+			WidgetID:    widget.WidgetID,
+			Created:     false,
+			Snapshot:    current,
+			WidgetState: *currentState,
+		}, nil, nil
+	}
+
+	if resolution.LayoutChanged {
+		responseState := nextState
+		if stateChanged {
+			if err := upsertWidgetStateRowTx(ctx, tx, nextState); err != nil {
+				return OpenPreviewResponse{}, nil, err
+			}
+		} else if currentState != nil {
+			responseState = *currentState
 		}
 		seq, err := insertEventRowTx(ctx, tx, EventTypeLayoutReplaced, nowUnixMs)
 		if err != nil {
@@ -506,23 +530,10 @@ func (s *Store) openPreview(ctx context.Context, req OpenPreviewRequest) (OpenPr
 		return OpenPreviewResponse{
 			RequestID:   normalizedReq.RequestID,
 			WidgetID:    widget.WidgetID,
-			Created:     true,
+			Created:     resolution.Created,
 			Snapshot:    nextSnapshot,
-			WidgetState: nextState,
+			WidgetState: responseState,
 		}, events, nil
-	}
-
-	if currentState != nil && widgetStateDataEqual(currentState.State, desiredState) {
-		if err := tx.Commit(); err != nil {
-			return OpenPreviewResponse{}, nil, err
-		}
-		return OpenPreviewResponse{
-			RequestID:   normalizedReq.RequestID,
-			WidgetID:    widget.WidgetID,
-			Created:     false,
-			Snapshot:    current,
-			WidgetState: *currentState,
-		}, nil, nil
 	}
 
 	event, err := upsertWidgetStateTx(ctx, tx, nextState)
@@ -540,7 +551,7 @@ func (s *Store) openPreview(ctx context.Context, req OpenPreviewRequest) (OpenPr
 	return OpenPreviewResponse{
 		RequestID:   normalizedReq.RequestID,
 		WidgetID:    widget.WidgetID,
-		Created:     false,
+		Created:     resolution.Created,
 		Snapshot:    nextSnapshot,
 		WidgetState: nextState,
 	}, events, nil
@@ -785,7 +796,13 @@ ORDER BY widget_id ASC`,
 	return updatedStates, events, nil
 }
 
-func resolveOpenPreviewWidget(snapshot Snapshot, req OpenPreviewRequest, nowUnixMs int64) (WidgetLayout, bool, error) {
+type openPreviewWidgetResolution struct {
+	Widget        WidgetLayout
+	Created       bool
+	LayoutChanged bool
+}
+
+func resolveOpenPreviewWidget(snapshot Snapshot, req OpenPreviewRequest, nowUnixMs int64) (openPreviewWidgetResolution, error) {
 	previewWidgets := previewWidgetsByLatest(snapshot.Widgets)
 	if req.OpenStrategy == OpenPreviewStrategySameFileOrCreate {
 		stateByWidgetID := make(map[string]WidgetState, len(snapshot.WidgetStates))
@@ -798,18 +815,63 @@ func resolveOpenPreviewWidget(snapshot Snapshot, req OpenPreviewRequest, nowUnix
 				continue
 			}
 			if state.State.Item.Path == req.Item.Path {
-				return widget, false, nil
+				frontWidget, changed := bringWidgetLayoutToFront(snapshot.Widgets, widget)
+				return openPreviewWidgetResolution{
+					Widget:        frontWidget,
+					Created:       false,
+					LayoutChanged: changed,
+				}, nil
 			}
 		}
 	}
 	if req.OpenStrategy == OpenPreviewStrategyFocusLatestOrCreate && len(previewWidgets) > 0 {
-		return previewWidgets[0], false, nil
+		frontWidget, changed := bringWidgetLayoutToFront(snapshot.Widgets, previewWidgets[0])
+		return openPreviewWidgetResolution{
+			Widget:        frontWidget,
+			Created:       false,
+			LayoutChanged: changed,
+		}, nil
 	}
 	widget, err := newPreviewWidget(snapshot.Widgets, req.Viewport, nowUnixMs)
 	if err != nil {
-		return WidgetLayout{}, false, err
+		return openPreviewWidgetResolution{}, err
 	}
-	return widget, true, nil
+	return openPreviewWidgetResolution{
+		Widget:        widget,
+		Created:       true,
+		LayoutChanged: true,
+	}, nil
+}
+
+func bringWidgetLayoutToFront(widgets []WidgetLayout, target WidgetLayout) (WidgetLayout, bool) {
+	maxZ := 0
+	hasWidgetAbove := false
+	for _, widget := range widgets {
+		if widget.ZIndex > maxZ {
+			maxZ = widget.ZIndex
+		}
+		if widget.WidgetID == target.WidgetID {
+			continue
+		}
+		if widgetLayoutAbove(widget, target) {
+			hasWidgetAbove = true
+		}
+	}
+	if !hasWidgetAbove {
+		return target, false
+	}
+	target.ZIndex = maxZ + 1
+	return target, true
+}
+
+func widgetLayoutAbove(left WidgetLayout, right WidgetLayout) bool {
+	if left.ZIndex != right.ZIndex {
+		return left.ZIndex > right.ZIndex
+	}
+	if left.CreatedAtUnixMs != right.CreatedAtUnixMs {
+		return left.CreatedAtUnixMs > right.CreatedAtUnixMs
+	}
+	return left.WidgetID > right.WidgetID
 }
 
 func previewWidgetsByLatest(widgets []WidgetLayout) []WidgetLayout {
@@ -1291,6 +1353,16 @@ WHERE singleton = 1`,
 		revision,
 		seq,
 		updatedAtUnixMs,
+	)
+	return err
+}
+
+func updateWidgetLayoutZIndexTx(ctx context.Context, tx *sql.Tx, widgetID string, zIndex int) error {
+	_, err := tx.ExecContext(
+		ctx,
+		`UPDATE workbench_layout_widgets SET z_index = ? WHERE widget_id = ?`,
+		zIndex,
+		widgetID,
 	)
 	return err
 }
