@@ -8,8 +8,8 @@ const uploadAssetMocks = vi.hoisted(() => ({
   prepareDesktopRuntimeUploadAsset: vi.fn(),
 }));
 
-vi.mock('./runtimeUploadAsset', async () => {
-  const actual = await vi.importActual<typeof import('./runtimeUploadAsset')>('./runtimeUploadAsset');
+vi.mock('./runtimePackageCache', async () => {
+  const actual = await vi.importActual<typeof import('./runtimePackageCache')>('./runtimePackageCache');
   return {
     ...actual,
     prepareDesktopRuntimeUploadAsset: uploadAssetMocks.prepareDesktopRuntimeUploadAsset,
@@ -71,6 +71,27 @@ describe('runtimePlacementManager', () => {
     return markerPath;
   }
 
+  async function installFakeSSH(tempDir: string): Promise<void> {
+    const sshPath = path.join(tempDir, 'ssh');
+    await fs.writeFile(sshPath, [
+      '#!/usr/bin/env node',
+      'const fs = require("node:fs");',
+      'const { spawnSync } = require("node:child_process");',
+      'const args = process.argv.slice(2);',
+      'const command = args[args.length - 1] || "";',
+      'if (command === "" || command.startsWith("-")) {',
+      '  process.stderr.write(`unexpected ssh args: ${args.join(" ")}\\n`);',
+      '  process.exit(1);',
+      '}',
+      'const input = fs.readFileSync(0);',
+      'const result = spawnSync("sh", ["-c", command], { input, encoding: "buffer", env: process.env });',
+      'if (result.stdout) process.stdout.write(result.stdout);',
+      'if (result.stderr) process.stderr.write(result.stderr);',
+      'if (result.error) { process.stderr.write(String(result.error)); process.exit(1); }',
+      'process.exit(result.status === null ? 1 : result.status);',
+    ].join('\n'), { mode: 0o755 });
+  }
+
   it('installs a missing runtime inside a running local container before returning a bridge binary path', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-placement-manager-'));
     const markerPath = await installFakeDocker(tempDir);
@@ -126,6 +147,46 @@ describe('runtimePlacementManager', () => {
     expect(uploadAssetMocks.prepareDesktopRuntimeUploadAsset).toHaveBeenCalledWith(expect.objectContaining({
       runtimeReleaseTag: 'v1.2.3',
       sourceRuntimeRoot: tempDir,
+      platform: expect.objectContaining({ platform_id: 'linux_amd64' }),
+    }));
+  });
+
+  it('installs an SSH container runtime through the same Desktop package cache path', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-placement-manager-'));
+    const markerPath = await installFakeDocker(tempDir);
+    await installFakeSSH(tempDir);
+
+    const ready = await ensureRuntimePlacementReady({
+      host_access: {
+        kind: 'ssh_host',
+        ssh: {
+          ssh_destination: 'devbox',
+          ssh_port: 2222,
+          auth_mode: 'key_agent',
+          remote_install_dir: 'remote_default',
+          bootstrap_strategy: 'desktop_upload',
+          release_base_url: '',
+          connect_timeout_seconds: 1,
+        },
+      },
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'dev',
+        container_label: 'dev',
+        runtime_install_root: '/opt/redeven-desktop/runtime',
+        runtime_state_root: '/var/lib/redeven',
+        bridge_strategy: 'exec_stream',
+      },
+      runtime_release_tag: 'v1.2.3',
+      release_base_url: 'https://example.invalid/releases',
+      asset_cache_root: tempDir,
+    });
+
+    expect(ready.runtime_binary_path).toBe('/opt/redeven-desktop/runtime/releases/v1.2.3/bin/redeven');
+    expect(await fs.readFile(markerPath, 'utf8')).toBe('redeven-archive');
+    expect(uploadAssetMocks.prepareDesktopRuntimeUploadAsset).toHaveBeenCalledWith(expect.objectContaining({
+      runtimeReleaseTag: 'v1.2.3',
       platform: expect.objectContaining({ platform_id: 'linux_amd64' }),
     }));
   });

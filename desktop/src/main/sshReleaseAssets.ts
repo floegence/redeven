@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -250,12 +250,22 @@ async function downloadURLToPath(
   targetPath: string,
   fetchPolicy?: DesktopSSHReleaseFetchPolicy,
 ): Promise<void> {
+  const targetDir = path.dirname(targetPath);
+  const tempPath = path.join(
+    targetDir,
+    `.${path.basename(targetPath)}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`,
+  );
   const data = await withFetchedReleaseAsset(sourceURL, fetchPolicy, async (response, signal) => {
     const buffer = Buffer.from(await response.arrayBuffer());
     throwIfReleaseFetchCanceled(signal);
     return buffer;
   });
-  await fs.writeFile(targetPath, data);
+  try {
+    await fs.writeFile(tempPath, data);
+    await fs.rename(tempPath, targetPath);
+  } finally {
+    await fs.rm(tempPath, { force: true }).catch(() => undefined);
+  }
 }
 
 async function downloadText(sourceURL: string, fetchPolicy?: DesktopSSHReleaseFetchPolicy): Promise<string> {

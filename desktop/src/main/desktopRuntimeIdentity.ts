@@ -6,6 +6,8 @@ export type DesktopRuntimeIdentity = Readonly<{
   runtime_build_time: string;
 }>;
 
+const DESKTOP_RUNTIME_IDENTITY_TIMEOUT_MS = 5_000;
+
 function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
@@ -33,7 +35,7 @@ export function readBundledDesktopRuntimeIdentity(executablePath: string): Deskt
   }
   const result = spawnSync(cleanExecutablePath, ['version'], {
     encoding: 'utf8',
-    timeout: 1_500,
+    timeout: DESKTOP_RUNTIME_IDENTITY_TIMEOUT_MS,
     windowsHide: true,
   });
   if (result.error || result.status !== 0) {

@@ -407,7 +407,7 @@ The stable flow is intentionally small:
 5. Execute through the resolved authority:
    - `runtime_rpc`: call `sys.restart` or `sys.upgrade`.
    - `desktop_local`: ask Desktop to restart the local managed service or open the Desktop release handoff.
-   - `desktop_ssh`: ask Desktop to restart the SSH-managed service or rerun SSH bootstrap with force update.
+   - `desktop_ssh`: ask Desktop to restart the SSH-managed service or rerun SSH bootstrap with force update, reusing the shared Desktop runtime package cache before using any remote-install fallback.
    - `host_device` / `manual`: show guidance and keep direct actions disabled.
 6. Reconnect through the normal Env App recovery path and surface completion/failure through toast feedback.
 

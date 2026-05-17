@@ -114,6 +114,11 @@ import {
   ensureRuntimePlacementReady,
 } from './runtimePlacementManager';
 import { startDesktopModelSource, type ManagedDesktopModelSource } from './desktopModelSource';
+import {
+  legacyRuntimePackageCacheRoots,
+  pruneDesktopRuntimePackageCache,
+  runtimePackageCacheRoot,
+} from './runtimePackageCache';
 import { PUBLIC_REDEVEN_RELEASE_BASE_URL } from './sshReleaseAssets';
 import { installStdioBrokenPipeGuards } from './stdio';
 import type { StartupReport } from './startup';
@@ -3019,6 +3024,18 @@ function resolveSSHRuntimeReleaseTag(): string {
   return clean.startsWith('v') ? clean : `v${clean}`;
 }
 
+function desktopRuntimePackageCacheRoot(): string {
+  return runtimePackageCacheRoot(app.getPath('userData'));
+}
+
+async function pruneDesktopRuntimePackageCacheForCurrentRelease(): Promise<void> {
+  await pruneDesktopRuntimePackageCache({
+    cacheRoot: desktopRuntimePackageCacheRoot(),
+    activeReleaseTag: resolveSSHRuntimeReleaseTag(),
+    legacyCacheRoots: legacyRuntimePackageCacheRoots(app.getPath('userData')),
+  });
+}
+
 async function markSavedExternalTargetUsed(environmentID: string, rawURL: string): Promise<void> {
   const preferences = await loadDesktopPreferencesCached();
   await persistDesktopPreferences(markSavedEnvironmentUsed(preferences, {
@@ -3128,7 +3145,7 @@ async function startSSHEnvironmentRuntimeRecord(
           ? sshDetails.connect_timeout_seconds
           : undefined,
         tempRoot: app.getPath('temp'),
-        assetCacheRoot: path.join(app.getPath('userData'), 'ssh-runtime-cache'),
+        assetCacheRoot: desktopRuntimePackageCacheRoot(),
         requireDesktopModelSource: true,
         signal,
         onLog: (stream, chunk) => {
@@ -4765,7 +4782,7 @@ async function startRuntimePlacementBridgeRecordFromLauncher(
       ? hostAccess.ssh.release_base_url
       : PUBLIC_REDEVEN_RELEASE_BASE_URL,
     source_runtime_root: process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT,
-    asset_cache_root: path.join(app.getPath('userData'), 'runtime-placement-cache'),
+    asset_cache_root: desktopRuntimePackageCacheRoot(),
     force_runtime_update: request.force_runtime_update === true,
     timeout_ms: 45_000,
   });
@@ -5742,7 +5759,7 @@ function runtimeMaintenanceContextFromSession(
         confirmLabel: 'Update',
         title: 'Update SSH Runtime?',
         message: 'Redeven Desktop will reinstall the SSH-hosted Runtime Service from the Desktop-managed release and reopen this session.',
-        detail: 'The existing SSH bootstrap path, release asset cache, and remote install strategy are reused for this update.',
+        detail: 'The existing SSH bootstrap path, runtime package cache, and remote install fallback policy are reused for this update.',
         requiresTargetVersion: false,
       }),
     };
@@ -7104,6 +7121,10 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(async () => {
     installDesktopDiagnosticsHooks();
     registerDesktopProtocolClient();
+    void pruneDesktopRuntimePackageCacheForCurrentRelease().catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[redeven:runtime-package-cache] Cache cleanup failed: ${message}`);
+    });
     Menu.setApplicationMenu(Menu.buildFromTemplate(buildAppMenuTemplate({
       openConnectionCenter: () => {
         void openDesktopWelcomeWindow({

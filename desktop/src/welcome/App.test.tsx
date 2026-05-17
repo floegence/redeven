@@ -789,7 +789,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('async function ' + 'connectFrom' + 'Dialog()');
     expect(appSrc).toContain("label: 'Automatic'");
     expect(appSrc).toContain("label: 'Desktop Upload'");
-    expect(appSrc).toContain("label: 'Remote Install'");
+    expect(appSrc).toContain("label: 'Remote Fallback'");
+    expect(appSrc).toContain("remote install is only a fallback");
     expect(appSrc).toContain('SSH Destination');
     expect(appSrc).toContain('function SSHDestinationCombobox');
     expect(appSrc).toContain('sm:grid-cols-[minmax(0,1fr)_7.5rem]');

@@ -117,11 +117,13 @@ SSH bootstrap is intentionally transport-light and runtime-heavy:
 - Mutable runtime state is host-scoped: one SSH host access entry maps to one remote Local Environment profile under the selected install root.
 - The remote install path defaults to the remote user's cache and can be overridden with an absolute path.
 - Desktop can probe the remote OS/architecture (`linux` / `darwin`, `amd64` / `arm64` / `arm` / `386`) and choose the matching release package for desktop-managed upload.
+- Desktop stores verified runtime packages in one local package cache shared by SSH Host, Local Container, and SSH Container targets. For many SSH hosts on the same platform, Desktop downloads the package once, then reuses the local archive for each SSH upload.
 - `desktop_upload` verifies the signed `SHA256SUMS` manifest before trusting release-asset checksums.
 - `release_base_url` lets operators point the desktop-upload path at a compatible internal release mirror instead of public GitHub Releases.
 - Compatible internal mirrors must expose the same signed manifest and `redeven_<goos>_<goarch>.tar.gz` assets as public releases.
 - Desktop-side release downloads use explicit timeouts so restricted-network failures stay bounded and diagnosable.
-- `auto` prefers desktop upload for restricted networks, then falls back to the remote installer path only when desktop-side asset preparation fails before upload/install begins.
+- `auto` prefers Desktop upload through the verified local package cache, then falls back to the remote installer path only when desktop-side package preparation fails before upload/install begins.
+- `remote_install` is a fallback delivery mode for environments where Desktop upload is unavailable; it is not the recommended path for large SSH host fleets because each remote host owns its own download.
 - After Desktop starts uploading or installing the tarball over SSH, later failures stay first-class errors instead of silently degrading into `remote_install`.
 - Development builds may set `REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG`; otherwise `scripts/dev_desktop.sh` falls back to the local Desktop bundle version or `v0.0.0-dev`.
 - The remote runtime process is intentionally independent from the SSH control command that launched it. Desktop owns the SSH control socket and local port forward, not the remote runtime lifecycle.
@@ -285,7 +287,7 @@ Container placements keep install and state paths separate:
 - `runtime_install_root`: the container-internal Desktop-managed release/stamp/bin root.
 - `runtime_state_root`: the container-internal Redeven state root used by `run` and `desktop-bridge`.
 
-Desktop installs the correct Linux runtime package into `runtime_install_root` before starting the bridge. A generic container does not need to provide `redeven` on `PATH`, and Desktop must not copy the host-bundled macOS/Windows binary into the container namespace. The bridge command uses the resolved container-local binary path only after platform, version, and Desktop stamp checks pass.
+Desktop installs the correct Linux runtime package into `runtime_install_root` before starting the bridge. A generic container does not need to provide `redeven` on `PATH`, and Desktop must not copy the host-bundled macOS/Windows binary into the container namespace. Container bootstrap reuses the same Desktop local package cache as SSH Host bootstrap, so Local Container and SSH Container targets do not redownload a runtime package already prepared for the same Desktop release and platform. The bridge command uses the resolved container-local binary path only after platform, version, and Desktop stamp checks pass.
 
 Container lifecycle is outside Redeven. The creation dialog lists only currently running Docker/Podman containers for the selected local or SSH host access path, saves the selected stable container id, and re-checks that container before saving or starting the runtime. If the container disappears or stops, the card offers refresh/error guidance; the user must start or repair the container with the owning container tool before Redeven can start the runtime process inside it.
 
@@ -312,7 +314,7 @@ Target validation rules:
 - SSH ports must be valid TCP ports when present.
 - SSH environment instance IDs must use 6-64 lowercase letters, numbers, `_`, or `-`.
 - SSH remote install directories must either use the default remote cache behavior or an absolute path.
-- SSH bootstrap delivery must be one of `auto`, `desktop_upload`, or `remote_install`.
+- SSH bootstrap delivery must be one of `auto`, `desktop_upload`, or `remote_install`; `remote_install` is a fallback mode, not the recommended default.
 - SSH release base URLs must be blank or absolute `http://` / `https://` URLs.
 
 Desktop shell preferences live under the Electron user data directory, not inside the git checkout.
