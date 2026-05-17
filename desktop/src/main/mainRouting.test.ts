@@ -159,7 +159,8 @@ describe('main routing', () => {
     expect(mainSrc).not.toContain('function launcherActionFailureForUnsupportedRuntimePlacement(');
     expect(mainSrc).toContain('const runtimePlacementBridgeByTargetID = new Map<DesktopRuntimeTargetID, RuntimePlacementBridgeRecord>();');
     expect(mainSrc).toContain('startRuntimePlacementBridgeSession({');
-    expect(mainSrc).toContain('runtimePlacementBridgeByTargetID.set(session.placement_target_id, record)');
+    expect(mainSrc).toContain('startDesktopModelSourceForStartup({');
+    expect(mainSrc).toContain('runtimePlacementBridgeByTargetID.set(session.placement_target_id, connectedRecord)');
     expect(mainSrc).toContain('async function openRuntimePlacementBridgeFromLauncher(');
     expect(mainSrc).toContain('Start this runtime first, then open it.');
     expect(mainSrc).toContain('Start it outside Redeven, then refresh and try again.');

@@ -375,16 +375,15 @@ describe('EnvSettingsPage', () => {
         portForwardCount: 4,
       },
       capabilities: {
-        desktopAiBroker: {
+        desktopModelSource: {
           supported: true,
           bindMethod: 'runtime_control_v1',
         },
       },
       bindings: {
-        desktopAiBroker: {
+        desktopModelSource: {
           state: 'bound',
-          sessionId: 'broker-session',
-          sshRuntimeKey: 'ssh:devbox',
+          sessionId: 'desktop-session',
           modelCount: 2,
         },
       },
@@ -409,12 +408,12 @@ describe('EnvSettingsPage', () => {
     expect(runtimeStatus?.textContent).toContain('Bound');
   });
 
-  it('shows Desktop broker status when remote AI config is missing', async () => {
+  it('shows Desktop model source status when remote AI config is missing', async () => {
     protocolMocks.status.mockReturnValue('connected');
     settingsResponse = {
       ai: null,
       ai_runtime: {
-        desktop_broker: {
+        desktop_model_source: {
           binding_state: 'bound',
           connected: true,
           available: true,

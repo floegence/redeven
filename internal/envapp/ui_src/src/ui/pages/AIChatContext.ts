@@ -38,7 +38,7 @@ export type ModelsResponse = Readonly<{
   runtime?: AIRuntimeStatus | null;
 }>;
 
-export type AIModelSourceKey = 'runtime_config' | 'desktop_broker';
+export type AIModelSourceKey = 'runtime_config' | 'desktop_model_source';
 
 export type AIModelOption = Readonly<{
   value: string;
@@ -57,14 +57,14 @@ export type AIModelSourceGroup = Readonly<{
 
 export type AIRuntimeStatus = Readonly<{
   remote_configured?: boolean;
-  desktop_broker?: Readonly<{
+  desktop_model_source?: Readonly<{
     binding_state?: string;
     connected?: boolean;
     available?: boolean;
     model_source?: string;
     session_id?: string;
-    ssh_runtime_key?: string;
     expires_at_unix_ms?: number;
+    connected_at_unix_ms?: number;
     model_count?: number;
     missing_key_provider_ids?: string[];
     last_error?: string;
@@ -276,14 +276,14 @@ function patchThreadReadStatus(thread: ThreadView, readStatus: ThreadReadStatus)
   };
 }
 
-const MODEL_SOURCE_ORDER: readonly AIModelSourceKey[] = ['runtime_config', 'desktop_broker'];
+const MODEL_SOURCE_ORDER: readonly AIModelSourceKey[] = ['runtime_config', 'desktop_model_source'];
 
 function normalizeAIModelSource(raw: unknown): AIModelSourceKey {
-  return String(raw ?? '').trim() === 'desktop_broker' ? 'desktop_broker' : 'runtime_config';
+  return String(raw ?? '').trim() === 'desktop_model_source' ? 'desktop_model_source' : 'runtime_config';
 }
 
 function defaultModelSourceLabel(source: AIModelSourceKey): string {
-  return source === 'desktop_broker' ? 'Desktop' : 'Remote runtime';
+  return source === 'desktop_model_source' ? 'Desktop' : 'Remote runtime';
 }
 
 function threadNeedsReadMark(readStatus: ThreadReadStatus | null | undefined): boolean {
@@ -398,7 +398,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     const s = settings();
     if (!s) return false;
     if (s.ai) return true;
-    return !!s.ai_runtime?.desktop_broker?.connected;
+    return !!s.ai_runtime?.desktop_model_source?.connected;
   });
 
   // Models resource
@@ -1394,8 +1394,8 @@ export function createAIChatContextValue(): AIChatContextValue {
       return null;
     }
     if (!aiEnabled() || modelOptions().length === 0) {
-      const broker = settings()?.ai_runtime?.desktop_broker;
-      const missing = broker?.missing_key_provider_ids?.filter(Boolean) ?? [];
+      const modelSource = settings()?.ai_runtime?.desktop_model_source;
+      const missing = modelSource?.missing_key_provider_ids?.filter(Boolean) ?? [];
       notify.error(
         'AI not configured',
         missing.length > 0

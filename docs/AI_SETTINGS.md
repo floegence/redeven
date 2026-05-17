@@ -138,20 +138,20 @@ For each run the Go runtime:
 When Redeven Desktop opens an SSH Host Environment, Flower may have two independent model sources:
 
 - `Remote runtime`: the SSH host runtime's own persisted Flower settings.
-- `Desktop`: the user's Desktop Local Environment model settings, exposed through a short-lived Desktop AI Broker session.
+- `Desktop`: the user's Desktop Local Environment model settings, exposed through a short-lived Desktop Model Source RPC session.
 
 The user can choose either source whenever that source has at least one usable model. Env App hides a source when it is unavailable, and switching a thread model still updates only that thread's `model_id`.
 
 This is deliberately different from copying settings to the SSH host:
 
 - The Desktop Local Environment keeps provider API keys in its own `secrets.json`.
-- The SSH host receives only a forwarded loopback broker URL plus a short-lived bearer token for that Desktop session.
-- Desktop binds that endpoint through the forwarded Local UI runtime-control route after the final running runtime has reported support for `desktop_ai_broker`.
-- The remote runtime stores that broker endpoint in memory only.
+- The SSH host receives only opaque `desktop:model_...` model ids plus a live runtime-control RPC session initiated by Desktop.
+- Desktop connects through the runtime-control route after the final running runtime has reported support for `desktop_model_source`.
+- The remote runtime stores only the in-memory Desktop model source session state.
 - The SSH host's `config.json` does not gain an `ai` section, provider keys, or an `enabled` boolean.
 - Remote tools, file reads, terminal commands, Git operations, and permission checks still execute in the SSH-hosted runtime.
 
-The API response field `ai_runtime.desktop_broker` reports the `Desktop` source status separately from the persisted `ai` config. Env App also reads `runtime_service.bindings.desktop_ai_broker` so the Flower card can distinguish `bound`, `unbound`, `unsupported`, `error`, and `expired` instead of collapsing every remote mismatch into `ai not configured`.
+The API response field `ai_runtime.desktop_model_source` reports the `Desktop` source status separately from the persisted `ai` config. Env App also reads `runtime_service.bindings.desktop_model_source` so the Flower card can distinguish `bound`, `connecting`, `unbound`, `unsupported`, `error`, and `expired` instead of collapsing every remote mismatch into `ai not configured`.
 
 ## 7. UI behavior
 

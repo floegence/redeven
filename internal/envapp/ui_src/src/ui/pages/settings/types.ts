@@ -58,14 +58,14 @@ export type AISecretsView = Readonly<{ provider_api_key_set: Record<string, bool
 
 export type AIRuntimeStatus = Readonly<{
   remote_configured?: boolean;
-  desktop_broker?: Readonly<{
+  desktop_model_source?: Readonly<{
     binding_state?: string;
     connected?: boolean;
     available?: boolean;
     model_source?: string;
     session_id?: string;
-    ssh_runtime_key?: string;
     expires_at_unix_ms?: number;
+    connected_at_unix_ms?: number;
     model_count?: number;
     missing_key_provider_ids?: string[];
     last_error?: string;

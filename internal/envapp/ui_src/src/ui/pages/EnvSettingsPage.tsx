@@ -389,7 +389,7 @@ function formatRuntimeServiceWorkload(snapshot: RuntimeServiceSnapshot | undefin
   return parts.length > 0 ? parts.join(', ') : 'No active work';
 }
 
-function formatDesktopBrokerBindingState(value: unknown): string {
+function formatDesktopModelSourceBindingState(value: unknown): string {
   switch (String(value ?? '').trim()) {
     case 'bound':
       return 'Bound';
@@ -406,7 +406,7 @@ function formatDesktopBrokerBindingState(value: unknown): string {
   }
 }
 
-function desktopBrokerBindingTone(value: unknown): 'default' | 'warning' | 'success' {
+function desktopModelSourceBindingTone(value: unknown): 'default' | 'warning' | 'success' {
   switch (String(value ?? '').trim()) {
     case 'bound':
       return 'success';
@@ -419,7 +419,7 @@ function desktopBrokerBindingTone(value: unknown): 'default' | 'warning' | 'succ
   }
 }
 
-function formatDesktopBrokerNotice(bindingState: unknown, status: { connected?: boolean; available?: boolean; last_error?: string } | null): string {
+function formatDesktopModelSourceNotice(bindingState: unknown, status: { connected?: boolean; available?: boolean; last_error?: string } | null): string {
   switch (String(bindingState ?? '').trim()) {
     case 'bound':
       if (status?.available) {
@@ -540,7 +540,7 @@ export function EnvSettingsPage() {
   const isRestarting = createMemo(() => runtimeUpdate.maintenance.isRestarting());
   const runtimeService = createMemo(() => runtimeUpdate.version.runtimeService());
   const activeWorkSummary = createMemo(() => formatRuntimeServiceWorkload(runtimeService()));
-  const runtimeDesktopBrokerBinding = createMemo(() => runtimeService()?.bindings?.desktopAiBroker);
+  const runtimeDesktopModelSourceBinding = createMemo(() => runtimeService()?.bindings?.desktopModelSource);
 
   createEffect(() => {
     if (codeRuntimeStatus()?.operation.state !== 'running') return;
@@ -901,21 +901,21 @@ export function EnvSettingsPage() {
   const [aiError, setAiError] = createSignal<string | null>(null);
 
   const aiEnabled = createMemo(() => !!settings()?.ai);
-  const desktopBrokerStatus = createMemo(() => settings()?.ai_runtime?.desktop_broker ?? null);
-  const desktopBrokerBindingState = createMemo(() => (
-    String(desktopBrokerStatus()?.binding_state ?? runtimeDesktopBrokerBinding()?.state ?? '').trim()
+  const desktopModelSourceStatus = createMemo(() => settings()?.ai_runtime?.desktop_model_source ?? null);
+  const desktopModelSourceBindingState = createMemo(() => (
+    String(desktopModelSourceStatus()?.binding_state ?? runtimeDesktopModelSourceBinding()?.state ?? '').trim()
   ));
   const flowerBadge = createMemo(() => {
     if (aiEnabled()) return 'Remote runtime';
-    if (desktopBrokerBindingState() === 'bound' && desktopBrokerStatus()?.available) return 'Desktop source';
-    if (desktopBrokerBindingState() === 'bound') return 'Desktop bound';
-    if (desktopBrokerStatus()?.available) return 'Desktop source';
-    if (desktopBrokerStatus()?.connected) return 'Desktop connected';
+    if (desktopModelSourceBindingState() === 'bound' && desktopModelSourceStatus()?.available) return 'Desktop source';
+    if (desktopModelSourceBindingState() === 'bound') return 'Desktop bound';
+    if (desktopModelSourceStatus()?.available) return 'Desktop source';
+    if (desktopModelSourceStatus()?.connected) return 'Desktop connected';
     return 'Disabled';
   });
   const flowerBadgeVariant = createMemo<'default' | 'warning' | 'success'>(() => {
-    if (aiEnabled() || desktopBrokerBindingState() === 'bound' || desktopBrokerStatus()?.available) return 'success';
-    if (desktopBrokerBindingState() === 'unsupported' || desktopBrokerBindingState() === 'expired' || desktopBrokerBindingState() === 'error') {
+    if (aiEnabled() || desktopModelSourceBindingState() === 'bound' || desktopModelSourceStatus()?.available) return 'success';
+    if (desktopModelSourceBindingState() === 'unsupported' || desktopModelSourceBindingState() === 'expired' || desktopModelSourceBindingState() === 'error') {
       return 'warning';
     }
     return 'default';
@@ -2966,12 +2966,12 @@ export function EnvSettingsPage() {
                   <SettingsTableRow>
                     <SettingsTableCell class="font-medium text-muted-foreground">Desktop model source</SettingsTableCell>
                     <SettingsTableCell>
-                      <SettingsPill tone={desktopBrokerBindingTone(runtimeDesktopBrokerBinding()?.state)}>
-                        {formatDesktopBrokerBindingState(runtimeDesktopBrokerBinding()?.state)}
+                      <SettingsPill tone={desktopModelSourceBindingTone(runtimeDesktopModelSourceBinding()?.state)}>
+                        {formatDesktopModelSourceBindingState(runtimeDesktopModelSourceBinding()?.state)}
                       </SettingsPill>
                     </SettingsTableCell>
                     <SettingsTableCell class="text-[11px] text-muted-foreground">
-                      {runtimeDesktopBrokerBinding()?.lastError || 'Session binding state for Desktop-provided Flower models.'}
+                      {runtimeDesktopModelSourceBinding()?.lastError || 'Session binding state for Desktop-provided Flower models.'}
                     </SettingsTableCell>
                   </SettingsTableRow>
                   <Show when={upgradeState().allowsUpgradeAction && upgradeState().requiresTargetVersion}>
@@ -3526,7 +3526,7 @@ export function EnvSettingsPage() {
                 <div class="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-4">
                   <Zap class="h-5 w-5 text-muted-foreground" />
                   <div class="text-sm text-muted-foreground">
-                    {formatDesktopBrokerNotice(desktopBrokerBindingState(), desktopBrokerStatus())}
+                    {formatDesktopModelSourceNotice(desktopModelSourceBindingState(), desktopModelSourceStatus())}
                   </div>
                 </div>
               </Show>

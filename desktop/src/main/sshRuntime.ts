@@ -33,7 +33,7 @@ import {
   runtimeServiceIsOpenable,
   runtimeServiceMatchesIdentity,
   runtimeServiceNeedsRuntimeUpdate,
-  runtimeServiceSupportsDesktopAIBrokerBinding,
+  runtimeServiceSupportsDesktopModelSource,
   type RuntimeServiceIdentity,
 } from '../shared/runtimeService';
 import type { DesktopRuntimeMaintenanceRequirement } from '../shared/desktopRuntimeHealth';
@@ -93,7 +93,7 @@ export type DesktopSSHRuntimeProgressPhase =
   | 'ssh_starting_runtime'
   | 'ssh_waiting_report'
   | 'ssh_opening_tunnel'
-  | 'ssh_binding_ai_broker'
+  | 'ssh_connecting_model_source'
   | 'ssh_verifying_tunnel'
   | 'ssh_cleaning_startup_resources';
 export type DesktopSSHRuntimeProgress = Readonly<{
@@ -106,7 +106,6 @@ type RecentLogs = Readonly<{
   master_stderr: string;
   control_stdout: string;
   control_stderr: string;
-  reverse_forward_stderr: string;
   forward_stderr: string;
   runtime_control_forward_stderr: string;
 }>;
@@ -115,7 +114,6 @@ type MutableRecentLogs = {
   master_stderr: string;
   control_stdout: string;
   control_stderr: string;
-  reverse_forward_stderr: string;
   forward_stderr: string;
   runtime_control_forward_stderr: string;
 };
@@ -165,14 +163,6 @@ export type ManagedSSHRuntime = Readonly<{
   stop: () => Promise<void>;
 }>;
 
-export type ManagedSSHRuntimeAIBroker = Readonly<{
-  local_url: string;
-  token: string;
-  session_id: string;
-  ssh_runtime_key: `ssh:${string}`;
-  expires_at_unix_ms: number;
-}>;
-
 type ManagedSSHRemoteStartup = Readonly<{
   startup: StartupReport;
   launch_mode: DesktopSessionRuntimeLaunchMode;
@@ -193,14 +183,13 @@ export type StartManagedSSHRuntimeArgs = Readonly<{
   stopTimeoutMs?: number;
   connectTimeoutSeconds?: number;
   probeTimeoutMs?: number;
-  aiBroker?: ManagedSSHRuntimeAIBroker | null;
+  requireDesktopModelSource?: boolean;
   signal?: AbortSignal;
   onLog?: (
     stream:
       | 'master_stderr'
       | 'control_stdout'
       | 'control_stderr'
-      | 'reverse_forward_stderr'
       | 'forward_stderr'
       | 'runtime_control_forward_stderr',
     chunk: string,
@@ -1089,87 +1078,6 @@ async function stopRemoteRuntimeProcess(args: Readonly<{
   );
 }
 
-function localPortFromBrokerURL(rawURL: string): number {
-  const parsed = new URL(rawURL);
-  const host = parsed.hostname.toLowerCase();
-  if (parsed.protocol !== 'http:' || (host !== '127.0.0.1' && host !== 'localhost' && host !== '[::1]' && host !== '::1')) {
-    throw new Error('Desktop AI Broker must listen on local HTTP loopback.');
-  }
-  const port = Number(parsed.port);
-  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
-    throw new Error('Desktop AI Broker URL is missing a valid port.');
-  }
-  return port;
-}
-
-async function openDesktopAIBrokerReverseForward(args: Readonly<{
-  sshBinary: string;
-  target: DesktopSSHEnvironmentDetails;
-  controlSocketPath: string;
-  connectTimeoutSeconds: number;
-  auth: SSHCommandAuthContext;
-  broker: ManagedSSHRuntimeAIBroker;
-  startupTimeoutMs: number;
-  logs: MutableRecentLogs;
-  onLog: StartManagedSSHRuntimeArgs['onLog'];
-  signal?: AbortSignal;
-}>): Promise<Readonly<{ process: SpawnedSSHProcess; remoteURL: string }>> {
-  const localPort = localPortFromBrokerURL(args.broker.local_url);
-  const proc = spawnSSHProcess(args.sshBinary, [
-    ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds, args.auth.mode),
-    '-o', 'ExitOnForwardFailure=yes',
-    '-N',
-    '-R', `127.0.0.1:0:127.0.0.1:${localPort}`,
-    ...sshTargetArgs(args.target),
-  ], args.auth, undefined, args.signal);
-
-  let spawnError: Error | null = null;
-  proc.once('error', (error) => {
-    spawnError = error instanceof Error ? error : new Error(String(error));
-  });
-
-  const deadline = Date.now() + args.startupTimeoutMs;
-  let allocatedPort: number | null = null;
-  const observe = (chunk: string) => {
-    args.logs.reverse_forward_stderr = appendRecentLog(args.logs.reverse_forward_stderr, chunk);
-    args.onLog?.('reverse_forward_stderr', chunk);
-    const match = args.logs.reverse_forward_stderr.match(/Allocated port\s+(\d+)/iu);
-    if (match) {
-      const parsed = Number(match[1]);
-      if (Number.isInteger(parsed) && parsed > 0 && parsed <= 65535) {
-        allocatedPort = parsed;
-      }
-    }
-  };
-  proc.stderr.setEncoding('utf8');
-  proc.stderr.on('data', observe);
-  if (proc.stdout) {
-    proc.stdout.setEncoding('utf8');
-    proc.stdout.on('data', observe);
-  }
-
-  for (;;) {
-    throwIfSSHRuntimeCanceled(args.signal);
-    if (spawnError) {
-      throw spawnError;
-    }
-    if (allocatedPort !== null) {
-      return {
-        process: proc,
-        remoteURL: `http://127.0.0.1:${allocatedPort}`,
-      };
-    }
-    if (proc.exitCode !== null || proc.signalCode) {
-      const exitReason = proc.exitCode !== null ? `exit code ${proc.exitCode}` : `signal ${proc.signalCode}`;
-      throw readinessFailure(`Desktop AI Broker reverse forward failed before allocation (${exitReason}).`, args.logs);
-    }
-    if (Date.now() >= deadline) {
-      throw readinessFailure('Timed out waiting for Desktop AI Broker reverse forward allocation.', args.logs);
-    }
-    await delay(DEFAULT_SSH_POLL_INTERVAL_MS);
-  }
-}
-
 async function waitForMasterReady(args: Readonly<{
   sshBinary: string;
   target: DesktopSSHEnvironmentDetails;
@@ -1919,7 +1827,7 @@ function managedSSHRuntimeAttachPolicy(
   startup: StartupReport,
   args: Readonly<{
     expectedRuntimeIdentity: RuntimeServiceIdentity;
-    requireDesktopAIBrokerBinding: boolean;
+    requireDesktopModelSource: boolean;
     allowActiveWorkReplacement: boolean;
   }>,
 ): ManagedSSHRuntimeAttachPolicy {
@@ -1927,20 +1835,20 @@ function managedSSHRuntimeAttachPolicy(
   const identityMismatch = !runtimeServiceMatchesIdentity(runtimeService, args.expectedRuntimeIdentity);
   const needsRuntimeUpdate = runtimeServiceNeedsRuntimeUpdate(runtimeService);
   const runtimeControlUnavailable = !startupHasForwardableRuntimeControl(startup);
-  const brokerBindingUnsupported = args.requireDesktopAIBrokerBinding
-    && !runtimeServiceSupportsDesktopAIBrokerBinding(runtimeService);
+  const modelSourceUnsupported = args.requireDesktopModelSource
+    && !runtimeServiceSupportsDesktopModelSource(runtimeService);
 
-  if (!identityMismatch && !needsRuntimeUpdate && !runtimeControlUnavailable && !brokerBindingUnsupported) {
+  if (!identityMismatch && !needsRuntimeUpdate && !runtimeControlUnavailable && !modelSourceUnsupported) {
     return { action: 'reuse' };
   }
 
-  const maintenanceKind = brokerBindingUnsupported
+  const maintenanceKind = modelSourceUnsupported
     ? 'desktop_model_source_requires_runtime_update'
     : needsRuntimeUpdate
       ? 'ssh_runtime_update_required'
       : 'ssh_runtime_restart_required';
-  const maintenanceRequiredFor = brokerBindingUnsupported ? 'desktop_model_source' : 'open';
-  const maintenanceMessage = brokerBindingUnsupported
+  const maintenanceRequiredFor = modelSourceUnsupported ? 'desktop_model_source' : 'open';
+  const maintenanceMessage = modelSourceUnsupported
     ? 'Update and restart this SSH runtime before Desktop can make your local model settings available here.'
     : needsRuntimeUpdate
       ? 'Update and restart this SSH runtime before opening this environment.'
@@ -1961,7 +1869,7 @@ function managedSSHRuntimeAttachPolicy(
   if (runtimeServiceHasActiveWork(runtimeService) && !args.allowActiveWorkReplacement) {
     return {
       action: 'block',
-      message: brokerBindingUnsupported
+      message: modelSourceUnsupported
         ? 'This SSH runtime needs to update before Desktop can prepare the Desktop model source, but active work is still running.'
         : runtimeControlUnavailable
           ? 'This SSH runtime needs to restart before Desktop can prepare runtime-control, but active work is still running.'
@@ -1972,7 +1880,7 @@ function managedSSHRuntimeAttachPolicy(
   if (!startupReportsStoppablePID(startup)) {
     return {
       action: 'block',
-      message: brokerBindingUnsupported
+      message: modelSourceUnsupported
         ? 'This SSH runtime needs to update before Desktop can prepare the Desktop model source, but it did not report a process id Desktop can stop.'
         : runtimeControlUnavailable
           ? 'This SSH runtime needs to restart before Desktop can prepare runtime-control, but it did not report a process id Desktop can stop.'
@@ -1982,116 +1890,12 @@ function managedSSHRuntimeAttachPolicy(
   }
   return {
     action: 'replace',
-    message: brokerBindingUnsupported
+    message: modelSourceUnsupported
       ? 'Restarting SSH runtime so Desktop can prepare the Desktop model source.'
       : runtimeControlUnavailable
         ? 'Restarting SSH runtime so Desktop can prepare runtime-control.'
         : 'Restarting SSH runtime so Desktop can open the requested runtime version.',
   };
-}
-
-type RuntimeDesktopAIBrokerBindResponse = Readonly<{
-  ok?: boolean;
-  error?: string;
-  data?: Readonly<{
-    ai_runtime?: Readonly<{
-      desktop_broker?: Readonly<{
-        binding_state?: string;
-        connected?: boolean;
-        last_error?: string;
-      }> | null;
-    }> | null;
-  }>;
-}>;
-
-async function postJSONToForwardedLocalUI<T>(
-  baseURL: string,
-  pathName: string,
-  body: unknown,
-  timeoutMs: number,
-  signal?: AbortSignal,
-): Promise<T> {
-  throwIfSSHRuntimeCanceled(signal);
-  const url = new URL(pathName, baseURL);
-  const controller = new AbortController();
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, Math.max(1, timeoutMs));
-  const abort = () => controller.abort();
-  signal?.addEventListener('abort', abort, { once: true });
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    const text = await response.text();
-    let payload: unknown = null;
-    if (text.trim() !== '') {
-      try {
-        payload = JSON.parse(text);
-      } catch {
-        payload = null;
-      }
-    }
-    if (!response.ok) {
-      const record = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {};
-      const message = compact(record.error) || `HTTP ${response.status}`;
-      throw new Error(message);
-    }
-    return payload as T;
-  } catch (error) {
-    if (isAbortError(error) && signal?.aborted) {
-      throw new DesktopSSHRuntimeCanceledError();
-    }
-    if (isAbortError(error) && timedOut) {
-      throw new Error('Timed out waiting for Runtime Control to bind the Desktop AI Broker.');
-    }
-    throw error;
-  } finally {
-    clearTimeout(timer);
-    signal?.removeEventListener('abort', abort);
-  }
-}
-
-async function bindDesktopAIBrokerToForwardedRuntime(args: Readonly<{
-  forwardedURL: string;
-  remoteBrokerURL: string;
-  broker: ManagedSSHRuntimeAIBroker;
-  timeoutMs: number;
-  signal?: AbortSignal;
-  onProgress: StartManagedSSHRuntimeArgs['onProgress'];
-}>): Promise<void> {
-  emitSSHRuntimeProgress(
-    args.onProgress,
-    'ssh_binding_ai_broker',
-    'Preparing Desktop model source',
-    'Desktop is making your local model settings available to the SSH runtime.',
-  );
-  const payload = await postJSONToForwardedLocalUI<RuntimeDesktopAIBrokerBindResponse>(
-    args.forwardedURL,
-    '/_redeven_proxy/api/runtime/bindings/desktop-ai-broker',
-    {
-      url: args.remoteBrokerURL,
-      token: args.broker.token,
-      session_id: args.broker.session_id,
-      ssh_runtime_key: args.broker.ssh_runtime_key,
-      expires_at_unix_ms: args.broker.expires_at_unix_ms,
-      model_source: 'desktop_local_environment',
-    },
-    args.timeoutMs,
-    args.signal,
-  );
-  if (!payload?.ok) {
-    throw new Error(compact(payload?.error) || 'Runtime Control did not accept the Desktop AI Broker binding.');
-  }
-  const status = payload.data?.ai_runtime?.desktop_broker ?? null;
-  if (!status?.connected || compact(status.binding_state) !== 'bound') {
-    throw new Error(compact(status?.last_error) || 'Runtime Control did not bind the Desktop AI Broker.');
-  }
 }
 
 export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): Promise<ManagedSSHRuntime> {
@@ -2114,7 +1918,6 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
     master_stderr: '',
     control_stdout: '',
     control_stderr: '',
-    reverse_forward_stderr: '',
     forward_stderr: '',
     runtime_control_forward_stderr: '',
   };
@@ -2148,10 +1951,8 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
   bindRecentLog(masterProcess.stderr, 'master_stderr', logs, args.onLog);
 
   let controlProcess: SpawnedSSHProcess | null = null;
-  let reverseForwardProcess: SpawnedSSHProcess | null = null;
   let forwardProcess: SpawnedSSHProcess | null = null;
   let runtimeControlForwardProcess: SpawnedSSHProcess | null = null;
-  let remoteBrokerURL = '';
   let remoteRuntimePID: number | null = null;
   let remoteStopAttempted = false;
   let transportDisconnected = false;
@@ -2169,7 +1970,6 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
     );
     await stopChildProcess(forwardProcess, stopTimeoutMs).catch(() => undefined);
     await stopChildProcess(runtimeControlForwardProcess, stopTimeoutMs).catch(() => undefined);
-    await stopChildProcess(reverseForwardProcess, stopTimeoutMs).catch(() => undefined);
     await stopChildProcess(controlProcess, stopTimeoutMs).catch(() => undefined);
     await stopChildProcess(masterProcess, stopTimeoutMs).catch(() => undefined);
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
@@ -2232,37 +2032,6 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       signal: args.signal,
     });
 
-    if (args.aiBroker) {
-      emitSSHRuntimeProgress(
-        args.onProgress,
-        'ssh_opening_tunnel',
-        'Preparing Desktop model source',
-        'Desktop is creating a private SSH bridge for local model calls.',
-      );
-      try {
-        const reverse = await openDesktopAIBrokerReverseForward({
-          sshBinary,
-          target,
-          controlSocketPath,
-          connectTimeoutSeconds,
-          auth,
-          broker: args.aiBroker,
-          startupTimeoutMs,
-          logs,
-          onLog: args.onLog,
-          signal: args.signal,
-        });
-        reverseForwardProcess = reverse.process;
-        remoteBrokerURL = reverse.remoteURL;
-      } catch (error) {
-        if (error instanceof DesktopSSHRuntimeCanceledError || isAbortError(error) || args.signal?.aborted) {
-          throw error;
-        }
-        const message = error instanceof Error ? error.message : String(error);
-        args.onLog?.('reverse_forward_stderr', `Desktop model bridge unavailable: ${message}\n`);
-      }
-    }
-
     let remoteLaunch: ManagedSSHRemoteStartup | null = null;
     let replacementAttempted = false;
     for (;;) {
@@ -2311,7 +2080,7 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       remoteRuntimePID = launch.startup.pid ?? null;
       const attachPolicy = managedSSHRuntimeAttachPolicy(launch.startup, {
         expectedRuntimeIdentity: { runtime_version: runtimeReleaseTag },
-        requireDesktopAIBrokerBinding: !!args.aiBroker,
+        requireDesktopModelSource: args.requireDesktopModelSource === true,
         allowActiveWorkReplacement: args.allowActiveWorkReplacement === true,
       });
       if (attachPolicy.action === 'block') {
@@ -2407,32 +2176,6 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
     );
     if (!forwardedStartup) {
       throw readinessFailure('Desktop created the SSH port forward but could not reach the forwarded Redeven Local UI.', logs);
-    }
-    if (args.aiBroker) {
-      if (remoteBrokerURL) {
-        try {
-          await bindDesktopAIBrokerToForwardedRuntime({
-            forwardedURL,
-            remoteBrokerURL,
-            broker: args.aiBroker,
-            timeoutMs: args.probeTimeoutMs ?? startupTimeoutMs,
-            signal: args.signal,
-            onProgress: args.onProgress,
-          });
-        } catch (error) {
-          if (error instanceof DesktopSSHRuntimeCanceledError || isAbortError(error) || args.signal?.aborted) {
-            throw error;
-          }
-          const message = error instanceof Error ? error.message : String(error);
-          args.onLog?.('control_stderr', `Desktop model bridge unavailable: ${message}\n`);
-        } finally {
-          forwardedStartup = await waitForForwardedLocalUIOpenable(
-            forwardedURL,
-            args.probeTimeoutMs ?? startupTimeoutMs,
-            args.signal,
-          ) ?? forwardedStartup;
-        }
-      }
     }
     const startup: StartupReport = {
       ...remoteStartup,

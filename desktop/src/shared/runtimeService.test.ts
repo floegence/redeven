@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   envAppShellUnavailableOpenReadiness,
   normalizeRuntimeServiceSnapshot,
-  runtimeServiceDesktopAIBrokerBindingState,
+  runtimeServiceDesktopModelSourceBindingState,
   runtimeServiceIsOpenable,
   runtimeServiceMatchesIdentity,
   runtimeServiceNeedsRuntimeUpdate,
@@ -11,7 +11,7 @@ import {
   runtimeServiceProviderConnectionState,
   runtimeServiceProviderLinkBinding,
   runtimeServiceProviderLinkMatches,
-  runtimeServiceSupportsDesktopAIBrokerBinding,
+  runtimeServiceSupportsDesktopModelSource,
   runtimeServiceSupportsProviderLink,
 } from './runtimeService';
 
@@ -92,21 +92,20 @@ describe('runtimeService', () => {
     })).toBe(false);
   });
 
-  it('normalizes Desktop AI Broker capability and binding status', () => {
+  it('normalizes Desktop model source capability and binding status', () => {
     const snapshot = normalizeRuntimeServiceSnapshot({
       runtime_version: 'v1.2.3',
       compatibility: 'compatible',
       open_readiness: { state: 'openable' },
       capabilities: {
-        desktop_ai_broker: {
+        desktop_model_source: {
           supported: true,
         },
       },
       bindings: {
-        desktop_ai_broker: {
+        desktop_model_source: {
           state: 'bound',
-          session_id: ' broker-session ',
-          ssh_runtime_key: ' ssh:devbox ',
+          session_id: ' desktop-session ',
           model_count: 2,
           missing_key_provider_ids: ['openai', '', 'anthropic', 'openai'],
         },
@@ -114,13 +113,12 @@ describe('runtimeService', () => {
       active_workload: {},
     });
 
-    expect(runtimeServiceSupportsDesktopAIBrokerBinding(snapshot)).toBe(true);
-    expect(runtimeServiceDesktopAIBrokerBindingState(snapshot)).toBe('bound');
-    expect(snapshot.capabilities?.desktop_ai_broker.bind_method).toBe('runtime_control_v1');
-    expect(snapshot.bindings?.desktop_ai_broker).toMatchObject({
+    expect(runtimeServiceSupportsDesktopModelSource(snapshot)).toBe(true);
+    expect(runtimeServiceDesktopModelSourceBindingState(snapshot)).toBe('bound');
+    expect(snapshot.capabilities?.desktop_model_source.bind_method).toBe('runtime_control_v1');
+    expect(snapshot.bindings?.desktop_model_source).toMatchObject({
       state: 'bound',
-      session_id: 'broker-session',
-      ssh_runtime_key: 'ssh:devbox',
+      session_id: 'desktop-session',
       model_count: 2,
       missing_key_provider_ids: ['anthropic', 'openai'],
     });

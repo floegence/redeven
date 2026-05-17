@@ -88,16 +88,17 @@ It does not introduce a second SSH-native file or terminal protocol. Electron ma
 
 The SSH Host open flow stays two-step: startup prepares or attaches the runtime, and the user still chooses `Open` before Desktop opens the forwarded Local UI origin. Env App receives an `ssh_environment` session context so Web Services treat remote-host `localhost` targets as remote loopback and open through `/pf/<forward_id>/`.
 
-If the Desktop Local Environment has usable Flower provider settings, Desktop also starts a short-lived loopback-only AI broker on the user's machine before launching or attaching the SSH runtime. The broker reads the Desktop Local Environment's `config.json` and `secrets.json`, exposes only model-list and model-stream endpoints, and never exposes files, terminals, ports, or Desktop IPC to the remote host. Desktop attaches that broker to the same SSH control connection with a reverse-forwarded loopback endpoint, then binds the forwarded broker URL plus a short-lived token to the running runtime over the trusted Local UI runtime-control route. The broker token is never passed as a remote `redeven run` command argument and is not written to remote config, secrets, or logs.
+For Desktop-managed SSH and container runtimes, Desktop also starts a short-lived Desktop Model Source RPC connector on the user's machine. The connector reads the Desktop Local Environment's `config.json` and `secrets.json`, exposes only Redeven AI RPC methods over runtime-control, and never exposes files, terminals, ports, or Desktop IPC to the remote host or container. Desktop initiates the WebSocket RPC connection through the runtime-control endpoint that is already forwarded for the selected runtime; SSH reverse forwarding and host-network assumptions are not part of the model path. The runtime-control token is passed only to the local connector process through an environment variable and is not written to remote config, secrets, or logs.
 
-This Desktop AI Broker is a session capability, not a persisted remote configuration:
+This Desktop model source is a session capability, not a persisted remote configuration:
 
 - Provider API keys stay in the Desktop Local Environment's local `secrets.json`.
 - The SSH host's `local-environment/state/config.json` does not receive an `ai` block, an `enabled` flag, or any provider secret.
+- Local Desktop-managed runtimes continue to use their local runtime config directly because they already run on the Desktop host and do not need a model-source bridge.
 - Remote tools still run inside the SSH-hosted runtime and remain governed by the remote session's `session_meta` plus local `permission_policy`.
-- If the Desktop source is unavailable or binding fails, the SSH runtime still starts; Flower uses the remote runtime's own AI config only when that config exists.
-- Env App surfaces the split explicitly as model sources `Remote runtime` and `Desktop`, tools location `SSH Host`, and Runtime Service binding state `bound` / `unbound` / `unsupported` / `error` / `expired`.
-- The SSH connection progress UI treats Desktop model preparation as optional. Stopping the progress overlay means stopping the opening attempt, not disabling a model source permanently.
+- If the Desktop source is unavailable, the SSH runtime still starts; Flower uses the remote runtime's own AI config only when that config exists.
+- Env App surfaces the split explicitly as model sources `Remote runtime` and `Desktop`, tools location `SSH Host`, and Runtime Service binding state `connecting` / `bound` / `unbound` / `unsupported` / `error` / `expired`.
+- The SSH connection progress UI treats Desktop model preparation as an independently observable model-source state. Stopping the progress overlay means stopping the opening attempt, not disabling a model source permanently.
 
 ### SSH Host Environment
 

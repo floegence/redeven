@@ -14,7 +14,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -1241,31 +1240,8 @@ func TestGateway_LocalUISettingsPermissionCapDoesNotHotReload(t *testing.T) {
 	}
 }
 
-func TestGateway_LocalUIBindsDesktopAIBrokerRuntimeControl(t *testing.T) {
+func TestGateway_LocalUIDoesNotExposeLegacyDesktopModelBinding(t *testing.T) {
 	t.Parallel()
-
-	var sawAuth bool
-	expiresAt := time.Now().Add(24 * time.Hour).UnixMilli()
-	broker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/status" {
-			t.Fatalf("unexpected broker path %q", r.URL.Path)
-		}
-		if got := r.Header.Get("Authorization"); got == "Bearer broker-token" {
-			sawAuth = true
-		} else {
-			t.Fatalf("Authorization = %q", got)
-		}
-		_ = json.NewEncoder(w).Encode(ai.DesktopAIBrokerStatus{
-			Connected:       true,
-			Available:       true,
-			ModelSource:     "desktop_local_environment",
-			SessionID:       "broker-session",
-			SSHRuntimeKey:   "ssh:devbox",
-			ExpiresAtUnixMS: expiresAt,
-			ModelCount:      2,
-		})
-	}))
-	defer broker.Close()
 
 	aiSvc, err := ai.NewService(ai.Options{
 		StateDir:     t.TempDir(),
@@ -1293,45 +1269,20 @@ func TestGateway_LocalUIBindsDesktopAIBrokerRuntimeControl(t *testing.T) {
 
 	req := WithLocalUIEnvRoute(httptest.NewRequest(
 		http.MethodPost,
-		"/_redeven_proxy/api/runtime/bindings/desktop-ai-broker",
-		bytes.NewBufferString(`{
-  "url": "`+broker.URL+`",
-  "token": "broker-token",
-  "session_id": "broker-session",
-  "ssh_runtime_key": "ssh:devbox",
-  "expires_at_unix_ms": `+strconv.FormatInt(expiresAt, 10)+`,
-  "model_source": "desktop_local_environment"
-}`),
+		"/_redeven_proxy/api/runtime/bindings/"+"desktop-"+"ai-"+"broker",
+		bytes.NewBufferString(`{"token":"legacy-token"}`),
 	))
 	rr := httptest.NewRecorder()
 	gw.serveHTTP(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	if rr.Code == http.StatusOK {
+		t.Fatalf("legacy desktop model endpoint unexpectedly succeeded: %s", rr.Body.String())
 	}
-	if !sawAuth {
-		t.Fatalf("broker status auth was not observed")
+	if strings.Contains(rr.Body.String(), "legacy-token") {
+		t.Fatalf("legacy binding response leaked token: %s", rr.Body.String())
 	}
-	if strings.Contains(rr.Body.String(), "broker-token") {
-		t.Fatalf("binding response leaked broker token: %s", rr.Body.String())
-	}
-	var resp struct {
-		OK   bool `json:"ok"`
-		Data struct {
-			AIRuntime ai.AIRuntimeStatus `json:"ai_runtime"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("Decode: %v", err)
-	}
-	if !resp.OK || resp.Data.AIRuntime.DesktopBroker == nil {
-		t.Fatalf("unexpected response: %#v", resp)
-	}
-	if got := resp.Data.AIRuntime.DesktopBroker.BindingState; got != "bound" {
-		t.Fatalf("binding_state = %q, want bound", got)
-	}
-	if !aiSvc.Enabled() {
-		t.Fatalf("AI service not enabled after broker binding")
+	if aiSvc.Enabled() {
+		t.Fatalf("AI service became enabled through legacy broker endpoint")
 	}
 }
 

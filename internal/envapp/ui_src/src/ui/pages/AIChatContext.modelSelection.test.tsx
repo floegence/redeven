@@ -262,11 +262,11 @@ describe('AIChatContext model selection', () => {
     dispose();
   });
 
-  it('keeps Flower available when Desktop broker is connected and remote AI config is missing', async () => {
+  it('keeps Flower available when Desktop model source is connected and remote AI config is missing', async () => {
     settingsState = {
       ai: null,
       ai_runtime: {
-        desktop_broker: {
+        desktop_model_source: {
           connected: true,
           available: true,
           model_source: 'desktop_local_environment',
@@ -290,7 +290,7 @@ describe('AIChatContext model selection', () => {
       current_model: 'remote/model-a',
       models: [
         { id: 'remote/model-a', label: 'Remote A', source: 'runtime_config', source_label: 'Remote runtime' },
-        { id: 'desktop-broker:local/model-b', label: 'Desktop B', source: 'desktop_broker', source_label: 'Desktop' },
+        { id: 'desktop:model_local_b', label: 'Desktop B', source: 'desktop_model_source', source_label: 'Desktop' },
       ],
     };
 
@@ -298,7 +298,7 @@ describe('AIChatContext model selection', () => {
 
     expect(ctx.modelOptions()).toEqual([
       { value: 'remote/model-a', label: 'Remote A', source: 'runtime_config', sourceLabel: 'Remote runtime' },
-      { value: 'desktop-broker:local/model-b', label: 'Desktop B', source: 'desktop_broker', sourceLabel: 'Desktop' },
+      { value: 'desktop:model_local_b', label: 'Desktop B', source: 'desktop_model_source', sourceLabel: 'Desktop' },
     ]);
     expect(ctx.modelSourceGroups()).toEqual([
       {
@@ -308,10 +308,10 @@ describe('AIChatContext model selection', () => {
         models: [{ value: 'remote/model-a', label: 'Remote A', source: 'runtime_config', sourceLabel: 'Remote runtime' }],
       },
       {
-        source: 'desktop_broker',
+        source: 'desktop_model_source',
         sourceLabel: 'Desktop',
         available: true,
-        models: [{ value: 'desktop-broker:local/model-b', label: 'Desktop B', source: 'desktop_broker', sourceLabel: 'Desktop' }],
+        models: [{ value: 'desktop:model_local_b', label: 'Desktop B', source: 'desktop_model_source', sourceLabel: 'Desktop' }],
       },
     ]);
 

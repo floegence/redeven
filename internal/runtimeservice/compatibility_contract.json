@@ -3,27 +3,26 @@
   "release_review": {
     "release_version": "unreleased",
     "previous_release": "v0.6.7",
-    "reviewed_at": "2026-05-15",
-    "review_id": "desktop-runtime-placement-bridge-v1",
-    "summary": "Desktop adds the Runtime Placement Bridge so Local and SSH container runtime targets can expose Local UI and runtime-control through a managed byte-stream transport without published container ports.",
+    "reviewed_at": "2026-05-16",
+    "review_id": "desktop-model-source-rpc-v1",
+    "summary": "Runtime-control adds Desktop Model Source RPC so Desktop-managed SSH and container runtimes can use Local Environment model settings without SSH reverse forwards or provider-specific broker endpoints.",
     "checked_surfaces": [
-      "Runtime Placement Bridge CLI command and stdio frame protocol",
-      "Runtime Placement Bridge Local UI byte-stream forwarding for HTTP, SSE, WebSocket, and runtime-control",
-      "Desktop container target host_access plus placement persistence schema",
-      "Desktop Welcome Local Container and SSH Container managed runtime cards",
-      "Desktop provider-link resolver for bridge-backed Local and SSH container targets",
+      "Desktop Model Source RPC connect, disconnect, status, and WebSocket frame protocol",
+      "Runtime Service desktop_model_source capability and binding normalization",
+      "Runtime AI model listing, model selection, thread title, run, and subagent paths for desktop:model_ identifiers",
+      "Desktop connector subprocess lifecycle for SSH and Runtime Placement Bridge runtimes",
+      "Desktop SSH startup without reverse forwarding or legacy broker binding",
+      "Runtime Placement Bridge runtime-control forwarding for Desktop Model Source RPC",
+      "Env App Flower model source grouping and unavailable-state copy",
       "Runtime Service provider_link capability and binding normalization",
       "Desktop startup reports and attachable runtime state runtime_control metadata",
-      "Desktop Welcome Local, SSH, and container Open and Start Runtime separation",
-      "Desktop Welcome provider Connect Runtime and Disconnect Runtime actions",
-      "Runtime-control provider-link HTTP authorization and structured errors",
-      "Runtime provider bootstrap exchange, config persistence, and control-channel lifecycle",
-      "RCPP desktop open-session bootstrap_ticket semantics",
-      "Local UI health and runtime state token exposure boundaries"
+      "Runtime-control authorization, Desktop owner checks, and loopback-only exposure",
+      "Local UI health and runtime state token exposure boundaries",
+      "Legacy Desktop model HTTP binding endpoint removal"
     ]
   },
   "runtime_protocol_version": "redeven-runtime-v1",
-  "compatibility_epoch": 4,
-  "minimum_desktop_version": "v0.6.9",
-  "minimum_runtime_version": "v0.6.9"
+  "compatibility_epoch": 5,
+  "minimum_desktop_version": "v0.7.0",
+  "minimum_runtime_version": "v0.7.0"
 }

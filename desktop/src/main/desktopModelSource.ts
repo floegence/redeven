@@ -1,29 +1,29 @@
 import { spawn, type ChildProcessByStdio } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { randomBytes } from 'node:crypto';
 import type { Readable } from 'node:stream';
 
+import type { DesktopRuntimeControlEndpoint } from '../shared/runtimeControl';
+
 const STARTUP_REPORT_POLL_MS = 100;
-const DEFAULT_BROKER_STARTUP_TIMEOUT_MS = 8_000;
-const DEFAULT_BROKER_STOP_TIMEOUT_MS = 3_000;
-const TOKEN_ENV_NAME = 'REDEVEN_DESKTOP_AI_BROKER_TOKEN';
+const DEFAULT_MODEL_SOURCE_STARTUP_TIMEOUT_MS = 8_000;
+const DEFAULT_MODEL_SOURCE_STOP_TIMEOUT_MS = 3_000;
+const TOKEN_ENV_NAME = 'REDEVEN_DESKTOP_MODEL_SOURCE_RUNTIME_CONTROL_TOKEN';
 
-type BrokerProcess = ChildProcessByStdio<null, Readable, Readable>;
+type ModelSourceProcess = ChildProcessByStdio<null, Readable, Readable>;
 
-export type DesktopAIBrokerStartupReport = Readonly<{
-  status: 'ready';
-  url: string;
+export type DesktopModelSourceStartupReport = Readonly<{
+  status: 'connected';
+  session_id: string;
   pid: number;
   configured?: boolean;
   model_count?: number;
   missing_key_provider_ids?: readonly string[];
 }>;
 
-export type ManagedDesktopAIBroker = Readonly<{
-  url: string;
-  token: string;
+export type ManagedDesktopModelSource = Readonly<{
   sessionID: string;
   expiresAtUnixMs: number;
   configured: boolean;
@@ -32,10 +32,10 @@ export type ManagedDesktopAIBroker = Readonly<{
   stop: () => Promise<void>;
 }>;
 
-export type StartDesktopAIBrokerArgs = Readonly<{
+export type StartDesktopModelSourceArgs = Readonly<{
   executablePath: string;
   stateRoot: string;
-  runtimeKey: `ssh:${string}`;
+  runtimeControl: DesktopRuntimeControlEndpoint;
   tempRoot?: string;
   startupTimeoutMs?: number;
   stopTimeoutMs?: number;
@@ -43,24 +43,24 @@ export type StartDesktopAIBrokerArgs = Readonly<{
   onLog?: (stream: 'stdout' | 'stderr', chunk: string) => void;
 }>;
 
-function brokerStartupCanceledError(): DOMException {
-  return new DOMException('Desktop AI Broker startup was canceled.', 'AbortError');
+function modelSourceStartupCanceledError(): DOMException {
+  return new DOMException('Desktop model source startup was canceled.', 'AbortError');
 }
 
-function throwIfBrokerStartupCanceled(signal: AbortSignal | undefined): void {
+function throwIfModelSourceStartupCanceled(signal: AbortSignal | undefined): void {
   if (signal?.aborted) {
-    throw brokerStartupCanceledError();
+    throw modelSourceStartupCanceledError();
   }
 }
 
 async function delay(ms: number, signal?: AbortSignal): Promise<void> {
-  throwIfBrokerStartupCanceled(signal);
+  throwIfModelSourceStartupCanceled(signal);
   let abort: (() => void) | null = null;
   await new Promise<void>((resolve, reject) => {
     const timer = setTimeout(resolve, ms);
     abort = () => {
       clearTimeout(timer);
-      reject(brokerStartupCanceledError());
+      reject(modelSourceStartupCanceledError());
     };
     signal?.addEventListener('abort', abort, { once: true });
   }).finally(() => {
@@ -70,21 +70,25 @@ async function delay(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-function normalizeReport(raw: unknown): DesktopAIBrokerStartupReport | null {
+function compact(value: unknown): string {
+  return String(value ?? '').trim();
+}
+
+function normalizeReport(raw: unknown, expectedSessionID: string): DesktopModelSourceStartupReport | null {
   if (!raw || typeof raw !== 'object') return null;
   const v = raw as Record<string, unknown>;
-  const status = String(v.status ?? '').trim();
-  const url = String(v.url ?? '').trim();
+  const status = compact(v.status);
+  const sessionID = compact(v.session_id);
   const pid = Number(v.pid ?? Number.NaN);
-  if (status !== 'ready' || !url || !Number.isInteger(pid) || pid <= 0) {
+  if (status !== 'connected' || sessionID !== expectedSessionID || !Number.isInteger(pid) || pid <= 0) {
     return null;
   }
   const missing = Array.isArray(v.missing_key_provider_ids)
-    ? v.missing_key_provider_ids.map((item) => String(item ?? '').trim()).filter(Boolean)
+    ? v.missing_key_provider_ids.map((item) => compact(item)).filter(Boolean)
     : [];
   return {
-    status: 'ready',
-    url,
+    status: 'connected',
+    session_id: sessionID,
     pid,
     configured: Boolean(v.configured),
     model_count: Number.isFinite(Number(v.model_count)) ? Number(v.model_count) : 0,
@@ -92,10 +96,10 @@ function normalizeReport(raw: unknown): DesktopAIBrokerStartupReport | null {
   };
 }
 
-async function readStartupReport(reportFile: string): Promise<DesktopAIBrokerStartupReport | null> {
+async function readStartupReport(reportFile: string, expectedSessionID: string): Promise<DesktopModelSourceStartupReport | null> {
   try {
     const raw = await fs.readFile(reportFile, 'utf8');
-    return normalizeReport(JSON.parse(raw));
+    return normalizeReport(JSON.parse(raw), expectedSessionID);
   } catch (error: unknown) {
     const nodeError = error as NodeJS.ErrnoException;
     if (nodeError?.code === 'ENOENT' || error instanceof SyntaxError) {
@@ -105,7 +109,7 @@ async function readStartupReport(reportFile: string): Promise<DesktopAIBrokerSta
   }
 }
 
-async function stopProcess(child: BrokerProcess, timeoutMs: number): Promise<void> {
+async function stopProcess(child: ModelSourceProcess, timeoutMs: number): Promise<void> {
   if (child.exitCode !== null || child.signalCode) {
     return;
   }
@@ -118,25 +122,32 @@ async function stopProcess(child: BrokerProcess, timeoutMs: number): Promise<voi
   }
 }
 
-export async function startDesktopAIBroker(args: StartDesktopAIBrokerArgs): Promise<ManagedDesktopAIBroker> {
-  throwIfBrokerStartupCanceled(args.signal);
-  const tempDir = await fs.mkdtemp(path.join(args.tempRoot ?? os.tmpdir(), 'redeven-ai-broker-'));
+export async function startDesktopModelSource(args: StartDesktopModelSourceArgs): Promise<ManagedDesktopModelSource> {
+  throwIfModelSourceStartupCanceled(args.signal);
+  const runtimeControl = args.runtimeControl;
+  const runtimeControlBaseURL = compact(runtimeControl.base_url);
+  const desktopOwnerID = compact(runtimeControl.desktop_owner_id);
+  const token = compact(runtimeControl.token);
+  if (!runtimeControlBaseURL || !desktopOwnerID || !token) {
+    throw new Error('Runtime Control endpoint is missing Desktop model source connection fields.');
+  }
+
+  const tempDir = await fs.mkdtemp(path.join(args.tempRoot ?? os.tmpdir(), 'redeven-model-source-'));
   const reportFile = path.join(tempDir, 'startup-report.json');
-  const token = randomBytes(32).toString('base64url');
-  const sessionID = `broker_${randomBytes(12).toString('hex')}`;
+  const sessionID = `dms_${randomBytes(12).toString('hex')}`;
   const expiresAtUnixMs = Date.now() + 12 * 60 * 60 * 1000;
   const child = spawn(args.executablePath, [
-    'desktop-ai-broker',
+    'desktop-model-source',
     '--state-root',
     args.stateRoot,
-    '--bind',
-    '127.0.0.1:0',
-    '--token-env',
+    '--runtime-control-url',
+    runtimeControlBaseURL,
+    '--runtime-control-token-env',
     TOKEN_ENV_NAME,
+    '--desktop-owner-id',
+    desktopOwnerID,
     '--session-id',
     sessionID,
-    '--ssh-runtime-key',
-    args.runtimeKey,
     '--expires-at-unix-ms',
     String(expiresAtUnixMs),
     '--startup-report-file',
@@ -148,12 +159,12 @@ export async function startDesktopAIBroker(args: StartDesktopAIBrokerArgs): Prom
       ...process.env,
       [TOKEN_ENV_NAME]: token,
     },
-  }) as unknown as BrokerProcess;
+  }) as unknown as ModelSourceProcess;
 
   let spawnError: Error | null = null;
   child.once('error', (error) => {
     if (args.signal?.aborted || (error as Partial<Error> & Readonly<{ code?: string }>)?.name === 'AbortError') {
-      spawnError = brokerStartupCanceledError();
+      spawnError = modelSourceStartupCanceledError();
       return;
     }
     spawnError = error instanceof Error ? error : new Error(String(error));
@@ -164,20 +175,18 @@ export async function startDesktopAIBroker(args: StartDesktopAIBrokerArgs): Prom
   child.stderr?.on('data', (chunk: string) => args.onLog?.('stderr', chunk));
 
   const cleanup = async () => {
-    await stopProcess(child, args.stopTimeoutMs ?? DEFAULT_BROKER_STOP_TIMEOUT_MS).catch(() => undefined);
+    await stopProcess(child, args.stopTimeoutMs ?? DEFAULT_MODEL_SOURCE_STOP_TIMEOUT_MS).catch(() => undefined);
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
   };
 
   try {
-    const deadline = Date.now() + (args.startupTimeoutMs ?? DEFAULT_BROKER_STARTUP_TIMEOUT_MS);
+    const deadline = Date.now() + (args.startupTimeoutMs ?? DEFAULT_MODEL_SOURCE_STARTUP_TIMEOUT_MS);
     for (;;) {
-      throwIfBrokerStartupCanceled(args.signal);
+      throwIfModelSourceStartupCanceled(args.signal);
       if (spawnError) throw spawnError;
-      const report = await readStartupReport(reportFile);
+      const report = await readStartupReport(reportFile, sessionID);
       if (report) {
         return {
-          url: report.url,
-          token,
           sessionID,
           expiresAtUnixMs,
           configured: report.configured === true,
@@ -187,10 +196,10 @@ export async function startDesktopAIBroker(args: StartDesktopAIBrokerArgs): Prom
         };
       }
       if (child.exitCode !== null || child.signalCode) {
-        throw new Error(`Desktop AI Broker exited before reporting readiness (${child.exitCode !== null ? `exit code ${child.exitCode}` : `signal ${child.signalCode}`}).`);
+        throw new Error(`Desktop model source exited before connecting (${child.exitCode !== null ? `exit code ${child.exitCode}` : `signal ${child.signalCode}`}).`);
       }
       if (Date.now() >= deadline) {
-        throw new Error('Timed out waiting for Desktop AI Broker readiness.');
+        throw new Error('Timed out waiting for Desktop model source connection.');
       }
       await delay(STARTUP_REPORT_POLL_MS, args.signal);
     }

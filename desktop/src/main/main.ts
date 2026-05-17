@@ -113,7 +113,7 @@ import {
 import {
   ensureRuntimePlacementReady,
 } from './runtimePlacementManager';
-import { startDesktopAIBroker, type ManagedDesktopAIBroker } from './desktopAIBroker';
+import { startDesktopModelSource, type ManagedDesktopModelSource } from './desktopModelSource';
 import { PUBLIC_REDEVEN_RELEASE_BASE_URL } from './sshReleaseAssets';
 import { installStdioBrokenPipeGuards } from './stdio';
 import type { StartupReport } from './startup';
@@ -372,6 +372,7 @@ type SSHEnvironmentRuntimeRecord = Readonly<{
   startup: StartupReport;
   local_forward_url: string;
   runtime_control_forward_url?: string;
+  desktop_model_source?: ManagedDesktopModelSource | null;
   runtime_handle: DesktopSessionRuntimeHandle;
   disconnect: () => Promise<void>;
   stop: () => Promise<void>;
@@ -384,6 +385,7 @@ type RuntimePlacementBridgeRecord = Readonly<{
   target_id: DesktopProviderRuntimeLinkTargetID;
   session: RuntimePlacementBridgeSession;
   startup: StartupReport;
+  desktop_model_source?: ManagedDesktopModelSource | null;
   runtime_handle: DesktopSessionRuntimeHandle;
 }>;
 
@@ -535,6 +537,64 @@ async function desktopRuntimeOwnerID(): Promise<string> {
     desktopRuntimeOwnerIDTask = loadOrCreateDesktopRuntimeOwnerID(app.getPath('userData'));
   }
   return desktopRuntimeOwnerIDTask;
+}
+
+async function startDesktopModelSourceForStartup(args: Readonly<{
+  label: string;
+  startup: StartupReport;
+  signal?: AbortSignal;
+}>): Promise<ManagedDesktopModelSource | null> {
+  const runtimeControl = args.startup.runtime_control;
+  if (!runtimeControl) {
+    return null;
+  }
+  try {
+    const modelSource = await startDesktopModelSource({
+      executablePath: bundledRuntimeExecutablePath(),
+      stateRoot: preferencesPaths().stateRoot,
+      runtimeControl,
+      tempRoot: app.getPath('temp'),
+      signal: args.signal,
+      onLog: (stream, chunk) => {
+        const text = compact(chunk);
+        if (text) console.log(`[redeven:model-source:${stream}] ${text}`);
+      },
+    });
+    if (modelSource.modelCount <= 0) {
+      const missing = modelSource.missingKeyProviderIDs.length > 0
+        ? ` Missing provider keys: ${modelSource.missingKeyProviderIDs.join(', ')}.`
+        : '';
+      console.warn(`[redeven:model-source] Connected to ${args.label}, but no usable Desktop models are available.${missing}`);
+    }
+    return modelSource;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw error;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[redeven:model-source] Desktop model source unavailable for ${args.label}: ${message}`);
+    return null;
+  }
+}
+
+async function refreshRuntimeStartupFromLocalUI(
+  startup: StartupReport,
+  localUIURL: string,
+): Promise<StartupReport> {
+  const refreshed = await loadExternalLocalUIStartup(localUIURL, DESKTOP_RUNTIME_PROBE_TIMEOUT_MS).catch(() => null);
+  if (!refreshed) {
+    return startup;
+  }
+  return {
+    ...startup,
+    local_ui_url: refreshed.local_ui_url,
+    local_ui_urls: refreshed.local_ui_urls,
+    password_required: refreshed.password_required,
+    desktop_managed: refreshed.desktop_managed ?? startup.desktop_managed,
+    desktop_owner_id: refreshed.desktop_owner_id ?? startup.desktop_owner_id,
+    runtime_service: refreshed.runtime_service ?? startup.runtime_service,
+    runtime_control: startup.runtime_control,
+  };
 }
 
 function localEnvironmentRuntimeStateFile(environment: DesktopLocalEnvironmentState): string {
@@ -3055,41 +3115,8 @@ async function startSSHEnvironmentRuntimeRecord(
 
   const task = (async () => {
     let operationSettled = false;
-    let desktopAIBroker: ManagedDesktopAIBroker | null = null;
+    let desktopModelSource: ManagedDesktopModelSource | null = null;
     try {
-      try {
-        const executablePath = resolveBundledRuntimePath({
-          isPackaged: app.isPackaged,
-          resourcesPath: process.resourcesPath,
-          appPath: app.getAppPath(),
-        });
-        desktopAIBroker = await startDesktopAIBroker({
-          executablePath,
-          stateRoot: preferencesPaths().stateRoot,
-          runtimeKey,
-          tempRoot: app.getPath('temp'),
-          signal,
-          onLog: (stream, chunk) => {
-            const text = String(chunk ?? '').trim();
-            if (text) console.log(`[redeven:ai-broker:${stream}] ${text}`);
-          },
-        });
-      } catch (brokerError) {
-        if (brokerError instanceof DOMException && brokerError.name === 'AbortError') {
-          throw new DesktopSSHRuntimeCanceledError();
-        }
-        const message = brokerError instanceof Error ? brokerError.message : String(brokerError);
-        console.warn(`[redeven:ai-broker] Desktop AI Broker unavailable for ${runtimeKey}: ${message}`);
-        desktopAIBroker = null;
-      }
-      if (desktopAIBroker && desktopAIBroker.modelCount <= 0) {
-        const missing = desktopAIBroker.missingKeyProviderIDs.length > 0
-          ? ` Missing provider keys: ${desktopAIBroker.missingKeyProviderIDs.join(', ')}.`
-          : '';
-        console.warn(`[redeven:ai-broker] Desktop AI Broker has no usable models for ${runtimeKey}.${missing}`);
-        await desktopAIBroker.stop().catch(() => undefined);
-        desktopAIBroker = null;
-      }
       const managedSSHRuntime = await startManagedSSHRuntime({
         target: sshDetails,
         runtimeReleaseTag: resolveSSHRuntimeReleaseTag(),
@@ -3102,15 +3129,7 @@ async function startSSHEnvironmentRuntimeRecord(
           : undefined,
         tempRoot: app.getPath('temp'),
         assetCacheRoot: path.join(app.getPath('userData'), 'ssh-runtime-cache'),
-        aiBroker: desktopAIBroker
-          ? {
-              local_url: desktopAIBroker.url,
-              token: desktopAIBroker.token,
-              session_id: desktopAIBroker.sessionID,
-              ssh_runtime_key: runtimeKey,
-              expires_at_unix_ms: desktopAIBroker.expiresAtUnixMs,
-            }
-          : null,
+        requireDesktopModelSource: true,
         signal,
         onLog: (stream, chunk) => {
           const text = String(chunk ?? '').trim();
@@ -3127,6 +3146,14 @@ async function startSSHEnvironmentRuntimeRecord(
           });
         },
       });
+      desktopModelSource = await startDesktopModelSourceForStartup({
+        label,
+        startup: managedSSHRuntime.startup,
+        signal,
+      });
+      const managedStartup = desktopModelSource
+        ? await refreshRuntimeStartupFromLocalUI(managedSSHRuntime.startup, managedSSHRuntime.local_forward_url)
+        : managedSSHRuntime.startup;
       if (launcherOperations.isStale(runtimeKey)) {
         launcherOperations.update(runtimeKey, {
           status: 'cleanup_running',
@@ -3137,7 +3164,7 @@ async function startSSHEnvironmentRuntimeRecord(
         });
         try {
           await managedSSHRuntime.stop();
-          await desktopAIBroker?.stop();
+          await desktopModelSource?.stop();
           launcherOperations.finish(runtimeKey, 'canceled', {
             phase: 'deleted_connection_cleaned',
             title: 'Startup canceled',
@@ -3163,17 +3190,18 @@ async function startSSHEnvironmentRuntimeRecord(
         environment_id: environmentID,
         label,
         details: sshDetails,
-        startup: managedSSHRuntime.startup,
+        startup: managedStartup,
         local_forward_url: managedSSHRuntime.local_forward_url,
         runtime_control_forward_url: managedSSHRuntime.runtime_control_forward_url,
+        desktop_model_source: desktopModelSource,
         runtime_handle: managedSSHRuntime.runtime_handle,
         disconnect: async () => {
           await managedSSHRuntime.disconnect();
-          await desktopAIBroker?.stop();
+          await desktopModelSource?.stop();
         },
         stop: async () => {
           await managedSSHRuntime.stop();
-          await desktopAIBroker?.stop();
+          await desktopModelSource?.stop();
         },
       };
       sshEnvironmentRuntimeByKey.set(runtimeKey, runtimeRecord);
@@ -3196,8 +3224,8 @@ async function startSSHEnvironmentRuntimeRecord(
             detail: 'Desktop is closing local startup resources for this SSH runtime.',
             cancelable: false,
           });
-          await desktopAIBroker?.stop();
-          desktopAIBroker = null;
+          await desktopModelSource?.stop();
+          desktopModelSource = null;
           launcherOperations.finish(runtimeKey, 'canceled', {
             phase: 'canceled',
             title: 'Startup canceled',
@@ -3224,7 +3252,7 @@ async function startSSHEnvironmentRuntimeRecord(
         }
         scheduleLauncherOperationRemoval(runtimeKey);
       }
-      await desktopAIBroker?.stop();
+      await desktopModelSource?.stop();
       throw error;
     } finally {
       pendingSSHRuntimeStartByKey.delete(runtimeKey);
@@ -4753,8 +4781,20 @@ async function startRuntimePlacementBridgeRecordFromLauncher(
     label: runtimeTargetLabelFromRequest(request),
     session,
   });
-  runtimePlacementBridgeByTargetID.set(session.placement_target_id, record);
-  return record;
+  const desktopModelSource = await startDesktopModelSourceForStartup({
+    label: record.label,
+    startup: record.startup,
+  });
+  const startup = desktopModelSource
+    ? await refreshRuntimeStartupFromLocalUI(record.startup, record.startup.local_ui_url)
+    : record.startup;
+  const connectedRecord: RuntimePlacementBridgeRecord = {
+    ...record,
+    startup,
+    desktop_model_source: desktopModelSource,
+  };
+  runtimePlacementBridgeByTargetID.set(session.placement_target_id, connectedRecord);
+  return connectedRecord;
 }
 
 async function openRuntimePlacementBridgeFromLauncher(
@@ -5180,6 +5220,7 @@ async function stopEnvironmentRuntimeFromLauncher(
     if (liveRuntimeSession) {
       await finalizeSessionClosure(liveRuntimeSession.session_key);
     }
+    await runtimeRecord.desktop_model_source?.stop().catch(() => undefined);
     await runtimeRecord.session.stop();
     runtimePlacementBridgeByTargetID.delete(runtimeRecord.session.placement_target_id);
     resetLauncherIssueState();
@@ -5308,6 +5349,7 @@ async function refreshEnvironmentRuntimeFromLauncher(
           runtimeServiceForProviderHealth = updatedStartup.runtime_service;
         }
       } catch {
+        await runtimeRecord.desktop_model_source?.stop().catch(() => undefined);
         await runtimeRecord.session.disconnect().catch(() => undefined);
         runtimePlacementBridgeByTargetID.delete(runtimeRecord.session.placement_target_id);
         runtimeServiceForProviderHealth = undefined;
@@ -6306,6 +6348,7 @@ async function deleteSavedRuntimeTargetFromWelcome(environmentID: string): Promi
     if (liveRuntimeSession) {
       await finalizeSessionClosure(liveRuntimeSession.session_key);
     }
+    await runtimeRecord.desktop_model_source?.stop().catch(() => undefined);
     await runtimeRecord.session.disconnect().catch(() => undefined);
     runtimePlacementBridgeByTargetID.delete(runtimeTargetID);
   }

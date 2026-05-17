@@ -19,10 +19,10 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 	}
 
 	capabilities := runtimeservice.Capabilities{
-		DesktopAIBroker: runtimeservice.Capability{
+		DesktopModelSource: runtimeservice.Capability{
 			Supported:  false,
 			ReasonCode: "ai_service_unavailable",
-			Message:    "Desktop AI Broker binding is not available in this runtime service.",
+			Message:    "Desktop model source is not available in this runtime service.",
 		},
 		ProviderLink: runtimeservice.Capability{
 			Supported:  a.desktopManaged,
@@ -37,17 +37,17 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 		}
 	}
 	bindings := runtimeservice.Bindings{
-		DesktopAIBroker: runtimeservice.Binding{State: runtimeservice.BindingStateUnsupported},
-		ProviderLink:    a.ProviderLinkBinding(),
+		DesktopModelSource: runtimeservice.Binding{State: runtimeservice.BindingStateUnsupported},
+		ProviderLink:       a.ProviderLinkBinding(),
 	}
 	if a.code != nil {
 		if aiSvc := a.code.AI(); aiSvc != nil {
-			capabilities.DesktopAIBroker = runtimeservice.Capability{
+			capabilities.DesktopModelSource = runtimeservice.Capability{
 				Supported:  true,
 				BindMethod: runtimeservice.RuntimeControlBindMethodV1,
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
-			bindings.DesktopAIBroker = aiSvc.DesktopBrokerBindingStatus(ctx)
+			bindings.DesktopModelSource = aiSvc.DesktopModelSourceBindingStatus(ctx)
 			cancel()
 		}
 	}
