@@ -25,6 +25,7 @@ describe('runtimePlacementBridge', () => {
         kind: 'container_process',
         container_engine: 'docker',
         container_id: 'container-stable-id',
+        container_ref: 'dev-container',
         container_label: 'dev-container',
         runtime_install_root: '/opt/redeven-desktop/runtime',
         runtime_state_root: '/var/lib/redeven',

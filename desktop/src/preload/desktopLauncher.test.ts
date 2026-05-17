@@ -42,6 +42,7 @@ describe('bootstrapDesktopLauncherBridge', () => {
             {
               engine: 'docker',
               container_id: 'container-stable-id',
+              container_ref: 'dev-container',
               container_label: 'dev-container',
               image: 'redeven-dev:latest',
               status_text: 'Up 2 minutes',
@@ -85,6 +86,7 @@ describe('bootstrapDesktopLauncherBridge', () => {
         {
           engine: 'docker',
           container_id: 'container-stable-id',
+          container_ref: 'dev-container',
           container_label: 'dev-container',
           image: 'redeven-dev:latest',
           status_text: 'Up 2 minutes',

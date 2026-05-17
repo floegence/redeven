@@ -1486,7 +1486,11 @@ export function upsertSavedRuntimeTarget(
   const hostAccess = normalizeDesktopRuntimeHostAccess(input.host_access);
   const placement = normalizeDesktopRuntimePlacement(input.placement);
   const targetID = desktopRuntimeTargetID(hostAccess, placement);
-  const existing = preferences.saved_runtime_targets.find((target) => target.id === targetID) ?? null;
+  const requestedID = compact(input.id);
+  const existing = preferences.saved_runtime_targets.find((target) => (
+    target.id === targetID
+    || (requestedID !== '' && target.id === requestedID)
+  )) ?? null;
   const now = Date.now();
   const nextTarget: DesktopSavedRuntimeTarget = {
     schema_version: 1,
@@ -1503,7 +1507,10 @@ export function upsertSavedRuntimeTarget(
     ...preferences,
     saved_runtime_targets: sortSavedRuntimeTargetsByLastUsed([
       nextTarget,
-      ...preferences.saved_runtime_targets.filter((target) => target.id !== targetID),
+      ...preferences.saved_runtime_targets.filter((target) => (
+        target.id !== targetID
+        && (requestedID === '' || target.id !== requestedID)
+      )),
     ]).slice(0, MAX_SAVED_RUNTIME_TARGETS),
   };
 }
@@ -1766,11 +1773,13 @@ export function markSavedRuntimeTargetUsed(
   if (!existing) {
     return preferences;
   }
+  const nextHostAccess = input.host_access ?? existing.host_access;
+  const nextPlacement = input.placement ?? existing.placement;
   return upsertSavedRuntimeTarget(preferences, {
     id: existing.id,
     label: existing.label,
-    host_access: existing.host_access,
-    placement: existing.placement,
+    host_access: nextHostAccess,
+    placement: nextPlacement,
     pinned: existing.pinned,
     created_at_ms: existing.created_at_ms,
     last_used_at_ms: input.last_used_at_ms ?? Date.now(),

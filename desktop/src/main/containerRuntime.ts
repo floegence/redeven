@@ -1,5 +1,9 @@
 import type { DesktopContainerEngine } from '../shared/desktopRuntimePlacement';
 import {
+  desktopRuntimeContainerReference,
+  type DesktopRuntimePlacement,
+} from '../shared/desktopRuntimePlacement';
+import {
   buildManagedSSHRuntimeProbeScript,
   buildManagedSSHUploadedInstallScript,
 } from './sshRuntime';
@@ -14,9 +18,12 @@ export type DesktopContainerRuntimeStatus =
   | 'missing'
   | 'no_permission';
 
+type ContainerProcessPlacement = Extract<DesktopRuntimePlacement, Readonly<{ kind: 'container_process' }>>;
+
 export type DesktopContainerInspectResult = Readonly<{
   engine: DesktopContainerEngine;
   container_id: string;
+  container_ref: string;
   container_label: string;
   status: DesktopContainerRuntimeStatus;
 }>;
@@ -24,12 +31,30 @@ export type DesktopContainerInspectResult = Readonly<{
 export type DesktopRuntimeContainerListItem = Readonly<{
   engine: DesktopContainerEngine;
   container_id: string;
+  container_ref: string;
   container_label: string;
   image: string;
   status_text: string;
 }>;
 
 export type DesktopContainerRuntimePlatform = DesktopSSHRemotePlatform;
+
+export type DesktopResolvedRuntimeContainerPlacement = Readonly<{
+  status: 'running';
+  inspected: DesktopContainerInspectResult;
+  placement: ContainerProcessPlacement;
+  changed: boolean;
+}>;
+
+export type DesktopRuntimeContainerResolution = DesktopResolvedRuntimeContainerPlacement | Readonly<{
+  status: Exclude<DesktopContainerRuntimeStatus, 'running'> | 'ambiguous';
+  message: string;
+}>;
+
+export type DesktopRuntimeContainerResolver = Readonly<{
+  inspect: (engine: DesktopContainerEngine, containerRef: string) => Promise<DesktopContainerInspectResult>;
+  listRunning: (engine: DesktopContainerEngine) => Promise<readonly DesktopRuntimeContainerListItem[]>;
+}>;
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -94,7 +119,7 @@ export function parseContainerInspectJSON(
   }
   const id = compact(record.Id);
   if (id === '') {
-    throw new Error('Container inspect output did not include a stable container ID.');
+    throw new Error('Container inspect output did not include a concrete container ID.');
   }
   const name = containerNameLabel(record.Name);
   const state = record.State && typeof record.State === 'object'
@@ -103,6 +128,7 @@ export function parseContainerInspectJSON(
   return {
     engine,
     container_id: id,
+    container_ref: name || id,
     container_label: name || id.slice(0, 12),
     status: state.Running === true ? 'running' : normalizeContainerStatus(state.Status),
   };
@@ -121,10 +147,12 @@ function parseContainerListLine(
   if (id === '') {
     return null;
   }
+  const label = containerListNameLabel(value.Names ?? value.names ?? value.Name ?? value.name);
   return {
     engine,
     container_id: id,
-    container_label: containerListNameLabel(value.Names ?? value.names ?? value.Name ?? value.name) || id.slice(0, 12),
+    container_ref: label || id,
+    container_label: label || id.slice(0, 12),
     image: compact(value.Image ?? value.image),
     status_text: compact(value.Status ?? value.status),
   };
@@ -169,6 +197,154 @@ export function containerListCommand(
 ): readonly string[] {
   const normalizedEngine = normalizeContainerEngine(engine);
   return [normalizedEngine, 'ps', '--no-trunc', '--format', '{{json .}}'];
+}
+
+function resolvedContainerPlacement(
+  placement: ContainerProcessPlacement,
+  inspected: DesktopContainerInspectResult,
+): ContainerProcessPlacement {
+  return {
+    ...placement,
+    container_id: inspected.container_id,
+    container_ref: desktopRuntimeContainerReference(placement),
+    container_label: inspected.container_label || placement.container_label,
+  };
+}
+
+function placementChanged(
+  left: ContainerProcessPlacement,
+  right: ContainerProcessPlacement,
+): boolean {
+  return left.container_id !== right.container_id
+    || left.container_ref !== right.container_ref
+    || left.container_label !== right.container_label;
+}
+
+function containerUnavailableMessage(
+  placement: ContainerProcessPlacement,
+  status: DesktopRuntimeContainerResolution['status'],
+): string {
+  const label = placement.container_label || desktopRuntimeContainerReference(placement);
+  if (status === 'missing') {
+    return `Container ${label} was not found. Choose a running container, then try again.`;
+  }
+  if (status === 'no_permission') {
+    return `Desktop does not have permission to inspect ${label}. Check ${placement.container_engine} access, then try again.`;
+  }
+  if (status === 'ambiguous') {
+    return `Container reference ${label} matches more than one running container. Choose the exact container, then try again.`;
+  }
+  return `Container ${label} is not running. Start it outside Redeven, then refresh and try again.`;
+}
+
+function inspectFailureStatus(error: unknown): Exclude<DesktopContainerRuntimeStatus, 'running' | 'stopped'> {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  if (/permission denied|access denied|unauthorized|forbidden|operation not permitted/iu.test(message)) {
+    return 'no_permission';
+  }
+  return 'missing';
+}
+
+function listItemMatchesReference(item: DesktopRuntimeContainerListItem, reference: string): boolean {
+  const cleanReference = compact(reference);
+  if (cleanReference === '') {
+    return false;
+  }
+  const referenceCanBeContainerID = /^[a-f0-9]{6,}$/iu.test(cleanReference);
+  return item.container_id === cleanReference
+    || item.container_ref === cleanReference
+    || item.container_label === cleanReference
+    || (referenceCanBeContainerID && item.container_id.startsWith(cleanReference));
+}
+
+function inspectedContainerMatchesReference(
+  inspected: DesktopContainerInspectResult,
+  placement: ContainerProcessPlacement,
+): boolean {
+  const reference = desktopRuntimeContainerReference(placement);
+  if (reference === placement.container_id) {
+    return true;
+  }
+  return listItemMatchesReference({
+    engine: inspected.engine,
+    container_id: inspected.container_id,
+    container_ref: inspected.container_ref,
+    container_label: inspected.container_label,
+    image: '',
+    status_text: '',
+  }, reference);
+}
+
+export async function resolveRuntimeContainerPlacement(
+  resolver: DesktopRuntimeContainerResolver,
+  placement: ContainerProcessPlacement,
+): Promise<DesktopRuntimeContainerResolution> {
+  try {
+    const inspected = await resolver.inspect(placement.container_engine, placement.container_id);
+    if (inspected.status !== 'running') {
+      return {
+        status: inspected.status,
+        message: containerUnavailableMessage(placement, inspected.status),
+      };
+    }
+    if (inspectedContainerMatchesReference(inspected, placement)) {
+      const nextPlacement = resolvedContainerPlacement(placement, inspected);
+      return {
+        status: 'running',
+        inspected,
+        placement: nextPlacement,
+        changed: placementChanged(placement, nextPlacement),
+      };
+    }
+  } catch (error) {
+    const directStatus = inspectFailureStatus(error);
+    if (directStatus === 'no_permission') {
+      return {
+        status: directStatus,
+        message: containerUnavailableMessage(placement, directStatus),
+      };
+    }
+  }
+
+  const reference = desktopRuntimeContainerReference(placement);
+  let containers: readonly DesktopRuntimeContainerListItem[];
+  try {
+    containers = await resolver.listRunning(placement.container_engine);
+  } catch (error) {
+    const status = inspectFailureStatus(error);
+    return {
+      status,
+      message: containerUnavailableMessage(placement, status),
+    };
+  }
+  const matches = containers.filter((item) => listItemMatchesReference(item, reference));
+  if (matches.length === 0) {
+    return {
+      status: 'missing',
+      message: containerUnavailableMessage(placement, 'missing'),
+    };
+  }
+  if (matches.length > 1) {
+    return {
+      status: 'ambiguous',
+      message: containerUnavailableMessage(placement, 'ambiguous'),
+    };
+  }
+  const [match] = matches;
+  const inspected: DesktopContainerInspectResult = {
+    engine: match.engine,
+    container_id: match.container_id,
+    container_ref: match.container_ref,
+    container_label: match.container_label,
+    status: 'running',
+  };
+  const nextPlacement = resolvedContainerPlacement(placement, inspected);
+  return {
+    status: 'running',
+    inspected,
+    placement: nextPlacement,
+    changed: true,
+  };
 }
 
 export function parseContainerPlatformProbeOutput(rawOutput: string): DesktopContainerRuntimePlatform {

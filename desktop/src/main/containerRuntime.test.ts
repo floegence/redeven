@@ -10,6 +10,8 @@ import {
   parseContainerListOutput,
   parseContainerInspectJSON,
   parseContainerPlatformProbeOutput,
+  resolveRuntimeContainerPlacement,
+  type DesktopRuntimeContainerResolver,
 } from './containerRuntime';
 
 describe('containerRuntime', () => {
@@ -26,6 +28,7 @@ describe('containerRuntime', () => {
     }]))).toEqual({
       engine: 'docker',
       container_id: 'container-stable-id',
+      container_ref: 'dev-container',
       container_label: 'dev-container',
       status: 'running',
     });
@@ -40,6 +43,7 @@ describe('containerRuntime', () => {
     }))).toEqual({
       engine: 'podman',
       container_id: 'podman-stable-id',
+      container_ref: 'web',
       container_label: 'web',
       status: 'stopped',
     });
@@ -64,6 +68,7 @@ describe('containerRuntime', () => {
       {
         engine: 'docker',
         container_id: 'other-container-id',
+        container_ref: 'api',
         container_label: 'api',
         image: 'api:local',
         status_text: 'Up 1 hour',
@@ -71,6 +76,7 @@ describe('containerRuntime', () => {
       {
         engine: 'docker',
         container_id: 'container-stable-id',
+        container_ref: 'dev-container',
         container_label: 'dev-container',
         image: 'redeven-dev:latest',
         status_text: 'Up 2 minutes',
@@ -169,5 +175,140 @@ describe('containerRuntime', () => {
       container_id: 'container-stable-id',
       argv: [],
     })).toThrow('argv');
+  });
+
+  it('resolves rebuilt running containers through their stable reference', async () => {
+    const resolver: DesktopRuntimeContainerResolver = {
+      inspect: async () => {
+        throw new Error('No such object: old-container-id');
+      },
+      listRunning: async () => [
+        {
+          engine: 'docker',
+          container_id: 'new-container-id',
+          container_ref: 'redeven-nginx-dev',
+          container_label: 'redeven-nginx-dev',
+          image: 'nginx:latest',
+          status_text: 'Up 5 seconds',
+        },
+      ],
+    };
+
+    await expect(resolveRuntimeContainerPlacement(resolver, {
+      kind: 'container_process',
+      container_engine: 'docker',
+      container_id: 'old-container-id',
+      container_ref: 'redeven-nginx-dev',
+      container_label: 'redeven-nginx-dev',
+      runtime_install_root: '/opt/redeven-desktop/runtime',
+      runtime_state_root: '/var/lib/redeven',
+      bridge_strategy: 'exec_stream',
+    })).resolves.toMatchObject({
+      status: 'running',
+      changed: true,
+      placement: {
+        container_id: 'new-container-id',
+        container_ref: 'redeven-nginx-dev',
+        container_label: 'redeven-nginx-dev',
+      },
+    });
+  });
+
+  it('does not accept a stale concrete id when it conflicts with the stable reference', async () => {
+    const inspected = {
+      engine: 'docker' as const,
+      container_id: 'stale-container-id',
+      container_ref: 'unrelated-container',
+      container_label: 'unrelated-container',
+      status: 'running' as const,
+    };
+    const resolver: DesktopRuntimeContainerResolver = {
+      inspect: async () => inspected,
+      listRunning: async () => [
+        {
+          ...inspected,
+          image: 'busybox:latest',
+          status_text: 'Up 1 minute',
+        },
+        {
+          engine: 'docker',
+          container_id: 'expected-container-id',
+          container_ref: 'redeven-nginx-dev',
+          container_label: 'redeven-nginx-dev',
+          image: 'nginx:latest',
+          status_text: 'Up 5 seconds',
+        },
+      ],
+    };
+
+    await expect(resolveRuntimeContainerPlacement(resolver, {
+      kind: 'container_process',
+      container_engine: 'docker',
+      container_id: 'stale-container-id',
+      container_ref: 'redeven-nginx-dev',
+      container_label: 'redeven-nginx-dev',
+      runtime_install_root: '/opt/redeven-desktop/runtime',
+      runtime_state_root: '/var/lib/redeven',
+      bridge_strategy: 'exec_stream',
+    })).resolves.toMatchObject({
+      status: 'running',
+      placement: {
+        container_id: 'expected-container-id',
+      },
+    });
+  });
+
+  it('reports unavailable container resolution precisely', async () => {
+    const resolver: DesktopRuntimeContainerResolver = {
+      inspect: async () => {
+        throw new Error('No such object: old-container-id');
+      },
+      listRunning: async () => [],
+    };
+
+    await expect(resolveRuntimeContainerPlacement(resolver, {
+      kind: 'container_process',
+      container_engine: 'docker',
+      container_id: 'old-container-id',
+      container_ref: 'redeven-nginx-dev',
+      container_label: 'redeven-nginx-dev',
+      runtime_install_root: '/opt/redeven-desktop/runtime',
+      runtime_state_root: '/var/lib/redeven',
+      bridge_strategy: 'exec_stream',
+    })).resolves.toEqual({
+      status: 'missing',
+      message: 'Container redeven-nginx-dev was not found. Choose a running container, then try again.',
+    });
+  });
+
+  it('does not use arbitrary container-name prefixes as id matches', async () => {
+    const resolver: DesktopRuntimeContainerResolver = {
+      inspect: async () => {
+        throw new Error('No such object: redeven');
+      },
+      listRunning: async () => [
+        {
+          engine: 'docker',
+          container_id: 'redevenabcdef123456',
+          container_ref: 'api',
+          container_label: 'api',
+          image: 'api:local',
+          status_text: 'Up 1 minute',
+        },
+      ],
+    };
+
+    await expect(resolveRuntimeContainerPlacement(resolver, {
+      kind: 'container_process',
+      container_engine: 'docker',
+      container_id: 'old-container-id',
+      container_ref: 'redeven',
+      container_label: 'redeven',
+      runtime_install_root: '/opt/redeven-desktop/runtime',
+      runtime_state_root: '/var/lib/redeven',
+      bridge_strategy: 'exec_stream',
+    })).resolves.toMatchObject({
+      status: 'missing',
+    });
   });
 });

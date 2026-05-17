@@ -10,6 +10,7 @@ export const DESKTOP_LAUNCHER_LIST_RUNTIME_CONTAINERS_CHANNEL = 'redeven-desktop
 export type DesktopRuntimeContainerOption = Readonly<{
   engine: DesktopContainerEngine;
   container_id: string;
+  container_ref: string;
   container_label: string;
   image: string;
   status_text: string;
@@ -49,10 +50,12 @@ export function normalizeDesktopRuntimeContainerOption(value: unknown): DesktopR
   if (containerID === '') {
     return null;
   }
+  const containerLabel = compact(record.container_label) || containerID.slice(0, 12);
   return {
     engine,
     container_id: containerID,
-    container_label: compact(record.container_label) || containerID.slice(0, 12),
+    container_ref: compact(record.container_ref) || containerLabel || containerID,
+    container_label: containerLabel,
     image: compact(record.image),
     status_text: compact(record.status_text),
   };

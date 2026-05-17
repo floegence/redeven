@@ -101,6 +101,8 @@ import {
   containerInspectCommand,
   parseContainerListOutput,
   parseContainerInspectJSON,
+  resolveRuntimeContainerPlacement,
+  type DesktopRuntimeContainerResolver,
 } from './containerRuntime';
 import {
   createLocalRuntimeHostExecutor,
@@ -401,6 +403,7 @@ type SavedRuntimeTargetState = Readonly<{
   runtime_service?: RuntimeServiceSnapshot;
   runtime_control_status: DesktopRuntimeControlStatus;
   lifecycle_control: DesktopManagedRuntimePresence['lifecycle_control'];
+  placement?: DesktopRuntimePlacement;
 }>;
 
 type PendingSSHRuntimeStart = Readonly<{
@@ -1118,6 +1121,32 @@ async function runtimeControlStatusForStartup(startup: StartupReport | null | un
     : desktopRuntimeControlStatusOwnerMismatch('This runtime is owned by another Desktop instance.');
 }
 
+function runtimeHostExecutor(hostAccess: DesktopRuntimeHostAccess) {
+  return hostAccess.kind === 'ssh_host'
+    ? createSSHRuntimeHostExecutor(hostAccess.ssh)
+    : createLocalRuntimeHostExecutor();
+}
+
+function runtimeContainerResolver(
+  hostAccess: DesktopRuntimeHostAccess,
+  signal?: AbortSignal,
+): DesktopRuntimeContainerResolver {
+  const executor = runtimeHostExecutor(hostAccess);
+  const commandOptions = () => ({
+    signal: signal ?? AbortSignal.timeout(DESKTOP_RUNTIME_PROBE_TIMEOUT_MS),
+  });
+  return {
+    inspect: async (engine, containerRef) => parseContainerInspectJSON(
+      engine,
+      (await executor.run(containerInspectCommand(engine, containerRef), commandOptions())).stdout,
+    ),
+    listRunning: async (engine) => parseContainerListOutput(
+      engine,
+      (await executor.run(containerListCommand(engine), commandOptions())).stdout,
+    ),
+  };
+}
+
 async function inspectSavedRuntimeTargetState(
   target: DesktopPreferences['saved_runtime_targets'][number],
 ): Promise<SavedRuntimeTargetState> {
@@ -1130,6 +1159,7 @@ async function inspectSavedRuntimeTargetState(
       runtime_service: bridgeRecord.startup.runtime_service,
       runtime_control_status: await runtimeControlStatusForStartup(bridgeRecord.startup),
       lifecycle_control: bridgeRecord.runtime_handle.lifecycle_owner === 'desktop' ? 'start_stop' : 'observe_only',
+      placement: bridgeRecord.session.placement,
     };
   }
   if (target.placement.kind !== 'container_process') {
@@ -1140,39 +1170,29 @@ async function inspectSavedRuntimeTargetState(
       lifecycle_control: 'start_stop',
     };
   }
-  try {
-    const executor = target.host_access.kind === 'ssh_host'
-      ? createSSHRuntimeHostExecutor(target.host_access.ssh)
-      : createLocalRuntimeHostExecutor();
-    const inspected = parseContainerInspectJSON(
-      target.placement.container_engine,
-      (await executor.run(containerInspectCommand(
-        target.placement.container_engine,
-        target.placement.container_id,
-      ), { signal: AbortSignal.timeout(DESKTOP_RUNTIME_PROBE_TIMEOUT_MS) })).stdout,
-    );
+  const resolution = await resolveRuntimeContainerPlacement(
+    runtimeContainerResolver(target.host_access),
+    target.placement,
+  );
+  if (resolution.status === 'running') {
     return {
       running: false,
       local_ui_url: '',
       runtime_control_status: desktopRuntimeControlStatusMissing(
         'not_started',
-        inspected.status === 'running'
-          ? 'Start this runtime before connecting it to a provider.'
-          : 'This container is not running. Start it outside Redeven, then refresh and start the runtime again.',
+        'Start this runtime before connecting it to a provider.',
       ),
-      lifecycle_control: inspected.status === 'running' ? 'start_stop' : 'observe_only',
-    };
-  } catch {
-    return {
-      running: false,
-      local_ui_url: '',
-      runtime_control_status: desktopRuntimeControlStatusMissing(
-        'not_started',
-        'Refresh this runtime after the container is reachable and running.',
-      ),
-      lifecycle_control: 'observe_only',
+      lifecycle_control: 'start_stop',
+      placement: resolution.placement,
     };
   }
+  return {
+    running: false,
+    local_ui_url: '',
+    runtime_control_status: desktopRuntimeControlStatusMissing('not_started', resolution.message),
+    lifecycle_control: 'observe_only',
+    placement: target.placement,
+  };
 }
 
 async function currentManagedRuntimePresenceByTargetID(
@@ -1254,7 +1274,7 @@ async function currentManagedRuntimePresenceByTargetID(
       label: target.label,
       runtime_key: target.id,
       host_access: target.host_access,
-      placement: target.placement,
+      placement: targetState.placement ?? target.placement,
       running: targetState.running,
       local_ui_url: targetState.local_ui_url,
       openable: runtimeServiceIsOpenable(targetState.runtime_service),
@@ -4723,50 +4743,22 @@ function runtimePlacementBridgeRecordForRequest(
   return runtimePlacementBridgeByTargetID.get(runtimeTargetIDFromRequest(request)) ?? null;
 }
 
-async function inspectRuntimeTargetContainer(
-  hostAccess: DesktopRuntimeHostAccess,
-  placement: Extract<DesktopRuntimePlacement, Readonly<{ kind: 'container_process' }>>,
-) {
-  const executor = hostAccess.kind === 'ssh_host'
-    ? createSSHRuntimeHostExecutor(hostAccess.ssh)
-    : createLocalRuntimeHostExecutor();
-  const result = await executor.run(containerInspectCommand(
-    placement.container_engine,
-    placement.container_id,
-  ));
-  return parseContainerInspectJSON(placement.container_engine, result.stdout);
-}
-
-function containerUnavailableMessage(
-  placement: Extract<DesktopRuntimePlacement, Readonly<{ kind: 'container_process' }>>,
-  status: string,
-): string {
-  const label = placement.container_label || placement.container_id;
-  if (status === 'missing') {
-    return `Container ${label} was not found. Choose a running container, then try again.`;
-  }
-  if (status === 'no_permission') {
-    return `Desktop does not have permission to inspect ${label}. Check ${placement.container_engine} access, then try again.`;
-  }
-  return `Container ${label} is not running. Start it outside Redeven, then refresh and try again.`;
-}
-
 async function assertRuntimeTargetContainerRunning(
   hostAccess: DesktopRuntimeHostAccess,
   placement: Extract<DesktopRuntimePlacement, Readonly<{ kind: 'container_process' }>>,
-): Promise<void> {
-  const inspected = await inspectRuntimeTargetContainer(hostAccess, placement);
-  if (inspected.status === 'running') {
-    return;
+): Promise<Extract<DesktopRuntimePlacement, Readonly<{ kind: 'container_process' }>>> {
+  const resolution = await resolveRuntimeContainerPlacement(runtimeContainerResolver(hostAccess), placement);
+  if (resolution.status === 'running') {
+    return resolution.placement;
   }
-  throw new Error(containerUnavailableMessage(placement, inspected.status));
+  throw new Error(resolution.message);
 }
 
 async function startRuntimePlacementBridgeRecordFromLauncher(
   request: DesktopLauncherRuntimeTargetRequest,
 ): Promise<RuntimePlacementBridgeRecord> {
   const hostAccess = runtimeHostAccessFromRequest(request);
-  const placement = runtimePlacementFromRequest(request);
+  let placement = runtimePlacementFromRequest(request);
   if (placement.kind !== 'container_process') {
     throw new Error('Runtime Placement Bridge requires a container runtime target.');
   }
@@ -4774,6 +4766,11 @@ async function startRuntimePlacementBridgeRecordFromLauncher(
   if (existing) {
     return existing;
   }
+  const resolution = await resolveRuntimeContainerPlacement(runtimeContainerResolver(hostAccess), placement);
+  if (resolution.status !== 'running') {
+    throw new Error(resolution.message);
+  }
+  placement = resolution.placement;
   const readyPlacement = await ensureRuntimePlacementReady({
     host_access: hostAccess,
     placement,
@@ -5372,7 +5369,21 @@ async function refreshEnvironmentRuntimeFromLauncher(
         runtimeServiceForProviderHealth = undefined;
       }
     } else {
-      await inspectRuntimeTargetContainer(runtimeHostAccessFromRequest(request), placement).catch(() => undefined);
+      const hostAccess = runtimeHostAccessFromRequest(request);
+      try {
+        const resolvedPlacement = await assertRuntimeTargetContainerRunning(hostAccess, placement);
+        const preferences = await loadDesktopPreferencesCached();
+        const environmentID = runtimeTargetEnvironmentIDFromRequest(request);
+        const existing = preferences.saved_runtime_targets.find((target) => target.id === environmentID);
+        await persistDesktopPreferences(markSavedRuntimeTargetUsed(preferences, {
+          environment_id: environmentID,
+          host_access: hostAccess,
+          placement: resolvedPlacement,
+          last_used_at_ms: existing?.last_used_at_ms ?? Date.now(),
+        }));
+      } catch {
+        // Refresh is best-effort; the next snapshot carries the resolver error.
+      }
     }
     await syncLinkedProviderRuntimeHealthFromService(runtimeServiceForProviderHealth);
     broadcastDesktopWelcomeSnapshots();
@@ -6317,15 +6328,16 @@ async function setSavedRuntimeTargetPinnedFromWelcome(
 async function upsertSavedRuntimeTargetFromWelcome(
   request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'upsert_saved_runtime_target' }>>,
 ): Promise<void> {
+  let placement = request.placement;
   if (request.placement.kind === 'container_process') {
-    await assertRuntimeTargetContainerRunning(request.host_access, request.placement);
+    placement = await assertRuntimeTargetContainerRunning(request.host_access, request.placement);
   }
   const preferences = await loadDesktopPreferencesCached();
   const next = upsertSavedRuntimeTarget(preferences, {
     id: request.environment_id,
     label: request.label,
     host_access: request.host_access,
-    placement: request.placement,
+    placement,
     last_used_at_ms: Date.now(),
   });
   await persistDesktopPreferences(next);

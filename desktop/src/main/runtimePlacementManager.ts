@@ -1,6 +1,7 @@
-import type {
-  DesktopRuntimeHostAccess,
-  DesktopRuntimePlacement,
+import {
+  desktopRuntimeContainerReference,
+  type DesktopRuntimeHostAccess,
+  type DesktopRuntimePlacement,
 } from '../shared/desktopRuntimePlacement';
 import {
   containerInspectCommand,
@@ -95,7 +96,7 @@ function containerUnavailableMessage(
   placement: Extract<DesktopRuntimePlacement, Readonly<{ kind: 'container_process' }>>,
   status: string,
 ): string {
-  const label = placement.container_label || placement.container_id;
+  const label = placement.container_label || desktopRuntimeContainerReference(placement);
   if (status === 'missing') {
     return `Container ${label} was not found. Choose a running container, then try again.`;
   }

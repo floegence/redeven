@@ -239,7 +239,7 @@ Durable preference categories:
 - `provider_environments`: first-class provider-backed environment records keyed by provider origin/id and environment id.
 - `saved_environments`: saved Local UI URL connections.
 - `saved_ssh_environments`: saved SSH Host connections and their bootstrap settings.
-- `saved_runtime_targets`: saved container runtime targets. A target keeps host access (`local_host` or `ssh_host`) separate from placement (`container_process`) so Local Container and SSH Container entries share the same managed-runtime card semantics as Local and SSH host-process runtimes.
+- `saved_runtime_targets`: saved container runtime targets. A target keeps host access (`local_host` or `ssh_host`) separate from placement (`container_process`) so Local Container and SSH Container entries share the same managed-runtime card semantics as Local and SSH host-process runtimes. Container placements persist a stable `container_ref` separately from the last resolved concrete `container_id`.
 - `control_planes`: provider discovery/account/catalog metadata.
 - `control_plane_refresh_tokens`: opaque provider refresh tokens in the local secrets file.
 
@@ -291,7 +291,7 @@ Container placements keep install and state paths separate:
 
 Desktop installs the correct Linux runtime package into `runtime_install_root` before starting the bridge. A generic container does not need to provide `redeven` on `PATH`, and Desktop must not copy the host-bundled macOS/Windows binary into the container namespace. Container bootstrap reuses the same Desktop local package cache as SSH Host bootstrap, so Local Container and SSH Container targets do not redownload a runtime package already prepared for the same Desktop release and platform. The bridge command uses the resolved container-local binary path only after platform, version, and Desktop stamp checks pass.
 
-Container lifecycle is outside Redeven. The creation dialog lists only currently running Docker/Podman containers for the selected local or SSH host access path, saves the selected stable container id, and re-checks that container before saving or starting the runtime. If the container disappears or stops, the card offers refresh/error guidance; the user must start or repair the container with the owning container tool before Redeven can start the runtime process inside it.
+Container lifecycle is outside Redeven. The creation dialog lists only currently running Docker/Podman containers for the selected local or SSH host access path, saves a stable `container_ref` (normally the container name), and keeps `container_id` as the last resolved execution id. Before status projection, bootstrap, or bridge startup, Desktop resolves the placement again through Docker/Podman on the local host or through the selected SSH host. If a container was recreated with the same stable reference, Desktop heals the concrete id and keeps `Start runtime` available. If the container is stopped, missing, ambiguous, or inaccessible, the card shows precise refresh/edit guidance; the user must start or repair the container with the owning container tool before Redeven can start the runtime process inside it.
 
 The runtime-control token stays in Electron main. Renderer snapshots expose only runtime-control status and provider-link capability.
 

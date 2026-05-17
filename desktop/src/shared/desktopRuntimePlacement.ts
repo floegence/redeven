@@ -24,6 +24,7 @@ export type DesktopRuntimePlacement =
       kind: 'container_process';
       container_engine: DesktopContainerEngine;
       container_id: string;
+      container_ref: string;
       container_label: string;
       runtime_install_root: string;
       runtime_state_root: string;
@@ -112,11 +113,15 @@ export function normalizeDesktopRuntimePlacement(value: unknown): DesktopRuntime
     const legacyRuntimeRoot = compact(record.runtime_root);
     const runtimeInstallRoot = compact(record.runtime_install_root) || legacyRuntimeRoot;
     const runtimeStateRoot = compact(record.runtime_state_root) || legacyRuntimeRoot;
+    const containerID = normalizeTokenComponent(record.container_id, 'Container ID');
+    const containerLabel = compact(record.container_label) || containerID;
+    const containerRef = compact(record.container_ref) || containerLabel || containerID;
     return {
       kind: 'container_process',
       container_engine: normalizeDesktopContainerEngine(record.container_engine),
-      container_id: normalizeTokenComponent(record.container_id, 'Container ID'),
-      container_label: compact(record.container_label) || compact(record.container_id),
+      container_id: containerID,
+      container_ref: normalizeTokenComponent(containerRef, 'Container reference'),
+      container_label: containerLabel,
       runtime_install_root: normalizeRuntimeRoot(runtimeInstallRoot, 'Container runtime install root'),
       runtime_state_root: normalizeRuntimeRoot(runtimeStateRoot, 'Container runtime state root'),
       bridge_strategy: 'exec_stream',
@@ -138,6 +143,12 @@ function encoded(value: string): string {
   return encodeURIComponent(value);
 }
 
+export function desktopRuntimeContainerReference(
+  placement: Extract<DesktopRuntimePlacement, Readonly<{ kind: 'container_process' }>>,
+): string {
+  return compact(placement.container_ref) || compact(placement.container_label) || compact(placement.container_id);
+}
+
 function normalizedSSHAuthority(ssh: DesktopSSHEnvironmentDetails): string {
   return desktopSSHAuthority(ssh);
 }
@@ -152,13 +163,13 @@ export function desktopRuntimeTargetID(
 ): DesktopRuntimeTargetID {
   if (hostAccess.kind === 'local_host') {
     if (placement.kind === 'container_process') {
-      return `local:container:${encoded(placement.container_engine)}:${encoded(placement.container_id)}:${hashRuntimePlacementRoots(placement.runtime_install_root, placement.runtime_state_root)}`;
+      return `local:container:${encoded(placement.container_engine)}:${encoded(desktopRuntimeContainerReference(placement))}:${hashRuntimePlacementRoots(placement.runtime_install_root, placement.runtime_state_root)}`;
     }
     return `local:host:${encoded(compact(fallbackLocalID) || 'local')}`;
   }
   const sshAuthority = normalizedSSHAuthority(hostAccess.ssh);
   if (placement.kind === 'container_process') {
-    return `ssh:container:${encoded(sshAuthority)}:${encoded(placement.container_engine)}:${encoded(placement.container_id)}:${hashRuntimePlacementRoots(placement.runtime_install_root, placement.runtime_state_root)}`;
+    return `ssh:container:${encoded(sshAuthority)}:${encoded(placement.container_engine)}:${encoded(desktopRuntimeContainerReference(placement))}:${hashRuntimePlacementRoots(placement.runtime_install_root, placement.runtime_state_root)}`;
   }
   return `ssh:host:${encoded(sshAuthority)}:${encoded(hostAccess.ssh.remote_install_dir)}`;
 }

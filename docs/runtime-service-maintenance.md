@@ -240,6 +240,7 @@ The same snapshot also carries explicit runtime-control surfaces:
 
 - `capabilities.desktop_model_source` and `bindings.desktop_model_source` let Desktop decide whether an attached SSH or container runtime can accept Desktop Model Source RPC without falling back to string-based heuristics. A binding error should be shown as model-source availability state, not as a Runtime Service startup failure.
 - `capabilities.provider_link` and `bindings.provider_link` describe whether a Desktop-managed Local or SSH runtime can accept an explicit provider-link command and which provider Environment, if any, is currently connected.
+- Container runtime targets resolve a stable `container_ref` to the current concrete `container_id` before bridge startup or maintenance actions. Runtime-control UI should reflect the resolver result: running containers without an active bridge remain startable, while stopped, missing, ambiguous, or inaccessible containers stay observe-only with the resolver message.
 
 ### Contract Carriers
 
