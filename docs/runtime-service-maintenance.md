@@ -279,9 +279,17 @@ Desktop launcher cards keep their current dense SaaS tool layout:
 - Runtime version appears in the existing metadata/fact slot, not as a new
   banner. It is always present; unknown runtime metadata is shown as
   `Version`: `UNKNOWN`.
+- Provider Environment cards show `LOCAL LINK` as a compact action when a
+  provider binding points at a managed Local/SSH/container runtime. The action
+  filters the Environment Library to the linked runtime card and does not act as
+  an alternate Open path.
 - Runtime lifecycle status and active-work impact stay in the status badge,
   action model, and maintenance confirmations instead of adding extra card
   fact rows.
+- Provider catalog freshness is tracked separately from route availability:
+  stale freshness does not override a last-known online/offline provider route.
+  Provider-card refresh first force-syncs the provider catalog, then refreshes
+  runtime health for that environment.
 - Primary actions remain route-aware:
   - compatible: `Open`
   - not running: `Open`

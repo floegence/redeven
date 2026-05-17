@@ -281,6 +281,41 @@ body {
   color: var(--foreground);
 }
 
+.redeven-card-fact-value--action {
+  display: inline-flex;
+  max-width: 68%;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.18rem;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--primary);
+  cursor: pointer;
+}
+
+.redeven-card-fact-value--action:hover .redeven-card-fact-value__text {
+  text-decoration: underline;
+  text-underline-offset: 0.16rem;
+}
+
+.redeven-card-fact-value--action:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--ring) 70%, transparent);
+  outline-offset: 2px;
+  border-radius: 0.25rem;
+}
+
+.redeven-card-fact-value__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.redeven-card-fact-value__icon {
+  flex: 0 0 auto;
+}
+
 .redeven-card-fact-value--placeholder {
   font-weight: 500;
   color: var(--muted-foreground);

@@ -510,7 +510,7 @@ function providerEnvironmentCandidateRouteState(
 ): DesktopProviderEnvironmentCandidate['route_state'] {
   return remoteRouteState === 'ready'
     ? 'online'
-    : remoteRouteState === 'unknown'
+    : remoteRouteState === 'unknown' || remoteRouteState === 'stale'
       ? 'unknown'
       : 'offline';
 }

@@ -35,4 +35,17 @@ describe('desktopRuntimeIdentity', () => {
 
     expect(readBundledDesktopRuntimeIdentity(executablePath)).toBeNull();
   });
+
+  it('waits long enough for version output under a busy desktop test run', async () => {
+    const executablePath = await writeExecutable(
+      'redeven-slow',
+      '#!/bin/sh\nsleep 2\nprintf "%s\\n" "redeven v1.2.3 (abc123) 2026-01-02T03:04:05Z"\n',
+    );
+
+    expect(readBundledDesktopRuntimeIdentity(executablePath)).toEqual({
+      runtime_version: 'v1.2.3',
+      runtime_commit: 'abc123',
+      runtime_build_time: '2026-01-02T03:04:05Z',
+    });
+  });
 });

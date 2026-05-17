@@ -5,9 +5,7 @@ import type {
   DesktopWelcomeSnapshot,
 } from '../shared/desktopLauncherIPC';
 import { desktopControlPlaneKey, type DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
-import {
-  type DesktopControlPlaneSyncState,
-} from '../shared/providerEnvironmentState';
+import type { DesktopControlPlaneSyncState } from '../shared/providerEnvironmentState';
 import {
   runtimeServiceOpenReadinessLabel,
   runtimeServiceIsOpenable,
@@ -15,7 +13,11 @@ import {
   type RuntimeServiceSnapshot,
 } from '../shared/runtimeService';
 import { buildDesktopProviderRuntimeLinkPlan } from '../shared/providerRuntimeLinkPlanner';
-import type { DesktopProviderRuntimeLinkTarget } from '../shared/providerRuntimeLinkTarget';
+import {
+  normalizeDesktopProviderRuntimeLinkTargetID,
+  type DesktopProviderRuntimeLinkTarget,
+  type DesktopProviderRuntimeLinkTargetID,
+} from '../shared/providerRuntimeLinkTarget';
 import {
   desktopEntryKindOwnsRuntimeManagement,
   desktopProviderEnvironmentOpenRoute,
@@ -49,10 +51,20 @@ export type EnvironmentCardMetaItem = Readonly<{
   monospace?: boolean;
 }>;
 
+export type EnvironmentCardFactActionModel = Readonly<
+  | {
+      kind: 'filter_runtime_target';
+      runtime_target_id: DesktopProviderRuntimeLinkTargetID;
+      label: string;
+      aria_label: string;
+    }
+>;
+
 export type EnvironmentCardFactModel = Readonly<{
   label: string;
   value: string;
   value_tone: 'default' | 'placeholder';
+  action?: EnvironmentCardFactActionModel;
 }>;
 
 export type EnvironmentCardEndpointModel = Readonly<{
@@ -155,6 +167,7 @@ export const LOCAL_ENVIRONMENT_LIBRARY_FILTER = '__local__';
 export const PROVIDER_ENVIRONMENT_LIBRARY_FILTER = '__provider__';
 export const URL_ENVIRONMENT_LIBRARY_FILTER = '__url__';
 export const SSH_ENVIRONMENT_LIBRARY_FILTER = '__ssh__';
+export const RUNTIME_TARGET_ENVIRONMENT_LIBRARY_FILTER_PREFIX = '__runtime_target__:';
 
 export function capabilityUnavailableMessage(label: string): string {
   return `Connect to an Environment first to open ${label}.`;
@@ -379,11 +392,16 @@ function externalLocalUINetworkLabel(environment: DesktopEnvironmentEntry): stri
   }
 }
 
-function buildEnvironmentCardFact(label: string, value: string): EnvironmentCardFactModel {
+function buildEnvironmentCardFact(
+  label: string,
+  value: string,
+  action?: EnvironmentCardFactActionModel,
+): EnvironmentCardFactModel {
   return {
     label,
     value,
     value_tone: 'default',
+    ...(action ? { action } : {}),
   };
 }
 
@@ -472,6 +490,20 @@ function runtimePlacementFacts(environment: DesktopEnvironmentEntry): readonly E
   ];
 }
 
+function providerRemoteOpenLooksAvailable(environment: DesktopEnvironmentEntry): boolean {
+  if (environment.kind !== 'provider_environment' || providerPrimaryRoute(environment) !== 'remote_desktop') {
+    return false;
+  }
+  return environment.remote_route_state === 'ready';
+}
+
+function providerRemoteLooksOffline(environment: DesktopEnvironmentEntry): boolean {
+  if (environment.kind !== 'provider_environment' || providerPrimaryRoute(environment) !== 'remote_desktop') {
+    return false;
+  }
+  return environment.remote_route_state === 'offline';
+}
+
 function providerLocalLinkLabel(environment: DesktopEnvironmentEntry): string {
   if (environment.kind !== 'provider_environment') {
     return '';
@@ -493,6 +525,22 @@ function providerLocalLinkLabel(environment: DesktopEnvironmentEntry): string {
     case 'unsupported':
       return 'No managed runtime linked';
   }
+}
+
+function providerLocalLinkFact(environment: DesktopEnvironmentEntry): EnvironmentCardFactModel {
+  const value = providerLocalLinkLabel(environment);
+  const linkedRuntime = environment.kind === 'provider_environment'
+    ? environment.provider_linked_runtime_summary
+    : undefined;
+  if (!linkedRuntime) {
+    return buildEnvironmentCardFact('LOCAL LINK', value);
+  }
+  return buildEnvironmentCardFact('LOCAL LINK', value, {
+    kind: 'filter_runtime_target',
+    runtime_target_id: linkedRuntime.runtime_target_id,
+    label: `Show ${linkedRuntime.label}`,
+    aria_label: `Show linked runtime ${linkedRuntime.label}`,
+  });
 }
 
 function providerEnvironmentIDFact(environment: DesktopEnvironmentEntry): EnvironmentCardFactModel {
@@ -519,7 +567,7 @@ export function buildEnvironmentCardFactsModel(
       buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment)),
       runtimeVersionFact(environment),
       buildEnvironmentCardFact('PROVIDER', controlPlaneDisplayLabel(environment) || 'Unavailable'),
-      buildEnvironmentCardFact('LOCAL LINK', providerLocalLinkLabel(environment)),
+      providerLocalLinkFact(environment),
       providerEnvironmentIDFact(environment),
     ]);
   }
@@ -609,11 +657,13 @@ function runtimeStatusLabel(environment: DesktopEnvironmentEntry): string {
     return 'RECONNECT REQUIRED';
   }
   if (environment.kind === 'provider_environment' && providerPrimaryRoute(environment) === 'remote_desktop') {
+    if (providerRemoteOpenLooksAvailable(environment)) {
+      return 'Open';
+    }
+    if (providerRemoteLooksOffline(environment)) {
+      return 'REMOTE OFFLINE';
+    }
     switch (environment.remote_route_state) {
-      case 'ready':
-        return 'Open';
-      case 'offline':
-        return 'REMOTE OFFLINE';
       case 'auth_required':
         return 'RECONNECT REQUIRED';
       case 'provider_unreachable':
@@ -651,7 +701,7 @@ function runtimeStatusTone(environment: DesktopEnvironmentEntry): EnvironmentCar
     return 'warning';
   }
   if (environment.kind === 'provider_environment' && providerPrimaryRoute(environment) === 'remote_desktop') {
-    return environment.remote_route_state === 'ready' ? 'success' : 'warning';
+    return providerRemoteOpenLooksAvailable(environment) ? 'success' : 'warning';
   }
   return environment.runtime_health.status === 'online' && runtimeServiceIsOpenable(environmentRuntimeService(environment))
     ? 'success'
@@ -678,7 +728,7 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
   const snapshot = environmentRuntimeService(environment);
   const primaryRoute = environment.kind === 'provider_environment' ? providerPrimaryRoute(environment) : '';
   const canOpenProviderRemoteRoute = environment.kind === 'provider_environment'
-    && environment.remote_route_state === 'ready';
+    && providerRemoteOpenLooksAvailable(environment);
   return {
     intent: 'open',
     label: 'Open',
@@ -1071,7 +1121,7 @@ function primaryActionOverlay(
     };
   }
   if (environment.kind === 'provider_environment' && providerPrimaryRoute(environment) === 'remote_desktop') {
-    if (environment.remote_route_state === 'ready') {
+    if (providerRemoteOpenLooksAvailable(environment)) {
       return undefined;
     }
     const refreshAction = blockedPrimaryActionRefreshGuidanceAction(menuActions);
@@ -1079,7 +1129,7 @@ function primaryActionOverlay(
       kind: 'popover',
       tone: 'warning',
       eyebrow: 'Remote route unavailable',
-      title: environment.remote_route_state === 'offline'
+      title: providerRemoteLooksOffline(environment)
         ? 'Provider reports offline'
         : environment.remote_route_state === 'provider_unreachable'
           ? 'Provider is unreachable'
@@ -1090,7 +1140,8 @@ function primaryActionOverlay(
               : environment.remote_route_state === 'stale'
                 ? 'Provider status is stale'
                 : 'Refresh provider status',
-      detail: environment.remote_state_reason || 'Remote open is not ready yet. Open stays separate from runtime start and provider link actions.',
+      detail: environment.remote_state_reason
+        || 'Remote open is not ready yet. Open stays separate from runtime start and provider link actions.',
       actions: refreshAction ? [refreshAction] : [],
     };
   }
@@ -1372,6 +1423,27 @@ export function environmentProviderFilterValue(environment: DesktopEnvironmentEn
   }
 }
 
+export function runtimeTargetEnvironmentLibraryFilterValue(
+  runtimeTargetID: DesktopProviderRuntimeLinkTargetID,
+): string {
+  const normalizedTargetID = normalizeDesktopProviderRuntimeLinkTargetID(runtimeTargetID);
+  return normalizedTargetID
+    ? `${RUNTIME_TARGET_ENVIRONMENT_LIBRARY_FILTER_PREFIX}${normalizedTargetID}`
+    : '';
+}
+
+export function runtimeTargetEnvironmentLibraryFilterTargetID(
+  providerFilter: string,
+): DesktopProviderRuntimeLinkTargetID | null {
+  const activeFilter = compact(providerFilter);
+  if (!activeFilter.startsWith(RUNTIME_TARGET_ENVIRONMENT_LIBRARY_FILTER_PREFIX)) {
+    return null;
+  }
+  return normalizeDesktopProviderRuntimeLinkTargetID(
+    activeFilter.slice(RUNTIME_TARGET_ENVIRONMENT_LIBRARY_FILTER_PREFIX.length),
+  );
+}
+
 function isVisibleEnvironmentLibraryEntry(environment: DesktopEnvironmentEntry): boolean {
   return Boolean(environment);
 }
@@ -1383,6 +1455,10 @@ export function environmentMatchesProviderFilter(
   const activeFilter = compact(providerFilter);
   if (activeFilter === '') {
     return true;
+  }
+  if (activeFilter.startsWith(RUNTIME_TARGET_ENVIRONMENT_LIBRARY_FILTER_PREFIX)) {
+    const runtimeTargetID = runtimeTargetEnvironmentLibraryFilterTargetID(activeFilter);
+    return runtimeTargetID !== null && environment.provider_runtime_link_target?.id === runtimeTargetID;
   }
   if (activeFilter === LOCAL_ENVIRONMENT_LIBRARY_FILTER) {
     return environment.kind === 'local_environment';

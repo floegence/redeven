@@ -38,6 +38,8 @@ import {
   filterEnvironmentLibrary,
   LOCAL_ENVIRONMENT_LIBRARY_FILTER,
   PROVIDER_ENVIRONMENT_LIBRARY_FILTER,
+  runtimeTargetEnvironmentLibraryFilterTargetID,
+  runtimeTargetEnvironmentLibraryFilterValue,
   SSH_ENVIRONMENT_LIBRARY_FILTER,
   URL_ENVIRONMENT_LIBRARY_FILTER,
   splitPinnedEnvironmentEntries,
@@ -1123,14 +1125,54 @@ describe('buildEnvironmentCardModel', () => {
       environment.kind === 'provider_environment' && environment.env_public_id === 'env_demo'
     ));
     expect(staleProviderEntry).toBeTruthy();
-    expect(buildProviderBackedEnvironmentActionModel(staleProviderEntry!)).toMatchObject({
+    expect(staleProviderEntry?.remote_route_state).toBe('ready');
+    const staleProviderAction = buildProviderBackedEnvironmentActionModel(staleProviderEntry!);
+    expect(staleProviderAction).toMatchObject({
+      status_label: 'Open',
+      status_tone: 'success',
+      action_presentation: {
+        primary_action: {
+          intent: 'open',
+          label: 'Open',
+          enabled: true,
+          variant: 'default',
+          route: desktopProviderEnvironmentOpenRoute(),
+        },
+      },
+    });
+    expect(staleProviderAction.action_presentation.primary_action_overlay).toBeUndefined();
+
+    const unknownControlPlane = {
+      ...buildControlPlaneSummary({
+        catalogFreshness: 'unknown',
+      }),
+      last_synced_at_ms: 0,
+      last_sync_attempt_at_ms: 0,
+    };
+    const unknownProviderSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment(),
+        provider_environments: [
+          testProviderEnvironment('https://cp.example.invalid', 'env_demo', {
+            preferredOpenRoute: 'remote_desktop',
+          }),
+        ],
+        control_planes: [unknownControlPlane],
+      }),
+      controlPlanes: [unknownControlPlane],
+    });
+    const unknownProviderEntry = unknownProviderSnapshot.environments.find((environment) => (
+      environment.kind === 'provider_environment' && environment.env_public_id === 'env_demo'
+    ));
+    expect(unknownProviderEntry).toBeTruthy();
+    expect(buildProviderBackedEnvironmentActionModel(unknownProviderEntry!)).toMatchObject({
       status_label: 'REFRESH NEEDED',
       status_tone: 'warning',
       action_presentation: {
         primary_action_overlay: {
           kind: 'popover',
-          title: 'Provider status is stale',
-          detail: 'Remote status is stale. Refresh the provider to confirm the current state.',
+          title: 'Refresh provider status',
+          detail: 'Remote status is not yet confirmed.',
           actions: [{
             label: 'Refresh status',
             emphasis: 'secondary',
@@ -1324,8 +1366,23 @@ describe('buildEnvironmentCardModel', () => {
       expect.objectContaining({
         label: 'LOCAL LINK',
         value: 'Local Environment needs attention',
+        action: {
+          kind: 'filter_runtime_target',
+          runtime_target_id: 'local:local',
+          label: 'Show Local Environment',
+          aria_label: 'Show linked runtime Local Environment',
+        },
       }),
     ]));
+    const localOnlyFilter = runtimeTargetEnvironmentLibraryFilterValue('local:local');
+    expect(localOnlyFilter).toBe('__runtime_target__:local:local');
+    expect(runtimeTargetEnvironmentLibraryFilterTargetID(localOnlyFilter)).toBe('local:local');
+    expect(filterEnvironmentLibrary(localOnlyLinkedSnapshot, '', localOnlyFilter)).toEqual([
+      expect.objectContaining({
+        kind: 'local_environment',
+        provider_runtime_link_target: expect.objectContaining({ id: 'local:local' }),
+      }),
+    ]);
     const localOnlyProviderMenuActionIDs = buildProviderBackedEnvironmentActionModel(localOnlyProviderEntry!)
       .action_presentation.menu_actions.map((item) => item.id);
     for (const action of DESKTOP_PROVIDER_CARD_FORBIDDEN_ACTIONS) {

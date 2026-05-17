@@ -5385,6 +5385,11 @@ async function refreshEnvironmentRuntimeFromLauncher(
     : null;
   if (providerEnvironment) {
     try {
+      await syncSavedControlPlaneAccountWithState(
+        providerEnvironment.provider_origin,
+        providerEnvironment.provider_id,
+        { force: true },
+      );
       await refreshProviderEnvironmentRuntimeHealth(
         providerEnvironment.provider_origin,
         providerEnvironment.provider_id,
