@@ -19,7 +19,7 @@ This document describes the public Electron desktop shell that ships with each `
 - Session identity is keyed by target type: managed Local Environment/provider route, saved Local UI URL, or SSH Host entry.
 - Provider integrations use the fixed public RCPP v1 contract. `provider_id` comes from discovery and is reused in protocol payloads, catalog records, and bindings.
 - Saved Redeven URL and SSH Host entries are connection records. SSH Host entries persist host-access details but do not create a separate Desktop-private runtime state root.
-- Env App receives a Desktop-owned session context so it can scope renderer UI state and choose the correct Web Services route for local, remote, or SSH-hosted sessions.
+- Env App receives a Desktop-owned session context so it can scope renderer-local UI state and choose the correct Web Services route for local, remote, or SSH-hosted sessions.
 - Common startup failures return to the launcher with contextual recovery actions; Electron allows session-owned navigation only to the reported Local UI origin and opens unrelated URLs in the system browser.
 
 ## Runtime Contract
@@ -271,6 +271,7 @@ Desktop semantics:
 - One Local Environment runtime may be active for the signed-in user / profile state root. Connecting a provider Environment is an explicit runtime-control operation against that singleton runtime.
 - Provider environments never persist provider-specific local runtime configuration; Desktop derives linked-local readiness from the single Local Environment runtime and its current provider binding.
 - Standalone runtime / CLI and Desktop sessions stay interoperable because both read and write the same Local Environment runtime layout.
+- Desktop renderer storage is only for renderer-local Env App state such as theme, Workbench filters, shell mode, active tool, and per-widget instance helpers. It does not own Workbench widget identity, geometry, ordering, z-index, or canvas objects; those are read from and written to the runtime layout service.
 - Process provenance stays diagnostic: Desktop can attach to externally started local runtimes, but explicit stop/restart/update availability is decided by the host or container management channel, not by an ownership label.
 
 ### Container Runtime Targets
@@ -409,7 +410,8 @@ Behavior:
 - When a desktop-managed remote session renders Env App through a same-origin iframe, the embedded document resolves desktop theme, session context, state storage, and window chrome from its host session window instead of falling back to plain browser semantics.
 - Same-origin embedded Env App documents publish drag-region intent upward; the top-level session document owns native drag hit-testing and subtracts app-owned floating surfaces from draggable titlebar regions.
 - Session child windows render through the same shell-owned chrome and theme bridge contract as their owning Environment window.
-- Welcome and desktop Env App route only the Floe `theme` persistence key through the shell bridge; other UI state stays in their normal storage namespaces.
+- Welcome and desktop Env App route only the Floe `theme` persistence key through the shell bridge; other renderer-local UI state stays in normal storage namespaces.
+- Workbench widget layout is not renderer-local UI state. Desktop Env App must get widget identity, geometry, ordering, z-index, and durable canvas objects from the runtime layout snapshot and must ignore old renderer layout payloads.
 - Theme toggles from either welcome or Env App update native chrome and all registered renderer windows together, including session child windows.
 - When the stored source is `system`, Electron main rebroadcasts a fresh snapshot whenever the OS theme changes.
 

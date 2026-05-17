@@ -3,10 +3,12 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_DECK_STORAGE_KEY,
   DEFAULT_ENVAPP_STORAGE_NAMESPACE,
-  DEFAULT_WORKBENCH_STORAGE_KEY,
+  DEFAULT_WORKBENCH_INSTANCE_STATE_KEY,
+  DEFAULT_WORKBENCH_LOCAL_PREFERENCES_KEY,
   DESKTOP_DECK_STORAGE_KEY,
   DESKTOP_ENVAPP_STORAGE_NAMESPACE,
-  DESKTOP_WORKBENCH_STORAGE_KEY,
+  DESKTOP_WORKBENCH_INSTANCE_STATE_KEY,
+  DESKTOP_WORKBENCH_LOCAL_PREFERENCES_KEY,
   resolveEnvAppStorageBinding,
 } from './uiPersistence';
 
@@ -18,18 +20,20 @@ describe('uiPersistence', () => {
     })).toEqual({
       namespace: DESKTOP_ENVAPP_STORAGE_NAMESPACE,
       deckStorageKey: DESKTOP_DECK_STORAGE_KEY,
-      workbenchStorageKey: DESKTOP_WORKBENCH_STORAGE_KEY,
+      workbenchLocalPreferencesKey: DESKTOP_WORKBENCH_LOCAL_PREFERENCES_KEY,
+      workbenchInstanceStateKey: DESKTOP_WORKBENCH_INSTANCE_STATE_KEY,
     });
   });
 
-  it('uses env-scoped keys in browser runtimes', () => {
+  it('uses env-scoped local-only Workbench keys in browser runtimes', () => {
     expect(resolveEnvAppStorageBinding({
       envID: 'env_demo',
       desktopStateStorageAvailable: false,
     })).toEqual({
       namespace: 'redeven-envapp:env_demo',
       deckStorageKey: 'deck:env_demo',
-      workbenchStorageKey: 'workbench:env_demo',
+      workbenchLocalPreferencesKey: 'workbench:local_preferences:env_demo',
+      workbenchInstanceStateKey: 'workbench:instance_state:env_demo',
     });
   });
 
@@ -40,7 +44,8 @@ describe('uiPersistence', () => {
     })).toEqual({
       namespace: DEFAULT_ENVAPP_STORAGE_NAMESPACE,
       deckStorageKey: DEFAULT_DECK_STORAGE_KEY,
-      workbenchStorageKey: DEFAULT_WORKBENCH_STORAGE_KEY,
+      workbenchLocalPreferencesKey: DEFAULT_WORKBENCH_LOCAL_PREFERENCES_KEY,
+      workbenchInstanceStateKey: DEFAULT_WORKBENCH_INSTANCE_STATE_KEY,
     });
   });
 });

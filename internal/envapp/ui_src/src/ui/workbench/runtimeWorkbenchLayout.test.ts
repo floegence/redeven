@@ -8,10 +8,9 @@ import {
 } from '@floegence/floe-webapp-core/workbench';
 
 import {
-  buildWorkbenchLocalStateStorageKey,
   createWorkbenchOverviewViewport,
   derivePersistedWorkbenchLocalState,
-  extractRuntimeWorkbenchLayoutFromWorkbenchState,
+  extractRuntimeWorkbenchLayoutFromSurfaceState,
   normalizeRuntimeWorkbenchLayoutSnapshot,
   normalizeRuntimeWorkbenchOpenPreviewResponse,
   projectWorkbenchStateFromRuntimeLayout,
@@ -19,6 +18,7 @@ import {
   runtimeWorkbenchAnnotationsEqual,
   runtimeWorkbenchBackgroundLayersEqual,
   runtimeWorkbenchSharedLayoutEqual,
+  runtimeWorkbenchLayoutIsPristine,
   runtimeWorkbenchStickyNotesEqual,
   runtimeWorkbenchWidgetStateById,
   runtimeWorkbenchWidgetStateDataEqual,
@@ -50,8 +50,27 @@ const widgetDefinitions = [
 const sansTextFont = WORKBENCH_TEXT_FONT_OPTIONS.find((option) => option.id === 'sans') ?? WORKBENCH_TEXT_FONT_OPTIONS[0]!;
 
 describe('runtimeWorkbenchLayout', () => {
-  it('builds a dedicated local state storage key', () => {
-    expect(buildWorkbenchLocalStateStorageKey('workbench:env-1')).toBe('workbench:env-1:local_state');
+  it('treats only untouched empty runtime layouts as pristine', () => {
+    expect(runtimeWorkbenchLayoutIsPristine({
+      seq: 0,
+      revision: 0,
+      updated_at_unix_ms: 0,
+      widgets: [],
+      widget_states: [],
+      sticky_notes: [],
+      annotations: [],
+      background_layers: [],
+    })).toBe(true);
+    expect(runtimeWorkbenchLayoutIsPristine({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 100,
+      widgets: [],
+      widget_states: [],
+      sticky_notes: [],
+      annotations: [],
+      background_layers: [],
+    })).toBe(false);
   });
 
   it('projects runtime layout while preserving local viewport, selection, and titles', () => {
@@ -79,7 +98,7 @@ describe('runtimeWorkbenchLayout', () => {
       selectedWidgetId: 'widget-files-1',
       theme: 'mica',
     };
-    const localState = derivePersistedWorkbenchLocalState(existingState as any, true);
+    const localState = derivePersistedWorkbenchLocalState(existingState as any);
     const snapshot: RuntimeWorkbenchLayoutSnapshot = {
       seq: 4,
       revision: 2,
@@ -161,7 +180,7 @@ describe('runtimeWorkbenchLayout', () => {
       selectedWidgetId: 'widget-terminal-1',
       theme: 'default',
     };
-    const localState = derivePersistedWorkbenchLocalState(existingState as any, true);
+    const localState = derivePersistedWorkbenchLocalState(existingState as any);
 
     const projected = projectWorkbenchStateFromRuntimeLayout({
       snapshot: {
@@ -228,7 +247,7 @@ describe('runtimeWorkbenchLayout', () => {
       selectedWidgetId: null,
       theme: 'default',
     };
-    const localState = derivePersistedWorkbenchLocalState(existingState as any, true);
+    const localState = derivePersistedWorkbenchLocalState(existingState as any);
 
     const projected = projectWorkbenchStateFromRuntimeLayout({
       snapshot: {
@@ -296,7 +315,7 @@ describe('runtimeWorkbenchLayout', () => {
       selectedWidgetId: 'widget-files-1',
       theme: 'default',
     };
-    const localState = derivePersistedWorkbenchLocalState(existingState as any, true);
+    const localState = derivePersistedWorkbenchLocalState(existingState as any);
 
     const projected = projectWorkbenchStateFromRuntimeLayout({
       snapshot: {
@@ -384,7 +403,7 @@ describe('runtimeWorkbenchLayout', () => {
       selectedWidgetId: null,
       theme: 'default',
     };
-    const localState = derivePersistedWorkbenchLocalState(existingState as any, true);
+    const localState = derivePersistedWorkbenchLocalState(existingState as any);
 
     const projected = projectWorkbenchStateFromRuntimeLayout({
       snapshot: {
@@ -460,7 +479,7 @@ describe('runtimeWorkbenchLayout', () => {
       theme: 'midnight',
     };
 
-    expect(extractRuntimeWorkbenchLayoutFromWorkbenchState(state as any)).toEqual({
+    expect(extractRuntimeWorkbenchLayoutFromSurfaceState(state as any)).toEqual({
       widgets: [
         {
           widget_id: 'widget-terminal-1',
@@ -548,7 +567,7 @@ describe('runtimeWorkbenchLayout', () => {
       ],
     };
 
-    const extracted = extractRuntimeWorkbenchLayoutFromWorkbenchState(existingState as any);
+    const extracted = extractRuntimeWorkbenchLayoutFromSurfaceState(existingState as any);
     expect(extracted).toMatchObject({
       widgets: [],
       sticky_notes: [{ id: 'note-1', kind: 'sticky_note', body: 'Check deploy notes' }],
@@ -556,7 +575,7 @@ describe('runtimeWorkbenchLayout', () => {
       background_layers: [{ id: 'background-1', material: 'grid', opacity: 0.42 }],
     });
 
-    const localState = derivePersistedWorkbenchLocalState(existingState as any, true);
+    const localState = derivePersistedWorkbenchLocalState(existingState as any);
     const projected = projectWorkbenchStateFromRuntimeLayout({
       snapshot: {
         seq: 8,
@@ -646,7 +665,7 @@ describe('runtimeWorkbenchLayout', () => {
         annotations: [],
         background_layers: [],
       },
-      localState: derivePersistedWorkbenchLocalState(existingState as any, true),
+      localState: derivePersistedWorkbenchLocalState(existingState as any),
       existingState: existingState as any,
       widgetDefinitions: widgetDefinitions as any,
     });
@@ -654,21 +673,20 @@ describe('runtimeWorkbenchLayout', () => {
     expect(projected.selectedObject).toBeNull();
   });
 
-  it('sanitizes local-only state from persisted data and legacy fallback', () => {
-    const legacyState = {
-      version: 1,
-      widgets: [],
-      viewport: { x: 80, y: 60, scale: 1 },
-      locked: false,
-      filters: {
-        'redeven.files': true,
-        'redeven.terminal': true,
-      },
-      selectedWidgetId: null,
-      theme: 'default',
-    };
-
+  it('sanitizes local-only state while ignoring layout-shaped payload fields', () => {
     const sanitized = sanitizePersistedWorkbenchLocalState({
+      widgets: [
+        {
+          id: 'legacy-widget',
+          type: 'redeven.files',
+          x: 1,
+          y: 2,
+          width: 3,
+          height: 4,
+          z_index: 1,
+          created_at_unix_ms: 5,
+        },
+      ],
       viewport: { x: 200, y: 140, scale: 1.3 },
       locked: true,
       filters: {
@@ -676,37 +694,23 @@ describe('runtimeWorkbenchLayout', () => {
         ignored: true,
       },
       selectedWidgetId: 'widget-files-1',
-      legacyLayoutMigrated: true,
-    }, legacyState as any, widgetDefinitions as any);
+      theme: 'midnight',
+    }, widgetDefinitions as any);
 
     expect(sanitized).toEqual({
-      version: 3,
+      version: 4,
       locked: true,
       filters: {
         'redeven.files': false,
         'redeven.terminal': true,
       },
-      theme: 'default',
+      theme: 'midnight',
       mode: 'work',
       activeTool: 'select',
-      legacyLayoutMigrated: true,
     });
   });
 
   it('preserves upstream layered filter ids in local state normalization', () => {
-    const legacyState = {
-      version: 1,
-      widgets: [],
-      viewport: { x: 80, y: 60, scale: 1 },
-      locked: false,
-      filters: {
-        'redeven.files': true,
-        'redeven.terminal': true,
-      },
-      selectedWidgetId: null,
-      theme: 'default',
-    };
-
     const sanitized = sanitizePersistedWorkbenchLocalState({
       filters: {
         'sticky-note': false,
@@ -716,7 +720,7 @@ describe('runtimeWorkbenchLayout', () => {
       },
       mode: 'background',
       activeTool: 'background-region',
-    }, legacyState as any, widgetDefinitions as any);
+    }, widgetDefinitions as any);
 
     expect(sanitized.filters).toMatchObject({
       'redeven.files': true,
@@ -742,10 +746,10 @@ describe('runtimeWorkbenchLayout', () => {
       },
       selectedWidgetId: 'widget-files-1',
       theme: 'mica',
-    } as any, true);
+    } as any);
 
     expect(localState).toEqual({
-      version: 3,
+      version: 4,
       locked: true,
       filters: {
         'redeven.files': false,
@@ -754,7 +758,6 @@ describe('runtimeWorkbenchLayout', () => {
       theme: 'mica',
       mode: 'work',
       activeTool: 'select',
-      legacyLayoutMigrated: true,
     });
   });
 
@@ -806,7 +809,7 @@ describe('runtimeWorkbenchLayout', () => {
   });
 
   it('compares runtime widget arrays deterministically', () => {
-    const left = extractRuntimeWorkbenchLayoutFromWorkbenchState({
+    const left = extractRuntimeWorkbenchLayoutFromSurfaceState({
       widgets: [
         {
           id: 'a',
@@ -821,7 +824,7 @@ describe('runtimeWorkbenchLayout', () => {
         },
       ],
     } as any).widgets;
-    const right = extractRuntimeWorkbenchLayoutFromWorkbenchState({
+    const right = extractRuntimeWorkbenchLayoutFromSurfaceState({
       widgets: [
         {
           id: 'a',

@@ -53,6 +53,7 @@ const layoutApiMocks = vi.hoisted(() => ({
     widget_states: [],
   })),
   putWorkbenchWidgetState: vi.fn(),
+  openWorkbenchPreview: vi.fn(),
   createWorkbenchTerminalSession: vi.fn(),
   deleteWorkbenchTerminalSession: vi.fn(),
   connectWorkbenchLayoutEventStream: vi.fn(async (args: any) => {
@@ -106,6 +107,7 @@ vi.mock('../services/workbenchLayoutApi', () => ({
   getWorkbenchLayoutSnapshot: layoutApiMocks.getWorkbenchLayoutSnapshot,
   putWorkbenchLayout: layoutApiMocks.putWorkbenchLayout,
   putWorkbenchWidgetState: layoutApiMocks.putWorkbenchWidgetState,
+  openWorkbenchPreview: layoutApiMocks.openWorkbenchPreview,
   createWorkbenchTerminalSession: layoutApiMocks.createWorkbenchTerminalSession,
   deleteWorkbenchTerminalSession: layoutApiMocks.deleteWorkbenchTerminalSession,
   connectWorkbenchLayoutEventStream: layoutApiMocks.connectWorkbenchLayoutEventStream,
@@ -178,6 +180,7 @@ vi.mock('./redevenWorkbenchWidgets', () => ({
     },
   ],
   redevenWorkbenchFilterBarWidgetTypes: [],
+  redevenWorkbenchInitialCanvasWidgetTypes: [],
 }));
 
 describe('EnvWorkbenchPage click handoff', () => {
@@ -186,7 +189,7 @@ describe('EnvWorkbenchPage click handoff', () => {
     layoutApiState.clicks = [];
     storageMocks.readUIStorageJSON.mockReset();
     storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
-      if (key === 'workbench:env-123:local_state') {
+      if (key === 'workbench:local_preferences:env-123') {
         return {
           version: 1,
           viewport: { x: 0, y: 0, scale: 1 },
@@ -198,7 +201,6 @@ describe('EnvWorkbenchPage click handoff', () => {
           },
           selectedWidgetId: 'widget-files-1',
           theme: 'default',
-          legacyLayoutMigrated: true,
         };
       }
       return null;

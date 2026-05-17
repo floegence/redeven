@@ -337,6 +337,35 @@ function persistedWidget(widget_id: string, widget_type: string, title: string, 
   };
 }
 
+function localWorkbenchPreferences(overrides: Record<string, unknown> = {}) {
+  return {
+    version: 4,
+    locked: false,
+    filters: {
+      'redeven.terminal': true,
+      'redeven.files': true,
+      'redeven.preview': true,
+    },
+    theme: 'default',
+    mode: 'work',
+    activeTool: 'select',
+    ...overrides,
+  };
+}
+
+function runtimeWidgetFromWorkbenchWidget(widget: any) {
+  return {
+    widget_id: widget.id,
+    widget_type: widget.type,
+    x: widget.x,
+    y: widget.y,
+    width: widget.width,
+    height: widget.height,
+    z_index: widget.z_index,
+    created_at_unix_ms: widget.created_at_unix_ms,
+  };
+}
+
 function runtimePreviewState(widget_id: string, path: string, name: string, revision = 1, updated_at_unix_ms = 400, size?: number) {
   return {
     widget_id,
@@ -492,6 +521,10 @@ vi.mock('./redevenWorkbenchWidgets', () => ({
     },
   ],
   redevenWorkbenchFilterBarWidgetTypes: [
+    'redeven.terminal',
+    'redeven.files',
+  ],
+  redevenWorkbenchInitialCanvasWidgetTypes: [
     'redeven.terminal',
     'redeven.files',
   ],
@@ -725,7 +758,7 @@ describe('EnvWorkbenchPage', () => {
     vi.useRealTimers();
   });
 
-  it('hydrates the runtime snapshot while persisting only local workbench state', async () => {
+  it('hydrates the runtime snapshot while ignoring old frontend layout storage', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -748,6 +781,20 @@ describe('EnvWorkbenchPage', () => {
       widget_states: [],
     });
     storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
+      if (key === 'workbench:local_preferences:env-123') {
+        return {
+          version: 4,
+          locked: true,
+          filters: {
+            'redeven.terminal': true,
+            'redeven.files': false,
+            'redeven.preview': true,
+          },
+          theme: 'mica',
+          mode: 'work',
+          activeTool: 'select',
+        };
+      }
       if (key === 'workbench:env-123') {
         return {
           version: 1,
@@ -782,17 +829,17 @@ describe('EnvWorkbenchPage', () => {
     await flushMicrotasks();
 
     const surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement;
-    expect(storageMocks.readUIStorageJSON).toHaveBeenCalledWith('workbench:env-123', null);
-    expect(storageMocks.readUIStorageJSON).toHaveBeenCalledWith('workbench:env-123:local_state', null);
+    expect(storageMocks.readUIStorageJSON).not.toHaveBeenCalledWith('workbench:env-123', null);
+    expect(storageMocks.readUIStorageJSON).toHaveBeenCalledWith('workbench:local_preferences:env-123', null);
     expect(surface.dataset.widgetIds).toBe('widget-files-1');
-    expect(surface.dataset.viewportX).toBe('180');
+    expect(surface.dataset.viewportX).toBe('80');
     expect(surface.dataset.widgetX).toBe('320');
 
     vi.advanceTimersByTime(120);
     expect(storageMocks.writeUIStorageJSON).toHaveBeenCalledWith(
-      'workbench:env-123:local_state',
+      'workbench:local_preferences:env-123',
       expect.objectContaining({
-        version: 3,
+        version: 4,
         locked: true,
         theme: 'mica',
         mode: 'work',
@@ -801,13 +848,91 @@ describe('EnvWorkbenchPage', () => {
     );
   });
 
-  it('migrates legacy workbench appearance into persisted local theme state', async () => {
+  it('seeds a pristine runtime canvas from widget definition default sizes', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
+    vi.setSystemTime(new Date('2026-05-17T00:00:00.000Z'));
 
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    expect(layoutApiMocks.putWorkbenchLayout).toHaveBeenCalledTimes(1);
+    expect(layoutApiMocks.putWorkbenchLayout).toHaveBeenCalledWith({
+      base_revision: 0,
+      widgets: [
+        expect.objectContaining({
+          widget_id: 'widget-initial-terminal',
+          widget_type: 'redeven.terminal',
+          width: 800,
+          height: 480,
+          z_index: 1,
+          created_at_unix_ms: 1_778_976_000_000,
+        }),
+        expect.objectContaining({
+          widget_id: 'widget-initial-files',
+          widget_type: 'redeven.files',
+          width: 720,
+          height: 520,
+          z_index: 2,
+          created_at_unix_ms: 1_778_976_000_001,
+        }),
+      ],
+      sticky_notes: [],
+      annotations: [],
+      background_layers: [],
+    });
+
+    const surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement;
+    expect(surface.dataset.widgetIds).toBe('widget-initial-terminal,widget-initial-files');
+  });
+
+  it('does not seed an empty runtime canvas after the runtime revision has advanced', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 7,
+      revision: 3,
+      updated_at_unix_ms: 500,
+      widgets: [],
+      widget_states: [],
+      sticky_notes: [],
+      annotations: [],
+      background_layers: [],
+    });
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    expect(layoutApiMocks.putWorkbenchLayout).not.toHaveBeenCalled();
+    const surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement;
+    expect(surface.dataset.widgetIds).toBe('');
+  });
+
+  it('ignores old desktop Workbench layout storage when seeding a pristine runtime canvas', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    storageMocks.isDesktopStateStorageAvailable.mockReturnValue(true);
     storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
-      if (key === 'redeven_envapp_workbench_appearance_v1') {
-        return { tone: 'slate', texture: 'grid' };
+      if (key === 'workbench:desktop') {
+        return {
+          version: 1,
+          widgets: [
+            {
+              id: 'legacy-desktop-widget',
+              type: 'redeven.files',
+              title: 'Files · legacy desktop',
+              x: 12,
+              y: 24,
+              width: 320,
+              height: 220,
+              z_index: 9,
+              created_at_unix_ms: 10,
+            },
+          ],
+          viewport: { x: 999, y: 888, scale: 1.6 },
+          selectedWidgetId: 'legacy-desktop-widget',
+          theme: 'midnight',
+        };
       }
       return null;
     }) as any);
@@ -815,15 +940,17 @@ describe('EnvWorkbenchPage', () => {
     mount(() => <EnvWorkbenchPage />, host);
     await flushMicrotasks();
 
-    expect(surfaceApiMocks.lastStateAccessor().theme).toBe('midnight');
-    expect(storageMocks.writeUIStorageJSON).toHaveBeenCalledWith(
-      'workbench:env-123:local_state',
-      expect.objectContaining({
-        theme: 'midnight',
-      }),
-    );
-    expect(storageMocks.removeUIStorageItem).toHaveBeenCalledWith(
-      'redeven_envapp_workbench_appearance_v1',
+    expect(storageMocks.readUIStorageJSON).not.toHaveBeenCalledWith('workbench:desktop', null);
+    expect(storageMocks.readUIStorageJSON).toHaveBeenCalledWith('workbench:local_preferences:desktop', null);
+    expect(layoutApiMocks.putWorkbenchLayout).toHaveBeenCalledTimes(1);
+    expect(layoutApiMocks.putWorkbenchLayout.mock.calls[0]?.[0].widgets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          widget_id: 'widget-initial-files',
+          width: 720,
+          height: 520,
+        }),
+      ]),
     );
   });
 
@@ -926,28 +1053,14 @@ describe('EnvWorkbenchPage', () => {
       ],
       widget_states: [],
     });
-    storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
-      if (key === 'workbench:env-123') {
-        return {
-          version: 1,
-          widgets: [],
-          viewport: { x: 180, y: 120, scale: 1.25 },
-          locked: false,
-          filters: {
-            'redeven.terminal': true,
-            'redeven.files': true,
-            'redeven.preview': true,
-          },
-          selectedWidgetId: null,
-          theme: 'default',
-        };
-      }
-      return null;
-    }) as any);
-
     mount(() => <EnvWorkbenchPage />, host);
     await flushMicrotasks();
     setMockCanvasFrameRect(host, 1200, 800);
+    surfaceApiMocks.lastSetState((previous: any) => ({
+      ...previous,
+      viewport: { x: 180, y: 120, scale: 1.25 },
+    }));
+    await flushMicrotasks();
 
     const minButton = document.querySelector('[aria-label="Scale canvas to minimum"]') as HTMLButtonElement | null;
     expect(minButton).toBeTruthy();
@@ -1007,28 +1120,14 @@ describe('EnvWorkbenchPage', () => {
       ],
       widget_states: [],
     });
-    storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
-      if (key === 'workbench:env-123') {
-        return {
-          version: 1,
-          widgets: [],
-          viewport: { x: 180, y: 120, scale: 1.25 },
-          locked: false,
-          filters: {
-            'redeven.terminal': true,
-            'redeven.files': true,
-            'redeven.preview': true,
-          },
-          selectedWidgetId: null,
-          theme: 'default',
-        };
-      }
-      return null;
-    }) as any);
-
     mount(() => <EnvWorkbenchPage />, host);
     await flushMicrotasks();
     setMockCanvasFrameRect(host, 1200, 800);
+    surfaceApiMocks.lastSetState((previous: any) => ({
+      ...previous,
+      viewport: { x: 180, y: 120, scale: 1.25 },
+    }));
+    await flushMicrotasks();
 
     const surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement;
     const escapeEvent = new KeyboardEvent('keydown', {
@@ -1073,28 +1172,15 @@ describe('EnvWorkbenchPage', () => {
       ],
       widget_states: [],
     });
-    storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
-      if (key === 'workbench:env-123') {
-        return {
-          version: 1,
-          widgets: [],
-          viewport: { x: 180, y: 120, scale: 1.25 },
-          locked: false,
-          filters: {
-            'redeven.terminal': true,
-            'redeven.files': true,
-            'redeven.preview': true,
-          },
-          selectedWidgetId: 'widget-files-1',
-          theme: 'default',
-        };
-      }
-      return null;
-    }) as any);
-
     mount(() => <EnvWorkbenchPage />, host);
     await flushMicrotasks();
     setMockCanvasFrameRect(host, 1200, 800);
+    surfaceApiMocks.lastSetState((previous: any) => ({
+      ...previous,
+      viewport: { x: 180, y: 120, scale: 1.25 },
+      selectedWidgetId: 'widget-files-1',
+    }));
+    await flushMicrotasks();
 
     const surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement;
     const escapeEvent = new KeyboardEvent('keydown', {
@@ -1136,26 +1222,12 @@ describe('EnvWorkbenchPage', () => {
       ],
       widget_states: [],
     });
-    storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
-      if (key === 'workbench:env-123') {
-        return {
-          version: 1,
-          widgets: [],
-          viewport: { x: 180, y: 120, scale: 1.25 },
-          locked: false,
-          filters: {
-            'redeven.terminal': true,
-            'redeven.files': true,
-            'redeven.preview': true,
-          },
-          selectedWidgetId: 'widget-files-1',
-          theme: 'default',
-        };
-      }
-      return null;
-    }) as any);
-
     mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+    surfaceApiMocks.lastSetState((previous: any) => ({
+      ...previous,
+      selectedWidgetId: 'widget-files-1',
+    }));
     await flushMicrotasks();
 
     const fitButton = document.querySelector('[aria-label="Fit selected widget to viewport"]') as HTMLButtonElement | null;
@@ -1399,26 +1471,12 @@ describe('EnvWorkbenchPage', () => {
       ],
       widget_states: [],
     });
-    storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
-      if (key === 'workbench:env-123') {
-        return {
-          version: 1,
-          widgets: [],
-          viewport: { x: 180, y: 120, scale: 1.25 },
-          locked: false,
-          filters: {
-            'redeven.terminal': true,
-            'redeven.files': true,
-            'redeven.preview': true,
-          },
-          selectedWidgetId: null,
-          theme: 'default',
-        };
-      }
-      return null;
-    }) as any);
-
     mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+    surfaceApiMocks.lastSetState((previous: any) => ({
+      ...previous,
+      viewport: { x: 180, y: 120, scale: 1.25 },
+    }));
     await flushMicrotasks();
 
     layoutApiMocks.lastStreamArgs.onEvent({
@@ -1602,25 +1660,19 @@ describe('EnvWorkbenchPage', () => {
       widget_states: [],
     });
     storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
-      if (key === 'workbench:env-123:local_state') {
-        return {
-          version: 1,
-          viewport: { x: 80, y: 60, scale: 1 },
-          locked: false,
-          filters: {
-            'redeven.terminal': true,
-            'redeven.files': true,
-            'redeven.preview': true,
-          },
-          selectedWidgetId: 'widget-files-1',
-          theme: 'default',
-          legacyLayoutMigrated: true,
-        };
+      if (key === 'workbench:local_preferences:env-123') {
+        return localWorkbenchPreferences();
       }
       return null;
     }) as any);
 
     mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    surfaceApiMocks.lastSetState((previous: any) => ({
+      ...previous,
+      selectedWidgetId: 'widget-files-1',
+    }));
     await flushMicrotasks();
 
     surfaceApiMocks.lastSetState((previous: any) => ({
@@ -2163,7 +2215,7 @@ describe('EnvWorkbenchPage', () => {
       ],
     });
     storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
-      if (key === 'workbench:env-123:instances') {
+      if (key === 'workbench:instance_state:env-123') {
         return {
           version: 2,
           latestWidgetIdByType: {},
@@ -2221,6 +2273,16 @@ describe('EnvWorkbenchPage', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 100,
+      widgets: [],
+      widget_states: [],
+      sticky_notes: [],
+      annotations: [],
+      background_layers: [],
+    });
     const terminalWidget = persistedWidget('widget-terminal-new', 'redeven.terminal', 'Terminal', 5, 500);
     surfaceApiMocks.createWidget.mockImplementation((_type: string, _options?: any) => {
       surfaceApiMocks.lastSetState((previous: any) => ({
@@ -2272,7 +2334,7 @@ describe('EnvWorkbenchPage', () => {
     }
 
     expect(layoutApiMocks.putWorkbenchLayout).toHaveBeenCalledWith({
-      base_revision: 0,
+      base_revision: 1,
       widgets: [
         expect.objectContaining({
           widget_id: 'widget-terminal-new',
@@ -2410,22 +2472,10 @@ describe('EnvWorkbenchPage', () => {
     };
 
     storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
-      if (key === 'workbench:env-123') {
-        return {
-          version: 1,
-          widgets: [existingWidget],
-          viewport: { x: 80, y: 60, scale: 1 },
-          locked: false,
-          filters: {
-            'redeven.terminal': true,
-            'redeven.files': true,
-            'redeven.preview': true,
-          },
-          selectedWidgetId: existingWidget.id,
-          theme: 'default',
-        };
+      if (key === 'workbench:local_preferences:env-123') {
+        return localWorkbenchPreferences();
       }
-      if (key === 'workbench:env-123:instances') {
+      if (key === 'workbench:instance_state:env-123') {
         return {
           version: 2,
           latestWidgetIdByType: {
@@ -2445,6 +2495,18 @@ describe('EnvWorkbenchPage', () => {
       }
       return null;
     }) as any);
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 120,
+      widgets: [runtimeWidgetFromWorkbenchWidget(existingWidget)],
+      widget_states: [
+        runtimePreviewState(existingWidget.id, '/workspace/demo.txt', 'demo.txt', 1, 120, 12),
+      ],
+      sticky_notes: [],
+      annotations: [],
+      background_layers: [],
+    });
     surfaceApiMocks.findWidgetById.mockReturnValue(existingWidget as any);
     layoutApiMocks.openWorkbenchPreview.mockResolvedValue(openPreviewResponse({
       requestId: 'request-preview-existing',
@@ -2516,22 +2578,10 @@ describe('EnvWorkbenchPage', () => {
     const newWidget = persistedWidget('widget-preview-new', 'redeven.preview', 'Preview', 8, 500);
 
     storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
-      if (key === 'workbench:env-123') {
-        return {
-          version: 1,
-          widgets: [existingWidget],
-          viewport: { x: 80, y: 60, scale: 1 },
-          locked: false,
-          filters: {
-            'redeven.terminal': true,
-            'redeven.files': true,
-            'redeven.preview': true,
-          },
-          selectedWidgetId: existingWidget.id,
-          theme: 'default',
-        };
+      if (key === 'workbench:local_preferences:env-123') {
+        return localWorkbenchPreferences();
       }
-      if (key === 'workbench:env-123:instances') {
+      if (key === 'workbench:instance_state:env-123') {
         return {
           version: 2,
           latestWidgetIdByType: {
@@ -2551,6 +2601,18 @@ describe('EnvWorkbenchPage', () => {
       }
       return null;
     }) as any);
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 120,
+      widgets: [runtimeWidgetFromWorkbenchWidget(existingWidget)],
+      widget_states: [
+        runtimePreviewState(existingWidget.id, '/workspace/demo.txt', 'demo.txt', 1, 120, 12),
+      ],
+      sticky_notes: [],
+      annotations: [],
+      background_layers: [],
+    });
     surfaceApiMocks.findWidgetById.mockImplementation((widgetId: unknown) => (
       String(widgetId) === existingWidget.id ? existingWidget : (
         String(widgetId) === newWidget.id ? newWidget : null
@@ -2675,22 +2737,10 @@ describe('EnvWorkbenchPage', () => {
     const latestWidget = persistedWidget('widget-preview-latest', 'redeven.preview', 'Preview · demo.txt', 7, 456);
 
     storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
-      if (key === 'workbench:env-123') {
-        return {
-          version: 1,
-          widgets: [latestWidget],
-          viewport: { x: 80, y: 60, scale: 1 },
-          locked: false,
-          filters: {
-            'redeven.terminal': true,
-            'redeven.files': true,
-            'redeven.preview': true,
-          },
-          selectedWidgetId: latestWidget.id,
-          theme: 'default',
-        };
+      if (key === 'workbench:local_preferences:env-123') {
+        return localWorkbenchPreferences();
       }
-      if (key === 'workbench:env-123:instances') {
+      if (key === 'workbench:instance_state:env-123') {
         return {
           version: 2,
           latestWidgetIdByType: {
@@ -2710,6 +2760,18 @@ describe('EnvWorkbenchPage', () => {
       }
       return null;
     }) as any);
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 120,
+      widgets: [runtimeWidgetFromWorkbenchWidget(latestWidget)],
+      widget_states: [
+        runtimePreviewState(latestWidget.id, '/workspace/demo.txt', 'demo.txt', 1, 120, 12),
+      ],
+      sticky_notes: [],
+      annotations: [],
+      background_layers: [],
+    });
     surfaceApiMocks.findWidgetById.mockImplementation((widgetId: unknown) => (
       String(widgetId) === latestWidget.id ? latestWidget : null
     ));
@@ -2776,20 +2838,8 @@ describe('EnvWorkbenchPage', () => {
     const filesWidget = persistedWidget('widget-files-1', 'redeven.files', 'Files', 1, 100);
     const previewWidget = persistedWidget('widget-preview-1', 'redeven.preview', 'Preview', 2, 110);
     storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
-      if (key === 'workbench:env-123') {
-        return {
-          version: 1,
-          widgets: [filesWidget, previewWidget],
-          viewport: { x: 80, y: 60, scale: 1 },
-          locked: false,
-          filters: {
-            'redeven.terminal': true,
-            'redeven.files': true,
-            'redeven.preview': true,
-          },
-          selectedWidgetId: filesWidget.id,
-          theme: 'default',
-        };
+      if (key === 'workbench:local_preferences:env-123') {
+        return localWorkbenchPreferences();
       }
       return null;
     }) as any);
@@ -2805,6 +2855,12 @@ describe('EnvWorkbenchPage', () => {
     });
 
     mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    surfaceApiMocks.lastSetState((previous: any) => ({
+      ...previous,
+      selectedWidgetId: filesWidget.id,
+    }));
     await flushMicrotasks();
 
     surfaceApiMocks.lastSetState((previous: any) => ({
@@ -2835,20 +2891,8 @@ describe('EnvWorkbenchPage', () => {
     const filesWidget = persistedWidget('widget-files-1', 'redeven.files', 'Files', 1, 100);
     const previewWidget = persistedWidget('widget-preview-1', 'redeven.preview', 'Preview', 2, 110);
     storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
-      if (key === 'workbench:env-123') {
-        return {
-          version: 1,
-          widgets: [filesWidget, previewWidget],
-          viewport: { x: 80, y: 60, scale: 1 },
-          locked: false,
-          filters: {
-            'redeven.terminal': true,
-            'redeven.files': true,
-            'redeven.preview': true,
-          },
-          selectedWidgetId: filesWidget.id,
-          theme: 'default',
-        };
+      if (key === 'workbench:local_preferences:env-123') {
+        return localWorkbenchPreferences();
       }
       return null;
     }) as any);
@@ -2864,6 +2908,12 @@ describe('EnvWorkbenchPage', () => {
     });
 
     mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    surfaceApiMocks.lastSetState((previous: any) => ({
+      ...previous,
+      selectedWidgetId: filesWidget.id,
+    }));
     await flushMicrotasks();
 
     surfaceApiMocks.lastSetState((previous: any) => ({
@@ -2901,20 +2951,8 @@ describe('EnvWorkbenchPage', () => {
     const filesWidget = persistedWidget('widget-files-1', 'redeven.files', 'Files', 1, 100);
     const previewWidget = persistedWidget('widget-preview-1', 'redeven.preview', 'Preview', 2, 110);
     storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
-      if (key === 'workbench:env-123') {
-        return {
-          version: 1,
-          widgets: [filesWidget, previewWidget],
-          viewport: { x: 80, y: 60, scale: 1 },
-          locked: false,
-          filters: {
-            'redeven.terminal': true,
-            'redeven.files': true,
-            'redeven.preview': true,
-          },
-          selectedWidgetId: filesWidget.id,
-          theme: 'default',
-        };
+      if (key === 'workbench:local_preferences:env-123') {
+        return localWorkbenchPreferences();
       }
       return null;
     }) as any);
@@ -2930,6 +2968,12 @@ describe('EnvWorkbenchPage', () => {
     });
 
     mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    surfaceApiMocks.lastSetState((previous: any) => ({
+      ...previous,
+      selectedWidgetId: filesWidget.id,
+    }));
     await flushMicrotasks();
 
     surfaceApiMocks.lastSetState((previous: any) => ({

@@ -203,11 +203,6 @@ export function reconcileWorkbenchInstanceState(
   };
 }
 
-export function buildWorkbenchInstanceStorageKey(workbenchStorageKey: string): string {
-  const baseKey = compact(workbenchStorageKey);
-  return baseKey ? `${baseKey}:instances` : 'workbench:instances';
-}
-
 export function isRedevenWorkbenchMultiInstanceWidgetType(
   value: unknown,
 ): value is RedevenWorkbenchMultiInstanceWidgetType {

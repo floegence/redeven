@@ -295,3 +295,13 @@ export const redevenWorkbenchFilterBarWidgetTypes: readonly WorkbenchWidgetType[
   'redeven.ai',
   'redeven.codex',
 ];
+
+export const redevenWorkbenchInitialCanvasWidgetTypes: readonly WorkbenchWidgetType[] = [
+  'redeven.files',
+  'redeven.terminal',
+  'redeven.monitor',
+  'redeven.codespaces',
+  'redeven.ports',
+  'redeven.ai',
+  'redeven.codex',
+];

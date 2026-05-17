@@ -37,8 +37,13 @@ import {
   type RedevenWorkbenchContextMenuItemsResolver,
   type RedevenWorkbenchSurfaceApi,
 } from './surface/RedevenWorkbenchSurface';
-import { redevenWorkbenchFilterBarWidgetTypes, redevenWorkbenchWidgets } from './redevenWorkbenchWidgets';
+import {
+  redevenWorkbenchFilterBarWidgetTypes,
+  redevenWorkbenchInitialCanvasWidgetTypes,
+  redevenWorkbenchWidgets,
+} from './redevenWorkbenchWidgets';
 import { arrangeWorkbenchWidgetsByType } from './workbenchAutoArrange';
+import { createRedevenWorkbenchInitialLayout } from './workbenchInitialCanvas';
 import {
   EnvWorkbenchInstancesContext,
   type EnvWorkbenchInstancesContextValue,
@@ -46,7 +51,6 @@ import {
 import {
   buildWorkbenchFileBrowserTitle,
   buildWorkbenchFilePreviewTitle,
-  buildWorkbenchInstanceStorageKey,
   isRedevenWorkbenchMultiInstanceWidgetType,
   pickLatestWorkbenchWidget,
   reconcileWorkbenchInstanceState,
@@ -67,13 +71,12 @@ import {
   type WorkbenchTerminalInteractionKind,
 } from './workbenchTerminalVisualCoordinator';
 import {
-  buildWorkbenchLocalStateStorageKey,
   createEmptyRuntimeWorkbenchLayoutSnapshot,
   derivePersistedWorkbenchLocalState,
-  extractRuntimeWorkbenchLayoutFromWorkbenchState,
+  extractRuntimeWorkbenchLayoutFromSurfaceState,
   projectWorkbenchStateFromRuntimeLayout,
   REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE,
-  runtimeWorkbenchLayoutIsEmpty,
+  runtimeWorkbenchLayoutIsPristine,
   runtimeWorkbenchSharedLayoutEqual,
   runtimeWorkbenchWidgetStateById,
   runtimeWorkbenchWidgetStateDataEqual,
@@ -88,11 +91,6 @@ import {
   type RuntimeWorkbenchWidgetState,
   type RuntimeWorkbenchWidgetStateData,
 } from './runtimeWorkbenchLayout';
-import {
-  normalizeWorkbenchTheme,
-  readLegacyWorkbenchThemeMigration,
-  removeLegacyWorkbenchAppearance,
-} from './workbenchThemeMigration';
 import {
   WorkbenchProgressCurtain,
   type WorkbenchProgressCurtainStage,
@@ -546,9 +544,27 @@ function fileItemToRuntimePreviewItem(item: FileItem): RuntimeWorkbenchPreviewIt
   };
 }
 
-function readPersistedWorkbenchState(storageKey: string): WorkbenchState {
-  return sanitizeWorkbenchState(
+function readPersistedWorkbenchLocalState(storageKey: string): PersistedWorkbenchLocalState {
+  return sanitizePersistedWorkbenchLocalState(
     readUIStorageJSON(storageKey, null),
+    redevenWorkbenchWidgets,
+  );
+}
+
+function createWorkbenchStateFromLocalState(localState: PersistedWorkbenchLocalState): WorkbenchState {
+  const defaultState = createDefaultWorkbenchState(redevenWorkbenchWidgets);
+  return sanitizeWorkbenchState(
+    {
+      ...defaultState,
+      locked: localState.locked,
+      filters: {
+        ...defaultState.filters,
+        ...localState.filters,
+      },
+      theme: localState.theme,
+      mode: localState.mode,
+      activeTool: localState.activeTool,
+    },
     {
       widgetDefinitions: redevenWorkbenchWidgets,
       createFallbackState: () => createDefaultWorkbenchState(redevenWorkbenchWidgets),
@@ -556,49 +572,12 @@ function readPersistedWorkbenchState(storageKey: string): WorkbenchState {
   );
 }
 
-function readPersistedWorkbenchLocalState(
-  storageKey: string,
-  legacyWorkbenchState: WorkbenchState,
-): PersistedWorkbenchLocalState {
-  const localStateKey = buildWorkbenchLocalStateStorageKey(storageKey);
-  const rawLocalState = readUIStorageJSON(localStateKey, null);
-  const rawLegacyState = readUIStorageJSON(storageKey, null);
-  const { theme: migratedTheme, shouldClearLegacyAppearance } = readLegacyWorkbenchThemeMigration();
-  const rawLegacyTheme = rawLegacyState && typeof rawLegacyState === 'object'
-    ? (rawLegacyState as { theme?: unknown }).theme
-    : undefined;
-  const legacyThemePersisted = Boolean(
-    typeof rawLegacyTheme === 'string'
-    && normalizeWorkbenchTheme(rawLegacyTheme) === rawLegacyTheme,
-  );
-  const nextLocalState = sanitizePersistedWorkbenchLocalState(
-    rawLocalState,
-    legacyWorkbenchState,
-    redevenWorkbenchWidgets,
-    !legacyThemePersisted ? migratedTheme ?? undefined : undefined,
-  );
-  const rawLocalTheme = rawLocalState && typeof rawLocalState === 'object'
-    ? (rawLocalState as { theme?: unknown }).theme
-    : undefined;
-  const localThemePersisted = Boolean(
-    typeof rawLocalTheme === 'string'
-    && normalizeWorkbenchTheme(rawLocalTheme) === rawLocalTheme,
-  );
-  if (!localThemePersisted || shouldClearLegacyAppearance) {
-    writeUIStorageJSON(localStateKey, nextLocalState);
-  }
-  if (shouldClearLegacyAppearance) {
-    removeLegacyWorkbenchAppearance();
-  }
-  return nextLocalState;
-}
-
 function readPersistedWorkbenchInstanceState(
   storageKey: string,
   workbenchState: WorkbenchState,
 ): RedevenWorkbenchInstanceState {
   return sanitizeWorkbenchInstanceState(
-    readUIStorageJSON(buildWorkbenchInstanceStorageKey(storageKey), null),
+    readUIStorageJSON(storageKey, null),
     workbenchState.widgets,
   );
 }
@@ -615,19 +594,18 @@ function waitForAbortOrTimeout(signal: AbortSignal, timeoutMs: number): Promise<
 
 export function EnvWorkbenchPage() {
   const env = useEnvContext();
-  const storageKey = createMemo(() => resolveEnvAppStorageBinding({
+  const storageBinding = createMemo(() => resolveEnvAppStorageBinding({
     envID: env.env_id(),
     desktopStateStorageAvailable: isDesktopStateStorageAvailable(),
-  }).workbenchStorageKey);
-  const initialWorkbenchState = readPersistedWorkbenchState(storageKey());
-  const initialLocalState = readPersistedWorkbenchLocalState(storageKey(), initialWorkbenchState);
-  const [workbenchState, setWorkbenchState] = createSignal<WorkbenchState>({
-    ...initialWorkbenchState,
-    theme: initialLocalState.theme,
-  });
+  }));
+  const localPreferencesKey = createMemo(() => storageBinding().workbenchLocalPreferencesKey);
+  const instanceStateKey = createMemo(() => storageBinding().workbenchInstanceStateKey);
+  const initialLocalState = readPersistedWorkbenchLocalState(localPreferencesKey());
+  const initialWorkbenchState = createWorkbenchStateFromLocalState(initialLocalState);
+  const [workbenchState, setWorkbenchState] = createSignal<WorkbenchState>(initialWorkbenchState);
   const [localState, setLocalState] = createSignal<PersistedWorkbenchLocalState>(initialLocalState);
   const [instanceState, setInstanceState] = createSignal<RedevenWorkbenchInstanceState>(
-    readPersistedWorkbenchInstanceState(storageKey(), initialWorkbenchState),
+    readPersistedWorkbenchInstanceState(instanceStateKey(), initialWorkbenchState),
   );
   const [runtimeSnapshot, setRuntimeSnapshot] = createSignal<RuntimeWorkbenchLayoutSnapshot>(
     createEmptyRuntimeWorkbenchLayoutSnapshot(),
@@ -1294,13 +1272,11 @@ export function EnvWorkbenchPage() {
   });
 
   createEffect(() => {
-    const key = storageKey();
-    const legacyWorkbenchState = readPersistedWorkbenchState(key);
-    const nextLocalState = readPersistedWorkbenchLocalState(key, legacyWorkbenchState);
-    setWorkbenchState({
-      ...legacyWorkbenchState,
-      theme: nextLocalState.theme,
-    });
+    const localKey = localPreferencesKey();
+    const instanceKey = instanceStateKey();
+    const nextLocalState = readPersistedWorkbenchLocalState(localKey);
+    const nextWorkbenchState = createWorkbenchStateFromLocalState(nextLocalState);
+    setWorkbenchState(nextWorkbenchState);
     setLocalState(nextLocalState);
     setRuntimeSnapshot(createEmptyRuntimeWorkbenchLayoutSnapshot());
     setRuntimeLayoutReady(false);
@@ -1311,7 +1287,7 @@ export function EnvWorkbenchPage() {
     setAppliedRemoteFileStateRevisions({});
     setFileBrowserCommittedPaths({});
     setPendingSyncedPreviewItems({});
-    setInstanceState(readPersistedWorkbenchInstanceState(key, legacyWorkbenchState));
+    setInstanceState(readPersistedWorkbenchInstanceState(instanceKey, nextWorkbenchState));
     setTerminalOpenRequests({});
     setPendingTerminalOpenRequests({});
     setConfirmedRuntimeTerminalWidgetIds(new Set<string>());
@@ -1363,34 +1339,30 @@ export function EnvWorkbenchPage() {
           return;
         }
 
-        let nextLocal = nextLocalState;
-        if (!nextLocal.legacyLayoutMigrated) {
-          if (runtimeWorkbenchLayoutIsEmpty(snapshot)) {
-            const legacyLayout = extractRuntimeWorkbenchLayoutFromWorkbenchState(legacyWorkbenchState);
-            if (legacyLayout.widgets.length > 0) {
-              try {
-                snapshot = await putWorkbenchLayout({
-                  base_revision: snapshot.revision,
-                  widgets: legacyLayout.widgets,
-                  sticky_notes: legacyLayout.sticky_notes,
-                  annotations: legacyLayout.annotations,
-                  background_layers: legacyLayout.background_layers,
-                });
-              } catch (error) {
-                if (error instanceof WorkbenchLayoutConflictError) {
-                  snapshot = await getWorkbenchLayoutSnapshot();
-                } else {
-                  throw error;
-                }
+        if (runtimeWorkbenchLayoutIsPristine(snapshot)) {
+          const initialLayout = createRedevenWorkbenchInitialLayout({
+            widgetDefinitions: redevenWorkbenchWidgets,
+            initialWidgetTypes: redevenWorkbenchInitialCanvasWidgetTypes,
+            typeOrder: redevenWorkbenchFilterBarWidgetTypes,
+            createdAtUnixMs: Date.now(),
+          });
+          if (initialLayout.widgets.length > 0) {
+            try {
+              snapshot = await putWorkbenchLayout({
+                base_revision: snapshot.revision,
+                widgets: initialLayout.widgets,
+                sticky_notes: initialLayout.sticky_notes,
+                annotations: initialLayout.annotations,
+                background_layers: initialLayout.background_layers,
+              });
+            } catch (error) {
+              if (error instanceof WorkbenchLayoutConflictError) {
+                snapshot = await getWorkbenchLayoutSnapshot();
+              } else {
+                throw error;
               }
             }
           }
-
-          nextLocal = {
-            ...nextLocal,
-            legacyLayoutMigrated: true,
-          };
-          setLocalState(nextLocal);
         }
 
         if (abortController.signal.aborted) {
@@ -1398,6 +1370,7 @@ export function EnvWorkbenchPage() {
         }
 
         applyRuntimeSnapshot(snapshot);
+        setInstanceState(readPersistedWorkbenchInstanceState(instanceKey, workbenchState()));
         setRuntimeLayoutReady(true);
         void startRuntimeLayoutStream(abortController.signal);
       } catch (error) {
@@ -1417,15 +1390,12 @@ export function EnvWorkbenchPage() {
   });
 
   createEffect(() => {
-    const state = derivePersistedWorkbenchLocalState(
-      workbenchState(),
-      localState().legacyLayoutMigrated,
-    );
+    const state = derivePersistedWorkbenchLocalState(workbenchState());
     setLocalState((previous) => (samePersistedWorkbenchLocalState(previous, state) ? previous : state));
   });
 
   createEffect(() => {
-    const key = buildWorkbenchLocalStateStorageKey(storageKey());
+    const key = localPreferencesKey();
     const state = localState();
     if (!key) {
       return;
@@ -1445,7 +1415,7 @@ export function EnvWorkbenchPage() {
       return;
     }
 
-    const desiredLayout = extractRuntimeWorkbenchLayoutFromWorkbenchState(workbenchState());
+    const desiredLayout = extractRuntimeWorkbenchLayoutFromSurfaceState(workbenchState());
     const currentSnapshot = runtimeSnapshot();
     if (runtimeWorkbenchSharedLayoutEqual(currentSnapshot, desiredLayout)) {
       setSubmitQueued(false);
@@ -1461,7 +1431,7 @@ export function EnvWorkbenchPage() {
     const addedObjects = runtimeSharedObjectCount(desiredLayout) > runtimeSharedObjectCount(currentSnapshot);
     const delayMs = addedObjects ? WORKBENCH_LAYOUT_FAST_FLUSH_DELAY_MS : WORKBENCH_LAYOUT_FLUSH_DELAY_MS;
     const timer = globalThis.setTimeout(async () => {
-      const nextDesiredLayout = extractRuntimeWorkbenchLayoutFromWorkbenchState(workbenchState());
+      const nextDesiredLayout = extractRuntimeWorkbenchLayoutFromSurfaceState(workbenchState());
       if (runtimeWorkbenchSharedLayoutEqual(runtimeSnapshot(), nextDesiredLayout)) {
         setSubmitQueued(false);
         return;
@@ -1509,7 +1479,10 @@ export function EnvWorkbenchPage() {
   });
 
   createEffect(() => {
-    const key = buildWorkbenchInstanceStorageKey(storageKey());
+    if (!runtimeLayoutReady()) {
+      return;
+    }
+    const key = instanceStateKey();
     const state = instanceState();
     if (!key) {
       return;

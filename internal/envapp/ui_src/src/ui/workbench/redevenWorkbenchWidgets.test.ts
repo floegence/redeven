@@ -23,6 +23,12 @@ function filterBarWidgetTypes(): string[] {
   return [...match![1].matchAll(/'([^']+)'/g)].map((entry) => entry[1]);
 }
 
+function initialCanvasWidgetTypes(): string[] {
+  const match = source.match(/redevenWorkbenchInitialCanvasWidgetTypes:[\s\S]*?=\s*\[([\s\S]*?)\];/);
+  expect(match?.[1]).toBeTruthy();
+  return [...match![1].matchAll(/'([^']+)'/g)].map((entry) => entry[1]);
+}
+
 describe('redevenWorkbenchWidgets source contract', () => {
   it('defines a shared projected render mode for frontable widgets', () => {
     expect(source).toMatch(/const\s+FRONTABLE_WORKBENCH_RENDER_MODE\s*=\s*'projected_surface'/);
@@ -42,6 +48,19 @@ describe('redevenWorkbenchWidgets source contract', () => {
     for (const type of widgetTypes) {
       expectProjectedSurface(type);
     }
+  });
+
+  it('seeds a single sample widget for each primary Workbench surface', () => {
+    expect(initialCanvasWidgetTypes()).toEqual([
+      'redeven.files',
+      'redeven.terminal',
+      'redeven.monitor',
+      'redeven.codespaces',
+      'redeven.ports',
+      'redeven.ai',
+      'redeven.codex',
+    ]);
+    expect(initialCanvasWidgetTypes()).not.toContain('redeven.preview');
   });
 
   it('marks overflow-only projected wrappers as non-routing wheel surfaces', () => {
