@@ -981,6 +981,14 @@ function blockedPrimaryActionGuidanceAction(
       action: recoveryAction.action,
     };
   }
+  const placement = environment.managed_runtime_placement;
+  if (placement?.kind === 'container_process') {
+    return {
+      label: `Start runtime in ${placement.container_label || placement.container_ref || placement.container_id}`,
+      emphasis: 'primary',
+      action: recoveryAction.action,
+    };
+  }
   return {
     label: environment.kind === 'ssh_environment' ? 'Start runtime' : 'Start runtime locally',
     emphasis: 'primary',
@@ -1101,9 +1109,20 @@ function blockedPrimaryActionDetail(
   if (action.intent === 'connect_provider_runtime') {
     return 'Connect this runtime to a provider Environment first. Open stays separate and becomes available after the link is ready.';
   }
+  if (environment.managed_runtime_placement?.kind === 'container_process') {
+    return 'Open becomes available once Desktop starts the runtime inside this running container.';
+  }
   return environment.kind === 'ssh_environment'
     ? 'Open becomes available once the runtime is ready on this SSH host.'
     : 'Open becomes available once the runtime is ready on this device.';
+}
+
+function specificRuntimeOfflineReason(environment: DesktopEnvironmentEntry): string {
+  const reason = compact(environment.runtime_health.offline_reason);
+  if (reason === '' || reason === 'The runtime offline / unavailable') {
+    return '';
+  }
+  return reason;
 }
 
 function primaryActionOverlay(
@@ -1186,7 +1205,8 @@ function primaryActionOverlay(
   return {
     kind: 'tooltip',
     tone: 'warning',
-    message: 'Runtime is offline or unavailable right now. Start it from its source, then refresh status.',
+    message: specificRuntimeOfflineReason(environment)
+      || 'Runtime is offline or unavailable right now. Start it from its source, then refresh status.',
   };
 }
 

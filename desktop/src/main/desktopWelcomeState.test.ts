@@ -993,8 +993,8 @@ describe('desktopWelcomeState', () => {
   });
 
   it('projects saved Local and SSH container runtime targets without leaking runtime-control material', () => {
-    const localContainerID = 'local:container:docker:container-stable-id:b0f0be51';
-    const sshContainerID = 'ssh:container:devbox%3A2222:docker:container-stable-id:b0f0be51';
+    const localContainerID = 'local:container:docker:dev-container:b0f0be51';
+    const sshContainerID = 'ssh:container:devbox%3A2222:docker:dev-container:b0f0be51';
     const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
     const sshHostAccess = {
       kind: 'ssh_host' as const,
@@ -1012,9 +1012,10 @@ describe('desktopWelcomeState', () => {
       kind: 'container_process' as const,
       container_engine: 'docker' as const,
       container_id: 'container-stable-id',
+      container_ref: 'dev-container',
       container_label: 'dev-container',
       runtime_install_root: '/opt/redeven-desktop/runtime',
-        runtime_state_root: '/var/lib/redeven',
+      runtime_state_root: '/var/lib/redeven',
       bridge_strategy: 'exec_stream' as const,
     };
 

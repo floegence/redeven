@@ -285,6 +285,7 @@ type RuntimeContainerConnectionDialogState = Readonly<{
   connect_timeout_seconds: string;
   container_engine: DesktopContainerEngine;
   container_id: string;
+  container_ref: string;
   container_label: string;
   runtime_install_root: string;
   runtime_state_root: string;
@@ -606,6 +607,7 @@ function createRuntimeContainerConnectionDialogState(
     connect_timeout_seconds: trimString(overrides.connect_timeout_seconds),
     container_engine: overrides.container_engine ?? 'docker',
     container_id: trimString(overrides.container_id),
+    container_ref: trimString(overrides.container_ref) || trimString(overrides.container_label) || trimString(overrides.container_id),
     container_label: trimString(overrides.container_label),
     runtime_install_root: trimString(overrides.runtime_install_root) || '/opt/redeven-desktop/runtime',
     runtime_state_root: trimString(overrides.runtime_state_root) || '/var/lib/redeven',
@@ -1180,8 +1182,38 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             ? currentDialogState.container_id
             : '',
         );
+        const selectedRef = trimString(
+          currentDialogState?.connection_kind === 'local_container_runtime' || currentDialogState?.connection_kind === 'ssh_container_runtime'
+            ? currentDialogState.container_ref || currentDialogState.container_label
+            : '',
+        );
         if (selectedID !== '' && !result.containers.some((container) => container.container_id === selectedID)) {
-          setRuntimeContainerOptionsError('The selected container is no longer running. Start it outside Redeven, refresh this list, then choose it again.');
+          const referenceMatches = selectedRef === ''
+            ? []
+            : result.containers.filter((container) => (
+              container.container_ref === selectedRef
+              || container.container_label === selectedRef
+              || container.container_id === selectedRef
+            ));
+          if (referenceMatches.length === 1) {
+            const [match] = referenceMatches;
+            setConnectionDialogState((current) => {
+              if (current?.connection_kind !== 'local_container_runtime' && current?.connection_kind !== 'ssh_container_runtime') {
+                return current;
+              }
+              if (current.container_engine !== state.container_engine) {
+                return current;
+              }
+              return {
+                ...current,
+                container_id: match.container_id,
+                container_ref: match.container_ref,
+                container_label: match.container_label,
+              };
+            });
+          } else {
+            setRuntimeContainerOptionsError('The selected container is no longer running. Start it outside Redeven, refresh this list, then choose it again.');
+          }
         }
       } else {
         setRuntimeContainerOptions([]);
@@ -1482,6 +1514,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           : '',
         container_engine: environment.managed_runtime_placement.container_engine,
         container_id: environment.managed_runtime_placement.container_id,
+        container_ref: environment.managed_runtime_placement.container_ref,
         container_label: environment.managed_runtime_placement.container_label,
         runtime_install_root: environment.managed_runtime_placement.runtime_install_root,
         runtime_state_root: environment.managed_runtime_placement.runtime_state_root,
@@ -1598,7 +1631,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function updateConnectionDialogField(
-    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'remote_install_dir' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_label' | 'runtime_install_root' | 'runtime_state_root',
+    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'remote_install_dir' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_ref' | 'container_label' | 'runtime_install_root' | 'runtime_state_root',
     value: string,
   ): void {
     setConnectionDialogState((current) => {
@@ -1611,7 +1644,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         ...(
           (name === 'ssh_destination' || name === 'ssh_port')
           && current.connection_kind === 'ssh_container_runtime'
-            ? { container_id: '', container_label: '' }
+            ? { container_id: '', container_ref: '', container_label: '' }
             : {}
         ),
       };
@@ -1632,7 +1665,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return {
         ...current,
         bootstrap_strategy: strategy,
-        ...(current.connection_kind === 'ssh_container_runtime' ? { container_id: '', container_label: '' } : {}),
+        ...(current.connection_kind === 'ssh_container_runtime' ? { container_id: '', container_ref: '', container_label: '' } : {}),
       };
     });
   }
@@ -2652,6 +2685,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           kind: 'container_process',
           container_engine: request.state.container_engine,
           container_id: trimString(request.state.container_id),
+          container_ref: trimString(request.state.container_ref) || trimString(request.state.container_label) || trimString(request.state.container_id),
           container_label: trimString(request.state.container_label) || trimString(request.state.container_id),
           runtime_install_root: trimString(request.state.runtime_install_root),
           runtime_state_root: trimString(request.state.runtime_state_root),
@@ -6044,6 +6078,7 @@ function SSHDestinationCombobox(props: Readonly<{
 function runtimeContainerSearchText(container: DesktopRuntimeContainerOption): string {
   return [
     container.container_label,
+    container.container_ref,
     container.container_id,
     container.image,
     container.status_text,
@@ -6052,6 +6087,7 @@ function runtimeContainerSearchText(container: DesktopRuntimeContainerOption): s
 
 function ContainerPicker(props: Readonly<{
   selectedContainerID: string;
+  selectedContainerRef: string;
   selectedContainerLabel: string;
   containers: readonly DesktopRuntimeContainerOption[];
   loading: boolean;
@@ -6073,6 +6109,7 @@ function ContainerPicker(props: Readonly<{
   const selectedLabel = createMemo(() => (
     trimString(props.selectedContainerLabel)
     || props.containers.find((container) => container.container_id === props.selectedContainerID)?.container_label
+    || trimString(props.selectedContainerRef)
     || trimString(props.selectedContainerID)
   ));
   const filteredContainers = createMemo(() => {
@@ -6333,7 +6370,7 @@ function ConnectionDialog(props: Readonly<{
   busyState: DesktopLauncherBusyState;
   onOpenChange: (open: boolean) => void;
   updateField: (
-    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'remote_install_dir' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_label' | 'runtime_install_root' | 'runtime_state_root',
+    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'remote_install_dir' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_ref' | 'container_label' | 'runtime_install_root' | 'runtime_state_root',
     value: string,
   ) => void;
   refreshContainerOptions: () => void;
@@ -6704,6 +6741,7 @@ function ConnectionDialog(props: Readonly<{
                     onChange={(value) => {
                       props.updateField('container_engine', value);
                       props.updateField('container_id', '');
+                      props.updateField('container_ref', '');
                       props.updateField('container_label', '');
                       props.clearFieldErrors();
                     }}
@@ -6716,6 +6754,7 @@ function ConnectionDialog(props: Readonly<{
                 </div>
                 <ContainerPicker
                   selectedContainerID={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.container_id : ''}
+                  selectedContainerRef={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.container_ref : ''}
                   selectedContainerLabel={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.container_label : ''}
                   containers={props.containerOptions}
                   loading={props.containerOptionsLoading}
@@ -6728,6 +6767,7 @@ function ConnectionDialog(props: Readonly<{
                   onRefresh={props.refreshContainerOptions}
                   onSelect={(container) => {
                     props.updateField('container_id', container.container_id);
+                    props.updateField('container_ref', container.container_ref);
                     props.updateField('container_label', container.container_label);
                     if (!trimString(props.state?.label ?? '')) {
                       props.updateField('label', container.container_label);

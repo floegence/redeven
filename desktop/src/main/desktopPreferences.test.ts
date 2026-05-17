@@ -33,6 +33,7 @@ import {
   markSavedEnvironmentUsed,
   markSavedRuntimeTargetUsed,
   markSavedSSHEnvironmentUsed,
+  normalizeSavedRuntimeTargets,
   rememberProviderEnvironmentUse,
   saveDesktopPreferences,
   setLocalEnvironmentPinned,
@@ -227,16 +228,17 @@ describe('desktopPreferences', () => {
         saved_runtime_targets: [
           {
             schema_version: 1,
-            id: 'local:container:docker:container-stable-id:b0f0be51',
+            id: 'local:container:docker:dev-container:b0f0be51',
             label: 'Local Container Runtime',
             host_access: { kind: 'local_host' },
             placement: {
               kind: 'container_process',
               container_engine: 'docker',
               container_id: 'container-stable-id',
+              container_ref: 'dev-container',
               container_label: 'dev-container',
               runtime_install_root: '/opt/redeven-desktop/runtime',
-        runtime_state_root: '/var/lib/redeven',
+              runtime_state_root: '/var/lib/redeven',
               bridge_strategy: 'exec_stream',
             },
             pinned: false,
@@ -681,9 +683,10 @@ describe('desktopPreferences', () => {
       kind: 'container_process' as const,
       container_engine: 'docker' as const,
       container_id: 'container-stable-id',
+      container_ref: 'dev-container',
       container_label: 'dev-container',
       runtime_install_root: '/opt/redeven-desktop/runtime',
-        runtime_state_root: '/var/lib/redeven',
+      runtime_state_root: '/var/lib/redeven',
       bridge_strategy: 'exec_stream' as const,
     };
     const saved = upsertSavedRuntimeTarget(defaultDesktopPreferences(), {
@@ -694,7 +697,7 @@ describe('desktopPreferences', () => {
       updated_at_ms: 20,
       last_used_at_ms: 30,
     });
-    const targetID = 'local:container:docker:container-stable-id:b0f0be51';
+    const targetID = 'local:container:docker:dev-container:b0f0be51';
 
     expect(saved.saved_runtime_targets).toEqual([
       expect.objectContaining({
@@ -735,6 +738,86 @@ describe('desktopPreferences', () => {
     }));
 
     expect(deleteSavedRuntimeTarget(marked, targetID).saved_runtime_targets).toEqual([]);
+  });
+
+  it('canonicalizes legacy container runtime targets onto stable container references', () => {
+    const [target] = normalizeSavedRuntimeTargets([{
+      schema_version: 1,
+      id: 'local:container:docker:old-concrete-id:b0f0be51',
+      label: 'Local Container Runtime',
+      host_access: { kind: 'local_host' },
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'old-concrete-id',
+        container_label: 'redeven-nginx-dev',
+        runtime_install_root: '/opt/redeven-desktop/runtime',
+        runtime_state_root: '/var/lib/redeven',
+        bridge_strategy: 'exec_stream',
+      },
+      pinned: false,
+      created_at_ms: 10,
+      updated_at_ms: 20,
+      last_used_at_ms: 30,
+    }]);
+
+    expect(target).toMatchObject({
+      id: 'local:container:docker:redeven-nginx-dev:b0f0be51',
+      placement: {
+        container_id: 'old-concrete-id',
+        container_ref: 'redeven-nginx-dev',
+        container_label: 'redeven-nginx-dev',
+      },
+    });
+  });
+
+  it('persists healed container placements without keeping the old target id', () => {
+    const oldPlacement = {
+      kind: 'container_process' as const,
+      container_engine: 'docker' as const,
+      container_id: 'old-concrete-id',
+      container_ref: 'redeven-nginx-dev',
+      container_label: 'redeven-nginx-dev',
+      runtime_install_root: '/opt/redeven-desktop/runtime',
+      runtime_state_root: '/var/lib/redeven',
+      bridge_strategy: 'exec_stream' as const,
+    };
+    const oldTargetID = 'local:container:docker:old-concrete-id:b0f0be51' as const;
+    const canonicalTargetID = 'local:container:docker:redeven-nginx-dev:b0f0be51' as const;
+    const preferences: DesktopPreferences = {
+      ...defaultDesktopPreferences(),
+      saved_runtime_targets: [{
+        schema_version: 1 as const,
+        id: oldTargetID,
+        label: 'Local Container Runtime',
+        host_access: { kind: 'local_host' as const },
+        placement: oldPlacement,
+        pinned: false,
+        created_at_ms: 10,
+        updated_at_ms: 20,
+        last_used_at_ms: 30,
+      }],
+    };
+    const healed = markSavedRuntimeTargetUsed(preferences, {
+      environment_id: oldTargetID,
+      host_access: { kind: 'local_host' },
+      placement: {
+        ...oldPlacement,
+        container_id: 'new-concrete-id',
+      },
+      last_used_at_ms: 40,
+    });
+
+    expect(healed.saved_runtime_targets).toHaveLength(1);
+    expect(healed.saved_runtime_targets[0]).toMatchObject({
+      id: canonicalTargetID,
+      placement: {
+        container_id: 'new-concrete-id',
+        container_ref: 'redeven-nginx-dev',
+      },
+      created_at_ms: 10,
+      last_used_at_ms: 40,
+    });
   });
 
   it('persists pin state for managed, URL, and SSH environments', () => {

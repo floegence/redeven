@@ -800,8 +800,17 @@ function runtimeHealthFromPresence(
     return fallback;
   }
   if (!presence.running) {
+    const runtimeControlMissing = presence.runtime_control_status.state === 'missing'
+      ? presence.runtime_control_status
+      : null;
     return {
       ...fallback,
+      checked_at_unix_ms: presence.checked_at_unix_ms,
+      source,
+      offline_reason_code: runtimeControlMissing?.reason_code === 'not_started'
+        ? 'not_started'
+        : fallback.offline_reason_code,
+      offline_reason: runtimeControlMissing?.message || fallback.offline_reason,
       runtime_maintenance: presence.maintenance ?? fallback.runtime_maintenance,
     };
   }
@@ -1523,12 +1532,19 @@ function buildSavedRuntimeTargetEntry(
     runtimeService,
   });
   const localUIURL = presence?.local_ui_url ?? openSession?.entry_url ?? openSession?.startup?.local_ui_url ?? runtimeHealth.local_ui_url ?? '';
+  const effectiveHostAccess = presence?.host_access ?? target.host_access;
+  const effectivePlacement = presence?.placement ?? target.placement;
+  const effectiveTarget = {
+    ...target,
+    host_access: effectiveHostAccess,
+    placement: effectivePlacement,
+  };
   return {
     id: target.id,
     kind: targetKind,
     label: target.label,
     local_ui_url: localUIURL,
-    secondary_text: runtimeTargetSecondaryText(target),
+    secondary_text: runtimeTargetSecondaryText(effectiveTarget),
     ssh_details: sshDetailsFromRuntimeTarget(target),
     pinned: target.pinned,
     tag: isOpen ? 'Open' : 'Saved',
@@ -1541,10 +1557,10 @@ function buildSavedRuntimeTargetEntry(
     runtime_maintenance: runtimeMaintenanceFromHealth(runtimeHealth),
     provider_runtime_link_target: providerRuntimeLinkTarget,
     provider_environment_candidates: providerEnvironmentCandidates,
-    managed_runtime_target_id: desktopRuntimeTargetID(target.host_access, target.placement),
+    managed_runtime_target_id: desktopRuntimeTargetID(effectiveHostAccess, effectivePlacement),
     managed_runtime_placement_target_id: target.id,
-    managed_runtime_host_access: target.host_access,
-    managed_runtime_placement: target.placement,
+    managed_runtime_host_access: effectiveHostAccess,
+    managed_runtime_placement: effectivePlacement,
     runtime_control_capability: managedRuntimeControlCapability(presence),
     open_session_key: openSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(openSession),

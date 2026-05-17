@@ -163,7 +163,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain('runtimePlacementBridgeByTargetID.set(session.placement_target_id, connectedRecord)');
     expect(mainSrc).toContain('async function openRuntimePlacementBridgeFromLauncher(');
     expect(mainSrc).toContain('Start this runtime first, then open it.');
-    expect(mainSrc).toContain('Start it outside Redeven, then refresh and try again.');
+    expect(mainSrc).toContain('resolveRuntimeContainerPlacement');
     expect(mainSrc).toContain('DESKTOP_LAUNCHER_LIST_RUNTIME_CONTAINERS_CHANNEL');
     expect(mainSrc).not.toContain('containerStartCommand');
     expect(mainSrc).not.toContain('containerStopCommand');
@@ -190,6 +190,8 @@ describe('main routing', () => {
     const refreshRuntimeSrc = mainSrc.slice(refreshRuntimeStart, refreshRuntimeEnd);
     expect(refreshRuntimeSrc).toContain("if (placement.kind === 'container_process')");
     expect(refreshRuntimeSrc).toContain('loadExternalLocalUIStartup(runtimeRecord.startup.local_ui_url');
+    expect(refreshRuntimeSrc).toContain('assertRuntimeTargetContainerRunning(hostAccess, placement)');
+    expect(refreshRuntimeSrc).toContain('markSavedRuntimeTargetUsed(preferences');
   });
 
   it('keeps provider-link tickets separate from remote open route readiness', () => {

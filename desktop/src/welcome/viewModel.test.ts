@@ -616,9 +616,10 @@ describe('buildEnvironmentCardModel', () => {
             kind: 'container_process',
             container_engine: 'docker',
             container_id: 'container-stable-id',
+            container_ref: 'dev-container',
             container_label: 'dev-container',
             runtime_install_root: '/opt/redeven-desktop/runtime',
-        runtime_state_root: '/var/lib/redeven',
+            runtime_state_root: '/var/lib/redeven',
             bridge_strategy: 'exec_stream',
           },
           running: false,
@@ -628,7 +629,7 @@ describe('buildEnvironmentCardModel', () => {
           runtime_control_status: {
             state: 'missing',
             reason_code: 'not_started',
-            message: 'Start this runtime before connecting it to a provider.',
+            message: 'Container dev-container was not found. Choose a running container, then try again.',
           },
         }),
       },
@@ -640,6 +641,7 @@ describe('buildEnvironmentCardModel', () => {
         kind: 'container_process',
         container_engine: 'docker',
         container_id: 'container-stable-id',
+        container_ref: 'dev-container',
         container_label: 'dev-container',
       },
     });
@@ -659,6 +661,64 @@ describe('buildEnvironmentCardModel', () => {
         }),
       }),
     ]));
+    expect(actionModel.action_presentation.primary_action_overlay).toMatchObject({
+      kind: 'tooltip',
+      message: 'Container dev-container was not found. Choose a running container, then try again.',
+    });
+  });
+
+  it('shows Start runtime for a running container target without an active bridge', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment(),
+      }),
+      managedRuntimePresenceByTargetID: {
+        'local:local': localRuntimePresence(undefined, {
+          placement_target_id: 'local:container:docker:dev-container:abc12345',
+          placement: {
+            kind: 'container_process',
+            container_engine: 'docker',
+            container_id: 'new-container-id',
+            container_ref: 'dev-container',
+            container_label: 'dev-container',
+            runtime_install_root: '/opt/redeven-desktop/runtime',
+            runtime_state_root: '/var/lib/redeven',
+            bridge_strategy: 'exec_stream',
+          },
+          running: false,
+          local_ui_url: '',
+          openable: false,
+          lifecycle_control: 'start_stop',
+          runtime_control_status: {
+            state: 'missing',
+            reason_code: 'not_started',
+            message: 'Start this runtime before connecting it to a provider.',
+          },
+        }),
+      },
+    });
+    const localEntry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
+    const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);
+
+    expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'start_runtime',
+        action: expect.objectContaining({
+          intent: 'start_runtime',
+          enabled: true,
+        }),
+      }),
+    ]));
+    expect(actionModel.action_presentation.primary_action_overlay).toMatchObject({
+      kind: 'popover',
+      title: 'Start the local runtime to continue',
+      detail: 'Open becomes available once Desktop starts the runtime inside this running container.',
+      actions: expect.arrayContaining([
+        expect.objectContaining({
+          label: 'Start runtime in dev-container',
+        }),
+      ]),
+    });
   });
 
   it('keeps an online SSH runtime visible but blocks Open when the running runtime needs an update', () => {
