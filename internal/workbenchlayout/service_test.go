@@ -55,6 +55,15 @@ func sampleWidgets() []WidgetLayout {
 	}
 }
 
+func findWidgetLayout(widgets []WidgetLayout, widgetID string) *WidgetLayout {
+	for index := range widgets {
+		if widgets[index].WidgetID == widgetID {
+			return &widgets[index]
+		}
+	}
+	return nil
+}
+
 func sampleLayeredLayoutRequest() PutLayoutRequest {
 	return PutLayoutRequest{
 		BaseRevision: 0,
@@ -622,6 +631,97 @@ func TestServiceOpenPreviewReusesSameFileWidget(t *testing.T) {
 	if second.Snapshot.Revision != first.Snapshot.Revision || second.WidgetState.Revision != first.WidgetState.Revision {
 		t.Fatalf("second response = %#v, want no-op reuse of first %#v", second, first)
 	}
+	events, _, err := svc.Subscribe(ctx, first.Snapshot.Seq)
+	if err != nil {
+		t.Fatalf("Subscribe() error = %v", err)
+	}
+	if len(events) != 0 {
+		t.Fatalf("events after no-op reuse = %#v, want none", events)
+	}
+}
+
+func TestServiceOpenPreviewPromotesReusedSameFileWidget(t *testing.T) {
+	t.Parallel()
+
+	svc := openTestService(t)
+	ctx := context.Background()
+
+	if _, err := svc.Replace(ctx, PutLayoutRequest{
+		BaseRevision: 0,
+		Widgets: []WidgetLayout{
+			{
+				WidgetID:        "widget-preview-1",
+				WidgetType:      WidgetTypePreview,
+				X:               120,
+				Y:               80,
+				Width:           900,
+				Height:          620,
+				ZIndex:          1,
+				CreatedAtUnixMs: 1_700_000_000_000,
+			},
+			{
+				WidgetID:        "widget-terminal-1",
+				WidgetType:      WidgetTypeTerminal,
+				X:               320,
+				Y:               160,
+				Width:           840,
+				Height:          500,
+				ZIndex:          7,
+				CreatedAtUnixMs: 1_700_000_000_100,
+			},
+		},
+	}); err != nil {
+		t.Fatalf("Replace() error = %v", err)
+	}
+	if _, err := svc.PutWidgetState(ctx, "widget-preview-1", PutWidgetStateRequest{
+		BaseRevision: 0,
+		WidgetType:   WidgetTypePreview,
+		State: WidgetStateData{
+			Kind: WidgetStateKindPreview,
+			Item: &PreviewItem{Path: "/workspace/demo.txt", Name: "demo.txt"},
+		},
+	}); err != nil {
+		t.Fatalf("PutWidgetState() error = %v", err)
+	}
+
+	resp, err := svc.OpenPreview(ctx, OpenPreviewRequest{
+		Item: PreviewItem{Path: "/workspace/demo.txt", Name: "demo.txt"},
+	})
+	if err != nil {
+		t.Fatalf("OpenPreview() error = %v", err)
+	}
+	if resp.Created {
+		t.Fatalf("created = true, want reuse")
+	}
+	if resp.WidgetID != "widget-preview-1" {
+		t.Fatalf("widget_id = %q, want widget-preview-1", resp.WidgetID)
+	}
+	if resp.WidgetState.Revision != 1 {
+		t.Fatalf("widget state revision = %d, want unchanged revision 1", resp.WidgetState.Revision)
+	}
+	gotPreview := findWidgetLayout(resp.Snapshot.Widgets, "widget-preview-1")
+	if gotPreview == nil || gotPreview.ZIndex != 8 {
+		t.Fatalf("preview widget = %#v, want promoted z_index 8", gotPreview)
+	}
+	if resp.Snapshot.Revision != 2 {
+		t.Fatalf("snapshot revision = %d, want layout promotion revision 2", resp.Snapshot.Revision)
+	}
+
+	events, _, err := svc.Subscribe(ctx, 2)
+	if err != nil {
+		t.Fatalf("Subscribe() error = %v", err)
+	}
+	if len(events) != 1 || events[0].Type != EventTypeLayoutReplaced {
+		t.Fatalf("events after state setup = %#v, want one layout.replaced promotion event", events)
+	}
+	var payload Snapshot
+	if err := json.Unmarshal(events[0].Payload, &payload); err != nil {
+		t.Fatalf("json.Unmarshal(payload) error = %v", err)
+	}
+	eventPreview := findWidgetLayout(payload.Widgets, "widget-preview-1")
+	if eventPreview == nil || eventPreview.ZIndex != 8 {
+		t.Fatalf("event preview widget = %#v, want promoted z_index 8", eventPreview)
+	}
 }
 
 func TestServiceOpenPreviewStrategies(t *testing.T) {
@@ -672,6 +772,150 @@ func TestServiceOpenPreviewStrategies(t *testing.T) {
 	}
 	if len(forced.Snapshot.Widgets) != 3 {
 		t.Fatalf("forced snapshot widgets = %#v, want 3 preview widgets", forced.Snapshot.Widgets)
+	}
+}
+
+func TestServiceOpenPreviewPromotesFocusLatestReuse(t *testing.T) {
+	t.Parallel()
+
+	svc := openTestService(t)
+	ctx := context.Background()
+
+	if _, err := svc.Replace(ctx, PutLayoutRequest{
+		BaseRevision: 0,
+		Widgets: []WidgetLayout{
+			{
+				WidgetID:        "widget-preview-1",
+				WidgetType:      WidgetTypePreview,
+				X:               120,
+				Y:               80,
+				Width:           900,
+				Height:          620,
+				ZIndex:          3,
+				CreatedAtUnixMs: 1_700_000_000_000,
+			},
+			{
+				WidgetID:        "widget-files-1",
+				WidgetType:      WidgetTypeFiles,
+				X:               320,
+				Y:               160,
+				Width:           840,
+				Height:          500,
+				ZIndex:          9,
+				CreatedAtUnixMs: 1_700_000_000_100,
+			},
+		},
+	}); err != nil {
+		t.Fatalf("Replace() error = %v", err)
+	}
+	if _, err := svc.PutWidgetState(ctx, "widget-preview-1", PutWidgetStateRequest{
+		BaseRevision: 0,
+		WidgetType:   WidgetTypePreview,
+		State: WidgetStateData{
+			Kind: WidgetStateKindPreview,
+			Item: &PreviewItem{Path: "/workspace/first.txt", Name: "first.txt"},
+		},
+	}); err != nil {
+		t.Fatalf("PutWidgetState() error = %v", err)
+	}
+
+	resp, err := svc.OpenPreview(ctx, OpenPreviewRequest{
+		Item:         PreviewItem{Path: "/workspace/second.txt", Name: "second.txt"},
+		OpenStrategy: OpenPreviewStrategyFocusLatestOrCreate,
+	})
+	if err != nil {
+		t.Fatalf("OpenPreview() error = %v", err)
+	}
+	if resp.Created || resp.WidgetID != "widget-preview-1" {
+		t.Fatalf("response = %#v, want reused preview widget", resp)
+	}
+	if resp.WidgetState.Revision != 2 || resp.WidgetState.State.Item == nil || resp.WidgetState.State.Item.Path != "/workspace/second.txt" {
+		t.Fatalf("widget state = %#v, want updated second file revision 2", resp.WidgetState)
+	}
+	gotPreview := findWidgetLayout(resp.Snapshot.Widgets, "widget-preview-1")
+	if gotPreview == nil || gotPreview.ZIndex != 10 {
+		t.Fatalf("preview widget = %#v, want promoted z_index 10", gotPreview)
+	}
+
+	events, _, err := svc.Subscribe(ctx, 2)
+	if err != nil {
+		t.Fatalf("Subscribe() error = %v", err)
+	}
+	if len(events) != 1 || events[0].Type != EventTypeLayoutReplaced {
+		t.Fatalf("events after state setup = %#v, want one layout.replaced event for state plus promotion", events)
+	}
+	var payload Snapshot
+	if err := json.Unmarshal(events[0].Payload, &payload); err != nil {
+		t.Fatalf("json.Unmarshal(payload) error = %v", err)
+	}
+	eventPreview := findWidgetLayout(payload.Widgets, "widget-preview-1")
+	if eventPreview == nil || eventPreview.ZIndex != 10 {
+		t.Fatalf("event preview widget = %#v, want promoted z_index 10", eventPreview)
+	}
+	if len(payload.WidgetStates) != 1 || payload.WidgetStates[0].State.Item == nil || payload.WidgetStates[0].State.Item.Path != "/workspace/second.txt" {
+		t.Fatalf("event widget states = %#v, want updated preview state", payload.WidgetStates)
+	}
+}
+
+func TestServiceOpenPreviewPromotesWhenTopZIndexIsTied(t *testing.T) {
+	t.Parallel()
+
+	svc := openTestService(t)
+	ctx := context.Background()
+
+	if _, err := svc.Replace(ctx, PutLayoutRequest{
+		BaseRevision: 0,
+		Widgets: []WidgetLayout{
+			{
+				WidgetID:        "widget-preview-1",
+				WidgetType:      WidgetTypePreview,
+				X:               120,
+				Y:               80,
+				Width:           900,
+				Height:          620,
+				ZIndex:          7,
+				CreatedAtUnixMs: 1_700_000_000_000,
+			},
+			{
+				WidgetID:        "widget-terminal-1",
+				WidgetType:      WidgetTypeTerminal,
+				X:               320,
+				Y:               160,
+				Width:           840,
+				Height:          500,
+				ZIndex:          7,
+				CreatedAtUnixMs: 1_700_000_000_100,
+			},
+		},
+	}); err != nil {
+		t.Fatalf("Replace() error = %v", err)
+	}
+	if _, err := svc.PutWidgetState(ctx, "widget-preview-1", PutWidgetStateRequest{
+		BaseRevision: 0,
+		WidgetType:   WidgetTypePreview,
+		State: WidgetStateData{
+			Kind: WidgetStateKindPreview,
+			Item: &PreviewItem{Path: "/workspace/demo.txt", Name: "demo.txt"},
+		},
+	}); err != nil {
+		t.Fatalf("PutWidgetState() error = %v", err)
+	}
+
+	resp, err := svc.OpenPreview(ctx, OpenPreviewRequest{
+		Item: PreviewItem{Path: "/workspace/demo.txt", Name: "demo.txt"},
+	})
+	if err != nil {
+		t.Fatalf("OpenPreview() error = %v", err)
+	}
+	gotPreview := findWidgetLayout(resp.Snapshot.Widgets, "widget-preview-1")
+	if gotPreview == nil || gotPreview.ZIndex != 8 {
+		t.Fatalf("preview widget = %#v, want promoted above tied top layer", gotPreview)
+	}
+	if resp.WidgetState.Revision != 1 {
+		t.Fatalf("widget state revision = %d, want unchanged revision 1", resp.WidgetState.Revision)
+	}
+	if resp.Snapshot.Revision != 2 {
+		t.Fatalf("snapshot revision = %d, want layout promotion revision 2", resp.Snapshot.Revision)
 	}
 }
 

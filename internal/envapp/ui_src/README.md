@@ -34,7 +34,7 @@ Workbench code must keep ownership boundaries explicit:
 - Wheel routing is selection-gated: unselected widgets do not own wheel input; a selected widget blocks canvas zoom inside its boundary; only marked local scroll viewports scroll locally.
 - Production scroll candidates must use the exported Workbench wheel props and stay compatible with the `check:workbench-wheel` guard.
 
-Runtime-shared Workbench state is intentionally narrow: widget identity/type, geometry, ordering, durable canvas objects, and small semantic widget state such as current Files path, Terminal session ids, and Preview target. Per-client camera, selection, transient gestures, drafts, scroll position, file-browser view preferences, and active terminal tab remain local.
+Runtime-shared Workbench state is intentionally narrow: widget identity/type, geometry, ordering, durable canvas objects, and small semantic widget state such as current Files path, Terminal session ids, and Preview target. Preview opens are runtime-owned actions that return the authoritative shared ordering; UI code must not add local z-index overrides for them. Per-client camera, selection, transient gestures, drafts, scroll position, file-browser view preferences, and active terminal tab remain local.
 
 ## AI Surfaces
 
