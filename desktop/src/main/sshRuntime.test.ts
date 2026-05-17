@@ -20,7 +20,7 @@ function readSSHRuntimeSource(): string {
 }
 
 describe('sshRuntime', () => {
-  it('builds remote install, upload-install, runtime-probe, and report scripts around the managed install root', () => {
+  it('builds remote install, upload-install, runtime-probe, and report scripts around the unified runtime root', () => {
     expect(buildManagedSSHRemoteInstallScript()).toContain('REDEVEN_INSTALL_MODE=upgrade');
     expect(buildManagedSSHStartScript()).toContain('--state-root "$state_root"');
     expect(buildManagedSSHStartScript()).toContain('--mode desktop');
@@ -31,20 +31,22 @@ describe('sshRuntime', () => {
     expect(buildManagedSSHStartScript()).toContain('printf "%s\\n" "$!" > "${session_dir}/launcher.pid"');
     expect(buildManagedSSHStartScript()).not.toContain('exec "$binary" run');
     expect(buildManagedSSHStartScript()).not.toContain('trap cleanup');
-    expect(buildManagedSSHStartScript()).toContain('local_environment_root="${install_root%/}/local-environment"');
+    expect(buildManagedSSHStartScript()).toContain('state_root="${runtime_root%/}"');
+    expect(buildManagedSSHStartScript()).toContain('session_dir="${runtime_root%/}/runtime/sessions/${session_token}"');
+    expect(buildManagedSSHStartScript()).toContain('log_dir="${runtime_root%/}/runtime/logs"');
     expect(buildManagedSSHRuntimeProbeScript()).toContain("printf 'status=%s\\n' \"$probe_status\"");
     expect(buildManagedSSHRuntimeProbeScript()).toContain(`stamp_path="${'${release_root}'}/${MANAGED_SSH_RUNTIME_STAMP_FILENAME}"`);
     expect(buildManagedSSHRuntimeProbeScript()).toContain('runtime_release_tag=$release_tag');
     expect(buildManagedSSHUploadedInstallScript()).toContain('archive_path="$3"');
     expect(buildManagedSSHUploadedInstallScript()).toContain('uploaded Redeven archive did not contain redeven');
     expect(buildManagedSSHUploadedInstallScript()).toContain('write_runtime_stamp "desktop_upload"');
-    expect(buildManagedSSHRemoteInstallScript()).toContain('if [ -z "$cache_base" ] && [ -n "${HOME:-}" ] && [ -d "$HOME" ] && [ -w "$HOME" ]; then');
-    expect(buildManagedSSHRemoteInstallScript()).toContain('install_root="${remote_tmp_dir%/}/redeven-desktop-runtime-${remote_user}"');
-    expect(buildManagedSSHRemoteInstallScript()).toContain('release_root="${install_root%/}/releases/${release_tag}"');
+    expect(buildManagedSSHRemoteInstallScript()).toContain('runtime_root="${HOME%/}/.redeven"');
+    expect(buildManagedSSHRemoteInstallScript()).toContain('release_root="${runtime_root%/}/runtime/releases/${release_tag}"');
+    expect(buildManagedSSHRemoteInstallScript()).not.toContain(['redeven', 'desktop', 'runtime'].join('-'));
     expect(buildManagedSSHRemoteInstallScript()).toContain('force_install="${4:-0}"');
     expect(buildManagedSSHRemoteInstallScript()).toContain('if [ "$force_install" = "1" ] || ! runtime_is_compatible; then');
     expect(buildManagedSSHRemoteInstallScript()).toContain('write_runtime_stamp "remote_install"');
-    expect(buildManagedSSHReportReadScript()).toContain('local-environment/sessions/${session_token}/startup-report.json');
+    expect(buildManagedSSHReportReadScript()).toContain('runtime/sessions/${session_token}/startup-report.json');
     expect(buildManagedSSHStopScript()).toContain('kill "$pid"');
     expect(buildManagedSSHStopScript()).toContain('kill -KILL "$pid"');
   });
@@ -55,14 +57,14 @@ describe('sshRuntime', () => {
       'expected_release_tag=v1.2.3',
       'reported_release_tag=1.2.2',
       'binary_path=/tmp/redeven',
-      'stamp_path=/tmp/desktop-runtime.stamp',
+      'stamp_path=/tmp/managed-runtime.stamp',
       'reason=managed runtime version does not match the requested Desktop release',
     ].join('\n'))).toEqual({
       status: 'version_mismatch',
       expected_release_tag: 'v1.2.3',
       reported_release_tag: 'v1.2.2',
       binary_path: '/tmp/redeven',
-      stamp_path: '/tmp/desktop-runtime.stamp',
+      stamp_path: '/tmp/managed-runtime.stamp',
       reason: 'managed runtime version does not match the requested Desktop release',
     });
   });
@@ -73,7 +75,7 @@ describe('sshRuntime', () => {
       expected_release_tag: 'v1.2.3',
       reported_release_tag: 'v1.2.3',
       binary_path: '/opt/redeven/bin/redeven',
-      stamp_path: '/opt/redeven/desktop-runtime.stamp',
+      stamp_path: '/opt/redeven/managed-runtime.stamp',
       reason: 'managed runtime stamp is missing',
     })).toContain('Desktop stamp is missing');
     expect(describeManagedSSHRuntimeProbeResult({
@@ -81,7 +83,7 @@ describe('sshRuntime', () => {
       expected_release_tag: 'v1.2.3',
       reported_release_tag: 'v1.2.2',
       binary_path: '/opt/redeven/bin/redeven',
-      stamp_path: '/opt/redeven/desktop-runtime.stamp',
+      stamp_path: '/opt/redeven/managed-runtime.stamp',
       reason: 'managed runtime version does not match the requested Desktop release',
     })).toContain('reports v1.2.2 instead of v1.2.3');
   });

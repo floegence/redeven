@@ -23,7 +23,7 @@ import type { StartupReport } from './startup';
 import type { DesktopRuntimeControlEndpoint } from '../shared/runtimeControl';
 import { formatBlockedLaunchDiagnostics, parseLaunchReport } from './launchReport';
 import {
-  DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
+  DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
   normalizeDesktopSSHEnvironmentDetails,
   type DesktopSSHAuthMode,
   type DesktopSSHBootstrapStrategy,
@@ -46,7 +46,7 @@ const DEFAULT_SSH_STOP_TIMEOUT_MS = 5_000;
 const DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS = 15;
 const DEFAULT_SSH_POLL_INTERVAL_MS = 200;
 const MAX_RECENT_LOG_CHARS = 8_000;
-export const MANAGED_SSH_RUNTIME_STAMP_FILENAME = 'desktop-runtime.stamp';
+export const MANAGED_SSH_RUNTIME_STAMP_FILENAME = 'managed-runtime.stamp';
 export const MANAGED_SSH_RUNTIME_STAMP_SCHEMA_VERSION = 1;
 
 type SpawnedSSHProcess = ChildProcessByStdio<Writable | null, Readable | null, Readable>;
@@ -375,33 +375,15 @@ function spawnSSHProcess(
 
 function buildRemoteInstallRootShell(): string {
   return [
-    'install_root_raw="$1"',
-    `if [ "$install_root_raw" = "${DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR}" ]; then`,
-    '  remote_tmp_dir="${TMPDIR:-/tmp}"',
-    '  remote_user="${USER:-}"',
-    '  if [ -z "$remote_user" ] && command -v id >/dev/null 2>&1; then',
-    '    remote_user="$(id -u 2>/dev/null || true)"',
+    'runtime_root_raw="$1"',
+    `if [ "$runtime_root_raw" = "${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}" ]; then`,
+    '  if [ -z "${HOME:-}" ]; then',
+    '    echo "remote HOME is unavailable; set Runtime Root to an absolute .redeven path" >&2',
+    '    exit 1',
     '  fi',
-    '  if [ -z "$remote_user" ]; then',
-    '    remote_user="user"',
-    '  fi',
-    '  cache_base=""',
-    '  if [ -n "${XDG_CACHE_HOME:-}" ]; then',
-    '    xdg_parent="$(dirname "$XDG_CACHE_HOME")"',
-    '    if [ -d "$XDG_CACHE_HOME" ] || { [ -d "$xdg_parent" ] && [ -w "$xdg_parent" ]; }; then',
-    '      cache_base="$XDG_CACHE_HOME"',
-    '    fi',
-    '  fi',
-    '  if [ -z "$cache_base" ] && [ -n "${HOME:-}" ] && [ -d "$HOME" ] && [ -w "$HOME" ]; then',
-    '    cache_base="${HOME%/}/.cache"',
-    '  fi',
-    '  if [ -n "$cache_base" ]; then',
-    '    install_root="${cache_base%/}/redeven-desktop/runtime"',
-    '  else',
-    '    install_root="${remote_tmp_dir%/}/redeven-desktop-runtime-${remote_user}"',
-    '  fi',
+    '  runtime_root="${HOME%/}/.redeven"',
     'else',
-    '  install_root="$install_root_raw"',
+    '  runtime_root="$runtime_root_raw"',
     'fi',
   ].join('\n');
 }
@@ -409,7 +391,7 @@ function buildRemoteInstallRootShell(): string {
 function buildManagedSSHRuntimePathShell(): string {
   return [
     'release_tag="$2"',
-    'release_root="${install_root%/}/releases/${release_tag}"',
+    'release_root="${runtime_root%/}/runtime/releases/${release_tag}"',
     'bin_dir="${release_root}/bin"',
     'binary="${bin_dir}/redeven"',
     `stamp_path="\${release_root}/${MANAGED_SSH_RUNTIME_STAMP_FILENAME}"`,
@@ -596,13 +578,12 @@ export function buildManagedSSHStartScript(): string {
     'set -eu',
     buildRemoteInstallRootShell(),
     buildManagedSSHRuntimePathShell(),
-    'local_environment_root="${install_root%/}/local-environment"',
-    'state_root="${local_environment_root}/state"',
+    'state_root="${runtime_root%/}"',
     'session_token="$3"',
     'desktop_owner_id="${4:-}"',
-    'session_dir="${local_environment_root}/sessions/${session_token}"',
+    'session_dir="${runtime_root%/}/runtime/sessions/${session_token}"',
     'report_path="${session_dir}/startup-report.json"',
-    'log_dir="${local_environment_root}/logs"',
+    'log_dir="${runtime_root%/}/runtime/logs"',
     'log_path="${log_dir}/runtime-${session_token}.log"',
     'mkdir -p "$state_root" "$session_dir" "$log_dir"',
     'rm -f "$report_path"',
@@ -629,7 +610,7 @@ export function buildManagedSSHReportReadScript(): string {
     'set -eu',
     buildRemoteInstallRootShell(),
     'session_token="$2"',
-    'report_path="${install_root%/}/local-environment/sessions/${session_token}/startup-report.json"',
+    'report_path="${runtime_root%/}/runtime/sessions/${session_token}/startup-report.json"',
     'if [ ! -f "$report_path" ]; then',
     '  exit 1',
     'fi',
@@ -1098,7 +1079,7 @@ async function probeRemoteRuntimeCompatibility(args: Readonly<{
       ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds, args.auth.mode),
       ...sshTargetArgs(args.target),
       remoteShellCommand(buildManagedSSHRuntimeProbeScript(), 'redeven-ssh-runtime-probe', [
-        args.target.remote_install_dir,
+        args.target.runtime_root,
         args.runtimeReleaseTag,
       ]),
     ],
@@ -1297,7 +1278,7 @@ async function installRemoteRuntimeViaRemoteInstall(args: Readonly<{
       ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds, args.auth.mode),
       ...sshTargetArgs(args.target),
       remoteShellCommand(buildManagedSSHRemoteInstallScript(), 'redeven-ssh-remote-install', [
-        args.target.remote_install_dir,
+        args.target.runtime_root,
         args.runtimeReleaseTag,
         args.installScriptURL,
         args.forceRuntimeUpdate === true ? '1' : '0',
@@ -1427,7 +1408,7 @@ async function installRemoteRuntimeViaDesktopUpload(args: Readonly<{
         ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds, args.auth.mode),
         ...sshTargetArgs(args.target),
         remoteShellCommand(buildManagedSSHUploadedInstallScript(), 'redeven-ssh-upload-install', [
-          args.target.remote_install_dir,
+          args.target.runtime_root,
           args.runtimeReleaseTag,
           remoteArchivePath,
           remoteTempDir,
@@ -1604,7 +1585,7 @@ async function waitForRemoteStartupReport(args: Readonly<{
         ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds, args.auth.mode),
         ...sshTargetArgs(args.target),
         remoteShellCommand(script, 'redeven-ssh-read-report', [
-          args.target.remote_install_dir,
+          args.target.runtime_root,
           args.sessionToken,
         ]),
       ],
@@ -1896,7 +1877,7 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
         ...sshSharedArgs(controlSocketPath, connectTimeoutSeconds, auth.mode),
         ...sshTargetArgs(target),
         remoteShellCommand(buildManagedSSHStartScript(), 'redeven-ssh-start', [
-          target.remote_install_dir,
+          target.runtime_root,
           runtimeReleaseTag,
           sessionToken,
           desktopOwnerID,

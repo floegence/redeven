@@ -11,7 +11,7 @@ import { normalizeLocalUIBaseURL } from './localUIURL';
 import {
   DEFAULT_DESKTOP_SSH_AUTH_MODE,
   DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
-  DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
+  DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
   defaultSavedSSHEnvironmentLabel,
   normalizeDesktopSSHAuthMode,
   desktopSSHEnvironmentID,
@@ -19,7 +19,7 @@ import {
   normalizeDesktopSSHEnvironmentDetails,
   normalizeDesktopSSHPort,
   normalizeDesktopSSHReleaseBaseURL,
-  normalizeDesktopSSHRemoteInstallDir,
+  normalizeDesktopSSHRuntimeRoot,
   normalizeDesktopSSHDestination,
   normalizeDesktopSSHConnectTimeoutSeconds,
   type DesktopSSHEnvironmentDetails,
@@ -182,7 +182,7 @@ type DesktopSavedSSHEnvironmentFile = Readonly<{
   ssh_destination?: unknown;
   ssh_port?: unknown;
   auth_mode?: unknown;
-  remote_install_dir?: unknown;
+  runtime_root?: unknown;
   bootstrap_strategy?: unknown;
   release_base_url?: unknown;
   connect_timeout_seconds?: unknown;
@@ -231,7 +231,7 @@ type DesktopConnectionCatalogFile = Readonly<{
   ssh_destination?: unknown;
   ssh_port?: unknown;
   auth_mode?: unknown;
-  remote_install_dir?: unknown;
+  runtime_root?: unknown;
   bootstrap_strategy?: unknown;
   release_base_url?: unknown;
   connect_timeout_seconds?: unknown;
@@ -499,7 +499,7 @@ function sortSavedSSHEnvironmentsByLastUsed(
     || left.label.localeCompare(right.label)
     || left.ssh_destination.localeCompare(right.ssh_destination)
     || String(left.ssh_port ?? '').localeCompare(String(right.ssh_port ?? ''))
-    || left.remote_install_dir.localeCompare(right.remote_install_dir)
+    || left.runtime_root.localeCompare(right.runtime_root)
   ));
 }
 
@@ -658,7 +658,7 @@ function normalizeSavedSSHEnvironmentCandidate(
       ssh_destination: normalizeDesktopSSHDestination(candidate.ssh_destination),
       ssh_port: normalizeDesktopSSHPort(candidate.ssh_port),
       auth_mode: normalizeDesktopSSHAuthMode(candidate.auth_mode),
-      remote_install_dir: normalizeDesktopSSHRemoteInstallDir(candidate.remote_install_dir),
+      runtime_root: normalizeDesktopSSHRuntimeRoot(candidate.runtime_root),
       bootstrap_strategy: normalizeDesktopSSHBootstrapStrategy(candidate.bootstrap_strategy),
       release_base_url: normalizeDesktopSSHReleaseBaseURL(candidate.release_base_url),
       connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds(candidate.connect_timeout_seconds),
@@ -679,7 +679,7 @@ function normalizeSavedSSHEnvironmentCandidate(
       ssh_destination: details.ssh_destination,
       ssh_port: details.ssh_port,
       auth_mode: details.auth_mode,
-      remote_install_dir: details.remote_install_dir,
+      runtime_root: details.runtime_root,
       bootstrap_strategy: details.bootstrap_strategy,
       release_base_url: details.release_base_url,
       connect_timeout_seconds: details.connect_timeout_seconds,
@@ -1442,7 +1442,7 @@ export function upsertSavedSSHEnvironment(
       environment.ssh_destination === details.ssh_destination
       && environment.ssh_port === details.ssh_port
       && environment.auth_mode === details.auth_mode
-      && environment.remote_install_dir === details.remote_install_dir
+      && environment.runtime_root === details.runtime_root
     )
   ));
   const label = compact(input.label) || existing?.label || defaultSavedSSHEnvironmentLabel(details);
@@ -1452,7 +1452,7 @@ export function upsertSavedSSHEnvironment(
     ssh_destination: details.ssh_destination,
     ssh_port: details.ssh_port,
     auth_mode: details.auth_mode,
-    remote_install_dir: details.remote_install_dir,
+    runtime_root: details.runtime_root,
     bootstrap_strategy: details.bootstrap_strategy,
     release_base_url: details.release_base_url,
     connect_timeout_seconds: details.connect_timeout_seconds,
@@ -1468,7 +1468,7 @@ export function upsertSavedSSHEnvironment(
         environment.ssh_destination !== details.ssh_destination
         || environment.ssh_port !== details.ssh_port
         || environment.auth_mode !== details.auth_mode
-        || environment.remote_install_dir !== details.remote_install_dir
+        || environment.runtime_root !== details.runtime_root
       )
     )),
   ]).slice(0, MAX_SAVED_SSH_ENVIRONMENTS);
@@ -1595,7 +1595,7 @@ export function setSavedSSHEnvironmentPinned(
     ssh_destination: input.ssh_destination,
     ssh_port: input.ssh_port,
     auth_mode: input.auth_mode,
-    remote_install_dir: input.remote_install_dir,
+    runtime_root: input.runtime_root,
     bootstrap_strategy: input.bootstrap_strategy,
     release_base_url: input.release_base_url,
     connect_timeout_seconds: input.connect_timeout_seconds,
@@ -1702,7 +1702,7 @@ export function markSavedSSHEnvironmentUsed(
     ssh_destination?: string;
     ssh_port?: number | null;
     auth_mode?: DesktopSSHEnvironmentDetails['auth_mode'];
-    remote_install_dir?: string;
+    runtime_root?: string;
     bootstrap_strategy?: DesktopSSHEnvironmentDetails['bootstrap_strategy'];
     release_base_url?: string;
     connect_timeout_seconds?: number | null;
@@ -1716,7 +1716,7 @@ export function markSavedSSHEnvironmentUsed(
           ssh_destination: input.ssh_destination ?? '',
           ssh_port: input.ssh_port ?? null,
           auth_mode: input.auth_mode ?? DEFAULT_DESKTOP_SSH_AUTH_MODE,
-          remote_install_dir: input.remote_install_dir ?? DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
+          runtime_root: input.runtime_root ?? DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
           bootstrap_strategy: input.bootstrap_strategy ?? DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
           release_base_url: input.release_base_url ?? '',
           connect_timeout_seconds: input.connect_timeout_seconds ?? null,
@@ -1730,7 +1730,7 @@ export function markSavedSSHEnvironmentUsed(
         && environment.ssh_destination === normalizedDetails.ssh_destination
         && environment.ssh_port === normalizedDetails.ssh_port
         && environment.auth_mode === normalizedDetails.auth_mode
-        && environment.remote_install_dir === normalizedDetails.remote_install_dir
+        && environment.runtime_root === normalizedDetails.runtime_root
         && environment.bootstrap_strategy === normalizedDetails.bootstrap_strategy
         && environment.release_base_url === normalizedDetails.release_base_url
         && environment.connect_timeout_seconds === normalizedDetails.connect_timeout_seconds
@@ -1744,7 +1744,7 @@ export function markSavedSSHEnvironmentUsed(
     ssh_destination: existing.ssh_destination,
     ssh_port: existing.ssh_port,
     auth_mode: existing.auth_mode,
-    remote_install_dir: existing.remote_install_dir,
+    runtime_root: existing.runtime_root,
     bootstrap_strategy: existing.bootstrap_strategy,
     release_base_url: existing.release_base_url,
     connect_timeout_seconds: existing.connect_timeout_seconds,
@@ -2138,7 +2138,7 @@ function serializeSavedSSHEnvironmentCatalog(environment: DesktopSavedSSHEnviron
     ssh_destination: environment.ssh_destination,
     ssh_port: environment.ssh_port,
     auth_mode: environment.auth_mode,
-    remote_install_dir: environment.remote_install_dir,
+    runtime_root: environment.runtime_root,
     bootstrap_strategy: environment.bootstrap_strategy,
     release_base_url: environment.release_base_url,
     connect_timeout_seconds: environment.connect_timeout_seconds,

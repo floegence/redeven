@@ -137,17 +137,17 @@ describe('containerRuntime', () => {
     expect(containerRuntimeProbeCommand({
       engine: 'docker',
       container_id: 'dev',
-      runtime_install_root: '/opt/redeven-desktop/runtime',
+      runtime_root: '/root/.redeven',
       runtime_release_tag: 'v1.2.3',
     })).toEqual(expect.arrayContaining([
       'redeven-container-runtime-probe',
-      '/opt/redeven-desktop/runtime',
+      '/root/.redeven',
       'v1.2.3',
     ]));
     const installCommand = containerRuntimeUploadedInstallCommand({
       engine: 'podman',
       container_id: 'dev',
-      runtime_install_root: '/opt/redeven-desktop/runtime',
+      runtime_root: '/root/.redeven',
       runtime_release_tag: 'v1.2.3',
     });
     expect(installCommand).toEqual(expect.arrayContaining([
@@ -156,7 +156,7 @@ describe('containerRuntime', () => {
       '-i',
       'dev',
       'redeven-container-upload-driver',
-      '/opt/redeven-desktop/runtime',
+      '/root/.redeven',
       'v1.2.3',
     ]));
     expect(installCommand.join('\n')).toContain('cat > "$archive_path"');
@@ -200,8 +200,7 @@ describe('containerRuntime', () => {
       container_id: 'old-container-id',
       container_ref: 'redeven-nginx-dev',
       container_label: 'redeven-nginx-dev',
-      runtime_install_root: '/opt/redeven-desktop/runtime',
-      runtime_state_root: '/var/lib/redeven',
+      runtime_root: '/root/.redeven',
       bridge_strategy: 'exec_stream',
     })).resolves.toMatchObject({
       status: 'running',
@@ -247,8 +246,7 @@ describe('containerRuntime', () => {
       container_id: 'stale-container-id',
       container_ref: 'redeven-nginx-dev',
       container_label: 'redeven-nginx-dev',
-      runtime_install_root: '/opt/redeven-desktop/runtime',
-      runtime_state_root: '/var/lib/redeven',
+      runtime_root: '/root/.redeven',
       bridge_strategy: 'exec_stream',
     })).resolves.toMatchObject({
       status: 'running',
@@ -272,8 +270,7 @@ describe('containerRuntime', () => {
       container_id: 'old-container-id',
       container_ref: 'redeven-nginx-dev',
       container_label: 'redeven-nginx-dev',
-      runtime_install_root: '/opt/redeven-desktop/runtime',
-      runtime_state_root: '/var/lib/redeven',
+      runtime_root: '/root/.redeven',
       bridge_strategy: 'exec_stream',
     })).resolves.toEqual({
       status: 'missing',
@@ -304,8 +301,7 @@ describe('containerRuntime', () => {
       container_id: 'old-container-id',
       container_ref: 'redeven',
       container_label: 'redeven',
-      runtime_install_root: '/opt/redeven-desktop/runtime',
-      runtime_state_root: '/var/lib/redeven',
+      runtime_root: '/root/.redeven',
       bridge_strategy: 'exec_stream',
     })).resolves.toMatchObject({
       status: 'missing',

@@ -774,8 +774,10 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Save a runtime target inside a running container on an SSH host.');
     expect(appSrc).toContain('bridge stream, not through published container ports');
     expect(appSrc).toContain('Container <span class="text-destructive">*</span>');
-    expect(appSrc).toContain('Runtime Install Root <span class="text-destructive">*</span>');
-    expect(appSrc).toContain('Runtime State Root <span class="text-destructive">*</span>');
+    expect(appSrc).toContain('Runtime Root <span class="text-destructive">*</span>');
+    expect(appSrc).toContain('Stores Redeven releases, Local Environment state, sessions, and logs inside this container.');
+    expect(appSrc).not.toContain(['Runtime', 'Install', 'Root'].join(' ') + ' <span class="text-destructive">*</span>');
+    expect(appSrc).not.toContain(['Runtime', 'State', 'Root'].join(' ') + ' <span class="text-destructive">*</span>');
     expect(appSrc).toContain("label: 'Docker'");
     expect(appSrc).toContain("label: 'Podman'");
     expect(appSrc).toContain('function ContainerPicker');
@@ -805,10 +807,12 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("props.updateField('ssh_port', host.port == null ? '' : String(host.port));");
     expect(appSrc).toContain('getSSHConfigHosts');
     expect(appSrc).toContain('listRuntimeContainers');
-    expect(appSrc).toContain('Remote Install Directory');
+    expect(appSrc).toContain('Runtime Root');
     expect(appSrc).toContain('Release Base URL');
     expect(appSrc).toContain('Set an internal release mirror when this desktop cannot use GitHub directly.');
-    expect(appSrc).toContain('Leave blank to use the default remote user cache:');
+    expect(appSrc).toContain("Leave blank to use the remote user's .redeven root:");
+    expect(appSrc).not.toContain(['Remote', 'Install', 'Directory'].join(' '));
+    expect(appSrc).not.toContain(['default', 'remote', 'user', 'cache'].join(' '));
   });
 
   it('keeps the connection dialog source-scoped across URL, SSH, and managed container targets', () => {

@@ -509,7 +509,7 @@ function normalizeDesktopLauncherRuntimeTarget(
   const sshDestination = compact(candidate.ssh_destination);
   const sshPortText = compact(candidate.ssh_port);
   const sshAuthMode = compact(candidate.auth_mode);
-  const remoteInstallDir = compact(candidate.remote_install_dir);
+  const remoteInstallDir = compact(candidate.runtime_root);
   const bootstrapStrategy = compact(candidate.bootstrap_strategy);
   const releaseBaseURL = compact(candidate.release_base_url);
 
@@ -546,7 +546,7 @@ function normalizeDesktopLauncherRuntimeTarget(
         }
       : {}),
     ...(sshAuthMode !== '' ? { auth_mode: sshAuthMode as DesktopSSHEnvironmentDetails['auth_mode'] } : {}),
-    ...(remoteInstallDir !== '' ? { remote_install_dir: remoteInstallDir } : {}),
+    ...(remoteInstallDir !== '' ? { runtime_root: remoteInstallDir } : {}),
     ...(bootstrapStrategy !== '' ? { bootstrap_strategy: bootstrapStrategy as DesktopSSHEnvironmentDetails['bootstrap_strategy'] } : {}),
     ...(releaseBaseURL !== '' ? { release_base_url: releaseBaseURL } : {}),
     ...(candidate.connect_timeout_seconds != null ? { connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds(candidate.connect_timeout_seconds) } : {}),
@@ -675,7 +675,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           ? null
           : Number.parseInt(sshPortText, 10),
         auth_mode: compact((candidate as { auth_mode?: unknown }).auth_mode) as DesktopSSHEnvironmentDetails['auth_mode'],
-        remote_install_dir: compact((candidate as { remote_install_dir?: unknown }).remote_install_dir),
+        runtime_root: compact((candidate as { runtime_root?: unknown }).runtime_root),
         bootstrap_strategy: compact((candidate as { bootstrap_strategy?: unknown }).bootstrap_strategy) as DesktopSSHEnvironmentDetails['bootstrap_strategy'],
         release_base_url: compact((candidate as { release_base_url?: unknown }).release_base_url),
         connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds((candidate as { connect_timeout_seconds?: unknown }).connect_timeout_seconds),
@@ -749,7 +749,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
             ? null
             : Number.parseInt(sshPortText, 10),
           auth_mode: compact((candidate as { auth_mode?: unknown }).auth_mode) as DesktopSSHEnvironmentDetails['auth_mode'],
-          remote_install_dir: compact((candidate as { remote_install_dir?: unknown }).remote_install_dir),
+          runtime_root: compact((candidate as { runtime_root?: unknown }).runtime_root),
           bootstrap_strategy: compact((candidate as { bootstrap_strategy?: unknown }).bootstrap_strategy) as DesktopSSHEnvironmentDetails['bootstrap_strategy'],
           release_base_url: compact((candidate as { release_base_url?: unknown }).release_base_url),
           connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds((candidate as { connect_timeout_seconds?: unknown }).connect_timeout_seconds),
@@ -829,7 +829,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           ? null
           : Number.parseInt(sshPortText, 10),
         auth_mode: compact((candidate as { auth_mode?: unknown }).auth_mode) as DesktopSSHEnvironmentDetails['auth_mode'],
-        remote_install_dir: compact((candidate as { remote_install_dir?: unknown }).remote_install_dir),
+        runtime_root: compact((candidate as { runtime_root?: unknown }).runtime_root),
         bootstrap_strategy: compact((candidate as { bootstrap_strategy?: unknown }).bootstrap_strategy) as DesktopSSHEnvironmentDetails['bootstrap_strategy'],
         release_base_url: compact((candidate as { release_base_url?: unknown }).release_base_url),
         connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds((candidate as { connect_timeout_seconds?: unknown }).connect_timeout_seconds),

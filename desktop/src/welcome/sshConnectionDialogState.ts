@@ -2,7 +2,7 @@ export type SSHConnectionDialogStateSnapshot = Readonly<{
   mode: 'create' | 'edit';
   connection_kind: 'external_local_ui' | 'ssh_environment';
   environment_id: string;
-  remote_install_dir?: string;
+  runtime_root?: string;
   release_base_url?: string;
 }> | null;
 
@@ -28,7 +28,7 @@ export function defaultSSHConnectionDialogAdvancedOpen(state: SSHConnectionDialo
     && state.connection_kind === 'ssh_environment'
     && (
       state.mode === 'edit'
-      || compact(state.remote_install_dir) !== ''
+      || compact(state.runtime_root) !== ''
       || compact(state.release_base_url) !== ''
     ),
   );

@@ -107,7 +107,8 @@ describe('main routing', () => {
     expect(mainSrc).toContain('launcherOperations.isStale(runtimeKey)');
     expect(mainSrc).toContain('scheduleLauncherOperationRemoval(runtimeKey);');
     expect(mainSrc).toContain('function friendlyRuntimeStartErrorMessage(');
-    expect(mainSrc).toContain('The SSH host resolved its runtime directory to /root');
+    expect(mainSrc).toContain('return firstDisplayLine(rawMessage);');
+    expect(mainSrc).not.toContain(['The SSH host resolved its runtime directory to', '/root'].join(' '));
   });
 
   it('routes runtime maintenance through an explicit Desktop session contract', () => {

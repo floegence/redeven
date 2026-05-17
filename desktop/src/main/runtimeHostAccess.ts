@@ -3,7 +3,7 @@ import type { ChildProcessByStdio } from 'node:child_process';
 import type { Readable, Writable } from 'node:stream';
 
 import type { DesktopRuntimeHostAccess } from '../shared/desktopRuntimePlacement';
-import type { DesktopSSHEnvironmentDetails } from '../shared/desktopSSH';
+import type { DesktopSSHHostAccessDetails } from '../shared/desktopSSH';
 
 export type RuntimeHostCommandResult = Readonly<{
   stdout: string;
@@ -44,7 +44,7 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/gu, `'\\''`)}'`;
 }
 
-function sshTargetArgs(target: DesktopSSHEnvironmentDetails): readonly string[] {
+function sshTargetArgs(target: DesktopSSHHostAccessDetails): readonly string[] {
   return [
     ...(target.ssh_port == null ? [] : ['-p', String(target.ssh_port)]),
     target.ssh_destination,
@@ -177,7 +177,7 @@ export function spawnLocalRuntimeHostCommand(
 }
 
 export function createSSHRuntimeHostExecutor(
-  ssh: DesktopSSHEnvironmentDetails,
+  ssh: DesktopSSHHostAccessDetails,
   options: Readonly<{
     sshBinary?: string;
   }> = {},
@@ -204,7 +204,7 @@ export function createSSHRuntimeHostExecutor(
 }
 
 export function spawnSSHRuntimeHostCommand(
-  ssh: DesktopSSHEnvironmentDetails,
+  ssh: DesktopSSHHostAccessDetails,
   argv: readonly string[],
   options: RuntimeHostCommandOptions & Readonly<{
     sshBinary?: string;

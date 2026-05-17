@@ -7,7 +7,7 @@ import {
   desktopRuntimeControlStatusOwnerMismatch,
 } from './desktopRuntimePresence';
 
-const hostPlacement = { kind: 'host_process' as const, install_dir: '' };
+const hostPlacement = { kind: 'host_process' as const, runtime_root: '' };
 
 describe('desktopRuntimePresence', () => {
   it('uses explicit operation plans for running managed runtimes', () => {
@@ -36,9 +36,6 @@ describe('desktopRuntimePresence', () => {
         ssh_destination: 'devbox',
         ssh_port: 22,
         auth_mode: 'key_agent',
-        remote_install_dir: 'remote_default',
-        bootstrap_strategy: 'desktop_upload',
-        release_base_url: '',
         connect_timeout_seconds: 10,
       } },
       placement: hostPlacement,
@@ -67,8 +64,7 @@ describe('desktopRuntimePresence', () => {
         container_id: 'abc123',
         container_ref: 'web',
         container_label: 'web',
-        runtime_install_root: '/opt/redeven-desktop/runtime',
-        runtime_state_root: '/var/lib/redeven',
+        runtime_root: '/root/.redeven',
         bridge_strategy: 'exec_stream',
       },
       running: false,

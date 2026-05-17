@@ -12,7 +12,7 @@ describe('sshConnectionDialogState', () => {
       mode: 'create',
       connection_kind: 'ssh_environment',
       environment_id: 'new-ssh',
-      remote_install_dir: '',
+      runtime_root: '',
       release_base_url: '',
     })).toBe('create:ssh_environment:new-ssh');
   });
@@ -22,7 +22,7 @@ describe('sshConnectionDialogState', () => {
       mode: 'create',
       connection_kind: 'ssh_environment',
       environment_id: 'new-ssh',
-      remote_install_dir: '',
+      runtime_root: '',
       release_base_url: '',
     })).toBe(false);
 
@@ -30,7 +30,7 @@ describe('sshConnectionDialogState', () => {
       mode: 'edit',
       connection_kind: 'ssh_environment',
       environment_id: 'saved-ssh',
-      remote_install_dir: '',
+      runtime_root: '',
       release_base_url: '',
     })).toBe(true);
 
@@ -38,7 +38,7 @@ describe('sshConnectionDialogState', () => {
       mode: 'create',
       connection_kind: 'ssh_environment',
       environment_id: 'mirror-ssh',
-      remote_install_dir: '',
+      runtime_root: '',
       release_base_url: 'https://mirror.example.invalid/releases',
     })).toBe(true);
   });
@@ -50,7 +50,7 @@ describe('sshConnectionDialogState', () => {
         mode: 'create',
         connection_kind: 'ssh_environment',
         environment_id: 'new-ssh',
-        remote_install_dir: '',
+        runtime_root: '',
         release_base_url: '',
       },
     );
@@ -68,7 +68,7 @@ describe('sshConnectionDialogState', () => {
       mode: 'create',
       connection_kind: 'ssh_environment',
       environment_id: 'new-ssh',
-      remote_install_dir: '',
+      runtime_root: '',
       release_base_url: 'https://mirror.example.invalid/releases',
     })).toEqual(userOpened);
   });
@@ -83,7 +83,7 @@ describe('sshConnectionDialogState', () => {
         mode: 'edit',
         connection_kind: 'ssh_environment',
         environment_id: 'saved-ssh',
-        remote_install_dir: '',
+        runtime_root: '',
         release_base_url: '',
       },
     )).toEqual({

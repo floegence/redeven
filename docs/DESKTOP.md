@@ -110,16 +110,17 @@ SSH bootstrap is intentionally transport-light and runtime-heavy:
 
 - Desktop does not introduce a second SSH-native runtime protocol.
 - Desktop pins the remote install to the same Redeven release tag as the running desktop build.
-- The remote install layout intentionally separates shared release artifacts from mutable environment state:
-  - `<install_root>/releases/<release_tag>/bin/redeven`
-  - `<install_root>/releases/<release_tag>/desktop-runtime.stamp`
-  - `<install_root>/local-environment/state/`
-  - `<install_root>/local-environment/sessions/<session_token>/startup-report.json`
+- The remote runtime layout keeps release artifacts, mutable Local Environment state, sessions, and logs under one selected runtime root:
+  - `<runtime_root>/runtime/releases/<release_tag>/bin/redeven`
+  - `<runtime_root>/runtime/releases/<release_tag>/managed-runtime.stamp`
+  - `<runtime_root>/local-environment/`
+  - `<runtime_root>/runtime/sessions/<session_token>/startup-report.json`
+  - `<runtime_root>/runtime/logs/runtime-<session_token>.log`
 - Desktop only reuses a remote runtime when the binary reports that exact release tag and a Desktop-managed runtime stamp in the same release root is valid.
-- Each managed version root contains `desktop-runtime.stamp`, which records the stamp schema, the owning shell (`redeven-desktop`), the exact release tag, and the install strategy.
+- Each managed version root contains `managed-runtime.stamp`, which records the stamp schema, the owning shell (`redeven-desktop`), the exact release tag, and the install strategy.
 - Desktop intentionally does not adopt arbitrary user-installed `redeven` binaries outside that managed version root, so SSH bootstrap stays side-by-side with direct CLI installs instead of mutating them.
-- Mutable runtime state is host-scoped: one SSH host access entry maps to one remote Local Environment profile under the selected install root.
-- The remote install path defaults to the remote user's cache and can be overridden with an absolute path.
+- Mutable runtime state is host-scoped: one SSH host access entry maps to one remote Local Environment profile under the selected runtime root.
+- The remote runtime root defaults to the remote user's `$HOME/.redeven` and can be overridden with an absolute path.
 - Desktop can probe the remote OS/architecture (`linux` / `darwin`, `amd64` / `arm64` / `arm` / `386`) and choose the matching release package for desktop-managed upload.
 - Desktop stores verified runtime packages in one local package cache shared by SSH Host, Local Container, and SSH Container targets. For many SSH hosts on the same platform, Desktop downloads the package once, then reuses the local archive for each SSH upload.
 - `desktop_upload` verifies the signed `SHA256SUMS` manifest before trusting release-asset checksums.
@@ -133,7 +134,7 @@ SSH bootstrap is intentionally transport-light and runtime-heavy:
 - The remote runtime process is intentionally independent from the SSH control command that launched it. Desktop owns the SSH control socket and local port forward, not the remote runtime lifecycle.
 - The forwarded localhost URL is session-ephemeral and only used as the live session origin.
 - SSH Host data traffic goes through the local SSH tunnel: Desktop opens `127.0.0.1:<local_forward>` and SSH forwards it to the remote runtime's loopback-only Local UI port. No public or LAN-facing host port is required for the Local UI.
-- Session identity is derived from SSH destination, SSH port, authentication mode, and remote install directory so reconnecting does not create duplicates just because the forwarded local port changed.
+- Session identity is derived from SSH destination, SSH port, authentication mode, and runtime root so reconnecting does not create duplicates just because the forwarded local port changed.
 - Closing the Desktop session window, losing the local forward, or quitting Desktop disconnects only the SSH transport. The SSH-hosted runtime keeps running until the user explicitly stops it or the remote host/process exits.
 - SSH runtime stop is an explicit launcher/runtime-menu action. Pending startup can be canceled, and cleanup failures remain visible instead of being collapsed into a generic failure.
 - `SSH Destination` accepts either a direct `user@host` target or a Host alias from the user's local SSH config. When a selected Host has a configured `Port`, Desktop fills the Port field while still allowing the user to edit or clear that override.
@@ -185,7 +186,7 @@ Launcher model:
 - Local and SSH cards represent runtime management. Their primary card action slot is always `Open`; advanced runtime actions (`Start runtime`, `Stop runtime`, `Restart runtime`, `Update runtime`) and provider-link actions (`Connect to provider...`, `Disconnect from provider`) live in the split-button dropdown or the disabled-Open guidance popover.
 - `Start runtime` appears only in Local/SSH/container runtime card popups and dropdown menus. Provider cards do not expose `Start runtime`.
 - `Connect to provider...` appears only on Local/SSH runtime cards and always requires the user to choose a provider Environment. Desktop does not preselect a provider and does not auto-link from a provider card. A saved provider binding is explicit authorization for later managed runtime startup to restore the provider control channel without showing `Connect to provider...` again.
-- SSH Host entries store the destination, optional port, bootstrap delivery mode, remote install directory, and optional release mirror base URL. Desktop reuses release artifacts for the exact Desktop-managed version and lets the remote host own its runtime state.
+- SSH Host entries store the destination, optional port, bootstrap delivery mode, runtime root, and optional release mirror base URL. Desktop reuses release artifacts for the exact Desktop-managed version and lets the remote host own its runtime state.
 - Runtime health and window state are separate. Cards always show runtime version, using `UNKNOWN` when runtime metadata is unavailable; runtime status and active-work impact stay in badges, action recovery, and maintenance confirmations while primary actions remain window-scoped (`Open`, `Opening...`, `Focus`).
 - Runtime health is probed through explicit contracts: Local UI health for local/URL/SSH targets and RCPP runtime-health queries for provider environments.
 - Provider catalog freshness is separate from provider route availability. A stale catalog still asks Desktop to sync in the background, but last-known online provider environments continue to show `Open` instead of collapsing into a generic refresh-required state. Refreshing a provider environment card force-syncs the provider catalog first, then refreshes that environment's runtime-health overlay.
@@ -282,18 +283,13 @@ Container targets use the Runtime Placement Bridge instead of published containe
 Desktop renderer
   -> Desktop main loopback proxy on 127.0.0.1
   -> placement bootstrap inspects the running container, detects platform, installs/verifies a Desktop-managed Redeven runtime
-  -> docker/podman exec -i [--env REDEVEN_DESKTOP_OWNER_ID] <container> <container_binary_path> desktop-bridge --state-root <runtime_state_root>
+  -> docker/podman exec -i [--env REDEVEN_DESKTOP_OWNER_ID] <container> <container_binary_path> desktop-bridge --state-root <runtime_root>
   -> Local UI and runtime-control inside the container
 ```
 
 The bridge is a versioned byte-stream transport for Local UI, SSE, WebSocket, and runtime-control traffic. Desktop may execute that container command locally or through SSH host access, but the placement remains `container_process`; it must not fall back to a host-process runtime, provider tunnel, host networking, or a published container port.
 
-Container placements keep install and state paths separate:
-
-- `runtime_install_root`: the container-internal Desktop-managed release/stamp/bin root.
-- `runtime_state_root`: the container-internal Redeven state root used by `run` and `desktop-bridge`.
-
-Desktop installs the correct Linux runtime package into `runtime_install_root` before starting the bridge. A generic container does not need to provide `redeven` on `PATH`, and Desktop must not copy the host-bundled macOS/Windows binary into the container namespace. Container bootstrap reuses the same Desktop local package cache as SSH Host bootstrap, so Local Container and SSH Container targets do not redownload a runtime package already prepared for the same Desktop release and platform. The bridge command uses the resolved container-local binary path only after platform, version, and Desktop stamp checks pass.
+Container placements use one container-internal `runtime_root`. The default is `/root/.redeven`; users can choose another writable, persistent `.redeven` path such as a mounted workspace directory. Desktop installs the correct Linux runtime package into `<runtime_root>/runtime/releases/<release_tag>/bin/redeven` before starting the bridge, and `desktop-bridge` uses the same `runtime_root` as its state root. A generic container does not need to provide `redeven` on `PATH`, and Desktop must not copy the host-bundled macOS/Windows binary into the container namespace. Container bootstrap reuses the same Desktop local package cache as SSH Host bootstrap, so Local Container and SSH Container targets do not redownload a runtime package already prepared for the same Desktop release and platform. The bridge command uses the resolved container-local binary path only after platform, version, and Desktop stamp checks pass.
 
 Container lifecycle is outside Redeven. The creation dialog lists only currently running Docker/Podman containers for the selected local or SSH host access path, saves a stable `container_ref` (normally the container name), and keeps `container_id` as the last resolved execution id. Before status projection, bootstrap, or bridge startup, Desktop resolves the placement again through Docker/Podman on the local host or through the selected SSH host. If a container was recreated with the same stable reference, Desktop heals the concrete id and keeps `Start runtime` available. If the container is stopped, missing, ambiguous, or inaccessible, the card shows precise refresh/edit guidance; the user must start or repair the container with the owning container tool before Redeven can start the runtime process inside it.
 
@@ -319,7 +315,7 @@ Target validation rules:
 - SSH Host destinations accept `[user@]host` or SSH config host aliases.
 - SSH ports must be valid TCP ports when present.
 - SSH environment instance IDs must use 6-64 lowercase letters, numbers, `_`, or `-`.
-- SSH remote install directories must either use the default remote cache behavior or an absolute path.
+- SSH runtime roots must either use the default remote `$HOME/.redeven` behavior or an absolute path.
 - SSH bootstrap delivery must be one of `auto`, `desktop_upload`, or `remote_install`; `remote_install` is a fallback mode, not the recommended default.
 - SSH release base URLs must be blank or absolute `http://` / `https://` URLs.
 
@@ -487,7 +483,7 @@ Desktop-specific outcomes from this implementation:
 - If the restarted runtime requires password verification again, the same page asks for the Local UI password instead of requiring a manual browser refresh.
 - Desktop resolves update impact before continuing:
   - Desktop-owned local and provider sessions may require a Desktop restart and reopen flow
-  - SSH-hosted Local Environment profiles only affect that one SSH Host entry and remote install root
+  - SSH-hosted Local Environment profiles only affect that one SSH Host entry and runtime root
   - external Redeven URL targets stay externally managed and do not offer a Desktop-side runtime update action
 - Session child windows keep using the same Env App runtime, access gate, and Flowersec protocol path; only the shell-owned launcher/options surfaces differ.
 - Shell-owned utility windows and session-owned child windows both clear their routing ownership from the same stable window record, so normal close actions stay silent instead of surfacing Electron lifecycle errors.

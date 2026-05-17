@@ -217,7 +217,7 @@ describe('desktopPreferences', () => {
             ssh_destination: 'devbox',
             ssh_port: 2222,
             auth_mode: 'key_agent',
-            remote_install_dir: 'remote_default',
+            runtime_root: 'remote_default',
             bootstrap_strategy: 'desktop_upload',
             release_base_url: 'https://mirror.example.invalid/releases',
             connect_timeout_seconds: 10,
@@ -228,7 +228,7 @@ describe('desktopPreferences', () => {
         saved_runtime_targets: [
           {
             schema_version: 1,
-            id: 'local:container:docker:dev-container:b0f0be51',
+            id: 'local:container:docker:dev-container:63ce185e',
             label: 'Local Container Runtime',
             host_access: { kind: 'local_host' },
             placement: {
@@ -237,8 +237,7 @@ describe('desktopPreferences', () => {
               container_id: 'container-stable-id',
               container_ref: 'dev-container',
               container_label: 'dev-container',
-              runtime_install_root: '/opt/redeven-desktop/runtime',
-              runtime_state_root: '/var/lib/redeven',
+              runtime_root: '/root/.redeven',
               bridge_strategy: 'exec_stream',
             },
             pinned: false,
@@ -272,7 +271,7 @@ describe('desktopPreferences', () => {
           label: 'SSH Lab',
           ssh_destination: 'devbox',
           ssh_port: 2222,
-          remote_install_dir: 'remote_default',
+          runtime_root: 'remote_default',
           bootstrap_strategy: 'desktop_upload',
           release_base_url: 'https://mirror.example.invalid/releases',
           pinned: false,
@@ -287,7 +286,7 @@ describe('desktopPreferences', () => {
         ssh_destination: 'devbox',
         ssh_port: 2222,
         auth_mode: 'key_agent',
-        remote_install_dir: 'remote_default',
+        runtime_root: 'remote_default',
         bootstrap_strategy: 'desktop_upload',
         release_base_url: 'https://mirror.example.invalid/releases',
         pinned: false,
@@ -638,7 +637,7 @@ describe('desktopPreferences', () => {
       ssh_destination: 'devbox',
       ssh_port: 2222,
       auth_mode: 'key_agent',
-      remote_install_dir: 'remote_default',
+      runtime_root: 'remote_default',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example.invalid/releases',
       last_used_at_ms: 100,
@@ -655,7 +654,7 @@ describe('desktopPreferences', () => {
         ssh_destination: 'devbox',
         ssh_port: 2222,
         auth_mode: 'key_agent',
-        remote_install_dir: 'remote_default',
+        runtime_root: 'remote_default',
         bootstrap_strategy: 'desktop_upload',
         release_base_url: 'https://mirror.example.invalid/releases',
         connect_timeout_seconds: 10,
@@ -669,7 +668,7 @@ describe('desktopPreferences', () => {
       ssh_destination: 'devbox',
       ssh_port: 2222,
       auth_mode: 'key_agent',
-      remote_install_dir: 'remote_default',
+      runtime_root: 'remote_default',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example.invalid/releases',
       last_used_at_ms: 900,
@@ -685,8 +684,7 @@ describe('desktopPreferences', () => {
       container_id: 'container-stable-id',
       container_ref: 'dev-container',
       container_label: 'dev-container',
-      runtime_install_root: '/opt/redeven-desktop/runtime',
-      runtime_state_root: '/var/lib/redeven',
+      runtime_root: '/root/.redeven',
       bridge_strategy: 'exec_stream' as const,
     };
     const saved = upsertSavedRuntimeTarget(defaultDesktopPreferences(), {
@@ -697,7 +695,7 @@ describe('desktopPreferences', () => {
       updated_at_ms: 20,
       last_used_at_ms: 30,
     });
-    const targetID = 'local:container:docker:dev-container:b0f0be51';
+    const targetID = 'local:container:docker:dev-container:63ce185e';
 
     expect(saved.saved_runtime_targets).toEqual([
       expect.objectContaining({
@@ -743,7 +741,7 @@ describe('desktopPreferences', () => {
   it('canonicalizes legacy container runtime targets onto stable container references', () => {
     const [target] = normalizeSavedRuntimeTargets([{
       schema_version: 1,
-      id: 'local:container:docker:old-concrete-id:b0f0be51',
+      id: 'local:container:docker:old-concrete-id:63ce185e',
       label: 'Local Container Runtime',
       host_access: { kind: 'local_host' },
       placement: {
@@ -751,9 +749,7 @@ describe('desktopPreferences', () => {
         container_engine: 'docker',
         container_id: 'old-concrete-id',
         container_label: 'redeven-nginx-dev',
-        runtime_install_root: '/opt/redeven-desktop/runtime',
-        runtime_state_root: '/var/lib/redeven',
-        bridge_strategy: 'exec_stream',
+        runtime_root: '/root/.redeven',
       },
       pinned: false,
       created_at_ms: 10,
@@ -762,7 +758,7 @@ describe('desktopPreferences', () => {
     }]);
 
     expect(target).toMatchObject({
-      id: 'local:container:docker:redeven-nginx-dev:b0f0be51',
+      id: 'local:container:docker:redeven-nginx-dev:63ce185e',
       placement: {
         container_id: 'old-concrete-id',
         container_ref: 'redeven-nginx-dev',
@@ -778,12 +774,11 @@ describe('desktopPreferences', () => {
       container_id: 'old-concrete-id',
       container_ref: 'redeven-nginx-dev',
       container_label: 'redeven-nginx-dev',
-      runtime_install_root: '/opt/redeven-desktop/runtime',
-      runtime_state_root: '/var/lib/redeven',
+      runtime_root: '/root/.redeven',
       bridge_strategy: 'exec_stream' as const,
     };
-    const oldTargetID = 'local:container:docker:old-concrete-id:b0f0be51' as const;
-    const canonicalTargetID = 'local:container:docker:redeven-nginx-dev:b0f0be51' as const;
+    const oldTargetID = 'local:container:docker:old-concrete-id:63ce185e' as const;
+    const canonicalTargetID = 'local:container:docker:redeven-nginx-dev:63ce185e' as const;
     const preferences: DesktopPreferences = {
       ...defaultDesktopPreferences(),
       saved_runtime_targets: [{
@@ -836,7 +831,7 @@ describe('desktopPreferences', () => {
         ssh_destination: 'devbox',
         ssh_port: 2222,
         auth_mode: 'key_agent',
-        remote_install_dir: 'remote_default',
+        runtime_root: 'remote_default',
         bootstrap_strategy: 'desktop_upload',
         release_base_url: '',
         connect_timeout_seconds: 10,
@@ -859,7 +854,7 @@ describe('desktopPreferences', () => {
       ssh_destination: 'devbox',
       ssh_port: 2222,
       auth_mode: 'key_agent',
-      remote_install_dir: 'remote_default',
+      runtime_root: 'remote_default',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: '',
     });

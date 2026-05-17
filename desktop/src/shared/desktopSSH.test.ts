@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
-  DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
+  DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
   desktopSSHAuthority,
   desktopSSHEnvironmentID,
   desktopSSHRuntimeAffectingSettingsMatch,
@@ -11,23 +11,23 @@ import {
   normalizeDesktopSSHEnvironmentDetails,
   normalizeDesktopSSHPort,
   normalizeDesktopSSHReleaseBaseURL,
-  normalizeDesktopSSHRemoteInstallDir,
+  normalizeDesktopSSHRuntimeRoot,
 } from './desktopSSH';
 
 describe('desktopSSH', () => {
-  it('normalizes SSH environment details and defaults the remote install directory', () => {
+  it('normalizes SSH environment details and defaults the remote runtime root', () => {
     expect(normalizeDesktopSSHEnvironmentDetails({
       ssh_destination: '  devbox  ',
       ssh_port: normalizeDesktopSSHPort(''),
       auth_mode: '',
-      remote_install_dir: '',
+      runtime_root: '',
       bootstrap_strategy: '',
       release_base_url: '',
     })).toEqual(expect.objectContaining({
       ssh_destination: 'devbox',
       ssh_port: null,
       auth_mode: 'key_agent',
-      remote_install_dir: DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
+      runtime_root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
       bootstrap_strategy: DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
       release_base_url: '',
     }));
@@ -38,24 +38,21 @@ describe('desktopSSH', () => {
       ssh_destination: 'user@example.internal',
       ssh_port: 2222,
       auth_mode: 'key_agent',
-      remote_install_dir: DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
-      bootstrap_strategy: DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
-      release_base_url: '',
     })).toBe('user@example.internal:2222');
 
     expect(desktopSSHEnvironmentID({
       ssh_destination: 'user@example.internal',
       ssh_port: 2222,
       auth_mode: 'password',
-      remote_install_dir: '/opt/redeven',
+      runtime_root: '/opt/redeven',
       bootstrap_strategy: DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
       release_base_url: '',
     })).toBe('ssh:user%40example.internal:2222:password:%2Fopt%2Fredeven');
   });
 
-  it('requires custom remote install directories to be absolute paths', () => {
-    expect(() => normalizeDesktopSSHRemoteInstallDir('relative/path')).toThrow(
-      'Remote install directory must be an absolute path or use the default remote cache.',
+  it('requires custom remote runtime roots to be absolute paths', () => {
+    expect(() => normalizeDesktopSSHRuntimeRoot('relative/path')).toThrow(
+      'Runtime root must be an absolute path or use the default remote .redeven.',
     );
   });
 
@@ -73,7 +70,7 @@ describe('desktopSSH', () => {
       ssh_destination: 'devbox',
       ssh_port: 2222,
       auth_mode: 'key_agent',
-      remote_install_dir: 'remote_default',
+      runtime_root: 'remote_default',
       bootstrap_strategy: 'auto',
       release_base_url: '',
       connect_timeout_seconds: 10,

@@ -400,7 +400,7 @@ export function containerRuntimePlatformProbeCommand(input: Readonly<{
 export function containerRuntimeProbeCommand(input: Readonly<{
   engine: DesktopContainerEngine;
   container_id: string;
-  runtime_install_root: string;
+  runtime_root: string;
   runtime_release_tag: string;
 }>): readonly string[] {
   return containerRuntimeExecCommand({
@@ -411,7 +411,7 @@ export function containerRuntimeProbeCommand(input: Readonly<{
       '-c',
       buildManagedSSHRuntimeProbeScript(),
       'redeven-container-runtime-probe',
-      input.runtime_install_root,
+      input.runtime_root,
       input.runtime_release_tag,
     ],
   });
@@ -420,12 +420,12 @@ export function containerRuntimeProbeCommand(input: Readonly<{
 export function containerRuntimeUploadedInstallCommand(input: Readonly<{
   engine: DesktopContainerEngine;
   container_id: string;
-  runtime_install_root: string;
+  runtime_root: string;
   runtime_release_tag: string;
 }>): readonly string[] {
   const installDriver = [
     'set -eu',
-    'install_root="$1"',
+    'runtime_root="$1"',
     'release_tag="$2"',
     'install_script="$3"',
     'upload_dir="$(mktemp -d "${TMPDIR:-/tmp}/redeven-container-upload.XXXXXX")"',
@@ -433,7 +433,7 @@ export function containerRuntimeUploadedInstallCommand(input: Readonly<{
     'cleanup() { rm -rf "$upload_dir"; }',
     'trap cleanup EXIT INT TERM',
     'cat > "$archive_path"',
-    'sh -c "$install_script" redeven-container-upload-install "$install_root" "$release_tag" "$archive_path" "$upload_dir"',
+    'sh -c "$install_script" redeven-container-upload-install "$runtime_root" "$release_tag" "$archive_path" "$upload_dir"',
   ].join('\n');
   return containerRuntimeExecCommand({
     engine: input.engine,
@@ -443,7 +443,7 @@ export function containerRuntimeUploadedInstallCommand(input: Readonly<{
       '-c',
       installDriver,
       'redeven-container-upload-driver',
-      input.runtime_install_root,
+      input.runtime_root,
       input.runtime_release_tag,
       buildManagedSSHUploadedInstallScript(),
     ],

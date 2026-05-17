@@ -22,7 +22,13 @@ import type {
   DesktopWelcomeSnapshot,
 } from '../shared/desktopLauncherIPC';
 import type { DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
-import { desktopSSHEnvironmentID, type DesktopSSHEnvironmentDetails } from '../shared/desktopSSH';
+import {
+  DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
+  DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL,
+  DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
+  desktopSSHEnvironmentID,
+  type DesktopSSHEnvironmentDetails,
+} from '../shared/desktopSSH';
 import {
   localEnvironmentStateKind,
   localEnvironmentAccess,
@@ -165,7 +171,7 @@ export function buildSSHConnectionIssue(
       `ssh destination: ${details.ssh_destination}`,
       `ssh port: ${details.ssh_port ?? 'default'}`,
       `ssh auth mode: ${details.auth_mode}`,
-      `remote install dir: ${details.remote_install_dir}`,
+      `runtime root: ${details.runtime_root}`,
       `bootstrap strategy: ${details.bootstrap_strategy}`,
       `release base url: ${details.release_base_url || 'default'}`,
     ]),
@@ -439,7 +445,7 @@ function openSessionBySSHEnvironment(
       || (
         session.target.ssh_destination === environment.ssh_destination
         && session.target.ssh_port === environment.ssh_port
-        && session.target.remote_install_dir === environment.remote_install_dir
+        && session.target.runtime_root === environment.runtime_root
       )
     )
   )) ?? null;
@@ -1021,7 +1027,7 @@ function buildLocalEnvironmentEntry(
   const runtimeOperations = managedRuntimeOperations({
     presence,
     hostAccess: { kind: 'local_host' },
-    placement: { kind: 'host_process', install_dir: environment.local_hosting.state_dir },
+    placement: { kind: 'host_process', runtime_root: environment.local_hosting.state_dir },
     running: runtimeHealth.status === 'online',
     openable: runtimeServiceIsOpenable(runtimeService),
     runtimeService,
@@ -1488,7 +1494,7 @@ function buildSavedSSHEnvironmentEntry(
   const runtimeMaintenance = runtimeMaintenanceFromHealth(runtimeHealth);
   const runtimeKey = desktopSSHEnvironmentID(environment);
   const hostAccess: DesktopRuntimeHostAccess = { kind: 'ssh_host', ssh: environment };
-  const placement: DesktopRuntimePlacement = { kind: 'host_process', install_dir: environment.remote_install_dir };
+  const placement: DesktopRuntimePlacement = { kind: 'host_process', runtime_root: environment.runtime_root };
   const runtimeOperations = managedRuntimeOperations({
     presence,
     hostAccess,
@@ -1521,7 +1527,7 @@ function buildSavedSSHEnvironmentEntry(
       ssh_destination: environment.ssh_destination,
       ssh_port: environment.ssh_port,
       auth_mode: environment.auth_mode,
-      remote_install_dir: environment.remote_install_dir,
+      runtime_root: environment.runtime_root,
       bootstrap_strategy: environment.bootstrap_strategy,
       release_base_url: environment.release_base_url,
       connect_timeout_seconds: environment.connect_timeout_seconds,
@@ -1564,7 +1570,20 @@ function runtimeTargetSecondaryText(target: DesktopSavedRuntimeTarget): string {
 }
 
 function sshDetailsFromRuntimeTarget(target: DesktopSavedRuntimeTarget): DesktopSSHEnvironmentDetails | undefined {
-  return target.host_access.kind === 'ssh_host' ? target.host_access.ssh : undefined;
+  if (target.host_access.kind !== 'ssh_host') {
+    return undefined;
+  }
+  const placement = target.placement;
+  return {
+    ...target.host_access.ssh,
+    runtime_root: placement.runtime_root || DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
+    bootstrap_strategy: placement.kind === 'host_process'
+      ? placement.bootstrap_strategy ?? DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY
+      : DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
+    release_base_url: placement.kind === 'host_process'
+      ? placement.release_base_url ?? DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL
+      : DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL,
+  };
 }
 
 function buildSavedRuntimeTargetEntry(
