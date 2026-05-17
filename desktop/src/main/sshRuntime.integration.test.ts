@@ -1,20 +1,13 @@
 import fs from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const sshReleaseAssetMocks = vi.hoisted(() => ({
-  ensureDesktopSSHReleaseAsset: vi.fn(),
+vi.mock('./sshReleaseTrust', () => ({
+  verifyDesktopSSHReleaseManifestSignature: vi.fn(),
 }));
-
-vi.mock('./sshReleaseAssets', async (importOriginal) => {
-  const actual = await importOriginal() as typeof import('./sshReleaseAssets');
-  return {
-    ...actual,
-    ensureDesktopSSHReleaseAsset: sshReleaseAssetMocks.ensureDesktopSSHReleaseAsset,
-  };
-});
 
 import {
   DesktopSSHRuntimeCanceledError,
@@ -33,6 +26,7 @@ type FakeSSHScenario =
   | 'forwarded_invalid_env_shell'
   | 'remote_install'
   | 'desktop_upload'
+  | 'upload_install_fail'
   | 'no_report'
   | 'quick_exit_report'
   | 'blocked_report';
@@ -50,6 +44,43 @@ type FakeSSHFixture = Readonly<{
   statePath: string;
   scenario: FakeSSHScenario;
 }>;
+
+function sha256(data: Buffer | string): string {
+  return createHash('sha256').update(data).digest('hex');
+}
+
+function installReleaseFetchMock(archives: ReadonlyMap<string, Buffer>): ReturnType<typeof vi.fn> {
+  const sumsText = [...archives.entries()]
+    .map(([name, archive]) => `${sha256(archive)}  ${name}`)
+    .join('\n');
+  const realFetch = globalThis.fetch.bind(globalThis);
+  const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (!url.includes('/download/')) {
+      return realFetch(input, init);
+    }
+    if (url.endsWith('/SHA256SUMS')) {
+      return new Response(sumsText, { status: 200 });
+    }
+    if (url.endsWith('/SHA256SUMS.sig')) {
+      return new Response('test-signature', { status: 200 });
+    }
+    if (url.endsWith('/SHA256SUMS.pem')) {
+      return new Response('test-certificate', { status: 200 });
+    }
+    const archive = archives.get(path.basename(new URL(url).pathname));
+    if (archive) {
+      return new Response(new Uint8Array(archive), { status: 200 });
+    }
+    return new Response('missing', { status: 404 });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
+
+function releaseArchiveFetchCount(fetchMock: ReturnType<typeof vi.fn>, packageName: string): number {
+  return fetchMock.mock.calls.filter((call) => String(call[0]).endsWith(`/${packageName}`)).length;
+}
 
 const FAKE_SSH_SCRIPT = String.raw`#!/usr/bin/env node
 const fs = require('node:fs');
@@ -441,6 +472,10 @@ if (args.includes('-M') && args.includes('-N')) {
       break;
     case 'redeven-ssh-upload-install':
       appendLog('upload_install');
+      if (scenario === 'upload_install_fail') {
+        process.stderr.write('simulated upload install failure\n');
+        process.exit(2);
+      }
       writeState({ installed: true });
       process.exit(0);
       break;
@@ -689,7 +724,7 @@ async function removeFakeSSHFixture(fixture: FakeSSHFixture): Promise<void> {
 }
 
 afterEach(() => {
-  sshReleaseAssetMocks.ensureDesktopSSHReleaseAsset.mockReset();
+  vi.unstubAllGlobals();
 });
 
 describe('sshRuntime integration', () => {
@@ -1062,6 +1097,42 @@ describe('sshRuntime integration', () => {
     await removeFakeSSHFixture(fixture);
   });
 
+  it('falls back to remote install only when local package preparation fails before upload', async () => {
+    const fixture = await createFakeSSHFixture('remote_install');
+    installReleaseFetchMock(new Map());
+    let runtime: ManagedSSHRuntime | null = null;
+    try {
+      runtime = await startWithFakeSSH(fixture, 'auto');
+    } finally {
+      await runtime?.stop();
+    }
+
+    const events = await readFakeSSHEvents(fixture);
+    const eventNames = events.map((event) => event.event);
+    expect(eventNames).toContain('remote_install');
+    expect(eventNames).not.toContain('upload_archive');
+    expect(eventNames).not.toContain('upload_install');
+    await removeFakeSSHFixture(fixture);
+  });
+
+  it('does not fall back to remote install after an upload install has started', async () => {
+    const fixture = await createFakeSSHFixture('upload_install_fail');
+    installReleaseFetchMock(new Map([
+      ['redeven_linux_amd64.tar.gz', Buffer.from('fake archive')],
+    ]));
+
+    await expect(startWithFakeSSH(fixture, 'auto')).rejects.toThrow(
+      'Desktop could not install the uploaded linux/amd64 Redeven package on the remote host.',
+    );
+
+    const events = await readFakeSSHEvents(fixture);
+    const eventNames = events.map((event) => event.event);
+    expect(eventNames).toContain('upload_archive');
+    expect(eventNames).toContain('upload_install');
+    expect(eventNames).not.toContain('remote_install');
+    await removeFakeSSHFixture(fixture);
+  });
+
   it('reinstalls a release runtime when the user explicitly requests an update before restart', async () => {
     const fixture = await createFakeSSHFixture('ready');
     let runtime: ManagedSSHRuntime | null = null;
@@ -1133,22 +1204,9 @@ describe('sshRuntime integration', () => {
 
   it('uploads a locally prepared release archive for desktop-upload bootstrap', async () => {
     const fixture = await createFakeSSHFixture('desktop_upload');
-    const archivePath = path.join(fixture.root, 'fake-redeven.tar.gz');
-    await fs.writeFile(archivePath, Buffer.from('fake archive'));
-    sshReleaseAssetMocks.ensureDesktopSSHReleaseAsset.mockResolvedValue({
-      release_tag: 'v1.2.3',
-      release_base_url: '',
-      source_cache_key: 'test-source',
-      platform: {
-        goos: 'linux',
-        goarch: 'amd64',
-        platform_id: 'linux_amd64',
-        release_package_name: 'redeven_linux_amd64.tar.gz',
-        platform_label: 'linux/amd64',
-      },
-      archive_path: archivePath,
-      sha256: '0'.repeat(64),
-    });
+    const fetchMock = installReleaseFetchMock(new Map([
+      ['redeven_linux_amd64.tar.gz', Buffer.from('fake archive')],
+    ]));
 
     let runtime: ManagedSSHRuntime | null = null;
     try {
@@ -1159,14 +1217,7 @@ describe('sshRuntime integration', () => {
 
     const events = await readFakeSSHEvents(fixture);
     const eventNames = events.map((event) => event.event);
-    expect(sshReleaseAssetMocks.ensureDesktopSSHReleaseAsset).toHaveBeenCalledWith(expect.objectContaining({
-      releaseTag: 'v1.2.3',
-      releaseBaseURL: '',
-      platform: expect.objectContaining({
-        platform_id: 'linux_amd64',
-        release_package_name: 'redeven_linux_amd64.tar.gz',
-      }),
-    }));
+    expect(releaseArchiveFetchCount(fetchMock, 'redeven_linux_amd64.tar.gz')).toBe(1);
     expect(eventNames).toEqual(expect.arrayContaining([
       'probe_platform',
       'upload_archive',
@@ -1177,6 +1228,45 @@ describe('sshRuntime integration', () => {
     ]));
     expect(events.find((event) => event.event === 'upload_archive')?.data?.bytes).toBe(Buffer.byteLength('fake archive'));
     await removeFakeSSHFixture(fixture);
+  });
+
+  it('reuses one local release download across many SSH host uploads on the same platform', async () => {
+    const fixtures = await Promise.all([
+      createFakeSSHFixture('desktop_upload'),
+      createFakeSSHFixture('desktop_upload'),
+      createFakeSSHFixture('desktop_upload'),
+    ]);
+    const sharedCacheRoot = path.join(fixtures[0].root, 'shared-runtime-cache');
+    const fetchMock = installReleaseFetchMock(new Map([
+      ['redeven_linux_amd64.tar.gz', Buffer.from('shared fake archive')],
+    ]));
+    let runtimes: ManagedSSHRuntime[] = [];
+    try {
+      for (const fixture of fixtures) {
+        const runtime = await withFakeSSHEnv(fixture, () => startManagedSSHRuntime({
+          target: targetFor('desktop_upload'),
+          runtimeReleaseTag: 'v1.2.3',
+          desktopOwnerID: 'desktop-owner-test',
+          sshBinary: fixture.sshBinary,
+          tempRoot: fixture.root,
+          assetCacheRoot: sharedCacheRoot,
+          startupTimeoutMs: 2_500,
+          probeTimeoutMs: 2_500,
+          stopTimeoutMs: 500,
+          connectTimeoutSeconds: 1,
+        }));
+        runtimes.push(runtime);
+      }
+    } finally {
+      await Promise.all(runtimes.map((runtime) => runtime.stop().catch(() => undefined)));
+    }
+
+    expect(releaseArchiveFetchCount(fetchMock, 'redeven_linux_amd64.tar.gz')).toBe(1);
+    for (const fixture of fixtures) {
+      const events = await readFakeSSHEvents(fixture);
+      expect(events.find((event) => event.event === 'upload_archive')?.data?.bytes).toBe(Buffer.byteLength('shared fake archive'));
+      await removeFakeSSHFixture(fixture);
+    }
   });
 
   it('builds and uploads the current checkout runtime for source-dev SSH bootstrap', async () => {
@@ -1200,7 +1290,6 @@ describe('sshRuntime integration', () => {
     }
 
     const events = await readFakeSSHEvents(fixture);
-    expect(sshReleaseAssetMocks.ensureDesktopSSHReleaseAsset).not.toHaveBeenCalled();
     expect(events).toEqual(expect.arrayContaining([
       expect.objectContaining({
         event: 'upload_archive',
@@ -1244,7 +1333,6 @@ describe('sshRuntime integration', () => {
       'upload_install',
       'start_runtime',
     ]));
-    expect(sshReleaseAssetMocks.ensureDesktopSSHReleaseAsset).not.toHaveBeenCalled();
     await removeFakeSSHFixture(fixture);
   });
 

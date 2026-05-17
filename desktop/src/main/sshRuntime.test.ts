@@ -109,8 +109,8 @@ describe('sshRuntime', () => {
     expect(source).toContain("if (args.target.bootstrap_strategy === 'auto' && error instanceof DesktopSSHUploadAssetPreparationError)");
     expect(source).toContain('const uploadProbe = await probeRemoteRuntimeCompatibility(args);');
     expect(source).toMatch(/if \(args\.target\.bootstrap_strategy === 'auto'\) \{\s*break;\s*\}\s*continue;/);
-    expect(source).toContain("path.join(sourceRoot, 'scripts', 'build_assets.sh')");
-    expect(source).toContain('await buildSourceRuntimeAssets(sourceRoot, args.signal);');
+    expect(source).toContain("from './runtimePackageCache'");
+    expect(source).toContain('prepareDesktopRuntimeUploadAsset({');
     expect(source).toContain('async function waitForForwardedLocalUIOpenable(');
     expect(source).toContain('managedSSHRuntimeAttachPolicy(');
     expect(source).toContain('DesktopSSHRuntimeMaintenanceRequiredError');

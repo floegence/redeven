@@ -78,7 +78,7 @@ export function normalizeDesktopSSHBootstrapStrategy(value: unknown): DesktopSSH
     case 'remote_install':
       return text;
     default:
-      throw new Error('SSH bootstrap delivery must be Automatic, Desktop Upload, or Remote Install.');
+      throw new Error('SSH bootstrap delivery must be Automatic, Desktop Upload, or Remote Fallback.');
   }
 }
 

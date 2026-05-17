@@ -6309,7 +6309,7 @@ function ConnectionDialog(props: Readonly<{
       case 'desktop_upload':
         return sshReleaseBaseURLLabel();
       case 'remote_install':
-        return 'Remote installer';
+        return 'Remote fallback';
       default:
         return 'Auto';
     }
@@ -6550,7 +6550,7 @@ function ConnectionDialog(props: Readonly<{
                   <div>
                     <div class="text-xs font-medium text-foreground">Advanced</div>
                     <div class="mt-1 text-[11px] text-muted-foreground">
-                      Bootstrap delivery, remote install path, and release mirror for this SSH host.
+                      Desktop upload cache, remote fallback, install path, and release mirror for this SSH host.
                     </div>
                   </div>
                   <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
@@ -6568,12 +6568,12 @@ function ConnectionDialog(props: Readonly<{
                           options={[
                             { value: 'auto', label: 'Automatic' },
                             { value: 'desktop_upload', label: 'Desktop Upload' },
-                            { value: 'remote_install', label: 'Remote Install' },
+                            { value: 'remote_install', label: 'Remote Fallback' },
                           ]}
                           size="sm"
                         />
                         <div class="text-[11px] text-muted-foreground">
-                          How Desktop places the runtime on this SSH host.{' '}
+                          Automatic uses Desktop's verified local package cache first; remote install is only a fallback when local package preparation is unavailable.{' '}
                           <span class="font-medium text-foreground">Source: {sshBootstrapSummaryLabel()}</span>
                         </div>
                       </div>

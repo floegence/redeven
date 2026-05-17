@@ -23,7 +23,7 @@ import {
 import {
   prepareDesktopRuntimeUploadAsset,
   runtimeReleaseFetchPolicy,
-} from './runtimeUploadAsset';
+} from './runtimePackageCache';
 
 export type RuntimePlacementProgressPhase =
   | 'checking_host'
