@@ -1937,7 +1937,7 @@ func (r *run) shouldUseNativeRuntime(provider *config.AIProvider) bool {
 		return false
 	}
 	switch strings.ToLower(strings.TrimSpace(provider.Type)) {
-	case "openai", "anthropic", "moonshot", "chatglm", "deepseek", "qwen", "openai_compatible", DesktopBrokerProviderType:
+	case "openai", "anthropic", "moonshot", "chatglm", "deepseek", "qwen", "openai_compatible", DesktopModelSourceProviderType:
 		return true
 	default:
 		return false

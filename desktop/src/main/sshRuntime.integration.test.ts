@@ -20,7 +20,6 @@ import {
   DesktopSSHRuntimeCanceledError,
   startManagedSSHRuntime,
   type ManagedSSHRuntime,
-  type ManagedSSHRuntimeAIBroker,
 } from './sshRuntime';
 import type { DesktopSSHBootstrapStrategy, DesktopSSHEnvironmentDetails } from '../shared/desktopSSH';
 
@@ -32,8 +31,6 @@ type FakeSSHScenario =
   | 'attached_unsupported_active'
   | 'forwarded_blocked_readiness'
   | 'forwarded_invalid_env_shell'
-  | 'binding_error'
-  | 'reverse_forward_error'
   | 'remote_install'
   | 'desktop_upload'
   | 'no_report'
@@ -104,7 +101,7 @@ function currentRuntimeService() {
       port_forward_count: 0,
     },
     capabilities: {
-      desktop_ai_broker: {
+      desktop_model_source: {
         supported: true,
         bind_method: 'runtime_control_v1',
       },
@@ -114,12 +111,11 @@ function currentRuntimeService() {
       },
     },
     bindings: {
-      desktop_ai_broker: state.broker_bound
+      desktop_model_source: state.model_source_bound
         ? {
             state: 'bound',
-            session_id: state.broker_session_id || 'broker-session',
-            ssh_runtime_key: state.broker_ssh_runtime_key || 'ssh:devbox',
-            expires_at_unix_ms: state.broker_expires_at_unix_ms || futureExpiryUnixMS(),
+            session_id: state.model_source_session_id || 'desktop-session',
+            expires_at_unix_ms: state.model_source_expires_at_unix_ms || futureExpiryUnixMS(),
             model_source: 'desktop_local_environment',
             model_count: 1,
         }
@@ -371,63 +367,6 @@ function startForward() {
       }));
       return;
     }
-    if (request.url === '/_redeven_proxy/api/runtime/bindings/desktop-ai-broker' && request.method === 'POST') {
-      const chunks = [];
-      request.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
-      request.on('end', () => {
-        const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
-        if (scenario === 'binding_error') {
-          appendLog('bind_desktop_ai_broker_failed', {
-            session_id: String(body.session_id || ''),
-            ssh_runtime_key: String(body.ssh_runtime_key || ''),
-          });
-          response.writeHead(200, { 'content-type': 'application/json' });
-          response.end(JSON.stringify({
-            ok: true,
-            data: {
-              ai_runtime: {
-                desktop_broker: {
-                  binding_state: 'error',
-                  connected: true,
-                  available: false,
-                  last_error: 'simulated binding failure',
-                },
-              },
-            },
-          }));
-          return;
-        }
-        const state = readState();
-        writeState({
-          ...state,
-          broker_bound: true,
-          broker_session_id: String(body.session_id || ''),
-          broker_ssh_runtime_key: String(body.ssh_runtime_key || ''),
-          broker_expires_at_unix_ms: Number(body.expires_at_unix_ms || 0),
-        });
-        appendLog('bind_desktop_ai_broker', {
-          url: String(body.url || ''),
-          has_token: Boolean(body.token),
-          session_id: String(body.session_id || ''),
-          ssh_runtime_key: String(body.ssh_runtime_key || ''),
-        });
-        response.writeHead(200, { 'content-type': 'application/json' });
-        response.end(JSON.stringify({
-          ok: true,
-          data: {
-            ai_runtime: {
-              desktop_broker: {
-                binding_state: 'bound',
-                connected: true,
-                available: true,
-                model_count: 1,
-              },
-            },
-          },
-        }));
-      });
-      return;
-    }
     if (request.url === '/_redeven_proxy/env/') {
       response.writeHead(200, { 'content-type': 'text/html' });
       response.end(scenario === 'forwarded_invalid_env_shell'
@@ -447,17 +386,6 @@ function startForward() {
     appendLog(isRuntimeControlForward ? 'runtime_control_forward_start' : 'forward_start', { local_port: localPort, remote_port: remotePort });
   });
   terminateLater(isRuntimeControlForward ? 'runtime_control_forward_terminated' : 'forward_terminated', () => server.close());
-}
-
-function startReverseForward() {
-  const spec = args[args.indexOf('-R') + 1] || '';
-  appendLog('reverse_forward_start', { spec });
-  if (scenario === 'reverse_forward_error') {
-    process.stderr.write('remote port forwarding failed\n');
-    process.exit(255);
-  }
-  process.stderr.write('Allocated port 41234 for remote forward to 127.0.0.1\n');
-  terminateLater('reverse_forward_terminated');
 }
 
 if (args.includes('-O') && args.includes('check')) {
@@ -480,8 +408,6 @@ if (args.includes('-M') && args.includes('-N')) {
   terminateLater('master_terminated');
 } else if (args.includes('-L')) {
   startForward();
-} else if (args.includes('-R')) {
-  startReverseForward();
 } else {
   switch (marker()) {
     case 'redeven-ssh-runtime-probe':
@@ -601,10 +527,6 @@ if (args.includes('-M') && args.includes('-N')) {
 }
 `;
 
-function futureExpiryUnixMS(): number {
-  return Date.now() + 24 * 60 * 60 * 1000;
-}
-
 async function createFakeSSHFixture(scenario: FakeSSHScenario): Promise<FakeSSHFixture> {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-fake-ssh-'));
   const sshBinary = path.join(root, 'fake-ssh.js');
@@ -710,7 +632,7 @@ async function startWithFakeSSH(
     sourceRuntimeRoot?: string;
     forceRuntimeUpdate?: boolean;
     allowActiveWorkReplacement?: boolean;
-    aiBroker?: ManagedSSHRuntimeAIBroker | null;
+    requireDesktopModelSource?: boolean;
     signal?: AbortSignal;
   }> = {},
 ): Promise<ManagedSSHRuntime> {
@@ -728,7 +650,7 @@ async function startWithFakeSSH(
     probeTimeoutMs: options.probeTimeoutMs ?? 2_500,
     stopTimeoutMs: 500,
     connectTimeoutSeconds: 1,
-    aiBroker: options.aiBroker ?? null,
+    requireDesktopModelSource: options.requireDesktopModelSource === true,
     signal: options.signal,
   }));
 }
@@ -833,109 +755,6 @@ describe('sshRuntime integration', () => {
     await removeFakeSSHFixture(fixture);
   });
 
-  it('binds the Desktop AI Broker after the forwarded runtime opens', async () => {
-    const fixture = await createFakeSSHFixture('ready');
-    let runtime: ManagedSSHRuntime | null = null;
-    try {
-      runtime = await startWithFakeSSH(fixture, 'auto', {
-        aiBroker: {
-          local_url: 'http://127.0.0.1:41234',
-          token: 'broker-token',
-          session_id: 'broker-session',
-          ssh_runtime_key: 'ssh:devbox',
-          expires_at_unix_ms: futureExpiryUnixMS(),
-        },
-      });
-      expect(runtime.startup.runtime_service).toMatchObject({
-        capabilities: {
-          desktop_ai_broker: {
-            supported: true,
-            bind_method: 'runtime_control_v1',
-          },
-        },
-        bindings: {
-          desktop_ai_broker: {
-            state: 'bound',
-            session_id: 'broker-session',
-            ssh_runtime_key: 'ssh:devbox',
-          },
-        },
-      });
-    } finally {
-      await runtime?.disconnect();
-    }
-
-    const events = await readFakeSSHEvents(fixture);
-    expect(events.map((event) => event.event)).toEqual(expect.arrayContaining([
-      'reverse_forward_start',
-      'bind_desktop_ai_broker',
-    ]));
-    const bindEvent = events.find((event) => event.event === 'bind_desktop_ai_broker');
-    expect(bindEvent?.data).toEqual(expect.objectContaining({
-      session_id: 'broker-session',
-      ssh_runtime_key: 'ssh:devbox',
-      has_token: true,
-    }));
-    expect(events.map((event) => event.event)).not.toContain('stop_runtime');
-    await removeFakeSSHFixture(fixture);
-  });
-
-  it('keeps opening the SSH runtime when Desktop AI Broker binding fails', async () => {
-    const fixture = await createFakeSSHFixture('binding_error');
-    let runtime: ManagedSSHRuntime | null = null;
-    try {
-      runtime = await startWithFakeSSH(fixture, 'auto', {
-        aiBroker: {
-          local_url: 'http://127.0.0.1:41234',
-          token: 'broker-token',
-          session_id: 'broker-session',
-          ssh_runtime_key: 'ssh:devbox',
-          expires_at_unix_ms: futureExpiryUnixMS(),
-        },
-      });
-      expect(runtime.startup.local_ui_url).toBe(runtime.local_forward_url);
-      expect(runtime.startup.runtime_service?.bindings?.desktop_ai_broker?.state).toBe('unbound');
-    } finally {
-      await runtime?.disconnect();
-    }
-
-    const events = await readFakeSSHEvents(fixture);
-    expect(events.map((event) => event.event)).toEqual(expect.arrayContaining([
-      'reverse_forward_start',
-      'start_runtime',
-      'bind_desktop_ai_broker_failed',
-    ]));
-    await removeFakeSSHFixture(fixture);
-  });
-
-  it('keeps opening the SSH runtime when the Desktop model reverse bridge fails', async () => {
-    const fixture = await createFakeSSHFixture('reverse_forward_error');
-    let runtime: ManagedSSHRuntime | null = null;
-    try {
-      runtime = await startWithFakeSSH(fixture, 'auto', {
-        aiBroker: {
-          local_url: 'http://127.0.0.1:41234',
-          token: 'broker-token',
-          session_id: 'broker-session',
-          ssh_runtime_key: 'ssh:devbox',
-          expires_at_unix_ms: futureExpiryUnixMS(),
-        },
-      });
-      expect(runtime.startup.local_ui_url).toBe(runtime.local_forward_url);
-      expect(runtime.startup.runtime_service?.bindings?.desktop_ai_broker?.state).toBe('unbound');
-    } finally {
-      await runtime?.disconnect();
-    }
-
-    const events = await readFakeSSHEvents(fixture);
-    expect(events.map((event) => event.event)).toEqual(expect.arrayContaining([
-      'reverse_forward_start',
-      'start_runtime',
-    ]));
-    expect(events.map((event) => event.event)).not.toContain('bind_desktop_ai_broker');
-    await removeFakeSSHFixture(fixture);
-  });
-
   it('stops the remote runtime only when the user explicitly stops the SSH runtime', async () => {
     const fixture = await createFakeSSHFixture('ready');
     let runtime: ManagedSSHRuntime | null = null;
@@ -1027,25 +846,19 @@ describe('sshRuntime integration', () => {
     await removeFakeSSHFixture(fixture);
   });
 
-  it('replaces an idle attached runtime that does not yet support Desktop AI Broker binding', async () => {
+  it('replaces an idle attached runtime that does not yet support Desktop model source RPC', async () => {
     const fixture = await createFakeSSHFixture('attached_unsupported_idle');
     let runtime: ManagedSSHRuntime | null = null;
     try {
       runtime = await startWithFakeSSH(fixture, 'auto', {
-        aiBroker: {
-          local_url: 'http://127.0.0.1:41234',
-          token: 'broker-token',
-          session_id: 'broker-session',
-          ssh_runtime_key: 'ssh:devbox',
-          expires_at_unix_ms: futureExpiryUnixMS(),
-        },
+        requireDesktopModelSource: true,
       });
       expect(runtime.runtime_handle.launch_mode).toBe('spawned');
       expect(runtime.startup.runtime_service).toMatchObject({
         runtime_version: 'v1.2.3',
         bindings: {
-          desktop_ai_broker: {
-            state: 'bound',
+          desktop_model_source: {
+            state: 'unbound',
           },
         },
       });
@@ -1057,7 +870,7 @@ describe('sshRuntime integration', () => {
     expect(events.map((event) => event.event)).toEqual(expect.arrayContaining([
       'start_runtime',
       'stop_runtime',
-      'bind_desktop_ai_broker',
+      'runtime_control_forward_start',
     ]));
     await removeFakeSSHFixture(fixture);
   });
@@ -1143,16 +956,10 @@ describe('sshRuntime integration', () => {
     await removeFakeSSHFixture(fixture);
   });
 
-  it('blocks an attached runtime that needs Desktop AI Broker binding but still has active work', async () => {
+  it('blocks an attached runtime that needs Desktop model source RPC but still has active work', async () => {
     const fixture = await createFakeSSHFixture('attached_unsupported_active');
     await expect(startWithFakeSSH(fixture, 'auto', {
-        aiBroker: {
-          local_url: 'http://127.0.0.1:41234',
-          token: 'broker-token',
-          session_id: 'broker-session',
-          ssh_runtime_key: 'ssh:devbox',
-          expires_at_unix_ms: futureExpiryUnixMS(),
-        },
+      requireDesktopModelSource: true,
     })).rejects.toThrow('needs to update before Desktop can prepare the Desktop model source');
 
     const events = await readFakeSSHEvents(fixture);
@@ -1285,13 +1092,7 @@ describe('sshRuntime integration', () => {
       runtime = await startWithFakeSSH(fixture, 'auto', {
         forceRuntimeUpdate: true,
         allowActiveWorkReplacement: true,
-        aiBroker: {
-          local_url: 'http://127.0.0.1:41234',
-          token: 'broker-token',
-          session_id: 'broker-session',
-          ssh_runtime_key: 'ssh:devbox',
-          expires_at_unix_ms: futureExpiryUnixMS(),
-        },
+        requireDesktopModelSource: true,
       });
     } finally {
       await runtime?.stop();

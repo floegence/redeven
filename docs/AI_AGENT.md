@@ -13,7 +13,7 @@ High-level design:
   - Moonshot: `openai-go` (Chat Completions API on Moonshot base URL)
   - Anthropic: `anthropic-sdk-go` (Messages API)
 - GLM/Z.ai, DeepSeek, and Qwen: `openai-go` against provider OpenAI-compatible endpoints with provider-specific request decoration. Qwen3.6 Plus/Flash use the provider Responses API `web_search` tool.
-- In Desktop-managed SSH Host sessions, the runtime may also use a Desktop AI Broker adapter. Desktop binds that adapter through runtime-control after the running SSH runtime reports the `desktop_ai_broker` capability. The broker performs model calls on the user's machine with the Desktop Local Environment's provider config and secrets, while the SSH-hosted runtime still owns context gathering, permission checks, and tool execution on the SSH host.
+- In Desktop-managed SSH Host and container sessions, the runtime may also use a Desktop Model Source RPC adapter. Desktop connects that adapter through runtime-control after the running runtime reports the `desktop_model_source` capability. The connector performs model calls on the user's machine with the Desktop Local Environment's provider config and secrets, while the remote runtime still owns context gathering, permission checks, and tool execution.
 - OpenAI Responses continuation is treated as an optimization layer rather than a second context system: Flower resumes with `previous_response_id` only when the same thread stays on a compatible OpenAI provider/model/base URL fingerprint, and otherwise falls back to the canonical local `PromptPack` replay path.
 
 ## Prompt architecture
@@ -52,7 +52,7 @@ The core runtime contract is:
 - `ai.current_model_id` selects the default model for new chats.
 - The wire model id remains `<provider_id>/<model_name>`, and each thread stores its own `model_id`.
 - Provider API keys are stored in the Local Environment state's `secrets.json`, never in `config.json`, and are never returned to the browser in plaintext.
-- For Desktop-managed SSH Host sessions, the remote runtime can use a short-lived Desktop AI Broker source without copying the Desktop Local Environment's `ai` config or secrets onto the SSH host.
+- For Desktop-managed SSH Host and container sessions, the remote runtime can use a short-lived Desktop Model Source RPC source without copying the Desktop Local Environment's `ai` config or secrets onto the remote target.
 
 ## Tooling and execution policy
 

@@ -1084,12 +1084,12 @@ export function registerEnvAIPageSendTests() {
         { value: 'remote/model-a', label: 'Remote A', source: 'runtime_config' as const, sourceLabel: 'Remote runtime' },
       ];
       const desktopModels = [
-        { value: 'desktop-broker:local/model-b', label: 'Desktop B', source: 'desktop_broker' as const, sourceLabel: 'Desktop' },
+        { value: 'desktop:model_local_b', label: 'Desktop B', source: 'desktop_model_source' as const, sourceLabel: 'Desktop' },
       ];
       aiContextValue.modelOptions = () => [...remoteModels, ...desktopModels];
       aiContextValue.modelSourceGroups = () => [
         { source: 'runtime_config', sourceLabel: 'Remote runtime', available: true, models: remoteModels },
-        { source: 'desktop_broker', sourceLabel: 'Desktop', available: true, models: desktopModels },
+        { source: 'desktop_model_source', sourceLabel: 'Desktop', available: true, models: desktopModels },
       ];
       aiContextValue.selectedDefaultModel = () => 'remote/model-a';
       aiContextValue.selectDefaultModel = vi.fn();
@@ -1108,7 +1108,7 @@ export function registerEnvAIPageSendTests() {
           .find((button) => button.textContent?.includes('Desktop'));
         desktopButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
-        expect(aiContextValue.selectDefaultModel).toHaveBeenCalledWith('desktop-broker:local/model-b');
+        expect(aiContextValue.selectDefaultModel).toHaveBeenCalledWith('desktop:model_local_b');
       } finally {
         dispose();
       }
@@ -1152,12 +1152,12 @@ export function registerEnvAIPageSendTests() {
         { value: 'remote/model-a', label: 'Remote A', source: 'runtime_config' as const, sourceLabel: 'Remote runtime' },
       ];
       const desktopModels = [
-        { value: 'desktop-broker:local/model-b', label: 'Desktop B', source: 'desktop_broker' as const, sourceLabel: 'Desktop' },
+        { value: 'desktop:model_local_b', label: 'Desktop B', source: 'desktop_model_source' as const, sourceLabel: 'Desktop' },
       ];
       aiContextValue.modelOptions = () => [...remoteModels, ...desktopModels];
       aiContextValue.modelSourceGroups = () => [
         { source: 'runtime_config', sourceLabel: 'Remote runtime', available: true, models: remoteModels },
-        { source: 'desktop_broker', sourceLabel: 'Desktop', available: true, models: desktopModels },
+        { source: 'desktop_model_source', sourceLabel: 'Desktop', available: true, models: desktopModels },
       ];
       aiContextValue.selectedThreadModel = () => 'remote/model-a';
       aiContextValue.selectThreadModel = vi.fn();
@@ -1178,7 +1178,7 @@ export function registerEnvAIPageSendTests() {
           .find((button) => button.textContent?.includes('Desktop'));
         desktopButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
-        expect(aiContextValue.selectThreadModel).toHaveBeenCalledWith('desktop-broker:local/model-b');
+        expect(aiContextValue.selectThreadModel).toHaveBeenCalledWith('desktop:model_local_b');
         expect(aiContextValue.selectDefaultModel).not.toHaveBeenCalled();
       } finally {
         dispose();

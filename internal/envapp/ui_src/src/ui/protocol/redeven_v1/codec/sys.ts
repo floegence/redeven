@@ -59,6 +59,7 @@ function normalizeRuntimeServiceBindingState(value: unknown, supported: boolean)
   const state = String(value ?? '').trim();
   switch (state) {
     case 'unbound':
+    case 'connecting':
     case 'bound':
     case 'error':
     case 'expired':
@@ -133,12 +134,12 @@ function fromWireRuntimeServiceSnapshot(resp: wire_sys_ping_resp['runtime_servic
   if (!resp) return undefined;
   const workload = resp.active_workload ?? {};
   const capabilities = resp.capabilities ?? {};
-  const desktopAiBrokerCapability = capabilities.desktop_ai_broker ?? {};
-  const desktopAiBrokerSupported = desktopAiBrokerCapability.supported === true;
+  const desktopModelSourceCapability = capabilities.desktop_model_source ?? {};
+  const desktopModelSourceSupported = desktopModelSourceCapability.supported === true;
   const providerLinkCapability = capabilities.provider_link ?? {};
   const providerLinkSupported = providerLinkCapability.supported === true;
   const bindings = resp.bindings ?? {};
-  const desktopAiBrokerBinding = bindings.desktop_ai_broker ?? {};
+  const desktopModelSourceBinding = bindings.desktop_model_source ?? {};
   const providerLinkBinding = bindings.provider_link ?? {};
   const desktopManaged = resp.desktop_managed === true;
   return {
@@ -164,13 +165,13 @@ function fromWireRuntimeServiceSnapshot(resp: wire_sys_ping_resp['runtime_servic
       portForwardCount: normalizeCount(workload.port_forward_count),
     },
     capabilities: {
-      desktopAiBroker: {
-        supported: desktopAiBrokerSupported,
-        bindMethod: desktopAiBrokerSupported
-          ? (String(desktopAiBrokerCapability.bind_method ?? '').trim() || 'runtime_control_v1')
+      desktopModelSource: {
+        supported: desktopModelSourceSupported,
+        bindMethod: desktopModelSourceSupported
+          ? (String(desktopModelSourceCapability.bind_method ?? '').trim() || 'runtime_control_v1')
           : undefined,
-        reasonCode: String(desktopAiBrokerCapability.reason_code ?? '').trim() || undefined,
-        message: String(desktopAiBrokerCapability.message ?? '').trim() || undefined,
+        reasonCode: String(desktopModelSourceCapability.reason_code ?? '').trim() || undefined,
+        message: String(desktopModelSourceCapability.message ?? '').trim() || undefined,
       },
       providerLink: {
         supported: providerLinkSupported,
@@ -182,15 +183,15 @@ function fromWireRuntimeServiceSnapshot(resp: wire_sys_ping_resp['runtime_servic
       },
     },
     bindings: {
-      desktopAiBroker: {
-        state: normalizeRuntimeServiceBindingState(desktopAiBrokerBinding.state, desktopAiBrokerSupported),
-        sessionId: String(desktopAiBrokerBinding.session_id ?? '').trim() || undefined,
-        sshRuntimeKey: String(desktopAiBrokerBinding.ssh_runtime_key ?? '').trim() || undefined,
-        expiresAtUnixMs: normalizeCount(desktopAiBrokerBinding.expires_at_unix_ms) || undefined,
-        modelSource: String(desktopAiBrokerBinding.model_source ?? '').trim() || undefined,
-        modelCount: normalizeCount(desktopAiBrokerBinding.model_count),
-        missingKeyProviderIds: compactStringArray(desktopAiBrokerBinding.missing_key_provider_ids),
-        lastError: String(desktopAiBrokerBinding.last_error ?? '').trim() || undefined,
+      desktopModelSource: {
+        state: normalizeRuntimeServiceBindingState(desktopModelSourceBinding.state, desktopModelSourceSupported),
+        sessionId: String(desktopModelSourceBinding.session_id ?? '').trim() || undefined,
+        expiresAtUnixMs: normalizeCount(desktopModelSourceBinding.expires_at_unix_ms) || undefined,
+        connectedAtUnixMs: normalizeCount(desktopModelSourceBinding.connected_at_unix_ms) || undefined,
+        modelSource: String(desktopModelSourceBinding.model_source ?? '').trim() || undefined,
+        modelCount: normalizeCount(desktopModelSourceBinding.model_count),
+        missingKeyProviderIds: compactStringArray(desktopModelSourceBinding.missing_key_provider_ids),
+        lastError: String(desktopModelSourceBinding.last_error ?? '').trim() || undefined,
       },
       providerLink: fromWireRuntimeServiceProviderLinkBinding(providerLinkBinding, providerLinkSupported),
     },

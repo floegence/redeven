@@ -85,7 +85,7 @@ paths that Desktop can read before adopting a process:
   "minimum_runtime_version": "v0.5.8",
   "compatibility_review_id": "runtime-service-maintenance-v1",
   "capabilities": {
-    "desktop_ai_broker": {
+    "desktop_model_source": {
       "supported": true,
       "bind_method": "runtime_control_v1"
     },
@@ -95,10 +95,11 @@ paths that Desktop can read before adopting a process:
     }
   },
   "bindings": {
-    "desktop_ai_broker": {
+    "desktop_model_source": {
       "state": "bound",
-      "session_id": "broker_xxx",
-      "ssh_runtime_key": "ssh:..."
+      "session_id": "dms_xxx",
+      "model_source": "desktop_local_environment",
+      "connected_at_unix_ms": 1778750000000
     },
     "provider_link": {
       "state": "linked",
@@ -156,17 +157,17 @@ type RuntimeServiceCapability = Readonly<{
 }>;
 
 type RuntimeServiceCapabilities = Readonly<{
-  desktop_ai_broker: RuntimeServiceCapability;
+  desktop_model_source: RuntimeServiceCapability;
   provider_link: RuntimeServiceCapability;
 }>;
 
-type RuntimeServiceBindingState = 'unbound' | 'bound' | 'unsupported' | 'error' | 'expired';
+type RuntimeServiceBindingState = 'unbound' | 'connecting' | 'bound' | 'unsupported' | 'error' | 'expired';
 
 type RuntimeServiceBinding = Readonly<{
   state: RuntimeServiceBindingState;
   session_id?: string;
-  ssh_runtime_key?: string;
   expires_at_unix_ms?: number;
+  connected_at_unix_ms?: number;
   model_source?: string;
   model_count?: number;
   missing_key_provider_ids?: string[];
@@ -174,7 +175,7 @@ type RuntimeServiceBinding = Readonly<{
 }>;
 
 type RuntimeServiceBindings = Readonly<{
-  desktop_ai_broker: RuntimeServiceBinding;
+  desktop_model_source: RuntimeServiceBinding;
   provider_link: RuntimeServiceProviderLinkBinding;
 }>;
 
@@ -237,7 +238,7 @@ invent a second compatibility policy in UI-only code.
 
 The same snapshot also carries explicit runtime-control surfaces:
 
-- `capabilities.desktop_ai_broker` and `bindings.desktop_ai_broker` let Desktop decide whether an attached SSH runtime can accept the optional `Desktop` model-source binding without falling back to string-based heuristics. A binding error should be shown as model-source availability state, not as a Runtime Service startup failure.
+- `capabilities.desktop_model_source` and `bindings.desktop_model_source` let Desktop decide whether an attached SSH or container runtime can accept Desktop Model Source RPC without falling back to string-based heuristics. A binding error should be shown as model-source availability state, not as a Runtime Service startup failure.
 - `capabilities.provider_link` and `bindings.provider_link` describe whether a Desktop-managed Local or SSH runtime can accept an explicit provider-link command and which provider Environment, if any, is currently connected.
 
 ### Contract Carriers
@@ -412,4 +413,4 @@ The stable flow is intentionally small:
 
 Welcome can run SSH-managed restart/update before an Env App window exists. The card records the runtime maintenance requirement, asks for explicit confirmation, then reruns the launcher start path. It does not auto-open the Environment after maintenance; it unlocks `Open` once the refreshed snapshot is openable.
 
-SSH startup cancellation uses the same lifecycle model. `Stop startup` cancels the current start/update operation, broadcasts the shared cancellation signal through owned subprocesses, downloads, SSH commands, broker preparation, binding requests, and polling loops, then cleans up local resources. Successful cancellation is short-lived; cleanup failures remain visible for user attention.
+SSH startup cancellation uses the same lifecycle model. `Stop startup` cancels the current start/update operation, broadcasts the shared cancellation signal through owned subprocesses, downloads, SSH commands, Desktop model source preparation, binding requests, and polling loops, then cleans up local resources. Successful cancellation is short-lived; cleanup failures remain visible for user attention.

@@ -42,7 +42,7 @@ export type wire_sys_ping_resp = {
       port_forward_count?: number;
     };
     capabilities?: {
-      desktop_ai_broker?: {
+      desktop_model_source?: {
         supported?: boolean;
         bind_method?: string;
         reason_code?: string;
@@ -56,11 +56,11 @@ export type wire_sys_ping_resp = {
       };
     };
     bindings?: {
-      desktop_ai_broker?: {
+      desktop_model_source?: {
         state?: string;
         session_id?: string;
-        ssh_runtime_key?: string;
         expires_at_unix_ms?: number;
+        connected_at_unix_ms?: number;
         model_source?: string;
         model_count?: number;
         missing_key_provider_ids?: string[];

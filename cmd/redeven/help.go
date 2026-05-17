@@ -31,6 +31,8 @@ Commands:
   run         Start the runtime in remote, hybrid, local, or desktop mode.
   desktop-bridge
               Run the Desktop runtime placement bridge over stdio.
+  desktop-model-source
+              Connect Desktop Local Environment models to runtime-control.
   targets     Inspect Redeven targets for Agent Skills and local automation.
   search      Run web search using configured provider credentials.
   knowledge   Build or verify embedded knowledge bundle assets.
@@ -75,6 +77,37 @@ Flags:
   --password <password>            Access password for the Local UI.
   --password-env <env_name>        Read the Local UI password from an environment variable.
   --password-file <path>           Read the Local UI password from a file.
+`, "\n")
+}
+
+func desktopModelSourceHelpText() string {
+	return strings.TrimLeft(`
+redeven desktop-model-source
+
+Connect Desktop Local Environment model settings to a Desktop-managed runtime
+through runtime-control. This command is intended to be launched by Redeven
+Desktop, not typed directly by users.
+
+Usage:
+  redeven desktop-model-source --runtime-control-url URL --runtime-control-token-env NAME --desktop-owner-id ID --session-id ID [flags]
+
+Flags:
+  --state-root PATH
+      State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
+  --runtime-control-url URL
+      Runtime-control service root URL.
+  --runtime-control-token-env NAME
+      Environment variable that contains the runtime-control bearer token.
+  --runtime-control-token TOKEN
+      Runtime-control bearer token. Prefer --runtime-control-token-env.
+  --desktop-owner-id ID
+      Desktop owner id expected by the runtime.
+  --session-id ID
+      Desktop model source session id.
+  --expires-at-unix-ms VALUE
+      Optional session expiration in Unix milliseconds.
+  --startup-report-file PATH
+      Optional JSON readiness report path.
 `, "\n")
 }
 
@@ -373,6 +406,8 @@ func lookupHelpText(args []string) (string, bool) {
 		return runHelpText(), true
 	case "desktop-bridge":
 		return desktopBridgeHelpText(), true
+	case "desktop-model-source":
+		return desktopModelSourceHelpText(), true
 	case "targets":
 		return targetsHelpText(), true
 	case "targets list":

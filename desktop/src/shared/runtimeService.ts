@@ -32,17 +32,17 @@ export type RuntimeServiceCapability = Readonly<{
 }>;
 
 export type RuntimeServiceCapabilities = Readonly<{
-  desktop_ai_broker: RuntimeServiceCapability;
+  desktop_model_source: RuntimeServiceCapability;
   provider_link: RuntimeServiceCapability;
 }>;
 
-export type RuntimeServiceBindingState = 'unbound' | 'bound' | 'unsupported' | 'error' | 'expired';
+export type RuntimeServiceBindingState = 'unbound' | 'connecting' | 'bound' | 'unsupported' | 'error' | 'expired';
 
 export type RuntimeServiceBinding = Readonly<{
   state: RuntimeServiceBindingState;
   session_id?: string;
-  ssh_runtime_key?: string;
   expires_at_unix_ms?: number;
+  connected_at_unix_ms?: number;
   model_source?: string;
   model_count?: number;
   missing_key_provider_ids?: string[];
@@ -50,7 +50,7 @@ export type RuntimeServiceBinding = Readonly<{
 }>;
 
 export type RuntimeServiceBindings = Readonly<{
-  desktop_ai_broker: RuntimeServiceBinding;
+  desktop_model_source: RuntimeServiceBinding;
   provider_link: RuntimeServiceProviderLinkBinding;
 }>;
 
@@ -242,13 +242,21 @@ function normalizeBinding(value: unknown, capability: RuntimeServiceCapability):
     ? Array.from(new Set(record.missing_key_provider_ids.map((item) => compact(item)).filter(Boolean))).sort()
     : [];
   const normalizedState: RuntimeServiceBindingState = capability.supported
-    ? (state === 'bound' || state === 'error' || state === 'expired' || state === 'unbound' ? state : 'unbound')
+    ? (
+        state === 'bound'
+        || state === 'connecting'
+        || state === 'error'
+        || state === 'expired'
+        || state === 'unbound'
+          ? state
+          : 'unbound'
+      )
     : 'unsupported';
   return {
     state: normalizedState,
     session_id: compact(record.session_id) || undefined,
-    ssh_runtime_key: compact(record.ssh_runtime_key) || undefined,
     expires_at_unix_ms: normalizeCount(record.expires_at_unix_ms),
+    connected_at_unix_ms: normalizeCount(record.connected_at_unix_ms),
     model_source: compact(record.model_source) || undefined,
     model_count: normalizeCount(record.model_count),
     missing_key_provider_ids: missingKeyProviderIDs.length > 0 ? missingKeyProviderIDs : undefined,
@@ -303,7 +311,7 @@ export function normalizeRuntimeServiceSnapshot(
   const capabilitiesRecord = record.capabilities && typeof record.capabilities === 'object'
     ? record.capabilities as Record<string, unknown>
     : {};
-  const desktopAIBrokerCapability = normalizeCapability(capabilitiesRecord.desktop_ai_broker);
+  const desktopModelSourceCapability = normalizeCapability(capabilitiesRecord.desktop_model_source);
   const providerLinkCapability = normalizeCapability(capabilitiesRecord.provider_link);
   const bindingsRecord = record.bindings && typeof record.bindings === 'object'
     ? record.bindings as Record<string, unknown>
@@ -338,11 +346,11 @@ export function normalizeRuntimeServiceSnapshot(
       port_forward_count: normalizeCount(workload.port_forward_count),
     },
     capabilities: {
-      desktop_ai_broker: desktopAIBrokerCapability,
+      desktop_model_source: desktopModelSourceCapability,
       provider_link: providerLinkCapability,
     },
     bindings: {
-      desktop_ai_broker: normalizeBinding(bindingsRecord.desktop_ai_broker, desktopAIBrokerCapability),
+      desktop_model_source: normalizeBinding(bindingsRecord.desktop_model_source, desktopModelSourceCapability),
       provider_link: normalizeProviderLinkBinding(bindingsRecord.provider_link, providerLinkCapability),
     },
   };
@@ -414,17 +422,17 @@ export function runtimeServiceHasActiveWork(snapshot: RuntimeServiceSnapshot | n
     || workload.port_forward_count > 0;
 }
 
-export function runtimeServiceDesktopAIBrokerBindingState(snapshot: RuntimeServiceSnapshot | null | undefined): RuntimeServiceBindingState {
-  const capability = snapshot?.capabilities?.desktop_ai_broker;
+export function runtimeServiceDesktopModelSourceBindingState(snapshot: RuntimeServiceSnapshot | null | undefined): RuntimeServiceBindingState {
+  const capability = snapshot?.capabilities?.desktop_model_source;
   if (!capability?.supported) {
     return 'unsupported';
   }
-  return snapshot?.bindings?.desktop_ai_broker?.state || 'unbound';
+  return snapshot?.bindings?.desktop_model_source?.state || 'unbound';
 }
 
-export function runtimeServiceSupportsDesktopAIBrokerBinding(snapshot: RuntimeServiceSnapshot | null | undefined): boolean {
-  return snapshot?.capabilities?.desktop_ai_broker?.supported === true
-    && (snapshot.capabilities.desktop_ai_broker.bind_method || 'runtime_control_v1') === 'runtime_control_v1';
+export function runtimeServiceSupportsDesktopModelSource(snapshot: RuntimeServiceSnapshot | null | undefined): boolean {
+  return snapshot?.capabilities?.desktop_model_source?.supported === true
+    && (snapshot.capabilities.desktop_model_source.bind_method || 'runtime_control_v1') === 'runtime_control_v1';
 }
 
 export function runtimeServiceProviderLinkBinding(

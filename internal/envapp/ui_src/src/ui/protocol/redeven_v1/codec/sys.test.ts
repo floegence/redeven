@@ -34,7 +34,7 @@ describe('sys codec', () => {
           port_forward_count: 4,
         },
         capabilities: {
-          desktop_ai_broker: {
+          desktop_model_source: {
             supported: true,
             bind_method: 'runtime_control_v1',
           },
@@ -44,10 +44,10 @@ describe('sys codec', () => {
           },
         },
         bindings: {
-          desktop_ai_broker: {
+          desktop_model_source: {
             state: 'bound',
-            session_id: 'broker-session',
-            ssh_runtime_key: 'ssh:devbox',
+            session_id: 'desktop-session',
+            connected_at_unix_ms: 1778750000000,
             model_count: 2,
             missing_key_provider_ids: ['openai', 'anthropic', 'openai'],
           },
@@ -93,7 +93,7 @@ describe('sys codec', () => {
           portForwardCount: 4,
         },
         capabilities: {
-          desktopAiBroker: {
+          desktopModelSource: {
             supported: true,
             bindMethod: 'runtime_control_v1',
           },
@@ -103,10 +103,10 @@ describe('sys codec', () => {
           },
         },
         bindings: {
-          desktopAiBroker: {
+          desktopModelSource: {
             state: 'bound',
-            sessionId: 'broker-session',
-            sshRuntimeKey: 'ssh:devbox',
+            sessionId: 'desktop-session',
+            connectedAtUnixMs: 1778750000000,
             modelCount: 2,
             missingKeyProviderIds: ['anthropic', 'openai'],
           },
@@ -162,7 +162,7 @@ describe('sys codec', () => {
         portForwardCount: 1,
       },
       capabilities: {
-        desktopAiBroker: {
+        desktopModelSource: {
           supported: false,
           bindMethod: undefined,
           reasonCode: undefined,
@@ -176,11 +176,11 @@ describe('sys codec', () => {
         },
       },
       bindings: {
-        desktopAiBroker: {
+        desktopModelSource: {
           state: 'unsupported',
           sessionId: undefined,
-          sshRuntimeKey: undefined,
           expiresAtUnixMs: undefined,
+          connectedAtUnixMs: undefined,
           modelSource: undefined,
           modelCount: 0,
           missingKeyProviderIds: undefined,

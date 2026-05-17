@@ -244,19 +244,19 @@ func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title st
 	}
 	executionMode = normalizeRunMode(strings.TrimSpace(executionMode), modeFallback)
 	if modelID != "" {
-		if _, _, ok := strings.Cut(modelID, "/"); !ok {
+		if _, _, ok := strings.Cut(modelID, "/"); !ok && !isDesktopModelSourceModelID(modelID) {
 			return nil, errors.New("invalid model")
 		}
 		if cfg != nil && cfg.IsAllowedModelID(modelID) {
 			// The model is provided by the runtime config.
-		} else if ok, err := s.desktopBrokerModelAllowed(ctx, modelID); err != nil {
+		} else if ok, err := s.desktopModelSourceModelAllowed(ctx, modelID); err != nil {
 			return nil, err
 		} else if !ok {
 			return nil, fmt.Errorf("model not allowed: %s", modelID)
 		}
 	}
 	if modelID == "" {
-		if id, ok := s.resolvedDesktopBrokerOverrideModel(ctx); ok {
+		if id, ok := s.resolvedDesktopModelSourceOverrideModel(ctx); ok {
 			modelID = id
 		}
 	}
@@ -266,7 +266,7 @@ func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title st
 		}
 	}
 	if modelID == "" && cfg == nil {
-		if id, ok := s.resolvedDesktopBrokerDefaultModel(ctx); ok {
+		if id, ok := s.resolvedDesktopModelSourceDefaultModel(ctx); ok {
 			modelID = id
 		}
 	}
@@ -404,7 +404,7 @@ func (s *Service) SetThreadModel(ctx context.Context, meta *session.Meta, thread
 	if modelID == "" {
 		return errors.New("missing model_id")
 	}
-	if _, _, ok := strings.Cut(modelID, "/"); !ok {
+	if _, _, ok := strings.Cut(modelID, "/"); !ok && !isDesktopModelSourceModelID(modelID) {
 		return errors.New("invalid model")
 	}
 
@@ -415,12 +415,12 @@ func (s *Service) SetThreadModel(ctx context.Context, meta *session.Meta, thread
 	if db == nil {
 		return errors.New("threads store not ready")
 	}
-	if cfg == nil && !isDesktopBrokerModelID(modelID) {
+	if cfg == nil && !isDesktopModelSourceModelID(modelID) {
 		return ErrNotConfigured
 	}
 	if cfg != nil && cfg.IsAllowedModelID(modelID) {
 		// The model is provided by the runtime config.
-	} else if ok, err := s.desktopBrokerModelAllowed(ctx, modelID); err != nil {
+	} else if ok, err := s.desktopModelSourceModelAllowed(ctx, modelID); err != nil {
 		return err
 	} else if !ok {
 		return fmt.Errorf("model not allowed: %s", modelID)

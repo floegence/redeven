@@ -39,13 +39,13 @@ export type RuntimeServiceCapability = {
   message?: string;
 };
 
-export type RuntimeServiceBindingState = 'unbound' | 'bound' | 'unsupported' | 'error' | 'expired';
+export type RuntimeServiceBindingState = 'unbound' | 'connecting' | 'bound' | 'unsupported' | 'error' | 'expired';
 
 export type RuntimeServiceBinding = {
   state: RuntimeServiceBindingState;
   sessionId?: string;
-  sshRuntimeKey?: string;
   expiresAtUnixMs?: number;
+  connectedAtUnixMs?: number;
   modelSource?: string;
   modelCount?: number;
   missingKeyProviderIds?: string[];
@@ -92,11 +92,11 @@ export type RuntimeServiceSnapshot = {
   openReadiness?: RuntimeServiceOpenReadiness;
   activeWorkload: RuntimeServiceWorkload;
   capabilities?: {
-    desktopAiBroker: RuntimeServiceCapability;
+    desktopModelSource: RuntimeServiceCapability;
     providerLink: RuntimeServiceCapability;
   };
   bindings?: {
-    desktopAiBroker: RuntimeServiceBinding;
+    desktopModelSource: RuntimeServiceBinding;
     providerLink: RuntimeServiceProviderLinkBinding;
   };
 };

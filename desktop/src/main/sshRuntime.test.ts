@@ -25,7 +25,7 @@ describe('sshRuntime', () => {
     expect(buildManagedSSHStartScript()).toContain('--state-root "$state_root"');
     expect(buildManagedSSHStartScript()).toContain('--mode desktop');
     expect(buildManagedSSHStartScript()).toContain('--startup-report-file "$report_path"');
-    expect(buildManagedSSHStartScript()).not.toContain('REDEVEN_DESKTOP_AI_BROKER_TOKEN');
+    expect(buildManagedSSHStartScript()).not.toContain(['REDEVEN_DESKTOP', 'AI', 'BROKER_TOKEN'].join('_'));
     expect(buildManagedSSHStartScript()).toContain('setsid "$binary" run');
     expect(buildManagedSSHStartScript()).toContain('nohup "$binary" run');
     expect(buildManagedSSHStartScript()).toContain('printf "%s\\n" "$!" > "${session_dir}/launcher.pid"');
@@ -116,9 +116,11 @@ describe('sshRuntime', () => {
     expect(source).toContain('DesktopSSHRuntimeMaintenanceRequiredError');
     expect(source).toContain('allowActiveWorkReplacement?: boolean;');
     expect(source).toContain('allowActiveWorkReplacement: args.allowActiveWorkReplacement === true');
-    expect(source).toContain('/_redeven_proxy/api/runtime/bindings/desktop-ai-broker');
-    expect(source).toContain('Desktop is creating a private SSH bridge for local model calls.');
-    expect(source).toContain('Desktop model bridge unavailable: ${message}');
+    expect(source).toContain('requireDesktopModelSource: boolean;');
+    expect(source).toContain('const modelSourceUnsupported = args.requireDesktopModelSource');
+    expect(source).toContain('runtimeServiceSupportsDesktopModelSource(runtimeService)');
+    expect(source).toContain("'desktop_model_source_requires_runtime_update'");
+    expect(source).not.toContain('/_redeven_proxy/api/runtime/bindings/');
     expect(source).toContain('let forwardedStartup = await waitForForwardedLocalUIOpenable(');
     expect(source).toContain('runtimeServiceIsOpenable(startup.runtime_service)');
     expect(source).not.toContain('Desktop reached the forwarded Redeven Local UI, but the runtime is not ready to open yet');

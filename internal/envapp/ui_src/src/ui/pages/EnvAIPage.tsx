@@ -1857,7 +1857,7 @@ export function EnvAIPage() {
   });
   const selectedModelSourceLabel = createMemo(() => {
     const option = modelOptionById().get(selectedHeaderModelId());
-    return String(option?.sourceLabel ?? '').trim() || (option?.source === 'desktop_broker' ? 'Desktop' : 'Remote runtime');
+    return String(option?.sourceLabel ?? '').trim() || (option?.source === 'desktop_model_source' ? 'Desktop' : 'Remote runtime');
   });
   const selectModelSource = (source: AIModelSourceKey): void => {
     const group = ai.modelSourceGroups().find((item) => item.source === source);
@@ -1870,16 +1870,16 @@ export function EnvAIPage() {
     }
     ai.selectDefaultModel(firstModel);
   };
-  const desktopBrokerMissingKeys = createMemo(() => (
-    ai.settings()?.ai_runtime?.desktop_broker?.missing_key_provider_ids?.filter(Boolean) ?? []
+  const desktopModelSourceMissingKeys = createMemo(() => (
+    ai.settings()?.ai_runtime?.desktop_model_source?.missing_key_provider_ids?.filter(Boolean) ?? []
   ));
-  const desktopBrokerConnected = createMemo(() => !!ai.settings()?.ai_runtime?.desktop_broker?.connected);
+  const desktopModelSourceConnected = createMemo(() => !!ai.settings()?.ai_runtime?.desktop_model_source?.connected);
   const noUsableModelMessage = createMemo(() => {
-    const missing = desktopBrokerMissingKeys();
-    if (desktopBrokerConnected() && missing.length > 0) {
+    const missing = desktopModelSourceMissingKeys();
+    if (desktopModelSourceConnected() && missing.length > 0) {
       return `Desktop model providers need API keys: ${missing.join(', ')}.`;
     }
-    if (desktopBrokerConnected()) {
+    if (desktopModelSourceConnected()) {
       return 'Desktop is connected, but no usable model is available.';
     }
     return 'Configure an AI provider in Runtime Settings to start using Flower.';
@@ -3642,7 +3642,7 @@ export function EnvAIPage() {
                       />
                       <div class="text-lg font-semibold text-foreground mb-2">Flower is not configured</div>
                       <div class="text-sm text-muted-foreground mb-6 max-w-[320px]">
-                        Configure an AI provider in Runtime Settings or Local Environment Settings to start using Flower.
+                        Configure a remote provider in Runtime Settings, or reconnect Redeven Desktop with an available Desktop model source.
                       </div>
                       <Button size="md" variant="default" onClick={() => env.openSettings('ai')}>
                         <Settings class="w-4 h-4 mr-2" />

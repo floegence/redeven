@@ -62,14 +62,15 @@ type Capability struct {
 }
 
 type Capabilities struct {
-	DesktopAIBroker Capability `json:"desktop_ai_broker"`
-	ProviderLink    Capability `json:"provider_link"`
+	DesktopModelSource Capability `json:"desktop_model_source"`
+	ProviderLink       Capability `json:"provider_link"`
 }
 
 type BindingState string
 
 const (
 	BindingStateUnbound     BindingState = "unbound"
+	BindingStateConnecting  BindingState = "connecting"
 	BindingStateBound       BindingState = "bound"
 	BindingStateUnsupported BindingState = "unsupported"
 	BindingStateError       BindingState = "error"
@@ -79,8 +80,8 @@ const (
 type Binding struct {
 	State                 BindingState `json:"state"`
 	SessionID             string       `json:"session_id,omitempty"`
-	SSHRuntimeKey         string       `json:"ssh_runtime_key,omitempty"`
 	ExpiresAtUnixMS       int64        `json:"expires_at_unix_ms,omitempty"`
+	ConnectedAtUnixMS     int64        `json:"connected_at_unix_ms,omitempty"`
 	ModelSource           string       `json:"model_source,omitempty"`
 	ModelCount            int          `json:"model_count,omitempty"`
 	MissingKeyProviderIDs []string     `json:"missing_key_provider_ids,omitempty"`
@@ -88,8 +89,8 @@ type Binding struct {
 }
 
 type Bindings struct {
-	DesktopAIBroker Binding             `json:"desktop_ai_broker"`
-	ProviderLink    ProviderLinkBinding `json:"provider_link"`
+	DesktopModelSource Binding             `json:"desktop_model_source"`
+	ProviderLink       ProviderLinkBinding `json:"provider_link"`
 }
 
 type ProviderLinkState string
@@ -223,7 +224,7 @@ func NormalizeSnapshot(snapshot Snapshot) Snapshot {
 }
 
 func NormalizeCapabilities(capabilities Capabilities) Capabilities {
-	capabilities.DesktopAIBroker = NormalizeCapability(capabilities.DesktopAIBroker)
+	capabilities.DesktopModelSource = NormalizeCapability(capabilities.DesktopModelSource)
 	capabilities.ProviderLink = NormalizeCapability(capabilities.ProviderLink)
 	return capabilities
 }
@@ -242,7 +243,7 @@ func NormalizeCapability(capability Capability) Capability {
 }
 
 func NormalizeBindings(bindings Bindings, capabilities Capabilities) Bindings {
-	bindings.DesktopAIBroker = NormalizeBinding(bindings.DesktopAIBroker, capabilities.DesktopAIBroker)
+	bindings.DesktopModelSource = NormalizeBinding(bindings.DesktopModelSource, capabilities.DesktopModelSource)
 	bindings.ProviderLink = NormalizeProviderLinkBinding(bindings.ProviderLink, capabilities.ProviderLink)
 	return bindings
 }
@@ -289,11 +290,13 @@ func NormalizeProviderLinkBinding(binding ProviderLinkBinding, capability Capabi
 func NormalizeBinding(binding Binding, capability Capability) Binding {
 	binding.State = BindingState(strings.TrimSpace(string(binding.State)))
 	binding.SessionID = strings.TrimSpace(binding.SessionID)
-	binding.SSHRuntimeKey = strings.TrimSpace(binding.SSHRuntimeKey)
 	binding.ModelSource = strings.TrimSpace(binding.ModelSource)
 	binding.LastError = strings.TrimSpace(binding.LastError)
 	if binding.ExpiresAtUnixMS < 0 {
 		binding.ExpiresAtUnixMS = 0
+	}
+	if binding.ConnectedAtUnixMS < 0 {
+		binding.ConnectedAtUnixMS = 0
 	}
 	binding.ModelCount = normalizeCount(binding.ModelCount)
 	binding.MissingKeyProviderIDs = compactSortedStrings(binding.MissingKeyProviderIDs)
@@ -303,7 +306,7 @@ func NormalizeBinding(binding Binding, capability Capability) Binding {
 		return binding
 	}
 	switch binding.State {
-	case BindingStateUnbound, BindingStateBound, BindingStateUnsupported, BindingStateError, BindingStateExpired:
+	case BindingStateUnbound, BindingStateConnecting, BindingStateBound, BindingStateUnsupported, BindingStateError, BindingStateExpired:
 	default:
 		binding.State = BindingStateUnbound
 	}

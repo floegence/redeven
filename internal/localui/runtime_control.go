@@ -13,7 +13,9 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/agent"
+	"github.com/floegence/redeven/internal/ai"
 	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
+	"github.com/gorilla/websocket"
 )
 
 const runtimeControlProtocolVersion = "redeven-runtime-control-v1"
@@ -66,12 +68,8 @@ func (s *runtimeControlServer) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	mux := http.NewServeMux()
-	mux.HandleFunc("/v1/provider-link", s.handleProviderLink)
-	mux.HandleFunc("/v1/provider-link/connect", s.handleProviderLinkConnect)
-	mux.HandleFunc("/v1/provider-link/disconnect", s.handleProviderLinkDisconnect)
 	srv := &http.Server{
-		Handler:           mux,
+		Handler:           s.routes(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	s.ln = ln
@@ -101,12 +99,8 @@ func (s *runtimeControlServer) StartOnListener(ctx context.Context, ln net.Liste
 	if ln == nil {
 		return errors.New("missing runtime-control listener")
 	}
-	mux := http.NewServeMux()
-	mux.HandleFunc("/v1/provider-link", s.handleProviderLink)
-	mux.HandleFunc("/v1/provider-link/connect", s.handleProviderLinkConnect)
-	mux.HandleFunc("/v1/provider-link/disconnect", s.handleProviderLinkDisconnect)
 	srv := &http.Server{
-		Handler:           mux,
+		Handler:           s.routes(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	s.ln = ln
@@ -124,6 +118,18 @@ func (s *runtimeControlServer) StartOnListener(ctx context.Context, ln net.Liste
 		s.log.Info("runtime-control listening", "addr", ln.Addr().String())
 	}
 	return nil
+}
+
+func (s *runtimeControlServer) routes() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/provider-link", s.handleProviderLink)
+	mux.HandleFunc("/v1/provider-link/connect", s.handleProviderLinkConnect)
+	mux.HandleFunc("/v1/provider-link/disconnect", s.handleProviderLinkDisconnect)
+	mux.HandleFunc("/v1/desktop-model-source", s.handleDesktopModelSource)
+	mux.HandleFunc("/v1/desktop-model-source/connect", s.handleDesktopModelSourceConnect)
+	mux.HandleFunc("/v1/desktop-model-source/disconnect", s.handleDesktopModelSourceDisconnect)
+	mux.HandleFunc("/v1/desktop-model-source/rpc", s.handleDesktopModelSourceRPC)
+	return mux
 }
 
 func (s *runtimeControlServer) Close() error {
@@ -290,7 +296,120 @@ func (s *runtimeControlServer) handleProviderLinkDisconnect(w http.ResponseWrite
 	})
 }
 
+type runtimeControlDesktopModelSourceRequest struct {
+	SessionID       string `json:"session_id"`
+	Source          string `json:"source"`
+	ProtocolVersion string `json:"protocol_version"`
+	ExpiresAtUnixMS int64  `json:"expires_at_unix_ms,omitempty"`
+}
+
+func (s *runtimeControlServer) handleDesktopModelSource(w http.ResponseWriter, r *http.Request) {
+	if !s.require(w, r) {
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeRuntimeControlError(w, http.StatusMethodNotAllowed, "RUNTIME_CONTROL_METHOD_NOT_ALLOWED", "Method not allowed.")
+		return
+	}
+	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{
+		OK: true,
+		Data: map[string]any{
+			"binding":         s.agent.RuntimeServiceSnapshot().Bindings.DesktopModelSource,
+			"runtime_service": s.agent.RuntimeServiceSnapshot(),
+		},
+	})
+}
+
+func (s *runtimeControlServer) handleDesktopModelSourceConnect(w http.ResponseWriter, r *http.Request) {
+	if !s.require(w, r) {
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeRuntimeControlError(w, http.StatusMethodNotAllowed, "RUNTIME_CONTROL_METHOD_NOT_ALLOWED", "Method not allowed.")
+		return
+	}
+	var body runtimeControlDesktopModelSourceRequest
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&body); err != nil {
+		writeRuntimeControlError(w, http.StatusBadRequest, "DESKTOP_MODEL_SOURCE_INVALID_REQUEST", "Invalid desktop model source request JSON.")
+		return
+	}
+	status, err := s.agent.PrepareDesktopModelSource(ai.DesktopModelSourceSession{
+		SessionID:       body.SessionID,
+		Source:          body.Source,
+		ProtocolVersion: body.ProtocolVersion,
+		ExpiresAtUnixMS: body.ExpiresAtUnixMS,
+	})
+	if err != nil {
+		writeRuntimeControlError(w, http.StatusBadRequest, "DESKTOP_MODEL_SOURCE_CONNECT_FAILED", err.Error())
+		return
+	}
+	s.notifyRuntimeServiceChanged()
+	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{
+		OK: true,
+		Data: map[string]any{
+			"connected":       false,
+			"ai_runtime":      status,
+			"runtime_service": s.agent.RuntimeServiceSnapshot(),
+		},
+	})
+}
+
+func (s *runtimeControlServer) handleDesktopModelSourceDisconnect(w http.ResponseWriter, r *http.Request) {
+	if !s.require(w, r) {
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeRuntimeControlError(w, http.StatusMethodNotAllowed, "RUNTIME_CONTROL_METHOD_NOT_ALLOWED", "Method not allowed.")
+		return
+	}
+	status := s.agent.DisconnectDesktopModelSource()
+	s.notifyRuntimeServiceChanged()
+	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{
+		OK: true,
+		Data: map[string]any{
+			"connected":       false,
+			"ai_runtime":      status,
+			"runtime_service": s.agent.RuntimeServiceSnapshot(),
+		},
+	})
+}
+
+func (s *runtimeControlServer) handleDesktopModelSourceRPC(w http.ResponseWriter, r *http.Request) {
+	if !s.require(w, r) {
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeRuntimeControlError(w, http.StatusMethodNotAllowed, "RUNTIME_CONTROL_METHOD_NOT_ALLOWED", "Method not allowed.")
+		return
+	}
+	sessionID := strings.TrimSpace(r.URL.Query().Get("session_id"))
+	if sessionID == "" {
+		writeRuntimeControlError(w, http.StatusBadRequest, "DESKTOP_MODEL_SOURCE_INVALID_REQUEST", "Missing desktop model source session id.")
+		return
+	}
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		return
+	}
+	session := ai.DesktopModelSourceSession{
+		SessionID:       sessionID,
+		Source:          ai.DesktopModelSourceDefaultSource,
+		ProtocolVersion: strings.TrimSpace(r.Header.Get("X-Redeven-Desktop-Model-Source-Protocol")),
+	}
+	err = s.agent.ServeDesktopModelSourceRPC(r.Context(), session, conn, s.notifyRuntimeServiceChanged)
+	if err != nil && s.log != nil {
+		s.log.Warn("desktop model source rpc closed", "error", err)
+	}
+}
+
 func (s *runtimeControlServer) notifyProviderLinkChanged() {
+	s.notifyRuntimeServiceChanged()
+}
+
+func (s *runtimeControlServer) notifyRuntimeServiceChanged() {
 	if s == nil || s.afterChange == nil {
 		return
 	}

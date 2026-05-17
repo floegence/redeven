@@ -126,8 +126,8 @@ Public contract (category level):
 | AI runs, uploads, and thread operations | `read + write + execute` |
 
 Notes:
-- Desktop AI Broker traffic is not a new permission category. It is an implementation detail of Desktop-managed SSH Host sessions that moves model calls to the user's machine while keeping tool execution on the SSH host.
-- The broker can only return model metadata and stream model responses. It must not widen file, terminal, monitor, or settings permissions beyond the authoritative `session_meta` plus local `permission_policy` checks already enforced by the runtime.
+- Desktop Model Source RPC traffic is not a new permission category. It is an implementation detail of Desktop-managed SSH Host and container sessions that moves model calls to the user's machine while keeping tool execution in the target runtime.
+- The Desktop model source can only return model metadata and stream model responses. It must not widen file, terminal, monitor, or settings permissions beyond the authoritative `session_meta` plus local `permission_policy` checks already enforced by the runtime.
 - In Local UI mode, gateway routes still resolve the local cap by target app. Env App management uses `com.floegence.redeven.agent`, Code App proxy routes use `com.floegence.redeven.code`, and Port Forward management/proxy routes use `com.floegence.redeven.portforward`.
 
 For maintainability and security hygiene, this document keeps the permission contract public but does not enumerate

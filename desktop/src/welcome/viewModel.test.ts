@@ -182,14 +182,14 @@ function providerRuntimeService(
       port_forward_count: 0,
     },
     capabilities: {
-      desktop_ai_broker: { supported: false },
+      desktop_model_source: { supported: false },
       provider_link: {
         supported: true,
         bind_method: 'runtime_control_v1',
       },
     },
     bindings: {
-      desktop_ai_broker: { state: 'unsupported' },
+      desktop_model_source: { state: 'unsupported' },
       provider_link: providerLinkBinding,
     },
   };
@@ -316,14 +316,14 @@ describe('buildEnvironmentCardModel', () => {
               port_forward_count: 0,
             },
             capabilities: {
-              desktop_ai_broker: { supported: false },
+              desktop_model_source: { supported: false },
               provider_link: {
                 supported: true,
                 bind_method: 'runtime_control_v1',
               },
             },
             bindings: {
-              desktop_ai_broker: { state: 'unsupported' },
+              desktop_model_source: { state: 'unsupported' },
               provider_link: {
                 state: 'linked',
                 provider_origin: 'https://cp.example.invalid',

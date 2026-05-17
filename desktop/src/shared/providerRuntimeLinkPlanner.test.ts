@@ -37,11 +37,11 @@ function runtimeService(binding: RuntimeServiceProviderLinkBinding): RuntimeServ
       port_forward_count: 0,
     },
     capabilities: {
-      desktop_ai_broker: { supported: true, bind_method: 'runtime_control_v1' },
+      desktop_model_source: { supported: true, bind_method: 'runtime_control_v1' },
       provider_link: { supported: true, bind_method: 'runtime_control_v1' },
     },
     bindings: {
-      desktop_ai_broker: { state: 'unbound' },
+      desktop_model_source: { state: 'unbound' },
       provider_link: binding,
     },
   };

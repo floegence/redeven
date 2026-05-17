@@ -93,21 +93,21 @@ func TestEnvAppShellUnavailableReadinessIsBlocked(t *testing.T) {
 	}
 }
 
-func TestNormalizeSnapshotNormalizesDesktopAIBrokerCapabilityAndBinding(t *testing.T) {
+func TestNormalizeSnapshotNormalizesDesktopModelSourceCapabilityAndBinding(t *testing.T) {
 	snapshot := NormalizeSnapshot(Snapshot{
 		ProtocolVersion: ProtocolVersion,
 		ServiceOwner:    OwnerDesktop,
 		DesktopManaged:  true,
 		Compatibility:   CompatibilityCompatible,
 		Capabilities: Capabilities{
-			DesktopAIBroker: Capability{Supported: true},
+			DesktopModelSource: Capability{Supported: true},
 		},
 		Bindings: Bindings{
-			DesktopAIBroker: Binding{
+			DesktopModelSource: Binding{
 				State:                 BindingState(" bound "),
-				SessionID:             " broker-session ",
-				SSHRuntimeKey:         " ssh:devbox ",
+				SessionID:             " desktop-session ",
 				ExpiresAtUnixMS:       -1,
+				ConnectedAtUnixMS:     1778750000000,
 				ModelSource:           " desktop_local_environment ",
 				ModelCount:            -3,
 				MissingKeyProviderIDs: []string{"anthropic", " ", "openai", "anthropic"},
@@ -116,39 +116,42 @@ func TestNormalizeSnapshotNormalizesDesktopAIBrokerCapabilityAndBinding(t *testi
 		},
 	})
 
-	if !snapshot.Capabilities.DesktopAIBroker.Supported {
-		t.Fatalf("DesktopAIBroker.Supported = false, want true")
+	if !snapshot.Capabilities.DesktopModelSource.Supported {
+		t.Fatalf("DesktopModelSource.Supported = false, want true")
 	}
-	if snapshot.Capabilities.DesktopAIBroker.BindMethod != RuntimeControlBindMethodV1 {
-		t.Fatalf("BindMethod = %q", snapshot.Capabilities.DesktopAIBroker.BindMethod)
+	if snapshot.Capabilities.DesktopModelSource.BindMethod != RuntimeControlBindMethodV1 {
+		t.Fatalf("BindMethod = %q", snapshot.Capabilities.DesktopModelSource.BindMethod)
 	}
-	binding := snapshot.Bindings.DesktopAIBroker
+	binding := snapshot.Bindings.DesktopModelSource
 	if binding.State != BindingStateBound {
 		t.Fatalf("State = %q, want %q", binding.State, BindingStateBound)
 	}
-	if binding.SessionID != "broker-session" || binding.SSHRuntimeKey != "ssh:devbox" {
+	if binding.SessionID != "desktop-session" {
 		t.Fatalf("binding identity was not trimmed: %#v", binding)
 	}
 	if binding.ExpiresAtUnixMS != 0 || binding.ModelCount != 0 {
 		t.Fatalf("negative numeric fields were not normalized: %#v", binding)
+	}
+	if binding.ConnectedAtUnixMS != 1778750000000 {
+		t.Fatalf("ConnectedAtUnixMS = %d", binding.ConnectedAtUnixMS)
 	}
 	if got := strings.Join(binding.MissingKeyProviderIDs, ","); got != "anthropic,openai" {
 		t.Fatalf("MissingKeyProviderIDs = %q", got)
 	}
 }
 
-func TestNormalizeSnapshotMarksDesktopAIBrokerBindingUnsupportedWithoutCapability(t *testing.T) {
+func TestNormalizeSnapshotMarksDesktopModelSourceBindingUnsupportedWithoutCapability(t *testing.T) {
 	snapshot := NormalizeSnapshot(Snapshot{
 		ProtocolVersion: ProtocolVersion,
 		ServiceOwner:    OwnerDesktop,
 		DesktopManaged:  true,
 		Compatibility:   CompatibilityCompatible,
 		Bindings: Bindings{
-			DesktopAIBroker: Binding{State: BindingStateBound},
+			DesktopModelSource: Binding{State: BindingStateBound},
 		},
 	})
-	if snapshot.Bindings.DesktopAIBroker.State != BindingStateUnsupported {
-		t.Fatalf("State = %q, want %q", snapshot.Bindings.DesktopAIBroker.State, BindingStateUnsupported)
+	if snapshot.Bindings.DesktopModelSource.State != BindingStateUnsupported {
+		t.Fatalf("State = %q, want %q", snapshot.Bindings.DesktopModelSource.State, BindingStateUnsupported)
 	}
 }
 
