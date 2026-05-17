@@ -19,9 +19,6 @@ describe('runtimeHostAccess', () => {
       ssh_destination: 'devbox',
       ssh_port: 2222,
       auth_mode: 'key_agent',
-      remote_install_dir: '/opt/redeven',
-      bootstrap_strategy: 'desktop_upload',
-      release_base_url: '',
       connect_timeout_seconds: 15,
     });
 
@@ -47,9 +44,6 @@ describe('runtimeHostAccess', () => {
       ssh_destination: 'devbox',
       ssh_port: null,
       auth_mode: 'key_agent',
-      remote_install_dir: '/opt/redeven',
-      bootstrap_strategy: 'desktop_upload',
-      release_base_url: '',
       connect_timeout_seconds: 15,
     }, { sshBinary: fakeSSH });
     await executor.run(['docker', 'exec', '-i', 'dev', 'redeven', 'desktop-bridge'], {
@@ -87,9 +81,6 @@ describe('runtimeHostAccess', () => {
       ssh_destination: 'devbox',
       ssh_port: null,
       auth_mode: 'key_agent',
-      remote_install_dir: '/opt/redeven',
-      bootstrap_strategy: 'desktop_upload',
-      release_base_url: '',
       connect_timeout_seconds: 15,
     }, { sshBinary: fakeSSH });
     await executor.run(['docker', 'exec', '-i', 'dev', 'sh'], {

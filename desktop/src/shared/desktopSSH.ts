@@ -1,5 +1,5 @@
-export const DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR = 'remote_default';
-export const DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR_LABEL = 'Remote user cache';
+export const DEFAULT_DESKTOP_SSH_RUNTIME_ROOT = 'remote_default';
+export const DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL = 'Remote user .redeven';
 export const DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY = 'auto';
 export const DEFAULT_DESKTOP_SSH_AUTH_MODE = 'key_agent';
 export const DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL = '';
@@ -13,13 +13,16 @@ export type DesktopSSHHostAccessDetails = Readonly<{
   ssh_destination: string;
   ssh_port: number | null;
   auth_mode: DesktopSSHAuthMode;
-  remote_install_dir: string;
-  bootstrap_strategy: DesktopSSHBootstrapStrategy;
-  release_base_url: string;
   connect_timeout_seconds?: number | null;
 }>;
 
-export type DesktopSSHEnvironmentDetails = DesktopSSHHostAccessDetails;
+export type DesktopSSHRuntimeSettings = Readonly<{
+  runtime_root: string;
+  bootstrap_strategy: DesktopSSHBootstrapStrategy;
+  release_base_url: string;
+}>;
+
+export type DesktopSSHEnvironmentDetails = DesktopSSHHostAccessDetails & DesktopSSHRuntimeSettings;
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -54,16 +57,16 @@ export function normalizeDesktopSSHPort(value: unknown): number | null {
   return numeric;
 }
 
-export function normalizeDesktopSSHRemoteInstallDir(value: unknown): string {
+export function normalizeDesktopSSHRuntimeRoot(value: unknown): string {
   const text = compact(value);
   if (text === '') {
-    return DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR;
+    return DEFAULT_DESKTOP_SSH_RUNTIME_ROOT;
   }
   if (/[\r\n]/u.test(text)) {
-    throw new Error('Remote install directory must be a single line.');
+    throw new Error('Runtime root must be a single line.');
   }
-  if (text !== DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR && !text.startsWith('/')) {
-    throw new Error('Remote install directory must be an absolute path or use the default remote cache.');
+  if (text !== DEFAULT_DESKTOP_SSH_RUNTIME_ROOT && !text.startsWith('/')) {
+    throw new Error('Runtime root must be an absolute path or use the default remote .redeven.');
   }
   return text;
 }
@@ -122,9 +125,6 @@ export function normalizeDesktopSSHHostAccessDetails(
     ssh_destination: unknown;
     ssh_port: unknown;
     auth_mode?: unknown;
-    remote_install_dir: unknown;
-    bootstrap_strategy: unknown;
-    release_base_url: unknown;
     connect_timeout_seconds?: unknown;
   }>,
 ): DesktopSSHHostAccessDetails {
@@ -132,9 +132,6 @@ export function normalizeDesktopSSHHostAccessDetails(
     ssh_destination: normalizeDesktopSSHDestination(value.ssh_destination),
     ssh_port: normalizeDesktopSSHPort(value.ssh_port),
     auth_mode: normalizeDesktopSSHAuthMode(value.auth_mode),
-    remote_install_dir: normalizeDesktopSSHRemoteInstallDir(value.remote_install_dir),
-    bootstrap_strategy: normalizeDesktopSSHBootstrapStrategy(value.bootstrap_strategy),
-    release_base_url: normalizeDesktopSSHReleaseBaseURL(value.release_base_url),
     connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds(value.connect_timeout_seconds),
   };
 }
@@ -159,13 +156,18 @@ export function normalizeDesktopSSHEnvironmentDetails(
     ssh_destination: unknown;
     ssh_port: unknown;
     auth_mode?: unknown;
-    remote_install_dir: unknown;
+    runtime_root: unknown;
     bootstrap_strategy: unknown;
     release_base_url: unknown;
     connect_timeout_seconds?: unknown;
   }>,
 ): DesktopSSHEnvironmentDetails {
-  return normalizeDesktopSSHHostAccessDetails(value);
+  return {
+    ...normalizeDesktopSSHHostAccessDetails(value),
+    runtime_root: normalizeDesktopSSHRuntimeRoot(value.runtime_root),
+    bootstrap_strategy: normalizeDesktopSSHBootstrapStrategy(value.bootstrap_strategy),
+    release_base_url: normalizeDesktopSSHReleaseBaseURL(value.release_base_url),
+  };
 }
 
 export function desktopSSHRuntimeAffectingSettingsMatch(
@@ -174,7 +176,8 @@ export function desktopSSHRuntimeAffectingSettingsMatch(
 ): boolean {
   const normalizedLeft = normalizeDesktopSSHEnvironmentDetails(left);
   const normalizedRight = normalizeDesktopSSHEnvironmentDetails(right);
-  return normalizedLeft.bootstrap_strategy === normalizedRight.bootstrap_strategy
+  return normalizedLeft.runtime_root === normalizedRight.runtime_root
+    && normalizedLeft.bootstrap_strategy === normalizedRight.bootstrap_strategy
     && normalizedLeft.release_base_url === normalizedRight.release_base_url
     && normalizedLeft.connect_timeout_seconds === normalizedRight.connect_timeout_seconds;
 }
@@ -189,7 +192,7 @@ export function desktopSSHAuthority(value: DesktopSSHHostAccessDetails): string 
 
 export function desktopSSHEnvironmentID(value: DesktopSSHEnvironmentDetails): `ssh:${string}` {
   const normalized = normalizeDesktopSSHEnvironmentDetails(value);
-  return `ssh:${encodeURIComponent(normalized.ssh_destination)}:${normalized.ssh_port ?? 'default'}:${encodeURIComponent(normalized.auth_mode)}:${encodeURIComponent(normalized.remote_install_dir)}`;
+  return `ssh:${encodeURIComponent(normalized.ssh_destination)}:${normalized.ssh_port ?? 'default'}:${encodeURIComponent(normalized.auth_mode)}:${encodeURIComponent(normalized.runtime_root)}`;
 }
 
 export function defaultSavedSSHEnvironmentLabel(value: DesktopSSHHostAccessDetails): string {

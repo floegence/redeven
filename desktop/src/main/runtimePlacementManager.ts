@@ -141,7 +141,7 @@ async function probeContainerRuntime(
   const result = await executor.run(containerRuntimeProbeCommand({
     engine: placement.container_engine,
     container_id: placement.container_id,
-    runtime_install_root: placement.runtime_install_root,
+    runtime_root: placement.runtime_root,
     runtime_release_tag: runtimeReleaseTag,
   }), { signal });
   return parseManagedSSHRuntimeProbeResult(result.stdout);
@@ -244,7 +244,7 @@ export async function ensureRuntimePlacementReady(
     await executor.run(containerRuntimeUploadedInstallCommand({
       engine: args.placement.container_engine,
       container_id: args.placement.container_id,
-      runtime_install_root: args.placement.runtime_install_root,
+      runtime_root: args.placement.runtime_root,
       runtime_release_tag: runtimeReleaseTag,
     }), {
       stdinData: asset.archiveData,

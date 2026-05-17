@@ -90,7 +90,7 @@ describe('desktopTarget', () => {
       ssh_destination: 'devbox',
       ssh_port: 2222,
       auth_mode: 'key_agent',
-      remote_install_dir: 'remote_default',
+      runtime_root: 'remote_default',
       bootstrap_strategy: 'auto',
       release_base_url: '',
     } as const;
@@ -107,7 +107,7 @@ describe('desktopTarget', () => {
       ssh_destination: 'devbox',
       ssh_port: 2222,
       auth_mode: 'key_agent',
-      remote_install_dir: 'remote_default',
+      runtime_root: 'remote_default',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example.invalid/releases',
     }, {
@@ -121,7 +121,7 @@ describe('desktopTarget', () => {
       ssh_destination: 'devbox',
       ssh_port: 2222,
       auth_mode: 'key_agent',
-      remote_install_dir: 'remote_default',
+      runtime_root: 'remote_default',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example.invalid/releases',
       connect_timeout_seconds: 10,

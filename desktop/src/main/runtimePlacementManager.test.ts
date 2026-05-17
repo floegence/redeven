@@ -51,9 +51,9 @@ describe('runtimePlacementManager', () => {
       '  if (script.includes("uname -s")) { process.stdout.write("Linux\\nx86_64\\n"); process.exit(0); }',
       '  if (args[markerIndex] === "redeven-container-runtime-probe") {',
       '    if (fs.existsSync(marker)) {',
-      '      process.stdout.write("status=ready\\nexpected_release_tag=v1.2.3\\nreported_release_tag=v1.2.3\\nbinary_path=/opt/redeven-desktop/runtime/releases/v1.2.3/bin/redeven\\nstamp_path=/opt/redeven-desktop/runtime/releases/v1.2.3/desktop-runtime.stamp\\nreason=ready\\n");',
+      '      process.stdout.write("status=ready\\nexpected_release_tag=v1.2.3\\nreported_release_tag=v1.2.3\\nbinary_path=/root/.redeven/runtime/releases/v1.2.3/bin/redeven\\nstamp_path=/root/.redeven/runtime/releases/v1.2.3/managed-runtime.stamp\\nreason=ready\\n");',
       '    } else {',
-      '      process.stdout.write("status=missing_binary\\nexpected_release_tag=v1.2.3\\nreported_release_tag=\\nbinary_path=/opt/redeven-desktop/runtime/releases/v1.2.3/bin/redeven\\nstamp_path=/opt/redeven-desktop/runtime/releases/v1.2.3/desktop-runtime.stamp\\nreason=missing\\n");',
+      '      process.stdout.write("status=missing_binary\\nexpected_release_tag=v1.2.3\\nreported_release_tag=\\nbinary_path=/root/.redeven/runtime/releases/v1.2.3/bin/redeven\\nstamp_path=/root/.redeven/runtime/releases/v1.2.3/managed-runtime.stamp\\nreason=missing\\n");',
       '    }',
       '    process.exit(0);',
       '  }',
@@ -104,8 +104,7 @@ describe('runtimePlacementManager', () => {
         container_id: 'dev',
         container_ref: 'dev',
         container_label: 'dev',
-        runtime_install_root: '/opt/redeven-desktop/runtime',
-        runtime_state_root: '/var/lib/redeven',
+        runtime_root: '/root/.redeven',
         bridge_strategy: 'exec_stream',
       },
       runtime_release_tag: 'v1.2.3',
@@ -113,7 +112,7 @@ describe('runtimePlacementManager', () => {
       asset_cache_root: tempDir,
     });
 
-    expect(ready.runtime_binary_path).toBe('/opt/redeven-desktop/runtime/releases/v1.2.3/bin/redeven');
+    expect(ready.runtime_binary_path).toBe('/root/.redeven/runtime/releases/v1.2.3/bin/redeven');
     expect(await fs.readFile(markerPath, 'utf8')).toBe('redeven-archive');
     expect(uploadAssetMocks.prepareDesktopRuntimeUploadAsset).toHaveBeenCalledWith(expect.objectContaining({
       runtimeReleaseTag: 'v1.2.3',
@@ -134,8 +133,7 @@ describe('runtimePlacementManager', () => {
         container_id: 'dev',
         container_ref: 'dev',
         container_label: 'dev',
-        runtime_install_root: '/opt/redeven-desktop/runtime',
-        runtime_state_root: '/var/lib/redeven',
+        runtime_root: '/root/.redeven',
         bridge_strategy: 'exec_stream',
       },
       runtime_release_tag: 'v1.2.3',
@@ -144,7 +142,7 @@ describe('runtimePlacementManager', () => {
       asset_cache_root: tempDir,
     });
 
-    expect(ready.runtime_binary_path).toBe('/opt/redeven-desktop/runtime/releases/v1.2.3/bin/redeven');
+    expect(ready.runtime_binary_path).toBe('/root/.redeven/runtime/releases/v1.2.3/bin/redeven');
     expect(await fs.readFile(markerPath, 'utf8')).toBe('redeven-archive');
     expect(uploadAssetMocks.prepareDesktopRuntimeUploadAsset).toHaveBeenCalledWith(expect.objectContaining({
       runtimeReleaseTag: 'v1.2.3',
@@ -165,9 +163,6 @@ describe('runtimePlacementManager', () => {
           ssh_destination: 'devbox',
           ssh_port: 2222,
           auth_mode: 'key_agent',
-          remote_install_dir: 'remote_default',
-          bootstrap_strategy: 'desktop_upload',
-          release_base_url: '',
           connect_timeout_seconds: 1,
         },
       },
@@ -177,8 +172,7 @@ describe('runtimePlacementManager', () => {
         container_id: 'dev',
         container_ref: 'dev',
         container_label: 'dev',
-        runtime_install_root: '/opt/redeven-desktop/runtime',
-        runtime_state_root: '/var/lib/redeven',
+        runtime_root: '/root/.redeven',
         bridge_strategy: 'exec_stream',
       },
       runtime_release_tag: 'v1.2.3',
@@ -186,7 +180,7 @@ describe('runtimePlacementManager', () => {
       asset_cache_root: tempDir,
     });
 
-    expect(ready.runtime_binary_path).toBe('/opt/redeven-desktop/runtime/releases/v1.2.3/bin/redeven');
+    expect(ready.runtime_binary_path).toBe('/root/.redeven/runtime/releases/v1.2.3/bin/redeven');
     expect(await fs.readFile(markerPath, 'utf8')).toBe('redeven-archive');
     expect(uploadAssetMocks.prepareDesktopRuntimeUploadAsset).toHaveBeenCalledWith(expect.objectContaining({
       runtimeReleaseTag: 'v1.2.3',

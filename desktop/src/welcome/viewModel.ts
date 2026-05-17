@@ -1364,8 +1364,8 @@ function environmentCardMeta(environment: DesktopEnvironmentEntry): readonly Env
   if (environment.kind === 'ssh_environment') {
     return [
       {
-        label: 'Install root',
-        value: environment.ssh_details?.remote_install_dir ?? '',
+        label: 'Runtime root',
+        value: environment.ssh_details?.runtime_root ?? '',
         monospace: true,
       },
       {
@@ -1464,7 +1464,7 @@ export function environmentMatchesLibrarySearch(
     environment.provider_origin ?? '',
     environment.env_public_id ?? '',
     environment.ssh_details?.ssh_destination ?? '',
-    environment.ssh_details?.remote_install_dir ?? '',
+    environment.ssh_details?.runtime_root ?? '',
     environment.ssh_details?.release_base_url ?? '',
     environment.ssh_details?.bootstrap_strategy ?? '',
   ].some((value) => value.toLowerCase().includes(clean));

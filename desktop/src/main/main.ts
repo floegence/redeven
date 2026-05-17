@@ -264,6 +264,9 @@ import {
   type DesktopProviderEnvironmentRuntimeHealth,
 } from '../shared/controlPlaneProvider';
 import {
+  DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
+  DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL,
+  DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
   desktopSSHRuntimeAffectingSettingsMatch,
   defaultSavedSSHEnvironmentLabel,
   normalizeDesktopSSHEnvironmentDetails,
@@ -1255,20 +1258,21 @@ async function currentManagedRuntimePresenceByTargetID(
   const localRecord = currentLocalEnvironmentRuntimeRecord(preferences.local_environment);
   if (localRecord) {
     const targetID = desktopProviderRuntimeLinkTargetID('local_environment', preferences.local_environment.id);
-    const placementTargetID = desktopRuntimeTargetID(
-      { kind: 'local_host' },
-      { kind: 'host_process', install_dir: localRecord.state_file ? path.dirname(localRecord.state_file) : '' },
-      preferences.local_environment.id,
-    );
+    const hostAccess: DesktopRuntimeHostAccess = { kind: 'local_host' };
+    const placement: DesktopRuntimePlacement = { kind: 'host_process', runtime_root: localRecord.state_file ? path.dirname(localRecord.state_file) : '' };
     out[targetID] = managedRuntimePresence({
       targetID,
-      placementTargetID,
+      placementTargetID: desktopRuntimeTargetID(
+        hostAccess,
+        placement,
+        preferences.local_environment.id,
+      ),
       kind: 'local_environment',
       environmentID: preferences.local_environment.id,
       label: preferences.local_environment.label,
       runtimeKey: preferences.local_environment.id,
-      hostAccess: { kind: 'local_host' },
-      placement: { kind: 'host_process', install_dir: localRecord.state_file ? path.dirname(localRecord.state_file) : '' },
+      hostAccess,
+      placement,
       running: true,
       localUIURL: localRecord.startup.local_ui_url,
       runtimeService: localRecord.startup.runtime_service,
@@ -1288,7 +1292,7 @@ async function currentManagedRuntimePresenceByTargetID(
       ?? savedSSHRuntimeHealth[environment.id]?.runtime_maintenance;
     const targetID = desktopProviderRuntimeLinkTargetID('ssh_environment', runtimeKey);
     const hostAccess: DesktopRuntimeHostAccess = { kind: 'ssh_host', ssh: environment };
-    const placement: DesktopRuntimePlacement = { kind: 'host_process', install_dir: environment.remote_install_dir };
+    const placement: DesktopRuntimePlacement = { kind: 'host_process', runtime_root: environment.runtime_root };
     out[targetID] = managedRuntimePresence({
       targetID,
       placementTargetID: desktopRuntimeTargetID(
@@ -1513,11 +1517,7 @@ function friendlyRuntimeStartErrorMessage(error: unknown): string {
     return 'SSH runtime startup was canceled.';
   }
   const rawMessage = error instanceof Error ? error.message : String(error);
-  const message = firstDisplayLine(rawMessage);
-  if (/ENOENT: no such file or directory, mkdir '\/root'/u.test(message)) {
-    return 'The SSH host resolved its runtime directory to /root, but that directory is not available. Desktop will avoid inherited SSH X11 setup and use a writable default runtime directory on the next start; if this persists, set Remote install dir to a writable path such as /tmp/redeven-desktop-runtime.';
-  }
-  return message;
+  return firstDisplayLine(rawMessage);
 }
 
 function launcherActionFailureFromRuntimeStartError(
@@ -3088,7 +3088,7 @@ async function markSavedSSHTargetUsed(
     ssh_destination: input.ssh_destination,
     ssh_port: input.ssh_port,
     auth_mode: input.auth_mode,
-    remote_install_dir: input.remote_install_dir,
+    runtime_root: input.runtime_root,
     bootstrap_strategy: input.bootstrap_strategy,
     release_base_url: input.release_base_url,
     connect_timeout_seconds: input.connect_timeout_seconds,
@@ -4534,7 +4534,7 @@ async function openSSHEnvironmentFromLauncher(
     ssh_destination: request.ssh_destination,
     ssh_port: request.ssh_port,
     auth_mode: request.auth_mode,
-    remote_install_dir: request.remote_install_dir,
+    runtime_root: request.runtime_root,
     bootstrap_strategy: request.bootstrap_strategy,
     release_base_url: request.release_base_url,
     connect_timeout_seconds: request.connect_timeout_seconds,
@@ -4648,7 +4648,15 @@ function sshDetailsFromRuntimeTargetRequest(
   request: DesktopLauncherRuntimeTargetRequest,
 ): DesktopSSHEnvironmentDetails | null {
   if (request.host_access?.kind === 'ssh_host') {
-    return request.host_access.ssh;
+    if (request.placement?.kind === 'container_process') {
+      return null;
+    }
+    return normalizeDesktopSSHEnvironmentDetails({
+      ...request.host_access.ssh,
+      runtime_root: request.placement?.kind === 'host_process' ? request.placement.runtime_root : request.runtime_root,
+      bootstrap_strategy: request.placement?.kind === 'host_process' ? request.placement.bootstrap_strategy : request.bootstrap_strategy,
+      release_base_url: request.placement?.kind === 'host_process' ? request.placement.release_base_url : request.release_base_url,
+    });
   }
   if (request.host_access?.kind === 'local_host') {
     return null;
@@ -4660,10 +4668,26 @@ function sshDetailsFromRuntimeTargetRequest(
     ssh_destination: request.ssh_destination,
     ssh_port: request.ssh_port,
     auth_mode: request.auth_mode,
-    remote_install_dir: request.remote_install_dir,
+    runtime_root: request.runtime_root,
     bootstrap_strategy: request.bootstrap_strategy,
     release_base_url: request.release_base_url,
     connect_timeout_seconds: request.connect_timeout_seconds,
+  });
+}
+
+function sshDetailsFromRuntimePlacement(
+  hostAccess: Extract<DesktopRuntimeHostAccess, Readonly<{ kind: 'ssh_host' }>>,
+  placement: DesktopRuntimePlacement,
+): DesktopSSHEnvironmentDetails {
+  return normalizeDesktopSSHEnvironmentDetails({
+    ...hostAccess.ssh,
+    runtime_root: placement.runtime_root || DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
+    bootstrap_strategy: placement.kind === 'host_process'
+      ? placement.bootstrap_strategy ?? DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY
+      : DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
+    release_base_url: placement.kind === 'host_process'
+      ? placement.release_base_url ?? DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL
+      : DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL,
   });
 }
 
@@ -4680,7 +4704,7 @@ function runtimeHostAccessFromRequest(
 function runtimePlacementFromRequest(
   request: DesktopLauncherRuntimeTargetRequest | Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'open_local_environment' | 'open_ssh_environment' }>>,
 ): DesktopRuntimePlacement {
-  return request.placement ?? { kind: 'host_process', install_dir: '' };
+  return request.placement ?? { kind: 'host_process', runtime_root: '' };
 }
 
 function runtimeTargetIDFromRequest(
@@ -4756,9 +4780,7 @@ async function startRuntimePlacementBridgeRecordFromLauncher(
       host_access: hostAccess,
       placement,
       runtime_release_tag: resolveSSHRuntimeReleaseTag(),
-      release_base_url: hostAccess.kind === 'ssh_host'
-        ? hostAccess.ssh.release_base_url
-        : PUBLIC_REDEVEN_RELEASE_BASE_URL,
+      release_base_url: PUBLIC_REDEVEN_RELEASE_BASE_URL,
       source_runtime_root: process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT,
       asset_cache_root: desktopRuntimePackageCacheRoot(),
       force_runtime_update: request.force_runtime_update === true,
@@ -4825,7 +4847,7 @@ async function openRuntimePlacementBridgeFromLauncher(
     });
   }
   const target = record.session.host_access.kind === 'ssh_host'
-    ? buildSSHDesktopTarget(record.session.host_access.ssh, {
+    ? buildSSHDesktopTarget(sshDetailsFromRuntimePlacement(record.session.host_access, record.session.placement), {
         environmentID: record.environment_id,
         label: record.label,
         forwardedLocalUIURL: record.startup.local_ui_url,
@@ -6015,7 +6037,7 @@ async function restartSSHRuntimeFromShell(
     ssh_destination: previousTarget.ssh_destination,
     ssh_port: previousTarget.ssh_port,
     auth_mode: previousTarget.auth_mode,
-    remote_install_dir: previousTarget.remote_install_dir,
+    runtime_root: previousTarget.runtime_root,
     bootstrap_strategy: previousTarget.bootstrap_strategy,
     release_base_url: previousTarget.release_base_url,
     connect_timeout_seconds: previousTarget.connect_timeout_seconds,
@@ -6241,7 +6263,7 @@ async function upsertSavedSSHEnvironmentFromWelcome(
     ssh_destination: details.ssh_destination,
     ssh_port: details.ssh_port,
     auth_mode: details.auth_mode,
-    remote_install_dir: details.remote_install_dir,
+    runtime_root: details.runtime_root,
     bootstrap_strategy: details.bootstrap_strategy,
     release_base_url: details.release_base_url,
     connect_timeout_seconds: details.connect_timeout_seconds,
@@ -6299,7 +6321,7 @@ async function setSavedSSHEnvironmentPinnedFromWelcome(
     ssh_destination: details.ssh_destination,
     ssh_port: details.ssh_port,
     auth_mode: details.auth_mode,
-    remote_install_dir: details.remote_install_dir,
+    runtime_root: details.runtime_root,
     bootstrap_strategy: details.bootstrap_strategy,
     release_base_url: details.release_base_url,
     connect_timeout_seconds: details.connect_timeout_seconds,
@@ -6466,7 +6488,7 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
           ssh_destination: request.ssh_destination,
           ssh_port: request.ssh_port,
           auth_mode: request.auth_mode,
-          remote_install_dir: request.remote_install_dir,
+          runtime_root: request.runtime_root,
           bootstrap_strategy: request.bootstrap_strategy,
           release_base_url: request.release_base_url,
           connect_timeout_seconds: request.connect_timeout_seconds,
@@ -6514,7 +6536,7 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
         ssh_destination: request.ssh_destination,
         ssh_port: request.ssh_port,
         auth_mode: request.auth_mode,
-        remote_install_dir: request.remote_install_dir,
+        runtime_root: request.runtime_root,
         bootstrap_strategy: request.bootstrap_strategy,
         release_base_url: request.release_base_url,
         connect_timeout_seconds: request.connect_timeout_seconds,

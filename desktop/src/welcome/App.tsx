@@ -82,8 +82,8 @@ import {
   DEFAULT_DESKTOP_SSH_AUTH_MODE,
   DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
   DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS,
-  DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
-  DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR_LABEL,
+  DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
+  DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL,
   DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL_LABEL,
   type DesktopSSHAuthMode,
   type DesktopSSHBootstrapStrategy,
@@ -265,7 +265,7 @@ type SSHConnectionDialogState = Readonly<{
   ssh_destination: string;
   ssh_port: string;
   auth_mode: DesktopSSHAuthMode;
-  remote_install_dir: string;
+  runtime_root: string;
   bootstrap_strategy: DesktopSSHBootstrapStrategy;
   release_base_url: string;
   connect_timeout_seconds: string;
@@ -279,16 +279,12 @@ type RuntimeContainerConnectionDialogState = Readonly<{
   ssh_destination: string;
   ssh_port: string;
   auth_mode: DesktopSSHAuthMode;
-  remote_install_dir: string;
-  bootstrap_strategy: DesktopSSHBootstrapStrategy;
-  release_base_url: string;
   connect_timeout_seconds: string;
   container_engine: DesktopContainerEngine;
   container_id: string;
   container_ref: string;
   container_label: string;
-  runtime_install_root: string;
-  runtime_state_root: string;
+  runtime_root: string;
 }>;
 
 type ConnectionDialogKind = 'external_local_ui' | 'ssh_environment' | 'local_container_runtime' | 'ssh_container_runtime';
@@ -470,9 +466,6 @@ function runtimeContainerHostAccessFromDialogState(
       ssh_destination: sshDestination,
       ssh_port: sshPortText === '' ? null : Number.parseInt(sshPortText, 10),
       auth_mode: state.auth_mode,
-      remote_install_dir: trimString(state.remote_install_dir) || DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
-      bootstrap_strategy: state.bootstrap_strategy,
-      release_base_url: trimString(state.release_base_url),
       connect_timeout_seconds: trimString(state.connect_timeout_seconds) === ''
         ? DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS
         : Number(trimString(state.connect_timeout_seconds)),
@@ -581,7 +574,7 @@ function createSSHConnectionDialogState(
     ssh_destination: trimString(overrides.ssh_destination),
     ssh_port: trimString(overrides.ssh_port),
     auth_mode: (trimString(overrides.auth_mode) as DesktopSSHAuthMode) || DEFAULT_DESKTOP_SSH_AUTH_MODE,
-    remote_install_dir: trimString(overrides.remote_install_dir),
+    runtime_root: trimString(overrides.runtime_root),
     bootstrap_strategy: (trimString(overrides.bootstrap_strategy) as DesktopSSHBootstrapStrategy) || DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
     release_base_url: trimString(overrides.release_base_url),
     connect_timeout_seconds: trimString(overrides.connect_timeout_seconds),
@@ -601,16 +594,12 @@ function createRuntimeContainerConnectionDialogState(
     ssh_destination: trimString(overrides.ssh_destination),
     ssh_port: trimString(overrides.ssh_port),
     auth_mode: (trimString(overrides.auth_mode) as DesktopSSHAuthMode) || DEFAULT_DESKTOP_SSH_AUTH_MODE,
-    remote_install_dir: trimString(overrides.remote_install_dir),
-    bootstrap_strategy: (trimString(overrides.bootstrap_strategy) as DesktopSSHBootstrapStrategy) || DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
-    release_base_url: trimString(overrides.release_base_url),
     connect_timeout_seconds: trimString(overrides.connect_timeout_seconds),
     container_engine: overrides.container_engine ?? 'docker',
     container_id: trimString(overrides.container_id),
     container_ref: trimString(overrides.container_ref) || trimString(overrides.container_label) || trimString(overrides.container_id),
     container_label: trimString(overrides.container_label),
-    runtime_install_root: trimString(overrides.runtime_install_root) || '/opt/redeven-desktop/runtime',
-    runtime_state_root: trimString(overrides.runtime_state_root) || '/var/lib/redeven',
+    runtime_root: trimString(overrides.runtime_root) || '/root/.redeven',
   };
 }
 
@@ -1485,9 +1474,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return;
     }
     if (preferredKind === 'local_container_runtime' || preferredKind === 'ssh_container_runtime') {
-      setConnectionDialogState(createRuntimeContainerConnectionDialogState('create', preferredKind, {
-        bootstrap_strategy: DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
-      }));
+      setConnectionDialogState(createRuntimeContainerConnectionDialogState('create', preferredKind));
       return;
     }
     setConnectionDialogState(createExternalURLConnectionDialogState('create', {
@@ -1504,11 +1491,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         ssh_destination: isSSHContainer ? environment.managed_runtime_host_access.ssh.ssh_destination : '',
         ssh_port: isSSHContainer && environment.managed_runtime_host_access.ssh.ssh_port != null ? String(environment.managed_runtime_host_access.ssh.ssh_port) : '',
         auth_mode: isSSHContainer ? environment.managed_runtime_host_access.ssh.auth_mode : DEFAULT_DESKTOP_SSH_AUTH_MODE,
-        remote_install_dir: isSSHContainer && environment.managed_runtime_host_access.ssh.remote_install_dir !== DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR
-          ? environment.managed_runtime_host_access.ssh.remote_install_dir
-          : '',
-        bootstrap_strategy: isSSHContainer ? environment.managed_runtime_host_access.ssh.bootstrap_strategy : DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
-        release_base_url: isSSHContainer ? environment.managed_runtime_host_access.ssh.release_base_url : '',
         connect_timeout_seconds: isSSHContainer && environment.managed_runtime_host_access.ssh.connect_timeout_seconds != null
           ? String(environment.managed_runtime_host_access.ssh.connect_timeout_seconds)
           : '',
@@ -1516,8 +1498,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         container_id: environment.managed_runtime_placement.container_id,
         container_ref: environment.managed_runtime_placement.container_ref,
         container_label: environment.managed_runtime_placement.container_label,
-        runtime_install_root: environment.managed_runtime_placement.runtime_install_root,
-        runtime_state_root: environment.managed_runtime_placement.runtime_state_root,
+        runtime_root: environment.managed_runtime_placement.runtime_root,
       }));
     } else if (environment.kind === 'local_environment') {
       openSettingsSurface(environment.id);
@@ -1530,9 +1511,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         ssh_destination: environment.ssh_details?.ssh_destination ?? '',
         ssh_port: environment.ssh_details?.ssh_port == null ? '' : String(environment.ssh_details.ssh_port),
         auth_mode: environment.ssh_details?.auth_mode ?? DEFAULT_DESKTOP_SSH_AUTH_MODE,
-        remote_install_dir: environment.ssh_details?.remote_install_dir === DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR
+        runtime_root: environment.ssh_details?.runtime_root === DEFAULT_DESKTOP_SSH_RUNTIME_ROOT
           ? ''
-          : (environment.ssh_details?.remote_install_dir ?? ''),
+          : (environment.ssh_details?.runtime_root ?? ''),
         bootstrap_strategy: environment.ssh_details?.bootstrap_strategy ?? DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
         release_base_url: environment.ssh_details?.release_base_url ?? '',
         connect_timeout_seconds: environment.ssh_details?.connect_timeout_seconds == null ? '' : String(environment.ssh_details.connect_timeout_seconds),
@@ -1618,7 +1599,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       if (kind === 'local_container_runtime' || kind === 'ssh_container_runtime') {
         return createRuntimeContainerConnectionDialogState('create', kind, {
           label: current.label,
-          bootstrap_strategy: DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
         });
       }
       return createExternalURLConnectionDialogState('create', {
@@ -1631,7 +1611,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function updateConnectionDialogField(
-    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'remote_install_dir' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_ref' | 'container_label' | 'runtime_install_root' | 'runtime_state_root',
+    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'runtime_root' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_ref' | 'container_label',
     value: string,
   ): void {
     setConnectionDialogState((current) => {
@@ -1886,7 +1866,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       ssh_destination: environment.ssh_details.ssh_destination,
       ssh_port: environment.ssh_details.ssh_port,
       auth_mode: environment.ssh_details.auth_mode,
-      remote_install_dir: environment.ssh_details.remote_install_dir,
+      runtime_root: environment.ssh_details.runtime_root,
       bootstrap_strategy: environment.ssh_details.bootstrap_strategy,
       release_base_url: environment.ssh_details.release_base_url,
       connect_timeout_seconds: environment.ssh_details.connect_timeout_seconds,
@@ -2203,7 +2183,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       ssh_destination: details.ssh_destination,
       ssh_port: details.ssh_port,
       auth_mode: details.auth_mode,
-      remote_install_dir: details.remote_install_dir,
+      runtime_root: details.runtime_root,
       bootstrap_strategy: details.bootstrap_strategy,
       release_base_url: details.release_base_url,
       connect_timeout_seconds: details.connect_timeout_seconds,
@@ -2643,7 +2623,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         ssh_destination: request.details.ssh_destination,
         ssh_port: request.details.ssh_port,
         auth_mode: request.details.auth_mode,
-        remote_install_dir: request.details.remote_install_dir,
+        runtime_root: request.details.runtime_root,
         bootstrap_strategy: request.details.bootstrap_strategy,
         release_base_url: request.details.release_base_url,
         connect_timeout_seconds: request.details.connect_timeout_seconds,
@@ -2689,9 +2669,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                 ssh_destination: request.state.ssh_destination,
                 ssh_port: trimString(request.state.ssh_port) === '' ? null : Number.parseInt(request.state.ssh_port, 10),
                 auth_mode: request.state.auth_mode,
-                remote_install_dir: trimString(request.state.remote_install_dir) || DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
-                bootstrap_strategy: request.state.bootstrap_strategy,
-                release_base_url: trimString(request.state.release_base_url),
                 connect_timeout_seconds: trimString(request.state.connect_timeout_seconds) === '' ? null : Number(trimString(request.state.connect_timeout_seconds)),
               },
             }
@@ -2702,8 +2679,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           container_id: trimString(request.state.container_id),
           container_ref: trimString(request.state.container_ref) || trimString(request.state.container_label) || trimString(request.state.container_id),
           container_label: trimString(request.state.container_label) || trimString(request.state.container_id),
-          runtime_install_root: trimString(request.state.runtime_install_root),
-          runtime_state_root: trimString(request.state.runtime_state_root),
+          runtime_root: trimString(request.state.runtime_root),
           bridge_strategy: 'exec_stream',
         },
       });
@@ -2756,15 +2732,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     if (
       (state?.connection_kind === 'local_container_runtime' || state?.connection_kind === 'ssh_container_runtime')
-      && !trimString(state.runtime_install_root)
+      && !trimString(state.runtime_root)
     ) {
-      errors.runtime_install_root = 'Runtime install root is required.';
-    }
-    if (
-      (state?.connection_kind === 'local_container_runtime' || state?.connection_kind === 'ssh_container_runtime')
-      && !trimString(state.runtime_state_root)
-    ) {
-      errors.runtime_state_root = 'Runtime state root is required.';
+      errors.runtime_root = 'Runtime root is required.';
     }
     return errors;
   }
@@ -2789,7 +2759,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           ssh_destination: state.ssh_destination,
           ssh_port: trimString(state.ssh_port) === '' ? null : Number.parseInt(state.ssh_port, 10),
           auth_mode: state.auth_mode,
-          remote_install_dir: trimString(state.remote_install_dir) || DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
+          runtime_root: trimString(state.runtime_root) || DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
           bootstrap_strategy: state.bootstrap_strategy,
           release_base_url: trimString(state.release_base_url),
           connect_timeout_seconds: trimString(state.connect_timeout_seconds) === '' ? null : Number(trimString(state.connect_timeout_seconds)),
@@ -2919,7 +2889,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         ssh_destination: details.ssh_destination,
         ssh_port: details.ssh_port,
         auth_mode: details.auth_mode,
-        remote_install_dir: details.remote_install_dir,
+        runtime_root: details.runtime_root,
         bootstrap_strategy: details.bootstrap_strategy,
         release_base_url: details.release_base_url,
         connect_timeout_seconds: details.connect_timeout_seconds,
@@ -6390,7 +6360,7 @@ function ConnectionDialog(props: Readonly<{
   busyState: DesktopLauncherBusyState;
   onOpenChange: (open: boolean) => void;
   updateField: (
-    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'remote_install_dir' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_ref' | 'container_label' | 'runtime_install_root' | 'runtime_state_root',
+    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'runtime_root' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_ref' | 'container_label',
     value: string,
   ) => void;
   refreshContainerOptions: () => void;
@@ -6409,15 +6379,15 @@ function ConnectionDialog(props: Readonly<{
   });
   const isSSHBackedKind = createMemo(() => connectionKind() === 'ssh_environment' || connectionKind() === 'ssh_container_runtime');
   const isContainerKind = createMemo(() => connectionKind() === 'local_container_runtime' || connectionKind() === 'ssh_container_runtime');
-  const showSSHAdvanced = createMemo(() => isSSHBackedKind() && advancedState().open);
+  const showSSHAdvanced = createMemo(() => connectionKind() === 'ssh_environment' && advancedState().open);
   const sshBootstrapStrategy = createMemo(() => (
-    props.state?.connection_kind === 'ssh_environment' || props.state?.connection_kind === 'ssh_container_runtime'
+    props.state?.connection_kind === 'ssh_environment'
       ? props.state.bootstrap_strategy
       : DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY
   ));
   const sshReleaseBaseURLLabel = createMemo(() => (
     trimString(
-      props.state?.connection_kind === 'ssh_environment' || props.state?.connection_kind === 'ssh_container_runtime'
+      props.state?.connection_kind === 'ssh_environment'
         ? props.state.release_base_url
         : '',
     ) === ''
@@ -6459,19 +6429,9 @@ function ConnectionDialog(props: Readonly<{
   createEffect(() => {
     const state = props.state;
     setAdvancedState((current) => syncSSHConnectionDialogAdvancedState(current, (
-      state?.connection_kind === 'ssh_environment'
+      state?.connection_kind === 'ssh_environment' || state?.connection_kind === 'external_local_ui'
         ? state
-        : state?.connection_kind === 'ssh_container_runtime'
-          ? {
-              mode: state.mode,
-              connection_kind: 'ssh_environment',
-              environment_id: state.environment_id,
-              remote_install_dir: state.remote_install_dir,
-              release_base_url: state.release_base_url,
-            }
-          : state?.connection_kind === 'external_local_ui'
-            ? state
-            : null
+        : null
     )));
   });
 
@@ -6661,7 +6621,8 @@ function ConnectionDialog(props: Readonly<{
                   Key / agent uses your existing SSH configuration. Password prompt asks only when starting the runtime and does not store the SSH password.
                 </div>
               </div>
-              <div class="overflow-hidden rounded-md border border-border/70 bg-background/80">
+              <Show when={connectionKind() === 'ssh_environment'}>
+                <div class="overflow-hidden rounded-md border border-border/70 bg-background/80">
                 <button
                   type="button"
                   class="flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-2.5 text-left"
@@ -6670,7 +6631,7 @@ function ConnectionDialog(props: Readonly<{
                   <div>
                     <div class="text-xs font-medium text-foreground">Advanced</div>
                     <div class="mt-1 text-[11px] text-muted-foreground">
-                      Desktop upload cache, remote fallback, install path, and release mirror for this SSH host.
+                      Runtime root, package delivery, and release mirror for this SSH host.
                     </div>
                   </div>
                   <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
@@ -6698,25 +6659,25 @@ function ConnectionDialog(props: Readonly<{
                         </div>
                       </div>
                       <div class="space-y-1.5">
-                        <label for="environment-ssh-install-dir" class="block text-xs font-medium text-foreground">Remote Install Directory</label>
+                        <label for="environment-ssh-runtime-root" class="block text-xs font-medium text-foreground">Runtime Root</label>
                         <Input
-                          id="environment-ssh-install-dir"
-                          value={isSSHBackedKind() ? (props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.remote_install_dir ?? '' : ''}
-                          onInput={(event) => props.updateField('remote_install_dir', event.currentTarget.value)}
-                          placeholder="/opt/redeven-desktop/runtime"
+                          id="environment-ssh-runtime-root"
+                          value={props.state?.connection_kind === 'ssh_environment' ? props.state.runtime_root : ''}
+                          onInput={(event) => props.updateField('runtime_root', event.currentTarget.value)}
+                          placeholder="$HOME/.redeven"
                           size="sm"
                           class="w-full"
                           spellcheck={false}
                         />
                         <div class="text-[11px] text-muted-foreground">
-                          Leave blank to use the default remote user cache: {DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR_LABEL}.
+                          Leave blank to use the remote user's .redeven root: {DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL}.
                         </div>
                       </div>
                       <div class="space-y-1.5">
                         <label for="environment-ssh-release-base-url" class="block text-xs font-medium text-foreground">Release Base URL</label>
                         <Input
                           id="environment-ssh-release-base-url"
-                          value={isSSHBackedKind() ? (props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.release_base_url ?? '' : ''}
+                          value={props.state?.connection_kind === 'ssh_environment' ? props.state.release_base_url : ''}
                           onInput={(event) => props.updateField('release_base_url', event.currentTarget.value)}
                           placeholder="https://github.com/floegence/redeven/releases"
                           size="sm"
@@ -6746,6 +6707,7 @@ function ConnectionDialog(props: Readonly<{
                   </div>
                 </Show>
               </div>
+              </Show>
             </div>
           </div>
         </Show>
@@ -6796,47 +6758,28 @@ function ConnectionDialog(props: Readonly<{
                   }}
                 />
               </div>
-              <div class="grid gap-3 md:grid-cols-2">
-                <div class="space-y-1.5">
-                  <label for="environment-runtime-root" class="block text-xs font-medium text-foreground">
-                    Runtime Install Root <span class="text-destructive">*</span>
-                  </label>
-                  <Input
-                    id="environment-runtime-root"
-                    value={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.runtime_install_root : ''}
-                    onInput={(event) => {
-                      props.updateField('runtime_install_root', event.currentTarget.value);
-                      props.clearFieldErrors();
-                    }}
-                    placeholder="/opt/redeven-desktop/runtime"
-                    size="sm"
-                    class={cn('w-full', props.fieldErrors.runtime_install_root && 'border-destructive ring-1 ring-destructive/20')}
-                    spellcheck={false}
-                  />
-                  <Show when={props.fieldErrors.runtime_install_root}>
-                    <div class="text-[11px] text-destructive">{props.fieldErrors.runtime_install_root}</div>
-                  </Show>
+              <div class="space-y-1.5">
+                <label for="environment-container-runtime-root" class="block text-xs font-medium text-foreground">
+                  Runtime Root <span class="text-destructive">*</span>
+                </label>
+                <Input
+                  id="environment-container-runtime-root"
+                  value={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.runtime_root : ''}
+                  onInput={(event) => {
+                    props.updateField('runtime_root', event.currentTarget.value);
+                    props.clearFieldErrors();
+                  }}
+                  placeholder="/root/.redeven"
+                  size="sm"
+                  class={cn('w-full', props.fieldErrors.runtime_root && 'border-destructive ring-1 ring-destructive/20')}
+                  spellcheck={false}
+                />
+                <div class="text-[11px] text-muted-foreground">
+                  Stores Redeven releases, Local Environment state, sessions, and logs inside this container.
                 </div>
-                <div class="space-y-1.5">
-                  <label for="environment-runtime-state-root" class="block text-xs font-medium text-foreground">
-                    Runtime State Root <span class="text-destructive">*</span>
-                  </label>
-                  <Input
-                    id="environment-runtime-state-root"
-                    value={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.runtime_state_root : ''}
-                    onInput={(event) => {
-                      props.updateField('runtime_state_root', event.currentTarget.value);
-                      props.clearFieldErrors();
-                    }}
-                    placeholder="/var/lib/redeven"
-                    size="sm"
-                    class={cn('w-full', props.fieldErrors.runtime_state_root && 'border-destructive ring-1 ring-destructive/20')}
-                    spellcheck={false}
-                  />
-                  <Show when={props.fieldErrors.runtime_state_root}>
-                    <div class="text-[11px] text-destructive">{props.fieldErrors.runtime_state_root}</div>
-                  </Show>
-                </div>
+                <Show when={props.fieldErrors.runtime_root}>
+                  <div class="text-[11px] text-destructive">{props.fieldErrors.runtime_root}</div>
+                </Show>
               </div>
             </div>
           </div>

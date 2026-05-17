@@ -101,7 +101,7 @@ async function startMockedSession(command: ReturnType<typeof createMockBridgeCom
   hostAccessMocks.spawnLocalRuntimeHostCommand.mockImplementationOnce(() => command);
   const task = startRuntimePlacementBridgeSession({
     host_access: { kind: 'local_host' },
-    placement: { kind: 'host_process', install_dir: '' },
+    placement: { kind: 'host_process', runtime_root: '' },
     desktop_owner_id: 'desktop-owner',
     fallback_local_id: 'local-env',
   });

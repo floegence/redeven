@@ -16,16 +16,12 @@ describe('desktopRuntimePlacement', () => {
         ssh_destination: ' devbox ',
         ssh_port: '2222',
         auth_mode: 'key_agent',
-        remote_install_dir: '/opt/redeven',
-        bootstrap_strategy: 'desktop_upload',
-        release_base_url: '',
       },
     })).toMatchObject({
       kind: 'ssh_host',
       ssh: {
         ssh_destination: 'devbox',
         ssh_port: 2222,
-        remote_install_dir: '/opt/redeven',
       },
     });
   });
@@ -43,19 +39,17 @@ describe('desktopRuntimePlacement', () => {
       container_id: 'abc123',
       container_ref: 'dev-container',
       container_label: 'dev-container',
-      runtime_install_root: '/workspace/.redeven',
-      runtime_state_root: '/workspace/.redeven',
+      runtime_root: '/workspace/.redeven',
       bridge_strategy: 'exec_stream',
     });
   });
 
-  it('falls back to legacy container ids when no stable reference is stored', () => {
+  it('uses the concrete container id as the stable reference when no label is stored', () => {
     const placement = normalizeDesktopRuntimePlacement({
       kind: 'container_process',
       container_engine: 'docker',
       container_id: 'abc123',
-      runtime_install_root: '/opt/redeven-desktop/runtime',
-      runtime_state_root: '/var/lib/redeven',
+      runtime_root: '/root/.redeven',
     });
 
     expect(placement).toMatchObject({
@@ -77,9 +71,6 @@ describe('desktopRuntimePlacement', () => {
         ssh_destination: 'root@gzcom',
         ssh_port: '',
         auth_mode: 'key_agent',
-        remote_install_dir: 'remote_default',
-        bootstrap_strategy: 'auto',
-        release_base_url: '',
       },
     });
     const container = normalizeDesktopRuntimePlacement({
@@ -88,11 +79,10 @@ describe('desktopRuntimePlacement', () => {
       container_id: 'container-stable-id',
       container_ref: 'dev-container',
       container_label: 'renamable-label',
-      runtime_install_root: '/opt/redeven-desktop/runtime',
-      runtime_state_root: '/var/lib/redeven',
+      runtime_root: '/root/.redeven',
     });
 
-    expect(desktopRuntimeTargetID(localHost, { kind: 'host_process', install_dir: '' }, 'local')).toBe('local:host:local');
+    expect(desktopRuntimeTargetID(localHost, { kind: 'host_process', runtime_root: '' }, 'local')).toBe('local:host:local');
     expect(desktopRuntimeTargetID(localHost, container)).toMatch(/^local:container:podman:dev-container:/u);
     expect(desktopRuntimeTargetID(sshHost, container)).toMatch(/^ssh:container:root%40gzcom:podman:dev-container:/u);
   });
@@ -105,8 +95,7 @@ describe('desktopRuntimePlacement', () => {
       container_id: 'old-concrete-id',
       container_ref: 'redeven-nginx-dev',
       container_label: 'redeven-nginx-dev',
-      runtime_install_root: '/opt/redeven-desktop/runtime',
-      runtime_state_root: '/var/lib/redeven',
+      runtime_root: '/root/.redeven',
     });
     const rebuiltPlacement = normalizeDesktopRuntimePlacement({
       ...firstPlacement,
@@ -121,15 +110,13 @@ describe('desktopRuntimePlacement', () => {
       kind: 'container_process',
       container_engine: 'lxc',
       container_id: 'abc123',
-      runtime_install_root: '/opt/redeven-desktop/runtime',
-      runtime_state_root: '/var/lib/redeven',
+      runtime_root: '/root/.redeven',
     })).toThrow('Container engine');
     expect(() => normalizeDesktopRuntimePlacement({
       kind: 'container_process',
       container_engine: 'docker',
       container_id: '',
-      runtime_install_root: '/opt/redeven-desktop/runtime',
-      runtime_state_root: '/var/lib/redeven',
+      runtime_root: '/root/.redeven',
     })).toThrow('Container ID');
   });
 });

@@ -333,7 +333,7 @@ function writeProbeResult() {
     'expected_release_tag=' + releaseTag,
     'reported_release_tag=' + (installed ? releaseTag : ''),
     'binary_path=/remote/redeven/releases/' + releaseTag + '/bin/redeven',
-    'stamp_path=/remote/redeven/releases/' + releaseTag + '/desktop-runtime.stamp',
+    'stamp_path=/remote/redeven/releases/' + releaseTag + '/managed-runtime.stamp',
     'reason=' + reason,
     '',
   ].join('\n'));
@@ -644,7 +644,7 @@ function targetFor(strategy: DesktopSSHBootstrapStrategy): DesktopSSHEnvironment
     ssh_destination: 'devbox',
     ssh_port: 2222,
     auth_mode: 'key_agent',
-    remote_install_dir: 'remote_default',
+    runtime_root: 'remote_default',
     bootstrap_strategy: strategy,
     release_base_url: '',
   };

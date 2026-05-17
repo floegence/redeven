@@ -57,15 +57,12 @@ function sshRuntimePresence(
         ssh_destination: 'devbox',
         ssh_port: 2222,
         auth_mode: 'key_agent',
-        remote_install_dir: 'remote_default',
-        bootstrap_strategy: 'desktop_upload',
-        release_base_url: '',
         connect_timeout_seconds: 10,
       },
     },
     placement: {
       kind: 'host_process',
-      install_dir: 'remote_default',
+      runtime_root: 'remote_default',
     },
     running: true,
     local_ui_url: 'http://127.0.0.1:40111/',
@@ -125,7 +122,7 @@ function localRuntimePresence(
     label: 'Local Environment',
     runtime_key: 'local',
     host_access: { kind: 'local_host' },
-    placement: { kind: 'host_process', install_dir: '' },
+    placement: { kind: 'host_process', runtime_root: '' },
     running: true,
     local_ui_url: 'http://localhost:23998/',
     openable: true,
@@ -642,7 +639,7 @@ describe('desktopWelcomeState', () => {
           ssh_destination: 'devbox',
           ssh_port: 2222,
           auth_mode: 'key_agent',
-          remote_install_dir: 'remote_default',
+          runtime_root: 'remote_default',
           bootstrap_strategy: 'desktop_upload',
           release_base_url: 'https://mirror.example.invalid/releases',
           connect_timeout_seconds: 10,
@@ -657,7 +654,7 @@ describe('desktopWelcomeState', () => {
             ssh_destination: 'devbox',
             ssh_port: 2222,
             auth_mode: 'key_agent',
-            remote_install_dir: 'remote_default',
+            runtime_root: 'remote_default',
             bootstrap_strategy: 'desktop_upload',
             release_base_url: 'https://mirror.example.invalid/releases',
           }, {
@@ -675,7 +672,7 @@ describe('desktopWelcomeState', () => {
         ssh_destination: 'devbox',
         ssh_port: 2222,
         auth_mode: 'key_agent',
-        remote_install_dir: 'remote_default',
+        runtime_root: 'remote_default',
         bootstrap_strategy: 'desktop_upload',
         release_base_url: 'https://mirror.example.invalid/releases',
       }, 'ssh_target_unreachable', 'Desktop could not reach that SSH target.'),
@@ -699,7 +696,7 @@ describe('desktopWelcomeState', () => {
       ssh_destination: 'devbox',
       ssh_port: 2222,
       auth_mode: 'key_agent',
-      remote_install_dir: 'remote_default',
+      runtime_root: 'remote_default',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example.invalid/releases',
     });
@@ -715,7 +712,7 @@ describe('desktopWelcomeState', () => {
           ssh_destination: 'devbox',
           ssh_port: 2222,
           auth_mode: 'key_agent',
-          remote_install_dir: 'remote_default',
+          runtime_root: 'remote_default',
           bootstrap_strategy: 'desktop_upload',
           release_base_url: '',
           connect_timeout_seconds: 10,
@@ -773,7 +770,7 @@ describe('desktopWelcomeState', () => {
           ssh_destination: 'devbox',
           ssh_port: 2222,
           auth_mode: 'key_agent',
-          remote_install_dir: 'remote_default',
+          runtime_root: 'remote_default',
           bootstrap_strategy: 'desktop_upload',
           release_base_url: '',
           connect_timeout_seconds: 10,
@@ -798,7 +795,7 @@ describe('desktopWelcomeState', () => {
       }),
       managed_runtime_placement: {
         kind: 'host_process',
-        install_dir: 'remote_default',
+        runtime_root: 'remote_default',
       },
       provider_runtime_link_target: {
         runtime_running: true,
@@ -857,7 +854,7 @@ describe('desktopWelcomeState', () => {
           ssh_destination: 'devbox',
           ssh_port: 2222,
           auth_mode: 'key_agent',
-          remote_install_dir: 'remote_default',
+          runtime_root: 'remote_default',
           bootstrap_strategy: 'desktop_upload',
           release_base_url: '',
           connect_timeout_seconds: 10,
@@ -1020,8 +1017,8 @@ describe('desktopWelcomeState', () => {
   });
 
   it('projects saved Local and SSH container runtime targets without leaking runtime-control material', () => {
-    const localContainerID = 'local:container:docker:dev-container:b0f0be51';
-    const sshContainerID = 'ssh:container:devbox%3A2222:docker:dev-container:b0f0be51';
+    const localContainerID = 'local:container:docker:dev-container:63ce185e';
+    const sshContainerID = 'ssh:container:devbox%3A2222:docker:dev-container:63ce185e';
     const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
     const sshHostAccess = {
       kind: 'ssh_host' as const,
@@ -1029,9 +1026,6 @@ describe('desktopWelcomeState', () => {
         ssh_destination: 'devbox',
         ssh_port: 2222,
         auth_mode: 'key_agent' as const,
-        remote_install_dir: 'remote_default',
-        bootstrap_strategy: 'desktop_upload' as const,
-        release_base_url: '',
         connect_timeout_seconds: 10,
       },
     };
@@ -1041,8 +1035,7 @@ describe('desktopWelcomeState', () => {
       container_id: 'container-stable-id',
       container_ref: 'dev-container',
       container_label: 'dev-container',
-      runtime_install_root: '/opt/redeven-desktop/runtime',
-      runtime_state_root: '/var/lib/redeven',
+      runtime_root: '/root/.redeven',
       bridge_strategy: 'exec_stream' as const,
     };
 
@@ -1186,7 +1179,7 @@ describe('desktopWelcomeState', () => {
           ssh_destination: 'devbox',
           ssh_port: 2222,
           auth_mode: 'key_agent',
-          remote_install_dir: 'remote_default',
+          runtime_root: 'remote_default',
           bootstrap_strategy: 'desktop_upload',
           release_base_url: '',
           connect_timeout_seconds: 10,
@@ -1242,7 +1235,7 @@ describe('desktopWelcomeState', () => {
           ssh_destination: 'devbox',
           ssh_port: 2222,
           auth_mode: 'key_agent',
-          remote_install_dir: 'remote_default',
+          runtime_root: 'remote_default',
           bootstrap_strategy: 'desktop_upload',
           release_base_url: '',
           connect_timeout_seconds: 10,
@@ -1257,7 +1250,7 @@ describe('desktopWelcomeState', () => {
             ssh_destination: 'devbox',
             ssh_port: 2222,
             auth_mode: 'key_agent',
-            remote_install_dir: 'remote_default',
+            runtime_root: 'remote_default',
             bootstrap_strategy: 'desktop_upload',
             release_base_url: '',
           }, {
@@ -1905,7 +1898,7 @@ describe('desktopWelcomeState', () => {
       managed_runtime_target_id: 'local:local',
       managed_runtime_placement_target_id: 'local:host:local',
       managed_runtime_host_access: { kind: 'local_host' },
-      managed_runtime_placement: { kind: 'host_process', install_dir: '' },
+      managed_runtime_placement: { kind: 'host_process', runtime_root: '' },
     });
     expect(localEntry?.provider_runtime_link_target).toMatchObject({
       id: 'local:local',
