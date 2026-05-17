@@ -1477,6 +1477,23 @@ async function ensureRemoteRuntimeInstalled(args: Readonly<{
   if (initialProbe.status === 'ready' && !shouldForceInstall) {
     return;
   }
+  if (!shouldForceInstall && initialProbe.status !== 'missing_binary') {
+    const maintenance: DesktopRuntimeMaintenanceRequirement = {
+      kind: 'ssh_runtime_update_required',
+      required_for: 'open',
+      can_desktop_restart: true,
+      has_active_work: false,
+      active_work_label: 'No active work',
+      current_runtime_version: initialProbe.reported_release_tag ?? undefined,
+      target_runtime_version: initialProbe.expected_release_tag,
+      message: 'Update this SSH runtime before starting it with the bundled runtime.',
+    };
+    throw new DesktopSSHRuntimeMaintenanceRequiredError(
+      maintenance.message,
+      maintenance,
+      formatRecentLogs(args.logs),
+    );
+  }
 
   const failures: string[] = [
     shouldForceInstall
@@ -1653,6 +1670,7 @@ function managedSSHRuntimeAttachPolicy(
     expectedRuntimeIdentity: RuntimeServiceIdentity;
     requireDesktopModelSource: boolean;
     allowActiveWorkReplacement: boolean;
+    allowRuntimeReplacement: boolean;
   }>,
 ): ManagedSSHRuntimeAttachPolicy {
   const runtimeService = startup.runtime_service;
@@ -1690,6 +1708,13 @@ function managedSSHRuntimeAttachPolicy(
     message: maintenanceMessage,
   };
 
+  if (!args.allowRuntimeReplacement) {
+    return {
+      action: 'block',
+      message: maintenanceMessage,
+      maintenance,
+    };
+  }
   if (runtimeServiceHasActiveWork(runtimeService) && !args.allowActiveWorkReplacement) {
     return {
       action: 'block',
@@ -1906,6 +1931,7 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
         expectedRuntimeIdentity: { runtime_version: runtimeReleaseTag },
         requireDesktopModelSource: args.requireDesktopModelSource === true,
         allowActiveWorkReplacement: args.allowActiveWorkReplacement === true,
+        allowRuntimeReplacement: args.forceRuntimeUpdate === true || args.allowActiveWorkReplacement === true,
       });
       if (attachPolicy.action === 'block') {
         throw new DesktopSSHRuntimeMaintenanceRequiredError(

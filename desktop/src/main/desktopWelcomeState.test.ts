@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { normalizeDesktopControlPlaneProvider } from '../shared/controlPlaneProvider';
 import type { DesktopManagedRuntimePresence } from '../shared/desktopRuntimePresence';
+import { buildDesktopRuntimeOperationPlans } from '../shared/desktopRuntimeOperationPlanner';
 import {
   testDesktopPreferences,
   testLocalAccess,
@@ -43,7 +44,7 @@ function providerRuntimeState(envPublicID = 'env_demo') {
 function sshRuntimePresence(
   overrides: Partial<DesktopManagedRuntimePresence> = {},
 ): DesktopManagedRuntimePresence {
-  return {
+  const presence = {
     target_id: 'ssh:ssh:devbox:2222:key_agent:remote_default',
     placement_target_id: 'ssh:host:devbox%3A2222:remote_default',
     kind: 'ssh_environment',
@@ -69,7 +70,6 @@ function sshRuntimePresence(
     running: true,
     local_ui_url: 'http://127.0.0.1:40111/',
     openable: true,
-    lifecycle_control: 'start_stop',
     runtime_service: {
       protocol_version: 'redeven-runtime-v1',
       service_owner: 'desktop',
@@ -98,13 +98,26 @@ function sshRuntimePresence(
     },
     checked_at_unix_ms: 1000,
     ...overrides,
+  } as Omit<DesktopManagedRuntimePresence, 'operations'> & Partial<Pick<DesktopManagedRuntimePresence, 'operations'>>;
+  return {
+    ...presence,
+    operations: overrides.operations ?? buildDesktopRuntimeOperationPlans({
+      surface: 'managed_runtime_card',
+      host_access: presence.host_access,
+      placement: presence.placement,
+      running: presence.running,
+      openable: presence.openable,
+      runtime_service: presence.runtime_service,
+      runtime_control_status: presence.runtime_control_status,
+      maintenance: presence.maintenance,
+    }),
   };
 }
 
 function localRuntimePresence(
   overrides: Partial<DesktopManagedRuntimePresence> = {},
 ): DesktopManagedRuntimePresence {
-  return {
+  const presence = {
     target_id: 'local:local',
     placement_target_id: 'local:host:local',
     kind: 'local_environment',
@@ -116,7 +129,6 @@ function localRuntimePresence(
     running: true,
     local_ui_url: 'http://localhost:23998/',
     openable: true,
-    lifecycle_control: 'start_stop',
     runtime_service: {
       protocol_version: 'redeven-runtime-v1',
       service_owner: 'desktop',
@@ -145,6 +157,19 @@ function localRuntimePresence(
     },
     checked_at_unix_ms: 1000,
     ...overrides,
+  } as Omit<DesktopManagedRuntimePresence, 'operations'> & Partial<Pick<DesktopManagedRuntimePresence, 'operations'>>;
+  return {
+    ...presence,
+    operations: overrides.operations ?? buildDesktopRuntimeOperationPlans({
+      surface: 'managed_runtime_card',
+      host_access: presence.host_access,
+      placement: presence.placement,
+      running: presence.running,
+      openable: presence.openable,
+      runtime_service: presence.runtime_service,
+      runtime_control_status: presence.runtime_control_status,
+      maintenance: presence.maintenance,
+    }),
   };
 }
 
@@ -281,7 +306,7 @@ describe('desktopWelcomeState', () => {
         local_environment_ui_bind: '0.0.0.0:24000',
         local_environment_runtime_state: 'running_desktop',
         local_environment_runtime_url: 'http://localhost:23998/',
-        local_environment_close_behavior: 'stops_runtime',
+        local_environment_close_behavior: 'detaches',
       }),
       expect.objectContaining({
         id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
@@ -421,7 +446,9 @@ describe('desktopWelcomeState', () => {
         local_environment_close_behavior: 'detaches',
         window_state: 'closed',
         open_action_label: 'Open',
-        runtime_control_capability: 'start_stop',
+        runtime_operations: expect.objectContaining({
+          stop: expect.objectContaining({ availability: 'available' }),
+        }),
         runtime_health: expect.objectContaining({
           status: 'online',
           runtime_service: expect.objectContaining({
@@ -1124,7 +1151,7 @@ describe('desktopWelcomeState', () => {
     expect(JSON.stringify(sshContainerEntry?.provider_runtime_link_target)).not.toContain('base_url');
   });
 
-  it('uses managed runtime presence as the renderer-facing lifecycle capability source', () => {
+  it('uses managed runtime presence as the renderer-facing operation source', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: testLocalEnvironment({
@@ -1136,16 +1163,16 @@ describe('desktopWelcomeState', () => {
         }),
       }),
       managedRuntimePresenceByTargetID: {
-        'local:local': localRuntimePresence({
-          lifecycle_control: 'observe_only',
-        }),
+        'local:local': localRuntimePresence(),
       },
     });
 
     const localEntry = snapshot.environments.find((entry) => entry.kind === 'local_environment');
     expect(localEntry).toMatchObject({
-      runtime_control_capability: 'observe_only',
       managed_runtime_target_id: 'local:local',
+      runtime_operations: expect.objectContaining({
+        stop: expect.objectContaining({ availability: 'available' }),
+      }),
     });
   });
 

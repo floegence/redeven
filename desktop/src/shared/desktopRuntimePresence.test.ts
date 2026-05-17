@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { buildDesktopRuntimeOperationPlans } from './desktopRuntimeOperationPlanner';
 import {
-  desktopManagedRuntimeLifecycleActions,
   desktopRuntimeControlStatusAvailable,
   desktopRuntimeControlStatusMissing,
   desktopRuntimeControlStatusOwnerMismatch,
@@ -10,41 +10,57 @@ import {
 const hostPlacement = { kind: 'host_process' as const, install_dir: '' };
 
 describe('desktopRuntimePresence', () => {
-  it('derives shared lifecycle actions for running managed runtimes', () => {
-    expect(desktopManagedRuntimeLifecycleActions({
-      running: true,
-      lifecycle_control: 'start_stop',
+  it('uses explicit operation plans for running managed runtimes', () => {
+    const plans = buildDesktopRuntimeOperationPlans({
+      surface: 'managed_runtime_card',
+      host_access: { kind: 'local_host' },
       placement: hostPlacement,
-    })).toEqual([
-      { intent: 'stop_runtime', label: 'Stop runtime', primary: true },
-      { intent: 'refresh_runtime', label: 'Refresh runtime status', primary: false },
-    ]);
+      running: true,
+      openable: true,
+      runtime_control_status: desktopRuntimeControlStatusAvailable(),
+    });
+
+    expect(plans.stop).toMatchObject({
+      availability: 'available',
+      label: 'Stop runtime',
+      method: 'local_host',
+    });
+    expect(plans.start.availability).toBe('unavailable');
+    expect(plans.refresh.availability).toBe('available');
   });
 
-  it('keeps Stop runtime visible when maintenance adds restart or update actions', () => {
-    expect(desktopManagedRuntimeLifecycleActions({
-      running: true,
-      lifecycle_control: 'start_stop',
+  it('keeps host management available when runtime-control owner mismatches', () => {
+    const plans = buildDesktopRuntimeOperationPlans({
+      surface: 'managed_runtime_card',
+      host_access: { kind: 'ssh_host', ssh: {
+        ssh_destination: 'devbox',
+        ssh_port: 22,
+        auth_mode: 'key_agent',
+        remote_install_dir: 'remote_default',
+        bootstrap_strategy: 'desktop_upload',
+        release_base_url: '',
+        connect_timeout_seconds: 10,
+      } },
       placement: hostPlacement,
-      maintenance: {
-        kind: 'ssh_runtime_restart_required',
-        required_for: 'open',
-        can_desktop_restart: true,
-        has_active_work: false,
-        active_work_label: 'No active work',
-        message: 'Restart required.',
-      },
-    }).map((action) => action.intent)).toEqual([
-      'stop_runtime',
-      'restart_runtime',
-      'refresh_runtime',
-    ]);
+      running: true,
+      openable: true,
+      runtime_control_status: desktopRuntimeControlStatusOwnerMismatch('Owned by another Desktop.'),
+    });
+
+    expect(plans.stop).toMatchObject({
+      availability: 'available',
+      method: 'ssh_host',
+    });
+    expect(plans.connect_provider).toMatchObject({
+      availability: 'blocked',
+      reason_code: 'runtime_control_owner_mismatch',
+    });
   });
 
-  it('starts only the runtime process for running container placements', () => {
-    expect(desktopManagedRuntimeLifecycleActions({
-      running: false,
-      lifecycle_control: 'start_stop',
+  it('blocks container start when the management target itself is unavailable', () => {
+    const plans = buildDesktopRuntimeOperationPlans({
+      surface: 'managed_runtime_card',
+      host_access: { kind: 'local_host' },
       placement: {
         kind: 'container_process',
         container_engine: 'docker',
@@ -55,29 +71,19 @@ describe('desktopRuntimePresence', () => {
         runtime_state_root: '/var/lib/redeven',
         bridge_strategy: 'exec_stream',
       },
-    })).toEqual([
-      { intent: 'start_runtime', label: 'Start runtime', primary: true },
-      { intent: 'refresh_runtime', label: 'Refresh runtime status', primary: false },
-    ]);
-  });
-
-  it('uses observe-only lifecycle for unavailable containers', () => {
-    expect(desktopManagedRuntimeLifecycleActions({
       running: false,
-      lifecycle_control: 'observe_only',
-      placement: {
-        kind: 'container_process',
-        container_engine: 'docker',
-        container_id: 'abc123',
-        container_ref: 'web',
-        container_label: 'web',
-        runtime_install_root: '/opt/redeven-desktop/runtime',
-        runtime_state_root: '/var/lib/redeven',
-        bridge_strategy: 'exec_stream',
-      },
-    })).toEqual([
-      { intent: 'refresh_runtime', label: 'Refresh runtime status', primary: false },
-    ]);
+      openable: false,
+      runtime_control_status: desktopRuntimeControlStatusMissing(
+        'forward_unavailable',
+        'Container web is not running.',
+      ),
+    });
+
+    expect(plans.start).toMatchObject({
+      availability: 'blocked',
+      reason_code: 'runtime_target_unavailable',
+      message: 'Container web is not running.',
+    });
   });
 
   it('uses explicit runtime-control status values without exposing tokens', () => {

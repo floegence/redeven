@@ -21,6 +21,7 @@ import type {
   RuntimeServiceSnapshot,
 } from '../shared/runtimeService';
 import type { DesktopManagedRuntimePresence } from '../shared/desktopRuntimePresence';
+import { buildDesktopRuntimeOperationPlans } from '../shared/desktopRuntimeOperationPlanner';
 import {
   testDesktopPreferences,
   testProviderEnvironment,
@@ -201,7 +202,7 @@ function localRuntimePresence(
   runtimeService: RuntimeServiceSnapshot | undefined,
   overrides: Partial<DesktopManagedRuntimePresence> = {},
 ): DesktopManagedRuntimePresence {
-  return {
+  const presence = {
     target_id: 'local:local',
     placement_target_id: 'local:host:local',
     kind: 'local_environment',
@@ -213,7 +214,6 @@ function localRuntimePresence(
     running: true,
     local_ui_url: 'http://127.0.0.1:24001/',
     openable: true,
-    lifecycle_control: 'start_stop',
     ...(runtimeService ? { runtime_service: runtimeService } : {}),
     runtime_control_status: {
       state: 'available',
@@ -221,6 +221,19 @@ function localRuntimePresence(
     },
     checked_at_unix_ms: Date.now(),
     ...overrides,
+  } as Omit<DesktopManagedRuntimePresence, 'operations'> & Partial<Pick<DesktopManagedRuntimePresence, 'operations'>>;
+  return {
+    ...presence,
+    operations: overrides.operations ?? buildDesktopRuntimeOperationPlans({
+      surface: 'managed_runtime_card',
+      host_access: presence.host_access,
+      placement: presence.placement,
+      running: presence.running,
+      openable: presence.openable,
+      runtime_service: presence.runtime_service,
+      runtime_control_status: presence.runtime_control_status,
+      maintenance: presence.maintenance,
+    }),
   };
 }
 
@@ -625,10 +638,9 @@ describe('buildEnvironmentCardModel', () => {
           running: false,
           local_ui_url: '',
           openable: false,
-          lifecycle_control: 'observe_only',
           runtime_control_status: {
             state: 'missing',
-            reason_code: 'not_started',
+            reason_code: 'forward_unavailable',
             message: 'Container dev-container was not found. Choose a running container, then try again.',
           },
         }),
@@ -688,7 +700,6 @@ describe('buildEnvironmentCardModel', () => {
           running: false,
           local_ui_url: '',
           openable: false,
-          lifecycle_control: 'start_stop',
           runtime_control_status: {
             state: 'missing',
             reason_code: 'not_started',
@@ -716,6 +727,76 @@ describe('buildEnvironmentCardModel', () => {
       actions: expect.arrayContaining([
         expect.objectContaining({
           label: 'Start runtime',
+        }),
+      ]),
+    });
+  });
+
+  it('offers Update runtime when a stopped container target has a stale runtime package', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment(),
+      }),
+      managedRuntimePresenceByTargetID: {
+        'local:local': localRuntimePresence(undefined, {
+          placement_target_id: 'local:container:docker:dev-container:abc12345',
+          placement: {
+            kind: 'container_process',
+            container_engine: 'docker',
+            container_id: 'new-container-id',
+            container_ref: 'dev-container',
+            container_label: 'dev-container',
+            runtime_install_root: '/opt/redeven-desktop/runtime',
+            runtime_state_root: '/var/lib/redeven',
+            bridge_strategy: 'exec_stream',
+          },
+          running: false,
+          local_ui_url: '',
+          openable: false,
+          runtime_control_status: {
+            state: 'missing',
+            reason_code: 'not_started',
+            message: 'Start this runtime before connecting it to a provider.',
+          },
+          maintenance: {
+            kind: 'ssh_runtime_update_required',
+            required_for: 'open',
+            can_desktop_restart: true,
+            has_active_work: false,
+            active_work_label: 'No active work',
+            current_runtime_version: 'v0.5.9',
+            target_runtime_version: 'v0.6.7',
+            message: 'Update this container runtime before starting it with the bundled runtime.',
+          },
+        }),
+      },
+    });
+    const localEntry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
+    const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);
+
+    expect(actionModel.action_presentation.menu_actions.map((item) => item.id)).not.toContain('start_runtime');
+    expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'update_runtime',
+        action: expect.objectContaining({
+          intent: 'update_runtime',
+          label: 'Update runtime',
+          enabled: true,
+        }),
+      }),
+    ]));
+    expect(actionModel.action_presentation.primary_action_overlay).toMatchObject({
+      kind: 'popover',
+      title: 'Update the runtime to continue',
+      detail: 'Open becomes available after Desktop updates the runtime package in this running container and the runtime reports ready.',
+      actions: expect.arrayContaining([
+        expect.objectContaining({
+          label: 'Update runtime',
+          action: expect.objectContaining({
+            intent: 'update_runtime',
+            label: 'Update runtime',
+            enabled: true,
+          }),
         }),
       ]),
     });
@@ -853,10 +934,10 @@ describe('buildEnvironmentCardModel', () => {
           },
           {
             id: 'update_runtime',
-            label: 'Update and restart…',
+            label: 'Update runtime',
             action: {
               intent: 'update_runtime',
-              label: 'Update and restart…',
+              label: 'Update runtime',
               enabled: true,
               variant: 'outline',
             },
@@ -1313,17 +1394,15 @@ describe('buildEnvironmentCardModel', () => {
         }),
       }),
       managedRuntimePresenceByTargetID: {
-        'local:local': localRuntimePresence(providerRuntimeService(), {
-          lifecycle_control: 'observe_only',
-        }),
+        'local:local': localRuntimePresence(providerRuntimeService()),
       },
     });
-    const observeOnlyLocalEntry = observeOnlySnapshot.environments.find((environment) => environment.kind === 'local_environment');
-    const observeOnlyMenuActionIDs = buildProviderBackedEnvironmentActionModel(observeOnlyLocalEntry!)
+    const managedLocalEntry = observeOnlySnapshot.environments.find((environment) => environment.kind === 'local_environment');
+    const managedMenuActionIDs = buildProviderBackedEnvironmentActionModel(managedLocalEntry!)
       .action_presentation.menu_actions.map((item) => item.id);
-    expect(observeOnlyMenuActionIDs).toContain('runtime_managed_externally');
-    expect(observeOnlyMenuActionIDs).not.toContain('stop_runtime');
-    expect(observeOnlyMenuActionIDs).not.toContain('start_runtime');
+    expect(managedMenuActionIDs).toContain('stop_runtime');
+    expect(managedMenuActionIDs).not.toContain('runtime_managed_externally');
+    expect(managedMenuActionIDs).not.toContain('start_runtime');
 
     const openLocalServeSnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
@@ -1885,6 +1964,16 @@ describe('buildEnvironmentCardModel', () => {
             action: {
               intent: 'stop_runtime',
               label: 'Stop runtime',
+              enabled: true,
+              variant: 'outline',
+            },
+          },
+          {
+            id: 'restart_runtime',
+            label: 'Restart runtime',
+            action: {
+              intent: 'restart_runtime',
+              label: 'Restart runtime',
               enabled: true,
               variant: 'outline',
             },

@@ -45,10 +45,7 @@ import {
   type DesktopProviderCatalogFreshness,
   type DesktopProviderRemoteRouteState,
 } from '../shared/providerEnvironmentState';
-import type {
-  DesktopRuntimeControlCapability,
-  DesktopRuntimeHealth,
-} from '../shared/desktopRuntimeHealth';
+import type { DesktopRuntimeHealth } from '../shared/desktopRuntimeHealth';
 import {
   normalizeDesktopRuntimeMaintenanceRequirement,
 } from '../shared/desktopRuntimeHealth';
@@ -57,6 +54,9 @@ import {
   type DesktopManagedRuntimePresence,
   type DesktopRuntimeControlStatus,
 } from '../shared/desktopRuntimePresence';
+import { buildDesktopRuntimeOperationPlans } from '../shared/desktopRuntimeOperationPlanner';
+import type { DesktopRuntimeOperationPlans } from '../shared/desktopRuntimeOperations';
+import { desktopRuntimePackageStateFromRuntimeService } from '../shared/desktopRuntimePackageState';
 import {
   normalizeRuntimeServiceSnapshot,
   runtimeServiceProviderConnectionState,
@@ -79,6 +79,7 @@ import {
 import {
   desktopRuntimeTargetID,
   type DesktopRuntimeHostAccess,
+  type DesktopRuntimePlacement,
 } from '../shared/desktopRuntimePlacement';
 import { normalizeLocalUIBaseURL } from './localUIURL';
 
@@ -357,6 +358,7 @@ function managedRuntimeEntryFields(
   | 'managed_runtime_placement_target_id'
   | 'managed_runtime_host_access'
   | 'managed_runtime_placement'
+  | 'runtime_operations'
 >> {
   if (!presence) {
     return {};
@@ -366,13 +368,51 @@ function managedRuntimeEntryFields(
     managed_runtime_placement_target_id: presence.placement_target_id,
     managed_runtime_host_access: presence.host_access,
     managed_runtime_placement: presence.placement,
+    runtime_operations: presence.operations,
   };
 }
 
-function managedRuntimeControlCapability(
-  presence: DesktopManagedRuntimePresence | undefined,
-): DesktopRuntimeControlCapability {
-  return presence?.lifecycle_control ?? 'start_stop';
+function managedRuntimeOperations(args: Readonly<{
+  presence?: DesktopManagedRuntimePresence;
+  hostAccess?: DesktopRuntimeHostAccess;
+  placement?: DesktopRuntimePlacement;
+  running: boolean;
+  openable: boolean;
+  runtimeService?: RuntimeServiceSnapshot;
+  runtimeControlStatus?: DesktopRuntimeControlStatus;
+  maintenance?: DesktopEnvironmentEntry['runtime_maintenance'];
+}>): DesktopRuntimeOperationPlans {
+  if (args.presence) {
+    return args.presence.operations;
+  }
+  const runtimePackageState = desktopRuntimePackageStateFromRuntimeService(args.runtimeService, args.maintenance);
+  return buildDesktopRuntimeOperationPlans({
+    surface: 'managed_runtime_card',
+    host_access: args.hostAccess,
+    placement: args.placement,
+    running: args.running,
+    openable: args.openable,
+    package_state: runtimePackageState,
+    runtime_service: args.runtimeService,
+    runtime_control_status: args.runtimeControlStatus,
+    maintenance: args.maintenance,
+  });
+}
+
+function externalLocalUIRuntimeOperations(openable: boolean): DesktopRuntimeOperationPlans {
+  return buildDesktopRuntimeOperationPlans({
+    surface: 'external_local_ui',
+    running: openable,
+    openable,
+  });
+}
+
+function providerRuntimeOperations(openable: boolean): DesktopRuntimeOperationPlans {
+  return buildDesktopRuntimeOperationPlans({
+    surface: 'provider_card',
+    running: openable,
+    openable,
+  });
 }
 
 function openSessionByURL(
@@ -777,7 +817,7 @@ function preferredRuntimeService(
 }
 
 function localCloseBehavior(runtimeState: DesktopLocalRuntimeState): DesktopLocalCloseBehavior {
-  return runtimeState === 'running_external' ? 'detaches' : 'stops_runtime';
+  return runtimeState === 'not_running' ? 'not_applicable' : 'detaches';
 }
 
 function localEnvironmentRuntimeHealth(
@@ -977,6 +1017,17 @@ function buildLocalEnvironmentEntry(
     presence,
     localEnvironmentRuntimeHealth(resolvedLocalRuntimeState, resolvedLocalRuntimeURL, runtimeService),
   );
+  const runtimeMaintenance = runtimeMaintenanceFromHealth(runtimeHealth);
+  const runtimeOperations = managedRuntimeOperations({
+    presence,
+    hostAccess: { kind: 'local_host' },
+    placement: { kind: 'host_process', install_dir: environment.local_hosting.state_dir },
+    running: runtimeHealth.status === 'online',
+    openable: runtimeServiceIsOpenable(runtimeService),
+    runtimeService,
+    runtimeControlStatus: presence?.runtime_control_status ?? defaultRuntimeControlStatusForRunningState(runtimeHealth.status === 'online'),
+    maintenance: runtimeMaintenance,
+  });
   const providerRuntimeLinkTarget = buildProviderRuntimeLinkTarget({
     id: desktopProviderRuntimeLinkTargetID('local_environment', environment.id),
     kind: 'local_environment',
@@ -1065,7 +1116,8 @@ function buildLocalEnvironmentEntry(
     is_opening: isOpening,
     runtime_health: runtimeHealth,
     runtime_service: runtimeService,
-    runtime_control_capability: managedRuntimeControlCapability(presence),
+    runtime_maintenance: runtimeMaintenance,
+    runtime_operations: runtimeOperations,
     open_session_key: localSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(localSession),
     open_action_label: localEnvironmentOpenActionLabel({
@@ -1233,7 +1285,7 @@ function buildProviderEnvironmentEntry(
     is_opening: effectiveWindowState === 'opening',
     runtime_health: runtimeHealth,
     runtime_service: undefined,
-    runtime_control_capability: 'observe_only',
+    runtime_operations: providerRuntimeOperations(effectiveWindowState === 'open' || routeDetails.remoteRouteState === 'ready'),
     open_session_key: effectiveSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(effectiveSession),
     open_action_label: localEnvironmentOpenActionLabel({
@@ -1393,7 +1445,7 @@ function buildSavedEnvironmentEntry(
     runtime_health: runtimeHealth,
     runtime_service: preferredRuntimeService(openSession?.startup?.runtime_service, savedRuntimeHealth),
     runtime_maintenance: runtimeMaintenanceFromHealth(runtimeHealth),
-    runtime_control_capability: 'observe_only',
+    runtime_operations: externalLocalUIRuntimeOperations(runtimeHealth.status === 'online'),
     open_session_key: openSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(openSession),
     open_action_label: isOpen ? 'Focus' : isOpening ? 'Opening…' : 'Open',
@@ -1433,7 +1485,20 @@ function buildSavedSSHEnvironmentEntry(
       'Serve the runtime first',
     );
   const runtimeService = preferredRuntimeService(openSession?.startup?.runtime_service, savedRuntimeHealth, presence);
+  const runtimeMaintenance = runtimeMaintenanceFromHealth(runtimeHealth);
   const runtimeKey = desktopSSHEnvironmentID(environment);
+  const hostAccess: DesktopRuntimeHostAccess = { kind: 'ssh_host', ssh: environment };
+  const placement: DesktopRuntimePlacement = { kind: 'host_process', install_dir: environment.remote_install_dir };
+  const runtimeOperations = managedRuntimeOperations({
+    presence,
+    hostAccess,
+    placement,
+    running: runtimeHealth.status === 'online',
+    openable: runtimeServiceIsOpenable(runtimeService),
+    runtimeService,
+    runtimeControlStatus: presence?.runtime_control_status ?? defaultRuntimeControlStatusForRunningState(runtimeHealth.status === 'online'),
+    maintenance: runtimeMaintenance,
+  });
   const providerRuntimeLinkTarget = buildProviderRuntimeLinkTarget({
     id: desktopProviderRuntimeLinkTargetID('ssh_environment', runtimeKey),
     kind: 'ssh_environment',
@@ -1469,11 +1534,11 @@ function buildSavedSSHEnvironmentEntry(
     is_opening: isOpening,
     runtime_health: runtimeHealth,
     runtime_service: runtimeService,
-    runtime_maintenance: runtimeMaintenanceFromHealth(runtimeHealth),
+    runtime_maintenance: runtimeMaintenance,
     provider_runtime_link_target: providerRuntimeLinkTarget,
     provider_environment_candidates: providerEnvironmentCandidates,
     ...managedRuntimeEntryFields(presence),
-    runtime_control_capability: managedRuntimeControlCapability(presence),
+    runtime_operations: runtimeOperations,
     open_session_key: openSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(openSession),
     open_action_label: isOpen ? 'Focus' : isOpening ? 'Opening…' : 'Open',
@@ -1534,6 +1599,17 @@ function buildSavedRuntimeTargetEntry(
   const localUIURL = presence?.local_ui_url ?? openSession?.entry_url ?? openSession?.startup?.local_ui_url ?? runtimeHealth.local_ui_url ?? '';
   const effectiveHostAccess = presence?.host_access ?? target.host_access;
   const effectivePlacement = presence?.placement ?? target.placement;
+  const runtimeMaintenance = runtimeMaintenanceFromHealth(runtimeHealth);
+  const runtimeOperations = managedRuntimeOperations({
+    presence,
+    hostAccess: effectiveHostAccess,
+    placement: effectivePlacement,
+    running: runtimeHealth.status === 'online',
+    openable: runtimeServiceIsOpenable(runtimeService),
+    runtimeService,
+    runtimeControlStatus: presence?.runtime_control_status ?? defaultRuntimeControlStatusForRunningState(runtimeHealth.status === 'online'),
+    maintenance: runtimeMaintenance,
+  });
   const effectiveTarget = {
     ...target,
     host_access: effectiveHostAccess,
@@ -1554,14 +1630,14 @@ function buildSavedRuntimeTargetEntry(
     is_opening: isOpening,
     runtime_health: runtimeHealth,
     runtime_service: runtimeService,
-    runtime_maintenance: runtimeMaintenanceFromHealth(runtimeHealth),
+    runtime_maintenance: runtimeMaintenance,
     provider_runtime_link_target: providerRuntimeLinkTarget,
     provider_environment_candidates: providerEnvironmentCandidates,
     managed_runtime_target_id: desktopRuntimeTargetID(effectiveHostAccess, effectivePlacement),
     managed_runtime_placement_target_id: target.id,
     managed_runtime_host_access: effectiveHostAccess,
     managed_runtime_placement: effectivePlacement,
-    runtime_control_capability: managedRuntimeControlCapability(presence),
+    runtime_operations: runtimeOperations,
     open_session_key: openSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(openSession),
     open_action_label: isOpen ? 'Focus' : isOpening ? 'Opening…' : 'Open',

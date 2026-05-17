@@ -46,7 +46,7 @@ describe('sessionRuntime', () => {
     })).toBe('external');
   });
 
-  it('detaches from external attached runtimes without stopping their host process', async () => {
+  it('keeps explicit stop control for external attached runtimes', async () => {
     const stop = vi.fn<() => Promise<void>>().mockResolvedValue();
     const runtime: ManagedRuntime = {
       child: null,
@@ -70,7 +70,7 @@ describe('sessionRuntime', () => {
     expect(handle.launch_mode).toBe('attached');
 
     await handle.stop();
-    expect(stop).not.toHaveBeenCalled();
+    expect(stop).toHaveBeenCalledTimes(1);
   });
 
   it('preserves stop control for attached runtimes leased to this Desktop', async () => {
@@ -100,7 +100,7 @@ describe('sessionRuntime', () => {
     expect(stop).toHaveBeenCalledTimes(1);
   });
 
-  it('detaches from attached Desktop-managed runtimes leased to another Desktop', async () => {
+  it('keeps explicit stop control for attached Desktop-managed runtimes leased to another Desktop', async () => {
     const stop = vi.fn<() => Promise<void>>().mockResolvedValue();
     const runtime: ManagedRuntime = {
       child: null,
@@ -124,6 +124,6 @@ describe('sessionRuntime', () => {
     expect(handle.lifecycle_owner).toBe('external');
 
     await handle.stop();
-    expect(stop).not.toHaveBeenCalled();
+    expect(stop).toHaveBeenCalledTimes(1);
   });
 });

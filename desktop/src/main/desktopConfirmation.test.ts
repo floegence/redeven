@@ -19,8 +19,8 @@ import type { DesktopConfirmationDialogModel } from '../shared/desktopConfirmati
 
 const quitModel: DesktopConfirmationDialogModel = {
   title: 'Quit Redeven Desktop?',
-  message: 'This will stop 2 Desktop-managed runtimes and close 1 environment window.',
-  detail: '1 externally managed runtime will keep running.',
+  message: 'This will close 1 environment window.',
+  detail: '3 runtime processes will keep running.',
   confirm_label: 'Quit',
   cancel_label: 'Cancel',
   confirm_tone: 'danger',
@@ -38,8 +38,8 @@ describe('desktopConfirmation', () => {
     })).toEqual({
       type: 'warning',
       title: 'Quit Redeven Desktop?',
-      message: 'This will stop 2 Desktop-managed runtimes and close 1 environment window.',
-      detail: '1 externally managed runtime will keep running.',
+      message: 'This will close 1 environment window.',
+      detail: '3 runtime processes will keep running.',
       buttons: ['Quit', 'Cancel'],
       defaultId: 1,
       cancelId: 1,
@@ -54,8 +54,8 @@ describe('desktopConfirmation', () => {
     })).toEqual({
       type: 'warning',
       title: 'Exit Redeven Desktop?',
-      message: 'This will stop 2 Desktop-managed runtimes and close 1 environment window.',
-      detail: '1 externally managed runtime will keep running.',
+      message: 'This will close 1 environment window.',
+      detail: '3 runtime processes will keep running.',
       buttons: ['Exit', 'Cancel'],
       defaultId: 1,
       cancelId: 1,
@@ -104,8 +104,8 @@ describe('desktopConfirmation', () => {
     expect(electronState.showMessageBox).toHaveBeenCalledWith(parentWindow, {
       type: 'warning',
       title: 'Quit Redeven Desktop?',
-      message: 'This will stop 2 Desktop-managed runtimes and close 1 environment window.',
-      detail: '1 externally managed runtime will keep running.',
+      message: 'This will close 1 environment window.',
+      detail: '3 runtime processes will keep running.',
       buttons: ['Quit', 'Cancel'],
       defaultId: 1,
       cancelId: 1,
@@ -131,8 +131,8 @@ describe('desktopConfirmation', () => {
     expect(electronState.showMessageBox).toHaveBeenCalledWith({
       type: 'warning',
       title: 'Exit Redeven Desktop?',
-      message: 'This will stop 2 Desktop-managed runtimes and close 1 environment window.',
-      detail: '1 externally managed runtime will keep running.',
+      message: 'This will close 1 environment window.',
+      detail: '3 runtime processes will keep running.',
       buttons: ['Exit', 'Cancel'],
       defaultId: 1,
       cancelId: 1,

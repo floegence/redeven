@@ -3,6 +3,7 @@ import {
   type DesktopRuntimeHostAccess,
   type DesktopRuntimePlacement,
 } from '../shared/desktopRuntimePlacement';
+import type { DesktopRuntimeMaintenanceRequirement } from '../shared/desktopRuntimeHealth';
 import {
   containerInspectCommand,
   containerRuntimePlatformProbeCommand,
@@ -47,6 +48,16 @@ export type ReadyRuntimePlacement = Readonly<{
   runtime_binary_path: string;
   probe: DesktopSSHRemoteRuntimeProbeResult;
 }>;
+
+export class RuntimePlacementMaintenanceRequiredError extends Error {
+  readonly maintenance: DesktopRuntimeMaintenanceRequirement;
+
+  constructor(message: string, maintenance: DesktopRuntimeMaintenanceRequirement) {
+    super(message);
+    this.name = 'RuntimePlacementMaintenanceRequiredError';
+    this.maintenance = maintenance;
+  }
+}
 
 export type EnsureRuntimePlacementReadyArgs = Readonly<{
   host_access: DesktopRuntimeHostAccess;
@@ -190,6 +201,24 @@ export async function ensureRuntimePlacementReady(
   const shouldInstallRuntime = probe.status !== 'ready'
     || args.force_runtime_update === true
     || sourceRuntimeRoot !== '';
+  if (
+    probe.status !== 'ready'
+    && probe.status !== 'missing_binary'
+    && args.force_runtime_update !== true
+    && sourceRuntimeRoot === ''
+  ) {
+    const maintenance: DesktopRuntimeMaintenanceRequirement = {
+      kind: 'ssh_runtime_update_required',
+      required_for: 'open',
+      can_desktop_restart: true,
+      has_active_work: false,
+      active_work_label: 'No active work',
+      current_runtime_version: probe.reported_release_tag ?? undefined,
+      target_runtime_version: probe.expected_release_tag,
+      message: 'Update this container runtime before starting it with the bundled runtime.',
+    };
+    throw new RuntimePlacementMaintenanceRequiredError(maintenance.message, maintenance);
+  }
   if (shouldInstallRuntime) {
     emitProgress(
       args.on_progress,
