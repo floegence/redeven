@@ -11,9 +11,9 @@ import type {
 import type {
   DesktopEnvironmentWindowState,
   DesktopRuntimeMaintenanceRequirement,
-  DesktopRuntimeControlCapability,
   DesktopRuntimeHealth,
 } from './desktopRuntimeHealth';
+import type { DesktopRuntimeOperationPlans } from './desktopRuntimeOperations';
 import type { DesktopLocalRuntimeOpenPlan } from './localRuntimeSupervisor';
 import type { RuntimeServiceProviderConnectionState, RuntimeServiceSnapshot } from './runtimeService';
 import {
@@ -44,7 +44,7 @@ export type DesktopEnvironmentEntryTag = 'Open' | 'Saved' | 'Local' | 'Provider'
 export type DesktopEnvironmentEntryCategory = 'local' | 'provider' | 'saved';
 export type DesktopLocalEnvironmentStateRoute = 'local_host' | 'remote_desktop';
 export type DesktopLocalRuntimeState = 'not_running' | 'running_desktop' | 'running_external';
-export type DesktopLocalCloseBehavior = 'stops_runtime' | 'detaches' | 'not_applicable';
+export type DesktopLocalCloseBehavior = 'detaches' | 'not_applicable';
 export type DesktopLauncherSessionLifecycle = 'opening' | 'open' | 'closing';
 export type DesktopLauncherOperationStatus =
   | 'running'
@@ -63,6 +63,7 @@ export type DesktopLauncherActionOutcome =
   | 'opened_environment_window'
   | 'focused_environment_window'
   | 'started_environment_runtime'
+  | 'updated_environment_runtime'
   | 'connected_provider_runtime'
   | 'disconnected_provider_runtime'
   | 'stopped_environment_runtime'
@@ -108,6 +109,7 @@ export type DesktopLauncherActionKind =
   | 'open_remote_environment'
   | 'open_ssh_environment'
   | 'start_environment_runtime'
+  | 'update_environment_runtime'
   | 'connect_provider_runtime'
   | 'disconnect_provider_runtime'
   | 'stop_environment_runtime'
@@ -228,7 +230,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   runtime_health: DesktopRuntimeHealth;
   runtime_service?: RuntimeServiceSnapshot;
   runtime_maintenance?: DesktopRuntimeMaintenanceRequirement;
-  runtime_control_capability: DesktopRuntimeControlCapability;
+  runtime_operations: DesktopRuntimeOperationPlans;
   open_session_key: string;
   open_session_lifecycle?: DesktopLauncherSessionLifecycle;
   open_action_label: 'Open' | 'Opening…' | 'Focus';
@@ -300,6 +302,9 @@ export type DesktopLauncherActionRequest = Readonly<
     } & DesktopSSHEnvironmentDetails & DesktopLauncherRuntimeTarget)
   | ({
       kind: 'start_environment_runtime';
+    } & DesktopLauncherRuntimeTarget)
+  | ({
+      kind: 'update_environment_runtime';
     } & DesktopLauncherRuntimeTarget)
   | {
       kind: 'connect_provider_runtime';
@@ -635,6 +640,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       } as DesktopLauncherActionRequest;
     }
     case 'start_environment_runtime':
+    case 'update_environment_runtime':
     case 'stop_environment_runtime':
     case 'refresh_environment_runtime': {
       const target = normalizeDesktopLauncherRuntimeTarget(candidate as Record<string, unknown>);

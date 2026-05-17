@@ -1,4 +1,6 @@
 import type { DesktopRuntimeMaintenanceRequirement } from './desktopRuntimeHealth';
+import type { DesktopRuntimeOperationPlans } from './desktopRuntimeOperations';
+import type { DesktopRuntimePackageState } from './desktopRuntimePackageState';
 import type {
   DesktopRuntimeHostAccess,
   DesktopRuntimePlacement,
@@ -23,8 +25,6 @@ export type DesktopRuntimeControlStatus =
       message: string;
     }>;
 
-export type DesktopManagedRuntimeLifecycleControl = 'start_stop' | 'observe_only';
-
 export type DesktopManagedRuntimePresence = Readonly<{
   target_id: DesktopProviderRuntimeLinkTargetID;
   placement_target_id: DesktopRuntimeTargetID;
@@ -37,24 +37,12 @@ export type DesktopManagedRuntimePresence = Readonly<{
   running: boolean;
   local_ui_url: string;
   openable: boolean;
-  lifecycle_control: DesktopManagedRuntimeLifecycleControl;
+  runtime_package_state?: DesktopRuntimePackageState;
   runtime_service?: RuntimeServiceSnapshot;
   runtime_control_status: DesktopRuntimeControlStatus;
+  operations: DesktopRuntimeOperationPlans;
   maintenance?: DesktopRuntimeMaintenanceRequirement;
   checked_at_unix_ms: number;
-}>;
-
-export type DesktopManagedRuntimeLifecycleIntent =
-  | 'start_runtime'
-  | 'stop_runtime'
-  | 'restart_runtime'
-  | 'update_runtime'
-  | 'refresh_runtime';
-
-export type DesktopManagedRuntimeLifecycleAction = Readonly<{
-  intent: DesktopManagedRuntimeLifecycleIntent;
-  label: string;
-  primary: boolean;
 }>;
 
 const missingNotStarted: DesktopRuntimeControlStatus = {
@@ -96,51 +84,4 @@ export function defaultRuntimeControlStatusForRunningState(running: boolean): De
   return running
     ? desktopRuntimeControlStatusMissing('not_reported', 'Restart this runtime from Desktop so runtime-control can be prepared.')
     : missingNotStarted;
-}
-
-// IMPORTANT: Local and SSH cards are both managed runtime cards. Their host
-// access differs, but lifecycle action semantics must stay shared.
-export function desktopManagedRuntimeLifecycleActions(
-  presence: Pick<DesktopManagedRuntimePresence, 'running' | 'lifecycle_control' | 'maintenance' | 'placement'>,
-): readonly DesktopManagedRuntimeLifecycleAction[] {
-  if (presence.lifecycle_control !== 'start_stop') {
-    return [
-      {
-        intent: 'refresh_runtime',
-        label: 'Refresh runtime status',
-        primary: false,
-      },
-    ];
-  }
-
-  const actions: DesktopManagedRuntimeLifecycleAction[] = [];
-  if (presence.running) {
-    actions.push({
-      intent: 'stop_runtime',
-      label: 'Stop runtime',
-      primary: true,
-    });
-  } else {
-    actions.push({
-      intent: 'start_runtime',
-      label: 'Start runtime',
-      primary: true,
-    });
-  }
-
-  if (presence.maintenance) {
-    actions.push({
-      intent: presence.maintenance.kind === 'ssh_runtime_restart_required' ? 'restart_runtime' : 'update_runtime',
-      label: presence.maintenance.kind === 'ssh_runtime_restart_required' ? 'Restart runtime…' : 'Update and restart…',
-      primary: false,
-    });
-  }
-
-  actions.push({
-    intent: 'refresh_runtime',
-    label: 'Refresh runtime status',
-    primary: false,
-  });
-
-  return actions;
 }

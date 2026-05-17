@@ -49,6 +49,7 @@ export type StartManagedRuntimeArgs = Readonly<{
   runtimeStabilityPollMs?: number;
   desktopOwnerID?: string;
   expectedRuntimeIdentity?: RuntimeServiceIdentity | null;
+  forceRuntimeUpdate?: boolean;
   passwordStdin?: string;
   onLog?: (stream: 'stdout' | 'stderr', chunk: string) => void;
 }>;
@@ -424,6 +425,7 @@ function managedRuntimeAttachPolicy(
   args: Readonly<{
     desktopOwnerID?: string;
     expectedRuntimeIdentity?: RuntimeServiceIdentity | null;
+    forceRuntimeUpdate?: boolean;
   }>,
 ): ManagedRuntimeAttachPolicy {
   const ownership = managedRuntimeOwnership(startup, String(args.desktopOwnerID ?? ''));
@@ -442,6 +444,12 @@ function managedRuntimeAttachPolicy(
     || !runtimeServiceMatchesIdentity(startup.runtime_service, args.expectedRuntimeIdentity);
   if (!runtimeNeedsRestart) {
     return { action: 'reuse' };
+  }
+  if (args.forceRuntimeUpdate !== true) {
+    return {
+      action: 'block',
+      message: 'This runtime needs an explicit update before Desktop can start it with the bundled runtime.',
+    };
   }
   if (runtimeServiceHasActiveWork(startup.runtime_service)) {
     return {
@@ -498,6 +506,7 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
     const attachPolicy = managedRuntimeAttachPolicy(existingRuntime, {
       desktopOwnerID: args.desktopOwnerID,
       expectedRuntimeIdentity: args.expectedRuntimeIdentity,
+      forceRuntimeUpdate: args.forceRuntimeUpdate,
     });
     if (attachPolicy.action === 'block') {
       throw readinessFailure(attachPolicy.message, { stdout: '', stderr: '' });
@@ -593,6 +602,7 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
       const attachPolicy = managedRuntimeAttachPolicy(attachedStartup, {
         desktopOwnerID: args.desktopOwnerID,
         expectedRuntimeIdentity: args.expectedRuntimeIdentity,
+        forceRuntimeUpdate: args.forceRuntimeUpdate,
       });
       if (attachPolicy.action === 'block') {
         throw readinessFailure(attachPolicy.message, recentLogs);
@@ -629,6 +639,7 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
       const attachPolicy = managedRuntimeAttachPolicy(attachedStartup, {
         desktopOwnerID: args.desktopOwnerID,
         expectedRuntimeIdentity: args.expectedRuntimeIdentity,
+        forceRuntimeUpdate: args.forceRuntimeUpdate,
       });
       if (attachPolicy.action === 'block') {
         throw readinessFailure(attachPolicy.message, recentLogs);

@@ -44,7 +44,8 @@ The user-facing model has two first-class objects:
 
 The UI should say `Runtime Service` when describing lifecycle or maintenance,
 and `Redeven Desktop` when describing the shell app release. Version decisions
-remain automatic unless user confirmation is needed to protect live work.
+are classified automatically, but existing-runtime update and replacement work
+starts only from an explicit user action.
 
 ## UX Principles
 
@@ -263,14 +264,14 @@ Env App protocol SDK types.
 | `restart_recommended` | Continue work, plan restart | Toast; action `Restart when idle` |
 | `update_required` | Existing work preserved; new risky actions blocked | Dialog-driven maintenance action |
 | `desktop_update_required` | Runtime is newer than Desktop | Toast + release handoff; do not downgrade |
-| `managed_elsewhere` | Desktop cannot own lifecycle | Stable card state + toast on blocked action |
+| `managed_elsewhere` | Runtime-control owner is not this Desktop | Provider-link guidance; host/container operations still use the runtime-card operation plan |
 | `unknown` | Metadata unavailable | Quiet degraded state; diagnostics available |
 
-Desktop treats the runtime as a singleton per Local Environment profile. Desktop-managed ownership is a lease, not a heuristic: Electron persists one `desktop_owner_id` under `userData`, passes it to managed child processes with `REDEVEN_DESKTOP_OWNER_ID`, and only owns an attached runtime when the runtime reports the same id through startup reports, `runtime/local-ui.json`, and Local UI health/runtime endpoints.
+Desktop treats the runtime as a singleton per Local Environment profile, but runtime-card management is no longer derived from whether Desktop "owns" that process. Electron still persists one `desktop_owner_id` under `userData` and passes it to managed child processes with `REDEVEN_DESKTOP_OWNER_ID`; that owner id remains a runtime-control lease for secure RPC surfaces such as provider linking and Desktop model-source binding. Stop, restart, start, and update availability comes from the runtime operation plan built from host access, placement, running state, package state, Runtime Service readiness, and maintenance requirements.
 
-Provider binding is an explicit runtime-card action, not a side effect of `Open` and not a runtime restart plan. Provider cards always open through the provider tunnel and never manage runtime lifecycle. Welcome `Start Runtime` starts only the Local or SSH runtime represented by that runtime card. `Connect to provider...` obtains provider open-session material, sends the one-time provider-link ticket to the selected running Local/SSH runtime over runtime-control, and lets the runtime start or replace only the provider control-channel goroutine. Once that binding is persisted, it is explicit authorization for later Desktop-managed startup to restore the provider control channel from saved config as part of the runtime lifecycle. `Disconnect from provider` revokes that authorization: it requires the current control channel to acknowledge an active disconnect before Desktop treats the link as removed, then Desktop refreshes provider runtime health from the provider API instead of locally fabricating an offline state. Active provider-originated work blocks relink. External-managed runtimes and runtimes leased to another Desktop instance stay outside Desktop ownership and are never silently replaced. Legacy Desktop-managed runtimes without a lease id are restart-reclaimable only when idle for lifecycle maintenance, not for provider binding.
+Provider binding is an explicit runtime-card action, not a side effect of `Open` and not a runtime restart plan. Provider cards always open through the provider tunnel and never manage runtime lifecycle. Welcome `Start runtime` starts only the Local/SSH/container runtime represented by that runtime card. It may install the runtime package when the target has no runtime yet, but it must not silently update or replace an existing package. `Update runtime` is the explicit user-visible path for outdated, incompatible, or maintenance-required runtime packages. `Connect to provider...` obtains provider open-session material, sends the one-time provider-link ticket to the selected running Local/SSH runtime over runtime-control, and lets the runtime start or replace only the provider control-channel goroutine. Once that binding is persisted, it is explicit authorization for later Desktop-managed startup to restore the provider control channel from saved config as part of the runtime lifecycle. `Disconnect from provider` revokes that authorization: it requires the current control channel to acknowledge an active disconnect before Desktop treats the link as removed, then Desktop refreshes provider runtime health from the provider API instead of locally fabricating an offline state. Active provider-originated work blocks relink. Runtime-control owner mismatch blocks provider-link RPC but does not hide host/container stop or restart operations.
 
-Container runtime targets use the same Runtime Service maintenance model. A Local Container or SSH Container card is still a managed runtime card because the user has host access to the machine that can execute `docker` or `podman`; only the process placement differs. Desktop first inspects the running container, detects its platform, installs or updates the Desktop-managed Redeven runtime under the container-internal install root, verifies the Desktop stamp/version, and only then starts the `redeven desktop-bridge` byte-stream protocol using the resolved container-local binary path. Local UI and runtime-control stay behind a Desktop-owned loopback proxy, and bridge/bootstrap changes are Runtime/Desktop compatibility surfaces. Container lifecycle remains separate from runtime lifecycle: Redeven lists, saves, and revalidates only running containers, and it never starts or stops the container itself.
+Container runtime targets use the same Runtime Service maintenance model. A Local Container or SSH Container card is still a managed runtime card because the user has host access to the machine that can execute `docker` or `podman`; only the process placement differs. Desktop first inspects the running container, detects its platform, and verifies the Desktop stamp/version under the container-internal install root. `Start runtime` installs only when the probe reports that no runtime package exists. Existing mismatched or invalid packages surface `Update runtime` instead of being replaced by start/open. Local UI and runtime-control stay behind a Desktop-owned loopback proxy, and bridge/bootstrap changes are Runtime/Desktop compatibility surfaces. Container lifecycle remains separate from runtime lifecycle: Redeven lists, saves, and revalidates only running containers, and it never starts or stops the container itself.
 
 ## Desktop Launcher UI
 
@@ -293,11 +294,12 @@ Desktop launcher cards keep their current dense SaaS tool layout:
   runtime health for that environment.
 - Primary actions remain route-aware:
   - compatible: `Open`
-  - not running: `Open`
-  - idle legacy managed runtime: `Open` with a restart-reclaim plan
-  - update required: `Open` with restart plan when idle
+  - not running: `Open` stays disabled and offers `Start runtime`
+  - first install needed: `Open` stays disabled and offers `Start runtime`
+  - restart required: `Open` stays disabled and offers `Restart runtime`
+  - update required: `Open` stays disabled and offers `Update runtime`
   - desktop too old: `Update Desktop`
-  - managed elsewhere: `Open` stays blocked with owner guidance
+  - runtime-control owner mismatch: provider-link actions stay blocked with owner guidance while host/container operations remain available when the management channel exists
 - Action feedback continues through Desktop toasts. No launcher content should
   shift when a version event arrives.
 
@@ -369,7 +371,7 @@ Actions:
 
 Transient update prompts are toast-driven:
 
-- automatic optional update: `Runtime update ready. Restart when your work is idle.`
+- optional update available: `Runtime update ready. Restart when your work is idle.`
 - desktop-managed runtime: `Runtime is managed by Redeven Desktop. Use Desktop maintenance controls.`
 - failure: `Runtime maintenance failed. Open Runtime Status for details.`
 

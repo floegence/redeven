@@ -13,10 +13,6 @@ export type DesktopSessionRuntimeHandle = Readonly<{
   stop: () => Promise<void>;
 }>;
 
-function noopStop(): Promise<void> {
-  return Promise.resolve();
-}
-
 export function resolveManagedRuntimeLifecycleOwner(
   startup: StartupReport,
   options: Readonly<{
@@ -63,6 +59,6 @@ export function desktopSessionRuntimeHandleFromManagedRuntime(
     runtime_kind: 'local_environment',
     lifecycle_owner: lifecycleOwner,
     launch_mode: runtime.attached ? 'attached' : 'spawned',
-    stop: lifecycleOwner === 'desktop' ? runtime.stop : noopStop,
+    stop: runtime.stop,
   };
 }

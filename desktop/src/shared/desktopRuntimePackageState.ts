@@ -1,0 +1,66 @@
+import type { DesktopRuntimeMaintenanceRequirement } from './desktopRuntimeHealth';
+import {
+  runtimeServiceNeedsRuntimeUpdate,
+  type RuntimeServiceSnapshot,
+} from './runtimeService';
+
+export type DesktopRuntimePackageState =
+  | Readonly<{
+      state: 'absent';
+      target_version: string;
+    }>
+  | Readonly<{
+      state: 'compatible';
+      current_version: string;
+      target_version: string;
+    }>
+  | Readonly<{
+      state: 'outdated';
+      current_version: string;
+      target_version: string;
+    }>
+  | Readonly<{
+      state: 'incompatible';
+      current_version?: string;
+      target_version: string;
+      reason: string;
+    }>
+  | Readonly<{
+      state: 'unknown';
+      target_version: string;
+      reason: string;
+    }>;
+
+function compact(value: unknown): string {
+  return String(value ?? '').trim();
+}
+
+export function desktopRuntimePackageStateFromRuntimeService(
+  runtimeService: RuntimeServiceSnapshot | undefined,
+  maintenance: DesktopRuntimeMaintenanceRequirement | undefined,
+): DesktopRuntimePackageState | undefined {
+  const targetVersion = compact(maintenance?.target_runtime_version);
+  const currentVersion = compact(maintenance?.current_runtime_version ?? runtimeService?.runtime_version);
+  if (maintenance?.kind === 'ssh_runtime_update_required' || maintenance?.kind === 'desktop_model_source_requires_runtime_update') {
+    return {
+      state: 'outdated',
+      current_version: currentVersion || 'unknown',
+      target_version: targetVersion || currentVersion || 'unknown',
+    };
+  }
+  if (runtimeServiceNeedsRuntimeUpdate(runtimeService)) {
+    return {
+      state: 'outdated',
+      current_version: currentVersion || 'unknown',
+      target_version: targetVersion || currentVersion || 'unknown',
+    };
+  }
+  if (runtimeService) {
+    return {
+      state: 'compatible',
+      current_version: currentVersion || targetVersion || 'unknown',
+      target_version: targetVersion || currentVersion || 'unknown',
+    };
+  }
+  return undefined;
+}

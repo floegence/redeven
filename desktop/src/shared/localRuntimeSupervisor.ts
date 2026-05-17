@@ -269,13 +269,13 @@ export function buildDesktopLocalRuntimeOpenPlan(
       runtimeRunning,
       runtimeMatchesTarget,
       desktopCanManage,
-      canOpen: true,
-      canPrepare: true,
+      canOpen: false,
+      canPrepare: false,
       requiresBootstrap,
       requiresRestart: true,
       requiresConfirmation: false,
       runtimeURL,
-      message: 'Desktop will restart the Local Runtime with the bundled update before opening.',
+      message: 'Update and restart this Local Runtime before opening. Open stays separate from runtime maintenance.',
     });
   }
 

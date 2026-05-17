@@ -881,59 +881,44 @@ describe('sshRuntime integration', () => {
     await removeFakeSSHFixture(fixture);
   });
 
-  it('replaces an idle attached runtime that does not yet support Desktop model source RPC', async () => {
+  it('surfaces update maintenance for an idle attached runtime that does not yet support Desktop model source RPC', async () => {
     const fixture = await createFakeSSHFixture('attached_unsupported_idle');
-    let runtime: ManagedSSHRuntime | null = null;
-    try {
-      runtime = await startWithFakeSSH(fixture, 'auto', {
-        requireDesktopModelSource: true,
-      });
-      expect(runtime.runtime_handle.launch_mode).toBe('spawned');
-      expect(runtime.startup.runtime_service).toMatchObject({
-        runtime_version: 'v1.2.3',
-        bindings: {
-          desktop_model_source: {
-            state: 'unbound',
-          },
-        },
-      });
-    } finally {
-      await runtime?.disconnect();
-    }
+    await expect(startWithFakeSSH(fixture, 'auto', {
+      requireDesktopModelSource: true,
+    })).rejects.toMatchObject({
+      name: 'DesktopSSHRuntimeMaintenanceRequiredError',
+      maintenance: expect.objectContaining({
+        kind: 'desktop_model_source_requires_runtime_update',
+        required_for: 'desktop_model_source',
+        has_active_work: false,
+      }),
+    });
 
     const events = await readFakeSSHEvents(fixture);
-    expect(events.map((event) => event.event)).toEqual(expect.arrayContaining([
-      'start_runtime',
-      'stop_runtime',
-      'runtime_control_forward_start',
-    ]));
+    expect(events.map((event) => event.event)).toContain('start_runtime');
+    expect(events.map((event) => event.event)).not.toContain('stop_runtime');
+    expect(events.map((event) => event.event)).not.toContain('runtime_control_forward_start');
     await removeFakeSSHFixture(fixture);
   });
 
-  it('restarts an idle SSH runtime that is missing Desktop runtime-control before opening tunnels', async () => {
+  it('surfaces restart maintenance when an idle SSH runtime is missing Desktop runtime-control', async () => {
     const fixture = await createFakeSSHFixture('missing_runtime_control_idle');
-    let runtime: ManagedSSHRuntime | null = null;
-    try {
-      runtime = await startWithFakeSSH(fixture, 'auto');
-      expect(runtime.startup.runtime_control).toEqual(expect.objectContaining({
-        protocol_version: 'redeven-runtime-control-v1',
-        desktop_owner_id: 'desktop-owner-test',
-      }));
-      expect(runtime.runtime_control_forward_url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/$/u);
-    } finally {
-      await runtime?.disconnect();
-    }
+    await expect(startWithFakeSSH(fixture, 'auto')).rejects.toMatchObject({
+      name: 'DesktopSSHRuntimeMaintenanceRequiredError',
+      maintenance: expect.objectContaining({
+        kind: 'ssh_runtime_restart_required',
+        required_for: 'open',
+        can_desktop_restart: true,
+        has_active_work: false,
+      }),
+    });
 
     const events = await readFakeSSHEvents(fixture);
     const eventNames = events.map((event) => event.event);
-    expect(eventNames).toEqual(expect.arrayContaining([
-      'start_runtime',
-      'stop_runtime',
-      'runtime_control_forward_start',
-      'forward_start',
-    ]));
-    expect(eventNames.filter((event) => event === 'start_runtime')).toHaveLength(2);
-    expect(eventNames.indexOf('stop_runtime')).toBeLessThan(eventNames.indexOf('runtime_control_forward_start'));
+    expect(eventNames).toContain('start_runtime');
+    expect(eventNames).not.toContain('stop_runtime');
+    expect(eventNames).not.toContain('runtime_control_forward_start');
+    expect(eventNames).not.toContain('forward_start');
     await removeFakeSSHFixture(fixture);
   });
 
@@ -995,7 +980,14 @@ describe('sshRuntime integration', () => {
     const fixture = await createFakeSSHFixture('attached_unsupported_active');
     await expect(startWithFakeSSH(fixture, 'auto', {
       requireDesktopModelSource: true,
-    })).rejects.toThrow('needs to update before Desktop can prepare the Desktop model source');
+    })).rejects.toMatchObject({
+      name: 'DesktopSSHRuntimeMaintenanceRequiredError',
+      maintenance: expect.objectContaining({
+        kind: 'desktop_model_source_requires_runtime_update',
+        required_for: 'desktop_model_source',
+        has_active_work: true,
+      }),
+    });
 
     const events = await readFakeSSHEvents(fixture);
     expect(events.map((event) => event.event)).toContain('start_runtime');
@@ -1178,7 +1170,7 @@ describe('sshRuntime integration', () => {
     ]));
     expect(eventNames.filter((event) => event === 'start_runtime')).toHaveLength(2);
     await removeFakeSSHFixture(fixture);
-  });
+  }, 10_000);
 
   it('allows password authentication by disabling SSH batch mode and configuring askpass', async () => {
     const fixture = await createFakeSSHFixture('ready');

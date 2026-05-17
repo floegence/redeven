@@ -46,7 +46,8 @@ Desktop may add user-configured startup flags on top of that base command:
 
 Behavior:
 
-- Local UI always starts for the Desktop-owned Local Environment runtime that Desktop owns locally.
+- Desktop is a view and control panel for runtimes the user can manage from this device. It does not act as a background supervisor for automatic start, stop, restart, or update work.
+- Local UI starts for the Local Environment runtime selected by the user through an explicit runtime action.
 - `--password-stdin` is the non-interactive desktop-managed password transport.
 - Desktop creates one stable, non-secret runtime owner id in Electron `userData` and passes it only to Desktop-managed runtimes through `REDEVEN_DESKTOP_OWNER_ID`.
 - Desktop resolves the managed state root before spawn and passes it explicitly to `redeven run`.
@@ -55,16 +56,19 @@ Behavior:
 - `--controlplane`, `--env-id`, and `--bootstrap-ticket-env` remain explicit CLI/manual bootstrap inputs. They are not part of the Welcome Local Environment `Start Runtime` path.
 - Desktop attach probing reads `runtime/local-ui.json` from the same resolved state root as the spawned config path.
 - Provider `Open` is a window/navigation action that always opens the provider Environment through the provider tunnel. It never opens a Local/SSH forwarded UI, never starts a managed runtime, and never connects a runtime to a provider.
-- A Desktop-managed runtime is lifecycle-owned by this Desktop only when `desktop_owner_id` matches the current Desktop owner id. Runtimes owned by another Desktop instance or an external CLI process are not silently adopted.
-- Desktop may restart an older Desktop-owned runtime for lifecycle maintenance only when Runtime Service reports no active workload. Provider binding changes are not implemented by restarting the runtime.
+- Runtime-card actions are derived from an explicit operation plan, not from process provenance. Local, SSH, Local Container, and SSH Container cards can expose `Start runtime`, `Stop runtime`, `Restart runtime`, and `Update runtime` when Desktop has the matching host/container management channel.
+- `Open` is a window/navigation action. It never starts, stops, restarts, updates, installs, or replaces a runtime.
+- `Start runtime` may perform the first runtime installation on a host or inside a running container when no runtime package is present. It must not silently update or replace an existing runtime package.
+- `Update runtime` is always explicit and user-visible. Existing outdated, incompatible, or maintenance-required runtimes keep `Open` blocked until the user chooses the update/restart action.
+- Runtime-control ownership only gates runtime-control RPC features such as provider linking. It does not decide whether the host/container runtime process can be stopped or restarted from the runtime card.
 - If active workload is present, Desktop keeps `Open` blocked and shows interruption-safe guidance instead of closing terminals, sessions, tasks, or port forwards implicitly.
 - The Local UI password stays out of process args and environment variables.
 - Provider one-time bootstrap tickets stay out of process args and renderer state. Welcome provider linking is initiated from Local/SSH runtime cards and passes tickets from Electron main to the selected running runtime through the desktop-only runtime-control endpoint.
 - Desktop startup reports and attachable runtime state include a non-secret `password_required` boolean so launcher and attach flows can describe whether the current runtime is protected.
 - Remote provider control is enabled after a successful explicit provider-link operation, an explicit non-Welcome bootstrap launch, or a later Desktop-managed startup that restores a valid saved provider binding.
 - `--desktop-managed` disables CLI self-upgrade semantics.
-- Desktop-owned managed-runtime restart stays available, but it is owned by Electron main rather than runtime self-`exec`.
-- Managed restart reuses Desktop-owned startup preferences, including `--password-stdin`, and preserves the current resolved loopback bind when the saved bind uses the advanced auto-port loopback option such as `127.0.0.1:0`.
+- Managed restart is an explicit user action owned by Electron main rather than runtime self-`exec`.
+- Managed restart reuses saved startup preferences, including `--password-stdin`, and preserves the current resolved loopback bind when the saved bind uses the advanced auto-port loopback option such as `127.0.0.1:0`.
 - `--startup-report-file` lets Electron wait for a structured desktop launch report instead of scraping terminal output.
 - On lock conflicts, the runtime first tries to attach to an existing Local UI from the same state directory before reporting a blocked launch outcome.
 - Desktop startup settings do not create a second preference-owned runtime target; the resolved Local Environment state directory remains the runtime source of truth.
@@ -86,7 +90,7 @@ Instead it validates and probes the configured Local UI base URL, then opens tha
 When the selected target is `SSH Host Environment`, Desktop still keeps Redeven Local UI as the only runtime contract.
 It does not introduce a second SSH-native file or terminal protocol. Electron main validates the SSH entry, opens an SSH control connection, installs or reuses the pinned Desktop-managed Redeven release on the host, starts `redeven run --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0` remotely with Desktop ownership, verifies the reported Runtime Service snapshot, and forwards both the remote Local UI and runtime-control endpoint back to the user's machine.
 
-The SSH Host open flow stays two-step: startup prepares or attaches the runtime, and the user still chooses `Open` before Desktop opens the forwarded Local UI origin. Env App receives an `ssh_environment` session context so Web Services treat remote-host `localhost` targets as remote loopback and open through `/pf/<forward_id>/`.
+The SSH Host runtime flow stays two-step: `Start runtime` prepares or attaches the runtime, and the user still chooses `Open` before Desktop opens the forwarded Local UI origin. Env App receives an `ssh_environment` session context so Web Services treat remote-host `localhost` targets as remote loopback and open through `/pf/<forward_id>/`.
 
 For Desktop-managed SSH and container runtimes, Desktop also starts a short-lived Desktop Model Source RPC connector on the user's machine. The connector reads the Desktop Local Environment's `config.json` and `secrets.json`, exposes only Redeven AI RPC methods over runtime-control, and never exposes files, terminals, ports, or Desktop IPC to the remote host or container. Desktop initiates the WebSocket RPC connection through the runtime-control endpoint that is already forwarded for the selected runtime; SSH reverse forwarding and host-network assumptions are not part of the model path. The runtime-control token is passed only to the local connector process through an environment variable and is not written to remote config, secrets, or logs.
 
@@ -178,8 +182,8 @@ Launcher model:
 - `Environment Settings` is launcher-owned and edits startup behavior for the profile Local Environment; saving settings never switches Environments or creates another local runtime identity.
 - Provider cards represent provider-tunnel access only. Their `Open` action always uses the provider tunnel, and their dropdown does not expose runtime lifecycle or provider-link controls.
 - Provider cards expose a `LOCAL LINK` fact only as a locator for the Local/SSH/container runtime card that owns the provider binding. Clicking it applies a precise linked-runtime filter in the Environment Library; it does not open the provider through the local runtime or mutate the binding.
-- Local and SSH cards represent runtime management. Their primary card action slot is always `Open`; lifecycle actions (`Start Runtime`, `Restart Runtime`, `Stop Runtime`) and provider-link actions (`Connect to provider...`, `Disconnect from provider`) live only on those runtime cards.
-- `Start Runtime` appears only in Local/SSH runtime card popups and dropdown menus. Provider cards do not expose `Start Runtime`.
+- Local and SSH cards represent runtime management. Their primary card action slot is always `Open`; advanced runtime actions (`Start runtime`, `Stop runtime`, `Restart runtime`, `Update runtime`) and provider-link actions (`Connect to provider...`, `Disconnect from provider`) live in the split-button dropdown or the disabled-Open guidance popover.
+- `Start runtime` appears only in Local/SSH/container runtime card popups and dropdown menus. Provider cards do not expose `Start runtime`.
 - `Connect to provider...` appears only on Local/SSH runtime cards and always requires the user to choose a provider Environment. Desktop does not preselect a provider and does not auto-link from a provider card. A saved provider binding is explicit authorization for later managed runtime startup to restore the provider control channel without showing `Connect to provider...` again.
 - SSH Host entries store the destination, optional port, bootstrap delivery mode, remote install directory, and optional release mirror base URL. Desktop reuses release artifacts for the exact Desktop-managed version and lets the remote host own its runtime state.
 - Runtime health and window state are separate. Cards always show runtime version, using `UNKNOWN` when runtime metadata is unavailable; runtime status and active-work impact stay in badges, action recovery, and maintenance confirmations while primary actions remain window-scoped (`Open`, `Opening...`, `Focus`).
@@ -266,11 +270,11 @@ Desktop semantics:
 - One Local Environment runtime may be active for the signed-in user / profile state root. Connecting a provider Environment is an explicit runtime-control operation against that singleton runtime.
 - Provider environments never persist provider-specific local runtime configuration; Desktop derives linked-local readiness from the single Local Environment runtime and its current provider binding.
 - Standalone runtime / CLI and Desktop sessions stay interoperable because both read and write the same Local Environment runtime layout.
-- Externally owned runtimes stay externally owned: Desktop can attach, but restart/update remain delegated to the owner.
+- Process provenance stays diagnostic: Desktop can attach to externally started local runtimes, but explicit stop/restart/update availability is decided by the host or container management channel, not by an ownership label.
 
 ### Container Runtime Targets
 
-Local Container and SSH Container entries are managed runtime cards. Their primary action slot remains `Open`, lifecycle actions stay in the card popup/dropdown, and provider-link actions remain explicit runtime-card actions. Provider Environment cards do not start, stop, open locally, or connect these runtimes.
+Local Container and SSH Container entries are managed runtime cards. Their primary action slot remains `Open`, runtime actions stay in the split-button dropdown or guidance popover, and provider-link actions remain explicit runtime-card actions. Provider Environment cards do not start, stop, open locally, or connect these runtimes.
 
 Container targets use the Runtime Placement Bridge instead of published container ports:
 
@@ -305,7 +309,7 @@ Runtime Service snapshots are carried through the same attach and startup paths 
 
 The snapshot is intentionally non-secret and uses snake_case fields such as `runtime_version`, `runtime_commit`, `runtime_build_time`, `protocol_version`, `service_owner`, `desktop_managed`, `desktop_owner_id`, `effective_run_mode`, `remote_enabled`, `compatibility`, `active_workload`, `capabilities`, and `bindings`. Desktop treats it as service identity, maintenance context, and live attach capability state, not as a second runtime protocol.
 
-For SSH Host sessions, Desktop validates the final running snapshot before reuse. If an attached runtime lacks required capabilities, Desktop replaces it only when the reported workload is idle and the process can be stopped; otherwise it blocks open with explicit restart/update guidance.
+For SSH Host sessions, Desktop validates the final running snapshot before reuse. If an attached runtime lacks required capabilities, Desktop blocks `Open` with restart/update guidance until the user explicitly chooses the matching runtime-card operation. Replacement then proceeds only when the process can be stopped and the user accepts the active-work impact.
 
 Target validation rules:
 
@@ -425,10 +429,10 @@ Non-goals:
 - The native app menu exposes one primary shell action: `Connect Environment...`
 - The native app menu also preserves OS-owned window-command roles for close, full screen, and window management, so custom desktop headers do not replace native shortcut inheritance.
 - `Quit Redeven Desktop` resolves the current quit impact before shutdown instead of relying on a generic fixed warning.
-- If Desktop still owns one or more managed runtimes, the quit confirmation states the concrete shutdown impact in one concise sentence and only keeps a short secondary note when externally managed runtimes remain unaffected.
-- On macOS, closing the final Desktop window keeps the app running, but Desktop now warns before the last window disappears when that close would hide the active environment surface or leave Desktop-managed runtimes running in the background.
-- Desktop-owned quit and final-window-close confirmations now use the platform-native system dialog surface, so macOS, Windows, and Linux each keep their expected shutdown affordances.
-- On non-macOS platforms, closing the final Desktop window uses that same quit-impact protection before the app is allowed to exit and stop Desktop-owned runtimes.
+- Quit confirmations describe only Desktop-owned UI impact: environment windows close, pending launcher tasks may be canceled, and runtime processes keep running.
+- On macOS, closing the final Desktop window keeps the app running, but Desktop warns before the last window disappears when that close would hide the active environment surface or pending work.
+- Quit and final-window-close confirmations use the platform-native system dialog surface, so macOS, Windows, and Linux each keep their expected shutdown affordances.
+- On non-macOS platforms, closing the final Desktop window uses that same quit-impact protection before the app is allowed to exit. Exiting Desktop does not stop runtime processes.
 - Shell window aliases such as `connect` route to the same welcome launcher.
 - Compatible providers may also enter through the registered `redeven://` deep-link scheme.
 - Generic settings aliases such as `advanced_settings` route to the launcher-owned `Environment Settings` dialog.
@@ -477,8 +481,8 @@ Desktop-specific outcomes from this implementation:
 
 - Desktop-managed Local UI exposes `desktop_managed`, `desktop_owner_id`, `effective_run_mode`, `remote_enabled`, and the normalized Runtime Service snapshot through local runtime/version endpoints.
 - When the runtime reports a desktop-owned release policy, Env App turns `Update Redeven` into `Manage in Desktop`.
-- Env App keeps `Restart runtime` only for Desktop-owned managed runtimes.
-- When Desktop is attached to an externally owned local runtime, restart and update hand off to the owning host process instead of trying to stop that runtime from Electron, and Desktop quit warnings do not claim that external runtime as a Desktop-owned shutdown.
+- Env App receives Desktop's explicit maintenance context and must not infer restart/update availability from `desktop_managed` or process provenance.
+- When Desktop is attached to a local runtime through a host management channel, explicit restart/stop actions use that channel. Desktop quit and window close still detach without stopping the runtime.
 - When a desktop-managed restart finishes, Env App recovers in place through the same shell-owned reconnect/access-gate flow used by other reconnect scenarios.
 - If the restarted runtime requires password verification again, the same page asks for the Local UI password instead of requiring a manual browser refresh.
 - Desktop resolves update impact before continuing:

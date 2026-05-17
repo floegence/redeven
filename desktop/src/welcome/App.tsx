@@ -1828,14 +1828,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function runtimeUnavailableMessage(environment: DesktopEnvironmentEntry): string {
-    return environment.runtime_control_capability === 'start_stop'
+    return environment.runtime_operations.start.availability === 'available'
       ? 'Start the runtime first to continue.'
       : 'This runtime is offline or unavailable right now.';
   }
 
   function runtimeActionRequest(
     environment: DesktopEnvironmentEntry,
-    kind: 'start_environment_runtime' | 'stop_environment_runtime' | 'refresh_environment_runtime',
+    kind: 'start_environment_runtime' | 'update_environment_runtime' | 'stop_environment_runtime' | 'refresh_environment_runtime',
     options: Readonly<{ forceRuntimeUpdate?: boolean; allowActiveWorkReplacement?: boolean }> = {},
   ): DesktopLauncherActionRequest | null {
     const runtimeTarget = {
@@ -1934,12 +1934,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
     options: Readonly<{
       announceSuccess?: boolean;
-      forceRuntimeUpdate?: boolean;
       allowActiveWorkReplacement?: boolean;
     }> = {},
   ): Promise<boolean> {
     const request = runtimeActionRequest(environment, 'start_environment_runtime', {
-      forceRuntimeUpdate: options.forceRuntimeUpdate,
       allowActiveWorkReplacement: options.allowActiveWorkReplacement,
     });
     if (!request) {
@@ -1952,6 +1950,26 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       showActionToast(`Runtime started for ${environment.label}.`);
     }
     return started;
+  }
+
+  async function updateEnvironmentRuntime(
+    environment: DesktopEnvironmentEntry,
+    errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
+  ): Promise<boolean> {
+    const request = runtimeActionRequest(environment, 'update_environment_runtime', {
+      forceRuntimeUpdate: true,
+      allowActiveWorkReplacement: true,
+    });
+    if (!request) {
+      setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', 'Desktop could not resolve that runtime target.');
+      return false;
+    }
+    const result = await performLauncherAction(request, errorTarget);
+    const updated = result?.outcome === 'updated_environment_runtime' || result?.outcome === 'started_environment_runtime';
+    if (updated) {
+      showActionToast(`Runtime updated for ${environment.label}.`);
+    }
+    return updated;
   }
 
   async function stopEnvironmentRuntime(
@@ -1994,10 +2012,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (confirmation.action === 'update') {
       setRuntimeMaintenanceConfirmation(null);
       const latestTarget = await loadLatestEnvironmentEntry(target.id) ?? target;
-      await startEnvironmentRuntime(latestTarget, 'connect', {
-        forceRuntimeUpdate: true,
-        allowActiveWorkReplacement: true,
-      });
+      await updateEnvironmentRuntime(latestTarget, 'connect');
       return;
     }
     if (confirmation.action === 'restart' && target.kind === 'ssh_environment' && target.runtime_maintenance) {
@@ -4295,6 +4310,8 @@ function isEnvironmentActionBusy(
         && busyState.action === 'start_control_plane_connect';
     case 'start_runtime':
       return busyStateMatchesEnvironment(busyState, environmentID, ['start_environment_runtime']);
+    case 'update_runtime':
+      return busyStateMatchesEnvironment(busyState, environmentID, ['update_environment_runtime']);
     case 'connect_provider_runtime':
       return busyStateMatchesEnvironment(busyState, environmentID, ['connect_provider_runtime']);
     case 'disconnect_provider_runtime':
@@ -4883,11 +4900,14 @@ function EnvironmentConnectionCard(props: Readonly<{
   const isRuntimeActionBusy = createMemo(() => (
     busyStateMatchesEnvironment(props.busyState, props.environment.id, [
       'start_environment_runtime',
+      'update_environment_runtime',
       'stop_environment_runtime',
       'refresh_environment_runtime',
     ])
     || busyStateMatchesAction(props.busyState, 'refresh_all_environment_runtimes')
-    || activeProgressForEnvironment(props.environment.id, props.busyState, props.actionProgress)?.action === 'start_environment_runtime'
+    || ['start_environment_runtime', 'update_environment_runtime'].includes(
+      activeProgressForEnvironment(props.environment.id, props.busyState, props.actionProgress)?.action ?? '',
+    )
   ));
   const isPinBusy = createMemo(() => (
     busyStateMatchesEnvironment(props.busyState, props.environment.id, [

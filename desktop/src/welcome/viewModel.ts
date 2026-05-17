@@ -23,8 +23,10 @@ import {
   desktopProviderEnvironmentOpenRoute,
 } from '../shared/environmentManagementPrinciples';
 import {
-  desktopManagedRuntimeLifecycleActions,
-} from '../shared/desktopRuntimePresence';
+  desktopRuntimeOperationIsVisible,
+  type DesktopRuntimeOperation,
+  type DesktopRuntimeOperationPlan,
+} from '../shared/desktopRuntimeOperations';
 
 export type DesktopWelcomeShellViewModel = Readonly<{
   shell_title: 'Redeven Desktop';
@@ -900,6 +902,50 @@ function runtimeProviderLinkCanConnect(
     || plans.some((plan) => plan.state === 'provider_environment_occupied');
 }
 
+const runtimeOperationMenuOrder: readonly DesktopRuntimeOperation[] = [
+  'start',
+  'stop',
+  'restart',
+  'update',
+];
+
+function runtimeOperationIntent(operation: DesktopRuntimeOperation): EnvironmentActionIntent | null {
+  switch (operation) {
+    case 'start':
+      return 'start_runtime';
+    case 'stop':
+      return 'stop_runtime';
+    case 'restart':
+      return 'restart_runtime';
+    case 'update':
+      return 'update_runtime';
+    case 'refresh':
+      return 'refresh_runtime';
+    default:
+      return null;
+  }
+}
+
+function runtimeOperationMenuItem(plan: DesktopRuntimeOperationPlan | undefined): EnvironmentActionMenuItemModel | null {
+  if (!plan || !desktopRuntimeOperationIsVisible(plan) || plan.availability !== 'available') {
+    return null;
+  }
+  const intent = runtimeOperationIntent(plan.operation);
+  if (!intent) {
+    return null;
+  }
+  return {
+    id: intent,
+    label: plan.label,
+    action: {
+      intent,
+      label: plan.label,
+      enabled: plan.availability === 'available',
+      variant: 'outline',
+    },
+  };
+}
+
 function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly EnvironmentActionMenuItemModel[] {
   const items: EnvironmentActionMenuItemModel[] = [];
   const remoteRouteAction = providerRemoteRouteMenuAction(environment);
@@ -910,50 +956,23 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
   if (runtimeProviderLinkAction) {
     items.push(runtimeProviderLinkAction);
   }
-  if (environment.runtime_control_capability === 'start_stop') {
-    if (desktopEntryKindOwnsRuntimeManagement(environment.kind)) {
-      const lifecycleActions = desktopManagedRuntimeLifecycleActions({
-        running: environment.runtime_health.status === 'online',
-        lifecycle_control: 'start_stop',
-        maintenance: environmentRuntimeMaintenance(environment),
-        placement: environment.managed_runtime_placement ?? { kind: 'host_process', install_dir: '' },
-      });
-      for (const lifecycleAction of lifecycleActions) {
-        if (lifecycleAction.intent === 'refresh_runtime') {
-          continue;
-        }
-        const runtimeAction: EnvironmentActionModel = {
-          intent: lifecycleAction.intent,
-          label: lifecycleAction.label,
-          enabled: true,
-          variant: 'outline',
-        };
-        items.push({
-          id: runtimeAction.intent,
-          label: runtimeAction.label,
-          action: runtimeAction,
-        });
+  if (desktopEntryKindOwnsRuntimeManagement(environment.kind)) {
+    for (const operation of runtimeOperationMenuOrder) {
+      const item = runtimeOperationMenuItem(environment.runtime_operations[operation]);
+      if (item) {
+        items.push(item);
       }
     }
-  } else if (desktopEntryKindOwnsRuntimeManagement(environment.kind) && !remoteRouteAction) {
-    items.push({
-      id: 'runtime_managed_externally',
-      label: 'Runtime managed externally',
-      action: {
-        intent: 'unavailable',
-        label: 'Runtime managed externally',
-        enabled: false,
-        variant: 'outline',
-      },
-    });
   }
+  const refreshPlan = environment.runtime_operations.refresh;
+  const refreshLabel = environment.kind === 'provider_environment' ? 'Refresh provider status' : 'Refresh runtime status';
   items.push({
     id: 'refresh_runtime',
-    label: environment.kind === 'provider_environment' ? 'Refresh provider status' : 'Refresh runtime status',
+    label: refreshLabel,
     action: {
       intent: 'refresh_runtime',
-      label: environment.kind === 'provider_environment' ? 'Refresh provider status' : 'Refresh runtime status',
-      enabled: true,
+      label: refreshLabel,
+      enabled: refreshPlan?.availability !== 'blocked',
       variant: 'outline',
     },
   });
@@ -964,28 +983,38 @@ function blockedPrimaryActionGuidanceAction(
   environment: DesktopEnvironmentEntry,
   menuActions: readonly EnvironmentActionMenuItemModel[],
 ): EnvironmentGuidanceActionModel | null {
-  const recoveryAction = menuActions.find((item) => (
-    item.action.enabled
-      && item.action.intent === 'start_runtime'
-  )) ?? menuActions.find((item) => (
-    item.action.enabled
-      && item.action.intent === 'connect_provider_runtime'
-  ));
+  const recoveryIntents: readonly EnvironmentActionIntent[] = [
+    'start_runtime',
+    'update_runtime',
+    'restart_runtime',
+    'connect_provider_runtime',
+  ];
+  const recoveryAction = recoveryIntents
+    .map((intent) => menuActions.find((item) => item.action.enabled && item.action.intent === intent))
+    .find((item): item is EnvironmentActionMenuItemModel => item !== undefined) ?? null;
   if (!recoveryAction) {
     return null;
   }
-  if (recoveryAction.action.intent === 'connect_provider_runtime') {
-    return {
-      label: 'Connect to provider',
-      emphasis: 'primary',
-      action: recoveryAction.action,
-    };
-  }
   return {
-    label: 'Start runtime',
+    label: primaryGuidanceActionLabel(recoveryAction.action.intent),
     emphasis: 'primary',
     action: recoveryAction.action,
   };
+}
+
+function primaryGuidanceActionLabel(intent: EnvironmentActionIntent): string {
+  switch (intent) {
+    case 'start_runtime':
+      return 'Start runtime';
+    case 'update_runtime':
+      return 'Update runtime';
+    case 'restart_runtime':
+      return 'Restart runtime';
+    case 'connect_provider_runtime':
+      return 'Connect to provider';
+    default:
+      return 'Continue';
+  }
 }
 
 function blockedPrimaryActionRefreshGuidanceAction(
@@ -1089,6 +1118,12 @@ function blockedPrimaryActionTitle(
   if (action.intent === 'connect_provider_runtime') {
     return 'Connect to provider to continue';
   }
+  if (action.intent === 'update_runtime') {
+    return 'Update the runtime to continue';
+  }
+  if (action.intent === 'restart_runtime') {
+    return 'Restart the runtime to continue';
+  }
   return environment.kind === 'ssh_environment'
     ? 'Start the runtime to continue'
     : 'Start the local runtime to continue';
@@ -1100,6 +1135,19 @@ function blockedPrimaryActionDetail(
 ): string {
   if (action.intent === 'connect_provider_runtime') {
     return 'Connect this runtime to a provider Environment first. Open stays separate and becomes available after the link is ready.';
+  }
+  if (action.intent === 'update_runtime') {
+    if (environment.managed_runtime_placement?.kind === 'container_process') {
+      return 'Open becomes available after Desktop updates the runtime package in this running container and the runtime reports ready.';
+    }
+    return environment.kind === 'ssh_environment'
+      ? 'Open becomes available after Desktop updates the runtime on this SSH host and it reports ready.'
+      : 'Open becomes available after Desktop updates the runtime on this device and it reports ready.';
+  }
+  if (action.intent === 'restart_runtime') {
+    return environment.kind === 'ssh_environment'
+      ? 'Open becomes available after Desktop restarts the runtime on this SSH host and it reports ready.'
+      : 'Open becomes available after Desktop restarts the runtime and it reports ready.';
   }
   if (environment.managed_runtime_placement?.kind === 'container_process') {
     return 'Open becomes available once Desktop starts the runtime inside this running container.';

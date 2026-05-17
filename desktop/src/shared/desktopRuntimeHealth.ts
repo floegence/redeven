@@ -1,7 +1,6 @@
 import type { RuntimeServiceSnapshot } from './runtimeService';
 
 export type DesktopRuntimeStatus = 'online' | 'offline';
-export type DesktopRuntimeControlCapability = 'start_stop' | 'observe_only';
 export type DesktopRuntimeMaintenanceKind =
   | 'ssh_runtime_update_required'
   | 'ssh_runtime_restart_required'
