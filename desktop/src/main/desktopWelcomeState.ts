@@ -516,41 +516,6 @@ function fallbackControlPlaneSummaries(
   }));
 }
 
-function providerEnvironmentRecordsFromControlPlanes(
-  controlPlanes: readonly DesktopControlPlaneSummary[],
-): readonly DesktopProviderEnvironmentRecord[] {
-  const records: DesktopProviderEnvironmentRecord[] = [];
-  for (const controlPlane of controlPlanes) {
-    for (const environment of controlPlane.environments) {
-      records.push(createDesktopProviderEnvironmentRecord(
-        controlPlane.provider.provider_origin,
-        environment.env_public_id,
-        {
-          providerID: controlPlane.provider.provider_id,
-          label: environment.label,
-          remoteCatalogEntry: desktopProviderEnvironmentRemoteCatalogEntryFromPublished(environment),
-          createdAtMS: controlPlane.last_synced_at_ms,
-          updatedAtMS: controlPlane.last_synced_at_ms,
-        },
-      ));
-    }
-  }
-  return records;
-}
-
-function providerEnvironmentRecordsForSnapshot(
-  stored: readonly DesktopProviderEnvironmentRecord[],
-  controlPlanes: readonly DesktopControlPlaneSummary[],
-): readonly DesktopProviderEnvironmentRecord[] {
-  const recordsByID = new Map(stored.map((environment) => [environment.id, environment] as const));
-  for (const environment of providerEnvironmentRecordsFromControlPlanes(controlPlanes)) {
-    if (!recordsByID.has(environment.id)) {
-      recordsByID.set(environment.id, environment);
-    }
-  }
-  return [...recordsByID.values()];
-}
-
 function providerEnvironmentCandidateRouteState(
   remoteRouteState: DesktopProviderRemoteRouteState,
 ): DesktopProviderEnvironmentCandidate['route_state'] {
@@ -677,9 +642,6 @@ function buildProviderRuntimeLinkTarget(input: Readonly<{
     if (providerLinkBinding.state === 'linking' || providerLinkBinding.state === 'disconnecting') {
       return 'provider_link_busy';
     }
-    if (providerLinkBinding.state === 'error') {
-      return 'provider_link_error';
-    }
     return '';
   })();
   const blockedReason = (() => {
@@ -698,8 +660,6 @@ function buildProviderRuntimeLinkTarget(input: Readonly<{
         return 'Restart this runtime with the current Desktop runtime before connecting it to a provider.';
       case 'provider_link_busy':
         return 'Provider-link is already changing state for this runtime.';
-      case 'provider_link_error':
-        return providerLinkBinding.last_error_message || 'Provider-link needs attention on this runtime.';
       default:
         return '';
     }
@@ -722,7 +682,7 @@ function buildProviderRuntimeLinkTarget(input: Readonly<{
     provider_id: providerLinkBinding.provider_id,
     env_public_id: providerLinkBinding.env_public_id,
     can_connect_provider: blockedReasonCode === '' && providerConnectionState === 'unlinked',
-    can_disconnect_provider: providerConnectionState === 'connected',
+    can_disconnect_provider: providerLinkBinding.state === 'linked',
     ...(blockedReasonCode !== '' ? { blocked_reason_code: blockedReasonCode } : {}),
     ...(blockedReason !== '' ? { blocked_reason: blockedReason } : {}),
   };
@@ -759,6 +719,83 @@ function controlPlaneEnvironmentSummary(
     return null;
   }
   return controlPlane.environments.find((entry) => entry.env_public_id === cleanEnvPublicID) ?? null;
+}
+
+function providerEnvironmentRecordKey(
+  providerOrigin: string,
+  providerID: string,
+  envPublicID: string,
+): string {
+  return `${compact(providerOrigin)}\n${compact(providerID)}\n${compact(envPublicID)}`;
+}
+
+function providerEnvironmentRecordsFromControlPlanes(
+  controlPlanes: readonly DesktopControlPlaneSummary[],
+): readonly DesktopProviderEnvironmentRecord[] {
+  const records: DesktopProviderEnvironmentRecord[] = [];
+  for (const controlPlane of controlPlanes) {
+    for (const environment of controlPlane.environments) {
+      records.push(createDesktopProviderEnvironmentRecord(
+        controlPlane.provider.provider_origin,
+        environment.env_public_id,
+        {
+          providerID: controlPlane.provider.provider_id,
+          label: environment.label,
+          remoteCatalogEntry: desktopProviderEnvironmentRemoteCatalogEntryFromPublished(environment),
+          createdAtMS: controlPlane.last_synced_at_ms,
+          updatedAtMS: controlPlane.last_synced_at_ms,
+        },
+      ));
+    }
+  }
+  return records;
+}
+
+function providerEnvironmentRecordsForSnapshot(
+  stored: readonly DesktopProviderEnvironmentRecord[],
+  controlPlanes: readonly DesktopControlPlaneSummary[],
+): readonly DesktopProviderEnvironmentRecord[] {
+  const activeCatalogKeys = new Set<string>();
+  const recordsByKey = new Map<string, DesktopProviderEnvironmentRecord>();
+  const storedByKey = new Map(stored.map((environment) => [
+    providerEnvironmentRecordKey(environment.provider_origin, environment.provider_id, environment.env_public_id),
+    environment,
+  ] as const));
+
+  for (const environment of providerEnvironmentRecordsFromControlPlanes(controlPlanes)) {
+    const key = providerEnvironmentRecordKey(environment.provider_origin, environment.provider_id, environment.env_public_id);
+    activeCatalogKeys.add(key);
+    const storedEnvironment = storedByKey.get(key);
+    recordsByKey.set(key, storedEnvironment
+      ? createDesktopProviderEnvironmentRecord(environment.provider_origin, environment.env_public_id, {
+          environmentID: environment.id,
+          providerID: environment.provider_id,
+          label: environment.label,
+          pinned: storedEnvironment.pinned,
+          preferredOpenRoute: storedEnvironment.preferred_open_route,
+          remoteWebSupported: environment.remote_web_supported,
+          remoteDesktopSupported: environment.remote_desktop_supported,
+          remoteCatalogEntry: environment.remote_catalog_entry,
+          createdAtMS: storedEnvironment.created_at_ms,
+          updatedAtMS: Math.max(storedEnvironment.updated_at_ms, environment.updated_at_ms),
+          lastUsedAtMS: storedEnvironment.last_used_at_ms,
+        })
+      : environment);
+  }
+
+  for (const environment of stored) {
+    const key = providerEnvironmentRecordKey(environment.provider_origin, environment.provider_id, environment.env_public_id);
+    if (recordsByKey.has(key)) {
+      continue;
+    }
+    const controlPlane = controlPlaneSummaryByIdentity(controlPlanes, environment.provider_origin, environment.provider_id);
+    const hasFreshCatalog = controlPlane?.sync_state === 'ready' && controlPlane.catalog_freshness === 'fresh';
+    if (!hasFreshCatalog || activeCatalogKeys.has(key)) {
+      recordsByKey.set(key, environment);
+    }
+  }
+
+  return [...recordsByKey.values()];
 }
 
 function localRouteState(

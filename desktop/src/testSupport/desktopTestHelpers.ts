@@ -163,12 +163,13 @@ export function testDesktopPreferences(
     local_environment: _localEnvironment,
     ...preferenceOverrides
   } = options;
+  const hasExplicitProviderEnvironments = Object.hasOwn(options, 'provider_environments');
   const providerEnvironmentsByID = new Map(
     (options.provider_environments ?? base.provider_environments).map((environment) => [environment.id, environment] as const),
   );
 
   const localProviderBinding = localEnvironment.current_provider_binding;
-  if (localProviderBinding) {
+  if (localProviderBinding && !hasExplicitProviderEnvironments) {
     const providerEnvironment = testProviderEnvironment(
       localProviderBinding.provider_origin,
       localProviderBinding.env_public_id,

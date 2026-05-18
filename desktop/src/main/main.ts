@@ -313,6 +313,7 @@ import {
   runtimeServiceSupportsProviderLink,
   runtimeServiceOpenReadinessLabel,
   runtimeServiceIsOpenable,
+  type RuntimeServiceProviderLinkBinding,
   type RuntimeServiceSnapshot,
 } from '../shared/runtimeService';
 import {
@@ -1012,6 +1013,25 @@ function providerEnvironmentFailureContext(environment: DesktopProviderEnvironme
     providerOrigin: environment.provider_origin,
     providerID: environment.provider_id,
     envPublicID: environment.env_public_id,
+    shouldRefreshSnapshot: true,
+  };
+}
+
+function providerBindingFailureContext(
+  binding: RuntimeServiceProviderLinkBinding | null | undefined,
+  environmentID = '',
+): Readonly<{
+  environmentID?: string;
+  providerOrigin?: string;
+  providerID?: string;
+  envPublicID?: string;
+  shouldRefreshSnapshot: true;
+}> {
+  return {
+    environmentID: compact(environmentID) || undefined,
+    providerOrigin: compact(binding?.provider_origin) || undefined,
+    providerID: compact(binding?.provider_id) || undefined,
+    envPublicID: compact(binding?.env_public_id) || undefined,
     shouldRefreshSnapshot: true,
   };
 }
@@ -5566,34 +5586,50 @@ async function disconnectProviderRuntimeFromLauncher(
   request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'disconnect_provider_runtime' }>>,
 ): Promise<DesktopLauncherActionResult> {
   const preferences = await loadDesktopPreferencesCached();
-  const environment = findProviderEnvironmentByID(preferences, request.provider_environment_id);
-  if (!environment) {
-    return launcherActionFailure(
-      'environment_missing',
-      'environment',
-      'This provider environment is no longer available.',
-      {
-        environmentID: request.provider_environment_id,
-        shouldRefreshSnapshot: true,
-      },
-    );
-  }
   const runtimeTarget = await resolveProviderRuntimeLinkTarget(preferences, request.runtime_target_id);
   const runtimeRecord = runtimeTarget?.record ?? null;
-  if (!runtimeRecord?.startup.runtime_control) {
+  const currentBinding = runtimeServiceProviderLinkBinding(runtimeRecord?.startup.runtime_service);
+  const providerEnvironmentID = compact(request.provider_environment_id);
+  const environment = (() => {
+    if (providerEnvironmentID !== '') {
+      const candidate = findProviderEnvironmentByID(preferences, providerEnvironmentID);
+      return candidate && desktopRuntimeProviderBindingMatches(currentBinding, {
+        provider_origin: candidate.provider_origin,
+        provider_id: candidate.provider_id,
+        env_public_id: candidate.env_public_id,
+      })
+        ? candidate
+        : null;
+    }
+    return preferences.provider_environments.find((candidate) => desktopRuntimeProviderBindingMatches(currentBinding, {
+      provider_origin: candidate.provider_origin,
+      provider_id: candidate.provider_id,
+      env_public_id: candidate.env_public_id,
+    })) ?? null;
+  })();
+  if (!runtimeTarget || !runtimeRecord?.startup.runtime_control) {
     return launcherActionFailure(
       'runtime_not_started',
       'environment',
       'The selected runtime is not currently running.',
-      providerEnvironmentFailureContext(environment),
+      environment
+        ? providerEnvironmentFailureContext(environment)
+        : providerBindingFailureContext(currentBinding, providerEnvironmentID),
     );
   }
-  if (!localRuntimeMatchesProvider(runtimeRecord.startup, environment)) {
-    return runtimeTargetProviderBindingFailure(environment, runtimeTarget?.label ?? 'Selected runtime', runtimeRecord.startup);
+  if (currentBinding.state !== 'linked') {
+    return launcherActionFailure(
+      'provider_link_failed',
+      'environment',
+      `${runtimeTarget.label} is not linked to a provider Environment.`,
+      environment
+        ? providerEnvironmentFailureContext(environment)
+        : providerBindingFailureContext(currentBinding, providerEnvironmentID),
+    );
   }
   try {
     const unlinked = await disconnectProviderLink(runtimeRecord.startup.runtime_control);
-    updateProviderRuntimeTargetStartup(runtimeTarget!, {
+    updateProviderRuntimeTargetStartup(runtimeTarget, {
       controlplane_base_url: '',
       controlplane_provider_id: '',
       env_public_id: '',
@@ -5601,7 +5637,7 @@ async function disconnectProviderRuntimeFromLauncher(
       remote_enabled: unlinked.runtime_service.remote_enabled,
       runtime_service: unlinked.runtime_service,
     });
-    if (runtimeTarget?.kind === 'local_environment') {
+    if (runtimeTarget.kind === 'local_environment') {
       await persistDesktopPreferences({
         ...preferences,
         local_environment: {
@@ -5610,19 +5646,23 @@ async function disconnectProviderRuntimeFromLauncher(
         },
       });
     }
-    await refreshProviderEnvironmentRuntimeHealth(
-      environment.provider_origin,
-      environment.provider_id,
-      [environment.env_public_id],
-    ).catch(() => {
-      // Best-effort provider health refresh should not turn a completed runtime disconnect into a failed action.
-    });
+    if (environment) {
+      await refreshProviderEnvironmentRuntimeHealth(
+        environment.provider_origin,
+        environment.provider_id,
+        [environment.env_public_id],
+      ).catch(() => {
+        // Best-effort provider health refresh should not turn a completed runtime disconnect into a failed action.
+      });
+    }
     resetLauncherIssueState();
     broadcastDesktopWelcomeSnapshots();
     return launcherActionSuccess('disconnected_provider_runtime');
   } catch (error) {
     return thrownLauncherActionFailure(error)
-      ?? launcherActionFailureFromProviderLinkError(error, providerEnvironmentFailureContext(environment));
+      ?? launcherActionFailureFromProviderLinkError(error, environment
+        ? providerEnvironmentFailureContext(environment)
+        : providerBindingFailureContext(currentBinding, providerEnvironmentID));
   }
 }
 

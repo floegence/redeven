@@ -1533,12 +1533,12 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildProviderBackedEnvironmentActionModel(localOnlyEntry!)).toMatchObject({
       action_presentation: {
         menu_actions: expect.arrayContaining([{
-          id: 'provider_link_needs_attention',
-          label: 'Provider link needs attention',
+          id: 'disconnect_provider_runtime',
+          label: 'Disconnect from provider',
           action: {
-            intent: 'unavailable',
-            label: 'Provider link needs attention',
-            enabled: false,
+            intent: 'disconnect_provider_runtime',
+            label: 'Disconnect from provider',
+            enabled: true,
             variant: 'outline',
           },
         }]),

@@ -251,8 +251,10 @@ describe('main routing', () => {
     const disconnectSrc = mainSrc.slice(disconnectStart, disconnectEnd);
     expect(disconnectSrc).toContain('const unlinked = await disconnectProviderLink(runtimeRecord.startup.runtime_control);');
     expect(disconnectSrc.indexOf('const unlinked = await disconnectProviderLink(runtimeRecord.startup.runtime_control);')).toBeLessThan(
-      disconnectSrc.indexOf('updateProviderRuntimeTargetStartup(runtimeTarget!, {'),
+      disconnectSrc.indexOf('updateProviderRuntimeTargetStartup(runtimeTarget, {'),
     );
+    expect(disconnectSrc).toContain('const currentBinding = runtimeServiceProviderLinkBinding(runtimeRecord?.startup.runtime_service);');
+    expect(disconnectSrc).toContain("if (currentBinding.state !== 'linked')");
     expect(disconnectSrc).toContain('await refreshProviderEnvironmentRuntimeHealth(');
     expect(disconnectSrc.indexOf('await refreshProviderEnvironmentRuntimeHealth(')).toBeLessThan(
       disconnectSrc.indexOf("return launcherActionSuccess('disconnected_provider_runtime');"),

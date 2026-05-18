@@ -187,6 +187,7 @@ Launcher model:
 - Local and SSH cards represent runtime management. Their primary card action slot is always `Open`; advanced runtime actions (`Start runtime`, `Stop runtime`, `Restart runtime`, `Update runtime`) and provider-link actions (`Connect to provider...`, `Disconnect from provider`) live in the split-button dropdown or the disabled-Open guidance popover.
 - `Start runtime` appears only in Local/SSH/container runtime card popups and dropdown menus. Provider cards do not expose `Start runtime`.
 - `Connect to provider...` appears only on Local/SSH runtime cards and always requires the user to choose a provider Environment. Desktop does not preselect a provider and does not auto-link from a provider card. A saved provider binding is explicit authorization for later managed runtime startup to restore the provider control channel without showing `Connect to provider...` again.
+- `Disconnect from provider` belongs to the runtime card, not to the provider Environment card. If a provider later removes the linked environment from its catalog, the provider card disappears but the Local/SSH/container runtime card still exposes `Disconnect from provider` as long as the runtime reports a linked provider binding.
 - SSH Host entries store the destination, optional port, bootstrap delivery mode, runtime root, and optional release mirror base URL. Desktop reuses release artifacts for the exact Desktop-managed version and lets the remote host own its runtime state.
 - Runtime health and window state are separate. Cards always show runtime version, using `UNKNOWN` when runtime metadata is unavailable; runtime status and active-work impact stay in badges, action recovery, and maintenance confirmations while primary actions remain window-scoped (`Open`, `Opening...`, `Focus`).
 - Runtime health is probed through explicit contracts: Local UI health for local/URL/SSH targets and RCPP runtime-health queries for provider environments.
@@ -194,6 +195,7 @@ Launcher model:
 - While runtime startup is running, the `Open` trigger remains clickable and opens the progress popup; it is not a native disabled button. The trigger keeps the existing flowing shimmer feedback during the operation. Once the runtime snapshot is openable, the popup yields and `Open` returns to direct click behavior.
 - If startup is launched from the popup's `Start runtime` action or from the split-button dropdown, the same `Open` popup stays available for progress. Closing the popup does not cancel startup; clicking `Open` reopens the current progress panel.
 - Provider catalog freshness is separate from provider route availability. A stale catalog still asks Desktop to sync in the background, but last-known online provider environments continue to show `Open` instead of collapsing into a generic refresh-required state. Refreshing a provider environment card force-syncs the provider catalog first, then refreshes that environment's runtime-health overlay.
+- A successful provider catalog sync is the source of truth for provider Environment cards. Environments absent from the latest successful catalog are removed from the Environment Library immediately; Desktop does not keep a `REMOVED` provider card because it was pinned, last used, or previously linked.
 - Deleting library entries is immediate and subject-owned: Local Environment is protected, open entries cannot be deleted, provider unlink clears only the local binding, and deleting saved URL/SSH entries cannot be blocked by background runtime cleanup.
 - Transient success/failure feedback uses toasts. Runtime startup progress belongs in the `Open` popup, not in toasts. Blocking recovery uses explicit actions instead of raw IPC errors or hover-only UI.
 - Quit and last-window-close confirmation models include pending background operations; runtime startup cancellation is bounded and cleanup failures remain visible.
@@ -245,7 +247,7 @@ Desktop keeps one current persisted preference model for the profile's Local Env
 Durable preference categories:
 
 - `local_environment`: the protected Local Environment entry and its local-hosting access configuration.
-- `provider_environments`: first-class provider-backed environment records keyed by provider origin/id and environment id.
+- `provider_environments`: first-class provider-backed environment records keyed by provider origin/id and environment id. The collection is reconciled from the latest successful provider catalog; user card preferences are preserved only while the provider still publishes that environment.
 - `saved_environments`: saved Local UI URL connections.
 - `saved_ssh_environments`: saved SSH Host connections and their bootstrap settings.
 - `saved_runtime_targets`: saved container runtime targets. A target keeps host access (`local_host` or `ssh_host`) separate from placement (`container_process`) so Local Container and SSH Container entries share the same managed-runtime card semantics as Local and SSH host-process runtimes. Container placements persist a stable `container_ref` separately from the last resolved concrete `container_id`.
@@ -259,6 +261,7 @@ Semantics:
 - Desktop never sends the stored Local UI password plaintext back to the renderer. The shell UI edits only a write-only replacement draft plus explicit keep/replace/remove intent.
 - Secrets live in Desktop local settings files and use Electron `safeStorage` encryption when the host platform provides it; otherwise they remain local-only user data owned by the current account.
 - Provider refresh reconciles canonical provider identity across provider environment records, but does not materialize remote-only provider environments into Local Environment state.
+- Provider unlink state is stored with the runtime binding. Clearing a provider binding must not require a matching `provider_environments` record because provider catalogs can legitimately remove an environment before the local runtime disconnects.
 - The Local Environment entry remains always available; ordinary editing changes only local access settings and never creates another local runtime identity.
 
 Desktop maps user-facing local-access decisions back onto the same runtime contract:

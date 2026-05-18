@@ -27,7 +27,7 @@ export type DesktopProviderRuntimeLinkRequestFields = Readonly<{
 }>;
 
 export type DesktopProviderRuntimeLinkRequestTarget = Readonly<{
-  provider_environment_id: string;
+  provider_environment_id?: string;
   runtime_target_id: DesktopProviderRuntimeLinkTargetID;
 }>;
 
@@ -72,11 +72,11 @@ export function normalizeDesktopProviderRuntimeLinkRequestTarget(
 ): DesktopProviderRuntimeLinkRequestTarget | null {
   const providerEnvironmentID = compact(fields.provider_environment_id);
   const runtimeTargetID = normalizeDesktopProviderRuntimeLinkTargetID(fields.runtime_target_id);
-  if (providerEnvironmentID === '' || !runtimeTargetID) {
+  if (!runtimeTargetID) {
     return null;
   }
   return {
-    provider_environment_id: providerEnvironmentID,
+    ...(providerEnvironmentID !== '' ? { provider_environment_id: providerEnvironmentID } : {}),
     runtime_target_id: runtimeTargetID,
   };
 }

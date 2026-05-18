@@ -316,7 +316,7 @@ export type DesktopLauncherActionRequest = Readonly<
   }
   | {
       kind: 'disconnect_provider_runtime';
-      provider_environment_id: string;
+      provider_environment_id?: string;
       runtime_target_id: DesktopProviderRuntimeLinkTargetID;
   }
   | ({
@@ -636,6 +636,9 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         runtime_target_id: (candidate as { runtime_target_id?: unknown }).runtime_target_id,
       });
       if (!target) {
+        return null;
+      }
+      if (kind === 'connect_provider_runtime' && !target.provider_environment_id) {
         return null;
       }
       return {

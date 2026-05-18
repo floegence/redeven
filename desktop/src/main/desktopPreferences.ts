@@ -1087,14 +1087,6 @@ function mergeProviderEnvironmentRecord(
   });
 }
 
-function providerEnvironmentShouldPersistWithoutRemoteCatalog(
-  environment: DesktopProviderEnvironmentRecord,
-  activeControlPlaneKeys: ReadonlySet<string>,
-): boolean {
-  const controlPlaneKey = desktopControlPlaneKey(environment.provider_origin, environment.provider_id);
-  return activeControlPlaneKeys.has(controlPlaneKey) && (environment.pinned || environment.last_used_at_ms > 0);
-}
-
 function reconcileProviderEnvironments(
   input: Readonly<{
     stored: readonly DesktopProviderEnvironmentRecord[];
@@ -1102,9 +1094,6 @@ function reconcileProviderEnvironments(
   }>,
 ): readonly DesktopProviderEnvironmentRecord[] {
   const canonicalProviderIDsByOrigin = buildCanonicalProviderIDByOrigin(input.controlPlanes);
-  const activeControlPlaneKeys = new Set(input.controlPlanes.map((controlPlane) => (
-    desktopControlPlaneKey(controlPlane.provider.provider_origin, controlPlane.provider.provider_id)
-  )));
   const recordsByKey = new Map<string, DesktopProviderEnvironmentRecord>();
   const activeCatalogKeys = new Set<string>();
 
@@ -1145,9 +1134,7 @@ function reconcileProviderEnvironments(
 
   return normalizeProviderEnvironmentCollection(
     [...recordsByKey.entries()]
-      .filter(([key, environment]) => (
-        activeCatalogKeys.has(key) || providerEnvironmentShouldPersistWithoutRemoteCatalog(environment, activeControlPlaneKeys)
-      ))
+      .filter(([key]) => activeCatalogKeys.has(key))
       .map(([, environment]) => environment),
   );
 }

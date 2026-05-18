@@ -1060,7 +1060,7 @@ describe('desktopPreferences', () => {
     }));
   });
 
-  it('drops revoked provider entries unless they have durable user preference metadata', () => {
+  it('drops provider entries that are absent from the latest provider catalog', () => {
     const provider = buildTestControlPlaneProvider();
     const remoteOnly = testProviderEnvironment('https://cp.example.invalid', 'env_removed');
     const preferredRoute = testProviderEnvironment('https://cp.example.invalid', 'env_kept', {
@@ -1080,6 +1080,29 @@ describe('desktopPreferences', () => {
     });
 
     expect(next.provider_environments.some((environment) => environment.id === remoteOnly.id)).toBe(false);
+    expect(next.provider_environments.some((environment) => environment.id === preferredRoute.id)).toBe(false);
+  });
+
+  it('preserves provider card preferences only while the environment remains in the provider catalog', () => {
+    const provider = buildTestControlPlaneProvider();
+    const preferredRoute = testProviderEnvironment('https://cp.example.invalid', 'env_kept', {
+      preferredOpenRoute: 'local_host',
+      lastUsedAtMS: 111,
+    });
+
+    const next = upsertSavedControlPlane(testDesktopPreferences({
+      provider_environments: [preferredRoute],
+    }), {
+      provider,
+      account: buildTestControlPlaneAccount(provider),
+      environments: [buildTestProviderEnvironment(provider, 'env_kept', {
+        label: 'Env Kept',
+      })],
+      refresh_token: 'refresh-demo-token',
+      display_label: 'Demo Control Plane',
+      last_synced_at_ms: 456,
+    });
+
     expect(next.provider_environments.find((environment) => environment.id === preferredRoute.id)).toEqual(expect.objectContaining({
       id: preferredRoute.id,
       preferred_open_route: 'local_host',
