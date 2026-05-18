@@ -795,6 +795,69 @@ describe('buildEnvironmentCardModel', () => {
     ]));
   });
 
+  it('uses the runtime open operation plan as the primary Open source for saved containers', () => {
+    const placement = {
+      kind: 'container_process' as const,
+      container_engine: 'docker' as const,
+      container_id: '840f2eee03368aab7c6c7d6be7ff19d0392c03b3d73cd5d2fdd12d97f19a0e6d',
+      container_ref: 'redeven-dev-mysql-db-dev-1',
+      container_label: 'redeven-dev-mysql-db-dev-1',
+      runtime_root: '/root/.redeven',
+      bridge_strategy: 'exec_stream' as const,
+    };
+    const targetID = 'local:container:docker:redeven-dev-mysql-db-dev-1:63ce185e';
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        saved_runtime_targets: [{
+          schema_version: 1,
+          id: targetID,
+          label: 'redeven-dev-mysql-db-dev-1',
+          host_access: { kind: 'local_host' },
+          placement,
+          pinned: false,
+          last_used_at_ms: 1779100944496,
+          created_at_ms: 1779100944496,
+          updated_at_ms: 1779100944496,
+        }],
+      }),
+      managedRuntimePresenceByTargetID: {
+        [`local:${targetID}`]: localRuntimePresence(undefined, {
+          target_id: `local:${targetID}`,
+          placement_target_id: targetID,
+          environment_id: targetID,
+          label: 'redeven-dev-mysql-db-dev-1',
+          runtime_key: targetID,
+          placement,
+          running: true,
+          local_ui_url: '',
+          openable: false,
+          open_connection_required: true,
+          runtime_service: undefined,
+          runtime_control_status: {
+            state: 'missing',
+            reason_code: 'forward_unavailable',
+            message: 'Open this runtime to prepare the Desktop bridge and provider connection.',
+          },
+        }),
+      },
+    });
+    const entry = snapshot.environments.find((environment) => environment.id === targetID);
+
+    expect(entry).toBeTruthy();
+    expect(buildProviderBackedEnvironmentActionModel(entry!)).toMatchObject({
+      status_label: 'READY TO OPEN',
+      status_tone: 'success',
+      action_presentation: {
+        primary_action: {
+          intent: 'open',
+          label: 'Open',
+          enabled: true,
+        },
+        primary_action_overlay: undefined,
+      },
+    });
+  });
+
   it('offers Update runtime when a stopped container target has a stale runtime package', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({

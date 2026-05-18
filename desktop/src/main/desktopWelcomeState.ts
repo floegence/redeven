@@ -1685,6 +1685,7 @@ function buildSavedRuntimeTargetEntry(
     host_access: effectiveHostAccess,
     placement: effectivePlacement,
   };
+  const managedFields = managedRuntimeEntryFields(presence);
   return {
     id: target.id,
     kind: targetKind,
@@ -1703,6 +1704,7 @@ function buildSavedRuntimeTargetEntry(
     runtime_maintenance: runtimeMaintenance,
     provider_runtime_link_target: providerRuntimeLinkTarget,
     provider_environment_candidates: providerEnvironmentCandidates,
+    ...managedFields,
     managed_runtime_target_id: desktopRuntimeTargetID(effectiveHostAccess, effectivePlacement),
     managed_runtime_placement_target_id: target.id,
     managed_runtime_host_access: effectiveHostAccess,

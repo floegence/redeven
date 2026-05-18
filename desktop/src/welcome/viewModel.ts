@@ -465,6 +465,10 @@ function environmentRuntimeService(environment: DesktopEnvironmentEntry): Runtim
   return undefined;
 }
 
+function environmentOpenOperationAvailable(environment: DesktopEnvironmentEntry): boolean {
+  return environment.runtime_operations.open.availability === 'available';
+}
+
 function environmentRuntimeMaintenance(environment: DesktopEnvironmentEntry) {
   return environment.runtime_maintenance;
 }
@@ -693,6 +697,9 @@ function runtimeStatusLabel(environment: DesktopEnvironmentEntry): string {
   if (runtimeServiceIsOpenable(snapshot)) {
     return 'Open';
   }
+  if (environment.kind !== 'provider_environment' && environmentOpenOperationAvailable(environment)) {
+    return 'READY TO OPEN';
+  }
   if (snapshot?.open_readiness?.state === 'blocked') {
     return runtimeServiceNeedsRuntimeUpdate(snapshot)
       ? 'RUNTIME NEEDS UPDATE'
@@ -708,8 +715,8 @@ function runtimeStatusTone(environment: DesktopEnvironmentEntry): EnvironmentCar
   if (environment.kind === 'provider_environment' && providerPrimaryRoute(environment) === 'remote_desktop') {
     return providerRemoteOpenLooksAvailable(environment) ? 'success' : 'warning';
   }
-  return environment.runtime_health.status === 'online' && runtimeServiceIsOpenable(environmentRuntimeService(environment))
-    || environment.managed_runtime_open_connection_required === true
+  return environment.runtime_health.status === 'online'
+    && (runtimeServiceIsOpenable(environmentRuntimeService(environment)) || environmentOpenOperationAvailable(environment))
     ? 'success'
     : 'warning';
 }
@@ -731,7 +738,6 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
       variant: 'default',
     };
   }
-  const snapshot = environmentRuntimeService(environment);
   const primaryRoute = environment.kind === 'provider_environment' ? providerPrimaryRoute(environment) : '';
   const canOpenProviderRemoteRoute = environment.kind === 'provider_environment'
     && providerRemoteOpenLooksAvailable(environment);
@@ -741,7 +747,7 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
     enabled: canOpenProviderRemoteRoute
       || (environment.kind !== 'provider_environment'
         && environment.runtime_health.status === 'online'
-        && (runtimeServiceIsOpenable(snapshot) || environment.managed_runtime_open_connection_required === true)),
+        && environmentOpenOperationAvailable(environment)),
     variant: 'default',
     ...(environment.kind === 'provider_environment'
       ? { route: desktopProviderEnvironmentOpenRoute() }
@@ -1224,7 +1230,7 @@ function primaryActionOverlay(
   }
   if (environment.runtime_health.status === 'online') {
     const snapshot = environmentRuntimeService(environment);
-    if (runtimeServiceIsOpenable(snapshot) || environment.managed_runtime_open_connection_required === true) {
+    if (runtimeServiceIsOpenable(snapshot) || environmentOpenOperationAvailable(environment)) {
       return undefined;
     }
     if (environmentRuntimeMaintenance(environment) || snapshot?.open_readiness?.state === 'blocked') {
