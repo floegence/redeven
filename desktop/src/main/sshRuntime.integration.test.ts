@@ -894,6 +894,7 @@ describe('sshRuntime integration', () => {
       }),
     });
 
+    await waitForFakeSSHEvent(fixture, 'start_runtime');
     const events = await readFakeSSHEvents(fixture);
     expect(events.map((event) => event.event)).toContain('start_runtime');
     expect(events.map((event) => event.event)).not.toContain('stop_runtime');
@@ -913,6 +914,7 @@ describe('sshRuntime integration', () => {
       }),
     });
 
+    await waitForFakeSSHEvent(fixture, 'start_runtime');
     const events = await readFakeSSHEvents(fixture);
     const eventNames = events.map((event) => event.event);
     expect(eventNames).toContain('start_runtime');
@@ -935,6 +937,7 @@ describe('sshRuntime integration', () => {
       }),
     });
 
+    await waitForFakeSSHEvent(fixture, 'start_runtime');
     const events = await readFakeSSHEvents(fixture);
     const eventNames = events.map((event) => event.event);
     expect(eventNames).toContain('start_runtime');
@@ -989,6 +992,7 @@ describe('sshRuntime integration', () => {
       }),
     });
 
+    await waitForFakeSSHEvent(fixture, 'start_runtime');
     const events = await readFakeSSHEvents(fixture);
     expect(events.map((event) => event.event)).toContain('start_runtime');
     expect(events.map((event) => event.event)).not.toContain('stop_runtime');
