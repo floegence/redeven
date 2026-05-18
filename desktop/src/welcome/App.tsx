@@ -6972,8 +6972,10 @@ function ConnectionDialog(props: Readonly<{
               <div class="space-y-3">
                 <div class="grid gap-3 sm:grid-cols-[10rem_minmax(0,1fr)] items-start">
                   <div class="space-y-1.5">
-                    <label class="block text-xs font-medium text-foreground">Engine</label>
-                  <SegmentedControl
+                    <div class="flex items-center h-7">
+                      <label class="block text-xs font-medium text-foreground">Engine</label>
+                    </div>
+                    <SegmentedControl
                     value={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.container_engine : 'docker'}
                     onChange={(value) => {
                       props.updateField('container_engine', value);
