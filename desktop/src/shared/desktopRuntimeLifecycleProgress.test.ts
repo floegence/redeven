@@ -48,6 +48,8 @@ describe('desktopRuntimeLifecycleProgress', () => {
       'checking_runtime_package',
       'preparing_runtime_package',
       'installing_runtime_package',
+      'starting_runtime_process',
+      'checking_runtime_service',
       'runtime_ready',
     ]);
     expect(runtimeLifecyclePhaseSequence('ssh_host')).toEqual([
@@ -68,6 +70,8 @@ describe('desktopRuntimeLifecycleProgress', () => {
       'checking_runtime_package',
       'preparing_runtime_package',
       'installing_runtime_package',
+      'starting_runtime_process',
+      'checking_runtime_service',
       'runtime_ready',
     ]);
   });
@@ -84,7 +88,7 @@ describe('desktopRuntimeLifecycleProgress', () => {
       location: 'ssh_container',
       phase: 'installing_runtime_package',
       stage_index: 6,
-      stage_count: 7,
+      stage_count: 9,
       target_id: 'ssh:container:devbox:docker:dev',
       target_label: 'Devbox Container',
       target_detail: 'devbox · docker/dev',

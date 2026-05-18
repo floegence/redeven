@@ -227,8 +227,11 @@ Current Env App behavior:
 - New threads can set working directory, model, approval policy, sandbox mode, and reasoning effort before the first turn. Existing threads keep their persisted working directory locked in the browser UI.
 - Composer controls include working directory, image attachments, model, reasoning effort, approval policy, and sandbox mode. Image attachments are limited to image files and are sent as Codex `image` user inputs.
 - Thread lifecycle actions are capability-gated: archive, fork, review current workspace changes, and interrupt the active turn.
-- The transcript projects user prompts, Codex replies, command executions, file changes, reasoning, web search evidence, and pending approvals through Codex-local renderers.
-- User-authored text renders as raw text with preserved line breaks; assistant/evidence content uses markdown rendering; file-change rows reuse the shared Git patch viewer.
+- The transcript projects user prompts and Codex replies as the primary reading path, while execution details are grouped into compact activity streams.
+- Activity streams summarize command executions, file changes, reasoning, plans, and web search evidence as low-weight rows instead of default heavy tool cards.
+- Users open details by clicking the specific activity item they care about, such as a single edited file row or a single command row.
+- Detail panels mount heavyweight renderers only on demand: command rows open command output, file-change rows reuse the shared Git patch viewer for the selected file, and web search / reasoning / plan rows open markdown details.
+- User-authored text renders as raw text with preserved line breaks; assistant content uses markdown rendering.
 - Codex transcript scrolling has `following` and `paused` modes. Thread switch/bootstrap/send re-enter follow mode, while manual scroll-away preserves the visible anchor until the user returns near the bottom.
 - The transcript `Browse files` affordance seeds the shared Env App file-browser surface from the resolved Codex working directory; Codex does not own a separate file-browser implementation.
 - Env Settings -> `AI & Extensions` -> Codex reports host capability and bridge status only. It does not edit approval policy, sandbox, or model defaults.

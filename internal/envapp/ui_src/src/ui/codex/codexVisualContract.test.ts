@@ -16,6 +16,10 @@ function readCodexTranscript(): string {
   return fs.readFileSync(resolveFromHere('./CodexTranscript.tsx'), 'utf8');
 }
 
+function readCodexActivityStream(): string {
+  return fs.readFileSync(resolveFromHere('./CodexActivityStream.tsx'), 'utf8');
+}
+
 describe('Codex visual contract', () => {
   it('keeps codex.css on semantic flat surfaces without gradients', () => {
     const src = readCodexCss();
@@ -30,23 +34,14 @@ describe('Codex visual contract', () => {
     expect(src).toContain('--codex-text-secondary:');
     expect(src).toContain('.codex-page-shell .chat-message-bubble-user {');
     expect(src).toContain('.codex-page-shell .chat-input-send-btn-active {');
-    expect(src).toMatch(/\.codex-chat-reasoning-inline \{[\s\S]*width: min\(100%, 42rem\);/);
-    expect(src).toMatch(/\.codex-chat-reasoning-toggle \{[\s\S]*gap: 0\.3125rem;[\s\S]*cursor: pointer;/);
-    expect(src).toMatch(/\.codex-chat-reasoning-kicker \{[\s\S]*width: 0\.875rem;[\s\S]*height: 0\.875rem;[\s\S]*color: color-mix\(in srgb, var\(--muted-foreground\) 82%, var\(--foreground\) 18%\);/);
     expect(src).toContain('.codex-chat-file-change {');
-    expect(src).toMatch(/\.codex-chat-evidence-card-web-search \{[\s\S]*gap: 0;[\s\S]*box-shadow:[\s\S]*padding: 0\.4375rem 0\.625rem;/);
-    expect(src).toMatch(/\.codex-chat-web-search-shell \{[\s\S]*grid-template-columns: auto minmax\(0, 1fr\) auto;[\s\S]*align-items: center;/);
-    expect(src).toMatch(/\.codex-chat-web-search-glyph \{[\s\S]*width: 1\.25rem;[\s\S]*height: 1\.25rem;[\s\S]*border-radius: 0\.4375rem;/);
-    expect(src).toMatch(/\.codex-chat-web-search-hero \{[\s\S]*display: flex;[\s\S]*align-items: baseline;/);
-    expect(src).toMatch(/\.codex-chat-web-search-primary \{[\s\S]*font-family: ui-monospace,[\s\S]*white-space: nowrap;/);
-    expect(src).toMatch(/\.codex-chat-web-search-meta-label \{[\s\S]*text-transform: uppercase;/);
-    expect(src).toContain('.codex-chat-web-search-meta-item-accent .codex-chat-web-search-meta-value {');
-    expect(src).toContain('.codex-chat-web-search-status .floe-tag {');
-    expect(src).not.toMatch(/\.codex-chat-evidence-card-web-search \{[^}]*gradient/);
-    expect(src).not.toMatch(/\.codex-chat-web-search-action-chip \{[^}]*gradient/);
-    expect(src).not.toMatch(/\.codex-chat-web-search-primary \{[^}]*gradient/);
-    expect(src).not.toMatch(/\.codex-chat-reasoning-kicker \{[^}]*border-radius:/);
-    expect(src).not.toMatch(/\.codex-chat-reasoning-kicker \{[^}]*background:/);
+    expect(src).toMatch(/\.codex-activity-stream \{[\s\S]*width: min\(100%, 42rem\);[\s\S]*color: color-mix\(in srgb, var\(--muted-foreground\) 82%, var\(--foreground\) 18%\);/);
+    expect(src).toMatch(/\.codex-activity-group-trigger,\s*\.codex-activity-item \{[\s\S]*background: transparent;[\s\S]*cursor: pointer;/);
+    expect(src).toMatch(/\.codex-activity-item-list \{[\s\S]*padding-left: 1\.25rem;/);
+    expect(src).toContain('.codex-activity-detail-panel {');
+    expect(src).not.toContain('.codex-chat-evidence-card-web-search {');
+    expect(src).not.toContain('.codex-chat-web-search-shell {');
+    expect(src).not.toContain('.codex-chat-reasoning-toggle {');
     expect(src).not.toContain('.codex-chat-reasoning-card {');
     expect(src).not.toContain('.codex-chat-diff-pre {');
     expect(src).not.toContain('.codex-chat-file-change-viewport {');
@@ -126,10 +121,14 @@ describe('Codex visual contract', () => {
 
   it('keeps empty and loading ornaments on the neutral Codex shell class', () => {
     const src = readCodexTranscript();
+    const activityStreamSrc = readCodexActivityStream();
 
     expect(src.match(/class="codex-empty-ornament"/g)?.length ?? 0).toBe(1);
-    expect(src).toContain('class="codex-chat-web-search-shell"');
-    expect(src).toContain('class="codex-chat-web-search-meta"');
+    expect(src).toContain('<CodexActivityStream');
+    expect(activityStreamSrc).toContain('class="codex-activity-stream"');
+    expect(activityStreamSrc).toContain('data-codex-activity-item-kind={item.kind}');
+    expect(src).not.toContain('class="codex-chat-web-search-shell"');
+    expect(src).not.toContain('class="codex-chat-web-search-meta"');
     expect(src).not.toContain('TranscriptEvidenceRowOldUnused');
     expect(src).toContain('data-codex-transcript-mode={transcriptSurfaceState().mode}');
     expect(src).toContain('class="codex-transcript-shell"');
