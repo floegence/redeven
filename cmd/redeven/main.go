@@ -65,6 +65,10 @@ func (c *cli) run(args []string) int {
 		return c.runCmd(args[1:])
 	case "desktop-bridge":
 		return c.desktopBridgeCmd(args[1:])
+	case "desktop-runtime-status":
+		return c.desktopRuntimeStatusCmd(args[1:])
+	case "desktop-runtime-stop":
+		return c.desktopRuntimeStopCmd(args[1:])
 	case "desktop-model-source":
 		return c.desktopModelSourceCmd(args[1:])
 	case "search":

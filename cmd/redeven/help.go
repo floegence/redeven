@@ -31,6 +31,10 @@ Commands:
   run         Start the runtime in remote, hybrid, local, or desktop mode.
   desktop-bridge
               Run the Desktop runtime placement bridge over stdio.
+  desktop-runtime-status
+              Probe an already-running Desktop-managed runtime daemon.
+  desktop-runtime-stop
+              Stop an already-running Desktop-managed runtime daemon.
   desktop-model-source
               Connect Desktop Local Environment models to runtime-control.
   targets     Inspect Redeven targets for Agent Skills and local automation.
@@ -70,13 +74,45 @@ Usage:
 This command is intended for Redeven Desktop managed runtime targets. It
 exposes the Local UI and Desktop runtime-control to Desktop through the
 versioned placement bridge protocol without requiring a published container
-port.
+port. It attaches to an already-running runtime daemon and never starts a
+runtime process.
 
 Flags:
   --state-root <path>              State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
-  --password <password>            Access password for the Local UI.
-  --password-env <env_name>        Read the Local UI password from an environment variable.
-  --password-file <path>           Read the Local UI password from a file.
+  --probe-timeout <duration>       Runtime health probe timeout.
+`, "\n")
+}
+
+func desktopRuntimeStatusHelpText() string {
+	return strings.TrimLeft(`
+redeven desktop-runtime-status
+
+Probe an already-running Desktop-managed runtime daemon and print its startup
+metadata as JSON.
+
+Usage:
+  redeven desktop-runtime-status [flags]
+
+Flags:
+  --state-root <path>              State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
+  --probe-timeout <duration>       Runtime health probe timeout.
+`, "\n")
+}
+
+func desktopRuntimeStopHelpText() string {
+	return strings.TrimLeft(`
+redeven desktop-runtime-stop
+
+Stop an already-running Desktop-managed runtime daemon. This command is used by
+explicit Desktop Stop Runtime operations; Open and Reconnect do not call it.
+
+Usage:
+  redeven desktop-runtime-stop [flags]
+
+Flags:
+  --state-root <path>              State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
+  --probe-timeout <duration>       Runtime health probe timeout.
+  --grace-period <duration>        Time to wait after requesting runtime shutdown.
 `, "\n")
 }
 
@@ -406,6 +442,10 @@ func lookupHelpText(args []string) (string, bool) {
 		return runHelpText(), true
 	case "desktop-bridge":
 		return desktopBridgeHelpText(), true
+	case "desktop-runtime-status":
+		return desktopRuntimeStatusHelpText(), true
+	case "desktop-runtime-stop":
+		return desktopRuntimeStopHelpText(), true
 	case "desktop-model-source":
 		return desktopModelSourceHelpText(), true
 	case "targets":

@@ -37,6 +37,7 @@ describe('runtimePlacementManager', () => {
   async function installFakeDocker(tempDir: string): Promise<string> {
     const dockerPath = path.join(tempDir, 'docker');
     const markerPath = path.join(tempDir, 'installed');
+    const daemonPath = path.join(tempDir, 'daemon');
     await fs.writeFile(dockerPath, [
       '#!/usr/bin/env node',
       'const fs = require("node:fs");',
@@ -48,6 +49,12 @@ describe('runtimePlacementManager', () => {
       '}',
       'if (args[0] === "exec") {',
       '  const markerIndex = args.findIndex((value) => value.startsWith("redeven-container-"));',
+      '  if (args.includes("run") && args.includes("--desktop-managed")) { fs.writeFileSync(' + JSON.stringify(daemonPath) + ', "running"); process.exit(0); }',
+      '  if (args.includes("desktop-runtime-status")) {',
+      '    if (!fs.existsSync(' + JSON.stringify(daemonPath) + ')) { process.stderr.write("runtime daemon is not running\\n"); process.exit(1); }',
+      '    process.stdout.write(JSON.stringify({ local_ui_url: "http://127.0.0.1:43210/", local_ui_urls: ["http://127.0.0.1:43210/"], password_required: false, desktop_managed: true, desktop_owner_id: "owner", runtime_control: { protocol_version: "runtime-control-v1", base_url: "http://127.0.0.1:43211/", token: "token", desktop_owner_id: "owner" }, runtime_service: { status: "online", desktop_managed: true, effective_run_mode: "local", remote_enabled: false } }));',
+      '    process.exit(0);',
+      '  }',
       '  const script = args.includes("-c") ? args[args.indexOf("-c") + 1] : "";',
       '  if (script.includes("uname -s")) { process.stdout.write("Linux\\nx86_64\\n"); process.exit(0); }',
       '  if (args[markerIndex] === "redeven-container-runtime-probe") {',
@@ -112,6 +119,7 @@ describe('runtimePlacementManager', () => {
       runtime_release_tag: 'v1.2.3',
       release_base_url: 'https://example.invalid/releases',
       asset_cache_root: tempDir,
+      desktop_owner_id: 'owner',
       on_progress: (progress) => {
         progressPhases.push(progress.phase);
       },
@@ -129,6 +137,8 @@ describe('runtimePlacementManager', () => {
       'checking_runtime',
       'preparing_runtime_package',
       'installing_runtime',
+      'starting_runtime_daemon',
+      'waiting_runtime_daemon',
       'runtime_ready',
     ]);
   });
@@ -153,6 +163,7 @@ describe('runtimePlacementManager', () => {
       release_base_url: 'https://example.invalid/releases',
       source_runtime_root: tempDir,
       asset_cache_root: tempDir,
+      desktop_owner_id: 'owner',
     });
 
     expect(ready.runtime_binary_path).toBe('/root/.redeven/runtime/releases/v1.2.3/bin/redeven');
@@ -192,6 +203,7 @@ describe('runtimePlacementManager', () => {
       runtime_release_tag: 'v1.2.3',
       release_base_url: 'https://example.invalid/releases',
       asset_cache_root: tempDir,
+      desktop_owner_id: 'owner',
       on_progress: (progress) => {
         progressPhases.push(progress.phase);
       },
@@ -210,6 +222,8 @@ describe('runtimePlacementManager', () => {
       'checking_runtime',
       'preparing_runtime_package',
       'installing_runtime',
+      'starting_runtime_daemon',
+      'waiting_runtime_daemon',
       'runtime_ready',
     ]);
   });

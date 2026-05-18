@@ -3,19 +3,69 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/floegence/redeven/internal/desktopbridge"
+	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
 )
 
-func TestDesktopBridgeKeepsStdoutProtocolPure(t *testing.T) {
-	t.Setenv(desktopOwnerIDEnvName, "test-desktop-owner")
-
+func TestDesktopBridgeFailsWhenRuntimeDaemonIsNotRunning(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	stateRoot := filepath.Join(t.TempDir(), "state")
+
+	code := runCLI(
+		[]string{"desktop-bridge", "--state-root", stateRoot},
+		strings.NewReader(""),
+		&stdout,
+		&stderr,
+	)
+	if code == 0 {
+		t.Fatalf("exit code = 0, want failure")
+	}
+	if strings.Contains(stderr.String(), "init runtime") {
+		t.Fatalf("stderr = %q, bridge must not initialize runtime", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "runtime daemon is not running") {
+		t.Fatalf("stderr = %q, want runtime daemon not running error", stderr.String())
+	}
+}
+
+func TestDesktopBridgeKeepsStdoutProtocolPure(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	stateRoot := filepath.Join(t.TempDir(), "state")
+	statePath := filepath.Join(stateRoot, "local-environment", "runtime", "local-ui.json")
+	localUIServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/local/runtime/health" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data":{"status":"online","password_required":false,"desktop_managed":true,"desktop_owner_id":"test-desktop-owner"}}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer localUIServer.Close()
+	controlServer := httptest.NewServer(http.NotFoundHandler())
+	defer controlServer.Close()
+	if err := localuiruntime.WriteState(statePath, localuiruntime.State{
+		LocalUIURL:       localUIServer.URL + "/",
+		LocalUIURLs:      []string{localUIServer.URL + "/"},
+		PasswordRequired: false,
+		DesktopManaged:   true,
+		DesktopOwnerID:   "test-desktop-owner",
+		RuntimeControl: &localuiruntime.RuntimeControlEndpoint{
+			ProtocolVersion: "runtime-control-v1",
+			BaseURL:         controlServer.URL + "/",
+			Token:           "token",
+			DesktopOwnerID:  "test-desktop-owner",
+		},
+	}); err != nil {
+		t.Fatalf("WriteState() error = %v", err)
+	}
 
 	code := runCLI(
 		[]string{"desktop-bridge", "--state-root", stateRoot},
@@ -45,7 +95,7 @@ func TestDesktopBridgeKeepsStdoutProtocolPure(t *testing.T) {
 	if hello.ProtocolVersion != desktopbridge.ProtocolVersion {
 		t.Fatalf("hello protocol = %q, want %q", hello.ProtocolVersion, desktopbridge.ProtocolVersion)
 	}
-	if !strings.Contains(stderr.String(), "codeapp gateway listening") {
-		t.Fatalf("stderr = %q, want gateway startup log", stderr.String())
+	if strings.Contains(stderr.String(), "codeapp gateway listening") || strings.Contains(stderr.String(), "init runtime") {
+		t.Fatalf("stderr = %q, bridge must not start runtime components", stderr.String())
 	}
 }

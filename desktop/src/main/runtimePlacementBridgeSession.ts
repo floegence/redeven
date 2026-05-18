@@ -291,12 +291,6 @@ export async function startRuntimePlacementBridgeSession(
     await settleBridgeSession();
   };
   const stop = async () => {
-    if (!closed) {
-      await writeRuntimePlacementBridgeFrame(command.stdin, {
-        type: 'shutdown_runtime',
-        stream_id: 'bridge',
-      }).catch(() => undefined);
-    }
     await settleBridgeSession();
   };
 
