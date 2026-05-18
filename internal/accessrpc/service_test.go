@@ -13,6 +13,10 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
+type pathContextProbe struct {
+	AgentHomePathAbs string `json:"agent_home_path_abs"`
+}
+
 func TestService_ResumeUnlocksProtectedRPC(t *testing.T) {
 	gate := accessgate.New(accessgate.Options{Password: "secret"})
 	proxyMeta := session.Meta{
@@ -80,11 +84,11 @@ func TestService_ResumeUnlocksProtectedRPC(t *testing.T) {
 		t.Fatalf("access.resume error = %v", err)
 	}
 
-	pathContext, err := rpcutil.CallJSON[struct{}, map[string]string](ctx, client, fs.TypeID_FS_GET_PATH_CONTEXT, &struct{}{})
+	pathContext, err := rpcutil.CallJSON[struct{}, pathContextProbe](ctx, client, fs.TypeID_FS_GET_PATH_CONTEXT, &struct{}{})
 	if err != nil {
 		t.Fatalf("fs.get_path_context after resume error = %v", err)
 	}
-	if pathContext == nil || (*pathContext)["agent_home_path_abs"] == "" {
+	if pathContext == nil || pathContext.AgentHomePathAbs == "" {
 		t.Fatalf("fs.get_path_context returned empty agent_home_path_abs")
 	}
 }
@@ -128,11 +132,11 @@ func TestService_InitiallyUnlockedChannelSkipsResume(t *testing.T) {
 		t.Fatalf("unexpected initial status: %#v", status)
 	}
 
-	pathContext, err := rpcutil.CallJSON[struct{}, map[string]string](ctx, client, fs.TypeID_FS_GET_PATH_CONTEXT, &struct{}{})
+	pathContext, err := rpcutil.CallJSON[struct{}, pathContextProbe](ctx, client, fs.TypeID_FS_GET_PATH_CONTEXT, &struct{}{})
 	if err != nil {
 		t.Fatalf("fs.get_path_context without resume error = %v", err)
 	}
-	if pathContext == nil || (*pathContext)["agent_home_path_abs"] == "" {
+	if pathContext == nil || pathContext.AgentHomePathAbs == "" {
 		t.Fatalf("fs.get_path_context returned empty agent_home_path_abs")
 	}
 }

@@ -1,10 +1,8 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack, type Accessor, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { ChevronRight, Sparkles } from '@floegence/floe-webapp-core/icons';
 import { Tag } from '@floegence/floe-webapp-core/ui';
 
 import { MarkdownBlock } from '../chat/blocks/MarkdownBlock';
-import { ShellBlock } from '../chat/blocks/ShellBlock';
 import { useVirtualList } from '../chat/hooks/useVirtualList';
 import {
   captureViewportAnchor,
@@ -13,8 +11,8 @@ import {
 } from '../chat/message-list/scrollAnchor';
 import type { FollowBottomViewportAnchorResolver } from '../chat/scroll/createFollowBottomController';
 import { StreamingCursor } from '../chat/status/StreamingCursor';
+import { CodexActivityStream, type CodexActivityStreamState } from './CodexActivityStream';
 import { CodexIcon } from '../icons/CodexIcon';
-import { CodexFileChangeDiff } from './CodexFileChangeDiff';
 import { CodexMessageRunIndicator } from './CodexMessageRunIndicator';
 import { CodexUserMessageContent } from './CodexUserMessageContent';
 import {
@@ -25,18 +23,23 @@ import {
   isWorkingStatus,
   statusTagVariant,
 } from './presentation';
+import {
+  buildCodexTranscriptDisplayNodes,
+  type CodexTranscriptActivityGroupNode,
+  type CodexTranscriptDisplayNode,
+} from './transcriptDisplayModel';
 import type { CodexOptimisticUserTurn, CodexTranscriptItem } from './types';
 import type { FollowBottomMode } from '../chat/scroll/createFollowBottomController';
 
 type CodexTranscriptSurfaceMode = 'empty' | 'loading' | 'feed';
 type CodexTranscriptSurfaceName = 'empty-state' | 'loading-state';
-type CodexTranscriptRowKind = 'optimistic' | 'item' | 'pending_assistant' | 'working_state';
+type CodexTranscriptRowKind = 'optimistic' | 'display_node' | 'pending_assistant' | 'working_state';
 type CodexTranscriptRenderRow = Readonly<{
   id: string;
   kind: CodexTranscriptRowKind;
   anchorId: string;
   estimatedHeightPx: number;
-  item?: CodexTranscriptItem;
+  displayNode?: CodexTranscriptDisplayNode;
   optimisticTurn?: CodexOptimisticUserTurn;
   pendingAssistantState?: PendingAssistantVisualState;
   workingPhaseLabel?: string;
@@ -71,11 +74,7 @@ const CODEX_TRANSCRIPT_ROW_HEIGHTS = {
   working_state: 76,
   userMessage: 92,
   agentMessage: 128,
-  reasoning: 112,
-  plan: 112,
-  commandExecution: 76,
-  fileChange: 232,
-  webSearch: 96,
+  activityGroup: 92,
   evidence: 128,
 } as const;
 
@@ -159,92 +158,6 @@ function CodexMessageLane(props: {
   );
 }
 
-function normalizeExecutionStatus(status: string | null | undefined, exitCode: number | null | undefined): 'running' | 'success' | 'error' {
-  const normalized = String(status ?? '').trim().toLowerCase();
-  if (normalized.includes('error') || normalized.includes('fail')) return 'error';
-  if (normalized === 'running' || normalized === 'inprogress' || normalized === 'in_progress') return 'running';
-  if (typeof exitCode === 'number' && exitCode !== 0) return 'error';
-  return 'success';
-}
-
-function CommandExecutionBody(props: { item: CodexTranscriptItem }) {
-  return (
-    <ShellBlock
-      command={props.item.command || 'Command unavailable'}
-      output={props.item.aggregated_output}
-      cwd={props.item.cwd}
-      durationMs={props.item.duration_ms}
-      exitCode={props.item.exit_code}
-      status={normalizeExecutionStatus(props.item.status, props.item.exit_code)}
-      class="codex-chat-shell-block"
-    />
-  );
-}
-
-function CommandExecutionRow(props: { item: CodexTranscriptItem }) {
-  return (
-    <CodexMessageLane role="assistant" contentClass="codex-chat-command-content">
-      <CommandExecutionBody item={props.item} />
-    </CodexMessageLane>
-  );
-}
-
-function FileChangeBody(props: { item: CodexTranscriptItem }) {
-  return (
-    <div class="space-y-3">
-      <For each={props.item.changes ?? []}>
-        {(change) => <CodexFileChangeDiff change={change} />}
-      </For>
-      <Show when={(props.item.changes?.length ?? 0) === 0}>
-        <div class="text-sm text-muted-foreground">No file change details were provided yet.</div>
-      </Show>
-    </div>
-  );
-}
-
-function reasoningSummary(item: CodexTranscriptItem): string[] {
-  return (item.summary ?? [])
-    .map((entry) => String(entry ?? '').trim())
-    .filter(Boolean);
-}
-
-function reasoningDetail(item: CodexTranscriptItem): string {
-  const direct = String(item.text ?? '').trim();
-  if (direct) return direct;
-  const content = (item.content ?? [])
-    .map((entry) => String(entry ?? '').trim())
-    .filter(Boolean);
-  if (content.length === 0) return '';
-  const summary = reasoningSummary(item);
-  if (summary.length === content.length && summary.join('\n\n') === content.join('\n\n')) {
-    return '';
-  }
-  return content.join('\n\n');
-}
-
-function reasoningMarkdown(item: CodexTranscriptItem): string {
-  const sections: string[] = [];
-  const summary = reasoningSummary(item);
-  if (summary.length > 0) {
-    sections.push(summary.map((entry) => `- ${entry}`).join('\n'));
-  }
-  const detail = reasoningDetail(item);
-  if (detail) {
-    sections.push(detail);
-  }
-  return sections.join('\n\n').trim();
-}
-
-function reasoningPreview(item: CodexTranscriptItem): string {
-  const summary = reasoningSummary(item);
-  if (summary.length > 0) return summary[0];
-  const detail = reasoningDetail(item);
-  if (detail) {
-    return detail.replace(/\s+/g, ' ').trim();
-  }
-  return item.type === 'plan' ? 'Planning next steps' : 'Thinking';
-}
-
 function titleCaseStatus(value: string): string {
   return displayStatus(value, 'working')
     .split(' ')
@@ -295,165 +208,6 @@ function workingPhaseLabel(label: string, flags: readonly string[]): string {
   }
 }
 
-function ReasoningRow(props: {
-  item: CodexTranscriptItem;
-  expanded: boolean;
-  onExpandedChange: (expanded: boolean) => void;
-}) {
-  const markdown = createMemo(() => reasoningMarkdown(props.item));
-  const preview = createMemo(() => reasoningPreview(props.item));
-  const isActive = createMemo(() => isWorkingStatus(props.item.status));
-  const bodyId = createMemo(() => `codex-reasoning-body-${props.item.id}`);
-  const expanded = () => props.expanded;
-
-  return (
-    <CodexMessageLane role="assistant">
-      <div
-        data-codex-item-type={props.item.type}
-        data-codex-reasoning-row="true"
-        data-codex-reasoning-expanded={expanded() ? 'true' : 'false'}
-        class="chat-message-bubble chat-message-bubble-assistant codex-chat-message-bubble-assistant"
-      >
-        <div class="codex-chat-reasoning-inline">
-          <div class="codex-chat-reasoning-copy">
-            <button
-              type="button"
-              class="codex-chat-reasoning-toggle"
-              aria-expanded={expanded() ? 'true' : 'false'}
-              aria-controls={bodyId()}
-              onClick={() => props.onExpandedChange(!expanded())}
-            >
-              <span class="codex-chat-reasoning-kicker" aria-hidden="true">
-                <Sparkles />
-              </span>
-              <span class="codex-chat-reasoning-preview">{preview()}</span>
-              <Show when={isActive()}>
-                <span class="codex-chat-reasoning-cursor">
-                  <StreamingCursor />
-                </span>
-              </Show>
-              <span class="codex-chat-reasoning-chevron" aria-hidden="true">
-                <ChevronRight />
-              </span>
-            </button>
-
-            <Show when={expanded() && markdown()}>
-              <div id={bodyId()} class="codex-chat-reasoning-body">
-                <MarkdownBlock
-                  content={markdown()}
-                  streaming={isActive()}
-                  class="codex-chat-markdown-block codex-chat-reasoning-markdown"
-                  rendererVariant="codex"
-                />
-              </div>
-            </Show>
-          </div>
-        </div>
-      </div>
-    </CodexMessageLane>
-  );
-}
-
-type CodexWebSearchMetaItem = Readonly<{
-  label: string;
-  value: string;
-  title?: string;
-  tone?: 'default' | 'accent';
-}>;
-
-function compactWebSearchURL(value: string | null | undefined): string {
-  const normalized = String(value ?? '').trim();
-  if (!normalized) return '';
-  try {
-    const parsed = new URL(normalized);
-    const host = parsed.hostname.replace(/^www\./, '');
-    const segments = parsed.pathname.split('/').filter(Boolean);
-    if (segments.length === 0) return host;
-    if (segments.length === 1) return `${host}/${segments[0]}`;
-    return `${host}/.../${segments[segments.length - 1]}`;
-  } catch {
-    if (normalized.length <= 48) return normalized;
-    return `${normalized.slice(0, 22)}...${normalized.slice(-18)}`;
-  }
-}
-
-function buildWebSearchCard(item: CodexTranscriptItem): Readonly<{
-  actionLabel: string;
-  primary: string;
-  primaryTitle: string;
-  meta: CodexWebSearchMetaItem[];
-}> {
-  const actionType = String(item.action?.type ?? '').trim();
-  const query = String(item.query ?? item.action?.query ?? '').trim();
-  const queries = Array.isArray(item.action?.queries)
-    ? item.action?.queries.map((entry) => String(entry ?? '').trim()).filter(Boolean)
-    : [];
-  const pattern = String(item.action?.pattern ?? '').trim();
-  const url = String(item.action?.url ?? '').trim();
-  const compactURL = compactWebSearchURL(url);
-  const meta: CodexWebSearchMetaItem[] = [];
-  const pushMeta = (
-    label: string,
-    value: string,
-    title?: string,
-    tone: CodexWebSearchMetaItem['tone'] = 'default',
-  ) => {
-    const normalizedLabel = String(label ?? '').trim();
-    const normalizedValue = String(value ?? '').trim();
-    if (!normalizedLabel || !normalizedValue) return;
-    if (meta.some((entry) => entry.label === normalizedLabel && entry.value === normalizedValue)) return;
-    meta.push({
-      label: normalizedLabel,
-      value: normalizedValue,
-      title: String(title ?? normalizedValue).trim() || undefined,
-      tone,
-    });
-  };
-
-  if (actionType === 'search') {
-    if (queries.length > 1) {
-      pushMeta('Across', `${queries.length} queries`, undefined, 'accent');
-    }
-    return {
-      actionLabel: 'Search',
-      primary: query || queries[0] || 'Search requested',
-      primaryTitle: query || queries[0] || 'Search requested',
-      meta,
-    };
-  }
-
-  if (actionType === 'openPage') {
-    return {
-      actionLabel: 'Open page',
-      primary: compactURL || url || query || 'Page opened',
-      primaryTitle: url || compactURL || query || 'Page opened',
-      meta,
-    };
-  }
-
-  if (actionType === 'findInPage') {
-    if (compactURL) {
-      pushMeta('Page', compactURL, url);
-    }
-    return {
-      actionLabel: 'Find in page',
-      primary: pattern || query || compactURL || 'Pattern lookup',
-      primaryTitle: pattern || query || url || compactURL || 'Pattern lookup',
-      meta,
-    };
-  }
-
-  if (compactURL) {
-    pushMeta('Page', compactURL, url);
-  }
-  return {
-    actionLabel: 'Search',
-    primary: query || pattern || compactURL || 'Search requested',
-    primaryTitle: query || pattern || url || compactURL || 'Search requested',
-    meta,
-  };
-}
-
 function EvidenceHeader(props: { item: CodexTranscriptItem }) {
   return (
     <div class="codex-chat-evidence-header">
@@ -472,54 +226,6 @@ function EvidenceHeader(props: { item: CodexTranscriptItem }) {
   );
 }
 
-function WebSearchRow(props: { item: CodexTranscriptItem }) {
-  const card = createMemo(() => buildWebSearchCard(props.item));
-  return (
-    <CodexMessageLane role="assistant">
-      <div data-codex-item-type={props.item.type} class="chat-message-bubble chat-message-bubble-assistant codex-chat-message-bubble-assistant">
-        <div class="codex-chat-evidence-card codex-chat-evidence-card-web-search">
-          <div class="codex-chat-web-search-shell">
-            <span class="codex-chat-web-search-glyph">{itemGlyph(props.item)}</span>
-            <div class="codex-chat-web-search-main">
-              <div class="codex-chat-web-search-hero">
-                <span class="codex-chat-web-search-action-chip">{card().actionLabel}</span>
-                <code class="codex-chat-web-search-primary" title={card().primaryTitle}>
-                  {card().primary}
-                </code>
-              </div>
-              <Show when={card().meta.length > 0}>
-                <div class="codex-chat-web-search-meta">
-                  <For each={card().meta}>
-                    {(entry) => (
-                      <span
-                        class={cn(
-                          'codex-chat-web-search-meta-item',
-                          entry.tone === 'accent' && 'codex-chat-web-search-meta-item-accent',
-                        )}
-                        title={entry.title}
-                      >
-                        <span class="codex-chat-web-search-meta-label">{entry.label}</span>
-                        <span class="codex-chat-web-search-meta-value">{entry.value}</span>
-                      </span>
-                    )}
-                  </For>
-                </div>
-              </Show>
-            </div>
-            <Show when={props.item.status}>
-              <span class="codex-chat-web-search-status">
-                <Tag variant={statusTagVariant(props.item.status)} tone="soft" size="sm">
-                  {displayStatus(props.item.status)}
-                </Tag>
-              </span>
-            </Show>
-          </div>
-        </div>
-      </div>
-    </CodexMessageLane>
-  );
-}
-
 function TranscriptEvidenceRow(props: { item: CodexTranscriptItem }) {
   const fallbackText = () => itemText(props.item);
   return (
@@ -528,12 +234,11 @@ function TranscriptEvidenceRow(props: { item: CodexTranscriptItem }) {
         <div class="codex-chat-evidence-card">
           <EvidenceHeader item={props.item} />
           <div class="codex-chat-evidence-body">
-            <Show when={props.item.type === 'fileChange'}>
-              <FileChangeBody item={props.item} />
-            </Show>
             <Show
               when={
                 props.item.type !== 'fileChange' &&
+                props.item.type !== 'commandExecution' &&
+                props.item.type !== 'webSearch' &&
                 props.item.type !== 'reasoning' &&
                 props.item.type !== 'plan' &&
                 Boolean(fallbackText().trim())
@@ -712,27 +417,21 @@ function estimateTranscriptRowHeight(row: CodexTranscriptRenderRow): number {
       return CODEX_TRANSCRIPT_ROW_HEIGHTS.pending_assistant;
     case 'working_state':
       return CODEX_TRANSCRIPT_ROW_HEIGHTS.working_state;
-    case 'item':
+    case 'display_node':
     default: {
-      const item = row.item;
-      if (!item) return CODEX_TRANSCRIPT_VIRTUAL_LIST.defaultItemHeight;
-      switch (item.type) {
-        case 'userMessage':
-          return CODEX_TRANSCRIPT_ROW_HEIGHTS.userMessage;
-        case 'agentMessage':
-          return CODEX_TRANSCRIPT_ROW_HEIGHTS.agentMessage;
-        case 'reasoning':
-          return CODEX_TRANSCRIPT_ROW_HEIGHTS.reasoning;
-        case 'plan':
-          return CODEX_TRANSCRIPT_ROW_HEIGHTS.plan;
-        case 'commandExecution':
-          return CODEX_TRANSCRIPT_ROW_HEIGHTS.commandExecution;
-        case 'fileChange':
-          return CODEX_TRANSCRIPT_ROW_HEIGHTS.fileChange;
-        case 'webSearch':
-          return CODEX_TRANSCRIPT_ROW_HEIGHTS.webSearch;
-        default:
+      const node = row.displayNode;
+      if (!node) return CODEX_TRANSCRIPT_VIRTUAL_LIST.defaultItemHeight;
+      switch (node.kind) {
+        case 'message':
+          if (node.item.type === 'userMessage') return CODEX_TRANSCRIPT_ROW_HEIGHTS.userMessage;
+          if (node.item.type === 'agentMessage') return CODEX_TRANSCRIPT_ROW_HEIGHTS.agentMessage;
           return CODEX_TRANSCRIPT_ROW_HEIGHTS.evidence;
+        case 'activity_group':
+          return CODEX_TRANSCRIPT_ROW_HEIGHTS.activityGroup;
+        case 'attention':
+          return CODEX_TRANSCRIPT_ROW_HEIGHTS.evidence;
+        default:
+          return CODEX_TRANSCRIPT_VIRTUAL_LIST.defaultItemHeight;
       }
     }
   }
@@ -773,8 +472,9 @@ function sameMeasuredRowHeights(
 
 function CodexTranscriptMeasuredRow(props: {
   row: Accessor<CodexTranscriptRenderRow | null>;
-  reasoningExpandedByID: Accessor<Record<string, boolean>>;
-  onReasoningExpandedChange: (rowID: string, expanded: boolean) => void;
+  sourceItems: readonly CodexTranscriptItem[];
+  activityStreamState: (group: CodexTranscriptActivityGroupNode) => CodexActivityStreamState;
+  setActivityStreamState: (groupID: string, nextState: CodexActivityStreamState) => void;
   observeRow: (element: HTMLElement, rowID: string) => void;
   unobserveRow: (element: HTMLElement) => void;
   class?: string;
@@ -808,15 +508,12 @@ function CodexTranscriptMeasuredRow(props: {
             <Show when={row().kind === 'optimistic' && row().optimisticTurn}>
               <OptimisticUserMessageRow turn={row().optimisticTurn!} />
             </Show>
-            <Show when={row().kind === 'item' && row().item}>
-              <TranscriptRow
-                item={() => row().item ?? null}
-                reasoningExpanded={Boolean(
-                  row().item ? props.reasoningExpandedByID()[row().id] : false,
-                )}
-                onReasoningExpandedChange={(expanded) => {
-                  props.onReasoningExpandedChange(row().id, expanded);
-                }}
+            <Show when={row().kind === 'display_node' && row().displayNode}>
+              <TranscriptDisplayRow
+                node={() => row().displayNode ?? null}
+                sourceItems={props.sourceItems}
+                activityStreamState={props.activityStreamState}
+                setActivityStreamState={props.setActivityStreamState}
               />
             </Show>
             <Show when={row().kind === 'pending_assistant' && row().pendingAssistantState}>
@@ -832,37 +529,59 @@ function CodexTranscriptMeasuredRow(props: {
   );
 }
 
-function TranscriptRow(props: {
-  item: Accessor<CodexTranscriptItem | null>;
-  reasoningExpanded?: boolean;
-  onReasoningExpandedChange?: (expanded: boolean) => void;
+function ActivityGroupRow(props: {
+  group: CodexTranscriptActivityGroupNode;
+  sourceItems: readonly CodexTranscriptItem[];
+  state: CodexActivityStreamState;
+  onStateChange: (nextState: CodexActivityStreamState) => void;
 }) {
   return (
-    <Show when={props.item()}>
-      {(itemAccessor) => {
-        const item = () => itemAccessor();
-        if (item().type === 'userMessage') {
-          return <UserMessageRow item={item()} />;
-        }
-        if (item().type === 'agentMessage') {
-          return <AgentMessageRow item={item()} />;
-        }
-        if (item().type === 'commandExecution') {
-          return <CommandExecutionRow item={item()} />;
-        }
-        if (item().type === 'webSearch') {
-          return <WebSearchRow item={item()} />;
-        }
-        if (item().type === 'reasoning' || item().type === 'plan') {
+    <CodexMessageLane role="assistant" class="codex-activity-message-row">
+      <CodexActivityStream
+        group={props.group}
+        sourceItems={props.sourceItems}
+        state={props.state}
+        onStateChange={props.onStateChange}
+      />
+    </CodexMessageLane>
+  );
+}
+
+function TranscriptDisplayRow(props: {
+  node: Accessor<CodexTranscriptDisplayNode | null>;
+  sourceItems: readonly CodexTranscriptItem[];
+  activityStreamState: (group: CodexTranscriptActivityGroupNode) => CodexActivityStreamState;
+  setActivityStreamState: (groupID: string, nextState: CodexActivityStreamState) => void;
+}) {
+  return (
+    <Show when={props.node()}>
+      {(nodeAccessor) => {
+        const node = () => nodeAccessor();
+        if (node().kind === 'activity_group') {
+          const group = node() as CodexTranscriptActivityGroupNode;
           return (
-            <ReasoningRow
-              item={item()}
-              expanded={Boolean(props.reasoningExpanded)}
-              onExpandedChange={(expanded) => props.onReasoningExpandedChange?.(expanded)}
+            <ActivityGroupRow
+              group={group}
+              sourceItems={props.sourceItems}
+              state={props.activityStreamState(group)}
+              onStateChange={(nextState) => props.setActivityStreamState(group.id, nextState)}
             />
           );
         }
-        return <TranscriptEvidenceRow item={item()} />;
+        const item = () => {
+          const current = node();
+          return current.kind === 'message' || current.kind === 'attention' ? current.item : null;
+        };
+        if (item()?.type === 'userMessage') {
+          return <UserMessageRow item={item()!} />;
+        }
+        if (item()?.type === 'agentMessage') {
+          return <AgentMessageRow item={item()!} />;
+        }
+        if (item()) {
+          return <TranscriptEvidenceRow item={item()!} />;
+        }
+        return null;
       }}
     </Show>
   );
@@ -888,22 +607,21 @@ export function CodexTranscript(props: {
   emptyBody: string;
 }) {
   const optimisticUserTurns = createMemo<readonly CodexOptimisticUserTurn[]>(() => props.optimisticUserTurns ?? []);
-  const [reasoningExpandedByID, setReasoningExpandedByID] = createSignal<Record<string, boolean>>({});
   const transcriptRowScopeKey = createMemo(() => normalizeTranscriptRowScopeKey(
     props.threadKey ?? optimisticUserTurns()[0]?.thread_id ?? null,
   ));
   const itemRows = createMemo<readonly CodexTranscriptRenderRow[]>(() => {
     const rows: CodexTranscriptRenderRow[] = [];
-    props.items.forEach((item) => {
-      if (!shouldRenderTranscriptItem(item)) return;
-      const itemID = String(item.id ?? '').trim();
-      if (!itemID) return;
-      const anchorId = `item:${itemID}`;
+    const renderableItems = props.items.filter(shouldRenderTranscriptItem);
+    buildCodexTranscriptDisplayNodes(renderableItems).forEach((displayNode) => {
+      const nodeID = String(displayNode.id ?? '').trim();
+      if (!nodeID) return;
+      const anchorId = displayNode.kind === 'activity_group' ? nodeID : `item:${nodeID}`;
       const seedRow: CodexTranscriptRenderRow = {
         id: buildScopedTranscriptRowID(transcriptRowScopeKey(), anchorId),
-        kind: 'item',
+        kind: 'display_node',
         anchorId,
-        item,
+        displayNode,
         estimatedHeightPx: CODEX_TRANSCRIPT_VIRTUAL_LIST.defaultItemHeight,
       };
       rows.push({
@@ -1011,6 +729,19 @@ export function CodexTranscript(props: {
   const [rowHeightsByID, setRowHeightsByID] = createSignal<Record<string, number>>(
     readPersistedRowHeights(transcriptRowOrder()),
   );
+  const [activityStreamStateByID, setActivityStreamStateByID] = createSignal<Record<string, CodexActivityStreamState>>({});
+  const activityStreamState = (group: CodexTranscriptActivityGroupNode): CodexActivityStreamState => {
+    return activityStreamStateByID()[group.id] ?? {
+      expanded: group.defaultExpandLevel === 'semi',
+      activeDetail: null,
+    };
+  };
+  const setActivityStreamState = (groupID: string, nextState: CodexActivityStreamState): void => {
+    setActivityStreamStateByID((current) => ({
+      ...current,
+      [groupID]: nextState,
+    }));
+  };
   const virtualized = createMemo(() => Boolean(props.scrollContainer));
   const virtualList = useVirtualList({
     count: () => transcriptRowOrder().length,
@@ -1142,31 +873,6 @@ export function CodexTranscript(props: {
     onResolverChange(virtualized() ? followBottomViewportAnchorResolver : null);
     onCleanup(() => {
       onResolverChange(null);
-    });
-  });
-
-  createEffect(() => {
-    const visibleReasoningRowIDs = new Set<string>();
-    setReasoningExpandedByID((current) => {
-      let next = current;
-      let changed = false;
-      for (const row of transcriptRows()) {
-        if (row.kind !== 'item') continue;
-        const item = row.item;
-        if (!item || (item.type !== 'reasoning' && item.type !== 'plan')) continue;
-        visibleReasoningRowIDs.add(row.id);
-        if (Object.prototype.hasOwnProperty.call(current, row.id)) continue;
-        if (next === current) next = { ...current };
-        next[row.id] = false;
-        changed = true;
-      }
-      for (const rowID of Object.keys(current)) {
-        if (visibleReasoningRowIDs.has(rowID)) continue;
-        if (next === current) next = { ...current };
-        delete next[rowID];
-        changed = true;
-      }
-      return changed ? next : current;
     });
   });
 
@@ -1311,21 +1017,14 @@ export function CodexTranscript(props: {
               <div class="codex-transcript-feed">
                 <For each={visibleRowIDs()}>
                   {(rowID) => (
-                    <CodexTranscriptMeasuredRow
-                      row={() => transcriptRowsByID()[rowID] ?? null}
-                      reasoningExpandedByID={reasoningExpandedByID}
-                      onReasoningExpandedChange={(itemID, expanded) => {
-                        setReasoningExpandedByID((current) => {
-                          if (Boolean(current[itemID]) === expanded) return current;
-                          return {
-                            ...current,
-                            [itemID]: expanded,
-                          };
-                        });
-                      }}
-                      observeRow={observeRow}
-                      unobserveRow={unobserveRow}
-                    />
+	                    <CodexTranscriptMeasuredRow
+	                      row={() => transcriptRowsByID()[rowID] ?? null}
+	                      sourceItems={props.items}
+                        activityStreamState={activityStreamState}
+                        setActivityStreamState={setActivityStreamState}
+	                      observeRow={observeRow}
+	                      unobserveRow={unobserveRow}
+	                    />
                   )}
                 </For>
               </div>
@@ -1340,23 +1039,16 @@ export function CodexTranscript(props: {
                 {(rowID) => {
                   const rowOffsetPx = createMemo(() => visibleVirtualItemsByID().get(rowID)?.start ?? 0);
                   return (
-                    <CodexTranscriptMeasuredRow
-                      row={() => transcriptRowsByID()[rowID] ?? null}
-                      class="codex-transcript-row-virtualized"
-                      style={() => ({ transform: `translateY(${rowOffsetPx()}px)` })}
-                      reasoningExpandedByID={reasoningExpandedByID}
-                      onReasoningExpandedChange={(itemID, expanded) => {
-                        setReasoningExpandedByID((current) => {
-                          if (Boolean(current[itemID]) === expanded) return current;
-                          return {
-                            ...current,
-                            [itemID]: expanded,
-                          };
-                        });
-                      }}
-                      observeRow={observeRow}
-                      unobserveRow={unobserveRow}
-                    />
+	                    <CodexTranscriptMeasuredRow
+	                      row={() => transcriptRowsByID()[rowID] ?? null}
+	                      class="codex-transcript-row-virtualized"
+	                      style={() => ({ transform: `translateY(${rowOffsetPx()}px)` })}
+	                      sourceItems={props.items}
+                        activityStreamState={activityStreamState}
+                        setActivityStreamState={setActivityStreamState}
+	                      observeRow={observeRow}
+	                      unobserveRow={unobserveRow}
+	                    />
                   );
                 }}
               </For>

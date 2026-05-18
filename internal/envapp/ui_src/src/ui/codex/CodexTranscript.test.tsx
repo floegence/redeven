@@ -37,6 +37,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     ChevronRight: Icon,
     Code: Icon,
     FileText: Icon,
+    Search: Icon,
     Sparkles: Icon,
     Terminal: Icon,
   };
@@ -293,7 +294,7 @@ describe('CodexTranscript', () => {
     dispose();
   });
 
-  it('preserves reasoning expansion after a virtualized row leaves and re-enters the viewport', async () => {
+  it('preserves activity detail expansion after a virtualized row leaves and re-enters the viewport', async () => {
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
       callback(16);
       return 1;
@@ -321,22 +322,24 @@ describe('CodexTranscript', () => {
 
     await flushAsync();
 
-    const toggle = host.querySelector('.codex-chat-reasoning-toggle') as HTMLButtonElement | null;
-    expect(toggle).toBeTruthy();
-    toggle?.click();
+    const groupToggle = host.querySelector('.codex-activity-group-trigger') as HTMLButtonElement | null;
+    expect(groupToggle).toBeTruthy();
+    const detailToggle = host.querySelector('[data-codex-activity-item-kind="reasoning"]') as HTMLButtonElement | null;
+    expect(detailToggle).toBeTruthy();
+    detailToggle?.click();
     await flushAsync();
-    expect(host.querySelector('[data-codex-reasoning-row="true"]')?.getAttribute('data-codex-reasoning-expanded')).toBe('true');
+    expect(host.querySelector('[data-codex-activity-detail="reasoning"]')).toBeTruthy();
 
     scrollContainer.scrollTop = 4_000;
     scrollContainer.dispatchEvent(new Event('scroll'));
     await flushAsync();
-    expect(host.querySelector('[data-codex-reasoning-row="true"]')).toBeNull();
+    expect(host.querySelector('[data-codex-activity-detail="reasoning"]')).toBeNull();
 
     scrollContainer.scrollTop = 0;
     scrollContainer.dispatchEvent(new Event('scroll'));
     await flushAsync();
 
-    expect(host.querySelector('[data-codex-reasoning-row="true"]')?.getAttribute('data-codex-reasoning-expanded')).toBe('true');
+    expect(host.querySelector('[data-codex-activity-detail="reasoning"]')).toBeTruthy();
     expect(host.textContent).toContain('Reasoning detail survives virtualization.');
 
     dispose();
@@ -389,7 +392,7 @@ describe('CodexTranscript', () => {
     expect(transcriptRows).toHaveLength(3);
 
     const rowMetricsByAnchorID = new Map<string, { top: number; height: number }>([
-      ['item:item_command_1', { top: 0, height: 144 }],
+      ['activity:turn:unknown:item_command_1', { top: 0, height: 144 }],
       ['item:item_agent_1', { top: 144, height: 72 }],
       ['item:item_agent_2', { top: 216, height: 72 }],
     ]);
@@ -404,14 +407,14 @@ describe('CodexTranscript', () => {
       });
     }
 
-    scrollContainer.scrollTop = 90;
+    scrollContainer.scrollTop = 96;
     scrollContainer.dispatchEvent(new Event('scroll'));
     await flushAsync();
 
     resizeObserverHarness.notify(transcriptRows[0]!);
     await flushAsync();
 
-    expect(scrollContainer.scrollTop).toBe(158);
+    expect(scrollContainer.scrollTop).toBe(148);
 
     dispose();
   });
@@ -887,7 +890,7 @@ describe('CodexTranscript', () => {
       showWorkingState: true,
       workingLabel: 'working',
     });
-    const webSearchRows = Array.from(host.querySelectorAll('[data-codex-item-type="webSearch"]'));
+    const webSearchRows = Array.from(host.querySelectorAll('[data-codex-activity-item-kind="search"]'));
     const workingRow = host.querySelector('[data-codex-working-state="true"]')?.closest('.chat-message-item');
 
     expect(host.querySelector('[data-codex-pre-output="true"]')).toBeNull();
@@ -961,7 +964,7 @@ describe('CodexTranscript', () => {
     dispose();
   });
 
-  it('renders reasoning as a collapsible markdown block and keeps it expanded after completion', async () => {
+  it('renders reasoning as an activity item and opens markdown only from item detail', async () => {
     const [items, setItems] = createSignal<CodexTranscriptItem[]>([
       {
         id: 'item_reasoning_live',
@@ -981,18 +984,18 @@ describe('CodexTranscript', () => {
       />
     ), host);
 
-    expect(host.querySelector('[data-codex-reasoning-row="true"]')?.getAttribute('data-codex-reasoning-expanded')).toBe('false');
+    expect(host.querySelector('.codex-activity-stream')).toBeTruthy();
     expect(host.textContent).not.toContain('Reasoning note');
-    expect(host.querySelector('.codex-chat-reasoning-card')).toBeNull();
-    expect(host.querySelector('.codex-chat-reasoning-toggle .codex-chat-reasoning-kicker')).toBeTruthy();
-    expect(host.querySelector('.codex-chat-reasoning-markdown')).toBeNull();
+    expect(host.querySelector('.codex-chat-reasoning-toggle')).toBeNull();
+    expect(host.querySelector('.codex-activity-detail-markdown')).toBeNull();
 
-    const toggle = host.querySelector('.codex-chat-reasoning-toggle') as HTMLButtonElement | null;
-    toggle?.click();
+    const toggle = host.querySelector('[data-codex-activity-item-kind="reasoning"]') as HTMLButtonElement | null;
+    const completedToggle = host.querySelector('[data-codex-activity-item-kind="reasoning"]') as HTMLButtonElement | null;
+    completedToggle?.click();
     await Promise.resolve();
 
-    expect(host.querySelector('[data-codex-reasoning-row="true"]')?.getAttribute('data-codex-reasoning-expanded')).toBe('true');
-    expect(host.querySelector('.codex-chat-reasoning-markdown')).toBeTruthy();
+    expect(host.querySelector('[data-codex-activity-detail="reasoning"]')).toBeTruthy();
+    expect(host.querySelector('.codex-activity-detail-markdown')).toBeTruthy();
 
     setItems([
       {
@@ -1006,18 +1009,18 @@ describe('CodexTranscript', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(host.querySelector('[data-codex-reasoning-row="true"]')?.getAttribute('data-codex-reasoning-expanded')).toBe('true');
+    expect(host.querySelector('[data-codex-activity-detail="reasoning"]')).toBeTruthy();
     expect(host.textContent).toContain('Investigating the event replay path.');
 
     toggle?.click();
     await Promise.resolve();
 
-    expect(host.querySelector('[data-codex-reasoning-row="true"]')?.getAttribute('data-codex-reasoning-expanded')).toBe('false');
+    expect(host.querySelector('[data-codex-activity-detail="reasoning"]')).toBeNull();
 
     dispose();
   });
 
-  it('keeps evidence rows avatar-free, hides empty reasoning rows, and shows web search details instead of a No content fallback', () => {
+  it('keeps activity rows avatar-free, hides empty reasoning rows, and shows web search details only after clicking an item', async () => {
     const items: CodexTranscriptItem[] = [
       {
         id: 'item_reasoning_empty',
@@ -1064,31 +1067,29 @@ describe('CodexTranscript', () => {
 
     expect(host.textContent).not.toContain('Reasoning note');
     expect(host.textContent).not.toContain('Web search');
-    expect(host.textContent).toContain('Search');
+    expect(host.textContent).toContain('Done');
     expect(host.textContent).toContain('site:nmc.cn changsha weather');
-    expect(host.textContent).toContain('2 queries');
-    expect(host.textContent).toContain('Open page');
-    expect(host.textContent).toContain('nmc.cn/.../changsha.html');
-    expect(host.textContent).toContain('Find in page');
+    expect(host.textContent).toContain('Opened https://nmc.cn/publish/forecast/AHN/changsha.html');
+    expect(host.textContent).toContain('Searched page for "Rainfall warning"');
     expect(host.textContent).toContain('Rainfall warning');
-    expect(host.textContent).toContain('Page');
-    expect(host.textContent).toContain('weather.com.cn/.../101250101.shtml');
     expect(host.textContent).not.toContain('No content.');
-    const webSearchRows = host.querySelectorAll('[data-codex-item-type="webSearch"]');
+    const webSearchRows = host.querySelectorAll('[data-codex-activity-item-kind="search"]');
 
     expect(webSearchRows[0]?.closest('.chat-message-item')?.querySelector('.chat-message-avatar')).toBeNull();
     expect(webSearchRows[1]?.closest('.chat-message-item')?.querySelector('.chat-message-avatar')).toBeNull();
     expect(host.querySelectorAll('.chat-message-avatar')).toHaveLength(0);
-    expect(host.querySelector('[data-codex-item-type="webSearch"] .codex-chat-markdown-block')).toBeNull();
-    expect(host.querySelector('[data-codex-item-type="webSearch"] .codex-chat-evidence-header')).toBeNull();
-    expect(host.querySelector('[data-codex-item-type="webSearch"] .codex-chat-web-search-primary')).toBeTruthy();
-    expect(host.querySelector('[data-codex-item-type="webSearch"] .codex-chat-web-search-meta')).toBeTruthy();
-    expect(host.querySelector('[data-codex-item-type="webSearch"] .codex-chat-web-search-meta-label')?.textContent).toBe('Across');
+    expect(host.querySelector('.codex-chat-evidence-card')).toBeNull();
+    expect(host.querySelector('.codex-activity-detail-markdown')).toBeNull();
+
+    (webSearchRows[0] as HTMLButtonElement | undefined)?.click();
+    await flushAsync();
+    expect(host.querySelector('[data-codex-activity-detail="web_search"]')).toBeTruthy();
+    expect(host.querySelector('.codex-activity-detail-markdown')).toBeTruthy();
 
     dispose();
   });
 
-  it('renders web search status only when the item has an explicit status', () => {
+  it('renders web search activity rows without status-heavy transcript cards', () => {
     const items: CodexTranscriptItem[] = [
       {
         id: 'item_web_search_no_status',
@@ -1114,17 +1115,16 @@ describe('CodexTranscript', () => {
     ];
 
     const { host, dispose } = renderTranscript(items);
-    const rows = host.querySelectorAll('[data-codex-item-type="webSearch"]');
+    const rows = host.querySelectorAll('[data-codex-activity-item-kind="search"]');
 
     expect(rows).toHaveLength(2);
-    expect(rows[0]?.querySelector('.codex-chat-web-search-status')).toBeNull();
-    expect(rows[1]?.querySelector('.codex-chat-web-search-status')).toBeTruthy();
-    expect(rows[1]?.textContent?.toLowerCase()).toContain('completed');
+    expect(host.querySelector('.codex-chat-web-search-status')).toBeNull();
+    expect(host.querySelector('.codex-chat-evidence-card-web-search')).toBeNull();
 
     dispose();
   });
 
-  it('renders command execution rows as direct shell blocks without the extra evidence header wrapper', () => {
+  it('renders command execution rows as compact activity items and opens shell details on click', async () => {
     const { host, dispose } = renderTranscript([
       {
         id: 'item_command',
@@ -1138,9 +1138,16 @@ describe('CodexTranscript', () => {
     ]);
 
     expect(host.textContent).toContain('pnpm test');
-    expect(host.textContent).toContain('PASS CodexTranscript.test.tsx');
+    expect(host.textContent).not.toContain('PASS CodexTranscript.test.tsx');
     expect(host.textContent).not.toContain('Command evidence');
     expect(host.querySelector('.codex-chat-evidence-card')).toBeNull();
+    expect(host.querySelector('.codex-chat-shell-block')).toBeNull();
+
+    (host.querySelector('[data-codex-activity-item-kind="command"]') as HTMLButtonElement | null)?.click();
+    await flushAsync();
+
+    expect(host.querySelector('[data-codex-activity-detail="command_output"]')).toBeTruthy();
+    expect(host.textContent).toContain('PASS CodexTranscript.test.tsx');
 
     dispose();
   });
@@ -1327,7 +1334,7 @@ describe('CodexTranscript', () => {
     dispose();
   });
 
-  it('renders file changes through a git-style Codex diff block instead of a raw preformatted dump', () => {
+  it('renders file changes as compact activity items and opens the clicked file diff on demand', async () => {
     const { host, dispose } = renderTranscript([
       {
         id: 'item_file_change',
@@ -1347,11 +1354,19 @@ describe('CodexTranscript', () => {
       },
     ]);
 
-    expect(host.querySelector('.codex-chat-file-change')).toBeTruthy();
+    expect(host.querySelector('.codex-chat-file-change')).toBeNull();
     expect(host.querySelector('.codex-chat-diff-pre')).toBeNull();
     expect(host.textContent).toContain('src/ui/codex/CodexFileChangeDiff.tsx');
-    expect(host.textContent).toContain('Added');
-    expect(host.textContent).toContain('+3 / −0');
+    expect(host.textContent).toContain('+3-0');
+    expect(host.textContent).not.toContain('+export function Example() {');
+    expect(host.textContent).not.toContain('+  return <div />;');
+    expect(host.textContent).not.toContain('Copy Patch');
+    expect(host.querySelectorAll('.redeven-surface-panel')).toHaveLength(0);
+
+    (host.querySelector('[data-codex-activity-item-kind="file_change"]') as HTMLButtonElement | null)?.click();
+    await flushAsync();
+
+    expect(host.querySelector('.codex-chat-file-change')).toBeTruthy();
     expect(host.textContent).toContain('+export function Example() {');
     expect(host.textContent).toContain('+  return <div />;');
     expect(host.textContent).not.toContain('Copy Patch');
