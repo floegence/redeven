@@ -104,6 +104,7 @@ function sshRuntimePresence(
       placement: presence.placement,
       running: presence.running,
       openable: presence.openable,
+      open_connection_required: presence.open_connection_required,
       runtime_service: presence.runtime_service,
       runtime_control_status: presence.runtime_control_status,
       maintenance: presence.maintenance,
@@ -163,6 +164,7 @@ function localRuntimePresence(
       placement: presence.placement,
       running: presence.running,
       openable: presence.openable,
+      open_connection_required: presence.open_connection_required,
       runtime_service: presence.runtime_service,
       runtime_control_status: presence.runtime_control_status,
       maintenance: presence.maintenance,
@@ -1165,6 +1167,73 @@ describe('desktopWelcomeState', () => {
       managed_runtime_target_id: 'local:local',
       runtime_operations: expect.objectContaining({
         stop: expect.objectContaining({ availability: 'available' }),
+      }),
+    });
+  });
+
+  it('keeps saved container open-connection presence aligned with the operation plan', () => {
+    const targetID = 'local:container:docker:redeven-dev-mysql-db-dev-1:63ce185e';
+    const presence = localRuntimePresence({
+      target_id: `local:${targetID}`,
+      placement_target_id: targetID,
+      environment_id: targetID,
+      label: 'redeven-dev-mysql-db-dev-1',
+      runtime_key: targetID,
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: '840f2eee03368aab7c6c7d6be7ff19d0392c03b3d73cd5d2fdd12d97f19a0e6d',
+        container_ref: 'redeven-dev-mysql-db-dev-1',
+        container_label: 'redeven-dev-mysql-db-dev-1',
+        runtime_root: '/root/.redeven',
+        bridge_strategy: 'exec_stream',
+      },
+      running: true,
+      local_ui_url: '',
+      openable: false,
+      open_connection_required: true,
+      runtime_service: undefined,
+      runtime_control_status: {
+        state: 'missing',
+        reason_code: 'forward_unavailable',
+        message: 'Open this runtime to prepare the Desktop bridge and provider connection.',
+      },
+    });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        saved_runtime_targets: [{
+          schema_version: 1,
+          id: targetID,
+          label: 'redeven-dev-mysql-db-dev-1',
+          host_access: { kind: 'local_host' },
+          placement: presence.placement,
+          pinned: false,
+          last_used_at_ms: 1779100944496,
+          created_at_ms: 1779100944496,
+          updated_at_ms: 1779100944496,
+        }],
+      }),
+      managedRuntimePresenceByTargetID: {
+        [presence.target_id]: presence,
+      },
+    });
+
+    const entry = snapshot.environments.find((environment) => environment.id === targetID);
+
+    expect(entry).toMatchObject({
+      label: 'redeven-dev-mysql-db-dev-1',
+      managed_runtime_open_connection_required: true,
+      runtime_operations: expect.objectContaining({
+        open: expect.objectContaining({ availability: 'available' }),
+        start: expect.objectContaining({
+          availability: 'unavailable',
+          reason_code: 'runtime_already_running',
+        }),
+      }),
+      provider_runtime_link_target: expect.objectContaining({
+        runtime_running: true,
+        runtime_openable: false,
+        blocked_reason_code: 'runtime_control_missing',
       }),
     });
   });
