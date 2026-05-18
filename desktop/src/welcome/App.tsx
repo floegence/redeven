@@ -205,7 +205,6 @@ import {
   busyStateWithActionProgress,
   activeProgressForEnvironment,
   busyStateMatchesAction,
-  busyStateMatchesAnyAction,
   busyStateMatchesControlPlane,
   busyStateMatchesEnvironment,
   environmentMatchesActionProgress,
@@ -2795,31 +2794,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
   }
 
-  async function saveAndConnectURLFromDialog(): Promise<void> {
-    const state = connectionDialogState();
-    if (!state || state.connection_kind !== 'external_local_ui') {
-      return;
-    }
-    const errors = validateConnectionDialogFields(state);
-    setConnectionDialogFieldErrors(errors);
-    if (Object.keys(errors).length > 0) {
-      return;
-    }
-    setConnectionDialogFieldErrors({});
-    const saved = await upsertSavedEnvironment({
-      environment_id: state.environment_id,
-      label: state.label,
-      external_local_ui_url: state.external_local_ui_url,
-      errorTarget: 'dialog',
-      successMessage: state.mode === 'edit'
-        ? 'Connection updated.'
-        : 'Connection saved to Environment Library.',
-    });
-    if (saved) {
-      await openRemoteEnvironment(state.external_local_ui_url, 'dialog');
-    }
-  }
-
   async function toggleEnvironmentPinned(environment: DesktopEnvironmentEntry): Promise<void> {
     const nextPinned = !environment.pinned;
     const successMessage = nextPinned
@@ -3127,7 +3101,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         switchKind={switchConnectionDialogKind}
         switchBootstrapStrategy={switchSSHBootstrapStrategy}
         clearFieldErrors={() => setConnectionDialogFieldErrors({})}
-        onConnect={saveAndConnectURLFromDialog}
         onSave={saveConnectionFromDialog}
       />
 
@@ -6367,7 +6340,6 @@ function ConnectionDialog(props: Readonly<{
   switchKind: (kind: ConnectionDialogKind) => void;
   switchBootstrapStrategy: (strategy: DesktopSSHBootstrapStrategy) => void;
   clearFieldErrors: () => void;
-  onConnect: () => Promise<void>;
   onSave: () => Promise<void>;
 }>) {
   const isOpen = createMemo(() => props.state !== null);
@@ -6404,7 +6376,6 @@ function ConnectionDialog(props: Readonly<{
         return 'Auto';
     }
   });
-  const showCreateConnectAction = createMemo(() => isCreate() && connectionKind() === 'external_local_ui');
   const connectionKindDescription = createMemo<JSX.Element>(() => {
     switch (connectionKind()) {
       case 'external_local_ui':
@@ -6448,7 +6419,7 @@ function ConnectionDialog(props: Readonly<{
           </Button>
           <Button
             size="sm"
-            variant={isCreate() ? 'outline' : 'default'}
+            variant="default"
             loading={busyStateMatchesAction(props.busyState, 'save_environment')}
             onClick={() => {
               void props.onSave();
@@ -6457,21 +6428,6 @@ function ConnectionDialog(props: Readonly<{
             <Save class="mr-1 h-3.5 w-3.5" />
             {compactSaveActionLabel()}
           </Button>
-          <Show when={showCreateConnectAction()}>
-            <Button
-              size="sm"
-              variant="default"
-              loading={busyStateMatchesAnyAction(props.busyState, [
-                'open_remote_environment',
-                'open_ssh_environment',
-              ])}
-              onClick={() => {
-                void props.onConnect();
-              }}
-            >
-              Connect
-            </Button>
-          </Show>
         </div>
       )}
     >

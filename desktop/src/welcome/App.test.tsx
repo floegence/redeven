@@ -815,9 +815,10 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("label: 'Key / agent'");
     expect(appSrc).toContain("label: 'Password prompt'");
     expect(appSrc).toContain('does not store the SSH password');
-    expect(appSrc).toContain("const showCreateConnectAction = createMemo(() => isCreate() && connectionKind() === 'external_local_ui');");
-    expect(appSrc).toContain('<Show when={showCreateConnectAction()}>');
-    expect(appSrc).toContain('async function saveAndConnectURLFromDialog()');
+    expect(appSrc).toContain('variant="default"');
+    expect(appSrc).not.toContain("const showCreateConnectAction = createMemo(() => isCreate() && connectionKind() === 'external_local_ui');");
+    expect(appSrc).not.toContain('<Show when={showCreateConnectAction()}>');
+    expect(appSrc).not.toContain('async function saveAndConnectURLFromDialog()');
     expect(appSrc).not.toContain('async function ' + 'connectFrom' + 'Dialog()');
     expect(appSrc).toContain("label: 'Automatic'");
     expect(appSrc).toContain("label: 'Desktop Upload'");
@@ -843,7 +844,8 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain('type ConnectionDialogState = ExternalURLConnectionDialogState | SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null;');
     expect(appSrc).toContain('props.switchKind(value as ConnectionDialogKind)');
-    expect(appSrc).toContain('const showCreateConnectAction = createMemo(() => isCreate() && connectionKind() === \'external_local_ui\');');
+    expect(appSrc).not.toContain('const showCreateConnectAction = createMemo(() => isCreate() && connectionKind() === \'external_local_ui\');');
+    expect(appSrc).not.toContain('onConnect={saveAndConnectURLFromDialog}');
     expect(appSrc).not.toContain('scope derived from Name.');
   });
 
