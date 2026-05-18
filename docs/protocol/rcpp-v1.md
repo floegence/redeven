@@ -229,7 +229,7 @@ Semantics:
   - or both
 - Desktop may use `remote_session_url` to open the provider Environment remotely.
 - Desktop may use `bootstrap_ticket` only for an explicit provider-link connect flow initiated from a Local or SSH runtime card. The Welcome `Open` action must not silently consume the ticket to link a runtime.
-- Runtime provider disconnect is runtime-target-first. A runtime that still reports a provider binding must remain disconnectable even when the linked provider Environment is no longer present in the latest provider catalog.
+- Runtime provider disconnect is runtime-target-first. A runtime that still reports a provider binding must remain disconnectable even when the linked provider Environment is no longer present in the latest provider catalog or its provider control channel is already unavailable.
 
 ### 5.9 Provider Link / Runtime Bootstrap Exchange
 

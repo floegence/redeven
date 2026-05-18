@@ -314,18 +314,54 @@ func providerLinkDisconnectError(err error) *ProviderLinkError {
 			Err:     err,
 		}
 	}
-	if errors.Is(err, errProviderControlChannelNotConnected) {
-		return &ProviderLinkError{
-			Code:    ProviderLinkErrorDisconnectRejected,
-			Message: "Provider disconnect requires an active provider control channel. Reconnect this runtime, then disconnect again.",
-			Err:     err,
-		}
-	}
 	return &ProviderLinkError{
 		Code:    ProviderLinkErrorDisconnectFailed,
 		Message: fmt.Sprintf("Provider disconnect failed: %v", err),
 		Err:     err,
 	}
+}
+
+func (a *Agent) providerDisconnectShouldNotifyLocked() bool {
+	return a.providerControlChannelActiveLocked() && a.controlRPC != nil
+}
+
+func (a *Agent) clearProviderLinkBindingLocked(snapshot providerDisconnectSnapshot) (runtimeservice.ProviderLinkBinding, error) {
+	if a.cfg == nil ||
+		strings.TrimSpace(a.cfg.ControlplaneBaseURL) != snapshot.ProviderOrigin ||
+		strings.TrimSpace(a.cfg.ControlplaneProviderID) != snapshot.ProviderID ||
+		strings.TrimSpace(a.cfg.EnvironmentID) != snapshot.EnvPublicID ||
+		strings.TrimSpace(a.cfg.LocalEnvironmentPublicID) != snapshot.LocalEnvironmentPublicID ||
+		a.cfg.BindingGeneration != snapshot.BindingGeneration {
+		return runtimeservice.ProviderLinkBinding{}, &ProviderLinkError{
+			Code:    ProviderLinkErrorBindingNotCurrent,
+			Message: "Provider binding changed while disconnecting. Refresh Desktop, then connect or disconnect again.",
+		}
+	}
+	next := *a.cfg
+	next.ControlplaneBaseURL = ""
+	next.ControlplaneProviderID = ""
+	next.EnvironmentID = ""
+	next.LocalEnvironmentPublicID = ""
+	next.BindingGeneration = 0
+	next.Direct = nil
+	if strings.TrimSpace(next.AgentInstanceID) == "" {
+		next.AgentInstanceID = a.cfg.AgentInstanceID
+	}
+	if err := config.Save(a.configPath, &next); err != nil {
+		return runtimeservice.ProviderLinkBinding{}, &ProviderLinkError{
+			Code:    ProviderLinkErrorDisconnectFailed,
+			Message: fmt.Sprintf("Persist provider disconnect failed: %v", err),
+			Err:     err,
+		}
+	}
+	a.cfg = &next
+	a.controlChannelEnabled = false
+	a.remoteEnabled = false
+	a.effectiveRunMode = "local"
+	return runtimeservice.ProviderLinkBinding{
+		State:                    runtimeservice.ProviderLinkStateUnbound,
+		LastDisconnectedAtUnixMS: time.Now().UnixMilli(),
+	}, nil
 }
 
 func (a *Agent) DisconnectProvider(ctx context.Context) (*ProviderLinkResponse, error) {
@@ -360,62 +396,25 @@ func (a *Agent) DisconnectProvider(ctx context.Context) (*ProviderLinkResponse, 
 			Err:     snapshotErr,
 		}
 	}
-	if !a.providerControlChannelActiveLocked() {
-		a.mu.Unlock()
-		return nil, &ProviderLinkError{
-			Code:    ProviderLinkErrorDisconnectRejected,
-			Message: "Provider disconnect requires an active provider control channel. Reconnect this runtime, then disconnect again.",
-		}
-	}
+	notifyProvider := a.providerDisconnectShouldNotifyLocked()
 	a.mu.Unlock()
 
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if err := a.sendRuntimeDisconnect(ctx, snapshot, providerDisconnectReasonUser); err != nil {
-		return nil, providerLinkDisconnectError(err)
+	if notifyProvider {
+		if err := a.sendRuntimeDisconnect(ctx, snapshot, providerDisconnectReasonUser); err != nil && !errors.Is(err, errProviderControlChannelNotConnected) {
+			return nil, providerLinkDisconnectError(err)
+		}
 	}
 
 	a.mu.Lock()
-	if a.cfg == nil ||
-		strings.TrimSpace(a.cfg.ControlplaneBaseURL) != snapshot.ProviderOrigin ||
-		strings.TrimSpace(a.cfg.ControlplaneProviderID) != snapshot.ProviderID ||
-		strings.TrimSpace(a.cfg.EnvironmentID) != snapshot.EnvPublicID ||
-		strings.TrimSpace(a.cfg.LocalEnvironmentPublicID) != snapshot.LocalEnvironmentPublicID ||
-		a.cfg.BindingGeneration != snapshot.BindingGeneration {
-		a.mu.Unlock()
-		return nil, &ProviderLinkError{
-			Code:    ProviderLinkErrorBindingNotCurrent,
-			Message: "Provider binding changed while disconnecting. Refresh Desktop, then connect or disconnect again.",
-		}
-	}
-	next := *a.cfg
-	next.ControlplaneBaseURL = ""
-	next.ControlplaneProviderID = ""
-	next.EnvironmentID = ""
-	next.LocalEnvironmentPublicID = ""
-	next.BindingGeneration = 0
-	next.Direct = nil
-	if strings.TrimSpace(next.AgentInstanceID) == "" {
-		next.AgentInstanceID = a.cfg.AgentInstanceID
-	}
-	if err := config.Save(a.configPath, &next); err != nil {
-		a.mu.Unlock()
-		return nil, &ProviderLinkError{
-			Code:    ProviderLinkErrorDisconnectFailed,
-			Message: fmt.Sprintf("Persist provider disconnect failed: %v", err),
-			Err:     err,
-		}
-	}
-	a.cfg = &next
-	a.controlChannelEnabled = false
-	a.remoteEnabled = false
-	a.effectiveRunMode = "local"
-	binding := runtimeservice.ProviderLinkBinding{
-		State:                    runtimeservice.ProviderLinkStateUnbound,
-		LastDisconnectedAtUnixMS: time.Now().UnixMilli(),
-	}
+	binding, clearErr := a.clearProviderLinkBindingLocked(snapshot)
 	a.mu.Unlock()
+	if clearErr != nil {
+		return nil, clearErr
+	}
+
 	if a.code != nil {
 		if err := a.code.SetControlplaneBaseURL(""); err != nil {
 			return nil, &ProviderLinkError{
