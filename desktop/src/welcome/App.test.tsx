@@ -658,7 +658,11 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('redeven-environment-progress');
     expect(appSrc).toContain('redeven-split-action-trigger--progress');
     expect(appSrc).toContain('autoOpenedEnvironmentProgressOperation');
-    expect(appSrc).toContain("(progress?.open_progress || progress?.lifecycle_progress) && operationKey !== '' && !autoOpenedEnvironmentProgressOperation.has(operationKey)");
+    expect(appSrc).toContain('OPEN_CONNECTION_PROGRESS_POPOVER_DELAY_MS = 520');
+    expect(appSrc).toContain('progress?.lifecycle_progress && operationKey !== \'\' && !autoOpenedEnvironmentProgressOperation.has(operationKey)');
+    expect(appSrc).toContain('window.setTimeout(() => {');
+    expect(appSrc).toContain('currentProgress.status === \'running\'');
+    expect(appSrc).toContain('}, OPEN_CONNECTION_PROGRESS_POPOVER_DELAY_MS);');
     expect(appSrc).not.toContain('<SSHRuntimeActivityOverlay');
     expect(appSrc).not.toContain('sshRuntimeProgressItems');
     expect(appSrc).not.toContain('function SSHRuntimeActivityOverlay');
