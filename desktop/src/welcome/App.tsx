@@ -4383,7 +4383,7 @@ function RuntimeStartupProgressPanel(props: Readonly<{
       <div class="redeven-action-popover__status-header">
         <span class="redeven-action-popover__status-icon" data-tone={iconTone()}>
           <Show when={iconTone() === 'success'} fallback={(
-            <Show when={iconTone() === 'error'} fallback={<Refresh class="animate-spin" />}>
+            <Show when={iconTone() === 'error'} fallback={<span class="redeven-action-popover__status-dot" />}>
               <X />
             </Show>
           )}>
