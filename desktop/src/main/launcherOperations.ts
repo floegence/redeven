@@ -5,6 +5,8 @@ import type {
   DesktopLauncherOperationStatus,
   DesktopLauncherOperationSubjectKind,
 } from '../shared/desktopLauncherIPC';
+import { runtimeStartupProgress } from '../shared/desktopRuntimeStartupProgress';
+import type { DesktopRuntimeStartupProgress } from '../shared/desktopRuntimeStartupProgress';
 
 type OperationChangeListener = (snapshot: DesktopLauncherOperationSnapshot) => void;
 
@@ -20,6 +22,7 @@ type CreateLauncherOperationInput = Readonly<{
   phase: string;
   title: string;
   detail: string;
+  runtime_startup?: DesktopRuntimeStartupProgress;
   cancelable?: boolean;
   interrupt_label?: string;
   interrupt_detail?: string;
@@ -48,6 +51,7 @@ function operationProgress(snapshot: DesktopLauncherOperationSnapshot): DesktopL
     phase: snapshot.phase,
     title: snapshot.title,
     detail: snapshot.detail,
+    ...(snapshot.runtime_startup ? { runtime_startup: snapshot.runtime_startup } : {}),
     cancelable: snapshot.cancelable,
     interrupt_label: snapshot.interrupt_label,
     interrupt_detail: snapshot.interrupt_detail,
@@ -69,11 +73,11 @@ function cancelPhaseForSnapshot(snapshot: DesktopLauncherOperationSnapshot): Rea
       detail: 'Desktop is stopping the startup task for this deleted connection.',
     };
   }
-  if (snapshot.subject_kind === 'ssh_environment' && snapshot.action === 'start_environment_runtime') {
+  if (snapshot.runtime_startup) {
     return {
-      phase: 'ssh_stopping_startup',
-      title: 'Stopping SSH runtime startup',
-      detail: 'Desktop is stopping the SSH runtime startup and cleaning up resources already created.',
+      phase: 'runtime_startup_canceling',
+      title: 'Stopping runtime startup',
+      detail: 'Desktop is stopping the runtime startup and cleaning up resources already created.',
     };
   }
   return {
@@ -128,6 +132,7 @@ export class LauncherOperationRegistry {
       phase: compact(input.phase),
       title: compact(input.title),
       detail: compact(input.detail),
+      ...(input.runtime_startup ? { runtime_startup: input.runtime_startup } : {}),
       cancelable: input.cancelable === true,
       interrupt_label: compact(input.interrupt_label) || undefined,
       interrupt_detail: compact(input.interrupt_detail) || undefined,
@@ -208,9 +213,18 @@ export class LauncherOperationRegistry {
       if (snapshot.subject_kind !== kind || snapshot.subject_id !== subjectID) {
         continue;
       }
+      const runtimeStartup = snapshot.runtime_startup
+        ? runtimeStartupProgress({
+            location: snapshot.runtime_startup.location,
+            phase: 'canceled',
+            targetLabel: snapshot.runtime_startup.target_label,
+            targetDetail: snapshot.runtime_startup.target_detail,
+          })
+        : undefined;
       const next = this.update(snapshot.operation_key, {
         ...patch,
         deleted_subject: true,
+        ...(runtimeStartup && !patch.runtime_startup ? { runtime_startup: runtimeStartup } : {}),
       });
       if (next) {
         touched.push(next);
@@ -239,11 +253,20 @@ export class LauncherOperationRegistry {
       controller.abort(compact(reason) || 'Operation canceled.');
     }
     const cancelPhase = cancelPhaseForSnapshot(snapshot);
+    const runtimeStartup = snapshot.runtime_startup
+      ? runtimeStartupProgress({
+          location: snapshot.runtime_startup.location,
+          phase: 'canceled',
+          targetLabel: snapshot.runtime_startup.target_label,
+          targetDetail: snapshot.runtime_startup.target_detail,
+        })
+      : undefined;
     return this.update(key, {
       status: 'canceling',
       phase: cancelPhase.phase,
       title: cancelPhase.title,
       detail: compact(reason) || cancelPhase.detail,
+      ...(runtimeStartup ? { runtime_startup: runtimeStartup } : {}),
       cancelable: false,
       interrupt_label: undefined,
       interrupt_detail: undefined,

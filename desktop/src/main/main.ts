@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, powerMonitor, s
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { attachManagedRuntimeFromStateFile, startManagedRuntime } from './runtimeProcess';
+import { attachManagedRuntimeFromStateFile, startManagedRuntime, type ManagedRuntimeProgress } from './runtimeProcess';
 import { buildAppMenuTemplate } from './appMenu';
 import {
   buildDesktopLastWindowCloseConfirmationModel,
@@ -95,6 +95,7 @@ import {
   DesktopSSHRuntimeCanceledError,
   DesktopSSHRuntimeMaintenanceRequiredError,
   startManagedSSHRuntime,
+  type DesktopSSHRuntimeProgress,
 } from './sshRuntime';
 import {
   containerListCommand,
@@ -115,6 +116,7 @@ import {
 import {
   ensureRuntimePlacementReady,
   RuntimePlacementMaintenanceRequiredError,
+  type RuntimePlacementProgress,
 } from './runtimePlacementManager';
 import { startDesktopModelSource, type ManagedDesktopModelSource } from './desktopModelSource';
 import {
@@ -267,6 +269,7 @@ import {
   DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
   DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL,
   DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
+  desktopSSHAuthority,
   desktopSSHRuntimeAffectingSettingsMatch,
   defaultSavedSSHEnvironmentLabel,
   normalizeDesktopSSHEnvironmentDetails,
@@ -291,6 +294,13 @@ import {
   type DesktopRuntimePlacement,
   type DesktopRuntimeTargetID,
 } from '../shared/desktopRuntimePlacement';
+import {
+  desktopRuntimeStartupLocation,
+  runtimeStartupProgress,
+  type DesktopRuntimeStartupLocation,
+  type DesktopRuntimeStartupPhase,
+  type DesktopRuntimeStartupProgress,
+} from '../shared/desktopRuntimeStartupProgress';
 import {
   desktopProviderCatalogFreshness,
   desktopProviderRemoteRouteState,
@@ -419,6 +429,14 @@ type PendingSSHRuntimeStart = Readonly<{
   task: Promise<SSHEnvironmentRuntimeRecord>;
 }>;
 
+type PendingRuntimePlacementStart = Readonly<{
+  target_id: DesktopRuntimeTargetID;
+  environment_id: string;
+  label: string;
+  operation_key: string;
+  task: Promise<RuntimePlacementBridgeRecord>;
+}>;
+
 type PreparedExternalTargetResult = Readonly<
   | {
       ok: true;
@@ -499,6 +517,7 @@ const pendingSSHRuntimeStartByKey = new Map<`ssh:${string}`, PendingSSHRuntimeSt
 const sshRuntimeMaintenanceByKey = new Map<`ssh:${string}`, DesktopRuntimeMaintenanceRequirement>();
 const runtimePlacementMaintenanceByTargetID = new Map<DesktopRuntimeTargetID, DesktopRuntimeMaintenanceRequirement>();
 const runtimePlacementBridgeByTargetID = new Map<DesktopRuntimeTargetID, RuntimePlacementBridgeRecord>();
+const pendingRuntimePlacementStartByTargetID = new Map<DesktopRuntimeTargetID, PendingRuntimePlacementStart>();
 const launcherOperationRemovalTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const launcherOperations = new LauncherOperationRegistry(handleLauncherOperationChange);
 const desktopDevToolsEnabled = ['1', 'true', 'yes', 'on'].includes(
@@ -2919,6 +2938,7 @@ type PrepareManagedTargetOptions = Readonly<{
   environment: DesktopLocalEnvironmentState;
   localUIBind?: string;
   forceRuntimeUpdate?: boolean;
+  onProgress?: (progress: ManagedRuntimeProgress) => void;
 }>;
 
 async function prepareManagedTarget(
@@ -2941,6 +2961,7 @@ async function prepareManagedTarget(
     runtimeStateFile: launchPlan.state_layout.runtimeStateFile,
     passwordStdin: launchPlan.password_stdin,
     tempRoot: app.getPath('temp'),
+    onProgress: options.onProgress,
     onLog: (stream, chunk) => {
       const text = String(chunk ?? '').trim();
       if (!text) {
@@ -3023,6 +3044,117 @@ function formatBindHostPort(host: string, port: number): string {
     return `[${cleanHost}]:${port}`;
   }
   return `${cleanHost}:${port}`;
+}
+
+function runtimeStartupTargetDetail(
+  hostAccess: DesktopRuntimeHostAccess,
+  placement: DesktopRuntimePlacement,
+): string {
+  if (placement.kind === 'container_process') {
+    const containerLabel = placement.container_label || placement.container_ref || placement.container_id;
+    if (hostAccess.kind === 'ssh_host') {
+      return `${desktopSSHAuthority(hostAccess.ssh)} · ${containerLabel}`;
+    }
+    return containerLabel;
+  }
+  if (hostAccess.kind === 'ssh_host') {
+    return desktopSSHAuthority(hostAccess.ssh);
+  }
+  return 'This device';
+}
+
+function buildRuntimeStartupProgress(input: Readonly<{
+  hostAccess: DesktopRuntimeHostAccess;
+  placement: DesktopRuntimePlacement;
+  phase: DesktopRuntimeStartupPhase;
+  targetLabel: string;
+}>): DesktopRuntimeStartupProgress {
+  return runtimeStartupProgress({
+    location: desktopRuntimeStartupLocation(input.hostAccess, input.placement),
+    phase: input.phase,
+    targetLabel: input.targetLabel,
+    targetDetail: runtimeStartupTargetDetail(input.hostAccess, input.placement),
+  });
+}
+
+function updateRuntimeStartupOperation(
+  operationKey: string,
+  input: Readonly<{
+    hostAccess: DesktopRuntimeHostAccess;
+    placement: DesktopRuntimePlacement;
+    phase: DesktopRuntimeStartupPhase;
+    targetLabel: string;
+    title: string;
+    detail: string;
+    status?: DesktopLauncherOperationSnapshot['status'];
+    errorMessage?: string;
+    cancelable?: boolean;
+  }>,
+): void {
+  launcherOperations.update(operationKey, {
+    ...(input.status ? { status: input.status } : {}),
+    phase: input.phase,
+    title: input.title,
+    detail: input.detail,
+    runtime_startup: buildRuntimeStartupProgress(input),
+    ...(input.errorMessage ? { error_message: input.errorMessage } : {}),
+    ...(input.cancelable !== undefined ? { cancelable: input.cancelable } : {}),
+  });
+}
+
+function sshRuntimeStartupPhase(
+  phase: DesktopSSHRuntimeProgress['phase'],
+): DesktopRuntimeStartupPhase {
+  switch (phase) {
+    case 'ssh_connecting':
+    case 'ssh_control_ready':
+      return 'checking_host';
+    case 'ssh_checking_runtime':
+      return 'checking_runtime';
+    case 'ssh_runtime_ready':
+      return 'runtime_ready';
+    case 'ssh_detecting_platform':
+      return 'detecting_platform';
+    case 'ssh_preparing_upload':
+      return 'preparing_runtime_package';
+    case 'ssh_remote_installing':
+    case 'ssh_creating_upload_dir':
+    case 'ssh_uploading_archive':
+    case 'ssh_installing_upload':
+      return 'installing_runtime';
+    case 'ssh_starting_runtime':
+      return 'starting_runtime';
+    case 'ssh_waiting_report':
+    case 'ssh_opening_tunnel':
+    case 'ssh_connecting_model_source':
+    case 'ssh_verifying_tunnel':
+      return 'waiting_for_readiness';
+    case 'ssh_cleaning_startup_resources':
+      return 'canceled';
+  }
+}
+
+function runtimeStartupProgressFromSSH(
+  target: DesktopSSHEnvironmentDetails,
+  progress: DesktopSSHRuntimeProgress,
+  targetLabel: string,
+): DesktopRuntimeStartupProgress {
+  return runtimeStartupProgress({
+    location: 'ssh_host',
+    phase: sshRuntimeStartupPhase(progress.phase),
+    targetLabel,
+    targetDetail: desktopSSHAuthority(target),
+  });
+}
+
+function runtimeStartupTitleForFailure(
+  location: DesktopRuntimeStartupLocation,
+  maintenanceRequired: boolean,
+): string {
+  if (maintenanceRequired) {
+    return location === 'ssh_host' ? 'SSH runtime needs attention' : 'Runtime needs attention';
+  }
+  return location === 'ssh_host' ? 'SSH runtime start failed' : 'Runtime start failed';
 }
 
 function resolveManagedRestartBindOverride(environment: DesktopLocalEnvironmentState, startup: StartupReport): string | null {
@@ -3159,9 +3291,15 @@ async function startSSHEnvironmentRuntimeRecord(
     phase: 'ssh_preparing_start',
     title: 'Preparing SSH runtime',
     detail: 'Desktop is preparing the secure SSH session and local tunnel.',
+    runtime_startup: runtimeStartupProgress({
+      location: 'ssh_host',
+      phase: 'checking_host',
+      targetLabel: label,
+      targetDetail: desktopSSHAuthority(sshDetails),
+    }),
     cancelable: true,
     interrupt_label: 'Stop startup',
-    interrupt_detail: 'Stops this SSH runtime startup and closes the local resources already created.',
+    interrupt_detail: 'Desktop is stopping this runtime startup and closing local resources already created.',
     interrupt_kind: 'stop_opening',
   });
   const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
@@ -3196,8 +3334,17 @@ async function startSSHEnvironmentRuntimeRecord(
             phase: progress.phase,
             title: progress.title,
             detail: progress.detail,
+            runtime_startup: runtimeStartupProgressFromSSH(sshDetails, progress, label),
           });
         },
+      });
+      updateRuntimeStartupOperation(runtimeKey, {
+        hostAccess: { kind: 'ssh_host', ssh: sshDetails },
+        placement: { kind: 'host_process', runtime_root: sshDetails.runtime_root },
+        phase: 'waiting_for_readiness',
+        targetLabel: label,
+        title: 'Connecting Desktop model source',
+        detail: 'Desktop is preparing local model access for this SSH runtime.',
       });
       desktopModelSource = await startDesktopModelSourceForStartup({
         label,
@@ -3213,6 +3360,12 @@ async function startSSHEnvironmentRuntimeRecord(
           phase: 'cleanup_deleted_connection',
           title: 'Connection removed',
           detail: 'Desktop is stopping the SSH runtime that finished after this connection was removed.',
+          runtime_startup: runtimeStartupProgress({
+            location: 'ssh_host',
+            phase: 'canceled',
+            targetLabel: label,
+            targetDetail: desktopSSHAuthority(sshDetails),
+          }),
           cancelable: false,
         });
         try {
@@ -3222,6 +3375,12 @@ async function startSSHEnvironmentRuntimeRecord(
             phase: 'deleted_connection_cleaned',
             title: 'Startup canceled',
             detail: 'Desktop removed the connection and cleaned up the SSH startup task.',
+            runtime_startup: runtimeStartupProgress({
+              location: 'ssh_host',
+              phase: 'canceled',
+              targetLabel: label,
+              targetDetail: desktopSSHAuthority(sshDetails),
+            }),
             deleted_subject: true,
           });
           scheduleLauncherOperationRemoval(runtimeKey);
@@ -3231,6 +3390,12 @@ async function startSSHEnvironmentRuntimeRecord(
             phase: 'cleanup_failed',
             title: 'Connection removed; cleanup needs attention',
             detail: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+            runtime_startup: runtimeStartupProgress({
+              location: 'ssh_host',
+              phase: 'failed',
+              targetLabel: label,
+              targetDetail: desktopSSHAuthority(sshDetails),
+            }),
             deleted_subject: true,
             error_message: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
           });
@@ -3263,6 +3428,12 @@ async function startSSHEnvironmentRuntimeRecord(
         phase: 'ssh_runtime_started',
         title: 'SSH runtime ready',
         detail: 'Desktop started the SSH runtime and opened a local tunnel.',
+        runtime_startup: runtimeStartupProgress({
+          location: 'ssh_host',
+          phase: 'runtime_ready',
+          targetLabel: label,
+          targetDetail: desktopSSHAuthority(sshDetails),
+        }),
       });
       scheduleLauncherOperationRemoval(runtimeKey);
       operationSettled = true;
@@ -3275,6 +3446,12 @@ async function startSSHEnvironmentRuntimeRecord(
             phase: 'ssh_cleaning_startup_resources',
             title: 'Cleaning SSH startup resources',
             detail: 'Desktop is closing local startup resources for this SSH runtime.',
+            runtime_startup: runtimeStartupProgress({
+              location: 'ssh_host',
+              phase: 'canceled',
+              targetLabel: label,
+              targetDetail: desktopSSHAuthority(sshDetails),
+            }),
             cancelable: false,
           });
           await desktopModelSource?.stop();
@@ -3283,6 +3460,12 @@ async function startSSHEnvironmentRuntimeRecord(
             phase: 'canceled',
             title: 'Startup canceled',
             detail: 'Desktop stopped the SSH runtime startup and cleaned up local startup resources.',
+            runtime_startup: runtimeStartupProgress({
+              location: 'ssh_host',
+              phase: 'canceled',
+              targetLabel: label,
+              targetDetail: desktopSSHAuthority(sshDetails),
+            }),
             deleted_subject: launcherOperations.get(runtimeKey)?.deleted_subject === true,
           });
         } else {
@@ -3300,6 +3483,12 @@ async function startSSHEnvironmentRuntimeRecord(
                 ? 'Update or restart the SSH runtime from the Welcome page.'
                 : 'Desktop could not start the SSH runtime.'
             ),
+            runtime_startup: runtimeStartupProgress({
+              location: 'ssh_host',
+              phase: 'failed',
+              targetLabel: label,
+              targetDetail: desktopSSHAuthority(sshDetails),
+            }),
             error_message: message,
           });
         }
@@ -4769,57 +4958,197 @@ async function startRuntimePlacementBridgeRecordFromLauncher(
   if (existing) {
     return existing;
   }
-  const resolution = await resolveRuntimeContainerPlacement(runtimeContainerResolver(hostAccess), placement);
-  if (resolution.status !== 'running') {
-    throw new Error(resolution.message);
+  const pendingStart = pendingRuntimePlacementStartByTargetID.get(targetID) ?? null;
+  if (pendingStart) {
+    return pendingStart.task;
   }
-  placement = resolution.placement;
-  let readyPlacement: Awaited<ReturnType<typeof ensureRuntimePlacementReady>>;
-  try {
-    readyPlacement = await ensureRuntimePlacementReady({
-      host_access: hostAccess,
-      placement,
-      runtime_release_tag: resolveSSHRuntimeReleaseTag(),
-      release_base_url: PUBLIC_REDEVEN_RELEASE_BASE_URL,
-      source_runtime_root: process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT,
-      asset_cache_root: desktopRuntimePackageCacheRoot(),
-      force_runtime_update: request.force_runtime_update === true,
-      timeout_ms: 45_000,
-    });
-    runtimePlacementMaintenanceByTargetID.delete(targetID);
-  } catch (error) {
-    if (error instanceof RuntimePlacementMaintenanceRequiredError) {
-      runtimePlacementMaintenanceByTargetID.set(targetID, error.maintenance);
-    }
-    throw error;
-  }
-  const session = await startRuntimePlacementBridgeSession({
-    host_access: hostAccess,
+
+  const environmentID = runtimeTargetEnvironmentIDFromRequest(request);
+  const label = runtimeTargetLabelFromRequest(request);
+  const initialProgress = buildRuntimeStartupProgress({
+    hostAccess,
     placement,
-    runtime_binary_path: readyPlacement.runtime_binary_path,
-    desktop_owner_id: await desktopRuntimeOwnerID(),
-    fallback_local_id: runtimeTargetEnvironmentIDFromRequest(request),
+    phase: hostAccess.kind === 'ssh_host' ? 'checking_host' : 'checking_container',
+    targetLabel: label,
   });
-  const record = bridgeRecordFromSession({
-    environmentID: runtimeTargetEnvironmentIDFromRequest(request),
-    label: runtimeTargetLabelFromRequest(request),
-    session,
+  const operation = launcherOperations.create({
+    operation_key: targetID,
+    action: 'start_environment_runtime',
+    subject_kind: 'runtime_target',
+    subject_id: targetID,
+    environment_id: environmentID,
+    environment_label: label,
+    phase: initialProgress.phase,
+    title: hostAccess.kind === 'ssh_host' ? 'Checking SSH container' : 'Checking container',
+    detail: hostAccess.kind === 'ssh_host'
+      ? 'Desktop is checking the SSH host and selected running container.'
+      : 'Desktop is checking the selected running container.',
+    runtime_startup: initialProgress,
+    cancelable: true,
+    interrupt_label: 'Stop startup',
+    interrupt_detail: 'Desktop is stopping this runtime startup and closing bridge resources already created.',
+    interrupt_kind: 'stop_opening',
   });
-  const desktopModelSource = await startDesktopModelSourceForStartup({
-    label: record.label,
-    startup: record.startup,
+  const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
+
+  const task = (async () => {
+    let operationSettled = false;
+    let desktopModelSource: ManagedDesktopModelSource | null = null;
+    let bridgeSession: RuntimePlacementBridgeSession | null = null;
+    try {
+      const resolution = await resolveRuntimeContainerPlacement(runtimeContainerResolver(hostAccess, signal), placement);
+      if (resolution.status !== 'running') {
+        throw new Error(resolution.message);
+      }
+      placement = resolution.placement;
+      let readyPlacement: Awaited<ReturnType<typeof ensureRuntimePlacementReady>>;
+      try {
+        readyPlacement = await ensureRuntimePlacementReady({
+          host_access: hostAccess,
+          placement,
+          runtime_release_tag: resolveSSHRuntimeReleaseTag(),
+          release_base_url: PUBLIC_REDEVEN_RELEASE_BASE_URL,
+          source_runtime_root: process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT,
+          asset_cache_root: desktopRuntimePackageCacheRoot(),
+          force_runtime_update: request.force_runtime_update === true,
+          timeout_ms: 45_000,
+          signal,
+          on_progress: (progress: RuntimePlacementProgress) => {
+            updateRuntimeStartupOperation(targetID, {
+              hostAccess,
+              placement,
+              phase: progress.phase,
+              targetLabel: label,
+              title: progress.title,
+              detail: progress.detail,
+            });
+          },
+        });
+        runtimePlacementMaintenanceByTargetID.delete(targetID);
+      } catch (error) {
+        if (error instanceof RuntimePlacementMaintenanceRequiredError) {
+          runtimePlacementMaintenanceByTargetID.set(targetID, error.maintenance);
+        }
+        throw error;
+      }
+      updateRuntimeStartupOperation(targetID, {
+        hostAccess,
+        placement,
+        phase: 'starting_bridge',
+        targetLabel: label,
+        title: 'Starting runtime bridge',
+        detail: 'Desktop is starting the secure bridge into this container runtime.',
+      });
+      bridgeSession = await startRuntimePlacementBridgeSession({
+        host_access: hostAccess,
+        placement,
+        runtime_binary_path: readyPlacement.runtime_binary_path,
+        desktop_owner_id: await desktopRuntimeOwnerID(),
+        fallback_local_id: environmentID,
+        signal,
+      });
+      const record = bridgeRecordFromSession({
+        environmentID,
+        label,
+        session: bridgeSession,
+      });
+      updateRuntimeStartupOperation(targetID, {
+        hostAccess,
+        placement,
+        phase: 'waiting_for_readiness',
+        targetLabel: label,
+        title: 'Connecting Desktop model source',
+        detail: 'Desktop is preparing local model access for this container runtime.',
+      });
+      desktopModelSource = await startDesktopModelSourceForStartup({
+        label: record.label,
+        startup: record.startup,
+        signal,
+      });
+      const startup = desktopModelSource
+        ? await refreshRuntimeStartupFromLocalUI(record.startup, record.startup.local_ui_url)
+        : record.startup;
+      if (!runtimeServiceIsOpenable(startup.runtime_service)) {
+        throw launcherActionFailureForRuntimeNotOpenable(startup, {
+          environmentID: record.environment_id,
+        });
+      }
+      const connectedRecord: RuntimePlacementBridgeRecord = {
+        ...record,
+        startup,
+        desktop_model_source: desktopModelSource,
+      };
+      runtimePlacementBridgeByTargetID.set(bridgeSession.placement_target_id, connectedRecord);
+      runtimePlacementMaintenanceByTargetID.delete(bridgeSession.placement_target_id);
+      launcherOperations.finish(targetID, 'succeeded', {
+        phase: 'runtime_bridge_started',
+        title: 'Runtime ready',
+        detail: 'Desktop started the container runtime bridge.',
+        runtime_startup: buildRuntimeStartupProgress({
+          hostAccess,
+          placement,
+          phase: 'runtime_ready',
+          targetLabel: label,
+        }),
+      });
+      scheduleLauncherOperationRemoval(targetID);
+      operationSettled = true;
+      return connectedRecord;
+    } catch (error) {
+      if (!operationSettled) {
+        if (signal?.aborted) {
+          await desktopModelSource?.stop().catch(() => undefined);
+          await bridgeSession?.disconnect().catch(() => undefined);
+          const currentDeleted = launcherOperations.get(targetID)?.deleted_subject === true;
+          launcherOperations.finish(targetID, 'canceled', {
+            phase: 'canceled',
+            title: 'Startup canceled',
+            detail: 'Desktop stopped the container runtime startup and cleaned up local startup resources.',
+            runtime_startup: buildRuntimeStartupProgress({
+              hostAccess,
+              placement,
+              phase: 'canceled',
+              targetLabel: label,
+            }),
+            deleted_subject: currentDeleted,
+          });
+        } else {
+          const launcherFailure = thrownLauncherActionFailure(error);
+          const message = launcherFailure?.message ?? (error instanceof Error ? error.message : String(error));
+          const location = desktopRuntimeStartupLocation(hostAccess, placement);
+          launcherOperations.finish(targetID, 'failed', {
+            phase: 'failed',
+            title: runtimeStartupTitleForFailure(
+              location,
+              error instanceof RuntimePlacementMaintenanceRequiredError || launcherFailure?.code === 'runtime_not_ready',
+            ),
+            detail: firstDisplayLine(message) || 'Desktop could not start the runtime.',
+            runtime_startup: buildRuntimeStartupProgress({
+              hostAccess,
+              placement,
+              phase: 'failed',
+              targetLabel: label,
+            }),
+            error_message: message,
+          });
+        }
+        scheduleLauncherOperationRemoval(targetID);
+      }
+      await desktopModelSource?.stop().catch(() => undefined);
+      await bridgeSession?.disconnect().catch(() => undefined);
+      throw error;
+    } finally {
+      pendingRuntimePlacementStartByTargetID.delete(targetID);
+    }
+  })();
+  pendingRuntimePlacementStartByTargetID.set(targetID, {
+    target_id: targetID,
+    environment_id: environmentID,
+    label,
+    operation_key: targetID,
+    task,
   });
-  const startup = desktopModelSource
-    ? await refreshRuntimeStartupFromLocalUI(record.startup, record.startup.local_ui_url)
-    : record.startup;
-  const connectedRecord: RuntimePlacementBridgeRecord = {
-    ...record,
-    startup,
-    desktop_model_source: desktopModelSource,
-  };
-  runtimePlacementBridgeByTargetID.set(session.placement_target_id, connectedRecord);
-  runtimePlacementMaintenanceByTargetID.delete(session.placement_target_id);
-  return connectedRecord;
+  return task;
 }
 
 async function openRuntimePlacementBridgeFromLauncher(
@@ -4893,8 +5222,8 @@ async function startEnvironmentRuntimeFromLauncher(
   request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'start_environment_runtime' }>>,
 ): Promise<DesktopLauncherActionResult> {
   const preferences = await loadDesktopPreferencesCached();
-  const placement = runtimePlacementFromRequest(request);
-  if (placement.kind === 'container_process') {
+  const requestedPlacement = runtimePlacementFromRequest(request);
+  if (requestedPlacement.kind === 'container_process') {
     try {
       const runtimeRecord = await startRuntimePlacementBridgeRecordFromLauncher(request);
       resetLauncherIssueState();
@@ -4907,9 +5236,10 @@ async function startEnvironmentRuntimeFromLauncher(
       broadcastDesktopWelcomeSnapshots();
       return launcherActionSuccess('started_environment_runtime');
     } catch (error) {
-      return launcherActionFailureFromRuntimeStartError(error, {
-        environmentID: runtimeTargetEnvironmentIDFromRequest(request),
-      });
+      return thrownLauncherActionFailure(error)
+        ?? launcherActionFailureFromRuntimeStartError(error, {
+          environmentID: runtimeTargetEnvironmentIDFromRequest(request),
+        });
     }
   }
 
@@ -4961,12 +5291,61 @@ async function startEnvironmentRuntimeFromLauncher(
     );
   }
 
+  const hostAccess: DesktopRuntimeHostAccess = { kind: 'local_host' };
+  const localHostPlacement: DesktopRuntimePlacement = { kind: 'host_process', runtime_root: environment.local_hosting.state_dir };
+  const operationKey = runtimeTargetIDFromRequest({
+    ...request,
+    environment_id: environment.id,
+    host_access: hostAccess,
+    placement: localHostPlacement,
+  });
+  const operation = launcherOperations.create({
+    operation_key: operationKey,
+    action: 'start_environment_runtime',
+    subject_kind: 'local_environment',
+    subject_id: environment.id,
+    environment_id: environment.id,
+    environment_label: environment.label,
+    phase: 'checking_existing_runtime',
+    title: 'Checking existing runtime',
+    detail: 'Desktop is checking whether a compatible local runtime is already running.',
+    runtime_startup: buildRuntimeStartupProgress({
+      hostAccess,
+      placement: localHostPlacement,
+      phase: 'checking_existing_runtime',
+      targetLabel: environment.label,
+    }),
+    cancelable: false,
+  });
   try {
     const prepared = await prepareManagedTarget({
       environment,
       forceRuntimeUpdate: request.force_runtime_update === true,
+      onProgress: (progress: ManagedRuntimeProgress) => {
+        updateRuntimeStartupOperation(operationKey, {
+          hostAccess,
+          placement: localHostPlacement,
+          phase: progress.phase,
+          targetLabel: environment.label,
+          title: progress.title,
+          detail: progress.detail,
+        });
+      },
     });
     if (!prepared.ok) {
+      launcherOperations.finish(operationKey, 'failed', {
+        phase: 'failed',
+        title: 'Runtime start blocked',
+        detail: prepared.issue.message,
+        runtime_startup: buildRuntimeStartupProgress({
+          hostAccess,
+          placement: localHostPlacement,
+          phase: 'failed',
+          targetLabel: environment.label,
+        }),
+        error_message: prepared.issue.message,
+      });
+      scheduleLauncherOperationRemoval(operation.operation_key);
       return launcherActionFailure(
         'action_invalid',
         'environment',
@@ -4976,6 +5355,14 @@ async function startEnvironmentRuntimeFromLauncher(
         },
       );
     }
+    updateRuntimeStartupOperation(operationKey, {
+      hostAccess,
+      placement: localHostPlacement,
+      phase: 'runtime_ready',
+      targetLabel: environment.label,
+      title: 'Runtime ready',
+      detail: 'The local runtime is ready to open.',
+    });
     updateLocalEnvironmentRuntimeRecord(
       environment,
       prepared.launch.managedRuntime.startup,
@@ -4987,8 +5374,34 @@ async function startEnvironmentRuntimeFromLauncher(
     resetLauncherIssueState();
     await syncLinkedProviderRuntimeHealthFromService(prepared.launch.managedRuntime.startup.runtime_service);
     broadcastDesktopWelcomeSnapshots();
+    launcherOperations.finish(operationKey, 'succeeded', {
+      phase: 'runtime_started',
+      title: 'Runtime ready',
+      detail: 'Desktop started the local runtime.',
+      runtime_startup: buildRuntimeStartupProgress({
+        hostAccess,
+        placement: localHostPlacement,
+        phase: 'runtime_ready',
+        targetLabel: environment.label,
+      }),
+    });
+    scheduleLauncherOperationRemoval(operation.operation_key);
     return launcherActionSuccess('started_environment_runtime');
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    launcherOperations.finish(operationKey, 'failed', {
+      phase: 'failed',
+      title: 'Runtime start failed',
+      detail: firstDisplayLine(message) || 'Desktop could not start the local runtime.',
+      runtime_startup: buildRuntimeStartupProgress({
+        hostAccess,
+        placement: localHostPlacement,
+        phase: 'failed',
+        targetLabel: environment.label,
+      }),
+      error_message: message,
+    });
+    scheduleLauncherOperationRemoval(operation.operation_key);
     return thrownLauncherActionFailure(error)
       ?? launcherActionFailureFromProviderAuthError(error, {
         environmentID: environment.id,
@@ -6392,8 +6805,20 @@ async function deleteSavedSSHEnvironmentFromWelcome(environmentID: string): Prom
 
 async function deleteSavedRuntimeTargetFromWelcome(environmentID: string): Promise<void> {
   const preferences = await loadDesktopPreferencesCached();
-  await persistDesktopPreferences(deleteSavedRuntimeTarget(preferences, environmentID));
   const runtimeTargetID = compact(environmentID) as DesktopRuntimeTargetID;
+  launcherOperations.markSubjectDeleted('runtime_target', runtimeTargetID, {
+    status: 'canceling',
+    phase: 'canceling_deleted_connection',
+    title: 'Runtime target removed',
+    detail: 'Desktop is canceling any startup task that still belongs to this deleted runtime target.',
+    cancelable: false,
+    deleted_subject: true,
+  });
+  const pendingStart = pendingRuntimePlacementStartByTargetID.get(runtimeTargetID) ?? null;
+  if (pendingStart) {
+    launcherOperations.cancel(pendingStart.operation_key, 'Runtime target removed. Desktop is canceling the runtime startup task in the background.');
+  }
+  await persistDesktopPreferences(deleteSavedRuntimeTarget(preferences, environmentID));
   const runtimeRecord = runtimePlacementBridgeByTargetID.get(runtimeTargetID) ?? null;
   if (runtimeRecord) {
     const liveRuntimeSession = liveSession(desktopSessionKeyFromRuntimeTargetID(runtimeTargetID));
@@ -6644,14 +7069,25 @@ async function restoreBestAvailableWindow(options?: Readonly<{ stealAppFocus?: b
 
 async function shutdownDesktopWindowsAndSessions(): Promise<void> {
   for (const pendingStart of pendingSSHRuntimeStartByKey.values()) {
-    launcherOperations.cancel(pendingStart.operation_key, 'Redeven Desktop is quitting and canceling this SSH startup task.');
+    launcherOperations.cancel(pendingStart.operation_key, 'Redeven Desktop is quitting and canceling this runtime startup task.');
+  }
+  for (const pendingStart of pendingRuntimePlacementStartByTargetID.values()) {
+    launcherOperations.cancel(pendingStart.operation_key, 'Redeven Desktop is quitting and canceling this runtime startup task.');
   }
   const pendingSSHStartPromises = [...pendingSSHRuntimeStartByKey.values()].map((pendingStart) => (
     pendingStart.task.catch(() => undefined)
   ));
+  const pendingPlacementStartPromises = [...pendingRuntimePlacementStartByTargetID.values()].map((pendingStart) => (
+    pendingStart.task.catch(() => undefined)
+  ));
   const sessionClosePromises = [...sessionsByKey.keys()].map((sessionKey) => finalizeSessionClosure(sessionKey));
   const sshDisconnectPromises = [...sshEnvironmentRuntimeByKey.values()].map((runtimeRecord) => runtimeRecord.disconnect());
+  const runtimePlacementDisconnectPromises = [...runtimePlacementBridgeByTargetID.values()].map(async (runtimeRecord) => {
+    await runtimeRecord.desktop_model_source?.stop().catch(() => undefined);
+    await runtimeRecord.session.disconnect().catch(() => undefined);
+  });
   sshEnvironmentRuntimeByKey.clear();
+  runtimePlacementBridgeByTargetID.clear();
   sshRuntimeMaintenanceByKey.clear();
   runtimePlacementMaintenanceByTargetID.clear();
   for (const kind of UTILITY_WINDOW_KINDS) {
@@ -6673,8 +7109,12 @@ async function shutdownDesktopWindowsAndSessions(): Promise<void> {
   await Promise.allSettled(sessionClosePromises);
   await Promise.allSettled([...sessionCloseTasks.values()]);
   await Promise.allSettled(sshDisconnectPromises);
+  await Promise.allSettled(runtimePlacementDisconnectPromises);
   await Promise.race([
-    Promise.allSettled(pendingSSHStartPromises),
+    Promise.allSettled([
+      ...pendingSSHStartPromises,
+      ...pendingPlacementStartPromises,
+    ]),
     new Promise((resolve) => setTimeout(resolve, 3_000)),
   ]);
 }

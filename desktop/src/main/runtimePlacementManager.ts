@@ -177,6 +177,14 @@ export async function ensureRuntimePlacementReady(
       : 'Desktop is checking the selected running container.',
   );
   await assertContainerRunning(executor, args.placement, args.signal);
+  if (args.host_access.kind === 'ssh_host') {
+    emitProgress(
+      args.on_progress,
+      'checking_container',
+      'Checking container',
+      'Desktop is checking the selected running container through the SSH host.',
+    );
+  }
 
   emitProgress(
     args.on_progress,

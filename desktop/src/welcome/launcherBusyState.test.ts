@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
+import type { DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
+import type { DesktopProviderRuntimeLinkTarget } from '../shared/providerRuntimeLinkTarget';
 import {
-  busyStateForLauncherRequest,
+  activeRuntimeStartupProgressForEnvironment,
   activeProgressForEnvironment,
+  busyStateForLauncherRequest,
   busyStateMatchesActionProgress,
   busyStateMatchesAction,
   busyStateMatchesAnyAction,
@@ -10,8 +13,38 @@ import {
   busyStateMatchesEnvironment,
   busyStateWithActionProgress,
   environmentMatchesActionProgress,
+  environmentMatchesRuntimeStartupProgress,
   IDLE_LAUNCHER_BUSY_STATE,
 } from './launcherBusyState';
+import type { RuntimeStartupProgressEnvironmentMatch } from './launcherBusyState';
+
+function runtimeID(value: `local:${string}` | `ssh:${string}`): DesktopRuntimeTargetID {
+  return value as DesktopRuntimeTargetID;
+}
+
+function providerRuntimeTarget(
+  runtimeKey: string,
+  id: `local:${string}` | `ssh:${string}` = 'ssh:target',
+): DesktopProviderRuntimeLinkTarget {
+  return {
+    id,
+    kind: id.startsWith('ssh:') ? 'ssh_environment' : 'local_environment',
+    environment_id: 'provider-env',
+    label: 'Provider target',
+    runtime_key: runtimeKey,
+    runtime_url: 'http://127.0.0.1:24000/',
+    runtime_running: true,
+    runtime_openable: false,
+    runtime_control_status: {
+      state: 'available',
+      owner: 'current_desktop',
+    },
+    provider_connection_state: 'connected',
+    provider_link_state: 'linked',
+    can_connect_provider: false,
+    can_disconnect_provider: true,
+  };
+}
 
 describe('launcherBusyState', () => {
   it('maps environment-scoped requests to the matching environment id', () => {
@@ -139,7 +172,7 @@ describe('launcherBusyState', () => {
     })).toBe(state);
   });
 
-  it('matches persisted SSH runtime progress by environment id and operation key', () => {
+  it('matches persisted runtime progress by environment id and operation key', () => {
     const state = busyStateForLauncherRequest({
       kind: 'start_environment_runtime',
       environment_id: 'ssh:%64evbox:default:key_agent:remote_default:envinst_demo',
@@ -163,5 +196,129 @@ describe('launcherBusyState', () => {
     expect(activeProgressForEnvironment('other', stateWithProgress, [progress])).toBeNull();
     expect(activeProgressForEnvironment(progress.environment_id, IDLE_LAUNCHER_BUSY_STATE, [progress])).toBe(progress);
     expect(activeProgressForEnvironment(progress.operation_key, IDLE_LAUNCHER_BUSY_STATE, [progress])).toBe(progress);
+  });
+
+  it('matches runtime startup progress for local host, container, SSH host, and SSH container targets', () => {
+    const localHostEnvironment: RuntimeStartupProgressEnvironmentMatch = {
+      id: 'local',
+      managed_runtime_target_id: runtimeID('local:local'),
+      managed_runtime_placement_target_id: undefined,
+      provider_runtime_link_target: undefined,
+    };
+    const localHostProgress = {
+      action: 'start_environment_runtime' as const,
+      environment_id: 'local',
+      operation_key: 'local:host:local',
+      subject_kind: 'local_environment' as const,
+      subject_id: 'local',
+      phase: 'checking_existing_runtime',
+      title: 'Checking existing runtime',
+      detail: 'Desktop is checking whether a compatible local runtime is already running.',
+      runtime_startup: {
+        kind: 'runtime_startup' as const,
+        location: 'local_host' as const,
+        phase: 'checking_existing_runtime' as const,
+        stage_index: 1,
+        stage_count: 4,
+        target_label: 'Local Environment',
+      },
+    };
+
+    const localContainerEnvironment: RuntimeStartupProgressEnvironmentMatch = {
+      id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      managed_runtime_target_id: runtimeID('local:container:docker:dev:abcd1234'),
+      managed_runtime_placement_target_id: runtimeID('local:container:docker:dev:abcd1234'),
+      provider_runtime_link_target: undefined,
+    };
+    const localContainerProgress = {
+      action: 'start_environment_runtime' as const,
+      environment_id: localContainerEnvironment.id,
+      operation_key: 'local:container:docker:dev:abcd1234',
+      subject_kind: 'runtime_target' as const,
+      subject_id: 'local:container:docker:dev:abcd1234',
+      phase: 'installing_runtime',
+      title: 'Installing runtime in container',
+      detail: 'Desktop is installing Redeven inside the running container.',
+      runtime_startup: {
+        kind: 'runtime_startup' as const,
+        location: 'local_container' as const,
+        phase: 'installing_runtime' as const,
+        stage_index: 5,
+        stage_count: 8,
+        target_label: 'Dev Container',
+      },
+    };
+
+    const sshHostEnvironment: RuntimeStartupProgressEnvironmentMatch = {
+      id: 'ssh:%64evbox:default:key_agent:remote_default:envinst_demo',
+      managed_runtime_target_id: runtimeID('ssh:ssh%3A%2564evbox%3Adefault%3Akey_agent%3Aremote_default%3Aenvinst_demo'),
+      managed_runtime_placement_target_id: undefined,
+      provider_runtime_link_target: providerRuntimeTarget('ssh:%64evbox:default:key_agent:remote_default:envinst_demo'),
+    };
+    const sshHostProgress = {
+      action: 'start_environment_runtime' as const,
+      environment_id: sshHostEnvironment.id,
+      operation_key: 'ssh:%64evbox:default:key_agent:remote_default:envinst_demo',
+      subject_kind: 'ssh_environment' as const,
+      subject_id: 'ssh:%64evbox:default:key_agent:remote_default:envinst_demo',
+      phase: 'ssh_remote_installing',
+      title: 'Installing remote runtime',
+      detail: 'Running the remote installer.',
+      runtime_startup: {
+        kind: 'runtime_startup' as const,
+        location: 'ssh_host' as const,
+        phase: 'installing_runtime' as const,
+        stage_index: 5,
+        stage_count: 8,
+        target_label: 'Devbox',
+      },
+    };
+
+    const sshContainerEnvironment: RuntimeStartupProgressEnvironmentMatch = {
+      id: 'ssh-container-env',
+      managed_runtime_target_id: runtimeID('ssh:container:devbox:docker:dev:abcd1234'),
+      managed_runtime_placement_target_id: runtimeID('ssh:container:devbox:docker:dev:abcd1234'),
+      provider_runtime_link_target: providerRuntimeTarget('ssh:container:devbox:docker:dev:abcd1234'),
+    };
+    const sshContainerProgress = {
+      action: 'start_environment_runtime' as const,
+      environment_id: 'ssh-container-env',
+      operation_key: 'ssh:container:devbox:docker:dev:abcd1234',
+      subject_kind: 'runtime_target' as const,
+      subject_id: 'ssh:container:devbox:docker:dev:abcd1234',
+      phase: 'checking_host',
+      title: 'Checking SSH container',
+      detail: 'Desktop is checking the SSH host and selected running container.',
+      runtime_startup: {
+        kind: 'runtime_startup' as const,
+        location: 'ssh_container' as const,
+        phase: 'checking_host' as const,
+        stage_index: 1,
+        stage_count: 9,
+        target_label: 'Devbox Container',
+      },
+    };
+
+    expect(environmentMatchesRuntimeStartupProgress(localHostEnvironment, localHostProgress)).toBe(true);
+    expect(environmentMatchesRuntimeStartupProgress(localContainerEnvironment, localContainerProgress)).toBe(true);
+    expect(environmentMatchesRuntimeStartupProgress(sshHostEnvironment, sshHostProgress)).toBe(true);
+    expect(environmentMatchesRuntimeStartupProgress(sshContainerEnvironment, sshContainerProgress)).toBe(true);
+    expect(environmentMatchesRuntimeStartupProgress(localHostEnvironment, localContainerProgress)).toBe(false);
+
+    expect(activeRuntimeStartupProgressForEnvironment(
+      localContainerEnvironment as never,
+      IDLE_LAUNCHER_BUSY_STATE,
+      [localHostProgress, localContainerProgress, sshHostProgress, sshContainerProgress],
+    )).toBe(localContainerProgress);
+    expect(activeRuntimeStartupProgressForEnvironment(
+      sshHostEnvironment as never,
+      {
+        ...IDLE_LAUNCHER_BUSY_STATE,
+        action: 'start_environment_runtime',
+        environment_id: sshHostEnvironment.id,
+        progress: sshHostProgress,
+      },
+      [],
+    )).toBe(sshHostProgress);
   });
 });

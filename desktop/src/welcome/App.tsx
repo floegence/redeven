@@ -22,7 +22,6 @@ import {
   ShieldCheck,
   Stop,
   Sun,
-  Terminal,
   Trash,
 } from '@floegence/floe-webapp-core/icons';
 import { BottomBarItem, StatusIndicator, TopBarIconButton } from '@floegence/floe-webapp-core/layout';
@@ -204,10 +203,10 @@ import {
   busyStateForLauncherRequest,
   busyStateWithActionProgress,
   activeProgressForEnvironment,
+  activeRuntimeStartupProgressForEnvironment,
   busyStateMatchesAction,
   busyStateMatchesControlPlane,
   busyStateMatchesEnvironment,
-  environmentMatchesActionProgress,
   IDLE_LAUNCHER_BUSY_STATE,
   type DesktopLauncherBusyState,
 } from './launcherBusyState';
@@ -437,6 +436,10 @@ function getErrorMessage(error: unknown): string {
     return trimString(error.message);
   }
   return trimString(error);
+}
+
+function firstLine(value: unknown): string {
+  return trimString(value).split(/\r?\n/u).map((line) => line.trim()).find(Boolean) ?? '';
 }
 
 function formatIssueToastMessage(issue: DesktopWelcomeIssue): string {
@@ -962,17 +965,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     )
   ));
   const activeActionProgress = createMemo(() => snapshot().action_progress);
-  const sshRuntimeProgressItems = createMemo(() => (
-    activeActionProgress()
-      .filter((progress) => (
-        progress.action === 'start_environment_runtime'
-        && (
-          trimString(progress.phase).startsWith('ssh_')
-          || trimString(progress.operation_key).startsWith('ssh:')
-        )
-      ))
-      .sort((left, right) => (left.started_at_unix_ms ?? 0) - (right.started_at_unix_ms ?? 0))
-  ));
 
   createEffect(() => {
     const activeSourceFilter = librarySourceFilter();
@@ -1715,7 +1707,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       operation_key: operationKey,
     });
     if (result?.outcome === 'canceled_launcher_operation') {
-      showActionToast('SSH runtime startup is stopping.', 'info');
+      showActionToast('Runtime startup is stopping.', 'info');
     }
   }
 
@@ -3034,6 +3026,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           copyEnvironmentValue={copyEnvironmentValue}
           editEnvironment={startEditingEnvironment}
           deleteEnvironment={setDeleteTarget}
+          cancelOperation={(progress) => {
+            void cancelLauncherOperation(progress);
+          }}
           controlPlanes={controlPlanes()}
           viewControlPlaneEnvironments={focusProviderEnvironments}
           reconnectControlPlane={reconnectControlPlane}
@@ -3054,11 +3049,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         toasts={actionToasts()}
         dismissToast={dismissActionToast}
         runToastAction={runActionToastAction}
-      />
-      <SSHRuntimeActivityOverlay
-        snapshot={snapshot()}
-        progressItems={sshRuntimeProgressItems()}
-        cancelOperation={cancelLauncherOperation}
       />
 
       <LocalEnvironmentSettingsDialog
@@ -3479,6 +3469,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
+  cancelOperation: (progress: DesktopLauncherActionProgress) => void;
   controlPlanes: readonly DesktopControlPlaneSummary[];
   viewControlPlaneEnvironments: (controlPlane: DesktopControlPlaneSummary) => void;
   reconnectControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
@@ -3768,6 +3759,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 copyEnvironmentValue={props.copyEnvironmentValue}
                 editEnvironment={props.editEnvironment}
                 deleteEnvironment={props.deleteEnvironment}
+                cancelOperation={props.cancelOperation}
                 environmentFailures={props.environmentFailures}
                 dismissEnvironmentFailure={props.dismissEnvironmentFailure}
               />
@@ -3810,6 +3802,7 @@ function EnvironmentCardsPanel(props: Readonly<{
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
+  cancelOperation: (progress: DesktopLauncherActionProgress) => void;
   environmentFailures: ReadonlyMap<string, EnvironmentFailureState>;
   dismissEnvironmentFailure: (environmentID: string) => void;
 }>) {
@@ -3843,7 +3836,7 @@ function EnvironmentCardsPanel(props: Readonly<{
       ) {
         return current;
       }
-      return reconcileEnvironmentLibraryOverlayState(current, props.entries);
+      return reconcileEnvironmentLibraryOverlayState(current, props.entries, props.actionProgress);
     });
     setGuidanceSessionState((current) => reconcileEnvironmentGuidanceSession(current, props.entries));
   });
@@ -3981,6 +3974,7 @@ function EnvironmentCardsPanel(props: Readonly<{
                     copyEnvironmentValue={props.copyEnvironmentValue}
                     editEnvironment={props.editEnvironment}
                     deleteEnvironment={props.deleteEnvironment}
+                    cancelOperation={props.cancelOperation}
                     setGuidanceSession={(nextSession) => setGuidanceSessionState(nextSession)}
                     environmentFailure={props.environmentFailures.get(environmentID) ?? null}
                     dismissEnvironmentFailure={() => props.dismissEnvironmentFailure(environmentID)}
@@ -4013,6 +4007,7 @@ function EnvironmentCardsPanel(props: Readonly<{
                     copyEnvironmentValue={props.copyEnvironmentValue}
                     editEnvironment={props.editEnvironment}
                     deleteEnvironment={props.deleteEnvironment}
+                    cancelOperation={props.cancelOperation}
                     setGuidanceSession={(nextSession) => setGuidanceSessionState(nextSession)}
                     environmentFailure={props.environmentFailures.get(environmentID) ?? null}
                     dismissEnvironmentFailure={() => props.dismissEnvironmentFailure(environmentID)}
@@ -4269,92 +4264,116 @@ function isEnvironmentActionBusy(
   }
 }
 
-function sshRuntimeActivityLabel(
-  progress: DesktopLauncherActionProgress,
-  environments: readonly DesktopEnvironmentEntry[],
-): string {
-  const explicitLabel = trimString(progress.environment_label);
-  if (explicitLabel !== '') {
-    return explicitLabel;
-  }
-  const progressEnvironmentID = trimString(progress.environment_id);
-  const environment = environments.find((entry) => (
-    (progressEnvironmentID !== '' && entry.id === progressEnvironmentID)
-    || environmentMatchesActionProgress(entry.id, progress)
-  ));
-  return environment?.label ?? progressEnvironmentID ?? 'SSH Environment';
-}
-
-function SSHRuntimeActivityOverlay(props: Readonly<{
-  snapshot: DesktopWelcomeSnapshot;
-  progressItems: readonly DesktopLauncherActionProgress[];
-  cancelOperation: (progress: DesktopLauncherActionProgress) => void;
-}>) {
-  return (
-    <Portal>
-      <Show when={props.progressItems.length > 0}>
-        <section class="redeven-ssh-runtime-activity" aria-live="polite" aria-label="SSH runtime activity">
-          <div class="redeven-ssh-runtime-activity__header">
-            <div class="redeven-ssh-runtime-activity__title">
-              <Terminal class="h-3.5 w-3.5" />
-              <span>Starting SSH Runtime</span>
-            </div>
-            <span class="redeven-ssh-runtime-activity__count">
-              {props.progressItems.length === 1 ? '1 active task' : `${props.progressItems.length} active tasks`}
-            </span>
-          </div>
-          <div class="redeven-ssh-runtime-activity__list">
-            <For each={props.progressItems}>
-              {(progress) => (
-                <div class="redeven-ssh-runtime-activity__item">
-                  <div class="redeven-ssh-runtime-activity__item-header">
-                    <span class="redeven-ssh-runtime-activity__label">
-                      {sshRuntimeActivityLabel(progress, props.snapshot.environments)}
-                    </span>
-                    <span class="redeven-ssh-runtime-activity__phase">
-                      {progress.title}
-                    </span>
-                  </div>
-                  <div class="redeven-ssh-runtime-activity__detail">
-                    {progress.detail}
-                  </div>
-                  <div class="mt-2 flex items-center justify-between gap-2">
-                    <span class="text-[11px] font-medium text-muted-foreground">
-                      {progress.deleted_subject
-                        ? 'Connection removed'
-                        : progress.status === 'canceling'
-                          ? 'Stopping'
-                          : progress.status === 'cleanup_failed'
-                            ? 'Cleanup needs attention'
-                            : progress.status === 'canceled'
-                              ? 'Canceled'
-                              : 'Running'}
-                    </span>
-                    <Show when={progress.cancelable === true && progress.status === 'running'}>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        class="h-7 gap-1.5 px-2 text-[11px]"
-                        title={progress.interrupt_detail || 'Stop this background task.'}
-                        onClick={() => props.cancelOperation(progress)}
-                      >
-                        <Stop class="h-3 w-3" />
-                        {progress.interrupt_label || 'Stop'}
-                      </Button>
-                    </Show>
-                  </div>
-                </div>
-              )}
-            </For>
-          </div>
-        </section>
-      </Show>
-    </Portal>
-  );
-}
-
 function blockedPrimaryActionTriggerLabel(label: string): string {
   return `${label} is unavailable. Show recovery options.`;
+}
+
+function runtimeStartupProgressStatus(progress: DesktopLauncherActionProgress): string {
+  if (progress.deleted_subject) {
+    return 'Connection removed';
+  }
+  switch (progress.status) {
+    case 'canceling':
+    case 'cleanup_running':
+      return 'Stopping';
+    case 'cleanup_failed':
+      return 'Cleanup needs attention';
+    case 'failed':
+      return 'Failed';
+    case 'canceled':
+      return 'Canceled';
+    case 'succeeded':
+      return 'Ready';
+    default:
+      return 'Running';
+  }
+}
+
+function runtimeStartupProgressLabel(progress: DesktopLauncherActionProgress): string {
+  const startup = progress.runtime_startup;
+  if (!startup) {
+    return 'Runtime startup';
+  }
+  const targetLabel = trimString(startup.target_label) || trimString(progress.environment_label) || 'Runtime';
+  switch (startup.location) {
+    case 'local_host':
+      return `${targetLabel} · Local`;
+    case 'local_container':
+      return `${targetLabel} · Local container`;
+    case 'ssh_host':
+      return `${targetLabel} · SSH host`;
+    case 'ssh_container':
+      return `${targetLabel} · SSH container`;
+  }
+}
+
+function RuntimeStartupProgressPanel(props: Readonly<{
+  progress: DesktopLauncherActionProgress;
+  cancelOperation: (progress: DesktopLauncherActionProgress) => void;
+}>) {
+  const startup = createMemo(() => props.progress.runtime_startup);
+  const stagePercent = createMemo(() => {
+    const current = startup();
+    if (!current || current.stage_count <= 0) {
+      return 0;
+    }
+    return Math.max(0, Math.min(100, Math.round((current.stage_index / current.stage_count) * 100)));
+  });
+  const canCancel = createMemo(() => (
+    props.progress.cancelable === true && props.progress.status === 'running'
+  ));
+
+  return (
+    <div class="redeven-action-popover redeven-runtime-startup-progress" tabIndex={-1} aria-live="polite">
+      <div class="redeven-runtime-startup-progress__header">
+        <div class="min-w-0">
+          <div class="redeven-action-popover__title">{props.progress.title}</div>
+          <div class="redeven-runtime-startup-progress__target">{runtimeStartupProgressLabel(props.progress)}</div>
+        </div>
+        <span class="redeven-runtime-startup-progress__status">
+          {runtimeStartupProgressStatus(props.progress)}
+        </span>
+      </div>
+      <div class="redeven-action-popover__detail">{props.progress.detail}</div>
+      <Show when={startup()}>
+        {(currentStartup) => (
+          <>
+            <div class="redeven-runtime-startup-progress__meter" aria-hidden="true">
+              <span style={{ width: `${stagePercent()}%` }} />
+            </div>
+            <div class="redeven-runtime-startup-progress__meta">
+              <span>Step {currentStartup().stage_index} of {currentStartup().stage_count}</span>
+              <Show when={currentStartup().target_detail}>
+                {(detail) => <span>{detail()}</span>}
+              </Show>
+            </div>
+          </>
+        )}
+      </Show>
+      <Show when={props.progress.error_message}>
+        {(message) => (
+          <div class="redeven-action-popover__notice" data-tone="error">
+            <div class="redeven-action-popover__notice-title">Startup needs attention</div>
+            <div class="redeven-action-popover__notice-detail">{firstLine(message())}</div>
+          </div>
+        )}
+      </Show>
+      <Show when={canCancel()}>
+        <div class="redeven-action-popover__actions">
+          <Button
+            size="sm"
+            variant="outline"
+            class="w-full justify-center gap-1.5"
+            title={props.progress.interrupt_detail || 'Stop this background task.'}
+            onClick={() => props.cancelOperation(props.progress)}
+          >
+            <Stop class="h-3.5 w-3.5" />
+            {props.progress.interrupt_label || 'Stop startup'}
+          </Button>
+        </div>
+      </Show>
+    </div>
+  );
 }
 
 function EnvironmentPrimaryActionPanel(props: Readonly<{
@@ -4485,6 +4504,8 @@ function EnvironmentSplitActionButton(props: Readonly<{
   guidanceSession: EnvironmentGuidanceSessionState;
   busyState?: DesktopLauncherBusyState;
   loading?: boolean;
+  runtimeStartupProgress?: DesktopLauncherActionProgress | null;
+  cancelOperation: (progress: DesktopLauncherActionProgress) => void;
   onRunAction: (action: EnvironmentActionModel) => void;
   onRunGuidanceAction: (action: EnvironmentActionModel) => void;
 }>) {
@@ -4504,7 +4525,23 @@ function EnvironmentSplitActionButton(props: Readonly<{
       actions: [],
     };
   });
-  const primaryActionOverlay = createMemo(() => props.presentation.primary_action_overlay ?? sessionPopoverOverlay());
+  const hasRuntimeStartupProgress = createMemo(() => props.runtimeStartupProgress?.runtime_startup !== undefined);
+  const primaryActionOverlay = createMemo(() => (
+    hasRuntimeStartupProgress() ? undefined : props.presentation.primary_action_overlay ?? sessionPopoverOverlay()
+  ));
+  const autoOpenedRuntimeStartupOperation = new Set<string>();
+  createEffect(() => {
+    const progress = props.runtimeStartupProgress;
+    const operationKey = [
+      trimString(progress?.operation_key) || trimString(progress?.subject_id),
+      String(progress?.started_at_unix_ms ?? ''),
+    ].filter(Boolean).join(':');
+    if (progress?.runtime_startup && operationKey !== '' && !autoOpenedRuntimeStartupOperation.has(operationKey)) {
+      autoOpenedRuntimeStartupOperation.add(operationKey);
+      closeMenu();
+      props.onGuidanceOpenChange(true);
+    }
+  });
   const tooltipOverlay = createMemo<Extract<EnvironmentPrimaryActionOverlayModel, Readonly<{ kind: 'tooltip' }>> | undefined>(() => {
     const overlay = primaryActionOverlay();
     return overlay?.kind === 'tooltip' ? overlay : undefined;
@@ -4520,6 +4557,15 @@ function EnvironmentSplitActionButton(props: Readonly<{
     popoverOverlay() !== undefined
     && popoverOverlay()!.actions.length > 0
     && !props.presentation.primary_action.enabled
+  ));
+  const popoverPrimaryRunsAction = createMemo(() => (
+    props.presentation.primary_action.enabled && popoverOverlay()?.actions.length === 0
+  ));
+  const shimmerBlocked = createMemo(() => (
+    hasRuntimeStartupProgress() ? false : blockedPrimaryActionDisabled()
+  ));
+  const runtimeStartupTriggerLabel = createMemo(() => (
+    props.runtimeStartupProgress?.action === 'update_environment_runtime' ? 'Updating...' : 'Starting...'
   ));
   const primaryButtonClass = createMemo(() => (
     cn('w-full justify-center', hasMenuActions() && 'rounded-r-none border-r-0')
@@ -4600,86 +4646,129 @@ function EnvironmentSplitActionButton(props: Readonly<{
       {props.presentation.primary_action.label}
     </Button>
   );
+  const renderRuntimeStartupTrigger = () => (
+    <DesktopActionPopover
+      open={props.guidanceOpen}
+      onOpenChange={(open) => {
+        if (open) {
+          closeMenu();
+        }
+        props.onGuidanceOpenChange(open);
+      }}
+      content={(
+        <RuntimeStartupProgressPanel
+          progress={props.runtimeStartupProgress!}
+          cancelOperation={props.cancelOperation}
+        />
+      )}
+      placement="top"
+      anchorClass="flex w-full"
+      popoverAriaLabel={props.runtimeStartupProgress?.title ?? 'Runtime startup progress'}
+    >
+      <Button
+        size="sm"
+        variant={props.presentation.primary_action.variant}
+        class={cn(primaryButtonClass(), 'redeven-split-action-trigger--progress')}
+        style={{ 'min-width': 'var(--redeven-split-action-primary-min-width)' }}
+        aria-haspopup="dialog"
+        aria-expanded={props.guidanceOpen}
+        aria-label={`${props.presentation.primary_action.label} startup progress`}
+        onClick={() => {
+          closeMenu();
+          props.onGuidanceOpenChange(!props.guidanceOpen);
+        }}
+      >
+        <span class="redeven-split-action-trigger__content">
+          <Play class="redeven-split-action-trigger__icon h-3.5 w-3.5" />
+          <span>{runtimeStartupTriggerLabel()}</span>
+        </span>
+      </Button>
+    </DesktopActionPopover>
+  );
 
   return (
     <div ref={rootRef} class="redeven-split-action flex-1">
       <div class="redeven-split-action-primary">
-        <Show when={primaryActionOverlay()} fallback={renderPrimaryButton()}>
-          <Show
-            when={popoverOverlay()}
-            fallback={(
-              <DesktopTooltip
-                content={tooltipOverlay()!.message}
-                placement="top"
-                anchorClass="flex w-full"
-              >
-                {renderPrimaryButton()}
-              </DesktopTooltip>
-            )}
-          >
-            {(overlay) => (
-              <DesktopActionPopover
-                open={props.guidanceOpen}
-                onOpenChange={(open) => {
-                  if (open) {
-                    closeMenu();
-                  }
-                  props.onGuidanceOpenChange(open);
-                }}
-                content={(
-                  <EnvironmentPrimaryActionPanel
-                    overlay={overlay()}
-                    environmentID={props.environmentID}
-                    busyState={props.busyState}
-                    session={props.guidanceSession}
-                    onRunAction={(action) => {
-                      closeMenu();
-                      props.onRunGuidanceAction(action);
-                    }}
-                  />
-                )}
-                placement="top"
-                anchorClass="flex w-full"
-                popoverAriaLabel={overlay().title}
-              >
-                <Button
-                  size="sm"
-                  variant={props.presentation.primary_action.variant}
-                  class={cn(
-                    primaryButtonClass(),
-                    blockedPrimaryActionDisabled() && 'redeven-split-action-trigger--blocked',
-                  )}
-                  style={{ 'min-width': 'var(--redeven-split-action-primary-min-width)' }}
-                  disabled={props.loading}
-                  aria-disabled={blockedPrimaryActionDisabled() ? true : undefined}
-                  aria-haspopup="dialog"
-                  aria-expanded={props.guidanceOpen}
-                  aria-label={blockedPrimaryActionTriggerLabel(props.presentation.primary_action.label)}
-                  onClick={() => {
-                    closeMenu();
-                    if (props.presentation.primary_action.enabled && popoverOverlay()?.actions.length === 0) {
-                      props.onGuidanceOpenChange(false);
-                      props.onRunAction(props.presentation.primary_action);
-                      return;
-                    }
-                    props.onGuidanceOpenChange(!props.guidanceOpen);
-                  }}
+        <Show when={hasRuntimeStartupProgress()} fallback={(
+          <Show when={primaryActionOverlay()} fallback={renderPrimaryButton()}>
+            <Show
+              when={popoverOverlay()}
+              fallback={(
+                <DesktopTooltip
+                  content={tooltipOverlay()!.message}
+                  placement="top"
+                  anchorClass="flex w-full"
                 >
-                  <Show
-                    when={blockedPrimaryActionDisabled()}
-                    fallback={props.presentation.primary_action.label}
+                  {renderPrimaryButton()}
+                </DesktopTooltip>
+              )}
+            >
+              {(overlay) => (
+                <DesktopActionPopover
+                  open={props.guidanceOpen}
+                  onOpenChange={(open) => {
+                    if (open) {
+                      closeMenu();
+                    }
+                    props.onGuidanceOpenChange(open);
+                  }}
+                  content={(
+                    <EnvironmentPrimaryActionPanel
+                      overlay={overlay()}
+                      environmentID={props.environmentID}
+                      busyState={props.busyState}
+                      session={props.guidanceSession}
+                      onRunAction={(action) => {
+                        closeMenu();
+                        props.onRunGuidanceAction(action);
+                      }}
+                    />
+                  )}
+                  placement="top"
+                  anchorClass="flex w-full"
+                  popoverAriaLabel={overlay().title}
+                >
+                  <Button
+                    size="sm"
+                    variant={props.presentation.primary_action.variant}
+                    class={cn(
+                      primaryButtonClass(),
+                      blockedPrimaryActionDisabled() && 'redeven-split-action-trigger--blocked',
+                    )}
+                    style={{ 'min-width': 'var(--redeven-split-action-primary-min-width)' }}
+                    disabled={props.loading && popoverPrimaryRunsAction()}
+                    aria-disabled={blockedPrimaryActionDisabled() ? true : undefined}
+                    aria-haspopup="dialog"
+                    aria-expanded={props.guidanceOpen}
+                    aria-label={blockedPrimaryActionTriggerLabel(props.presentation.primary_action.label)}
+                    onClick={() => {
+                      closeMenu();
+                      if (popoverPrimaryRunsAction()) {
+                        props.onGuidanceOpenChange(false);
+                        props.onRunAction(props.presentation.primary_action);
+                        return;
+                      }
+                      props.onGuidanceOpenChange(!props.guidanceOpen);
+                    }}
                   >
-                    <span class="redeven-split-action-trigger__content">
-                      {props.presentation.primary_action.intent === 'reconnect_provider'
-                        ? <ShieldCheck class="redeven-split-action-trigger__icon h-3.5 w-3.5" />
-                        : <Lock class="redeven-split-action-trigger__icon h-3.5 w-3.5" />}
-                      <span>{props.presentation.primary_action.label}</span>
-                    </span>
-                  </Show>
-                </Button>
-              </DesktopActionPopover>
-            )}
+                    <Show
+                      when={blockedPrimaryActionDisabled()}
+                      fallback={props.presentation.primary_action.label}
+                    >
+                      <span class="redeven-split-action-trigger__content">
+                        {props.presentation.primary_action.intent === 'reconnect_provider'
+                          ? <ShieldCheck class="redeven-split-action-trigger__icon h-3.5 w-3.5" />
+                          : <Lock class="redeven-split-action-trigger__icon h-3.5 w-3.5" />}
+                        <span>{props.presentation.primary_action.label}</span>
+                      </span>
+                    </Show>
+                  </Button>
+                </DesktopActionPopover>
+              )}
+            </Show>
           </Show>
+        )}>
+          {renderRuntimeStartupTrigger()}
         </Show>
         <Presence>
           <Show when={props.loading}>
@@ -4688,7 +4777,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.25 }}
-              class={blockedPrimaryActionDisabled() ? 'redeven-blocked-shimmer-overlay' : 'redeven-loading-shimmer-overlay'}
+              class={shimmerBlocked() ? 'redeven-blocked-shimmer-overlay' : 'redeven-loading-shimmer-overlay'}
             />
           </Show>
         </Presence>
@@ -4700,7 +4789,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
           aria-label={props.presentation.menu_button_label}
           aria-haspopup="menu"
           aria-expanded={props.menuOpen}
-          disabled={props.loading}
+          disabled={props.loading && !hasRuntimeStartupProgress()}
           onClick={() => props.onMenuOpenChange(!props.menuOpen)}
         >
           <ChevronDown class={cn('h-3.5 w-3.5 transition-transform duration-150', props.menuOpen && 'rotate-180')} />
@@ -4822,6 +4911,7 @@ function EnvironmentConnectionCard(props: Readonly<{
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
+  cancelOperation: (progress: DesktopLauncherActionProgress) => void;
   environmentFailure: EnvironmentFailureState | null;
   dismissEnvironmentFailure: () => void;
 }>) {
@@ -4830,6 +4920,13 @@ function EnvironmentConnectionCard(props: Readonly<{
   const endpoints = createMemo(() => buildEnvironmentCardEndpointsModel(props.environment));
   const environmentActionModel = createMemo(() => buildProviderBackedEnvironmentActionModel(props.environment));
   const environmentActionPresentation = createMemo(() => environmentActionModel().action_presentation);
+  const runtimeStartupProgress = createMemo(() => (
+    activeRuntimeStartupProgressForEnvironment(props.environment, props.busyState, props.actionProgress)
+  ));
+  const runtimeOpenable = createMemo(() => (
+    props.environment.runtime_health.status === 'online'
+    && runtimeServiceIsOpenable(environmentRuntimeServiceSnapshot(props.environment))
+  ));
   const isCardOpen = createMemo(() => props.environment.window_state === 'open');
   const isWindowActionBusy = createMemo(() => (
     busyStateMatchesEnvironment(props.busyState, props.environment.id, [
@@ -4851,6 +4948,7 @@ function EnvironmentConnectionCard(props: Readonly<{
     || ['start_environment_runtime', 'update_environment_runtime'].includes(
       activeProgressForEnvironment(props.environment.id, props.busyState, props.actionProgress)?.action ?? '',
     )
+    || (runtimeStartupProgress() !== null && !runtimeOpenable())
   ));
   const isPinBusy = createMemo(() => (
     busyStateMatchesEnvironment(props.busyState, props.environment.id, [
@@ -4960,7 +5058,12 @@ function EnvironmentConnectionCard(props: Readonly<{
           guidanceSession={props.guidanceSession}
           busyState={props.busyState}
           loading={isWindowActionBusy() || isRuntimeActionBusy()}
+          runtimeStartupProgress={runtimeOpenable() ? null : runtimeStartupProgress()}
+          cancelOperation={props.cancelOperation}
           onRunAction={(action) => {
+            if (action.intent === 'start_runtime') {
+              props.onPrimaryActionGuidanceOpenChange(true);
+            }
             void props.runLocalEnvironmentAction(
               props.environment,
               action,
@@ -4977,9 +5080,11 @@ function EnvironmentConnectionCard(props: Readonly<{
                 ));
               }
               const resolution = await props.runEnvironmentGuidanceAction(props.environment, action);
-              props.setGuidanceSession(resolution.next_session);
+              props.setGuidanceSession(action.intent === 'start_runtime' && resolution.close_panel
+                ? openEnvironmentGuidanceSession(props.environment.id)
+                : resolution.next_session);
               if (resolution.close_panel) {
-                props.onPrimaryActionGuidanceOpenChange(false);
+                props.onPrimaryActionGuidanceOpenChange(action.intent === 'start_runtime');
               }
             })();
           }}

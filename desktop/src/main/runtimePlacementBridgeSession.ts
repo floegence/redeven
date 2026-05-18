@@ -79,6 +79,12 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
+function abortError(): Error {
+  const error = new Error('Runtime Placement Bridge startup was canceled.');
+  error.name = 'AbortError';
+  return error;
+}
+
 function bindRecentLog(stream: Readable, onLog?: (chunk: string) => void): void {
   stream.setEncoding('utf8');
   stream.on('data', (chunk: string) => {
@@ -120,6 +126,13 @@ export async function startRuntimePlacementBridgeSession(
   // fallback paths around this bridge.
   const command = spawnBridgeCommand(args);
   void command.closed.catch(() => undefined);
+  const throwIfCanceled = () => {
+    if (args.signal?.aborted) {
+      command.kill('SIGTERM');
+      throw abortError();
+    }
+  };
+  throwIfCanceled();
   const streams = new Map<string, BridgeStreamCallbacks>();
   let closed = false;
   let proxyClose: (() => Promise<void>) | null = null;
@@ -147,7 +160,9 @@ export async function startRuntimePlacementBridgeSession(
 
   let hello: RuntimePlacementBridgeHello;
   try {
+    throwIfCanceled();
     const firstFrame = await readRuntimePlacementBridgeFrame(command.stdout);
+    throwIfCanceled();
     if (!firstFrame || firstFrame.header.type !== 'hello') {
       throw new Error('Runtime Placement Bridge did not send a hello frame.');
     }
@@ -250,7 +265,9 @@ export async function startRuntimePlacementBridgeSession(
 
   let proxy: Awaited<ReturnType<typeof startRuntimePlacementLoopbackProxy>>;
   try {
+    throwIfCanceled();
     proxy = await startRuntimePlacementLoopbackProxy(bridgeHandle);
+    throwIfCanceled();
   } catch (error) {
     await closeStreamingCommand(command);
     throw error;

@@ -1,5 +1,7 @@
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
 import { environmentSupportsGuidancePopover } from './environmentGuidanceSession';
+import { environmentMatchesRuntimeStartupProgress } from './launcherBusyState';
+import type { DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
 
 export type EnvironmentLibraryOverlayKind = 'runtime_menu' | 'primary_action_guidance';
 
@@ -46,6 +48,7 @@ function entrySupportsPrimaryActionGuidance(environment: DesktopEnvironmentEntry
 export function reconcileEnvironmentLibraryOverlayState(
   state: EnvironmentLibraryOverlayState,
   entries: readonly DesktopEnvironmentEntry[],
+  progressItems: readonly DesktopLauncherActionProgress[] = [],
 ): EnvironmentLibraryOverlayState {
   if (state.kind === 'none') {
     return state;
@@ -57,6 +60,10 @@ export function reconcileEnvironmentLibraryOverlayState(
   }
 
   if (state.kind === 'runtime_menu') {
+    return state;
+  }
+
+  if (progressItems.some((progress) => environmentMatchesRuntimeStartupProgress(environment, progress))) {
     return state;
   }
 
