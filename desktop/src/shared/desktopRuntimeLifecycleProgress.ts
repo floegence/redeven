@@ -49,6 +49,8 @@ const CONTAINER_LIFECYCLE_PHASES: readonly DesktopRuntimeLifecyclePhase[] = [
   'checking_runtime_package',
   'preparing_runtime_package',
   'installing_runtime_package',
+  'starting_runtime_process',
+  'checking_runtime_service',
   'runtime_ready',
 ];
 
@@ -71,6 +73,8 @@ const SSH_CONTAINER_LIFECYCLE_PHASES: readonly DesktopRuntimeLifecyclePhase[] = 
   'checking_runtime_package',
   'preparing_runtime_package',
   'installing_runtime_package',
+  'starting_runtime_process',
+  'checking_runtime_service',
   'runtime_ready',
 ];
 

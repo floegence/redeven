@@ -61,8 +61,9 @@ export function buildRuntimePlacementBridgePlan(input: Readonly<{
       },
       // IMPORTANT: Container targets execute the runtime binary inside the
       // container after placement bootstrap has resolved the container-local
-      // binary path. Do not fall back to PATH lookup; bootstrap owns install
-      // and version readiness before the bridge stream starts.
+      // binary path. Do not fall back to PATH lookup; Start Runtime owns
+      // install, daemon startup, and health readiness before this bridge
+      // attach stream starts.
       argv: desktopBridgeCommand(runtimeBinaryPath, input.placement.runtime_root),
     }),
     requires_published_port: false,

@@ -6,12 +6,15 @@ import {
 import type { DesktopRuntimeMaintenanceRequirement } from '../shared/desktopRuntimeHealth';
 import {
   containerInspectCommand,
+  containerRuntimeDaemonStartCommand,
+  containerRuntimeDaemonStatusCommand,
   containerRuntimePlatformProbeCommand,
   containerRuntimeProbeCommand,
   containerRuntimeUploadedInstallCommand,
   parseContainerInspectJSON,
   parseContainerPlatformProbeOutput,
 } from './containerRuntime';
+import { parseStartupReport, type StartupReport } from './startup';
 import {
   createLocalRuntimeHostExecutor,
   createSSHRuntimeHostExecutor,
@@ -34,6 +37,8 @@ export type RuntimePlacementProgressPhase =
   | 'checking_runtime'
   | 'preparing_runtime_package'
   | 'installing_runtime'
+  | 'starting_runtime_daemon'
+  | 'waiting_runtime_daemon'
   | 'runtime_ready';
 
 export type RuntimePlacementProgress = Readonly<{
@@ -47,6 +52,7 @@ export type ReadyRuntimePlacement = Readonly<{
   placement: DesktopRuntimePlacement;
   runtime_binary_path: string;
   probe: DesktopSSHRemoteRuntimeProbeResult;
+  startup?: StartupReport;
 }>;
 
 export class RuntimePlacementMaintenanceRequiredError extends Error {
@@ -68,6 +74,7 @@ export type EnsureRuntimePlacementReadyArgs = Readonly<{
   asset_cache_root: string;
   force_runtime_update?: boolean;
   timeout_ms?: number;
+  desktop_owner_id?: string;
   signal?: AbortSignal;
   on_progress?: (progress: RuntimePlacementProgress) => void;
 }>;
@@ -101,6 +108,34 @@ function runtimeHostExecutor(hostAccess: DesktopRuntimeHostAccess): RuntimeHostA
   return hostAccess.kind === 'ssh_host'
     ? createSSHRuntimeHostExecutor(hostAccess.ssh)
     : createLocalRuntimeHostExecutor();
+}
+
+async function waitForContainerRuntimeDaemon(args: Readonly<{
+  executor: RuntimeHostAccessExecutor;
+  placement: Extract<DesktopRuntimePlacement, Readonly<{ kind: 'container_process' }>>;
+  runtime_binary_path: string;
+  timeout_ms: number;
+  signal?: AbortSignal;
+}>): Promise<StartupReport> {
+  const deadline = Date.now() + Math.max(1_000, args.timeout_ms);
+  let lastError: Error | null = null;
+  for (;;) {
+    try {
+      const result = await args.executor.run(containerRuntimeDaemonStatusCommand({
+        engine: args.placement.container_engine,
+        container_id: args.placement.container_id,
+        runtime_root: args.placement.runtime_root,
+        runtime_binary_path: args.runtime_binary_path,
+      }), { signal: args.signal });
+      return parseStartupReport(result.stdout);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(`Runtime daemon did not become ready before timeout.${lastError ? ` ${lastError.message}` : ''}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
 }
 
 function containerUnavailableMessage(
@@ -166,6 +201,7 @@ export async function ensureRuntimePlacementReady(
       },
     };
   }
+  const placement = args.placement;
 
   const executor = runtimeHostExecutor(args.host_access);
   emitProgress(
@@ -176,7 +212,7 @@ export async function ensureRuntimePlacementReady(
       ? 'Desktop is checking the SSH host and selected running container.'
       : 'Desktop is checking the selected running container.',
   );
-  await assertContainerRunning(executor, args.placement, args.signal);
+  await assertContainerRunning(executor, placement, args.signal);
   if (args.host_access.kind === 'ssh_host') {
     emitProgress(
       args.on_progress,
@@ -193,8 +229,8 @@ export async function ensureRuntimePlacementReady(
     'Desktop is checking the container OS and CPU architecture before choosing a runtime package.',
   );
   const platformResult = await executor.run(containerRuntimePlatformProbeCommand({
-    engine: args.placement.container_engine,
-    container_id: args.placement.container_id,
+    engine: placement.container_engine,
+    container_id: placement.container_id,
   }), { signal: args.signal });
   const platform = parseContainerPlatformProbeOutput(platformResult.stdout);
 
@@ -204,7 +240,7 @@ export async function ensureRuntimePlacementReady(
     'Checking container runtime',
     `Desktop is checking for a compatible Redeven ${runtimeReleaseTag} runtime inside the container.`,
   );
-  let probe = await probeContainerRuntime(executor, args.placement, runtimeReleaseTag, args.signal);
+  let probe = await probeContainerRuntime(executor, placement, runtimeReleaseTag, args.signal);
   const sourceRuntimeRoot = compact(args.source_runtime_root);
   const shouldInstallRuntime = probe.status !== 'ready'
     || args.force_runtime_update === true
@@ -250,29 +286,56 @@ export async function ensureRuntimePlacementReady(
       `Desktop is installing Redeven ${runtimeReleaseTag} inside the running container.`,
     );
     await executor.run(containerRuntimeUploadedInstallCommand({
-      engine: args.placement.container_engine,
-      container_id: args.placement.container_id,
-      runtime_root: args.placement.runtime_root,
+      engine: placement.container_engine,
+      container_id: placement.container_id,
+      runtime_root: placement.runtime_root,
       runtime_release_tag: runtimeReleaseTag,
     }), {
       stdinData: asset.archiveData,
       signal: args.signal,
     });
-    probe = await probeContainerRuntime(executor, args.placement, runtimeReleaseTag, args.signal);
+    probe = await probeContainerRuntime(executor, placement, runtimeReleaseTag, args.signal);
   }
   if (probe.status !== 'ready') {
     throw new Error(describeManagedSSHRuntimeProbeResult(probe));
   }
   emitProgress(
     args.on_progress,
+    'starting_runtime_daemon',
+    'Starting runtime daemon',
+    'Desktop is starting the long-running Redeven runtime daemon inside the selected container.',
+  );
+  await executor.run(containerRuntimeDaemonStartCommand({
+    engine: placement.container_engine,
+    container_id: placement.container_id,
+    runtime_root: placement.runtime_root,
+    runtime_binary_path: probe.binary_path,
+    desktop_owner_id: compact(args.desktop_owner_id),
+  }), { signal: args.signal });
+  emitProgress(
+    args.on_progress,
+    'waiting_runtime_daemon',
+    'Waiting for runtime daemon',
+    'Desktop is waiting for the runtime daemon health check before enabling Open.',
+  );
+  const startup = await waitForContainerRuntimeDaemon({
+    executor,
+    placement,
+    runtime_binary_path: probe.binary_path,
+    timeout_ms: args.timeout_ms ?? 45_000,
+    signal: args.signal,
+  });
+  emitProgress(
+    args.on_progress,
     'runtime_ready',
-    'Runtime ready',
-    describeManagedSSHRuntimeProbeResult(probe),
+    'Runtime daemon ready',
+    'The runtime daemon is running. Open will connect Desktop to it.',
   );
   return {
     host_access: args.host_access,
-    placement: args.placement,
+    placement,
     runtime_binary_path: probe.binary_path,
     probe,
+    startup,
   };
 }

@@ -5,6 +5,9 @@ import {
   containerListCommand,
   containerRuntimePlatformProbeCommand,
   containerRuntimeProbeCommand,
+  containerRuntimeDaemonStartCommand,
+  containerRuntimeDaemonStatusCommand,
+  containerRuntimeDaemonStopCommand,
   containerRuntimeExecCommand,
   containerRuntimeUploadedInstallCommand,
   parseContainerListOutput,
@@ -161,6 +164,62 @@ describe('containerRuntime', () => {
     ]));
     expect(installCommand.join('\n')).toContain('cat > "$archive_path"');
     expect(installCommand.join('\n')).toContain('write_runtime_stamp "desktop_upload"');
+  });
+
+  it('builds daemon lifecycle commands separately from bridge attach', () => {
+    expect(containerRuntimeDaemonStartCommand({
+      engine: 'docker',
+      container_id: 'dev',
+      runtime_binary_path: '/root/.redeven/runtime/releases/v1.2.3/bin/redeven',
+      runtime_root: '/root/.redeven',
+      desktop_owner_id: 'desktop-owner',
+    })).toEqual([
+      'docker',
+      'exec',
+      '-d',
+      '--env',
+      'REDEVEN_DESKTOP_OWNER_ID=desktop-owner',
+      'dev',
+      '/root/.redeven/runtime/releases/v1.2.3/bin/redeven',
+      'run',
+      '--mode',
+      'desktop',
+      '--desktop-managed',
+      '--state-root',
+      '/root/.redeven',
+      '--local-ui-bind',
+      '127.0.0.1:0',
+    ]);
+    expect(containerRuntimeDaemonStatusCommand({
+      engine: 'docker',
+      container_id: 'dev',
+      runtime_binary_path: '/root/.redeven/runtime/releases/v1.2.3/bin/redeven',
+      runtime_root: '/root/.redeven',
+    })).toEqual([
+      'docker',
+      'exec',
+      '-i',
+      'dev',
+      '/root/.redeven/runtime/releases/v1.2.3/bin/redeven',
+      'desktop-runtime-status',
+      '--state-root',
+      '/root/.redeven',
+    ]);
+    expect(containerRuntimeDaemonStopCommand({
+      engine: 'docker',
+      container_id: 'dev',
+      runtime_binary_path: '/root/.redeven/runtime/releases/v1.2.3/bin/redeven',
+      runtime_root: '/root/.redeven',
+    })).toEqual([
+      'docker',
+      'exec',
+      '-i',
+      'dev',
+      '/root/.redeven/runtime/releases/v1.2.3/bin/redeven',
+      'desktop-runtime-stop',
+      '--state-root',
+      '/root/.redeven',
+    ]);
   });
 
   it('rejects malformed command inputs instead of falling back', () => {

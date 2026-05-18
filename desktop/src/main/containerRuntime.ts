@@ -371,6 +371,18 @@ export function containerRuntimeExecCommand(input: Readonly<{
   argv: readonly string[];
   env?: Readonly<Record<string, string | undefined>>;
 }>): readonly string[] {
+  return containerRuntimeExecCommandWithMode(input, { detached: false, interactive: true });
+}
+
+function containerRuntimeExecCommandWithMode(input: Readonly<{
+  engine: DesktopContainerEngine;
+  container_id: string;
+  argv: readonly string[];
+  env?: Readonly<Record<string, string | undefined>>;
+}>, mode: Readonly<{
+  detached: boolean;
+  interactive: boolean;
+}>): readonly string[] {
   const normalizedEngine = normalizeContainerEngine(input.engine);
   const containerID = compact(input.container_id);
   if (containerID === '') {
@@ -383,7 +395,15 @@ export function containerRuntimeExecCommand(input: Readonly<{
     .map(([key, value]) => [compact(key), value] as const)
     .filter(([key]) => /^[A-Za-z_][A-Za-z0-9_]*$/u.test(key))
     .flatMap(([key, value]) => ['--env', value == null ? key : `${key}=${String(value)}`]);
-  return [normalizedEngine, 'exec', '-i', ...envArgs, containerID, ...input.argv.map((part) => compact(part))];
+  return [
+    normalizedEngine,
+    'exec',
+    ...(mode.detached ? ['-d'] : []),
+    ...(mode.interactive ? ['-i'] : []),
+    ...envArgs,
+    containerID,
+    ...input.argv.map((part) => compact(part)),
+  ];
 }
 
 export function containerRuntimePlatformProbeCommand(input: Readonly<{
@@ -446,6 +466,69 @@ export function containerRuntimeUploadedInstallCommand(input: Readonly<{
       input.runtime_root,
       input.runtime_release_tag,
       buildManagedSSHUploadedInstallScript(),
+    ],
+  });
+}
+
+export function containerRuntimeDaemonStartCommand(input: Readonly<{
+  engine: DesktopContainerEngine;
+  container_id: string;
+  runtime_binary_path: string;
+  runtime_root: string;
+  desktop_owner_id: string;
+}>): readonly string[] {
+  return containerRuntimeExecCommandWithMode({
+    engine: input.engine,
+    container_id: input.container_id,
+    env: {
+      REDEVEN_DESKTOP_OWNER_ID: input.desktop_owner_id,
+    },
+    argv: [
+      input.runtime_binary_path,
+      'run',
+      '--mode',
+      'desktop',
+      '--desktop-managed',
+      '--state-root',
+      input.runtime_root,
+      '--local-ui-bind',
+      '127.0.0.1:0',
+    ],
+  }, { detached: true, interactive: false });
+}
+
+export function containerRuntimeDaemonStatusCommand(input: Readonly<{
+  engine: DesktopContainerEngine;
+  container_id: string;
+  runtime_binary_path: string;
+  runtime_root: string;
+}>): readonly string[] {
+  return containerRuntimeExecCommand({
+    engine: input.engine,
+    container_id: input.container_id,
+    argv: [
+      input.runtime_binary_path,
+      'desktop-runtime-status',
+      '--state-root',
+      input.runtime_root,
+    ],
+  });
+}
+
+export function containerRuntimeDaemonStopCommand(input: Readonly<{
+  engine: DesktopContainerEngine;
+  container_id: string;
+  runtime_binary_path: string;
+  runtime_root: string;
+}>): readonly string[] {
+  return containerRuntimeExecCommand({
+    engine: input.engine,
+    container_id: input.container_id,
+    argv: [
+      input.runtime_binary_path,
+      'desktop-runtime-stop',
+      '--state-root',
+      input.runtime_root,
     ],
   });
 }

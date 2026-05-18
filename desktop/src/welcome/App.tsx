@@ -448,6 +448,21 @@ function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return trimString(error.message);
   }
+  if (error && typeof error === 'object') {
+    const record = error as Record<string, unknown>;
+    const directMessage = trimString(record.message)
+      || trimString(record.error)
+      || trimString(record.detail)
+      || trimString(record.details);
+    if (directMessage !== '') {
+      return directMessage;
+    }
+    try {
+      return trimString(JSON.stringify(record));
+    } catch {
+      return '';
+    }
+  }
   return trimString(error);
 }
 
