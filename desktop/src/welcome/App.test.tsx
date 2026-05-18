@@ -627,6 +627,14 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('.redeven-split-menu');
     expect(styles).not.toContain('bottom: calc(100% + 0.5rem);');
     expect(styles).toContain('.redeven-split-menu-item');
+    expect(styles).toContain('.redeven-action-popover-frame');
+    expect(styles).toContain('--redeven-action-popover-border');
+    expect(styles).toContain('--redeven-action-popover-width: min(28rem, calc(100vw - 1rem));');
+    expect(styles).toContain('width: 100%;');
+    expect(styles).toContain('.redeven-action-popover > *');
+    expect(styles).toContain('.redeven-action-popover__notice-detail');
+    expect(styles).toContain('overflow-wrap: anywhere;');
+    expect(styles).toContain('flex-wrap: wrap;');
     expect(styles).toContain('.redeven-action-popover');
     expect(styles).toContain('.redeven-action-popover__actions');
     expect(styles).toContain('.redeven-action-popover__notice');
