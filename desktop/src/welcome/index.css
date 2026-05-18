@@ -515,9 +515,44 @@ body {
 }
 
 .redeven-provider-pill[data-active='true'] {
-  border-color: color-mix(in srgb, var(--primary) 36%, transparent);
-  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
   color: var(--foreground);
+}
+
+/* ── Runtime target / control plane filter chip ── */
+
+.redeven-runtime-chip {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px solid var(--primary);
+  border-radius: 0.3rem;
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  padding: 0.32rem 0.5rem 0.32rem 0.6rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--foreground);
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease;
+}
+
+.redeven-runtime-chip:hover {
+  border-color: color-mix(in srgb, var(--primary) 60%, transparent);
+  background: color-mix(in srgb, var(--primary) 16%, transparent);
+}
+
+.redeven-runtime-chip svg {
+  flex-shrink: 0;
+  opacity: 0.55;
+  transition: opacity 150ms ease;
+}
+
+.redeven-runtime-chip:hover svg {
+  opacity: 1;
 }
 
 /* ── Banners ── */
