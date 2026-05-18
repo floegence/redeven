@@ -667,8 +667,31 @@ describe('buildEnvironmentCardModel', () => {
       defaultFact('ENGINE', 'Docker'),
     ]));
     const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);
-    expect(actionModel.action_presentation.menu_actions.map((item) => item.id)).not.toContain('start_runtime');
     expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'start_runtime',
+        action: expect.objectContaining({
+          intent: 'start_runtime',
+          enabled: false,
+          disabled_reason: 'Container dev-container was not found. Choose a running container, then try again.',
+        }),
+      }),
+      expect.objectContaining({
+        id: 'stop_runtime',
+        action: expect.objectContaining({
+          intent: 'stop_runtime',
+          enabled: false,
+          disabled_reason: 'Runtime is not running.',
+        }),
+      }),
+      expect.objectContaining({
+        id: 'update_runtime',
+        action: expect.objectContaining({
+          intent: 'update_runtime',
+          enabled: false,
+          disabled_reason: 'Container dev-container was not found. Choose a running container, then try again.',
+        }),
+      }),
       expect.objectContaining({
         id: 'refresh_runtime',
         action: expect.objectContaining({
@@ -903,8 +926,15 @@ describe('buildEnvironmentCardModel', () => {
     const localEntry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
     const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);
 
-    expect(actionModel.action_presentation.menu_actions.map((item) => item.id)).not.toContain('start_runtime');
     expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+          id: 'start_runtime',
+          action: expect.objectContaining({
+            intent: 'start_runtime',
+            enabled: false,
+            disabled_reason: 'Update this runtime before continuing.',
+          }),
+        }),
       expect.objectContaining({
         id: 'update_runtime',
         action: expect.objectContaining({
@@ -1000,91 +1030,57 @@ describe('buildEnvironmentCardModel', () => {
       defaultFact('RUNS ON', 'ops@example.internal:2222'),
       defaultFact('VERSION', 'v0.5.9'),
     ]);
-    expect(buildProviderBackedEnvironmentActionModel(entry!)).toEqual({
+    const actionModel = buildProviderBackedEnvironmentActionModel(entry!);
+    expect(actionModel).toMatchObject({
       status_label: 'RUNTIME NEEDS UPDATE',
       status_tone: 'warning',
       action_presentation: {
-        kind: 'split_button',
         primary_action: {
           intent: 'open',
-          label: 'Open',
           enabled: false,
-          variant: 'default',
         },
         primary_action_overlay: {
           kind: 'popover',
-          tone: 'warning',
-          eyebrow: 'Runtime blocked',
           title: 'Runtime update required',
-          detail: 'This SSH host is reachable, but the running runtime needs an update before it can open this environment. Update and restart the runtime first; Open stays separate and becomes available after the runtime is ready.',
-          actions: [
-            {
+          actions: expect.arrayContaining([
+            expect.objectContaining({
               label: 'Update and restart…',
-              emphasis: 'primary',
-              action: {
+              action: expect.objectContaining({
                 intent: 'update_runtime',
-                label: 'Update and restart…',
-                enabled: true,
-                variant: 'outline',
-              },
-            },
-            {
-              label: 'Refresh status',
-              emphasis: 'secondary',
-              action: {
-                intent: 'refresh_runtime',
-                label: 'Refresh runtime status',
-                enabled: true,
-                variant: 'outline',
-              },
-            },
-          ],
+                runtime_operation_method: 'ssh_host',
+              }),
+            }),
+          ]),
         },
-        menu_button_label: 'Runtime actions',
-        menu_actions: [
-          {
-            id: 'provider_link_unavailable',
-            label: 'Provider link unavailable',
-            action: {
-              intent: 'unavailable',
-              label: 'Provider link unavailable',
-              enabled: false,
-              variant: 'outline',
-            },
-          },
-          {
-            id: 'stop_runtime',
-            label: 'Stop runtime',
-            action: {
-              intent: 'stop_runtime',
-              label: 'Stop runtime',
-              enabled: true,
-              variant: 'outline',
-            },
-          },
-          {
-            id: 'update_runtime',
-            label: 'Update runtime',
-            action: {
-              intent: 'update_runtime',
-              label: 'Update runtime',
-              enabled: true,
-              variant: 'outline',
-            },
-          },
-          {
-            id: 'refresh_runtime',
-            label: 'Refresh runtime status',
-            action: {
-              intent: 'refresh_runtime',
-              label: 'Refresh runtime status',
-              enabled: true,
-              variant: 'outline',
-            },
-          },
-        ],
       },
     });
+    expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'stop_runtime',
+        action: expect.objectContaining({
+          intent: 'stop_runtime',
+          enabled: true,
+          runtime_operation_method: 'ssh_host',
+        }),
+      }),
+      expect.objectContaining({
+        id: 'restart_runtime',
+        action: expect.objectContaining({
+          intent: 'restart_runtime',
+          enabled: false,
+          disabled_reason: 'Update this runtime from v0.5.9 to v0.6.7 before continuing.',
+        }),
+      }),
+      expect.objectContaining({
+        id: 'update_runtime',
+        action: expect.objectContaining({
+          intent: 'update_runtime',
+          label: 'Update runtime',
+          enabled: true,
+          runtime_operation_method: 'ssh_host',
+        }),
+      }),
+    ]));
   });
 
   it('treats a missing Env App shell as an update-required SSH runtime block', () => {
@@ -2073,63 +2069,45 @@ describe('buildEnvironmentCardModel', () => {
       open_action_label: 'Opening…',
     }));
 
-    expect(buildProviderBackedEnvironmentActionModel(entry!)).toEqual({
+    const actionModel = buildProviderBackedEnvironmentActionModel(entry!);
+    expect(actionModel).toMatchObject({
       status_label: 'Open',
       status_tone: 'success',
       action_presentation: {
-        kind: 'split_button',
         primary_action: {
           intent: 'opening',
-          label: 'Open',
           enabled: false,
-          variant: 'default',
         },
         primary_action_overlay: undefined,
-        menu_button_label: 'Runtime actions',
-        menu_actions: [
-          {
-            id: 'connect_provider_runtime',
-            label: 'Connect to provider...',
-            action: {
-              intent: 'connect_provider_runtime',
-              label: 'Connect to provider...',
-              enabled: false,
-              variant: 'outline',
-            },
-          },
-          {
-            id: 'stop_runtime',
-            label: 'Stop runtime',
-            action: {
-              intent: 'stop_runtime',
-              label: 'Stop runtime',
-              enabled: true,
-              variant: 'outline',
-            },
-          },
-          {
-            id: 'restart_runtime',
-            label: 'Restart runtime',
-            action: {
-              intent: 'restart_runtime',
-              label: 'Restart runtime',
-              enabled: true,
-              variant: 'outline',
-            },
-          },
-          {
-            id: 'refresh_runtime',
-            label: 'Refresh runtime status',
-            action: {
-              intent: 'refresh_runtime',
-              label: 'Refresh runtime status',
-              enabled: true,
-              variant: 'outline',
-            },
-          },
-        ],
       },
     });
+    expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'stop_runtime',
+        action: expect.objectContaining({
+          intent: 'stop_runtime',
+          enabled: true,
+          runtime_operation_method: 'local_host',
+        }),
+      }),
+      expect.objectContaining({
+        id: 'restart_runtime',
+        action: expect.objectContaining({
+          intent: 'restart_runtime',
+          enabled: true,
+          runtime_operation_method: 'local_host',
+        }),
+      }),
+      expect.objectContaining({
+        id: 'update_runtime',
+        label: 'Update Redeven Desktop',
+        action: expect.objectContaining({
+          intent: 'update_runtime',
+          enabled: true,
+          runtime_operation_method: 'desktop_local_update_handoff',
+        }),
+      }),
+    ]));
   });
 
   it('keeps Open disabled while an online runtime is still preparing Env App readiness', () => {

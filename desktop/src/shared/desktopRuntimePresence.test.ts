@@ -24,8 +24,21 @@ describe('desktopRuntimePresence', () => {
       availability: 'available',
       label: 'Stop runtime',
       method: 'local_host',
+      menu_visibility: 'stable',
     });
     expect(plans.start.availability).toBe('unavailable');
+    expect(plans.start.menu_visibility).toBe('hidden');
+    expect(plans.restart).toMatchObject({
+      availability: 'available',
+      method: 'local_host',
+      menu_visibility: 'stable',
+    });
+    expect(plans.update).toMatchObject({
+      availability: 'available',
+      label: 'Update Redeven Desktop',
+      method: 'desktop_local_update_handoff',
+      menu_visibility: 'stable',
+    });
     expect(plans.refresh.availability).toBe('available');
   });
 
@@ -47,6 +60,13 @@ describe('desktopRuntimePresence', () => {
     expect(plans.stop).toMatchObject({
       availability: 'available',
       method: 'ssh_host',
+      menu_visibility: 'stable',
+    });
+    expect(plans.update).toMatchObject({
+      availability: 'available',
+      method: 'ssh_host',
+      label: 'Update runtime',
+      menu_visibility: 'stable',
     });
     expect(plans.connect_provider).toMatchObject({
       availability: 'blocked',
@@ -79,6 +99,74 @@ describe('desktopRuntimePresence', () => {
       availability: 'blocked',
       reason_code: 'runtime_target_unavailable',
       message: 'Container web is not running.',
+      menu_visibility: 'contextual',
+    });
+    expect(plans.stop).toMatchObject({
+      availability: 'unavailable',
+      menu_visibility: 'stable',
+      message: 'Runtime is not running.',
+    });
+    expect(plans.restart).toMatchObject({
+      availability: 'unavailable',
+      menu_visibility: 'stable',
+      message: 'Runtime is not running.',
+    });
+    expect(plans.update).toMatchObject({
+      availability: 'blocked',
+      method: 'local_container_exec',
+      menu_visibility: 'stable',
+      message: 'Container web is not running.',
+    });
+  });
+
+  it('keeps provider cards out of runtime lifecycle management', () => {
+    const plans = buildDesktopRuntimeOperationPlans({
+      surface: 'provider_card',
+      running: true,
+      openable: true,
+    });
+
+    expect(plans.open).toMatchObject({
+      availability: 'available',
+      method: 'provider_tunnel',
+    });
+    for (const operation of ['start', 'stop', 'restart', 'update'] as const) {
+      expect(plans[operation]).toMatchObject({
+        availability: 'hidden',
+        method: 'none',
+        menu_visibility: 'hidden',
+      });
+    }
+  });
+
+  it('routes container updates through the host/container management channel', () => {
+    const plans = buildDesktopRuntimeOperationPlans({
+      surface: 'managed_runtime_card',
+      host_access: { kind: 'ssh_host', ssh: {
+        ssh_destination: 'devbox',
+        ssh_port: 22,
+        auth_mode: 'key_agent',
+        connect_timeout_seconds: 10,
+      } },
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'abc123',
+        container_ref: 'web',
+        container_label: 'web',
+        runtime_root: '/root/.redeven',
+        bridge_strategy: 'exec_stream',
+      },
+      running: true,
+      openable: true,
+      runtime_control_status: desktopRuntimeControlStatusAvailable(),
+    });
+
+    expect(plans.update).toMatchObject({
+      availability: 'available',
+      label: 'Update runtime',
+      method: 'ssh_container_exec',
+      menu_visibility: 'stable',
     });
   });
 

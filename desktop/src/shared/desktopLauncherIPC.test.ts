@@ -91,6 +91,15 @@ describe('desktopLauncherIPC', () => {
       allow_active_work_replacement: true,
     });
     expect(normalizeDesktopLauncherActionRequest({
+      kind: 'manage_desktop_update',
+      environment_id: ' local ',
+      label: ' Local Environment ',
+    })).toEqual({
+      kind: 'manage_desktop_update',
+      environment_id: 'local',
+      label: 'Local Environment',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
       kind: 'prepare_environment_open',
       environment_id: ' ssh-container ',
       label: ' SSH container ',
@@ -417,6 +426,7 @@ describe('desktopLauncherIPC', () => {
     expect(normalizeDesktopLauncherActionRequest({ kind: 'open_advanced_settings' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'open_local_environment' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'stop_environment_runtime', environment_id: '   ' })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'manage_desktop_update', environment_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'connect_provider_runtime', provider_environment_id: '   ', runtime_target_id: 'local:local' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'connect_provider_runtime', provider_environment_id: 'provider-env', runtime_target_id: 'provider-env' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'connect_provider_runtime', provider_environment_id: 'provider-env' })).toBeNull();
@@ -457,6 +467,10 @@ describe('desktopLauncherIPC', () => {
       ok: true,
       outcome: 'opened_environment_window',
       session_key: 'env:local%3Adefault:local_host',
+    })).toBe(true);
+    expect(isDesktopLauncherActionSuccess({
+      ok: true,
+      outcome: 'opened_desktop_update_handoff',
     })).toBe(true);
     expect(isDesktopLauncherActionFailure({
       ok: false,

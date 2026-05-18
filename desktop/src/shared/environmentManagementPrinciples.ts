@@ -11,6 +11,8 @@ export const DESKTOP_PROVIDER_CARD_FORBIDDEN_ACTIONS = [
   'open_remote_environment',
   'open_ssh_environment',
   'start_environment_runtime',
+  'update_environment_runtime',
+  'manage_desktop_update',
   'stop_environment_runtime',
   'connect_provider_runtime',
   'disconnect_provider_runtime',

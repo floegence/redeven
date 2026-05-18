@@ -140,7 +140,11 @@ describe('main routing', () => {
     expect(mainSrc).toContain("authority: 'desktop_ssh'");
     expect(mainSrc).toContain("method: 'desktop_ssh_restart'");
     expect(mainSrc).toContain("method: 'desktop_ssh_force_update'");
+    expect(mainSrc).toContain("method: 'desktop_local_update_handoff'");
     expect(mainSrc).toContain('async function restartSSHRuntimeFromShell(');
+    expect(mainSrc).toContain('async function manageDesktopUpdateFromLauncher(');
+    expect(mainSrc).toContain("case 'manage_desktop_update':");
+    expect(mainSrc).toContain("launcherActionSuccess('opened_desktop_update_handoff')");
     expect(mainSrc).toContain('forceRuntimeUpdate: options.forceRuntimeUpdate === true');
     expect(mainSrc).toContain('allowActiveWorkReplacement: true');
     expect(mainSrc).toContain("if (normalized.action === 'restart_runtime')");

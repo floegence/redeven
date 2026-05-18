@@ -771,6 +771,7 @@ describe('sshRuntime integration', () => {
       ready = await ensureReadyWithFakeSSH(fixture, 'auto');
       expect(ready.startup.local_ui_url).toBe('http://127.0.0.1:39001/');
       expect(ready.runtime_handle.launch_mode).toBe('spawned');
+      await waitForFakeSSHEvent(fixture, 'start_runtime');
     } finally {
       await ready?.disconnect();
     }
@@ -794,6 +795,7 @@ describe('sshRuntime integration', () => {
     let runtime: ManagedSSHRuntime | null = null;
     try {
       ready = await ensureReadyWithFakeSSH(fixture, 'auto');
+      await waitForFakeSSHEvent(fixture, 'start_runtime');
       const beforeOpenEventCount = (await readFakeSSHEvents(fixture)).length;
       runtime = await openConnectionWithFakeSSH(fixture, ready);
       expect(runtime.local_forward_url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/$/u);

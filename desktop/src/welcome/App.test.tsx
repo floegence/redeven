@@ -606,7 +606,12 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('IMPORTANT: Provider-link confirmation is intentionally reachable only from');
     expect(appSrc).toContain('desktopEntryKindOwnsRuntimeManagement(environment.kind)');
     expect(appSrc).toContain('This interrupts the background runtime service for this environment.');
-    expect(appSrc).toContain('Desktop will install the bundled Redeven runtime and start it again on this SSH host.');
+    expect(appSrc).toContain("runtime_action?.runtime_operation_method === 'desktop_local_update_handoff'");
+    expect(appSrc).toContain("kind: 'manage_desktop_update'");
+    expect(appSrc).toContain("result?.outcome === 'opened_desktop_update_handoff'");
+    expect(appSrc).toContain('Desktop update options opened for ${environment.label}.');
+    expect(appSrc).toContain('This local runtime is bundled with Redeven Desktop. Desktop will open the update handoff so the app and local runtime move together.');
+    expect(appSrc).toContain('Desktop will update the runtime package and start it again. Open remains separate after the update.');
     expect(appSrc).toContain('Active work:');
     expect(appSrc).toContain('formatRuntimeServiceWorkload');
     expect(appSrc).toContain("case 'start_runtime':");

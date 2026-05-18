@@ -324,6 +324,7 @@ type RuntimeMaintenanceConfirmationAction = 'stop' | 'restart' | 'update';
 type RuntimeMaintenanceConfirmationState = Readonly<{
   environment: DesktopEnvironmentEntry;
   action: RuntimeMaintenanceConfirmationAction;
+  runtime_action?: EnvironmentActionModel;
 }>;
 
 type ProviderRuntimeLinkConfirmationAction = 'connect' | 'disconnect';
@@ -960,6 +961,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const stopRuntimeHasActiveWork = createMemo(() => (
     runtimeMaintenanceConfirmation()?.environment.runtime_maintenance?.has_active_work
     ?? runtimeServiceHasActiveWork(stopRuntimeSnapshot())
+  ));
+  const runtimeMaintenanceUsesDesktopUpdate = createMemo(() => (
+    runtimeMaintenanceConfirmation()?.action === 'update'
+    && runtimeMaintenanceConfirmation()?.runtime_action?.runtime_operation_method === 'desktop_local_update_handoff'
   ));
   const providerRuntimeLinkActionLabel = createMemo(() => (
     providerRuntimeLinkConfirmation()?.action === 'disconnect' ? 'Disconnect from provider' : 'Connect to provider'
@@ -1982,8 +1987,21 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   async function updateEnvironmentRuntime(
     environment: DesktopEnvironmentEntry,
+    action: EnvironmentActionModel | undefined,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
   ): Promise<boolean> {
+    if (action?.runtime_operation_method === 'desktop_local_update_handoff') {
+      const result = await performLauncherAction({
+        kind: 'manage_desktop_update',
+        environment_id: environment.id,
+        label: environment.label,
+      }, errorTarget);
+      const opened = result?.outcome === 'opened_desktop_update_handoff';
+      if (opened) {
+        showActionToast(`Desktop update options opened for ${environment.label}.`, 'info');
+      }
+      return opened;
+    }
     const request = runtimeActionRequest(environment, 'update_environment_runtime', {
       forceRuntimeUpdate: true,
       allowActiveWorkReplacement: true,
@@ -2024,10 +2042,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   function requestRuntimeMaintenanceConfirmation(
     environment: DesktopEnvironmentEntry,
     action: RuntimeMaintenanceConfirmationAction,
+    runtimeAction?: EnvironmentActionModel,
   ): void {
     setRuntimeMaintenanceConfirmation({
       environment,
       action,
+      ...(runtimeAction ? { runtime_action: runtimeAction } : {}),
     });
   }
 
@@ -2040,7 +2060,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (confirmation.action === 'update') {
       setRuntimeMaintenanceConfirmation(null);
       const latestTarget = await loadLatestEnvironmentEntry(target.id) ?? target;
-      await updateEnvironmentRuntime(latestTarget, 'connect');
+      await updateEnvironmentRuntime(latestTarget, confirmation.runtime_action, 'connect');
       return;
     }
     if (confirmation.action === 'restart' && target.kind === 'ssh_environment' && target.runtime_maintenance) {
@@ -2290,13 +2310,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       case 'start_runtime':
         return startEnvironmentRuntime(environment, errorTarget);
       case 'stop_runtime':
-        requestRuntimeMaintenanceConfirmation(environment, 'stop');
+        requestRuntimeMaintenanceConfirmation(environment, 'stop', action);
         return true;
       case 'restart_runtime':
-        requestRuntimeMaintenanceConfirmation(environment, 'restart');
+        requestRuntimeMaintenanceConfirmation(environment, 'restart', action);
         return true;
       case 'update_runtime':
-        requestRuntimeMaintenanceConfirmation(environment, 'update');
+        requestRuntimeMaintenanceConfirmation(environment, 'update', action);
         return true;
       case 'refresh_runtime':
         return refreshEnvironmentRuntime(environment, errorTarget);
@@ -2365,7 +2385,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
 
     if (action.intent === 'stop_runtime') {
-      requestRuntimeMaintenanceConfirmation(environment, 'stop');
+      requestRuntimeMaintenanceConfirmation(environment, 'stop', action);
       return {
         close_panel: true,
         next_session: null,
@@ -2373,7 +2393,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
 
     if (action.intent === 'restart_runtime') {
-      requestRuntimeMaintenanceConfirmation(environment, 'restart');
+      requestRuntimeMaintenanceConfirmation(environment, 'restart', action);
       return {
         close_panel: true,
         next_session: null,
@@ -2381,7 +2401,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
 
     if (action.intent === 'update_runtime') {
-      requestRuntimeMaintenanceConfirmation(environment, 'update');
+      requestRuntimeMaintenanceConfirmation(environment, 'update', action);
       return {
         close_panel: true,
         next_session: null,
@@ -3221,17 +3241,23 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           }
         }}
         title={runtimeMaintenanceConfirmation()?.action === 'update'
-          ? 'Update SSH Runtime'
+          ? runtimeMaintenanceUsesDesktopUpdate()
+            ? 'Update Redeven Desktop'
+            : 'Update Runtime'
           : runtimeMaintenanceConfirmation()?.action === 'restart'
             ? 'Restart Runtime'
             : 'Stop Runtime'}
         confirmText={runtimeMaintenanceConfirmation()?.action === 'update'
-          ? 'Update and Restart'
+          ? runtimeMaintenanceUsesDesktopUpdate()
+            ? 'Continue'
+            : 'Update and Restart'
           : runtimeMaintenanceConfirmation()?.action === 'restart'
             ? 'Stop and Restart'
             : 'Stop Runtime'}
         variant="destructive"
-        loading={busyStateMatchesAction(busyState(), 'stop_environment_runtime')}
+        loading={busyStateMatchesAction(busyState(), 'stop_environment_runtime')
+          || busyStateMatchesAction(busyState(), 'update_environment_runtime')
+          || busyStateMatchesAction(busyState(), 'manage_desktop_update')}
         onConfirm={() => void confirmRuntimeMaintenance()}
       >
         <div class="space-y-2">
@@ -3248,7 +3274,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                   <>Stop and restart the runtime for <span class="font-semibold">{runtimeMaintenanceConfirmation()?.environment.label}</span>?</>
                 )}
               >
-                Update and restart the SSH runtime for <span class="font-semibold">{runtimeMaintenanceConfirmation()?.environment.label}</span>?
+                <Show
+                  when={runtimeMaintenanceUsesDesktopUpdate()}
+                  fallback={(
+                    <>Update and restart the runtime for <span class="font-semibold">{runtimeMaintenanceConfirmation()?.environment.label}</span>?</>
+                  )}
+                >
+                  Open Redeven Desktop update options for <span class="font-semibold">{runtimeMaintenanceConfirmation()?.environment.label}</span>?
+                </Show>
               </Show>
             </Show>
           </p>
@@ -3262,7 +3295,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           </Show>
           <Show when={runtimeMaintenanceConfirmation()?.action === 'update'}>
             <p class="text-xs text-muted-foreground">
-              Desktop will install the bundled Redeven runtime and start it again on this SSH host. Open remains separate after the update.
+              <Show
+                when={runtimeMaintenanceUsesDesktopUpdate()}
+                fallback="Desktop will update the runtime package and start it again. Open remains separate after the update."
+              >
+                This local runtime is bundled with Redeven Desktop. Desktop will open the update handoff so the app and local runtime move together.
+              </Show>
             </p>
           </Show>
           <p class="text-xs text-muted-foreground">
@@ -4306,7 +4344,7 @@ function isEnvironmentActionBusy(
     case 'start_runtime':
       return busyStateMatchesEnvironment(busyState, environmentID, ['start_environment_runtime']);
     case 'update_runtime':
-      return busyStateMatchesEnvironment(busyState, environmentID, ['update_environment_runtime']);
+      return busyStateMatchesEnvironment(busyState, environmentID, ['update_environment_runtime', 'manage_desktop_update']);
     case 'connect_provider_runtime':
       return busyStateMatchesEnvironment(busyState, environmentID, ['connect_provider_runtime']);
     case 'disconnect_provider_runtime':
@@ -5021,6 +5059,8 @@ function EnvironmentSplitActionButton(props: Readonly<{
                     class="redeven-split-menu-item"
                     style={toneColor() ? { color: toneColor() } : undefined}
                     disabled={!item.action.enabled}
+                    title={!item.action.enabled ? item.action.disabled_reason : undefined}
+                    aria-describedby={!item.action.enabled && item.action.disabled_reason ? `${props.environmentID}-${item.id}-disabled-reason` : undefined}
                     onClick={() => {
                       closeMenu();
                       props.onRunAction(item.action);
@@ -5037,6 +5077,11 @@ function EnvironmentSplitActionButton(props: Readonly<{
                       }}
                     </Show>
                     {item.label}
+                    <Show when={!item.action.enabled && item.action.disabled_reason}>
+                      <span id={`${props.environmentID}-${item.id}-disabled-reason`} class="sr-only">
+                        {item.action.disabled_reason}
+                      </span>
+                    </Show>
                   </button>
               );
             }}
@@ -5148,6 +5193,7 @@ function EnvironmentConnectionCard(props: Readonly<{
     busyStateMatchesEnvironment(props.busyState, props.environment.id, [
       'start_environment_runtime',
       'update_environment_runtime',
+      'manage_desktop_update',
       'stop_environment_runtime',
       'refresh_environment_runtime',
     ])

@@ -25,6 +25,7 @@ import {
 import {
   desktopRuntimeOperationIsVisible,
   type DesktopRuntimeOperation,
+  type DesktopRuntimeOperationMethod,
   type DesktopRuntimeOperationPlan,
 } from '../shared/desktopRuntimeOperations';
 
@@ -109,6 +110,9 @@ export type EnvironmentActionModel = Readonly<{
   route?: DesktopLocalEnvironmentStateRoute;
   provider_origin?: string;
   provider_id?: string;
+  runtime_operation?: DesktopRuntimeOperation;
+  runtime_operation_method?: DesktopRuntimeOperationMethod;
+  disabled_reason?: string;
 }>;
 
 export type EnvironmentActionMenuItemModel = Readonly<{
@@ -951,7 +955,10 @@ function runtimeOperationIntent(operation: DesktopRuntimeOperation): Environment
 }
 
 function runtimeOperationMenuItem(plan: DesktopRuntimeOperationPlan | undefined): EnvironmentActionMenuItemModel | null {
-  if (!plan || !desktopRuntimeOperationIsVisible(plan) || plan.availability !== 'available') {
+  if (!plan || !desktopRuntimeOperationIsVisible(plan) || plan.menu_visibility === 'hidden') {
+    return null;
+  }
+  if (plan.menu_visibility === 'contextual' && plan.availability === 'unavailable') {
     return null;
   }
   const intent = runtimeOperationIntent(plan.operation);
@@ -962,11 +969,14 @@ function runtimeOperationMenuItem(plan: DesktopRuntimeOperationPlan | undefined)
     id: intent,
     label: plan.label,
     action: {
-      intent,
-      label: plan.label,
-      enabled: plan.availability === 'available',
-      variant: 'outline',
-    },
+        intent,
+        label: plan.label,
+        enabled: plan.availability === 'available',
+        variant: 'outline',
+        runtime_operation: plan.operation,
+        runtime_operation_method: plan.method,
+        ...(plan.message ? { disabled_reason: plan.message } : {}),
+      },
   };
 }
 
@@ -1020,18 +1030,18 @@ function blockedPrimaryActionGuidanceAction(
     return null;
   }
   return {
-    label: primaryGuidanceActionLabel(recoveryAction.action.intent),
+    label: primaryGuidanceActionLabel(recoveryAction.action),
     emphasis: 'primary',
     action: recoveryAction.action,
   };
 }
 
-function primaryGuidanceActionLabel(intent: EnvironmentActionIntent): string {
-  switch (intent) {
+function primaryGuidanceActionLabel(action: EnvironmentActionModel): string {
+  switch (action.intent) {
     case 'start_runtime':
       return 'Start runtime';
     case 'update_runtime':
-      return 'Update runtime';
+      return action.label;
     case 'restart_runtime':
       return 'Restart runtime';
     case 'connect_provider_runtime':
@@ -1059,28 +1069,36 @@ function blockedRuntimePrimaryActionGuidanceActions(
   environment: DesktopEnvironmentEntry,
   menuActions: readonly EnvironmentActionMenuItemModel[],
 ): readonly EnvironmentGuidanceActionModel[] {
-  const restartSource = menuActions.find((item) => (
-    item.action.intent === 'update_runtime'
-    || item.action.intent === 'restart_runtime'
-    || item.action.intent === 'stop_runtime'
-  ));
+  const updateSource = menuActions.find((item) => item.action.enabled && item.action.intent === 'update_runtime');
+  const restartSource = menuActions.find((item) => item.action.enabled && item.action.intent === 'restart_runtime');
+  const stopSource = menuActions.find((item) => item.action.enabled && item.action.intent === 'stop_runtime');
   const refreshSource = menuActions.find((item) => item.action.intent === 'refresh_runtime');
   const maintenance = environmentRuntimeMaintenance(environment);
-  const primaryLabel = maintenance?.kind === 'ssh_runtime_restart_required'
-    ? 'Restart runtime…'
-    : 'Update and restart…';
-  const primaryIntent = maintenance?.kind === 'ssh_runtime_restart_required'
-    ? 'restart_runtime'
-    : 'update_runtime';
+  const primarySource = maintenance?.kind === 'ssh_runtime_restart_required'
+    ? restartSource
+    : updateSource ?? restartSource ?? stopSource;
+  const primaryLabel = (() => {
+    if (!primarySource) {
+      return '';
+    }
+    if (primarySource.action.intent === 'update_runtime') {
+      return primarySource.action.runtime_operation_method === 'desktop_local_update_handoff'
+        ? primarySource.action.label
+        : 'Update and restart…';
+    }
+    if (primarySource.action.intent === 'restart_runtime') {
+      return 'Restart runtime…';
+    }
+    return primarySource.action.label;
+  })();
   return [
-    restartSource
+    primarySource
       ? {
-          label: maintenance ? primaryLabel : 'Restart after update…',
+          label: primaryLabel,
           emphasis: 'primary',
           action: {
-            ...restartSource.action,
-            intent: maintenance ? primaryIntent : 'restart_runtime',
-            label: maintenance ? primaryLabel : 'Restart after update…',
+            ...primarySource.action,
+            label: primaryLabel,
           },
         }
       : null,
@@ -1143,6 +1161,9 @@ function blockedPrimaryActionTitle(
     return 'Connect to provider to continue';
   }
   if (action.intent === 'update_runtime') {
+    if (action.runtime_operation_method === 'desktop_local_update_handoff') {
+      return 'Update Redeven Desktop to continue';
+    }
     return 'Update the runtime to continue';
   }
   if (action.intent === 'restart_runtime') {
@@ -1161,12 +1182,15 @@ function blockedPrimaryActionDetail(
     return 'Connect this runtime to a provider Environment first. Open stays separate and becomes available after the link is ready.';
   }
   if (action.intent === 'update_runtime') {
+    if (action.runtime_operation_method === 'desktop_local_update_handoff') {
+      return 'Open becomes available after Redeven Desktop is updated and the local runtime is restarted with the bundled runtime.';
+    }
     if (environment.managed_runtime_placement?.kind === 'container_process') {
       return 'Open becomes available after Desktop updates the runtime package in this running container and the runtime reports ready.';
     }
     return environment.kind === 'ssh_environment'
       ? 'Open becomes available after Desktop updates the runtime on this SSH host and it reports ready.'
-      : 'Open becomes available after Desktop updates the runtime on this device and it reports ready.';
+      : 'Open becomes available after Desktop completes the runtime update and it reports ready.';
   }
   if (action.intent === 'restart_runtime') {
     return environment.kind === 'ssh_environment'

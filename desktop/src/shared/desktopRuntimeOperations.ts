@@ -22,9 +22,15 @@ export type DesktopRuntimeOperationMethod =
   | 'ssh_host'
   | 'local_container_exec'
   | 'ssh_container_exec'
+  | 'desktop_local_update_handoff'
   | 'runtime_control_rpc'
   | 'provider_tunnel'
   | 'none';
+
+export type DesktopRuntimeOperationMenuVisibility =
+  | 'stable'
+  | 'contextual'
+  | 'hidden';
 
 export type DesktopRuntimeOperationPlan = Readonly<{
   operation: DesktopRuntimeOperation;
@@ -32,6 +38,7 @@ export type DesktopRuntimeOperationPlan = Readonly<{
   method: DesktopRuntimeOperationMethod;
   requires_confirmation: boolean;
   label: string;
+  menu_visibility: DesktopRuntimeOperationMenuVisibility;
   reason_code?: string;
   message?: string;
   package_state?: DesktopRuntimePackageState;
@@ -78,8 +85,10 @@ export function hiddenDesktopRuntimeOperationPlan(
     method: 'none',
     requires_confirmation: false,
     label: desktopRuntimeOperationLabel(operation),
+    menu_visibility: 'hidden',
   };
 }
+
 export function desktopRuntimeOperationPlan(
   operation: DesktopRuntimeOperation,
   availability: DesktopRuntimeOperationAvailability,
@@ -91,6 +100,7 @@ export function desktopRuntimeOperationPlan(
     message?: string;
     packageState?: DesktopRuntimePackageState;
     maintenance?: DesktopRuntimeMaintenanceRequirement;
+    menuVisibility?: DesktopRuntimeOperationMenuVisibility;
   }> = {},
 ): DesktopRuntimeOperationPlan {
   return {
@@ -99,6 +109,9 @@ export function desktopRuntimeOperationPlan(
     method,
     requires_confirmation: options.requiresConfirmation === true,
     label: options.label ?? desktopRuntimeOperationLabel(operation),
+    menu_visibility: options.menuVisibility ?? (
+      availability === 'hidden' ? 'hidden' : 'contextual'
+    ),
     ...(options.reasonCode ? { reason_code: options.reasonCode } : {}),
     ...(options.message ? { message: options.message } : {}),
     ...(options.packageState ? { package_state: options.packageState } : {}),
