@@ -364,6 +364,7 @@ function managedRuntimeEntryFields(
   | 'managed_runtime_placement_target_id'
   | 'managed_runtime_host_access'
   | 'managed_runtime_placement'
+  | 'managed_runtime_open_connection_required'
   | 'runtime_operations'
 >> {
   if (!presence) {
@@ -374,6 +375,7 @@ function managedRuntimeEntryFields(
     managed_runtime_placement_target_id: presence.placement_target_id,
     managed_runtime_host_access: presence.host_access,
     managed_runtime_placement: presence.placement,
+    ...(presence.open_connection_required ? { managed_runtime_open_connection_required: true } : {}),
     runtime_operations: presence.operations,
   };
 }
@@ -384,6 +386,7 @@ function managedRuntimeOperations(args: Readonly<{
   placement?: DesktopRuntimePlacement;
   running: boolean;
   openable: boolean;
+  openConnectionRequired?: boolean;
   runtimeService?: RuntimeServiceSnapshot;
   runtimeControlStatus?: DesktopRuntimeControlStatus;
   maintenance?: DesktopEnvironmentEntry['runtime_maintenance'];
@@ -398,6 +401,7 @@ function managedRuntimeOperations(args: Readonly<{
     placement: args.placement,
     running: args.running,
     openable: args.openable,
+    open_connection_required: args.openConnectionRequired === true,
     package_state: runtimePackageState,
     runtime_service: args.runtimeService,
     runtime_control_status: args.runtimeControlStatus,
@@ -619,6 +623,7 @@ function buildProviderRuntimeLinkTarget(input: Readonly<{
   label: string;
   runtimeKey: string;
   runtimeURL: string;
+  runtimeRunning?: boolean;
   runtimeControlStatus?: DesktopProviderRuntimeLinkTarget['runtime_control_status'];
   runtimeService?: RuntimeServiceSnapshot;
 }>): DesktopProviderRuntimeLinkTarget {
@@ -628,7 +633,7 @@ function buildProviderRuntimeLinkTarget(input: Readonly<{
     : undefined;
   const providerLinkBinding = runtimeServiceProviderLinkBinding(runtimeService);
   const providerConnectionState = runtimeServiceProviderConnectionState(runtimeService);
-  const runtimeRunning = runtimeURL !== '';
+  const runtimeRunning = input.runtimeRunning ?? runtimeURL !== '';
   const providerLinkSupported = runtimeServiceSupportsProviderLink(runtimeService);
   const runtimeControlStatus = input.runtimeControlStatus ?? defaultRuntimeControlStatusForRunningState(runtimeRunning);
   const blockedReasonCode = (() => {
@@ -1067,6 +1072,7 @@ function buildLocalEnvironmentEntry(
     placement: { kind: 'host_process', runtime_root: environment.local_hosting.state_dir },
     running: runtimeHealth.status === 'online',
     openable: runtimeServiceIsOpenable(runtimeService),
+    openConnectionRequired: presence?.open_connection_required === true,
     runtimeService,
     runtimeControlStatus: presence?.runtime_control_status ?? defaultRuntimeControlStatusForRunningState(runtimeHealth.status === 'online'),
     maintenance: runtimeMaintenance,
@@ -1078,6 +1084,7 @@ function buildLocalEnvironmentEntry(
     label: environment.label,
     runtimeKey: environment.id,
     runtimeURL: resolvedLocalRuntimeURL,
+    runtimeRunning: runtimeHealth.status === 'online',
     runtimeControlStatus: presence?.runtime_control_status,
     runtimeService,
   });
@@ -1359,6 +1366,7 @@ function buildEnvironmentEntries(
     label: preferences.local_environment.label,
     runtimeKey: preferences.local_environment.id,
     runtimeURL: localPresence?.local_ui_url ?? localRuntimeURL(preferences.local_environment),
+    runtimeRunning: localPresence?.running,
     runtimeControlStatus: localPresence?.runtime_control_status,
     runtimeService: preferredRuntimeService(localEnvironmentRuntimeService(preferences.local_environment), undefined, localPresence),
   });
@@ -1374,6 +1382,7 @@ function buildEnvironmentEntries(
       label: environment.label,
       runtimeKey,
       runtimeURL: presence?.local_ui_url ?? runtimeHealth?.local_ui_url ?? '',
+      runtimeRunning: presence?.running ?? runtimeHealth?.status === 'online',
       runtimeControlStatus: presence?.runtime_control_status,
       runtimeService: preferredRuntimeService(undefined, runtimeHealth, presence),
     });
@@ -1389,6 +1398,7 @@ function buildEnvironmentEntries(
       label: target.label,
       runtimeKey: target.id,
       runtimeURL: presence?.local_ui_url ?? '',
+      runtimeRunning: presence?.running,
       runtimeControlStatus: presence?.runtime_control_status,
       runtimeService: preferredRuntimeService(undefined, undefined, presence),
     });
@@ -1538,6 +1548,7 @@ function buildSavedSSHEnvironmentEntry(
     placement,
     running: runtimeHealth.status === 'online',
     openable: runtimeServiceIsOpenable(runtimeService),
+    openConnectionRequired: presence?.open_connection_required === true,
     runtimeService,
     runtimeControlStatus: presence?.runtime_control_status ?? defaultRuntimeControlStatusForRunningState(runtimeHealth.status === 'online'),
     maintenance: runtimeMaintenance,
@@ -1549,6 +1560,7 @@ function buildSavedSSHEnvironmentEntry(
     label: environment.label,
     runtimeKey,
     runtimeURL: presence?.local_ui_url ?? openSession?.entry_url ?? openSession?.startup?.local_ui_url ?? runtimeHealth.local_ui_url ?? '',
+    runtimeRunning: runtimeHealth.status === 'online',
     runtimeControlStatus: presence?.runtime_control_status,
     runtimeService,
   });
@@ -1649,6 +1661,7 @@ function buildSavedRuntimeTargetEntry(
     label: target.label,
     runtimeKey: target.id,
     runtimeURL: presence?.local_ui_url ?? openSession?.entry_url ?? openSession?.startup?.local_ui_url ?? runtimeHealth.local_ui_url ?? '',
+    runtimeRunning: runtimeHealth.status === 'online',
     runtimeControlStatus: presence?.runtime_control_status,
     runtimeService,
   });
@@ -1662,6 +1675,7 @@ function buildSavedRuntimeTargetEntry(
     placement: effectivePlacement,
     running: runtimeHealth.status === 'online',
     openable: runtimeServiceIsOpenable(runtimeService),
+    openConnectionRequired: presence?.open_connection_required === true,
     runtimeService,
     runtimeControlStatus: presence?.runtime_control_status ?? defaultRuntimeControlStatusForRunningState(runtimeHealth.status === 'online'),
     maintenance: runtimeMaintenance,

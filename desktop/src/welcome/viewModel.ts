@@ -686,6 +686,9 @@ function runtimeStatusLabel(environment: DesktopEnvironmentEntry): string {
       ? 'RESTART REQUIRED'
       : 'RUNTIME NEEDS UPDATE';
   }
+  if (environment.managed_runtime_open_connection_required === true) {
+    return 'READY TO OPEN';
+  }
   const snapshot = environmentRuntimeService(environment);
   if (runtimeServiceIsOpenable(snapshot)) {
     return 'Open';
@@ -706,6 +709,7 @@ function runtimeStatusTone(environment: DesktopEnvironmentEntry): EnvironmentCar
     return providerRemoteOpenLooksAvailable(environment) ? 'success' : 'warning';
   }
   return environment.runtime_health.status === 'online' && runtimeServiceIsOpenable(environmentRuntimeService(environment))
+    || environment.managed_runtime_open_connection_required === true
     ? 'success'
     : 'warning';
 }
@@ -735,7 +739,9 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
     intent: 'open',
     label: 'Open',
     enabled: canOpenProviderRemoteRoute
-      || (environment.kind !== 'provider_environment' && environment.runtime_health.status === 'online' && runtimeServiceIsOpenable(snapshot)),
+      || (environment.kind !== 'provider_environment'
+        && environment.runtime_health.status === 'online'
+        && (runtimeServiceIsOpenable(snapshot) || environment.managed_runtime_open_connection_required === true)),
     variant: 'default',
     ...(environment.kind === 'provider_environment'
       ? { route: desktopProviderEnvironmentOpenRoute() }
@@ -1218,7 +1224,7 @@ function primaryActionOverlay(
   }
   if (environment.runtime_health.status === 'online') {
     const snapshot = environmentRuntimeService(environment);
-    if (runtimeServiceIsOpenable(snapshot)) {
+    if (runtimeServiceIsOpenable(snapshot) || environment.managed_runtime_open_connection_required === true) {
       return undefined;
     }
     if (environmentRuntimeMaintenance(environment) || snapshot?.open_readiness?.state === 'blocked') {

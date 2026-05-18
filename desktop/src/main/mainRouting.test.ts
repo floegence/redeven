@@ -185,6 +185,8 @@ describe('main routing', () => {
     expect(mainSrc).toContain('startDesktopModelSourceForStartup({');
     expect(mainSrc).toContain('runtimePlacementReadyByTargetID.set(targetID, readyRecord)');
     expect(mainSrc).toContain('runtimePlacementBridgeByTargetID.set(bridgeSession.placement_target_id, record)');
+    expect(mainSrc).toContain('open_connection_required: true');
+    expect(mainSrc).toContain('openConnectionRequired: targetState.open_connection_required === true');
     expect(mainSrc).toContain('async function openRuntimePlacementBridgeFromLauncher(');
     expect(mainSrc).toContain('Start this runtime first, then open it.');
     expect(mainSrc).toContain('resolveRuntimeContainerPlacement');

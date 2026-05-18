@@ -82,6 +82,43 @@ describe('desktopRuntimePresence', () => {
     });
   });
 
+  it('allows Open while keeping provider link blocked when a ready container still needs an Open connection', () => {
+    const plans = buildDesktopRuntimeOperationPlans({
+      surface: 'managed_runtime_card',
+      host_access: { kind: 'local_host' },
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'abc123',
+        container_ref: 'redeven-nginx-dev',
+        container_label: 'redeven-nginx-dev',
+        runtime_root: '/root/.redeven',
+        bridge_strategy: 'exec_stream',
+      },
+      running: true,
+      openable: false,
+      open_connection_required: true,
+      runtime_control_status: desktopRuntimeControlStatusMissing(
+        'forward_unavailable',
+        'Open this runtime to prepare the Desktop bridge and provider connection.',
+      ),
+    });
+
+    expect(plans.open).toMatchObject({
+      availability: 'available',
+      method: 'local_container_exec',
+    });
+    expect(plans.start).toMatchObject({
+      availability: 'unavailable',
+      reason_code: 'runtime_already_running',
+    });
+    expect(plans.connect_provider).toMatchObject({
+      availability: 'blocked',
+      reason_code: 'runtime_control_missing',
+      message: 'Open this runtime to prepare the Desktop bridge and provider connection.',
+    });
+  });
+
   it('uses explicit runtime-control status values without exposing tokens', () => {
     expect(desktopRuntimeControlStatusAvailable()).toEqual({
       state: 'available',
