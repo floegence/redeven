@@ -5912,6 +5912,17 @@ async function startEnvironmentRuntimeFromLauncher(
 async function updateEnvironmentRuntimeFromLauncher(
   request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'update_environment_runtime' }>>,
 ): Promise<DesktopLauncherActionResult> {
+  const requestedPlacement = runtimePlacementFromRequest(request);
+  if (requestedPlacement.kind !== 'container_process' && !sshDetailsFromRuntimeTargetRequest(request)) {
+    return launcherActionFailure(
+      'action_invalid',
+      'environment',
+      'Local Host runtime updates are managed through the Redeven Desktop update handoff.',
+      {
+        environmentID: runtimeTargetEnvironmentIDFromRequest(request),
+      },
+    );
+  }
   const result = await startEnvironmentRuntimeFromLauncher({
     ...request,
     kind: 'start_environment_runtime',
@@ -5924,6 +5935,44 @@ async function updateEnvironmentRuntimeFromLauncher(
       utilityWindowKind: result.utility_window_kind,
     })
     : result;
+}
+
+async function manageDesktopUpdateFromLauncher(
+  request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'manage_desktop_update' }>>,
+): Promise<DesktopLauncherActionResult> {
+  const preferences = await loadDesktopPreferencesCached();
+  const environment = findLocalEnvironmentByID(preferences, request.environment_id);
+  if (!environment) {
+    if (findProviderEnvironmentByID(preferences, request.environment_id)) {
+      return launcherActionFailure(
+        'action_invalid',
+        'environment',
+        'Provider Environment cards do not manage Desktop-bundled runtime updates. Use the Local runtime card on the host device.',
+        {
+          environmentID: request.environment_id,
+        },
+      );
+    }
+    return launcherActionFailure(
+      'environment_missing',
+      'environment',
+      'This environment is no longer available.',
+      {
+        environmentID: request.environment_id,
+        shouldRefreshSnapshot: true,
+      },
+    );
+  }
+  await showDesktopUpdateHandoffDialog({
+    label: compact(request.label) || environment.label,
+    environmentKindLabel: localEnvironmentStateKind(environment) === 'controlplane'
+      ? 'Provider environment'
+      : 'Local environment',
+    detail: localEnvironmentStateKind(environment) === 'controlplane'
+      ? 'Desktop will keep this environment in the same provider-backed Local Environment profile and may need a newer desktop release before redeploying the managed runtime.'
+      : 'Desktop will keep this environment on the same Local Environment profile and may need a newer desktop release before restarting the managed runtime.',
+  });
+  return launcherActionSuccess('opened_desktop_update_handoff');
 }
 
 async function connectProviderRuntimeFromLauncher(
@@ -7098,6 +7147,29 @@ async function restartSSHRuntimeFromShell(
   };
 }
 
+async function showDesktopUpdateHandoffDialog(args: Readonly<{
+  label: string;
+  environmentKindLabel: string;
+  detail: string;
+}>): Promise<void> {
+  const dialogOptions: MessageBoxOptions = {
+    type: 'info',
+    buttons: ['Open release page', 'Later'],
+    defaultId: 0,
+    cancelId: 1,
+    title: 'Manage Desktop Update',
+    message: `${args.label} is managed by Redeven Desktop.`,
+    detail: `${args.detail}\n\nAffected runtime: ${args.environmentKindLabel} for this profile.\n\nDesktop and remote access will continue to resolve to the same environment after the update.`,
+  };
+  const parentWindow = currentParentWindow();
+  const result = parentWindow
+    ? await dialog.showMessageBox(parentWindow, dialogOptions)
+    : await dialog.showMessageBox(dialogOptions);
+  if (result.response === 0) {
+    await openExternalURL(PUBLIC_REDEVEN_RELEASE_BASE_URL);
+  }
+}
+
 async function manageDesktopUpdateFromShell(webContentsID: number): Promise<DesktopShellRuntimeActionResponse> {
   const sessionRecord = sessionRecordForWebContentsID(webContentsID);
   if (!sessionRecord || sessionRecord.target.kind !== 'local_environment') {
@@ -7128,22 +7200,11 @@ async function manageDesktopUpdateFromShell(webContentsID: number): Promise<Desk
   const detail = sessionRecord.target.local_environment_kind === 'controlplane'
     ? 'Desktop will keep this environment in the same provider-backed Local Environment profile and may need a newer desktop release before redeploying the managed runtime.'
     : 'Desktop will keep this environment on the same Local Environment profile and may need a newer desktop release before restarting the managed runtime.';
-  const dialogOptions: MessageBoxOptions = {
-    type: 'info',
-    buttons: ['Open release page', 'Later'],
-    defaultId: 0,
-    cancelId: 1,
-    title: 'Manage Desktop Update',
-    message: `${sessionRecord.target.label} is managed by Redeven Desktop.`,
-    detail: `${detail}\n\nAffected runtime: ${environmentKindLabel} for this profile.\n\nDesktop and remote access will continue to resolve to the same environment after the update.`,
-  };
-  const parentWindow = currentParentWindow();
-  const result = parentWindow
-    ? await dialog.showMessageBox(parentWindow, dialogOptions)
-    : await dialog.showMessageBox(dialogOptions);
-  if (result.response === 0) {
-    await openExternalURL(PUBLIC_REDEVEN_RELEASE_BASE_URL);
-  }
+  await showDesktopUpdateHandoffDialog({
+    label: sessionRecord.target.label,
+    environmentKindLabel,
+    detail,
+  });
   return {
     ok: true,
     started: false,
@@ -7436,6 +7497,8 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       return startEnvironmentRuntimeFromLauncher(request);
     case 'update_environment_runtime':
       return updateEnvironmentRuntimeFromLauncher(request);
+    case 'manage_desktop_update':
+      return manageDesktopUpdateFromLauncher(request);
     case 'connect_provider_runtime':
       return connectProviderRuntimeFromLauncher(request);
     case 'disconnect_provider_runtime':

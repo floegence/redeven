@@ -67,6 +67,7 @@ export type DesktopLauncherActionOutcome =
   | 'focused_environment_window'
   | 'started_environment_runtime'
   | 'updated_environment_runtime'
+  | 'opened_desktop_update_handoff'
   | 'connected_provider_runtime'
   | 'disconnected_provider_runtime'
   | 'stopped_environment_runtime'
@@ -114,6 +115,7 @@ export type DesktopLauncherActionKind =
   | 'prepare_environment_open'
   | 'start_environment_runtime'
   | 'update_environment_runtime'
+  | 'manage_desktop_update'
   | 'connect_provider_runtime'
   | 'disconnect_provider_runtime'
   | 'stop_environment_runtime'
@@ -317,6 +319,11 @@ export type DesktopLauncherActionRequest = Readonly<
   | ({
       kind: 'update_environment_runtime';
     } & DesktopLauncherRuntimeTarget)
+  | {
+      kind: 'manage_desktop_update';
+      environment_id: string;
+      label?: string;
+    }
   | {
       kind: 'connect_provider_runtime';
       provider_environment_id: string;
@@ -667,6 +674,17 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         kind,
         ...target,
       } as DesktopLauncherActionRequest;
+    }
+    case 'manage_desktop_update': {
+      const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
+      if (environmentID === '') {
+        return null;
+      }
+      return {
+        kind,
+        environment_id: environmentID,
+        label: compact((candidate as { label?: unknown }).label) || undefined,
+      };
     }
     case 'refresh_all_environment_runtimes':
       return { kind };

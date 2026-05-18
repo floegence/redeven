@@ -65,6 +65,16 @@ function updateRequiredMessage(packageState: DesktopRuntimePackageState | undefi
   return 'Update this runtime before continuing.';
 }
 
+function localDesktopUpdateMessage(packageState: DesktopRuntimePackageState | undefined): string {
+  if (packageState?.state === 'outdated') {
+    return `Update Redeven Desktop to bring the bundled runtime from ${packageState.current_version} to ${packageState.target_version}.`;
+  }
+  if (packageState?.state === 'incompatible') {
+    return packageState.reason || 'Update Redeven Desktop before continuing with this local runtime.';
+  }
+  return 'Update Redeven Desktop before continuing with this local runtime.';
+}
+
 function activeWorkMessage(runtimeService: RuntimeServiceSnapshot | undefined): string {
   return runtimeServiceHasActiveWork(runtimeService)
     ? 'Active work may be interrupted. Confirm before changing this runtime.'
@@ -106,6 +116,9 @@ export function buildDesktopRuntimeOperationPlans(
   }
 
   const method = managementMethod(input.host_access, input.placement);
+  const updateMethod: DesktopRuntimeOperationMethod = method === 'local_host'
+    ? 'desktop_local_update_handoff'
+    : method;
   const hasManagement = method !== 'none';
   const requiresUpdate = packageRequiresUpdate(input.package_state);
   const maintenance = input.maintenance;
@@ -117,6 +130,9 @@ export function buildDesktopRuntimeOperationPlans(
     && input.runtime_control_status.reason_code === 'forward_unavailable'
     && !openConnectionRequired;
   const blockedByUpdate = requiresUpdate || updateMaintenance;
+  const updateMessage = updateMethod === 'desktop_local_update_handoff'
+    ? localDesktopUpdateMessage(input.package_state)
+    : updateRequiredMessage(input.package_state);
   const canOpen = input.openable || openConnectionRequired;
   const openAvailability = input.running && canOpen && !blockedByUpdate && !restartMaintenance
     ? 'available'
@@ -126,7 +142,7 @@ export function buildDesktopRuntimeOperationPlans(
     : !input.running
     ? 'Start this runtime before opening it.'
     : blockedByUpdate
-      ? updateRequiredMessage(input.package_state)
+      ? updateMessage
       : restartMaintenance
         ? maintenance.message
         : canOpen
@@ -146,7 +162,9 @@ export function buildDesktopRuntimeOperationPlans(
       packageState: input.package_state,
       maintenance,
     }),
-    refresh: desktopRuntimeOperationPlan('refresh', 'available', method),
+    refresh: desktopRuntimeOperationPlan('refresh', 'available', method, {
+      menuVisibility: 'contextual',
+    }),
     start: desktopRuntimeOperationPlan(
       'start',
       hasManagement
@@ -161,9 +179,10 @@ export function buildDesktopRuntimeOperationPlans(
       method,
       {
         reasonCode: managementBlocked ? 'runtime_target_unavailable' : blockedByUpdate ? 'runtime_update_required' : input.running ? 'runtime_already_running' : undefined,
-        message: managementBlocked ? input.runtime_control_status?.message : blockedByUpdate ? updateRequiredMessage(input.package_state) : undefined,
+        message: managementBlocked ? input.runtime_control_status?.message : blockedByUpdate ? updateMessage : undefined,
         packageState: input.package_state,
         maintenance,
+        menuVisibility: hasManagement && !input.running ? 'contextual' : 'hidden',
       },
     ),
     stop: desktopRuntimeOperationPlan(
@@ -173,7 +192,8 @@ export function buildDesktopRuntimeOperationPlans(
       {
         requiresConfirmation: input.running,
         reasonCode: input.running ? undefined : 'runtime_not_started',
-        message: activeWorkMessage(input.runtime_service),
+        message: input.running ? activeWorkMessage(input.runtime_service) : 'Runtime is not running.',
+        menuVisibility: hasManagement ? 'stable' : 'hidden',
       },
     ),
     restart: desktopRuntimeOperationPlan(
@@ -189,23 +209,28 @@ export function buildDesktopRuntimeOperationPlans(
       {
         requiresConfirmation: input.running,
         reasonCode: blockedByUpdate ? 'runtime_update_required' : input.running ? undefined : 'runtime_not_started',
-        message: blockedByUpdate ? updateRequiredMessage(input.package_state) : maintenance?.message ?? activeWorkMessage(input.runtime_service),
+        message: blockedByUpdate ? updateMessage : input.running ? maintenance?.message ?? activeWorkMessage(input.runtime_service) : 'Runtime is not running.',
         packageState: input.package_state,
         maintenance,
+        menuVisibility: hasManagement ? 'stable' : 'hidden',
       },
     ),
     update: desktopRuntimeOperationPlan(
       'update',
-      hasManagement && (blockedByUpdate || input.package_state?.state === 'unknown')
-        ? 'available'
+      hasManagement
+        ? managementBlocked
+          ? 'blocked'
+          : 'available'
         : 'hidden',
-      method,
+      updateMethod,
       {
         requiresConfirmation: true,
         reasonCode: blockedByUpdate ? 'runtime_update_required' : undefined,
-        message: maintenance?.message ?? updateRequiredMessage(input.package_state),
+        label: updateMethod === 'desktop_local_update_handoff' ? 'Update Redeven Desktop' : undefined,
+        message: managementBlocked ? input.runtime_control_status?.message : maintenance?.message ?? updateMessage,
         packageState: input.package_state,
         maintenance,
+        menuVisibility: hasManagement ? 'stable' : 'hidden',
       },
     ),
     connect_provider: desktopRuntimeOperationPlan(

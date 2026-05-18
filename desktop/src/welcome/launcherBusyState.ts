@@ -15,6 +15,7 @@ export type BusyAction =
   | 'prepare_environment_open'
   | 'start_environment_runtime'
   | 'update_environment_runtime'
+  | 'manage_desktop_update'
   | 'connect_provider_runtime'
   | 'disconnect_provider_runtime'
   | 'stop_environment_runtime'
