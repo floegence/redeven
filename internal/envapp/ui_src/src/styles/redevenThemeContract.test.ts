@@ -144,7 +144,10 @@ describe('Redeven Env App surface theme contract', () => {
 
     expect(src).toContain('.redeven-loading-curtain {');
     expect(src).toContain('.redeven-loading-curtain__indicator {');
+    expect(src).toContain('height: 3px;');
     expect(src).toContain('.redeven-loading-curtain__indicator-bar {');
+    expect(src).toContain('color-mix(in srgb, var(--primary) 78%, white 18%)');
+    expect(src).toContain('animation: redeven-loading-curtain-sweep 1.35s cubic-bezier(0.42, 0, 0.2, 1) infinite;');
     expect(src).toContain('@keyframes redeven-loading-curtain-sweep {');
     expect(src).toContain('.redeven-loading-curtain__message {');
     expect(src).toContain('.redeven-workbench-progress-curtain {');
