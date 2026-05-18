@@ -1,5 +1,6 @@
-import { Show, createEffect, createSignal, onCleanup } from 'solid-js';
+import { Show, createEffect, createSignal, onCleanup, untrack } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
+import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type { WorkbenchWidgetBodyProps } from '@floegence/floe-webapp-core/workbench';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { Button } from '@floegence/floe-webapp-core/ui';
@@ -11,17 +12,98 @@ import { buildFilePreviewAskFlowerIntent } from '../utils/filePreviewAskFlower';
 import { FilePreviewPanel } from '../widgets/FilePreviewPanel';
 import { createFilePreviewController } from '../widgets/createFilePreviewController';
 import { useEnvWorkbenchInstancesContext } from './EnvWorkbenchInstancesContext';
+import type { RuntimeWorkbenchPreviewItem } from './runtimeWorkbenchLayout';
+
+type PreviewOpenIntentSource =
+  | 'direct_request'
+  | 'shared_state'
+  | 'pending_synced_user_action';
+
+type PreviewFileLike = Readonly<{
+  id?: string;
+  type?: string;
+  path?: string;
+  name?: string;
+  size?: number;
+}>;
+
+type PreviewOpenIntent = Readonly<{
+  key: string;
+  item: FileItem;
+  source: PreviewOpenIntentSource;
+  requestId?: string;
+}>;
+
+type PreviewOpenLifecycle =
+  | Readonly<{ phase: 'idle' }>
+  | Readonly<{ phase: 'hydrating'; key: string; requestIds: readonly string[] }>
+  | Readonly<{ phase: 'hydrated'; key: string }>
+  | Readonly<{ phase: 'blocked_by_dirty_draft'; key: string }>;
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-function previewItemKey(item: { path?: string; name?: string; size?: number } | null | undefined): string {
+function previewOpenIntentKey(item: PreviewFileLike | null | undefined): string {
+  const path = compact(item?.path);
+  if (!path) {
+    return '';
+  }
   return [
-    compact(item?.path),
+    path,
     compact(item?.name),
     typeof item?.size === 'number' ? String(item.size) : '',
   ].join('\u0000');
+}
+
+function normalizePreviewIntentFromFileItem(
+  item: PreviewFileLike | null | undefined,
+  source: PreviewOpenIntentSource,
+  requestId?: string,
+): PreviewOpenIntent | null {
+  if (!item || item.type !== 'file') {
+    return null;
+  }
+  const path = compact(item.path);
+  if (!path) {
+    return null;
+  }
+  const normalizedItem: FileItem = {
+    ...item,
+    id: compact(item.id) || path,
+    type: 'file',
+    path,
+    name: compact(item.name) || path,
+  };
+  const key = previewOpenIntentKey(normalizedItem);
+  if (!key) {
+    return null;
+  }
+  const normalizedRequestId = compact(requestId);
+  return {
+    key,
+    item: normalizedItem,
+    source,
+    ...(normalizedRequestId ? { requestId: normalizedRequestId } : {}),
+  };
+}
+
+function runtimePreviewItemFromFileItem(item: FileItem): RuntimeWorkbenchPreviewItem {
+  return {
+    id: compact(item.id) || item.path,
+    type: 'file',
+    path: item.path,
+    name: compact(item.name) || item.path,
+    ...(typeof item.size === 'number' ? { size: item.size } : {}),
+  };
+}
+
+function appendRequestId(requestIds: readonly string[], requestId: string | undefined): readonly string[] {
+  const normalizedRequestId = compact(requestId);
+  if (!normalizedRequestId || requestIds.includes(normalizedRequestId)) {
+    return requestIds;
+  }
+  return [...requestIds, normalizedRequestId];
 }
 
 export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
@@ -41,11 +123,116 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
       notification.error('Save failed', `${path}: ${message}`);
     },
   });
-  const [hydratedPath, setHydratedPath] = createSignal('');
+  const [openLifecycle, setOpenLifecycle] = createSignal<PreviewOpenLifecycle>({ phase: 'idle' });
   const [dismissedSyncedPreviewKey, setDismissedSyncedPreviewKey] = createSignal('');
-  const [pendingOpenRequestPath, setPendingOpenRequestPath] = createSignal('');
   const [pendingWidgetRemoval, setPendingWidgetRemoval] = createSignal(false);
   const pendingSyncedItem = () => workbench.pendingSyncedPreviewItem(props.widgetId);
+  const consumedPreviewOpenRequestIds = new Set<string>();
+
+  const clearPendingSyncedPreviewItem = (key: string) => {
+    const pendingItem = untrack(pendingSyncedItem);
+    if (!pendingItem || previewOpenIntentKey(pendingItem) !== key) {
+      return;
+    }
+    workbench.setPendingSyncedPreviewItem(props.widgetId, null);
+    setDismissedSyncedPreviewKey('');
+  };
+
+  const markIntentAccepted = (intent: PreviewOpenIntent) => {
+    const lifecycle = openLifecycle();
+    if (lifecycle.phase === 'hydrating' && lifecycle.key === intent.key) {
+      if (intent.requestId) {
+        setOpenLifecycle((current) => (
+          current.phase === 'hydrating' && current.key === intent.key
+            ? { ...current, requestIds: appendRequestId(current.requestIds, intent.requestId) }
+            : current
+        ));
+      }
+      clearPendingSyncedPreviewItem(intent.key);
+      return true;
+    }
+    if (lifecycle.phase === 'hydrated' && lifecycle.key === intent.key) {
+      clearPendingSyncedPreviewItem(intent.key);
+      return true;
+    }
+    if (
+      lifecycle.phase === 'blocked_by_dirty_draft'
+      && lifecycle.key === intent.key
+      && intent.source !== 'pending_synced_user_action'
+    ) {
+      if (
+        intent.source === 'shared_state'
+        || previewOpenIntentKey(untrack(pendingSyncedItem)) === intent.key
+        || untrack(dismissedSyncedPreviewKey) === intent.key
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const markHydratedFromControllerItem = (key: string) => {
+    if (!key) {
+      return;
+    }
+    setOpenLifecycle((current) => (
+      current.phase === 'hydrated' && current.key === key
+        ? current
+        : { phase: 'hydrated', key }
+    ));
+    clearPendingSyncedPreviewItem(key);
+  };
+
+  const startPreviewHydration = (intent: PreviewOpenIntent) => {
+    setOpenLifecycle({
+      phase: 'hydrating',
+      key: intent.key,
+      requestIds: appendRequestId([], intent.requestId),
+    });
+    void controller.openPreview(intent.item)
+      .then(() => {
+        const currentKey = previewOpenIntentKey(controller.item());
+        if (currentKey === intent.key) {
+          markHydratedFromControllerItem(intent.key);
+          return;
+        }
+        setOpenLifecycle((current) => (
+          current.phase === 'hydrating' && current.key === intent.key
+            ? { phase: 'idle' }
+            : current
+        ));
+      })
+      .catch(() => {
+        setOpenLifecycle((current) => (
+          current.phase === 'hydrating' && current.key === intent.key
+            ? { phase: 'idle' }
+            : current
+        ));
+      });
+  };
+
+  const openPreviewIntent = (intent: PreviewOpenIntent) => {
+    if (markIntentAccepted(intent)) {
+      return;
+    }
+    if (controller.open() && previewOpenIntentKey(controller.item()) === intent.key) {
+      markHydratedFromControllerItem(intent.key);
+      return;
+    }
+    if (intent.source === 'shared_state' && controller.dirty()) {
+      setOpenLifecycle((current) => (
+        current.phase === 'blocked_by_dirty_draft' && current.key === intent.key
+          ? current
+          : { phase: 'blocked_by_dirty_draft', key: intent.key }
+      ));
+      if (dismissedSyncedPreviewKey() !== intent.key) {
+        workbench.setPendingSyncedPreviewItem(props.widgetId, runtimePreviewItemFromFileItem(intent.item));
+      }
+      return;
+    }
+    setDismissedSyncedPreviewKey('');
+    startPreviewHydration(intent);
+  };
 
   const handleCopyPath = async (): Promise<boolean> => {
     const path = compact(controller.item()?.path);
@@ -82,77 +269,45 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
     if (!requestId || !request) {
       return;
     }
-    workbench.consumePreviewOpenRequest(requestId);
-    const requestPath = compact(request.item?.path);
-    if (!requestPath) {
+    if (consumedPreviewOpenRequestIds.has(requestId)) {
       return;
     }
-    setPendingOpenRequestPath(requestPath);
-    void controller.openPreview(request.item)
-      .then(() => {
-        if (compact(controller.item()?.path) === requestPath) {
-          setHydratedPath(requestPath);
-        }
-      })
-      .finally(() => {
-        setPendingOpenRequestPath((current) => (current === requestPath ? '' : current));
-      })
-      .catch(() => undefined);
+    consumedPreviewOpenRequestIds.add(requestId);
+    workbench.consumePreviewOpenRequest(requestId);
+    const intent = normalizePreviewIntentFromFileItem(request.item, 'direct_request', requestId);
+    if (!intent) {
+      return;
+    }
+    untrack(() => openPreviewIntent(intent));
   });
 
   createEffect(() => {
     const item = workbench.previewItem(props.widgetId);
-    if (!item) {
+    const intent = normalizePreviewIntentFromFileItem(item, 'shared_state');
+    if (!intent) {
       return;
     }
-    if (item.type !== 'file') {
-      return;
-    }
-    const previewPath = compact(item?.path);
-    if (!previewPath || previewPath === hydratedPath()) {
-      return;
-    }
-    if (pendingOpenRequestPath() === previewPath) {
-      return;
-    }
-    const syncedItem = {
-      id: compact(item.id) || previewPath,
-      type: 'file' as const,
-      path: previewPath,
-      name: compact(item.name) || previewPath,
-      ...(typeof item.size === 'number' ? { size: item.size } : {}),
-    };
-    if (controller.open() && compact(controller.item()?.path) === previewPath) {
-      setHydratedPath(previewPath);
-      setDismissedSyncedPreviewKey('');
-      workbench.setPendingSyncedPreviewItem(props.widgetId, null);
-      return;
-    }
-    const nextKey = previewItemKey(syncedItem);
-    if (controller.dirty()) {
-      if (dismissedSyncedPreviewKey() !== nextKey) {
-        workbench.setPendingSyncedPreviewItem(props.widgetId, syncedItem);
-      }
-      return;
-    }
-    setDismissedSyncedPreviewKey('');
-    workbench.setPendingSyncedPreviewItem(props.widgetId, null);
-    setHydratedPath(previewPath);
-    void controller.openPreview(syncedItem);
+    untrack(() => openPreviewIntent(intent));
   });
 
   createEffect(() => {
     const item = controller.item();
     if (!item || item.type !== 'file') {
-      if (pendingOpenRequestPath()) {
+      if (untrack(openLifecycle).phase === 'hydrating') {
         return;
       }
+      setOpenLifecycle((current) => (
+        current.phase === 'idle'
+          ? current
+          : { phase: 'idle' }
+      ));
       workbench.updatePreviewItem(props.widgetId, null);
       return;
     }
+    markHydratedFromControllerItem(previewOpenIntentKey(item));
     workbench.updatePreviewItem(props.widgetId, item);
-    const pendingItem = pendingSyncedItem();
-    if (pendingItem && compact(pendingItem.path) === compact(item.path)) {
+    const pendingItem = untrack(pendingSyncedItem);
+    if (pendingItem && previewOpenIntentKey(pendingItem) === previewOpenIntentKey(item)) {
       workbench.setPendingSyncedPreviewItem(props.widgetId, null);
       setDismissedSyncedPreviewKey('');
     }
@@ -206,7 +361,10 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
                   size="sm"
                   variant="outline"
                   onClick={() => {
-                    void controller.openPreview(item());
+                    const intent = normalizePreviewIntentFromFileItem(item(), 'pending_synced_user_action');
+                    if (intent) {
+                      openPreviewIntent(intent);
+                    }
                   }}
                 >
                   Open synced file
@@ -215,7 +373,7 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
                   size="sm"
                   variant="ghost"
                   onClick={() => {
-                    setDismissedSyncedPreviewKey(previewItemKey(item()));
+                    setDismissedSyncedPreviewKey(previewOpenIntentKey(item()));
                     workbench.setPendingSyncedPreviewItem(props.widgetId, null);
                   }}
                 >

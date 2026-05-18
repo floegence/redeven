@@ -38,6 +38,7 @@ Deck and Workbench reuse released floe-webapp layout/workbench primitives. Redev
 - Empty but non-pristine runtime layouts are valid user/runtime state and are not re-seeded. Old renderer layout keys are ignored instead of migrated into runtime layout.
 - Per-client camera, shell mode, selection, transient gestures, active terminal tab, file-browser view preferences, preview cursor/scroll, unsaved drafts, filters, active tool, and theme preference stay local.
 - Geometry changes and widget semantic state flow through ordered runtime snapshot/event streams. Preview opens are runtime commands that atomically choose the Preview widget, update its target, and promote its shared ordering when needed; clients must not fabricate local z-index overrides for that flow.
+- A Preview open target can reach the renderer through both the runtime event stream and the direct command response. Widget bodies must consume those deliveries as one idempotent open intent, so a matching late delivery never clears and reloads an already hydrating or hydrated file.
 - Remote Workbench updates must not move the local camera or steal current editing context.
 - Drag/resize persistence is interaction-gated: the browser updates live UI during the gesture and flushes one runtime write after the interaction ends.
 - Widget shell chrome and widget-local content remain separate. Shell affordances own selection, drag, focus/overview/remove, and shell context menus; widget bodies own local focus, dialogs, dropdowns, text selection, and component context menus.
