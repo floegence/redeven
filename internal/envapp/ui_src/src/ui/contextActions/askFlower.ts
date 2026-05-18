@@ -12,6 +12,7 @@ function toContextActionItem(item: AskFlowerContextItem): ContextActionContextIt
       kind: 'file_path',
       path: item.path,
       is_directory: item.isDirectory,
+      root_label: item.rootLabel,
     };
   }
   if (item.kind === 'file_selection') {

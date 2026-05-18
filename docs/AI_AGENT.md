@@ -27,7 +27,7 @@ Flower task prompts are built through a section-oriented runtime prompt builder 
 - Static prefix caching is intentionally conservative and excludes volatile facts such as the current objective text, round counters, local date/timezone context, git/worktree state, repository rule excerpts, delegation state, todo counts, recent errors, skill overlays, and exception overlays.
 - Runtime context includes authoritative local date and timezone facts sampled from the runtime host when the prompt is built, so relative date references can be grounded without adding scenario-specific heuristics.
 - Workspace context is collected at prompt-build time and exposes:
-  - environment facts such as shell, runtime home, approval policy, dangerous-command blocking, and whether subagent delegation is available;
+  - environment facts such as shell, runtime home, authorized filesystem roots, approval policy, dangerous-command blocking, and whether subagent delegation is available;
   - repository state such as git repository detection, worktree root, branch/upstream, ahead-behind, linked-worktree status, and a staged/unstaged/untracked summary;
   - durable repository rule files discovered from the current worktree path (for example `AGENTS.md`, `CLAUDE.md`, `.introduce.md`, and legacy `.develop.md`) under an explicit prompt budget;
   - active subagent/delegation state so the parent agent can see ongoing parallel work instead of redoing it.
@@ -72,7 +72,7 @@ Structured file-tool notes:
 - `file.read` is the primary file inspection path for code and text files.
 - `file.edit` performs exact string replacement with deterministic single-match or replace-all semantics.
 - `file.write` creates or replaces a full file deterministically inside the active project root.
-- Structured file tools resolve relative paths from the thread working directory, and runtime path validation requires the final path to stay inside both the runtime-home sandbox and the active project root.
+- Structured file tools resolve relative paths from the thread working directory, and runtime path validation requires the final path to stay inside an authorized `filesystem_scope` root. `agent_home_dir` is still the default working directory and `~` expansion target, but it is no longer the only filesystem boundary.
 - When a task explicitly asks for verification or a verification command, Flower should use `terminal.exec` for that verification step; `file.read` can supplement inspection, but it does not replace a real verification command.
 
 Patch execution notes:
@@ -152,7 +152,7 @@ The eval harness runs real Flower tasks and asserts:
 - final thread state (`run_status`, `execution_mode`, waiting prompt behavior)
 - structural tool behavior (`file.read`, `file.edit`, `file.write`, `terminal.exec`, `write_todos`, `exit_plan_mode`, `task_complete`, forbidden tools)
 - runtime events such as `ask_user.waiting`, `todos.updated`, and loop-failure signals
-- structured workspace-scope enforcement for `file.read`, `file.edit`, `file.write`, `apply_patch`, and `terminal.exec`
+- structured filesystem-scope enforcement for `file.read`, `file.edit`, `file.write`, `apply_patch`, and `terminal.exec`
 - todo discipline, including final closeout and single `in_progress` execution
 - assistant-visible output, evidence paths, and fallback-free closeout
 

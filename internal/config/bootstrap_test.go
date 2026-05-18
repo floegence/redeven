@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 )
@@ -99,6 +100,47 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 	}
 	if cfg.Direct == nil || cfg.Direct.ChannelId != "ch_123" {
 		t.Fatalf("Direct = %#v", cfg.Direct)
+	}
+}
+
+func TestSavePreservesUnknownConfigFields(t *testing.T) {
+	path := t.TempDir() + "/config.json"
+	if err := os.WriteFile(path, []byte(`{
+  "agent_home_dir": "/tmp",
+  "future_runtime_field": {
+    "enabled": true,
+    "label": "kept"
+  }
+}`), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	cfg.Shell = "/bin/sh"
+	if err := Save(path, cfg); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	var raw map[string]any
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	future, ok := raw["future_runtime_field"].(map[string]any)
+	if !ok {
+		t.Fatalf("future_runtime_field missing after save: %s", string(b))
+	}
+	if future["enabled"] != true || future["label"] != "kept" {
+		t.Fatalf("future_runtime_field = %#v", future)
+	}
+	if raw["shell"] != "/bin/sh" {
+		t.Fatalf("shell = %#v", raw["shell"])
 	}
 }
 

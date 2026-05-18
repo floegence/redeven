@@ -88,6 +88,8 @@ Runtime Settings -> `AI & Extensions` -> Codex is diagnostic-only and currently 
 - `agent_home_dir`
 - `error`
 
+Codex working directories are resolved through the runtime filesystem-scope registry before a request is forwarded. `agent_home_dir` remains the default and the `~` expansion target, but a user-selected Codex `cwd` may live under any authorized filesystem root.
+
 ## Gateway contract
 
 The current browser-facing contract is:

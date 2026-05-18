@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/filesystemscope"
 )
 
 func canonicalPath(path string) string {
@@ -32,7 +35,8 @@ func TestResolveToolPath(t *testing.T) {
 
 	t.Run("accepts absolute path", func(t *testing.T) {
 		t.Parallel()
-		resolved, err := resolveToolPath(target, root, root)
+		r := &run{agentHomeDir: root, workingDir: root}
+		resolved, err := r.resolveToolPath(target, root)
 		if err != nil {
 			t.Fatalf("resolveToolPath: %v", err)
 		}
@@ -43,7 +47,8 @@ func TestResolveToolPath(t *testing.T) {
 
 	t.Run("resolves relative path against working_dir_abs", func(t *testing.T) {
 		t.Parallel()
-		resolved, err := resolveToolPath("sub/dir", root, root)
+		r := &run{agentHomeDir: root, workingDir: root}
+		resolved, err := r.resolveToolPath("sub/dir", root)
 		if err != nil {
 			t.Fatalf("resolveToolPath: %v", err)
 		}
@@ -55,7 +60,8 @@ func TestResolveToolPath(t *testing.T) {
 
 	t.Run("expands tilde to runtime home directory", func(t *testing.T) {
 		t.Parallel()
-		resolved, err := resolveToolPath("~/", root, root)
+		r := &run{agentHomeDir: root, workingDir: root}
+		resolved, err := r.resolveToolPath("~/", root)
 		if err != nil {
 			t.Fatalf("resolveToolPath: %v", err)
 		}
@@ -64,7 +70,7 @@ func TestResolveToolPath(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects absolute path outside project root", func(t *testing.T) {
+	t.Run("rejects absolute path outside configured roots", func(t *testing.T) {
 		t.Parallel()
 		home := t.TempDir()
 		project := filepath.Join(home, "workspace")
@@ -75,8 +81,65 @@ func TestResolveToolPath(t *testing.T) {
 		if err := os.MkdirAll(outsideProject, 0o755); err != nil {
 			t.Fatalf("MkdirAll outsideProject: %v", err)
 		}
-		if _, err := resolveToolPath(outsideProject, project, home); err == nil {
-			t.Fatalf("expected outside-project absolute path to fail")
+		scope, err := filesystemscope.NewRegistry(&config.Config{
+			AgentHomeDir: home,
+			FilesystemScope: &config.FilesystemScope{
+				SchemaVersion: config.FilesystemScopeSchemaVersionV1,
+				DefaultRootID: "project",
+				Roots: []config.FilesystemRootPolicy{
+					{
+						ID:          "project",
+						Label:       "Project",
+						Path:        project,
+						Kind:        config.FilesystemRootCustom,
+						Permissions: config.FilesystemPermissionSet{Read: true, Write: true},
+					},
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("NewRegistry: %v", err)
+		}
+		r := &run{agentHomeDir: home, workingDir: project, scope: scope}
+		if _, err := r.resolveToolPath(outsideProject, project); err == nil {
+			t.Fatalf("expected outside-scope absolute path to fail")
+		}
+	})
+
+	t.Run("accepts absolute path inside a non-home custom root", func(t *testing.T) {
+		t.Parallel()
+		home := t.TempDir()
+		customRoot := t.TempDir()
+		target := filepath.Join(customRoot, "notes.txt")
+		if err := os.WriteFile(target, []byte("ok"), 0o644); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		scope, err := filesystemscope.NewRegistry(&config.Config{
+			AgentHomeDir: home,
+			FilesystemScope: &config.FilesystemScope{
+				SchemaVersion: config.FilesystemScopeSchemaVersionV1,
+				DefaultRootID: "custom",
+				Roots: []config.FilesystemRootPolicy{
+					{
+						ID:          "custom",
+						Label:       "Custom",
+						Path:        customRoot,
+						Kind:        config.FilesystemRootCustom,
+						Permissions: config.FilesystemPermissionSet{Read: true, Write: true},
+					},
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("NewRegistry: %v", err)
+		}
+		r := &run{agentHomeDir: home, workingDir: customRoot, scope: scope}
+		resolved, err := r.resolveToolPath(target, customRoot)
+		if err != nil {
+			t.Fatalf("resolveToolPath: %v", err)
+		}
+		if canonicalPath(resolved) != canonicalPath(target) {
+			t.Fatalf("resolved=%q, want=%q", resolved, target)
 		}
 	})
 }
@@ -139,7 +202,7 @@ func TestToolTerminalExec_CwdRules(t *testing.T) {
 		}
 	})
 
-	t.Run("absolute cwd outside project root is rejected", func(t *testing.T) {
+	t.Run("absolute cwd outside configured roots is rejected", func(t *testing.T) {
 		t.Parallel()
 		home := t.TempDir()
 		project := filepath.Join(home, "workspace")
@@ -150,9 +213,28 @@ func TestToolTerminalExec_CwdRules(t *testing.T) {
 		if err := os.MkdirAll(outside, 0o755); err != nil {
 			t.Fatalf("MkdirAll outside: %v", err)
 		}
-		r := &run{agentHomeDir: home, workingDir: project, shell: "bash"}
+		scope, err := filesystemscope.NewRegistry(&config.Config{
+			AgentHomeDir: home,
+			FilesystemScope: &config.FilesystemScope{
+				SchemaVersion: config.FilesystemScopeSchemaVersionV1,
+				DefaultRootID: "home",
+				Roots: []config.FilesystemRootPolicy{
+					{
+						ID:          "home",
+						Label:       "Home",
+						Path:        project,
+						Kind:        config.FilesystemRootHome,
+						Permissions: config.FilesystemPermissionSet{Read: true, Write: true},
+					},
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("NewRegistry: %v", err)
+		}
+		r := &run{agentHomeDir: home, workingDir: project, scope: scope, shell: "bash"}
 		if _, err := r.toolTerminalExec(context.Background(), "pwd", "", outside, 5000); err == nil {
-			t.Fatalf("expected outside-project cwd to fail")
+			t.Fatalf("expected outside-scope cwd to fail")
 		}
 	})
 

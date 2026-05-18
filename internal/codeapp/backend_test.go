@@ -11,6 +11,7 @@ import (
 	"github.com/floegence/redeven/internal/codeapp/codeserver"
 	"github.com/floegence/redeven/internal/codeapp/gateway"
 	"github.com/floegence/redeven/internal/codeapp/registry"
+	"github.com/floegence/redeven/internal/filesystemscope"
 )
 
 func TestService_CreateUpdateDeleteSpace_MetadataOnly(t *testing.T) {
@@ -31,11 +32,16 @@ func TestService_CreateUpdateDeleteSpace_MetadataOnly(t *testing.T) {
 		PortMax:   20010,
 	})
 	ws := t.TempDir()
+	scope, err := filesystemscope.NewDefaultRegistry(ws)
+	if err != nil {
+		t.Fatalf("NewDefaultRegistry: %v", err)
+	}
 	svc := &Service{
 		stateDir:     stateDir,
 		agentHomeDir: ws,
 		reg:          reg,
 		runner:       runner,
+		scope:        scope,
 	}
 
 	ctx := context.Background()
@@ -152,6 +158,10 @@ func TestService_CreateSpace_GeneratesValidIDWhenMissing(t *testing.T) {
 	t.Cleanup(func() { _ = reg.Close() })
 
 	ws := t.TempDir()
+	scope, err := filesystemscope.NewDefaultRegistry(ws)
+	if err != nil {
+		t.Fatalf("NewDefaultRegistry: %v", err)
+	}
 	svc := &Service{
 		stateDir:     stateDir,
 		agentHomeDir: ws,
@@ -162,6 +172,7 @@ func TestService_CreateSpace_GeneratesValidIDWhenMissing(t *testing.T) {
 			PortMin:   20000,
 			PortMax:   20010,
 		}),
+		scope: scope,
 	}
 
 	created, err := svc.CreateSpace(context.Background(), gateway.CreateSpaceRequest{

@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
-
-	"github.com/floegence/redeven/internal/pathutil"
 )
 
 // Invocation carries the minimum context required for error classification and retry hints.
@@ -155,18 +155,65 @@ func normalizePathValue(raw string, workingDir string, agentHomeDir string) (str
 	if raw == "" {
 		return "", false
 	}
-	scope, err := pathutil.NewPathScope(agentHomeDir, workingDir)
-	if err != nil {
+	clean := raw
+	if raw == "~" || strings.HasPrefix(raw, "~/") {
+		home := strings.TrimSpace(agentHomeDir)
+		if home == "" {
+			return "", false
+		}
+		if raw == "~" {
+			clean = home
+		} else {
+			clean = filepath.Join(home, strings.TrimPrefix(raw, "~/"))
+		}
+	} else if !filepath.IsAbs(raw) {
+		base := strings.TrimSpace(workingDir)
+		if base == "" {
+			return "", false
+		}
+		clean = filepath.Join(base, raw)
+	}
+	if clean == "" {
 		return "", false
 	}
-	clean, err := scope.ResolveTargetPath(raw)
-	if err != nil || clean == "" {
-		return "", false
+	if abs, err := filepath.Abs(clean); err == nil {
+		clean = abs
 	}
+	if resolved, err := filepath.EvalSymlinks(clean); err == nil {
+		clean = resolved
+	} else if errors.Is(err, os.ErrNotExist) {
+		if resolvedViaAncestor := resolveViaExistingAncestorBestEffort(clean); resolvedViaAncestor != "" {
+			clean = resolvedViaAncestor
+		}
+	}
+	clean = filepath.Clean(clean)
 	if clean == raw {
 		return "", false
 	}
 	return clean, true
+}
+
+func resolveViaExistingAncestorBestEffort(path string) string {
+	path = filepath.Clean(strings.TrimSpace(path))
+	if path == "" {
+		return ""
+	}
+	current := path
+	tail := make([]string, 0, 4)
+	for {
+		if resolved, err := filepath.EvalSymlinks(current); err == nil {
+			for i := len(tail) - 1; i >= 0; i-- {
+				resolved = filepath.Join(resolved, tail[i])
+			}
+			return filepath.Clean(resolved)
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return ""
+		}
+		tail = append(tail, filepath.Base(current))
+		current = parent
+	}
 }
 
 func cloneMap(in map[string]any) map[string]any {

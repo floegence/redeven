@@ -21,8 +21,8 @@ import (
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
 	envui "github.com/floegence/redeven/internal/envapp/ui"
+	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/notes"
-	"github.com/floegence/redeven/internal/pathutil"
 	"github.com/floegence/redeven/internal/portforward"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 	"github.com/floegence/redeven/internal/session"
@@ -51,8 +51,9 @@ type Options struct {
 	CodeServerPortMax int
 
 	// Env/App-level context (used by AI tools).
-	AgentHomeDir string
-	Shell        string
+	AgentHomeDir    string
+	FilesystemScope *filesystemscope.Registry
+	Shell           string
 
 	AIConfig    *config.AIConfig
 	Audit       *auditlog.Store
@@ -69,6 +70,7 @@ type Service struct {
 	log          *slog.Logger
 	stateDir     string
 	agentHomeDir string
+	scope        *filesystemscope.Registry
 
 	// Control plane origin is the environment URL base (scheme + <region>.<base-domain>).
 	// Trusted launcher origins are derived from it as:
@@ -117,10 +119,14 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	if err := os.MkdirAll(stateAbs, 0o700); err != nil {
 		return nil, err
 	}
-	agentHomeDir, err := pathutil.CanonicalizeExistingDirAbs(opts.AgentHomeDir)
-	if err != nil {
-		return nil, err
+	scope := opts.FilesystemScope
+	if scope == nil {
+		scope, err = filesystemscope.NewDefaultRegistry(opts.AgentHomeDir)
+		if err != nil {
+			return nil, err
+		}
 	}
+	agentHomeDir := scope.HomePathAbs()
 
 	cpOrigin, err := parseControlplaneBase(strings.TrimSpace(opts.ControlplaneBaseURL))
 	if err != nil {
@@ -186,6 +192,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		log:          logger,
 		stateDir:     stateAbs,
 		agentHomeDir: agentHomeDir,
+		scope:        scope,
 		cpOrigin:     cpOrigin,
 		codePortMin:  portMin,
 		codePortMax:  portMax,
@@ -198,11 +205,12 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	secrets := settings.NewSecretsStore(filepath.Join(stateAbs, "secrets.json"))
 
 	aiSvc, err := ai.NewService(ai.Options{
-		Logger:       logger,
-		StateDir:     stateAbs,
-		AgentHomeDir: agentHomeDir,
-		Shell:        strings.TrimSpace(opts.Shell),
-		Config:       opts.AIConfig,
+		Logger:          logger,
+		StateDir:        stateAbs,
+		AgentHomeDir:    agentHomeDir,
+		FilesystemScope: scope,
+		Shell:           strings.TrimSpace(opts.Shell),
+		Config:          opts.AIConfig,
 		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
 			return secrets.GetAIProviderAPIKey(providerID)
 		},
@@ -290,6 +298,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		SecretsStore:            secrets,
 		ThreadReadStateStore:    threadReadStateStore,
 		AgentHomeDir:            agentHomeDir,
+		FilesystemScope:         scope,
 		ListenAddr:              "127.0.0.1:0",
 	})
 	if err != nil {

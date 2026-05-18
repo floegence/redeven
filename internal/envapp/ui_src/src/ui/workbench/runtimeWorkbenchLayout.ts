@@ -110,7 +110,7 @@ export type RuntimeWorkbenchOpenPreviewRequest = Readonly<{
 }>;
 
 export type RuntimeWorkbenchWidgetStateData =
-  | Readonly<{ kind: 'files'; current_path: string }>
+  | Readonly<{ kind: 'files'; current_path: string; root_id?: string }>
   | Readonly<{ kind: 'terminal'; session_ids: string[]; font_size?: number; font_family_id?: string }>
   | Readonly<{ kind: 'preview'; item: RuntimeWorkbenchPreviewItem | null }>;
 
@@ -320,7 +320,12 @@ function normalizeRuntimeWorkbenchWidgetStateData(
   const kind = compact(value.kind);
   if (widgetType === 'redeven.files' && (!kind || kind === 'files')) {
     const currentPath = normalizeAbsolutePath(value.current_path);
-    return currentPath ? { kind: 'files', current_path: currentPath } : null;
+    const rootId = compact(value.root_id);
+    return currentPath ? {
+      kind: 'files',
+      current_path: currentPath,
+      ...(rootId ? { root_id: rootId } : {}),
+    } : null;
   }
   if (widgetType === 'redeven.terminal' && (!kind || kind === 'terminal')) {
     const sessionIds = Array.isArray(value.session_ids)
@@ -737,7 +742,7 @@ export function runtimeWorkbenchWidgetStateDataEqual(
 ): boolean {
   if (left.kind !== right.kind) return false;
   if (left.kind === 'files' && right.kind === 'files') {
-    return left.current_path === right.current_path;
+    return left.current_path === right.current_path && (left.root_id ?? '') === (right.root_id ?? '');
   }
   if (left.kind === 'terminal' && right.kind === 'terminal') {
     return left.session_ids.length === right.session_ids.length

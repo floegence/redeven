@@ -30,9 +30,15 @@ type Config struct {
 	// It is designed to limit the effective permissions even if the control-plane grants more.
 	PermissionPolicy *PermissionPolicy `json:"permission_policy,omitempty"`
 
-	// AgentHomeDir is the configured filesystem scope for user-facing features.
+	// AgentHomeDir is the default home/working directory and the target of "~".
 	// If empty, the runtime picks a safe default (the current user home dir).
+	// Filesystem access boundaries are defined by FilesystemScope.
 	AgentHomeDir string `json:"agent_home_dir,omitempty"`
+
+	// FilesystemScope defines the endpoint-local filesystem roots exposed to
+	// runtime capabilities. When omitted, the runtime derives a Home root from
+	// AgentHomeDir and a read-only Computer root at the OS filesystem root.
+	FilesystemScope *FilesystemScope `json:"filesystem_scope,omitempty"`
 
 	// Shell is the shell command used for terminal sessions.
 	// If empty, the runtime picks a default (SHELL or /bin/bash).
@@ -47,6 +53,8 @@ type Config struct {
 	// If unset/invalid, the runtime uses a safe default range.
 	CodeServerPortMin int `json:"code_server_port_min,omitempty"`
 	CodeServerPortMax int `json:"code_server_port_max,omitempty"`
+
+	extra map[string]json.RawMessage
 }
 
 // ValidateLocalMinimal validates config fields required to start the runtime in local-only mode.
@@ -60,6 +68,11 @@ func (c *Config) ValidateLocalMinimal() error {
 	if c.PermissionPolicy != nil {
 		if err := c.PermissionPolicy.Validate(); err != nil {
 			return fmt.Errorf("invalid permission_policy: %w", err)
+		}
+	}
+	if c.FilesystemScope != nil {
+		if err := c.FilesystemScope.Validate(); err != nil {
+			return fmt.Errorf("invalid filesystem_scope: %w", err)
 		}
 	}
 	if c.AI != nil {

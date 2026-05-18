@@ -12,7 +12,7 @@ import (
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/accessgate"
-	"github.com/floegence/redeven/internal/pathutil"
+	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -28,15 +28,22 @@ const (
 )
 
 type Service struct {
-	agentHomeAbs string
+	scope *filesystemscope.Registry
 }
 
 func NewService(agentHomeAbs string) *Service {
-	resolved, err := pathutil.CanonicalizeExistingDirAbs(agentHomeAbs)
+	scope, err := filesystemscope.NewDefaultRegistry(agentHomeAbs)
 	if err != nil {
 		panic(err)
 	}
-	return &Service{agentHomeAbs: resolved}
+	return &Service{scope: scope}
+}
+
+func NewServiceWithScope(scope *filesystemscope.Registry) *Service {
+	if scope == nil {
+		panic("nil filesystem scope")
+	}
+	return &Service{scope: scope}
 }
 
 func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
@@ -52,7 +59,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
 		}
-		return &fsGetPathContextResp{AgentHomePathAbs: s.agentHomeAbs}, nil
+		return s.getPathContext(), nil
 	})
 
 	accessgate.RegisterTyped[fsListReq, fsListResp](r, TypeID_FS_LIST, gate, meta, accessgate.RPCAccessProtected, func(_ctx context.Context, req *fsListReq) (*fsListResp, error) {
@@ -62,6 +69,12 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		showHidden := req.ShowHidden != nil && *req.ShowHidden
 		out, err := s.listDirectoryEntries(req.Path, showHidden)
 		if err != nil {
+			if errors.Is(err, filesystemscope.ErrPathOutsideScope) {
+				return nil, &rpc.Error{Code: 403, Message: "path outside filesystem scope"}
+			}
+			if errors.Is(err, filesystemscope.ErrReadDenied) {
+				return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+			}
 			if os.IsNotExist(err) {
 				return nil, &rpc.Error{Code: 404, Message: "not found"}
 			}
@@ -76,6 +89,12 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		}
 		p, _, err := s.resolveReadableFilePath(req.Path)
 		if err != nil {
+			if errors.Is(err, filesystemscope.ErrPathOutsideScope) {
+				return nil, &rpc.Error{Code: 403, Message: "path outside filesystem scope"}
+			}
+			if errors.Is(err, filesystemscope.ErrReadDenied) {
+				return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+			}
 			if os.IsNotExist(err) {
 				return nil, &rpc.Error{Code: 404, Message: "not found"}
 			}
@@ -106,6 +125,12 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		}
 		p, err := s.resolveTargetPath(req.Path)
 		if err != nil {
+			if errors.Is(err, filesystemscope.ErrPathOutsideScope) {
+				return nil, &rpc.Error{Code: 403, Message: "path outside filesystem scope"}
+			}
+			if errors.Is(err, filesystemscope.ErrWriteDenied) {
+				return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+			}
 			return nil, &rpc.Error{Code: 400, Message: "invalid path"}
 		}
 
@@ -155,6 +180,12 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 			if os.IsNotExist(err) {
 				return nil, &rpc.Error{Code: 404, Message: "not found"}
 			}
+			if errors.Is(err, filesystemscope.ErrPathOutsideScope) {
+				return nil, &rpc.Error{Code: 403, Message: "path outside filesystem scope"}
+			}
+			if errors.Is(err, filesystemscope.ErrWriteDenied) {
+				return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+			}
 			if errors.Is(err, errFSInvalidPath) {
 				return nil, &rpc.Error{Code: 400, Message: "invalid path"}
 			}
@@ -172,6 +203,10 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 			switch {
 			case os.IsNotExist(err):
 				return nil, &rpc.Error{Code: 404, Message: "source not found"}
+			case errors.Is(err, filesystemscope.ErrPathOutsideScope):
+				return nil, &rpc.Error{Code: 403, Message: "path outside filesystem scope"}
+			case errors.Is(err, filesystemscope.ErrWriteDenied):
+				return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 			case errors.Is(err, errFSDestinationExists):
 				return nil, &rpc.Error{Code: 409, Message: "destination already exists"}
 			case errors.Is(err, errFSInvalidNewPath):
@@ -195,6 +230,10 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 			switch {
 			case os.IsNotExist(err):
 				return nil, &rpc.Error{Code: 404, Message: "source not found"}
+			case errors.Is(err, filesystemscope.ErrPathOutsideScope):
+				return nil, &rpc.Error{Code: 403, Message: "path outside filesystem scope"}
+			case errors.Is(err, filesystemscope.ErrWriteDenied):
+				return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 			case errors.Is(err, errFSDestinationExists):
 				return nil, &rpc.Error{Code: 409, Message: "destination already exists"}
 			case errors.Is(err, errFSInvalidSourcePath):
@@ -213,10 +252,8 @@ func (s *Service) resolveExistingDir(path string) (string, error) {
 	if s == nil {
 		return "", errors.New("nil service")
 	}
-	if strings.TrimSpace(path) == "" {
-		path = s.agentHomeAbs
-	}
-	return pathutil.ResolveExistingScopedDir(path, s.agentHomeAbs)
+	resolved, err := s.scope.Resolve(path, filesystemscope.ResolveOptions{RequireExisting: true, RequireDir: true})
+	return resolved.RealAbs, err
 }
 
 func (s *Service) resolveTargetPath(path string) (string, error) {
@@ -226,12 +263,19 @@ func (s *Service) resolveTargetPath(path string) (string, error) {
 	if strings.TrimSpace(path) == "" {
 		return "", errors.New("missing path")
 	}
-	return pathutil.ResolveTargetScopedPath(path, s.agentHomeAbs)
+	resolved, err := s.scope.ResolveTarget(path, filesystemscope.ResolveOptions{ForWrite: true})
+	return resolved.RealAbs, err
 }
 
 func (s *Service) mkdirTarget(path string, createParents bool) (string, error) {
 	targetPath, err := s.resolveTargetPath(path)
 	if err != nil {
+		if errors.Is(err, filesystemscope.ErrPathOutsideScope) {
+			return "", &rpc.Error{Code: 403, Message: "path outside filesystem scope"}
+		}
+		if errors.Is(err, filesystemscope.ErrWriteDenied) {
+			return "", &rpc.Error{Code: 403, Message: "write permission denied"}
+		}
 		return "", &rpc.Error{Code: 400, Message: "invalid path"}
 	}
 
@@ -280,12 +324,55 @@ func fileModeString(m fs.FileMode) string {
 	return m.String()
 }
 
+func (s *Service) getPathContext() *fsGetPathContextResp {
+	ctx := s.scope.PathContext()
+	roots := make([]fsRootInfo, 0, len(ctx.Roots))
+	for _, root := range ctx.Roots {
+		roots = append(roots, fsRootInfo{
+			ID:    root.ID,
+			Label: root.Label,
+			Path:  root.PathAbs,
+			Kind:  string(root.Kind),
+			Permissions: fsRootPermissionInfo{
+				Read:  root.Permissions.Read,
+				Write: root.Permissions.Write,
+			},
+			Hidden: root.Hidden,
+			System: root.System,
+		})
+	}
+	return &fsGetPathContextResp{
+		AgentHomePathAbs: ctx.HomePathAbs,
+		HomePathAbs:      ctx.HomePathAbs,
+		DefaultRootID:    ctx.DefaultRootID,
+		Roots:            roots,
+	}
+}
+
 // --- wire types (snake_case JSON) ---
 
 type fsGetPathContextReq struct{}
 
 type fsGetPathContextResp struct {
-	AgentHomePathAbs string `json:"agent_home_path_abs"`
+	AgentHomePathAbs string       `json:"agent_home_path_abs"`
+	HomePathAbs      string       `json:"home_path_abs"`
+	DefaultRootID    string       `json:"default_root_id"`
+	Roots            []fsRootInfo `json:"roots"`
+}
+
+type fsRootInfo struct {
+	ID          string               `json:"id"`
+	Label       string               `json:"label"`
+	Path        string               `json:"path"`
+	Kind        string               `json:"kind"`
+	Permissions fsRootPermissionInfo `json:"permissions"`
+	Hidden      bool                 `json:"hidden,omitempty"`
+	System      bool                 `json:"system,omitempty"`
+}
+
+type fsRootPermissionInfo struct {
+	Read  bool `json:"read"`
+	Write bool `json:"write"`
 }
 
 type fsListReq struct {

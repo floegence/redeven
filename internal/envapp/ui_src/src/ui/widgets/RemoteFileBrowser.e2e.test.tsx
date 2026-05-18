@@ -43,6 +43,10 @@ const legacyClipboardStore = vi.hoisted(() => ({
   execCommand: vi.fn(),
 }));
 
+const gatewayFetchStore = vi.hoisted(() => ({
+  fetchGatewayJSON: vi.fn(),
+}));
+
 const gitWorkspaceRenderStore = vi.hoisted(() => ({
   snapshots: [] as Array<{
     subview: string;
@@ -225,6 +229,10 @@ vi.mock('./FilePreviewContext', () => ({
   }),
 }));
 
+vi.mock('../services/gatewayApi', () => ({
+  fetchGatewayJSON: gatewayFetchStore.fetchGatewayJSON,
+}));
+
 vi.mock('./FileBrowserSurfaceContext', () => ({
   useFileBrowserSurfaceContext: () => ({
     controller: {},
@@ -295,6 +303,7 @@ vi.mock('./FileBrowserWorkspace', () => ({
     onModeChange?: (mode: string) => void;
     onResize?: (delta: number) => void;
     onNavigate?: (path: string) => void;
+    onDragMove?: (items: FileItem[], targetPath: string) => void;
     onPathSubmit?: (path: string) => Promise<{ status: string; committedPath?: string; message?: string }>;
     pathEditRequestKey?: number;
     contextMenuCallbacks?: ContextMenuCallbacks;
@@ -413,6 +422,12 @@ vi.mock('./FileBrowserWorkspace', () => ({
         <div data-testid="mock-reveal-parent-path">{props.revealRequest?.parentPath ?? ''}</div>
         <div data-testid="mock-reveal-target-path">{props.revealRequest?.targetPath ?? ''}</div>
         <button type="button" onClick={() => setLocalCount((count) => count + 1)}>mock-files-bump</button>
+        <button
+          type="button"
+          onClick={() => props.onDragMove?.([copyNameTarget], props.currentPath)}
+        >
+          mock-drag-move-file
+        </button>
         <button type="button" onClick={() => props.onModeChange?.('git')}>mock-to-git</button>
         <button type="button" onClick={() => props.onResize?.(24)}>mock-resize-sidebar</button>
         <button type="button" onClick={() => props.onNavigate?.('/workspace/repo')}>mock-nav-repo</button>
@@ -881,11 +896,11 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function createEnvContext(options?: { canExecute?: boolean; viewMode?: EnvViewMode }): EnvContextValue {
+function createEnvContext(options?: { canExecute?: boolean; viewMode?: EnvViewMode; settingsSeq?: () => number; bumpSettingsSeq?: () => void }): EnvContextValue {
   return createEnvContextWithIdAccessor(() => 'env-1', options);
 }
 
-function createEnvContextWithIdAccessor(envId: () => string, options?: { canExecute?: boolean; viewMode?: EnvViewMode }): EnvContextValue {
+function createEnvContextWithIdAccessor(envId: () => string, options?: { canExecute?: boolean; viewMode?: EnvViewMode; settingsSeq?: () => number; bumpSettingsSeq?: () => void }): EnvContextValue {
   const canExecute = options?.canExecute ?? true;
   const viewMode = options?.viewMode ?? 'activity';
   const envResource = Object.assign(
@@ -922,8 +937,8 @@ function createEnvContextWithIdAccessor(envId: () => string, options?: { canExec
     filesSidebarOpen: () => false,
     setFilesSidebarOpen: () => {},
     toggleFilesSidebar: () => {},
-    settingsSeq: () => 0,
-    bumpSettingsSeq: () => {},
+    settingsSeq: options?.settingsSeq ?? (() => 0),
+    bumpSettingsSeq: options?.bumpSettingsSeq ?? (() => {}),
     openSettings: () => {},
     debugConsoleEnabled: () => false,
     setDebugConsoleEnabled: () => {},
@@ -1018,6 +1033,50 @@ beforeEach(() => {
   mockRpc.fs.copy.mockResolvedValue({ success: true, newPath: '/workspace/repo/copied' });
   mockRpc.fs.delete.mockResolvedValue({ success: true });
   mockRpc.fs.getPathContext.mockResolvedValue({ agentHomePathAbs: '/workspace' });
+  gatewayFetchStore.fetchGatewayJSON.mockImplementation(async (url: string, init?: RequestInit) => {
+    if (url !== '/_redeven_proxy/api/settings') return null;
+    if (init?.method === 'GET') {
+      return {
+        config_path: '/tmp/redeven/config.json',
+        connection: { controlplane_base_url: '', environment_id: 'env-1', agent_instance_id: 'agent-1', direct: { ws_url: '', channel_id: '', channel_init_expire_at_unix_s: 0, default_suite: 1, e2ee_psk_set: false } },
+        runtime: {
+          agent_home_dir: '/workspace',
+          shell: '/bin/sh',
+          filesystem_scope: {
+            schema_version: 1,
+            default_root_id: 'home',
+            roots: [
+              { id: 'home', label: 'Home', path: '/workspace', kind: 'home', permissions: { read: true, write: true }, system: true },
+              { id: 'computer', label: 'Computer', path: '/', kind: 'computer', permissions: { read: true, write: false }, system: true },
+            ],
+          },
+        },
+        logging: { log_format: '', log_level: '' },
+        codespaces: { code_server_port_min: 0, code_server_port_max: 0 },
+        permission_policy: null,
+        ai: null,
+      };
+    }
+    if (init?.method === 'PUT') {
+      const body = JSON.parse(String(init.body ?? '{}'));
+      return {
+        settings: {
+          config_path: '/tmp/redeven/config.json',
+          connection: { controlplane_base_url: '', environment_id: 'env-1', agent_instance_id: 'agent-1', direct: { ws_url: '', channel_id: '', channel_init_expire_at_unix_s: 0, default_suite: 1, e2ee_psk_set: false } },
+          runtime: {
+            agent_home_dir: String(body.agent_home_dir ?? '/workspace'),
+            shell: String(body.shell ?? '/bin/sh'),
+            filesystem_scope: body.filesystem_scope,
+          },
+          logging: { log_format: '', log_level: '' },
+          codespaces: { code_server_port_min: 0, code_server_port_max: 0 },
+          permission_policy: null,
+          ai: null,
+        },
+      };
+    }
+    return null;
+  });
   mockRpc.git.resolveRepo.mockResolvedValue({
     available: true,
     repoRootPath: '/workspace/repo',
@@ -1198,6 +1257,169 @@ afterEach(() => {
 });
 
 describe('RemoteFileBrowser persistence', () => {
+  it('uses filesystem scope default roots instead of cached Home when mounting at Computer root', async () => {
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    mockRpc.fs.getPathContext.mockResolvedValue({
+      homePathAbs: '/workspace',
+      defaultRootId: 'computer',
+      roots: [
+        { id: 'home', label: 'Home', pathAbs: '/workspace', kind: 'home', permissions: { read: true, write: true }, system: true },
+        { id: 'computer', label: 'Computer', pathAbs: '/', kind: 'computer', permissions: { read: true, write: false }, system: true },
+      ],
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      expect(mockRpc.fs.list).toHaveBeenCalledWith({ path: '/', showHidden: false });
+      expect(host.querySelector('[data-testid="mock-current-path"]')?.textContent).toBe('/');
+      expect(host.querySelector('[data-testid="mock-files-tree"]')?.textContent).toContain('/');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('disables mutating context menu actions on read-only roots while leaving read-only actions available', async () => {
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/readonly/repo/src' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    mockRpc.fs.getPathContext.mockResolvedValue({
+      homePathAbs: '/workspace',
+      defaultRootId: 'readonly',
+      roots: [
+        { id: 'readonly', label: 'Read Only', pathAbs: '/readonly', kind: 'custom', permissions: { read: true, write: false }, system: false },
+        { id: 'workspace', label: 'Workspace', pathAbs: '/workspace', kind: 'home', permissions: { read: true, write: true }, system: true },
+      ],
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      expect(host.querySelector('[data-testid="mock-folder-menu-order"]')?.textContent).toBe(
+        'ask-flower,open-in-terminal,new[new-file|new-folder],separator:new,duplicate,copy-name,copy-path,rename,delete',
+      );
+
+      const createFileButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-create-file-from-background') as HTMLButtonElement | undefined;
+      expect(createFileButton).toBeTruthy();
+      createFileButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(mockRpc.fs.writeFile).not.toHaveBeenCalled();
+      expect(notificationStore.error).toContainEqual({
+        title: 'Create unavailable',
+        message: 'This filesystem root is read-only.',
+      });
+
+      const dragMoveButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-drag-move-file') as HTMLButtonElement | undefined;
+      expect(dragMoveButton).toBeTruthy();
+      dragMoveButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(mockRpc.fs.rename).not.toHaveBeenCalled();
+      expect(notificationStore.error).toContainEqual({
+        title: 'Move unavailable',
+        message: 'This filesystem root is read-only.',
+      });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('reloads filesystem context when settings change and refreshes mutation affordances', async () => {
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/readonly/repo/src' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    let readonlyRootWritable = false;
+    mockRpc.fs.getPathContext.mockImplementation(async () => ({
+      homePathAbs: '/workspace',
+      defaultRootId: 'readonly',
+      roots: [
+        { id: 'readonly', label: 'Read Only', pathAbs: '/readonly', kind: 'custom', permissions: { read: true, write: readonlyRootWritable }, system: false },
+        { id: 'workspace', label: 'Workspace', pathAbs: '/workspace', kind: 'home', permissions: { read: true, write: true }, system: true },
+      ],
+    }));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => {
+      const [settingsSeq, setSettingsSeq] = createSignal(0);
+      return (
+        <LayoutProvider>
+          <EnvContext.Provider value={createEnvContext({ settingsSeq, bumpSettingsSeq: () => setSettingsSeq((value) => value + 1) })}>
+            <RemoteFileBrowser widgetId="widget-1" />
+            <button type="button" onClick={() => setSettingsSeq((value) => value + 1)}>mock-settings-changed</button>
+          </EnvContext.Provider>
+        </LayoutProvider>
+      );
+    }, host);
+
+    try {
+      await flush();
+      expect(mockRpc.fs.writeFile).not.toHaveBeenCalled();
+      const createFileButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-create-file-from-background') as HTMLButtonElement | undefined;
+      expect(createFileButton).toBeTruthy();
+      createFileButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      expect(notificationStore.error).toContainEqual({
+        title: 'Create unavailable',
+        message: 'This filesystem root is read-only.',
+      });
+
+      const settingsButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-settings-changed') as HTMLButtonElement | undefined;
+      readonlyRootWritable = true;
+      settingsButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      const refreshedCreateFileButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-create-file-from-background') as HTMLButtonElement | undefined;
+      inputDialogStore.pendingConfirmValue = 'New File.txt';
+      refreshedCreateFileButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      await flush();
+
+      expect(mockRpc.fs.writeFile).toHaveBeenCalledWith({
+        path: '/readonly/repo/src/New File.txt',
+        content: '',
+        createDirs: false,
+      });
+    } finally {
+      dispose();
+    }
+  });
+
   it('reports committed path changes only after successful directory navigation', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -1255,7 +1477,7 @@ describe('RemoteFileBrowser persistence', () => {
 
       expect(onOpenPathRequestHandled).toHaveBeenCalledWith('open-docs');
       expect(onCommittedPathChange).toHaveBeenCalledTimes(1);
-      expect(onCommittedPathChange).toHaveBeenCalledWith('/workspace/repo/docs');
+      expect(onCommittedPathChange).toHaveBeenCalledWith('/workspace/repo/docs', 'home');
 
       setOpenPathRequest({
         requestId: 'reload-docs',

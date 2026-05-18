@@ -15,7 +15,7 @@ import (
 	rpcwirev1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/rpc/v1"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/accessgate"
-	"github.com/floegence/redeven/internal/pathutil"
+	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -47,6 +47,7 @@ var ErrSessionNotFound = errors.New("terminal session not found")
 
 type Manager struct {
 	agentHomeAbs string
+	scope        *filesystemscope.Registry
 	log          *slog.Logger
 
 	term              *termgo.Manager
@@ -105,16 +106,24 @@ func newTerminalGoManagerConfig(shell string, log *slog.Logger) termgo.ManagerCo
 }
 
 func NewManager(shell string, agentHomeAbs string, log *slog.Logger) *Manager {
-	resolved, err := pathutil.CanonicalizeExistingDirAbs(agentHomeAbs)
+	scope, err := filesystemscope.NewDefaultRegistry(agentHomeAbs)
 	if err != nil {
 		panic(err)
+	}
+	return NewManagerWithScope(shell, scope, log)
+}
+
+func NewManagerWithScope(shell string, scope *filesystemscope.Registry, log *slog.Logger) *Manager {
+	if scope == nil {
+		panic("nil filesystem scope")
 	}
 	if log == nil {
 		log = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	}
 
 	m := &Manager{
-		agentHomeAbs:     resolved,
+		agentHomeAbs:     scope.HomePathAbs(),
+		scope:            scope,
 		log:              log,
 		writers:          make(map[*rpc.Server]*sinkWriter),
 		byServer:         make(map[*rpc.Server]map[string]string),
@@ -621,7 +630,18 @@ func (m *Manager) createSession(name string, workingDir string) (*termgo.Session
 
 	workingDirAbs, err := m.resolveWorkingDir(workingDir)
 	if err != nil {
-		return nil, &rpc.Error{Code: 400, Message: "invalid working_dir"}
+		switch {
+		case errors.Is(err, filesystemscope.ErrPathOutsideScope):
+			return nil, &rpc.Error{Code: 403, Message: "working_dir outside filesystem scope"}
+		case errors.Is(err, filesystemscope.ErrReadDenied):
+			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+		case os.IsNotExist(err):
+			return nil, &rpc.Error{Code: 404, Message: "working_dir not found"}
+		case strings.Contains(err.Error(), "directory"):
+			return nil, &rpc.Error{Code: 400, Message: "working_dir is not a directory"}
+		default:
+			return nil, &rpc.Error{Code: 400, Message: "invalid working_dir"}
+		}
 	}
 
 	sess, err := m.term.CreateSession(name, workingDirAbs)
@@ -989,7 +1009,8 @@ func (m *Manager) resolveWorkingDir(workingDir string) (string, error) {
 	if strings.TrimSpace(workingDir) == "" {
 		workingDir = m.agentHomeAbs
 	}
-	return pathutil.ResolveExistingScopedDir(workingDir, m.agentHomeAbs)
+	resolved, err := m.scope.Resolve(workingDir, filesystemscope.ResolveOptions{RequireExisting: true, RequireDir: true})
+	return resolved.RealAbs, err
 }
 
 // --- async notify sink ---

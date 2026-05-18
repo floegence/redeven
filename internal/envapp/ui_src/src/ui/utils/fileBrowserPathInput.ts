@@ -1,5 +1,6 @@
-import { expandHomeDisplayPath, isWithinAbsolutePath, normalizeAbsolutePath, toHomeDisplayPath } from './askFlowerPath';
-import { toFileBrowserAbsolutePath } from './fileBrowserDisplayPath';
+import { isWithinAbsolutePath, normalizeAbsolutePath } from './askFlowerPath';
+import type { NormalizedFilesystemRoot } from './filesystemRoots';
+import { formatFilesystemPath, parseFilesystemPathInput } from './filesystemRoots';
 
 export type ParsedFileBrowserPathInput =
   | {
@@ -21,11 +22,7 @@ export function formatFileBrowserPathInputValue(pathAbs: string, rootPathAbs?: s
   if (!normalizedPath) return '';
 
   const normalizedRoot = normalizeAbsolutePath(rootPathAbs ?? '');
-  if (!normalizedRoot) {
-    return normalizedPath;
-  }
-
-  return toHomeDisplayPath(normalizedPath, normalizedRoot) || normalizedPath;
+  return formatFilesystemPath(normalizedPath, normalizedRoot) || normalizedPath;
 }
 
 export function parseFileBrowserPathInput(rawValue: string, rootPathAbs?: string | null): ParsedFileBrowserPathInput {
@@ -36,52 +33,13 @@ export function parseFileBrowserPathInput(rawValue: string, rootPathAbs?: string
 
   const normalizedRoot = normalizeAbsolutePath(rootPathAbs ?? '');
 
-  if (raw === '~' || raw.startsWith('~/') || raw.startsWith('~\\')) {
-    if (!normalizedRoot) {
-      return { kind: 'error', message: 'Home directory is unavailable.' };
-    }
-
-    const expanded = expandHomeDisplayPath(raw, normalizedRoot);
-    if (!expanded) {
-      return { kind: 'error', message: 'Enter a valid path.' };
-    }
-
-    return {
-      kind: 'ok',
-      absolutePath: expanded,
-      displayPath: formatFileBrowserPathInputValue(expanded, normalizedRoot),
-    };
-  }
-
-  if (!normalizedRoot) {
-    const absolutePath = normalizeAbsolutePath(raw);
-    if (!absolutePath) {
-      return { kind: 'error', message: 'Enter an absolute path.' };
-    }
-
-    return {
-      kind: 'ok',
-      absolutePath,
-      displayPath: formatFileBrowserPathInputValue(absolutePath),
-    };
-  }
-
-  if (!raw.startsWith('/')) {
+  if (!raw.startsWith('/') && raw !== '~' && !raw.startsWith('~/') && !raw.startsWith('~\\')) {
     return { kind: 'error', message: 'Use "/" or "~" to enter a path.' };
   }
 
-  const absoluteCandidate = normalizeAbsolutePath(raw);
-  if (absoluteCandidate && isWithinAbsolutePath(absoluteCandidate, normalizedRoot)) {
-    return {
-      kind: 'ok',
-      absolutePath: absoluteCandidate,
-      displayPath: formatFileBrowserPathInputValue(absoluteCandidate, normalizedRoot),
-    };
-  }
-
-  const absolutePath = toFileBrowserAbsolutePath(raw, normalizedRoot);
-  if (!absolutePath || !isWithinAbsolutePath(absolutePath, normalizedRoot)) {
-    return { kind: 'error', message: 'Path is outside the runtime home directory.' };
+  const absolutePath = parseFilesystemPathInput(raw, normalizedRoot);
+  if (!absolutePath) {
+    return { kind: 'error', message: raw.startsWith('~') ? 'Home directory is unavailable.' : 'Enter an absolute path.' };
   }
 
   return {
@@ -91,11 +49,18 @@ export function parseFileBrowserPathInput(rawValue: string, rootPathAbs?: string
   };
 }
 
-export function pathInputIncludesHiddenSegment(pathAbs: string, rootPathAbs?: string | null): boolean {
+export function pathInputIncludesHiddenSegment(
+  pathAbs: string,
+  rootPathAbs?: string | null,
+  roots?: readonly NormalizedFilesystemRoot[],
+): boolean {
   const normalizedPath = normalizeAbsolutePath(pathAbs);
   if (!normalizedPath) return false;
 
-  const normalizedRoot = normalizeAbsolutePath(rootPathAbs ?? '');
+  const matchedRoot = roots
+    ?.filter((root) => isWithinAbsolutePath(normalizedPath, root.pathAbs))
+    .sort((a, b) => b.pathAbs.length - a.pathAbs.length)[0];
+  const normalizedRoot = normalizeAbsolutePath(matchedRoot?.pathAbs ?? rootPathAbs ?? '');
   if (normalizedRoot && !isWithinAbsolutePath(normalizedPath, normalizedRoot)) {
     return false;
   }

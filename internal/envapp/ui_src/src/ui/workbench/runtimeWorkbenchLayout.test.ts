@@ -1015,6 +1015,7 @@ describe('runtimeWorkbenchLayout', () => {
           state: {
             kind: 'files',
             current_path: '/workspace',
+            root_id: 'workspace',
           },
         },
       ],
@@ -1029,15 +1030,27 @@ describe('runtimeWorkbenchLayout', () => {
           state: {
             kind: 'files',
             current_path: '/workspace',
+            root_id: 'workspace',
           },
         },
       ],
     }).widget_states;
 
     expect(runtimeWorkbenchWidgetStatesEqual(left, right)).toBe(true);
+    expect(left[0]?.state).toEqual({
+      kind: 'files',
+      current_path: '/workspace',
+      root_id: 'workspace',
+    });
     expect(runtimeWorkbenchWidgetStateDataEqual(left[0]!.state, {
       kind: 'files',
       current_path: '/workspace/src',
+      root_id: 'workspace',
+    })).toBe(false);
+    expect(runtimeWorkbenchWidgetStateDataEqual(left[0]!.state, {
+      kind: 'files',
+      current_path: '/workspace',
+      root_id: 'other-root',
     })).toBe(false);
     expect(runtimeWorkbenchWidgetStateDataEqual(
       { kind: 'terminal', session_ids: ['session-1'], font_size: 12, font_family_id: 'monaco' },

@@ -24,6 +24,7 @@ import (
 	contextstore "github.com/floegence/redeven/internal/ai/context/store"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/pathutil"
 	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/session"
@@ -48,8 +49,9 @@ type Options struct {
 	Logger   *slog.Logger
 	StateDir string
 
-	AgentHomeDir string
-	Shell        string
+	AgentHomeDir    string
+	Shell           string
+	FilesystemScope *filesystemscope.Registry
 
 	Config *config.AIConfig
 
@@ -93,6 +95,7 @@ type Service struct {
 
 	stateDir     string
 	agentHomeDir string
+	scope        *filesystemscope.Registry
 	shell        string
 
 	cfg                *config.AIConfig
@@ -178,6 +181,14 @@ func NewService(opts Options) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
+	scope := opts.FilesystemScope
+	if scope == nil {
+		scope, err = filesystemscope.NewDefaultRegistry(agentHomeDir)
+		if err != nil {
+			return nil, err
+		}
+	}
+	agentHomeDir = scope.HomePathAbs()
 
 	logger := opts.Logger
 	if logger == nil {
@@ -246,6 +257,7 @@ func NewService(opts Options) (*Service, error) {
 		log:                          logger,
 		stateDir:                     strings.TrimSpace(opts.StateDir),
 		agentHomeDir:                 agentHomeDir,
+		scope:                        scope,
 		shell:                        strings.TrimSpace(opts.Shell),
 		cfg:                          opts.Config,
 		desktopModelSource:           newDesktopModelSourceClient(logger),
@@ -418,6 +430,21 @@ func (s *Service) UpdateConfig(next *config.AIConfig, persist func() error) erro
 	if coordinator != nil {
 		coordinator.Wake()
 	}
+	return nil
+}
+
+// UpdateFilesystemScope refreshes the in-memory filesystem roots for future runs.
+func (s *Service) UpdateFilesystemScope(scope *filesystemscope.Registry) error {
+	if s == nil {
+		return errors.New("nil service")
+	}
+	if scope == nil {
+		return errors.New("nil filesystem scope")
+	}
+	s.mu.Lock()
+	s.scope = scope
+	s.agentHomeDir = scope.HomePathAbs()
+	s.mu.Unlock()
 	return nil
 }
 
@@ -1083,6 +1110,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		StateDir:            s.stateDir,
 		AgentHomeDir:        s.agentHomeDir,
 		WorkingDir:          runWorkingDir,
+		FilesystemScope:     s.scope,
 		Shell:               s.shell,
 		AIConfig:            cfg,
 		SessionMeta:         metaRef,

@@ -86,7 +86,7 @@ func TestClassifyError_InvalidPathNormalizesRelativePath(t *testing.T) {
 	}
 }
 
-func TestClassifyError_InvalidPathDoesNotNormalizeOutsideProjectRoot(t *testing.T) {
+func TestClassifyError_InvalidPathNormalizesAbsolutePathOutsideWorkingDir(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
@@ -97,6 +97,9 @@ func TestClassifyError_InvalidPathDoesNotNormalizeOutsideProjectRoot(t *testing.
 	}
 	if err := os.MkdirAll(other, 0o755); err != nil {
 		t.Fatalf("MkdirAll other: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(other, "docs"), 0o755); err != nil {
+		t.Fatalf("MkdirAll other/docs: %v", err)
 	}
 
 	inv := Invocation{
@@ -111,8 +114,12 @@ func TestClassifyError_InvalidPathDoesNotNormalizeOutsideProjectRoot(t *testing.
 	if toolErr == nil {
 		t.Fatalf("expected tool error")
 	}
-	if len(toolErr.NormalizedArgs) != 0 {
-		t.Fatalf("normalized args=%v, want none for outside-project path", toolErr.NormalizedArgs)
+	want, err := filepath.EvalSymlinks(filepath.Join(other, "docs"))
+	if err != nil {
+		t.Fatalf("EvalSymlinks(other/docs): %v", err)
+	}
+	if got := toolErr.NormalizedArgs["cwd"]; got != want {
+		t.Fatalf("normalized cwd=%v, want=%v", got, want)
 	}
 }
 

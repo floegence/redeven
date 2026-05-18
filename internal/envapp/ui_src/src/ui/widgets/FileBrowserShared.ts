@@ -137,7 +137,17 @@ export function withChildren(tree: FileItem[], folderPath: string, children: Fil
 export function withChildrenAtRoot(tree: FileItem[], folderPath: string, children: FileItem[], rootPath: string): FileItem[] {
   const target = normalizePath(folderPath);
   const normalizedRoot = normalizePath(rootPath);
-  if (target === normalizedRoot) return children;
+  if (target === normalizedRoot) {
+    const segments = normalizedRoot.split('/').filter(Boolean);
+    const rootName = normalizedRoot === '/' ? 'Computer' : segments[segments.length - 1] || normalizedRoot;
+    return [{
+      id: normalizedRoot,
+      name: rootName,
+      type: 'folder',
+      path: normalizedRoot,
+      children,
+    }];
+  }
   return withChildren(tree, target, children);
 }
 

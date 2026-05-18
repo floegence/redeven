@@ -211,6 +211,8 @@ For MVP, the runtime requires **all three** permissions before serving Code App 
 
 This is conservative: code-server is not designed to enforce a partial permission model at the proxy layer.
 
+Codespace workspace paths are resolved through the same runtime `filesystem_scope` registry used by Files, Git, Terminal, and Flower tools. `agent_home_dir` remains the default starting point, but workspace paths are not implicitly Home-only; a codespace may target any authorized root that passes the runtime path checks. Code App still requires `read + write + execute` because code-server itself is not a root-aware permission sandbox.
+
 ## Troubleshooting
 
 - "Missing init payload" in the bootstrap page:

@@ -22,18 +22,19 @@ import (
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/knowledge"
-	"github.com/floegence/redeven/internal/pathutil"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/websearch"
 )
 
 type runOptions struct {
-	Log          *slog.Logger
-	StateDir     string
-	AgentHomeDir string
-	WorkingDir   string
-	Shell        string
+	Log             *slog.Logger
+	StateDir        string
+	AgentHomeDir    string
+	WorkingDir      string
+	FilesystemScope *filesystemscope.Registry
+	Shell           string
 
 	AIConfig *config.AIConfig
 
@@ -77,6 +78,7 @@ type run struct {
 	stateDir     string
 	agentHomeDir string
 	workingDir   string
+	scope        *filesystemscope.Registry
 	shell        string
 	cfg          *config.AIConfig
 	runMode      string
@@ -193,6 +195,7 @@ func newRun(opts runOptions) *run {
 		stateDir:                  strings.TrimSpace(opts.StateDir),
 		agentHomeDir:              agentHomeDir,
 		workingDir:                workingDir,
+		scope:                     opts.FilesystemScope,
 		shell:                     strings.TrimSpace(opts.Shell),
 		cfg:                       opts.AIConfig,
 		sessionMeta:               runMeta,
@@ -3414,36 +3417,88 @@ var (
 )
 
 func (r *run) workingDirAbs() (string, error) {
-	scope, err := r.pathScope()
+	scope, err := r.runPathScope()
 	if err != nil {
 		return "", err
 	}
-	return scope.ProjectRootAbs, nil
+	return scope.WorkingDirAbs, nil
 }
 
-func (r *run) pathScope() (pathutil.PathScope, error) {
+type runPathScope struct {
+	Registry      *filesystemscope.Registry
+	WorkingDirAbs string
+}
+
+func (s runPathScope) resolveInput(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	if path == "~" || strings.HasPrefix(path, "~/") || filepath.IsAbs(path) {
+		return path
+	}
+	if strings.TrimSpace(s.WorkingDirAbs) == "" {
+		return path
+	}
+	return filepath.Join(s.WorkingDirAbs, path)
+}
+
+func (s runPathScope) ResolveExistingPath(path string) (string, error) {
+	if s.Registry == nil {
+		return "", errors.New("nil filesystem scope")
+	}
+	resolved, err := s.Registry.Resolve(s.resolveInput(path), filesystemscope.ResolveOptions{RequireExisting: true})
+	if err != nil {
+		return "", err
+	}
+	return resolved.RealAbs, nil
+}
+
+func (s runPathScope) ResolveTargetPath(path string) (string, error) {
+	if s.Registry == nil {
+		return "", errors.New("nil filesystem scope")
+	}
+	resolved, err := s.Registry.ResolveTarget(s.resolveInput(path), filesystemscope.ResolveOptions{})
+	if err != nil {
+		return "", err
+	}
+	return resolved.RealAbs, nil
+}
+
+func (r *run) runPathScope() (runPathScope, error) {
 	workingDir := strings.TrimSpace(r.workingDir)
 	if workingDir == "" {
 		workingDir = strings.TrimSpace(r.agentHomeDir)
 	}
 	if workingDir == "" {
-		return pathutil.PathScope{}, errEmptyWorkingDir
+		return runPathScope{}, errEmptyWorkingDir
 	}
-	scope, err := pathutil.NewPathScope(r.agentHomeDir, workingDir)
+	registry := r.scope
+	if registry == nil {
+		var err error
+		registry, err = filesystemscope.NewDefaultRegistry(r.agentHomeDir)
+		if err != nil {
+			return runPathScope{}, errInvalidWorkingDir
+		}
+	}
+	resolved, err := registry.Resolve(workingDir, filesystemscope.ResolveOptions{RequireExisting: true, RequireDir: true})
 	if err != nil {
-		return pathutil.PathScope{}, errInvalidWorkingDir
+		return runPathScope{}, errInvalidWorkingDir
 	}
-	return scope, nil
+	return runPathScope{Registry: registry, WorkingDirAbs: resolved.RealAbs}, nil
 }
 
-func resolveToolPath(raw string, workingDirAbs string, agentHomeDir string) (string, error) {
+func (r *run) resolveToolPath(raw string, workingDirAbs string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return "", errInvalidToolPath
 	}
-	scope, err := pathutil.NewPathScope(agentHomeDir, workingDirAbs)
+	scope, err := r.runPathScope()
 	if err != nil {
 		return "", errInvalidWorkingDir
+	}
+	if strings.TrimSpace(workingDirAbs) != "" {
+		scope.WorkingDirAbs = strings.TrimSpace(workingDirAbs)
 	}
 	resolved, err := scope.ResolveTargetPath(raw)
 	if err != nil {
@@ -3507,11 +3562,11 @@ func (r *run) normalizeTerminalExecCwd(cwd string, workdir string) (string, erro
 	if err != nil {
 		return "", mapToolCwdError(err)
 	}
-	resolvedCwd, err := resolveToolPath(cwd, workingDirAbs, r.agentHomeDir)
+	resolvedCwd, err := r.resolveToolPath(cwd, workingDirAbs)
 	if err != nil {
 		return "", errors.New("invalid cwd")
 	}
-	resolvedWorkdir, err := resolveToolPath(workdir, workingDirAbs, r.agentHomeDir)
+	resolvedWorkdir, err := r.resolveToolPath(workdir, workingDirAbs)
 	if err != nil {
 		return "", errors.New("invalid cwd")
 	}
@@ -3631,7 +3686,7 @@ func (r *run) toolTerminalExec(ctx context.Context, command string, stdin string
 	if cwd == "" {
 		cwd = workingDirAbs
 	}
-	cwdAbs, err := resolveToolPath(cwd, workingDirAbs, r.agentHomeDir)
+	cwdAbs, err := r.resolveToolPath(cwd, workingDirAbs)
 	if err != nil {
 		return nil, mapToolCwdError(err)
 	}

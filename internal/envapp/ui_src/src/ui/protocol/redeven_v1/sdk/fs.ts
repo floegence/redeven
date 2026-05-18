@@ -16,6 +16,26 @@ export interface FsFileInfo {
 
 export interface FsPathContextResponse {
   agentHomePathAbs: string;
+  homePathAbs: string;
+  defaultRootId: string;
+  roots: FsRoot[];
+}
+
+export type FsRootKind = 'home' | 'computer' | 'custom';
+
+export interface FsRootPermissionSet {
+  read: boolean;
+  write: boolean;
+}
+
+export interface FsRoot {
+  id: string;
+  label: string;
+  pathAbs: string;
+  kind: FsRootKind;
+  permissions: FsRootPermissionSet;
+  hidden?: boolean;
+  system?: boolean;
 }
 
 export interface FsListRequest {

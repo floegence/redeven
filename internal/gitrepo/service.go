@@ -10,8 +10,8 @@ import (
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/accessgate"
+	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/gitutil"
-	"github.com/floegence/redeven/internal/pathutil"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -55,15 +55,22 @@ const (
 var errGitUnavailable = errors.New("git unavailable")
 
 type Service struct {
-	agentHomeAbs string
+	scope *filesystemscope.Registry
 }
 
 func NewService(agentHomeAbs string) *Service {
-	resolved, err := pathutil.CanonicalizeExistingDirAbs(agentHomeAbs)
+	scope, err := filesystemscope.NewDefaultRegistry(agentHomeAbs)
 	if err != nil {
 		panic(err)
 	}
-	return &Service{agentHomeAbs: resolved}
+	return &Service{scope: scope}
+}
+
+func NewServiceWithScope(scope *filesystemscope.Registry) *Service {
+	if scope == nil {
+		panic("nil filesystem scope")
+	}
+	return &Service{scope: scope}
 }
 
 func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
@@ -695,19 +702,19 @@ type repoResolveResult struct {
 
 func (s *Service) resolveRepoForPath(ctx context.Context, path string) (repoResolveResult, error) {
 	if strings.TrimSpace(path) == "" {
-		path = s.agentHomeAbs
+		path = s.scope.DefaultRootPath()
 	}
-	resolved, err := pathutil.ResolveExistingScopedPath(path, s.agentHomeAbs)
+	resolved, err := s.scope.Resolve(path, filesystemscope.ResolveOptions{RequireExisting: true})
 	if err != nil {
 		return repoResolveResult{}, err
 	}
-	stat, err := os.Stat(resolved)
+	stat, err := os.Stat(resolved.RealAbs)
 	if err != nil {
 		return repoResolveResult{}, err
 	}
-	targetDir := resolved
+	targetDir := resolved.RealAbs
 	if !stat.IsDir() {
-		targetDir = filepath.Dir(resolved)
+		targetDir = filepath.Dir(resolved.RealAbs)
 	}
 	repoRootReal, err := resolveGitTopLevel(ctx, targetDir)
 	if err != nil {
@@ -725,11 +732,7 @@ func (s *Service) resolveRepoForPath(ctx context.Context, path string) (repoReso
 	if eval, err := filepath.EvalSymlinks(repoRootReal); err == nil {
 		repoRootReal = filepath.Clean(eval)
 	}
-	withinRoot, err := pathutil.IsWithinScope(repoRootReal, s.agentHomeAbs)
-	if err != nil {
-		return repoResolveResult{}, err
-	}
-	if !withinRoot {
+	if _, ok := s.scope.Contains(repoRootReal); !ok {
 		return repoResolveResult{
 			GitAvailable:      true,
 			UnavailableReason: "Current path is not inside a Git repository.",
@@ -755,26 +758,20 @@ func (s *Service) resolveExplicitRepo(ctx context.Context, repoRootPath string) 
 }
 
 func (s *Service) validateRepoRootPath(ctx context.Context, repoRootPath string) (string, error) {
-	repoRootReal := filepath.Clean(strings.TrimSpace(repoRootPath))
-	if repoRootReal == "" {
+	if strings.TrimSpace(repoRootPath) == "" {
 		return "", errors.New("missing repo_root_path")
 	}
+	resolved, err := s.scope.Resolve(repoRootPath, filesystemscope.ResolveOptions{RequireExisting: true, RequireDir: true})
+	if err != nil {
+		return "", err
+	}
+	repoRootReal := resolved.RealAbs
 	stat, err := os.Stat(repoRootReal)
 	if err != nil {
 		return "", err
 	}
 	if !stat.IsDir() {
 		return "", errors.New("repo root must be a directory")
-	}
-	if eval, err := filepath.EvalSymlinks(repoRootReal); err == nil {
-		repoRootReal = filepath.Clean(eval)
-	}
-	withinRoot, err := pathutil.IsWithinScope(repoRootReal, s.agentHomeAbs)
-	if err != nil {
-		return "", err
-	}
-	if !withinRoot {
-		return "", errors.New("path escapes root")
 	}
 	topLevel, err := resolveGitTopLevel(ctx, repoRootReal)
 	if err != nil {

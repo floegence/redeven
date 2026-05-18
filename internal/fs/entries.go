@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/floegence/redeven/internal/pathutil"
+	"github.com/floegence/redeven/internal/filesystemscope"
 )
 
 type fsEntryType string
@@ -75,20 +75,16 @@ func (s *Service) resolveListDirectory(path string) (resolvedListDirectory, erro
 	}
 
 	if strings.TrimSpace(path) == "" {
-		path = s.agentHomeAbs
+		path = s.scope.DefaultRootPath()
 	}
 
-	logicalAbs, err := pathutil.NormalizeUserPathInput(path, s.agentHomeAbs)
-	if err != nil {
-		return resolvedListDirectory{}, err
-	}
-	resolvedAbs, err := pathutil.ResolveExistingScopedDir(logicalAbs, s.agentHomeAbs)
+	resolved, err := s.scope.Resolve(path, filesystemscope.ResolveOptions{RequireExisting: true, RequireDir: true})
 	if err != nil {
 		return resolvedListDirectory{}, err
 	}
 	return resolvedListDirectory{
-		logicalAbs:  logicalAbs,
-		resolvedAbs: resolvedAbs,
+		logicalAbs:  resolved.LogicalAbs,
+		resolvedAbs: resolved.RealAbs,
 	}, nil
 }
 
@@ -97,22 +93,22 @@ func (s *Service) resolveReadableFilePath(path string) (string, os.FileInfo, err
 		return "", nil, errors.New("nil service")
 	}
 	if strings.TrimSpace(path) == "" {
-		path = s.agentHomeAbs
+		path = s.scope.DefaultRootPath()
 	}
 
-	resolvedPath, err := pathutil.ResolveExistingScopedPath(path, s.agentHomeAbs)
+	resolved, err := s.scope.Resolve(path, filesystemscope.ResolveOptions{RequireExisting: true})
 	if err != nil {
 		return "", nil, err
 	}
 
-	info, err := os.Stat(resolvedPath)
+	info, err := os.Stat(resolved.RealAbs)
 	if err != nil {
 		return "", nil, err
 	}
 	if info.IsDir() {
 		return "", nil, errFSPathIsDirectory
 	}
-	return resolvedPath, info, nil
+	return resolved.RealAbs, info, nil
 }
 
 func (s *Service) resolveExistingEntryPath(path string) (string, error) {
@@ -120,17 +116,37 @@ func (s *Service) resolveExistingEntryPath(path string) (string, error) {
 		return "", errors.New("nil service")
 	}
 
-	normalized, err := pathutil.NormalizeUserPathInput(path, s.agentHomeAbs)
+	normalized, err := s.scope.NormalizeInput(path)
+	if err != nil {
+		return "", err
+	}
+	parentResolved, err := s.scope.Resolve(filepath.Dir(normalized), filesystemscope.ResolveOptions{RequireExisting: true, RequireDir: true})
 	if err != nil {
 		return "", err
 	}
 
-	parentResolved, err := pathutil.ResolveExistingScopedDir(filepath.Dir(normalized), s.agentHomeAbs)
+	entryPath := filepath.Join(parentResolved.RealAbs, filepath.Base(normalized))
+	if _, err := os.Lstat(entryPath); err != nil {
+		return "", err
+	}
+	return entryPath, nil
+}
+
+func (s *Service) resolveExistingWritableEntryPath(path string) (string, error) {
+	if s == nil {
+		return "", errors.New("nil service")
+	}
+
+	normalized, err := s.scope.NormalizeInput(path)
+	if err != nil {
+		return "", err
+	}
+	parentResolved, err := s.scope.Resolve(filepath.Dir(normalized), filesystemscope.ResolveOptions{RequireExisting: true, RequireDir: true, ForWrite: true})
 	if err != nil {
 		return "", err
 	}
 
-	entryPath := filepath.Join(parentResolved, filepath.Base(normalized))
+	entryPath := filepath.Join(parentResolved.RealAbs, filepath.Base(normalized))
 	if _, err := os.Lstat(entryPath); err != nil {
 		return "", err
 	}
@@ -138,9 +154,9 @@ func (s *Service) resolveExistingEntryPath(path string) (string, error) {
 }
 
 func (s *Service) deleteEntry(path string, recursive bool) error {
-	entryPath, err := s.resolveExistingEntryPath(path)
+	entryPath, err := s.resolveExistingWritableEntryPath(path)
 	if err != nil {
-		return fmt.Errorf("%w: %v", errFSInvalidPath, err)
+		return fmt.Errorf("%w: %w", errFSInvalidPath, err)
 	}
 	if recursive {
 		return os.RemoveAll(entryPath)
@@ -149,13 +165,13 @@ func (s *Service) deleteEntry(path string, recursive bool) error {
 }
 
 func (s *Service) renameEntry(oldPath string, newPath string) (string, error) {
-	oldEntryPath, err := s.resolveExistingEntryPath(oldPath)
+	oldEntryPath, err := s.resolveExistingWritableEntryPath(oldPath)
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", errFSInvalidOldPath, err)
+		return "", fmt.Errorf("%w: %w", errFSInvalidOldPath, err)
 	}
 	newEntryPath, err := s.resolveTargetPath(newPath)
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", errFSInvalidNewPath, err)
+		return "", fmt.Errorf("%w: %w", errFSInvalidNewPath, err)
 	}
 
 	if _, err := os.Lstat(oldEntryPath); os.IsNotExist(err) {
@@ -182,11 +198,11 @@ func (s *Service) renameEntry(oldPath string, newPath string) (string, error) {
 func (s *Service) copyEntry(sourcePath string, destPath string, overwrite bool) (string, error) {
 	sourceEntryPath, err := s.resolveExistingEntryPath(sourcePath)
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", errFSInvalidSourcePath, err)
+		return "", fmt.Errorf("%w: %w", errFSInvalidSourcePath, err)
 	}
 	destEntryPath, err := s.resolveTargetPath(destPath)
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", errFSInvalidDestPath, err)
+		return "", fmt.Errorf("%w: %w", errFSInvalidDestPath, err)
 	}
 
 	sourceLinkInfo, err := os.Lstat(sourceEntryPath)
@@ -288,8 +304,7 @@ func (s *Service) classifySymlinkTarget(path string) (fsResolvedType, os.FileInf
 	}
 
 	targetPath = filepath.Clean(targetPath)
-	withinScope, err := pathutil.IsWithinScope(targetPath, s.agentHomeAbs)
-	if err != nil || !withinScope {
+	if _, ok := s.scope.Contains(targetPath); !ok {
 		return fsResolvedTypeUnknown, nil
 	}
 

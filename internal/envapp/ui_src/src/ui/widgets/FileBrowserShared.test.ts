@@ -12,12 +12,14 @@ import {
 } from './FileBrowserShared';
 
 describe('FileBrowserShared scoped root helpers', () => {
-  it('replaces top-level children when the requested path matches the scoped root', () => {
+  it('keeps a concrete root node when the requested path matches the scoped root', () => {
     const children: FileItem[] = [
       { id: '/Users/tester/src', name: 'src', type: 'folder', path: '/Users/tester/src', children: [] },
     ];
 
-    expect(withChildrenAtRoot([], '/Users/tester', children, '/Users/tester')).toEqual(children);
+    expect(withChildrenAtRoot([], '/Users/tester', children, '/Users/tester')).toEqual([
+      { id: '/Users/tester', name: 'tester', type: 'folder', path: '/Users/tester', children },
+    ]);
   });
 
   it('inserts new items at the scoped root instead of requiring a synthetic slash root node', () => {

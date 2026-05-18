@@ -32,6 +32,7 @@ import (
 	"github.com/floegence/redeven/internal/codexbridge"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
+	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/notes"
 	"github.com/floegence/redeven/internal/pathutil"
 	"github.com/floegence/redeven/internal/portforward"
@@ -67,9 +68,9 @@ type Options struct {
 	SecretsStore *settings.SecretsStore
 	// ThreadReadStateStore persists per-user per-surface thread read watermarks.
 	ThreadReadStateStore *threadreadstate.Store
-	// AgentHomeDir is the canonical absolute path to the agent home directory,
-	// used as the filesystem scope root for the file-serving endpoint.
-	AgentHomeDir string
+	// AgentHomeDir is the canonical absolute path to the default home directory.
+	AgentHomeDir    string
+	FilesystemScope *filesystemscope.Registry
 }
 
 type Backend interface {
@@ -171,6 +172,7 @@ type Gateway struct {
 	threadReadState       *threadreadstate.Store
 
 	agentHomeDir string
+	scope        *filesystemscope.Registry
 
 	distFS fs.FS
 
@@ -268,9 +270,18 @@ func New(opts Options) (*Gateway, error) {
 
 	stateDir := filepath.Dir(strings.TrimSpace(opts.ConfigPath))
 	localPermissionPolicy := loadLocalPermissionPolicySnapshot(strings.TrimSpace(opts.ConfigPath))
+	scope := opts.FilesystemScope
+	if scope == nil {
+		var err error
+		scope, err = filesystemscope.NewDefaultRegistry(opts.AgentHomeDir)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return &Gateway{
 		log:                     logger,
-		agentHomeDir:            opts.AgentHomeDir,
+		agentHomeDir:            scope.HomePathAbs(),
+		scope:                   scope,
 		backend:                 opts.Backend,
 		pf:                      opts.PortForward,
 		ai:                      opts.AI,
@@ -673,8 +684,9 @@ type settingsDirectView struct {
 }
 
 type settingsRuntimeView struct {
-	AgentHomeDir string `json:"agent_home_dir"`
-	Shell        string `json:"shell"`
+	AgentHomeDir    string                  `json:"agent_home_dir"`
+	Shell           string                  `json:"shell"`
+	FilesystemScope *config.FilesystemScope `json:"filesystem_scope,omitempty"`
 }
 
 type settingsLoggingView struct {
@@ -1102,8 +1114,9 @@ func (g *Gateway) toSettingsView(cfg *config.Config) settingsView {
 			Direct:              direct,
 		}
 		out.Runtime = settingsRuntimeView{
-			AgentHomeDir: strings.TrimSpace(cfg.AgentHomeDir),
-			Shell:        strings.TrimSpace(cfg.Shell),
+			AgentHomeDir:    strings.TrimSpace(cfg.AgentHomeDir),
+			Shell:           strings.TrimSpace(cfg.Shell),
+			FilesystemScope: cfg.FilesystemScope,
 		}
 		out.Logging = settingsLoggingView{
 			LogFormat: strings.TrimSpace(cfg.LogFormat),
@@ -1425,7 +1438,7 @@ func (g *Gateway) appendAudit(meta *session.Meta, action string, status string, 
 }
 
 // handleFSServeFile serves a project file identified by the "path" query parameter.
-// Security: reuses pathutil.ResolveExistingScopedPath to prevent traversal and symlink escape.
+// Security: uses filesystem_scope so local preview cannot bypass configured roots.
 func (g *Gateway) handleFSServeFile(w http.ResponseWriter, r *http.Request) {
 	userPath := strings.TrimSpace(r.URL.Query().Get("path"))
 	if userPath == "" {
@@ -1433,11 +1446,12 @@ func (g *Gateway) handleFSServeFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resolvedPath, err := pathutil.ResolveExistingScopedPath(userPath, g.agentHomeDir)
+	resolved, err := g.scope.Resolve(userPath, filesystemscope.ResolveOptions{RequireExisting: true})
 	if err != nil {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
+	resolvedPath := resolved.RealAbs
 
 	ext := strings.ToLower(filepath.Ext(resolvedPath))
 	ct := mime.TypeByExtension(ext)
@@ -1661,8 +1675,9 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		type settingsUpdateReq struct {
-			AgentHomeDir *string `json:"agent_home_dir,omitempty"`
-			Shell        *string `json:"shell,omitempty"`
+			AgentHomeDir    *string                 `json:"agent_home_dir,omitempty"`
+			Shell           *string                 `json:"shell,omitempty"`
+			FilesystemScope *config.FilesystemScope `json:"filesystem_scope,omitempty"`
 
 			LogFormat *string `json:"log_format,omitempty"`
 			LogLevel  *string `json:"log_level,omitempty"`
@@ -1694,7 +1709,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if body.AgentHomeDir == nil && body.Shell == nil &&
+		if body.AgentHomeDir == nil && body.Shell == nil && body.FilesystemScope == nil &&
 			body.LogFormat == nil && body.LogLevel == nil &&
 			body.CodeServerPortMin == nil && body.CodeServerPortMax == nil &&
 			len(body.PermissionPolicy) == 0 && len(body.AI) == 0 {
@@ -1756,6 +1771,9 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if body.Shell != nil {
 			auditDetail["shell"] = strings.TrimSpace(*body.Shell)
 		}
+		if body.FilesystemScope != nil {
+			auditDetail["filesystem_scope_updated"] = true
+		}
 		if body.LogFormat != nil {
 			auditDetail["log_format"] = strings.TrimSpace(*body.LogFormat)
 		}
@@ -1802,6 +1820,12 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				if body.Shell != nil {
 					c.Shell = strings.TrimSpace(*body.Shell)
 				}
+				if body.FilesystemScope != nil {
+					if err := body.FilesystemScope.Validate(); err != nil {
+						return fmt.Errorf("invalid filesystem_scope: %w", err)
+					}
+					c.FilesystemScope = body.FilesystemScope
+				}
 				if body.LogFormat != nil {
 					c.LogFormat = strings.TrimSpace(*body.LogFormat)
 				}
@@ -1824,6 +1848,23 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			})
 			if err != nil {
 				return err
+			}
+			if body.AgentHomeDir != nil || body.FilesystemScope != nil {
+				if g.scope == nil {
+					scope, err := filesystemscope.NewRegistry(cfg)
+					if err != nil {
+						return fmt.Errorf("invalid filesystem_scope: %w", err)
+					}
+					g.scope = scope
+				} else if err := g.scope.UpdateFromConfig(cfg); err != nil {
+					return fmt.Errorf("invalid filesystem_scope: %w", err)
+				}
+				g.agentHomeDir = g.scope.HomePathAbs()
+				if g.ai != nil {
+					if err := g.ai.UpdateFilesystemScope(g.scope); err != nil {
+						return err
+					}
+				}
 			}
 			updated = cfg
 			return nil

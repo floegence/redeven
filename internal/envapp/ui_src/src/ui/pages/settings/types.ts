@@ -86,13 +86,29 @@ export type AgentSettingsResponse = Readonly<{
       e2ee_psk_set: boolean;
     }>;
   }>;
-  runtime: Readonly<{ agent_home_dir: string; shell: string }>;
+  runtime: Readonly<{ agent_home_dir: string; shell: string; filesystem_scope?: FilesystemScope | null }>;
   logging: Readonly<{ log_format: string; log_level: string }>;
   codespaces: Readonly<{ code_server_port_min: number; code_server_port_max: number }>;
   permission_policy: PermissionPolicy | null;
   ai: AIConfig | null;
   ai_runtime?: AIRuntimeStatus | null;
   ai_secrets?: AISecretsView | null;
+}>;
+
+export type FilesystemScope = Readonly<{
+  schema_version: number;
+  default_root_id?: string;
+  roots: readonly FilesystemRootPolicy[];
+}>;
+
+export type FilesystemRootPolicy = Readonly<{
+  id: string;
+  label: string;
+  path: string;
+  kind: 'home' | 'computer' | 'custom';
+  permissions: Readonly<{ read: boolean; write: boolean }>;
+  hidden?: boolean;
+  system?: boolean;
 }>;
 
 export type SettingsAIUpdateMeta = Readonly<{
