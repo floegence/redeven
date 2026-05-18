@@ -634,6 +634,31 @@ const PendingTerminalTabStatusIcon = (props: { status: pending_terminal_session_
   );
 };
 
+function TerminalCreatingPane() {
+  return (
+    <div
+      class="redeven-loading-curtain redeven-terminal-loading-curtain"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      data-redeven-loading-curtain-surface="component"
+      data-redeven-loading-curtain-stage="creating"
+    >
+      <div class="redeven-loading-curtain__panel">
+        <div class="redeven-loading-curtain__eyebrow">Terminal</div>
+        <div
+          class="redeven-loading-curtain__indicator"
+          role="progressbar"
+          aria-label="Creating terminal"
+        >
+          <div class="redeven-loading-curtain__indicator-bar" />
+        </div>
+        <div class="redeven-loading-curtain__message">Creating terminal...</div>
+      </div>
+    </div>
+  );
+}
+
 const PlusIcon = (props: { class?: string }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -1252,6 +1277,10 @@ function TerminalSessionView(props: terminal_session_view_props) {
 
   const terminalBackground = () => colors().background ?? '#1e1e1e';
   const terminalForeground = () => colors().foreground ?? '#c9d1d9';
+  const terminalLoadingVars = () => ({
+    '--redeven-terminal-loading-background': terminalBackground(),
+    '--redeven-terminal-loading-foreground': terminalForeground(),
+  });
 
   return (
     <div
@@ -1260,9 +1289,11 @@ function TerminalSessionView(props: terminal_session_view_props) {
         'background-color': terminalBackground(),
         '--terminal-bottom-inset': `${props.bottomInsetPx()}px`,
         '--background': terminalBackground(),
+        '--foreground': terminalForeground(),
         '--primary': terminalForeground(),
         '--muted': `color-mix(in srgb, ${terminalForeground()} 12%, ${terminalBackground()})`,
         '--muted-foreground': `color-mix(in srgb, ${terminalForeground()} 70%, transparent)`,
+        ...terminalLoadingVars(),
       }}
     >
       <div
@@ -1284,6 +1315,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
         visible={showLoading()}
         eyebrow="Terminal"
         message={loadingMessage()}
+        class="redeven-terminal-loading-curtain"
       />
 
       <Show when={error()}>
@@ -1544,6 +1576,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const terminalThemeMutedForeground = createMemo(() => (
     `color-mix(in srgb, ${terminalThemeForeground()} 70%, transparent)`
   ));
+  const terminalLoadingVars = createMemo(() => ({
+    '--redeven-terminal-loading-background': terminalThemeBackground(),
+    '--redeven-terminal-loading-foreground': terminalThemeForeground(),
+  }));
 
   const [allSessions, setAllSessions] = createSignal<TerminalSessionInfo[]>([]);
   const [optimisticTerminalSessions, setOptimisticTerminalSessions] = createSignal<TerminalSessionInfo[]>([]);
@@ -3503,6 +3539,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
           data-terminal-work-state={terminalWorkIndicatorState()}
           data-terminal-work-theme={terminalWorkIndicatorTheme()}
           class="flex-1 min-h-0 relative"
+          style={terminalLoadingVars()}
         >
           <Show when={workIndicatorEnabled()}>
             <div
@@ -3612,25 +3649,20 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                       style={{
                         'background-color': terminalThemeBackground(),
                         color: terminalThemeForeground(),
+                        ...terminalLoadingVars(),
                       }}
                     >
-                      <div class="absolute inset-0 flex items-center justify-center p-8">
-                        <div class="max-w-sm text-center flex flex-col items-center gap-3">
-                          <Show
-                            when={session().status === 'failed'}
-                            fallback={<PendingTerminalTabStatusIcon status="creating" />}
-                          >
+                      <Show
+                        when={session().status === 'failed'}
+                        fallback={<TerminalCreatingPane />}
+                      >
+                        <div class="absolute inset-0 flex items-center justify-center p-8">
+                          <div class="max-w-sm text-center flex flex-col items-center gap-3">
                             <PendingTerminalTabStatusIcon status="failed" />
-                          </Show>
-                          <div class="text-sm font-medium">
-                            {session().status === 'failed' ? 'Terminal creation failed' : 'Creating terminal...'}
-                          </div>
-                          <div class="text-xs break-words" style={{ color: terminalThemeMutedForeground() }}>
-                            {session().status === 'failed'
-                              ? (session().errorMessage || 'Could not create this terminal session.')
-                              : (session().workingDir || 'Preparing shell session')}
-                          </div>
-                          <Show when={session().status === 'failed'}>
+                            <div class="text-sm font-medium">Terminal creation failed</div>
+                            <div class="text-xs break-words" style={{ color: terminalThemeMutedForeground() }}>
+                              {session().errorMessage || 'Could not create this terminal session.'}
+                            </div>
                             <div class="flex items-center justify-center gap-2">
                               <Button
                                 size="sm"
@@ -3652,9 +3684,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                                 Dismiss
                               </Button>
                             </div>
-                          </Show>
+                          </div>
                         </div>
-                      </div>
+                      </Show>
                     </div>
                   </TabPanel>
                 )}
@@ -3663,7 +3695,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
           </Show>
 
           <Show when={sessionsLoading() && sessions().length === 0}>
-            <RedevenLoadingCurtain visible eyebrow="Terminal" message="Loading sessions..." />
+            <RedevenLoadingCurtain
+              visible
+              eyebrow="Terminal"
+              message="Loading sessions..."
+              class="redeven-terminal-loading-curtain"
+            />
           </Show>
 
           <Show when={!sessionsLoading() && sessions().length === 0 && visiblePendingTerminalSessions().length === 0}>

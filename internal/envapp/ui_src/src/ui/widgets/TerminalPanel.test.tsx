@@ -1533,10 +1533,12 @@ describe('TerminalPanel', () => {
     expect(pendingSurface).toBeTruthy();
     expect(pendingSurface?.style.backgroundColor).toBe('rgb(17, 17, 17)');
     expect(pendingSurface?.style.color).toBe('rgb(238, 238, 238)');
-    expect(pendingSurface?.style.getPropertyValue('--background')).toBe('');
-    expect(pendingSurface?.style.getPropertyValue('--foreground')).toBe('');
-    expect(pendingSurface?.style.getPropertyValue('--muted')).toBe('');
-    expect(pendingSurface?.style.getPropertyValue('--muted-foreground')).toBe('');
+    expect(pendingSurface?.style.getPropertyValue('--redeven-terminal-loading-background')).toBe('#111111');
+    expect(pendingSurface?.style.getPropertyValue('--redeven-terminal-loading-foreground')).toBe('#eeeeee');
+    const pendingCurtain = pendingSurface?.querySelector('.redeven-terminal-loading-curtain') as HTMLElement | null;
+    expect(pendingCurtain).toBeTruthy();
+    expect(pendingCurtain?.getAttribute('data-redeven-loading-curtain-stage')).toBe('creating');
+    expect(pendingCurtain?.querySelector('[role="progressbar"]')?.getAttribute('aria-label')).toBe('Creating terminal');
     const statusBar = host.querySelector('[data-testid="terminal-status-bar"]') as HTMLElement | null;
     expect(statusBar).toBeTruthy();
     expect(statusBar?.textContent).toContain('Session: Creating terminal');
@@ -1666,6 +1668,9 @@ describe('TerminalPanel', () => {
     document.body.appendChild(host);
 
     render(() => <TerminalPanel variant="deck" />, host);
+    const terminalContent = host.querySelector('[data-testid="terminal-content"]') as HTMLElement | null;
+    expect(terminalContent?.style.getPropertyValue('--redeven-terminal-loading-background')).toBe('#111111');
+    expect(terminalContent?.style.getPropertyValue('--redeven-terminal-loading-foreground')).toBe('#eeeeee');
     await vi.waitFor(() => {
       expect(transportMocks.attach).toHaveBeenCalledWith('session-1', 80, 24);
     });
