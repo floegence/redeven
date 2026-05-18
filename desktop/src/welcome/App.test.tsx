@@ -632,38 +632,40 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('.redeven-action-popover__notice');
   });
 
-  it('renders runtime startup progress inside the Open popup instead of the old SSH activity overlay', () => {
+  it('renders lifecycle and Open connection progress inside the Open popup instead of the old SSH activity overlay', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
 
     expect(appSrc).toContain('const activeActionProgress = createMemo(() => snapshot().action_progress);');
     expect(appSrc).toContain('actionProgress={props.actionProgress}');
-    expect(appSrc).toContain('activeRuntimeStartupProgressForEnvironment(props.environment, props.busyState, props.actionProgress)');
-    expect(appSrc).toContain('runtimeStartupProgress={runtimeOpenable() ? null : runtimeStartupProgress()}');
-    expect(appSrc).toContain('function RuntimeStartupProgressPanel');
-    expect(appSrc).toContain("props.runtimeStartupProgress?.action === 'update_environment_runtime' ? 'Updating...' : 'Starting...'");
-    expect(appSrc).toContain('redeven-runtime-startup-progress');
+    expect(appSrc).toContain('activeRuntimeLifecycleProgressForEnvironment(props.environment, props.busyState, props.actionProgress)');
+    expect(appSrc).toContain('activeOpenConnectionProgressForEnvironment(props.environment, props.busyState, props.actionProgress)');
+    expect(appSrc).toContain('runtimeLifecycleProgress={runtimeLifecycleProgress()}');
+    expect(appSrc).toContain('openConnectionProgress={openConnectionProgress()}');
+    expect(appSrc).toContain('function EnvironmentProgressPanel');
+    expect(appSrc).toContain("primaryProgress()?.open_progress ? 'Opening...' : runtimeMenuProgress()?.action === 'update_environment_runtime' ? 'Updating...' : 'Starting...'");
+    expect(appSrc).toContain('redeven-environment-progress');
     expect(appSrc).toContain('redeven-split-action-trigger--progress');
-    expect(appSrc).toContain('autoOpenedRuntimeStartupOperation');
-    expect(appSrc).toContain("progress?.runtime_startup && operationKey !== '' && !autoOpenedRuntimeStartupOperation.has(operationKey)");
+    expect(appSrc).toContain('autoOpenedEnvironmentProgressOperation');
+    expect(appSrc).toContain("(progress?.open_progress || progress?.lifecycle_progress) && operationKey !== '' && !autoOpenedEnvironmentProgressOperation.has(operationKey)");
     expect(appSrc).not.toContain('<SSHRuntimeActivityOverlay');
     expect(appSrc).not.toContain('sshRuntimeProgressItems');
     expect(appSrc).not.toContain('function SSHRuntimeActivityOverlay');
     expect(appSrc).not.toContain('Starting SSH Runtime');
-    expect(styles).toContain('.redeven-runtime-startup-progress');
-    expect(styles).toContain('.redeven-runtime-startup-progress__meter');
-    expect(styles).toContain('.redeven-runtime-startup-progress__meta');
+    expect(styles).toContain('.redeven-environment-progress');
+    expect(styles).toContain('.redeven-environment-progress__meter');
+    expect(styles).toContain('.redeven-environment-progress__meta');
     expect(styles).toContain('.redeven-split-action-trigger--progress');
     expect(styles).not.toContain('.redeven-ssh-runtime-activity');
   });
 
-  it('lets users inspect and cancel runtime startup from the Open popup while shimmer feedback stays active', () => {
+  it('lets users inspect and cancel lifecycle or Open progress from the Open popup while shimmer feedback stays active', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
 
     expect(appSrc).toContain('async function cancelLauncherOperation(progress: DesktopLauncherActionProgress): Promise<void>');
     expect(appSrc).toContain("kind: 'cancel_launcher_operation'");
-    expect(appSrc).toContain("showActionToast('Runtime startup is stopping.', 'info');");
+    expect(appSrc).toContain("showActionToast(progress.open_progress ? 'Opening is stopping.' : 'Runtime startup is stopping.', 'info');");
     expect(appSrc).toContain('cancelOperation={(progress) => {\n            void cancelLauncherOperation(progress);');
     expect(appSrc).toContain('cancelOperation: (progress: DesktopLauncherActionProgress) => void;');
     expect(appSrc).toContain("case 'cleanup_failed':\n      return 'Cleanup needs attention';");
@@ -672,7 +674,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('<Stop class="h-3.5 w-3.5" />');
     expect(appSrc).toContain("{props.progress.interrupt_label || 'Stop startup'}");
     expect(appSrc).toContain("class={shimmerBlocked() ? 'redeven-blocked-shimmer-overlay' : 'redeven-loading-shimmer-overlay'}");
-    expect(appSrc).toContain('disabled={props.loading && !hasRuntimeStartupProgress()}');
+    expect(appSrc).toContain('disabled={props.loading && !hasOpenConnectionProgress() && !hasRuntimeLifecycleProgress()}');
     expect(appSrc).toContain('disabled={props.loading && popoverPrimaryRunsAction()}');
     expect(appSrc).toContain("if (action.intent === 'start_runtime') {\n              props.onPrimaryActionGuidanceOpenChange(true);");
     expect(styles).toContain('.redeven-loading-shimmer-overlay');

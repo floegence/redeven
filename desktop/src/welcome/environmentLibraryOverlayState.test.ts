@@ -119,7 +119,7 @@ describe('environmentLibraryOverlayState', () => {
     expect(reconcileEnvironmentLibraryOverlayState(state, snapshot.environments)).toEqual(closedEnvironmentLibraryOverlayState());
   });
 
-  it('keeps the primary action guidance overlay open while runtime startup progress belongs to the environment', () => {
+  it('keeps the primary action guidance overlay open while runtime lifecycle progress belongs to the environment', () => {
     const local = testLocalEnvironment({ label: 'Local Environment' });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
@@ -135,15 +135,16 @@ describe('environmentLibraryOverlayState', () => {
       environment_id: local.id,
       subject_kind: 'local_environment',
       subject_id: local.id,
-      phase: 'starting_runtime',
+      phase: 'starting_runtime_process',
       title: 'Starting runtime',
       detail: 'Desktop is launching the bundled Redeven runtime on this device.',
-      runtime_startup: {
-        kind: 'runtime_startup',
+      lifecycle_progress: {
+        kind: 'runtime_lifecycle',
         location: 'local_host',
-        phase: 'starting_runtime',
-        stage_index: 2,
-        stage_count: 4,
+        phase: 'starting_runtime_process',
+        stage_index: 3,
+        stage_count: 5,
+        target_id: local.id,
         target_label: local.label,
       },
     }])).toEqual(state);

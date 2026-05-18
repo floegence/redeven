@@ -17,6 +17,11 @@ SSH hosts or containers.
   the selected runtime.
 - SSH environments do not use reverse forwarding for model calls. Container
   runtimes use the Runtime Placement Bridge runtime-control surface.
+- Desktop model source connection is part of Desktop `Open` connection setup,
+  not runtime lifecycle startup. `Start runtime` only needs the runtime to report
+  a compatible Runtime Service and runtime-control endpoint; each Desktop
+  process opens, refreshes, and tears down the model-source session with the
+  current SSH tunnel or container bridge.
 
 ## Runtime Service Surface
 

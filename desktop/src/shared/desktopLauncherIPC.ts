@@ -14,7 +14,8 @@ import type {
   DesktopRuntimeHealth,
 } from './desktopRuntimeHealth';
 import type { DesktopRuntimeOperationPlans } from './desktopRuntimeOperations';
-import type { DesktopRuntimeStartupProgress } from './desktopRuntimeStartupProgress';
+import type { DesktopOpenConnectionProgress } from './desktopOpenConnectionProgress';
+import type { DesktopRuntimeLifecycleProgress } from './desktopRuntimeLifecycleProgress';
 import type { DesktopLocalRuntimeOpenPlan } from './localRuntimeSupervisor';
 import type { RuntimeServiceProviderConnectionState, RuntimeServiceSnapshot } from './runtimeService';
 import {
@@ -110,6 +111,7 @@ export type DesktopLauncherActionKind =
   | 'open_provider_environment'
   | 'open_remote_environment'
   | 'open_ssh_environment'
+  | 'prepare_environment_open'
   | 'start_environment_runtime'
   | 'update_environment_runtime'
   | 'connect_provider_runtime'
@@ -272,7 +274,8 @@ export type DesktopLauncherOperationSnapshot = Readonly<{
   phase: string;
   title: string;
   detail: string;
-  runtime_startup?: DesktopRuntimeStartupProgress;
+  lifecycle_progress?: DesktopRuntimeLifecycleProgress;
+  open_progress?: DesktopOpenConnectionProgress;
   cancelable: boolean;
   interrupt_label?: string;
   interrupt_detail?: string;
@@ -298,6 +301,9 @@ export type DesktopLauncherActionRequest = Readonly<
       environment_id?: string;
       label?: string;
     }
+  | ({
+      kind: 'prepare_environment_open';
+    } & DesktopLauncherRuntimeTarget)
   | ({
       kind: 'open_ssh_environment';
       environment_id?: string;
@@ -458,7 +464,8 @@ export type DesktopLauncherActionProgress = Readonly<{
   phase: string;
   title: string;
   detail: string;
-  runtime_startup?: DesktopRuntimeStartupProgress;
+  lifecycle_progress?: DesktopRuntimeLifecycleProgress;
+  open_progress?: DesktopOpenConnectionProgress;
   cancelable?: boolean;
   interrupt_label?: string;
   interrupt_detail?: string;
@@ -661,6 +668,16 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
     }
     case 'refresh_all_environment_runtimes':
       return { kind };
+    case 'prepare_environment_open': {
+      const target = normalizeDesktopLauncherRuntimeTarget(candidate as Record<string, unknown>);
+      if (!target) {
+        return null;
+      }
+      return {
+        kind,
+        ...target,
+      } as DesktopLauncherActionRequest;
+    }
     case 'open_remote_environment':
       return {
         kind,

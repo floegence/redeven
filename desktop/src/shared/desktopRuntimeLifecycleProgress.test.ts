@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  desktopRuntimeStartupLocation,
-  runtimeStartupPhaseSequence,
-  runtimeStartupProgress,
-} from './desktopRuntimeStartupProgress';
+  desktopRuntimeLifecycleLocation,
+  runtimeLifecyclePhaseSequence,
+  runtimeLifecycleProgress,
+} from './desktopRuntimeLifecycleProgress';
 
-describe('desktopRuntimeStartupProgress', () => {
+describe('desktopRuntimeLifecycleProgress', () => {
   it('resolves startup locations from host access and placement', () => {
     const localHost = { kind: 'local_host' as const };
     const sshHost = {
@@ -28,77 +28,78 @@ describe('desktopRuntimeStartupProgress', () => {
       bridge_strategy: 'exec_stream' as const,
     };
 
-    expect(desktopRuntimeStartupLocation(localHost, hostPlacement)).toBe('local_host');
-    expect(desktopRuntimeStartupLocation(localHost, containerPlacement)).toBe('local_container');
-    expect(desktopRuntimeStartupLocation(sshHost, hostPlacement)).toBe('ssh_host');
-    expect(desktopRuntimeStartupLocation(sshHost, containerPlacement)).toBe('ssh_container');
+    expect(desktopRuntimeLifecycleLocation(localHost, hostPlacement)).toBe('local_host');
+    expect(desktopRuntimeLifecycleLocation(localHost, containerPlacement)).toBe('local_container');
+    expect(desktopRuntimeLifecycleLocation(sshHost, hostPlacement)).toBe('ssh_host');
+    expect(desktopRuntimeLifecycleLocation(sshHost, containerPlacement)).toBe('ssh_container');
   });
 
   it('keeps ordered phase metadata for all runtime startup locations', () => {
-    expect(runtimeStartupPhaseSequence('local_host')).toEqual([
+    expect(runtimeLifecyclePhaseSequence('local_host')).toEqual([
       'checking_existing_runtime',
-      'starting_runtime',
-      'waiting_for_readiness',
+      'attaching_existing_runtime',
+      'starting_runtime_process',
+      'checking_runtime_service',
       'runtime_ready',
     ]);
-    expect(runtimeStartupPhaseSequence('local_container')).toEqual([
+    expect(runtimeLifecyclePhaseSequence('local_container')).toEqual([
       'checking_container',
       'detecting_platform',
-      'checking_runtime',
+      'checking_runtime_package',
       'preparing_runtime_package',
-      'installing_runtime',
-      'starting_bridge',
-      'waiting_for_readiness',
+      'installing_runtime_package',
       'runtime_ready',
     ]);
-    expect(runtimeStartupPhaseSequence('ssh_host')).toEqual([
+    expect(runtimeLifecyclePhaseSequence('ssh_host')).toEqual([
       'checking_host',
-      'checking_runtime',
+      'checking_runtime_package',
       'detecting_platform',
       'preparing_runtime_package',
-      'installing_runtime',
-      'starting_runtime',
-      'waiting_for_readiness',
+      'installing_runtime_package',
+      'starting_runtime_process',
+      'attaching_existing_runtime',
+      'checking_runtime_service',
       'runtime_ready',
     ]);
-    expect(runtimeStartupPhaseSequence('ssh_container')).toEqual([
+    expect(runtimeLifecyclePhaseSequence('ssh_container')).toEqual([
       'checking_host',
       'checking_container',
       'detecting_platform',
-      'checking_runtime',
+      'checking_runtime_package',
       'preparing_runtime_package',
-      'installing_runtime',
-      'starting_bridge',
-      'waiting_for_readiness',
+      'installing_runtime_package',
       'runtime_ready',
     ]);
   });
 
   it('builds bounded stage metadata without faking percentage precision', () => {
-    expect(runtimeStartupProgress({
+    expect(runtimeLifecycleProgress({
       location: 'ssh_container',
-      phase: 'installing_runtime',
+      phase: 'installing_runtime_package',
+      targetID: 'ssh:container:devbox:docker:dev',
       targetLabel: ' Devbox Container ',
       targetDetail: ' devbox · docker/dev ',
     })).toEqual({
-      kind: 'runtime_startup',
+      kind: 'runtime_lifecycle',
       location: 'ssh_container',
-      phase: 'installing_runtime',
+      phase: 'installing_runtime_package',
       stage_index: 6,
-      stage_count: 9,
+      stage_count: 7,
+      target_id: 'ssh:container:devbox:docker:dev',
       target_label: 'Devbox Container',
       target_detail: 'devbox · docker/dev',
     });
-    expect(runtimeStartupProgress({
+    expect(runtimeLifecycleProgress({
       location: 'local_host',
       phase: 'failed',
       targetLabel: '',
     })).toEqual({
-      kind: 'runtime_startup',
+      kind: 'runtime_lifecycle',
       location: 'local_host',
       phase: 'failed',
-      stage_index: 4,
-      stage_count: 4,
+      stage_index: 5,
+      stage_count: 5,
+      target_id: 'runtime',
       target_label: 'Runtime',
     });
   });

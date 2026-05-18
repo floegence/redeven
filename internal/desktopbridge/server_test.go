@@ -147,3 +147,52 @@ func TestServerRoutesStreamOpenAndDataThroughSurfaceConn(t *testing.T) {
 		t.Fatalf("Serve error: %v", err)
 	}
 }
+
+func TestServerShutdownFrameEndsBridgeContext(t *testing.T) {
+	inReader, inWriter := io.Pipe()
+	defer inReader.Close()
+	defer inWriter.Close()
+	bridgeOutReader, bridgeOutWriter := io.Pipe()
+	defer bridgeOutReader.Close()
+	defer bridgeOutWriter.Close()
+	shutdownCalled := make(chan struct{}, 1)
+	server := Server{
+		Hello: Hello{
+			RuntimeVersion: "v0.0.0-test",
+			LocalUI:        HelloLocalUI{Available: true, BasePath: "/"},
+		},
+		OnShutdown: func() {
+			shutdownCalled <- struct{}{}
+		},
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- server.Serve(context.Background(), inReader, bridgeOutWriter)
+	}()
+
+	header, _, err := ReadFrame(bridgeOutReader)
+	if err != nil {
+		t.Fatalf("read hello: %v", err)
+	}
+	if header.Type != FrameTypeHello {
+		t.Fatalf("first frame=%q, want hello", header.Type)
+	}
+
+	if err := WriteFrame(inWriter, FrameHeader{Type: FrameTypeShutdownRuntime}, nil); err != nil {
+		t.Fatalf("write shutdown: %v", err)
+	}
+	select {
+	case <-shutdownCalled:
+	case <-time.After(time.Second):
+		t.Fatal("shutdown callback was not called")
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Serve shutdown error: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("bridge did not stop after shutdown frame")
+	}
+}

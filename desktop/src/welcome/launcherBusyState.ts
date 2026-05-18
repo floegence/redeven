@@ -1,7 +1,7 @@
 import type { DesktopLauncherActionProgress, DesktopLauncherActionRequest } from '../shared/desktopLauncherIPC';
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
 
-export type RuntimeStartupProgressEnvironmentMatch = Pick<
+export type RuntimeProgressEnvironmentMatch = Pick<
   DesktopEnvironmentEntry,
   'id' | 'managed_runtime_target_id' | 'managed_runtime_placement_target_id' | 'provider_runtime_link_target'
 >;
@@ -12,6 +12,7 @@ export type BusyAction =
   | 'open_provider_environment'
   | 'open_remote_environment'
   | 'open_ssh_environment'
+  | 'prepare_environment_open'
   | 'start_environment_runtime'
   | 'update_environment_runtime'
   | 'connect_provider_runtime'
@@ -154,7 +155,7 @@ export function environmentMatchesActionProgress(
   );
 }
 
-function environmentRuntimeProgressIDs(environment: RuntimeStartupProgressEnvironmentMatch): readonly string[] {
+function environmentRuntimeProgressIDs(environment: RuntimeProgressEnvironmentMatch): readonly string[] {
   return [
     environment.id,
     environment.managed_runtime_target_id,
@@ -165,14 +166,31 @@ function environmentRuntimeProgressIDs(environment: RuntimeStartupProgressEnviro
     .filter((value, index, values) => value !== '' && values.indexOf(value) === index);
 }
 
-export function environmentMatchesRuntimeStartupProgress(
-  environment: RuntimeStartupProgressEnvironmentMatch,
+export function environmentMatchesRuntimeLifecycleProgress(
+  environment: RuntimeProgressEnvironmentMatch,
   progress: DesktopLauncherActionProgress | null | undefined,
 ): boolean {
-  if (!progress?.runtime_startup) {
+  if (!progress?.lifecycle_progress) {
     return false;
   }
   const progressIDs = [
+    progress.environment_id,
+    progress.subject_id,
+    progress.operation_key,
+  ].map((value) => String(value ?? '').trim()).filter(Boolean);
+  return environmentRuntimeProgressIDs(environment).some((environmentID) => progressIDs.includes(environmentID));
+}
+
+export function environmentMatchesOpenConnectionProgress(
+  environment: RuntimeProgressEnvironmentMatch,
+  progress: DesktopLauncherActionProgress | null | undefined,
+): boolean {
+  if (!progress?.open_progress) {
+    return false;
+  }
+  const progressIDs = [
+    progress.open_progress.environment_id,
+    progress.open_progress.target_id,
     progress.environment_id,
     progress.subject_id,
     progress.operation_key,
@@ -208,18 +226,32 @@ export function activeProgressForEnvironment(
   return progressItems.find((progress) => environmentMatchesActionProgress(environmentID, progress)) ?? null;
 }
 
-export function activeRuntimeStartupProgressForEnvironment(
+export function activeRuntimeLifecycleProgressForEnvironment(
   environment: DesktopEnvironmentEntry,
   busyState: DesktopLauncherBusyState,
   progressItems: readonly DesktopLauncherActionProgress[],
 ): DesktopLauncherActionProgress | null {
   if (
-    busyState.progress?.runtime_startup
-    && environmentMatchesRuntimeStartupProgress(environment, busyState.progress)
+    busyState.progress?.lifecycle_progress
+    && environmentMatchesRuntimeLifecycleProgress(environment, busyState.progress)
   ) {
     return busyState.progress;
   }
-  return progressItems.find((progress) => environmentMatchesRuntimeStartupProgress(environment, progress)) ?? null;
+  return progressItems.find((progress) => environmentMatchesRuntimeLifecycleProgress(environment, progress)) ?? null;
+}
+
+export function activeOpenConnectionProgressForEnvironment(
+  environment: DesktopEnvironmentEntry,
+  busyState: DesktopLauncherBusyState,
+  progressItems: readonly DesktopLauncherActionProgress[],
+): DesktopLauncherActionProgress | null {
+  if (
+    busyState.progress?.open_progress
+    && environmentMatchesOpenConnectionProgress(environment, busyState.progress)
+  ) {
+    return busyState.progress;
+  }
+  return progressItems.find((progress) => environmentMatchesOpenConnectionProgress(environment, progress)) ?? null;
 }
 
 export function busyStateMatchesAction(

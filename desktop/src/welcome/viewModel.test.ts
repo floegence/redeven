@@ -721,7 +721,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(actionModel.action_presentation.primary_action_overlay).toMatchObject({
       kind: 'popover',
       title: 'Start the local runtime to continue',
-      detail: 'Open becomes available once Desktop starts the runtime inside this running container.',
+      detail: 'Open becomes available once the runtime package is ready in this running container.',
       actions: expect.arrayContaining([
         expect.objectContaining({
           label: 'Start runtime',

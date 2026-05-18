@@ -77,17 +77,17 @@ describe('main routing', () => {
     expect(mainSrc).toContain('Set REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG for dev SSH bootstrap');
   });
 
-  it('routes runtime startup progress through cancellable launcher operations', () => {
+  it('routes runtime lifecycle and Open connection progress through cancellable launcher operations', () => {
     const mainSrc = readMainSource();
 
     expect(mainSrc).toContain('DESKTOP_LAUNCHER_ACTION_PROGRESS_CHANNEL');
     expect(mainSrc).toContain('const launcherOperations = new LauncherOperationRegistry(handleLauncherOperationChange);');
     expect(mainSrc).toContain('actionProgress: launcherOperations.progressItems()');
     expect(mainSrc).toContain('operations: launcherOperations.operations()');
-    expect(mainSrc).toContain('desktopRuntimeStartupLocation');
-    expect(mainSrc).toContain('buildRuntimeStartupProgress');
-    expect(mainSrc).toContain('updateRuntimeStartupOperation');
-    expect(mainSrc).toContain("runtime_startup: runtimeStartupProgress({");
+    expect(mainSrc).toContain('desktopRuntimeLifecycleLocation');
+    expect(mainSrc).toContain('buildRuntimeLifecycleProgress');
+    expect(mainSrc).toContain('updateRuntimeLifecycleOperation');
+    expect(mainSrc).toContain("lifecycle_progress: runtimeLifecycleProgress({");
     expect(mainSrc).toContain("location: 'ssh_host'");
     expect(mainSrc).toContain("const hostAccess: DesktopRuntimeHostAccess = { kind: 'local_host' };");
     expect(mainSrc).toContain('const localHostPlacement: DesktopRuntimePlacement = { kind: \'host_process\'');
@@ -96,8 +96,9 @@ describe('main routing', () => {
     expect(mainSrc).toContain('operation_key: operationKey');
     expect(mainSrc).toContain('operation_key: targetID');
     expect(mainSrc).toContain("phase: 'checking_existing_runtime'");
-    expect(mainSrc).toContain("phase: 'starting_bridge'");
-    expect(mainSrc).toContain("phase: 'waiting_for_readiness'");
+    expect(mainSrc).toContain("case 'waiting_for_readiness':\n      return 'checking_runtime_service';");
+    expect(mainSrc).toContain('open_progress: buildOpenConnectionProgress(input)');
+    expect(mainSrc).toContain("interrupt_label: 'Stop opening'");
     expect(mainSrc).toContain('const pendingStart = pendingSSHRuntimeStartByKey.get(runtimeKey) ?? null;');
     expect(mainSrc).toContain('const pendingStart = pendingRuntimePlacementStartByTargetID.get(targetID) ?? null;');
     expect(mainSrc).toContain('return pendingStart.task;');
@@ -117,9 +118,9 @@ describe('main routing', () => {
     expect(mainSrc).toContain("interrupt_kind: 'stop_opening'");
     expect(mainSrc).toContain('const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;');
     expect(mainSrc).toContain('environment_label: label');
-    expect(mainSrc).toContain('phase: progress.phase');
+    expect(mainSrc).toContain('phase: sshRuntimeLifecyclePhase(progress.phase)');
     expect(mainSrc).toContain('detail: progress.detail');
-    expect(mainSrc).toContain('runtimeStartupProgressFromSSH(sshDetails, progress, label)');
+    expect(mainSrc).toContain('runtimeLifecycleProgressFromSSH(sshDetails, progress, label)');
     expect(mainSrc).toContain('ensureRuntimePlacementReady({');
     expect(mainSrc).toContain('on_progress: (progress: RuntimePlacementProgress) => {');
     expect(mainSrc).toContain('const launch = await startManagedRuntime({');
@@ -179,9 +180,11 @@ describe('main routing', () => {
     const mainSrc = readMainSource();
     expect(mainSrc).not.toContain('function launcherActionFailureForUnsupportedRuntimePlacement(');
     expect(mainSrc).toContain('const runtimePlacementBridgeByTargetID = new Map<DesktopRuntimeTargetID, RuntimePlacementBridgeRecord>();');
+    expect(mainSrc).toContain('const runtimePlacementReadyByTargetID = new Map<DesktopRuntimeTargetID, RuntimePlacementReadyRecord>();');
     expect(mainSrc).toContain('startRuntimePlacementBridgeSession({');
     expect(mainSrc).toContain('startDesktopModelSourceForStartup({');
-    expect(mainSrc).toContain('runtimePlacementBridgeByTargetID.set(bridgeSession.placement_target_id, connectedRecord)');
+    expect(mainSrc).toContain('runtimePlacementReadyByTargetID.set(targetID, readyRecord)');
+    expect(mainSrc).toContain('runtimePlacementBridgeByTargetID.set(bridgeSession.placement_target_id, record)');
     expect(mainSrc).toContain('async function openRuntimePlacementBridgeFromLauncher(');
     expect(mainSrc).toContain('Start this runtime first, then open it.');
     expect(mainSrc).toContain('resolveRuntimeContainerPlacement');
@@ -195,7 +198,8 @@ describe('main routing', () => {
     const startRuntimeEnd = mainSrc.indexOf('async function connectProviderRuntimeFromLauncher(', startRuntimeStart);
     const startRuntimeSrc = mainSrc.slice(startRuntimeStart, startRuntimeEnd);
     expect(startRuntimeSrc).toContain("if (requestedPlacement.kind === 'container_process')");
-    expect(startRuntimeSrc).toContain('startRuntimePlacementBridgeRecordFromLauncher(request)');
+    expect(startRuntimeSrc).toContain('ensureRuntimePlacementReadyRecordFromLauncher(request)');
+    expect(startRuntimeSrc).not.toContain('startRuntimePlacementBridgeSession({');
     expect(startRuntimeSrc).toContain('const normalizedSSHTarget = sshDetailsFromRuntimeTargetRequest(request);');
 
     const stopRuntimeStart = mainSrc.indexOf('async function stopEnvironmentRuntimeFromLauncher(');

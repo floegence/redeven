@@ -91,6 +91,33 @@ describe('desktopLauncherIPC', () => {
       allow_active_work_replacement: true,
     });
     expect(normalizeDesktopLauncherActionRequest({
+      kind: 'prepare_environment_open',
+      environment_id: ' ssh-container ',
+      label: ' SSH container ',
+      runtime_target_id: ' ssh:container:devbox%3A2222:docker:container-stable-id:e832df85 ',
+      host_access: {
+        kind: 'ssh_host',
+        ssh: {
+          ssh_destination: ' devbox ',
+          ssh_port: ' 2222 ',
+          auth_mode: ' key_agent ',
+        },
+      },
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'container-stable-id',
+        container_ref: 'dev-container',
+        container_label: 'dev-container',
+        runtime_root: '/root/.redeven',
+      },
+    })).toEqual(expect.objectContaining({
+      kind: 'prepare_environment_open',
+      environment_id: 'ssh-container',
+      label: 'SSH container',
+      runtime_target_id: 'ssh:container:devbox%3A2222:docker:container-stable-id:e832df85',
+    }));
+    expect(normalizeDesktopLauncherActionRequest({
       kind: 'connect_provider_runtime',
       provider_environment_id: ' cp:https%3A%2F%2Fcp.example.invalid:env:env_demo ',
       runtime_target_id: ' ssh:ssh%3Adevbox%3Adefault%3Akey_agent%3Aremote_default ',
@@ -440,13 +467,14 @@ describe('desktopLauncherIPC', () => {
     })).toBe(true);
   });
 
-  it('carries runtime startup metadata in launcher operation and progress contracts', () => {
-    const runtimeStartup = {
-      kind: 'runtime_startup',
+  it('carries runtime lifecycle metadata in launcher operation and progress contracts', () => {
+    const runtimeLifecycle = {
+      kind: 'runtime_lifecycle',
       location: 'local_container',
-      phase: 'installing_runtime',
+      phase: 'installing_runtime_package',
       stage_index: 5,
-      stage_count: 8,
+      stage_count: 6,
+      target_id: 'local:container:docker:dev:abcd1234',
       target_label: 'Dev Container',
       target_detail: 'docker/dev',
     } as const;
@@ -461,10 +489,10 @@ describe('desktopLauncherIPC', () => {
       started_at_unix_ms: 1,
       updated_at_unix_ms: 2,
       status: 'running',
-      phase: 'installing_runtime',
+      phase: 'installing_runtime_package',
       title: 'Installing runtime in container',
       detail: 'Desktop is installing Redeven inside the running container.',
-      runtime_startup: runtimeStartup,
+      lifecycle_progress: runtimeLifecycle,
       cancelable: true,
       deleted_subject: false,
     };
@@ -481,12 +509,41 @@ describe('desktopLauncherIPC', () => {
       phase: operation.phase,
       title: operation.title,
       detail: operation.detail,
-      runtime_startup: operation.runtime_startup,
+      lifecycle_progress: operation.lifecycle_progress,
       cancelable: operation.cancelable,
       deleted_subject: operation.deleted_subject,
     };
 
     expect(operation.subject_kind).toBe('runtime_target');
-    expect(progress.runtime_startup).toEqual(runtimeStartup);
+    expect(progress.lifecycle_progress).toEqual(runtimeLifecycle);
+  });
+
+  it('carries Open connection metadata separately from runtime lifecycle metadata', () => {
+    const openProgress = {
+      kind: 'open_connection',
+      location: 'ssh_host',
+      phase: 'opening_local_tunnel',
+      stage_index: 4,
+      stage_count: 9,
+      environment_id: 'ssh-devbox',
+      environment_label: 'Devbox',
+      target_id: 'ssh:devbox',
+      target_label: 'Devbox',
+      target_detail: 'devbox',
+    } as const;
+    const progress: DesktopLauncherActionProgress = {
+      action: 'open_ssh_environment',
+      environment_id: 'ssh-devbox',
+      operation_key: 'ssh:devbox:open',
+      phase: 'opening_local_tunnel',
+      title: 'Opening local tunnel',
+      detail: 'Desktop is opening the local SSH tunnel.',
+      open_progress: openProgress,
+      cancelable: true,
+      interrupt_label: 'Stop opening',
+    };
+
+    expect(progress.lifecycle_progress).toBeUndefined();
+    expect(progress.open_progress).toEqual(openProgress);
   });
 });

@@ -1162,7 +1162,7 @@ function blockedPrimaryActionDetail(
       : 'Open becomes available after Desktop restarts the runtime and it reports ready.';
   }
   if (environment.managed_runtime_placement?.kind === 'container_process') {
-    return 'Open becomes available once Desktop starts the runtime inside this running container.';
+    return 'Open becomes available once the runtime package is ready in this running container.';
   }
   return environment.kind === 'ssh_environment'
     ? 'Open becomes available once the runtime is ready on this SSH host.'
