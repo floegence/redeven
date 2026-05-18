@@ -159,6 +159,7 @@ describe('environmentLibraryOverlayState', () => {
           label: 'Staging',
           local_ui_url: 'http://192.168.1.12:24000/',
           pinned: false,
+          created_at_ms: 20,
           last_used_at_ms: 200,
         }],
       }),

@@ -207,6 +207,7 @@ describe('desktopPreferences', () => {
             label: 'Staging',
             local_ui_url: 'http://192.168.1.12:24000/',
             pinned: true,
+            created_at_ms: 50,
             last_used_at_ms: 100,
           },
         ],
@@ -222,6 +223,7 @@ describe('desktopPreferences', () => {
             release_base_url: 'https://mirror.example.invalid/releases',
             connect_timeout_seconds: 10,
             pinned: false,
+            created_at_ms: 60,
             last_used_at_ms: 90,
           },
         ],
@@ -583,6 +585,7 @@ describe('desktopPreferences', () => {
       environment_id: desktopEnvironmentID('http://192.168.1.11:24000/'),
       label: 'Laptop',
       local_ui_url: 'http://192.168.1.11:24000/',
+      created_at_ms: 10,
       last_used_at_ms: 100,
     });
     const marked = markSavedEnvironmentUsed(first, {
@@ -593,6 +596,7 @@ describe('desktopPreferences', () => {
       environment_id: '',
       label: '',
       local_ui_url: 'http://192.168.1.12:24000/_redeven_proxy/env/',
+      created_at_ms: 20,
       last_used_at_ms: 200,
     });
 
@@ -602,6 +606,7 @@ describe('desktopPreferences', () => {
         label: 'Laptop',
         local_ui_url: 'http://192.168.1.11:24000/',
         pinned: false,
+        created_at_ms: 10,
         last_used_at_ms: 300,
       },
       {
@@ -609,6 +614,7 @@ describe('desktopPreferences', () => {
         label: defaultSavedEnvironmentLabel('http://192.168.1.12:24000/'),
         local_ui_url: 'http://192.168.1.12:24000/',
         pinned: false,
+        created_at_ms: 20,
         last_used_at_ms: 200,
       },
     ]);
@@ -619,6 +625,7 @@ describe('desktopPreferences', () => {
         label: 'Laptop',
         local_ui_url: 'http://192.168.1.11:24000/',
         pinned: false,
+        created_at_ms: 10,
         last_used_at_ms: 300,
       },
     ]);
@@ -640,6 +647,7 @@ describe('desktopPreferences', () => {
       runtime_root: 'remote_default',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example.invalid/releases',
+      created_at_ms: 10,
       last_used_at_ms: 100,
     });
     const marked = markSavedSSHEnvironmentUsed(saved, {
@@ -659,6 +667,7 @@ describe('desktopPreferences', () => {
         release_base_url: 'https://mirror.example.invalid/releases',
         connect_timeout_seconds: 10,
         pinned: false,
+        created_at_ms: 10,
         last_used_at_ms: 500,
       },
     ]);
@@ -675,6 +684,43 @@ describe('desktopPreferences', () => {
     })).toBe(empty);
 
     expect(deleteSavedSSHEnvironment(marked, 'ssh:devbox:2222:key_agent:remote_default').saved_ssh_environments).toEqual([]);
+  });
+
+  it('keeps saved SSH environment order stable when usage changes', () => {
+    const first = upsertSavedSSHEnvironment(defaultDesktopPreferences(), {
+      environment_id: '',
+      label: 'SSH Alpha',
+      ssh_destination: 'alpha',
+      ssh_port: null,
+      auth_mode: 'key_agent',
+      runtime_root: 'remote_default',
+      bootstrap_strategy: 'desktop_upload',
+      release_base_url: '',
+      created_at_ms: 10,
+      last_used_at_ms: 100,
+    });
+    const second = upsertSavedSSHEnvironment(first, {
+      environment_id: '',
+      label: 'SSH Beta',
+      ssh_destination: 'beta',
+      ssh_port: null,
+      auth_mode: 'key_agent',
+      runtime_root: 'remote_default',
+      bootstrap_strategy: 'desktop_upload',
+      release_base_url: '',
+      created_at_ms: 20,
+      last_used_at_ms: 50,
+    });
+
+    const marked = markSavedSSHEnvironmentUsed(second, {
+      environment_id: 'ssh:beta:default:key_agent:remote_default',
+      last_used_at_ms: 500,
+    });
+
+    expect(marked.saved_ssh_environments.map((environment) => environment.label)).toEqual([
+      'SSH Alpha',
+      'SSH Beta',
+    ]);
   });
 
   it('upserts, pins, marks, and deletes saved runtime targets by host access plus placement', () => {
@@ -736,6 +782,47 @@ describe('desktopPreferences', () => {
     }));
 
     expect(deleteSavedRuntimeTarget(marked, targetID).saved_runtime_targets).toEqual([]);
+  });
+
+  it('keeps saved runtime target order stable when usage changes', () => {
+    const firstPlacement = {
+      kind: 'container_process' as const,
+      container_engine: 'docker' as const,
+      container_id: 'first-container',
+      container_ref: 'first-container',
+      container_label: 'first-container',
+      runtime_root: '/root/.redeven',
+      bridge_strategy: 'exec_stream' as const,
+    };
+    const secondPlacement = {
+      ...firstPlacement,
+      container_id: 'second-container',
+      container_ref: 'second-container',
+      container_label: 'second-container',
+    };
+    const first = upsertSavedRuntimeTarget(defaultDesktopPreferences(), {
+      label: 'First Container',
+      host_access: { kind: 'local_host' },
+      placement: firstPlacement,
+      created_at_ms: 10,
+      last_used_at_ms: 100,
+    });
+    const second = upsertSavedRuntimeTarget(first, {
+      label: 'Second Container',
+      host_access: { kind: 'local_host' },
+      placement: secondPlacement,
+      created_at_ms: 20,
+      last_used_at_ms: 50,
+    });
+    const marked = markSavedRuntimeTargetUsed(second, {
+      environment_id: second.saved_runtime_targets[1]!.id,
+      last_used_at_ms: 500,
+    });
+
+    expect(marked.saved_runtime_targets.map((target) => target.label)).toEqual([
+      'First Container',
+      'Second Container',
+    ]);
   });
 
   it('canonicalizes legacy container runtime targets onto stable container references', () => {
@@ -823,6 +910,7 @@ describe('desktopPreferences', () => {
         label: 'Staging',
         local_ui_url: 'http://192.168.1.12:24000/',
         pinned: false,
+        created_at_ms: 10,
         last_used_at_ms: 20,
       }],
       saved_ssh_environments: [{
@@ -836,6 +924,7 @@ describe('desktopPreferences', () => {
         release_base_url: '',
         connect_timeout_seconds: 10,
         pinned: false,
+        created_at_ms: 20,
         last_used_at_ms: 10,
       }],
     });
@@ -1204,6 +1293,27 @@ describe('desktopPreferences', () => {
         pinned: true,
         last_used_at_ms: expect.any(Number),
       }),
+    ]);
+  });
+
+  it('keeps provider environment order stable by creation time instead of last use', () => {
+    const older = testProviderEnvironment('https://cp.example.invalid', 'env_older', {
+      label: 'Older',
+      createdAtMS: 10,
+      lastUsedAtMS: 100,
+    });
+    const newer = testProviderEnvironment('https://cp.example.invalid', 'env_newer', {
+      label: 'Newer',
+      createdAtMS: 20,
+      lastUsedAtMS: 50,
+    });
+    const remembered = rememberProviderEnvironmentUse(testDesktopPreferences({
+      provider_environments: [older, newer],
+    }), newer.id);
+
+    expect(remembered.provider_environments.map((environment) => environment.env_public_id)).toEqual([
+      'env_older',
+      'env_newer',
     ]);
   });
 

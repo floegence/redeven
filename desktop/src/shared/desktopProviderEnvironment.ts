@@ -113,11 +113,12 @@ export function providerEnvironmentSupportsRemoteDesktop(
   return environment.remote_desktop_supported === true;
 }
 
-export function providerEnvironmentSortKey(
+export function providerEnvironmentStableSortKey(
   environment: DesktopProviderEnvironmentRecord,
-): readonly [number, string, string] {
+): readonly [number, number, string, string] {
   return [
     environment.pinned ? 0 : 1,
+    environment.created_at_ms,
     environment.label.toLowerCase(),
     environment.id,
   ];

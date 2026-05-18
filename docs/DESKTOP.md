@@ -183,6 +183,7 @@ Launcher model:
 
 - Cold launch never auto-opens a remembered target. Environment choice is always a user action.
 - The `Environments` view contains the protected Local Environment, provider environments, saved Redeven URL entries, and saved SSH Host entries. Provider management stays separate from the main open/rebind path.
+- The Environment Library is ordered for spatial stability: pinned entries render first, regular entries render after them, and each group keeps creation-time order. Opening, editing, saving, refreshing, or probing an Environment updates metadata in place and must not move the card; only changing the pinned state moves it between the two groups.
 - `Environment Settings` is launcher-owned and edits startup behavior for the profile Local Environment; saving settings never switches Environments or creates another local runtime identity.
 - Provider cards represent provider-tunnel access only. Their `Open` action always uses the provider tunnel, and their dropdown does not expose runtime lifecycle or provider-link controls.
 - Provider cards expose a `LOCAL LINK` fact only as a locator for the Local/SSH/container runtime card that owns the provider binding. Clicking it applies a precise linked-runtime filter in the Environment Library; it does not open the provider through the local runtime or mutate the binding.
