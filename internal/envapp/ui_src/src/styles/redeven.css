@@ -3561,35 +3561,36 @@ a.chat-sources-cell-url:focus-visible {
 }
 
 .redeven-loading-curtain__indicator {
-  width: 10rem;
-  height: 2px;
+  width: 10.5rem;
+  height: 3px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+  background: color-mix(in srgb, var(--foreground) 13%, transparent);
   overflow: hidden;
 }
 
 .redeven-loading-curtain__indicator-bar {
-  width: 50%;
+  width: 42%;
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(
     90deg,
-    transparent,
-    color-mix(in srgb, var(--foreground) 30%, transparent) 50%,
-    transparent
+    transparent 0%,
+    color-mix(in srgb, var(--primary) 54%, var(--foreground) 18%) 42%,
+    color-mix(in srgb, var(--primary) 78%, white 18%) 55%,
+    transparent 100%
   );
-  animation: redeven-loading-curtain-sweep 2s ease-in-out infinite;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--primary) 28%, transparent);
+  animation: redeven-loading-curtain-sweep 1.35s cubic-bezier(0.42, 0, 0.2, 1) infinite;
   will-change: transform;
 }
 
 @keyframes redeven-loading-curtain-sweep {
-  0% {
-    transform: translateX(-100%);
+  from {
+    transform: translateX(-120%);
   }
 
-  50%,
-  100% {
-    transform: translateX(200%);
+  to {
+    transform: translateX(260%);
   }
 }
 
