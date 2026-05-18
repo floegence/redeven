@@ -305,6 +305,42 @@ describe('WorkbenchFilePreviewWidget', () => {
     }
   });
 
+  it('keeps a dirty shared-state pending preview idempotent when the matching direct request arrives later', async () => {
+    const harness = renderPreviewWidget();
+    const blockedItem: RuntimeWorkbenchPreviewItem = {
+      id: '/workspace/blocked.md',
+      type: 'file',
+      path: '/workspace/blocked.md',
+      name: 'blocked.md',
+    };
+
+    try {
+      await flush();
+      controllerStore.openPreview.mockClear();
+
+      harness.setSharedItem(blockedItem);
+      await flush();
+
+      expect(harness.host.textContent).toContain('Synced preview pending');
+      expect(harness.host.textContent).toContain('blocked.md');
+      expect(controllerStore.openPreview).not.toHaveBeenCalled();
+
+      harness.setOpenRequest({
+        requestId: 'request-blocked-markdown-preview',
+        widgetId: 'widget-preview-1',
+        item: blockedItem,
+      });
+      await flush();
+
+      expect(workbenchStore.consumePreviewOpenRequest).toHaveBeenCalledWith('request-blocked-markdown-preview');
+      expect(controllerStore.openPreview).not.toHaveBeenCalled();
+      expect(harness.host.textContent).toContain('Synced preview pending');
+      expect(harness.host.textContent).toContain('blocked.md');
+    } finally {
+      harness.dispose();
+    }
+  });
+
   it('does not reopen the same clean preview through shared state while a direct open request is in flight', async () => {
     const harness = renderPreviewWidget();
     const targetItem: RuntimeWorkbenchPreviewItem = {
@@ -347,6 +383,93 @@ describe('WorkbenchFilePreviewWidget', () => {
 
       expect(controllerStore.openPreview).toHaveBeenCalledTimes(1);
       expect(controllerStore.item?.()?.path).toBe('/workspace/target.ts');
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  it('does not reopen a preview opened through shared state when the matching direct request arrives later', async () => {
+    const harness = renderPreviewWidget({
+      initialControllerItem: null,
+      initialDirty: false,
+    });
+    const targetItem: RuntimeWorkbenchPreviewItem = {
+      id: '/workspace/target.md',
+      type: 'file',
+      path: '/workspace/target.md',
+      name: 'target.md',
+    };
+
+    try {
+      await flush();
+      controllerStore.openPreview.mockClear();
+
+      harness.setSharedItem(targetItem);
+      await flush();
+
+      expect(controllerStore.openPreview).toHaveBeenCalledTimes(1);
+      expect(controllerStore.item?.()?.path).toBe('/workspace/target.md');
+
+      harness.setOpenRequest({
+        requestId: 'request-target-markdown-preview',
+        widgetId: 'widget-preview-1',
+        item: targetItem,
+      });
+      await flush();
+
+      expect(workbenchStore.consumePreviewOpenRequest).toHaveBeenCalledWith('request-target-markdown-preview');
+      expect(controllerStore.openPreview).toHaveBeenCalledTimes(1);
+      expect(harness.host.textContent).not.toContain('Synced preview pending');
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  it('does not reopen a shared-state preview when the matching direct request arrives during hydration', async () => {
+    const harness = renderPreviewWidget({
+      initialControllerItem: null,
+      initialDirty: false,
+    });
+    const targetItem: RuntimeWorkbenchPreviewItem = {
+      id: '/workspace/target.md',
+      type: 'file',
+      path: '/workspace/target.md',
+      name: 'target.md',
+    };
+
+    try {
+      await flush();
+      controllerStore.openPreview.mockClear();
+
+      let resolveOpen: () => void = () => {
+        throw new Error('open promise was not created');
+      };
+      controllerStore.openPreview.mockImplementationOnce((async (item: any) => {
+        await new Promise<void>((resolve) => {
+          resolveOpen = resolve;
+        });
+        controllerStore.setItem?.(item);
+        controllerStore.setDirty?.(false);
+      }) as any);
+
+      harness.setSharedItem(targetItem);
+      await flush();
+      harness.setOpenRequest({
+        requestId: 'request-target-markdown-preview',
+        widgetId: 'widget-preview-1',
+        item: targetItem,
+      });
+      await flush();
+
+      expect(workbenchStore.consumePreviewOpenRequest).toHaveBeenCalledWith('request-target-markdown-preview');
+      expect(controllerStore.openPreview).toHaveBeenCalledTimes(1);
+
+      resolveOpen();
+      await flush();
+
+      expect(controllerStore.openPreview).toHaveBeenCalledTimes(1);
+      expect(controllerStore.item?.()?.path).toBe('/workspace/target.md');
+      expect(harness.host.textContent).not.toContain('Synced preview pending');
     } finally {
       harness.dispose();
     }
