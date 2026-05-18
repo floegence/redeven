@@ -69,7 +69,7 @@ import {
   defaultDesktopProviderEnvironmentLabel,
   desktopProviderEnvironmentID,
   desktopProviderEnvironmentRemoteCatalogEntryFromPublished,
-  providerEnvironmentSortKey,
+  providerEnvironmentStableSortKey,
   type DesktopProviderEnvironmentRecord,
 } from '../shared/desktopProviderEnvironment';
 
@@ -78,6 +78,7 @@ export type DesktopSavedEnvironment = Readonly<{
   label: string;
   local_ui_url: string;
   pinned: boolean;
+  created_at_ms: number;
   last_used_at_ms: number;
 }>;
 
@@ -85,6 +86,7 @@ export type DesktopSavedSSHEnvironment = Readonly<DesktopSSHEnvironmentDetails &
   id: string;
   label: string;
   pinned: boolean;
+  created_at_ms: number;
   last_used_at_ms: number;
 }>;
 
@@ -173,6 +175,7 @@ type DesktopSavedEnvironmentFile = Readonly<{
   label?: unknown;
   local_ui_url?: unknown;
   pinned?: unknown;
+  created_at_ms?: unknown;
   last_used_at_ms?: unknown;
 }>;
 
@@ -330,6 +333,7 @@ export type UpsertDesktopSavedEnvironmentInput = Readonly<{
   label: string;
   local_ui_url: string;
   pinned?: boolean;
+  created_at_ms?: number;
   last_used_at_ms?: number;
 }>;
 
@@ -337,6 +341,7 @@ export type UpsertDesktopSavedSSHEnvironmentInput = Readonly<DesktopSSHEnvironme
   environment_id: string;
   label: string;
   pinned?: boolean;
+  created_at_ms?: number;
   last_used_at_ms?: number;
 }>;
 
@@ -458,6 +463,14 @@ function compact(value: unknown): string {
 }
 
 function normalizeLastUsedAtMS(value: unknown, fallback: number): number {
+  return normalizePositiveTimestampMS(value, fallback);
+}
+
+function normalizeCreatedAtMS(value: unknown, fallback: number): number {
+  return normalizePositiveTimestampMS(value, fallback);
+}
+
+function normalizePositiveTimestampMS(value: unknown, fallback: number): number {
   const numeric = Number(value);
   if (Number.isFinite(numeric) && numeric > 0) {
     return Math.floor(numeric);
@@ -479,23 +492,23 @@ export function defaultSavedEnvironmentLabel(rawURL: string): string {
   }
 }
 
-function sortSavedEnvironmentsByLastUsed(
+function sortSavedEnvironmentsByStableOrder(
   environments: readonly DesktopSavedEnvironment[],
 ): readonly DesktopSavedEnvironment[] {
   return [...environments].sort((left, right) => (
     (left.pinned ? 0 : 1) - (right.pinned ? 0 : 1)
-    || right.last_used_at_ms - left.last_used_at_ms
+    || left.created_at_ms - right.created_at_ms
     || left.label.localeCompare(right.label)
     || left.local_ui_url.localeCompare(right.local_ui_url)
   ));
 }
 
-function sortSavedSSHEnvironmentsByLastUsed(
+function sortSavedSSHEnvironmentsByStableOrder(
   environments: readonly DesktopSavedSSHEnvironment[],
 ): readonly DesktopSavedSSHEnvironment[] {
   return [...environments].sort((left, right) => (
     (left.pinned ? 0 : 1) - (right.pinned ? 0 : 1)
-    || right.last_used_at_ms - left.last_used_at_ms
+    || left.created_at_ms - right.created_at_ms
     || left.label.localeCompare(right.label)
     || left.ssh_destination.localeCompare(right.ssh_destination)
     || String(left.ssh_port ?? '').localeCompare(String(right.ssh_port ?? ''))
@@ -503,12 +516,12 @@ function sortSavedSSHEnvironmentsByLastUsed(
   ));
 }
 
-function sortSavedRuntimeTargetsByLastUsed(
+function sortSavedRuntimeTargetsByStableOrder(
   targets: readonly DesktopSavedRuntimeTarget[],
 ): readonly DesktopSavedRuntimeTarget[] {
   return [...targets].sort((left, right) => (
     (left.pinned ? 0 : 1) - (right.pinned ? 0 : 1)
-    || right.last_used_at_ms - left.last_used_at_ms
+    || left.created_at_ms - right.created_at_ms
     || left.label.localeCompare(right.label)
     || left.id.localeCompare(right.id)
   ));
@@ -524,13 +537,16 @@ function sortSavedControlPlanes(
   ));
 }
 
-function sortProviderEnvironments(
+function sortProviderEnvironmentsByStableOrder(
   environments: readonly DesktopProviderEnvironmentRecord[],
 ): readonly DesktopProviderEnvironmentRecord[] {
   return [...environments].sort((left, right) => {
-    const [leftPinned, leftLabel, leftID] = providerEnvironmentSortKey(left);
-    const [rightPinned, rightLabel, rightID] = providerEnvironmentSortKey(right);
-    return leftPinned - rightPinned || leftLabel.localeCompare(rightLabel) || leftID.localeCompare(rightID);
+    const [leftPinned, leftCreatedAtMS, leftLabel, leftID] = providerEnvironmentStableSortKey(left);
+    const [rightPinned, rightCreatedAtMS, rightLabel, rightID] = providerEnvironmentStableSortKey(right);
+    return leftPinned - rightPinned
+      || leftCreatedAtMS - rightCreatedAtMS
+      || leftLabel.localeCompare(rightLabel)
+      || leftID.localeCompare(rightID);
   });
 }
 
@@ -615,6 +631,7 @@ export function findProviderEnvironmentByID(
 
 function normalizeSavedEnvironmentCandidate(
   value: unknown,
+  fallbackCreatedAtMS: number,
   fallbackLastUsedAtMS: number,
 ): DesktopSavedEnvironment | null {
   if (!value || typeof value !== 'object') {
@@ -636,12 +653,14 @@ function normalizeSavedEnvironmentCandidate(
     label,
     local_ui_url: normalizedURL,
     pinned: normalizePinned(candidate.pinned),
+    created_at_ms: normalizeCreatedAtMS(candidate.created_at_ms, fallbackCreatedAtMS),
     last_used_at_ms: normalizeLastUsedAtMS(candidate.last_used_at_ms, fallbackLastUsedAtMS),
   };
 }
 
 function normalizeSavedSSHEnvironmentCandidate(
   value: unknown,
+  fallbackCreatedAtMS: number,
   fallbackLastUsedAtMS: number,
 ): SavedSSHEnvironmentCandidateNormalizationResult {
   if (!value || typeof value !== 'object') {
@@ -684,6 +703,7 @@ function normalizeSavedSSHEnvironmentCandidate(
       release_base_url: details.release_base_url,
       connect_timeout_seconds: details.connect_timeout_seconds,
       pinned: normalizePinned(candidate.pinned),
+      created_at_ms: normalizeCreatedAtMS(candidate.created_at_ms, fallbackCreatedAtMS),
       last_used_at_ms: normalizeLastUsedAtMS(candidate.last_used_at_ms, fallbackLastUsedAtMS),
     },
     didCanonicalize: compact(candidate.id) !== environmentID,
@@ -703,6 +723,7 @@ function defaultSavedRuntimeTargetLabel(
 
 function normalizeSavedRuntimeTargetCandidate(
   value: unknown,
+  fallbackCreatedAtMS: number,
   fallbackLastUsedAtMS: number,
 ): Readonly<{ target: DesktopSavedRuntimeTarget | null; didCanonicalize: boolean }> {
   if (!value || typeof value !== 'object') {
@@ -735,7 +756,7 @@ function normalizeSavedRuntimeTargetCandidate(
       placement,
       pinned: normalizePinned(candidate.pinned),
       last_used_at_ms: normalizeLastUsedAtMS(candidate.last_used_at_ms, fallbackLastUsedAtMS),
-      created_at_ms: normalizeLastUsedAtMS(candidate.created_at_ms, now),
+      created_at_ms: normalizeCreatedAtMS(candidate.created_at_ms, fallbackCreatedAtMS),
       updated_at_ms: normalizeLastUsedAtMS(candidate.updated_at_ms, now),
     },
     didCanonicalize: rawID !== '' && rawID !== computedID,
@@ -791,7 +812,13 @@ export function normalizeSavedEnvironments(
   const seenURLs = new Set<string>();
 
   for (let index = 0; index < sourceValues.length; index += 1) {
-    const environment = normalizeSavedEnvironmentCandidate(sourceValues[index], sourceValues.length - index);
+    const fallbackCreatedAtMS = Date.now() + index + 1;
+    const fallbackLastUsedAtMS = sourceValues.length - index;
+    const environment = normalizeSavedEnvironmentCandidate(
+      sourceValues[index],
+      fallbackCreatedAtMS,
+      fallbackLastUsedAtMS,
+    );
     if (!environment || seenURLs.has(environment.local_ui_url)) {
       continue;
     }
@@ -799,7 +826,7 @@ export function normalizeSavedEnvironments(
     normalized.push(environment);
   }
 
-  return sortSavedEnvironmentsByLastUsed(normalized).slice(0, MAX_SAVED_ENVIRONMENTS);
+  return sortSavedEnvironmentsByStableOrder(normalized).slice(0, MAX_SAVED_ENVIRONMENTS);
 }
 
 function collectSavedSSHEnvironmentNormalizationResult(
@@ -811,7 +838,13 @@ function collectSavedSSHEnvironmentNormalizationResult(
   let didCanonicalize = false;
 
   for (let index = 0; index < sourceValues.length; index += 1) {
-    const result = normalizeSavedSSHEnvironmentCandidate(sourceValues[index], sourceValues.length - index);
+    const fallbackCreatedAtMS = Date.now() + index + 1;
+    const fallbackLastUsedAtMS = sourceValues.length - index;
+    const result = normalizeSavedSSHEnvironmentCandidate(
+      sourceValues[index],
+      fallbackCreatedAtMS,
+      fallbackLastUsedAtMS,
+    );
     didCanonicalize ||= result.didCanonicalize;
     if (!result.environment || seenIDs.has(result.environment.id)) {
       continue;
@@ -821,7 +854,7 @@ function collectSavedSSHEnvironmentNormalizationResult(
   }
 
   return {
-    environments: sortSavedSSHEnvironmentsByLastUsed(normalized).slice(0, MAX_SAVED_SSH_ENVIRONMENTS),
+    environments: sortSavedSSHEnvironmentsByStableOrder(normalized).slice(0, MAX_SAVED_SSH_ENVIRONMENTS),
     didCanonicalize,
   };
 }
@@ -841,7 +874,13 @@ function collectSavedRuntimeTargetNormalizationResult(
   let didCanonicalize = false;
 
   for (let index = 0; index < sourceValues.length; index += 1) {
-    const result = normalizeSavedRuntimeTargetCandidate(sourceValues[index], sourceValues.length - index);
+    const fallbackCreatedAtMS = Date.now() + index + 1;
+    const fallbackLastUsedAtMS = sourceValues.length - index;
+    const result = normalizeSavedRuntimeTargetCandidate(
+      sourceValues[index],
+      fallbackCreatedAtMS,
+      fallbackLastUsedAtMS,
+    );
     didCanonicalize ||= result.didCanonicalize;
     if (!result.target || seenIDs.has(result.target.id)) {
       continue;
@@ -851,7 +890,7 @@ function collectSavedRuntimeTargetNormalizationResult(
   }
 
   return {
-    targets: sortSavedRuntimeTargetsByLastUsed(normalized).slice(0, MAX_SAVED_RUNTIME_TARGETS),
+    targets: sortSavedRuntimeTargetsByStableOrder(normalized).slice(0, MAX_SAVED_RUNTIME_TARGETS),
     didCanonicalize,
   };
 }
@@ -1017,7 +1056,7 @@ function normalizeProviderEnvironmentCollection(
     seenIDs.add(environment.id);
     normalized.push(environment);
   }
-  return sortProviderEnvironments(normalized);
+  return sortProviderEnvironmentsByStableOrder(normalized);
 }
 
 function normalizeProviderEnvironmentsFromCatalog(
@@ -1396,15 +1435,17 @@ export function upsertSavedEnvironment(
     environment.id === environmentID || environment.local_ui_url === normalizedURL
   ));
   const label = compact(input.label) || existing?.label || defaultSavedEnvironmentLabel(normalizedURL);
+  const now = Date.now();
   const nextEnvironment: DesktopSavedEnvironment = {
     id: environmentID,
     label,
     local_ui_url: normalizedURL,
     pinned: input.pinned ?? existing?.pinned ?? false,
-    last_used_at_ms: normalizeLastUsedAtMS(input.last_used_at_ms, Date.now()),
+    created_at_ms: normalizeCreatedAtMS(input.created_at_ms, existing?.created_at_ms ?? now),
+    last_used_at_ms: normalizeLastUsedAtMS(input.last_used_at_ms, now),
   };
 
-  const savedEnvironments = sortSavedEnvironmentsByLastUsed([
+  const savedEnvironments = sortSavedEnvironmentsByStableOrder([
     nextEnvironment,
     ...preferences.saved_environments.filter((environment) => (
       environment.id !== environmentID && environment.local_ui_url !== normalizedURL
@@ -1433,6 +1474,7 @@ export function upsertSavedSSHEnvironment(
     )
   ));
   const label = compact(input.label) || existing?.label || defaultSavedSSHEnvironmentLabel(details);
+  const now = Date.now();
   const nextEnvironment: DesktopSavedSSHEnvironment = {
     id: environmentID,
     label,
@@ -1444,10 +1486,11 @@ export function upsertSavedSSHEnvironment(
     release_base_url: details.release_base_url,
     connect_timeout_seconds: details.connect_timeout_seconds,
     pinned: input.pinned ?? existing?.pinned ?? false,
-    last_used_at_ms: normalizeLastUsedAtMS(input.last_used_at_ms, Date.now()),
+    created_at_ms: normalizeCreatedAtMS(input.created_at_ms, existing?.created_at_ms ?? now),
+    last_used_at_ms: normalizeLastUsedAtMS(input.last_used_at_ms, now),
   };
 
-  const savedSSHEnvironments = sortSavedSSHEnvironmentsByLastUsed([
+  const savedSSHEnvironments = sortSavedSSHEnvironmentsByStableOrder([
     nextEnvironment,
     ...preferences.saved_ssh_environments.filter((environment) => (
       environment.id !== environmentID
@@ -1492,7 +1535,7 @@ export function upsertSavedRuntimeTarget(
   };
   return {
     ...preferences,
-    saved_runtime_targets: sortSavedRuntimeTargetsByLastUsed([
+    saved_runtime_targets: sortSavedRuntimeTargetsByStableOrder([
       nextTarget,
       ...preferences.saved_runtime_targets.filter((target) => (
         target.id !== targetID
@@ -2111,6 +2154,7 @@ function serializeSavedEnvironmentCatalog(environment: DesktopSavedEnvironment):
     label: environment.label,
     local_ui_url: environment.local_ui_url,
     pinned: environment.pinned,
+    created_at_ms: environment.created_at_ms,
     last_used_at_ms: environment.last_used_at_ms,
   };
 }
@@ -2130,6 +2174,7 @@ function serializeSavedSSHEnvironmentCatalog(environment: DesktopSavedSSHEnviron
     release_base_url: environment.release_base_url,
     connect_timeout_seconds: environment.connect_timeout_seconds,
     pinned: environment.pinned,
+    created_at_ms: environment.created_at_ms,
     last_used_at_ms: environment.last_used_at_ms,
   };
 }

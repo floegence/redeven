@@ -173,6 +173,54 @@ function localRuntimePresence(
 }
 
 describe('desktopWelcomeState', () => {
+  it('orders environment entries by pinned state and stable creation time', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment({
+          label: 'Local',
+          pinned: false,
+          createdAtMS: 10,
+        }),
+        provider_environments: [
+          testProviderEnvironment('https://cp.example.invalid', 'env_provider', {
+            label: 'Provider',
+            pinned: true,
+            createdAtMS: 30,
+          }),
+        ],
+        saved_environments: [{
+          id: 'http://192.168.1.12:24000/',
+          label: 'URL',
+          local_ui_url: 'http://192.168.1.12:24000/',
+          pinned: false,
+          created_at_ms: 20,
+          last_used_at_ms: 500,
+        }],
+        saved_ssh_environments: [{
+          id: 'ssh:devbox:2222:key_agent:remote_default',
+          label: 'SSH',
+          ssh_destination: 'devbox',
+          ssh_port: 2222,
+          auth_mode: 'key_agent',
+          runtime_root: 'remote_default',
+          bootstrap_strategy: 'desktop_upload',
+          release_base_url: '',
+          connect_timeout_seconds: 10,
+          pinned: true,
+          created_at_ms: 5,
+          last_used_at_ms: 100,
+        }],
+      }),
+    });
+
+    expect(snapshot.environments.map((environment) => environment.label)).toEqual([
+      'SSH',
+      'Provider',
+      'Local',
+      'URL',
+    ]);
+  });
+
   it('builds launcher snapshots around open windows and saved environments', () => {
     const local = testLocalEnvironment({
       access: testLocalAccess({
@@ -211,6 +259,7 @@ describe('desktopWelcomeState', () => {
             label: 'Staging',
             local_ui_url: 'http://192.168.1.12:24000/',
             pinned: false,
+            created_at_ms: 20,
             last_used_at_ms: 200,
           },
           {
@@ -218,6 +267,7 @@ describe('desktopWelcomeState', () => {
             label: 'Laptop',
             local_ui_url: 'http://192.168.1.11:24000/',
             pinned: false,
+            created_at_ms: 10,
             last_used_at_ms: 100,
           },
         ],
@@ -469,6 +519,7 @@ describe('desktopWelcomeState', () => {
           label: 'Team Host',
           local_ui_url: 'http://192.168.1.20:24000/',
           pinned: false,
+          created_at_ms: 10,
           last_used_at_ms: 200,
         }],
       }),
@@ -519,6 +570,7 @@ describe('desktopWelcomeState', () => {
           label: 'Team Host',
           local_ui_url: 'http://192.168.1.20:24000/',
           pinned: false,
+          created_at_ms: 10,
           last_used_at_ms: 200,
         }],
       }),
@@ -646,6 +698,7 @@ describe('desktopWelcomeState', () => {
           release_base_url: 'https://mirror.example.invalid/releases',
           connect_timeout_seconds: 10,
           pinned: true,
+          created_at_ms: 10,
           last_used_at_ms: 100,
         }],
       }),
@@ -719,6 +772,7 @@ describe('desktopWelcomeState', () => {
           release_base_url: '',
           connect_timeout_seconds: 10,
           pinned: false,
+          created_at_ms: 10,
           last_used_at_ms: 100,
         }],
       }),
@@ -777,6 +831,7 @@ describe('desktopWelcomeState', () => {
           release_base_url: '',
           connect_timeout_seconds: 10,
           pinned: false,
+          created_at_ms: 10,
           last_used_at_ms: 100,
         }],
         provider_environments: [providerEnvironment],
@@ -861,6 +916,7 @@ describe('desktopWelcomeState', () => {
           release_base_url: '',
           connect_timeout_seconds: 10,
           pinned: false,
+          created_at_ms: 10,
           last_used_at_ms: 100,
         }],
       }),
@@ -1253,6 +1309,7 @@ describe('desktopWelcomeState', () => {
           release_base_url: '',
           connect_timeout_seconds: 10,
           pinned: false,
+          created_at_ms: 10,
           last_used_at_ms: 100,
         }],
       }),
@@ -1309,6 +1366,7 @@ describe('desktopWelcomeState', () => {
           release_base_url: '',
           connect_timeout_seconds: 10,
           pinned: false,
+          created_at_ms: 10,
           last_used_at_ms: 100,
         }],
       }),

@@ -356,6 +356,17 @@ function buildOpenEnvironmentWindows(
     }));
 }
 
+function sortEnvironmentEntriesByStableOrder(
+  entries: readonly DesktopEnvironmentEntry[],
+): readonly DesktopEnvironmentEntry[] {
+  return [...entries].sort((left, right) => (
+    (left.pinned ? 0 : 1) - (right.pinned ? 0 : 1)
+    || left.created_at_ms - right.created_at_ms
+    || left.label.toLowerCase().localeCompare(right.label.toLowerCase())
+    || left.id.localeCompare(right.id)
+  ));
+}
+
 function managedRuntimeEntryFields(
   presence: DesktopManagedRuntimePresence | undefined,
 ): Partial<Pick<
@@ -1176,6 +1187,7 @@ function buildLocalEnvironmentEntry(
     }),
     can_edit: true,
     can_delete: false,
+    created_at_ms: environment.created_at_ms,
     last_used_at_ms: environment.last_used_at_ms,
   };
 }
@@ -1344,6 +1356,7 @@ function buildProviderEnvironmentEntry(
     }),
     can_edit: true,
     can_delete: false,
+    created_at_ms: environment.created_at_ms,
     last_used_at_ms: environment.last_used_at_ms,
   };
 }
@@ -1462,7 +1475,7 @@ function buildEnvironmentEntries(
     ));
   }
 
-  return entries;
+  return sortEnvironmentEntriesByStableOrder(entries);
 }
 
 function buildSavedEnvironmentEntry(
@@ -1504,6 +1517,7 @@ function buildSavedEnvironmentEntry(
     open_action_label: isOpen ? 'Focus' : isOpening ? 'Opening…' : 'Open',
     can_edit: true,
     can_delete: true,
+    created_at_ms: environment.created_at_ms,
     last_used_at_ms: environment.last_used_at_ms,
   };
 }
@@ -1599,6 +1613,7 @@ function buildSavedSSHEnvironmentEntry(
     open_action_label: isOpen ? 'Focus' : isOpening ? 'Opening…' : 'Open',
     can_edit: true,
     can_delete: true,
+    created_at_ms: environment.created_at_ms,
     last_used_at_ms: environment.last_used_at_ms,
   };
 }
@@ -1715,6 +1730,7 @@ function buildSavedRuntimeTargetEntry(
     open_action_label: isOpen ? 'Focus' : isOpening ? 'Opening…' : 'Open',
     can_edit: true,
     can_delete: true,
+    created_at_ms: target.created_at_ms,
     last_used_at_ms: target.last_used_at_ms,
   };
 }

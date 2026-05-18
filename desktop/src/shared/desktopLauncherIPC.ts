@@ -241,6 +241,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   open_action_label: 'Open' | 'Opening…' | 'Focus';
   can_edit: boolean;
   can_delete: boolean;
+  created_at_ms: number;
   last_used_at_ms: number;
 }>;
 
