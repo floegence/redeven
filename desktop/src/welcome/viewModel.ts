@@ -516,7 +516,7 @@ function providerLocalLinkLabel(environment: DesktopEnvironmentEntry): string {
   }
   switch (linkedRuntime.provider_connection_state) {
     case 'connected':
-      return `Connected through ${linkedRuntime.label}`;
+      return linkedRuntime.label;
     case 'connecting':
       return `Connecting through ${linkedRuntime.label}`;
     case 'disconnecting':

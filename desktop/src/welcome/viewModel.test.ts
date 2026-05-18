@@ -1431,6 +1431,12 @@ describe('buildEnvironmentCardModel', () => {
         provider_connection_state: 'connected',
       },
     });
+    expect(buildEnvironmentCardFactsModel(openLocalServeProviderEntry!)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        label: 'LOCAL LINK',
+        value: 'Local Environment',
+      }),
+    ]));
     expect(buildProviderBackedEnvironmentActionModel(openLocalServeProviderEntry!)).toMatchObject({
       status_label: 'REMOTE OFFLINE',
       status_tone: 'warning',
