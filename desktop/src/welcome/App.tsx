@@ -4,6 +4,7 @@ import { Motion, Presence } from 'solid-motionone';
 import { cn, FloeProvider, useCommand, useTheme } from '@floegence/floe-webapp-core';
 import {
   AlertCircle,
+  AlertTriangle,
   Check,
   ChevronDown,
   ChevronRight,
@@ -23,6 +24,7 @@ import {
   Stop,
   Sun,
   Trash,
+  X,
 } from '@floegence/floe-webapp-core/icons';
 import { BottomBarItem, StatusIndicator, TopBarIconButton } from '@floegence/floe-webapp-core/layout';
 import {
@@ -78,6 +80,11 @@ import {
 } from '../shared/runtimeService';
 import { desktopEntryKindOwnsRuntimeManagement } from '../shared/environmentManagementPrinciples';
 import {
+  RUNTIME_STARTUP_PHASE_LABELS,
+  runtimeStartupPhaseSequence,
+  type DesktopRuntimeStartupPhase,
+} from '../shared/desktopRuntimeStartupProgress';
+import {
   DEFAULT_DESKTOP_SSH_AUTH_MODE,
   DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
   DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS,
@@ -130,6 +137,7 @@ import {
   type EnvironmentCardEndpointModel,
   type EnvironmentCardFactActionModel,
   type EnvironmentCardFactModel,
+  type EnvironmentActionOverlayTone,
   type EnvironmentActionPresentation,
   type EnvironmentCenterTab,
   type EnvironmentPrimaryActionOverlayModel,
@@ -4307,11 +4315,35 @@ function runtimeStartupProgressLabel(progress: DesktopLauncherActionProgress): s
   }
 }
 
+function runtimeStartupStatusIconTone(progress: DesktopLauncherActionProgress): 'info' | 'success' | 'error' {
+  if (progress.deleted_subject) {
+    return 'error';
+  }
+  switch (progress.status) {
+    case 'succeeded':
+      return 'success';
+    case 'failed':
+    case 'canceled':
+    case 'cleanup_failed':
+      return 'error';
+    default:
+      return 'info';
+  }
+}
+
 function RuntimeStartupProgressPanel(props: Readonly<{
   progress: DesktopLauncherActionProgress;
   cancelOperation: (progress: DesktopLauncherActionProgress) => void;
 }>) {
   const startup = createMemo(() => props.progress.runtime_startup);
+  const iconTone = createMemo(() => runtimeStartupStatusIconTone(props.progress));
+  const phaseStatus = createMemo(() => {
+    const s = props.progress.status;
+    if (s === 'succeeded' || s === 'failed' || s === 'canceled') {
+      return s;
+    }
+    return 'running';
+  });
   const stagePercent = createMemo(() => {
     const current = startup();
     if (!current || current.stage_count <= 0) {
@@ -4322,22 +4354,71 @@ function RuntimeStartupProgressPanel(props: Readonly<{
   const canCancel = createMemo(() => (
     props.progress.cancelable === true && props.progress.status === 'running'
   ));
+  const phaseSequence = createMemo<readonly { phase: DesktopRuntimeStartupPhase; label: string }[]>(() => {
+    const current = startup();
+    if (!current) {
+      return [];
+    }
+    const phases = runtimeStartupPhaseSequence(current.location);
+    return phases.map((p) => ({ phase: p, label: RUNTIME_STARTUP_PHASE_LABELS[p] }));
+  });
+  const stepState = (index: number, currentPhase: DesktopRuntimeStartupPhase | undefined, opStatus: string): 'done' | 'active' | 'pending' | 'error' => {
+    if (!currentPhase) {
+      return 'pending';
+    }
+    if (opStatus === 'failed' || opStatus === 'canceled') {
+      const currentIdx = phaseSequence().findIndex((s) => s.phase === currentPhase);
+      if (index < currentIdx) return 'done';
+      if (index === currentIdx) return 'error';
+      return 'pending';
+    }
+    const currentIdx = phaseSequence().findIndex((s) => s.phase === currentPhase);
+    if (index < currentIdx) return 'done';
+    if (index === currentIdx) return 'active';
+    return 'pending';
+  };
 
   return (
     <div class="redeven-action-popover redeven-runtime-startup-progress" tabIndex={-1} aria-live="polite">
-      <div class="redeven-runtime-startup-progress__header">
-        <div class="min-w-0">
+      <div class="redeven-action-popover__status-header">
+        <span class="redeven-action-popover__status-icon" data-tone={iconTone()}>
+          <Show when={iconTone() === 'success'} fallback={(
+            <Show when={iconTone() === 'error'} fallback={<Refresh class="animate-spin" />}>
+              <X />
+            </Show>
+          )}>
+            <Check />
+          </Show>
+        </span>
+        <div class="redeven-action-popover__status-text">
+          <div class="redeven-action-popover__eyebrow">{runtimeStartupProgressStatus(props.progress)}</div>
           <div class="redeven-action-popover__title">{props.progress.title}</div>
           <div class="redeven-runtime-startup-progress__target">{runtimeStartupProgressLabel(props.progress)}</div>
         </div>
-        <span class="redeven-runtime-startup-progress__status">
-          {runtimeStartupProgressStatus(props.progress)}
-        </span>
       </div>
       <div class="redeven-action-popover__detail">{props.progress.detail}</div>
       <Show when={startup()}>
         {(currentStartup) => (
           <>
+            <div class="redeven-runtime-startup-progress__steps" aria-hidden="true">
+              <For each={phaseSequence()}>
+                {(step, index) => {
+                  const state = () => stepState(index(), currentStartup().phase, phaseStatus());
+                  const isLast = () => index() === phaseSequence().length - 1;
+                  return (
+                    <div class="redeven-runtime-startup-progress__step">
+                      <div class="redeven-runtime-startup-progress__step-connector">
+                        <span class="redeven-runtime-startup-progress__step-dot" data-state={state()} />
+                        <Show when={!isLast()}>
+                          <span class="redeven-runtime-startup-progress__step-line" data-state={state()} />
+                        </Show>
+                      </div>
+                      <span class="redeven-runtime-startup-progress__step-label" data-state={state()}>{step.label}</span>
+                    </div>
+                  );
+                }}
+              </For>
+            </div>
             <div class="redeven-runtime-startup-progress__meter" aria-hidden="true">
               <span style={{ width: `${stagePercent()}%` }} />
             </div>
@@ -4376,6 +4457,10 @@ function RuntimeStartupProgressPanel(props: Readonly<{
   );
 }
 
+function overlayStatusIconTone(tone: EnvironmentActionOverlayTone): 'warning' | 'neutral' {
+  return tone;
+}
+
 function EnvironmentPrimaryActionPanel(props: Readonly<{
   overlay: Extract<EnvironmentPrimaryActionOverlayModel, Readonly<{ kind: 'popover' }>>;
   environmentID: string;
@@ -4387,10 +4472,21 @@ function EnvironmentPrimaryActionPanel(props: Readonly<{
     props.overlay.actions.length > 0 ? guidanceSessionNotice(props.session) : null
   ));
   const panelBusy = createMemo(() => props.session?.pending_intent !== null);
+  const iconTone = createMemo(() => overlayStatusIconTone(props.overlay.tone));
 
   return (
     <div class="redeven-action-popover" tabIndex={-1}>
-      <div class="redeven-action-popover__title">{props.overlay.title}</div>
+      <div class="redeven-action-popover__status-header">
+        <span class="redeven-action-popover__status-icon" data-tone={iconTone()}>
+          <Show when={props.overlay.tone === 'warning'} fallback={<AlertCircle />}>
+            <AlertTriangle />
+          </Show>
+        </span>
+        <div class="redeven-action-popover__status-text">
+          <div class="redeven-action-popover__eyebrow">{props.overlay.eyebrow}</div>
+          <div class="redeven-action-popover__title">{props.overlay.title}</div>
+        </div>
+      </div>
       <div class="redeven-action-popover__detail">{props.overlay.detail}</div>
       <Show when={notice()}>
         {(currentNotice) => (
