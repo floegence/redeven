@@ -422,25 +422,35 @@ func TestDisconnectProviderConflictDoesNotClearConfig(t *testing.T) {
 	}
 }
 
-func TestDisconnectProviderRequiresActiveControlChannel(t *testing.T) {
+func TestDisconnectProviderClearsConfigWithoutActiveControlChannel(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
 	cfg := providerLinkRemoteConfig(t, cfgPath)
 	a := newProviderLinkTestAgent(t, cfgPath, cfg)
 
-	_, err := a.DisconnectProvider(context.Background())
-	var linkErr *ProviderLinkError
-	if !errors.As(err, &linkErr) || linkErr.Code != ProviderLinkErrorDisconnectRejected {
-		t.Fatalf("DisconnectProvider() error = %v, want %s", err, ProviderLinkErrorDisconnectRejected)
+	resp, err := a.DisconnectProvider(context.Background())
+	if err != nil {
+		t.Fatalf("DisconnectProvider() error = %v", err)
+	}
+	if resp.Binding.State != runtimeservice.ProviderLinkStateUnbound || resp.Binding.LastDisconnectedAtUnixMS <= 0 {
+		t.Fatalf("DisconnectProvider() binding = %#v, want unbound with disconnect time", resp.Binding)
 	}
 
 	saved, loadErr := config.Load(cfgPath)
 	if loadErr != nil {
 		t.Fatalf("config.Load() error = %v", loadErr)
 	}
-	if saved.ControlplaneBaseURL != cfg.ControlplaneBaseURL ||
-		saved.EnvironmentID != cfg.EnvironmentID ||
-		saved.BindingGeneration != cfg.BindingGeneration ||
-		saved.Direct == nil {
-		t.Fatalf("config changed after inactive-channel disconnect: %#v", saved)
+	if saved.ControlplaneBaseURL != "" ||
+		saved.ControlplaneProviderID != "" ||
+		saved.EnvironmentID != "" ||
+		saved.LocalEnvironmentPublicID != "" ||
+		saved.BindingGeneration != 0 ||
+		saved.Direct != nil {
+		t.Fatalf("saved config after inactive-channel disconnect = %#v, want provider fields cleared", saved)
+	}
+	if saved.AgentInstanceID != "ai_existing" {
+		t.Fatalf("AgentInstanceID = %q, want preserved", saved.AgentInstanceID)
+	}
+	if binding := a.ProviderLinkBinding(); binding.State != runtimeservice.ProviderLinkStateUnbound {
+		t.Fatalf("ProviderLinkBinding() = %#v, want unbound", binding)
 	}
 }
