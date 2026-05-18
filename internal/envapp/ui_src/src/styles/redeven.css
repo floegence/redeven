@@ -3605,6 +3605,46 @@ html.dark .redeven-loading-curtain {
   background: color-mix(in srgb, var(--background) 90%, transparent);
 }
 
+.redeven-terminal-loading-curtain {
+  color: var(--redeven-terminal-loading-foreground, var(--foreground));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--redeven-terminal-loading-background, var(--background)) 84%, transparent),
+      color-mix(in srgb, var(--redeven-terminal-loading-background, var(--background)) 92%, transparent)
+    );
+  backdrop-filter: blur(2px);
+}
+
+.redeven-terminal-loading-curtain .redeven-loading-curtain__eyebrow {
+  color: color-mix(in srgb, var(--redeven-terminal-loading-foreground, var(--foreground)) 62%, transparent);
+}
+
+.redeven-terminal-loading-curtain .redeven-loading-curtain__message {
+  color: color-mix(in srgb, var(--redeven-terminal-loading-foreground, var(--foreground)) 78%, transparent);
+}
+
+.redeven-terminal-loading-curtain .redeven-loading-curtain__indicator {
+  width: 11rem;
+  height: 3px;
+  background: color-mix(in srgb, var(--redeven-terminal-loading-foreground, var(--foreground)) 22%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--redeven-terminal-loading-background, var(--background)) 65%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--redeven-terminal-loading-foreground, var(--foreground)) 8%, transparent);
+}
+
+.redeven-terminal-loading-curtain .redeven-loading-curtain__indicator-bar {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--redeven-terminal-loading-foreground, var(--foreground)) 58%, transparent) 30%,
+    color-mix(in srgb, var(--redeven-terminal-loading-foreground, var(--foreground)) 92%, white 8%) 52%,
+    color-mix(in srgb, var(--primary) 60%, var(--redeven-terminal-loading-foreground, var(--foreground)) 28%) 68%,
+    transparent 100%
+  );
+  box-shadow: 0 0 14px color-mix(in srgb, var(--redeven-terminal-loading-foreground, var(--foreground)) 34%, transparent);
+}
+
 .redeven-workbench-progress-curtain {
   background: var(--background);
   backdrop-filter: none;

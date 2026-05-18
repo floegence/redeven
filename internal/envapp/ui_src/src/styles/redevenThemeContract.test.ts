@@ -150,6 +150,9 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('animation: redeven-loading-curtain-sweep 1.35s cubic-bezier(0.42, 0, 0.2, 1) infinite;');
     expect(src).toContain('@keyframes redeven-loading-curtain-sweep {');
     expect(src).toContain('.redeven-loading-curtain__message {');
+    expect(src).toContain('.redeven-terminal-loading-curtain {');
+    expect(src).toContain('--redeven-terminal-loading-background');
+    expect(src).toContain('--redeven-terminal-loading-foreground');
     expect(src).toContain('.redeven-workbench-progress-curtain {');
     expect(src).toContain('@media (prefers-reduced-motion: reduce) {');
     expect(src).not.toContain('.workbench-entry-intro');
