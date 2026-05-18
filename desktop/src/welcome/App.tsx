@@ -1611,19 +1611,22 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       if (!current || current.mode !== 'create' || current.connection_kind === kind) {
         return current;
       }
+      const oldSuggested = suggestConnectionLabel(current);
+      const wasAutoFilled = oldSuggested !== null && trimString(current.label) === oldSuggested;
+      const label = wasAutoFilled ? '' : current.label;
       if (kind === 'ssh_environment') {
         return createSSHConnectionDialogState('create', {
-          label: current.label,
+          label,
           bootstrap_strategy: DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
         });
       }
       if (kind === 'local_container_runtime' || kind === 'ssh_container_runtime') {
         return createRuntimeContainerConnectionDialogState('create', kind, {
-          label: current.label,
+          label,
         });
       }
       return createExternalURLConnectionDialogState('create', {
-        label: current.label,
+        label,
         external_local_ui_url: current.connection_kind === 'external_local_ui'
           ? current.external_local_ui_url
           : trimString(snapshot().suggested_remote_url),
@@ -1650,9 +1653,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         ),
       };
       if (name === 'ssh_destination' || name === 'container_label') {
-        const suggested = suggestConnectionLabel(base as ConnectionDialogState);
-        if (suggested !== null && !trimString(base.label)) {
-          return { ...base, label: suggested };
+        const oldSuggested = suggestConnectionLabel(current);
+        const newSuggested = suggestConnectionLabel(base as ConnectionDialogState);
+        const wasAutoFilled = oldSuggested !== null && trimString(current.label) === oldSuggested;
+        if (newSuggested !== null && (wasAutoFilled || !trimString(base.label))) {
+          return { ...base, label: newSuggested };
         }
       }
       return base as ConnectionDialogState;
@@ -6965,9 +6970,9 @@ function ConnectionDialog(props: Readonly<{
             </div>
             <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-3 mt-2 transition-[border-color,background-color,box-shadow] duration-150 hover:border-primary/25 hover:shadow-[0_4px_16px_-12px_color-mix(in_srgb,var(--foreground)_20%,transparent)]">
               <div class="space-y-3">
-                <div class="grid gap-3 sm:grid-cols-[10rem_minmax(0,1fr)]">
-                <div class="space-y-1.5">
-                  <label class="block text-xs font-medium text-foreground">Engine</label>
+                <div class="grid gap-3 sm:grid-cols-[10rem_minmax(0,1fr)] items-start">
+                  <div class="space-y-1.5">
+                    <label class="block text-xs font-medium text-foreground">Engine</label>
                   <SegmentedControl
                     value={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.container_engine : 'docker'}
                     onChange={(value) => {
