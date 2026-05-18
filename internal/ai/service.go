@@ -37,6 +37,13 @@ var (
 	ErrModelSwitchRequiresExplicitRestart = errors.New("model switch requires explicit restart")
 )
 
+const (
+	modelSourceRuntimeConfig           = "runtime_config"
+	modelSourceRuntimeConfigLabel      = "Runtime config"
+	modelSourceDesktopModelSource      = "desktop_model_source"
+	modelSourceDesktopModelSourceLabel = "Desktop"
+)
+
 type Options struct {
 	Logger   *slog.Logger
 	StateDir string
@@ -574,8 +581,8 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 		out.Models = append(out.Models, Model{
 			ID:          currentModelID,
 			Label:       strings.TrimSpace(modelLabelByID[currentModelID]),
-			Source:      "runtime_config",
-			SourceLabel: "Remote runtime",
+			Source:      modelSourceRuntimeConfig,
+			SourceLabel: modelSourceRuntimeConfigLabel,
 		})
 		seen[currentModelID] = struct{}{}
 	}
@@ -589,8 +596,8 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 		out.Models = append(out.Models, Model{
 			ID:          id,
 			Label:       strings.TrimSpace(modelLabelByID[id]),
-			Source:      "runtime_config",
-			SourceLabel: "Remote runtime",
+			Source:      modelSourceRuntimeConfig,
+			SourceLabel: modelSourceRuntimeConfigLabel,
 		})
 		seen[id] = struct{}{}
 	}
@@ -640,8 +647,8 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 				model := Model{
 					ID:          modelID,
 					Label:       label,
-					Source:      "desktop_model_source",
-					SourceLabel: "Desktop",
+					Source:      modelSourceDesktopModelSource,
+					SourceLabel: modelSourceDesktopModelSourceLabel,
 				}
 				if modelID == sourceCurrent && out.CurrentModel == sourceCurrent {
 					out.Models = append([]Model{model}, out.Models...)

@@ -283,7 +283,7 @@ function normalizeAIModelSource(raw: unknown): AIModelSourceKey {
 }
 
 function defaultModelSourceLabel(source: AIModelSourceKey): string {
-  return source === 'desktop_model_source' ? 'Desktop' : 'Remote runtime';
+  return source === 'desktop_model_source' ? 'Desktop' : 'Runtime config';
 }
 
 function threadNeedsReadMark(readStatus: ThreadReadStatus | null | undefined): boolean {
@@ -311,8 +311,8 @@ export interface AIChatContextValue {
   // Models
   models: Resource<ModelsResponse | null>;
   modelsReady: Accessor<boolean>;
-  selectedDefaultModel: Accessor<string>;
-  selectDefaultModel: (modelID: string) => void;
+  selectedCurrentModel: Accessor<string>;
+  selectCurrentModel: (modelID: string) => void;
   selectedThreadModel: Accessor<string>;
   selectThreadModel: (modelID: string) => void;
   selectedSendModel: Accessor<string>;
@@ -415,7 +415,7 @@ export function createAIChatContextValue(): AIChatContextValue {
 
   const modelsReady = createMemo(() => !!models() && !models.loading && !models.error);
 
-  const [draftModelId, setDraftModelId] = createSignal<string>('');
+  const [draftCurrentModelId, setDraftCurrentModelId] = createSignal<string>('');
   const [threadModelOverride, setThreadModelOverride] = createSignal<Record<string, string>>({});
 
   const [draftWorkingDir, setDraftWorkingDirRaw] = createSignal<string>(readPersistedDraftWorkingDir() ?? '');
@@ -451,10 +451,10 @@ export function createAIChatContextValue(): AIChatContextValue {
   createEffect(() => {
     if (!modelsReady()) return;
     const allowed = allowedModelIDs();
-    const current = String(draftModelId() ?? '').trim();
+    const current = String(draftCurrentModelId() ?? '').trim();
     if (current && allowed.has(current)) return;
     const next = fallbackModelId();
-    setDraftModelId(next);
+    setDraftCurrentModelId(next);
   });
 
   const modelOptions = createMemo<AIModelOption[]>(() => {
@@ -1183,12 +1183,12 @@ export function createAIChatContextValue(): AIChatContextValue {
     return fallback;
   };
 
-  // Keep the default model for future chats separate from the active thread model.
-  const selectedDefaultModel = createMemo(() => {
+  // Keep the current model for draft chats separate from the active thread model.
+  const selectedCurrentModel = createMemo(() => {
     if (!modelsReady()) return '';
 
     const allowed = allowedModelIDs();
-    const draft = String(draftModelId() ?? '').trim();
+    const draft = String(draftCurrentModelId() ?? '').trim();
     if (draft && allowed.has(draft)) return draft;
 
     return fallbackModelId();
@@ -1198,7 +1198,7 @@ export function createAIChatContextValue(): AIChatContextValue {
   const selectedSendModel = createMemo(() => {
     const tid = String(activeThreadId() ?? '').trim();
     if (tid) return resolveThreadModelSelection(tid);
-    return selectedDefaultModel();
+    return selectedCurrentModel();
   });
 
   const patchThreadModel = async (threadId: string, nextModelId: string, prevModelId: string | null, silent?: boolean): Promise<boolean> => {
@@ -1235,7 +1235,7 @@ export function createAIChatContextValue(): AIChatContextValue {
         method: 'PUT',
         body: JSON.stringify({ model_id: mid }),
       });
-      setDraftModelId(mid);
+      setDraftCurrentModelId(mid);
       mutateModels(resp);
       return true;
     } catch (e) {
@@ -1245,7 +1245,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     }
   };
 
-  const selectDefaultModel = (modelID: string) => {
+  const selectCurrentModel = (modelID: string) => {
     const id = String(modelID ?? '').trim();
     if (!id) return;
 
@@ -1258,12 +1258,12 @@ export function createAIChatContextValue(): AIChatContextValue {
       notify.error('Invalid model', 'This model is not allowed.');
       return;
     }
-    const prev = selectedDefaultModel();
+    const prev = selectedCurrentModel();
     if (prev === id) return;
-    setDraftModelId(id);
+    setDraftCurrentModelId(id);
     void patchCurrentModel(id, false).then((ok) => {
       if (ok) return;
-      setDraftModelId(prev);
+      setDraftCurrentModelId(prev);
     });
   };
 
@@ -1371,7 +1371,7 @@ export function createAIChatContextValue(): AIChatContextValue {
   const [creatingThread, setCreatingThread] = createSignal(false);
 
   const createThread = async (opts?: { executionMode?: ExecutionMode }): Promise<ThreadView> => {
-    const modelID = String(selectedDefaultModel() ?? '').trim();
+    const modelID = String(selectedCurrentModel() ?? '').trim();
     const body: any = { title: '' };
     if (modelID) body.model_id = modelID;
     if (opts?.executionMode) body.execution_mode = normalizeExecutionMode(opts.executionMode);
@@ -1468,8 +1468,8 @@ export function createAIChatContextValue(): AIChatContextValue {
     aiEnabled,
     models,
     modelsReady,
-    selectedDefaultModel,
-    selectDefaultModel,
+    selectedCurrentModel,
+    selectCurrentModel,
     selectedThreadModel,
     selectThreadModel,
     selectedSendModel,

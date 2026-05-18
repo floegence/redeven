@@ -83,7 +83,7 @@ The wire model id remains:
 <provider_id>/<model_name>
 ```
 
-Models are stored under each provider in `config.json`, while `current_model_id` lives at the AI root and determines the default model for new chats.
+Models are stored under each provider in `config.json`, while `current_model_id` lives at the AI root and determines the current model used when a new chat thread is created.
 
 Important rules:
 
@@ -137,10 +137,10 @@ For each run the Go runtime:
 
 When Redeven Desktop opens an SSH Host Environment, Flower may have two independent model sources:
 
-- `Remote runtime`: the SSH host runtime's own persisted Flower settings.
+- `Runtime config`: the current runtime's own persisted Flower settings.
 - `Desktop`: the user's Desktop Local Environment model settings, exposed through a short-lived Desktop Model Source RPC session.
 
-The user can choose either source whenever that source has at least one usable model. Env App hides a source when it is unavailable, and switching a thread model still updates only that thread's `model_id`.
+The user can choose any usable model returned by the runtime. Env App does not expose model-source labels as persistent chat-header copy; it only marks models backed by Desktop Model Source RPC with a lightweight `REMOTE` tag.
 
 This is deliberately different from copying settings to the SSH host:
 
@@ -158,16 +158,17 @@ The API response field `ai_runtime.desktop_model_source` reports the `Desktop` s
 Current Runtime Settings UI behavior is:
 
 - Flower lives under Runtime Settings -> `AI & Extensions` as its own card, while permission policy and diagnostics stay in separate top-level groups.
-- On SSH Host sessions, the Flower card separates persisted `Remote runtime` provider settings from the `Desktop` source session capability.
-- When both `Remote runtime` and `Desktop` have usable models, the chat header shows a source selector before the model selector.
-- When only one model source has usable models, the chat header shows only the model selector for that source.
+- On SSH Host sessions, the Flower card separates persisted remote runtime provider settings from the Desktop source session capability.
+- The chat header shows a single `MODEL` control. It does not show model-source or tools-location summary badges.
+- When the selected model is served through Desktop Model Source RPC, the chat header shows a `REMOTE` tag. Its tooltip explains that AI requests are handled by Desktop while files, terminal, Git, and workspace actions still run in the current environment.
+- When the selected model uses the current environment runtime's own AI config, the chat header shows no source tag.
 - Add Provider generates a provider id automatically.
 - Provider id is shown as read-only.
 - API keys are stored locally and shown only as status (`Key set` / `Key not set`).
 - Web search controls are shown only inside OpenAI-compatible provider editing.
 - Native providers show built-in web-search status only; they do not show Brave or hosted-search configuration.
 - Models are configured inside each provider entry.
-- In a draft chat with no active thread, the chat model picker updates `current_model_id` immediately for future new chats.
+- In a draft chat with no active thread, the chat model picker updates `current_model_id` immediately for future thread creation.
 - In an active unlocked thread, the chat model picker updates only that thread's `model_id`.
 - Locked threads show the current thread model as read-only instead of as an editable picker.
 

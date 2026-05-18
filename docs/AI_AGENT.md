@@ -49,7 +49,7 @@ Enable Flower by adding an `ai` section to the runtime config file (default Loca
 The core runtime contract is:
 
 - Providers own their allowed model list in `ai.providers[].models[]`.
-- `ai.current_model_id` selects the default model for new chats.
+- `ai.current_model_id` selects the current model used when a new chat thread is created.
 - The wire model id remains `<provider_id>/<model_name>`, and each thread stores its own `model_id`.
 - Provider API keys are stored in the Local Environment state's `secrets.json`, never in `config.json`, and are never returned to the browser in plaintext.
 - For Desktop-managed SSH Host and container sessions, the remote runtime can use a short-lived Desktop Model Source RPC source without copying the Desktop Local Environment's `ai` config or secrets onto the remote target.
