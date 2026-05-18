@@ -205,6 +205,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   managed_runtime_placement_target_id?: DesktopRuntimeTargetID;
   managed_runtime_host_access?: DesktopRuntimeHostAccess;
   managed_runtime_placement?: DesktopRuntimePlacement;
+  managed_runtime_open_connection_required?: boolean;
   provider_linked_runtime_summary?: Readonly<{
     runtime_target_id: DesktopProviderRuntimeLinkTargetID;
     runtime_kind: DesktopProviderRuntimeLinkTarget['kind'];

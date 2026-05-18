@@ -230,6 +230,7 @@ function localRuntimePresence(
       placement: presence.placement,
       running: presence.running,
       openable: presence.openable,
+      open_connection_required: presence.open_connection_required,
       runtime_service: presence.runtime_service,
       runtime_control_status: presence.runtime_control_status,
       maintenance: presence.maintenance,
@@ -728,6 +729,70 @@ describe('buildEnvironmentCardModel', () => {
         }),
       ]),
     });
+  });
+
+  it('shows ready-to-open for a container runtime prepared by Start runtime but not yet opened', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment(),
+      }),
+      managedRuntimePresenceByTargetID: {
+        'local:local': localRuntimePresence(undefined, {
+          placement_target_id: 'local:container:docker:redeven-nginx-dev:63ce185e',
+          placement: {
+            kind: 'container_process',
+            container_engine: 'docker',
+            container_id: '63ce185e',
+            container_ref: 'redeven-nginx-dev',
+            container_label: 'redeven-nginx-dev',
+            runtime_root: '/root/.redeven',
+            bridge_strategy: 'exec_stream',
+          },
+          running: true,
+          local_ui_url: '',
+          openable: false,
+          open_connection_required: true,
+          runtime_control_status: {
+            state: 'missing',
+            reason_code: 'forward_unavailable',
+            message: 'Open this runtime to prepare the Desktop bridge and provider connection.',
+          },
+        }),
+      },
+    });
+    const localEntry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
+    const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);
+
+    expect(localEntry).toMatchObject({
+      managed_runtime_open_connection_required: true,
+      provider_runtime_link_target: expect.objectContaining({
+        runtime_running: true,
+        runtime_openable: false,
+        blocked_reason_code: 'runtime_control_missing',
+        blocked_reason: 'Open this runtime to prepare the Desktop bridge and provider connection.',
+      }),
+    });
+    expect(actionModel).toMatchObject({
+      status_label: 'READY TO OPEN',
+      status_tone: 'success',
+      action_presentation: {
+        primary_action: {
+          intent: 'open',
+          label: 'Open',
+          enabled: true,
+        },
+        primary_action_overlay: undefined,
+      },
+    });
+    expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'provider_link_unavailable',
+        action: expect.objectContaining({
+          intent: 'unavailable',
+          enabled: false,
+        }),
+      }),
+    ]));
   });
 
   it('offers Update runtime when a stopped container target has a stale runtime package', () => {

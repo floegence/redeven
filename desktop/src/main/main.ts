@@ -444,6 +444,7 @@ type SavedRuntimeTargetState = Readonly<{
   running: boolean;
   startup?: StartupReport;
   local_ui_url: string;
+  open_connection_required?: boolean;
   runtime_service?: RuntimeServiceSnapshot;
   runtime_control_status: DesktopRuntimeControlStatus;
   maintenance?: DesktopRuntimeMaintenanceRequirement;
@@ -1233,6 +1234,7 @@ function managedRuntimePresence(args: Readonly<{
   placement: DesktopRuntimePlacement;
   running: boolean;
   localUIURL: string;
+  openConnectionRequired?: boolean;
   runtimeService?: RuntimeServiceSnapshot;
   runtimeControlStatus: DesktopRuntimeControlStatus;
   maintenance?: DesktopRuntimeMaintenanceRequirement;
@@ -1240,6 +1242,7 @@ function managedRuntimePresence(args: Readonly<{
   const runtimeService = args.runtimeService ? normalizeRuntimeServiceSnapshot(args.runtimeService) : undefined;
   const runtimePackageState = desktopRuntimePackageStateFromRuntimeService(runtimeService, args.maintenance);
   const openable = runtimeServiceIsOpenable(runtimeService);
+  const openConnectionRequired = args.openConnectionRequired === true;
   return {
     target_id: args.targetID,
     placement_target_id: args.placementTargetID,
@@ -1252,6 +1255,7 @@ function managedRuntimePresence(args: Readonly<{
     running: args.running,
     local_ui_url: args.localUIURL,
     openable,
+    ...(openConnectionRequired ? { open_connection_required: true } : {}),
     ...(runtimePackageState ? { runtime_package_state: runtimePackageState } : {}),
     ...(runtimeService ? { runtime_service: runtimeService } : {}),
     runtime_control_status: args.runtimeControlStatus,
@@ -1261,6 +1265,7 @@ function managedRuntimePresence(args: Readonly<{
       placement: args.placement,
       running: args.running,
       openable,
+      open_connection_required: openConnectionRequired,
       package_state: runtimePackageState,
       runtime_service: runtimeService,
       runtime_control_status: args.runtimeControlStatus,
@@ -1291,6 +1296,7 @@ async function inspectSavedRuntimeTargetState(
     return {
       running: true,
       local_ui_url: '',
+      open_connection_required: true,
       runtime_control_status: desktopRuntimeControlStatusMissing(
         'forward_unavailable',
         'Open this runtime to prepare the Desktop bridge and provider connection.',
@@ -1414,6 +1420,7 @@ async function currentManagedRuntimePresenceByTargetID(
       placement,
       running: targetState.running,
       localUIURL: targetState.local_ui_url,
+      openConnectionRequired: targetState.open_connection_required === true,
       runtimeService: targetState.runtime_service,
       runtimeControlStatus: targetState.runtime_control_status,
       maintenance: targetState.maintenance,

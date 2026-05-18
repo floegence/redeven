@@ -28,6 +28,7 @@ export type DesktopRuntimeOperationPlannerInput = Readonly<{
   placement?: DesktopRuntimePlacement;
   running: boolean;
   openable: boolean;
+  open_connection_required?: boolean;
   package_state?: DesktopRuntimePackageState;
   runtime_service?: RuntimeServiceSnapshot;
   runtime_control_status?: DesktopRuntimeControlStatus;
@@ -111,10 +112,13 @@ export function buildDesktopRuntimeOperationPlans(
   const restartMaintenance = maintenance?.kind === 'ssh_runtime_restart_required';
   const updateMaintenance = maintenance?.kind === 'ssh_runtime_update_required'
     || maintenance?.kind === 'desktop_model_source_requires_runtime_update';
+  const openConnectionRequired = input.open_connection_required === true;
   const managementBlocked = input.runtime_control_status?.state === 'missing'
-    && input.runtime_control_status.reason_code === 'forward_unavailable';
+    && input.runtime_control_status.reason_code === 'forward_unavailable'
+    && !openConnectionRequired;
   const blockedByUpdate = requiresUpdate || updateMaintenance;
-  const openAvailability = input.running && input.openable && !blockedByUpdate && !restartMaintenance
+  const canOpen = input.openable || openConnectionRequired;
+  const openAvailability = input.running && canOpen && !blockedByUpdate && !restartMaintenance
     ? 'available'
     : 'blocked';
   const openMessage = managementBlocked
@@ -125,7 +129,7 @@ export function buildDesktopRuntimeOperationPlans(
       ? updateRequiredMessage(input.package_state)
       : restartMaintenance
         ? maintenance.message
-        : input.openable
+        : canOpen
           ? undefined
           : 'Runtime is not ready to open yet.';
 

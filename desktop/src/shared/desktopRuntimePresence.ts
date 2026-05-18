@@ -37,6 +37,7 @@ export type DesktopManagedRuntimePresence = Readonly<{
   running: boolean;
   local_ui_url: string;
   openable: boolean;
+  open_connection_required?: boolean;
   runtime_package_state?: DesktopRuntimePackageState;
   runtime_service?: RuntimeServiceSnapshot;
   runtime_control_status: DesktopRuntimeControlStatus;
