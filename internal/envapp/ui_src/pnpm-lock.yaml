@@ -25,14 +25,14 @@ importers:
         specifier: ^0.0.5
         version: 0.0.5
       '@floegence/floe-webapp-boot':
-        specifier: ^0.36.49
-        version: 0.36.49
+        specifier: ^0.36.50
+        version: 0.36.50
       '@floegence/floe-webapp-core':
-        specifier: ^0.36.49
-        version: 0.36.49(solid-js@1.9.11)
+        specifier: ^0.36.50
+        version: 0.36.50(solid-js@1.9.11)
       '@floegence/floe-webapp-protocol':
-        specifier: ^0.36.49
-        version: 0.36.49(solid-js@1.9.11)
+        specifier: ^0.36.50
+        version: 0.36.50(solid-js@1.9.11)
       '@floegence/floeterm-terminal-web':
         specifier: ^0.5.1
         version: 0.5.1
@@ -489,16 +489,16 @@ packages:
   '@fast-csv/parse@4.3.6':
     resolution: {integrity: sha512-uRsLYksqpbDmWaSmzvJcuApSEe38+6NQZBUsuAyMZKqHxH0g1wcJgsKUvN3WC8tewaqFjBMMGrkHmC+T7k8LvA==}
 
-  '@floegence/floe-webapp-boot@0.36.49':
-    resolution: {integrity: sha512-EtwWC81f2roYripJ/2tpZx6n1VKu1Kf09H/D0HR4EEM1oXMQhBfNha14Ld/fSdbd4Krpf/8ER0v2PmawI82dGg==}
+  '@floegence/floe-webapp-boot@0.36.50':
+    resolution: {integrity: sha512-kinjAH1gk8KM4sCGyp0654BdhZBKf2k1tkICcuA1fX0P8tHHn4ygCfmU7BovO2kW/fq0NhnrvUnJTx/803daHQ==}
 
-  '@floegence/floe-webapp-core@0.36.49':
-    resolution: {integrity: sha512-4JSJlg1dEpBHq39REsvdTp+ruyX6cJIhu1Bak10Ll42BgRGIv4lwO/kxJ9+0RRwhThLibsVC7r6xGeOSYq8vOw==}
+  '@floegence/floe-webapp-core@0.36.50':
+    resolution: {integrity: sha512-v4Jbp9M18dueGzVHG5hD+amkS8jCZcNa9JQUC4SOTFK3MSoUswSLzUjLakScos1tG1MMvceMLVL9CFM3FGwRYQ==}
     peerDependencies:
       solid-js: ^1.8.0
 
-  '@floegence/floe-webapp-protocol@0.36.49':
-    resolution: {integrity: sha512-guBwS8Qu5RA4v8OdJ936R9vPr5vCXjeRlHfXTQ/Hbpnr5k3pOMkzISJmhCuz46kCmeyP07oYSoEf0eAgI388cw==}
+  '@floegence/floe-webapp-protocol@0.36.50':
+    resolution: {integrity: sha512-LYCdgBunAvhmfwpbrasGV+siJptDl5Ek4PRJevEmpna9nq9NjOrBnw1sXBKRRlLuySVK30F/D1zaKIq53FZ00A==}
     peerDependencies:
       solid-js: ^1.8.0
 
@@ -2511,8 +2511,8 @@ packages:
   symbol-tree@3.2.4:
     resolution: {integrity: sha512-9QNk5KwDF+Bvz+PyObkmSYjI5ksVUYtjW7AU22r2NKcfLJcXp96hkDWU3+XndOsUb+AQ9QhfzfCT2O+CNWT5Tw==}
 
-  tailwind-merge@3.5.0:
-    resolution: {integrity: sha512-I8K9wewnVDkL1NTGoqWmVEIlUcB9gFriAEkXkfCjX5ib8ezGxtR3xD7iZIxrfArjEsH7F1CHD4RFUtxefdqV/A==}
+  tailwind-merge@3.6.0:
+    resolution: {integrity: sha512-uxL7qAVQriqRQPAyK3pj66VqskWqoZ37PW94jwOTwNfq/z9oyu1V+eqrZqtR2+fCiXdYOZe/Modt8GtvqNzu+w==}
 
   tailwindcss@4.1.18:
     resolution: {integrity: sha512-4+Z+0yiYyEtUVCScyfHCxOYP06L5Ne+JiHhY2IjR2KWMIWhJOYZKLSGZaP5HkZ8+bY0cxfzwDE5uOmzFXyIwxw==}
@@ -3112,14 +3112,14 @@ snapshots:
       lodash.isundefined: 3.0.1
       lodash.uniq: 4.5.0
 
-  '@floegence/floe-webapp-boot@0.36.49':
+  '@floegence/floe-webapp-boot@0.36.50':
     dependencies:
       '@floegence/flowersec-core': 0.19.4
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/floe-webapp-core@0.36.49(solid-js@1.9.11)':
+  '@floegence/floe-webapp-core@0.36.50(solid-js@1.9.11)':
     dependencies:
       clsx: 2.1.1
       diff: 8.0.3
@@ -3129,9 +3129,9 @@ snapshots:
       shiki: 3.22.0
       solid-js: 1.9.11
       solid-motionone: 1.0.4(solid-js@1.9.11)
-      tailwind-merge: 3.5.0
+      tailwind-merge: 3.6.0
 
-  '@floegence/floe-webapp-protocol@0.36.49(solid-js@1.9.11)':
+  '@floegence/floe-webapp-protocol@0.36.50(solid-js@1.9.11)':
     dependencies:
       '@floegence/flowersec-core': 0.19.4
       solid-js: 1.9.11
@@ -5212,7 +5212,7 @@ snapshots:
 
   symbol-tree@3.2.4: {}
 
-  tailwind-merge@3.5.0: {}
+  tailwind-merge@3.6.0: {}
 
   tailwindcss@4.1.18: {}
 
