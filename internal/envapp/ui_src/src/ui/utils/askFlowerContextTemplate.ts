@@ -16,9 +16,11 @@ function sanitizeFenceContent(content: string): string {
 
 function buildContextSection(item: AskFlowerContextItem): string {
   if (item.kind === 'file_path') {
+    const rootLabel = String(item.rootLabel ?? '').trim();
+    const rootSuffix = rootLabel ? ` (root: ${rootLabel})` : '';
     return item.isDirectory
-      ? `- Directory path: \`${item.path}\``
-      : `- File path: \`${item.path}\``;
+      ? `- Directory path${rootSuffix}: \`${item.path}\``
+      : `- File path${rootSuffix}: \`${item.path}\``;
   }
 
   if (item.kind === 'file_selection') {

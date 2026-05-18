@@ -6,7 +6,7 @@ import type {
   FileItem,
   FileBrowserRevealRequest,
 } from '@floegence/floe-webapp-core/file-browser';
-import { isWithinAbsolutePath, normalizeAbsolutePath } from './askFlowerPath';
+import { normalizeAbsolutePath } from './askFlowerPath';
 
 function normalizeDisplayPath(path: string): string {
   const raw = String(path ?? '').trim();
@@ -20,33 +20,14 @@ function normalizeDisplayPath(path: string): string {
   return collapsed.endsWith('/') ? collapsed.replace(/\/+$/, '') || '/' : collapsed;
 }
 
-export function toFileBrowserDisplayPath(pathAbs: string, rootPathAbs?: string | null): string {
+export function toFileBrowserDisplayPath(pathAbs: string, _rootPathAbs?: string | null): string {
   const normalizedPath = normalizeAbsolutePath(pathAbs);
-  const normalizedRoot = normalizeAbsolutePath(rootPathAbs ?? '');
-
-  if (!normalizedRoot) {
-    return normalizeDisplayPath(normalizedPath || pathAbs);
-  }
-  if (!normalizedPath || !isWithinAbsolutePath(normalizedPath, normalizedRoot)) {
-    return '/';
-  }
-  if (normalizedPath === normalizedRoot) {
-    return '/';
-  }
-  return normalizeDisplayPath(normalizedPath.slice(normalizedRoot.length));
+  return normalizeDisplayPath(normalizedPath || pathAbs);
 }
 
-export function toFileBrowserAbsolutePath(displayPath: string, rootPathAbs?: string | null): string {
-  const normalizedRoot = normalizeAbsolutePath(rootPathAbs ?? '');
+export function toFileBrowserAbsolutePath(displayPath: string, _rootPathAbs?: string | null): string {
   const normalizedDisplay = normalizeDisplayPath(displayPath);
-
-  if (!normalizedRoot) {
-    return normalizeAbsolutePath(normalizedDisplay);
-  }
-  if (normalizedDisplay === '/') {
-    return normalizedRoot;
-  }
-  return normalizeAbsolutePath(`${normalizedRoot}${normalizedDisplay}`);
+  return normalizeAbsolutePath(normalizedDisplay);
 }
 
 export function mapFileItemToDisplayPath(item: FileItem, rootPathAbs?: string | null): FileItem {

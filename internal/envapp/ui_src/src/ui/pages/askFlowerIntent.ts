@@ -9,6 +9,7 @@ export type AskFlowerContextItem =
       kind: 'file_path';
       path: string;
       isDirectory: boolean;
+      rootLabel?: string;
     }
   | {
       kind: 'file_selection';

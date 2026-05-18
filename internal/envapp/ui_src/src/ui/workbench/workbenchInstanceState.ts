@@ -38,6 +38,7 @@ export type WorkbenchOpenFileBrowserRequest = Readonly<{
   widgetId: string;
   path: string;
   homePath?: string;
+  rootId?: string;
   title?: string;
 }>;
 

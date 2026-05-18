@@ -39,11 +39,20 @@ type promptWorkspaceContext struct {
 type promptEnvironmentFacts struct {
 	WorkingDir              string
 	AgentHomeDir            string
+	FilesystemRoots         []promptFilesystemRootFact
 	Shell                   string
 	UserInteractionEnabled  bool
 	ToolApprovalEnabled     bool
 	DangerousCommandBlocked bool
 	SubagentDelegation      bool
+}
+
+type promptFilesystemRootFact struct {
+	ID    string
+	Label string
+	Path  string
+	Read  bool
+	Write bool
 }
 
 type promptRepositoryState struct {
@@ -108,6 +117,19 @@ func collectPromptEnvironmentFacts(r *run, capability runCapabilityContract) pro
 	}
 	out.WorkingDir = promptWorkingDirForRun(r)
 	out.AgentHomeDir = strings.TrimSpace(r.agentHomeDir)
+	if r.scope != nil {
+		ctx := r.scope.PathContext()
+		out.FilesystemRoots = make([]promptFilesystemRootFact, 0, len(ctx.Roots))
+		for _, root := range ctx.Roots {
+			out.FilesystemRoots = append(out.FilesystemRoots, promptFilesystemRootFact{
+				ID:    strings.TrimSpace(root.ID),
+				Label: strings.TrimSpace(root.Label),
+				Path:  strings.TrimSpace(root.PathAbs),
+				Read:  root.Permissions.Read,
+				Write: root.Permissions.Write,
+			})
+		}
+	}
 	out.Shell = strings.TrimSpace(r.shell)
 	if r.cfg != nil {
 		out.ToolApprovalEnabled = r.cfg.EffectiveRequireUserApproval()
@@ -464,6 +486,27 @@ func renderPromptEnvironmentFactsLines(env promptEnvironmentFacts) []string {
 	}
 	if home := strings.TrimSpace(env.AgentHomeDir); home != "" {
 		lines = append(lines, fmt.Sprintf("- Runtime home: %s", home))
+	}
+	if len(env.FilesystemRoots) > 0 {
+		rootParts := make([]string, 0, len(env.FilesystemRoots))
+		for _, root := range env.FilesystemRoots {
+			path := strings.TrimSpace(root.Path)
+			if path == "" {
+				continue
+			}
+			label := strings.TrimSpace(root.Label)
+			if label == "" {
+				label = strings.TrimSpace(root.ID)
+			}
+			access := "read-only"
+			if root.Write {
+				access = "read-write"
+			}
+			rootParts = append(rootParts, fmt.Sprintf("%s=%s (%s)", label, path, access))
+		}
+		if len(rootParts) > 0 {
+			lines = append(lines, fmt.Sprintf("- Filesystem roots: %s", strings.Join(rootParts, "; ")))
+		}
 	}
 	lines = append(lines,
 		fmt.Sprintf("- Mutating tool approval required: %t", env.ToolApprovalEnabled),

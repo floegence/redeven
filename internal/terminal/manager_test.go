@@ -11,6 +11,9 @@ import (
 
 	"github.com/creack/pty"
 	termgo "github.com/floegence/floeterm/terminal-go"
+	"github.com/floegence/flowersec/flowersec-go/rpc"
+	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/filesystemscope"
 )
 
 func mustEvalPath(t *testing.T, path string) string {
@@ -47,9 +50,22 @@ func TestResolveWorkingDir(t *testing.T) {
 		t.Fatalf("resolveWorkingDir(existing dir) = %q, want %q", got, sub)
 	}
 
-	if _, err := m.resolveWorkingDir("/../../.."); err == nil {
-		t.Fatalf("expected out-of-scope path to fail")
+	got, err = m.resolveWorkingDir("/")
+	if err != nil {
+		t.Fatalf("resolveWorkingDir(computer root) error: %v", err)
 	}
+	if got != "/" {
+		t.Fatalf("resolveWorkingDir(computer root) = %q, want /", got)
+	}
+}
+
+func mustTestFilesystemScope(t *testing.T, root string) *filesystemscope.Registry {
+	t.Helper()
+	scope, err := filesystemscope.NewDefaultRegistry(root)
+	if err != nil {
+		t.Fatalf("NewDefaultRegistry(%q): %v", root, err)
+	}
+	return scope
 }
 
 func TestCreateSessionStartsDormantWithoutColsRows(t *testing.T) {
@@ -77,6 +93,68 @@ func TestCreateSessionStartsDormantWithoutColsRows(t *testing.T) {
 	}
 	if got.ToSessionInfo().IsActive {
 		t.Fatalf("expected listed session info to stay inactive before attach")
+	}
+}
+
+func TestCreateSessionReportsWorkingDirErrors(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	m := newQuietTestManager(t, root)
+	t.Cleanup(func() {
+		m.Cleanup()
+	})
+
+	filePath := filepath.Join(root, "plain.txt")
+	if err := os.WriteFile(filePath, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q): %v", filePath, err)
+	}
+
+	homeOnlyScope, err := filesystemscope.NewRegistry(&config.Config{
+		AgentHomeDir: root,
+		FilesystemScope: &config.FilesystemScope{
+			SchemaVersion: config.FilesystemScopeSchemaVersionV1,
+			DefaultRootID: "home",
+			Roots: []config.FilesystemRootPolicy{
+				{
+					ID:          "home",
+					Label:       "Home",
+					Path:        root,
+					Kind:        config.FilesystemRootHome,
+					Permissions: config.FilesystemPermissionSet{Read: true, Write: true},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewRegistry() error = %v", err)
+	}
+	outsideManager := NewManagerWithScope(filepath.Join(root, "sleep-shell.sh"), homeOnlyScope, nil)
+	t.Cleanup(func() {
+		outsideManager.Cleanup()
+	})
+
+	tests := []struct {
+		name    string
+		manager *Manager
+		path    string
+		code    uint32
+		message string
+	}{
+		{name: "outside scope", manager: outsideManager, path: outside, code: 403, message: "working_dir outside filesystem scope"},
+		{name: "not found", manager: m, path: filepath.Join(root, "missing"), code: 404, message: "working_dir not found"},
+		{name: "not directory", manager: m, path: filePath, code: 400, message: "working_dir is not a directory"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := tt.manager.createSession("test", tt.path)
+			rpcErr, ok := err.(*rpc.Error)
+			if !ok {
+				t.Fatalf("createSession() error = %#v, want rpc error", err)
+			}
+			if rpcErr.Code != tt.code || rpcErr.Message != tt.message {
+				t.Fatalf("createSession() error = (%d, %q), want (%d, %q)", rpcErr.Code, rpcErr.Message, tt.code, tt.message)
+			}
+		})
 	}
 }
 

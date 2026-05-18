@@ -29,6 +29,7 @@ Notes:
 - `write` does NOT imply `execute`, and vice versa.
 - `execute=true` does NOT mean "read-only": terminal commands can still mutate files even when `write=false`. For strict read-only, require `write=false` **and** `execute=false`.
 - `admin` is a separate capability dimension from RWX.
+- Filesystem paths are additionally constrained by `filesystem_scope`. RWX grants choose the capability class; `filesystem_scope` chooses the exposed roots and root-level read/write policy.
 - Runtime-local AI uploads live under the runtime state directory rather than the workspace tree, but deleting threads/followups may reclaim those upload blobs and SQLite metadata as destructive runtime-local cleanup.
 - UIs should treat permission denials as a normal capability state (not an exceptional error): when a capability is not granted (or is locally capped by `permission_policy`), stop polling and show a permission empty state.
 - Agent Skills target discovery is metadata-only. `redeven targets list` and `redeven targets resolve` read local config/runtime state and do not grant file, terminal, monitor, Flower, Codex, or gateway access by themselves.
@@ -55,13 +56,28 @@ The customer-side runtime is not a control-plane authorization boundary: users c
 
 See also: [`PERMISSION_POLICY.md`](PERMISSION_POLICY.md).
 
+## Filesystem Scope
+
+The runtime exposes a structured path context through `fs.get_path_context`:
+
+- `home_path_abs`: the real absolute path used for `~`.
+- `default_root_id`: the root opened by default.
+- `roots[]`: ordered root policies with `id`, `label`, `path_abs`, `kind`, `permissions.read`, `permissions.write`, and `system`.
+
+Default roots are:
+
+- `Home`: writable, derived from `agent_home_dir` or the host user's home directory.
+- `Computer`: read-only, the operating-system filesystem root (`/` on Unix/macOS; platform-adapted on Windows).
+
+Custom roots may be added from Runtime Settings. File Browser, Git, Flower tools, Terminal working-directory validation, and Code App workspace resolution all use the same registry. Read-only roots disable UI mutation affordances, but server-side RPC handlers still perform the final root permission check.
+
 ## Data-Plane Capabilities
 
 ### RPC (Yamux stream kind: `rpc`)
 
 | Domain | Capability | RPC type_id | Required permission | Source |
 | --- | --- | ---: | --- | --- |
-| FS | Get home | `1010` | `read` | `internal/fs/service.go` |
+| FS | Get path context | `1010` | `read` | `internal/fs/service.go` |
 | FS | List directory | `1001` | `read` | `internal/fs/service.go` |
 | FS | Read file (JSON) | `1002` | `read` | `internal/fs/service.go` |
 | FS | Write file | `1003` | `write` | `internal/fs/service.go` |

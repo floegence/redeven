@@ -11,6 +11,7 @@ import (
 	"github.com/floegence/flowersec/flowersec-go/framing/jsonframe"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/accessgate"
+	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -92,6 +93,26 @@ func (s *Service) ServeReadFileStreamWithAccessGate(ctx context.Context, stream 
 
 	realPath, _, err := s.resolveReadableFilePath(req.Path)
 	if err != nil {
+		if errors.Is(err, filesystemscope.ErrPathOutsideScope) {
+			_ = jsonframe.WriteJSONFrame(stream, fsReadFileStreamRespMeta{
+				Ok: false,
+				Error: &fsStreamError{
+					Code:    403,
+					Message: "path outside filesystem scope",
+				},
+			})
+			return
+		}
+		if errors.Is(err, filesystemscope.ErrReadDenied) {
+			_ = jsonframe.WriteJSONFrame(stream, fsReadFileStreamRespMeta{
+				Ok: false,
+				Error: &fsStreamError{
+					Code:    403,
+					Message: "read permission denied",
+				},
+			})
+			return
+		}
 		if os.IsNotExist(err) {
 			_ = jsonframe.WriteJSONFrame(stream, fsReadFileStreamRespMeta{
 				Ok: false,

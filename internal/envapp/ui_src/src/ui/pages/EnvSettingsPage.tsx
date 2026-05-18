@@ -6,9 +6,11 @@ import {
   FileCode,
   Globe,
   Layers,
+  Plus,
   RefreshIcon,
   Shield,
   Terminal,
+  Trash,
   Zap,
 } from '@floegence/floe-webapp-core/icons';
 import { Sidebar, SidebarContent, SidebarItem, SidebarItemList, SidebarSection } from '@floegence/floe-webapp-core/layout';
@@ -25,6 +27,9 @@ import {
   runtimeMaintenanceMethodUsesDesktop,
 } from '../services/desktopShellBridge';
 import { fetchGatewayJSON } from '../services/gatewayApi';
+import {
+  normalizeFilesystemScopeDraft,
+} from '../services/filesystemScopeSettings';
 import {
   cancelCodeRuntimeOperation,
   codeRuntimeOperationNeedsAttention,
@@ -96,6 +101,8 @@ import type {
   AIProviderWebSearchMode,
   AIPreservedUIFields,
   CodexHostStatus,
+  FilesystemRootPolicy,
+  FilesystemScope,
   PermissionPolicy,
   PermissionRow,
   PermissionSet,
@@ -121,6 +128,53 @@ import type {
 const DEFAULT_CODE_SERVER_PORT_MIN = 20000;
 const DEFAULT_CODE_SERVER_PORT_MAX = 21000;
 const AUTO_SAVE_DELAY_MS = 700;
+
+function runtimeFilesystemRoots(agentHomeDir: string, scope: FilesystemScope | null): readonly FilesystemRootPolicy[] {
+  if (scope?.roots?.length) return scope.roots;
+  const home = String(agentHomeDir ?? '').trim();
+  return [
+    {
+      id: 'home',
+      label: 'Home',
+      path: home || '~',
+      kind: 'home',
+      permissions: { read: true, write: true },
+      system: true,
+    },
+    {
+      id: 'computer',
+      label: 'Computer',
+      path: '/',
+      kind: 'computer',
+      permissions: { read: true, write: false },
+      system: true,
+    },
+  ];
+}
+
+function cloneFilesystemRoot(root: FilesystemRootPolicy): FilesystemRootPolicy {
+  return {
+    id: String(root.id ?? ''),
+    label: String(root.label ?? ''),
+    path: String(root.path ?? ''),
+    kind: root.kind,
+    permissions: {
+      read: Boolean(root.permissions?.read),
+      write: Boolean(root.permissions?.write),
+    },
+    hidden: Boolean(root.hidden),
+    system: Boolean(root.system),
+  };
+}
+
+function nextCustomRootID(roots: readonly FilesystemRootPolicy[]): string {
+  const ids = new Set(roots.map((root) => String(root.id ?? '').trim()).filter(Boolean));
+  for (let i = 1; i < 1000; i += 1) {
+    const candidate = i === 1 ? 'custom' : `custom-${i}`;
+    if (!ids.has(candidate)) return candidate;
+  }
+  return `custom-${Date.now()}`;
+}
 
 function formatSavedTime(unixMs: number | null): string {
   if (!unixMs) return '';
@@ -784,6 +838,8 @@ export function EnvSettingsPage() {
   // Runtime fields
   const [agentHomeDir, setAgentHomeDir] = createSignal('');
   const [shell, setShell] = createSignal('');
+  const [filesystemScope, setFilesystemScope] = createSignal<FilesystemScope | null>(null);
+  const [filesystemWriteConfirmTarget, setFilesystemWriteConfirmTarget] = createSignal<{ index: number; root: FilesystemRootPolicy } | null>(null);
 
   // Logging fields
   const [logFormat, setLogFormat] = createSignal('');
@@ -986,8 +1042,13 @@ export function EnvSettingsPage() {
 
   const configJSONText = createMemo(() => JSON.stringify({ config_path: configPath() || '' }, null, 2));
   const connectionJSONText = createMemo(() => JSON.stringify(settings()?.connection ?? null, null, 2));
+  const filesystemRootRows = createMemo(() => runtimeFilesystemRoots(agentHomeDir(), filesystemScope()));
 
-  const buildRuntimePatch = () => ({ agent_home_dir: String(agentHomeDir() ?? ''), shell: String(shell() ?? '') });
+  const buildRuntimePatch = () => ({
+    agent_home_dir: String(agentHomeDir() ?? ''),
+    shell: String(shell() ?? ''),
+    filesystem_scope: filesystemScope(),
+  });
   const buildLoggingPatch = () => ({ log_format: String(logFormat() ?? ''), log_level: String(logLevel() ?? '') });
   const buildCodespacesPatch = () => {
     if (useDefaultCodePorts()) return { code_server_port_min: 0, code_server_port_max: 0 };
@@ -1335,6 +1396,65 @@ export function EnvSettingsPage() {
     } catch {
       // Best-effort only: the AI config UI should still work even if key status is unavailable.
     }
+  };
+
+  const updateFilesystemScopeRoots = (updater: (roots: FilesystemRootPolicy[]) => FilesystemRootPolicy[]) => {
+    const base = normalizeFilesystemScopeDraft(agentHomeDir(), filesystemScope());
+    const roots = updater(base.roots.map((root) => cloneFilesystemRoot(root)));
+    const defaultRootID = roots.some((root) => root.id === base.default_root_id)
+      ? base.default_root_id
+      : (roots.find((root) => root.id === 'home')?.id ?? roots[0]?.id ?? 'home');
+    setFilesystemScope({
+      ...base,
+      default_root_id: defaultRootID,
+      roots,
+    });
+    setRuntimeDirty(true);
+  };
+
+  const addFilesystemRoot = () => {
+    updateFilesystemScopeRoots((roots) => [
+      ...roots,
+      {
+        id: nextCustomRootID(roots),
+        label: 'Custom Root',
+        path: '',
+        kind: 'custom',
+        permissions: { read: true, write: false },
+        system: false,
+      },
+    ]);
+  };
+
+  const updateFilesystemRootAt = (index: number, updater: (root: FilesystemRootPolicy) => FilesystemRootPolicy) => {
+    updateFilesystemScopeRoots((roots) => roots.map((root, rowIndex) => (
+      rowIndex === index ? updater(cloneFilesystemRoot(root)) : root
+    )));
+  };
+
+  const requestFilesystemRootWriteChange = (index: number, root: FilesystemRootPolicy, value: boolean) => {
+    if (!value) {
+      updateFilesystemRootAt(index, (current) => ({
+        ...current,
+        permissions: { read: true, write: false },
+      }));
+      return;
+    }
+    setFilesystemWriteConfirmTarget({ index, root: cloneFilesystemRoot(root) });
+  };
+
+  const confirmFilesystemRootWriteAccess = () => {
+    const target = filesystemWriteConfirmTarget();
+    if (!target) return;
+    updateFilesystemRootAt(target.index, (current) => ({
+      ...current,
+      permissions: { read: true, write: true },
+    }));
+    setFilesystemWriteConfirmTarget(null);
+  };
+
+  const removeFilesystemRootAt = (index: number) => {
+    updateFilesystemScopeRoots((roots) => roots.filter((root, rowIndex) => rowIndex !== index || root.system));
   };
 
   const updateAIProviderKey = async (providerID: string, apiKey: string | null) => {
@@ -1971,7 +2091,12 @@ export function EnvSettingsPage() {
       const r = s.runtime;
       setAgentHomeDir(String(r?.agent_home_dir ?? ''));
       setShell(String(r?.shell ?? ''));
-      setRuntimeJSON(JSON.stringify({ agent_home_dir: String(r?.agent_home_dir ?? ''), shell: String(r?.shell ?? '') }, null, 2));
+      setFilesystemScope(r?.filesystem_scope ?? null);
+      setRuntimeJSON(JSON.stringify({
+        agent_home_dir: String(r?.agent_home_dir ?? ''),
+        shell: String(r?.shell ?? ''),
+        filesystem_scope: r?.filesystem_scope ?? null,
+      }, null, 2));
     }
 
     if (!loggingDirty()) {
@@ -2120,6 +2245,7 @@ export function EnvSettingsPage() {
       }
       setAgentHomeDir(String((v as any).agent_home_dir ?? ''));
       setShell(String((v as any).shell ?? ''));
+      setFilesystemScope(((v as any).filesystem_scope ?? null) as FilesystemScope | null);
       setRuntimeView('ui');
     } catch (e) {
       setRuntimeError(e instanceof Error ? e.message : String(e));
@@ -2268,6 +2394,9 @@ export function EnvSettingsPage() {
   const buildRuntimeDraft = () => {
     const body = runtimeView() === 'json' ? parseJSONOrThrow(runtimeJSON()) : buildRuntimePatch();
     if (!isJSONObject(body)) throw new Error('Runtime JSON must be an object.');
+    if ((body as any).filesystem_scope == null) {
+      delete (body as any).filesystem_scope;
+    }
     return { body, signature: JSON.stringify(body) };
   };
 
@@ -3109,6 +3238,103 @@ export function EnvSettingsPage() {
                     </SettingsTableRow>
                   </SettingsTableBody>
                 </SettingsTable>
+                <SubSectionHeader
+                  title="Filesystem Roots"
+                  description="Directory-level file access exposed to Files, Git, Flower tools, and Code App."
+                  actions={
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      icon={Plus}
+                      onClick={() => addFilesystemRoot()}
+                      disabled={!canInteract()}
+                    >
+                      Add Root
+                    </Button>
+                  }
+                />
+                <SettingsTable minWidthClass="min-w-[58rem]">
+                  <SettingsTableHead>
+                    <SettingsTableHeaderRow>
+                      <SettingsTableHeaderCell class="w-52">Root</SettingsTableHeaderCell>
+                      <SettingsTableHeaderCell class="w-[22rem]">Path</SettingsTableHeaderCell>
+                      <SettingsTableHeaderCell class="w-36">Access</SettingsTableHeaderCell>
+                      <SettingsTableHeaderCell class="w-28">Type</SettingsTableHeaderCell>
+                      <SettingsTableHeaderCell class="w-24" align="right">Actions</SettingsTableHeaderCell>
+                    </SettingsTableHeaderRow>
+                  </SettingsTableHead>
+                  <SettingsTableBody>
+                    <For each={filesystemRootRows()}>
+                      {(root, index) => (
+                        <SettingsTableRow>
+                          <SettingsTableCell>
+                            <div class="space-y-1">
+                              <Input
+                                value={root.label || root.id}
+                                onInput={(event) => {
+                                  const value = event.currentTarget.value;
+                                  updateFilesystemRootAt(index(), (current) => ({ ...current, label: value }));
+                                }}
+                                size="sm"
+                                class="w-full"
+                                disabled={!canInteract() || root.system}
+                                aria-label={`Filesystem root ${index() + 1} label`}
+                              />
+                              <div class="font-mono text-[11px] text-muted-foreground">{root.id}</div>
+                            </div>
+                          </SettingsTableCell>
+                          <SettingsTableCell>
+                            <Input
+                              value={root.path}
+                              onInput={(event) => {
+                                const value = event.currentTarget.value;
+                                updateFilesystemRootAt(index(), (current) => ({ ...current, path: value }));
+                              }}
+                              placeholder="/path/to/folder"
+                              size="sm"
+                              class="w-full font-mono text-[11px]"
+                              disabled={!canInteract() || root.system}
+                              aria-label={`Filesystem root ${index() + 1} path`}
+                            />
+                          </SettingsTableCell>
+                          <SettingsTableCell>
+                            <div class="space-y-1.5">
+                              <SettingsPill tone={root.permissions?.write ? 'success' : 'warning'}>
+                                {root.permissions?.write ? 'Read/write' : 'Read-only'}
+                              </SettingsPill>
+                              <label class={`flex items-center gap-2 text-[11px] text-muted-foreground ${canInteract() && !root.system ? 'cursor-pointer' : ''}`}>
+                                <Checkbox
+                                  checked={Boolean(root.permissions?.write)}
+                                  onChange={(value) => requestFilesystemRootWriteChange(index(), root, Boolean(value))}
+                                  disabled={!canInteract() || root.system}
+                                />
+                                Allow writes
+                              </label>
+                            </div>
+                          </SettingsTableCell>
+                          <SettingsTableCell class="text-[11px] text-muted-foreground">
+                            {root.system ? 'System' : 'Custom'}
+                          </SettingsTableCell>
+                          <SettingsTableCell align="right">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              icon={Trash}
+                              title={root.system ? 'System roots cannot be removed' : 'Remove root'}
+                              aria-label={root.system ? 'System roots cannot be removed' : 'Remove filesystem root'}
+                              class={root.system ? 'opacity-40' : 'text-muted-foreground hover:text-destructive'}
+                              onClick={() => removeFilesystemRootAt(index())}
+                              disabled={!canInteract() || root.system}
+                            />
+                          </SettingsTableCell>
+                        </SettingsTableRow>
+                      )}
+                    </For>
+                  </SettingsTableBody>
+                </SettingsTable>
+                <div class="text-[11px] leading-relaxed text-muted-foreground">
+                  System roots are managed by the runtime. Custom roots require a manual restart after save; write access is explicit and still intersects with the runtime permission policy.
+                </div>
               </Show>
             </SettingsCard>
           </div>
@@ -4066,6 +4292,30 @@ export function EnvSettingsPage() {
           <p class="text-xs text-muted-foreground">Active work: {activeWorkSummary()}.</p>
           <p class="text-xs text-muted-foreground">You will reconnect automatically after the runtime comes back online.</p>
           <p class="text-xs text-muted-foreground">If the secure session needs to be verified again, this page will ask for the access password without a manual refresh.</p>
+        </div>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={Boolean(filesystemWriteConfirmTarget())}
+        onOpenChange={(open) => {
+          if (!open) setFilesystemWriteConfirmTarget(null);
+        }}
+        title="Allow filesystem writes?"
+        confirmText="Allow writes"
+        variant="destructive"
+        onConfirm={() => confirmFilesystemRootWriteAccess()}
+      >
+        <div class="space-y-3">
+          <p class="text-sm">This custom root will allow create, rename, overwrite, and delete operations from runtime file capabilities.</p>
+          <p class="text-xs text-muted-foreground break-all">
+            Root: {filesystemWriteConfirmTarget()?.root.label || filesystemWriteConfirmTarget()?.root.id || 'Custom Root'}
+          </p>
+          <p class="text-xs text-muted-foreground break-all">
+            Path: <span class="font-mono">{filesystemWriteConfirmTarget()?.root.path || '-'}</span>
+          </p>
+          <p class="text-xs text-muted-foreground">
+            The effective permission still intersects with the runtime permission policy and OS-level filesystem permissions.
+          </p>
         </div>
       </ConfirmDialog>
 

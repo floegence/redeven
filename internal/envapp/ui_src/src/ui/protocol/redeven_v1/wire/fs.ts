@@ -1,5 +1,26 @@
 export type wire_fs_get_path_context_req = Record<string, never>;
-export type wire_fs_get_path_context_resp = { agent_home_path_abs: string };
+export type wire_fs_root_kind = 'home' | 'computer' | 'custom';
+
+export type wire_fs_root = {
+  id: string;
+  label: string;
+  path?: string;
+  path_abs?: string;
+  kind: wire_fs_root_kind;
+  permissions: {
+    read: boolean;
+    write: boolean;
+  };
+  hidden?: boolean;
+  system?: boolean;
+};
+
+export type wire_fs_get_path_context_resp = {
+  agent_home_path_abs?: string;
+  home_path_abs?: string;
+  default_root_id?: string;
+  roots?: wire_fs_root[];
+};
 
 export type wire_fs_list_req = {
   path: string;

@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/ai/threadstore"
-	"github.com/floegence/redeven/internal/pathutil"
+	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -276,7 +276,7 @@ func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title st
 	if workingDir == "" {
 		workingDir = fallbackWorkingDir
 	}
-	workingDirClean, err := validateThreadWorkingDir(workingDir, strings.TrimSpace(s.agentHomeDir))
+	workingDirClean, err := validateThreadWorkingDir(workingDir, s.scope)
 	if err != nil {
 		return nil, err
 	}
@@ -335,21 +335,21 @@ func (s *Service) ValidateWorkingDir(workingDir string) (string, error) {
 	if workingDir == "" {
 		workingDir = fallbackWorkingDir
 	}
-	return validateThreadWorkingDir(workingDir, fallbackWorkingDir)
+	return validateThreadWorkingDir(workingDir, s.scope)
 }
 
-func validateThreadWorkingDir(workingDir string, agentHomeDir string) (string, error) {
+func validateThreadWorkingDir(workingDir string, scope *filesystemscope.Registry) (string, error) {
 	if strings.TrimSpace(workingDir) == "" {
 		return "", errors.New("missing working_dir")
 	}
-	resolved, err := pathutil.ResolveExistingScopedDir(workingDir, agentHomeDir)
+	resolved, err := scope.Resolve(workingDir, filesystemscope.ResolveOptions{RequireExisting: true, RequireDir: true})
 	if err != nil {
 		msg := strings.TrimSpace(err.Error())
 		switch {
 		case msg == "path must be absolute":
 			return "", errors.New("working_dir must be absolute")
-		case msg == "path escapes runtime home directory":
-			return "", errors.New("working_dir must stay within the runtime home directory")
+		case errors.Is(err, filesystemscope.ErrPathOutsideScope):
+			return "", errors.New("working_dir is outside the configured filesystem roots")
 		case errors.Is(err, os.ErrNotExist):
 			return "", errors.New("working_dir does not exist")
 		case msg == "path must be a directory":
@@ -358,7 +358,7 @@ func validateThreadWorkingDir(workingDir string, agentHomeDir string) (string, e
 			return "", errors.New("working_dir is not accessible")
 		}
 	}
-	return resolved, nil
+	return resolved.RealAbs, nil
 }
 
 func (s *Service) RenameThread(ctx context.Context, meta *session.Meta, threadID string, title string) error {

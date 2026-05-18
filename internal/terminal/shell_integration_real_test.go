@@ -198,6 +198,7 @@ func newShellLifecycleTestManagerWithRecorder(t *testing.T, root string, shellPa
 
 	manager := &Manager{
 		agentHomeAbs:     root,
+		scope:            mustTestFilesystemScope(t, root),
 		log:              logger,
 		writers:          make(map[*rpc.Server]*sinkWriter),
 		byServer:         make(map[*rpc.Server]map[string]string),

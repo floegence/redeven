@@ -62,8 +62,8 @@ function FilesWidget(props: RedevenWorkbenchWidgetBodyProps) {
         onTitleChange={(title) => {
           workbench.updateWidgetTitle(props.widgetId, title);
         }}
-        onCommittedPathChange={(path) => {
-          workbench.updateFileBrowserPath(props.widgetId, path);
+        onCommittedPathChange={(path, rootId) => {
+          workbench.updateFileBrowserPath(props.widgetId, path, rootId);
         }}
       />
     </div>

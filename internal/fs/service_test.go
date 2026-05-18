@@ -12,6 +12,8 @@ import (
 
 	"github.com/floegence/flowersec/flowersec-go/framing/jsonframe"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
+	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -116,8 +118,12 @@ func TestServiceResolve(t *testing.T) {
 		t.Fatalf("resolve(existing dir) = %q, want %q", p, child)
 	}
 
-	if _, err := s.resolveExistingDir("/../../.."); err == nil {
-		t.Fatalf("expected out-of-scope path to fail")
+	p, err = s.resolveExistingDir("/")
+	if err != nil {
+		t.Fatalf("resolve(computer root) error: %v", err)
+	}
+	if p != "/" {
+		t.Fatalf("resolve(computer root) = %q, want /", p)
 	}
 }
 
@@ -143,11 +149,11 @@ func TestServiceMkdirTarget(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects out of scope target", func(t *testing.T) {
+	t.Run("rejects read-only computer root target", func(t *testing.T) {
 		_, err := s.mkdirTarget("/../../outside", false)
 		rpcErr, ok := err.(*rpc.Error)
-		if !ok || rpcErr.Code != 400 {
-			t.Fatalf("expected rpc 400 error, got %#v", err)
+		if !ok || rpcErr.Code != 403 {
+			t.Fatalf("expected rpc 403 error, got %#v", err)
 		}
 	})
 
@@ -331,6 +337,67 @@ func TestServiceMutationsOperateOnSymlinkLeafs(t *testing.T) {
 	}
 	if _, err := os.Stat(targetFile); err != nil {
 		t.Fatalf("target file missing after delete: %v", err)
+	}
+}
+
+func TestServiceMutationsRequireWritableSourceRoot(t *testing.T) {
+	home := t.TempDir()
+	readonlyRoot := t.TempDir()
+	writableRoot := t.TempDir()
+	writeTestFile(t, filepath.Join(readonlyRoot, "source.txt"), "source")
+	writeTestFile(t, filepath.Join(readonlyRoot, "delete.txt"), "delete")
+	writeTestFile(t, filepath.Join(writableRoot, "source.txt"), "source")
+
+	scope, err := filesystemscope.NewRegistry(&config.Config{
+		AgentHomeDir: home,
+		FilesystemScope: &config.FilesystemScope{
+			SchemaVersion: config.FilesystemScopeSchemaVersionV1,
+			DefaultRootID: "write",
+			Roots: []config.FilesystemRootPolicy{
+				{
+					ID:          "read",
+					Label:       "Read",
+					Path:        readonlyRoot,
+					Kind:        config.FilesystemRootCustom,
+					Permissions: config.FilesystemPermissionSet{Read: true, Write: false},
+				},
+				{
+					ID:          "write",
+					Label:       "Write",
+					Path:        writableRoot,
+					Kind:        config.FilesystemRootCustom,
+					Permissions: config.FilesystemPermissionSet{Read: true, Write: true},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	svc := NewServiceWithScope(scope)
+
+	if err := svc.deleteEntry(filepath.Join(readonlyRoot, "source.txt"), false); !errors.Is(err, filesystemscope.ErrWriteDenied) {
+		t.Fatalf("deleteEntry(readonly source) error = %v, want %v", err, filesystemscope.ErrWriteDenied)
+	}
+	if _, err := svc.renameEntry(filepath.Join(readonlyRoot, "source.txt"), filepath.Join(writableRoot, "renamed.txt")); !errors.Is(err, filesystemscope.ErrWriteDenied) {
+		t.Fatalf("renameEntry(readonly source) error = %v, want %v", err, filesystemscope.ErrWriteDenied)
+	}
+	if _, err := svc.copyEntry(filepath.Join(readonlyRoot, "source.txt"), filepath.Join(writableRoot, "copied.txt"), false); err != nil {
+		t.Fatalf("copyEntry(readonly source to writable dest) error = %v", err)
+	}
+	if _, err := svc.resolveTargetPath(filepath.Join(readonlyRoot, "new.txt")); !errors.Is(err, filesystemscope.ErrWriteDenied) {
+		t.Fatalf("resolveTargetPath(readonly root) error = %v, want %v", err, filesystemscope.ErrWriteDenied)
+	}
+	if _, err := svc.mkdirTarget(filepath.Join(readonlyRoot, "new-dir"), false); err == nil {
+		t.Fatalf("mkdirTarget(readonly root) error = nil, want write denied")
+	} else if rpcErr, ok := err.(*rpc.Error); !ok || rpcErr.Code != 403 || rpcErr.Message != "write permission denied" {
+		t.Fatalf("mkdirTarget(readonly root) error = %#v, want rpc 403 write permission denied", err)
+	}
+	if _, err := svc.renameEntry(filepath.Join(writableRoot, "source.txt"), filepath.Join(readonlyRoot, "renamed.txt")); !errors.Is(err, filesystemscope.ErrWriteDenied) {
+		t.Fatalf("renameEntry(readonly destination) error = %v, want %v", err, filesystemscope.ErrWriteDenied)
+	}
+	if _, err := svc.copyEntry(filepath.Join(writableRoot, "source.txt"), filepath.Join(readonlyRoot, "copied.txt"), false); !errors.Is(err, filesystemscope.ErrWriteDenied) {
+		t.Fatalf("copyEntry(readonly destination) error = %v, want %v", err, filesystemscope.ErrWriteDenied)
 	}
 }
 

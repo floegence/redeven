@@ -8,6 +8,7 @@ describe('filePathAskFlower', () => {
         {
           path: '/workspace/demo',
           isDirectory: true,
+          rootLabel: 'Workspace',
         },
       ],
       fallbackWorkingDirAbs: '/workspace',
@@ -23,6 +24,7 @@ describe('filePathAskFlower', () => {
           kind: 'file_path',
           path: '/workspace/demo',
           isDirectory: true,
+          rootLabel: 'Workspace',
         },
       ],
       pendingAttachments: [],
@@ -43,6 +45,7 @@ describe('filePathAskFlower', () => {
             kind: 'file_path',
             path: '/workspace/demo',
             is_directory: true,
+            root_label: 'Workspace',
           },
         ],
         presentation: {

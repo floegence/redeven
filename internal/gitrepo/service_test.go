@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/gitutil"
 )
 
@@ -74,6 +76,33 @@ func mustContainPath(t *testing.T, paths []string, want string) {
 		}
 	}
 	t.Fatalf("paths=%v, want %q", paths, want)
+}
+
+func mustHomeOnlyService(t *testing.T, home string) *Service {
+	t.Helper()
+	scope, err := filesystemscope.NewRegistry(&config.Config{
+		AgentHomeDir: home,
+		FilesystemScope: &config.FilesystemScope{
+			SchemaVersion: config.FilesystemScopeSchemaVersionV1,
+			DefaultRootID: "home",
+			Roots: []config.FilesystemRootPolicy{
+				{
+					ID:    "home",
+					Label: "Home",
+					Path:  home,
+					Kind:  config.FilesystemRootHome,
+					Permissions: config.FilesystemPermissionSet{
+						Read:  true,
+						Write: true,
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewRegistry(home-only): %v", err)
+	}
+	return NewServiceWithScope(scope)
 }
 
 func TestBuildStashSummary_UsesParentsForLightweightMetadata(t *testing.T) {
@@ -154,7 +183,7 @@ func TestResolveRepoForPath_NonRepository(t *testing.T) {
 
 func TestResolveRepoForPath_GitUnavailable(t *testing.T) {
 	fixture := createTestRepoFixture(t)
-	svc := NewService(fixture.Root)
+	svc := mustHomeOnlyService(t, fixture.Root)
 	t.Setenv("PATH", t.TempDir())
 
 	result, err := svc.resolveRepoForPath(context.Background(), fixture.Root)
@@ -2150,7 +2179,7 @@ func TestPreviewDeleteBranch_BlocksForceDeleteForInaccessibleLinkedWorktree(t *t
 	worktree := filepath.Join(t.TempDir(), "compare-inaccessible-wt")
 	runGitFixture(t, fixture.Root, "worktree", "add", worktree, compare.Branch)
 
-	svc := NewService(fixture.Root)
+	svc := mustHomeOnlyService(t, fixture.Root)
 	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
 	if err != nil {
 		t.Fatalf("resolveExplicitRepo: %v", err)

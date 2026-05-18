@@ -784,6 +784,235 @@ describe('FileBrowserWorkspace interactions', () => {
     }
   });
 
+  it('submits the operating system root without rewriting it to Home and keeps toolbar controls interactive', async () => {
+    let submittedPath = '';
+    let rootSelectedPath = '';
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="h-[560px]">
+          <FileBrowserWorkspace
+            mode="files"
+            onModeChange={() => {}}
+            captureTypingFromPage
+            files={[
+              { id: '/', name: 'Computer', type: 'folder', path: '/', children: [
+                { id: '/Users', name: 'Users', type: 'folder', path: '/Users', children: [] },
+              ] },
+            ]}
+            currentPath="/"
+            initialPath="/"
+            homePath="/Users/tester"
+            roots={[
+              { id: 'home', label: 'Home', kind: 'home', pathAbs: '/Users/tester', permissions: { read: true, write: true }, system: true },
+              { id: 'computer', label: 'Computer', kind: 'computer', pathAbs: '/', permissions: { read: true, write: false }, system: true },
+            ]}
+            persistenceKey="test-files-workspace-os-root-path-editor"
+            instanceId="test-files-workspace-os-root-path-editor"
+            resetKey={0}
+            width={260}
+            open
+            onRootSelect={(path) => {
+              rootSelectedPath = path;
+            }}
+            onPathSubmit={async (path) => {
+              submittedPath = path;
+              return { status: 'ready', committedPath: path };
+            }}
+            toolbarEndActions={(
+              <>
+                <button type="button">Refresh</button>
+                <button type="button" aria-label="More file browser options">More</button>
+              </>
+            )}
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const filterInput = host.querySelector('input[aria-label="Filter files"]') as HTMLInputElement | null;
+      const moreButton = host.querySelector('button[aria-label="More file browser options"]') as HTMLButtonElement | null;
+      const refreshButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Refresh')) as HTMLButtonElement | undefined;
+      const listButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'List') as HTMLButtonElement | undefined;
+      const gridButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'Grid') as HTMLButtonElement | undefined;
+
+      expect(filterInput).toBeTruthy();
+      expect(moreButton).toBeTruthy();
+      expect(refreshButton).toBeTruthy();
+      expect(listButton).toBeTruthy();
+      expect(gridButton).toBeTruthy();
+
+      const computerRoot = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Computer')) as HTMLButtonElement | undefined;
+      expect(computerRoot).toBeTruthy();
+      expect(host.querySelector('[data-tree-row-path="/Users"]')).toBeTruthy();
+      expect(host.querySelector('[data-filesystem-root-id="home"]')).toBeTruthy();
+      expect(host.querySelector('[data-filesystem-root-id="computer"]')).toBeTruthy();
+      expect(host.querySelector('[data-filesystem-root-id="computer"] button[aria-current="page"]')).toBeTruthy();
+      computerRoot!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      expect(rootSelectedPath).toBe('/');
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', ctrlKey: true, bubbles: true }));
+      await flush();
+
+      const pathInput = host.querySelector('input[aria-label="Go to path"]') as HTMLInputElement | null;
+      expect(pathInput).toBeTruthy();
+      expect(pathInput?.value).toBe('/');
+
+      pathInput!.value = '/';
+      pathInput!.dispatchEvent(new Event('input', { bubbles: true }));
+      pathInput!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await flush();
+
+      expect(submittedPath).toBe('/');
+      expect(host.querySelector('input[aria-label="Go to path"]')).toBeNull();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps root navigation separate from the RO/RW toggle hit area', async () => {
+    let rootSelectedPath = '';
+    const writePermissionChanges: Array<{ id: string; write: boolean }> = [];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="h-[560px]">
+          <FileBrowserWorkspace
+            mode="files"
+            onModeChange={() => {}}
+            files={[{ id: '/', name: 'Computer', type: 'folder', path: '/', children: [] }]}
+            currentPath="/"
+            initialPath="/"
+            homePath="/Users/tester"
+            roots={[
+              { id: 'home', label: 'Home', kind: 'home', pathAbs: '/Users/tester', permissions: { read: true, write: true }, system: true },
+              { id: 'computer', label: 'Computer', kind: 'computer', pathAbs: '/', permissions: { read: true, write: true }, system: true },
+            ]}
+            persistenceKey="test-files-workspace-root-write-toggle"
+            instanceId="test-files-workspace-root-write-toggle"
+            resetKey={0}
+            width={260}
+            open
+            onRootSelect={(path) => {
+              rootSelectedPath = path;
+            }}
+            onRootWritePermissionChange={(root, write) => {
+              writePermissionChanges.push({ id: root.id, write });
+            }}
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      expect(host.querySelector('[data-filesystem-root-write-toggle="home"]')).toBeNull();
+      const homeBadge = host.querySelector('[data-filesystem-root-write-badge="home"]');
+      expect(homeBadge?.textContent?.trim()).toBe('RW');
+      const computerToggle = host.querySelector('[data-filesystem-root-write-toggle="computer"]');
+      const computerReadOnlyButton = Array.from(computerToggle?.querySelectorAll('button') ?? [])
+        .find((node) => node.textContent?.trim() === 'RO') as HTMLButtonElement | undefined;
+      expect(computerToggle).toBeTruthy();
+      expect(computerToggle?.textContent?.trim()).toBe('RORW');
+      expect(computerReadOnlyButton).toBeTruthy();
+      computerReadOnlyButton!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await flush();
+
+      expect(rootSelectedPath).toBe('');
+      expect(writePermissionChanges).toEqual([{ id: 'computer', write: false }]);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('requires confirmation before enabling Computer RW from the root row', async () => {
+    let rootSelectedPath = '';
+    const writePermissionChanges: Array<{ id: string; write: boolean }> = [];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="h-[560px]">
+          <FileBrowserWorkspace
+            mode="files"
+            onModeChange={() => {}}
+            files={[{ id: '/', name: 'Computer', type: 'folder', path: '/', children: [] }]}
+            currentPath="/"
+            initialPath="/"
+            homePath="/Users/tester"
+            roots={[
+              { id: 'home', label: 'Home', kind: 'home', pathAbs: '/Users/tester', permissions: { read: true, write: true }, system: true },
+              { id: 'computer', label: 'Computer', kind: 'computer', pathAbs: '/', permissions: { read: true, write: false }, system: true },
+            ]}
+            persistenceKey="test-files-workspace-root-write-confirm"
+            instanceId="test-files-workspace-root-write-confirm"
+            resetKey={0}
+            width={260}
+            open
+            onRootSelect={(path) => {
+              rootSelectedPath = path;
+            }}
+            onRootWritePermissionChange={(root, write) => {
+              writePermissionChanges.push({ id: root.id, write });
+            }}
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      const computerToggle = host.querySelector('[data-filesystem-root-write-toggle="computer"]');
+      const computerReadOnlyButton = Array.from(computerToggle?.querySelectorAll('button') ?? [])
+        .find((node) => node.textContent?.trim() === 'RO') as HTMLButtonElement | undefined;
+      const computerReadWriteButton = Array.from(computerToggle?.querySelectorAll('button') ?? [])
+        .find((node) => node.textContent?.trim() === 'RW') as HTMLButtonElement | undefined;
+      expect(computerToggle).toBeTruthy();
+      expect(computerToggle?.textContent?.trim()).toBe('RORW');
+      expect(computerReadOnlyButton).toBeTruthy();
+      expect(computerReadWriteButton).toBeTruthy();
+
+      computerReadOnlyButton!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await flush();
+      expect(rootSelectedPath).toBe('');
+      expect(writePermissionChanges).toEqual([]);
+      expect(document.body.textContent).not.toContain('Enable write access for Computer?');
+
+      computerReadWriteButton!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await flush();
+      expect(rootSelectedPath).toBe('');
+      expect(writePermissionChanges).toEqual([]);
+      expect(document.body.textContent).toContain('Enable write access for Computer?');
+
+      const cancelButton = Array.from(document.body.querySelectorAll('button'))
+        .find((node) => node.textContent?.trim() === 'Cancel') as HTMLButtonElement | undefined;
+      expect(cancelButton).toBeTruthy();
+      cancelButton!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await flush();
+      expect(writePermissionChanges).toEqual([]);
+
+      computerReadWriteButton!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await flush();
+      const confirmButton = Array.from(document.body.querySelectorAll('button'))
+        .find((node) => node.textContent?.trim() === 'Enable RW') as HTMLButtonElement | undefined;
+      expect(confirmButton).toBeTruthy();
+      confirmButton!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await flush();
+
+      expect(rootSelectedPath).toBe('');
+      expect(writePermissionChanges).toEqual([{ id: 'computer', write: true }]);
+    } finally {
+      dispose();
+    }
+  });
+
   it('keeps the path editor open and shows inline feedback when the entered path is invalid', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

@@ -6,6 +6,7 @@ import { createClientId } from './clientId';
 export type AskFlowerPathContextTarget = Readonly<{
   path: string;
   isDirectory: boolean;
+  rootLabel?: string;
 }>;
 
 export type BuildFilePathAskFlowerIntentResult = Readonly<{
@@ -18,12 +19,14 @@ function normalizePathTargets(items: AskFlowerPathContextTarget[]): AskFlowerPat
     .map((item) => {
       const path = normalizeAbsolutePath(item.path);
       if (!path) return null;
+      const rootLabel = String(item.rootLabel ?? '').trim();
       return {
         path,
         isDirectory: item.isDirectory === true,
+        ...(rootLabel ? { rootLabel } : {}),
       };
     })
-    .filter((item): item is AskFlowerPathContextTarget => !!item);
+    .filter((item): item is AskFlowerPathContextTarget => item !== null);
 }
 
 export function buildFilePathAskFlowerIntent(params: {
@@ -51,6 +54,7 @@ export function buildFilePathAskFlowerIntent(params: {
       kind: 'file_path' as const,
       path: item.path,
       isDirectory: item.isDirectory,
+      rootLabel: item.rootLabel,
     })),
     pendingAttachments: [...(params.pendingAttachments ?? [])],
     notes: [...(params.notes ?? [])],

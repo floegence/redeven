@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { fromWireFsListResponse } from './fs';
+import { fromWireFsListResponse, fromWireFsPathContextResponse } from './fs';
 
 describe('fs codec', () => {
   it('decodes symlink metadata from list responses without flattening it into is_directory alone', () => {
@@ -39,5 +39,39 @@ describe('fs codec', () => {
       resolvedType: 'broken',
       isDirectory: false,
     });
+  });
+
+  it('decodes filesystem roots while preserving the legacy home field', () => {
+    const resp = fromWireFsPathContextResponse({
+      agent_home_path_abs: '/Users/alice',
+      home_path_abs: '/Users/alice',
+      default_root_id: 'home',
+      roots: [
+        {
+          id: 'home',
+          label: 'Home',
+          path: '/Users/alice',
+          kind: 'home',
+          permissions: { read: true, write: true },
+          system: true,
+        },
+        {
+          id: 'computer',
+          label: 'Computer',
+          path: '/',
+          kind: 'computer',
+          permissions: { read: true, write: false },
+          system: true,
+        },
+      ],
+    });
+
+    expect(resp.agentHomePathAbs).toBe('/Users/alice');
+    expect(resp.homePathAbs).toBe('/Users/alice');
+    expect(resp.defaultRootId).toBe('home');
+    expect(resp.roots).toEqual([
+      expect.objectContaining({ id: 'home', pathAbs: '/Users/alice', permissions: { read: true, write: true } }),
+      expect.objectContaining({ id: 'computer', pathAbs: '/', permissions: { read: true, write: false } }),
+    ]);
   });
 });

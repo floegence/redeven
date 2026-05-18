@@ -2153,7 +2153,7 @@ describe('EnvWorkbenchPage', () => {
         <button
           type="button"
           data-testid="commit-files-path"
-          onClick={() => workbench.updateFileBrowserPath(bodyProps.widgetId, '/workspace/app')}
+          onClick={() => workbench.updateFileBrowserPath(bodyProps.widgetId, '/workspace/app', 'workspace')}
         >
           Commit path
         </button>
@@ -2177,6 +2177,7 @@ describe('EnvWorkbenchPage', () => {
       state: {
         kind: 'files',
         current_path: '/workspace/app',
+        root_id: 'workspace',
       },
     });
   });

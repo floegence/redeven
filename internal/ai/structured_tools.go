@@ -97,7 +97,7 @@ func mapToolFilePathError(err error) error {
 }
 
 func (r *run) resolveStructuredToolPath(filePath string, mustExist bool) (string, error) {
-	scope, err := r.pathScope()
+	scope, err := r.runPathScope()
 	if err != nil {
 		return "", mapToolCwdError(err)
 	}
@@ -112,7 +112,7 @@ func (r *run) resolveStructuredToolPath(filePath string, mustExist bool) (string
 		}
 		return resolved, nil
 	}
-	return resolveToolPath(filePath, scope.ProjectRootAbs, scope.RuntimeHomeAbs)
+	return scope.ResolveTargetPath(filePath)
 }
 
 func splitFileReadLines(content string) []string {

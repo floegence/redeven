@@ -32,11 +32,11 @@ import (
 	"github.com/floegence/redeven/internal/codeapp"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
+	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/fs"
 	"github.com/floegence/redeven/internal/gitrepo"
 	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
 	"github.com/floegence/redeven/internal/monitor"
-	"github.com/floegence/redeven/internal/pathutil"
 	"github.com/floegence/redeven/internal/portforward"
 	"github.com/floegence/redeven/internal/rpcutil"
 	"github.com/floegence/redeven/internal/runtimeproxy"
@@ -119,6 +119,7 @@ type Agent struct {
 	buildTime string
 
 	agentHomeAbs       string
+	filesystemScope    *filesystemscope.Registry
 	configPath         string
 	runtimeStatePath   string
 	processStartedAtMs int64
@@ -169,18 +170,11 @@ func New(opts Options) (*Agent, error) {
 		return nil, err
 	}
 
-	agentHomeDir := strings.TrimSpace(opts.Config.AgentHomeDir)
-	if agentHomeDir == "" {
-		home, _ := os.UserHomeDir()
-		agentHomeDir = strings.TrimSpace(home)
-	}
-	if agentHomeDir == "" {
-		return nil, errors.New("missing runtime home dir")
-	}
-	agentHomeAbs, err := pathutil.CanonicalizeExistingDirAbs(agentHomeDir)
+	filesystemScope, err := filesystemscope.NewRegistry(opts.Config)
 	if err != nil {
 		return nil, err
 	}
+	agentHomeAbs := filesystemScope.HomePathAbs()
 
 	logger, err := newLogger(strings.TrimSpace(opts.Config.LogFormat), strings.TrimSpace(opts.Config.LogLevel), opts.LogOutput)
 	if err != nil {
@@ -221,10 +215,11 @@ func New(opts Options) (*Agent, error) {
 		commit:                strings.TrimSpace(opts.Commit),
 		buildTime:             strings.TrimSpace(opts.BuildTime),
 		agentHomeAbs:          agentHomeAbs,
+		filesystemScope:       filesystemScope,
 		configPath:            cfgPathAbs,
 		runtimeStatePath:      localuiruntime.RuntimeStatePath(cfgPathAbs),
 		processStartedAtMs:    time.Now().UnixMilli(),
-		term:                  terminal.NewManager(shell, agentHomeAbs, logger),
+		term:                  terminal.NewManagerWithScope(shell, filesystemScope, logger),
 		mon:                   monitor.NewService(logger),
 		sessions:              make(map[string]*activeSession),
 		onControlConnected:    opts.OnControlConnected,
@@ -278,6 +273,7 @@ func New(opts Options) (*Agent, error) {
 		CodeServerPortMin:   opts.Config.CodeServerPortMin,
 		CodeServerPortMax:   opts.Config.CodeServerPortMax,
 		AgentHomeDir:        agentHomeAbs,
+		FilesystemScope:     filesystemScope,
 		Shell:               shell,
 		AIConfig:            opts.Config.AI,
 		Audit:               auditStore,
@@ -333,6 +329,24 @@ func New(opts Options) (*Agent, error) {
 	return a, nil
 }
 
+func summarizeFilesystemRoots(scope *filesystemscope.Registry) []map[string]any {
+	if scope == nil {
+		return nil
+	}
+	ctx := scope.PathContext()
+	out := make([]map[string]any, 0, len(ctx.Roots))
+	for _, root := range ctx.Roots {
+		out = append(out, map[string]any{
+			"id":    root.ID,
+			"label": root.Label,
+			"path":  root.PathAbs,
+			"read":  root.Permissions.Read,
+			"write": root.Permissions.Write,
+		})
+	}
+	return out
+}
+
 func (a *Agent) Run(ctx context.Context) error {
 	a.StartBackgroundServices(ctx)
 
@@ -350,6 +364,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		"environment_id", a.cfg.EnvironmentID,
 		"controlplane", a.cfg.ControlplaneBaseURL,
 		"agent_home_abs", a.agentHomeAbs,
+		"filesystem_roots", summarizeFilesystemRoots(a.filesystemScope),
 		"goos", runtime.GOOS,
 		"goarch", runtime.GOARCH,
 	)
@@ -1118,8 +1133,8 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess endpoint.Sess
 		return errors.New("missing session")
 	}
 
-	fsSvc := fs.NewService(a.agentHomeAbs)
-	gitRepoSvc := gitrepo.NewService(a.agentHomeAbs)
+	fsSvc := fs.NewServiceWithScope(a.filesystemScope)
+	gitRepoSvc := gitrepo.NewServiceWithScope(a.filesystemScope)
 
 	srv, err := serve.New(serve.Options{
 		OnError: func(err error) {

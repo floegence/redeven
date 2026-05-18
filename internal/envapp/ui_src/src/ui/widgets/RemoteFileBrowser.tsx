@@ -41,6 +41,14 @@ import {
 } from '../utils/askFlowerPath';
 import { setAskFlowerAttachmentSourcePath } from '../utils/askFlowerAttachmentMetadata';
 import { pathInputIncludesHiddenSegment } from '../utils/fileBrowserPathInput';
+import { fetchFilesystemSettings, saveFilesystemRootWritePermission } from '../services/filesystemScopeSettings';
+import {
+  defaultFilesystemPath,
+  matchFilesystemRoot,
+  normalizeFilesystemContext,
+  type NormalizedFilesystemContext,
+  type NormalizedFilesystemRoot,
+} from '../utils/filesystemRoots';
 import {
   copyFileBrowserItemNames,
   copyFileBrowserItemPaths,
@@ -300,9 +308,10 @@ function normalizeShowHidden(value: unknown): boolean {
   return value === true;
 }
 
-function visibleBrowserPath(path: string, rootPath: string): string {
+function visibleBrowserPath(path: string, rootPath: string, roots: readonly NormalizedFilesystemRoot[] = []): string {
   const normalizedPath = normalizePath(path);
-  const normalizedRoot = normalizePath(rootPath);
+  const matchedRoot = matchFilesystemRoot(normalizedPath, roots);
+  const normalizedRoot = normalizePath(matchedRoot?.pathAbs || rootPath);
   if (normalizedPath === normalizedRoot) return normalizedRoot;
   if (normalizedRoot !== '/' && !normalizedPath.startsWith(`${normalizedRoot}/`)) return normalizedRoot;
 
@@ -320,9 +329,10 @@ function visibleBrowserPath(path: string, rootPath: string): string {
   return normalizedPath;
 }
 
-function buildFallbackDirectoryCandidates(path: string, rootPath: string, fallbackPath?: string): string[] {
+function buildFallbackDirectoryCandidates(path: string, rootPath: string, fallbackPath?: string, roots: readonly NormalizedFilesystemRoot[] = []): string[] {
   const normalizedPath = normalizePath(path);
-  const normalizedRoot = normalizePath(rootPath);
+  const matchedRoot = matchFilesystemRoot(normalizedPath, roots);
+  const normalizedRoot = normalizePath(matchedRoot?.pathAbs || rootPath);
   const normalizedFallback = fallbackPath ? normalizePath(fallbackPath) : '';
   const seen = new Set<string>();
   const candidates: string[] = [];
@@ -366,11 +376,12 @@ export interface RemoteFileBrowserProps {
     requestId: string;
     path: string;
     homePath?: string;
+    rootId?: string;
     title?: string;
   } | null;
   onOpenPathRequestHandled?: (requestId: string) => void;
   onTitleChange?: (title: string) => void;
-  onCommittedPathChange?: (path: string) => void;
+  onCommittedPathChange?: (path: string, rootId?: string) => void;
 }
 
 function normalizeBrowserStateScope(value: unknown): string {
@@ -587,6 +598,14 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [titleOverride, setTitleOverride] = createSignal('');
 
   const [agentHomePathAbs, setAgentHomePathAbs] = createSignal('');
+  const [filesystemContext, setFilesystemContext] = createSignal<NormalizedFilesystemContext>({
+    homePathAbs: '',
+    defaultRootId: 'home',
+    roots: [],
+  });
+  const filesystemRoots = createMemo(() => filesystemContext().roots);
+  const defaultRootPath = createMemo(() => defaultFilesystemPath(filesystemContext()));
+  const rootPermissionsSignature = createMemo(() => filesystemRoots().map((root) => `${root.id}:${root.permissions.write ? 'rw' : 'ro'}`).join('|'));
   const [showHidden, setShowHidden] = createSignal(false);
   const [pageMode, setPageMode] = createSignal<BrowserPageMode>('files');
   const [pathEditorRequestKey, setPathEditorRequestKey] = createSignal(0);
@@ -660,7 +679,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [stashReview, setStashReview] = createSignal<GitStashReviewState | null>(null);
   const [stashReviewLoading, setStashReviewLoading] = createSignal(false);
   const [stashReviewError, setStashReviewError] = createSignal('');
+  const [filesystemScopeRefreshKey, setFilesystemScopeRefreshKey] = createSignal(0);
   let previousEnvId: string | null = null;
+  let previousSettingsSeq = ctx.settingsSeq();
+  let previousRootPermissionsSignature = '';
   const [gitDeleteActionError, setGitDeleteActionError] = createSignal('');
 
   let dirReqSeq = 0;
@@ -793,9 +815,21 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       }
     });
     if (committedPath && committedPath !== previousPath) {
-      props.onCommittedPathChange?.(committedPath);
+      props.onCommittedPathChange?.(committedPath, matchFilesystemRoot(committedPath, filesystemRoots())?.id);
     }
   };
+
+  createEffect(() => {
+    const signature = rootPermissionsSignature();
+    if (!signature) return;
+    if (!previousRootPermissionsSignature) {
+      previousRootPermissionsSignature = signature;
+      return;
+    }
+    if (previousRootPermissionsSignature === signature) return;
+    previousRootPermissionsSignature = signature;
+    resetFileBrowser();
+  });
 
   const resetFileBrowser = () => {
     setFileBrowserResetSeq((value) => value + 1);
@@ -973,26 +1007,95 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const resolveFsRootAbs = async (): Promise<string> => {
     const requestedOverride = normalizeAbsolutePath(requestedHomePathOverride());
     if (requestedOverride) {
+      setFilesystemContext({
+        homePathAbs: requestedOverride,
+        defaultRootId: 'home',
+        roots: [{
+          id: 'home',
+          label: 'Home',
+          pathAbs: requestedOverride,
+          kind: 'home',
+          permissions: { read: true, write: true },
+          system: true,
+        }],
+      });
       setAgentHomePathAbs(requestedOverride);
       return requestedOverride;
     }
 
     const override = homePathOverride();
     if (override) {
+      setFilesystemContext({
+        homePathAbs: override,
+        defaultRootId: 'home',
+        roots: [{
+          id: 'home',
+          label: 'Home',
+          pathAbs: override,
+          kind: 'home',
+          permissions: { read: true, write: true },
+          system: true,
+        }],
+      });
       setAgentHomePathAbs(override);
       return override;
     }
 
-    const cached = normalizeAbsolutePath(agentHomePathAbs());
-    if (cached) return cached;
+    if (filesystemContext().roots.length > 0) {
+      const cachedRoot = normalizeAbsolutePath(defaultFilesystemPath(filesystemContext()));
+      if (cachedRoot) return cachedRoot;
+    }
 
+    return refreshFilesystemPathContext();
+  };
+
+  const refreshFilesystemPathContext = async (): Promise<string> => {
     const resp = await rpc.fs.getPathContext();
-    const root = normalizeAbsolutePath(String(resp?.agentHomePathAbs ?? '').trim());
-    if (!root) {
+    const ctx = normalizeFilesystemContext(resp);
+    const home = normalizeAbsolutePath(ctx.homePathAbs);
+    const root = normalizeAbsolutePath(defaultFilesystemPath(ctx));
+    if (!home || !root) {
       throw new Error('Failed to resolve home directory.');
     }
-    setAgentHomePathAbs(root);
+    setFilesystemContext(ctx);
+    setAgentHomePathAbs(home);
     return root;
+  };
+
+  const handleRootWritePermissionChange = async (root: NormalizedFilesystemRoot, write: boolean) => {
+    try {
+      const settings = await fetchFilesystemSettings();
+      await saveFilesystemRootWritePermission(settings, root.id, write);
+      ctx.bumpSettingsSeq();
+      setFilesystemContext((current) => ({
+        ...current,
+        roots: current.roots.map((item) => (
+          item.id === root.id
+            ? {
+                ...item,
+                permissions: {
+                  read: true,
+                  write,
+                },
+              }
+            : item
+        )),
+      }));
+      await refreshFilesystemPathContext();
+      const currentPath = normalizeAbsolutePath(currentBrowserPath()) || defaultRootPath();
+      if (currentPath) {
+        await requestDirectoryNavigation(currentPath, {
+          fallbackPath: defaultRootPath(),
+          persistEnvId: envId(),
+          persistOnReady: true,
+          targetPolicy: 'force_reload',
+        });
+      }
+      notification.success('Filesystem access updated', `${root.label} is now ${write ? 'read/write' : 'read-only'}.`);
+    } catch (error) {
+      notification.error('Filesystem access update failed', error instanceof Error ? error.message : String(error));
+      throw error;
+    }
   };
 
   const repoHistoryAvailable = () => Boolean(repoInfo()?.available && repoInfo()?.repoRootPath);
@@ -3125,7 +3228,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       const currentPath = normalizeAbsolutePath(currentBrowserPath()) || rootPath;
       const nextPath = nextShowHidden
         ? normalizePath(currentPath)
-        : visibleBrowserPath(currentPath, rootPath);
+        : visibleBrowserPath(currentPath, rootPath, filesystemRoots());
 
       writePersistedShowHidden(id, nextShowHidden);
       batch(() => {
@@ -3245,22 +3348,24 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
 
     const normalizedRequestedPath = normalizePath(requestedPath);
-    if (normalizedRequestedPath !== rootPath && !normalizedRequestedPath.startsWith(`${rootPath}/`)) {
+    const activeRoot = matchFilesystemRoot(normalizedRequestedPath, filesystemRoots());
+    if (!activeRoot) {
       return {
         status: 'invalid_path',
-        message: 'Path is outside the runtime home directory.',
+        message: 'Path is outside the configured filesystem roots.',
         rootPath,
       };
     }
 
+    const activeRootPath = normalizePath(activeRoot.pathAbs || rootPath);
     const targetPolicy = options.targetPolicy ?? 'use_cache';
     let nextTree = options.seed?.tree ?? files();
     const nextCache = options.seed?.cache ?? cloneDirCache(cache);
 
-    const rel = normalizedRequestedPath === rootPath ? '' : normalizedRequestedPath.slice(rootPath.length);
+    const rel = normalizedRequestedPath === activeRootPath ? '' : normalizedRequestedPath.slice(activeRootPath.length);
     const parts = rel.split('/').filter(Boolean);
-    const chain: string[] = [rootPath];
-    let cursor = rootPath;
+    const chain: string[] = [activeRootPath];
+    let cursor = activeRootPath;
     for (const part of parts) {
       cursor = cursor === '/' ? `/${part}` : `${cursor}/${part}`;
       chain.push(cursor);
@@ -3272,7 +3377,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       const forceReload = dir === normalizedRequestedPath && (targetPolicy === 'force_reload' || targetPolicy === 'revalidate_target');
       const cachedItems = !forceReload ? nextCache.get(dir) : undefined;
       if (cachedItems) {
-        nextTree = withChildrenAtRoot(nextTree, dir, cachedItems, rootPath);
+        nextTree = withChildrenAtRoot(nextTree, dir, cachedItems, activeRootPath);
         continue;
       }
 
@@ -3288,12 +3393,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
           .map(toFileItem)
           .sort((a: FileItem, b: FileItem) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'folder' ? -1 : 1));
         nextCache.set(dir, items);
-        nextTree = withChildrenAtRoot(nextTree, dir, items, rootPath);
+        nextTree = withChildrenAtRoot(nextTree, dir, items, activeRootPath);
       } catch (error) {
         if (seq !== dirReqSeq) return { status: 'canceled' };
         return {
           ...classifyPathLoadError(error),
-          rootPath,
+          rootPath: activeRootPath,
         };
       }
     }
@@ -3303,7 +3408,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       state: {
         tree: nextTree,
         cache: nextCache,
-        rootPath,
+        rootPath: activeRootPath,
         committedPath: normalizedRequestedPath,
         lastLoadedPath: normalizedRequestedPath,
       },
@@ -3331,14 +3436,14 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return { status: 'error', result: prepared };
     }
 
-    const rootPath = normalizePath(prepared.rootPath || agentHomePathAbs() || '/');
+    const rootPath = normalizePath(prepared.rootPath || defaultRootPath() || '/');
     const normalizedFallbackPath = options.fallbackPath
       ? normalizePath(options.fallbackPath)
       : '';
     const nextCache = cloneDirCache(cache);
     removeCachePathPrefix(nextCache, normalizedRequestedPath);
     const nextTree = removeItemsFromTree(files(), new Set([normalizedRequestedPath]));
-    const fallbackCandidates = buildFallbackDirectoryCandidates(normalizedRequestedPath, rootPath, normalizedFallbackPath);
+    const fallbackCandidates = buildFallbackDirectoryCandidates(normalizedRequestedPath, rootPath, normalizedFallbackPath, filesystemRoots());
 
     for (const candidate of fallbackCandidates) {
       const fallbackPrepared = await prepareDirectoryState(candidate, seq, {
@@ -3436,7 +3541,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const normalizedCurrentPath = normalizeAbsolutePath(currentBrowserPath())
       ? normalizePath(currentBrowserPath())
       : rootPath;
-    const nextShowHidden = !showHidden() && pathInputIncludesHiddenSegment(normalizedRequestedPath, rootPath);
+    const nextShowHidden = !showHidden() && pathInputIncludesHiddenSegment(normalizedRequestedPath, rootPath, filesystemRoots());
     const result = await runDirectoryNavigationRequest(normalizedRequestedPath, {
       fallbackPath: lastLoadedBrowserPath() || rootPath,
       persistEnvId: id || undefined,
@@ -3483,7 +3588,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (pathLoadInFlight() === normalizedPath) return;
 
     await requestDirectoryNavigation(path, {
-      fallbackPath: lastLoadedBrowserPath() || agentHomePathAbs(),
+      fallbackPath: lastLoadedBrowserPath() || defaultRootPath(),
       persistEnvId: id,
       targetPolicy: options.forceReload ? 'force_reload' : 'revalidate_target',
       showBlockingOverlay: lastLoadedBrowserPath() === '',
@@ -3500,7 +3605,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const applyLocalMove = (item: FileItem, destDir: string) => {
     const from = normalizePath(item.path);
     const to = destDir === '/' ? `/${item.name}` : `${destDir}/${item.name}`;
-    const scopedRootPath = normalizePath(agentHomePathAbs() || getParentDir(from));
+    const scopedRootPath = normalizePath(matchFilesystemRoot(from, filesystemRoots())?.pathAbs || defaultRootPath() || getParentDir(from));
     const movedItem = rewriteSubtreePaths(item, from, to);
 
     setFiles((prev) => {
@@ -3538,6 +3643,16 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (dragMoveLoading()) return;
 
     const destDir = normalizePath(targetPath);
+    const mutationPaths = [
+      destDir,
+      ...items.map((item) => item.path),
+    ];
+    if (!mutationPaths.every((path) => canMutatePath(path))) {
+      resetFileBrowser();
+      notification.error('Move unavailable', 'This filesystem root is read-only.');
+      return;
+    }
+
     setDragMoveLoading(true);
 
     let okCount = 0;
@@ -3627,7 +3742,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const insertCreatedItemIntoState = (parentDirPath: string, item: FileItem) => {
     const parentDir = normalizePath(parentDirPath);
-    const scopedRootPath = normalizePath(agentHomePathAbs() || parentDir);
+    const scopedRootPath = normalizePath(matchFilesystemRoot(parentDir, filesystemRoots())?.pathAbs || defaultRootPath() || parentDir);
     const cached = cache.get(parentDir);
 
     if (cached && !cached.some((entry) => normalizePath(entry.path) === normalizePath(item.path))) {
@@ -3688,6 +3803,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       items: [{
         path: directory.path,
         isDirectory: true,
+        rootLabel: matchFilesystemRoot(directory.path, filesystemRoots())?.label,
       }],
       fallbackWorkingDirAbs: directory.path,
     });
@@ -3760,7 +3876,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       : baseName;
     const newName = `${nameWithoutExt} (copy)${ext}`;
     const destPath = buildChildPath(parentDir, newName);
-    const scopedRootPath = normalizePath(agentHomePathAbs() || parentDir);
+    const scopedRootPath = normalizePath(matchFilesystemRoot(parentDir, filesystemRoots())?.pathAbs || defaultRootPath() || parentDir);
 
     try {
       await rpc.fs.copy({ sourcePath: item.path, destPath });
@@ -3819,7 +3935,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
       if (normalizePath(currentBrowserPath()) !== normalizePath(draft.parentDir)) {
         await requestDirectoryNavigation(draft.parentDir, {
-          fallbackPath: lastLoadedBrowserPath() || agentHomePathAbs(),
+          fallbackPath: lastLoadedBrowserPath() || defaultRootPath(),
           persistEnvId: envId(),
           persistOnReady: true,
           targetPolicy: 'revalidate_target',
@@ -3841,11 +3957,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   createEffect(() => {
     if (!protocol.client()) return;
     const id = envId();
+    const scopeRefreshKey = filesystemScopeRefreshKey();
     if (!id) return;
     void (async () => {
       let rootPath = '';
       try {
-        rootPath = normalizePath(await resolveFsRootAbs());
+        rootPath = normalizePath(scopeRefreshKey > 0 ? await refreshFilesystemPathContext() : await resolveFsRootAbs());
       } catch (e) {
         notifyPathLoadFailure({
           status: 'transport_error',
@@ -3860,12 +3977,20 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       const requestedStartPath = rememberedPath || persistedPath || rootPath;
       const startPath = showHiddenEnabled
         ? normalizePath(requestedStartPath)
-        : visibleBrowserPath(requestedStartPath, rootPath);
+        : visibleBrowserPath(requestedStartPath, rootPath, filesystemRoots());
       if (startPath !== requestedStartPath) {
         writePersistedLastPath(id, startPath);
       }
       setCurrentBrowserPath(startPath);
     })();
+  });
+
+  createEffect(() => {
+    const seq = ctx.settingsSeq();
+    if (seq === previousSettingsSeq) return;
+    previousSettingsSeq = seq;
+    if (!protocol.client() || !envId()) return;
+    setFilesystemScopeRefreshKey((value) => value + 1);
   });
 
   createEffect(() => {
@@ -3908,7 +4033,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     void (async () => {
       try {
         await requestDirectoryNavigation(requestedPath, {
-          fallbackPath: lastLoadedBrowserPath() || requestedHomePath || agentHomePathAbs(),
+          fallbackPath: lastLoadedBrowserPath() || requestedHomePath || defaultRootPath(),
           showBlockingOverlay: lastLoadedBrowserPath() === '',
           persistEnvId: envId(),
           persistOnReady: true,
@@ -4231,6 +4356,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       items: normalizedItems.map((item) => ({
         path: item.path,
         isDirectory: item.type === 'folder',
+        rootLabel: matchFilesystemRoot(item.path, filesystemRoots())?.label,
       })),
       fallbackWorkingDirAbs: currentBrowserPath(),
       pendingAttachments,
@@ -4290,10 +4416,23 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     });
   };
 
+  const rootForPath = (path: string) => matchFilesystemRoot(path, filesystemRoots());
+  const canMutatePath = (path: string) => Boolean(rootForPath(path)?.permissions.write);
+  const canMutateContext = (event: ContextMenuEvent | null): boolean => {
+    const paths = event?.items?.length
+      ? event.items.map((item) => item.path)
+      : [resolveDirectoryContextTarget(event)?.path ?? ''];
+    return paths.every((path) => path && canMutatePath(path));
+  };
+
   const openCreateEntryDialog = (kind: CreateEntryKind, event?: ContextMenuEvent | null) => {
     const directory = resolveDirectoryContextTarget(event);
     if (!directory) {
       notification.error('Create unavailable', 'Could not resolve the target directory.');
+      return;
+    }
+    if (!canMutatePath(directory.path)) {
+      notification.error('Create unavailable', 'This filesystem root is read-only.');
       return;
     }
 
@@ -4307,14 +4446,26 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const ctxMenu: ContextMenuCallbacks = {
     onDelete: (items: FileItem[]) => {
+      if (!items.every((item) => canMutatePath(item.path))) {
+        notification.error('Delete unavailable', 'This filesystem root is read-only.');
+        return;
+      }
       setDeleteDialogItems(items);
       setDeleteDialogOpen(true);
     },
     onRename: (item: FileItem) => {
+      if (!canMutatePath(item.path)) {
+        notification.error('Rename unavailable', 'This filesystem root is read-only.');
+        return;
+      }
       setRenameDialogItem(item);
       setRenameDialogOpen(true);
     },
     onDuplicate: (items: FileItem[]) => {
+      if (!items.every((item) => canMutatePath(item.path))) {
+        notification.error('Duplicate unavailable', 'This filesystem root is read-only.');
+        return;
+      }
       void (async () => {
         if (duplicateLoading()) return;
         setDuplicateLoading(true);
@@ -4454,11 +4605,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     },
   });
 
-  const buildNewContextMenuItem = (separator = false): ContextMenuItem => ({
+  const buildNewContextMenuItem = (separator = false, disabled = false): ContextMenuItem => ({
     id: 'new',
     label: 'New',
     type: 'custom',
     icon: (props) => <Plus class={props.class} />,
+    disabled,
     separator,
     children: [
       {
@@ -4485,6 +4637,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (!event || !scope) return [];
 
     if (scope === 'directory-background') {
+      const canMutate = canMutateContext(event);
       const backgroundItems: ContextMenuItem[] = [
         buildAskFlowerMenuItem({
           onAction: (_items, menuEvent) => {
@@ -4495,28 +4648,37 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       if (canOpenDirectoryContextInTerminal(event)) {
         backgroundItems.push(buildOpenInTerminalMenuItem());
       }
-      backgroundItems.push(buildNewContextMenuItem());
+      backgroundItems.push(buildNewContextMenuItem(false, !canMutate));
       return sortContextActionMenuItems(backgroundItems);
     }
 
     if (scope === 'single-folder') {
+      const canMutate = canMutateContext(event);
       const folderItems: ContextMenuItem[] = [
         buildAskFlowerMenuItem(),
       ];
       if (canOpenDirectoryContextInTerminal(event)) {
         folderItems.push(buildOpenInTerminalMenuItem());
       }
-      folderItems.push(buildNewContextMenuItem(true));
-      return [...sortContextActionMenuItems(folderItems), ...filterSecondaryContextMenuItems(singleSelectSecondaryContextMenuItemIds)];
+      folderItems.push(buildNewContextMenuItem(true, !canMutate));
+      return [
+        ...sortContextActionMenuItems(folderItems),
+        ...filterSecondaryContextMenuItems(singleSelectSecondaryContextMenuItemIds).map((item) => (
+          item.id === 'duplicate' || item.id === 'rename' || item.id === 'delete' ? { ...item, disabled: !canMutate } : item
+        )),
+      ];
     }
 
+    const canMutate = canMutateContext(event);
     return [
       buildAskFlowerMenuItem({ separator: true }),
       ...filterSecondaryContextMenuItems(
         scope === 'multi-select'
           ? multiSelectSecondaryContextMenuItemIds
           : singleSelectSecondaryContextMenuItemIds,
-      ),
+      ).map((item) => (
+        item.id === 'duplicate' || item.id === 'rename' || item.id === 'delete' ? { ...item, disabled: !canMutate } : item
+      )),
     ];
   };
 
@@ -4550,6 +4712,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       currentPath={currentBrowserPath()}
                       initialPath={readPersistedLastPath(id)}
                       homePath={agentHomePathAbs() || undefined}
+                      roots={filesystemRoots()}
                       persistenceKey={workspacePersistenceKey(id)}
                       instanceId={workspaceInstanceId(id)}
                       resetKey={fileBrowserResetSeq()}
@@ -4560,6 +4723,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       onClose={closePageSidebar}
                       showMobileSidebarButton={layout.isMobile() && hasEmbeddedWidget()}
                       onToggleSidebar={togglePageSidebar}
+                      onRootSelect={(path) => {
+                        void requestManualDirectoryNavigation(path);
+                      }}
+                      onRootWritePermissionChange={handleRootWritePermissionChange}
                       pathEditRequestKey={pathEditorRequestKey()}
                       toolbarEndActions={fileBrowserToolbarEndActions()}
                       revealRequest={pendingCreatedEntryReveal()}
@@ -4569,7 +4736,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       onNavigate={(path) => {
                         const targetPath = normalizePath(path);
                         void requestDirectoryNavigation(targetPath, {
-                          fallbackPath: lastLoadedBrowserPath() || agentHomePathAbs(),
+                          fallbackPath: lastLoadedBrowserPath() || defaultRootPath(),
                           persistEnvId: id,
                           persistOnReady: true,
                           targetPolicy: 'revalidate_target',

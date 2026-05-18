@@ -38,6 +38,7 @@ export type ContextActionContextItem =
       kind: 'file_path';
       path: string;
       is_directory: boolean;
+      root_label?: string;
     }>
   | Readonly<{
       kind: 'file_selection';

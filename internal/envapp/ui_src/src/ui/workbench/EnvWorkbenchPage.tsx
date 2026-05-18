@@ -1583,6 +1583,7 @@ export function EnvWorkbenchPage() {
         requestId: `shared-files:${widgetId}:${state.revision}`,
         widgetId,
         path: currentPath,
+        rootId: state.state.kind === 'files' ? state.state.root_id : undefined,
       };
       shouldUpdateRequests = true;
     }
@@ -2241,9 +2242,10 @@ export function EnvWorkbenchPage() {
         return changed ? next : previous;
       });
     },
-    updateFileBrowserPath: (widgetId, path) => {
+    updateFileBrowserPath: (widgetId, path, rootId) => {
       const normalizedWidgetId = compact(widgetId);
       const normalizedPath = normalizeAbsolutePath(path);
+      const normalizedRootId = compact(rootId ?? '');
       if (!normalizedWidgetId || !normalizedPath) {
         return;
       }
@@ -2259,6 +2261,7 @@ export function EnvWorkbenchPage() {
       void putSharedWidgetState(normalizedWidgetId, 'redeven.files', {
         kind: 'files',
         current_path: normalizedPath,
+        ...(normalizedRootId ? { root_id: normalizedRootId } : {}),
       });
     },
     previewItem: (widgetId) => {

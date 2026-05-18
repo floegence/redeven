@@ -7,10 +7,11 @@ import (
 	"testing"
 
 	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/session"
 )
 
-func TestService_CreateThread_RejectsWorkingDirOutsideAgentHome(t *testing.T) {
+func TestService_CreateThread_RejectsWorkingDirOutsideConfiguredRoots(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -18,6 +19,25 @@ func TestService_CreateThread_RejectsWorkingDirOutsideAgentHome(t *testing.T) {
 
 	rootDir := t.TempDir()
 	outsideDir := t.TempDir()
+	scope, err := filesystemscope.NewRegistry(&config.Config{
+		AgentHomeDir: rootDir,
+		FilesystemScope: &config.FilesystemScope{
+			SchemaVersion: config.FilesystemScopeSchemaVersionV1,
+			DefaultRootID: "home",
+			Roots: []config.FilesystemRootPolicy{
+				{
+					ID:          "home",
+					Label:       "Home",
+					Path:        rootDir,
+					Kind:        config.FilesystemRootHome,
+					Permissions: config.FilesystemPermissionSet{Read: true, Write: true},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
 
 	cfg := &config.AIConfig{
 		Providers: []config.AIProvider{
@@ -32,11 +52,12 @@ func TestService_CreateThread_RejectsWorkingDirOutsideAgentHome(t *testing.T) {
 	}
 
 	svc, err := NewService(Options{
-		Logger:       logger,
-		StateDir:     stateDir,
-		AgentHomeDir: rootDir,
-		Shell:        "bash",
-		Config:       cfg,
+		Logger:          logger,
+		StateDir:        stateDir,
+		AgentHomeDir:    rootDir,
+		FilesystemScope: scope,
+		Shell:           "bash",
+		Config:          cfg,
 		ResolveProviderAPIKey: func(string) (string, bool, error) {
 			return "sk-test", true, nil
 		},

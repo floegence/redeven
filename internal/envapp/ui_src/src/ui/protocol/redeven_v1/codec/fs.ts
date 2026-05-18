@@ -23,6 +23,7 @@ import type {
   FsDeleteRequest,
   FsDeleteResponse,
   FsEntryType,
+  FsRootKind,
   FsPathContextResponse,
   FsListRequest,
   FsResolvedType,
@@ -152,6 +153,28 @@ export function fromWireFsCopyResponse(resp: wire_fs_copy_resp): FsCopyResponse 
   };
 }
 
+function decodeFsRootKind(value: unknown): FsRootKind {
+  return value === 'home' || value === 'computer' || value === 'custom' ? value : 'custom';
+}
+
 export function fromWireFsPathContextResponse(resp: wire_fs_get_path_context_resp): FsPathContextResponse {
-  return { agentHomePathAbs: String(resp?.agent_home_path_abs ?? '') };
+  const homePathAbs = String(resp?.home_path_abs ?? resp?.agent_home_path_abs ?? '');
+  const roots = Array.isArray(resp?.roots) ? resp.roots : [];
+  return {
+    agentHomePathAbs: String(resp?.agent_home_path_abs ?? homePathAbs),
+    homePathAbs,
+    defaultRootId: String(resp?.default_root_id ?? ''),
+    roots: roots.map((root) => ({
+      id: String(root?.id ?? ''),
+      label: String(root?.label ?? ''),
+      pathAbs: String(root?.path_abs ?? root?.path ?? ''),
+      kind: decodeFsRootKind(root?.kind),
+      permissions: {
+        read: Boolean(root?.permissions?.read ?? false),
+        write: Boolean(root?.permissions?.write ?? false),
+      },
+      hidden: typeof root?.hidden === 'boolean' ? root.hidden : undefined,
+      system: typeof root?.system === 'boolean' ? root.system : undefined,
+    })),
+  };
 }

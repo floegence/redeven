@@ -7,6 +7,7 @@ import (
 	"encoding/base32"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"net"
 	"net/http"
@@ -23,6 +24,7 @@ import (
 	"github.com/floegence/redeven/internal/codeapp/codeserver"
 	"github.com/floegence/redeven/internal/codexbridge"
 	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionhop"
 	"github.com/floegence/redeven/internal/threadreadstate"
@@ -1237,6 +1239,82 @@ func TestGateway_LocalUISettingsPermissionCapDoesNotHotReload(t *testing.T) {
 	}
 	if resp.Data.PermissionPolicy.LocalMax.Read || resp.Data.PermissionPolicy.LocalMax.Write || resp.Data.PermissionPolicy.LocalMax.Execute {
 		t.Fatalf("permission_policy local_max = %+v, want all false", resp.Data.PermissionPolicy.LocalMax)
+	}
+}
+
+func TestGateway_SettingsFilesystemScopeRefreshesSharedRegistry(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	custom := t.TempDir()
+	cfgPath := writeTestConfig(t)
+	scope, err := filesystemscope.NewRegistry(&config.Config{AgentHomeDir: home})
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	if _, err := scope.ResolveTarget(filepath.Join(custom, "next.txt"), filesystemscope.ResolveOptions{ForWrite: true}); err == nil {
+		t.Fatalf("custom path unexpectedly writable before scope update")
+	}
+
+	gw, err := New(Options{
+		Backend:            &stubBackend{},
+		DistFS:             fstest.MapFS{"env/index.html": {Data: []byte("<html>env</html>")}},
+		ListenAddr:         "127.0.0.1:0",
+		ConfigPath:         cfgPath,
+		AgentHomeDir:       home,
+		FilesystemScope:    scope,
+		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	body := fmt.Sprintf(`{
+  "agent_home_dir": %q,
+  "filesystem_scope": {
+    "schema_version": 1,
+    "default_root_id": "home",
+    "roots": [
+      {
+        "id": "home",
+        "label": "Home",
+        "path": %q,
+        "kind": "home",
+        "permissions": { "read": true, "write": true },
+        "system": true
+      },
+      {
+        "id": "computer",
+        "label": "Computer",
+        "path": "/",
+        "kind": "computer",
+        "permissions": { "read": true, "write": false },
+        "system": true
+      },
+      {
+        "id": "custom",
+        "label": "Custom",
+        "path": %q,
+        "kind": "custom",
+        "permissions": { "read": true, "write": true }
+      }
+    ]
+  }
+}`, home, home, custom)
+
+	rr := WithLocalUIEnvRoute(httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/settings", bytes.NewBufferString(body)))
+	res := httptest.NewRecorder()
+	gw.serveHTTP(res, rr)
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d body=%s", res.Code, http.StatusOK, res.Body.String())
+	}
+
+	resolved, err := scope.ResolveTarget(filepath.Join(custom, "next.txt"), filesystemscope.ResolveOptions{ForWrite: true})
+	if err != nil {
+		t.Fatalf("shared registry did not refresh writable custom root: %v", err)
+	}
+	if resolved.RootID != "custom" {
+		t.Fatalf("RootID = %q, want custom", resolved.RootID)
 	}
 }
 

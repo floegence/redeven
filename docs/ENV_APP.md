@@ -16,6 +16,8 @@ Key points:
 - Web Services is the user-facing registry for HTTP services reachable from the runtime host. Same-device local mode can open safe loopback targets directly; URL/SSH Local UI sessions use `/pf/<forward_id>/`; remote Provider sessions use the isolated Flowersec E2EE port-forward tunnel.
 - Codex is a separate optional AI runtime with its own activity-bar entry and gateway namespace. It is not a Flower mode/provider, and Runtime Settings reports Codex host status without persisting Codex approval, sandbox, model, or binary defaults.
 - File Browser keeps Monaco as the single text preview/edit surface where possible, treats symbolic links explicitly, and enforces `fs/read_file` as file-only before raw bytes are streamed.
+- File Browser uses runtime `filesystem_scope` roots rather than treating Home as the only boundary. The sidebar shows Home, Computer, and custom roots above the current folder tree; the Path row keeps the existing filter, refresh, view switcher, and overflow menu while displaying real absolute paths (`/` is OS root, `~` is Home).
+- File Browser root rows own the high-frequency write toggle for exposed roots. Computer defaults to `RO`, custom roots reflect their configured `RO/RW` state, and enabling `RW` requires confirmation before the shared Runtime Settings update path persists the change and refreshes the runtime filesystem registry. Home shows its status but is managed from Runtime Settings rather than the root row.
 - Terminal sessions are runtime-owned and may be attached by multiple Env App surfaces; only the focused surface emits resize ownership updates after attach.
 - Desktop-managed runs keep Preview, File Browser, Ask Flower, and Debug Console inside the main Env App window as product-owned floating surfaces. Browser-app windows such as Codespaces remain separate navigation flows.
 
@@ -33,7 +35,7 @@ Env App exposes a product-owned **Notes overlay** above the current workspace in
 
 Deck and Workbench reuse released floe-webapp layout/workbench primitives. Redeven keeps product-owned interaction adapters and business-widget bodies on top of those shared surfaces.
 
-- Runtime-shared state is deliberately narrow and authoritative: widget identity/type, geometry, ordering, durable canvas objects, and semantic widget data such as Files current path, Terminal session ids, and Preview target. Renderer storage is never a source of truth for widget layout, geometry, z-index, viewport layout, or canvas objects.
+- Runtime-shared state is deliberately narrow and authoritative: widget identity/type, geometry, ordering, durable canvas objects, and semantic widget data such as Files current path/root identity, Terminal session ids, and Preview target. Renderer storage is never a source of truth for widget layout, geometry, z-index, viewport layout, or canvas objects.
 - A pristine runtime layout (`revision === 0` and no widgets, sticky notes, annotations, or background layers) is seeded once with the canonical Workbench sample canvas. The seed uses the same `redevenWorkbenchWidgets.defaultSize` catalog as the Add flow, so initial widgets and user-added widgets share sizing.
 - Empty but non-pristine runtime layouts are valid user/runtime state and are not re-seeded. Old renderer layout keys are ignored instead of migrated into runtime layout.
 - Per-client camera, shell mode, selection, transient gestures, active terminal tab, file-browser view preferences, preview cursor/scroll, unsaved drafts, filters, active tool, and theme preference stay local.
@@ -54,6 +56,7 @@ Env App targets a WCAG 2.2 AA baseline. The implementation follows an upstream-f
 - Shared shell landmarks, skip-link behavior, main-region targeting, dropdown semantics, and generic tab behavior come from released `@floegence/floe-webapp-*` packages.
 - Redeven-specific code only handles product-owned surfaces such as the local access gate, AI sidebar, custom tool blocks, git widgets, terminal integration, and file-browser composition.
 - Product-owned file-browser composition is also responsible for cross-surface handoffs such as `Open in Terminal` for a selected directory; shared file-browser primitives still only provide generic menu/rendering behavior.
+- File-browser root switching is product-owned as well: system roots are always visible, custom roots are configured in Runtime Settings, inline `RO/RW` controls update root write access through the same settings contract, and read-only roots disable mutation menus without removing read/copy/Ask Flower affordances.
 - The shared floating browser host is also product-owned because it coordinates terminal/chat entry points, desktop browser presentation policy, and browser-path seeding on top of the generic `RemoteFileBrowser` surface.
 
 Contributor rules for this surface:

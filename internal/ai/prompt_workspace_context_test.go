@@ -198,8 +198,12 @@ func TestBuildPromptWorkspaceContextSection_RendersStructuredFacts(t *testing.T)
 	section := buildPromptWorkspaceContextSection(promptRuntimeSnapshot{
 		WorkspaceContext: promptWorkspaceContext{
 			Environment: promptEnvironmentFacts{
-				Shell:                   "/bin/zsh",
-				AgentHomeDir:            "/workspace/home",
+				Shell:        "/bin/zsh",
+				AgentHomeDir: "/workspace/home",
+				FilesystemRoots: []promptFilesystemRootFact{
+					{ID: "home", Label: "Home", Path: "/workspace/home", Read: true, Write: true},
+					{ID: "computer", Label: "Computer", Path: "/", Read: true, Write: false},
+				},
 				ToolApprovalEnabled:     true,
 				DangerousCommandBlocked: false,
 				SubagentDelegation:      true,
@@ -244,6 +248,7 @@ func TestBuildPromptWorkspaceContextSection_RendersStructuredFacts(t *testing.T)
 	for _, want := range []string{
 		"### Environment Facts",
 		"- Shell: /bin/zsh",
+		"- Filesystem roots: Home=/workspace/home (read-write); Computer=/ (read-only)",
 		"### Repository State",
 		"- Repository root: /workspace/repo",
 		"### Repository Rules",

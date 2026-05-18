@@ -12,7 +12,7 @@ import (
 
 	"github.com/floegence/redeven/internal/codeapp/gateway"
 	"github.com/floegence/redeven/internal/codeapp/registry"
-	"github.com/floegence/redeven/internal/pathutil"
+	"github.com/floegence/redeven/internal/filesystemscope"
 )
 
 func (s *Service) ListSpaces(ctx context.Context) ([]gateway.SpaceStatus, error) {
@@ -69,10 +69,11 @@ func (s *Service) CreateSpace(ctx context.Context, req gateway.CreateSpaceReques
 	if workspacePath == "" {
 		return nil, errors.New("missing path")
 	}
-	abs, err := pathutil.ResolveExistingScopedDir(workspacePath, s.agentHomeDir)
+	resolved, err := s.scope.Resolve(workspacePath, filesystemscope.ResolveOptions{RequireExisting: true, RequireDir: true})
 	if err != nil {
 		return nil, err
 	}
+	abs := resolved.RealAbs
 	if err := validateWorkspacePath(abs); err != nil {
 		return nil, err
 	}

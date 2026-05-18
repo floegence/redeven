@@ -24,6 +24,8 @@ import { resolveFileBrowserToolbarLayout } from './fileBrowserPathLayout';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { formatFileBrowserPathInputValue, parseFileBrowserPathInput } from '../utils/fileBrowserPathInput';
+import type { NormalizedFilesystemRoot } from '../utils/filesystemRoots';
+import { matchFilesystemRoot } from '../utils/filesystemRoots';
 import {
   mapContextMenuCallbacksToAbsolute,
   mapContextMenuEventToAbsolutePath,
@@ -58,6 +60,7 @@ export interface FileBrowserWorkspaceProps {
   currentPath: string;
   initialPath: string;
   homePath?: string;
+  roots?: NormalizedFilesystemRoot[];
   persistenceKey?: string;
   instanceId: string;
   resetKey: number;
@@ -69,6 +72,8 @@ export interface FileBrowserWorkspaceProps {
   showMobileSidebarButton?: boolean;
   onToggleSidebar?: () => void;
   onNavigate?: (path: string) => void;
+  onRootSelect?: (path: string) => void;
+  onRootWritePermissionChange?: (root: NormalizedFilesystemRoot, write: boolean) => Promise<void> | void;
   onPathChange?: (path: string, source: 'user' | 'programmatic') => void;
   onPathSubmit?: (path: string) => Promise<FileBrowserPathSubmitResult>;
   onOpen?: (item: FileItem) => void;
@@ -267,7 +272,7 @@ function FileWorkspaceStatusBar() {
         </Show>
       </div>
       <div class="max-w-full truncate text-right sm:max-w-[45%]">
-        {browser.currentPath() === '/' ? browser.homeLabel() : browser.currentPath()}
+        {browser.currentPath()}
       </div>
     </div>
   );
@@ -293,6 +298,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
   const [pathError, setPathError] = createSignal('');
   const [pathSubmitting, setPathSubmitting] = createSignal(false);
   const formattedCurrentPath = createMemo(() => formatFileBrowserPathInputValue(props.currentPath, props.homePath));
+  const currentRoot = createMemo(() => matchFilesystemRoot(props.currentPath, props.roots ?? []));
   const pathStatus = createMemo(() => {
     if (pathControlMode() !== 'edit') return null;
     if (pathError().trim()) {
@@ -443,7 +449,19 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
         <div class="flex h-full min-h-0 flex-col gap-1.5">
           <div class="flex items-center justify-between px-0.5 text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground/60">
             <span>Folder Tree</span>
-            <span>{browser.currentPath() === '/' ? browser.homeLabel() : 'Compact depth'}</span>
+            <span class="flex items-center gap-1">
+              <span>{currentRoot()?.label ?? 'Compact depth'}</span>
+              <Show when={currentRoot()}>
+                {(root) => (
+                  <span
+                    class="rounded-full border border-border/40 bg-background/80 px-1 py-0 text-[8px] font-semibold leading-4 text-muted-foreground"
+                    title={`${root().label} is ${root().permissions.write ? 'read-write' : 'read-only'}`}
+                  >
+                    {root().permissions.write ? 'RW' : 'RO'}
+                  </span>
+                )}
+              </Show>
+            </span>
           </div>
 
           <div
@@ -459,6 +477,10 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
               enableDragDrop={dragEnabled()}
               sidebarOpen={props.open}
               scrollContainer={() => treeScrollEl}
+              roots={props.roots}
+              currentPath={props.currentPath}
+              onRootSelect={props.onRootSelect}
+              onRootWritePermissionChange={props.onRootWritePermissionChange}
               class="min-h-full"
             />
           </div>
@@ -562,6 +584,7 @@ export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
           captureTypingFromPage={props.captureTypingFromPage}
           currentPath={props.currentPath}
           homePath={props.homePath}
+          roots={props.roots}
           width={props.width}
           open={props.open}
           resizable={props.resizable}
@@ -569,6 +592,8 @@ export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
           onClose={props.onClose}
           showMobileSidebarButton={props.showMobileSidebarButton}
           onToggleSidebar={props.onToggleSidebar}
+          onRootSelect={props.onRootSelect}
+          onRootWritePermissionChange={props.onRootWritePermissionChange}
           instanceId={props.instanceId}
           onPathSubmit={props.onPathSubmit}
           pathEditRequestKey={props.pathEditRequestKey}
