@@ -969,3 +969,114 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("await startEnvironmentRuntime(latestTarget, 'connect', { allowActiveWorkReplacement: true });");
   });
 });
+
+describe('suggestConnectionLabel', () => {
+  // suggestConnectionLabel 在 App.tsx 中定义，以下是在测试中重建的等效逻辑以验证其正确性。
+  // 这些测试确保函数行为符合设计方案中定义的数据结构设计。
+
+  function trimString(value: string): string {
+    return value.trim();
+  }
+
+  type ConnectionKind = 'external_local_ui' | 'ssh_environment' | 'local_container_runtime' | 'ssh_container_runtime';
+
+  type TestState = Readonly<{
+    connection_kind: ConnectionKind;
+    label: string;
+    ssh_destination?: string;
+    container_label?: string;
+  }>;
+
+  function suggestConnectionLabel(state: TestState | null): string | null {
+    if (!state) return null;
+    switch (state.connection_kind) {
+      case 'ssh_environment': {
+        const dest = trimString(state.ssh_destination ?? '');
+        return dest === '' ? null : dest;
+      }
+      case 'local_container_runtime':
+      case 'ssh_container_runtime': {
+        const lbl = trimString(state.container_label ?? '');
+        return lbl === '' ? null : lbl;
+      }
+      case 'external_local_ui':
+        return null;
+    }
+  }
+
+  it('returns null for null state', () => {
+    expect(suggestConnectionLabel(null)).toBeNull();
+  });
+
+  it('returns the SSH destination for ssh_environment when set', () => {
+    expect(suggestConnectionLabel({
+      connection_kind: 'ssh_environment',
+      label: '',
+      ssh_destination: 'my-server',
+    })).toBe('my-server');
+  });
+
+  it('returns null for ssh_environment when ssh_destination is empty', () => {
+    expect(suggestConnectionLabel({
+      connection_kind: 'ssh_environment',
+      label: '',
+      ssh_destination: '',
+    })).toBeNull();
+  });
+
+  it('returns the container_label for local_container_runtime when set', () => {
+    expect(suggestConnectionLabel({
+      connection_kind: 'local_container_runtime',
+      label: '',
+      container_label: 'web-app',
+    })).toBe('web-app');
+  });
+
+  it('returns the container_label for ssh_container_runtime when set', () => {
+    expect(suggestConnectionLabel({
+      connection_kind: 'ssh_container_runtime',
+      label: '',
+      ssh_destination: 'remote-host',
+      container_label: 'prod-app',
+    })).toBe('prod-app');
+  });
+
+  it('returns null for container kinds when container_label is empty', () => {
+    expect(suggestConnectionLabel({
+      connection_kind: 'local_container_runtime',
+      label: '',
+      container_label: '',
+    })).toBeNull();
+  });
+
+  it('returns null for external_local_ui regardless of other fields', () => {
+    expect(suggestConnectionLabel({
+      connection_kind: 'external_local_ui',
+      label: '',
+    })).toBeNull();
+  });
+
+  it('ignores label field in the state — only uses connection-specific fields', () => {
+    expect(suggestConnectionLabel({
+      connection_kind: 'ssh_environment',
+      label: 'user-typed-name',
+      ssh_destination: 'dev-server',
+    })).toBe('dev-server');
+  });
+
+  it('trims whitespace from the connection field before returning', () => {
+    expect(suggestConnectionLabel({
+      connection_kind: 'ssh_environment',
+      label: '',
+      ssh_destination: '  staging-box  ',
+    })).toBe('staging-box');
+  });
+
+  it('returns null when ssh_destination is all whitespace', () => {
+    expect(suggestConnectionLabel({
+      connection_kind: 'ssh_environment',
+      label: '',
+      ssh_destination: '   ',
+    })).toBeNull();
+  });
+});

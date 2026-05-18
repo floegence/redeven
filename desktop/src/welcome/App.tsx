@@ -618,6 +618,23 @@ function createRuntimeContainerConnectionDialogState(
   };
 }
 
+function suggestConnectionLabel(state: ConnectionDialogState): string | null {
+  if (!state) return null;
+  switch (state.connection_kind) {
+    case 'ssh_environment': {
+      const dest = trimString(state.ssh_destination);
+      return dest === '' ? null : dest;
+    }
+    case 'local_container_runtime':
+    case 'ssh_container_runtime': {
+      const lbl = trimString(state.container_label);
+      return lbl === '' ? null : lbl;
+    }
+    case 'external_local_ui':
+      return null;
+  }
+}
+
 function createControlPlaneDialogState(
   overrides: Partial<Exclude<ControlPlaneDialogState, null>> = {},
 ): Exclude<ControlPlaneDialogState, null> {
@@ -1622,7 +1639,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       if (!current) {
         return current;
       }
-      return {
+      const base = {
         ...current,
         [name]: value,
         ...(
@@ -1632,6 +1649,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             : {}
         ),
       };
+      if (name === 'ssh_destination' || name === 'container_label') {
+        const suggested = suggestConnectionLabel(base as ConnectionDialogState);
+        if (suggested !== null && !trimString(base.label)) {
+          return { ...base, label: suggested };
+        }
+      }
+      return base as ConnectionDialogState;
     });
   }
 
@@ -5684,7 +5708,7 @@ const LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS = cn(
 	  'max-h-[calc(100dvh-3rem)] w-[min(58rem,96vw)]',
 	);
 
-const LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS = 'redeven-tile rounded-md border border-border px-4 py-4';
+const LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS = 'redeven-tile rounded-md border border-border px-4 py-4 redeven-settings-detail-card';
 
 function accessModeIcon(mode: DesktopAccessMode): (props?: { class?: string }) => JSX.Element {
   switch (mode) {
@@ -6701,7 +6725,7 @@ function ConnectionDialog(props: Readonly<{
       )}
     >
       <div
-        class="space-y-4"
+        class="space-y-5"
         onWheel={(event) => {
           let el: HTMLElement | null = event.currentTarget as HTMLElement;
           while (el) {
@@ -6730,65 +6754,56 @@ function ConnectionDialog(props: Readonly<{
               ]}
               size="sm"
             />
-            <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-[11px] leading-5 text-muted-foreground">
+            <div class="rounded-md border border-dashed border-border/40 bg-muted/10 px-3 py-2 text-[11px] leading-5 text-muted-foreground">
               {connectionKindDescription()}
             </div>
           </div>
         </Show>
 
-        <div class="space-y-1.5">
-          <label for="environment-label" class="block text-xs font-medium text-foreground">
-            Name <span class="text-destructive">*</span>
-          </label>
-          <Input
-            id="environment-label"
-            value={props.state?.label ?? ''}
-            onInput={(event) => {
-              props.updateField('label', event.currentTarget.value);
-              props.clearFieldErrors();
-            }}
-            placeholder="My Environment"
-            size="sm"
-            class={cn('w-full', props.fieldErrors.label && 'border-destructive ring-1 ring-destructive/20')}
-          />
-          <Show when={props.fieldErrors.label}>
-            <div class="text-[11px] text-destructive">{props.fieldErrors.label}</div>
-          </Show>
-        </div>
-
         <Show when={connectionKind() === 'external_local_ui'}>
-          <div class="space-y-1.5">
-            <label for="environment-url" class="block text-xs font-medium text-foreground">
-              Environment URL <span class="text-destructive">*</span>
-            </label>
-            <Input
-              id="environment-url"
-              value={props.state?.connection_kind === 'external_local_ui' ? props.state.external_local_ui_url : ''}
-              onInput={(event) => {
-                props.updateField('external_local_ui_url', event.currentTarget.value);
-                props.clearFieldErrors();
-              }}
-              placeholder="http://192.168.1.11:24000/"
-              size="sm"
-              class={cn('w-full', props.fieldErrors.external_local_ui_url && 'border-destructive ring-1 ring-destructive/20')}
-              spellcheck={false}
-              autofocus={props.state?.mode === 'create'}
-            />
-            <Show when={props.fieldErrors.external_local_ui_url}>
-              <div class="text-[11px] text-destructive">{props.fieldErrors.external_local_ui_url}</div>
-            </Show>
+          <div class="redeven-dialog-section">
+            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              Connection URL
+            </div>
+            <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-3 mt-2 transition-[border-color,background-color,box-shadow] duration-150 hover:border-primary/25 hover:shadow-[0_4px_16px_-12px_color-mix(in_srgb,var(--foreground)_20%,transparent)]">
+              <div class="space-y-1.5">
+                <label for="environment-url" class="block text-xs font-medium text-foreground">
+                  Environment URL <span class="text-destructive">*</span>
+                </label>
+                <Input
+                  id="environment-url"
+                  value={props.state?.connection_kind === 'external_local_ui' ? props.state.external_local_ui_url : ''}
+                  onInput={(event) => {
+                    props.updateField('external_local_ui_url', event.currentTarget.value);
+                    props.clearFieldErrors();
+                  }}
+                  placeholder="http://192.168.1.11:24000/"
+                  size="sm"
+                  class={cn('w-full', props.fieldErrors.external_local_ui_url && 'border-destructive ring-1 ring-destructive/20')}
+                  spellcheck={false}
+                  autofocus={props.state?.mode === 'create'}
+                />
+                <Show when={props.fieldErrors.external_local_ui_url}>
+                  <div class="text-[11px] text-destructive">{props.fieldErrors.external_local_ui_url}</div>
+                </Show>
+              </div>
+            </div>
           </div>
         </Show>
 
         <Show when={isSSHBackedKind()}>
-          <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-3">
-            <div class="text-xs leading-5 text-muted-foreground">
-              {connectionKind() === 'ssh_environment'
-                ? "Desktop reuses only the exact Desktop-managed Redeven release on that host, installs it on demand when needed, and stores runtime state in that host's single runtime profile."
-                : 'Desktop uses this SSH host only as the management channel for the selected container runtime target.'}
+          <div class="redeven-dialog-section">
+            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              SSH Host
             </div>
-            <div class="mt-3 space-y-3">
-              <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7.5rem]">
+            <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-3 mt-2 transition-[border-color,background-color,box-shadow] duration-150 hover:border-primary/25 hover:shadow-[0_4px_16px_-12px_color-mix(in_srgb,var(--foreground)_20%,transparent)]">
+              <div class="rounded-md border border-dashed border-border/40 bg-muted/10 px-2.5 py-2 text-[11px] leading-5 text-muted-foreground">
+                {connectionKind() === 'ssh_environment'
+                  ? "Desktop reuses only the exact Desktop-managed Redeven release on that host, installs it on demand when needed, and stores runtime state in that host's single runtime profile."
+                  : 'Desktop uses this SSH host only as the management channel for the selected container runtime target.'}
+              </div>
+              <div class="mt-3 space-y-3">
+                <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7.5rem]">
                 <div class="space-y-1.5">
                   <label for="environment-ssh-destination" class="block text-xs font-medium text-foreground">
                     SSH Destination <span class="text-destructive">*</span>
@@ -6863,8 +6878,12 @@ function ConnectionDialog(props: Readonly<{
                     {showSSHAdvanced() ? 'Shown' : 'Hidden'}
                   </Tag>
                 </button>
-                <Show when={showSSHAdvanced()}>
-                  <div class="border-t border-border/70 px-3 py-3">
+                <div class={cn(
+                  'redeven-dialog-collapse',
+                  showSSHAdvanced() && 'redeven-dialog-collapse--open',
+                )}>
+                  <div>
+                    <div class="border-t border-border/70 px-3 py-3">
                     <div class="space-y-3">
                       <div class="space-y-1.5">
                         <label class="block text-xs font-medium text-foreground">Bootstrap Delivery</label>
@@ -6930,17 +6949,23 @@ function ConnectionDialog(props: Readonly<{
                       </div>
                     </div>
                   </div>
-                </Show>
+                  </div>
+                </div>
               </div>
               </Show>
+              </div>
             </div>
           </div>
         </Show>
 
         <Show when={isContainerKind()}>
-          <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-3">
-            <div class="space-y-3">
-              <div class="grid gap-3 sm:grid-cols-[10rem_minmax(0,1fr)]">
+          <div class="redeven-dialog-section">
+            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              Container
+            </div>
+            <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-3 mt-2 transition-[border-color,background-color,box-shadow] duration-150 hover:border-primary/25 hover:shadow-[0_4px_16px_-12px_color-mix(in_srgb,var(--foreground)_20%,transparent)]">
+              <div class="space-y-3">
+                <div class="grid gap-3 sm:grid-cols-[10rem_minmax(0,1fr)]">
                 <div class="space-y-1.5">
                   <label class="block text-xs font-medium text-foreground">Engine</label>
                   <SegmentedControl
@@ -6976,10 +7001,7 @@ function ConnectionDialog(props: Readonly<{
                     props.updateField('container_id', container.container_id);
                     props.updateField('container_ref', container.container_ref);
                     props.updateField('container_label', container.container_label);
-                    if (!trimString(props.state?.label ?? '')) {
-                      props.updateField('label', container.container_label);
-                    }
-                      props.clearFieldErrors();
+                    props.clearFieldErrors();
                   }}
                 />
               </div>
@@ -7008,7 +7030,28 @@ function ConnectionDialog(props: Readonly<{
               </div>
             </div>
           </div>
+          </div>
         </Show>
+
+        <div class="space-y-1.5 rounded-md border border-dashed border-border/30 bg-background/40 px-3 py-3">
+          <label for="environment-label" class="block text-xs font-medium text-foreground">
+            Name <span class="text-destructive">*</span>
+          </label>
+          <Input
+            id="environment-label"
+            value={props.state?.label ?? ''}
+            onInput={(event) => {
+              props.updateField('label', event.currentTarget.value);
+              props.clearFieldErrors();
+            }}
+            placeholder="My Environment"
+            size="sm"
+            class={cn('w-full', props.fieldErrors.label && 'border-destructive ring-1 ring-destructive/20')}
+          />
+          <Show when={props.fieldErrors.label}>
+            <div class="text-[11px] text-destructive">{props.fieldErrors.label}</div>
+          </Show>
+        </div>
 
         <Show when={props.error}>
           <div role="alert" class="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
