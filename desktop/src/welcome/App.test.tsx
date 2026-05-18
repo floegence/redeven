@@ -383,6 +383,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('title={tooltip()}');
     expect(appSrc).toContain('redeven-console-tab');
     expect(appSrc).toContain('redeven-provider-pill');
+    expect(appSrc).toContain('redeven-runtime-chip');
     expect(appSrc).toContain('redeven-environment-card');
     expect(appSrc).toContain('redeven-environment-grid');
   });
@@ -487,6 +488,28 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('<EnvironmentConnectionCard');
     expect(appSrc).toContain('New Environment');
     expect(appSrc).toContain('NewEnvironmentPlaceholderCard');
+  });
+
+  it('renders filter pills with counts, a dismissible chip for runtime target / control plane filters, and conditional live count', () => {
+    const appSrc = readWelcomeSource();
+    const styles = readWelcomeStyles();
+
+    // Pill counts
+    expect(appSrc).toContain('All ({layoutReferenceEnvironmentCount()})');
+    expect(appSrc).toContain('{option.label} ({option.count})');
+    // Chip for non-category filters
+    expect(appSrc).toContain('activeNonCategoryFilterChipLabel');
+    expect(appSrc).toContain('redeven-runtime-chip');
+    expect(styles).toContain('.redeven-runtime-chip');
+    expect(styles).toContain('.redeven-runtime-chip:hover');
+    // Conditional live count
+    expect(appSrc).toContain('open_windows.length > 0');
+    // Dead code removed
+    expect(appSrc).not.toContain('redeven-native-select');
+    expect(appSrc).not.toContain('All Sources');
+    expect(appSrc).not.toContain('activeSourceFilterLabel');
+    // Active pill contrast enhanced
+    expect(styles).toContain('border-color: var(--primary)');
   });
 
   it('renders facts rows, endpoint copy inputs, and pinned sections in the environment library', () => {
@@ -652,7 +675,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Providers');
     expect(appSrc).toContain('Add Provider');
     expect(appSrc).toContain('View Environments');
-    expect(appSrc).toContain('All Sources');
+    expect(appSrc).not.toContain('All Sources');
     expect(appSrc).toContain('Local');
     expect(appSrc).toContain('control-plane-label');
     expect(appSrc).toContain('suggestControlPlaneDisplayLabel');
