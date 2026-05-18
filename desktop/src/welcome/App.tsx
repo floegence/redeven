@@ -341,6 +341,7 @@ const DESKTOP_COMMAND_PLACEHOLDER = 'Search desktop commands...';
 const ACTION_TOAST_TTL_MS = 4_000;
 const GUIDANCE_SUCCESS_DISMISS_MS = 720;
 const GUIDANCE_SESSION_CLEAR_MS = 220;
+const OPEN_CONNECTION_PROGRESS_POPOVER_DELAY_MS = 520;
 
 function normalizePixelMeasurement(value: number): number {
   if (!Number.isFinite(value)) {
@@ -4656,17 +4657,48 @@ function EnvironmentSplitActionButton(props: Readonly<{
     hasOpenConnectionProgress() ? undefined : props.presentation.primary_action_overlay ?? sessionPopoverOverlay()
   ));
   const autoOpenedEnvironmentProgressOperation = new Set<string>();
+  const environmentProgressOperationKey = (progress: DesktopLauncherActionProgress | null | undefined): string => [
+    trimString(progress?.operation_key) || trimString(progress?.subject_id),
+    String(progress?.started_at_unix_ms ?? ''),
+  ].filter(Boolean).join(':');
   createEffect(() => {
-    const progress = primaryProgress() ?? runtimeMenuProgress();
-    const operationKey = [
-      trimString(progress?.operation_key) || trimString(progress?.subject_id),
-      String(progress?.started_at_unix_ms ?? ''),
-    ].filter(Boolean).join(':');
-    if ((progress?.open_progress || progress?.lifecycle_progress) && operationKey !== '' && !autoOpenedEnvironmentProgressOperation.has(operationKey)) {
+    const progress = runtimeMenuProgress();
+    const operationKey = environmentProgressOperationKey(progress);
+    if (progress?.lifecycle_progress && operationKey !== '' && !autoOpenedEnvironmentProgressOperation.has(operationKey)) {
       autoOpenedEnvironmentProgressOperation.add(operationKey);
       closeMenu();
       props.onGuidanceOpenChange(true);
     }
+  });
+  createEffect(() => {
+    const progress = primaryProgress();
+    const operationKey = environmentProgressOperationKey(progress);
+    if (!progress?.open_progress || operationKey === '' || autoOpenedEnvironmentProgressOperation.has(operationKey)) {
+      return;
+    }
+    if (progress.status !== 'running') {
+      autoOpenedEnvironmentProgressOperation.add(operationKey);
+      closeMenu();
+      props.onGuidanceOpenChange(true);
+      return;
+    }
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const handle = window.setTimeout(() => {
+      const currentProgress = primaryProgress();
+      if (
+        currentProgress?.open_progress
+        && currentProgress.status === 'running'
+        && environmentProgressOperationKey(currentProgress) === operationKey
+        && !autoOpenedEnvironmentProgressOperation.has(operationKey)
+      ) {
+        autoOpenedEnvironmentProgressOperation.add(operationKey);
+        closeMenu();
+        props.onGuidanceOpenChange(true);
+      }
+    }, OPEN_CONNECTION_PROGRESS_POPOVER_DELAY_MS);
+    onCleanup(() => window.clearTimeout(handle));
   });
   const tooltipOverlay = createMemo<Extract<EnvironmentPrimaryActionOverlayModel, Readonly<{ kind: 'tooltip' }>> | undefined>(() => {
     const overlay = primaryActionOverlay();
