@@ -1170,7 +1170,7 @@ body {
 }
 
 .redeven-action-popover-surface {
-  --redeven-action-popover-width: min(24rem, calc(100vw - 1rem));
+  --redeven-action-popover-width: min(22rem, calc(100vw - 1rem));
   --redeven-action-popover-border: color-mix(in srgb, var(--redeven-stroke-overlay, var(--border)) 86%, var(--foreground) 14%);
   width: var(--redeven-action-popover-width);
   animation: redeven-action-popover-enter 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
