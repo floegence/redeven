@@ -940,6 +940,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('const providerRuntimeLinkSelectedPlan = createMemo(() => (');
     expect(appSrc).toContain('const providerRuntimeLinkConfirmDisabled = createMemo(() => (');
     expect(appSrc).toContain('disabled={providerRuntimeLinkConfirmDisabled()}');
+    expect(appSrc).toContain("providerRuntimeLinkConfirmation()?.action === 'connect'");
     expect(appSrc).toContain('disabled={!item.canConnect}');
     expect(appSrc).toContain('<Show when={!item.canConnect}>');
   });

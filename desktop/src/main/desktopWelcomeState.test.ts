@@ -1661,6 +1661,7 @@ describe('desktopWelcomeState', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: managedControlPlane,
+        provider_environments: [],
         control_planes: [{
           provider: testProvider,
           account: summaryAccount,
@@ -1908,17 +1909,16 @@ describe('desktopWelcomeState', () => {
       env_public_id: 'env_demo',
       provider_connection_state: 'error',
       can_connect_provider: false,
-      can_disconnect_provider: false,
+      can_disconnect_provider: true,
     });
   });
 
-  it('keeps dual-route entries visible when remote access is removed and marks their Local Environment state as controlplane', () => {
+  it('drops removed provider entries while keeping linked Local runtimes manageable', () => {
     const freshSyncAt = Date.now();
     expect(testProvider).toBeTruthy();
     if (!testProvider) {
       throw new Error('Expected normalized test provider.');
     }
-    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
     const managedControlPlane = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo');
     const summaryAccount = {
       provider_id: testProvider.provider_id,
@@ -1932,6 +1932,7 @@ describe('desktopWelcomeState', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: managedControlPlane,
+        provider_environments: [],
         control_planes: [{
           provider: testProvider,
           account: summaryAccount,
@@ -1940,6 +1941,42 @@ describe('desktopWelcomeState', () => {
           last_synced_at_ms: freshSyncAt,
         }],
       }),
+      managedRuntimePresenceByTargetID: {
+        'local:local': localRuntimePresence({
+          runtime_service: {
+            protocol_version: 'redeven-runtime-v1',
+            service_owner: 'desktop',
+            desktop_managed: true,
+            effective_run_mode: 'desktop',
+            remote_enabled: true,
+            compatibility: 'compatible',
+            open_readiness: { state: 'openable' },
+            active_workload: {
+              terminal_count: 0,
+              session_count: 0,
+              task_count: 0,
+              port_forward_count: 0,
+            },
+            capabilities: {
+              desktop_model_source: { supported: false },
+              provider_link: {
+                supported: true,
+                bind_method: 'runtime_control_v1',
+              },
+            },
+            bindings: {
+              desktop_model_source: { state: 'unsupported' },
+              provider_link: {
+                state: 'linked',
+                provider_origin: 'https://cp.example.invalid',
+                provider_id: 'example_control_plane',
+                env_public_id: 'env_demo',
+                remote_enabled: true,
+              },
+            },
+          },
+        }),
+      },
       controlPlanes: [{
         provider: testProvider,
         account: summaryAccount,
@@ -1954,14 +1991,21 @@ describe('desktopWelcomeState', () => {
       }],
     });
 
-    expect(snapshot.environments.find((entry) => (
+    expect(snapshot.environments.some((entry) => (
       entry.kind === 'provider_environment'
-      && entry.id === providerEnvironment.id
-    ))).toEqual(expect.objectContaining({
-      id: providerEnvironment.id,
-      remote_route_state: 'removed',
-      remote_state_reason: 'This environment is no longer published by the provider.',
-    }));
+      && entry.env_public_id === 'env_demo'
+    ))).toBe(false);
+    expect(snapshot.environments.find((entry) => entry.kind === 'local_environment')).toMatchObject({
+      provider_runtime_link_target: expect.objectContaining({
+        id: 'local:local',
+        provider_link_state: 'linked',
+        provider_origin: 'https://cp.example.invalid',
+        provider_id: 'example_control_plane',
+        env_public_id: 'env_demo',
+        can_disconnect_provider: true,
+      }),
+      provider_environment_candidates: [],
+    });
   });
 
   it('turns blocked local-runtime reports into managed-environment recovery copy', () => {

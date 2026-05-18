@@ -49,6 +49,11 @@ describe('environmentManagementPrinciples', () => {
       runtime_target_id: 'local:local',
     });
     expect(normalizeDesktopProviderRuntimeLinkRequestTarget({
+      runtime_target_id: 'local:local',
+    })).toEqual({
+      runtime_target_id: 'local:local',
+    });
+    expect(normalizeDesktopProviderRuntimeLinkRequestTarget({
       provider_environment_id: 'provider-env',
       runtime_target_id: 'provider-env',
     })).toBeNull();

@@ -850,6 +850,18 @@ function runtimeProviderLinkMenuAction(
         },
       };
     case 'error':
+      if (target.can_disconnect_provider) {
+        return {
+          id: 'disconnect_provider_runtime',
+          label: 'Disconnect from provider',
+          action: {
+            intent: 'disconnect_provider_runtime',
+            label: 'Disconnect from provider',
+            enabled: true,
+            variant: 'outline',
+          },
+        };
+      }
       return {
         id: 'provider_link_needs_attention',
         label: 'Provider link needs attention',

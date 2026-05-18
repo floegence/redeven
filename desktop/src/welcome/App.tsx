@@ -2082,11 +2082,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     const latestEnvironment = await loadLatestEnvironmentEntry(confirmation.environment.id) ?? confirmation.environment;
     const providerEnvironmentID = providerRuntimeLinkProviderEnvironmentID();
-    if (providerEnvironmentID === '') {
-      setErrorMessage('connect', 'Choose a provider environment first.');
-      return;
-    }
     if (confirmation.action === 'connect') {
+      if (providerEnvironmentID === '') {
+        setErrorMessage('connect', 'Choose a provider environment first.');
+        return;
+      }
       const target = latestEnvironment.provider_runtime_link_target;
       const providerEnvironment = latestEnvironment.provider_environment_candidates?.find((candidate) => (
         candidate.provider_environment_id === providerEnvironmentID
@@ -2143,7 +2143,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     const result = await performLauncherAction({
       kind: 'disconnect_provider_runtime',
-      provider_environment_id: providerEnvironmentID,
+      ...(providerEnvironmentID !== '' ? { provider_environment_id: providerEnvironmentID } : {}),
       runtime_target_id: target.id,
     }, errorTarget);
     const disconnected = result?.outcome === 'disconnected_provider_runtime';

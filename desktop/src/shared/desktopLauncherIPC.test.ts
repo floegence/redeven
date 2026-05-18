@@ -108,6 +108,13 @@ describe('desktopLauncherIPC', () => {
       provider_environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
       runtime_target_id: 'local:local',
     });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'disconnect_provider_runtime',
+      runtime_target_id: ' local:local ',
+    })).toEqual({
+      kind: 'disconnect_provider_runtime',
+      runtime_target_id: 'local:local',
+    });
     expect(normalizeDesktopLauncherActionRequest({ kind: 'close_launcher_or_quit' })).toEqual({ kind: 'close_launcher_or_quit' });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'save_local_environment_settings',
@@ -386,6 +393,15 @@ describe('desktopLauncherIPC', () => {
     expect(normalizeDesktopLauncherActionRequest({ kind: 'connect_provider_runtime', provider_environment_id: '   ', runtime_target_id: 'local:local' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'connect_provider_runtime', provider_environment_id: 'provider-env', runtime_target_id: 'provider-env' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'connect_provider_runtime', provider_environment_id: 'provider-env' })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'disconnect_provider_runtime', runtime_target_id: ' local:local ' })).toEqual({
+      kind: 'disconnect_provider_runtime',
+      runtime_target_id: 'local:local',
+    });
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'disconnect_provider_runtime', provider_environment_id: 'provider-env', runtime_target_id: ' local:local ' })).toEqual({
+      kind: 'disconnect_provider_runtime',
+      provider_environment_id: 'provider-env',
+      runtime_target_id: 'local:local',
+    });
     expect(normalizeDesktopLauncherActionRequest({ kind: 'disconnect_provider_runtime', provider_environment_id: 'provider-env', runtime_target_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'disconnect_provider_runtime', provider_environment_id: 'provider-env', runtime_target_id: 'local:' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({
