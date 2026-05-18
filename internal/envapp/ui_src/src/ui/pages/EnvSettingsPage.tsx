@@ -906,7 +906,7 @@ export function EnvSettingsPage() {
     String(desktopModelSourceStatus()?.binding_state ?? runtimeDesktopModelSourceBinding()?.state ?? '').trim()
   ));
   const flowerBadge = createMemo(() => {
-    if (aiEnabled()) return 'Remote runtime';
+    if (aiEnabled()) return 'Runtime config';
     if (desktopModelSourceBindingState() === 'bound' && desktopModelSourceStatus()?.available) return 'Desktop source';
     if (desktopModelSourceBindingState() === 'bound') return 'Desktop bound';
     if (desktopModelSourceStatus()?.available) return 'Desktop source';
@@ -3615,7 +3615,7 @@ export function EnvSettingsPage() {
                             disabled={!canInteract() || aiModelOptions().length === 0 || aiSaving() || disableAISaving()}
                           />
                         </SettingsTableCell>
-                        <SettingsTableCell class="text-[11px] text-muted-foreground">Default model for new chats. Individual threads may still select a different model.</SettingsTableCell>
+                        <SettingsTableCell class="text-[11px] text-muted-foreground">Current model used when a new chat thread is created. Individual threads may still select a different model.</SettingsTableCell>
                       </SettingsTableRow>
                     </SettingsTableBody>
                   </SettingsTable>

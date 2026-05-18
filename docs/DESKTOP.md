@@ -101,7 +101,7 @@ This Desktop model source is a session capability, not a persisted remote config
 - Local Desktop-managed runtimes continue to use their local runtime config directly because they already run on the Desktop host and do not need a model-source bridge.
 - Remote tools still run inside the SSH-hosted runtime and remain governed by the remote session's `session_meta` plus local `permission_policy`.
 - If the Desktop source is unavailable, the SSH runtime still starts; Flower uses the remote runtime's own AI config only when that config exists.
-- Env App surfaces the split explicitly as model sources `Remote runtime` and `Desktop`, tools location `SSH Host`, and Runtime Service binding state `connecting` / `bound` / `unbound` / `unsupported` / `error` / `expired`.
+- Env App keeps this split quiet in the chat header: normal environment-runtime AI config has no extra tag, while Desktop-backed model calls show a small `REMOTE` tag with a tooltip explaining that AI requests are handled by Desktop and workspace actions still run in the selected runtime. Runtime Settings still surfaces the Runtime Service binding state as `connecting` / `bound` / `unbound` / `unsupported` / `error` / `expired`.
 - The SSH connection progress UI treats Desktop model preparation as an independently observable model-source state. Stopping the progress overlay means stopping the opening attempt, not disabling a model source permanently.
 
 ### SSH Host Environment

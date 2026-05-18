@@ -39,7 +39,7 @@ import {
 } from '../chat/askUserContract';
 import { RpcError, useProtocol } from '@floegence/floe-webapp-protocol';
 import { useEnvContext } from './EnvContext';
-import { useAIChatContext, type AIModelOption, type AIModelSourceKey } from './AIChatContext';
+import { useAIChatContext, type AIModelOption } from './AIChatContext';
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import { Tooltip } from '../primitives/Tooltip';
 import { fetchGatewayJSON, prepareGatewayRequestInit, uploadGatewayFile } from '../services/gatewayApi';
@@ -1817,7 +1817,7 @@ export function EnvAIPage() {
   );
   const hasActiveThread = createMemo(() => !!String(ai.activeThreadId() ?? '').trim());
   const headerModelControlDisabled = createMemo(() => ai.models.loading || !!ai.models.error || !canRWXReady());
-  const defaultModelControlDisabled = createMemo(() => headerModelControlDisabled());
+  const currentModelControlDisabled = createMemo(() => headerModelControlDisabled());
   const threadModelControlDisabled = createMemo(() => headerModelControlDisabled() || activeThreadRunning());
   const modelLabelById = createMemo(() => {
     const map = new Map<string, string>();
@@ -1843,33 +1843,25 @@ export function EnvAIPage() {
     return map;
   });
   const selectedHeaderModelId = createMemo(() => (
-    String(hasActiveThread() ? ai.selectedThreadModel() : ai.selectedDefaultModel()).trim()
+    String(hasActiveThread() ? ai.selectedThreadModel() : ai.selectedCurrentModel()).trim()
   ));
-  const selectedModelSource = createMemo<AIModelSourceKey | ''>(() => {
-    const selected = modelOptionById().get(selectedHeaderModelId());
-    if (selected) return selected.source;
-    return ai.modelSourceGroups()[0]?.source ?? '';
-  });
-  const selectedSourceModelOptions = createMemo<AIModelOption[]>(() => {
-    const source = selectedModelSource();
-    const group = ai.modelSourceGroups().find((item) => item.source === source);
-    return group?.models.slice() ?? ai.modelOptions();
-  });
-  const selectedModelSourceLabel = createMemo(() => {
-    const option = modelOptionById().get(selectedHeaderModelId());
-    return String(option?.sourceLabel ?? '').trim() || (option?.source === 'desktop_model_source' ? 'Desktop' : 'Remote runtime');
-  });
-  const selectModelSource = (source: AIModelSourceKey): void => {
-    const group = ai.modelSourceGroups().find((item) => item.source === source);
-    const firstModel = group?.models[0]?.value ?? '';
-    if (!firstModel) return;
-    if (group?.models.some((item) => item.value === selectedHeaderModelId())) return;
-    if (hasActiveThread()) {
-      ai.selectThreadModel(firstModel);
-      return;
-    }
-    ai.selectDefaultModel(firstModel);
-  };
+  const selectedHeaderModelOption = createMemo(() => modelOptionById().get(selectedHeaderModelId()) ?? null);
+  const selectedHeaderModelLabel = createMemo(() => formatModelLabel(selectedHeaderModelId()));
+  const showRemoteModelTag = createMemo(() => selectedHeaderModelOption()?.source === 'desktop_model_source');
+  const remoteModelTooltip = 'AI requests are handled by your Desktop. Files, terminal, Git, and workspace actions still run in this environment.';
+  const remoteModelTag = () => (
+    <Show when={showRemoteModelTag()}>
+      <Tooltip content={remoteModelTooltip} placement="bottom" delay={0}>
+        <span
+          data-testid="ai-remote-model-tag"
+          tabIndex={0}
+          class="inline-flex h-6 shrink-0 cursor-help items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-amber-700 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-amber-500/30 dark:text-amber-300"
+        >
+          REMOTE
+        </span>
+      </Tooltip>
+    </Show>
+  );
   const desktopModelSourceMissingKeys = createMemo(() => (
     ai.settings()?.ai_runtime?.desktop_model_source?.missing_key_provider_ids?.filter(Boolean) ?? []
   ));
@@ -3687,114 +3679,48 @@ export function EnvAIPage() {
                     <span class="truncate font-medium">{ai.activeThreadTitle()}</span>
                   </div>
                   <div class="flower-chat-header-actions">
-                    <Show when={ai.aiEnabled()}>
-                      <div class="hidden md:inline-flex max-w-full items-center gap-2 rounded-full border border-border/70 bg-muted/20 px-2 py-1 text-[11px]">
-                        <span class="text-[10px] font-medium uppercase text-muted-foreground">Model</span>
-                        <span class="max-w-[96px] truncate font-medium text-foreground">{selectedModelSourceLabel()}</span>
-                        <span class="h-3 w-px bg-border" />
-                        <span class="text-[10px] font-medium uppercase text-muted-foreground">Tools</span>
-                        <span class="font-medium text-foreground">SSH Host</span>
-                      </div>
-                    </Show>
                     <Show when={ai.aiEnabled() && ai.modelOptions().length > 0}>
                       <Show
-                        when={hasActiveThread()}
+                        when={hasActiveThread() && ai.activeThreadModelLocked()}
                         fallback={(
                           <div
-                            data-testid="default-model-control"
-                            class="inline-flex max-w-full items-center gap-2 rounded-full border border-border/70 bg-muted/20 px-2 py-1"
+                            data-testid={hasActiveThread() ? 'thread-model-control' : 'current-model-control'}
+                            class="flower-chat-model-control inline-flex max-w-full min-w-0 flex-wrap items-center justify-end gap-2 rounded-full border border-border/70 bg-muted/20 px-2 py-1"
                           >
                             <span class="hidden sm:inline text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-                              Default model
+                              MODEL
                             </span>
-                            <Show when={ai.modelSourceGroups().length > 1}>
-                              <div data-testid="default-model-source-selector" class="inline-flex shrink-0 rounded-full border border-border/70 bg-background/60 p-0.5">
-                                <For each={ai.modelSourceGroups()}>
-                                  {(sourceGroup) => (
-                                    <button
-                                      type="button"
-                                      class={cn(
-                                        'h-6 rounded-full px-2 text-[10px] font-medium transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50',
-                                        selectedModelSource() === sourceGroup.source
-                                          ? 'bg-primary text-primary-foreground shadow-sm'
-                                          : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground',
-                                      )}
-                                      disabled={defaultModelControlDisabled()}
-                                      aria-pressed={selectedModelSource() === sourceGroup.source}
-                                      onClick={() => selectModelSource(sourceGroup.source)}
-                                    >
-                                      {sourceGroup.sourceLabel}
-                                    </button>
-                                  )}
-                                </For>
-                              </div>
-                            </Show>
                             <Select
-                              value={ai.selectedDefaultModel()}
-                              onChange={(v) => ai.selectDefaultModel(String(v ?? '').trim())}
-                              options={selectedSourceModelOptions()}
-                              placeholder="Select default model..."
-                              disabled={defaultModelControlDisabled()}
+                              value={hasActiveThread() ? ai.selectedThreadModel() : ai.selectedCurrentModel()}
+                              onChange={(v) => {
+                                const next = String(v ?? '').trim();
+                                if (hasActiveThread()) {
+                                  ai.selectThreadModel(next);
+                                  return;
+                                }
+                                ai.selectCurrentModel(next);
+                              }}
+                              options={ai.modelOptions()}
+                              placeholder="Select model..."
+                              disabled={hasActiveThread() ? threadModelControlDisabled() : currentModelControlDisabled()}
                               class="ai-model-select-trigger flower-chat-model-select min-w-[120px] max-w-[160px] sm:min-w-[140px] sm:max-w-[200px] h-7 text-[11px]"
                             />
+                            {remoteModelTag()}
                           </div>
                         )}
                       >
-                        <Show
-                          when={!ai.activeThreadModelLocked()}
-                          fallback={(
-                            <div
-                              data-testid="thread-model-locked-badge"
-                              class="inline-flex max-w-full items-center gap-2 rounded-full border border-border/70 bg-muted/20 px-2 py-1 text-[11px]"
-                              title={ai.selectedThreadModel()}
-                            >
-                              <span class="hidden sm:inline text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-                                Thread model
-                              </span>
-                              <span class="max-w-[160px] truncate font-medium text-foreground">{activeThreadModelLabel() || 'Unknown model'}</span>
-                              <span class="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Locked</span>
-                            </div>
-                          )}
+                        <div
+                          data-testid="thread-model-locked-badge"
+                          class="flower-chat-model-control inline-flex max-w-full min-w-0 flex-wrap items-center justify-end gap-2 rounded-full border border-border/70 bg-muted/20 px-2 py-1 text-[11px]"
+                          title={ai.selectedThreadModel()}
                         >
-                          <div
-                            data-testid="thread-model-control"
-                            class="inline-flex max-w-full items-center gap-2 rounded-full border border-border/70 bg-muted/20 px-2 py-1"
-                          >
-                            <span class="hidden sm:inline text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-                              Thread model
-                            </span>
-                            <Show when={ai.modelSourceGroups().length > 1}>
-                              <div data-testid="thread-model-source-selector" class="inline-flex shrink-0 rounded-full border border-border/70 bg-background/60 p-0.5">
-                                <For each={ai.modelSourceGroups()}>
-                                  {(sourceGroup) => (
-                                    <button
-                                      type="button"
-                                      class={cn(
-                                        'h-6 rounded-full px-2 text-[10px] font-medium transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50',
-                                        selectedModelSource() === sourceGroup.source
-                                          ? 'bg-primary text-primary-foreground shadow-sm'
-                                          : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground',
-                                      )}
-                                      disabled={threadModelControlDisabled()}
-                                      aria-pressed={selectedModelSource() === sourceGroup.source}
-                                      onClick={() => selectModelSource(sourceGroup.source)}
-                                    >
-                                      {sourceGroup.sourceLabel}
-                                    </button>
-                                  )}
-                                </For>
-                              </div>
-                            </Show>
-                            <Select
-                              value={ai.selectedThreadModel()}
-                              onChange={(v) => ai.selectThreadModel(String(v ?? '').trim())}
-                              options={selectedSourceModelOptions()}
-                              placeholder="Select thread model..."
-                              disabled={threadModelControlDisabled()}
-                              class="ai-model-select-trigger flower-chat-model-select min-w-[120px] max-w-[160px] sm:min-w-[140px] sm:max-w-[200px] h-7 text-[11px]"
-                            />
-                          </div>
-                        </Show>
+                          <span class="hidden sm:inline text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                            MODEL
+                          </span>
+                          <span class="min-w-0 max-w-[160px] truncate font-medium text-foreground">{selectedHeaderModelLabel() || activeThreadModelLabel() || 'Unknown model'}</span>
+                          <span class="shrink-0 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Locked</span>
+                          {remoteModelTag()}
+                        </div>
                       </Show>
                     </Show>
 

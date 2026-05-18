@@ -245,15 +245,15 @@ describe('AIChatContext model selection', () => {
     resetStorage();
   });
 
-  it('updates current_model_id immediately when the draft default model changes', async () => {
+  it('updates current_model_id immediately when the current draft model changes', async () => {
     const { ctx, dispose } = await renderContext();
 
     expect(ctx.activeThreadId()).toBeNull();
-    expect(ctx.selectedDefaultModel()).toBe('openai/model-a');
+    expect(ctx.selectedCurrentModel()).toBe('openai/model-a');
 
-    ctx.selectDefaultModel('openai/model-b');
+    ctx.selectCurrentModel('openai/model-b');
 
-    expect(ctx.selectedDefaultModel()).toBe('openai/model-b');
+    expect(ctx.selectedCurrentModel()).toBe('openai/model-b');
     await vi.waitFor(() => {
       expect(currentModelRequests).toEqual([{ model_id: 'openai/model-b' }]);
       expect(modelsState.current_model).toBe('openai/model-b');
@@ -285,11 +285,11 @@ describe('AIChatContext model selection', () => {
     dispose();
   });
 
-  it('groups Remote runtime and Desktop model sources from the model list', async () => {
+  it('groups runtime config and Desktop model sources from the model list', async () => {
     modelsState = {
       current_model: 'remote/model-a',
       models: [
-        { id: 'remote/model-a', label: 'Remote A', source: 'runtime_config', source_label: 'Remote runtime' },
+        { id: 'remote/model-a', label: 'Remote A', source: 'runtime_config', source_label: 'Runtime config' },
         { id: 'desktop:model_local_b', label: 'Desktop B', source: 'desktop_model_source', source_label: 'Desktop' },
       ],
     };
@@ -297,15 +297,15 @@ describe('AIChatContext model selection', () => {
     const { ctx, dispose } = await renderContext();
 
     expect(ctx.modelOptions()).toEqual([
-      { value: 'remote/model-a', label: 'Remote A', source: 'runtime_config', sourceLabel: 'Remote runtime' },
+      { value: 'remote/model-a', label: 'Remote A', source: 'runtime_config', sourceLabel: 'Runtime config' },
       { value: 'desktop:model_local_b', label: 'Desktop B', source: 'desktop_model_source', sourceLabel: 'Desktop' },
     ]);
     expect(ctx.modelSourceGroups()).toEqual([
       {
         source: 'runtime_config',
-        sourceLabel: 'Remote runtime',
+        sourceLabel: 'Runtime config',
         available: true,
-        models: [{ value: 'remote/model-a', label: 'Remote A', source: 'runtime_config', sourceLabel: 'Remote runtime' }],
+        models: [{ value: 'remote/model-a', label: 'Remote A', source: 'runtime_config', sourceLabel: 'Runtime config' }],
       },
       {
         source: 'desktop_model_source',
@@ -336,21 +336,21 @@ describe('AIChatContext model selection', () => {
       expect(threadsState[0]?.model_id).toBe('openai/model-b');
     });
     expect(currentModelRequests).toEqual([]);
-    expect(ctx.selectedDefaultModel()).toBe('openai/model-a');
+    expect(ctx.selectedCurrentModel()).toBe('openai/model-a');
 
     dispose();
   });
 
-  it('rolls back the default model when persisting current_model_id fails', async () => {
+  it('rolls back the current model when persisting current_model_id fails', async () => {
     currentModelError = new Error('save failed');
     const { ctx, dispose } = await renderContext();
 
-    ctx.selectDefaultModel('openai/model-b');
-    expect(ctx.selectedDefaultModel()).toBe('openai/model-b');
+    ctx.selectCurrentModel('openai/model-b');
+    expect(ctx.selectedCurrentModel()).toBe('openai/model-b');
 
     await vi.waitFor(() => {
       expect(notificationMock.error).toHaveBeenCalledWith('Failed to update current model', 'save failed');
-      expect(ctx.selectedDefaultModel()).toBe('openai/model-a');
+      expect(ctx.selectedCurrentModel()).toBe('openai/model-a');
     });
     expect(modelsState.current_model).toBe('openai/model-a');
 
@@ -379,10 +379,10 @@ describe('AIChatContext model selection', () => {
     dispose();
   });
 
-  it('uses the selected default model when creating a new thread', async () => {
+  it('uses the selected current model when creating a new thread', async () => {
     const { ctx, dispose } = await renderContext();
 
-    ctx.selectDefaultModel('openai/model-b');
+    ctx.selectCurrentModel('openai/model-b');
     await vi.waitFor(() => {
       expect(modelsState.current_model).toBe('openai/model-b');
     });
