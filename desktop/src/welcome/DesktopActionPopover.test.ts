@@ -12,6 +12,7 @@ describe('DesktopActionPopover', () => {
     const source = readDesktopActionPopoverSource();
 
     expect(source).toContain('data-redeven-action-popover-anchor=""');
+    expect(source).toContain('redeven-action-popover-frame');
     expect(source).toContain('requestAnimationFrame(() => {');
     expect(source).toContain('firstFocusableElement(popoverRef)?.focus();');
     expect(source).toContain("document.addEventListener('mousedown', handlePointerDown);");

@@ -141,7 +141,7 @@ export function DesktopActionPopover(props: DesktopActionPopoverProps) {
           ariaLabel={props.popoverAriaLabel}
           interactive
           class={cn(
-            'redeven-action-popover-surface z-[225] max-w-[min(18rem,calc(100vw-1rem))] border border-border bg-popover text-popover-foreground',
+            'redeven-action-popover-surface z-[225] text-popover-foreground',
             closing() && 'redeven-action-popover-surface--closing',
             props.class,
           )}
@@ -149,9 +149,9 @@ export function DesktopActionPopover(props: DesktopActionPopoverProps) {
             popoverRef = element;
           }}
         >
-          <>
+          <div class="redeven-action-popover-frame">
             {props.content}
-          </>
+          </div>
         </DesktopAnchoredOverlaySurface>
       </Show>
     </span>

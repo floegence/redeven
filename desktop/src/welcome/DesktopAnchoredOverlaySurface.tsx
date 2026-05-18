@@ -148,7 +148,7 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
       >
         {props.children}
         <div
-          class={cn('absolute h-0 w-0', desktopOverlayArrowClass(resolvedPlacement()))}
+          class={cn('redeven-anchored-overlay-arrow absolute h-0 w-0', desktopOverlayArrowClass(resolvedPlacement()))}
           style={position() ? desktopOverlayArrowStyle(position()!) : undefined}
         />
       </div>
