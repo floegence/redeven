@@ -1377,12 +1377,12 @@ body {
   border-top: 1px solid color-mix(in srgb, var(--border) 46%, transparent);
 }
 
-.redeven-runtime-startup-progress {
+.redeven-environment-progress {
   min-width: min(22rem, calc(100vw - 1rem));
   gap: 0.55rem;
 }
 
-.redeven-runtime-startup-progress__header {
+.redeven-environment-progress__header {
   display: flex;
   min-width: 0;
   align-items: flex-start;
@@ -1390,7 +1390,7 @@ body {
   gap: 0.75rem;
 }
 
-.redeven-runtime-startup-progress__target {
+.redeven-environment-progress__target {
   min-width: 0;
   overflow-wrap: anywhere;
   font-size: 0.68rem;
@@ -1399,7 +1399,7 @@ body {
   color: var(--muted-foreground);
 }
 
-.redeven-runtime-startup-progress__status {
+.redeven-environment-progress__status {
   flex: 0 0 auto;
   border: 1px solid color-mix(in srgb, var(--primary) 22%, transparent);
   border-radius: 9999px;
@@ -1416,14 +1416,14 @@ body {
     color 200ms ease;
 }
 
-.redeven-runtime-startup-progress__status[data-phase='succeeded'] {
+.redeven-environment-progress__status[data-phase='succeeded'] {
   border-color: color-mix(in srgb, var(--success) 22%, transparent);
   background: color-mix(in srgb, var(--success) 6%, transparent);
   color: color-mix(in srgb, var(--success) 82%, white 18%);
 }
 
-.redeven-runtime-startup-progress__status[data-phase='failed'],
-.redeven-runtime-startup-progress__status[data-phase='canceled'] {
+.redeven-environment-progress__status[data-phase='failed'],
+.redeven-environment-progress__status[data-phase='canceled'] {
   border-color: color-mix(in srgb, var(--error) 22%, transparent);
   background: color-mix(in srgb, var(--error) 6%, transparent);
   color: color-mix(in srgb, var(--error) 82%, white 18%);
@@ -1431,19 +1431,19 @@ body {
 
 /* ── Step indicator ── */
 
-.redeven-runtime-startup-progress__steps {
+.redeven-environment-progress__steps {
   display: grid;
   gap: 0;
   margin: 0.15rem 0;
 }
 
-.redeven-runtime-startup-progress__step {
+.redeven-environment-progress__step {
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
 }
 
-.redeven-runtime-startup-progress__step-connector {
+.redeven-environment-progress__step-connector {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1452,7 +1452,7 @@ body {
   padding-top: 0.15rem;
 }
 
-.redeven-runtime-startup-progress__step-dot {
+.redeven-environment-progress__step-dot {
   width: 0.6rem;
   height: 0.6rem;
   border-radius: 9999px;
@@ -1464,30 +1464,30 @@ body {
     transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.redeven-runtime-startup-progress__step-dot[data-state='done'] {
+.redeven-environment-progress__step-dot[data-state='done'] {
   background: color-mix(in srgb, var(--success) 72%, white 28%);
   border: 1.5px solid color-mix(in srgb, var(--success) 60%, transparent);
   box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--success) 10%, transparent);
 }
 
-.redeven-runtime-startup-progress__step-dot[data-state='active'] {
+.redeven-environment-progress__step-dot[data-state='active'] {
   background: color-mix(in srgb, var(--primary) 72%, white 28%);
   border: 1.5px solid color-mix(in srgb, var(--primary) 56%, transparent);
   box-shadow: 0 0 0 0.22rem color-mix(in srgb, var(--primary) 14%, transparent);
   animation: redeven-step-pulse 2.2s ease-in-out infinite;
 }
 
-.redeven-runtime-startup-progress__step-dot[data-state='pending'] {
+.redeven-environment-progress__step-dot[data-state='pending'] {
   background: transparent;
   border: 1.5px solid color-mix(in srgb, var(--border) 64%, transparent);
 }
 
-.redeven-runtime-startup-progress__step-dot[data-state='error'] {
+.redeven-environment-progress__step-dot[data-state='error'] {
   background: color-mix(in srgb, var(--error) 72%, white 28%);
   border: 1.5px solid color-mix(in srgb, var(--error) 56%, transparent);
 }
 
-.redeven-runtime-startup-progress__step-line {
+.redeven-environment-progress__step-line {
   width: 1.5px;
   flex: 1;
   min-height: 0.5rem;
@@ -1495,11 +1495,11 @@ body {
   transition: background-color 200ms ease;
 }
 
-.redeven-runtime-startup-progress__step-line[data-state='done'] {
+.redeven-environment-progress__step-line[data-state='done'] {
   background: color-mix(in srgb, var(--success) 36%, transparent);
 }
 
-.redeven-runtime-startup-progress__step-label {
+.redeven-environment-progress__step-label {
   padding-top: 0.06rem;
   padding-bottom: 0.4rem;
   font-size: 0.7rem;
@@ -1509,26 +1509,26 @@ body {
   transition: color 200ms ease;
 }
 
-.redeven-runtime-startup-progress__step-label[data-state='done'] {
+.redeven-environment-progress__step-label[data-state='done'] {
   color: var(--foreground);
 }
 
-.redeven-runtime-startup-progress__step-label[data-state='active'] {
+.redeven-environment-progress__step-label[data-state='active'] {
   font-weight: 600;
   color: var(--popover-foreground);
 }
 
-.redeven-runtime-startup-progress__step:last-child .redeven-runtime-startup-progress__step-line {
+.redeven-environment-progress__step:last-child .redeven-environment-progress__step-line {
   background: transparent;
 }
 
-.redeven-runtime-startup-progress__step:last-child .redeven-runtime-startup-progress__step-label {
+.redeven-environment-progress__step:last-child .redeven-environment-progress__step-label {
   padding-bottom: 0;
 }
 
 /* ── Progress meter (secondary, compact) ── */
 
-.redeven-runtime-startup-progress__meter {
+.redeven-environment-progress__meter {
   position: relative;
   overflow: hidden;
   width: 100%;
@@ -1537,7 +1537,7 @@ body {
   background: color-mix(in srgb, var(--border) 48%, transparent);
 }
 
-.redeven-runtime-startup-progress__meter span {
+.redeven-environment-progress__meter span {
   display: block;
   height: 100%;
   min-width: 0.28rem;
@@ -1546,7 +1546,7 @@ body {
   transition: width 250ms ease;
 }
 
-.redeven-runtime-startup-progress__meta {
+.redeven-environment-progress__meta {
   display: flex;
   min-width: 0;
   justify-content: space-between;
@@ -1557,7 +1557,7 @@ body {
   color: var(--muted-foreground);
 }
 
-.redeven-runtime-startup-progress__meta span {
+.redeven-environment-progress__meta span {
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -1859,7 +1859,7 @@ pre,
     animation-duration: 1ms;
   }
 
-  .redeven-runtime-startup-progress__step-dot[data-state='active'] {
+  .redeven-environment-progress__step-dot[data-state='active'] {
     animation-duration: 1ms;
   }
 

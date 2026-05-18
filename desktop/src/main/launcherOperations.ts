@@ -5,8 +5,10 @@ import type {
   DesktopLauncherOperationStatus,
   DesktopLauncherOperationSubjectKind,
 } from '../shared/desktopLauncherIPC';
-import { runtimeStartupProgress } from '../shared/desktopRuntimeStartupProgress';
-import type { DesktopRuntimeStartupProgress } from '../shared/desktopRuntimeStartupProgress';
+import { openConnectionProgress } from '../shared/desktopOpenConnectionProgress';
+import type { DesktopOpenConnectionProgress } from '../shared/desktopOpenConnectionProgress';
+import { runtimeLifecycleProgress } from '../shared/desktopRuntimeLifecycleProgress';
+import type { DesktopRuntimeLifecycleProgress } from '../shared/desktopRuntimeLifecycleProgress';
 
 type OperationChangeListener = (snapshot: DesktopLauncherOperationSnapshot) => void;
 
@@ -22,7 +24,8 @@ type CreateLauncherOperationInput = Readonly<{
   phase: string;
   title: string;
   detail: string;
-  runtime_startup?: DesktopRuntimeStartupProgress;
+  lifecycle_progress?: DesktopRuntimeLifecycleProgress;
+  open_progress?: DesktopOpenConnectionProgress;
   cancelable?: boolean;
   interrupt_label?: string;
   interrupt_detail?: string;
@@ -51,7 +54,8 @@ function operationProgress(snapshot: DesktopLauncherOperationSnapshot): DesktopL
     phase: snapshot.phase,
     title: snapshot.title,
     detail: snapshot.detail,
-    ...(snapshot.runtime_startup ? { runtime_startup: snapshot.runtime_startup } : {}),
+    ...(snapshot.lifecycle_progress ? { lifecycle_progress: snapshot.lifecycle_progress } : {}),
+    ...(snapshot.open_progress ? { open_progress: snapshot.open_progress } : {}),
     cancelable: snapshot.cancelable,
     interrupt_label: snapshot.interrupt_label,
     interrupt_detail: snapshot.interrupt_detail,
@@ -73,11 +77,18 @@ function cancelPhaseForSnapshot(snapshot: DesktopLauncherOperationSnapshot): Rea
       detail: 'Desktop is stopping the startup task for this deleted connection.',
     };
   }
-  if (snapshot.runtime_startup) {
+  if (snapshot.lifecycle_progress) {
     return {
-      phase: 'runtime_startup_canceling',
+      phase: 'runtime_lifecycle_canceling',
       title: 'Stopping runtime startup',
       detail: 'Desktop is stopping the runtime startup and cleaning up resources already created.',
+    };
+  }
+  if (snapshot.open_progress) {
+    return {
+      phase: 'open_connection_canceling',
+      title: 'Stopping open',
+      detail: 'Desktop is stopping the connection setup and cleaning up local resources already created.',
     };
   }
   return {
@@ -132,7 +143,8 @@ export class LauncherOperationRegistry {
       phase: compact(input.phase),
       title: compact(input.title),
       detail: compact(input.detail),
-      ...(input.runtime_startup ? { runtime_startup: input.runtime_startup } : {}),
+      ...(input.lifecycle_progress ? { lifecycle_progress: input.lifecycle_progress } : {}),
+      ...(input.open_progress ? { open_progress: input.open_progress } : {}),
       cancelable: input.cancelable === true,
       interrupt_label: compact(input.interrupt_label) || undefined,
       interrupt_detail: compact(input.interrupt_detail) || undefined,
@@ -213,18 +225,31 @@ export class LauncherOperationRegistry {
       if (snapshot.subject_kind !== kind || snapshot.subject_id !== subjectID) {
         continue;
       }
-      const runtimeStartup = snapshot.runtime_startup
-        ? runtimeStartupProgress({
-            location: snapshot.runtime_startup.location,
+      const runtimeLifecycle = snapshot.lifecycle_progress
+        ? runtimeLifecycleProgress({
+            location: snapshot.lifecycle_progress.location,
             phase: 'canceled',
-            targetLabel: snapshot.runtime_startup.target_label,
-            targetDetail: snapshot.runtime_startup.target_detail,
+            targetID: snapshot.lifecycle_progress.target_id,
+            targetLabel: snapshot.lifecycle_progress.target_label,
+            targetDetail: snapshot.lifecycle_progress.target_detail,
+          })
+        : undefined;
+      const openConnection = snapshot.open_progress
+        ? openConnectionProgress({
+            location: snapshot.open_progress.location,
+            phase: 'canceled',
+            environmentID: snapshot.open_progress.environment_id,
+            environmentLabel: snapshot.open_progress.environment_label,
+            targetID: snapshot.open_progress.target_id,
+            targetLabel: snapshot.open_progress.target_label,
+            targetDetail: snapshot.open_progress.target_detail,
           })
         : undefined;
       const next = this.update(snapshot.operation_key, {
         ...patch,
         deleted_subject: true,
-        ...(runtimeStartup && !patch.runtime_startup ? { runtime_startup: runtimeStartup } : {}),
+        ...(runtimeLifecycle && !patch.lifecycle_progress ? { lifecycle_progress: runtimeLifecycle } : {}),
+        ...(openConnection && !patch.open_progress ? { open_progress: openConnection } : {}),
       });
       if (next) {
         touched.push(next);
@@ -253,12 +278,24 @@ export class LauncherOperationRegistry {
       controller.abort(compact(reason) || 'Operation canceled.');
     }
     const cancelPhase = cancelPhaseForSnapshot(snapshot);
-    const runtimeStartup = snapshot.runtime_startup
-      ? runtimeStartupProgress({
-          location: snapshot.runtime_startup.location,
+    const runtimeLifecycle = snapshot.lifecycle_progress
+      ? runtimeLifecycleProgress({
+          location: snapshot.lifecycle_progress.location,
           phase: 'canceled',
-          targetLabel: snapshot.runtime_startup.target_label,
-          targetDetail: snapshot.runtime_startup.target_detail,
+          targetID: snapshot.lifecycle_progress.target_id,
+          targetLabel: snapshot.lifecycle_progress.target_label,
+          targetDetail: snapshot.lifecycle_progress.target_detail,
+        })
+      : undefined;
+    const openConnection = snapshot.open_progress
+      ? openConnectionProgress({
+          location: snapshot.open_progress.location,
+          phase: 'canceled',
+          environmentID: snapshot.open_progress.environment_id,
+          environmentLabel: snapshot.open_progress.environment_label,
+          targetID: snapshot.open_progress.target_id,
+          targetLabel: snapshot.open_progress.target_label,
+          targetDetail: snapshot.open_progress.target_detail,
         })
       : undefined;
     return this.update(key, {
@@ -266,7 +303,8 @@ export class LauncherOperationRegistry {
       phase: cancelPhase.phase,
       title: cancelPhase.title,
       detail: compact(reason) || cancelPhase.detail,
-      ...(runtimeStartup ? { runtime_startup: runtimeStartup } : {}),
+      ...(runtimeLifecycle ? { lifecycle_progress: runtimeLifecycle } : {}),
+      ...(openConnection ? { open_progress: openConnection } : {}),
       cancelable: false,
       interrupt_label: undefined,
       interrupt_detail: undefined,

@@ -80,10 +80,13 @@ import {
 } from '../shared/runtimeService';
 import { desktopEntryKindOwnsRuntimeManagement } from '../shared/environmentManagementPrinciples';
 import {
-  RUNTIME_STARTUP_PHASE_LABELS,
-  runtimeStartupPhaseSequence,
-  type DesktopRuntimeStartupPhase,
-} from '../shared/desktopRuntimeStartupProgress';
+  RUNTIME_LIFECYCLE_PHASE_LABELS,
+  runtimeLifecyclePhaseSequence,
+} from '../shared/desktopRuntimeLifecycleProgress';
+import {
+  OPEN_CONNECTION_PHASE_LABELS,
+  openConnectionPhaseSequence,
+} from '../shared/desktopOpenConnectionProgress';
 import {
   DEFAULT_DESKTOP_SSH_AUTH_MODE,
   DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
@@ -211,7 +214,8 @@ import {
   busyStateForLauncherRequest,
   busyStateWithActionProgress,
   activeProgressForEnvironment,
-  activeRuntimeStartupProgressForEnvironment,
+  activeOpenConnectionProgressForEnvironment,
+  activeRuntimeLifecycleProgressForEnvironment,
   busyStateMatchesAction,
   busyStateMatchesControlPlane,
   busyStateMatchesEnvironment,
@@ -1715,7 +1719,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       operation_key: operationKey,
     });
     if (result?.outcome === 'canceled_launcher_operation') {
-      showActionToast('Runtime startup is stopping.', 'info');
+      showActionToast(progress.open_progress ? 'Opening is stopping.' : 'Runtime startup is stopping.', 'info');
     }
   }
 
@@ -4276,7 +4280,7 @@ function blockedPrimaryActionTriggerLabel(label: string): string {
   return `${label} is unavailable. Show recovery options.`;
 }
 
-function runtimeStartupProgressStatus(progress: DesktopLauncherActionProgress): string {
+function environmentProgressStatus(progress: DesktopLauncherActionProgress): string {
   if (progress.deleted_subject) {
     return 'Connection removed';
   }
@@ -4297,10 +4301,26 @@ function runtimeStartupProgressStatus(progress: DesktopLauncherActionProgress): 
   }
 }
 
-function runtimeStartupProgressLabel(progress: DesktopLauncherActionProgress): string {
-  const startup = progress.runtime_startup;
+function environmentProgressLabel(progress: DesktopLauncherActionProgress): string {
+  const open = progress.open_progress;
+  if (open) {
+    const environmentLabel = trimString(open.environment_label) || trimString(progress.environment_label) || 'Environment';
+    switch (open.location) {
+      case 'local_host':
+        return `${environmentLabel} · Local`;
+      case 'local_container':
+        return `${environmentLabel} · Local container`;
+      case 'ssh_host':
+        return `${environmentLabel} · SSH host`;
+      case 'ssh_container':
+        return `${environmentLabel} · SSH container`;
+      case 'provider_remote':
+        return `${environmentLabel} · Provider`;
+    }
+  }
+  const startup = progress.lifecycle_progress;
   if (!startup) {
-    return 'Runtime startup';
+    return 'Environment progress';
   }
   const targetLabel = trimString(startup.target_label) || trimString(progress.environment_label) || 'Runtime';
   switch (startup.location) {
@@ -4315,7 +4335,7 @@ function runtimeStartupProgressLabel(progress: DesktopLauncherActionProgress): s
   }
 }
 
-function runtimeStartupStatusIconTone(progress: DesktopLauncherActionProgress): 'info' | 'success' | 'error' {
+function environmentProgressStatusIconTone(progress: DesktopLauncherActionProgress): 'info' | 'success' | 'error' {
   if (progress.deleted_subject) {
     return 'error';
   }
@@ -4331,12 +4351,13 @@ function runtimeStartupStatusIconTone(progress: DesktopLauncherActionProgress): 
   }
 }
 
-function RuntimeStartupProgressPanel(props: Readonly<{
+function EnvironmentProgressPanel(props: Readonly<{
   progress: DesktopLauncherActionProgress;
   cancelOperation: (progress: DesktopLauncherActionProgress) => void;
 }>) {
-  const startup = createMemo(() => props.progress.runtime_startup);
-  const iconTone = createMemo(() => runtimeStartupStatusIconTone(props.progress));
+  const startup = createMemo(() => props.progress.lifecycle_progress);
+  const openConnection = createMemo(() => props.progress.open_progress);
+  const iconTone = createMemo(() => environmentProgressStatusIconTone(props.progress));
   const phaseStatus = createMemo(() => {
     const s = props.progress.status;
     if (s === 'succeeded' || s === 'failed' || s === 'canceled') {
@@ -4345,7 +4366,7 @@ function RuntimeStartupProgressPanel(props: Readonly<{
     return 'running';
   });
   const stagePercent = createMemo(() => {
-    const current = startup();
+    const current = startup() ?? openConnection();
     if (!current || current.stage_count <= 0) {
       return 0;
     }
@@ -4354,15 +4375,20 @@ function RuntimeStartupProgressPanel(props: Readonly<{
   const canCancel = createMemo(() => (
     props.progress.cancelable === true && props.progress.status === 'running'
   ));
-  const phaseSequence = createMemo<readonly { phase: DesktopRuntimeStartupPhase; label: string }[]>(() => {
+  const phaseSequence = createMemo<readonly { phase: string; label: string }[]>(() => {
     const current = startup();
+    const open = openConnection();
+    if (open) {
+      return openConnectionPhaseSequence(open.location)
+        .map((p) => ({ phase: p, label: OPEN_CONNECTION_PHASE_LABELS[p] }));
+    }
     if (!current) {
       return [];
     }
-    const phases = runtimeStartupPhaseSequence(current.location);
-    return phases.map((p) => ({ phase: p, label: RUNTIME_STARTUP_PHASE_LABELS[p] }));
+    const phases = runtimeLifecyclePhaseSequence(current.location);
+    return phases.map((p) => ({ phase: p, label: RUNTIME_LIFECYCLE_PHASE_LABELS[p] }));
   });
-  const stepState = (index: number, currentPhase: DesktopRuntimeStartupPhase | undefined, opStatus: string): 'done' | 'active' | 'pending' | 'error' => {
+  const stepState = (index: number, currentPhase: string | undefined, opStatus: string): 'done' | 'active' | 'pending' | 'error' => {
     if (!currentPhase) {
       return 'pending';
     }
@@ -4379,7 +4405,7 @@ function RuntimeStartupProgressPanel(props: Readonly<{
   };
 
   return (
-    <div class="redeven-action-popover redeven-runtime-startup-progress" tabIndex={-1} aria-live="polite">
+    <div class="redeven-action-popover redeven-environment-progress" tabIndex={-1} aria-live="polite">
       <div class="redeven-action-popover__status-header">
         <span class="redeven-action-popover__status-icon" data-tone={iconTone()}>
           <Show when={iconTone() === 'success'} fallback={(
@@ -4391,38 +4417,38 @@ function RuntimeStartupProgressPanel(props: Readonly<{
           </Show>
         </span>
         <div class="redeven-action-popover__status-text">
-          <div class="redeven-action-popover__eyebrow">{runtimeStartupProgressStatus(props.progress)}</div>
+          <div class="redeven-action-popover__eyebrow">{environmentProgressStatus(props.progress)}</div>
           <div class="redeven-action-popover__title">{props.progress.title}</div>
-          <div class="redeven-runtime-startup-progress__target">{runtimeStartupProgressLabel(props.progress)}</div>
+          <div class="redeven-environment-progress__target">{environmentProgressLabel(props.progress)}</div>
         </div>
       </div>
       <div class="redeven-action-popover__detail">{props.progress.detail}</div>
-      <Show when={startup()}>
+      <Show when={startup() || openConnection()}>
         {(currentStartup) => (
           <>
-            <div class="redeven-runtime-startup-progress__steps" aria-hidden="true">
+            <div class="redeven-environment-progress__steps" aria-hidden="true">
               <For each={phaseSequence()}>
                 {(step, index) => {
                   const state = () => stepState(index(), currentStartup().phase, phaseStatus());
                   const isLast = () => index() === phaseSequence().length - 1;
                   return (
-                    <div class="redeven-runtime-startup-progress__step">
-                      <div class="redeven-runtime-startup-progress__step-connector">
-                        <span class="redeven-runtime-startup-progress__step-dot" data-state={state()} />
+                    <div class="redeven-environment-progress__step">
+                      <div class="redeven-environment-progress__step-connector">
+                        <span class="redeven-environment-progress__step-dot" data-state={state()} />
                         <Show when={!isLast()}>
-                          <span class="redeven-runtime-startup-progress__step-line" data-state={state()} />
+                          <span class="redeven-environment-progress__step-line" data-state={state()} />
                         </Show>
                       </div>
-                      <span class="redeven-runtime-startup-progress__step-label" data-state={state()}>{step.label}</span>
+                      <span class="redeven-environment-progress__step-label" data-state={state()}>{step.label}</span>
                     </div>
                   );
                 }}
               </For>
             </div>
-            <div class="redeven-runtime-startup-progress__meter" aria-hidden="true">
+            <div class="redeven-environment-progress__meter" aria-hidden="true">
               <span style={{ width: `${stagePercent()}%` }} />
             </div>
-            <div class="redeven-runtime-startup-progress__meta">
+            <div class="redeven-environment-progress__meta">
               <span>Step {currentStartup().stage_index} of {currentStartup().stage_count}</span>
               <Show when={currentStartup().target_detail}>
                 {(detail) => <span>{detail()}</span>}
@@ -4434,7 +4460,7 @@ function RuntimeStartupProgressPanel(props: Readonly<{
       <Show when={props.progress.error_message}>
         {(message) => (
           <div class="redeven-action-popover__notice" data-tone="error">
-            <div class="redeven-action-popover__notice-title">Startup needs attention</div>
+            <div class="redeven-action-popover__notice-title">{openConnection() ? 'Open needs attention' : 'Startup needs attention'}</div>
             <div class="redeven-action-popover__notice-detail">{firstLine(message())}</div>
           </div>
         )}
@@ -4600,7 +4626,8 @@ function EnvironmentSplitActionButton(props: Readonly<{
   guidanceSession: EnvironmentGuidanceSessionState;
   busyState?: DesktopLauncherBusyState;
   loading?: boolean;
-  runtimeStartupProgress?: DesktopLauncherActionProgress | null;
+  runtimeLifecycleProgress?: DesktopLauncherActionProgress | null;
+  openConnectionProgress?: DesktopLauncherActionProgress | null;
   cancelOperation: (progress: DesktopLauncherActionProgress) => void;
   onRunAction: (action: EnvironmentActionModel) => void;
   onRunGuidanceAction: (action: EnvironmentActionModel) => void;
@@ -4621,19 +4648,22 @@ function EnvironmentSplitActionButton(props: Readonly<{
       actions: [],
     };
   });
-  const hasRuntimeStartupProgress = createMemo(() => props.runtimeStartupProgress?.runtime_startup !== undefined);
+  const primaryProgress = createMemo(() => props.openConnectionProgress ?? null);
+  const runtimeMenuProgress = createMemo(() => props.runtimeLifecycleProgress ?? null);
+  const hasOpenConnectionProgress = createMemo(() => primaryProgress()?.open_progress !== undefined);
+  const hasRuntimeLifecycleProgress = createMemo(() => runtimeMenuProgress()?.lifecycle_progress !== undefined);
   const primaryActionOverlay = createMemo(() => (
-    hasRuntimeStartupProgress() ? undefined : props.presentation.primary_action_overlay ?? sessionPopoverOverlay()
+    hasOpenConnectionProgress() ? undefined : props.presentation.primary_action_overlay ?? sessionPopoverOverlay()
   ));
-  const autoOpenedRuntimeStartupOperation = new Set<string>();
+  const autoOpenedEnvironmentProgressOperation = new Set<string>();
   createEffect(() => {
-    const progress = props.runtimeStartupProgress;
+    const progress = primaryProgress() ?? runtimeMenuProgress();
     const operationKey = [
       trimString(progress?.operation_key) || trimString(progress?.subject_id),
       String(progress?.started_at_unix_ms ?? ''),
     ].filter(Boolean).join(':');
-    if (progress?.runtime_startup && operationKey !== '' && !autoOpenedRuntimeStartupOperation.has(operationKey)) {
-      autoOpenedRuntimeStartupOperation.add(operationKey);
+    if ((progress?.open_progress || progress?.lifecycle_progress) && operationKey !== '' && !autoOpenedEnvironmentProgressOperation.has(operationKey)) {
+      autoOpenedEnvironmentProgressOperation.add(operationKey);
       closeMenu();
       props.onGuidanceOpenChange(true);
     }
@@ -4658,10 +4688,10 @@ function EnvironmentSplitActionButton(props: Readonly<{
     props.presentation.primary_action.enabled && popoverOverlay()?.actions.length === 0
   ));
   const shimmerBlocked = createMemo(() => (
-    hasRuntimeStartupProgress() ? false : blockedPrimaryActionDisabled()
+    hasOpenConnectionProgress() || hasRuntimeLifecycleProgress() ? false : blockedPrimaryActionDisabled()
   ));
-  const runtimeStartupTriggerLabel = createMemo(() => (
-    props.runtimeStartupProgress?.action === 'update_environment_runtime' ? 'Updating...' : 'Starting...'
+  const environmentProgressTriggerLabel = createMemo(() => (
+    primaryProgress()?.open_progress ? 'Opening...' : runtimeMenuProgress()?.action === 'update_environment_runtime' ? 'Updating...' : 'Starting...'
   ));
   const primaryButtonClass = createMemo(() => (
     cn('w-full justify-center', hasMenuActions() && 'rounded-r-none border-r-0')
@@ -4742,7 +4772,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
       {props.presentation.primary_action.label}
     </Button>
   );
-  const renderRuntimeStartupTrigger = () => (
+  const renderEnvironmentProgressTrigger = () => (
     <DesktopActionPopover
       open={props.guidanceOpen}
       onOpenChange={(open) => {
@@ -4752,14 +4782,14 @@ function EnvironmentSplitActionButton(props: Readonly<{
         props.onGuidanceOpenChange(open);
       }}
       content={(
-        <RuntimeStartupProgressPanel
-          progress={props.runtimeStartupProgress!}
+        <EnvironmentProgressPanel
+          progress={(primaryProgress() ?? runtimeMenuProgress())!}
           cancelOperation={props.cancelOperation}
         />
       )}
       placement="top"
       anchorClass="flex w-full"
-      popoverAriaLabel={props.runtimeStartupProgress?.title ?? 'Runtime startup progress'}
+      popoverAriaLabel={(primaryProgress() ?? runtimeMenuProgress())?.title ?? 'Environment progress'}
     >
       <Button
         size="sm"
@@ -4768,7 +4798,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
         style={{ 'min-width': 'var(--redeven-split-action-primary-min-width)' }}
         aria-haspopup="dialog"
         aria-expanded={props.guidanceOpen}
-        aria-label={`${props.presentation.primary_action.label} startup progress`}
+        aria-label={`${props.presentation.primary_action.label} progress`}
         onClick={() => {
           closeMenu();
           props.onGuidanceOpenChange(!props.guidanceOpen);
@@ -4776,7 +4806,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
       >
         <span class="redeven-split-action-trigger__content">
           <Play class="redeven-split-action-trigger__icon h-3.5 w-3.5" />
-          <span>{runtimeStartupTriggerLabel()}</span>
+          <span>{environmentProgressTriggerLabel()}</span>
         </span>
       </Button>
     </DesktopActionPopover>
@@ -4785,7 +4815,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
   return (
     <div ref={rootRef} class="redeven-split-action flex-1">
       <div class="redeven-split-action-primary">
-        <Show when={hasRuntimeStartupProgress()} fallback={(
+        <Show when={hasOpenConnectionProgress() || hasRuntimeLifecycleProgress()} fallback={(
           <Show when={primaryActionOverlay()} fallback={renderPrimaryButton()}>
             <Show
               when={popoverOverlay()}
@@ -4864,7 +4894,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
             </Show>
           </Show>
         )}>
-          {renderRuntimeStartupTrigger()}
+          {renderEnvironmentProgressTrigger()}
         </Show>
         <Presence>
           <Show when={props.loading}>
@@ -4885,7 +4915,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
           aria-label={props.presentation.menu_button_label}
           aria-haspopup="menu"
           aria-expanded={props.menuOpen}
-          disabled={props.loading && !hasRuntimeStartupProgress()}
+          disabled={props.loading && !hasOpenConnectionProgress() && !hasRuntimeLifecycleProgress()}
           onClick={() => props.onMenuOpenChange(!props.menuOpen)}
         >
           <ChevronDown class={cn('h-3.5 w-3.5 transition-transform duration-150', props.menuOpen && 'rotate-180')} />
@@ -5016,8 +5046,11 @@ function EnvironmentConnectionCard(props: Readonly<{
   const endpoints = createMemo(() => buildEnvironmentCardEndpointsModel(props.environment));
   const environmentActionModel = createMemo(() => buildProviderBackedEnvironmentActionModel(props.environment));
   const environmentActionPresentation = createMemo(() => environmentActionModel().action_presentation);
-  const runtimeStartupProgress = createMemo(() => (
-    activeRuntimeStartupProgressForEnvironment(props.environment, props.busyState, props.actionProgress)
+  const runtimeLifecycleProgress = createMemo(() => (
+    activeRuntimeLifecycleProgressForEnvironment(props.environment, props.busyState, props.actionProgress)
+  ));
+  const openConnectionProgress = createMemo(() => (
+    activeOpenConnectionProgressForEnvironment(props.environment, props.busyState, props.actionProgress)
   ));
   const runtimeOpenable = createMemo(() => (
     props.environment.runtime_health.status === 'online'
@@ -5030,8 +5063,10 @@ function EnvironmentConnectionCard(props: Readonly<{
       'open_provider_environment',
       'open_remote_environment',
       'open_ssh_environment',
+      'prepare_environment_open',
       'focus_environment_window',
     ])
+    || openConnectionProgress() !== null
   ));
   const isRuntimeActionBusy = createMemo(() => (
     busyStateMatchesEnvironment(props.busyState, props.environment.id, [
@@ -5044,7 +5079,7 @@ function EnvironmentConnectionCard(props: Readonly<{
     || ['start_environment_runtime', 'update_environment_runtime'].includes(
       activeProgressForEnvironment(props.environment.id, props.busyState, props.actionProgress)?.action ?? '',
     )
-    || (runtimeStartupProgress() !== null && !runtimeOpenable())
+    || (runtimeLifecycleProgress() !== null && !runtimeOpenable())
   ));
   const isPinBusy = createMemo(() => (
     busyStateMatchesEnvironment(props.busyState, props.environment.id, [
@@ -5154,7 +5189,8 @@ function EnvironmentConnectionCard(props: Readonly<{
           guidanceSession={props.guidanceSession}
           busyState={props.busyState}
           loading={isWindowActionBusy() || isRuntimeActionBusy()}
-          runtimeStartupProgress={runtimeOpenable() ? null : runtimeStartupProgress()}
+          runtimeLifecycleProgress={runtimeLifecycleProgress()}
+          openConnectionProgress={openConnectionProgress()}
           cancelOperation={props.cancelOperation}
           onRunAction={(action) => {
             if (action.intent === 'start_runtime') {

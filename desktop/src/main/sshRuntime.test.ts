@@ -123,7 +123,10 @@ describe('sshRuntime', () => {
     expect(source).toContain('runtimeServiceSupportsDesktopModelSource(runtimeService)');
     expect(source).toContain("'desktop_model_source_requires_runtime_update'");
     expect(source).not.toContain('/_redeven_proxy/api/runtime/bindings/');
-    expect(source).toContain('let forwardedStartup = await waitForForwardedLocalUIOpenable(');
+    expect(source).toContain('const forwardedStartup = await waitForForwardedLocalUIOpenable(');
+    expect(source).toContain('ready: ManagedSSHRuntimeReady;');
+    expect(source).toContain('return await startManagedSSHRuntimeInternal(args, false) as ManagedSSHRuntimeReady;');
+    expect(source).toContain('const remoteStartup = args.ready.startup;');
     expect(source).toContain('runtimeServiceIsOpenable(startup.runtime_service)');
     expect(source).not.toContain('Desktop reached the forwarded Redeven Local UI, but the runtime is not ready to open yet');
     expect(source).toContain('runtime_service: forwardedStartup.runtime_service ?? remoteStartup.runtime_service');

@@ -73,7 +73,7 @@ Behavior:
 - On lock conflicts, the runtime first tries to attach to an existing Local UI from the same state directory before reporting a blocked launch outcome.
 - Desktop startup settings do not create a second preference-owned runtime target; the resolved Local Environment state directory remains the runtime source of truth.
 - Desktop-managed runtime state never falls back to the Electron process working directory; if no usable home directory exists and no explicit config path is available, startup fails clearly instead of writing inside an arbitrary repository or shell cwd.
-- Runtime startup progress is part of the launcher operation contract. Local Host, Local Container, SSH Host, and SSH Container startup all publish canonical `runtime_startup` metadata through `DESKTOP_LAUNCHER_ACTION_PROGRESS_CHANNEL` so the renderer does not infer progress from SSH-only phase prefixes or operation-key strings.
+- Runtime lifecycle and Open connection progress are separate launcher operation contracts. Local Host, Local Container, SSH Host, and SSH Container start/update actions publish canonical `lifecycle_progress` metadata; Open actions publish `open_progress` metadata for SSH tunnels, container bridges, runtime-control forwarding, Desktop model source preparation, and Env App window creation.
 
 Desktop-managed Local Runtime also exposes a separate runtime-control endpoint when it is started by Desktop:
 
@@ -191,14 +191,14 @@ Launcher model:
 - SSH Host entries store the destination, optional port, bootstrap delivery mode, runtime root, and optional release mirror base URL. Desktop reuses release artifacts for the exact Desktop-managed version and lets the remote host own its runtime state.
 - Runtime health and window state are separate. Cards always show runtime version, using `UNKNOWN` when runtime metadata is unavailable; runtime status and active-work impact stay in badges, action recovery, and maintenance confirmations while primary actions remain window-scoped (`Open`, `Opening...`, `Focus`).
 - Runtime health is probed through explicit contracts: Local UI health for local/URL/SSH targets and RCPP runtime-health queries for provider environments.
-- Local Host, Local Container, SSH Host, and SSH Container startup progress is shown inside the owning card's `Open` button popup. There is no global or bottom-right SSH-only activity overlay.
-- While runtime startup is running, the `Open` trigger remains clickable and opens the progress popup; it is not a native disabled button. The trigger keeps the existing flowing shimmer feedback during the operation. Once the runtime snapshot is openable, the popup yields and `Open` returns to direct click behavior.
-- If startup is launched from the popup's `Start runtime` action or from the split-button dropdown, the same `Open` popup stays available for progress. Closing the popup does not cancel startup; clicking `Open` reopens the current progress panel.
+- Runtime lifecycle progress and Open connection progress are shown inside the owning card's `Open` button popup. There is no global or bottom-right SSH-only activity overlay.
+- While runtime lifecycle or Open connection work is running, the `Open` trigger remains clickable and opens the progress popup; it is not a native disabled button. The trigger keeps the existing flowing shimmer feedback during the operation. Once the runtime snapshot is openable and the Open connection is ready, the popup yields and `Open` returns to direct click behavior.
+- If startup is launched from the popup's `Start runtime` action or from the split-button dropdown, the same `Open` popup stays available for lifecycle progress. Closing the popup does not cancel startup; clicking `Open` reopens the current progress panel. If `Open` needs to rebuild a Desktop-session tunnel or bridge after Desktop restart, that work is represented as Open connection progress, not as runtime startup.
 - Provider catalog freshness is separate from provider route availability. A stale catalog still asks Desktop to sync in the background, but last-known online provider environments continue to show `Open` instead of collapsing into a generic refresh-required state. Refreshing a provider environment card force-syncs the provider catalog first, then refreshes that environment's runtime-health overlay.
 - A successful provider catalog sync is the source of truth for provider Environment cards. Environments absent from the latest successful catalog are removed from the Environment Library immediately; Desktop does not keep a `REMOVED` provider card because it was pinned, last used, or previously linked.
 - Deleting library entries is immediate and subject-owned: Local Environment is protected, open entries cannot be deleted, provider unlink clears only the local binding, and deleting saved URL/SSH entries cannot be blocked by background runtime cleanup.
-- Transient success/failure feedback uses toasts. Runtime startup progress belongs in the `Open` popup, not in toasts. Blocking recovery uses explicit actions instead of raw IPC errors or hover-only UI.
-- Quit and last-window-close confirmation models include pending background operations; runtime startup cancellation is bounded and cleanup failures remain visible.
+- Transient success/failure feedback uses toasts. Runtime lifecycle and Open connection progress belong in the `Open` popup, not in toasts. Blocking recovery uses explicit actions instead of raw IPC errors or hover-only UI.
+- Quit and last-window-close confirmation models include pending background operations; runtime lifecycle and Open connection cancellation are bounded and cleanup failures remain visible.
 
 ## Session Child Windows
 

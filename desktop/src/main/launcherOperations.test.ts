@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { runtimeStartupProgress } from '../shared/desktopRuntimeStartupProgress';
+import { runtimeLifecycleProgress } from '../shared/desktopRuntimeLifecycleProgress';
 import { LauncherOperationRegistry } from './launcherOperations';
 
 describe('LauncherOperationRegistry', () => {
-  it('tracks operations as cancelable runtime startup progress snapshots', () => {
+  it('tracks operations as cancelable runtime lifecycle progress snapshots', () => {
     const changed: string[] = [];
     const registry = new LauncherOperationRegistry((snapshot) => {
       changed.push(`${snapshot.operation_key}:${snapshot.status}:${snapshot.phase}`);
@@ -20,7 +20,7 @@ describe('LauncherOperationRegistry', () => {
       phase: 'ssh_connecting',
       title: 'Opening SSH control connection',
       detail: 'Connecting to devbox.',
-      runtime_startup: runtimeStartupProgress({
+      lifecycle_progress: runtimeLifecycleProgress({
         location: 'ssh_host',
         phase: 'checking_host',
         targetLabel: 'Devbox',
@@ -29,7 +29,7 @@ describe('LauncherOperationRegistry', () => {
       cancelable: true,
       interrupt_label: 'Stop startup',
       interrupt_detail: 'Stops this SSH runtime startup.',
-      interrupt_kind: 'stop_opening',
+      interrupt_kind: 'generic',
     });
 
     expect(operation.subject_generation).toBe(0);
@@ -40,15 +40,15 @@ describe('LauncherOperationRegistry', () => {
         subject_kind: 'ssh_environment',
         subject_id: operation.subject_id,
         status: 'running',
-        runtime_startup: expect.objectContaining({
-          kind: 'runtime_startup',
+        lifecycle_progress: expect.objectContaining({
+          kind: 'runtime_lifecycle',
           location: 'ssh_host',
           phase: 'checking_host',
           target_label: 'Devbox',
         }),
         cancelable: true,
         interrupt_label: 'Stop startup',
-        interrupt_kind: 'stop_opening',
+        interrupt_kind: 'generic',
       }),
     ]);
     expect(changed).toEqual([`${operation.operation_key}:running:ssh_connecting`]);
@@ -64,9 +64,9 @@ describe('LauncherOperationRegistry', () => {
       phase: 'ssh_uploading_archive',
       title: 'Uploading runtime package',
       detail: 'Uploading.',
-      runtime_startup: runtimeStartupProgress({
+      lifecycle_progress: runtimeLifecycleProgress({
         location: 'ssh_host',
-        phase: 'installing_runtime',
+        phase: 'installing_runtime_package',
         targetLabel: 'Devbox',
       }),
       cancelable: true,
@@ -84,7 +84,7 @@ describe('LauncherOperationRegistry', () => {
       operation_key: operation.operation_key,
       deleted_subject: true,
       status: 'canceling',
-      runtime_startup: expect.objectContaining({
+      lifecycle_progress: expect.objectContaining({
         location: 'ssh_host',
         phase: 'canceled',
       }),
@@ -103,9 +103,9 @@ describe('LauncherOperationRegistry', () => {
       phase: 'ssh_waiting_report',
       title: 'Waiting for runtime readiness',
       detail: 'Waiting.',
-      runtime_startup: runtimeStartupProgress({
+      lifecycle_progress: runtimeLifecycleProgress({
         location: 'ssh_host',
-        phase: 'waiting_for_readiness',
+        phase: 'checking_runtime_service',
         targetLabel: 'Devbox',
       }),
       cancelable: true,
@@ -118,9 +118,9 @@ describe('LauncherOperationRegistry', () => {
     expect(canceled).toEqual(expect.objectContaining({
       status: 'canceling',
       cancelable: false,
-      phase: 'runtime_startup_canceling',
+      phase: 'runtime_lifecycle_canceling',
       title: 'Stopping runtime startup',
-      runtime_startup: expect.objectContaining({
+      lifecycle_progress: expect.objectContaining({
         phase: 'canceled',
       }),
       interrupt_label: undefined,

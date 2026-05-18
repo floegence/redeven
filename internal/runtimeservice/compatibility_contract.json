@@ -11,6 +11,8 @@
       "Runtime Service desktop_model_source capability and binding normalization",
       "Runtime AI model listing, model selection, thread title, run, and subagent paths for desktop:model_ identifiers",
       "Desktop connector subprocess lifecycle for SSH and Runtime Placement Bridge runtimes",
+      "Desktop Runtime Lifecycle and Open Connection IPC progress split",
+      "Desktop SSH Open connection setup separated from SSH runtime install/start readiness",
       "Desktop SSH startup without reverse forwarding or legacy broker binding",
       "Runtime Placement Bridge runtime-control forwarding for Desktop Model Source RPC",
       "Env App Flower model source grouping and unavailable-state copy",

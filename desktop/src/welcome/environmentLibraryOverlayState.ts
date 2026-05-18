@@ -1,6 +1,6 @@
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
 import { environmentSupportsGuidancePopover } from './environmentGuidanceSession';
-import { environmentMatchesRuntimeStartupProgress } from './launcherBusyState';
+import { environmentMatchesRuntimeLifecycleProgress } from './launcherBusyState';
 import type { DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
 
 export type EnvironmentLibraryOverlayKind = 'runtime_menu' | 'primary_action_guidance';
@@ -63,7 +63,7 @@ export function reconcileEnvironmentLibraryOverlayState(
     return state;
   }
 
-  if (progressItems.some((progress) => environmentMatchesRuntimeStartupProgress(environment, progress))) {
+  if (progressItems.some((progress) => environmentMatchesRuntimeLifecycleProgress(environment, progress))) {
     return state;
   }
 

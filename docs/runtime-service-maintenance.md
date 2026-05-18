@@ -271,7 +271,7 @@ Desktop treats the runtime as a singleton per Local Environment profile, but run
 
 Provider binding is an explicit runtime-card action, not a side effect of `Open` and not a runtime restart plan. Provider cards always open through the provider tunnel and never manage runtime lifecycle. Welcome `Start runtime` starts only the Local/SSH/container runtime represented by that runtime card. It may install the runtime package when the target has no runtime yet, but it must not silently update or replace an existing package. `Update runtime` is the explicit user-visible path for outdated, incompatible, or maintenance-required runtime packages. `Connect to provider...` obtains provider open-session material, sends the one-time provider-link ticket to the selected running Local/SSH runtime over runtime-control, and lets the runtime start or replace only the provider control-channel goroutine. Once that binding is persisted, it is explicit authorization for later Desktop-managed startup to restore the provider control channel from saved config as part of the runtime lifecycle. `Disconnect from provider` revokes that local authorization and clears the runtime's persisted provider binding; an active control channel is used to notify the provider first, but the local unlink still completes when that channel is already unavailable. Desktop then refreshes provider runtime health from the provider API when the provider Environment is still present instead of locally fabricating an offline state. Active provider-originated work blocks relink. Runtime-control owner mismatch blocks provider-link RPC but does not hide host/container stop or restart operations.
 
-Container runtime targets use the same Runtime Service maintenance model. A Local Container or SSH Container card is still a managed runtime card because the user has host access to the machine that can execute `docker` or `podman`; only the process placement differs. Desktop first inspects the running container, detects its platform, and verifies the Desktop stamp/version under the container-internal `runtime_root` (default `/root/.redeven`). `Start runtime` installs only when the probe reports that no runtime package exists, then starts the `redeven desktop-bridge` byte-stream protocol using the resolved container-local binary path with `--state-root <runtime_root>`. Existing mismatched or invalid packages surface `Update runtime` instead of being replaced by start/open. Local UI and runtime-control stay behind a Desktop-owned loopback proxy, and bridge/bootstrap changes are Runtime/Desktop compatibility surfaces. Container lifecycle remains separate from runtime lifecycle: Redeven lists, saves, and revalidates only running containers, and it never starts or stops the container itself.
+Container runtime targets use the same Runtime Service maintenance model. A Local Container or SSH Container card is still a managed runtime card because the user has host access to the machine that can execute `docker` or `podman`; only the process placement differs. Desktop first inspects the running container, detects its platform, and verifies the Desktop stamp/version under the container-internal `runtime_root` (default `/root/.redeven`). `Start runtime` installs only when the probe reports that no runtime package exists, and records the container runtime package as ready. `Open` then starts the `redeven desktop-bridge` byte-stream protocol using the resolved container-local binary path with `--state-root <runtime_root>`. Existing mismatched or invalid packages surface `Update runtime` instead of being replaced by start/open. Local UI and runtime-control stay behind a Desktop-owned loopback proxy, and bridge/bootstrap changes are Runtime/Desktop compatibility surfaces. Container lifecycle remains separate from runtime lifecycle: Redeven lists, saves, and revalidates only running containers, and it never starts or stops the container itself.
 
 ## Desktop Launcher UI
 
@@ -300,15 +300,19 @@ Desktop launcher cards keep their current dense SaaS tool layout:
   - update required: `Open` stays disabled and offers `Update runtime`
   - desktop too old: `Update Desktop`
   - runtime-control owner mismatch: provider-link actions stay blocked with owner guidance while host/container operations remain available when the management channel exists
-- Runtime startup progress for Local Host, Local Container, SSH Host, and SSH
-  Container targets belongs in the owning card's `Open` popup. During startup
-  the `Open` trigger remains clickable for progress inspection, keeps the
-  existing flowing shimmer treatment, and returns to direct `Open` behavior once
-  the refreshed runtime snapshot is openable. Startup progress must not use a
-  bottom-right SSH-only activity overlay.
+- Runtime lifecycle progress for Local Host, Local Container, SSH Host, and SSH
+  Container targets belongs in the owning card's `Open` popup. Open connection
+  work has a separate progress model for SSH tunnels, container bridges,
+  runtime-control forwarding, Desktop model source preparation, and window
+  creation. During either operation, the `Open` trigger remains clickable for
+  progress inspection, keeps the existing flowing shimmer treatment, and returns
+  to direct `Open` behavior once the runtime is openable and the current Desktop
+  connection is ready. Progress must not use a bottom-right SSH-only activity
+  overlay.
 - Action feedback for completion, failure, and other ephemeral events continues
   through Desktop toasts. No launcher content should shift when a version event
-  arrives, and toasts must not become the progress surface for runtime startup.
+  arrives, and toasts must not become the progress surface for runtime lifecycle
+  or Open connection work.
 
 ## Env App Settings UI
 
@@ -431,4 +435,4 @@ The stable flow is intentionally small:
 
 Welcome can run runtime restart/update before an Env App window exists. The card records the runtime maintenance requirement, asks for explicit confirmation, then reruns the launcher start path. It does not auto-open the Environment after maintenance; it unlocks `Open` once the refreshed snapshot is openable.
 
-Startup cancellation uses the same lifecycle model for Local, SSH, and container runtime targets. `Stop startup` cancels the current start/update operation, broadcasts the shared cancellation signal through owned subprocesses, downloads, SSH commands, Desktop model source preparation, binding requests, bridge startup, and polling loops, then cleans up local resources. Successful cancellation is short-lived; cleanup failures remain visible for user attention.
+Startup cancellation uses the same lifecycle model for Local, SSH, and container runtime targets. `Stop startup` cancels the current start/update operation, broadcasts the shared cancellation signal through owned runtime subprocesses, downloads, SSH install/start commands, and readiness polling loops, then cleans up local lifecycle resources. Open cancellation is separate: `Stop opening` cancels SSH tunnels, container bridges, runtime-control forwarding, Desktop model source preparation, and Env App window creation for the current Desktop session. Successful cancellation is short-lived; cleanup failures remain visible for user attention.
