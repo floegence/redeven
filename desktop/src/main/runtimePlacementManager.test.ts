@@ -17,6 +17,7 @@ vi.mock('./runtimePackageCache', async () => {
 });
 
 import { ensureRuntimePlacementReady } from './runtimePlacementManager';
+import type { RuntimePlacementProgressPhase } from './runtimePlacementManager';
 
 describe('runtimePlacementManager', () => {
   let originalPath = '';
@@ -95,6 +96,7 @@ describe('runtimePlacementManager', () => {
   it('installs a missing runtime inside a running local container before returning a bridge binary path', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-placement-manager-'));
     const markerPath = await installFakeDocker(tempDir);
+    const progressPhases: RuntimePlacementProgressPhase[] = [];
 
     const ready = await ensureRuntimePlacementReady({
       host_access: { kind: 'local_host' },
@@ -110,6 +112,9 @@ describe('runtimePlacementManager', () => {
       runtime_release_tag: 'v1.2.3',
       release_base_url: 'https://example.invalid/releases',
       asset_cache_root: tempDir,
+      on_progress: (progress) => {
+        progressPhases.push(progress.phase);
+      },
     });
 
     expect(ready.runtime_binary_path).toBe('/root/.redeven/runtime/releases/v1.2.3/bin/redeven');
@@ -118,6 +123,14 @@ describe('runtimePlacementManager', () => {
       runtimeReleaseTag: 'v1.2.3',
       platform: expect.objectContaining({ platform_id: 'linux_amd64' }),
     }));
+    expect(progressPhases).toEqual([
+      'checking_container',
+      'detecting_platform',
+      'checking_runtime',
+      'preparing_runtime_package',
+      'installing_runtime',
+      'runtime_ready',
+    ]);
   });
 
   it('replaces a ready container runtime when Desktop is using the current source runtime', async () => {
@@ -155,6 +168,7 @@ describe('runtimePlacementManager', () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-placement-manager-'));
     const markerPath = await installFakeDocker(tempDir);
     await installFakeSSH(tempDir);
+    const progressPhases: RuntimePlacementProgressPhase[] = [];
 
     const ready = await ensureRuntimePlacementReady({
       host_access: {
@@ -178,6 +192,9 @@ describe('runtimePlacementManager', () => {
       runtime_release_tag: 'v1.2.3',
       release_base_url: 'https://example.invalid/releases',
       asset_cache_root: tempDir,
+      on_progress: (progress) => {
+        progressPhases.push(progress.phase);
+      },
     });
 
     expect(ready.runtime_binary_path).toBe('/root/.redeven/runtime/releases/v1.2.3/bin/redeven');
@@ -186,5 +203,14 @@ describe('runtimePlacementManager', () => {
       runtimeReleaseTag: 'v1.2.3',
       platform: expect.objectContaining({ platform_id: 'linux_amd64' }),
     }));
+    expect(progressPhases).toEqual([
+      'checking_host',
+      'checking_container',
+      'detecting_platform',
+      'checking_runtime',
+      'preparing_runtime_package',
+      'installing_runtime',
+      'runtime_ready',
+    ]);
   });
 });

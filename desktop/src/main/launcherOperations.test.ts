@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
+import { runtimeStartupProgress } from '../shared/desktopRuntimeStartupProgress';
 import { LauncherOperationRegistry } from './launcherOperations';
 
 describe('LauncherOperationRegistry', () => {
-  it('tracks operations as cancelable progress snapshots', () => {
+  it('tracks operations as cancelable runtime startup progress snapshots', () => {
     const changed: string[] = [];
     const registry = new LauncherOperationRegistry((snapshot) => {
       changed.push(`${snapshot.operation_key}:${snapshot.status}:${snapshot.phase}`);
@@ -19,6 +20,12 @@ describe('LauncherOperationRegistry', () => {
       phase: 'ssh_connecting',
       title: 'Opening SSH control connection',
       detail: 'Connecting to devbox.',
+      runtime_startup: runtimeStartupProgress({
+        location: 'ssh_host',
+        phase: 'checking_host',
+        targetLabel: 'Devbox',
+        targetDetail: 'devbox',
+      }),
       cancelable: true,
       interrupt_label: 'Stop startup',
       interrupt_detail: 'Stops this SSH runtime startup.',
@@ -33,6 +40,12 @@ describe('LauncherOperationRegistry', () => {
         subject_kind: 'ssh_environment',
         subject_id: operation.subject_id,
         status: 'running',
+        runtime_startup: expect.objectContaining({
+          kind: 'runtime_startup',
+          location: 'ssh_host',
+          phase: 'checking_host',
+          target_label: 'Devbox',
+        }),
         cancelable: true,
         interrupt_label: 'Stop startup',
         interrupt_kind: 'stop_opening',
@@ -51,6 +64,11 @@ describe('LauncherOperationRegistry', () => {
       phase: 'ssh_uploading_archive',
       title: 'Uploading runtime package',
       detail: 'Uploading.',
+      runtime_startup: runtimeStartupProgress({
+        location: 'ssh_host',
+        phase: 'installing_runtime',
+        targetLabel: 'Devbox',
+      }),
       cancelable: true,
     });
 
@@ -66,6 +84,10 @@ describe('LauncherOperationRegistry', () => {
       operation_key: operation.operation_key,
       deleted_subject: true,
       status: 'canceling',
+      runtime_startup: expect.objectContaining({
+        location: 'ssh_host',
+        phase: 'canceled',
+      }),
     }));
     expect(registry.currentSubjectGeneration('ssh_environment', operation.subject_id)).toBe(1);
     expect(registry.isStale(operation.operation_key)).toBe(true);
@@ -81,6 +103,11 @@ describe('LauncherOperationRegistry', () => {
       phase: 'ssh_waiting_report',
       title: 'Waiting for runtime readiness',
       detail: 'Waiting.',
+      runtime_startup: runtimeStartupProgress({
+        location: 'ssh_host',
+        phase: 'waiting_for_readiness',
+        targetLabel: 'Devbox',
+      }),
       cancelable: true,
     });
     const signal = registry.operationSignal(operation.operation_key);
@@ -91,8 +118,11 @@ describe('LauncherOperationRegistry', () => {
     expect(canceled).toEqual(expect.objectContaining({
       status: 'canceling',
       cancelable: false,
-      phase: 'ssh_stopping_startup',
-      title: 'Stopping SSH runtime startup',
+      phase: 'runtime_startup_canceling',
+      title: 'Stopping runtime startup',
+      runtime_startup: expect.objectContaining({
+        phase: 'canceled',
+      }),
       interrupt_label: undefined,
       interrupt_kind: undefined,
     }));

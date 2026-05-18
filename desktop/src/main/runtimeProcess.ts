@@ -51,7 +51,20 @@ export type StartManagedRuntimeArgs = Readonly<{
   expectedRuntimeIdentity?: RuntimeServiceIdentity | null;
   forceRuntimeUpdate?: boolean;
   passwordStdin?: string;
+  onProgress?: (progress: ManagedRuntimeProgress) => void;
   onLog?: (stream: 'stdout' | 'stderr', chunk: string) => void;
+}>;
+
+export type ManagedRuntimeProgressPhase =
+  | 'checking_existing_runtime'
+  | 'starting_runtime'
+  | 'waiting_for_readiness'
+  | 'runtime_ready';
+
+export type ManagedRuntimeProgress = Readonly<{
+  phase: ManagedRuntimeProgressPhase;
+  title: string;
+  detail: string;
 }>;
 
 export type ManagedRuntimeLaunch = Readonly<
@@ -86,6 +99,19 @@ function appendRecentLog(existing: string, chunk: string): string {
     return next;
   }
   return next.slice(next.length - MAX_RECENT_LOG_CHARS);
+}
+
+function emitManagedRuntimeProgress(
+  callback: StartManagedRuntimeArgs['onProgress'],
+  phase: ManagedRuntimeProgressPhase,
+  title: string,
+  detail: string,
+): void {
+  callback?.({
+    phase,
+    title,
+    detail,
+  });
 }
 
 function formatRecentLogs(logs: RecentLogs): string {
@@ -500,6 +526,12 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
   const runtimeAttachTimeoutMs = args.runtimeAttachTimeoutMs ?? DEFAULT_RUNTIME_ATTACH_TIMEOUT_MS;
   const runtimeStabilityWindowMs = args.runtimeStabilityWindowMs ?? DEFAULT_RUNTIME_STABILITY_WINDOW_MS;
   const runtimeStabilityPollMs = args.runtimeStabilityPollMs ?? DEFAULT_RUNTIME_STABILITY_POLL_MS;
+  emitManagedRuntimeProgress(
+    args.onProgress,
+    'checking_existing_runtime',
+    'Checking existing runtime',
+    'Desktop is checking whether a compatible local runtime is already running.',
+  );
   const existingRuntime = await loadAttachableRuntimeState(runtimeStateFile, runtimeAttachTimeoutMs);
   if (existingRuntime) {
     assertRuntimePIDAlive(existingRuntime, { stdout: '', stderr: '' });
@@ -512,7 +544,19 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
       throw readinessFailure(attachPolicy.message, { stdout: '', stderr: '' });
     }
     if (attachPolicy.action === 'reuse') {
+      emitManagedRuntimeProgress(
+        args.onProgress,
+        'waiting_for_readiness',
+        'Checking runtime readiness',
+        'Desktop found a compatible local runtime and is checking whether it can open the Environment App.',
+      );
       assertRuntimeOpenable(existingRuntime, { stdout: '', stderr: '' });
+      emitManagedRuntimeProgress(
+        args.onProgress,
+        'runtime_ready',
+        'Runtime ready',
+        'The local runtime is ready to open.',
+      );
       return {
         kind: 'ready',
         managedRuntime: {
@@ -529,6 +573,12 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
     await attachedStop(existingRuntime, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS)();
   }
 
+  emitManagedRuntimeProgress(
+    args.onProgress,
+    'starting_runtime',
+    'Starting runtime',
+    'Desktop is launching the bundled Redeven runtime on this device.',
+  );
   const reportDir = await fs.mkdtemp(path.join(args.tempRoot ?? os.tmpdir(), 'redeven-desktop-'));
   const reportFile = path.join(reportDir, 'startup-report.json');
   const child = spawn(args.executablePath, [...args.runtimeArgs, '--startup-report-file', reportFile], {
@@ -568,6 +618,12 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
   }
 
   try {
+    emitManagedRuntimeProgress(
+      args.onProgress,
+      'waiting_for_readiness',
+      'Waiting for runtime readiness',
+      'Redeven is starting locally and writing its startup report.',
+    );
     const launchReport = await waitForLaunchReport(
       reportFile,
       child,
@@ -612,6 +668,12 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
         return startManagedRuntime(args);
       }
       assertRuntimeOpenable(attachedStartup, recentLogs);
+      emitManagedRuntimeProgress(
+        args.onProgress,
+        'runtime_ready',
+        'Runtime ready',
+        'The local runtime is ready to open.',
+      );
       return {
         kind: 'ready',
         managedRuntime: {
@@ -649,6 +711,12 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
         return startManagedRuntime(args);
       }
       assertRuntimeOpenable(attachedStartup, recentLogs);
+      emitManagedRuntimeProgress(
+        args.onProgress,
+        'runtime_ready',
+        'Runtime ready',
+        'The local runtime is ready to open.',
+      );
       return {
         kind: 'ready',
         managedRuntime: {
@@ -674,6 +742,12 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
       logs: recentLogs,
       getSpawnError: () => spawnError,
     });
+    emitManagedRuntimeProgress(
+      args.onProgress,
+      'runtime_ready',
+      'Runtime ready',
+      'The local runtime is ready to open.',
+    );
     return {
       kind: 'ready',
       managedRuntime: {

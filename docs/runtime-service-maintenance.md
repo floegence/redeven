@@ -300,8 +300,15 @@ Desktop launcher cards keep their current dense SaaS tool layout:
   - update required: `Open` stays disabled and offers `Update runtime`
   - desktop too old: `Update Desktop`
   - runtime-control owner mismatch: provider-link actions stay blocked with owner guidance while host/container operations remain available when the management channel exists
-- Action feedback continues through Desktop toasts. No launcher content should
-  shift when a version event arrives.
+- Runtime startup progress for Local Host, Local Container, SSH Host, and SSH
+  Container targets belongs in the owning card's `Open` popup. During startup
+  the `Open` trigger remains clickable for progress inspection, keeps the
+  existing flowing shimmer treatment, and returns to direct `Open` behavior once
+  the refreshed runtime snapshot is openable. Startup progress must not use a
+  bottom-right SSH-only activity overlay.
+- Action feedback for completion, failure, and other ephemeral events continues
+  through Desktop toasts. No launcher content should shift when a version event
+  arrives, and toasts must not become the progress surface for runtime startup.
 
 ## Env App Settings UI
 
@@ -422,6 +429,6 @@ The stable flow is intentionally small:
    - `host_device` / `manual`: show guidance and keep direct actions disabled.
 6. Reconnect through the normal Env App recovery path and surface completion/failure through toast feedback.
 
-Welcome can run SSH-managed restart/update before an Env App window exists. The card records the runtime maintenance requirement, asks for explicit confirmation, then reruns the launcher start path. It does not auto-open the Environment after maintenance; it unlocks `Open` once the refreshed snapshot is openable.
+Welcome can run runtime restart/update before an Env App window exists. The card records the runtime maintenance requirement, asks for explicit confirmation, then reruns the launcher start path. It does not auto-open the Environment after maintenance; it unlocks `Open` once the refreshed snapshot is openable.
 
-SSH startup cancellation uses the same lifecycle model. `Stop startup` cancels the current start/update operation, broadcasts the shared cancellation signal through owned subprocesses, downloads, SSH commands, Desktop model source preparation, binding requests, and polling loops, then cleans up local resources. Successful cancellation is short-lived; cleanup failures remain visible for user attention.
+Startup cancellation uses the same lifecycle model for Local, SSH, and container runtime targets. `Stop startup` cancels the current start/update operation, broadcasts the shared cancellation signal through owned subprocesses, downloads, SSH commands, Desktop model source preparation, binding requests, bridge startup, and polling loops, then cleans up local resources. Successful cancellation is short-lived; cleanup failures remain visible for user attention.

@@ -77,14 +77,29 @@ describe('main routing', () => {
     expect(mainSrc).toContain('Set REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG for dev SSH bootstrap');
   });
 
-  it('routes SSH runtime bootstrap progress through cancellable launcher operations', () => {
+  it('routes runtime startup progress through cancellable launcher operations', () => {
     const mainSrc = readMainSource();
 
     expect(mainSrc).toContain('DESKTOP_LAUNCHER_ACTION_PROGRESS_CHANNEL');
     expect(mainSrc).toContain('const launcherOperations = new LauncherOperationRegistry(handleLauncherOperationChange);');
     expect(mainSrc).toContain('actionProgress: launcherOperations.progressItems()');
     expect(mainSrc).toContain('operations: launcherOperations.operations()');
+    expect(mainSrc).toContain('desktopRuntimeStartupLocation');
+    expect(mainSrc).toContain('buildRuntimeStartupProgress');
+    expect(mainSrc).toContain('updateRuntimeStartupOperation');
+    expect(mainSrc).toContain("runtime_startup: runtimeStartupProgress({");
+    expect(mainSrc).toContain("location: 'ssh_host'");
+    expect(mainSrc).toContain("const hostAccess: DesktopRuntimeHostAccess = { kind: 'local_host' };");
+    expect(mainSrc).toContain('const localHostPlacement: DesktopRuntimePlacement = { kind: \'host_process\'');
+    expect(mainSrc).toContain("subject_kind: 'local_environment'");
+    expect(mainSrc).toContain("subject_kind: 'runtime_target'");
+    expect(mainSrc).toContain('operation_key: operationKey');
+    expect(mainSrc).toContain('operation_key: targetID');
+    expect(mainSrc).toContain("phase: 'checking_existing_runtime'");
+    expect(mainSrc).toContain("phase: 'starting_bridge'");
+    expect(mainSrc).toContain("phase: 'waiting_for_readiness'");
     expect(mainSrc).toContain('const pendingStart = pendingSSHRuntimeStartByKey.get(runtimeKey) ?? null;');
+    expect(mainSrc).toContain('const pendingStart = pendingRuntimePlacementStartByTargetID.get(targetID) ?? null;');
     expect(mainSrc).toContain('return pendingStart.task;');
     expect(mainSrc).toContain('const sshRuntimeMaintenanceByKey = new Map');
     expect(mainSrc).toContain('error instanceof DesktopSSHRuntimeMaintenanceRequiredError');
@@ -104,6 +119,11 @@ describe('main routing', () => {
     expect(mainSrc).toContain('environment_label: label');
     expect(mainSrc).toContain('phase: progress.phase');
     expect(mainSrc).toContain('detail: progress.detail');
+    expect(mainSrc).toContain('runtimeStartupProgressFromSSH(sshDetails, progress, label)');
+    expect(mainSrc).toContain('ensureRuntimePlacementReady({');
+    expect(mainSrc).toContain('on_progress: (progress: RuntimePlacementProgress) => {');
+    expect(mainSrc).toContain('const launch = await startManagedRuntime({');
+    expect(mainSrc).toContain('onProgress: (progress: ManagedRuntimeProgress) => {');
     expect(mainSrc).toContain('launcherOperations.isStale(runtimeKey)');
     expect(mainSrc).toContain('scheduleLauncherOperationRemoval(runtimeKey);');
     expect(mainSrc).toContain('function friendlyRuntimeStartErrorMessage(');
@@ -161,7 +181,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain('const runtimePlacementBridgeByTargetID = new Map<DesktopRuntimeTargetID, RuntimePlacementBridgeRecord>();');
     expect(mainSrc).toContain('startRuntimePlacementBridgeSession({');
     expect(mainSrc).toContain('startDesktopModelSourceForStartup({');
-    expect(mainSrc).toContain('runtimePlacementBridgeByTargetID.set(session.placement_target_id, connectedRecord)');
+    expect(mainSrc).toContain('runtimePlacementBridgeByTargetID.set(bridgeSession.placement_target_id, connectedRecord)');
     expect(mainSrc).toContain('async function openRuntimePlacementBridgeFromLauncher(');
     expect(mainSrc).toContain('Start this runtime first, then open it.');
     expect(mainSrc).toContain('resolveRuntimeContainerPlacement');
@@ -174,7 +194,7 @@ describe('main routing', () => {
     const startRuntimeStart = mainSrc.indexOf('async function startEnvironmentRuntimeFromLauncher(');
     const startRuntimeEnd = mainSrc.indexOf('async function connectProviderRuntimeFromLauncher(', startRuntimeStart);
     const startRuntimeSrc = mainSrc.slice(startRuntimeStart, startRuntimeEnd);
-    expect(startRuntimeSrc).toContain("if (placement.kind === 'container_process')");
+    expect(startRuntimeSrc).toContain("if (requestedPlacement.kind === 'container_process')");
     expect(startRuntimeSrc).toContain('startRuntimePlacementBridgeRecordFromLauncher(request)');
     expect(startRuntimeSrc).toContain('const normalizedSSHTarget = sshDetailsFromRuntimeTargetRequest(request);');
 
@@ -405,7 +425,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain('label: string;');
     expect(mainSrc).toContain('async function buildCurrentDesktopQuitImpact(): Promise<DesktopQuitImpact> {');
     expect(mainSrc).toContain('pending_operation_count: launcherOperations.operations().filter((operation) => (');
-    expect(mainSrc).toContain("launcherOperations.cancel(pendingStart.operation_key, 'Redeven Desktop is quitting and canceling this SSH startup task.');");
+    expect(mainSrc).toContain("launcherOperations.cancel(pendingStart.operation_key, 'Redeven Desktop is quitting and canceling this runtime startup task.');");
     expect(mainSrc).toContain('async function confirmDesktopImpact(');
     expect(mainSrc).toContain('async function requestFinalWindowClose(');
     expect(mainSrc).toContain('confirmedFinalWindowCloseWebContentsIDs.add(windowRecord.webContentsID);');

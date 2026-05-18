@@ -354,6 +354,7 @@ describe('runtimeProcess', () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-'));
     const runtimeStateFile = path.join(dir, 'runtime', 'local-ui.json');
     const server = await startHealthServer();
+    const progressPhases: string[] = [];
     try {
       await writeRuntimeState(runtimeStateFile, server.baseURL);
 
@@ -365,6 +366,9 @@ describe('runtimeProcess', () => {
         runtimeStabilityWindowMs: 500,
         runtimeStabilityPollMs: 30,
         desktopOwnerID: 'desktop-owner-1',
+        onProgress: (progress) => {
+          progressPhases.push(progress.phase);
+        },
       });
 
       expect(launch.kind).toBe('ready');
@@ -374,6 +378,11 @@ describe('runtimeProcess', () => {
       expect(launch.spawned).toBe(false);
       expect(launch.managedRuntime.attached).toBe(true);
       expect(server.healthRequests()).toBe(1);
+      expect(progressPhases).toEqual([
+        'checking_existing_runtime',
+        'waiting_for_readiness',
+        'runtime_ready',
+      ]);
     } finally {
       await server.close();
       await fs.rm(dir, { recursive: true, force: true });
@@ -407,6 +416,7 @@ describe('runtimeProcess', () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-'));
     const runtimeStateFile = path.join(dir, 'runtime', 'local-ui.json');
     const scriptPath = await writeFakeRuntimeScript(dir);
+    const progressPhases: string[] = [];
     try {
       const launch = await startManagedRuntime({
         executablePath: process.execPath,
@@ -420,6 +430,9 @@ describe('runtimeProcess', () => {
         runtimeAttachTimeoutMs: 120,
         runtimeStabilityWindowMs: 80,
         runtimeStabilityPollMs: 40,
+        onProgress: (progress) => {
+          progressPhases.push(progress.phase);
+        },
       });
 
       expect(launch.kind).toBe('ready');
@@ -427,6 +440,12 @@ describe('runtimeProcess', () => {
         return;
       }
       expect(launch.managedRuntime.startup.runtime_service?.open_readiness).toEqual({ state: 'openable' });
+      expect(progressPhases).toEqual([
+        'checking_existing_runtime',
+        'starting_runtime',
+        'waiting_for_readiness',
+        'runtime_ready',
+      ]);
       await launch.managedRuntime.stop();
     } finally {
       await fs.rm(dir, { recursive: true, force: true });

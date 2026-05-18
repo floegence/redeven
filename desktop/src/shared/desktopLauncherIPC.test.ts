@@ -6,6 +6,7 @@ import {
   isDesktopLauncherActionSuccess,
   normalizeDesktopLauncherActionRequest,
 } from './desktopLauncherIPC';
+import type { DesktopLauncherActionProgress, DesktopLauncherOperationSnapshot } from './desktopLauncherIPC';
 
 describe('desktopLauncherIPC', () => {
   it('normalizes launcher actions and trims Environment inputs', () => {
@@ -421,5 +422,55 @@ describe('desktopLauncherIPC', () => {
       message: 'That window was already closed. Desktop refreshed the environment list.',
       should_refresh_snapshot: true,
     })).toBe(true);
+  });
+
+  it('carries runtime startup metadata in launcher operation and progress contracts', () => {
+    const runtimeStartup = {
+      kind: 'runtime_startup',
+      location: 'local_container',
+      phase: 'installing_runtime',
+      stage_index: 5,
+      stage_count: 8,
+      target_label: 'Dev Container',
+      target_detail: 'docker/dev',
+    } as const;
+    const operation: DesktopLauncherOperationSnapshot = {
+      operation_key: 'local:container:docker:dev:abcd1234',
+      action: 'start_environment_runtime',
+      subject_kind: 'runtime_target',
+      subject_id: 'local:container:docker:dev:abcd1234',
+      subject_generation: 0,
+      environment_id: 'local:container:docker:dev:abcd1234',
+      environment_label: 'Dev Container',
+      started_at_unix_ms: 1,
+      updated_at_unix_ms: 2,
+      status: 'running',
+      phase: 'installing_runtime',
+      title: 'Installing runtime in container',
+      detail: 'Desktop is installing Redeven inside the running container.',
+      runtime_startup: runtimeStartup,
+      cancelable: true,
+      deleted_subject: false,
+    };
+    const progress: DesktopLauncherActionProgress = {
+      action: operation.action,
+      operation_key: operation.operation_key,
+      subject_kind: operation.subject_kind,
+      subject_id: operation.subject_id,
+      environment_id: operation.environment_id,
+      environment_label: operation.environment_label,
+      started_at_unix_ms: operation.started_at_unix_ms,
+      updated_at_unix_ms: operation.updated_at_unix_ms,
+      status: operation.status,
+      phase: operation.phase,
+      title: operation.title,
+      detail: operation.detail,
+      runtime_startup: operation.runtime_startup,
+      cancelable: operation.cancelable,
+      deleted_subject: operation.deleted_subject,
+    };
+
+    expect(operation.subject_kind).toBe('runtime_target');
+    expect(progress.runtime_startup).toEqual(runtimeStartup);
   });
 });

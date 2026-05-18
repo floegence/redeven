@@ -119,6 +119,36 @@ describe('environmentLibraryOverlayState', () => {
     expect(reconcileEnvironmentLibraryOverlayState(state, snapshot.environments)).toEqual(closedEnvironmentLibraryOverlayState());
   });
 
+  it('keeps the primary action guidance overlay open while runtime startup progress belongs to the environment', () => {
+    const local = testLocalEnvironment({ label: 'Local Environment' });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: local,
+      }),
+    });
+    const localEntry = snapshot.environments.find((environment) => environment.id === local.id);
+    const state = openEnvironmentLibraryOverlayState('primary_action_guidance', local.id);
+
+    expect(localEntry).toBeTruthy();
+    expect(reconcileEnvironmentLibraryOverlayState(state, snapshot.environments, [{
+      action: 'start_environment_runtime',
+      environment_id: local.id,
+      subject_kind: 'local_environment',
+      subject_id: local.id,
+      phase: 'starting_runtime',
+      title: 'Starting runtime',
+      detail: 'Desktop is launching the bundled Redeven runtime on this device.',
+      runtime_startup: {
+        kind: 'runtime_startup',
+        location: 'local_host',
+        phase: 'starting_runtime',
+        stage_index: 2,
+        stage_count: 4,
+        target_label: local.label,
+      },
+    }])).toEqual(state);
+  });
+
   it('closes a guidance overlay when the same environment now only exposes tooltip guidance', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({

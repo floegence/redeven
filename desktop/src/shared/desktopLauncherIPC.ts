@@ -14,6 +14,7 @@ import type {
   DesktopRuntimeHealth,
 } from './desktopRuntimeHealth';
 import type { DesktopRuntimeOperationPlans } from './desktopRuntimeOperations';
+import type { DesktopRuntimeStartupProgress } from './desktopRuntimeStartupProgress';
 import type { DesktopLocalRuntimeOpenPlan } from './localRuntimeSupervisor';
 import type { RuntimeServiceProviderConnectionState, RuntimeServiceSnapshot } from './runtimeService';
 import {
@@ -58,6 +59,7 @@ export type DesktopLauncherOperationSubjectKind =
   | 'local_environment'
   | 'external_local_ui'
   | 'ssh_environment'
+  | 'runtime_target'
   | 'control_plane';
 export type DesktopLauncherActionOutcome =
   | 'opened_environment_window'
@@ -270,6 +272,7 @@ export type DesktopLauncherOperationSnapshot = Readonly<{
   phase: string;
   title: string;
   detail: string;
+  runtime_startup?: DesktopRuntimeStartupProgress;
   cancelable: boolean;
   interrupt_label?: string;
   interrupt_detail?: string;
@@ -455,6 +458,7 @@ export type DesktopLauncherActionProgress = Readonly<{
   phase: string;
   title: string;
   detail: string;
+  runtime_startup?: DesktopRuntimeStartupProgress;
   cancelable?: boolean;
   interrupt_label?: string;
   interrupt_detail?: string;
