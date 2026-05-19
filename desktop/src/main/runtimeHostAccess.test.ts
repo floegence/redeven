@@ -59,6 +59,33 @@ describe('runtimeHostAccess', () => {
     );
   });
 
+  it('uses a locally supplied SSH password through askpass without sending it in argv', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-ssh-password-test-'));
+    const argsPath = path.join(tempDir, 'ssh-args.json');
+    const passwordPath = path.join(tempDir, 'password.txt');
+    const fakeSSH = path.join(tempDir, 'ssh');
+    await fs.writeFile(fakeSSH, [
+      '#!/usr/bin/env bash',
+      'set -euo pipefail',
+      `node -e "const fs=require('node:fs'); fs.writeFileSync(process.argv[1], JSON.stringify(process.argv.slice(3))); const askpass=process.env.SSH_ASKPASS; fs.writeFileSync(process.argv[2], askpass ? require('node:child_process').execFileSync(askpass, ['Password:']).toString('utf8') : '');" ${JSON.stringify(argsPath)} ${JSON.stringify(passwordPath)} "$@"`,
+    ].join('\n'), { mode: 0o755 });
+
+    const executor = createSSHRuntimeHostExecutor({
+      ssh_destination: 'devbox',
+      ssh_port: null,
+      auth_mode: 'password',
+      connect_timeout_seconds: 15,
+    }, {
+      sshBinary: fakeSSH,
+      sshPassword: 'stored-secret',
+    });
+    await executor.run(['true']);
+
+    const args = JSON.parse(await fs.readFile(argsPath, 'utf8')) as string[];
+    expect(args.join(' ')).not.toContain('stored-secret');
+    expect(await fs.readFile(passwordPath, 'utf8')).toBe('stored-secret\n');
+  });
+
   it('streams stdin data through local and SSH host executors', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-host-stdin-test-'));
     const localOut = path.join(tempDir, 'local.bin');

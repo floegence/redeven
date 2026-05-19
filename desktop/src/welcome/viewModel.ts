@@ -687,6 +687,12 @@ function runtimeStatusLabel(environment: DesktopEnvironmentEntry): string {
     }
   }
   if (environment.runtime_health.status !== 'online') {
+    if (environment.runtime_health.offline_reason_code === 'auth_required') {
+      return 'MANUAL AUTH REQUIRED';
+    }
+    if (environment.runtime_health.offline_reason_code === 'unverified') {
+      return 'UNVERIFIED';
+    }
     return 'RUNTIME OFFLINE';
   }
   if (environmentRuntimeMaintenance(environment)) {
@@ -750,7 +756,7 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
     label: 'Open',
     enabled: canOpenProviderRemoteRoute
       || (environment.kind !== 'provider_environment'
-        && environment.runtime_health.status === 'online'
+        && (environment.runtime_health.status === 'online' || environment.kind === 'external_local_ui')
         && environmentOpenOperationAvailable(environment)),
     variant: 'default',
     ...(environment.kind === 'provider_environment'
@@ -1272,6 +1278,9 @@ function primaryActionOverlay(
       tone: 'warning',
       message: runtimeServiceOpenReadinessLabel(snapshot),
     };
+  }
+  if (environment.kind === 'external_local_ui' && environmentOpenOperationAvailable(environment)) {
+    return undefined;
   }
 
   const recoveryAction = blockedPrimaryActionGuidanceAction(environment, menuActions);

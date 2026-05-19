@@ -62,6 +62,36 @@ starts only from an explicit user action.
   `Restart now`, `Update Desktop`, `Open release page`, `Try again`, and
   `Copy diagnostics`.
 
+## Welcome Detection And Safe Start
+
+Desktop treats saved runtimes as long-lived services that can outlive the
+Desktop process. On Welcome startup, Refresh, and restored visibility, Desktop
+performs read-only detection for saved SSH Host, Local Container, SSH Container,
+and saved Redeven URL entries.
+
+Detection rules:
+
+- Detection never starts, stops, restarts, updates, installs, or replaces a
+  runtime.
+- Detection never creates a session window, Local UI tunnel, container bridge,
+  runtime-control forward, desktop model-source connection, or provider binding.
+- A target with a running and openable Runtime Service becomes `Open`-ready
+  even after Desktop has restarted, because runtime readiness is not tied to
+  Electron process memory.
+- A saved Redeven URL probe failure is `Unverified`, not `Not started`, and
+  `Open` remains available.
+- Password-based SSH detection is non-interactive. Automatic detection may use
+  a locally stored SSH password for that saved entry; otherwise the card reports
+  `Auto detection waits for manual authentication`.
+
+Manual `Start runtime` uses the same probe-first policy. If the runtime is
+already running and openable, Start succeeds without launching a replacement
+process. If the runtime is running but incompatible, blocked, or missing a
+management socket, Desktop surfaces a maintenance requirement and leaves the
+existing process alone. Explicit restart/update actions may be offered by the
+operation planner, but they require user confirmation and must preserve active
+work unless the user accepts the interruption risk.
+
 ## Data Structures
 
 ### Runtime Service Snapshot

@@ -1,4 +1,8 @@
 import * as childProcess from 'node:child_process';
+import fsSync from 'node:fs';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import type { ChildProcessByStdio } from 'node:child_process';
 import type { Readable, Writable } from 'node:stream';
 
@@ -67,6 +71,29 @@ function sshRemoteEnvPrefix(env: NodeJS.ProcessEnv | undefined): string {
 
 function sshRemoteCommandWithEnv(argv: readonly string[], env: NodeJS.ProcessEnv | undefined): string {
   return `${sshRemoteEnvPrefix(env)}${sshRemoteCommand(argv)}`;
+}
+
+function buildSSHPasswordAskPassScript(): string {
+  return [
+    '#!/bin/sh',
+    'set -eu',
+    'printf "%s\\n" "${REDEVEN_DESKTOP_SSH_PASSWORD:-}"',
+  ].join('\n');
+}
+
+async function createSSHPasswordAskPassScript(): Promise<Readonly<{
+  scriptPath: string;
+  cleanup: () => Promise<void>;
+}>> {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'rdv-host-ssh-'));
+  const scriptPath = path.join(tempDir, 'redeven-ssh-password-askpass.sh');
+  await fs.writeFile(scriptPath, buildSSHPasswordAskPassScript(), { mode: 0o700 });
+  return {
+    scriptPath,
+    cleanup: async () => {
+      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+    },
+  };
 }
 
 function spawnCommand(
@@ -180,6 +207,7 @@ export function createSSHRuntimeHostExecutor(
   ssh: DesktopSSHHostAccessDetails,
   options: Readonly<{
     sshBinary?: string;
+    sshPassword?: string;
   }> = {},
 ): RuntimeHostAccessExecutor {
   return {
@@ -189,16 +217,34 @@ export function createSSHRuntimeHostExecutor(
         throw new Error('Runtime host command argv must be non-empty.');
       }
       const sshBinary = compact(options.sshBinary) || 'ssh';
+      const sshPassword = compact(options.sshPassword);
+      const askPass = ssh.auth_mode === 'password' && sshPassword !== ''
+        ? await createSSHPasswordAskPassScript()
+        : null;
       const args = [
         '-T',
         '-x',
         '-o',
         `ConnectTimeout=${ssh.connect_timeout_seconds}`,
-        ...(ssh.auth_mode === 'key_agent' ? ['-o', 'BatchMode=yes'] : []),
+        ...(ssh.auth_mode === 'key_agent' ? ['-o', 'BatchMode=yes'] : ['-o', 'BatchMode=no', '-o', 'NumberOfPasswordPrompts=1']),
         ...sshTargetArgs(ssh),
         sshRemoteCommandWithEnv(argv, commandOptions.env),
       ];
-      return spawnCommand(sshBinary, args, { ...commandOptions, env: undefined });
+      try {
+        return await spawnCommand(sshBinary, args, {
+          ...commandOptions,
+          env: askPass
+            ? {
+                DISPLAY: process.env.DISPLAY || ':0',
+                SSH_ASKPASS: askPass.scriptPath,
+                SSH_ASKPASS_REQUIRE: 'force',
+                REDEVEN_DESKTOP_SSH_PASSWORD: sshPassword,
+              }
+            : undefined,
+        });
+      } finally {
+        await askPass?.cleanup();
+      }
     },
   };
 }
@@ -208,20 +254,47 @@ export function spawnSSHRuntimeHostCommand(
   argv: readonly string[],
   options: RuntimeHostCommandOptions & Readonly<{
     sshBinary?: string;
+    sshPassword?: string;
   }> = {},
 ): RuntimeHostStreamingCommand {
   if (argv.length === 0) {
     throw new Error('Runtime host command argv must be non-empty.');
   }
   const sshBinary = compact(options.sshBinary) || 'ssh';
+  const sshPassword = compact(options.sshPassword);
+  const askPass = ssh.auth_mode === 'password' && sshPassword !== ''
+    ? (() => {
+        const tempDir = fsSync.mkdtempSync(path.join(os.tmpdir(), 'rdv-host-ssh-stream-'));
+        const scriptPath = path.join(tempDir, 'redeven-ssh-password-askpass.sh');
+        fsSync.writeFileSync(scriptPath, buildSSHPasswordAskPassScript(), { mode: 0o700 });
+        return {
+          scriptPath,
+          cleanup: () => fsSync.rmSync(tempDir, { recursive: true, force: true }),
+        };
+      })()
+    : null;
   const args = [
     '-T',
     '-x',
     '-o',
     `ConnectTimeout=${ssh.connect_timeout_seconds}`,
-    ...(ssh.auth_mode === 'key_agent' ? ['-o', 'BatchMode=yes'] : []),
+    ...(ssh.auth_mode === 'key_agent' ? ['-o', 'BatchMode=yes'] : ['-o', 'BatchMode=no', '-o', 'NumberOfPasswordPrompts=1']),
     ...sshTargetArgs(ssh),
     sshRemoteCommandWithEnv(argv, options.env),
   ];
-  return spawnStreamingCommand(sshBinary, args, { ...options, env: undefined });
+  const command = spawnStreamingCommand(sshBinary, args, {
+    ...options,
+    env: askPass
+      ? {
+          DISPLAY: process.env.DISPLAY || ':0',
+          SSH_ASKPASS: askPass.scriptPath,
+          SSH_ASKPASS_REQUIRE: 'force',
+          REDEVEN_DESKTOP_SSH_PASSWORD: sshPassword,
+        }
+      : undefined,
+  });
+  if (askPass) {
+    void command.closed.finally(() => askPass.cleanup()).catch(() => undefined);
+  }
+  return command;
 }

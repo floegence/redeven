@@ -276,6 +276,12 @@ type SSHConnectionDialogState = Readonly<{
   ssh_destination: string;
   ssh_port: string;
   auth_mode: DesktopSSHAuthMode;
+  ssh_password: string;
+  ssh_password_mode: 'keep' | 'replace' | 'clear';
+  ssh_password_configured: boolean;
+  baseline_ssh_destination: string;
+  baseline_ssh_port: string;
+  baseline_auth_mode: DesktopSSHAuthMode;
   runtime_root: string;
   bootstrap_strategy: DesktopSSHBootstrapStrategy;
   release_base_url: string;
@@ -290,6 +296,12 @@ type RuntimeContainerConnectionDialogState = Readonly<{
   ssh_destination: string;
   ssh_port: string;
   auth_mode: DesktopSSHAuthMode;
+  ssh_password: string;
+  ssh_password_mode: 'keep' | 'replace' | 'clear';
+  ssh_password_configured: boolean;
+  baseline_ssh_destination: string;
+  baseline_ssh_port: string;
+  baseline_auth_mode: DesktopSSHAuthMode;
   connect_timeout_seconds: string;
   container_engine: DesktopContainerEngine;
   container_id: string;
@@ -300,6 +312,7 @@ type RuntimeContainerConnectionDialogState = Readonly<{
 
 type ConnectionDialogKind = 'external_local_ui' | 'ssh_environment' | 'local_container_runtime' | 'ssh_container_runtime';
 type ConnectionDialogState = ExternalURLConnectionDialogState | SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null;
+type SSHPasswordConnectionDialogState = SSHConnectionDialogState | RuntimeContainerConnectionDialogState;
 
 type ControlPlaneDialogState = Readonly<{
   display_label: string;
@@ -598,14 +611,23 @@ function createSSHConnectionDialogState(
   mode: 'create' | 'edit',
   overrides: Partial<SSHConnectionDialogState> = {},
 ): SSHConnectionDialogState {
+  const sshDestination = trimString(overrides.ssh_destination);
+  const sshPort = trimString(overrides.ssh_port);
+  const authMode = (trimString(overrides.auth_mode) as DesktopSSHAuthMode) || DEFAULT_DESKTOP_SSH_AUTH_MODE;
   return {
     mode,
     connection_kind: 'ssh_environment',
     environment_id: trimString(overrides.environment_id),
     label: trimString(overrides.label),
-    ssh_destination: trimString(overrides.ssh_destination),
-    ssh_port: trimString(overrides.ssh_port),
-    auth_mode: (trimString(overrides.auth_mode) as DesktopSSHAuthMode) || DEFAULT_DESKTOP_SSH_AUTH_MODE,
+    ssh_destination: sshDestination,
+    ssh_port: sshPort,
+    auth_mode: authMode,
+    ssh_password: '',
+    ssh_password_mode: overrides.ssh_password_configured ? 'keep' : 'replace',
+    ssh_password_configured: overrides.ssh_password_configured === true,
+    baseline_ssh_destination: sshDestination,
+    baseline_ssh_port: sshPort,
+    baseline_auth_mode: authMode,
     runtime_root: trimString(overrides.runtime_root),
     bootstrap_strategy: (trimString(overrides.bootstrap_strategy) as DesktopSSHBootstrapStrategy) || DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
     release_base_url: trimString(overrides.release_base_url),
@@ -618,20 +640,76 @@ function createRuntimeContainerConnectionDialogState(
   kind: RuntimeContainerConnectionDialogState['connection_kind'],
   overrides: Partial<RuntimeContainerConnectionDialogState> = {},
 ): RuntimeContainerConnectionDialogState {
+  const sshDestination = trimString(overrides.ssh_destination);
+  const sshPort = trimString(overrides.ssh_port);
+  const authMode = (trimString(overrides.auth_mode) as DesktopSSHAuthMode) || DEFAULT_DESKTOP_SSH_AUTH_MODE;
   return {
     mode,
     connection_kind: kind,
     environment_id: trimString(overrides.environment_id),
     label: trimString(overrides.label),
-    ssh_destination: trimString(overrides.ssh_destination),
-    ssh_port: trimString(overrides.ssh_port),
-    auth_mode: (trimString(overrides.auth_mode) as DesktopSSHAuthMode) || DEFAULT_DESKTOP_SSH_AUTH_MODE,
+    ssh_destination: sshDestination,
+    ssh_port: sshPort,
+    auth_mode: authMode,
+    ssh_password: '',
+    ssh_password_mode: overrides.ssh_password_configured ? 'keep' : 'replace',
+    ssh_password_configured: overrides.ssh_password_configured === true,
+    baseline_ssh_destination: sshDestination,
+    baseline_ssh_port: sshPort,
+    baseline_auth_mode: authMode,
     connect_timeout_seconds: trimString(overrides.connect_timeout_seconds),
     container_engine: overrides.container_engine ?? 'docker',
     container_id: trimString(overrides.container_id),
     container_ref: trimString(overrides.container_ref) || trimString(overrides.container_label) || trimString(overrides.container_id),
     container_label: trimString(overrides.container_label),
     runtime_root: trimString(overrides.runtime_root) || '/root/.redeven',
+  };
+}
+
+function isSSHPasswordConnectionDialogState(
+  state: ConnectionDialogState,
+): state is SSHPasswordConnectionDialogState {
+  return state?.connection_kind === 'ssh_environment' || state?.connection_kind === 'ssh_container_runtime';
+}
+
+function sshPasswordIdentityMatchesBaseline(state: SSHPasswordConnectionDialogState): boolean {
+  return trimString(state.ssh_destination) === trimString(state.baseline_ssh_destination)
+    && trimString(state.ssh_port) === trimString(state.baseline_ssh_port)
+    && state.auth_mode === state.baseline_auth_mode
+    && state.auth_mode === 'password';
+}
+
+function reconcileSSHPasswordDraft(
+  state: SSHPasswordConnectionDialogState,
+  changedField: string,
+): SSHPasswordConnectionDialogState {
+  if (changedField === 'ssh_password') {
+    return {
+      ...state,
+      ssh_password_mode: trimString(state.ssh_password) === '' ? state.ssh_password_mode : 'replace',
+    };
+  }
+  if (changedField !== 'ssh_destination' && changedField !== 'ssh_port' && changedField !== 'auth_mode') {
+    return state;
+  }
+  if (state.auth_mode !== 'password') {
+    return {
+      ...state,
+      ssh_password: '',
+      ssh_password_mode: 'clear',
+    };
+  }
+  if (state.ssh_password_configured && sshPasswordIdentityMatchesBaseline(state)) {
+    return {
+      ...state,
+      ssh_password: '',
+      ssh_password_mode: 'keep',
+    };
+  }
+  return {
+    ...state,
+    ssh_password: '',
+    ssh_password_mode: state.ssh_password_configured ? 'clear' : 'replace',
   };
 }
 
@@ -1533,6 +1611,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         ssh_destination: isSSHContainer ? environment.managed_runtime_host_access.ssh.ssh_destination : '',
         ssh_port: isSSHContainer && environment.managed_runtime_host_access.ssh.ssh_port != null ? String(environment.managed_runtime_host_access.ssh.ssh_port) : '',
         auth_mode: isSSHContainer ? environment.managed_runtime_host_access.ssh.auth_mode : DEFAULT_DESKTOP_SSH_AUTH_MODE,
+        ssh_password_configured: isSSHContainer && environment.ssh_password_configured === true,
         connect_timeout_seconds: isSSHContainer && environment.managed_runtime_host_access.ssh.connect_timeout_seconds != null
           ? String(environment.managed_runtime_host_access.ssh.connect_timeout_seconds)
           : '',
@@ -1553,6 +1632,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         ssh_destination: environment.ssh_details?.ssh_destination ?? '',
         ssh_port: environment.ssh_details?.ssh_port == null ? '' : String(environment.ssh_details.ssh_port),
         auth_mode: environment.ssh_details?.auth_mode ?? DEFAULT_DESKTOP_SSH_AUTH_MODE,
+        ssh_password_configured: environment.ssh_password_configured === true,
         runtime_root: environment.ssh_details?.runtime_root === DEFAULT_DESKTOP_SSH_RUNTIME_ROOT
           ? ''
           : (environment.ssh_details?.runtime_root ?? ''),
@@ -1656,14 +1736,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function updateConnectionDialogField(
-    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'runtime_root' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_ref' | 'container_label',
+    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'ssh_password' | 'runtime_root' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_ref' | 'container_label',
     value: string,
   ): void {
     setConnectionDialogState((current) => {
       if (!current) {
         return current;
       }
-      const base = {
+      let base: ConnectionDialogState = {
         ...current,
         [name]: value,
         ...(
@@ -1672,13 +1752,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             ? { container_id: '', container_ref: '', container_label: '' }
             : {}
         ),
-      };
+      } as ConnectionDialogState;
+      if (isSSHPasswordConnectionDialogState(base)) {
+        base = reconcileSSHPasswordDraft(base, name) as ConnectionDialogState;
+      }
       if (name === 'ssh_destination' || name === 'container_label') {
         const oldSuggested = suggestConnectionLabel(current);
         const newSuggested = suggestConnectionLabel(base as ConnectionDialogState);
         const wasAutoFilled = oldSuggested !== null && trimString(current.label) === oldSuggested;
-        if (newSuggested !== null && (wasAutoFilled || !trimString(base.label))) {
-          return { ...base, label: newSuggested };
+        if (base && newSuggested !== null && (wasAutoFilled || !trimString(base.label))) {
+          return { ...base, label: newSuggested } as ConnectionDialogState;
         }
       }
       return base as ConnectionDialogState;
@@ -1700,6 +1783,19 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         ...current,
         bootstrap_strategy: strategy,
         ...(current.connection_kind === 'ssh_container_runtime' ? { container_id: '', container_ref: '', container_label: '' } : {}),
+      };
+    });
+  }
+
+  function removeSSHPasswordFromConnectionDialog(): void {
+    setConnectionDialogState((current) => {
+      if (!isSSHPasswordConnectionDialogState(current)) {
+        return current;
+      }
+      return {
+        ...current,
+        ssh_password: '',
+        ssh_password_mode: 'clear',
       };
     });
   }
@@ -2672,6 +2768,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       environment_id: string;
       label: string;
       details: DesktopSSHEnvironmentDetails;
+      sshPassword: string;
+      sshPasswordMode: 'keep' | 'replace' | 'clear';
       errorTarget: 'connect' | 'dialog';
       successMessage: string;
     }>,
@@ -2696,6 +2794,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         bootstrap_strategy: request.details.bootstrap_strategy,
         release_base_url: request.details.release_base_url,
         connect_timeout_seconds: request.details.connect_timeout_seconds,
+        ssh_password: request.sshPassword,
+        ssh_password_mode: request.sshPasswordMode,
       });
       await refreshSnapshot();
       showActionToast(request.successMessage);
@@ -2751,6 +2851,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           runtime_root: trimString(request.state.runtime_root),
           bridge_strategy: 'exec_stream',
         },
+        ssh_password: request.state.ssh_password,
+        ssh_password_mode: request.state.ssh_password_mode,
       });
       await refreshSnapshot();
       showActionToast(request.successMessage);
@@ -2833,6 +2935,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           release_base_url: trimString(state.release_base_url),
           connect_timeout_seconds: trimString(state.connect_timeout_seconds) === '' ? null : Number(trimString(state.connect_timeout_seconds)),
         },
+        sshPassword: state.ssh_password,
+        sshPasswordMode: state.ssh_password_mode,
         errorTarget: 'dialog',
         successMessage: state.mode === 'edit'
           ? 'Connection updated.'
@@ -3168,6 +3272,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         }}
         switchKind={switchConnectionDialogKind}
         switchBootstrapStrategy={switchSSHBootstrapStrategy}
+        removeSSHPassword={removeSSHPasswordFromConnectionDialog}
         clearFieldErrors={() => setConnectionDialogFieldErrors({})}
         onSave={saveConnectionFromDialog}
       />
@@ -6750,12 +6855,13 @@ function ConnectionDialog(props: Readonly<{
   busyState: DesktopLauncherBusyState;
   onOpenChange: (open: boolean) => void;
   updateField: (
-    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'runtime_root' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_ref' | 'container_label',
+    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'ssh_password' | 'runtime_root' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_ref' | 'container_label',
     value: string,
   ) => void;
   refreshContainerOptions: () => void;
   switchKind: (kind: ConnectionDialogKind) => void;
   switchBootstrapStrategy: (strategy: DesktopSSHBootstrapStrategy) => void;
+  removeSSHPassword: () => void;
   clearFieldErrors: () => void;
   onSave: () => Promise<void>;
 }>) {
@@ -6982,9 +7088,35 @@ function ConnectionDialog(props: Readonly<{
                   size="sm"
                 />
                 <div class="text-[11px] leading-5 text-muted-foreground">
-                  Key / agent uses your existing SSH configuration. Password prompt asks only when starting the runtime and does not store the SSH password.
+                  Key / agent uses your existing SSH configuration. Password prompt can reuse a locally saved password after Save.
                 </div>
               </div>
+              <Show when={isSSHBackedKind() && ((props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.auth_mode ?? DEFAULT_DESKTOP_SSH_AUTH_MODE) === 'password'}>
+                <div class="space-y-1.5">
+                  <label for="environment-ssh-password" class="block text-xs font-medium text-foreground">Local SSH password</label>
+                  <Input
+                    id="environment-ssh-password"
+                    type="password"
+                    autocomplete="new-password"
+                    value={isSSHBackedKind() ? (props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.ssh_password ?? '' : ''}
+                    onInput={(event) => props.updateField('ssh_password', event.currentTarget.value)}
+                    placeholder={(props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.ssh_password_configured ? 'Enter a new password to replace the stored one' : 'Optional saved password for local auto detection'}
+                    size="sm"
+                    class="w-full"
+                  />
+                  <div class="text-[11px] leading-5 text-muted-foreground">
+                    Desktop stores this password only on this device. Automatic detection uses it silently; manual password prompts are not saved.
+                  </div>
+                  <Show when={(props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.ssh_password_configured && (props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.ssh_password_mode !== 'clear'}>
+                    <Button size="sm" variant="outline" onClick={props.removeSSHPassword}>
+                      Remove stored password
+                    </Button>
+                  </Show>
+                  <Show when={(props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.ssh_password_mode === 'clear'}>
+                    <div class="text-[11px] text-muted-foreground">The stored SSH password will be removed on save.</div>
+                  </Show>
+                </div>
+              </Show>
               <Show when={connectionKind() === 'ssh_environment'}>
                 <div class="overflow-hidden rounded-md border border-border/70 bg-background/80">
                 <button

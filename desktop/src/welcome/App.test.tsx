@@ -848,7 +848,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Authentication');
     expect(appSrc).toContain("label: 'Key / agent'");
     expect(appSrc).toContain("label: 'Password prompt'");
-    expect(appSrc).toContain('does not store the SSH password');
+    expect(appSrc).toContain('Local SSH password');
+    expect(appSrc).toContain('Desktop stores this password only on this device');
     expect(appSrc).toContain('variant="default"');
     expect(appSrc).not.toContain("const showCreateConnectAction = createMemo(() => isCreate() && connectionKind() === 'external_local_ui');");
     expect(appSrc).not.toContain('<Show when={showCreateConnectAction()}>');

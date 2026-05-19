@@ -18,6 +18,9 @@ export type DesktopRuntimeMaintenanceRequirement = Readonly<{
 }>;
 export type DesktopRuntimeOfflineReasonCode =
   | 'not_started'
+  | 'auth_required'
+  | 'unverified'
+  | 'container_not_running'
   | 'probe_failed'
   | 'provider_reported_offline'
   | 'provider_unavailable'

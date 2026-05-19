@@ -8,14 +8,13 @@ import {
   containerInspectCommand,
   containerRuntimeDaemonStartCommand,
   containerRuntimeDaemonStatusCommand,
-  containerRuntimeDaemonStopCommand,
   containerRuntimePlatformProbeCommand,
   containerRuntimeProbeCommand,
   containerRuntimeUploadedInstallCommand,
   parseContainerInspectJSON,
   parseContainerPlatformProbeOutput,
 } from './containerRuntime';
-import { parseLaunchReport, type LaunchBlockedReport } from './launchReport';
+import { parseLaunchReport } from './launchReport';
 import { type StartupReport } from './startup';
 import {
   createLocalRuntimeHostExecutor,
@@ -70,6 +69,7 @@ export class RuntimePlacementMaintenanceRequiredError extends Error {
 export type EnsureRuntimePlacementReadyArgs = Readonly<{
   host_access: DesktopRuntimeHostAccess;
   placement: DesktopRuntimePlacement;
+  ssh_password?: string;
   runtime_release_tag: string;
   release_base_url: string;
   source_runtime_root?: string;
@@ -106,9 +106,9 @@ function emitProgress(
   });
 }
 
-function runtimeHostExecutor(hostAccess: DesktopRuntimeHostAccess): RuntimeHostAccessExecutor {
+function runtimeHostExecutor(hostAccess: DesktopRuntimeHostAccess, sshPassword?: string): RuntimeHostAccessExecutor {
   return hostAccess.kind === 'ssh_host'
-    ? createSSHRuntimeHostExecutor(hostAccess.ssh)
+    ? createSSHRuntimeHostExecutor(hostAccess.ssh, { sshPassword })
     : createLocalRuntimeHostExecutor();
 }
 
@@ -117,12 +117,11 @@ async function waitForContainerRuntimeDaemon(args: Readonly<{
   placement: Extract<DesktopRuntimePlacement, Readonly<{ kind: 'container_process' }>>;
   runtime_binary_path: string;
   timeout_ms: number;
+  runtime_release_tag: string;
   signal?: AbortSignal;
-  on_blocked?: (report: LaunchBlockedReport) => Promise<boolean>;
 }>): Promise<StartupReport> {
   const deadline = Date.now() + Math.max(1_000, args.timeout_ms);
   let lastError: Error | null = null;
-  let lastBlocked: LaunchBlockedReport | null = null;
   for (;;) {
     let report: ReturnType<typeof parseLaunchReport> | null = null;
     try {
@@ -141,37 +140,23 @@ async function waitForContainerRuntimeDaemon(args: Readonly<{
         return report.startup;
       }
     } else {
-      lastBlocked = report;
       lastError = new Error(report.message);
-      if (await args.on_blocked?.(report)) {
-        lastBlocked = null;
-        lastError = null;
-        continue;
-      }
+      const maintenance: DesktopRuntimeMaintenanceRequirement = {
+        kind: 'ssh_runtime_restart_required',
+        required_for: 'open',
+        can_desktop_restart: false,
+        has_active_work: true,
+        active_work_label: 'Existing runtime work may be active',
+        target_runtime_version: args.runtime_release_tag,
+        message: report.message,
+      };
+      throw new RuntimePlacementMaintenanceRequiredError(maintenance.message, maintenance);
     }
     if (Date.now() >= deadline) {
-      const blockedDetail = lastBlocked
-        ? ` Last runtime state: ${lastBlocked.code}. ${lastBlocked.message}`
-        : '';
-      throw new Error(`Runtime daemon did not become ready before timeout.${blockedDetail}${lastError ? ` ${lastError.message}` : ''}`);
+      throw new Error(`Runtime daemon did not become ready before timeout.${lastError ? ` ${lastError.message}` : ''}`);
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
-}
-
-function isReplaceableDesktopManagedRuntimeBlock(
-  report: LaunchBlockedReport,
-  desktopOwnerID: string,
-): boolean {
-  if (report.code !== 'live_process_without_management_socket') {
-    return false;
-  }
-  if (report.lock_owner?.desktop_managed !== true) {
-    return false;
-  }
-  const lockOwnerID = compact(report.lock_owner.desktop_owner_id);
-  const expectedOwnerID = compact(desktopOwnerID);
-  return lockOwnerID === '' || (expectedOwnerID !== '' && lockOwnerID === expectedOwnerID);
 }
 
 async function startContainerRuntimeDaemon(args: Readonly<{
@@ -187,20 +172,6 @@ async function startContainerRuntimeDaemon(args: Readonly<{
     runtime_root: args.placement.runtime_root,
     runtime_binary_path: args.runtime_binary_path,
     desktop_owner_id: compact(args.desktop_owner_id),
-  }), { signal: args.signal });
-}
-
-async function stopContainerRuntimeDaemon(args: Readonly<{
-  executor: RuntimeHostAccessExecutor;
-  placement: Extract<DesktopRuntimePlacement, Readonly<{ kind: 'container_process' }>>;
-  runtime_binary_path: string;
-  signal?: AbortSignal;
-}>): Promise<void> {
-  await args.executor.run(containerRuntimeDaemonStopCommand({
-    engine: args.placement.container_engine,
-    container_id: args.placement.container_id,
-    runtime_root: args.placement.runtime_root,
-    runtime_binary_path: args.runtime_binary_path,
   }), { signal: args.signal });
 }
 
@@ -269,7 +240,7 @@ export async function ensureRuntimePlacementReady(
   }
   const placement = args.placement;
 
-  const executor = runtimeHostExecutor(args.host_access);
+  const executor = runtimeHostExecutor(args.host_access, args.ssh_password);
   emitProgress(
     args.on_progress,
     args.host_access.kind === 'ssh_host' ? 'checking_host' : 'checking_container',
@@ -384,45 +355,13 @@ export async function ensureRuntimePlacementReady(
     'Waiting for runtime daemon',
     'Desktop is waiting for the runtime daemon health check before enabling Open.',
   );
-  let replacedBlockedDaemon = false;
   const startup = await waitForContainerRuntimeDaemon({
     executor,
     placement,
     runtime_binary_path: probe.binary_path,
     timeout_ms: args.timeout_ms ?? 45_000,
+    runtime_release_tag: runtimeReleaseTag,
     signal: args.signal,
-    on_blocked: async (report) => {
-      if (replacedBlockedDaemon || !isReplaceableDesktopManagedRuntimeBlock(report, compact(args.desktop_owner_id))) {
-        return false;
-      }
-      replacedBlockedDaemon = true;
-      emitProgress(
-        args.on_progress,
-        'starting_runtime_daemon',
-        'Replacing runtime daemon',
-        'Desktop is replacing a desktop-managed runtime process whose management socket is unavailable.',
-      );
-      await stopContainerRuntimeDaemon({
-        executor,
-        placement,
-        runtime_binary_path: probe.binary_path,
-        signal: args.signal,
-      });
-      await startContainerRuntimeDaemon({
-        executor,
-        placement,
-        runtime_binary_path: probe.binary_path,
-        desktop_owner_id: compact(args.desktop_owner_id),
-        signal: args.signal,
-      });
-      emitProgress(
-        args.on_progress,
-        'waiting_runtime_daemon',
-        'Waiting for runtime daemon',
-        'Desktop is waiting for the replacement runtime daemon health check before enabling Open.',
-      );
-      return true;
-    },
   });
   emitProgress(
     args.on_progress,

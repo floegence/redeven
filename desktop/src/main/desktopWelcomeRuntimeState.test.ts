@@ -430,7 +430,7 @@ process.stdout.write(${JSON.stringify(JSON.stringify({
       });
 
       const hydrated = await hydrateWelcomeLocalEnvironmentRuntimeState(preferences, [], {
-        probeTimeoutMs: 1_500,
+        probeTimeoutMs: 5_000,
         desktopOwnerID: 'desktop-owner-1',
         executablePath,
       });

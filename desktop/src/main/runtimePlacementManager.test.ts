@@ -16,7 +16,7 @@ vi.mock('./runtimePackageCache', async () => {
   };
 });
 
-import { ensureRuntimePlacementReady } from './runtimePlacementManager';
+import { ensureRuntimePlacementReady, RuntimePlacementMaintenanceRequiredError } from './runtimePlacementManager';
 import type { RuntimePlacementProgressPhase } from './runtimePlacementManager';
 
 describe('runtimePlacementManager', () => {
@@ -188,14 +188,14 @@ describe('runtimePlacementManager', () => {
     }));
   });
 
-  it('replaces a desktop-managed container daemon when the management socket is unreachable', async () => {
+  it('does not replace a desktop-managed container daemon when the management socket is unreachable', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-placement-manager-'));
     const { markerPath, orphanPath, eventsPath } = await installFakeDocker(tempDir);
     await fs.writeFile(markerPath, 'current-runtime');
     await fs.writeFile(orphanPath, 'old-daemon-without-management-socket');
     const progressPhases: RuntimePlacementProgressPhase[] = [];
 
-    const ready = await ensureRuntimePlacementReady({
+    await expect(ensureRuntimePlacementReady({
       host_access: { kind: 'local_host' },
       placement: {
         kind: 'container_process',
@@ -213,19 +213,15 @@ describe('runtimePlacementManager', () => {
       on_progress: (progress) => {
         progressPhases.push(progress.phase);
       },
-    });
+    })).rejects.toBeInstanceOf(RuntimePlacementMaintenanceRequiredError);
 
-    expect(ready.startup?.pid).toBeUndefined();
-    expect(await fs.readFile(eventsPath, 'utf8')).toBe('run\nstop\nrun\n');
+    expect(await fs.readFile(eventsPath, 'utf8')).toBe('run\n');
     expect(progressPhases).toEqual([
       'checking_container',
       'detecting_platform',
       'checking_runtime',
       'starting_runtime_daemon',
       'waiting_runtime_daemon',
-      'starting_runtime_daemon',
-      'waiting_runtime_daemon',
-      'runtime_ready',
     ]);
   });
 

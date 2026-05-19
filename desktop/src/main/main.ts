@@ -96,17 +96,22 @@ import {
   DesktopSSHRuntimeMaintenanceRequiredError,
   ensureManagedSSHRuntimeReady,
   openManagedSSHRuntimeConnection,
+  probeManagedSSHRuntimeStatus,
+  parseManagedSSHRuntimeProbeResult,
   type DesktopSSHRuntimeProgress,
 } from './sshRuntime';
 import {
   containerListCommand,
   containerInspectCommand,
+  containerRuntimeDaemonStatusCommand,
   containerRuntimeDaemonStopCommand,
+  containerRuntimeProbeCommand,
   parseContainerListOutput,
   parseContainerInspectJSON,
   resolveRuntimeContainerPlacement,
   type DesktopRuntimeContainerResolver,
 } from './containerRuntime';
+import { parseLaunchReport } from './launchReport';
 import {
   createLocalRuntimeHostExecutor,
   createSSHRuntimeHostExecutor,
@@ -272,6 +277,7 @@ import {
   DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL,
   DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
   desktopSSHAuthority,
+  desktopSSHEnvironmentID,
   desktopSSHRuntimeAffectingSettingsMatch,
   defaultSavedSSHEnvironmentLabel,
   normalizeDesktopSSHEnvironmentDetails,
@@ -321,6 +327,9 @@ import {
   runtimeServiceSupportsProviderLink,
   runtimeServiceOpenReadinessLabel,
   runtimeServiceIsOpenable,
+  runtimeServiceNeedsRuntimeUpdate,
+  runtimeServiceHasActiveWork,
+  formatRuntimeServiceWorkload,
   type RuntimeServiceProviderLinkBinding,
   type RuntimeServiceSnapshot,
 } from '../shared/runtimeService';
@@ -1249,17 +1258,18 @@ async function runtimeControlStatusForStartup(startup: StartupReport | null | un
     : desktopRuntimeControlStatusOwnerMismatch('This runtime is owned by another Desktop instance.');
 }
 
-function runtimeHostExecutor(hostAccess: DesktopRuntimeHostAccess) {
+function runtimeHostExecutor(hostAccess: DesktopRuntimeHostAccess, sshPassword?: string) {
   return hostAccess.kind === 'ssh_host'
-    ? createSSHRuntimeHostExecutor(hostAccess.ssh)
+    ? createSSHRuntimeHostExecutor(hostAccess.ssh, { sshPassword })
     : createLocalRuntimeHostExecutor();
 }
 
 function runtimeContainerResolver(
   hostAccess: DesktopRuntimeHostAccess,
   signal?: AbortSignal,
+  sshPassword?: string,
 ): DesktopRuntimeContainerResolver {
-  const executor = runtimeHostExecutor(hostAccess);
+  const executor = runtimeHostExecutor(hostAccess, sshPassword);
   const commandOptions = () => ({
     signal: signal ?? AbortSignal.timeout(DESKTOP_RUNTIME_PROBE_TIMEOUT_MS),
   });
@@ -1367,11 +1377,127 @@ async function inspectSavedRuntimeTargetState(
       maintenance: runtimePlacementMaintenanceByTargetID.get(target.id),
     };
   }
+  if (target.host_access.kind === 'ssh_host' && target.host_access.ssh.auth_mode === 'password' && !target.ssh_password_configured) {
+    return {
+      running: false,
+      local_ui_url: '',
+      runtime_control_status: desktopRuntimeControlStatusMissing('auth_required', 'Auto detection waits for manual authentication.'),
+      maintenance: runtimePlacementMaintenanceByTargetID.get(target.id),
+      placement: target.placement,
+    };
+  }
+  const sshPassword = target.host_access.kind === 'ssh_host' && target.ssh_password_configured
+    ? target.ssh_password ?? ''
+    : undefined;
   const resolution = await resolveRuntimeContainerPlacement(
-    runtimeContainerResolver(target.host_access),
+    runtimeContainerResolver(target.host_access, undefined, sshPassword),
     target.placement,
   );
   if (resolution.status === 'running') {
+    const executor = runtimeHostExecutor(target.host_access, sshPassword);
+    try {
+      const probeResult = await executor.run(containerRuntimeProbeCommand({
+        engine: resolution.placement.container_engine,
+        container_id: resolution.placement.container_id,
+        runtime_root: resolution.placement.runtime_root,
+        runtime_release_tag: resolveSSHRuntimeReleaseTag(),
+      }), {
+        signal: AbortSignal.timeout(DESKTOP_RUNTIME_PROBE_TIMEOUT_MS),
+      });
+      const probe = parseManagedSSHRuntimeProbeResult(probeResult.stdout);
+      if (probe.status === 'ready') {
+        const statusResult = await executor.run(containerRuntimeDaemonStatusCommand({
+          engine: resolution.placement.container_engine,
+          container_id: resolution.placement.container_id,
+          runtime_root: resolution.placement.runtime_root,
+          runtime_binary_path: probe.binary_path,
+        }), {
+          signal: AbortSignal.timeout(DESKTOP_RUNTIME_PROBE_TIMEOUT_MS),
+        });
+        const report = parseLaunchReport(statusResult.stdout);
+        if (report.status === 'blocked') {
+          const maintenance: DesktopRuntimeMaintenanceRequirement = {
+            kind: 'ssh_runtime_restart_required',
+            required_for: 'open',
+            can_desktop_restart: false,
+            has_active_work: true,
+            active_work_label: 'Existing runtime work may be active',
+            message: report.message,
+          };
+          runtimePlacementMaintenanceByTargetID.set(target.id, maintenance);
+          return {
+            running: true,
+            local_ui_url: '',
+            runtime_control_status: desktopRuntimeControlStatusMissing(
+              'not_reported',
+              report.message,
+            ),
+            maintenance,
+            placement: resolution.placement,
+          };
+        }
+        const maintenance = runtimePlacementMaintenanceByTargetID.get(target.id);
+        if (runtimeServiceIsOpenable(report.startup.runtime_service)) {
+          runtimePlacementReadyByTargetID.set(target.id, {
+            runtime_key: target.id,
+            environment_id: target.id,
+            label: target.label,
+            target_id: providerRuntimeLinkTargetIDForRuntimeTarget(target.host_access, target.id),
+            host_access: target.host_access,
+            placement: resolution.placement,
+            runtime_binary_path: probe.binary_path,
+            startup: report.startup,
+          });
+        }
+        return {
+          running: true,
+          startup: report.startup,
+          local_ui_url: '',
+          open_connection_required: true,
+          runtime_service: report.startup.runtime_service,
+          runtime_control_status: desktopRuntimeControlStatusMissing(
+            'forward_unavailable',
+            'Open this runtime to prepare the Desktop bridge and provider connection.',
+          ),
+          maintenance: maintenance && !runtimeServiceIsOpenable(report.startup.runtime_service)
+            ? maintenance
+            : undefined,
+          placement: resolution.placement,
+        };
+      }
+      if (probe.status !== 'missing_binary') {
+        const maintenance: DesktopRuntimeMaintenanceRequirement = {
+          kind: 'ssh_runtime_update_required',
+          required_for: 'open',
+          can_desktop_restart: false,
+          has_active_work: true,
+          active_work_label: 'Existing runtime work may be active',
+          current_runtime_version: probe.reported_release_tag ?? undefined,
+          target_runtime_version: probe.expected_release_tag,
+          message: 'Update this container runtime before opening it with this Desktop.',
+        };
+        runtimePlacementMaintenanceByTargetID.set(target.id, maintenance);
+        return {
+          running: false,
+          local_ui_url: '',
+          runtime_control_status: desktopRuntimeControlStatusMissing('not_reported', maintenance.message),
+          maintenance,
+          placement: resolution.placement,
+        };
+      }
+    } catch (error) {
+      // Read-only detection should never start or replace a container runtime.
+      return {
+        running: false,
+        local_ui_url: '',
+        runtime_control_status: desktopRuntimeControlStatusMissing(
+          'unverified',
+          `Could not verify runtime status: ${error instanceof Error ? error.message : String(error)}`,
+        ),
+        maintenance: runtimePlacementMaintenanceByTargetID.get(target.id),
+        placement: resolution.placement,
+      };
+    }
     return {
       running: false,
       local_ui_url: '',
@@ -1386,7 +1512,7 @@ async function inspectSavedRuntimeTargetState(
   return {
     running: false,
     local_ui_url: '',
-    runtime_control_status: desktopRuntimeControlStatusMissing('not_started', resolution.message),
+    runtime_control_status: desktopRuntimeControlStatusMissing('container_not_running', resolution.message),
     maintenance: runtimePlacementMaintenanceByTargetID.get(target.id),
     placement: target.placement,
   };
@@ -2087,8 +2213,8 @@ async function collectSavedExternalRuntimeHealth(
           environment.id,
           offlineRuntimeHealth(
             'external_local_ui_probe',
-            'external_unreachable',
-            'The runtime offline / unavailable',
+            'unverified',
+            'Could not verify runtime health',
           ),
         ] as const;
       }
@@ -2098,8 +2224,8 @@ async function collectSavedExternalRuntimeHealth(
         environment.id,
         offlineRuntimeHealth(
           'external_local_ui_probe',
-          'external_unreachable',
-          'The runtime offline / unavailable',
+          'unverified',
+          'Could not verify runtime health',
         ),
       ] as const;
     }
@@ -2130,6 +2256,69 @@ async function collectSavedSSHRuntimeHealth(
       )] as const;
     }
     if (!runtimeRecord) {
+      if (environment.auth_mode === 'password' && !environment.ssh_password_configured) {
+        return [
+          environment.id,
+          offlineRuntimeHealth('ssh_runtime_probe', 'auth_required', 'Auto detection waits for manual authentication'),
+        ] as const;
+      }
+      const probe = await probeManagedSSHRuntimeStatus({
+        target: environment,
+        sshPassword: environment.ssh_password_configured ? environment.ssh_password : undefined,
+        tempRoot: app.getPath('temp'),
+        connectTimeoutSeconds: environment.connect_timeout_seconds ?? undefined,
+      });
+      if (probe.status === 'ready') {
+        const runtimeMaintenance = maintenance && !runtimeServiceIsOpenable(probe.startup.runtime_service)
+          ? maintenance
+          : undefined;
+        if (!runtimeMaintenance) {
+          sshRuntimeMaintenanceByKey.delete(runtimeKey);
+        }
+        const attachedHandle: DesktopSessionRuntimeHandle = {
+          runtime_kind: 'ssh',
+          lifecycle_owner: 'external',
+          launch_mode: 'attached',
+          stop: async () => undefined,
+        };
+        sshRuntimeReadyByKey.set(runtimeKey, {
+          runtime_key: runtimeKey,
+          environment_id: environment.id,
+          label: environment.label,
+          details: environment,
+          startup: probe.startup,
+          runtime_handle: attachedHandle,
+          disconnect: async () => undefined,
+          stop: async () => undefined,
+        });
+        return [environment.id, onlineRuntimeHealth(
+          'ssh_runtime_probe',
+          probe.startup.local_ui_url,
+          probe.startup.runtime_service,
+          runtimeMaintenance,
+        )] as const;
+      }
+      if (probe.status === 'blocked') {
+        const runtimeMaintenance = maintenance ?? {
+          kind: 'ssh_runtime_restart_required',
+          required_for: 'open',
+          can_desktop_restart: false,
+          has_active_work: true,
+          active_work_label: 'Existing runtime work may be active',
+          message: probe.report.message,
+        };
+        sshRuntimeMaintenanceByKey.set(runtimeKey, runtimeMaintenance);
+        return [
+          environment.id,
+          onlineRuntimeHealth('ssh_runtime_probe', '', undefined, runtimeMaintenance),
+        ] as const;
+      }
+      if (probe.status === 'failed') {
+        return [
+          environment.id,
+          offlineRuntimeHealth('ssh_runtime_probe', 'unverified', probe.message || 'Could not verify runtime status'),
+        ] as const;
+      }
       if (maintenance) {
         return [
           environment.id,
@@ -2143,7 +2332,7 @@ async function collectSavedSSHRuntimeHealth(
       }
       return [
         environment.id,
-        offlineRuntimeHealth('ssh_runtime_probe', 'not_started', 'Serve the runtime first'),
+        offlineRuntimeHealth('ssh_runtime_probe', 'not_started', probe.message || 'Runtime is not running on this SSH host.'),
       ] as const;
     }
     try {
@@ -3468,6 +3657,45 @@ async function markSavedSSHTargetUsed(
   }));
 }
 
+function savedSSHPasswordForDetails(
+  preferences: DesktopPreferences,
+  details: DesktopSSHEnvironmentDetails,
+  environmentID?: string,
+): string {
+  if (details.auth_mode !== 'password') {
+    return '';
+  }
+  const runtimeKey = desktopSSHEnvironmentID(details);
+  const cleanEnvironmentID = compact(environmentID);
+  const existing = preferences.saved_ssh_environments.find((environment) => (
+    (cleanEnvironmentID !== '' && environment.id === cleanEnvironmentID)
+    || environment.id === runtimeKey
+  )) ?? null;
+  return existing?.ssh_password_configured === true ? existing.ssh_password ?? '' : '';
+}
+
+function sshRuntimeMaintenanceFromStartup(
+  startup: StartupReport,
+  fallbackMessage: string,
+): DesktopRuntimeMaintenanceRequirement {
+  const runtimeService = startup.runtime_service;
+  const needsUpdate = runtimeServiceNeedsRuntimeUpdate(runtimeService)
+    || runtimeService?.open_readiness?.reason_code === 'runtime_update_required';
+  const message = compact(runtimeService?.open_readiness?.message)
+    || compact(runtimeService?.compatibility_message)
+    || fallbackMessage;
+  return {
+    kind: needsUpdate ? 'ssh_runtime_update_required' : 'ssh_runtime_restart_required',
+    required_for: 'open',
+    can_desktop_restart: Number.isInteger(startup.pid) && Number(startup.pid) > 0,
+    has_active_work: runtimeServiceHasActiveWork(runtimeService),
+    active_work_label: formatRuntimeServiceWorkload(runtimeService),
+    current_runtime_version: runtimeService?.runtime_version,
+    target_runtime_version: resolveSSHRuntimeReleaseTag(),
+    message,
+  };
+}
+
 async function startSSHEnvironmentRuntimeRecord(
   sshDetails: DesktopSSHEnvironmentDetails,
   options: Readonly<{
@@ -3530,10 +3758,80 @@ async function startSSHEnvironmentRuntimeRecord(
   const task = (async () => {
     let operationSettled = false;
     try {
+      const preferences = await loadDesktopPreferencesCached();
+      const sshPassword = savedSSHPasswordForDetails(preferences, sshDetails, environmentID);
+      const statusProbe = await probeManagedSSHRuntimeStatus({
+        target: sshDetails,
+        sshPassword,
+        tempRoot: app.getPath('temp'),
+        connectTimeoutSeconds: typeof sshDetails.connect_timeout_seconds === 'number'
+          ? sshDetails.connect_timeout_seconds
+          : undefined,
+        signal,
+      });
+      if (statusProbe.status === 'ready') {
+        if (!runtimeServiceIsOpenable(statusProbe.startup.runtime_service)) {
+          const maintenance = sshRuntimeMaintenanceFromStartup(
+            statusProbe.startup,
+            'This SSH runtime is running but cannot open with this Desktop yet.',
+          );
+          sshRuntimeMaintenanceByKey.set(runtimeKey, maintenance);
+          throw new DesktopSSHRuntimeMaintenanceRequiredError(maintenance.message, maintenance);
+        }
+        const attachedHandle: DesktopSessionRuntimeHandle = {
+          runtime_kind: 'ssh',
+          lifecycle_owner: 'external',
+          launch_mode: 'attached',
+          stop: async () => undefined,
+        };
+        const readyRecord: SSHRuntimeReadyRecord = {
+          runtime_key: runtimeKey,
+          environment_id: environmentID,
+          label,
+          details: sshDetails,
+          startup: statusProbe.startup,
+          runtime_handle: attachedHandle,
+          disconnect: async () => undefined,
+          stop: async () => undefined,
+        };
+        sshRuntimeReadyByKey.set(runtimeKey, readyRecord);
+        sshRuntimeMaintenanceByKey.delete(runtimeKey);
+        launcherOperations.finish(runtimeKey, 'succeeded', {
+          phase: 'runtime_ready',
+          title: 'Runtime already running',
+          detail: 'Desktop found an openable SSH runtime and did not start a new process.',
+          lifecycle_progress: runtimeLifecycleProgress({
+            location: 'ssh_host',
+            phase: 'runtime_ready',
+            targetID: runtimeKey,
+            targetLabel: label,
+            targetDetail: desktopSSHAuthority(sshDetails),
+          }),
+        });
+        scheduleLauncherOperationRemoval(runtimeKey);
+        operationSettled = true;
+        return readyRecord;
+      }
+      if (statusProbe.status === 'blocked') {
+        const maintenance: DesktopRuntimeMaintenanceRequirement = {
+          kind: 'ssh_runtime_restart_required',
+          required_for: 'open',
+          can_desktop_restart: false,
+          has_active_work: true,
+          active_work_label: 'Existing runtime work may be active',
+          message: statusProbe.report.message,
+        };
+        sshRuntimeMaintenanceByKey.set(runtimeKey, maintenance);
+        throw new DesktopSSHRuntimeMaintenanceRequiredError(maintenance.message, maintenance);
+      }
+      if (statusProbe.status === 'failed') {
+        throw new Error(statusProbe.message || 'Desktop could not verify the SSH runtime status.');
+      }
       const managedSSHRuntime = await ensureManagedSSHRuntimeReady({
         target: sshDetails,
         runtimeReleaseTag: resolveSSHRuntimeReleaseTag(),
         desktopOwnerID: await desktopRuntimeOwnerID(),
+        sshPassword,
         sourceRuntimeRoot: process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT,
         forceRuntimeUpdate: options.forceRuntimeUpdate,
         allowActiveWorkReplacement: options.allowActiveWorkReplacement,
@@ -5020,6 +5318,8 @@ async function openSSHEnvironmentFromLauncher(
   let runtimeRecord = existingRuntimeRecord;
   let desktopModelSource: ManagedDesktopModelSource | null = null;
   try {
+    const preferences = await loadDesktopPreferencesCached();
+    const sshPassword = savedSSHPasswordForDetails(preferences, sshDetails, request.environment_id);
     if (!runtimeRecord) {
       updateOpenConnectionOperation(operationKey, {
         hostAccess: { kind: 'ssh_host', ssh: sshDetails },
@@ -5035,6 +5335,7 @@ async function openSSHEnvironmentFromLauncher(
       const managedSSHRuntime = await openManagedSSHRuntimeConnection({
         target: sshDetails,
         ready: readyRecord!,
+        sshPassword,
         connectTimeoutSeconds: typeof sshDetails.connect_timeout_seconds === 'number'
           ? sshDetails.connect_timeout_seconds
           : undefined,
@@ -5370,16 +5671,93 @@ async function ensureRuntimePlacementReadyRecordFromLauncher(
   const task = (async () => {
     let operationSettled = false;
     try {
-      const resolution = await resolveRuntimeContainerPlacement(runtimeContainerResolver(hostAccess, signal), placement);
+      const preferences = await loadDesktopPreferencesCached();
+      const savedTarget = preferences.saved_runtime_targets.find((target) => target.id === targetID) ?? null;
+      const sshPassword = savedTarget?.ssh_password_configured === true
+        ? savedTarget.ssh_password ?? ''
+        : compact(request.ssh_password);
+      const resolution = await resolveRuntimeContainerPlacement(runtimeContainerResolver(hostAccess, signal, sshPassword), placement);
       if (resolution.status !== 'running') {
         throw new Error(resolution.message);
       }
       placement = resolution.placement;
+      const executor = runtimeHostExecutor(hostAccess, sshPassword);
+      try {
+        const probeResult = await executor.run(containerRuntimeProbeCommand({
+          engine: placement.container_engine,
+          container_id: placement.container_id,
+          runtime_root: placement.runtime_root,
+          runtime_release_tag: resolveSSHRuntimeReleaseTag(),
+        }), { signal });
+        const probe = parseManagedSSHRuntimeProbeResult(probeResult.stdout);
+        if (probe.status === 'ready') {
+          const statusResult = await executor.run(containerRuntimeDaemonStatusCommand({
+            engine: placement.container_engine,
+            container_id: placement.container_id,
+            runtime_root: placement.runtime_root,
+            runtime_binary_path: probe.binary_path,
+          }), { signal });
+          const report = parseLaunchReport(statusResult.stdout);
+          if (report.status === 'blocked') {
+            const maintenance: DesktopRuntimeMaintenanceRequirement = {
+              kind: 'ssh_runtime_restart_required',
+              required_for: 'open',
+              can_desktop_restart: false,
+              has_active_work: true,
+              active_work_label: 'Existing runtime work may be active',
+              message: report.message,
+            };
+            runtimePlacementMaintenanceByTargetID.set(targetID, maintenance);
+            throw new RuntimePlacementMaintenanceRequiredError(maintenance.message, maintenance);
+          }
+          if (runtimeServiceIsOpenable(report.startup.runtime_service)) {
+            const readyRecord: RuntimePlacementReadyRecord = {
+              runtime_key: targetID,
+              environment_id: environmentID,
+              label,
+              target_id: providerRuntimeLinkTargetIDForRuntimeTarget(hostAccess, targetID),
+              host_access: hostAccess,
+              placement,
+              runtime_binary_path: probe.binary_path,
+              startup: report.startup,
+            };
+            runtimePlacementReadyByTargetID.set(targetID, readyRecord);
+            runtimePlacementMaintenanceByTargetID.delete(targetID);
+            launcherOperations.finish(targetID, 'succeeded', {
+              phase: 'runtime_ready',
+              title: 'Runtime already running',
+              detail: 'Desktop found an openable runtime in the container and did not start a new process.',
+              lifecycle_progress: buildRuntimeLifecycleProgress({
+                hostAccess,
+                placement,
+                phase: 'runtime_ready',
+                targetID,
+                targetLabel: label,
+              }),
+            });
+            scheduleLauncherOperationRemoval(targetID);
+            operationSettled = true;
+            return readyRecord;
+          }
+          const maintenance = sshRuntimeMaintenanceFromStartup(
+            report.startup,
+            'This container runtime is running but cannot open with this Desktop yet.',
+          );
+          runtimePlacementMaintenanceByTargetID.set(targetID, maintenance);
+          throw new RuntimePlacementMaintenanceRequiredError(maintenance.message, maintenance);
+        }
+      } catch (error) {
+        if (error instanceof RuntimePlacementMaintenanceRequiredError) {
+          throw error;
+        }
+        throw new Error(`Desktop could not verify the selected container runtime before starting: ${error instanceof Error ? error.message : String(error)}`);
+      }
       let readyPlacement: Awaited<ReturnType<typeof ensureRuntimePlacementReady>>;
       try {
         readyPlacement = await ensureRuntimePlacementReady({
           host_access: hostAccess,
           placement,
+          ssh_password: sshPassword,
           runtime_release_tag: resolveSSHRuntimeReleaseTag(),
           release_base_url: PUBLIC_REDEVEN_RELEASE_BASE_URL,
           source_runtime_root: process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT,
@@ -5570,6 +5948,9 @@ async function openRuntimePlacementBridgeFromLauncher(
     if (!record) {
       const runtimeBinaryPath = readyRecord!.runtime_binary_path;
       placement = readyRecord!.placement;
+      const preferences = await loadDesktopPreferencesCached();
+      const savedTarget = preferences.saved_runtime_targets.find((target) => target.id === targetID) ?? null;
+      const sshPassword = savedTarget?.ssh_password_configured === true ? savedTarget.ssh_password ?? '' : compact(request.ssh_password);
       updateOpenConnectionOperation(operationKey, {
         hostAccess,
         placement,
@@ -5586,6 +5967,7 @@ async function openRuntimePlacementBridgeFromLauncher(
         placement,
         runtime_binary_path: runtimeBinaryPath,
         desktop_owner_id: await desktopRuntimeOwnerID(),
+        ssh_password: sshPassword,
         fallback_local_id: environmentID,
         signal,
       });
@@ -7280,9 +7662,21 @@ async function upsertSavedSSHEnvironmentFromWelcome(
   environmentID: string,
   label: string,
   details: DesktopSSHEnvironmentDetails,
+  passwordInput: Readonly<{
+    ssh_password?: string;
+    ssh_password_mode?: 'keep' | 'replace' | 'clear';
+  }>,
 ): Promise<void> {
   const preferences = await loadDesktopPreferencesCached();
   const existing = preferences.saved_ssh_environments.find((environment) => environment.id === environmentID);
+  const passwordMode = passwordInput.ssh_password_mode;
+  const sshPasswordConfigured = details.auth_mode === 'password'
+    ? passwordMode === 'clear'
+      ? false
+      : passwordMode === 'replace'
+        ? compact(passwordInput.ssh_password) !== ''
+        : undefined
+    : false;
   const next = upsertSavedSSHEnvironment(preferences, {
     environment_id: environmentID,
     label,
@@ -7293,6 +7687,8 @@ async function upsertSavedSSHEnvironmentFromWelcome(
     bootstrap_strategy: details.bootstrap_strategy,
     release_base_url: details.release_base_url,
     connect_timeout_seconds: details.connect_timeout_seconds,
+    ssh_password: passwordMode === 'replace' ? compact(passwordInput.ssh_password) : '',
+    ...(sshPasswordConfigured === undefined ? {} : { ssh_password_configured: sshPasswordConfigured }),
     last_used_at_ms: existing?.last_used_at_ms ?? Date.now(),
   });
   await persistDesktopPreferences(next);
@@ -7382,6 +7778,12 @@ async function upsertSavedRuntimeTargetFromWelcome(
     label: request.label,
     host_access: request.host_access,
     placement,
+    ssh_password: request.ssh_password_mode === 'replace' ? compact(request.ssh_password) : '',
+    ...(request.ssh_password_mode === 'clear'
+      ? { ssh_password_configured: false }
+      : request.ssh_password_mode === 'replace'
+        ? { ssh_password_configured: compact(request.ssh_password) !== '' }
+        : {}),
     last_used_at_ms: Date.now(),
   });
   await persistDesktopPreferences(next);
@@ -7589,6 +7991,9 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
         bootstrap_strategy: request.bootstrap_strategy,
         release_base_url: request.release_base_url,
         connect_timeout_seconds: request.connect_timeout_seconds,
+      }, {
+        ssh_password: request.ssh_password,
+        ssh_password_mode: request.ssh_password_mode,
       });
       return launcherActionSuccess('saved_environment');
     case 'upsert_saved_runtime_target':

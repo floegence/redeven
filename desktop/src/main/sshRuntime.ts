@@ -21,7 +21,7 @@ import { loadExternalLocalUIStartup } from './runtimeState';
 import type { DesktopSessionRuntimeHandle, DesktopSessionRuntimeLaunchMode } from './sessionRuntime';
 import type { StartupReport } from './startup';
 import type { DesktopRuntimeControlEndpoint } from '../shared/runtimeControl';
-import { formatBlockedLaunchDiagnostics, parseLaunchReport } from './launchReport';
+import { formatBlockedLaunchDiagnostics, parseLaunchReport, type LaunchBlockedReport } from './launchReport';
 import {
   DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
   normalizeDesktopSSHEnvironmentDetails,
@@ -55,7 +55,27 @@ type PreparedDesktopSSHUploadAsset = DesktopRuntimeUploadAsset;
 type SSHCommandAuthContext = Readonly<{
   mode: DesktopSSHAuthMode;
   askPassScriptPath?: string;
+  password?: string;
 }>;
+
+export type DesktopSSHRuntimeStatusProbe = Readonly<
+  | {
+      status: 'ready';
+      startup: StartupReport;
+    }
+  | {
+      status: 'blocked';
+      report: LaunchBlockedReport;
+    }
+  | {
+      status: 'not_running';
+      message: string;
+    }
+  | {
+      status: 'failed';
+      message: string;
+    }
+>;
 export type DesktopSSHRemoteRuntimeStamp = Readonly<{
   schema_version: typeof MANAGED_SSH_RUNTIME_STAMP_SCHEMA_VERSION;
   managed_by: 'redeven-desktop';
@@ -169,6 +189,7 @@ export type ManagedSSHRuntimeConnectionInput = Readonly<{
   target: DesktopSSHEnvironmentDetails;
   ready: ManagedSSHRuntimeReady;
   runtimeReleaseTag?: string;
+  sshPassword?: string;
   requireDesktopModelSource?: boolean;
   sshBinary?: string;
   tempRoot?: string;
@@ -189,6 +210,7 @@ export type StartManagedSSHRuntimeArgs = Readonly<{
   target: DesktopSSHEnvironmentDetails;
   runtimeReleaseTag: string;
   desktopOwnerID: string;
+  sshPassword?: string;
   sshBinary?: string;
   installScriptURL?: string;
   sourceRuntimeRoot?: string;
@@ -354,16 +376,38 @@ function sshSharedArgs(controlSocketPath: string, connectTimeoutSeconds: number,
   return args;
 }
 
+function sshStandaloneArgs(connectTimeoutSeconds: number, authMode: DesktopSSHAuthMode): string[] {
+  const args = [
+    '-T',
+    '-x',
+    '-o', `ConnectTimeout=${connectTimeoutSeconds}`,
+    '-o', 'RequestTTY=no',
+    '-o', 'ForwardX11=no',
+    '-o', 'ForwardX11Trusted=no',
+    '-o', 'ForwardAgent=no',
+    '-o', 'ServerAliveInterval=15',
+    '-o', 'ServerAliveCountMax=1',
+  ];
+  if (authMode === 'key_agent') {
+    args.unshift('-o', 'BatchMode=yes');
+  } else {
+    args.unshift('-o', 'BatchMode=no', '-o', 'NumberOfPasswordPrompts=1');
+  }
+  return args;
+}
+
 function sshSpawnOptions(auth: SSHCommandAuthContext): SpawnOptions {
   if (auth.mode !== 'password' || !auth.askPassScriptPath) {
     return {};
   }
+  const password = compact(auth.password);
   return {
     env: {
       ...process.env,
       DISPLAY: process.env.DISPLAY || ':0',
       SSH_ASKPASS: auth.askPassScriptPath,
       SSH_ASKPASS_REQUIRE: 'force',
+      ...(password !== '' ? { REDEVEN_DESKTOP_SSH_PASSWORD: password } : {}),
     },
   };
 }
@@ -640,6 +684,97 @@ export function buildManagedSSHReportReadScript(): string {
   ].join('\n');
 }
 
+function buildManagedSSHRuntimeStatusScript(): string {
+  return [
+    'set -eu',
+    buildRemoteInstallRootShell(),
+    buildManagedSSHRuntimePathShell(),
+    'state_root="${runtime_root%/}"',
+    'if [ ! -x "$binary" ]; then',
+    '  exit 127',
+    'fi',
+    'exec "$binary" desktop-runtime-status --state-root "$state_root"',
+  ].join('\n');
+}
+
+export async function probeManagedSSHRuntimeStatus(
+  args: Readonly<{
+    target: DesktopSSHEnvironmentDetails;
+    sshPassword?: string;
+    sshBinary?: string;
+    tempRoot?: string;
+    connectTimeoutSeconds?: number;
+    signal?: AbortSignal;
+  }>,
+): Promise<DesktopSSHRuntimeStatusProbe> {
+  const target = normalizeDesktopSSHEnvironmentDetails(args.target);
+  const sshBinary = compact(args.sshBinary) || 'ssh';
+  const tempRoot = compact(args.tempRoot) || os.tmpdir();
+  const connectTimeoutSeconds = args.connectTimeoutSeconds ?? DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS;
+  const tempDir = await fs.mkdtemp(path.join(tempRoot, 'rdv-ssh-probe-'));
+  const logs: MutableRecentLogs = {
+    master_stderr: '',
+    control_stdout: '',
+    control_stderr: '',
+    forward_stderr: '',
+    runtime_control_forward_stderr: '',
+  };
+  const auth: SSHCommandAuthContext = {
+    mode: target.auth_mode,
+    askPassScriptPath: await createSSHAskPassScript(tempDir, target.auth_mode),
+    password: args.sshPassword,
+  };
+  try {
+    const result = await runSSHOnce(
+      sshBinary,
+      [
+        ...sshStandaloneArgs(connectTimeoutSeconds, auth.mode),
+        ...sshTargetArgs(target),
+        remoteShellCommand(buildManagedSSHRuntimeStatusScript(), 'redeven-ssh-runtime-status', [
+          target.runtime_root,
+        ]),
+      ],
+      auth,
+      logs,
+      'control_stderr',
+      undefined,
+      undefined,
+      args.signal,
+    );
+    if (result.exit_code !== 0) {
+      const message = formatRecentLogs(logs) || result.stderr || 'Redeven runtime status was not available on this SSH host.';
+      if (result.exit_code !== 1 && result.exit_code !== 127) {
+        return {
+          status: 'failed',
+          message,
+        };
+      }
+      return {
+        status: 'not_running',
+        message,
+      };
+    }
+    const report = parseLaunchReport(result.stdout);
+    if (report.status === 'blocked') {
+      return {
+        status: 'blocked',
+        report,
+      };
+    }
+    return {
+      status: 'ready',
+      startup: report.startup,
+    };
+  } catch (error) {
+    return {
+      status: 'failed',
+      message: error instanceof Error ? error.message : String(error),
+    };
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
 export function buildManagedSSHStopScript(): string {
   return [
     'set -eu',
@@ -892,6 +1027,10 @@ function buildSSHAskPassScript(): string {
   return [
     '#!/bin/sh',
     'set -eu',
+    'if [ "${REDEVEN_DESKTOP_SSH_PASSWORD+x}" = "x" ]; then',
+    '  printf "%s\\n" "$REDEVEN_DESKTOP_SSH_PASSWORD"',
+    '  exit 0',
+    'fi',
     'prompt="${1:-SSH password}"',
     'if command -v osascript >/dev/null 2>&1; then',
     '  osascript -e \'display dialog prompt default answer "" with hidden answer buttons {"Cancel", "OK"} default button "OK" cancel button "Cancel"\' -e \'text returned of result\' -- "$prompt"',
@@ -1805,6 +1944,7 @@ async function startManagedSSHRuntimeInternal(
   const auth: SSHCommandAuthContext = {
     mode: target.auth_mode,
     askPassScriptPath: await createSSHAskPassScript(tempDir, target.auth_mode),
+    password: args.sshPassword,
   };
 
   emitSSHRuntimeProgress(
@@ -2156,6 +2296,7 @@ export async function openManagedSSHRuntimeConnection(
   const auth: SSHCommandAuthContext = {
     mode: target.auth_mode,
     askPassScriptPath: await createSSHAskPassScript(tempDir, target.auth_mode),
+    password: args.sshPassword,
   };
 
   emitSSHRuntimeProgress(
