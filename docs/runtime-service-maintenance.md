@@ -256,6 +256,17 @@ The same snapshot also carries explicit runtime-control surfaces:
 All carriers use `snake_case` on the wire and normalize to camelCase only inside
 Env App protocol SDK types.
 
+The Docker runtime E2E gate (`./scripts/check_docker_runtime_e2e.sh`) exercises
+these carriers against a real `ubuntu:24.04` container. It builds the current
+Linux runtime binary, starts `redeven run --mode desktop --desktop-managed`
+inside the container, verifies `desktop-runtime-status`, attaches with
+`desktop-bridge`, requests Local UI and runtime-control through bridge streams,
+then performs direct `sys.ping` and `sys.restart` calls. It also verifies that
+desktop-managed runtimes reject runtime-owned `sys.upgrade` and that a
+Desktop-owned package update followed by daemon restart is attachable again.
+This is the regression boundary for container daemon lifecycle, bridge
+forwarding, and maintenance behavior.
+
 ## Compatibility Decision Table
 
 | State | User Impact | Primary UI |
@@ -281,6 +292,11 @@ recovery action. Provider and external URL lifecycle operations use hidden
 visibility and must not leak into provider cards or externally managed entries.
 
 Container runtime targets use the same Runtime Service maintenance model. A Local Container or SSH Container card is still a managed runtime card because the user has host access to the machine that can execute `docker` or `podman`; only the process placement differs. Desktop first inspects the running container, detects its platform, and verifies the Desktop stamp/version under the container-internal `runtime_root` (default `/root/.redeven`). `Start runtime` installs only when the probe reports that no runtime package exists, then starts the long-running runtime daemon and waits for `desktop-runtime-status` to confirm daemon health. `Open` then starts the per-Desktop `redeven desktop-bridge` byte-stream protocol using the resolved container-local binary path with `--state-root <runtime_root>`; the bridge attaches to the already-running daemon and never starts a runtime process. Existing mismatched or invalid packages surface `Update runtime` instead of being replaced by start/open. Local UI and runtime-control stay behind a Desktop-owned loopback proxy, and daemon/bridge/bootstrap changes are Runtime/Desktop compatibility surfaces. Container lifecycle remains separate from runtime lifecycle: Redeven lists, saves, and revalidates only running containers, and it never starts or stops the container itself.
+
+The Ubuntu container E2E test keeps this contract executable: it starts only an
+already-running container, never asks Redeven to create or stop that container,
+and verifies that a second runtime launch against the same state root attaches
+to the existing daemon instead of creating another manager process.
 
 ## Desktop Launcher UI
 
