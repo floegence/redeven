@@ -40,6 +40,16 @@ High-level design:
 - `thread/start` only forwards explicitly user-supplied fields such as `cwd` and optional `model`; host Codex defaults stay owned by Codex itself.
 - The gateway also aggregates a Codex-only capability snapshot for the browser by combining `model/list`, `config/read`, and `configRequirements/read`.
 
+## Transcript activity UI
+
+Codex transcript activity is intentionally compact because long-running agent work can produce many intermediate updates:
+
+- Thinking, streaming, shell, tool, patch, and subagent states share one quiet activity-row visual language.
+- The default transcript shows concise action summaries such as `Thinking`, `Running exec_command`, or `Edited file.go +12 -171`.
+- Arguments, command output, diffs, reasoning text, and diagnostics stay collapsed until the user opens the corresponding row.
+- Running state uses a small status dot and honors reduced-motion preferences; decorative loaders such as bouncing dots, snake loaders, sparkles, and large spinners are not part of the Codex transcript contract.
+- Completed and failed states update in place instead of appending duplicate status blocks.
+
 This keeps the upgrade boundary small:
 
 - Codex CLI and app-server protocol may evolve independently.

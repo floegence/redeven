@@ -4,6 +4,7 @@ import { cn } from '@floegence/floe-webapp-core';
 import { Dialog } from '@floegence/floe-webapp-core/ui';
 import { prepareGatewayRequestInit } from '../../services/gatewayApi';
 import { writeTextToClipboard } from '../../utils/clipboard';
+import { ActivityStatusIcon, type ActivityStatus } from '../status/ActivityLine';
 
 export interface ShellBlockProps {
   command: string;
@@ -389,6 +390,12 @@ function normalizeShellStatus(raw: unknown): ShellBlockProps['status'] | undefin
   return undefined;
 }
 
+function shellActivityStatus(status: ShellBlockProps['status']): ActivityStatus {
+  if (status === 'running') return 'running';
+  if (status === 'error') return 'error';
+  return 'success';
+}
+
 function terminalOutputURL(runID: string, toolID: string, metaOnly: boolean): string {
   const base = `/_redeven_proxy/api/ai/runs/${encodeURIComponent(runID)}/tools/${encodeURIComponent(toolID)}/output`;
   if (!metaOnly) return base;
@@ -656,40 +663,7 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
     <div class={cn('chat-shell-block', statusClass(), props.class)}>
       <div class="chat-shell-header">
         <div class="chat-shell-command" title={normalizedCommand() || commandPreviewSource()}>
-          <Show when={displayStatus() === 'running'}>
-            <span class="chat-shell-status-icon chat-shell-status-running" aria-label="Running">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                class="chat-shell-spinner"
-              >
-                <circle class="chat-shell-spinner-track" cx="12" cy="12" r="9" />
-                <path class="chat-shell-spinner-head" d="M21 12a9 9 0 0 0-9-9" />
-              </svg>
-            </span>
-          </Show>
-          <Show when={displayStatus() === 'success'}>
-            <span class="chat-shell-status-icon chat-shell-status-success" aria-label="Success">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M20 6 9 17l-5-5" />
-              </svg>
-            </span>
-          </Show>
-          <Show when={displayStatus() === 'error'}>
-            <span class="chat-shell-status-icon chat-shell-status-error" aria-label="Error">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M18 6 6 18" />
-                <path d="m6 6 12 12" />
-              </svg>
-            </span>
-          </Show>
+          <ActivityStatusIcon status={shellActivityStatus(displayStatus())} class="chat-shell-status-icon" />
 
           <span class="chat-shell-prompt">$</span>
           <span class="chat-shell-command-text">

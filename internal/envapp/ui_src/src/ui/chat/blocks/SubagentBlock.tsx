@@ -4,6 +4,7 @@ import { cn } from '@floegence/floe-webapp-core';
 import { Dialog } from '@floegence/floe-webapp-core/ui';
 import type { Message, SubagentBlock as SubagentBlockType } from '../types';
 import { useChatContext } from '../ChatProvider';
+import { ActivityStatusIcon, type ActivityStatus } from '../status/ActivityLine';
 import {
   mapSubagentPayloadSnakeToCamel,
   mergeSubagentEventsByTimestamp,
@@ -57,6 +58,23 @@ function subagentStatusClass(status: SubagentBlockType['status']): string {
       return 'chat-subagent-status chat-subagent-status-timed-out';
     default:
       return 'chat-subagent-status';
+  }
+}
+
+function subagentActivityStatus(status: SubagentBlockType['status']): ActivityStatus {
+  switch (status) {
+    case 'queued':
+      return 'pending';
+    case 'running':
+    case 'waiting_input':
+      return 'running';
+    case 'completed':
+      return 'success';
+    case 'failed':
+    case 'timed_out':
+      return 'error';
+    default:
+      return 'info';
   }
 }
 
@@ -297,6 +315,7 @@ export const SubagentBlock: Component<SubagentBlockProps> = (props) => {
       <div class="chat-subagent-header chat-subagent-header-static">
         <span class="chat-subagent-header-main">
           <span class={subagentStatusClass(blockView().status)}>
+            <ActivityStatusIcon status={subagentActivityStatus(blockView().status)} class="chat-subagent-status-icon" />
             {statusText()}
           </span>
           <span class="chat-subagent-meta chat-subagent-agent">{blockView().agentType || 'subagent'}</span>

@@ -1,11 +1,12 @@
-// Blinking cursor shown during message streaming.
+// Minimal streaming mark shown while assistant text is still arriving.
 
 import type { Component } from 'solid-js';
+import { ActivityStatusIcon } from './ActivityLine';
 
 export interface StreamingCursorProps {
   class?: string;
 }
 
-export const StreamingCursor: Component<StreamingCursorProps> = () => {
-  return <span class="chat-streaming-cursor" style={{ animation: 'pulse 1s infinite' }}>{'\u258B'}</span>;
+export const StreamingCursor: Component<StreamingCursorProps> = (props) => {
+  return <ActivityStatusIcon status="running" class={props.class} />;
 };

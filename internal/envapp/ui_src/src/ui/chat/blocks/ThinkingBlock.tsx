@@ -1,9 +1,9 @@
 // ThinkingBlock renders reasoning metadata when surfaced by a diagnostic view.
 
-import { Show } from 'solid-js';
+import { Show, createSignal } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { Sparkles } from '@floegence/floe-webapp-core/icons';
+import { ActivityLine, formatActivityDuration } from '../status/ActivityLine';
 
 export interface ThinkingBlockProps {
   content?: string;
@@ -12,37 +12,31 @@ export interface ThinkingBlockProps {
 }
 
 /**
- * Format a duration in milliseconds to a human-readable string.
- */
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
-}
-
-/**
- * Renders an AI thinking indicator, optionally showing reasoning content
- * and the time taken.
+ * Renders reasoning metadata as a quiet activity row.
  */
 export const ThinkingBlock: Component<ThinkingBlockProps> = (props) => {
+  const [expanded, setExpanded] = createSignal(false);
+  const durationText = () => formatActivityDuration(props.duration);
+  const hasContent = () => String(props.content ?? '').trim().length > 0;
+
   return (
-    <div class={cn('chat-thinking-block', props.class)} role="note" aria-label="Reasoning">
-      <Sparkles class="chat-thinking-icon" aria-hidden="true" />
-
-      <div class="chat-thinking-body">
-        <Show when={props.duration !== undefined}>
-          <div class="chat-thinking-meta">
-            <span class="chat-thinking-duration">
-              {formatDuration(props.duration!)}
-            </span>
-          </div>
-        </Show>
-
+    <ActivityLine
+      status={hasContent() ? 'success' : 'running'}
+      title="Thinking"
+      meta={durationText()}
+      detail={hasContent() ? undefined : 'Waiting for reasoning'}
+      class={cn('chat-thinking-block', props.class)}
+      expandable={hasContent()}
+      expanded={expanded()}
+      onToggle={() => setExpanded((value) => !value)}
+    >
+      <div class="chat-thinking-body" role="note" aria-label="Reasoning">
         <Show when={props.content}>
           <div class="chat-thinking-content" style={{ 'white-space': 'pre-wrap' }}>
             {props.content}
           </div>
         </Show>
       </div>
-    </div>
+    </ActivityLine>
   );
 };
