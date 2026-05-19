@@ -15,6 +15,26 @@ const storageMocks = vi.hoisted(() => ({
 }));
 
 const layoutApiMocks = vi.hoisted(() => ({
+  WorkbenchLayoutConflictError: class WorkbenchLayoutConflictError extends Error {
+    currentRevision: number;
+
+    constructor(message: string, currentRevision: number) {
+      super(message);
+      this.name = 'WorkbenchLayoutConflictError';
+      this.currentRevision = currentRevision;
+    }
+  },
+  WorkbenchWidgetStateConflictError: class WorkbenchWidgetStateConflictError extends Error {
+    widgetId: string;
+    currentRevision: number;
+
+    constructor(message: string, widgetId: string, currentRevision: number) {
+      super(message);
+      this.name = 'WorkbenchWidgetStateConflictError';
+      this.widgetId = widgetId;
+      this.currentRevision = currentRevision;
+    }
+  },
   getWorkbenchLayoutSnapshot: vi.fn(async (): Promise<any> => ({
     seq: 0,
     revision: 0,
@@ -468,26 +488,8 @@ vi.mock('../services/workbenchLayoutApi', () => ({
   createWorkbenchTerminalSession: layoutApiMocks.createWorkbenchTerminalSession,
   deleteWorkbenchTerminalSession: layoutApiMocks.deleteWorkbenchTerminalSession,
   connectWorkbenchLayoutEventStream: layoutApiMocks.connectWorkbenchLayoutEventStream,
-  WorkbenchLayoutConflictError: class WorkbenchLayoutConflictError extends Error {
-    currentRevision: number;
-
-    constructor(message: string, currentRevision: number) {
-      super(message);
-      this.name = 'WorkbenchLayoutConflictError';
-      this.currentRevision = currentRevision;
-    }
-  },
-  WorkbenchWidgetStateConflictError: class WorkbenchWidgetStateConflictError extends Error {
-    widgetId: string;
-    currentRevision: number;
-
-    constructor(message: string, widgetId: string, currentRevision: number) {
-      super(message);
-      this.name = 'WorkbenchWidgetStateConflictError';
-      this.widgetId = widgetId;
-      this.currentRevision = currentRevision;
-    }
-  },
+  WorkbenchLayoutConflictError: layoutApiMocks.WorkbenchLayoutConflictError,
+  WorkbenchWidgetStateConflictError: layoutApiMocks.WorkbenchWidgetStateConflictError,
 }));
 
 vi.mock('./redevenWorkbenchWidgets', () => ({
@@ -511,6 +513,15 @@ vi.mock('./redevenWorkbenchWidgets', () => ({
       singleton: false,
     },
     {
+      type: 'redeven.monitor',
+      label: 'Monitoring',
+      icon: () => null,
+      body: () => null,
+      defaultTitle: 'Monitoring',
+      defaultSize: { width: 760, height: 460 },
+      singleton: true,
+    },
+    {
       type: 'redeven.preview',
       label: 'Preview',
       icon: () => null,
@@ -523,10 +534,12 @@ vi.mock('./redevenWorkbenchWidgets', () => ({
   redevenWorkbenchFilterBarWidgetTypes: [
     'redeven.terminal',
     'redeven.files',
+    'redeven.monitor',
   ],
   redevenWorkbenchInitialCanvasWidgetTypes: [
     'redeven.terminal',
     'redeven.files',
+    'redeven.monitor',
   ],
 }));
 
@@ -641,6 +654,9 @@ describe('EnvWorkbenchPage', () => {
       updated_at_unix_ms: 0,
       widgets: [],
       widget_states: [],
+      sticky_notes: [],
+      annotations: [],
+      background_layers: [],
     });
     layoutApiMocks.putWorkbenchLayout.mockReset();
     layoutApiMocks.putWorkbenchLayout.mockImplementation(async (input: any) => ({
@@ -649,6 +665,9 @@ describe('EnvWorkbenchPage', () => {
       updated_at_unix_ms: 200,
       widgets: input?.widgets ?? [],
       widget_states: [],
+      sticky_notes: input?.sticky_notes ?? [],
+      annotations: input?.annotations ?? [],
+      background_layers: input?.background_layers ?? [],
     }));
     layoutApiMocks.putWorkbenchWidgetState.mockReset();
     layoutApiMocks.putWorkbenchWidgetState.mockImplementation(async (widgetId: string, input: any) => ({
@@ -848,7 +867,7 @@ describe('EnvWorkbenchPage', () => {
     );
   });
 
-  it('seeds a pristine runtime canvas from widget definition default sizes', async () => {
+  it('seeds a pristine runtime canvas from the complete welcome preset', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     vi.setSystemTime(new Date('2026-05-17T00:00:00.000Z'));
@@ -861,29 +880,59 @@ describe('EnvWorkbenchPage', () => {
       base_revision: 0,
       widgets: [
         expect.objectContaining({
-          widget_id: 'widget-initial-terminal',
-          widget_type: 'redeven.terminal',
-          width: 800,
-          height: 480,
-          z_index: 1,
-          created_at_unix_ms: 1_778_976_000_000,
-        }),
-        expect.objectContaining({
           widget_id: 'widget-initial-files',
           widget_type: 'redeven.files',
           width: 720,
           height: 520,
-          z_index: 2,
+          z_index: 20,
+          created_at_unix_ms: 1_778_976_000_000,
+        }),
+        expect.objectContaining({
+          widget_id: 'widget-initial-terminal',
+          widget_type: 'redeven.terminal',
+          width: 800,
+          height: 480,
+          z_index: 21,
           created_at_unix_ms: 1_778_976_000_001,
         }),
+        expect.objectContaining({
+          widget_id: 'widget-initial-monitor',
+          widget_type: 'redeven.monitor',
+          width: 760,
+          height: 460,
+          z_index: 22,
+          created_at_unix_ms: 1_778_976_000_002,
+        }),
       ],
-      sticky_notes: [],
-      annotations: [],
-      background_layers: [],
+      sticky_notes: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'sticky-initial-capture',
+          color: 'amber',
+          body: expect.stringContaining('<strong>thought</strong>'),
+        }),
+        expect.objectContaining({
+          id: 'sticky-initial-region',
+          color: 'sage',
+          body: expect.stringContaining('<em>intentional</em>'),
+        }),
+      ]),
+      annotations: [
+        expect.objectContaining({
+          id: 'annotation-initial-welcome-title',
+          text: '🚀 Welcome to Redeven',
+        }),
+      ],
+      background_layers: [
+        expect.objectContaining({
+          id: 'region-initial-welcome-runtime',
+          name: 'Welcome Region',
+          material: 'glass',
+        }),
+      ],
     });
 
     const surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement;
-    expect(surface.dataset.widgetIds).toBe('widget-initial-terminal,widget-initial-files');
+    expect(surface.dataset.widgetIds).toBe('widget-initial-files,widget-initial-terminal,widget-initial-monitor');
   });
 
   it('does not seed an empty runtime canvas after the runtime revision has advanced', async () => {
@@ -906,6 +955,55 @@ describe('EnvWorkbenchPage', () => {
     expect(layoutApiMocks.putWorkbenchLayout).not.toHaveBeenCalled();
     const surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement;
     expect(surface.dataset.widgetIds).toBe('');
+  });
+
+  it('reloads the runtime snapshot when another client wins first-run seeding', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const seededSnapshot = {
+      seq: 3,
+      revision: 1,
+      updated_at_unix_ms: 600,
+      widgets: [
+        {
+          widget_id: 'widget-initial-files',
+          widget_type: 'redeven.files',
+          x: 160,
+          y: 420,
+          width: 720,
+          height: 520,
+          z_index: 20,
+          created_at_unix_ms: 1,
+        },
+      ],
+      widget_states: [],
+      sticky_notes: [],
+      annotations: [],
+      background_layers: [],
+    };
+    layoutApiMocks.getWorkbenchLayoutSnapshot
+      .mockResolvedValueOnce({
+        seq: 0,
+        revision: 0,
+        updated_at_unix_ms: 0,
+        widgets: [],
+        widget_states: [],
+        sticky_notes: [],
+        annotations: [],
+        background_layers: [],
+      })
+      .mockResolvedValueOnce(seededSnapshot);
+    layoutApiMocks.putWorkbenchLayout.mockRejectedValueOnce(
+      new layoutApiMocks.WorkbenchLayoutConflictError('conflict', 1),
+    );
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    expect(layoutApiMocks.putWorkbenchLayout).toHaveBeenCalledTimes(1);
+    expect(layoutApiMocks.getWorkbenchLayoutSnapshot).toHaveBeenCalledTimes(2);
+    const surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement;
+    expect(surface.dataset.widgetIds).toBe('widget-initial-files');
   });
 
   it('ignores old desktop Workbench layout storage when seeding a pristine runtime canvas', async () => {

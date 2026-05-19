@@ -378,6 +378,108 @@ describe('runtimeWorkbenchLayout', () => {
     });
   });
 
+  it('keeps existing sticky note order stable when runtime z-index order changes', () => {
+    const existingState = {
+      version: 1,
+      widgets: [],
+      viewport: { x: 80, y: 60, scale: 1 },
+      locked: false,
+      filters: {
+        'sticky-note': true,
+      },
+      selectedWidgetId: null,
+      selectedObject: { kind: 'sticky_note', id: 'note-a' },
+      theme: 'default',
+      stickyNotes: [
+        {
+          id: 'note-a',
+          kind: 'sticky_note',
+          body: 'A',
+          color: 'amber',
+          x: 20,
+          y: 20,
+          width: 240,
+          height: 160,
+          z_index: 1,
+          created_at_unix_ms: 100,
+          updated_at_unix_ms: 100,
+        },
+        {
+          id: 'note-b',
+          kind: 'sticky_note',
+          body: 'B',
+          color: 'sage',
+          x: 300,
+          y: 20,
+          width: 240,
+          height: 160,
+          z_index: 2,
+          created_at_unix_ms: 101,
+          updated_at_unix_ms: 101,
+        },
+      ],
+      annotations: [],
+      backgroundLayers: [],
+    };
+    const localState = derivePersistedWorkbenchLocalState(existingState as any);
+
+    const projected = projectWorkbenchStateFromRuntimeLayout({
+      snapshot: {
+        seq: 6,
+        revision: 4,
+        updated_at_unix_ms: 400,
+        widgets: [],
+        widget_states: [],
+        sticky_notes: [
+          {
+            id: 'note-b',
+            kind: 'sticky_note',
+            body: 'B updated',
+            color: 'sage',
+            x: 300,
+            y: 20,
+            width: 240,
+            height: 160,
+            z_index: 1,
+            created_at_unix_ms: 101,
+            updated_at_unix_ms: 201,
+          },
+          {
+            id: 'note-a',
+            kind: 'sticky_note',
+            body: 'A updated',
+            color: 'amber',
+            x: 20,
+            y: 20,
+            width: 240,
+            height: 160,
+            z_index: 9,
+            created_at_unix_ms: 100,
+            updated_at_unix_ms: 200,
+          },
+        ],
+        annotations: [],
+        background_layers: [],
+      },
+      localState,
+      existingState: existingState as any,
+      widgetDefinitions: widgetDefinitions as any,
+    });
+
+    expect(projected.selectedObject).toEqual({ kind: 'sticky_note', id: 'note-a' });
+    expect(projected.stickyNotes?.map((note) => note.id)).toEqual(['note-a', 'note-b']);
+    expect(projected.stickyNotes?.[0]).toMatchObject({
+      id: 'note-a',
+      body: 'A updated',
+      z_index: 9,
+    });
+    expect(projected.stickyNotes?.[1]).toMatchObject({
+      id: 'note-b',
+      body: 'B updated',
+      z_index: 1,
+    });
+  });
+
   it('appends new runtime widgets after the stable live widget order', () => {
     const existingState = {
       version: 1,

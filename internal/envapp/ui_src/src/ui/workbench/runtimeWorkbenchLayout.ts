@@ -468,6 +468,35 @@ function sortLayerItems<T extends { id: string; z_index: number; created_at_unix
   });
 }
 
+function projectLayerItemsInStableOrder<T extends { id: string }>(
+  runtimeItems: readonly T[] | null | undefined,
+  existingItems: readonly T[] | null | undefined,
+): T[] {
+  const normalizedRuntimeItems = runtimeItems ?? [];
+  const runtimeByID = new Map(normalizedRuntimeItems.map((item) => [item.id, item] as const));
+  const visitedIDs = new Set<string>();
+  const projected: T[] = [];
+
+  for (const existing of existingItems ?? []) {
+    const runtimeItem = runtimeByID.get(existing.id);
+    if (!runtimeItem || visitedIDs.has(runtimeItem.id)) {
+      continue;
+    }
+    visitedIDs.add(runtimeItem.id);
+    projected.push(runtimeItem);
+  }
+
+  for (const runtimeItem of normalizedRuntimeItems) {
+    if (visitedIDs.has(runtimeItem.id)) {
+      continue;
+    }
+    visitedIDs.add(runtimeItem.id);
+    projected.push(runtimeItem);
+  }
+
+  return projected;
+}
+
 function normalizeFilters(
   value: unknown,
   defaults: Record<string, boolean>,
@@ -1009,9 +1038,18 @@ export function projectWorkbenchStateFromRuntimeLayout(args: Readonly<{
   const selectedWidgetId = widgetIDs.has(liveSelectedWidgetId)
     ? liveSelectedWidgetId
     : null;
-  const stickyNotes = sortLayerItems(args.snapshot.sticky_notes);
-  const annotations = sortLayerItems(args.snapshot.annotations);
-  const backgroundLayers = sortLayerItems(args.snapshot.background_layers);
+  const stickyNotes = projectLayerItemsInStableOrder(
+    args.snapshot.sticky_notes,
+    args.existingState?.stickyNotes,
+  );
+  const annotations = projectLayerItemsInStableOrder(
+    args.snapshot.annotations,
+    args.existingState?.annotations,
+  );
+  const backgroundLayers = projectLayerItemsInStableOrder(
+    args.snapshot.background_layers,
+    args.existingState?.backgroundLayers,
+  );
   const selectedObject = selectedObjectExists(args.existingState?.selectedObject, {
     widgets,
     stickyNotes,
