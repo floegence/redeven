@@ -171,6 +171,14 @@ describe('main routing', () => {
     expect(sshStartSrc).toContain('options.allowActiveWorkReplacement !== true');
     expect(sshStartSrc).toContain('desktopSSHRuntimeAffectingSettingsMatch(existingRecord.details, sshDetails)');
 
+    const sshStartTaskEnd = mainSrc.indexOf('const managedSSHRuntime = await ensureManagedSSHRuntimeReady', sshStartStart);
+    expect(sshStartTaskEnd).toBeGreaterThan(sshStartStart);
+    const sshStartTaskSrc = mainSrc.slice(sshStartStart, sshStartTaskEnd);
+    expect(sshStartTaskSrc).toContain("if (statusProbe.status === 'blocked')");
+    expect(sshStartTaskSrc).toContain('options.allowActiveWorkReplacement !== true');
+    expect(sshStartTaskSrc).toContain('maintenance.can_desktop_restart');
+    expect(sshStartTaskSrc).toContain('await stopManagedSSHRuntimeProcess({');
+
     const openSSHStart = mainSrc.indexOf('async function openSSHEnvironmentFromLauncher(');
     const openSSHEnd = mainSrc.indexOf('const optimisticSessionKey = sshDesktopSessionKey(sshDetails);', openSSHStart);
     expect(mainSrc.slice(openSSHStart, openSSHEnd)).toContain('connect_timeout_seconds: request.connect_timeout_seconds');
