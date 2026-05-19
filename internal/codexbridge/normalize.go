@@ -65,6 +65,8 @@ func normalizeItem(in wireThreadItem) Item {
 	text := strings.TrimSpace(in.Text)
 	if itemType == "userMessage" {
 		text = in.Text
+	} else if itemType == "agentMessage" {
+		text = cleanAssistantHostDirectiveText(text)
 	}
 	out := Item{
 		ID:     strings.TrimSpace(in.ID),

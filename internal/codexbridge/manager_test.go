@@ -308,6 +308,57 @@ func TestReadThread_PreservesCompletedProjectedItemLifecycleWithoutExplicitUpstr
 	}
 }
 
+func TestHandleEnvelope_CleansCompletedProjectedAssistantHostDirectives(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewManager(Options{AgentHomeDir: "/workspace"})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+
+	manager.handleEnvelope(rpcEnvelope{
+		Method: "item/agentMessage/delta",
+		Params: mustMarshalParams(t, wireDeltaNotification{
+			ThreadID: "thread_1",
+			TurnID:   "turn_1",
+			ItemID:   "item_agent",
+			Delta:    "Done.\n\n::git-stage{cwd=\"/repo\"}",
+		}),
+	})
+	manager.handleEnvelope(rpcEnvelope{
+		Method: "item/completed",
+		Params: mustMarshalParams(t, wireItemNotification{
+			ThreadID: "thread_1",
+			TurnID:   "turn_1",
+			Item: wireThreadItem{
+				ID:   "item_agent",
+				Type: "agentMessage",
+				Text: "Done.\n\n::git-stage{cwd=\"/repo\"}\n::git-push{cwd=\"/repo\" branch=\"main\"}",
+			},
+		}),
+	})
+
+	manager.mu.Lock()
+	state := manager.threads["thread_1"]
+	if state == nil || state.thread == nil {
+		manager.mu.Unlock()
+		t.Fatalf("expected projected thread state")
+	}
+	detail := manager.buildThreadDetailLocked(state, *state.thread)
+	manager.mu.Unlock()
+
+	if len(detail.Thread.Turns) != 1 || len(detail.Thread.Turns[0].Items) != 1 {
+		t.Fatalf("unexpected projected turns: %+v", detail.Thread.Turns)
+	}
+	item := detail.Thread.Turns[0].Items[0]
+	if item.Status != "completed" {
+		t.Fatalf("Status=%q, want completed", item.Status)
+	}
+	if item.Text != "Done." {
+		t.Fatalf("Text=%q, want Done.", item.Text)
+	}
+}
+
 func TestStartTurn_RetriesWhenLiveThreadNeedsResume(t *testing.T) {
 	t.Parallel()
 
