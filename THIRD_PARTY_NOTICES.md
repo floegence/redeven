@@ -534,7 +534,8 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | boolean | 3.2.0 | MIT | Desktop shell | https://www.npmjs.com/package/boolean/v/3.2.0 |  |
 | brace-expansion | 1.1.13 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/brace-expansion/v/1.1.13 |  |
 | brace-expansion | 2.0.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/brace-expansion/v/2.0.3 |  |
-| brace-expansion | 5.0.5 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/brace-expansion/v/5.0.5 |  |
+| brace-expansion | 5.0.5 | MIT | Desktop shell | https://www.npmjs.com/package/brace-expansion/v/5.0.5 |  |
+| brace-expansion | 5.0.6 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/brace-expansion/v/5.0.6 |  |
 | browserslist | 4.28.1 | MIT | Env App UI | https://www.npmjs.com/package/browserslist/v/4.28.1 |  |
 | browserslist | 4.28.2 | MIT | Desktop shell | https://www.npmjs.com/package/browserslist/v/4.28.2 |  |
 | buffer-crc32 | 0.2.13 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/buffer-crc32/v/0.2.13 |  |
@@ -1157,7 +1158,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | wrap-ansi | 7.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/wrap-ansi/v/7.0.0 |  |
 | wrap-ansi | 8.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/wrap-ansi/v/8.1.0 |  |
 | wrappy | 1.0.2 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/wrappy/v/1.0.2 |  |
-| ws | 8.19.0 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/ws/v/8.19.0 |  |
+| ws | 8.20.1 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/ws/v/8.20.1 |  |
 | xml-name-validator | 5.0.0 | Apache-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/xml-name-validator/v/5.0.0 |  |
 | xmlbuilder | 15.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/xmlbuilder/v/15.1.1 |  |
 | xmlchars | 2.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/xmlchars/v/2.2.0 |  |
