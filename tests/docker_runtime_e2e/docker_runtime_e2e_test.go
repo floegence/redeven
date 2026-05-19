@@ -1,0 +1,580 @@
+//go:build docker_e2e
+
+package docker_runtime_e2e
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/floegence/redeven/internal/desktopbridge"
+)
+
+const (
+	ubuntuImage        = "ubuntu:24.04"
+	containerStateRoot = "/root/.redeven-e2e"
+	containerRedeven   = "/usr/local/bin/redeven"
+	upgradedRedeven    = "/root/.redeven-e2e/runtime/releases/v9.9.9-e2e/bin/redeven"
+	containerHelper    = "/tmp/redeven-e2e-client"
+	targetVersion      = "v9.9.9-e2e"
+	desktopOwnerID     = "redeven-docker-e2e-desktop-owner"
+)
+
+type commandResult struct {
+	Stdout string
+	Stderr string
+}
+
+type launchReport struct {
+	Status                   string                  `json:"status,omitempty"`
+	Code                     string                  `json:"code,omitempty"`
+	Message                  string                  `json:"message,omitempty"`
+	LocalUIURL               string                  `json:"local_ui_url,omitempty"`
+	LocalUIURLs              []string                `json:"local_ui_urls,omitempty"`
+	RuntimeControl           *runtimeControlEndpoint `json:"runtime_control,omitempty"`
+	PasswordRequired         bool                    `json:"password_required"`
+	EffectiveRunMode         string                  `json:"effective_run_mode,omitempty"`
+	RemoteEnabled            bool                    `json:"remote_enabled"`
+	DesktopManaged           bool                    `json:"desktop_managed"`
+	DesktopOwnerID           string                  `json:"desktop_owner_id,omitempty"`
+	StateDir                 string                  `json:"state_dir,omitempty"`
+	RuntimeControlSocketPath string                  `json:"runtime_control_socket_path,omitempty"`
+	PID                      int                     `json:"pid,omitempty"`
+	RuntimeService           map[string]any          `json:"runtime_service,omitempty"`
+}
+
+type runtimeControlEndpoint struct {
+	ProtocolVersion string `json:"protocol_version"`
+	BaseURL         string `json:"base_url"`
+	Token           string `json:"token"`
+	DesktopOwnerID  string `json:"desktop_owner_id"`
+}
+
+type helperResult struct {
+	Action string `json:"action"`
+	Ping   *struct {
+		ServerTimeMs       int64  `json:"server_time_ms,omitempty"`
+		AgentInstanceID    string `json:"agent_instance_id,omitempty"`
+		ProcessStartedAtMs int64  `json:"process_started_at_ms,omitempty"`
+		Version            string `json:"version,omitempty"`
+		Commit             string `json:"commit,omitempty"`
+	} `json:"ping,omitempty"`
+	Restart *struct {
+		OK      bool   `json:"ok"`
+		Message string `json:"message,omitempty"`
+	} `json:"restart,omitempty"`
+	Upgrade *struct {
+		OK      bool   `json:"ok"`
+		Message string `json:"message,omitempty"`
+	} `json:"upgrade,omitempty"`
+}
+
+type fixture struct {
+	t             *testing.T
+	repoRoot      string
+	tempRoot      string
+	containerName string
+	goarch        string
+}
+
+func TestDockerUbuntuDesktopRuntimeLifecycle(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	f := newFixture(t)
+	f.requireDocker(ctx)
+	f.startContainer(ctx)
+	defer f.cleanup(context.Background())
+	f.detectContainerArch(ctx)
+	f.buildBinaries(ctx)
+
+	f.startRuntime(ctx, containerRedeven)
+	initial := f.waitReady(ctx)
+	initialPing := f.runHelper(ctx, initial.LocalUIURL, "ping", "")
+	if initialPing.Ping == nil || initialPing.Ping.ProcessStartedAtMs <= 0 {
+		t.Fatalf("unexpected initial ping result: %#v", initialPing)
+	}
+
+	hello := f.openBridgeAndAssertRequests(ctx, initial)
+	if hello.ProtocolVersion != desktopbridge.ProtocolVersion {
+		t.Fatalf("bridge protocol = %q, want %q", hello.ProtocolVersion, desktopbridge.ProtocolVersion)
+	}
+
+	conflict := f.runSecondRuntimeAttach(ctx)
+	if conflict.Status != "attached" {
+		t.Fatalf("second runtime status = %q, want attached; report=%#v", conflict.Status, conflict)
+	}
+	if conflict.PID != initial.PID {
+		t.Fatalf("second runtime attached PID = %d, want existing PID %d", conflict.PID, initial.PID)
+	}
+
+	restart := f.runHelper(ctx, initial.LocalUIURL, "restart", "")
+	if restart.Restart == nil || !restart.Restart.OK {
+		t.Fatalf("unexpected restart result: %#v", restart)
+	}
+	afterRestart := f.waitPingAfter(ctx, initialPing.Ping.ProcessStartedAtMs)
+
+	if _, err := f.tryHelper(ctx, afterRestart.LocalUIURL, "upgrade", targetVersion); err == nil || !strings.Contains(err.Error(), "upgrade not supported") {
+		t.Fatalf("desktop-managed sys.upgrade error = %v, want unsupported", err)
+	}
+	f.performDesktopOwnedUpgrade(ctx)
+	afterUpgrade := f.waitPingAfter(ctx, afterRestart.ProcessStartedAtMs)
+
+	finalStatus := f.waitReady(ctx)
+	if finalStatus.LocalUIURL == "" {
+		t.Fatalf("final Local UI URL is empty")
+	}
+	finalPing := f.runHelper(ctx, finalStatus.LocalUIURL, "ping", "")
+	if finalPing.Ping == nil || finalPing.Ping.ProcessStartedAtMs != afterUpgrade.ProcessStartedAtMs {
+		t.Fatalf("unexpected final ping result: %#v; afterUpgrade=%#v", finalPing, afterUpgrade)
+	}
+}
+
+type pingSnapshot struct {
+	LocalUIURL         string
+	ProcessStartedAtMs int64
+}
+
+func newFixture(t *testing.T) *fixture {
+	t.Helper()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	repoRoot, err := filepath.Abs(filepath.Join(wd, "..", ".."))
+	if err != nil {
+		t.Fatalf("resolve repo root: %v", err)
+	}
+	return &fixture{
+		t:             t,
+		repoRoot:      repoRoot,
+		tempRoot:      t.TempDir(),
+		containerName: fmt.Sprintf("redeven-e2e-%d", time.Now().UnixNano()),
+	}
+}
+
+func (f *fixture) requireDocker(ctx context.Context) {
+	f.t.Helper()
+	if _, err := exec.LookPath("docker"); err != nil {
+		f.t.Fatalf("docker not found: %v", err)
+	}
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "version", "--format", "{{.Server.Version}}"); err != nil {
+		f.t.Fatalf("docker daemon is not available: %v", err)
+	}
+}
+
+func (f *fixture) startContainer(ctx context.Context) {
+	f.t.Helper()
+	_, _ = f.runHost(ctx, f.repoRoot, nil, "docker", "pull", ubuntuImage)
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "run", "-d", "--name", f.containerName, ubuntuImage, "sleep", "infinity"); err != nil {
+		f.t.Fatalf("start container: %v", err)
+	}
+}
+
+func (f *fixture) detectContainerArch(ctx context.Context) {
+	f.t.Helper()
+	raw := strings.TrimSpace(f.dockerExec(ctx, nil, "uname", "-m").Stdout)
+	switch raw {
+	case "x86_64", "amd64":
+		f.goarch = "amd64"
+	case "aarch64", "arm64":
+		f.goarch = "arm64"
+	default:
+		f.t.Fatalf("unsupported container architecture %q", raw)
+	}
+}
+
+func (f *fixture) buildBinaries(ctx context.Context) {
+	f.t.Helper()
+	redevenOut := filepath.Join(f.tempRoot, "redeven-linux")
+	helperOut := filepath.Join(f.tempRoot, "redeven-e2e-client")
+	env := append(os.Environ(), "GOOS=linux", "GOARCH="+f.goarch, "CGO_ENABLED=0")
+	if _, err := f.runHostEnv(ctx, f.repoRoot, env, "go", "build", "-o", redevenOut, "./cmd/redeven"); err != nil {
+		f.t.Fatalf("build redeven: %v", err)
+	}
+	if _, err := f.runHostEnv(ctx, f.repoRoot, env, "go", "build", "-o", helperOut, "./tests/docker_runtime_e2e/testclient"); err != nil {
+		f.t.Fatalf("build e2e helper: %v", err)
+	}
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", redevenOut, f.containerName+":"+containerRedeven); err != nil {
+		f.t.Fatalf("copy redeven: %v", err)
+	}
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", helperOut, f.containerName+":"+containerHelper); err != nil {
+		f.t.Fatalf("copy helper: %v", err)
+	}
+	f.dockerExec(ctx, nil, "chmod", "0755", containerRedeven, containerHelper)
+}
+
+func (f *fixture) startRuntime(ctx context.Context, binaryPath string) {
+	f.t.Helper()
+	args := []string{
+		"exec", "-d",
+		"--env", "REDEVEN_DESKTOP_OWNER_ID=" + desktopOwnerID,
+		f.containerName,
+		binaryPath,
+		"run",
+		"--mode", "desktop",
+		"--desktop-managed",
+		"--state-root", containerStateRoot,
+		"--local-ui-bind", "127.0.0.1:0",
+	}
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", args...); err != nil {
+		f.t.Fatalf("start runtime: %v", err)
+	}
+}
+
+func (f *fixture) performDesktopOwnedUpgrade(ctx context.Context) {
+	f.t.Helper()
+	f.stopRuntime(ctx)
+	f.dockerExec(ctx, nil, "mkdir", "-p", filepath.Dir(upgradedRedeven))
+	f.dockerExec(ctx, nil, "cp", containerRedeven, upgradedRedeven)
+	f.dockerExec(ctx, nil, "chmod", "0755", upgradedRedeven)
+	stamp := strings.Join([]string{
+		"schema_version=1",
+		"managed_by=redeven-desktop",
+		"runtime_release_tag=" + targetVersion,
+		"install_strategy=desktop_upload",
+		"",
+	}, "\n")
+	f.dockerExec(ctx, strings.NewReader(stamp), "sh", "-c", "cat > "+filepath.Dir(upgradedRedeven)+"/../managed-runtime.stamp")
+	f.startRuntime(ctx, upgradedRedeven)
+}
+
+func (f *fixture) stopRuntime(ctx context.Context) {
+	f.t.Helper()
+	f.dockerExec(ctx, nil, containerRedeven, "desktop-runtime-stop", "--state-root", containerStateRoot, "--grace-period", "10s")
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		report, err := f.runtimeStatus(ctx)
+		if err == nil && report.Status != "ready" {
+			return
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	f.dumpContainerDiagnostics(ctx)
+	f.t.Fatalf("runtime did not stop")
+}
+
+func (f *fixture) waitReady(ctx context.Context) launchReport {
+	f.t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	var lastErr error
+	var last launchReport
+	for time.Now().Before(deadline) {
+		report, err := f.runtimeStatus(ctx)
+		if err == nil {
+			last = report
+			if report.Status == "ready" && report.LocalUIURL != "" && report.RuntimeControl != nil && report.PID > 0 {
+				return report
+			}
+			lastErr = fmt.Errorf("runtime status is not ready: %#v", report)
+		} else {
+			lastErr = err
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	f.dumpContainerDiagnostics(ctx)
+	f.t.Fatalf("runtime did not become ready: %v; last=%#v", lastErr, last)
+	return launchReport{}
+}
+
+func (f *fixture) waitPingAfter(ctx context.Context, previousProcessStartedAtMs int64) pingSnapshot {
+	f.t.Helper()
+	deadline := time.Now().Add(35 * time.Second)
+	var lastErr error
+	for time.Now().Before(deadline) {
+		status, err := f.runtimeStatus(ctx)
+		if err == nil && status.Status == "ready" && status.LocalUIURL != "" {
+			result, helperErr := f.tryHelper(ctx, status.LocalUIURL, "ping", "")
+			if helperErr == nil && result.Ping != nil && result.Ping.ProcessStartedAtMs > previousProcessStartedAtMs {
+				return pingSnapshot{
+					LocalUIURL:         status.LocalUIURL,
+					ProcessStartedAtMs: result.Ping.ProcessStartedAtMs,
+				}
+			}
+			lastErr = helperErr
+		} else if err != nil {
+			lastErr = err
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	f.dumpContainerDiagnostics(ctx)
+	f.t.Fatalf("runtime did not restart after process_started_at_ms=%d: %v", previousProcessStartedAtMs, lastErr)
+	return pingSnapshot{}
+}
+
+func (f *fixture) runtimeStatus(ctx context.Context) (launchReport, error) {
+	out, err := f.runHost(ctx, f.repoRoot, nil,
+		"docker", "exec", "-i", f.containerName,
+		containerRedeven, "desktop-runtime-status",
+		"--state-root", containerStateRoot,
+		"--probe-timeout", "2s",
+	)
+	if err != nil {
+		return launchReport{}, err
+	}
+	var report launchReport
+	if err := json.Unmarshal([]byte(out.Stdout), &report); err != nil {
+		return launchReport{}, fmt.Errorf("decode desktop-runtime-status: %w; stdout=%q", err, out.Stdout)
+	}
+	return report, nil
+}
+
+func (f *fixture) runHelper(ctx context.Context, baseURL string, action string, targetVersion string) helperResult {
+	f.t.Helper()
+	result, err := f.tryHelper(ctx, baseURL, action, targetVersion)
+	if err != nil {
+		f.dumpContainerDiagnostics(ctx)
+		f.t.Fatalf("helper %s failed: %v", action, err)
+	}
+	return result
+}
+
+func (f *fixture) tryHelper(ctx context.Context, baseURL string, action string, targetVersion string) (helperResult, error) {
+	args := []string{
+		"exec", "-i", f.containerName,
+		containerHelper,
+		"--base-url", baseURL,
+		"--action", action,
+	}
+	if strings.TrimSpace(targetVersion) != "" {
+		args = append(args, "--target-version", targetVersion)
+	}
+	out, err := f.runHost(ctx, f.repoRoot, nil, "docker", args...)
+	if err != nil {
+		return helperResult{}, err
+	}
+	var result helperResult
+	if err := json.Unmarshal([]byte(out.Stdout), &result); err != nil {
+		return helperResult{}, fmt.Errorf("decode helper output: %w; stdout=%q", err, out.Stdout)
+	}
+	return result, nil
+}
+
+func (f *fixture) openBridgeAndAssertRequests(ctx context.Context, status launchReport) desktopbridge.Hello {
+	f.t.Helper()
+	bridgeCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	cmd := exec.CommandContext(bridgeCtx,
+		"docker", "exec", "-i",
+		"--env", "REDEVEN_DESKTOP_OWNER_ID="+desktopOwnerID,
+		f.containerName,
+		containerRedeven, "desktop-bridge",
+		"--state-root", containerStateRoot,
+	)
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		f.t.Fatalf("bridge stdin: %v", err)
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		f.t.Fatalf("bridge stdout: %v", err)
+	}
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		f.t.Fatalf("start bridge: %v", err)
+	}
+	defer func() {
+		_ = desktopbridge.WriteFrame(stdin, desktopbridge.FrameHeader{StreamID: "shutdown", Type: desktopbridge.FrameTypeShutdownRuntime}, nil)
+		_ = stdin.Close()
+		cancel()
+		_ = cmd.Wait()
+	}()
+
+	reader := bufio.NewReader(stdout)
+	header, payload, err := desktopbridge.ReadFrame(reader)
+	if err != nil {
+		f.t.Fatalf("read bridge hello: %v; stderr=%s", err, stderr.String())
+	}
+	if header.Type != desktopbridge.FrameTypeHello {
+		f.t.Fatalf("first bridge frame type = %q, want hello", header.Type)
+	}
+	var hello desktopbridge.Hello
+	if err := json.Unmarshal(payload, &hello); err != nil {
+		f.t.Fatalf("decode bridge hello: %v", err)
+	}
+	if !hello.LocalUI.Available || !hello.RuntimeControl.Available {
+		f.t.Fatalf("bridge hello missing surfaces: %#v", hello)
+	}
+	if hello.RuntimeControl.Token == "" || hello.RuntimeControl.DesktopOwnerID != desktopOwnerID {
+		f.t.Fatalf("unexpected runtime-control hello: %#v", hello.RuntimeControl)
+	}
+
+	localBody := bridgeHTTPRequest(f.t, reader, stdin, "local-ui-e2e", desktopbridge.StreamSurfaceLocalUI, "GET /api/local/runtime/health HTTP/1.1\r\nHost: runtime\r\nConnection: close\r\n\r\n")
+	assertContains(f.t, string(localBody), `"status":"online"`)
+	assertContains(f.t, string(localBody), `"desktop_managed":true`)
+
+	controlRequest := fmt.Sprintf(
+		"GET /v1/provider-link HTTP/1.1\r\nHost: runtime-control\r\nAuthorization: Bearer %s\r\nX-Redeven-Desktop-Owner-ID: %s\r\nConnection: close\r\n\r\n",
+		hello.RuntimeControl.Token,
+		hello.RuntimeControl.DesktopOwnerID,
+	)
+	controlBody := bridgeHTTPRequest(f.t, reader, stdin, "runtime-control-e2e", desktopbridge.StreamSurfaceRuntimeControl, controlRequest)
+	assertContains(f.t, string(controlBody), `"ok":true`)
+	assertContains(f.t, string(controlBody), `"runtime_service"`)
+
+	if status.RuntimeControl == nil || status.RuntimeControl.Token != hello.RuntimeControl.Token {
+		f.t.Fatalf("bridge hello token does not match status endpoint")
+	}
+	return hello
+}
+
+func bridgeHTTPRequest(t *testing.T, reader *bufio.Reader, writer io.Writer, streamID string, surface desktopbridge.StreamSurface, request string) []byte {
+	t.Helper()
+	payload, err := json.Marshal(desktopbridge.StreamOpen{Surface: surface})
+	if err != nil {
+		t.Fatalf("marshal stream open: %v", err)
+	}
+	if err := desktopbridge.WriteFrame(writer, desktopbridge.FrameHeader{StreamID: streamID, Type: desktopbridge.FrameTypeStreamOpen}, payload); err != nil {
+		t.Fatalf("write stream open: %v", err)
+	}
+	if err := desktopbridge.WriteFrame(writer, desktopbridge.FrameHeader{StreamID: streamID, Type: desktopbridge.FrameTypeStreamData}, []byte(request)); err != nil {
+		t.Fatalf("write stream data: %v", err)
+	}
+	var raw bytes.Buffer
+	for {
+		header, payload, err := desktopbridge.ReadFrame(reader)
+		if err != nil {
+			t.Fatalf("read bridge frame: %v", err)
+		}
+		if header.StreamID != streamID {
+			continue
+		}
+		switch header.Type {
+		case desktopbridge.FrameTypeStreamData:
+			raw.Write(payload)
+		case desktopbridge.FrameTypeStreamClose:
+			return httpBody(t, raw.Bytes())
+		case desktopbridge.FrameTypeStreamError:
+			t.Fatalf("bridge stream error: %s", string(payload))
+		}
+	}
+}
+
+func httpBody(t *testing.T, raw []byte) []byte {
+	t.Helper()
+	resp, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(raw)), nil)
+	if err != nil {
+		t.Fatalf("parse HTTP response: %v; raw=%q", err, string(raw))
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read HTTP response body: %v", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		t.Fatalf("HTTP status = %d; body=%s", resp.StatusCode, string(body))
+	}
+	return body
+}
+
+func (f *fixture) runSecondRuntimeAttach(ctx context.Context) launchReport {
+	f.t.Helper()
+	reportPath := "/tmp/redeven-e2e/second-runtime-report.json"
+	f.dockerExec(ctx, nil, "rm", "-f", reportPath)
+	out, err := f.runHost(ctx, f.repoRoot, nil,
+		"docker", "exec", "-i",
+		"--env", "REDEVEN_DESKTOP_OWNER_ID="+desktopOwnerID,
+		f.containerName,
+		containerRedeven, "run",
+		"--mode", "desktop",
+		"--desktop-managed",
+		"--state-root", containerStateRoot,
+		"--local-ui-bind", "127.0.0.1:0",
+		"--startup-report-file", reportPath,
+	)
+	if err != nil {
+		f.t.Fatalf("second runtime attach command failed: %v; stdout=%s", err, out.Stdout)
+	}
+	reportRaw := f.dockerExec(ctx, nil, "cat", reportPath).Stdout
+	var report launchReport
+	if err := json.Unmarshal([]byte(reportRaw), &report); err != nil {
+		f.t.Fatalf("decode second runtime report: %v; report=%s", err, reportRaw)
+	}
+	return report
+}
+
+func (f *fixture) dockerExec(ctx context.Context, stdin io.Reader, args ...string) commandResult {
+	f.t.Helper()
+	fullArgs := append([]string{"exec", "-i", f.containerName}, args...)
+	out, err := f.runHost(ctx, f.repoRoot, stdin, "docker", fullArgs...)
+	if err != nil {
+		f.t.Fatalf("docker %s failed: %v", strings.Join(fullArgs, " "), err)
+	}
+	return out
+}
+
+func (f *fixture) runHost(ctx context.Context, dir string, stdin io.Reader, name string, args ...string) (commandResult, error) {
+	return f.runHostCommand(ctx, dir, nil, stdin, name, args...)
+}
+
+func (f *fixture) runHostEnv(ctx context.Context, dir string, env []string, name string, args ...string) (commandResult, error) {
+	return f.runHostCommand(ctx, dir, env, nil, name, args...)
+}
+
+func (f *fixture) runHostCommand(ctx context.Context, dir string, env []string, stdin io.Reader, name string, args ...string) (commandResult, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Dir = dir
+	if len(env) > 0 {
+		cmd.Env = env
+	}
+	if stdin != nil {
+		cmd.Stdin = stdin
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	result := commandResult{Stdout: stdout.String(), Stderr: stderr.String()}
+	if err != nil {
+		return result, fmt.Errorf("%s %s: %w\nstdout:\n%s\nstderr:\n%s", name, strings.Join(args, " "), err, result.Stdout, result.Stderr)
+	}
+	return result, nil
+}
+
+func (f *fixture) cleanup(ctx context.Context) {
+	_, _ = f.runHost(ctx, f.repoRoot, nil, "docker", "rm", "-f", f.containerName)
+}
+
+func (f *fixture) dumpContainerDiagnostics(ctx context.Context) {
+	if f == nil || f.t == nil || f.containerName == "" {
+		return
+	}
+	if status, err := f.runtimeStatus(ctx); err == nil {
+		body, _ := json.MarshalIndent(status, "", "  ")
+		f.t.Logf("last runtime status:\n%s", string(body))
+	}
+	if logs, err := f.runHost(ctx, f.repoRoot, nil, "docker", "logs", "--tail", "200", f.containerName); err == nil {
+		f.t.Logf("container logs stdout:\n%s\nstderr:\n%s", logs.Stdout, logs.Stderr)
+	}
+	if ps, err := f.runHost(ctx, f.repoRoot, nil, "docker", "exec", "-i", f.containerName, "ps", "-ef"); err == nil {
+		f.t.Logf("container ps:\n%s", ps.Stdout)
+	}
+}
+
+func assertContains(t *testing.T, haystack string, needle string) {
+	t.Helper()
+	if !strings.Contains(haystack, needle) {
+		t.Fatalf("expected %q to contain %q", haystack, needle)
+	}
+}
+
+func TestMain(m *testing.M) {
+	if runtime.GOOS == "windows" {
+		fmt.Fprintln(os.Stderr, "docker runtime e2e is not supported on Windows")
+		os.Exit(1)
+	}
+	os.Exit(m.Run())
+}

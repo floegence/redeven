@@ -62,6 +62,7 @@ jobs:
           bash -n scripts/build_desktop_bundled_runtime.sh
           bash -n scripts/build_desktop_bundled_agent.sh
           bash -n scripts/check_desktop.sh
+          bash -n scripts/check_docker_runtime_e2e.sh
           bash -n scripts/ui_package_common.sh
           bash -n scripts/open_source_hygiene_check.sh
           bash -n scripts/install_git_hooks.sh
@@ -102,6 +103,9 @@ jobs:
 
       - name: Build embedded assets
         run: ./scripts/build_assets.sh
+
+      - name: Docker runtime E2E
+        run: ./scripts/check_docker_runtime_e2e.sh
 
       - name: go test
         run: go test ./...

@@ -235,6 +235,7 @@ Run the CI-aligned local checks before integration:
 - `bash -n scripts/lint_ui.sh`
 - `bash -n scripts/build_desktop_bundled_agent.sh`
 - `bash -n scripts/check_desktop.sh`
+- `bash -n scripts/check_docker_runtime_e2e.sh`
 - `bash -n scripts/check_runtime_compatibility_contract.sh`
 - `bash -n scripts/ui_package_common.sh`
 - `bash -n scripts/open_source_hygiene_check.sh`
@@ -242,6 +243,7 @@ Run the CI-aligned local checks before integration:
 - `./scripts/lint_ui.sh`
 - `./scripts/check_runtime_compatibility_contract.sh --source-only`
 - `./scripts/check_desktop.sh`
+- `./scripts/check_docker_runtime_e2e.sh`
 - `./scripts/open_source_hygiene_check.sh --staged`
 - `./scripts/open_source_hygiene_check.sh --all`
 - `./scripts/knowledge/check_source_integrity.sh`

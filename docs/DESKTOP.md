@@ -78,6 +78,7 @@ Behavior:
 - Desktop startup settings do not create a second preference-owned runtime target; the resolved Local Environment state directory remains the runtime source of truth.
 - Desktop-managed runtime state never falls back to the Electron process working directory; if no usable home directory exists and no explicit config path is available, startup fails clearly instead of writing inside an arbitrary repository or shell cwd.
 - Runtime lifecycle and Open connection progress are separate launcher operation contracts. Local Host, Local Container, SSH Host, and SSH Container start/update actions publish canonical `lifecycle_progress` metadata; Open actions publish `open_progress` metadata for SSH tunnels, container bridges, runtime-control forwarding, Desktop model source preparation, and Env App window creation.
+- `./scripts/check_docker_runtime_e2e.sh` is the real container lifecycle regression gate. It starts an `ubuntu:24.04` Docker container, runs the current Linux `redeven` binary as a desktop-managed daemon inside that container, verifies `desktop-runtime-status`, attaches through `desktop-bridge`, requests Local UI and runtime-control over bridge streams, calls direct `sys.ping`, exercises `sys.restart`, verifies runtime-owned `sys.upgrade` is unavailable for desktop-managed runtimes, then performs a Desktop-owned package update and reconnects.
 
 Desktop-managed Local Runtime also exposes a separate runtime-control endpoint when it is started by Desktop:
 
@@ -311,6 +312,12 @@ Container placements use one container-internal `runtime_root`. The default is `
 Container lifecycle is outside Redeven. The creation dialog lists only currently running Docker/Podman containers for the selected local or SSH host access path, saves a stable `container_ref` (normally the container name), and keeps `container_id` as the last resolved execution id. Before status projection, bootstrap, daemon startup, or bridge startup, Desktop resolves the placement again through Docker/Podman on the local host or through the selected SSH host. If a container was recreated with the same stable reference, Desktop heals the concrete id and keeps `Start runtime` available. If `Start runtime` has already verified or installed the runtime package and started the daemon but no bridge is active, the card stays openable and `Open` starts only the bridge. If the container is stopped, missing, ambiguous, or inaccessible, the card shows precise refresh/edit guidance; the user must start or repair the container with the owning container tool before Redeven can start the runtime process inside it.
 
 The runtime-control token stays in Electron main. Renderer snapshots expose only runtime-control status and provider-link capability.
+
+The Docker runtime E2E test covers this placement model without using published
+container ports or host networking. It copies a Linux test build into a running
+Ubuntu container, starts the daemon with `--state-root`, uses
+`desktop-runtime-status` as the attach authority, and accesses Local UI plus
+runtime-control only through `desktop-bridge` streams.
 
 Runtime Service snapshots are carried through the same attach and startup paths that already describe Local UI:
 
