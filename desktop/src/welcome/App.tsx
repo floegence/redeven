@@ -5268,13 +5268,12 @@ function EnvironmentConnectionCard(props: Readonly<{
                       delay={300}
                       closeDelay={150}
                       content={
-                        <div class="flex items-start gap-1.5 p-1">
-                          <span class="min-w-0 text-xs leading-snug break-words">
-                            {failure().message}
-                          </span>
+                        <div class="p-1 text-xs leading-snug break-words">
+                          {failure().message}
+                          {' '}
                           <button
                             type="button"
-                            class="inline-flex shrink-0 items-center justify-center rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+                            class="inline-flex align-text-top items-center justify-center rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
                             aria-label="Copy error message"
                             title="Copy error message"
                             onClick={(e) => { e.stopPropagation(); void handleCopy(); }}
