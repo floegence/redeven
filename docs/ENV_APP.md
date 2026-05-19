@@ -36,6 +36,7 @@ Env App exposes a product-owned **Notes overlay** above the current workspace in
 Deck and Workbench reuse released floe-webapp layout/workbench primitives. Redeven keeps product-owned interaction adapters and business-widget bodies on top of those shared surfaces.
 
 - Runtime-shared state is deliberately narrow and authoritative: widget identity/type, geometry, ordering, durable canvas objects, and semantic widget data such as Files current path/root identity, Terminal session ids, and Preview target. Renderer storage is never a source of truth for widget layout, geometry, z-index, viewport layout, or canvas objects.
+- Files shared state stores the host absolute `current_path` and may store an optional opaque `root_id` for shared root context. `root_id` is never a permission input; actual file access still flows through runtime filesystem policy and path validation.
 - A pristine runtime layout (`revision === 0` and no widgets, sticky notes, annotations, or background layers) is seeded once with the canonical Workbench sample canvas. The seed uses the same `redevenWorkbenchWidgets.defaultSize` catalog as the Add flow, so initial widgets and user-added widgets share sizing.
 - Empty but non-pristine runtime layouts are valid user/runtime state and are not re-seeded. Old renderer layout keys are ignored instead of migrated into runtime layout.
 - Per-client camera, shell mode, selection, transient gestures, active terminal tab, file-browser view preferences, preview cursor/scroll, unsaved drafts, filters, active tool, and theme preference stay local.
@@ -48,6 +49,16 @@ Deck and Workbench reuse released floe-webapp layout/workbench primitives. Redev
 - Production local scroll candidates must use the exported Workbench wheel props so the static `check:workbench-wheel` gate can catch accidental bypasses.
 - Heavy widgets such as Files, Terminal, Preview, Codespaces, Flower, and Codex use floe-webapp's projected-surface render path while preserving the same world-space layout model.
 - App-owned floating surfaces such as Preview, File Browser, Ask Flower, stash confirmations, and Debug Console use the centralized `ENV_APP_FLOATING_LAYER` contract.
+
+The runtime-shared widget-state contract is intentionally explicit:
+
+```json
+{
+  "files": { "kind": "files", "current_path": "/Users/alice/project/src", "root_id": "project" },
+  "terminal": { "kind": "terminal", "session_ids": ["session-1"], "font_size": 14, "font_family_id": "jetbrains" },
+  "preview": { "kind": "preview", "item": { "type": "file", "path": "/Users/alice/project/src/main.go", "name": "main.go" } }
+}
+```
 
 ## Accessibility baseline
 

@@ -1154,6 +1154,24 @@ describe('runtimeWorkbenchLayout', () => {
       current_path: '/workspace',
       root_id: 'other-root',
     })).toBe(false);
+    expect(normalizeRuntimeWorkbenchLayoutSnapshot({
+      widget_states: [
+        {
+          widget_id: 'widget-files-1',
+          widget_type: 'redeven.files',
+          revision: 1,
+          updated_at_unix_ms: 100,
+          state: {
+            kind: 'files',
+            current_path: '/workspace',
+            root_id: 'x'.repeat(4097),
+          },
+        },
+      ],
+    }).widget_states[0]?.state).toEqual({
+      kind: 'files',
+      current_path: '/workspace',
+    });
     expect(runtimeWorkbenchWidgetStateDataEqual(
       { kind: 'terminal', session_ids: ['session-1'], font_size: 12, font_family_id: 'monaco' },
       { kind: 'terminal', session_ids: ['session-1'], font_size: 14, font_family_id: 'monaco' },

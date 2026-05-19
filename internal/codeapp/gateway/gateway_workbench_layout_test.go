@@ -372,14 +372,15 @@ func TestGatewayWorkbenchWidgetStateFlow(t *testing.T) {
   "widget_type": "redeven.files",
   "state": {
     "kind": "files",
-    "current_path": "/workspace/src"
+    "current_path": "/workspace/src",
+    "root_id": "workspace"
   }
 }`)
 	if stateResp.Code != http.StatusOK {
 		t.Fatalf("state put status = %d, body = %s", stateResp.Code, stateResp.Body.String())
 	}
 	state := decodeWorkbenchLayoutResponse[workbenchlayout.WidgetState](t, stateResp)
-	if state.WidgetID != "widget-files-1" || state.Revision != 1 || state.State.CurrentPath != "/workspace/src" {
+	if state.WidgetID != "widget-files-1" || state.Revision != 1 || state.State.CurrentPath != "/workspace/src" || state.State.RootID != "workspace" {
 		t.Fatalf("state = %#v, want files revision 1", state)
 	}
 
@@ -388,8 +389,21 @@ func TestGatewayWorkbenchWidgetStateFlow(t *testing.T) {
 		t.Fatalf("snapshot status = %d, body = %s", snapshotResp.Code, snapshotResp.Body.String())
 	}
 	snapshot := decodeWorkbenchLayoutResponse[workbenchlayout.Snapshot](t, snapshotResp)
-	if len(snapshot.WidgetStates) != 1 || snapshot.WidgetStates[0].State.CurrentPath != "/workspace/src" {
+	if len(snapshot.WidgetStates) != 1 || snapshot.WidgetStates[0].State.CurrentPath != "/workspace/src" || snapshot.WidgetStates[0].State.RootID != "workspace" {
 		t.Fatalf("snapshot widget states = %#v, want files path", snapshot.WidgetStates)
+	}
+
+	rootConflictResp := performWorkbenchLayoutRequest(t, gw, http.MethodPut, "/_redeven_proxy/api/workbench/widgets/widget-files-1/state", `{
+  "base_revision": 0,
+  "widget_type": "redeven.files",
+  "state": {
+    "kind": "files",
+    "current_path": "/workspace/src",
+    "root_id": "other-root"
+  }
+}`)
+	if rootConflictResp.Code != http.StatusConflict {
+		t.Fatalf("root conflict status = %d, want 409, body = %s", rootConflictResp.Code, rootConflictResp.Body.String())
 	}
 
 	conflictResp := performWorkbenchLayoutRequest(t, gw, http.MethodPut, "/_redeven_proxy/api/workbench/widgets/widget-files-1/state", `{
@@ -409,6 +423,20 @@ func TestGatewayWorkbenchWidgetStateFlow(t *testing.T) {
 	}
 	if resp.ErrorCode != workbenchWidgetStateConflictErrorCode {
 		t.Fatalf("error_code = %q, want %q", resp.ErrorCode, workbenchWidgetStateConflictErrorCode)
+	}
+
+	unknownFieldResp := performWorkbenchLayoutRequest(t, gw, http.MethodPut, "/_redeven_proxy/api/workbench/widgets/widget-files-1/state", `{
+  "base_revision": 1,
+  "widget_type": "redeven.files",
+  "state": {
+    "kind": "files",
+    "current_path": "/workspace/src",
+    "root_id": "workspace",
+    "unexpected": true
+  }
+}`)
+	if unknownFieldResp.Code != http.StatusBadRequest {
+		t.Fatalf("unknown field status = %d, want 400, body = %s", unknownFieldResp.Code, unknownFieldResp.Body.String())
 	}
 }
 
