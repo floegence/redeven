@@ -21,7 +21,7 @@ export type DesktopRuntimeControlStatus =
     }>
   | Readonly<{
       state: 'missing';
-      reason_code: 'not_started' | 'not_reported' | 'forward_unavailable';
+      reason_code: 'not_started' | 'auth_required' | 'unverified' | 'container_not_running' | 'not_reported' | 'forward_unavailable';
       message: string;
     }>;
 

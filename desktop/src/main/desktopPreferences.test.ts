@@ -222,6 +222,8 @@ describe('desktopPreferences', () => {
             bootstrap_strategy: 'desktop_upload',
             release_base_url: 'https://mirror.example.invalid/releases',
             connect_timeout_seconds: 10,
+            ssh_password: '',
+            ssh_password_configured: false,
             pinned: false,
             created_at_ms: 60,
             last_used_at_ms: 90,
@@ -242,6 +244,8 @@ describe('desktopPreferences', () => {
               runtime_root: '/root/.redeven',
               bridge_strategy: 'exec_stream',
             },
+            ssh_password: '',
+            ssh_password_configured: false,
             pinned: false,
             created_at_ms: 70,
             updated_at_ms: 80,
@@ -666,6 +670,8 @@ describe('desktopPreferences', () => {
         bootstrap_strategy: 'desktop_upload',
         release_base_url: 'https://mirror.example.invalid/releases',
         connect_timeout_seconds: 10,
+        ssh_password: '',
+        ssh_password_configured: false,
         pinned: false,
         created_at_ms: 10,
         last_used_at_ms: 500,
@@ -721,6 +727,85 @@ describe('desktopPreferences', () => {
       'SSH Alpha',
       'SSH Beta',
     ]);
+  });
+
+  it('keeps, replaces, and clears saved SSH environment passwords by saved identity', () => {
+    const saved = upsertSavedSSHEnvironment(defaultDesktopPreferences(), {
+      environment_id: '',
+      label: 'SSH Lab',
+      ssh_destination: 'devbox',
+      ssh_port: 2222,
+      auth_mode: 'password',
+      runtime_root: 'remote_default',
+      bootstrap_strategy: 'desktop_upload',
+      release_base_url: '',
+      ssh_password: 'first-secret',
+      ssh_password_configured: true,
+    });
+
+    const kept = upsertSavedSSHEnvironment(saved, {
+      environment_id: saved.saved_ssh_environments[0]!.id,
+      label: 'SSH Lab Renamed',
+      ssh_destination: 'devbox',
+      ssh_port: 2222,
+      auth_mode: 'password',
+      runtime_root: 'remote_default',
+      bootstrap_strategy: 'desktop_upload',
+      release_base_url: '',
+    });
+    expect(kept.saved_ssh_environments[0]).toMatchObject({
+      ssh_password: 'first-secret',
+      ssh_password_configured: true,
+    });
+
+    const replaced = upsertSavedSSHEnvironment(kept, {
+      environment_id: kept.saved_ssh_environments[0]!.id,
+      label: 'SSH Lab Renamed',
+      ssh_destination: 'devbox',
+      ssh_port: 2222,
+      auth_mode: 'password',
+      runtime_root: 'remote_default',
+      bootstrap_strategy: 'desktop_upload',
+      release_base_url: '',
+      ssh_password: 'second-secret',
+      ssh_password_configured: true,
+    });
+    expect(replaced.saved_ssh_environments[0]).toMatchObject({
+      ssh_password: 'second-secret',
+      ssh_password_configured: true,
+    });
+
+    const changedHost = upsertSavedSSHEnvironment(replaced, {
+      environment_id: replaced.saved_ssh_environments[0]!.id,
+      label: 'SSH Lab Renamed',
+      ssh_destination: 'otherbox',
+      ssh_port: 2222,
+      auth_mode: 'password',
+      runtime_root: 'remote_default',
+      bootstrap_strategy: 'desktop_upload',
+      release_base_url: '',
+    });
+    expect(changedHost.saved_ssh_environments[0]).toMatchObject({
+      ssh_destination: 'otherbox',
+      ssh_password: '',
+      ssh_password_configured: false,
+    });
+
+    const cleared = upsertSavedSSHEnvironment(replaced, {
+      environment_id: replaced.saved_ssh_environments[0]!.id,
+      label: 'SSH Lab Renamed',
+      ssh_destination: 'devbox',
+      ssh_port: 2222,
+      auth_mode: 'password',
+      runtime_root: 'remote_default',
+      bootstrap_strategy: 'desktop_upload',
+      release_base_url: '',
+      ssh_password_configured: false,
+    });
+    expect(cleared.saved_ssh_environments[0]).toMatchObject({
+      ssh_password: '',
+      ssh_password_configured: false,
+    });
   });
 
   it('upserts, pins, marks, and deletes saved runtime targets by host access plus placement', () => {
@@ -782,6 +867,71 @@ describe('desktopPreferences', () => {
     }));
 
     expect(deleteSavedRuntimeTarget(marked, targetID).saved_runtime_targets).toEqual([]);
+  });
+
+  it('keeps, replaces, and clears saved SSH runtime target passwords by target identity', () => {
+    const placement = {
+      kind: 'container_process' as const,
+      container_engine: 'docker' as const,
+      container_id: 'container-stable-id',
+      container_ref: 'dev-container',
+      container_label: 'dev-container',
+      runtime_root: '/root/.redeven',
+      bridge_strategy: 'exec_stream' as const,
+    };
+    const hostAccess = {
+      kind: 'ssh_host' as const,
+      ssh: {
+        ssh_destination: 'devbox',
+        ssh_port: 2222,
+        auth_mode: 'password' as const,
+        connect_timeout_seconds: 10,
+      },
+    };
+    const saved = upsertSavedRuntimeTarget(defaultDesktopPreferences(), {
+      label: 'SSH Container',
+      host_access: hostAccess,
+      placement,
+      ssh_password: 'first-secret',
+      ssh_password_configured: true,
+    });
+    const targetID = saved.saved_runtime_targets[0]!.id;
+
+    const kept = upsertSavedRuntimeTarget(saved, {
+      id: targetID,
+      label: 'SSH Container Renamed',
+      host_access: hostAccess,
+      placement,
+    });
+    expect(kept.saved_runtime_targets[0]).toMatchObject({
+      ssh_password: 'first-secret',
+      ssh_password_configured: true,
+    });
+
+    const replaced = upsertSavedRuntimeTarget(kept, {
+      id: targetID,
+      label: 'SSH Container Renamed',
+      host_access: hostAccess,
+      placement,
+      ssh_password: 'second-secret',
+      ssh_password_configured: true,
+    });
+    expect(replaced.saved_runtime_targets[0]).toMatchObject({
+      ssh_password: 'second-secret',
+      ssh_password_configured: true,
+    });
+
+    const cleared = upsertSavedRuntimeTarget(replaced, {
+      id: targetID,
+      label: 'SSH Container Renamed',
+      host_access: hostAccess,
+      placement,
+      ssh_password_configured: false,
+    });
+    expect(cleared.saved_runtime_targets[0]).toMatchObject({
+      ssh_password: '',
+      ssh_password_configured: false,
+    });
   });
 
   it('keeps saved runtime target order stable when usage changes', () => {

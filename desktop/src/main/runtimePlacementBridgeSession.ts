@@ -71,6 +71,7 @@ export type StartRuntimePlacementBridgeSessionArgs = Readonly<{
   placement: DesktopRuntimePlacement;
   runtime_binary_path?: string;
   desktop_owner_id: string;
+  ssh_password?: string;
   fallback_local_id?: string;
   signal?: AbortSignal;
 }>;
@@ -104,6 +105,7 @@ function spawnBridgeCommand(args: StartRuntimePlacementBridgeSessionArgs): Runti
   if (args.host_access.kind === 'ssh_host') {
     return spawnSSHRuntimeHostCommand(args.host_access.ssh, plan.command, {
       env,
+      sshPassword: args.ssh_password,
       signal: args.signal,
     });
   }

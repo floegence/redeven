@@ -1282,22 +1282,18 @@ describe('buildEnvironmentCardModel', () => {
     const externalEntry = externalSnapshot.environments.find((environment) => environment.kind === 'external_local_ui');
     expect(externalEntry).toBeTruthy();
     expect(buildProviderBackedEnvironmentActionModel(externalEntry!)).toMatchObject({
-      status_label: 'RUNTIME OFFLINE',
+      status_label: 'UNVERIFIED',
       status_tone: 'warning',
       action_presentation: {
         primary_action: {
           intent: 'open',
           label: 'Open',
-          enabled: false,
+          enabled: true,
           variant: 'default',
-        },
-        primary_action_overlay: {
-          kind: 'tooltip',
-          tone: 'warning',
-          message: 'Runtime is offline or unavailable right now. Start it from its source, then refresh status.',
         },
       },
     });
+    expect(buildProviderBackedEnvironmentActionModel(externalEntry!).action_presentation.primary_action_overlay).toBeUndefined();
   });
 
   it('builds provider-card actions around provider remote availability', () => {

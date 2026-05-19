@@ -321,6 +321,8 @@ describe('desktopLauncherIPC', () => {
       bootstrap_strategy: '',
       release_base_url: '',
       connect_timeout_seconds: 10,
+      ssh_password: '',
+      ssh_password_mode: 'replace',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'delete_saved_ssh_environment',
@@ -384,6 +386,8 @@ describe('desktopLauncherIPC', () => {
         runtime_root: '/root/.redeven',
         bridge_strategy: 'exec_stream',
       },
+      ssh_password: '',
+      ssh_password_mode: 'replace',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'set_saved_runtime_target_pinned',

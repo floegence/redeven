@@ -906,9 +906,13 @@ function runtimeHealthFromPresence(
       ...fallback,
       checked_at_unix_ms: presence.checked_at_unix_ms,
       source,
-      offline_reason_code: runtimeControlMissing?.reason_code === 'not_started'
-        ? 'not_started'
-        : fallback.offline_reason_code,
+      offline_reason_code:
+        runtimeControlMissing?.reason_code === 'not_started'
+        || runtimeControlMissing?.reason_code === 'auth_required'
+        || runtimeControlMissing?.reason_code === 'unverified'
+        || runtimeControlMissing?.reason_code === 'container_not_running'
+          ? runtimeControlMissing.reason_code
+          : fallback.offline_reason_code,
       offline_reason: runtimeControlMissing?.message || fallback.offline_reason,
       runtime_maintenance: presence.maintenance ?? fallback.runtime_maintenance,
     };
@@ -1493,9 +1497,12 @@ function buildSavedEnvironmentEntry(
     ?? savedRuntimeHealth
     ?? offlineRuntimeHealth(
       'external_local_ui_probe',
-      'external_unreachable',
-      'The runtime offline / unavailable',
+      'unverified',
+      'Could not verify runtime health',
     );
+  const externalOpenable = runtimeHealth.status === 'online'
+    || runtimeHealth.offline_reason_code === 'unverified'
+    || runtimeHealth.offline_reason_code === 'external_unreachable';
   return {
     id: environment.id,
     kind: 'external_local_ui',
@@ -1511,7 +1518,7 @@ function buildSavedEnvironmentEntry(
     runtime_health: runtimeHealth,
     runtime_service: preferredRuntimeService(openSession?.startup?.runtime_service, savedRuntimeHealth),
     runtime_maintenance: runtimeMaintenanceFromHealth(runtimeHealth),
-    runtime_operations: externalLocalUIRuntimeOperations(runtimeHealth.status === 'online'),
+    runtime_operations: externalLocalUIRuntimeOperations(externalOpenable),
     open_session_key: openSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(openSession),
     open_action_label: isOpen ? 'Focus' : isOpening ? 'Opening…' : 'Open',
@@ -1595,6 +1602,7 @@ function buildSavedSSHEnvironmentEntry(
       release_base_url: environment.release_base_url,
       connect_timeout_seconds: environment.connect_timeout_seconds,
     },
+    ssh_password_configured: environment.ssh_password_configured,
     pinned: environment.pinned,
     tag: isOpen ? 'Open' : 'Saved',
     category: 'saved',
@@ -1708,6 +1716,7 @@ function buildSavedRuntimeTargetEntry(
     local_ui_url: localUIURL,
     secondary_text: runtimeTargetSecondaryText(effectiveTarget),
     ssh_details: sshDetailsFromRuntimeTarget(target),
+    ssh_password_configured: target.ssh_password_configured,
     pinned: target.pinned,
     tag: isOpen ? 'Open' : 'Saved',
     category: 'saved',

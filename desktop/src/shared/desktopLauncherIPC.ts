@@ -174,6 +174,8 @@ export type DesktopLauncherRuntimeTarget = Readonly<
     label: string;
     force_runtime_update: boolean;
     allow_active_work_replacement: boolean;
+    ssh_password: string;
+    ssh_password_mode: 'keep' | 'replace' | 'clear';
   }>
   & Partial<DesktopSSHEnvironmentDetails>
 >;
@@ -227,6 +229,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   remote_catalog_freshness?: DesktopProviderCatalogFreshness;
   remote_state_reason?: string;
   ssh_details?: DesktopSSHEnvironmentDetails;
+  ssh_password_configured?: boolean;
   pinned: boolean;
   control_plane_label?: string;
   tag: DesktopEnvironmentEntryTag;
@@ -412,12 +415,15 @@ export type DesktopLauncherActionRequest = Readonly<
       kind: 'upsert_saved_ssh_environment';
       environment_id: string;
       label: string;
+      ssh_password: string;
+      ssh_password_mode: 'keep' | 'replace' | 'clear';
     } & DesktopSSHEnvironmentDetails)
   | ({
       kind: 'upsert_saved_runtime_target';
       environment_id?: string;
       label: string;
-    } & Required<Pick<DesktopLauncherRuntimeTarget, 'host_access' | 'placement'>>)
+    } & Required<Pick<DesktopLauncherRuntimeTarget, 'host_access' | 'placement'>>
+      & Pick<DesktopLauncherRuntimeTarget, 'ssh_password' | 'ssh_password_mode'>)
   | {
       kind: 'delete_saved_environment';
       environment_id: string;
@@ -497,6 +503,11 @@ export function isDesktopLauncherActionSuccess(
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+function normalizeSSHPasswordMode(value: unknown): 'keep' | 'replace' | 'clear' {
+  const mode = compact(value);
+  return mode === 'keep' || mode === 'clear' ? mode : 'replace';
 }
 
 function normalizeDesktopLauncherRuntimeTarget(
@@ -868,6 +879,8 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         kind,
         environment_id: compact((candidate as { environment_id?: unknown }).environment_id),
         label: compact((candidate as { label?: unknown }).label),
+        ssh_password: String((candidate as { ssh_password?: unknown }).ssh_password ?? ''),
+        ssh_password_mode: normalizeSSHPasswordMode((candidate as { ssh_password_mode?: unknown }).ssh_password_mode),
         ssh_destination: compact((candidate as { ssh_destination?: unknown }).ssh_destination),
         ssh_port: (candidate as { ssh_port?: unknown }).ssh_port == null || sshPortText === ''
           ? null
@@ -894,6 +907,8 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         label: compact((candidate as { label?: unknown }).label),
         host_access: hostAccess,
         placement,
+        ssh_password: String((candidate as { ssh_password?: unknown }).ssh_password ?? ''),
+        ssh_password_mode: normalizeSSHPasswordMode((candidate as { ssh_password_mode?: unknown }).ssh_password_mode),
       };
     }
     case 'delete_saved_environment': {

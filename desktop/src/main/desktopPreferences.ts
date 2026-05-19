@@ -85,6 +85,8 @@ export type DesktopSavedEnvironment = Readonly<{
 export type DesktopSavedSSHEnvironment = Readonly<DesktopSSHEnvironmentDetails & {
   id: string;
   label: string;
+  ssh_password?: string;
+  ssh_password_configured?: boolean;
   pinned: boolean;
   created_at_ms: number;
   last_used_at_ms: number;
@@ -96,6 +98,8 @@ export type DesktopSavedRuntimeTarget = Readonly<{
   label: string;
   host_access: DesktopRuntimeHostAccess;
   placement: DesktopRuntimePlacement;
+  ssh_password?: string;
+  ssh_password_configured?: boolean;
   pinned: boolean;
   last_used_at_ms: number;
   created_at_ms: number;
@@ -309,12 +313,24 @@ type DesktopControlPlaneSecretFile = Readonly<{
 type DesktopSecretsFile = Readonly<{
   version?: number;
   local_environment?: DesktopLocalEnvironmentStateSecretFile;
+  saved_ssh_environments?: readonly DesktopSSHEnvironmentSecretFile[];
+  saved_runtime_targets?: readonly DesktopRuntimeTargetSecretFile[];
   control_planes?: readonly DesktopControlPlaneSecretFile[];
 }>;
 
 type DesktopLocalEnvironmentStateSecretFile = Readonly<{
   environment_id?: unknown;
   local_ui_password?: StoredSecret;
+}>;
+
+type DesktopSSHEnvironmentSecretFile = Readonly<{
+  environment_id?: unknown;
+  ssh_password?: StoredSecret;
+}>;
+
+type DesktopRuntimeTargetSecretFile = Readonly<{
+  target_id?: unknown;
+  ssh_password?: StoredSecret;
 }>;
 
 export type DesktopSecretCodec = Readonly<{
@@ -340,6 +356,8 @@ export type UpsertDesktopSavedEnvironmentInput = Readonly<{
 export type UpsertDesktopSavedSSHEnvironmentInput = Readonly<DesktopSSHEnvironmentDetails & {
   environment_id: string;
   label: string;
+  ssh_password?: string;
+  ssh_password_configured?: boolean;
   pinned?: boolean;
   created_at_ms?: number;
   last_used_at_ms?: number;
@@ -350,6 +368,8 @@ export type UpsertDesktopSavedRuntimeTargetInput = Readonly<{
   label: string;
   host_access: DesktopRuntimeHostAccess;
   placement: DesktopRuntimePlacement;
+  ssh_password?: string;
+  ssh_password_configured?: boolean;
   pinned?: boolean;
   last_used_at_ms?: number;
   created_at_ms?: number;
@@ -691,6 +711,11 @@ function normalizeSavedSSHEnvironmentCandidate(
 
   const environmentID = desktopSSHEnvironmentID(details);
   const label = compact(candidate.label) || defaultSavedSSHEnvironmentLabel(details);
+  const sshPassword = details.auth_mode === 'password'
+    ? String((candidate as { ssh_password?: unknown }).ssh_password ?? '')
+    : '';
+  const sshPasswordConfigured = details.auth_mode === 'password'
+    && ((candidate as { ssh_password_configured?: unknown }).ssh_password_configured === true || compact(sshPassword) !== '');
   return {
     environment: {
       id: environmentID,
@@ -702,6 +727,8 @@ function normalizeSavedSSHEnvironmentCandidate(
       bootstrap_strategy: details.bootstrap_strategy,
       release_base_url: details.release_base_url,
       connect_timeout_seconds: details.connect_timeout_seconds,
+      ssh_password: sshPassword,
+      ssh_password_configured: sshPasswordConfigured,
       pinned: normalizePinned(candidate.pinned),
       created_at_ms: normalizeCreatedAtMS(candidate.created_at_ms, fallbackCreatedAtMS),
       last_used_at_ms: normalizeLastUsedAtMS(candidate.last_used_at_ms, fallbackLastUsedAtMS),
@@ -747,6 +774,12 @@ function normalizeSavedRuntimeTargetCandidate(
   const computedID = desktopRuntimeTargetID(hostAccess, placement);
   const rawID = compact(candidate.id);
   const now = Date.now();
+  const sshPassword = hostAccess.kind === 'ssh_host' && hostAccess.ssh.auth_mode === 'password'
+    ? String((candidate as { ssh_password?: unknown }).ssh_password ?? '')
+    : '';
+  const sshPasswordConfigured = hostAccess.kind === 'ssh_host'
+    && hostAccess.ssh.auth_mode === 'password'
+    && ((candidate as { ssh_password_configured?: unknown }).ssh_password_configured === true || compact(sshPassword) !== '');
   return {
     target: {
       schema_version: 1,
@@ -754,6 +787,8 @@ function normalizeSavedRuntimeTargetCandidate(
       label: compact(candidate.label) || defaultSavedRuntimeTargetLabel(hostAccess, placement),
       host_access: hostAccess,
       placement,
+      ssh_password: sshPassword,
+      ssh_password_configured: sshPasswordConfigured,
       pinned: normalizePinned(candidate.pinned),
       last_used_at_ms: normalizeLastUsedAtMS(candidate.last_used_at_ms, fallbackLastUsedAtMS),
       created_at_ms: normalizeCreatedAtMS(candidate.created_at_ms, fallbackCreatedAtMS),
@@ -924,6 +959,86 @@ function decodeDesktopControlPlaneRefreshTokens(
     }
   }
   return out;
+}
+
+function decodeSSHEnvironmentPasswords(
+  codec: DesktopSecretCodec,
+  values: readonly DesktopSSHEnvironmentSecretFile[] | null | undefined,
+): ReadonlyMap<string, string> {
+  const out = new Map<string, string>();
+  if (!Array.isArray(values)) {
+    return out;
+  }
+  for (const value of values) {
+    const environmentID = compact(value?.environment_id);
+    const password = decodeOptionalSecret(codec, value?.ssh_password);
+    if (environmentID !== '' && compact(password) !== '') {
+      out.set(environmentID, password);
+    }
+  }
+  return out;
+}
+
+function decodeRuntimeTargetPasswords(
+  codec: DesktopSecretCodec,
+  values: readonly DesktopRuntimeTargetSecretFile[] | null | undefined,
+): ReadonlyMap<string, string> {
+  const out = new Map<string, string>();
+  if (!Array.isArray(values)) {
+    return out;
+  }
+  for (const value of values) {
+    const targetID = compact(value?.target_id);
+    const password = decodeOptionalSecret(codec, value?.ssh_password);
+    if (targetID !== '' && compact(password) !== '') {
+      out.set(targetID, password);
+    }
+  }
+  return out;
+}
+
+function attachSSHEnvironmentPasswords(
+  environments: readonly DesktopSavedSSHEnvironment[],
+  passwordsByID: ReadonlyMap<string, string>,
+): readonly DesktopSavedSSHEnvironment[] {
+  return environments.map((environment) => {
+    if (environment.auth_mode !== 'password') {
+      return {
+        ...environment,
+        ssh_password: '',
+        ssh_password_configured: false,
+      };
+    }
+    const password = passwordsByID.get(environment.id) ?? environment.ssh_password;
+    const configured = compact(password) !== '' || environment.ssh_password_configured === true;
+    return {
+      ...environment,
+      ssh_password: password,
+      ssh_password_configured: configured,
+    };
+  });
+}
+
+function attachRuntimeTargetPasswords(
+  targets: readonly DesktopSavedRuntimeTarget[],
+  passwordsByID: ReadonlyMap<string, string>,
+): readonly DesktopSavedRuntimeTarget[] {
+  return targets.map((target) => {
+    if (target.host_access.kind !== 'ssh_host' || target.host_access.ssh.auth_mode !== 'password') {
+      return {
+        ...target,
+        ssh_password: '',
+        ssh_password_configured: false,
+      };
+    }
+    const password = passwordsByID.get(target.id) ?? target.ssh_password;
+    const configured = compact(password) !== '' || target.ssh_password_configured === true;
+    return {
+      ...target,
+      ssh_password: password,
+      ssh_password_configured: configured,
+    };
+  });
 }
 
 export function normalizeSavedControlPlanes(
@@ -1464,8 +1579,10 @@ export function upsertSavedSSHEnvironment(
 ): DesktopPreferences {
   const details = normalizeDesktopSSHEnvironmentDetails(input);
   const environmentID = desktopSSHEnvironmentID(details);
+  const requestedEnvironmentID = compact(input.environment_id);
   const existing = preferences.saved_ssh_environments.find((environment) => (
-    environment.id === environmentID
+    environment.id === requestedEnvironmentID
+    || environment.id === environmentID
     || (
       environment.ssh_destination === details.ssh_destination
       && environment.ssh_port === details.ssh_port
@@ -1473,6 +1590,21 @@ export function upsertSavedSSHEnvironment(
       && environment.runtime_root === details.runtime_root
     )
   ));
+  const existingSameIdentity = existing?.id === environmentID;
+  const inputPassword = String(input.ssh_password ?? '');
+  const explicitPasswordClear = input.ssh_password_configured === false;
+  const sshPassword = details.auth_mode === 'password'
+    ? explicitPasswordClear
+      ? ''
+      : compact(inputPassword) !== ''
+      ? inputPassword
+      : existingSameIdentity
+        ? existing?.ssh_password ?? ''
+        : ''
+    : '';
+  const sshPasswordConfigured = details.auth_mode === 'password'
+    && !explicitPasswordClear
+    && (compact(inputPassword) !== '' || (existingSameIdentity && existing?.ssh_password_configured === true));
   const label = compact(input.label) || existing?.label || defaultSavedSSHEnvironmentLabel(details);
   const now = Date.now();
   const nextEnvironment: DesktopSavedSSHEnvironment = {
@@ -1485,6 +1617,8 @@ export function upsertSavedSSHEnvironment(
     bootstrap_strategy: details.bootstrap_strategy,
     release_base_url: details.release_base_url,
     connect_timeout_seconds: details.connect_timeout_seconds,
+    ssh_password: sshPassword,
+    ssh_password_configured: sshPasswordConfigured,
     pinned: input.pinned ?? existing?.pinned ?? false,
     created_at_ms: normalizeCreatedAtMS(input.created_at_ms, existing?.created_at_ms ?? now),
     last_used_at_ms: normalizeLastUsedAtMS(input.last_used_at_ms, now),
@@ -1494,6 +1628,7 @@ export function upsertSavedSSHEnvironment(
     nextEnvironment,
     ...preferences.saved_ssh_environments.filter((environment) => (
       environment.id !== environmentID
+      && environment.id !== requestedEnvironmentID
       && (
         environment.ssh_destination !== details.ssh_destination
         || environment.ssh_port !== details.ssh_port
@@ -1521,6 +1656,22 @@ export function upsertSavedRuntimeTarget(
     target.id === targetID
     || (requestedID !== '' && target.id === requestedID)
   )) ?? null;
+  const existingSameIdentity = existing?.id === targetID;
+  const inputPassword = String(input.ssh_password ?? '');
+  const explicitPasswordClear = input.ssh_password_configured === false;
+  const targetUsesSSHPassword = hostAccess.kind === 'ssh_host' && hostAccess.ssh.auth_mode === 'password';
+  const sshPassword = targetUsesSSHPassword
+    ? explicitPasswordClear
+      ? ''
+      : compact(inputPassword) !== ''
+      ? inputPassword
+      : existingSameIdentity
+        ? existing?.ssh_password ?? ''
+        : ''
+    : '';
+  const sshPasswordConfigured = targetUsesSSHPassword
+    && !explicitPasswordClear
+    && (compact(inputPassword) !== '' || (existingSameIdentity && existing?.ssh_password_configured === true));
   const now = Date.now();
   const nextTarget: DesktopSavedRuntimeTarget = {
     schema_version: 1,
@@ -1528,6 +1679,8 @@ export function upsertSavedRuntimeTarget(
     label: compact(input.label) || existing?.label || defaultSavedRuntimeTargetLabel(hostAccess, placement),
     host_access: hostAccess,
     placement,
+    ssh_password: sshPassword,
+    ssh_password_configured: sshPasswordConfigured,
     pinned: input.pinned ?? existing?.pinned ?? false,
     last_used_at_ms: normalizeLastUsedAtMS(input.last_used_at_ms, now),
     created_at_ms: normalizeLastUsedAtMS(input.created_at_ms, existing?.created_at_ms ?? now),
@@ -2261,6 +2414,8 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
   const catalogProviders = await readJSONDirectory(catalogPaths.providersDir);
   const catalogProviderEnvironments = await readJSONDirectory(catalogPaths.providerEnvironmentsDir);
   const controlPlaneRefreshTokensByKey = decodeDesktopControlPlaneRefreshTokens(codec, secretsFile?.control_planes);
+  const sshEnvironmentPasswordsByID = decodeSSHEnvironmentPasswords(codec, secretsFile?.saved_ssh_environments);
+  const runtimeTargetPasswordsByID = decodeRuntimeTargetPasswords(codec, secretsFile?.saved_runtime_targets);
 
   const hasCurrentCatalogData = (
     catalogLocalEnvironment != null
@@ -2278,13 +2433,19 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
       !!value && typeof value === 'object' && compact((value as DesktopConnectionCatalogFile).kind) === 'ssh'
     )),
   );
-  const savedSSHEnvironments = savedSSHEnvironmentResult.environments;
+  const savedSSHEnvironments = attachSSHEnvironmentPasswords(
+    savedSSHEnvironmentResult.environments,
+    sshEnvironmentPasswordsByID,
+  );
   const savedRuntimeTargetResult = collectSavedRuntimeTargetNormalizationResult(
     catalogConnections.filter((value) => (
       !!value && typeof value === 'object' && compact((value as DesktopConnectionCatalogFile).kind) === 'runtime_target'
     )),
   );
-  const savedRuntimeTargets = savedRuntimeTargetResult.targets;
+  const savedRuntimeTargets = attachRuntimeTargetPasswords(
+    savedRuntimeTargetResult.targets,
+    runtimeTargetPasswordsByID,
+  );
   const controlPlanes = normalizeSavedControlPlanes(catalogProviders, controlPlaneRefreshTokensByKey);
   const canonicalProviderIDsByOrigin = buildCanonicalProviderIDByOrigin(controlPlanes);
   const localEnvironmentCatalogResult = normalizeLocalEnvironmentFromCatalog(
@@ -2338,6 +2499,16 @@ export async function saveDesktopPreferences(
   const savedSSHEnvironments = normalizeSavedSSHEnvironments(preferences.saved_ssh_environments);
   const savedRuntimeTargets = normalizeSavedRuntimeTargets(preferences.saved_runtime_targets);
   const controlPlanes = sortSavedControlPlanes(preferences.control_planes);
+  const existingSSHEnvironmentSecrets = new Map(
+    (existingSecretsFile?.saved_ssh_environments ?? [])
+      .map((entry) => [compact(entry.environment_id), entry.ssh_password] as const)
+      .filter(([environmentID, secret]) => environmentID !== '' && secret),
+  );
+  const existingRuntimeTargetSecrets = new Map(
+    (existingSecretsFile?.saved_runtime_targets ?? [])
+      .map((entry) => [compact(entry.target_id), entry.ssh_password] as const)
+      .filter(([targetID, secret]) => targetID !== '' && secret),
+  );
   const preferencesFile: DesktopPreferencesFile = {
     version: 13,
   };
@@ -2356,6 +2527,34 @@ export async function saveDesktopPreferences(
           : existingSecret?.local_ui_password,
       };
     })(),
+    saved_ssh_environments: savedSSHEnvironments.flatMap((environment) => {
+      if (environment.auth_mode !== 'password' || !environment.ssh_password_configured) {
+        return [];
+      }
+      const password = compact(environment.ssh_password);
+      const existingSecret = existingSSHEnvironmentSecrets.get(environment.id);
+      const secret = password !== ''
+        ? codec.encodeSecret(environment.ssh_password ?? '')
+        : existingSecret;
+      return secret ? [{
+        environment_id: environment.id,
+        ssh_password: secret,
+      }] : [];
+    }),
+    saved_runtime_targets: savedRuntimeTargets.flatMap((target) => {
+      if (target.host_access.kind !== 'ssh_host' || target.host_access.ssh.auth_mode !== 'password' || !target.ssh_password_configured) {
+        return [];
+      }
+      const password = compact(target.ssh_password);
+      const existingSecret = existingRuntimeTargetSecrets.get(target.id);
+      const secret = password !== ''
+        ? codec.encodeSecret(target.ssh_password ?? '')
+        : existingSecret;
+      return secret ? [{
+        target_id: target.id,
+        ssh_password: secret,
+      }] : [];
+    }),
     control_planes: controlPlanes.flatMap((controlPlane) => {
       const refreshToken = compact(preferences.control_plane_refresh_tokens[
         desktopControlPlaneKey(controlPlane.provider.provider_origin, controlPlane.provider.provider_id)
