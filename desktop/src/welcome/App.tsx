@@ -5268,18 +5268,32 @@ function EnvironmentConnectionCard(props: Readonly<{
                       delay={300}
                       closeDelay={150}
                       content={
-                        <div class="p-1 text-xs leading-snug break-words">
-                          {failure().message}
-                          {' '}
-                          <button
-                            type="button"
-                            class="inline-flex align-text-top items-center justify-center rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
-                            aria-label="Copy error message"
-                            title="Copy error message"
-                            onClick={(e) => { e.stopPropagation(); void handleCopy(); }}
-                          >
-                            {copied() ? <Check class="h-3 w-3" /> : <Copy class="h-3 w-3" />}
-                          </button>
+                        <div class="py-2.5 px-3">
+                          <div class="flex items-center gap-1.5 mb-1.5">
+                            <Show
+                              when={failure().tone === 'error'}
+                              fallback={<AlertTriangle class="h-3.5 w-3.5 shrink-0 text-amber-400" />}
+                            >
+                              <AlertCircle class="h-3.5 w-3.5 shrink-0 text-red-400" />
+                            </Show>
+                            <span class="text-xs font-semibold">
+                              {failure().tone === 'error' ? 'Error' : 'Warning'}
+                            </span>
+                            <button
+                              type="button"
+                              class="ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[0.65rem] font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+                              aria-label="Copy error message"
+                              onClick={(e) => { e.stopPropagation(); void handleCopy(); }}
+                            >
+                              <Show when={copied()} fallback={<Copy class="h-3 w-3" />}>
+                                <Check class="h-3 w-3" />
+                              </Show>
+                              <span>{copied() ? 'Copied' : 'Copy'}</span>
+                            </button>
+                          </div>
+                          <p class="text-xs leading-relaxed text-muted-foreground font-mono break-words">
+                            {failure().message}
+                          </p>
                         </div>
                       }
                     >
