@@ -1984,6 +1984,24 @@ pre,
   overflow: hidden;
 }
 
+/* ─── popover panel expand/collapse transition ─── */
+
+.redeven-popover-panel-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 200ms ease, opacity 200ms ease;
+  opacity: 0;
+}
+
+.redeven-popover-panel-collapse--open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.redeven-popover-panel-collapse > div {
+  overflow: hidden;
+}
+
 /* ─── settings detail card hover ─── */
 
 .redeven-settings-detail-card {
@@ -2027,7 +2045,9 @@ pre,
   }
 
   .redeven-dialog-collapse,
-  .redeven-dialog-collapse--open {
+  .redeven-dialog-collapse--open,
+  .redeven-popover-panel-collapse,
+  .redeven-popover-panel-collapse--open {
     transition-duration: 1ms;
   }
 

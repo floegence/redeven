@@ -4735,6 +4735,8 @@ function EnvironmentSplitActionButton(props: Readonly<{
   const runtimeMenuProgress = createMemo(() => props.runtimeLifecycleProgress ?? null);
   const hasOpenConnectionProgress = createMemo(() => primaryProgress()?.open_progress !== undefined);
   const hasRuntimeLifecycleProgress = createMemo(() => runtimeMenuProgress()?.lifecycle_progress !== undefined);
+  const showProgress = createMemo(() => hasOpenConnectionProgress() || hasRuntimeLifecycleProgress());
+  const progressData = createMemo(() => primaryProgress() ?? runtimeMenuProgress());
   const primaryActionOverlay = createMemo(() => (
     hasOpenConnectionProgress() ? undefined : props.presentation.primary_action_overlay ?? sessionPopoverOverlay()
   ));
@@ -4886,129 +4888,139 @@ function EnvironmentSplitActionButton(props: Readonly<{
       {props.presentation.primary_action.label}
     </Button>
   );
-  const renderEnvironmentProgressTrigger = () => (
-    <DesktopActionPopover
-      open={props.guidanceOpen}
-      onOpenChange={(open) => {
-        if (open) {
-          closeMenu();
-        }
-        props.onGuidanceOpenChange(open);
-      }}
-      content={(
-        <EnvironmentProgressPanel
-          progress={(primaryProgress() ?? runtimeMenuProgress())!}
-          cancelOperation={props.cancelOperation}
-        />
-      )}
-      placement="top"
-      anchorClass="flex w-full"
-      popoverAriaLabel={(primaryProgress() ?? runtimeMenuProgress())?.title ?? 'Environment progress'}
-    >
-      <Button
-        size="sm"
-        variant={props.presentation.primary_action.variant}
-        class={cn(primaryButtonClass(), 'redeven-split-action-trigger--progress')}
-        style={{ 'min-width': 'var(--redeven-split-action-primary-min-width)' }}
-        aria-haspopup="dialog"
-        aria-expanded={props.guidanceOpen}
-        aria-label={`${props.presentation.primary_action.label} progress`}
-        onClick={() => {
-          closeMenu();
-          props.onGuidanceOpenChange(!props.guidanceOpen);
-        }}
-      >
-        <span class="redeven-split-action-trigger__content">
-          <Play class="redeven-split-action-trigger__icon h-3.5 w-3.5" />
-          <span>{environmentProgressTriggerLabel()}</span>
-        </span>
-      </Button>
-    </DesktopActionPopover>
-  );
-
   return (
     <div ref={rootRef} class="redeven-split-action flex-1">
       <div class="redeven-split-action-primary">
-        <Show when={hasOpenConnectionProgress() || hasRuntimeLifecycleProgress()} fallback={(
-          <Show when={primaryActionOverlay()} fallback={renderPrimaryButton()}>
-            <Show
-              when={popoverOverlay()}
-              fallback={(
-                <DesktopTooltip
-                  content={tooltipOverlay()!.message}
-                  placement="top"
-                  anchorClass="flex w-full"
+        <Show
+          when={showProgress() || popoverOverlay()}
+          fallback={(
+            <Show when={tooltipOverlay()} fallback={renderPrimaryButton()}>
+              <DesktopTooltip
+                content={tooltipOverlay()!.message}
+                placement="top"
+                anchorClass="flex w-full"
+              >
+                {renderPrimaryButton()}
+              </DesktopTooltip>
+            </Show>
+          )}
+        >
+          <DesktopActionPopover
+            open={props.guidanceOpen}
+            onOpenChange={(open) => {
+              if (open) {
+                closeMenu();
+              }
+              props.onGuidanceOpenChange(open);
+            }}
+            content={(
+              <div style={{ display: 'grid' }}>
+                <div
+                  class="redeven-popover-panel-collapse"
+                  classList={{ 'redeven-popover-panel-collapse--open': !showProgress() }}
                 >
-                  {renderPrimaryButton()}
-                </DesktopTooltip>
+                  <div>
+                    <Show when={popoverOverlay()}>
+                      {(overlay) => (
+                        <EnvironmentPrimaryActionPanel
+                          overlay={overlay()}
+                          environmentID={props.environmentID}
+                          busyState={props.busyState}
+                          session={props.guidanceSession}
+                          onRunAction={(action) => {
+                            closeMenu();
+                            props.onRunGuidanceAction(action);
+                          }}
+                        />
+                      )}
+                    </Show>
+                  </div>
+                </div>
+                <div
+                  class="redeven-popover-panel-collapse"
+                  classList={{ 'redeven-popover-panel-collapse--open': showProgress() }}
+                >
+                  <div>
+                    <Show when={progressData()}>
+                      {(p) => (
+                        <EnvironmentProgressPanel
+                          progress={p()}
+                          cancelOperation={props.cancelOperation}
+                        />
+                      )}
+                    </Show>
+                  </div>
+                </div>
+              </div>
+            )}
+            placement="top"
+            anchorClass="flex w-full"
+            popoverAriaLabel={
+              showProgress()
+                ? (progressData()?.title ?? 'Environment progress')
+                : (popoverOverlay()?.title ?? '')
+            }
+          >
+            <Show
+              when={showProgress()}
+              fallback={(
+                <Button
+                  size="sm"
+                  variant={props.presentation.primary_action.variant}
+                  class={cn(
+                    primaryButtonClass(),
+                    blockedPrimaryActionDisabled() && 'redeven-split-action-trigger--blocked',
+                  )}
+                  style={{ 'min-width': 'var(--redeven-split-action-primary-min-width)' }}
+                  disabled={props.loading && popoverPrimaryRunsAction()}
+                  aria-disabled={blockedPrimaryActionDisabled() ? true : undefined}
+                  aria-haspopup="dialog"
+                  aria-expanded={props.guidanceOpen}
+                  aria-label={blockedPrimaryActionTriggerLabel(props.presentation.primary_action.label)}
+                  onClick={() => {
+                    closeMenu();
+                    if (popoverPrimaryRunsAction()) {
+                      props.onGuidanceOpenChange(false);
+                      props.onRunAction(props.presentation.primary_action);
+                      return;
+                    }
+                    props.onGuidanceOpenChange(!props.guidanceOpen);
+                  }}
+                >
+                  <Show
+                    when={blockedPrimaryActionDisabled()}
+                    fallback={props.presentation.primary_action.label}
+                  >
+                    <span class="redeven-split-action-trigger__content">
+                      {props.presentation.primary_action.intent === 'reconnect_provider'
+                        ? <ShieldCheck class="redeven-split-action-trigger__icon h-3.5 w-3.5" />
+                        : <Lock class="redeven-split-action-trigger__icon h-3.5 w-3.5" />}
+                      <span>{props.presentation.primary_action.label}</span>
+                    </span>
+                  </Show>
+                </Button>
               )}
             >
-              {(overlay) => (
-                <DesktopActionPopover
-                  open={props.guidanceOpen}
-                  onOpenChange={(open) => {
-                    if (open) {
-                      closeMenu();
-                    }
-                    props.onGuidanceOpenChange(open);
-                  }}
-                  content={(
-                    <EnvironmentPrimaryActionPanel
-                      overlay={overlay()}
-                      environmentID={props.environmentID}
-                      busyState={props.busyState}
-                      session={props.guidanceSession}
-                      onRunAction={(action) => {
-                        closeMenu();
-                        props.onRunGuidanceAction(action);
-                      }}
-                    />
-                  )}
-                  placement="top"
-                  anchorClass="flex w-full"
-                  popoverAriaLabel={overlay().title}
-                >
-                  <Button
-                    size="sm"
-                    variant={props.presentation.primary_action.variant}
-                    class={cn(
-                      primaryButtonClass(),
-                      blockedPrimaryActionDisabled() && 'redeven-split-action-trigger--blocked',
-                    )}
-                    style={{ 'min-width': 'var(--redeven-split-action-primary-min-width)' }}
-                    disabled={props.loading && popoverPrimaryRunsAction()}
-                    aria-disabled={blockedPrimaryActionDisabled() ? true : undefined}
-                    aria-haspopup="dialog"
-                    aria-expanded={props.guidanceOpen}
-                    aria-label={blockedPrimaryActionTriggerLabel(props.presentation.primary_action.label)}
-                    onClick={() => {
-                      closeMenu();
-                      if (popoverPrimaryRunsAction()) {
-                        props.onGuidanceOpenChange(false);
-                        props.onRunAction(props.presentation.primary_action);
-                        return;
-                      }
-                      props.onGuidanceOpenChange(!props.guidanceOpen);
-                    }}
-                  >
-                    <Show
-                      when={blockedPrimaryActionDisabled()}
-                      fallback={props.presentation.primary_action.label}
-                    >
-                      <span class="redeven-split-action-trigger__content">
-                        {props.presentation.primary_action.intent === 'reconnect_provider'
-                          ? <ShieldCheck class="redeven-split-action-trigger__icon h-3.5 w-3.5" />
-                          : <Lock class="redeven-split-action-trigger__icon h-3.5 w-3.5" />}
-                        <span>{props.presentation.primary_action.label}</span>
-                      </span>
-                    </Show>
-                  </Button>
-                </DesktopActionPopover>
-              )}
+              <Button
+                size="sm"
+                variant={props.presentation.primary_action.variant}
+                class={cn(primaryButtonClass(), 'redeven-split-action-trigger--progress')}
+                style={{ 'min-width': 'var(--redeven-split-action-primary-min-width)' }}
+                aria-haspopup="dialog"
+                aria-expanded={props.guidanceOpen}
+                aria-label={`${props.presentation.primary_action.label} progress`}
+                onClick={() => {
+                  closeMenu();
+                  props.onGuidanceOpenChange(!props.guidanceOpen);
+                }}
+              >
+                <span class="redeven-split-action-trigger__content">
+                  <Play class="redeven-split-action-trigger__icon h-3.5 w-3.5" />
+                  <span>{environmentProgressTriggerLabel()}</span>
+                </span>
+              </Button>
             </Show>
-          </Show>
-        )}>
-          {renderEnvironmentProgressTrigger()}
+          </DesktopActionPopover>
         </Show>
         <Presence>
           <Show when={props.loading}>
