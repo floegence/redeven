@@ -119,6 +119,18 @@ describe('Codex visual contract', () => {
     );
   });
 
+  it('keeps Codex user markdown block surfaces distinct from the dark user bubble', () => {
+    const src = readCodexCss();
+
+    expect(src).toMatch(
+      /\.codex-chat-message-bubble-user \.codex-chat-markdown-block pre\.chat-md-code-block \{[\s\S]*background-color: color-mix\(in srgb, var\(--primary-foreground\) 92%, var\(--primary\) 8%\);[\s\S]*color: #1f2937;[\s\S]*\}/
+    );
+    expect(src).toMatch(
+      /\.codex-chat-message-bubble-user \.codex-chat-markdown-block \.chat-md-blockquote \{[\s\S]*background: color-mix\(in srgb, var\(--primary-foreground\) 90%, var\(--primary\) 10%\);[\s\S]*color: #263041;[\s\S]*\}/
+    );
+    expect(src).not.toMatch(/\.codex-chat-message-bubble-user \.codex-chat-markdown-block pre\.chat-md-code-block \{[\s\S]*#0d1117/);
+  });
+
   it('keeps empty and loading ornaments on the neutral Codex shell class', () => {
     const src = readCodexTranscript();
     const activityStreamSrc = readCodexActivityStream();
