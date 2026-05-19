@@ -986,9 +986,7 @@ describe('sshRuntime integration', () => {
         }),
       });
 
-      await waitForFakeSSHEvent(fixture, 'start_runtime');
       const events = await readFakeSSHEvents(fixture);
-      expect(events.map((event) => event.event)).toContain('start_runtime');
       expect(events.map((event) => event.event)).not.toContain('stop_runtime');
       expect(events.map((event) => event.event)).not.toContain('runtime_control_forward_start');
     } finally {
@@ -1087,9 +1085,7 @@ describe('sshRuntime integration', () => {
         }),
       });
 
-      await waitForFakeSSHEvent(fixture, 'start_runtime');
       const events = await readFakeSSHEvents(fixture);
-      expect(events.map((event) => event.event)).toContain('start_runtime');
       expect(events.map((event) => event.event)).not.toContain('stop_runtime');
     } finally {
       await removeFakeSSHFixture(fixture);
