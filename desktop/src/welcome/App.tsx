@@ -176,6 +176,7 @@ import {
   toggleDesktopTheme,
 } from './desktopTheme';
 import { DesktopTooltip } from './DesktopTooltip';
+import { DesktopPopover } from './DesktopPopover';
 import { DesktopLauncherShell } from './DesktopLauncherShell';
 import { desktopControlPlaneKey, suggestControlPlaneDisplayLabel } from '../shared/controlPlaneProvider';
 import {
@@ -5249,21 +5250,54 @@ function EnvironmentConnectionCard(props: Readonly<{
                 {card().status_label}
               </EnvironmentStatusIndicator>
               <Show when={props.environmentFailure}>
-                {(failure) => (
-                  <span
-                    class="redeven-environment-card__failure-badge"
-                    data-tone={failure().tone}
-                    onClick={props.dismissEnvironmentFailure}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`Dismiss startup failure: ${failure().message}`}
-                  >
-                    <span class="redeven-environment-card__failure-badge-icon" aria-hidden="true">!</span>
-                    <span class="redeven-environment-card__failure-tooltip">
-                      {failure().message}
-                    </span>
-                  </span>
-                )}
+                {(failure) => {
+                  const [popoverOpen, setPopoverOpen] = createSignal(false);
+                  const [copied, setCopied] = createSignal(false);
+
+                  const handleCopy = async () => {
+                    await copyToClipboard(failure().message);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1500);
+                  };
+
+                  return (
+                    <DesktopPopover
+                      open={popoverOpen()}
+                      onOpenChange={setPopoverOpen}
+                      placement="bottom"
+                      delay={300}
+                      closeDelay={150}
+                      class="min-w-[14rem]"
+                      content={
+                        <div class="flex items-start gap-2 p-1">
+                          <span class="min-w-0 flex-1 text-xs leading-snug break-words">
+                            {failure().message}
+                          </span>
+                          <button
+                            type="button"
+                            class="inline-flex shrink-0 items-center justify-center rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+                            aria-label="Copy error message"
+                            title="Copy error message"
+                            onClick={(e) => { e.stopPropagation(); void handleCopy(); }}
+                          >
+                            {copied() ? <Check class="h-3 w-3" /> : <Copy class="h-3 w-3" />}
+                          </button>
+                        </div>
+                      }
+                    >
+                      <span
+                        class="redeven-environment-card__failure-badge"
+                        data-tone={failure().tone}
+                        onClick={props.dismissEnvironmentFailure}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Dismiss startup failure: ${failure().message}`}
+                      >
+                        <span class="redeven-environment-card__failure-badge-icon" aria-hidden="true">!</span>
+                      </span>
+                    </DesktopPopover>
+                  );
+                }}
               </Show>
             </div>
             <CardTitle class="truncate text-sm font-semibold" title={props.environment.label}>
