@@ -113,6 +113,9 @@ describe('sshRuntime', () => {
     expect(source).toMatch(/if \(args\.target\.bootstrap_strategy === 'auto'\) \{\s*break;\s*\}\s*continue;/);
     expect(source).toContain("from './runtimePackageCache'");
     expect(source).toContain('prepareDesktopRuntimeUploadAsset({');
+    expect(source).toContain("asset.source === 'source_build_cache'");
+    expect(source).toContain('Using cached local runtime package');
+    expect(source).toContain('package built from this Desktop session');
     expect(source).toContain('async function waitForForwardedLocalUIOpenable(');
     expect(source).toContain('managedSSHRuntimeAttachPolicy(');
     expect(source).toContain('DesktopSSHRuntimeMaintenanceRequiredError');

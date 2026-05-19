@@ -129,6 +129,7 @@ SSH bootstrap is intentionally transport-light and runtime-heavy:
 - The remote runtime root defaults to the remote user's `$HOME/.redeven` and can be overridden with an absolute path.
 - Desktop can probe the remote OS/architecture (`linux` / `darwin`, `amd64` / `arm64` / `arm` / `386`) and choose the matching release package for desktop-managed upload.
 - Desktop stores verified runtime packages in one local package cache shared by SSH Host, Local Container, and SSH Container targets. For many SSH hosts on the same platform, Desktop downloads the package once, then reuses the local archive for each SSH upload.
+- Development Desktop sessions that start from `scripts/dev_desktop.sh` build target runtime packages from the current checkout. Each Desktop process builds a source package once per target platform, then reuses that in-memory archive for later SSH Host, Local Container, or SSH Container starts. Restart `scripts/dev_desktop.sh` after source changes when a target runtime should use newly compiled code.
 - `desktop_upload` verifies the signed `SHA256SUMS` manifest before trusting release-asset checksums.
 - `release_base_url` lets operators point the desktop-upload path at a compatible internal release mirror instead of public GitHub Releases.
 - Compatible internal mirrors must expose the same signed manifest and `redeven_<goos>_<goarch>.tar.gz` assets as public releases.

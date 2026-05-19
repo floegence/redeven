@@ -80,14 +80,54 @@ async function preparePackage(args: Readonly<{
   cacheRoot: string;
   platform: DesktopSSHRemotePlatform;
   releaseBaseURL?: string;
+  sourceRuntimeRoot?: string;
 }>): Promise<Awaited<ReturnType<typeof prepareDesktopRuntimeUploadAsset>>> {
   return prepareDesktopRuntimeUploadAsset({
     runtimeReleaseTag: 'v1.2.3',
     releaseBaseURL: args.releaseBaseURL ?? 'https://mirror.example.invalid/releases',
     assetCacheRoot: args.cacheRoot,
+    sourceRuntimeRoot: args.sourceRuntimeRoot,
     platform: args.platform,
     fetchPolicy: runtimeReleaseFetchPolicy(45_000),
   });
+}
+
+async function createSourceRuntimeFixture(): Promise<Readonly<{
+  root: string;
+  cacheRoot: string;
+  buildLogPath: string;
+}>> {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-source-runtime-fixture-'));
+  const root = path.join(tempRoot, 'redeven');
+  const buildLogPath = path.join(tempRoot, 'build-assets.log');
+
+  await Promise.all([
+    fs.mkdir(path.join(root, 'scripts'), { recursive: true }),
+    fs.mkdir(path.join(root, 'cmd', 'redeven'), { recursive: true }),
+  ]);
+  await fs.writeFile(path.join(root, 'go.mod'), [
+    'module example.invalid/redeven-source-runtime-fixture',
+    '',
+    'go 1.24.0',
+    '',
+  ].join('\n'));
+  await fs.writeFile(path.join(root, 'cmd', 'redeven', 'main.go'), [
+    'package main',
+    '',
+    'func main() {}',
+    '',
+  ].join('\n'));
+  await fs.writeFile(path.join(root, 'scripts', 'build_assets.sh'), [
+    '#!/usr/bin/env sh',
+    'set -eu',
+    `printf 'assets\\n' >> ${JSON.stringify(buildLogPath)}`,
+  ].join('\n'), { mode: 0o755 });
+
+  return {
+    root,
+    cacheRoot: runtimePackageCacheRoot(tempRoot),
+    buildLogPath,
+  };
 }
 
 describe('runtimePackageCache', () => {
@@ -194,6 +234,72 @@ describe('runtimePackageCache', () => {
       await fs.rm(path.dirname(cacheRoot), { recursive: true, force: true });
     }
   });
+
+  it('builds a source runtime package once per Desktop process and reuses it for the same platform', async () => {
+    const fixture = await createSourceRuntimeFixture();
+    const platform = resolveDesktopSSHRemotePlatform('linux', 'x86_64');
+    try {
+      const first = await preparePackage({
+        cacheRoot: fixture.cacheRoot,
+        platform,
+        sourceRuntimeRoot: fixture.root,
+      });
+      const cached = await preparePackage({
+        cacheRoot: fixture.cacheRoot,
+        platform,
+        sourceRuntimeRoot: fixture.root,
+      });
+
+      expect(first.source).toBe('source_build');
+      expect(cached.source).toBe('source_build_cache');
+      expect(cached.archiveData).toEqual(first.archiveData);
+      await expect(fs.readFile(fixture.buildLogPath, 'utf8')).resolves.toBe('assets\n');
+    } finally {
+      await fs.rm(path.dirname(fixture.root), { recursive: true, force: true });
+    }
+  }, 15_000);
+
+  it('deduplicates concurrent source runtime builds for the same platform', async () => {
+    const fixture = await createSourceRuntimeFixture();
+    const platform = resolveDesktopSSHRemotePlatform('linux', 'x86_64');
+    try {
+      const results = await Promise.all([
+        preparePackage({ cacheRoot: fixture.cacheRoot, platform, sourceRuntimeRoot: fixture.root }),
+        preparePackage({ cacheRoot: fixture.cacheRoot, platform, sourceRuntimeRoot: fixture.root }),
+        preparePackage({ cacheRoot: fixture.cacheRoot, platform, sourceRuntimeRoot: fixture.root }),
+      ]);
+
+      expect(results.map((result) => result.source)).toEqual([
+        'source_build',
+        'source_build',
+        'source_build',
+      ]);
+      expect(results[1].archiveData).toEqual(results[0].archiveData);
+      expect(results[2].archiveData).toEqual(results[0].archiveData);
+      await expect(fs.readFile(fixture.buildLogPath, 'utf8')).resolves.toBe('assets\n');
+    } finally {
+      await fs.rm(path.dirname(fixture.root), { recursive: true, force: true });
+    }
+  }, 15_000);
+
+  it('keeps source runtime packages separate by target platform', async () => {
+    const fixture = await createSourceRuntimeFixture();
+    const amd64 = resolveDesktopSSHRemotePlatform('linux', 'x86_64');
+    const arm64 = resolveDesktopSSHRemotePlatform('linux', 'aarch64');
+    try {
+      const [amd64Asset, arm64Asset] = await Promise.all([
+        preparePackage({ cacheRoot: fixture.cacheRoot, platform: amd64, sourceRuntimeRoot: fixture.root }),
+        preparePackage({ cacheRoot: fixture.cacheRoot, platform: arm64, sourceRuntimeRoot: fixture.root }),
+      ]);
+
+      expect(amd64Asset.source).toBe('source_build');
+      expect(arm64Asset.source).toBe('source_build');
+      expect(arm64Asset.archiveData).not.toEqual(amd64Asset.archiveData);
+      await expect(fs.readFile(fixture.buildLogPath, 'utf8')).resolves.toBe('assets\nassets\n');
+    } finally {
+      await fs.rm(path.dirname(fixture.root), { recursive: true, force: true });
+    }
+  }, 15_000);
 
   it('prunes old release tags, temporary files, and legacy cache roots', async () => {
     const userDataRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-package-prune-'));

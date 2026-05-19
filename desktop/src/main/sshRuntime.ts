@@ -1351,16 +1351,8 @@ async function prepareDesktopSSHUploadAsset(args: Readonly<{
     emitSSHRuntimeProgress(
       args.onProgress,
       'ssh_preparing_upload',
-      asset.source === 'source_build'
-        ? 'Built local runtime package'
-        : asset.cacheEntry?.from_cache
-          ? 'Using cached runtime package'
-          : 'Cached runtime package',
-      asset.source === 'source_build'
-        ? `Desktop built the ${args.platform.platform_label} Redeven ${args.runtimeReleaseTag} package from the current checkout.`
-        : asset.cacheEntry?.from_cache
-          ? `Desktop is reusing the verified ${args.platform.platform_label} Redeven ${args.runtimeReleaseTag} package.`
-          : `Desktop downloaded and verified the ${args.platform.platform_label} Redeven ${args.runtimeReleaseTag} package for future SSH hosts.`,
+      desktopSSHUploadAssetPreparedTitle(asset),
+      desktopSSHUploadAssetPreparedDetail(asset, args.platform, args.runtimeReleaseTag),
     );
     return asset;
   } catch (error) {
@@ -1368,6 +1360,36 @@ async function prepareDesktopSSHUploadAsset(args: Readonly<{
       `Desktop could not prepare the ${args.platform.platform_label} Redeven runtime package locally: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
+}
+
+function desktopSSHUploadAssetPreparedTitle(asset: PreparedDesktopSSHUploadAsset): string {
+  if (asset.source === 'source_build') {
+    return 'Built local runtime package';
+  }
+  if (asset.source === 'source_build_cache') {
+    return 'Using cached local runtime package';
+  }
+  if (asset.cacheEntry?.from_cache) {
+    return 'Using cached runtime package';
+  }
+  return 'Cached runtime package';
+}
+
+function desktopSSHUploadAssetPreparedDetail(
+  asset: PreparedDesktopSSHUploadAsset,
+  platform: DesktopSSHRemotePlatform,
+  runtimeReleaseTag: string,
+): string {
+  if (asset.source === 'source_build') {
+    return `Desktop built the ${platform.platform_label} Redeven ${runtimeReleaseTag} package from the current checkout.`;
+  }
+  if (asset.source === 'source_build_cache') {
+    return `Desktop is reusing the ${platform.platform_label} Redeven ${runtimeReleaseTag} package built from this Desktop session.`;
+  }
+  if (asset.cacheEntry?.from_cache) {
+    return `Desktop is reusing the verified ${platform.platform_label} Redeven ${runtimeReleaseTag} package.`;
+  }
+  return `Desktop downloaded and verified the ${platform.platform_label} Redeven ${runtimeReleaseTag} package for future SSH hosts.`;
 }
 
 async function installRemoteRuntimeViaDesktopUpload(args: Readonly<{

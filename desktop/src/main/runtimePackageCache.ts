@@ -35,7 +35,7 @@ export type DesktopRuntimePackageCacheEntry = Readonly<{
 export type DesktopRuntimeUploadAsset = Readonly<{
   archiveData: Buffer;
   cacheEntry: DesktopRuntimePackageCacheEntry | null;
-  source: 'release_cache' | 'source_build';
+  source: 'release_cache' | 'source_build' | 'source_build_cache';
 }>;
 
 export type DesktopRuntimePackagePrunePolicy = Readonly<{
@@ -50,8 +50,17 @@ type LocalCommandResult = Readonly<{
   stderr: string;
 }>;
 
+type DesktopSourceRuntimePackageCacheEntry = Readonly<{
+  source_root: string;
+  runtime_release_tag: string;
+  platform_id: string;
+  archive_data: Buffer;
+}>;
+
 const inFlightReleaseManifests = new Map<string, Promise<DesktopSSHVerifiedReleaseManifest>>();
 const inFlightReleaseAssets = new Map<string, Promise<DesktopRuntimePackageCacheEntry>>();
+const inFlightSourceRuntimeAssets = new Map<string, Promise<DesktopRuntimeUploadAsset>>();
+const sourceRuntimePackageCache = new Map<string, DesktopSourceRuntimePackageCacheEntry>();
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -82,6 +91,14 @@ function releaseManifestInFlightKey(sourceCacheKey: string, releaseTag: string):
 
 function releaseAssetInFlightKey(sourceCacheKey: string, releaseTag: string, platformID: string): string {
   return `asset:${sourceCacheKey}:${releaseTag}:${platformID}`;
+}
+
+function normalizeSourceRuntimeRoot(sourceRoot: string): string {
+  return path.resolve(compact(sourceRoot));
+}
+
+function sourceRuntimeAssetCacheKey(sourceRoot: string, releaseTag: string, platformID: string): string {
+  return `source:${sourceRoot}:${releaseTag}:${platformID}`;
 }
 
 function onceInFlight<T>(
@@ -243,12 +260,9 @@ async function prepareSourceRuntimeUploadAsset(args: Readonly<{
   runtimeReleaseTag: string;
   platform: DesktopSSHRemotePlatform;
   signal?: AbortSignal;
-}>): Promise<DesktopRuntimeUploadAsset | null> {
+}>): Promise<DesktopRuntimeUploadAsset> {
   throwIfCanceled(args.signal);
-  const sourceRoot = compact(args.sourceRuntimeRoot);
-  if (sourceRoot === '') {
-    return null;
-  }
+  const sourceRoot = args.sourceRuntimeRoot;
   const commandRoot = path.join(sourceRoot, 'cmd', 'redeven');
   const commandRootStat = await fs.stat(commandRoot).catch(() => null);
   if (!commandRootStat?.isDirectory()) {
@@ -288,6 +302,45 @@ async function prepareSourceRuntimeUploadAsset(args: Readonly<{
   } finally {
     await fs.rm(buildRoot, { recursive: true, force: true }).catch(() => undefined);
   }
+}
+
+async function ensureSourceRuntimeUploadAsset(args: Readonly<{
+  sourceRuntimeRoot: string;
+  runtimeReleaseTag: string;
+  platform: DesktopSSHRemotePlatform;
+  signal?: AbortSignal;
+}>): Promise<DesktopRuntimeUploadAsset | null> {
+  throwIfCanceled(args.signal);
+  const requestedSourceRoot = compact(args.sourceRuntimeRoot);
+  if (requestedSourceRoot === '') {
+    return null;
+  }
+  const sourceRoot = normalizeSourceRuntimeRoot(requestedSourceRoot);
+  const key = sourceRuntimeAssetCacheKey(sourceRoot, args.runtimeReleaseTag, args.platform.platform_id);
+  const cached = sourceRuntimePackageCache.get(key);
+  if (cached) {
+    return {
+      archiveData: Buffer.from(cached.archive_data),
+      cacheEntry: null,
+      source: 'source_build_cache',
+    };
+  }
+
+  return onceInFlight(inFlightSourceRuntimeAssets, key, async () => {
+    const built = await prepareSourceRuntimeUploadAsset({
+      sourceRuntimeRoot: sourceRoot,
+      runtimeReleaseTag: args.runtimeReleaseTag,
+      platform: args.platform,
+      signal: args.signal,
+    });
+    sourceRuntimePackageCache.set(key, {
+      source_root: sourceRoot,
+      runtime_release_tag: args.runtimeReleaseTag,
+      platform_id: args.platform.platform_id,
+      archive_data: Buffer.from(built.archiveData),
+    });
+    return built;
+  });
 }
 
 function isRuntimePackageCacheTemporaryName(name: string): boolean {
@@ -467,7 +520,7 @@ export async function prepareDesktopRuntimeUploadAsset(args: Readonly<{
       includeTemporaryEntries: false,
     }).catch(() => undefined);
 
-    const sourceAsset = await prepareSourceRuntimeUploadAsset({
+    const sourceAsset = await ensureSourceRuntimeUploadAsset({
       sourceRuntimeRoot: args.sourceRuntimeRoot ?? '',
       runtimeReleaseTag,
       platform: args.platform,
