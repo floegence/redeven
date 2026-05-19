@@ -6,8 +6,37 @@ ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." &> /dev/null && pwd)
 
 source "$SCRIPT_DIR/ui_package_common.sh"
 
+usage() {
+  cat <<'USAGE'
+Usage: ./scripts/check_desktop.sh [--ci|--full]
+
+  --ci    Run the lightweight Desktop gate for GitHub Actions.
+  --full  Run the full Desktop gate, including heavier Vitest suites.
+USAGE
+}
+
 main() {
+  local mode="full"
   local dir="$ROOT_DIR/desktop"
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --ci)
+        mode="ci"
+        ;;
+      --full)
+        mode="full"
+        ;;
+      -h|--help)
+        usage
+        return 0
+        ;;
+      *)
+        ui_pkg_die "unknown check_desktop option: $1"
+        ;;
+    esac
+    shift
+  done
 
   if [ ! -d "$dir" ]; then
     ui_pkg_log "Desktop: skipped (missing: $dir)"
@@ -18,6 +47,7 @@ main() {
   fi
 
   ui_pkg_log "Checking Redeven Desktop package..."
+  ui_pkg_log "MODE: $mode"
   ui_pkg_log "ROOT_DIR: $ROOT_DIR"
 
   (
@@ -27,7 +57,12 @@ main() {
     fi
     npm run lint
     npm run typecheck
-    npm run test
+    # IMPORTANT: GitHub Actions runs the lightweight Desktop gate; full Vitest
+    # coverage is intentionally owned by local pre-commit so CI stays fast and
+    # stable instead of timing out on heavy SSH/Electron-adjacent integration.
+    if [ "$mode" = "full" ]; then
+      npm run test
+    fi
     npm run build
   )
 

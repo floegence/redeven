@@ -66,6 +66,7 @@ jobs:
           bash -n scripts/ui_package_common.sh
           bash -n scripts/open_source_hygiene_check.sh
           bash -n scripts/install_git_hooks.sh
+          bash -n .githooks/pre-commit
 
       - name: Third-party notice check
         run: node scripts/generate_third_party_notices.mjs --check
@@ -98,14 +99,11 @@ jobs:
       - name: UI lint
         run: ./scripts/lint_ui.sh
 
-      - name: Desktop checks
-        run: ./scripts/check_desktop.sh
+      - name: Desktop lightweight checks
+        run: ./scripts/check_desktop.sh --ci
 
       - name: Build embedded assets
         run: ./scripts/build_assets.sh
-
-      - name: Docker runtime E2E
-        run: ./scripts/check_docker_runtime_e2e.sh
 
       - name: go test
         run: go test ./...

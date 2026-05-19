@@ -5,3 +5,9 @@ repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
 ./scripts/open_source_hygiene_check.sh --staged
+
+# IMPORTANT: Heavy Desktop Vitest coverage and Docker runtime E2E belong to
+# pre-commit, not GitHub Actions, so developer machines catch integration
+# regressions before push while hosted CI remains lightweight and deterministic.
+./scripts/check_desktop.sh --full
+./scripts/check_docker_runtime_e2e.sh

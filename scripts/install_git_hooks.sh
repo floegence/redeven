@@ -6,4 +6,4 @@ cd "$repo_root"
 
 git config core.hooksPath .githooks
 echo "[INFO] git hooks enabled via .githooks/"
-echo "[INFO] pre-commit now runs scripts/open_source_hygiene_check.sh --staged"
+echo "[INFO] pre-commit now runs hygiene plus full Desktop and Docker runtime E2E checks"

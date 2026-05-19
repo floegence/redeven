@@ -138,8 +138,8 @@ jobs:
             --dir dist/agent \
             --name "package-${{ matrix.goos }}-${{ matrix.goarch }}"
 
-      - name: Desktop quality checks
-        run: ./scripts/check_desktop.sh
+      - name: Desktop lightweight checks
+        run: ./scripts/check_desktop.sh --ci
 
       - name: Validate macOS signing inputs
         if: matrix.goos == 'darwin'
