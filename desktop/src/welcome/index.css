@@ -82,6 +82,49 @@ body {
   --redeven-tile: hsl(36 12% 94%);
 }
 
+/*
+ * Dialog visual hierarchy: backdrop separation + panel edge definition.
+ *
+ * Without these overrides the floe Dialog defaults produce a backdrop whose
+ * opacity (80 %) and blur (4 px) leave the panel nearly indistinguishable from
+ * the background, especially in dark mode where --background and --card are
+ * only 2 % lightness apart.  Lower opacity lets the page content show through
+ * the mask and the stronger blur creates a frosted-glass depth cue.  Heavier
+ * composite shadows on the panel replace the default shadow-lg (invisible on
+ * dark backgrounds) with a multi-layer ring-plus-spread that reads in both
+ * light and dark themes.
+ */
+
+/* ── Dialog backdrop: lower opacity, stronger blur ── */
+
+[data-floe-dialog-backdrop] {
+  background-color: color-mix(in srgb, var(--background) 48%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.dark [data-floe-dialog-backdrop] {
+  background-color: color-mix(in srgb, var(--background) 42%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+/* ── Dialog panel: visible border + composite shadow ── */
+
+[data-floe-dialog-panel] {
+  border-color: color-mix(in srgb, var(--border) 88%, var(--foreground) 12%);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--foreground) 4%, transparent),
+    0 8px 28px -10px color-mix(in srgb, var(--foreground) 16%, transparent),
+    0 18px 48px -18px color-mix(in srgb, var(--foreground) 12%, transparent);
+}
+
+.dark [data-floe-dialog-panel] {
+  border-color: color-mix(in srgb, var(--border) 78%, var(--foreground) 22%);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--foreground) 7%, transparent),
+    0 8px 28px -10px color-mix(in srgb, var(--foreground) 22%, transparent),
+    0 18px 48px -18px color-mix(in srgb, var(--foreground) 16%, transparent);
+}
+
 /* ── Environment card grid ── */
 
 .redeven-environment-library {
