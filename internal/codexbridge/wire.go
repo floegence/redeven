@@ -30,7 +30,8 @@ type clientInfo struct {
 }
 
 type initializeCapabilities struct {
-	ExperimentalAPI bool `json:"experimentalApi"`
+	ExperimentalAPI    bool `json:"experimentalApi"`
+	RequestAttestation bool `json:"requestAttestation"`
 }
 
 type wireThreadStatus struct {
@@ -185,14 +186,12 @@ type wireThreadListResponse struct {
 }
 
 type wireThreadStartParams struct {
-	Model                  *string `json:"model,omitempty"`
-	CWD                    *string `json:"cwd,omitempty"`
-	ApprovalPolicy         *string `json:"approvalPolicy,omitempty"`
-	Sandbox                *string `json:"sandbox,omitempty"`
-	ApprovalsReviewer      *string `json:"approvalsReviewer,omitempty"`
-	ServiceName            *string `json:"serviceName,omitempty"`
-	ExperimentalRawEvents  bool    `json:"experimentalRawEvents"`
-	PersistExtendedHistory bool    `json:"persistExtendedHistory"`
+	Model             *string `json:"model,omitempty"`
+	CWD               *string `json:"cwd,omitempty"`
+	ApprovalPolicy    *string `json:"approvalPolicy,omitempty"`
+	Sandbox           *string `json:"sandbox,omitempty"`
+	ApprovalsReviewer *string `json:"approvalsReviewer,omitempty"`
+	ServiceName       *string `json:"serviceName,omitempty"`
 }
 
 type wireThreadStartResponse struct {
@@ -207,13 +206,12 @@ type wireThreadStartResponse struct {
 }
 
 type wireThreadResumeParams struct {
-	ThreadID               string  `json:"threadId"`
-	Model                  *string `json:"model,omitempty"`
-	CWD                    *string `json:"cwd,omitempty"`
-	ApprovalPolicy         *string `json:"approvalPolicy,omitempty"`
-	Sandbox                *string `json:"sandbox,omitempty"`
-	ApprovalsReviewer      *string `json:"approvalsReviewer,omitempty"`
-	PersistExtendedHistory bool    `json:"persistExtendedHistory"`
+	ThreadID          string  `json:"threadId"`
+	Model             *string `json:"model,omitempty"`
+	CWD               *string `json:"cwd,omitempty"`
+	ApprovalPolicy    *string `json:"approvalPolicy,omitempty"`
+	Sandbox           *string `json:"sandbox,omitempty"`
+	ApprovalsReviewer *string `json:"approvalsReviewer,omitempty"`
 }
 
 type wireThreadResumeResponse struct {
@@ -272,12 +270,11 @@ type wireTurnSteerResponse struct {
 }
 
 type wireThreadForkParams struct {
-	ThreadID               string  `json:"threadId"`
-	Model                  *string `json:"model,omitempty"`
-	ApprovalPolicy         *string `json:"approvalPolicy,omitempty"`
-	Sandbox                *string `json:"sandbox,omitempty"`
-	ApprovalsReviewer      *string `json:"approvalsReviewer,omitempty"`
-	PersistExtendedHistory bool    `json:"persistExtendedHistory"`
+	ThreadID          string  `json:"threadId"`
+	Model             *string `json:"model,omitempty"`
+	ApprovalPolicy    *string `json:"approvalPolicy,omitempty"`
+	Sandbox           *string `json:"sandbox,omitempty"`
+	ApprovalsReviewer *string `json:"approvalsReviewer,omitempty"`
 }
 
 type wireThreadForkResponse struct {

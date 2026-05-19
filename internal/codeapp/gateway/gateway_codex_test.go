@@ -749,3 +749,52 @@ func TestCompactCodexEvents(t *testing.T) {
 		t.Fatalf("non-matching reasoning delta should stay separate: %+v", events[3])
 	}
 }
+
+func TestGateway_CodexUnavailableErrorsReturnServiceUnavailable(t *testing.T) {
+	t.Parallel()
+
+	channelID := "ch_test_codex_unavailable"
+	envOrigin := envOriginWithChannel(channelID)
+
+	gw, err := New(Options{
+		Backend: &stubBackend{},
+		Codex: &stubCodexBackend{
+			readCapabilities: func(ctx context.Context, cwd string) (*codexbridge.Capabilities, error) {
+				return nil, codexbridge.ErrUnavailable
+			},
+			listThreads: func(ctx context.Context, req codexbridge.ListThreadsRequest) ([]codexbridge.Thread, error) {
+				return nil, codexbridge.ErrUnavailable
+			},
+		},
+		DistFS:             codexTestDistFS(),
+		ListenAddr:         "127.0.0.1:0",
+		ConfigPath:         writeTestConfig(t),
+		ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanWrite: true, CanExecute: true}),
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		path string
+	}{
+		{name: "capabilities", path: "/_redeven_proxy/api/codex/capabilities?cwd=%2Fworkspace"},
+		{name: "threads", path: "/_redeven_proxy/api/codex/threads?limit=100&archived=false"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			req.Header.Set("Origin", envOrigin)
+			rr := httptest.NewRecorder()
+			gw.serveHTTP(rr, req)
+
+			if rr.Code != http.StatusServiceUnavailable {
+				t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+			}
+			if !bytes.Contains(rr.Body.Bytes(), []byte(`"ok":false`)) {
+				t.Fatalf("unexpected body: %s", rr.Body.String())
+			}
+		})
+	}
+}

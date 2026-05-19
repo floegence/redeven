@@ -918,9 +918,6 @@ func TestForkThread_UsesNormalizedOverrides(t *testing.T) {
 				if stringValue(params.ApprovalsReviewer) != "user" {
 					t.Fatalf("ApprovalsReviewer=%q", stringValue(params.ApprovalsReviewer))
 				}
-				if !params.PersistExtendedHistory {
-					t.Fatalf("PersistExtendedHistory=false, want true")
-				}
 				proc.dispatchEnvelope(rpcEnvelope{
 					ID: env.ID,
 					Result: mustJSONRaw(wireThreadForkResponse{
