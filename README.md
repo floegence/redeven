@@ -72,13 +72,15 @@ redeven run --mode hybrid
 
 Bootstrap writes your Local Environment config to `~/.redeven/local-environment/config.json`. Each OS user has one Local Environment identity, bound to one provider Environment at a time. Desktop and browser flows use the same one-time ticket contract.
 
+Interactive terminals use Redeven's rich startup presentation by default: a compact character mark, grouped startup status, Local UI and Environment URLs, and actionable warning/error panels. Non-interactive shells fall back to plain text, and Desktop-managed launches use the machine presentation contract with structured startup reports instead of terminal UI.
+
 **Run modes at a glance:**
 
 | Goal | Command |
 |---|---|
 | Local UI only (this device) | `redeven run --mode local` |
 | Local UI + remote control channel | `redeven run --mode hybrid` |
-| Desktop-managed runtime | `redeven run --mode desktop --desktop-managed --local-ui-bind localhost:23998` |
+| Desktop-managed runtime | `redeven run --mode desktop --desktop-managed --presentation machine --local-ui-bind localhost:23998` |
 | Expose to another trusted device | `REDEVEN_LOCAL_UI_PASSWORD=<password> redeven run --mode hybrid --local-ui-bind 0.0.0.0:23998 --password-env REDEVEN_LOCAL_UI_PASSWORD` |
 
 ## What you can do

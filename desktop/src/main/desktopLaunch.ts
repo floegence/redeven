@@ -51,6 +51,8 @@ export function buildDesktopRuntimeArgs(
     '--mode',
     'desktop',
     '--desktop-managed',
+    '--presentation',
+    'machine',
     '--local-ui-bind',
     localUIBind,
   ];

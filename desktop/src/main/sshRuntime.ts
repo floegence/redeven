@@ -663,9 +663,9 @@ export function buildManagedSSHStartScript(): string {
     'fi',
     'export REDEVEN_DESKTOP_OWNER_ID="$desktop_owner_id"',
     'if command -v setsid >/dev/null 2>&1; then',
-    '  setsid "$binary" run --state-root "$state_root" --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path" >>"$log_path" 2>&1 </dev/null &',
+    '  setsid "$binary" run --state-root "$state_root" --mode desktop --desktop-managed --presentation machine --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path" >>"$log_path" 2>&1 </dev/null &',
     'else',
-    '  nohup "$binary" run --state-root "$state_root" --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path" >>"$log_path" 2>&1 </dev/null &',
+    '  nohup "$binary" run --state-root "$state_root" --mode desktop --desktop-managed --presentation machine --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path" >>"$log_path" 2>&1 </dev/null &',
     'fi',
     'printf "%s\\n" "$!" > "${session_dir}/launcher.pid"',
   ].join('\n');

@@ -185,6 +185,8 @@ describe('containerRuntime', () => {
       '--mode',
       'desktop',
       '--desktop-managed',
+      '--presentation',
+      'machine',
       '--state-root',
       '/root/.redeven',
       '--local-ui-bind',

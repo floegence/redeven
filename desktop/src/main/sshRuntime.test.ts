@@ -24,6 +24,7 @@ describe('sshRuntime', () => {
     expect(buildManagedSSHRemoteInstallScript()).toContain('REDEVEN_INSTALL_MODE=upgrade');
     expect(buildManagedSSHStartScript()).toContain('--state-root "$state_root"');
     expect(buildManagedSSHStartScript()).toContain('--mode desktop');
+    expect(buildManagedSSHStartScript()).toContain('--presentation machine');
     expect(buildManagedSSHStartScript()).toContain('--startup-report-file "$report_path"');
     expect(buildManagedSSHStartScript()).not.toContain(['REDEVEN_DESKTOP', 'AI', 'BROKER_TOKEN'].join('_'));
     expect(buildManagedSSHStartScript()).toContain('setsid "$binary" run');

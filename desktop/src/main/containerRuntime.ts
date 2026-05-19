@@ -489,6 +489,8 @@ export function containerRuntimeDaemonStartCommand(input: Readonly<{
       '--mode',
       'desktop',
       '--desktop-managed',
+      '--presentation',
+      'machine',
       '--state-root',
       input.runtime_root,
       '--local-ui-bind',

@@ -48,6 +48,7 @@ func TestRunCLIHelp(t *testing.T) {
 			"Local UI bind rules:",
 			"Always start the Local UI. Connect to the control plane only when bootstrap config is already valid.",
 			"--state-root <path>",
+			"--presentation <auto|rich|plain|machine>",
 			"Accepted examples: localhost:23998, 127.0.0.1:24000, 127.0.0.1:0, 0.0.0.0:24000, 192.168.1.11:24000",
 		)
 	})
@@ -210,6 +211,29 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		)
 	})
 
+	t.Run("invalid presentation includes allowed values", func(t *testing.T) {
+		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--presentation", "cinematic")
+		if code != 2 {
+			t.Fatalf("exit code = %d, want 2", code)
+		}
+		assertContainsAll(t, stderr,
+			"invalid value for `--presentation`: cinematic",
+			"Allowed values: auto, rich, plain, machine.",
+			"Example: redeven run --mode hybrid --presentation rich",
+		)
+	})
+
+	t.Run("desktop startup rejects human presentation", func(t *testing.T) {
+		code, _, stderr := runCLITest(t, "run", "--mode", "desktop", "--desktop-managed", "--presentation", "rich")
+		if code != 2 {
+			t.Fatalf("exit code = %d, want 2", code)
+		}
+		assertContainsAll(t, stderr,
+			"`--desktop-managed` and `--startup-report-file` require `--presentation machine`",
+			"Desktop and startup-report consumers must use the machine presentation contract.",
+		)
+	})
+
 	t.Run("invalid local ui bind includes accepted examples", func(t *testing.T) {
 		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--local-ui-bind", "example.com:12345")
 		if code != 2 {
@@ -239,7 +263,7 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		}
 		assertContainsAll(t, stderr,
 			"`--desktop-managed` requires a Local UI run mode",
-			"Hint: use `redeven run --mode desktop --desktop-managed` for the packaged desktop shell.",
+			"Hint: use `redeven run --mode desktop --desktop-managed --presentation machine` for the packaged desktop shell.",
 		)
 	})
 
@@ -250,7 +274,7 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		}
 		assertContainsAll(t, stderr,
 			"`--startup-report-file` requires a Local UI run mode",
-			"Hint: use `redeven run --mode desktop --startup-report-file <path>` when a desktop shell needs machine-readable readiness output.",
+			"Hint: use `redeven run --mode desktop --presentation machine --startup-report-file <path>` when a desktop shell needs machine-readable readiness output.",
 		)
 	})
 
@@ -359,7 +383,7 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 			"Hint: run `redeven bootstrap` first, or pass --controlplane, --env-id, and a one-time bootstrap ticket directly to `redeven run`.",
 			"redeven bootstrap --controlplane https://region.example.invalid --env-id env_123 --bootstrap-ticket <bootstrap-ticket>",
 			"redeven run --mode hybrid --controlplane https://region.example.invalid --env-id env_123 --bootstrap-ticket <bootstrap-ticket>",
-			"REDEVEN_BOOTSTRAP_TICKET=<bootstrap-ticket> redeven run --mode desktop --desktop-managed --controlplane https://region.example.invalid --env-id env_123 --bootstrap-ticket-env REDEVEN_BOOTSTRAP_TICKET",
+			"REDEVEN_BOOTSTRAP_TICKET=<bootstrap-ticket> redeven run --mode desktop --desktop-managed --presentation machine --controlplane https://region.example.invalid --env-id env_123 --bootstrap-ticket-env REDEVEN_BOOTSTRAP_TICKET",
 		)
 	})
 }
