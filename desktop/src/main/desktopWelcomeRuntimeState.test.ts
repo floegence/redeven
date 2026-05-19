@@ -387,20 +387,40 @@ describe('desktopWelcomeRuntimeState', () => {
       }
 
       const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-welcome-runtime-'));
-      await fs.mkdir(path.join(stateDir, 'runtime'), { recursive: true });
+      const executablePath = path.join(stateDir, 'status-runtime.cjs');
       await fs.writeFile(
-        path.join(stateDir, 'runtime', 'local-ui.json'),
-        JSON.stringify({
+        executablePath,
+        `#!/usr/bin/env node
+process.stdout.write(${JSON.stringify(JSON.stringify({
+          status: 'ready',
           local_ui_url: `http://127.0.0.1:${address.port}/`,
           local_ui_urls: [`http://127.0.0.1:${address.port}/`],
           desktop_managed: true,
           remote_enabled: true,
           effective_run_mode: 'desktop',
           pid: 5252,
-          desktop_owner_id: 'desktop-owner-state',
-        }),
+          desktop_owner_id: 'desktop-owner-1',
+          runtime_service: {
+            runtime_version: 'v1.4.0',
+            protocol_version: 'redeven-runtime-v1',
+            service_owner: 'desktop',
+            desktop_managed: true,
+            effective_run_mode: 'desktop',
+            remote_enabled: true,
+            compatibility: 'compatible',
+            open_readiness: { state: 'openable' },
+            active_workload: {
+              terminal_count: 3,
+              session_count: 1,
+              task_count: 0,
+              port_forward_count: 0,
+            },
+          },
+        }))} + '\\n');
+`,
         'utf8',
       );
+      await fs.chmod(executablePath, 0o755);
 
       const environment = testLocalEnvironment({
         stateDir,
@@ -410,8 +430,9 @@ describe('desktopWelcomeRuntimeState', () => {
       });
 
       const hydrated = await hydrateWelcomeLocalEnvironmentRuntimeState(preferences, [], {
-        probeTimeoutMs: 200,
+        probeTimeoutMs: 1_500,
         desktopOwnerID: 'desktop-owner-1',
+        executablePath,
       });
 
       expect(hydrated.local_environment.local_hosting.current_runtime).toMatchObject({

@@ -6,7 +6,6 @@ import path from 'node:path';
 import type { Readable, Writable } from 'node:stream';
 
 import { parseLaunchReport, type LaunchBlockedReport, type LaunchReport } from './launchReport';
-import { defaultRuntimeStatePath, loadAttachableRuntimeState } from './runtimeState';
 import { type StartupReport } from './startup';
 import {
   runtimeServiceHasActiveWork,
@@ -41,9 +40,9 @@ export type StartManagedRuntimeArgs = Readonly<{
   runtimeArgs: string[];
   tempRoot?: string;
   env?: NodeJS.ProcessEnv;
+  stateRoot?: string;
   startupTimeoutMs?: number;
   stopTimeoutMs?: number;
-  runtimeStateFile?: string;
   runtimeAttachTimeoutMs?: number;
   runtimeStabilityWindowMs?: number;
   runtimeStabilityPollMs?: number;
@@ -148,11 +147,98 @@ async function readLaunchReport(reportFile: string): Promise<LaunchReport | null
   }
 }
 
+async function readRuntimeStatus(args: Readonly<{
+  executablePath: string;
+  stateRoot?: string;
+  env: NodeJS.ProcessEnv;
+  timeoutMs: number;
+}>): Promise<LaunchReport | null> {
+  const executablePath = String(args.executablePath ?? '').trim();
+  if (!executablePath) {
+    return null;
+  }
+  const commandArgs = ['desktop-runtime-status'];
+  const stateRoot = String(args.stateRoot ?? '').trim();
+  if (stateRoot) {
+    commandArgs.push('--state-root', stateRoot);
+  }
+  const timeoutMs = Math.max(100, Math.floor(args.timeoutMs));
+  return await new Promise((resolve, reject) => {
+    const child = spawn(executablePath, commandArgs, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: args.env,
+    });
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      child.kill('SIGKILL');
+      resolve(null);
+    }, timeoutMs);
+
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', (chunk: string) => {
+      stderr += chunk;
+    });
+    child.once('error', (error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.once('close', (code) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      if (code !== 0) {
+        if (stderr.trim()) {
+          reject(new Error(stderr.trim()));
+          return;
+        }
+        resolve(null);
+        return;
+      }
+      try {
+        resolve(parseLaunchReport(stdout));
+      } catch {
+        resolve(null);
+      }
+    });
+  });
+}
+
+export async function loadManagedRuntimeStartupFromStatus(args: Readonly<{
+  executablePath: string;
+  stateRoot?: string;
+  env: NodeJS.ProcessEnv;
+  timeoutMs: number;
+}>): Promise<StartupReport | null> {
+  const report = await readRuntimeStatus(args);
+  if (!report || report.status === 'blocked') {
+    return null;
+  }
+  return report.startup;
+}
+
 async function waitForLaunchReport(
   reportFile: string,
   child: SpawnedRuntimeProcess,
   timeoutMs: number,
-  runtimeStateFile: string,
+  executablePath: string,
+  stateRoot: string | undefined,
+  env: NodeJS.ProcessEnv,
   runtimeAttachTimeoutMs: number,
   logs: RecentLogs,
   getSpawnError: () => Error | null,
@@ -168,7 +254,12 @@ async function waitForLaunchReport(
       return launchReport;
     }
     if (child.exitCode !== null) {
-      const attachedStartup = await loadAttachableRuntimeState(runtimeStateFile, runtimeAttachTimeoutMs);
+      const attachedStartup = await loadManagedRuntimeStartupFromStatus({
+        executablePath,
+        stateRoot,
+        env,
+        timeoutMs: runtimeAttachTimeoutMs,
+      });
       if (attachedStartup) {
         return {
           status: 'attached',
@@ -182,7 +273,12 @@ async function waitForLaunchReport(
       throw readinessFailure(`redeven exited before reporting readiness (exit code: ${child.exitCode})`, logs);
     }
     if (child.signalCode) {
-      const attachedStartup = await loadAttachableRuntimeState(runtimeStateFile, runtimeAttachTimeoutMs);
+      const attachedStartup = await loadManagedRuntimeStartupFromStatus({
+        executablePath,
+        stateRoot,
+        env,
+        timeoutMs: runtimeAttachTimeoutMs,
+      });
       if (attachedStartup) {
         return {
           status: 'attached',
@@ -196,7 +292,12 @@ async function waitForLaunchReport(
       throw readinessFailure(`redeven exited before reporting readiness (signal: ${child.signalCode})`, logs);
     }
     if (Date.now() >= deadline) {
-      const attachedStartup = await loadAttachableRuntimeState(runtimeStateFile, runtimeAttachTimeoutMs);
+      const attachedStartup = await loadManagedRuntimeStartupFromStatus({
+        executablePath,
+        stateRoot,
+        env,
+        timeoutMs: runtimeAttachTimeoutMs,
+      });
       if (attachedStartup) {
         return {
           status: 'attached',
@@ -306,13 +407,20 @@ function assertRuntimeOpenable(startup: StartupReport, logs: RecentLogs): void {
 }
 
 async function requireAttachableRuntimeReadiness(args: Readonly<{
-  runtimeStateFile: string;
+  executablePath: string;
+  stateRoot?: string;
+  env: NodeJS.ProcessEnv;
   probeTimeoutMs: number;
   logs: RecentLogs;
   unavailableMessage: string;
   requireOpenable?: boolean;
 }>): Promise<StartupReport> {
-  const attachedStartup = await loadAttachableRuntimeState(args.runtimeStateFile, args.probeTimeoutMs);
+  const attachedStartup = await loadManagedRuntimeStartupFromStatus({
+    executablePath: args.executablePath,
+    stateRoot: args.stateRoot,
+    env: args.env,
+    timeoutMs: args.probeTimeoutMs,
+  });
   if (!attachedStartup) {
     throw readinessFailure(args.unavailableMessage, args.logs);
   }
@@ -325,7 +433,9 @@ async function requireAttachableRuntimeReadiness(args: Readonly<{
 
 async function waitForStableRuntimeReadiness(args: Readonly<{
   startup: StartupReport;
-  runtimeStateFile: string;
+  executablePath: string;
+  stateRoot?: string;
+  env: NodeJS.ProcessEnv;
   probeTimeoutMs: number;
   openTimeoutMs: number;
   stabilityWindowMs: number;
@@ -352,7 +462,9 @@ async function waitForStableRuntimeReadiness(args: Readonly<{
     }
 
     latestStartup = await requireAttachableRuntimeReadiness({
-      runtimeStateFile: args.runtimeStateFile,
+      executablePath: args.executablePath,
+      stateRoot: args.stateRoot,
+      env: args.env,
       probeTimeoutMs: args.probeTimeoutMs,
       logs: args.logs,
       unavailableMessage: 'Start Runtime did not complete because the runtime process did not stay online.',
@@ -434,7 +546,7 @@ type ManagedRuntimeAttachPolicy =
 function managedRuntimeOwnership(
   startup: StartupReport,
   desktopOwnerID: string,
-): 'owned' | 'managed_elsewhere' | 'legacy_unleased' | 'external' {
+): 'owned' | 'managed_elsewhere' | 'unowned' | 'external' {
   if (startup.desktop_managed !== true) {
     return 'external';
   }
@@ -443,7 +555,7 @@ function managedRuntimeOwnership(
   if (cleanDesktopOwnerID !== '' && startupOwnerID !== '' && startupOwnerID === cleanDesktopOwnerID) {
     return 'owned';
   }
-  return startupOwnerID === '' ? 'legacy_unleased' : 'managed_elsewhere';
+  return startupOwnerID === '' ? 'unowned' : 'managed_elsewhere';
 }
 
 function managedRuntimeAttachPolicy(
@@ -465,7 +577,7 @@ function managedRuntimeAttachPolicy(
     };
   }
 
-  const runtimeNeedsRestart = ownership === 'legacy_unleased'
+  const runtimeNeedsRestart = ownership === 'unowned'
     || runtimeServiceNeedsRuntimeUpdate(startup.runtime_service)
     || !runtimeServiceMatchesIdentity(startup.runtime_service, args.expectedRuntimeIdentity);
   if (!runtimeNeedsRestart) {
@@ -480,8 +592,8 @@ function managedRuntimeAttachPolicy(
   if (runtimeServiceHasActiveWork(startup.runtime_service)) {
     return {
       action: 'block',
-      message: ownership === 'legacy_unleased'
-        ? 'An older Desktop-managed runtime has active work. Close active runtime work before Desktop restarts it.'
+      message: ownership === 'unowned'
+        ? 'A Desktop-managed runtime without an owner id has active work. Close active runtime work before Desktop restarts it.'
         : 'The Desktop-managed runtime needs to restart before opening, but active work is still running.',
     };
   }
@@ -522,7 +634,7 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
     ...process.env,
     ...args.env,
   };
-  const runtimeStateFile = String(args.runtimeStateFile ?? '').trim() || defaultRuntimeStatePath(mergedEnv);
+  const stateRoot = String(args.stateRoot ?? '').trim() || undefined;
   const runtimeAttachTimeoutMs = args.runtimeAttachTimeoutMs ?? DEFAULT_RUNTIME_ATTACH_TIMEOUT_MS;
   const runtimeStabilityWindowMs = args.runtimeStabilityWindowMs ?? DEFAULT_RUNTIME_STABILITY_WINDOW_MS;
   const runtimeStabilityPollMs = args.runtimeStabilityPollMs ?? DEFAULT_RUNTIME_STABILITY_POLL_MS;
@@ -532,7 +644,12 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
     'Checking existing runtime',
     'Desktop is checking whether a compatible local runtime is already running.',
   );
-  const existingRuntime = await loadAttachableRuntimeState(runtimeStateFile, runtimeAttachTimeoutMs);
+  const existingRuntime = await loadManagedRuntimeStartupFromStatus({
+    executablePath: args.executablePath,
+    stateRoot,
+    env: mergedEnv,
+    timeoutMs: runtimeAttachTimeoutMs,
+  });
   if (existingRuntime) {
     assertRuntimePIDAlive(existingRuntime, { stdout: '', stderr: '' });
     const attachPolicy = managedRuntimeAttachPolicy(existingRuntime, {
@@ -628,7 +745,9 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
       reportFile,
       child,
       args.startupTimeoutMs ?? DEFAULT_STARTUP_TIMEOUT_MS,
-      runtimeStateFile,
+      args.executablePath,
+      stateRoot,
+      mergedEnv,
       runtimeAttachTimeoutMs,
       recentLogs,
       () => spawnError,
@@ -649,7 +768,9 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
       await stopChildProcess(child, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS).catch(() => undefined);
       await fs.rm(reportDir, { recursive: true, force: true }).catch(() => undefined);
       const attachedStartup = await requireAttachableRuntimeReadiness({
-        runtimeStateFile,
+        executablePath: args.executablePath,
+        stateRoot,
+        env: mergedEnv,
         probeTimeoutMs: runtimeAttachTimeoutMs,
         logs: recentLogs,
         unavailableMessage: 'Start Runtime did not complete because the attached runtime is no longer online.',
@@ -689,7 +810,12 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
     }
 
     if (spawnError || child.exitCode !== null || child.signalCode) {
-      const attachedStartup = await loadAttachableRuntimeState(runtimeStateFile, runtimeAttachTimeoutMs);
+      const attachedStartup = await loadManagedRuntimeStartupFromStatus({
+        executablePath: args.executablePath,
+        stateRoot,
+        env: mergedEnv,
+        timeoutMs: runtimeAttachTimeoutMs,
+      });
       if (!attachedStartup) {
         throw readinessFailure(
           'Start Runtime did not complete because the runtime process exited before Desktop could attach.',
@@ -733,7 +859,9 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
 
     const stableStartup = await waitForStableRuntimeReadiness({
       startup,
-      runtimeStateFile,
+      executablePath: args.executablePath,
+      stateRoot,
+      env: mergedEnv,
       probeTimeoutMs: runtimeAttachTimeoutMs,
       openTimeoutMs: args.startupTimeoutMs ?? DEFAULT_STARTUP_TIMEOUT_MS,
       stabilityWindowMs: runtimeStabilityWindowMs,
@@ -770,19 +898,22 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
   }
 }
 
-export async function attachManagedRuntimeFromStateFile(args: Readonly<{
-  runtimeStateFile: string;
+export async function attachManagedRuntimeFromStatus(args: Readonly<{
+  executablePath: string;
+  stateRoot?: string;
+  env?: NodeJS.ProcessEnv;
   runtimeAttachTimeoutMs?: number;
   stopTimeoutMs?: number;
 }>): Promise<ManagedRuntime | null> {
-  const runtimeStateFile = String(args.runtimeStateFile ?? '').trim();
-  if (runtimeStateFile === '') {
-    return null;
-  }
-  const startup = await loadAttachableRuntimeState(
-    runtimeStateFile,
-    args.runtimeAttachTimeoutMs ?? DEFAULT_RUNTIME_ATTACH_TIMEOUT_MS,
-  );
+  const startup = await loadManagedRuntimeStartupFromStatus({
+    executablePath: args.executablePath,
+    stateRoot: args.stateRoot,
+    env: {
+      ...process.env,
+      ...args.env,
+    },
+    timeoutMs: args.runtimeAttachTimeoutMs ?? DEFAULT_RUNTIME_ATTACH_TIMEOUT_MS,
+  });
   if (!startup) {
     return null;
   }

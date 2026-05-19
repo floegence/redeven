@@ -25,21 +25,32 @@ const (
 )
 
 type desktopLaunchLockOwner struct {
-	PID              int    `json:"pid,omitempty"`
-	Mode             string `json:"mode,omitempty"`
-	DesktopManaged   bool   `json:"desktop_managed"`
-	LocalUIEnabled   bool   `json:"local_ui_enabled"`
-	ConfigPath       string `json:"config_path,omitempty"`
-	StateDir         string `json:"state_dir,omitempty"`
-	RuntimeStatePath string `json:"runtime_state_path,omitempty"`
+	PID                      int    `json:"pid,omitempty"`
+	Mode                     string `json:"mode,omitempty"`
+	InstanceID               string `json:"instance_id,omitempty"`
+	StartedAtUnixMS          int64  `json:"started_at_unix_ms,omitempty"`
+	RuntimeVersion           string `json:"runtime_version,omitempty"`
+	RuntimeCommit            string `json:"runtime_commit,omitempty"`
+	BinaryPath               string `json:"binary_path,omitempty"`
+	DesktopManaged           bool   `json:"desktop_managed"`
+	LocalUIEnabled           bool   `json:"local_ui_enabled"`
+	ConfigPath               string `json:"config_path,omitempty"`
+	StateRoot                string `json:"state_root,omitempty"`
+	StateDir                 string `json:"state_dir,omitempty"`
+	RuntimeControlSocketPath string `json:"runtime_control_socket_path,omitempty"`
 }
 
 type desktopLaunchDiagnostics struct {
-	LockPath         string `json:"lock_path,omitempty"`
-	StateDir         string `json:"state_dir,omitempty"`
-	RuntimeStatePath string `json:"runtime_state_path,omitempty"`
-	ConfigPath       string `json:"config_path,omitempty"`
-	Command          string `json:"command,omitempty"`
+	LockPath                 string `json:"lock_path,omitempty"`
+	StateDir                 string `json:"state_dir,omitempty"`
+	RuntimeControlSocketPath string `json:"runtime_control_socket_path,omitempty"`
+	ConfigPath               string `json:"config_path,omitempty"`
+	Command                  string `json:"command,omitempty"`
+	AttachState              string `json:"attach_state,omitempty"`
+	FailureCode              string `json:"failure_code,omitempty"`
+	LockPID                  int    `json:"lock_pid,omitempty"`
+	PIDAlive                 bool   `json:"pid_alive,omitempty"`
+	SocketReachable          bool   `json:"socket_reachable,omitempty"`
 }
 
 type desktopLaunchReport struct {
@@ -47,21 +58,22 @@ type desktopLaunchReport struct {
 	Code    string              `json:"code,omitempty"`
 	Message string              `json:"message,omitempty"`
 
-	LocalUIURL             string                  `json:"local_ui_url,omitempty"`
-	LocalUIURLs            []string                `json:"local_ui_urls,omitempty"`
-	RuntimeControl         *runtimeControlEndpoint `json:"runtime_control,omitempty"`
-	PasswordRequired       bool                    `json:"password_required"`
-	EffectiveRunMode       string                  `json:"effective_run_mode,omitempty"`
-	RemoteEnabled          bool                    `json:"remote_enabled"`
-	DesktopManaged         bool                    `json:"desktop_managed"`
-	DesktopOwnerID         string                  `json:"desktop_owner_id,omitempty"`
-	ControlplaneBaseURL    string                  `json:"controlplane_base_url,omitempty"`
-	ControlplaneProviderID string                  `json:"controlplane_provider_id,omitempty"`
-	EnvPublicID            string                  `json:"env_public_id,omitempty"`
-	StateDir               string                  `json:"state_dir,omitempty"`
-	DiagnosticsEnabled     bool                    `json:"diagnostics_enabled"`
-	PID                    int                     `json:"pid,omitempty"`
-	RuntimeService         runtimeservice.Snapshot `json:"runtime_service"`
+	LocalUIURL               string                  `json:"local_ui_url,omitempty"`
+	LocalUIURLs              []string                `json:"local_ui_urls,omitempty"`
+	RuntimeControl           *runtimeControlEndpoint `json:"runtime_control,omitempty"`
+	PasswordRequired         bool                    `json:"password_required"`
+	EffectiveRunMode         string                  `json:"effective_run_mode,omitempty"`
+	RemoteEnabled            bool                    `json:"remote_enabled"`
+	DesktopManaged           bool                    `json:"desktop_managed"`
+	DesktopOwnerID           string                  `json:"desktop_owner_id,omitempty"`
+	ControlplaneBaseURL      string                  `json:"controlplane_base_url,omitempty"`
+	ControlplaneProviderID   string                  `json:"controlplane_provider_id,omitempty"`
+	EnvPublicID              string                  `json:"env_public_id,omitempty"`
+	StateDir                 string                  `json:"state_dir,omitempty"`
+	RuntimeControlSocketPath string                  `json:"runtime_control_socket_path,omitempty"`
+	DiagnosticsEnabled       bool                    `json:"diagnostics_enabled"`
+	PID                      int                     `json:"pid,omitempty"`
+	RuntimeService           runtimeservice.Snapshot `json:"runtime_service"`
 
 	LockOwner   *desktopLaunchLockOwner   `json:"lock_owner,omitempty"`
 	Diagnostics *desktopLaunchDiagnostics `json:"diagnostics,omitempty"`

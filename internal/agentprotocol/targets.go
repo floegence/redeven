@@ -1,13 +1,15 @@
 package agentprotocol
 
 import (
+	"context"
 	"errors"
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/floegence/redeven/internal/config"
-	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
+	"github.com/floegence/redeven/internal/runtimemanagement"
 )
 
 const (
@@ -44,21 +46,20 @@ func DiscoverTargets(opts DiscoverTargetsOptions) (TargetCatalog, error) {
 		return TargetCatalog{}, cfgErr
 	}
 
-	runtimeState, err := localuiruntime.Load(layout.RuntimeStatePath)
-	if err != nil {
-		return TargetCatalog{}, err
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	runtimeStatus, runtimeStatusErr := runtimemanagement.LoadStatus(ctx, layout.RuntimeControlSocketPath, 300*time.Millisecond)
+	cancel()
 
 	target := TargetDescriptor{
-		ID:               "local:" + config.DefaultLocalEnvironmentID,
-		Kind:             TargetKindLocalEnvironment,
-		Label:            "Local Environment",
-		Status:           TargetStatusNotConfigured,
-		StateRoot:        layout.StateRoot,
-		StateDir:         layout.StateDir,
-		ConfigPath:       layout.ConfigPath,
-		RuntimeStatePath: layout.RuntimeStatePath,
-		Capabilities:     []string{},
+		ID:                       "local:" + config.DefaultLocalEnvironmentID,
+		Kind:                     TargetKindLocalEnvironment,
+		Label:                    "Local Environment",
+		Status:                   TargetStatusNotConfigured,
+		StateRoot:                layout.StateRoot,
+		StateDir:                 layout.StateDir,
+		ConfigPath:               layout.ConfigPath,
+		RuntimeControlSocketPath: layout.RuntimeControlSocketPath,
+		Capabilities:             []string{},
 	}
 
 	if cfg != nil {
@@ -79,22 +80,22 @@ func DiscoverTargets(opts DiscoverTargetsOptions) (TargetCatalog, error) {
 		target.UnavailableReasonCode = "config_missing"
 	}
 
-	if runtimeState != nil {
+	if runtimeStatusErr == nil && runtimeStatus.State == runtimemanagement.AttachStateReady && runtimeStatus.Endpoint != nil {
 		target.Status = TargetStatusAvailable
-		target.LocalUIURL = strings.TrimSpace(runtimeState.LocalUIURL)
-		target.LocalUIURLs = compactStrings(runtimeState.LocalUIURLs)
-		target.PasswordRequired = runtimeState.PasswordRequired
-		target.EffectiveRunMode = strings.TrimSpace(runtimeState.EffectiveRunMode)
-		target.RemoteEnabled = runtimeState.RemoteEnabled
-		target.DesktopManaged = runtimeState.DesktopManaged
+		target.LocalUIURL = strings.TrimSpace(runtimeStatus.Endpoint.LocalUIURL)
+		target.LocalUIURLs = compactStrings(runtimeStatus.Endpoint.LocalUIURLs)
+		target.PasswordRequired = runtimeStatus.Endpoint.PasswordRequired
+		target.EffectiveRunMode = strings.TrimSpace(runtimeStatus.RuntimeService.EffectiveRunMode)
+		target.RemoteEnabled = runtimeStatus.RuntimeService.RemoteEnabled
+		target.DesktopManaged = runtimeStatus.Identity.DesktopManaged
 		if target.ControlplaneBaseURL == "" {
-			target.ControlplaneBaseURL = strings.TrimSpace(runtimeState.ControlplaneBaseURL)
+			target.ControlplaneBaseURL = strings.TrimSpace(runtimeStatus.RuntimeService.Bindings.ProviderLink.ProviderOrigin)
 		}
 		if target.ControlplaneProvider == "" {
-			target.ControlplaneProvider = strings.TrimSpace(runtimeState.ControlplaneProviderID)
+			target.ControlplaneProvider = strings.TrimSpace(runtimeStatus.RuntimeService.Bindings.ProviderLink.ProviderID)
 		}
 		if target.EnvPublicID == "" {
-			target.EnvPublicID = strings.TrimSpace(runtimeState.EnvPublicID)
+			target.EnvPublicID = strings.TrimSpace(runtimeStatus.RuntimeService.Bindings.ProviderLink.EnvPublicID)
 		}
 		target.Capabilities = append(target.Capabilities,
 			CapabilityLocalUI,

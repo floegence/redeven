@@ -1,36 +1,65 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/floegence/redeven/internal/config"
-	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
 	"github.com/floegence/redeven/internal/lockfile"
+	"github.com/floegence/redeven/internal/runtimemanagement"
+	"github.com/floegence/redeven/internal/runtimeservice"
 )
 
 func TestHandleDesktopLockConflictWritesAttachedReportWhenRuntimeIsAvailable(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/local/runtime/health" {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"data":{"status":"online","password_required":true,"desktop_managed":true,"desktop_owner_id":"desktop-owner-health","runtime_service":{"protocol_version":"redeven-runtime-v1","service_owner":"desktop","desktop_managed":true,"compatibility":"compatible","open_readiness":{"state":"openable"},"active_workload":{}}}}`))
-	}))
-	defer server.Close()
-
-	cfgPath := filepath.Join(t.TempDir(), "config.json")
-	reportPath := filepath.Join(t.TempDir(), "startup-report.json")
-	runtimePath := localuiruntime.RuntimeStatePath(cfgPath)
-	if err := writeRuntimeStateForTest(runtimePath, server.URL+"/"); err != nil {
-		t.Fatalf("writeRuntimeStateForTest() error = %v", err)
+	stateRoot, err := os.MkdirTemp("/tmp", "rdv-startup-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp() error = %v", err)
 	}
+	defer func() { _ = os.RemoveAll(stateRoot) }()
+	layout, err := config.LocalEnvironmentStateLayout(stateRoot)
+	if err != nil {
+		t.Fatalf("LocalEnvironmentStateLayout() error = %v", err)
+	}
+	cfgPath := layout.ConfigPath
+	reportPath := filepath.Join(t.TempDir(), "startup-report.json")
+	statusServer, err := runtimemanagement.NewServer(layout.RuntimeControlSocketPath, func(context.Context) (runtimemanagement.RuntimeAttachStatus, error) {
+		return runtimemanagement.RuntimeAttachStatus{
+			State: runtimemanagement.AttachStateReady,
+			Identity: runtimemanagement.RuntimeInstanceIdentity{
+				StateDir:       layout.StateDir,
+				PID:            os.Getpid(),
+				DesktopManaged: true,
+				DesktopOwnerID: "desktop-owner-health",
+			},
+			Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
+				LocalUIURL:       "http://127.0.0.1:23998/",
+				LocalUIURLs:      []string{"http://127.0.0.1:23998/"},
+				PasswordRequired: true,
+			},
+			RuntimeService: runtimeservice.NormalizeSnapshot(runtimeservice.Snapshot{
+				ServiceOwner:     runtimeservice.OwnerDesktop,
+				DesktopManaged:   true,
+				EffectiveRunMode: "hybrid",
+				RemoteEnabled:    true,
+				OpenReadiness: runtimeservice.OpenReadiness{
+					State: runtimeservice.OpenReadinessOpenable,
+				},
+			}),
+			Diagnostics: runtimemanagement.RuntimeAttachDiagnostics{
+				ControlSocketPath: layout.RuntimeControlSocketPath,
+			},
+		}, nil
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+	if err := statusServer.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer func() { _ = statusServer.Close() }()
 
 	handled, exitCode, err := handleDesktopLockConflict(reportPath, filepath.Join(filepath.Dir(cfgPath), "agent.lock"), cfgPath)
 	if err != nil {
@@ -44,13 +73,13 @@ func TestHandleDesktopLockConflictWritesAttachedReportWhenRuntimeIsAvailable(t *
 	if report.Status != desktopLaunchStatusAttached {
 		t.Fatalf("Status = %q", report.Status)
 	}
-	if report.LocalUIURL != server.URL+"/" {
+	if report.LocalUIURL != "http://127.0.0.1:23998/" {
 		t.Fatalf("LocalUIURL = %q", report.LocalUIURL)
 	}
 	if !report.PasswordRequired {
 		t.Fatalf("PasswordRequired = false, want true")
 	}
-	if report.StateDir != filepath.Dir(cfgPath) || !report.DiagnosticsEnabled {
+	if report.StateDir != filepath.Dir(cfgPath) {
 		t.Fatalf("unexpected diagnostics report: %#v", report)
 	}
 	if report.DesktopOwnerID != "desktop-owner-health" {
@@ -75,11 +104,13 @@ func TestHandleDesktopLockConflictWritesBlockedReportWhenRuntimeIsUnavailable(t 
 	}()
 	if err := writeAgentLockMetadata(lk, newAgentLockMetadata(
 		"remote",
+		"rt_conflict",
 		false,
 		false,
 		config.StateLayout{
-			ConfigPath:       cfgPath,
-			RuntimeStatePath: localuiruntime.RuntimeStatePath(cfgPath),
+			ConfigPath:               cfgPath,
+			StateRoot:                filepath.Dir(filepath.Dir(cfgPath)),
+			RuntimeControlSocketPath: config.RuntimeControlSocketPathFromConfigPath(cfgPath),
 		},
 	)); err != nil {
 		t.Fatalf("writeAgentLockMetadata() error = %v", err)
@@ -94,34 +125,12 @@ func TestHandleDesktopLockConflictWritesBlockedReportWhenRuntimeIsUnavailable(t 
 	}
 
 	report := readDesktopLaunchReportForTest(t, reportPath)
-	if report.Status != desktopLaunchStatusBlocked || report.Code != desktopLaunchCodeStateDirLocked {
+	if report.Status != desktopLaunchStatusBlocked || report.Code != string(runtimemanagement.AttachStateLiveProcessWithoutSocket) {
 		t.Fatalf("unexpected report: %#v", report)
 	}
 	if report.LockOwner == nil || report.LockOwner.Mode != "remote" || report.LockOwner.LocalUIEnabled {
 		t.Fatalf("unexpected lock owner: %#v", report.LockOwner)
 	}
-}
-
-func writeRuntimeStateForTest(path string, localUIURL string) error {
-	body, err := json.MarshalIndent(map[string]any{
-		"local_ui_url":        localUIURL,
-		"local_ui_urls":       []string{localUIURL},
-		"password_required":   true,
-		"effective_run_mode":  "hybrid",
-		"remote_enabled":      true,
-		"desktop_managed":     true,
-		"desktop_owner_id":    "desktop-owner-state",
-		"state_dir":           filepath.Dir(filepath.Dir(path)),
-		"diagnostics_enabled": true,
-	}, "", "  ")
-	if err != nil {
-		return err
-	}
-	body = append(body, '\n')
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	return os.WriteFile(path, body, 0o600)
 }
 
 func readDesktopLaunchReportForTest(t *testing.T, path string) desktopLaunchReport {

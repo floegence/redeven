@@ -1,12 +1,9 @@
-import fs from 'node:fs/promises';
 import http from 'node:http';
 import https from 'node:https';
-import os from 'node:os';
 
 import { isAllowedAppNavigation } from './navigation';
-import { parseStartupReport, type StartupReport } from './startup';
+import { type StartupReport } from './startup';
 import { normalizeLocalUIBaseURL } from './localUIURL';
-import { defaultLocalEnvironmentStateLayout } from './statePaths';
 import {
   envAppShellUnavailableOpenReadiness,
   normalizeRuntimeServiceSnapshot,
@@ -30,12 +27,6 @@ type RuntimeProbeStatus = Readonly<{
   runtime_service?: RuntimeServiceSnapshot;
 }>;
 
-const PROVIDER_BINDING_STARTUP_FIELDS = [
-  'controlplane_base_url',
-  'controlplane_provider_id',
-  'env_public_id',
-] as const satisfies readonly (keyof StartupReport)[];
-
 type EnvAppShellValidation = Readonly<{
   ok: boolean;
   assetPaths: readonly string[];
@@ -45,21 +36,6 @@ type EnvAppShellProbeResult = 'ready' | 'invalid' | 'unavailable';
 
 const ENV_APP_ROOT_MOUNT_PATTERN = /<div\b[^>]*\bid\s*=\s*["']root["'][^>]*>/iu;
 const ENV_APP_ASSET_REF_PATTERN = /\b(?:src|href)\s*=\s*["'](\/_redeven_proxy\/env\/assets\/[^"']+)["']/giu;
-
-function candidateStartupURLs(startup: StartupReport): string[] {
-  const seen = new Set<string>();
-  const ordered = [startup.local_ui_url, ...startup.local_ui_urls];
-  const out: string[] = [];
-  for (const value of ordered) {
-    const cleanValue = String(value ?? '').trim();
-    if (!cleanValue || seen.has(cleanValue)) {
-      continue;
-    }
-    seen.add(cleanValue);
-    out.push(cleanValue);
-  }
-  return out;
-}
 
 function request(
   url: URL,
@@ -258,65 +234,4 @@ export async function loadExternalLocalUIStartup(
     ...(String(status.desktop_owner_id ?? '').trim() !== '' ? { desktop_owner_id: String(status.desktop_owner_id).trim() } : {}),
     ...(status.runtime_service ? { runtime_service: status.runtime_service } : {}),
   };
-}
-
-export function defaultRuntimeStatePath(
-  env: NodeJS.ProcessEnv = process.env,
-  homedir: () => string = os.homedir,
-): string {
-  return defaultLocalEnvironmentStateLayout(env, homedir).runtimeStateFile;
-}
-
-export async function loadAttachableRuntimeState(
-  runtimeStateFile: string,
-  timeoutMs: number = DEFAULT_RUNTIME_PROBE_TIMEOUT_MS,
-): Promise<StartupReport | null> {
-  const cleanPath = String(runtimeStateFile ?? '').trim();
-  if (!cleanPath) {
-    return null;
-  }
-
-  let raw = '';
-  try {
-    raw = await fs.readFile(cleanPath, 'utf8');
-  } catch (error: unknown) {
-    const nodeError = error as NodeJS.ErrnoException;
-    if (nodeError?.code === 'ENOENT') {
-      return null;
-    }
-    throw error;
-  }
-
-  let startup: StartupReport;
-  try {
-    startup = parseStartupReport(raw);
-  } catch {
-    return null;
-  }
-
-  for (const candidateURL of candidateStartupURLs(startup)) {
-    const status = await probeRedevenLocalUI(candidateURL, timeoutMs);
-    if (status) {
-      const providerBindingFields = Object.fromEntries(
-        PROVIDER_BINDING_STARTUP_FIELDS.flatMap((key) => (
-          startup[key] ? [[key, startup[key]]] : []
-        )),
-      ) as Partial<StartupReport>;
-      return {
-        ...startup,
-        ...providerBindingFields,
-        local_ui_url: candidateURL,
-        local_ui_urls: candidateStartupURLs({
-          ...startup,
-          local_ui_url: candidateURL,
-        }),
-        password_required: status.password_required,
-        runtime_control: startup.runtime_control,
-        ...(typeof status.desktop_managed === 'boolean' ? { desktop_managed: status.desktop_managed } : {}),
-        ...(String(status.desktop_owner_id ?? '').trim() !== '' ? { desktop_owner_id: String(status.desktop_owner_id).trim() } : {}),
-        ...(status.runtime_service ? { runtime_service: status.runtime_service } : {}),
-      };
-    }
-  }
-  return null;
 }

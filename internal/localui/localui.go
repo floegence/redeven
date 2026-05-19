@@ -28,8 +28,8 @@ import (
 	"github.com/floegence/redeven/internal/codeapp/gateway"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
-	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
 	"github.com/floegence/redeven/internal/portforward"
+	"github.com/floegence/redeven/internal/runtimemanagement"
 	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/gorilla/websocket"
@@ -68,6 +68,9 @@ type Options struct {
 	// ConfigPath is the absolute path to the runtime config file.
 	// It is used to compute the local permission cap and to render Settings consistently.
 	ConfigPath string
+	StateRoot  string
+
+	RuntimeControlSocketPath string
 
 	// Version is the runtime build version (used by /api/local/agent/version/latest).
 	Version string
@@ -84,8 +87,9 @@ type Server struct {
 
 	bind                   BindSpec
 	configPath             string
+	stateRoot              string
 	stateDir               string
-	runtimeStatePath       string
+	runtimeControlSockPath string
 	version                string
 	desktopManaged         bool
 	desktopOwnerID         string
@@ -111,6 +115,7 @@ type Server struct {
 	srv       *http.Server
 
 	runtimeControl *runtimeControlServer
+	runtimeStatus  *runtimemanagement.Server
 }
 
 type pendingDirect struct {
@@ -189,8 +194,9 @@ func New(opts Options) (*Server, error) {
 		log:                    logger,
 		bind:                   bind,
 		configPath:             configPath,
+		stateRoot:              strings.TrimSpace(opts.StateRoot),
 		stateDir:               filepath.Dir(configPath),
-		runtimeStatePath:       localuiruntime.RuntimeStatePath(configPath),
+		runtimeControlSockPath: strings.TrimSpace(opts.RuntimeControlSocketPath),
 		version:                strings.TrimSpace(opts.Version),
 		desktopManaged:         opts.DesktopManaged,
 		desktopOwnerID:         strings.TrimSpace(opts.DesktopOwnerID),
@@ -260,11 +266,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	if s.desktopManaged && strings.TrimSpace(s.desktopOwnerID) != "" {
-		runtimeControl, err := newRuntimeControlServer(s.a, s.desktopOwnerID, s.log, func() {
-			if err := s.writeRuntimeState(); err != nil {
-				s.log.Warn("failed to refresh local runtime state", "path", s.runtimeStatePath, "error", err)
-			}
-		})
+		runtimeControl, err := newRuntimeControlServer(s.a, s.desktopOwnerID, s.log, nil)
 		if err != nil {
 			_ = s.Close()
 			return fmt.Errorf("init runtime-control: %w", err)
@@ -276,9 +278,9 @@ func (s *Server) Start(ctx context.Context) error {
 		s.runtimeControl = runtimeControl
 	}
 
-	if err := s.writeRuntimeState(); err != nil {
+	if err := s.startRuntimeStatusServer(ctx); err != nil {
 		_ = s.Close()
-		return fmt.Errorf("write local runtime state: %w", err)
+		return fmt.Errorf("start runtime management socket: %w", err)
 	}
 
 	s.log.Info("local ui listening", "bind", s.ListenLabel())
@@ -322,11 +324,7 @@ func (s *Server) StartOnListeners(ctx context.Context, listeners []net.Listener,
 	}
 
 	if s.desktopManaged && strings.TrimSpace(s.desktopOwnerID) != "" {
-		runtimeControl, err := newRuntimeControlServer(s.a, s.desktopOwnerID, s.log, func() {
-			if err := s.writeRuntimeState(); err != nil {
-				s.log.Warn("failed to refresh local runtime state", "path", s.runtimeStatePath, "error", err)
-			}
-		})
+		runtimeControl, err := newRuntimeControlServer(s.a, s.desktopOwnerID, s.log, nil)
 		if err != nil {
 			_ = s.Close()
 			return fmt.Errorf("init runtime-control: %w", err)
@@ -343,52 +341,79 @@ func (s *Server) StartOnListeners(ctx context.Context, listeners []net.Listener,
 		s.runtimeControl = runtimeControl
 	}
 
-	if err := s.writeRuntimeState(); err != nil {
+	if err := s.startRuntimeStatusServer(ctx); err != nil {
 		_ = s.Close()
-		return fmt.Errorf("write local runtime state: %w", err)
+		return fmt.Errorf("start runtime management socket: %w", err)
 	}
 
 	s.log.Info("local ui listening", "bind", s.ListenLabel())
 	return nil
 }
 
-func (s *Server) writeRuntimeState() error {
+func (s *Server) startRuntimeStatusServer(ctx context.Context) error {
 	if s == nil {
 		return nil
 	}
-	runtimeService := s.runtimeServiceSnapshot()
-	providerLink := runtimeService.Bindings.ProviderLink
-	return localuiruntime.WriteState(s.runtimeStatePath, localuiruntime.State{
-		LocalUIURL:             firstNonEmptyString(s.DisplayURLs()),
-		LocalUIURLs:            s.DisplayURLs(),
-		RuntimeControl:         runtimeControlEndpoint(s.runtimeControl),
-		PasswordRequired:       s.accessEnabled(),
-		EffectiveRunMode:       runtimeService.EffectiveRunMode,
-		RemoteEnabled:          runtimeService.RemoteEnabled,
-		DesktopManaged:         s.desktopManaged,
-		DesktopOwnerID:         s.desktopOwnerID,
-		ControlplaneBaseURL:    providerLink.ProviderOrigin,
-		ControlplaneProviderID: providerLink.ProviderID,
-		EnvPublicID:            providerLink.EnvPublicID,
-		StateDir:               s.stateDir,
-		DiagnosticsEnabled:     s.diag != nil && s.diag.Enabled(),
-		PID:                    os.Getpid(),
-		RuntimeService:         runtimeService,
+	if s.runtimeStatus != nil || strings.TrimSpace(s.runtimeControlSockPath) == "" {
+		return nil
+	}
+	statusServer, err := runtimemanagement.NewServer(s.runtimeControlSockPath, func(context.Context) (runtimemanagement.RuntimeAttachStatus, error) {
+		return s.RuntimeAttachStatus(), nil
 	})
+	if err != nil {
+		return err
+	}
+	if err := statusServer.Start(ctx); err != nil {
+		return err
+	}
+	s.runtimeStatus = statusServer
+	return nil
 }
 
-func runtimeControlEndpoint(srv *runtimeControlServer) *localuiruntime.RuntimeControlEndpoint {
+func runtimeControlEndpoint(srv *runtimeControlServer) *runtimemanagement.RuntimeControlEndpoint {
 	if srv == nil {
 		return nil
 	}
 	return srv.Endpoint()
 }
 
-func (s *Server) RuntimeControlEndpointForDesktopBridge() *localuiruntime.RuntimeControlEndpoint {
+func (s *Server) RuntimeControlEndpointForDesktopBridge() *runtimemanagement.RuntimeControlEndpoint {
 	if s == nil {
 		return nil
 	}
 	return runtimeControlEndpoint(s.runtimeControl)
+}
+
+func (s *Server) RuntimeAttachStatus() runtimemanagement.RuntimeAttachStatus {
+	if s == nil {
+		return runtimemanagement.RuntimeAttachStatus{State: runtimemanagement.AttachStateNotRunning}
+	}
+	runtimeService := s.runtimeServiceSnapshot()
+	return runtimemanagement.RuntimeAttachStatus{
+		State: runtimemanagement.AttachStateReady,
+		Identity: runtimemanagement.RuntimeInstanceIdentity{
+			InstanceID:      s.a.InstanceID(),
+			StateRoot:       s.stateRoot,
+			StateDir:        s.stateDir,
+			PID:             os.Getpid(),
+			StartedAtUnixMS: s.a.ProcessStartedAtUnixMS(),
+			RuntimeVersion:  s.a.Version(),
+			RuntimeCommit:   s.a.Commit(),
+			BinaryPath:      s.a.BinaryPath(),
+			DesktopManaged:  s.desktopManaged,
+			DesktopOwnerID:  s.desktopOwnerID,
+		},
+		Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
+			LocalUIURL:       firstNonEmptyString(s.DisplayURLs()),
+			LocalUIURLs:      s.DisplayURLs(),
+			RuntimeControl:   runtimeControlEndpoint(s.runtimeControl),
+			PasswordRequired: s.accessEnabled(),
+		},
+		RuntimeService: runtimeService,
+		Diagnostics: runtimemanagement.RuntimeAttachDiagnostics{
+			ControlSocketPath: s.runtimeControlSockPath,
+		},
+	}
 }
 
 func (s *Server) RuntimeServiceSnapshotForDesktopBridge() runtimeservice.Snapshot {
@@ -410,15 +435,16 @@ func (s *Server) Close() error {
 	if s.runtimeControl != nil {
 		_ = s.runtimeControl.Close()
 	}
+	if s.runtimeStatus != nil {
+		_ = s.runtimeStatus.Close()
+	}
 	for _, ln := range s.listeners {
 		_ = ln.Close()
-	}
-	if err := localuiruntime.RemoveState(s.runtimeStatePath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		s.log.Warn("failed to remove local runtime state", "path", s.runtimeStatePath, "error", err)
 	}
 	s.srv = nil
 	s.listeners = nil
 	s.runtimeControl = nil
+	s.runtimeStatus = nil
 	return nil
 }
 
@@ -442,13 +468,6 @@ func (s *Server) ListenLabel() string {
 		return ""
 	}
 	return s.bind.ListenLabelForPort(s.Port())
-}
-
-func (s *Server) RuntimeStatePath() string {
-	if s == nil {
-		return ""
-	}
-	return s.runtimeStatePath
 }
 
 func (s *Server) DisplayURLs() []string {
@@ -886,7 +905,7 @@ func (s *Server) handleLogo(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	// Keep the legacy root-level logo URL working so UI code doesn't need to special-case Local UI mode.
+	// Keep the root-level logo URL stable so UI code doesn't need to special-case Local UI mode.
 	http.Redirect(w, r, "/_redeven_proxy/env/logo.png", http.StatusFound)
 }
 

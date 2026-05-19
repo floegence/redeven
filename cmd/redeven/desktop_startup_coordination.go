@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/config"
-	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
+	"github.com/floegence/redeven/internal/runtimemanagement"
 	"github.com/floegence/redeven/internal/runtimeservice"
 )
 
@@ -32,80 +32,87 @@ func writeDesktopBlockedLaunchReport(
 		Code:    code,
 		Message: message,
 		Diagnostics: &desktopLaunchDiagnostics{
-			StateDir:   stateLayout.StateDir,
-			ConfigPath: stateLayout.ConfigPath,
-			Command:    "redeven run",
+			StateDir:                 stateLayout.StateDir,
+			ConfigPath:               stateLayout.ConfigPath,
+			RuntimeControlSocketPath: stateLayout.RuntimeControlSocketPath,
+			Command:                  "redeven run",
 		},
 	})
 }
 
 func writeDesktopReadyLaunchReport(reportPath string, startup runtimeStartupReport, status desktopLaunchStatus) error {
 	return writeDesktopLaunchReport(reportPath, desktopLaunchReport{
-		Status:                 status,
-		LocalUIURL:             startup.LocalUIURL,
-		LocalUIURLs:            append([]string(nil), startup.LocalUIURLs...),
-		RuntimeControl:         startup.RuntimeControl,
-		PasswordRequired:       startup.PasswordRequired,
-		EffectiveRunMode:       startup.EffectiveRunMode,
-		RemoteEnabled:          startup.RemoteEnabled,
-		DesktopManaged:         startup.DesktopManaged,
-		DesktopOwnerID:         startup.DesktopOwnerID,
-		ControlplaneBaseURL:    startup.ControlplaneBaseURL,
-		ControlplaneProviderID: startup.ControlplaneProviderID,
-		EnvPublicID:            startup.EnvPublicID,
-		StateDir:               startup.StateDir,
-		DiagnosticsEnabled:     startup.DiagnosticsEnabled,
-		PID:                    startup.PID,
-		RuntimeService:         startup.RuntimeService,
+		Status:                   status,
+		LocalUIURL:               startup.LocalUIURL,
+		LocalUIURLs:              append([]string(nil), startup.LocalUIURLs...),
+		RuntimeControl:           startup.RuntimeControl,
+		PasswordRequired:         startup.PasswordRequired,
+		EffectiveRunMode:         startup.EffectiveRunMode,
+		RemoteEnabled:            startup.RemoteEnabled,
+		DesktopManaged:           startup.DesktopManaged,
+		DesktopOwnerID:           startup.DesktopOwnerID,
+		ControlplaneBaseURL:      startup.ControlplaneBaseURL,
+		ControlplaneProviderID:   startup.ControlplaneProviderID,
+		EnvPublicID:              startup.EnvPublicID,
+		StateDir:                 startup.StateDir,
+		RuntimeControlSocketPath: startup.RuntimeControlSocketPath,
+		DiagnosticsEnabled:       startup.DiagnosticsEnabled,
+		PID:                      startup.PID,
+		RuntimeService:           startup.RuntimeService,
 	})
 }
 
 type runtimeStartupReport struct {
-	LocalUIURL             string
-	LocalUIURLs            []string
-	RuntimeControl         *runtimeControlEndpoint
-	PasswordRequired       bool
-	EffectiveRunMode       string
-	RemoteEnabled          bool
-	DesktopManaged         bool
-	DesktopOwnerID         string
-	ControlplaneBaseURL    string
-	ControlplaneProviderID string
-	EnvPublicID            string
-	StateDir               string
-	DiagnosticsEnabled     bool
-	PID                    int
-	RuntimeService         runtimeservice.Snapshot
+	LocalUIURL               string
+	LocalUIURLs              []string
+	RuntimeControl           *runtimeControlEndpoint
+	PasswordRequired         bool
+	EffectiveRunMode         string
+	RemoteEnabled            bool
+	DesktopManaged           bool
+	DesktopOwnerID           string
+	ControlplaneBaseURL      string
+	ControlplaneProviderID   string
+	EnvPublicID              string
+	StateDir                 string
+	RuntimeControlSocketPath string
+	DiagnosticsEnabled       bool
+	PID                      int
+	RuntimeService           runtimeservice.Snapshot
 }
 
-func buildRuntimeStartupReport(state *localuiruntime.Snapshot) runtimeStartupReport {
+func buildRuntimeStartupReport(status runtimemanagement.RuntimeAttachStatus) runtimeStartupReport {
+	endpoint := status.Endpoint
+	if endpoint == nil {
+		endpoint = &runtimemanagement.RuntimeAttachEndpoint{}
+	}
 	return runtimeStartupReport{
-		LocalUIURL:  state.LocalUIURL,
-		LocalUIURLs: append([]string(nil), state.LocalUIURLs...),
+		LocalUIURL:  endpoint.LocalUIURL,
+		LocalUIURLs: append([]string(nil), endpoint.LocalUIURLs...),
 		RuntimeControl: func() *runtimeControlEndpoint {
-			if state.RuntimeControl == nil {
+			if endpoint.RuntimeControl == nil {
 				return nil
 			}
 			return &runtimeControlEndpoint{
-				ProtocolVersion: state.RuntimeControl.ProtocolVersion,
-				BaseURL:         state.RuntimeControl.BaseURL,
-				Token:           state.RuntimeControl.Token,
-				DesktopOwnerID:  state.RuntimeControl.DesktopOwnerID,
-				ExpiresAtUnixMS: state.RuntimeControl.ExpiresAtUnixMS,
+				ProtocolVersion: endpoint.RuntimeControl.ProtocolVersion,
+				BaseURL:         endpoint.RuntimeControl.BaseURL,
+				Token:           endpoint.RuntimeControl.Token,
+				DesktopOwnerID:  endpoint.RuntimeControl.DesktopOwnerID,
+				ExpiresAtUnixMS: endpoint.RuntimeControl.ExpiresAtUnixMS,
 			}
 		}(),
-		PasswordRequired:       state.PasswordRequired,
-		EffectiveRunMode:       state.EffectiveRunMode,
-		RemoteEnabled:          state.RemoteEnabled,
-		DesktopManaged:         state.DesktopManaged,
-		DesktopOwnerID:         state.DesktopOwnerID,
-		ControlplaneBaseURL:    state.ControlplaneBaseURL,
-		ControlplaneProviderID: state.ControlplaneProviderID,
-		EnvPublicID:            state.EnvPublicID,
-		StateDir:               state.StateDir,
-		DiagnosticsEnabled:     state.DiagnosticsEnabled,
-		PID:                    state.PID,
-		RuntimeService:         state.RuntimeService,
+		PasswordRequired:         endpoint.PasswordRequired,
+		EffectiveRunMode:         status.RuntimeService.EffectiveRunMode,
+		RemoteEnabled:            status.RuntimeService.RemoteEnabled,
+		DesktopManaged:           status.Identity.DesktopManaged,
+		DesktopOwnerID:           status.Identity.DesktopOwnerID,
+		ControlplaneBaseURL:      status.RuntimeService.Bindings.ProviderLink.ProviderOrigin,
+		ControlplaneProviderID:   status.RuntimeService.Bindings.ProviderLink.ProviderID,
+		EnvPublicID:              status.RuntimeService.Bindings.ProviderLink.EnvPublicID,
+		StateDir:                 status.Identity.StateDir,
+		RuntimeControlSocketPath: status.Diagnostics.ControlSocketPath,
+		PID:                      status.Identity.PID,
+		RuntimeService:           status.RuntimeService,
 	}
 }
 
@@ -114,37 +121,45 @@ func normalizeLaunchRuntimeServiceSnapshot(snapshot runtimeservice.Snapshot, des
 }
 
 func handleDesktopLockConflict(reportPath string, lockPath string, configPath string) (handled bool, exitCode int, err error) {
-	runtimeStatePath := localuiruntime.RuntimeStatePath(configPath)
-	state, loadErr := localuiruntime.WaitForAttachable(
-		runtimeStatePath,
-		desktopLockConflictAttachTimeout,
-		desktopLockConflictPollInterval,
-		desktopRuntimeProbeTimeout,
-	)
-	if loadErr != nil {
-		return false, 0, loadErr
-	}
-	if state != nil {
-		if err := writeDesktopReadyLaunchReport(reportPath, buildRuntimeStartupReport(state), desktopLaunchStatusAttached); err != nil {
+	socketPath := config.RuntimeControlSocketPathFromConfigPath(configPath)
+	status, loadErr := waitForDesktopRuntimeStatus(socketPath, desktopLockConflictAttachTimeout, desktopLockConflictPollInterval, desktopRuntimeProbeTimeout)
+	if loadErr == nil && status.State == runtimemanagement.AttachStateReady && status.Endpoint != nil {
+		if err := writeDesktopReadyLaunchReport(reportPath, buildRuntimeStartupReport(status), desktopLaunchStatusAttached); err != nil {
 			return false, 0, err
 		}
 		return true, 0, nil
 	}
 
-	metadata, err := readAgentLockMetadata(lockPath)
-	if err != nil {
-		metadata = nil
+	metadata, _ := readAgentLockMetadata(lockPath)
+	diagnostics := diagnoseRuntimeAttachFailure(lockPath, socketPath, metadata, loadErr)
+	if diagnostics.State == runtimemanagement.AttachStateStaleLock {
+		if err := writeDesktopLaunchReport(reportPath, desktopLaunchReport{
+			Status:      desktopLaunchStatusBlocked,
+			Code:        string(runtimemanagement.AttachStateStaleLock),
+			Message:     "Runtime lock metadata is present but the recorded runtime process is not alive.",
+			LockOwner:   lockOwnerFromMetadata(metadata),
+			Diagnostics: desktopLaunchDiagnosticsFromAttach(diagnostics),
+		}); err != nil {
+			return false, 0, err
+		}
+		return true, 1, nil
 	}
+
 	stateDir := filepath.Dir(filepath.Clean(configPath))
 	if err := writeDesktopLaunchReport(reportPath, desktopLaunchReport{
 		Status:    desktopLaunchStatusBlocked,
-		Code:      desktopLaunchCodeStateDirLocked,
-		Message:   "Another Redeven runtime instance is already using this state directory.",
+		Code:      string(diagnostics.State),
+		Message:   desktopRuntimeAttachMessage(diagnostics.State),
 		LockOwner: lockOwnerFromMetadata(metadata),
 		Diagnostics: &desktopLaunchDiagnostics{
-			LockPath:         lockPath,
-			StateDir:         stateDir,
-			RuntimeStatePath: runtimeStatePath,
+			LockPath:                 lockPath,
+			StateDir:                 stateDir,
+			RuntimeControlSocketPath: socketPath,
+			AttachState:              string(diagnostics.State),
+			FailureCode:              diagnostics.Diagnostics.FailureCode,
+			LockPID:                  diagnostics.Diagnostics.LockPID,
+			PIDAlive:                 diagnostics.Diagnostics.PIDAlive,
+			SocketReachable:          diagnostics.Diagnostics.SocketReachable,
 		},
 	}); err != nil {
 		return false, 0, fmt.Errorf("write blocked desktop launch report: %w", err)

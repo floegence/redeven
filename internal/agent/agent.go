@@ -35,7 +35,6 @@ import (
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/fs"
 	"github.com/floegence/redeven/internal/gitrepo"
-	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
 	"github.com/floegence/redeven/internal/monitor"
 	"github.com/floegence/redeven/internal/portforward"
 	"github.com/floegence/redeven/internal/rpcutil"
@@ -72,6 +71,10 @@ type Options struct {
 	// ConfigPath is the path used to load the config file (used to derive state_dir).
 	ConfigPath string
 	StateRoot  string
+	// InstanceID is a per-process runtime identity used by desktop lifecycle diagnostics.
+	InstanceID string
+	// LocalUIBind is the requested Local UI bind address before dynamic port resolution.
+	LocalUIBind string
 	// LocalUIEnabled indicates Local UI is enabled (e.g. `redeven run --mode hybrid|local`).
 	//
 	// When enabled, the agent is allowed to start even without a full bootstrap config.
@@ -121,7 +124,9 @@ type Agent struct {
 	agentHomeAbs       string
 	filesystemScope    *filesystemscope.Registry
 	configPath         string
-	runtimeStatePath   string
+	instanceID         string
+	binaryPath         string
+	localUIBind        string
 	processStartedAtMs int64
 
 	term *terminal.Manager
@@ -217,7 +222,9 @@ func New(opts Options) (*Agent, error) {
 		agentHomeAbs:          agentHomeAbs,
 		filesystemScope:       filesystemScope,
 		configPath:            cfgPathAbs,
-		runtimeStatePath:      localuiruntime.RuntimeStatePath(cfgPathAbs),
+		instanceID:            strings.TrimSpace(opts.InstanceID),
+		binaryPath:            currentExecutablePath(),
+		localUIBind:           strings.TrimSpace(opts.LocalUIBind),
 		processStartedAtMs:    time.Now().UnixMilli(),
 		term:                  terminal.NewManagerWithScope(shell, filesystemScope, logger),
 		mon:                   monitor.NewService(logger),

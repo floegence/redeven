@@ -19,11 +19,13 @@ func TestWriteAndReadAgentLockMetadata(t *testing.T) {
 
 	metadata := newAgentLockMetadata(
 		"desktop",
+		"rt_test",
 		true,
 		true,
 		config.StateLayout{
-			ConfigPath:       "/Users/tester/.redeven/local-environment/config.json",
-			RuntimeStatePath: "/Users/tester/.redeven/local-environment/runtime/local-ui.json",
+			StateRoot:                "/Users/tester/.redeven",
+			ConfigPath:               "/Users/tester/.redeven/local-environment/config.json",
+			RuntimeControlSocketPath: "/Users/tester/.redeven/local-environment/runtime/control.sock",
 		},
 	)
 	if err := writeAgentLockMetadata(lk, metadata); err != nil {
@@ -40,10 +42,16 @@ func TestWriteAndReadAgentLockMetadata(t *testing.T) {
 	if got.Mode != "desktop" || !got.DesktopManaged || !got.LocalUIEnabled {
 		t.Fatalf("unexpected metadata: %#v", got)
 	}
+	if got.InstanceID != "rt_test" {
+		t.Fatalf("InstanceID = %q", got.InstanceID)
+	}
 	if got.ConfigPath != "/Users/tester/.redeven/local-environment/config.json" {
 		t.Fatalf("ConfigPath = %q", got.ConfigPath)
 	}
 	if got.StateDir != "/Users/tester/.redeven/local-environment" {
 		t.Fatalf("StateDir = %q", got.StateDir)
+	}
+	if got.RuntimeControlSocketPath != "/Users/tester/.redeven/local-environment/runtime/control.sock" {
+		t.Fatalf("RuntimeControlSocketPath = %q", got.RuntimeControlSocketPath)
 	}
 }

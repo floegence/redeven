@@ -36,7 +36,7 @@ export type DesktopLocalRuntimeObservation = Readonly<{
 export type DesktopLocalRuntimeOwnership =
   | 'owned'
   | 'managed_elsewhere'
-  | 'legacy_unleased'
+  | 'unowned'
   | 'external';
 
 export type DesktopLocalRuntimeOpenPlan = Readonly<{
@@ -81,7 +81,7 @@ function desktopLocalRuntimeOwnership(
   desktopOwnerID: string | undefined,
 ): DesktopLocalRuntimeOwnership {
   const declared = compact(runtime?.desktop_ownership);
-  if (declared === 'owned' || declared === 'managed_elsewhere' || declared === 'legacy_unleased' || declared === 'external') {
+  if (declared === 'owned' || declared === 'managed_elsewhere' || declared === 'unowned' || declared === 'external') {
     return declared;
   }
   if (runtime?.desktop_managed !== true) {
@@ -92,7 +92,7 @@ function desktopLocalRuntimeOwnership(
   if (expectedOwnerID !== '' && observedOwnerID !== '' && expectedOwnerID === observedOwnerID) {
     return 'owned';
   }
-  return observedOwnerID === '' ? 'legacy_unleased' : 'managed_elsewhere';
+  return observedOwnerID === '' ? 'unowned' : 'managed_elsewhere';
 }
 
 function plan(
@@ -138,7 +138,7 @@ export function buildDesktopLocalRuntimeOpenPlan(
   const runtimeURL = compact(runtime?.local_ui_url);
   const runtimeRunning = runtimeURL !== '';
   const runtimeOwnership = desktopLocalRuntimeOwnership(runtime, options.desktopOwnerID);
-  const desktopCanManage = runtimeOwnership === 'owned' || runtimeOwnership === 'legacy_unleased';
+  const desktopCanManage = runtimeOwnership === 'owned' || runtimeOwnership === 'unowned';
   const runtimeMatchesTarget = true;
   const requiresBootstrap = false;
   const runtimeService = runtime?.runtime_service;
@@ -180,7 +180,7 @@ export function buildDesktopLocalRuntimeOpenPlan(
     });
   }
 
-  if (runtimeOwnership === 'legacy_unleased') {
+  if (runtimeOwnership === 'unowned') {
     if (runtimeHasActiveWork) {
       return plan({
         target,
@@ -194,7 +194,7 @@ export function buildDesktopLocalRuntimeOpenPlan(
         requiresRestart: true,
         requiresConfirmation: true,
         runtimeURL,
-        message: 'This older Desktop-managed runtime needs to be restarted before Desktop can own it. Close active runtime work before restarting.',
+        message: 'This Desktop-managed runtime needs to be restarted before Desktop can own it. Close active runtime work before restarting.',
       });
     }
     return plan({

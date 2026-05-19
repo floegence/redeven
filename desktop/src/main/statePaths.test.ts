@@ -13,7 +13,7 @@ describe('statePaths', () => {
       secretsFile: '/Users/tester/.redeven/local-environment/secrets.json',
       lockFile: '/Users/tester/.redeven/local-environment/agent.lock',
       stateDir: '/Users/tester/.redeven/local-environment',
-      runtimeStateFile: '/Users/tester/.redeven/local-environment/runtime/local-ui.json',
+      runtimeControlSocket: '/Users/tester/.redeven/local-environment/runtime/control.sock',
       diagnosticsDir: '/Users/tester/.redeven/local-environment/diagnostics',
       auditDir: '/Users/tester/.redeven/local-environment/audit',
       appsDir: '/Users/tester/.redeven/local-environment/apps',
@@ -25,7 +25,7 @@ describe('statePaths', () => {
     expect(localEnvironmentStateLayout({ HOME: '/Users/tester' }, () => '/ignored')).toEqual(expect.objectContaining({
       configPath: '/Users/tester/.redeven/local-environment/config.json',
       stateDir: '/Users/tester/.redeven/local-environment',
-      runtimeStateFile: '/Users/tester/.redeven/local-environment/runtime/local-ui.json',
+      runtimeControlSocket: '/Users/tester/.redeven/local-environment/runtime/control.sock',
     }));
   });
 

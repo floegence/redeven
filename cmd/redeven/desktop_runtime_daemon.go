@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
+	"github.com/floegence/redeven/internal/runtimemanagement"
 )
 
 func (c *cli) desktopRuntimeStatusCmd(args []string) int {
@@ -28,16 +28,12 @@ func (c *cli) desktopRuntimeStatusCmd(args []string) int {
 		writeErrorWithHelp(c.stderr, "`redeven desktop-runtime-status` does not accept positional arguments", nil, desktopRuntimeStatusHelpText())
 		return 2
 	}
-	state, err := loadAttachableDesktopRuntime(*stateRoot, *probeTimeout)
+	status, err := loadDesktopRuntimeStatus(*stateRoot, *probeTimeout)
 	if err != nil {
 		fmt.Fprintf(c.stderr, "desktop-runtime-status failed: %v\n", err)
 		return 1
 	}
-	if state == nil {
-		fmt.Fprintln(c.stderr, "runtime daemon is not running")
-		return 1
-	}
-	report := desktopLaunchReportFromRuntimeState(state, desktopLaunchStatusReady)
+	report := desktopLaunchReportFromRuntimeStatus(status, desktopLaunchStatusReady)
 	body, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		fmt.Fprintf(c.stderr, "desktop-runtime-status failed: %v\n", err)
@@ -69,19 +65,19 @@ func (c *cli) desktopRuntimeStopCmd(args []string) int {
 		writeErrorWithHelp(c.stderr, "`redeven desktop-runtime-stop` does not accept positional arguments", nil, desktopRuntimeStopHelpText())
 		return 2
 	}
-	state, err := loadAttachableDesktopRuntime(*stateRoot, *probeTimeout)
+	status, err := loadDesktopRuntimeStatus(*stateRoot, *probeTimeout)
 	if err != nil {
 		fmt.Fprintf(c.stderr, "desktop-runtime-stop failed: %v\n", err)
 		return 1
 	}
-	if state == nil {
+	if status.State == runtimemanagement.AttachStateNotRunning || status.State == runtimemanagement.AttachStateStaleLock {
 		return 0
 	}
-	if state.PID <= 0 {
+	if status.Identity.PID <= 0 {
 		fmt.Fprintln(c.stderr, "desktop-runtime-stop failed: runtime did not report a process id")
 		return 1
 	}
-	process, err := os.FindProcess(state.PID)
+	process, err := os.FindProcess(status.Identity.PID)
 	if err != nil {
 		fmt.Fprintf(c.stderr, "desktop-runtime-stop failed: %v\n", err)
 		return 1
@@ -94,8 +90,8 @@ func (c *cli) desktopRuntimeStopCmd(args []string) int {
 	}
 	deadline := time.Now().Add(*gracePeriod)
 	for time.Now().Before(deadline) {
-		attached, probeErr := loadAttachableDesktopRuntime(*stateRoot, *probeTimeout)
-		if probeErr == nil && attached == nil {
+		attached, probeErr := loadDesktopRuntimeStatus(*stateRoot, *probeTimeout)
+		if probeErr == nil && (attached.State == runtimemanagement.AttachStateNotRunning || attached.State == runtimemanagement.AttachStateStaleLock) {
 			return 0
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -103,31 +99,48 @@ func (c *cli) desktopRuntimeStopCmd(args []string) int {
 	return 0
 }
 
-func desktopLaunchReportFromRuntimeState(state *localuiruntime.Snapshot, status desktopLaunchStatus) desktopLaunchReport {
-	if state == nil {
-		return desktopLaunchReport{Status: status}
+func desktopLaunchReportFromRuntimeStatus(state runtimemanagement.RuntimeAttachStatus, status desktopLaunchStatus) desktopLaunchReport {
+	if state.State != runtimemanagement.AttachStateReady && state.State != runtimemanagement.AttachStateStarting {
+		return desktopLaunchReport{
+			Status:  desktopLaunchStatusBlocked,
+			Code:    string(state.State),
+			Message: desktopRuntimeAttachMessage(state.State),
+			Diagnostics: &desktopLaunchDiagnostics{
+				LockPath:                 state.Diagnostics.LockPath,
+				RuntimeControlSocketPath: state.Diagnostics.ControlSocketPath,
+				AttachState:              string(state.State),
+				FailureCode:              state.Diagnostics.FailureCode,
+				LockPID:                  state.Diagnostics.LockPID,
+				PIDAlive:                 state.Diagnostics.PIDAlive,
+				SocketReachable:          state.Diagnostics.SocketReachable,
+			},
+		}
+	}
+	endpoint := state.Endpoint
+	if endpoint == nil {
+		endpoint = &runtimemanagement.RuntimeAttachEndpoint{}
 	}
 	return desktopLaunchReport{
-		Status:                 status,
-		LocalUIURL:             state.LocalUIURL,
-		LocalUIURLs:            append([]string(nil), state.LocalUIURLs...),
-		RuntimeControl:         runtimeControlEndpointFromRuntimeState(state.RuntimeControl),
-		PasswordRequired:       state.PasswordRequired,
-		EffectiveRunMode:       state.EffectiveRunMode,
-		RemoteEnabled:          state.RemoteEnabled,
-		DesktopManaged:         state.DesktopManaged,
-		DesktopOwnerID:         state.DesktopOwnerID,
-		ControlplaneBaseURL:    state.ControlplaneBaseURL,
-		ControlplaneProviderID: state.ControlplaneProviderID,
-		EnvPublicID:            state.EnvPublicID,
-		StateDir:               state.StateDir,
-		DiagnosticsEnabled:     state.DiagnosticsEnabled,
-		PID:                    state.PID,
-		RuntimeService:         state.RuntimeService,
+		Status:                   status,
+		LocalUIURL:               endpoint.LocalUIURL,
+		LocalUIURLs:              append([]string(nil), endpoint.LocalUIURLs...),
+		RuntimeControl:           runtimeControlEndpointFromRuntimeStatus(endpoint.RuntimeControl),
+		PasswordRequired:         endpoint.PasswordRequired,
+		EffectiveRunMode:         state.RuntimeService.EffectiveRunMode,
+		RemoteEnabled:            state.RuntimeService.RemoteEnabled,
+		DesktopManaged:           state.Identity.DesktopManaged,
+		DesktopOwnerID:           state.Identity.DesktopOwnerID,
+		ControlplaneBaseURL:      state.RuntimeService.Bindings.ProviderLink.ProviderOrigin,
+		ControlplaneProviderID:   state.RuntimeService.Bindings.ProviderLink.ProviderID,
+		EnvPublicID:              state.RuntimeService.Bindings.ProviderLink.EnvPublicID,
+		StateDir:                 state.Identity.StateDir,
+		RuntimeControlSocketPath: state.Diagnostics.ControlSocketPath,
+		PID:                      state.Identity.PID,
+		RuntimeService:           state.RuntimeService,
 	}
 }
 
-func runtimeControlEndpointFromRuntimeState(endpoint *localuiruntime.RuntimeControlEndpoint) *runtimeControlEndpoint {
+func runtimeControlEndpointFromRuntimeStatus(endpoint *runtimemanagement.RuntimeControlEndpoint) *runtimeControlEndpoint {
 	if endpoint == nil {
 		return nil
 	}

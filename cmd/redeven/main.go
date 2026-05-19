@@ -16,7 +16,6 @@ import (
 	"github.com/floegence/redeven/internal/agent"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/localui"
-	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
 	"github.com/floegence/redeven/internal/lockfile"
 )
 
@@ -361,6 +360,10 @@ func (c *cli) runCmd(args []string) int {
 
 	// Prevent multiple runtime processes from managing the same local state directory.
 	// This avoids control-plane flapping and data-plane races when users start the runtime twice.
+	runtimeInstanceID, err := newRuntimeInstanceID()
+	if err != nil {
+		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to create runtime instance id: %v", err))
+	}
 	lockPath := filepath.Join(stateLayout.StateDir, "agent.lock")
 	lk, err := lockfile.Acquire(lockPath)
 	if err != nil {
@@ -384,7 +387,7 @@ func (c *cli) runCmd(args []string) int {
 	}
 	defer func() { _ = lk.Release() }()
 
-	if err := writeAgentLockMetadata(lk, newAgentLockMetadata(string(mode), *desktopManaged, mode != runModeRemote, stateLayout)); err != nil {
+	if err := writeAgentLockMetadata(lk, newAgentLockMetadata(string(mode), runtimeInstanceID, *desktopManaged, mode != runModeRemote, stateLayout)); err != nil {
 		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to write runtime lock metadata: %v", err))
 	}
 
@@ -506,6 +509,8 @@ func (c *cli) runCmd(args []string) int {
 		Config:                cfg,
 		ConfigPath:            stateLayout.ConfigPath,
 		StateRoot:             stateLayout.StateRoot,
+		InstanceID:            runtimeInstanceID,
+		LocalUIBind:           localUIBind.ListenLabel(),
 		LocalUIEnabled:        localUIEnabled,
 		ControlChannelEnabled: controlChannelEnabled,
 		DesktopManaged:        *desktopManaged,
@@ -545,20 +550,22 @@ func (c *cli) runCmd(args []string) int {
 		}
 
 		srv, err := localui.New(localui.Options{
-			Bind:                   localUIBind,
-			DesktopManaged:         *desktopManaged,
-			DesktopOwnerID:         desktopOwnerID,
-			EffectiveRunMode:       string(effectiveRunMode),
-			RemoteEnabled:          processRemoteEnabled,
-			ControlplaneBaseURL:    cfg.ControlplaneBaseURL,
-			ControlplaneProviderID: cfg.ControlplaneProviderID,
-			EnvPublicID:            cfg.EnvironmentID,
-			Gateway:                gw,
-			Agent:                  a,
-			ConfigPath:             stateLayout.ConfigPath,
-			Version:                Version,
-			Diagnostics:            a.DiagnosticsStore(),
-			AccessGate:             accessGate,
+			Bind:                     localUIBind,
+			DesktopManaged:           *desktopManaged,
+			DesktopOwnerID:           desktopOwnerID,
+			EffectiveRunMode:         string(effectiveRunMode),
+			RemoteEnabled:            processRemoteEnabled,
+			ControlplaneBaseURL:      cfg.ControlplaneBaseURL,
+			ControlplaneProviderID:   cfg.ControlplaneProviderID,
+			EnvPublicID:              cfg.EnvironmentID,
+			Gateway:                  gw,
+			Agent:                    a,
+			ConfigPath:               stateLayout.ConfigPath,
+			StateRoot:                stateLayout.StateRoot,
+			RuntimeControlSocketPath: stateLayout.RuntimeControlSocketPath,
+			Version:                  Version,
+			Diagnostics:              a.DiagnosticsStore(),
+			AccessGate:               accessGate,
 		})
 		if err != nil {
 			return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to init local ui: %v", err))
@@ -568,6 +575,7 @@ func (c *cli) runCmd(args []string) int {
 		}
 		localUIBindLabel = srv.ListenLabel()
 		localUIURLs = srv.DisplayURLs()
+		a.SetLocalUIBind(localUIBindLabel)
 		if err := config.WriteEnvironmentCatalogRecord(stateLayout, cfg, localUIBindLabel, accessGate.Enabled()); err != nil {
 			return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to refresh environment catalog: %v", err))
 		}
@@ -576,30 +584,31 @@ func (c *cli) runCmd(args []string) int {
 				LocalUIURL:  firstNonEmptyString(localUIURLs),
 				LocalUIURLs: append([]string(nil), localUIURLs...),
 				RuntimeControl: func() *runtimeControlEndpoint {
-					state, err := localuiruntime.Load(srv.RuntimeStatePath())
-					if err != nil || state == nil || state.RuntimeControl == nil {
+					endpoint := srv.RuntimeControlEndpointForDesktopBridge()
+					if endpoint == nil {
 						return nil
 					}
 					return &runtimeControlEndpoint{
-						ProtocolVersion: state.RuntimeControl.ProtocolVersion,
-						BaseURL:         state.RuntimeControl.BaseURL,
-						Token:           state.RuntimeControl.Token,
-						DesktopOwnerID:  state.RuntimeControl.DesktopOwnerID,
-						ExpiresAtUnixMS: state.RuntimeControl.ExpiresAtUnixMS,
+						ProtocolVersion: endpoint.ProtocolVersion,
+						BaseURL:         endpoint.BaseURL,
+						Token:           endpoint.Token,
+						DesktopOwnerID:  endpoint.DesktopOwnerID,
+						ExpiresAtUnixMS: endpoint.ExpiresAtUnixMS,
 					}
 				}(),
-				PasswordRequired:       accessGate != nil && accessGate.Enabled(),
-				EffectiveRunMode:       string(effectiveRunMode),
-				RemoteEnabled:          processRemoteEnabled,
-				DesktopManaged:         *desktopManaged,
-				DesktopOwnerID:         desktopOwnerID,
-				ControlplaneBaseURL:    cfg.ControlplaneBaseURL,
-				ControlplaneProviderID: cfg.ControlplaneProviderID,
-				EnvPublicID:            cfg.EnvironmentID,
-				StateDir:               stateLayout.StateDir,
-				DiagnosticsEnabled:     a.DiagnosticsEnabled(),
-				PID:                    os.Getpid(),
-				RuntimeService:         a.RuntimeServiceSnapshot(),
+				PasswordRequired:         accessGate != nil && accessGate.Enabled(),
+				EffectiveRunMode:         string(effectiveRunMode),
+				RemoteEnabled:            processRemoteEnabled,
+				DesktopManaged:           *desktopManaged,
+				DesktopOwnerID:           desktopOwnerID,
+				ControlplaneBaseURL:      cfg.ControlplaneBaseURL,
+				ControlplaneProviderID:   cfg.ControlplaneProviderID,
+				EnvPublicID:              cfg.EnvironmentID,
+				StateDir:                 stateLayout.StateDir,
+				RuntimeControlSocketPath: stateLayout.RuntimeControlSocketPath,
+				DiagnosticsEnabled:       a.DiagnosticsEnabled(),
+				PID:                      os.Getpid(),
+				RuntimeService:           a.RuntimeServiceSnapshot(),
 			}, desktopLaunchStatusReady); err != nil {
 				fmt.Fprintf(c.stderr, "failed to write desktop launch report: %v\n", err)
 				return 1
