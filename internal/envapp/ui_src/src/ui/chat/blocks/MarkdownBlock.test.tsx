@@ -282,6 +282,19 @@ describe('MarkdownBlock', () => {
     expect(paragraphs[1].matches('.chat-markdown-block > :last-child p:last-child')).toBe(true);
   });
 
+  it('keeps user-bubble markdown blocks on light inset surfaces', () => {
+    expect(chatStyles).toContain('.chat-message-bubble-user pre.chat-md-code-block {');
+    expect(chatStyles).toContain('.chat-message-bubble-user .chat-md-blockquote {');
+    expect(chatStyles).toContain('.chat-message-bubble-user .chat-md-inline-code {');
+    expect(chatStyles).toMatch(
+      /\.chat-message-bubble-user pre\.chat-md-code-block \{[^}]*background-color: color-mix\(in srgb, var\(--primary-foreground\) 92%, var\(--primary\) 8%\);[^}]*color: #1f2937;/
+    );
+    expect(chatStyles).toMatch(
+      /\.chat-message-bubble-user \.chat-md-blockquote \{[^}]*background-color: color-mix\(in srgb, var\(--primary-foreground\) 90%, var\(--primary\) 10%\);[^}]*color: #263041;/
+    );
+    expect(chatStyles).not.toMatch(/\.chat-message-bubble-user pre\.chat-md-code-block \{[^}]*#0d1117/);
+  });
+
   it('normalizes malformed markdown boundaries before rendering', async () => {
     const content = '# Title##Chapter One';
     const normalized = normalizeMarkdownForDisplay(content);
