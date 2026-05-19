@@ -2,6 +2,7 @@ package codexbridge
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -77,6 +78,11 @@ type appServerLaunchPlan struct {
 	PATH       string
 }
 
+type loginShellEnvSnapshot struct {
+	Env  []string
+	PATH string
+}
+
 func buildAppServerLaunchPlan(shell string, binaryPath string) (*appServerLaunchPlan, error) {
 	resolved, err := sanitizeExecutablePath(binaryPath)
 	if err != nil {
@@ -85,14 +91,18 @@ func buildAppServerLaunchPlan(shell string, binaryPath string) (*appServerLaunch
 	if resolved == "" {
 		return nil, errors.New("missing codex binary")
 	}
-	pathValue := composeAppServerPath(filepath.Dir(resolved), loginShellPath(shell))
+	snapshot, err := captureLoginShellEnvironment(shell)
+	if err != nil {
+		return nil, err
+	}
+	env, pathValue := composeAppServerEnv(snapshot.Env, filepath.Dir(resolved))
 	if err := validateAppServerRuntime(resolved, pathValue); err != nil {
 		return nil, err
 	}
 	return &appServerLaunchPlan{
 		BinaryPath: resolved,
 		Args:       []string{resolved, "app-server", "--listen", "stdio://"},
-		Env:        environWithPath(pathValue),
+		Env:        env,
 		PATH:       pathValue,
 	}, nil
 }
@@ -377,23 +387,80 @@ func resolveExecutableCandidate(candidate string) (string, bool) {
 	return path, true
 }
 
-func loginShellPath(shell string) string {
+func captureLoginShellEnvironment(shell string) (*loginShellEnvSnapshot, error) {
 	shellPath, err := resolveInteractiveLoginShell(shell)
 	if err != nil {
-		return ""
+		return nil, err
 	}
-	out, err := exec.Command(shellPath, "-l", "-i", "-c", `printf '__REDEVEN_CODEX_ENV_PATH__%s\n' "$PATH"`).Output()
+	out, err := exec.Command(shellPath, "-l", "-i", "-c", loginShellEnvCaptureCommand).Output()
 	if err != nil {
-		return ""
+		return nil, fmt.Errorf("capture login shell environment: %w", err)
 	}
-	const marker = "__REDEVEN_CODEX_ENV_PATH__"
-	for _, line := range strings.Split(string(out), "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, marker) {
-			return strings.TrimSpace(strings.TrimPrefix(line, marker))
+	snapshot, err := parseLoginShellEnvironmentOutput(out)
+	if err != nil {
+		return nil, err
+	}
+	return snapshot, nil
+}
+
+const (
+	loginShellEnvBeginMarker    = "__REDEVEN_CODEX_ENV_BEGIN__"
+	loginShellEnvEndMarker      = "__REDEVEN_CODEX_ENV_END__"
+	loginShellEnvCaptureCommand = `printf '%s\0' '__REDEVEN_CODEX_ENV_BEGIN__'; env -0; printf '%s\0' '__REDEVEN_CODEX_ENV_END__'`
+)
+
+func parseLoginShellEnvironmentOutput(out []byte) (*loginShellEnvSnapshot, error) {
+	beginIndex := bytes.Index(out, []byte(loginShellEnvBeginMarker))
+	if beginIndex < 0 {
+		return nil, errors.New("login shell environment marker not found")
+	}
+	envStart := beginIndex + len(loginShellEnvBeginMarker)
+	if envStart >= len(out) || out[envStart] != 0 {
+		return nil, errors.New("login shell environment marker is malformed")
+	}
+	envStart++
+	tokens := bytes.Split(out[envStart:], []byte{0})
+	env := make([]string, 0, len(tokens))
+	foundEnd := false
+	for _, token := range tokens {
+		value := string(token)
+		if value == loginShellEnvEndMarker {
+			foundEnd = true
+			break
 		}
+		if value == "" {
+			continue
+		}
+		if !strings.Contains(value, "=") {
+			return nil, errors.New("login shell environment contained malformed entry")
+		}
+		env = append(env, value)
 	}
-	return ""
+	if !foundEnd {
+		return nil, errors.New("login shell environment end marker not found")
+	}
+	return &loginShellEnvSnapshot{
+		Env:  env,
+		PATH: envValue(env, "PATH"),
+	}, nil
+}
+
+func composeAppServerEnv(baseEnv []string, binaryDir string) ([]string, string) {
+	pathValue := composeAppServerPath(binaryDir, envValue(baseEnv, "PATH"))
+	out := make([]string, 0, len(baseEnv)+1)
+	replaced := false
+	for _, kv := range baseEnv {
+		if envName(kv) == "PATH" {
+			out = append(out, "PATH="+pathValue)
+			replaced = true
+			continue
+		}
+		out = append(out, kv)
+	}
+	if !replaced {
+		out = append(out, "PATH="+pathValue)
+	}
+	return out, pathValue
 }
 
 func composeAppServerPath(binaryDir string, shellPath string) string {
@@ -401,9 +468,6 @@ func composeAppServerPath(binaryDir string, shellPath string) string {
 	shellPath = strings.TrimSpace(shellPath)
 	if binaryDir == "" {
 		return shellPath
-	}
-	if shellPath == "" {
-		shellPath = os.Getenv("PATH")
 	}
 	if shellPath == "" {
 		return binaryDir
@@ -462,28 +526,6 @@ func lookPathInPath(binaryName string, pathValue string) string {
 	return ""
 }
 
-func environWithPath(pathValue string) []string {
-	pathValue = strings.TrimSpace(pathValue)
-	if pathValue == "" {
-		return nil
-	}
-	env := os.Environ()
-	out := make([]string, 0, len(env)+1)
-	replaced := false
-	for _, kv := range env {
-		if strings.HasPrefix(kv, "PATH=") {
-			out = append(out, "PATH="+pathValue)
-			replaced = true
-			continue
-		}
-		out = append(out, kv)
-	}
-	if !replaced {
-		out = append(out, "PATH="+pathValue)
-	}
-	return out
-}
-
 func resolveInteractiveLoginShell(shell string) (string, error) {
 	if shellPath, ok := resolveShellPath(strings.TrimSpace(shell)); ok {
 		return shellPath, nil
@@ -507,4 +549,24 @@ func resolveShellPath(shell string) (string, bool) {
 		return "", false
 	}
 	return shellPath, true
+}
+
+func envValue(env []string, name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	for _, kv := range env {
+		if envName(kv) == name {
+			return strings.TrimPrefix(kv, name+"=")
+		}
+	}
+	return ""
+}
+
+func envName(kv string) string {
+	if index := strings.Index(kv, "="); index >= 0 {
+		return kv[:index]
+	}
+	return kv
 }

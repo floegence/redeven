@@ -10,8 +10,13 @@ import (
 )
 
 func TestBuildAppServerCommand_ExecutesResolvedBinaryDirectly(t *testing.T) {
-	shellPath := writeExecutable(t, "preferred-shell")
-	fallbackShell := writeExecutable(t, "fallback-shell")
+	shellPath := writeEnvCaptureShell(t, []string{
+		"PATH=/usr/bin:/bin",
+		"CUSTOM_PROVIDER_API_KEY=from-login-shell",
+	}, "")
+	fallbackShell := writeEnvCaptureShell(t, []string{
+		"PATH=/fallback/bin",
+	}, "")
 	codexPath := writeExecutable(t, "codex")
 	t.Setenv("SHELL", fallbackShell)
 
@@ -30,6 +35,9 @@ func TestBuildAppServerCommand_ExecutesResolvedBinaryDirectly(t *testing.T) {
 	}
 	if first := strings.Split(pathValue, string(os.PathListSeparator))[0]; first != filepath.Dir(codexPath) {
 		t.Fatalf("PATH first entry=%q want %q", first, filepath.Dir(codexPath))
+	}
+	if got := envValue(cmd.Env, "CUSTOM_PROVIDER_API_KEY"); got != "from-login-shell" {
+		t.Fatalf("CUSTOM_PROVIDER_API_KEY=%q want login shell value", got)
 	}
 }
 
@@ -71,11 +79,9 @@ func TestBuildAppServerCommand_UsesLoginShellPathForNodeShim(t *testing.T) {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 	_ = writeExecutableAt(t, nodeDir, "node")
-	shellPath := filepath.Join(t.TempDir(), "shell")
-	script := "#!/bin/sh\nif [ \"$1\" = \"-l\" ] && [ \"$2\" = \"-i\" ] && [ \"$3\" = \"-c\" ]; then\n  PATH=\"" + nodeDir + ":$PATH\" /bin/sh -c \"$4\" \"$5\"\n  exit $?\nfi\nexit 64\n"
-	if err := os.WriteFile(shellPath, []byte(script), 0o755); err != nil {
-		t.Fatalf("write shell %q: %v", shellPath, err)
-	}
+	shellPath := writeEnvCaptureShell(t, []string{
+		"PATH=" + nodeDir + string(os.PathListSeparator) + "/usr/bin",
+	}, "")
 
 	cmd, err := buildAppServerCommand(shellPath, codexPath)
 	if err != nil {
@@ -91,12 +97,55 @@ func TestBuildAppServerCommand_UsesLoginShellPathForNodeShim(t *testing.T) {
 func TestBuildAppServerCommand_RejectsNodeShimWithoutNodeInRuntimePath(t *testing.T) {
 	dir := t.TempDir()
 	codexPath := writeNodeShimAt(t, dir, "codex")
-	t.Setenv("PATH", t.TempDir())
+	shellPath := writeEnvCaptureShell(t, []string{
+		"PATH=" + t.TempDir(),
+	}, "")
 	t.Setenv("SHELL", "")
 
-	_, err := buildAppServerCommand("", codexPath)
+	_, err := buildAppServerCommand(shellPath, codexPath)
 	if err == nil || !strings.Contains(err.Error(), "Node.js shim") || !strings.Contains(err.Error(), "`node` is not available") {
 		t.Fatalf("buildAppServerCommand error=%v, want actionable node shim error", err)
+	}
+}
+
+func TestBuildAppServerCommand_RejectsLoginShellEnvCaptureFailure(t *testing.T) {
+	codexPath := writeExecutable(t, "codex")
+	shellPath := filepath.Join(t.TempDir(), "shell")
+	script := "#!/bin/sh\nexit 64\n"
+	if err := os.WriteFile(shellPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write shell %q: %v", shellPath, err)
+	}
+
+	_, err := buildAppServerCommand(shellPath, codexPath)
+	if err == nil || !strings.Contains(err.Error(), "capture login shell environment") {
+		t.Fatalf("buildAppServerCommand error=%v, want login shell capture error", err)
+	}
+}
+
+func TestParseLoginShellEnvironmentOutput_IgnoresShellNoise(t *testing.T) {
+	raw := []byte("welcome from shell\n" +
+		loginShellEnvBeginMarker + "\x00" +
+		"PATH=/login/bin:/usr/bin\x00" +
+		"CUSTOM_PROVIDER_API_KEY=secret-from-login\x00" +
+		loginShellEnvEndMarker + "\x00" +
+		"trailing noise\n")
+
+	snapshot, err := parseLoginShellEnvironmentOutput(raw)
+	if err != nil {
+		t.Fatalf("parseLoginShellEnvironmentOutput: %v", err)
+	}
+	if got := snapshot.PATH; got != "/login/bin:/usr/bin" {
+		t.Fatalf("PATH=%q want login path", got)
+	}
+	if got := envValue(snapshot.Env, "CUSTOM_PROVIDER_API_KEY"); got != "secret-from-login" {
+		t.Fatalf("CUSTOM_PROVIDER_API_KEY=%q want secret-from-login", got)
+	}
+}
+
+func TestParseLoginShellEnvironmentOutput_RejectsMalformedOutput(t *testing.T) {
+	_, err := parseLoginShellEnvironmentOutput([]byte("startup noise only"))
+	if err == nil || !strings.Contains(err.Error(), "marker") {
+		t.Fatalf("parseLoginShellEnvironmentOutput error=%v, want marker error", err)
 	}
 }
 
@@ -143,11 +192,33 @@ func writeNodeShimAt(t *testing.T, dir string, name string) string {
 	return path
 }
 
-func pathFromEnv(env []string) string {
-	for _, kv := range env {
-		if strings.HasPrefix(kv, "PATH=") {
-			return strings.TrimPrefix(kv, "PATH=")
-		}
+func writeEnvCaptureShell(t *testing.T, env []string, noise string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "shell")
+	var script strings.Builder
+	script.WriteString("#!/bin/sh\n")
+	script.WriteString("if [ \"$1\" = \"-l\" ] && [ \"$2\" = \"-i\" ] && [ \"$3\" = \"-c\" ]; then\n")
+	if noise != "" {
+		script.WriteString("  printf '%s\\n' " + shellQuote(noise) + "\n")
 	}
-	return ""
+	script.WriteString("  printf '%s\\000' " + shellQuote(loginShellEnvBeginMarker))
+	for _, kv := range env {
+		script.WriteString(" " + shellQuote(kv))
+	}
+	script.WriteString(" " + shellQuote(loginShellEnvEndMarker) + "\n")
+	script.WriteString("  exit 0\n")
+	script.WriteString("fi\n")
+	script.WriteString("exit 64\n")
+	if err := os.WriteFile(path, []byte(script.String()), 0o755); err != nil {
+		t.Fatalf("write shell %q: %v", path, err)
+	}
+	return path
+}
+
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
+}
+
+func pathFromEnv(env []string) string {
+	return envValue(env, "PATH")
 }

@@ -79,11 +79,12 @@ Redeven resolves `codex` like this:
 
 1. Resolve `codex` through the user's configured shell in `login + interactive` mode so host-specific PATH setup from tools such as nvm or Homebrew is visible.
 2. Sanitize the shell output and keep only a real executable path, ignoring interactive startup noise such as aliases or banners.
-3. Start `codex app-server --listen stdio://` on demand by executing the resolved binary directly, with the binary directory prepended to `PATH` so npm-style `#!/usr/bin/env node` shims can still find their runtime.
-4. If the resolved binary is a Node.js shim, verify that `node` is available in the final app-server `PATH` before starting the child process. A missing Node runtime is reported as a host diagnostic instead of surfacing as an opaque exit status.
-5. Inherit the rest of the runtime process environment as-is, including `CODEX_HOME` and related Codex runtime configuration.
-6. Store the app-server `initialize` response (`codexHome`, `userAgent`, and platform fields) in the Codex status contract so the browser can show the actual host runtime context.
-7. Let the local Codex installation keep its own defaults for model, approvals, sandboxing, and other runtime behavior unless the user explicitly overrides a field in the Codex page request itself.
+3. Capture the complete `login + interactive` shell environment with a marked NUL-delimited snapshot. Startup noise outside the markers is ignored, but capture failure stops app-server startup instead of silently falling back to an incomplete process environment.
+4. Start `codex app-server --listen stdio://` on demand by executing the resolved binary directly, with the binary directory prepended to `PATH` so npm-style `#!/usr/bin/env node` shims can still find their runtime. Redeven does not wrap the long-running app-server in a shell because shell startup output would corrupt the stdio JSON-RPC channel.
+5. If the resolved binary is a Node.js shim, verify that `node` is available in the final app-server `PATH` before starting the child process. A missing Node runtime is reported as a host diagnostic instead of surfacing as an opaque exit status.
+6. Pass the captured login shell environment to the child process so provider keys and host-specific variables exported by the user's shell startup files are visible to Codex. Runtime diagnostics never log or display secret values.
+7. Store the app-server `initialize` response (`codexHome`, `userAgent`, and platform fields) in the Codex status contract so the browser can show the actual host runtime context.
+8. Let the local Codex installation keep its own defaults for model, approvals, sandboxing, and other runtime behavior unless the user explicitly overrides a field in the Codex page request itself.
 
 Runtime Settings -> `AI & Extensions` -> Codex is diagnostic-only and currently shows:
 
