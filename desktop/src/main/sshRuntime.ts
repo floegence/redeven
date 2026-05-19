@@ -76,6 +76,16 @@ export type DesktopSSHRuntimeStatusProbe = Readonly<
       message: string;
     }
 >;
+export type StopManagedSSHRuntimeProcessArgs = Readonly<{
+  target: DesktopSSHEnvironmentDetails;
+  pid: number;
+  sshPassword?: string;
+  sshBinary?: string;
+  tempRoot?: string;
+  connectTimeoutSeconds?: number;
+  signal?: AbortSignal;
+  onLog?: StartManagedSSHRuntimeArgs['onLog'];
+}>;
 export type DesktopSSHRemoteRuntimeStamp = Readonly<{
   schema_version: typeof MANAGED_SSH_RUNTIME_STAMP_SCHEMA_VERSION;
   managed_by: 'redeven-desktop';
@@ -773,6 +783,54 @@ export async function probeManagedSSHRuntimeStatus(
       status: 'failed',
       message: error instanceof Error ? error.message : String(error),
     };
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
+export async function stopManagedSSHRuntimeProcess(
+  args: StopManagedSSHRuntimeProcessArgs,
+): Promise<void> {
+  if (!Number.isInteger(args.pid) || args.pid <= 0) {
+    throw new Error('Desktop could not resolve the SSH runtime process id to stop.');
+  }
+  const target = normalizeDesktopSSHEnvironmentDetails(args.target);
+  const sshBinary = compact(args.sshBinary) || 'ssh';
+  const tempRoot = compact(args.tempRoot) || os.tmpdir();
+  const connectTimeoutSeconds = args.connectTimeoutSeconds ?? DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS;
+  const tempDir = await fs.mkdtemp(path.join(tempRoot, 'rdv-ssh-stop-'));
+  const logs: MutableRecentLogs = {
+    master_stderr: '',
+    control_stdout: '',
+    control_stderr: '',
+    forward_stderr: '',
+    runtime_control_forward_stderr: '',
+  };
+  const auth: SSHCommandAuthContext = {
+    mode: target.auth_mode,
+    askPassScriptPath: await createSSHAskPassScript(tempDir, target.auth_mode),
+    password: args.sshPassword,
+  };
+  try {
+    const result = await runSSHOnce(
+      sshBinary,
+      [
+        ...sshStandaloneArgs(connectTimeoutSeconds, auth.mode),
+        ...sshTargetArgs(target),
+        remoteShellCommand(buildManagedSSHStopScript(), 'redeven-ssh-stop', [
+          String(args.pid),
+        ]),
+      ],
+      auth,
+      logs,
+      'control_stderr',
+      args.onLog,
+      undefined,
+      args.signal,
+    );
+    if (result.exit_code !== 0) {
+      throw new Error(formatRecentLogs(logs) || result.stderr || 'Desktop could not stop the SSH runtime process.');
+    }
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
   }

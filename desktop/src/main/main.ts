@@ -98,6 +98,7 @@ import {
   openManagedSSHRuntimeConnection,
   probeManagedSSHRuntimeStatus,
   parseManagedSSHRuntimeProbeResult,
+  stopManagedSSHRuntimeProcess,
   type DesktopSSHRuntimeProgress,
 } from './sshRuntime';
 import {
@@ -111,7 +112,7 @@ import {
   resolveRuntimeContainerPlacement,
   type DesktopRuntimeContainerResolver,
 } from './containerRuntime';
-import { parseLaunchReport } from './launchReport';
+import { parseLaunchReport, type LaunchBlockedReport } from './launchReport';
 import {
   createLocalRuntimeHostExecutor,
   createSSHRuntimeHostExecutor,
@@ -2300,14 +2301,7 @@ async function collectSavedSSHRuntimeHealth(
         )] as const;
       }
       if (probe.status === 'blocked') {
-        const runtimeMaintenance = maintenance ?? {
-          kind: 'ssh_runtime_restart_required',
-          required_for: 'open',
-          can_desktop_restart: false,
-          has_active_work: true,
-          active_work_label: 'Existing runtime work may be active',
-          message: probe.report.message,
-        };
+        const runtimeMaintenance = maintenance ?? sshRuntimeMaintenanceFromBlockedLaunchReport(probe.report);
         sshRuntimeMaintenanceByKey.set(runtimeKey, runtimeMaintenance);
         return [
           environment.id,
@@ -3697,6 +3691,36 @@ function sshRuntimeMaintenanceFromStartup(
   };
 }
 
+function launchBlockedReportPID(report: LaunchBlockedReport): number {
+  const candidates = [
+    report.lock_owner?.pid,
+    report.diagnostics?.lock_pid,
+  ];
+  for (const candidate of candidates) {
+    const pid = Number(candidate ?? Number.NaN);
+    if (Number.isInteger(pid) && pid > 0) {
+      return pid;
+    }
+  }
+  return 0;
+}
+
+function sshRuntimeMaintenanceFromBlockedLaunchReport(
+  report: LaunchBlockedReport,
+): DesktopRuntimeMaintenanceRequirement {
+  const canRestart = launchBlockedReportPID(report) > 0
+    && (report.lock_owner?.desktop_managed !== false);
+  return {
+    kind: 'ssh_runtime_restart_required',
+    required_for: 'open',
+    can_desktop_restart: canRestart,
+    has_active_work: true,
+    active_work_label: 'Existing runtime work may be active',
+    target_runtime_version: resolveSSHRuntimeReleaseTag(),
+    message: report.message,
+  };
+}
+
 async function startSSHEnvironmentRuntimeRecord(
   sshDetails: DesktopSSHEnvironmentDetails,
   options: Readonly<{
@@ -3815,16 +3839,40 @@ async function startSSHEnvironmentRuntimeRecord(
         return readyRecord;
       }
       if (statusProbe.status === 'blocked') {
-        const maintenance: DesktopRuntimeMaintenanceRequirement = {
-          kind: 'ssh_runtime_restart_required',
-          required_for: 'open',
-          can_desktop_restart: false,
-          has_active_work: true,
-          active_work_label: 'Existing runtime work may be active',
-          message: statusProbe.report.message,
-        };
+        const maintenance = sshRuntimeMaintenanceFromBlockedLaunchReport(statusProbe.report);
         sshRuntimeMaintenanceByKey.set(runtimeKey, maintenance);
-        throw new DesktopSSHRuntimeMaintenanceRequiredError(maintenance.message, maintenance);
+        if (options.allowActiveWorkReplacement !== true || !maintenance.can_desktop_restart) {
+          throw new DesktopSSHRuntimeMaintenanceRequiredError(maintenance.message, maintenance);
+        }
+        const pid = launchBlockedReportPID(statusProbe.report);
+        launcherOperations.update(runtimeKey, {
+          phase: 'ssh_starting_runtime',
+          title: 'Restarting blocked SSH runtime',
+          detail: 'Desktop is stopping the live runtime process that no longer exposes its management socket.',
+          lifecycle_progress: runtimeLifecycleProgress({
+            location: 'ssh_host',
+            phase: 'starting_runtime_process',
+            targetID: runtimeKey,
+            targetLabel: label,
+            targetDetail: desktopSSHAuthority(sshDetails),
+          }),
+        });
+        await stopManagedSSHRuntimeProcess({
+          target: sshDetails,
+          pid,
+          sshPassword,
+          tempRoot: app.getPath('temp'),
+          connectTimeoutSeconds: typeof sshDetails.connect_timeout_seconds === 'number'
+            ? sshDetails.connect_timeout_seconds
+            : undefined,
+          signal,
+          onLog: (stream, chunk) => {
+            const text = String(chunk ?? '').trim();
+            if (text) {
+              console.log(`[redeven:${stream}] ${text}`);
+            }
+          },
+        });
       }
       if (statusProbe.status === 'failed') {
         throw new Error(statusProbe.message || 'Desktop could not verify the SSH runtime status.');

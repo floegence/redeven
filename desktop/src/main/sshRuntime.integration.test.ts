@@ -15,6 +15,7 @@ import {
   openManagedSSHRuntimeConnection,
   probeManagedSSHRuntimeStatus,
   startManagedSSHRuntime,
+  stopManagedSSHRuntimeProcess,
   type ManagedSSHRuntime,
   type ManagedSSHRuntimeReady,
 } from './sshRuntime';
@@ -33,7 +34,8 @@ type FakeSSHScenario =
   | 'upload_install_fail'
   | 'no_report'
   | 'quick_exit_report'
-  | 'blocked_report';
+  | 'blocked_report'
+  | 'status_blocked_without_socket';
 
 type FakeSSHEvent = Readonly<{
   event: string;
@@ -348,6 +350,26 @@ function writeProbeResult() {
 
 function writeRuntimeStatus() {
   const state = readState();
+  if (scenario === 'status_blocked_without_socket') {
+    process.stdout.write(JSON.stringify({
+      status: 'blocked',
+      code: 'live_process_without_management_socket',
+      message: 'A Redeven runtime process is alive, but its management socket is not reachable.',
+      lock_owner: {
+        pid: 4242,
+        desktop_managed: true,
+        desktop_owner_id: 'desktop-owner-test',
+      },
+      diagnostics: {
+        lock_pid: 4242,
+        pid_alive: true,
+        attach_state: 'live_process_without_management_socket',
+        failure_code: 'management_socket_unreachable',
+        socket_reachable: false,
+      },
+    }));
+    return;
+  }
   if (state.installed !== true) {
     process.exit(127);
   }
@@ -811,6 +833,46 @@ describe('sshRuntime integration', () => {
       const events = await readFakeSSHEvents(fixture);
       const statusEvent = events.find((event) => event.event === 'runtime_status');
       expect(statusEvent?.data?.script_args).toEqual(['remote_default', 'v1.2.3']);
+    } finally {
+      await removeFakeSSHFixture(fixture);
+    }
+  });
+
+  it('reports blocked SSH status with a stoppable process id and can stop that process explicitly', async () => {
+    const fixture = await createFakeSSHFixture('status_blocked_without_socket');
+    try {
+      const probe = await withFakeSSHEnv(fixture, () => probeManagedSSHRuntimeStatus({
+        target: targetFor('auto'),
+        runtimeReleaseTag: 'v1.2.3',
+        sshBinary: fixture.sshBinary,
+        tempRoot: fixture.root,
+        connectTimeoutSeconds: 1,
+      }));
+
+      expect(probe).toMatchObject({
+        status: 'blocked',
+        report: {
+          code: 'live_process_without_management_socket',
+          lock_owner: {
+            pid: 4242,
+            desktop_managed: true,
+          },
+          diagnostics: {
+            failure_code: 'management_socket_unreachable',
+          },
+        },
+      });
+
+      await withFakeSSHEnv(fixture, () => stopManagedSSHRuntimeProcess({
+        target: targetFor('auto'),
+        pid: 4242,
+        sshBinary: fixture.sshBinary,
+        tempRoot: fixture.root,
+        connectTimeoutSeconds: 1,
+      }));
+
+      const events = await readFakeSSHEvents(fixture);
+      expect(events.find((event) => event.event === 'stop_runtime')?.data).toEqual({ pid: '4242' });
     } finally {
       await removeFakeSSHFixture(fixture);
     }
