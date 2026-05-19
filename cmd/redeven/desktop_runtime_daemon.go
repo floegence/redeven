@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/floegence/redeven/internal/runtimemanagement"
@@ -102,9 +103,10 @@ func (c *cli) desktopRuntimeStopCmd(args []string) int {
 func desktopLaunchReportFromRuntimeStatus(state runtimemanagement.RuntimeAttachStatus, status desktopLaunchStatus) desktopLaunchReport {
 	if state.State != runtimemanagement.AttachStateReady && state.State != runtimemanagement.AttachStateStarting {
 		return desktopLaunchReport{
-			Status:  desktopLaunchStatusBlocked,
-			Code:    string(state.State),
-			Message: desktopRuntimeAttachMessage(state.State),
+			Status:    desktopLaunchStatusBlocked,
+			Code:      string(state.State),
+			Message:   desktopRuntimeAttachMessage(state.State),
+			LockOwner: lockOwnerFromRuntimeIdentity(state.Identity),
 			Diagnostics: &desktopLaunchDiagnostics{
 				LockPath:                 state.Diagnostics.LockPath,
 				RuntimeControlSocketPath: state.Diagnostics.ControlSocketPath,
@@ -137,6 +139,24 @@ func desktopLaunchReportFromRuntimeStatus(state runtimemanagement.RuntimeAttachS
 		RuntimeControlSocketPath: state.Diagnostics.ControlSocketPath,
 		PID:                      state.Identity.PID,
 		RuntimeService:           state.RuntimeService,
+	}
+}
+
+func lockOwnerFromRuntimeIdentity(identity runtimemanagement.RuntimeInstanceIdentity) *desktopLaunchLockOwner {
+	if identity.PID <= 0 && strings.TrimSpace(identity.InstanceID) == "" {
+		return nil
+	}
+	return &desktopLaunchLockOwner{
+		PID:             identity.PID,
+		InstanceID:      identity.InstanceID,
+		StartedAtUnixMS: identity.StartedAtUnixMS,
+		RuntimeVersion:  identity.RuntimeVersion,
+		RuntimeCommit:   identity.RuntimeCommit,
+		BinaryPath:      identity.BinaryPath,
+		DesktopManaged:  identity.DesktopManaged,
+		DesktopOwnerID:  identity.DesktopOwnerID,
+		StateRoot:       identity.StateRoot,
+		StateDir:        identity.StateDir,
 	}
 }
 

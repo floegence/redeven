@@ -87,7 +87,11 @@ func diagnoseRuntimeAttachFailure(lockPath string, socketPath string, metadata *
 	}
 
 	return runtimemanagement.RuntimeAttachStatus{
-		State:   state,
+		State: state,
+		Identity: runtimeIdentityFromLockMetadata(metadata, runtimemanagement.RuntimeInstanceIdentity{
+			PID:        lockPID,
+			InstanceID: lockInstanceID,
+		}),
 		Message: message,
 		Diagnostics: runtimemanagement.RuntimeAttachDiagnostics{
 			LockPath:          lockPath,
@@ -99,6 +103,31 @@ func diagnoseRuntimeAttachFailure(lockPath string, socketPath string, metadata *
 			FailureCode:       failureCode,
 		},
 	}
+}
+
+func runtimeIdentityFromLockMetadata(metadata *agentLockMetadata, base runtimemanagement.RuntimeInstanceIdentity) runtimemanagement.RuntimeInstanceIdentity {
+	if metadata == nil {
+		return base
+	}
+	identity := runtimemanagement.RuntimeInstanceIdentity{
+		InstanceID:      strings.TrimSpace(metadata.InstanceID),
+		StateRoot:       strings.TrimSpace(metadata.StateRoot),
+		StateDir:        strings.TrimSpace(metadata.StateDir),
+		PID:             metadata.PID,
+		StartedAtUnixMS: metadata.StartedAtUnixMS,
+		RuntimeVersion:  strings.TrimSpace(metadata.RuntimeVersion),
+		RuntimeCommit:   strings.TrimSpace(metadata.RuntimeCommit),
+		BinaryPath:      strings.TrimSpace(metadata.BinaryPath),
+		DesktopManaged:  metadata.DesktopManaged,
+		DesktopOwnerID:  strings.TrimSpace(metadata.DesktopOwnerID),
+	}
+	if identity.InstanceID == "" {
+		identity.InstanceID = base.InstanceID
+	}
+	if identity.PID <= 0 {
+		identity.PID = base.PID
+	}
+	return identity
 }
 
 func desktopRuntimeAttachMessage(state runtimemanagement.AttachState) string {

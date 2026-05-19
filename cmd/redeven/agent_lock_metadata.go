@@ -20,6 +20,7 @@ type agentLockMetadata struct {
 	RuntimeCommit            string `json:"runtime_commit,omitempty"`
 	BinaryPath               string `json:"binary_path,omitempty"`
 	DesktopManaged           bool   `json:"desktop_managed"`
+	DesktopOwnerID           string `json:"desktop_owner_id,omitempty"`
 	LocalUIEnabled           bool   `json:"local_ui_enabled"`
 	ConfigPath               string `json:"config_path,omitempty"`
 	StateRoot                string `json:"state_root,omitempty"`
@@ -27,7 +28,7 @@ type agentLockMetadata struct {
 	RuntimeControlSocketPath string `json:"runtime_control_socket_path,omitempty"`
 }
 
-func newAgentLockMetadata(mode string, instanceID string, desktopManaged bool, localUIEnabled bool, layout config.StateLayout) agentLockMetadata {
+func newAgentLockMetadata(mode string, instanceID string, desktopManaged bool, desktopOwnerID string, localUIEnabled bool, layout config.StateLayout) agentLockMetadata {
 	cleanConfigPath := filepath.Clean(strings.TrimSpace(layout.ConfigPath))
 	return agentLockMetadata{
 		PID:                      os.Getpid(),
@@ -38,6 +39,7 @@ func newAgentLockMetadata(mode string, instanceID string, desktopManaged bool, l
 		RuntimeCommit:            Commit,
 		BinaryPath:               currentExecutablePathForCLI(),
 		DesktopManaged:           desktopManaged,
+		DesktopOwnerID:           strings.TrimSpace(desktopOwnerID),
 		LocalUIEnabled:           localUIEnabled,
 		ConfigPath:               cleanConfigPath,
 		StateRoot:                filepath.Clean(strings.TrimSpace(layout.StateRoot)),
@@ -72,6 +74,7 @@ func readAgentLockMetadata(path string) (*agentLockMetadata, error) {
 	metadata.RuntimeVersion = strings.TrimSpace(metadata.RuntimeVersion)
 	metadata.RuntimeCommit = strings.TrimSpace(metadata.RuntimeCommit)
 	metadata.BinaryPath = strings.TrimSpace(metadata.BinaryPath)
+	metadata.DesktopOwnerID = strings.TrimSpace(metadata.DesktopOwnerID)
 	metadata.ConfigPath = strings.TrimSpace(metadata.ConfigPath)
 	metadata.StateRoot = strings.TrimSpace(metadata.StateRoot)
 	metadata.StateDir = strings.TrimSpace(metadata.StateDir)
@@ -92,6 +95,7 @@ func lockOwnerFromMetadata(metadata *agentLockMetadata) *desktopLaunchLockOwner 
 		RuntimeCommit:            metadata.RuntimeCommit,
 		BinaryPath:               metadata.BinaryPath,
 		DesktopManaged:           metadata.DesktopManaged,
+		DesktopOwnerID:           metadata.DesktopOwnerID,
 		LocalUIEnabled:           metadata.LocalUIEnabled,
 		ConfigPath:               metadata.ConfigPath,
 		StateRoot:                metadata.StateRoot,

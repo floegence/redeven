@@ -8,6 +8,7 @@ import {
   containerInspectCommand,
   containerRuntimeDaemonStartCommand,
   containerRuntimeDaemonStatusCommand,
+  containerRuntimeDaemonStopCommand,
   containerRuntimePlatformProbeCommand,
   containerRuntimeProbeCommand,
   containerRuntimeUploadedInstallCommand,
@@ -117,11 +118,13 @@ async function waitForContainerRuntimeDaemon(args: Readonly<{
   runtime_binary_path: string;
   timeout_ms: number;
   signal?: AbortSignal;
+  on_blocked?: (report: LaunchBlockedReport) => Promise<boolean>;
 }>): Promise<StartupReport> {
   const deadline = Date.now() + Math.max(1_000, args.timeout_ms);
   let lastError: Error | null = null;
   let lastBlocked: LaunchBlockedReport | null = null;
   for (;;) {
+    let report: ReturnType<typeof parseLaunchReport> | null = null;
     try {
       const result = await args.executor.run(containerRuntimeDaemonStatusCommand({
         engine: args.placement.container_engine,
@@ -129,14 +132,22 @@ async function waitForContainerRuntimeDaemon(args: Readonly<{
         runtime_root: args.placement.runtime_root,
         runtime_binary_path: args.runtime_binary_path,
       }), { signal: args.signal });
-      const report = parseLaunchReport(result.stdout);
-      if (report.status !== 'blocked') {
-        return report.startup;
-      }
-      lastBlocked = report;
-      lastError = new Error(report.message);
+      report = parseLaunchReport(result.stdout);
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
+    }
+    if (report?.status !== 'blocked') {
+      if (report) {
+        return report.startup;
+      }
+    } else {
+      lastBlocked = report;
+      lastError = new Error(report.message);
+      if (await args.on_blocked?.(report)) {
+        lastBlocked = null;
+        lastError = null;
+        continue;
+      }
     }
     if (Date.now() >= deadline) {
       const blockedDetail = lastBlocked
@@ -146,6 +157,51 @@ async function waitForContainerRuntimeDaemon(args: Readonly<{
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
+}
+
+function isReplaceableDesktopManagedRuntimeBlock(
+  report: LaunchBlockedReport,
+  desktopOwnerID: string,
+): boolean {
+  if (report.code !== 'live_process_without_management_socket') {
+    return false;
+  }
+  if (report.lock_owner?.desktop_managed !== true) {
+    return false;
+  }
+  const lockOwnerID = compact(report.lock_owner.desktop_owner_id);
+  const expectedOwnerID = compact(desktopOwnerID);
+  return lockOwnerID === '' || (expectedOwnerID !== '' && lockOwnerID === expectedOwnerID);
+}
+
+async function startContainerRuntimeDaemon(args: Readonly<{
+  executor: RuntimeHostAccessExecutor;
+  placement: Extract<DesktopRuntimePlacement, Readonly<{ kind: 'container_process' }>>;
+  runtime_binary_path: string;
+  desktop_owner_id: string;
+  signal?: AbortSignal;
+}>): Promise<void> {
+  await args.executor.run(containerRuntimeDaemonStartCommand({
+    engine: args.placement.container_engine,
+    container_id: args.placement.container_id,
+    runtime_root: args.placement.runtime_root,
+    runtime_binary_path: args.runtime_binary_path,
+    desktop_owner_id: compact(args.desktop_owner_id),
+  }), { signal: args.signal });
+}
+
+async function stopContainerRuntimeDaemon(args: Readonly<{
+  executor: RuntimeHostAccessExecutor;
+  placement: Extract<DesktopRuntimePlacement, Readonly<{ kind: 'container_process' }>>;
+  runtime_binary_path: string;
+  signal?: AbortSignal;
+}>): Promise<void> {
+  await args.executor.run(containerRuntimeDaemonStopCommand({
+    engine: args.placement.container_engine,
+    container_id: args.placement.container_id,
+    runtime_root: args.placement.runtime_root,
+    runtime_binary_path: args.runtime_binary_path,
+  }), { signal: args.signal });
 }
 
 function containerUnavailableMessage(
@@ -315,25 +371,58 @@ export async function ensureRuntimePlacementReady(
     'Starting runtime daemon',
     'Desktop is starting the long-running Redeven runtime daemon inside the selected container.',
   );
-  await executor.run(containerRuntimeDaemonStartCommand({
-    engine: placement.container_engine,
-    container_id: placement.container_id,
-    runtime_root: placement.runtime_root,
+  await startContainerRuntimeDaemon({
+    executor,
+    placement,
     runtime_binary_path: probe.binary_path,
     desktop_owner_id: compact(args.desktop_owner_id),
-  }), { signal: args.signal });
+    signal: args.signal,
+  });
   emitProgress(
     args.on_progress,
     'waiting_runtime_daemon',
     'Waiting for runtime daemon',
     'Desktop is waiting for the runtime daemon health check before enabling Open.',
   );
+  let replacedBlockedDaemon = false;
   const startup = await waitForContainerRuntimeDaemon({
     executor,
     placement,
     runtime_binary_path: probe.binary_path,
     timeout_ms: args.timeout_ms ?? 45_000,
     signal: args.signal,
+    on_blocked: async (report) => {
+      if (replacedBlockedDaemon || !isReplaceableDesktopManagedRuntimeBlock(report, compact(args.desktop_owner_id))) {
+        return false;
+      }
+      replacedBlockedDaemon = true;
+      emitProgress(
+        args.on_progress,
+        'starting_runtime_daemon',
+        'Replacing runtime daemon',
+        'Desktop is replacing a desktop-managed runtime process whose management socket is unavailable.',
+      );
+      await stopContainerRuntimeDaemon({
+        executor,
+        placement,
+        runtime_binary_path: probe.binary_path,
+        signal: args.signal,
+      });
+      await startContainerRuntimeDaemon({
+        executor,
+        placement,
+        runtime_binary_path: probe.binary_path,
+        desktop_owner_id: compact(args.desktop_owner_id),
+        signal: args.signal,
+      });
+      emitProgress(
+        args.on_progress,
+        'waiting_runtime_daemon',
+        'Waiting for runtime daemon',
+        'Desktop is waiting for the replacement runtime daemon health check before enabling Open.',
+      );
+      return true;
+    },
   });
   emitProgress(
     args.on_progress,

@@ -21,6 +21,7 @@ func TestWriteAndReadAgentLockMetadata(t *testing.T) {
 		"desktop",
 		"rt_test",
 		true,
+		"desktop-owner-test",
 		true,
 		config.StateLayout{
 			StateRoot:                "/Users/tester/.redeven",
@@ -44,6 +45,9 @@ func TestWriteAndReadAgentLockMetadata(t *testing.T) {
 	}
 	if got.InstanceID != "rt_test" {
 		t.Fatalf("InstanceID = %q", got.InstanceID)
+	}
+	if got.DesktopOwnerID != "desktop-owner-test" {
+		t.Fatalf("DesktopOwnerID = %q", got.DesktopOwnerID)
 	}
 	if got.ConfigPath != "/Users/tester/.redeven/local-environment/config.json" {
 		t.Fatalf("ConfigPath = %q", got.ConfigPath)
