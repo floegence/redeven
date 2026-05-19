@@ -56,4 +56,22 @@ describe('chat responsiveness guardrails', () => {
     expect(codexTranscript).toContain('useVirtualList');
     expect(codexTranscript).toContain('scrollContainer?: HTMLElement | null;');
   });
+
+  it('keeps long-running activity indicators visually quiet', () => {
+    const chatCss = readText('src/ui/chat/chat.css');
+    const workingIndicator = readText('src/ui/chat/status/WorkingIndicator.tsx');
+    const streamingCursor = readText('src/ui/chat/status/StreamingCursor.tsx');
+    const toolCallBlock = readText('src/ui/chat/blocks/ToolCallBlock.tsx');
+
+    expect(chatCss).toContain('@media (prefers-reduced-motion: reduce)');
+    expect(chatCss).toContain('.chat-activity-running-dot');
+    expect(chatCss).not.toContain('@keyframes bounce');
+    expect(chatCss).not.toContain('@keyframes thinkingPulse');
+    expect(chatCss).not.toContain('chat-tool-inline-snake-loader');
+    expect(chatCss).not.toContain('chat-shell-spinner');
+
+    expect(workingIndicator).not.toContain('chat-working-dot');
+    expect(streamingCursor).not.toContain('\\u258B');
+    expect(toolCallBlock).not.toContain('SnakeLoader');
+  });
 });

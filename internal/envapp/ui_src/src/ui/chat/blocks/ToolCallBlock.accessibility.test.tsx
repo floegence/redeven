@@ -38,7 +38,7 @@ describe('ToolCallBlock accessibility', () => {
       </ChatProvider>
     ), host);
 
-    const headerButton = host.querySelector('.chat-tool-call-header-button') as HTMLButtonElement | null;
+    const headerButton = host.querySelector('.chat-tool-call-header .chat-activity-line-button') as HTMLButtonElement | null;
     const approvalActions = host.querySelector('.chat-tool-approval-actions');
 
     expect(headerButton).toBeTruthy();
@@ -46,5 +46,6 @@ describe('ToolCallBlock accessibility', () => {
     expect(headerButton?.getAttribute('aria-controls')).toContain('chat-tool-call-body-');
     expect(approvalActions).toBeTruthy();
     expect(headerButton?.querySelector('.chat-tool-approval-actions')).toBeNull();
+    expect(headerButton?.textContent).toContain('exec');
   });
 });

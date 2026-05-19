@@ -3,10 +3,10 @@
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { Tag } from '@floegence/floe-webapp-core/ui';
 import { useChatContext } from '../ChatProvider';
 import type { ToolCallBlock as ToolCallBlockType } from '../types';
+import { ActivityLine, ActivityStatusIcon, type ActivityStatus } from '../status/ActivityLine';
 import {
   getSelectedAskUserChoice,
   normalizeAskUserDraft,
@@ -42,94 +42,12 @@ type AskUserDisplay = {
   questions: AskUserQuestion[];
 };
 
-// Chevron icon for collapse toggle (rotatable)
-const ChevronIcon: Component<{ collapsed: boolean }> = (props) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="14"
-    height="14"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    stroke-width="2"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-    style={{
-      transform: props.collapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
-      transition: 'transform 0.15s ease',
-    }}
-  >
-    <polyline points="6 9 12 15 18 9" />
-  </svg>
-);
-
-// Status icons for different tool call states
-const StatusIcon: Component<{ status: ToolCallBlockType['status'] }> = (props) => {
-  const iconStyle = { 'flex-shrink': '0' } as const;
-
-  return (
-    <>
-      {props.status === 'pending' && (
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          class="chat-tool-status-icon chat-tool-status-pending"
-          style={iconStyle}
-        >
-          <circle cx="12" cy="12" r="10" />
-          <polyline points="12 6 12 12 16 14" />
-        </svg>
-      )}
-      {props.status === 'running' && (
-        <span class="chat-tool-status-icon chat-tool-status-running" style={iconStyle}>
-          <SnakeLoader size="sm" class="chat-tool-status-loader" />
-        </span>
-      )}
-      {props.status === 'success' && (
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          class="chat-tool-status-icon chat-tool-status-success"
-          style={iconStyle}
-        >
-          <polyline points="20 6 9 17 4 12" />
-        </svg>
-      )}
-      {props.status === 'error' && (
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          class="chat-tool-status-icon chat-tool-status-error"
-          style={iconStyle}
-        >
-          <line x1="18" y1="6" x2="6" y2="18" />
-          <line x1="6" y1="6" x2="18" y2="18" />
-        </svg>
-      )}
-    </>
-  );
-};
+function toolActivityStatus(status: ToolCallBlockType['status']): ActivityStatus {
+  if (status === 'pending') return 'pending';
+  if (status === 'running') return 'running';
+  if (status === 'error') return 'error';
+  return 'success';
+}
 
 function summarizeArgs(args: Record<string, unknown>): string {
   const text = JSON.stringify(args);
@@ -650,6 +568,7 @@ const WaitSubagentsToolCard: Component<WaitSubagentsToolCardProps> = (props) => 
         <div class="chat-tool-wait-subagents-head-main">
           <span class="chat-tool-wait-subagents-badge">{badgeLabel()}</span>
           <span class={cn('chat-tool-wait-subagents-state', headlineStateClass())}>
+            <ActivityStatusIcon status={toolActivityStatus(props.block.status)} class="chat-tool-wait-subagents-state-icon" />
             {headlineStateLabel()}
           </span>
         </div>
@@ -2249,9 +2168,7 @@ const ApplyPatchToolCard: Component<ApplyPatchToolCardProps> = (props) => {
           </span>
           <span class={cn('chat-tool-apply-patch-state', applyPatchStateClass(props.block.status))}>
             <Show when={props.block.status === 'pending' || props.block.status === 'running'}>
-              <span class="chat-tool-apply-patch-state-loader">
-                <SnakeLoader size="sm" class="chat-tool-inline-snake-loader" />
-              </span>
+              <ActivityStatusIcon status={toolActivityStatus(props.block.status)} class="chat-tool-apply-patch-state-icon" />
             </Show>
             {applyPatchStateLabel(props.block.status)}
           </span>
@@ -3296,6 +3213,7 @@ export const ToolCallBlock: Component<ToolCallBlockProps> = (props) => {
   };
 
   const collapsedSummary = () => summarizeArgs(props.block.args);
+  const toolLineDetail = () => (isCollapsed() && !showApproval() ? collapsedSummary() : undefined);
 
   if (askUserDisplay()) {
     return (
@@ -3360,25 +3278,16 @@ export const ToolCallBlock: Component<ToolCallBlockProps> = (props) => {
   return (
     <div class={cn('chat-tool-call-block', props.class)}>
       <div class="chat-tool-call-header">
-        <button
-          type="button"
-          class="chat-tool-call-header-button"
-          onClick={handleToggle}
-          aria-expanded={!isCollapsed()}
-          aria-controls={bodyId}
-        >
-          <span class="chat-tool-collapse-btn" aria-hidden="true">
-            <ChevronIcon collapsed={isCollapsed()} />
-          </span>
-
-          <StatusIcon status={props.block.status} />
-
-          <span class="chat-tool-name">{props.block.toolName}</span>
-
-          <Show when={isCollapsed() && !showApproval()}>
-            <span class="chat-tool-summary">{collapsedSummary()}</span>
-          </Show>
-        </button>
+        <ActivityLine
+          status={toolActivityStatus(props.block.status)}
+          title={props.block.toolName}
+          detail={toolLineDetail()}
+          expandable
+          expanded={!isCollapsed()}
+          controls={bodyId}
+          onToggle={handleToggle}
+          class="chat-tool-call-activity"
+        />
 
         <Show when={showApproval()}>
           <div class="chat-tool-approval-actions">
