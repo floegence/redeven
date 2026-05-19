@@ -14,7 +14,8 @@ import {
   parseContainerInspectJSON,
   parseContainerPlatformProbeOutput,
 } from './containerRuntime';
-import { parseStartupReport, type StartupReport } from './startup';
+import { parseLaunchReport, type LaunchBlockedReport } from './launchReport';
+import { type StartupReport } from './startup';
 import {
   createLocalRuntimeHostExecutor,
   createSSHRuntimeHostExecutor,
@@ -119,6 +120,7 @@ async function waitForContainerRuntimeDaemon(args: Readonly<{
 }>): Promise<StartupReport> {
   const deadline = Date.now() + Math.max(1_000, args.timeout_ms);
   let lastError: Error | null = null;
+  let lastBlocked: LaunchBlockedReport | null = null;
   for (;;) {
     try {
       const result = await args.executor.run(containerRuntimeDaemonStatusCommand({
@@ -127,12 +129,20 @@ async function waitForContainerRuntimeDaemon(args: Readonly<{
         runtime_root: args.placement.runtime_root,
         runtime_binary_path: args.runtime_binary_path,
       }), { signal: args.signal });
-      return parseStartupReport(result.stdout);
+      const report = parseLaunchReport(result.stdout);
+      if (report.status !== 'blocked') {
+        return report.startup;
+      }
+      lastBlocked = report;
+      lastError = new Error(report.message);
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
     }
     if (Date.now() >= deadline) {
-      throw new Error(`Runtime daemon did not become ready before timeout.${lastError ? ` ${lastError.message}` : ''}`);
+      const blockedDetail = lastBlocked
+        ? ` Last runtime state: ${lastBlocked.code}. ${lastBlocked.message}`
+        : '';
+      throw new Error(`Runtime daemon did not become ready before timeout.${blockedDetail}${lastError ? ` ${lastError.message}` : ''}`);
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }

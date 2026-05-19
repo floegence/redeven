@@ -2,15 +2,19 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/desktopbridge"
-	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
+	"github.com/floegence/redeven/internal/runtimemanagement"
+	"github.com/floegence/redeven/internal/runtimeservice"
 )
 
 func TestDesktopBridgeFailsWhenRuntimeDaemonIsNotRunning(t *testing.T) {
@@ -30,7 +34,7 @@ func TestDesktopBridgeFailsWhenRuntimeDaemonIsNotRunning(t *testing.T) {
 	if strings.Contains(stderr.String(), "init runtime") {
 		t.Fatalf("stderr = %q, bridge must not initialize runtime", stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "runtime daemon is not running") {
+	if !strings.Contains(strings.ToLower(stderr.String()), "runtime daemon is not running") {
 		t.Fatalf("stderr = %q, want runtime daemon not running error", stderr.String())
 	}
 }
@@ -38,8 +42,15 @@ func TestDesktopBridgeFailsWhenRuntimeDaemonIsNotRunning(t *testing.T) {
 func TestDesktopBridgeKeepsStdoutProtocolPure(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	stateRoot := filepath.Join(t.TempDir(), "state")
-	statePath := filepath.Join(stateRoot, "local-environment", "runtime", "local-ui.json")
+	stateRoot, err := os.MkdirTemp("/tmp", "rdv-bridge-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp() error = %v", err)
+	}
+	defer func() { _ = os.RemoveAll(stateRoot) }()
+	layout, err := config.LocalEnvironmentStateLayout(stateRoot)
+	if err != nil {
+		t.Fatalf("LocalEnvironmentStateLayout() error = %v", err)
+	}
 	localUIServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/local/runtime/health" {
 			w.Header().Set("Content-Type", "application/json")
@@ -51,21 +62,37 @@ func TestDesktopBridgeKeepsStdoutProtocolPure(t *testing.T) {
 	defer localUIServer.Close()
 	controlServer := httptest.NewServer(http.NotFoundHandler())
 	defer controlServer.Close()
-	if err := localuiruntime.WriteState(statePath, localuiruntime.State{
-		LocalUIURL:       localUIServer.URL + "/",
-		LocalUIURLs:      []string{localUIServer.URL + "/"},
-		PasswordRequired: false,
-		DesktopManaged:   true,
-		DesktopOwnerID:   "test-desktop-owner",
-		RuntimeControl: &localuiruntime.RuntimeControlEndpoint{
-			ProtocolVersion: "runtime-control-v1",
-			BaseURL:         controlServer.URL + "/",
-			Token:           "token",
-			DesktopOwnerID:  "test-desktop-owner",
-		},
-	}); err != nil {
-		t.Fatalf("WriteState() error = %v", err)
+	statusServer, err := runtimemanagement.NewServer(layout.RuntimeControlSocketPath, func(context.Context) (runtimemanagement.RuntimeAttachStatus, error) {
+		return runtimemanagement.RuntimeAttachStatus{
+			State: runtimemanagement.AttachStateReady,
+			Identity: runtimemanagement.RuntimeInstanceIdentity{
+				StateDir:       layout.StateDir,
+				DesktopManaged: true,
+				DesktopOwnerID: "test-desktop-owner",
+			},
+			Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
+				LocalUIURL:       localUIServer.URL + "/",
+				LocalUIURLs:      []string{localUIServer.URL + "/"},
+				PasswordRequired: false,
+				RuntimeControl: &runtimemanagement.RuntimeControlEndpoint{
+					ProtocolVersion: "runtime-control-v1",
+					BaseURL:         controlServer.URL + "/",
+					Token:           "token",
+					DesktopOwnerID:  "test-desktop-owner",
+				},
+			},
+			RuntimeService: runtimeservice.NormalizeSnapshot(runtimeservice.Snapshot{
+				DesktopManaged: true,
+			}),
+		}, nil
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
 	}
+	if err := statusServer.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer func() { _ = statusServer.Close() }()
 
 	code := runCLI(
 		[]string{"desktop-bridge", "--state-root", stateRoot},

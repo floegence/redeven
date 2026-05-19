@@ -9,11 +9,12 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/floegence/redeven/internal/agent"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
-	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
+	"github.com/floegence/redeven/internal/runtimemanagement"
 )
 
 func discardLogger() *slog.Logger {
@@ -32,6 +33,7 @@ func newDesktopManagedTestAgent(t *testing.T, cfgPath string) *agent.Agent {
 			PermissionPolicy: policy,
 		},
 		ConfigPath:       cfgPath,
+		InstanceID:       "rt_test",
 		LocalUIEnabled:   true,
 		DesktopManaged:   true,
 		EffectiveRunMode: "desktop",
@@ -42,23 +44,29 @@ func newDesktopManagedTestAgent(t *testing.T, cfgPath string) *agent.Agent {
 	return a
 }
 
-func TestServerStartWritesAndCloseRemovesRuntimeState(t *testing.T) {
+func TestServerStartPublishesRuntimeManagementStatus(t *testing.T) {
 	cfgPath := writeTestConfig(t)
 	bind, err := ParseBind("127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("ParseBind() error = %v", err)
 	}
+	socketDir, err := os.MkdirTemp("/tmp", "rdv-localui-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp() error = %v", err)
+	}
+	defer func() { _ = os.RemoveAll(socketDir) }()
 
 	s := &Server{
-		log:              discardLogger(),
-		bind:             bind,
-		configPath:       cfgPath,
-		stateDir:         filepath.Dir(cfgPath),
-		runtimeStatePath: localuiruntime.RuntimeStatePath(cfgPath),
-		version:          "dev",
-		desktopManaged:   true,
-		desktopOwnerID:   "desktop-owner-state",
-		gw:               newTestGateway(t, cfgPath),
+		log:                    discardLogger(),
+		bind:                   bind,
+		configPath:             cfgPath,
+		stateRoot:              filepath.Dir(filepath.Dir(cfgPath)),
+		stateDir:               filepath.Dir(cfgPath),
+		runtimeControlSockPath: filepath.Join(socketDir, "control.sock"),
+		version:                "dev",
+		desktopManaged:         true,
+		desktopOwnerID:         "desktop-owner-state",
+		gw:                     newTestGateway(t, cfgPath),
 		diag: func() *diagnostics.Store {
 			store, err := diagnostics.New(diagnostics.Options{
 				Logger:   discardLogger(),
@@ -81,40 +89,35 @@ func TestServerStartWritesAndCloseRemovesRuntimeState(t *testing.T) {
 		t.Fatalf("Start() error = %v", err)
 	}
 
-	body, err := os.ReadFile(localuiruntime.RuntimeStatePath(cfgPath))
+	status, err := runtimemanagement.LoadStatus(ctx, s.runtimeControlSockPath, time.Second)
 	if err != nil {
-		t.Fatalf("ReadFile() error = %v", err)
+		t.Fatalf("LoadStatus() error = %v", err)
 	}
-
-	var state localuiruntime.State
-	if err := json.Unmarshal(body, &state); err != nil {
-		t.Fatalf("json.Unmarshal() error = %v", err)
+	if status.State != runtimemanagement.AttachStateReady || status.Endpoint == nil {
+		t.Fatalf("unexpected runtime status: %#v", status)
 	}
-	if state.LocalUIURL == "" || len(state.LocalUIURLs) == 0 {
-		t.Fatalf("unexpected runtime state: %#v", state)
+	if status.Endpoint.LocalUIURL == "" || len(status.Endpoint.LocalUIURLs) == 0 {
+		t.Fatalf("unexpected runtime endpoint: %#v", status.Endpoint)
 	}
-	if state.PasswordRequired {
+	if status.Endpoint.PasswordRequired {
 		t.Fatalf("PasswordRequired = true, want false")
 	}
-	if state.StateDir != filepath.Dir(cfgPath) || !state.DiagnosticsEnabled {
-		t.Fatalf("unexpected diagnostics metadata: %#v", state)
+	if status.Identity.StateDir != filepath.Dir(cfgPath) {
+		t.Fatalf("unexpected identity metadata: %#v", status.Identity)
 	}
-	if !state.DesktopManaged || state.DesktopOwnerID != "desktop-owner-state" {
-		t.Fatalf("unexpected desktop ownership metadata: %#v", state)
+	if !status.Identity.DesktopManaged || status.Identity.DesktopOwnerID != "desktop-owner-state" {
+		t.Fatalf("unexpected desktop ownership metadata: %#v", status.Identity)
 	}
-	if state.RuntimeControl == nil ||
-		state.RuntimeControl.ProtocolVersion != "redeven-runtime-control-v1" ||
-		state.RuntimeControl.BaseURL == "" ||
-		state.RuntimeControl.Token == "" ||
-		state.RuntimeControl.DesktopOwnerID != "desktop-owner-state" {
-		t.Fatalf("unexpected runtime-control endpoint: %#v", state.RuntimeControl)
+	if status.Endpoint.RuntimeControl == nil ||
+		status.Endpoint.RuntimeControl.ProtocolVersion != "redeven-runtime-control-v1" ||
+		status.Endpoint.RuntimeControl.BaseURL == "" ||
+		status.Endpoint.RuntimeControl.Token == "" ||
+		status.Endpoint.RuntimeControl.DesktopOwnerID != "desktop-owner-state" {
+		t.Fatalf("unexpected runtime-control endpoint: %#v", status.Endpoint.RuntimeControl)
 	}
 
 	if err := s.Close(); err != nil {
 		t.Fatalf("Close() error = %v", err)
-	}
-	if _, err := os.Stat(localuiruntime.RuntimeStatePath(cfgPath)); !os.IsNotExist(err) {
-		t.Fatalf("runtime state still exists, stat err = %v", err)
 	}
 }
 
@@ -124,19 +127,25 @@ func TestServerRuntimeControlUsesStructuredAuthErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseBind() error = %v", err)
 	}
+	socketDir, err := os.MkdirTemp("/tmp", "rdv-localui-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp() error = %v", err)
+	}
+	defer func() { _ = os.RemoveAll(socketDir) }()
 	a := newDesktopManagedTestAgent(t, cfgPath)
 	s := &Server{
-		log:              discardLogger(),
-		bind:             bind,
-		configPath:       cfgPath,
-		stateDir:         filepath.Dir(cfgPath),
-		runtimeStatePath: localuiruntime.RuntimeStatePath(cfgPath),
-		version:          "dev",
-		desktopManaged:   true,
-		desktopOwnerID:   "desktop-owner-state",
-		gw:               newTestGateway(t, cfgPath),
-		a:                a,
-		pending:          make(map[string]pendingDirect),
+		log:                    discardLogger(),
+		bind:                   bind,
+		configPath:             cfgPath,
+		stateRoot:              filepath.Dir(filepath.Dir(cfgPath)),
+		stateDir:               filepath.Dir(cfgPath),
+		runtimeControlSockPath: filepath.Join(socketDir, "control.sock"),
+		version:                "dev",
+		desktopManaged:         true,
+		desktopOwnerID:         "desktop-owner-state",
+		gw:                     newTestGateway(t, cfgPath),
+		a:                      a,
+		pending:                make(map[string]pendingDirect),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -146,20 +155,17 @@ func TestServerRuntimeControlUsesStructuredAuthErrors(t *testing.T) {
 	}
 	defer func() { _ = s.Close() }()
 
-	state, err := localuiruntime.Load(localuiruntime.RuntimeStatePath(cfgPath))
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if state == nil || state.RuntimeControl == nil {
-		t.Fatalf("missing runtime-control endpoint: %#v", state)
+	endpoint := s.RuntimeControlEndpointForDesktopBridge()
+	if endpoint == nil {
+		t.Fatalf("missing runtime-control endpoint")
 	}
 
-	req, err := http.NewRequest(http.MethodPost, state.RuntimeControl.BaseURL+"/v1/provider-link", nil)
+	req, err := http.NewRequest(http.MethodPost, endpoint.BaseURL+"/v1/provider-link", nil)
 	if err != nil {
 		t.Fatalf("NewRequest() error = %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+state.RuntimeControl.Token)
-	req.Header.Set("X-Redeven-Desktop-Owner-ID", state.RuntimeControl.DesktopOwnerID)
+	req.Header.Set("Authorization", "Bearer "+endpoint.Token)
+	req.Header.Set("X-Redeven-Desktop-Owner-ID", endpoint.DesktopOwnerID)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("Do() error = %v", err)

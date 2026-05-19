@@ -23,16 +23,16 @@ var (
 )
 
 type StateLayout struct {
-	StateRoot        string
-	ConfigPath       string
-	SecretsPath      string
-	LockPath         string
-	StateDir         string
-	RuntimeStatePath string
-	DiagnosticsDir   string
-	AuditDir         string
-	AppsDir          string
-	GatewayDir       string
+	StateRoot                string
+	ConfigPath               string
+	SecretsPath              string
+	LockPath                 string
+	StateDir                 string
+	RuntimeControlSocketPath string
+	DiagnosticsDir           string
+	AuditDir                 string
+	AppsDir                  string
+	GatewayDir               string
 }
 
 func DefaultConfigPath() (string, error) {
@@ -84,18 +84,27 @@ func ResolveStateRoot(override string) (string, error) {
 
 func stateLayoutForResolvedRoot(stateRoot string) StateLayout {
 	stateDir := filepath.Join(stateRoot, localEnvironmentDirName)
+	runtimeDir := filepath.Join(stateDir, "runtime")
 	return StateLayout{
-		StateRoot:        stateRoot,
-		ConfigPath:       filepath.Join(stateDir, "config.json"),
-		SecretsPath:      filepath.Join(stateDir, "secrets.json"),
-		LockPath:         filepath.Join(stateDir, "agent.lock"),
-		StateDir:         stateDir,
-		RuntimeStatePath: filepath.Join(stateDir, "runtime", "local-ui.json"),
-		DiagnosticsDir:   filepath.Join(stateDir, "diagnostics"),
-		AuditDir:         filepath.Join(stateDir, "audit"),
-		AppsDir:          filepath.Join(stateDir, "apps"),
-		GatewayDir:       filepath.Join(stateDir, "gateway"),
+		StateRoot:                stateRoot,
+		ConfigPath:               filepath.Join(stateDir, "config.json"),
+		SecretsPath:              filepath.Join(stateDir, "secrets.json"),
+		LockPath:                 filepath.Join(stateDir, "agent.lock"),
+		StateDir:                 stateDir,
+		RuntimeControlSocketPath: filepath.Join(runtimeDir, "control.sock"),
+		DiagnosticsDir:           filepath.Join(stateDir, "diagnostics"),
+		AuditDir:                 filepath.Join(stateDir, "audit"),
+		AppsDir:                  filepath.Join(stateDir, "apps"),
+		GatewayDir:               filepath.Join(stateDir, "gateway"),
 	}
+}
+
+func RuntimeControlSocketPathFromConfigPath(configPath string) string {
+	configPath = strings.TrimSpace(configPath)
+	if configPath == "" {
+		return filepath.Join("runtime", "control.sock")
+	}
+	return filepath.Join(filepath.Dir(configPath), "runtime", "control.sock")
 }
 
 func normalizeControlplaneBaseURL(raw string) (string, error) {

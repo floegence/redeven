@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
 )
 
 type selfExecPlan struct {
@@ -17,25 +15,17 @@ type selfExecPlan struct {
 	localUIBind string
 }
 
-func resolveSelfExecPlan(runtimeStatePath string) (selfExecPlan, error) {
-	exePath, err := os.Executable()
-	if err != nil {
-		return selfExecPlan{}, err
-	}
-	exePath = strings.TrimSpace(exePath)
+func resolveSelfExecPlan(localUIBind string) (selfExecPlan, error) {
+	exePath := currentExecutablePath()
 	if exePath == "" {
 		return selfExecPlan{}, os.ErrInvalid
 	}
-	if abs, absErr := filepath.Abs(exePath); absErr == nil && strings.TrimSpace(abs) != "" {
-		exePath = abs
-	}
-	exePath = filepath.Clean(exePath)
 	installDir := filepath.Clean(filepath.Dir(exePath))
 	if strings.TrimSpace(installDir) == "" {
 		return selfExecPlan{}, os.ErrInvalid
 	}
 
-	argv := rewriteSelfExecArgs(os.Args, runtimeStatePath)
+	argv := rewriteSelfExecArgs(os.Args, localUIBind)
 	return selfExecPlan{
 		exePath:     exePath,
 		installDir:  installDir,
@@ -44,12 +34,27 @@ func resolveSelfExecPlan(runtimeStatePath string) (selfExecPlan, error) {
 	}, nil
 }
 
-func rewriteSelfExecArgs(argv []string, runtimeStatePath string) []string {
+func currentExecutablePath() string {
+	exePath, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	exePath = strings.TrimSpace(exePath)
+	if exePath == "" {
+		return ""
+	}
+	if abs, absErr := filepath.Abs(exePath); absErr == nil && strings.TrimSpace(abs) != "" {
+		exePath = abs
+	}
+	return filepath.Clean(exePath)
+}
+
+func rewriteSelfExecArgs(argv []string, runtimeBind string) []string {
 	if len(argv) == 0 {
 		return nil
 	}
-	runtimeBind, ok := runtimeBindAddress(runtimeStatePath)
-	if !ok {
+	runtimeBind = strings.TrimSpace(runtimeBind)
+	if runtimeBind == "" {
 		return append([]string(nil), argv...)
 	}
 
@@ -73,18 +78,6 @@ func rewriteSelfExecArgs(argv []string, runtimeStatePath string) []string {
 		}
 	}
 	return out
-}
-
-func runtimeBindAddress(runtimeStatePath string) (string, bool) {
-	snapshot, err := localuiruntime.Load(runtimeStatePath)
-	if err != nil || snapshot == nil {
-		return "", false
-	}
-	bindAddress, err := snapshot.BindAddress()
-	if err != nil {
-		return "", false
-	}
-	return bindAddress, true
 }
 
 func isDynamicBindArg(raw string) bool {

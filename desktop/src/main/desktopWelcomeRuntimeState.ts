@@ -1,6 +1,7 @@
 import path from 'node:path';
 
-import { loadAttachableRuntimeState, loadExternalLocalUIStartup } from './runtimeState';
+import { loadManagedRuntimeStartupFromStatus } from './runtimeProcess';
+import { loadExternalLocalUIStartup } from './runtimeState';
 import type { StartupReport } from './startup';
 import type { DesktopPreferences } from './desktopPreferences';
 import type { DesktopSessionSummary } from './desktopTarget';
@@ -34,7 +35,7 @@ function runtimeDesktopOwnership(startup: StartupReport, desktopOwnerID: string)
   if (runtimeOwnedByCurrentDesktop(startup, desktopOwnerID)) {
     return 'owned';
   }
-  return compact(startup.desktop_owner_id) === '' ? 'legacy_unleased' : 'managed_elsewhere';
+  return compact(startup.desktop_owner_id) === '' ? 'unowned' : 'managed_elsewhere';
 }
 
 function runtimeStateFromStartup(
@@ -145,18 +146,22 @@ async function currentRuntimeFromLocalSession(
 
 async function currentRuntimeFromProbeStateDir(
   stateDir: string,
+  executablePath: string,
   probeTimeoutMs: number,
   desktopOwnerID: string,
   expectedRuntimeIdentity: RuntimeServiceIdentity | null | undefined,
 ): Promise<DesktopLocalEnvironmentRuntimeState | undefined> {
   const cleanStateDir = compact(stateDir);
-  if (cleanStateDir === '') {
+  const cleanExecutablePath = compact(executablePath);
+  if (cleanStateDir === '' || cleanExecutablePath === '') {
     return undefined;
   }
-  const startup = await loadAttachableRuntimeState(
-    path.join(cleanStateDir, 'runtime', 'local-ui.json'),
-    probeTimeoutMs,
-  );
+  const startup = await loadManagedRuntimeStartupFromStatus({
+    executablePath: cleanExecutablePath,
+    stateRoot: path.dirname(cleanStateDir),
+    env: process.env,
+    timeoutMs: probeTimeoutMs,
+  });
   if (!startup) {
     return undefined;
   }
@@ -169,11 +174,12 @@ async function currentRuntimeFromProbeStateDir(
 
 async function currentRuntimeFromProbe(
   environment: DesktopLocalEnvironmentState,
+  executablePath: string,
   probeTimeoutMs: number,
   desktopOwnerID: string,
   expectedRuntimeIdentity: RuntimeServiceIdentity | null | undefined,
 ): Promise<DesktopLocalEnvironmentRuntimeState | undefined> {
-  return currentRuntimeFromProbeStateDir(environment.local_hosting?.state_dir ?? '', probeTimeoutMs, desktopOwnerID, expectedRuntimeIdentity);
+  return currentRuntimeFromProbeStateDir(environment.local_hosting?.state_dir ?? '', executablePath, probeTimeoutMs, desktopOwnerID, expectedRuntimeIdentity);
 }
 
 function withCurrentRuntime(
@@ -220,6 +226,7 @@ export async function hydrateWelcomeLocalEnvironmentRuntimeState(
     probeTimeoutMs?: number;
     desktopOwnerID?: string;
     expectedRuntimeIdentity?: RuntimeServiceIdentity | null;
+    executablePath?: string;
   }> = {},
 ): Promise<DesktopPreferences> {
   const probeTimeoutMs = options.probeTimeoutMs ?? DEFAULT_WELCOME_RUNTIME_PROBE_TIMEOUT_MS;
@@ -233,7 +240,7 @@ export async function hydrateWelcomeLocalEnvironmentRuntimeState(
     desktopOwnerID,
     expectedRuntimeIdentity,
   )
-    ?? await currentRuntimeFromProbe(localEnvironment, probeTimeoutMs, desktopOwnerID, expectedRuntimeIdentity);
+    ?? await currentRuntimeFromProbe(localEnvironment, compact(options.executablePath), probeTimeoutMs, desktopOwnerID, expectedRuntimeIdentity);
   return {
     ...preferences,
     local_environment: withCurrentRuntime(localEnvironment, currentRuntime),

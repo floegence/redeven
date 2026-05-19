@@ -88,7 +88,7 @@ Agents must check `ok` before using `data`.
         "state_root": "/Users/alice/.redeven",
         "state_dir": "/Users/alice/.redeven/local-environment",
         "config_path": "/Users/alice/.redeven/local-environment/config.json",
-        "runtime_state_path": "/Users/alice/.redeven/local-environment/runtime/local-ui.json",
+        "runtime_control_socket_path": "/Users/alice/.redeven/local-environment/runtime/control.sock",
         "local_ui_url": "http://127.0.0.1:23998/",
         "local_ui_urls": ["http://127.0.0.1:23998/"],
         "password_required": true,

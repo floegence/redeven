@@ -245,7 +245,8 @@ The same snapshot also carries explicit runtime-control surfaces:
 
 ### Contract Carriers
 
-- `runtime/local-ui.json`: persisted attach state used by Desktop before spawn.
+- `desktop-runtime-status`: structured attach status used by Desktop before spawn.
+- `runtime/control.sock`: runtime-owned management socket that backs local status queries.
 - `--startup-report-file`: structured readiness report for a newly started
   desktop-managed process.
 - `/api/local/runtime/health`: no-unlock health probe for attach viability.

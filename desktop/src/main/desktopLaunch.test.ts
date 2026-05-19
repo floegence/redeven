@@ -87,7 +87,7 @@ describe('desktopLaunch', () => {
     expect(plan.state_layout).toEqual(expect.objectContaining({
       configPath: '/Users/tester/.redeven/local-environment/config.json',
       stateDir: '/Users/tester/.redeven/local-environment',
-      runtimeStateFile: '/Users/tester/.redeven/local-environment/runtime/local-ui.json',
+      runtimeControlSocket: '/Users/tester/.redeven/local-environment/runtime/control.sock',
     }));
   });
 
@@ -174,7 +174,7 @@ describe('desktopLaunch', () => {
     expect(plan.state_layout).toEqual(expect.objectContaining({
       configPath: '/Users/tester/.redeven/local-environment/config.json',
       stateDir: '/Users/tester/.redeven/local-environment',
-      runtimeStateFile: '/Users/tester/.redeven/local-environment/runtime/local-ui.json',
+      runtimeControlSocket: '/Users/tester/.redeven/local-environment/runtime/control.sock',
     }));
   });
 });

@@ -71,7 +71,7 @@ func (u *sysUpgrader) StartUpgrade(_ctx context.Context, meta *session.Meta, req
 		return nil, err
 	}
 
-	plan, err := resolveSelfExecPlan(a.runtimeStatePath)
+	plan, err := resolveSelfExecPlan(a.localUIBind)
 	if err != nil {
 		a.log.Warn("sys_upgrade: resolve self paths failed", "error", err)
 		return nil, &rpc.Error{Code: 500, Message: "failed to resolve runtime executable path"}

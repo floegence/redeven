@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -10,7 +11,8 @@ import (
 
 	"github.com/floegence/redeven/internal/agentprotocol"
 	"github.com/floegence/redeven/internal/config"
-	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
+	"github.com/floegence/redeven/internal/runtimemanagement"
+	"github.com/floegence/redeven/internal/runtimeservice"
 )
 
 func TestRunCLIHelp(t *testing.T) {
@@ -457,7 +459,11 @@ func TestResolveRuntimeLaunchPolicy(t *testing.T) {
 }
 
 func TestTargetsCommandJSON(t *testing.T) {
-	stateRoot := t.TempDir()
+	stateRoot, err := os.MkdirTemp("/tmp", "rdv-targets-cli-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp() error = %v", err)
+	}
+	defer func() { _ = os.RemoveAll(stateRoot) }()
 	layout, err := config.LocalEnvironmentStateLayout(stateRoot)
 	if err != nil {
 		t.Fatalf("LocalEnvironmentStateLayout() error = %v", err)
@@ -470,13 +476,29 @@ func TestTargetsCommandJSON(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
-	if err := localuiruntime.WriteState(layout.RuntimeStatePath, localuiruntime.State{
-		LocalUIURL:       "http://127.0.0.1:23998/",
-		EffectiveRunMode: "hybrid",
-		RemoteEnabled:    true,
-	}); err != nil {
-		t.Fatalf("WriteState() error = %v", err)
+	statusServer, err := runtimemanagement.NewServer(layout.RuntimeControlSocketPath, func(context.Context) (runtimemanagement.RuntimeAttachStatus, error) {
+		return runtimemanagement.RuntimeAttachStatus{
+			State: runtimemanagement.AttachStateReady,
+			Identity: runtimemanagement.RuntimeInstanceIdentity{
+				StateDir: layout.StateDir,
+			},
+			Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
+				LocalUIURL:  "http://127.0.0.1:23998/",
+				LocalUIURLs: []string{"http://127.0.0.1:23998/"},
+			},
+			RuntimeService: runtimeservice.NormalizeSnapshot(runtimeservice.Snapshot{
+				EffectiveRunMode: "hybrid",
+				RemoteEnabled:    true,
+			}),
+		}, nil
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
 	}
+	if err := statusServer.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer func() { _ = statusServer.Close() }()
 
 	t.Run("list writes protocol envelope", func(t *testing.T) {
 		code, stdout, stderr := runCLITest(t, "targets", "list", "--state-root", stateRoot, "--json")

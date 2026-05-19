@@ -34,8 +34,8 @@ func TestDefaultStateLayoutUsesSingleLocalEnvironment(t *testing.T) {
 	if layout.StateDir != wantStateDir {
 		t.Fatalf("StateDir = %q", layout.StateDir)
 	}
-	if layout.RuntimeStatePath != filepath.Join(wantStateDir, "runtime", "local-ui.json") {
-		t.Fatalf("RuntimeStatePath = %q", layout.RuntimeStatePath)
+	if layout.RuntimeControlSocketPath != filepath.Join(wantStateDir, "runtime", "control.sock") {
+		t.Fatalf("RuntimeControlSocketPath = %q", layout.RuntimeControlSocketPath)
 	}
 	if layout.DiagnosticsDir != filepath.Join(wantStateDir, "diagnostics") {
 		t.Fatalf("DiagnosticsDir = %q", layout.DiagnosticsDir)

@@ -14,7 +14,7 @@ import (
 
 	"github.com/floegence/redeven/internal/agent"
 	"github.com/floegence/redeven/internal/ai"
-	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
+	"github.com/floegence/redeven/internal/runtimemanagement"
 	"github.com/gorilla/websocket"
 )
 
@@ -149,7 +149,7 @@ func (s *runtimeControlServer) Close() error {
 	return nil
 }
 
-func (s *runtimeControlServer) Endpoint() *localuiruntime.RuntimeControlEndpoint {
+func (s *runtimeControlServer) Endpoint() *runtimemanagement.RuntimeControlEndpoint {
 	if s == nil || s.ln == nil {
 		return nil
 	}
@@ -157,7 +157,7 @@ func (s *runtimeControlServer) Endpoint() *localuiruntime.RuntimeControlEndpoint
 	if !ok || addr.Port <= 0 {
 		return nil
 	}
-	return &localuiruntime.RuntimeControlEndpoint{
+	return &runtimemanagement.RuntimeControlEndpoint{
 		ProtocolVersion: runtimeControlProtocolVersion,
 		BaseURL:         fmt.Sprintf("http://127.0.0.1:%d", addr.Port),
 		Token:           s.token,

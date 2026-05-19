@@ -54,7 +54,7 @@ Behavior:
 - The Desktop-owned local runtime uses `~/.redeven/local-environment/config.json`.
 - The Welcome `Start Runtime` action does not add provider bootstrap flags or request provider open-session material. If the runtime already has a valid persisted provider binding, startup restores that provider control channel from the saved config; otherwise it starts local-only.
 - `--controlplane`, `--env-id`, and `--bootstrap-ticket-env` remain explicit CLI/manual bootstrap inputs. They are not part of the Welcome Local Environment `Start Runtime` path.
-- Desktop attach probing reads `runtime/local-ui.json` from the same resolved state root as the spawned config path.
+- Desktop attach probing executes the target runtime's `desktop-runtime-status` command against the same resolved state root as the spawned config path.
 - Provider `Open` is a window/navigation action that always opens the provider Environment through the provider tunnel. It never opens a Local/SSH forwarded UI, never starts a managed runtime, and never connects a runtime to a provider.
 - Runtime-card actions are derived from an explicit operation plan, not from process provenance. Local, SSH, Local Container, and SSH Container cards can expose `Start runtime`, `Stop runtime`, `Restart runtime`, and `Update runtime` when Desktop has the matching host/container management channel. The operation plan is also the source of truth for menu visibility, disabled reasons, confirmation requirements, and execution method.
 - Welcome card primary action availability is also derived from the runtime operation plan. If `runtime_operations.open` is available, the primary `Open` button and card status must stay openable even when runtime-control forwarding or runtime service metadata is not present yet; those details may explain provider-link blocking, but they must not create a second readiness source that turns an openable card into `RUNTIME PREPARING`.
@@ -68,13 +68,13 @@ Behavior:
 - If active workload is present, Desktop keeps `Open` blocked and shows interruption-safe guidance instead of closing terminals, sessions, tasks, or port forwards implicitly.
 - The Local UI password stays out of process args and environment variables.
 - Provider one-time bootstrap tickets stay out of process args and renderer state. Welcome provider linking is initiated from Local/SSH runtime cards and passes tickets from Electron main to the selected running runtime through the desktop-only runtime-control endpoint.
-- Desktop startup reports and attachable runtime state include a non-secret `password_required` boolean so launcher and attach flows can describe whether the current runtime is protected.
+- Desktop startup reports and runtime management status include a non-secret `password_required` boolean so launcher and attach flows can describe whether the current runtime is protected.
 - Remote provider control is enabled after a successful explicit provider-link operation, an explicit non-Welcome bootstrap launch, or a later Desktop-managed startup that restores a valid saved provider binding.
 - `--desktop-managed` disables CLI self-upgrade semantics.
 - Managed restart is an explicit user action owned by Electron main rather than runtime self-`exec`.
 - Managed restart reuses saved startup preferences, including `--password-stdin`, and preserves the current resolved loopback bind when the saved bind uses the advanced auto-port loopback option such as `127.0.0.1:0`.
 - `--startup-report-file` lets Electron wait for a structured desktop launch report instead of scraping terminal output.
-- On lock conflicts, the runtime first tries to attach to an existing Local UI from the same state directory before reporting a blocked launch outcome.
+- On lock conflicts, the runtime first queries the existing runtime management socket from the same state directory before reporting a blocked launch outcome.
 - Desktop startup settings do not create a second preference-owned runtime target; the resolved Local Environment state directory remains the runtime source of truth.
 - Desktop-managed runtime state never falls back to the Electron process working directory; if no usable home directory exists and no explicit config path is available, startup fails clearly instead of writing inside an arbitrary repository or shell cwd.
 - Runtime lifecycle and Open connection progress are separate launcher operation contracts. Local Host, Local Container, SSH Host, and SSH Container start/update actions publish canonical `lifecycle_progress` metadata; Open actions publish `open_progress` metadata for SSH tunnels, container bridges, runtime-control forwarding, Desktop model source preparation, and Env App window creation.
@@ -83,7 +83,7 @@ Desktop-managed Local Runtime also exposes a separate runtime-control endpoint w
 
 - It listens on a random loopback-only address (`127.0.0.1:0`).
 - It uses a random bearer token plus the Desktop owner id.
-- The endpoint appears in the startup report and `runtime/local-ui.json` for Electron main to consume.
+- The endpoint appears in the startup report and runtime management status for Electron main to consume.
 - The bearer token is not exposed to the renderer, Env App JavaScript, provider pages, Local UI HTTP responses, or process arguments.
 - Provider link operations use `GET /v1/provider-link`, `POST /v1/provider-link/connect`, and `POST /v1/provider-link/disconnect` on this endpoint.
 - Successful `connect` updates the Local Runtime config and starts or replaces the provider control-channel goroutine without restarting Local UI, local direct sessions, terminals, tasks, or port forwards.
@@ -314,7 +314,8 @@ The runtime-control token stays in Electron main. Renderer snapshots expose only
 
 Runtime Service snapshots are carried through the same attach and startup paths that already describe Local UI:
 
-- `runtime/local-ui.json`
+- `desktop-runtime-status`
+- `runtime/control.sock`
 - `--startup-report-file`
 - `/api/local/runtime/health`
 - `/api/local/runtime`

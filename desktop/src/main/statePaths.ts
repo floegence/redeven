@@ -9,7 +9,7 @@ export type DesktopLocalEnvironmentStateLayout = Readonly<{
   secretsFile: string;
   lockFile: string;
   stateDir: string;
-  runtimeStateFile: string;
+  runtimeControlSocket: string;
   diagnosticsDir: string;
   auditDir: string;
   appsDir: string;
@@ -43,7 +43,7 @@ function stateLayoutForResolvedStateRoot(
     secretsFile: path.join(stateDir, 'secrets.json'),
     lockFile: path.join(stateDir, 'agent.lock'),
     stateDir,
-    runtimeStateFile: path.join(stateDir, 'runtime', 'local-ui.json'),
+    runtimeControlSocket: path.join(stateDir, 'runtime', 'control.sock'),
     diagnosticsDir: path.join(stateDir, 'diagnostics'),
     auditDir: path.join(stateDir, 'audit'),
     appsDir: path.join(stateDir, 'apps'),

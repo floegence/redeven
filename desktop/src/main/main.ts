@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, powerMonitor, s
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { attachManagedRuntimeFromStateFile, startManagedRuntime, type ManagedRuntimeProgress } from './runtimeProcess';
+import { attachManagedRuntimeFromStatus, startManagedRuntime, type ManagedRuntimeProgress } from './runtimeProcess';
 import { buildAppMenuTemplate } from './appMenu';
 import {
   buildDesktopLastWindowCloseConfirmationModel,
@@ -390,7 +390,7 @@ type DesktopControlPlaneSyncRecord = Readonly<{
 type LocalEnvironmentRuntimeRecord = Readonly<{
   environment_id: string;
   label: string;
-  state_file: string;
+  state_root: string;
   startup: StartupReport;
   runtime_handle: DesktopSessionRuntimeHandle;
 }>;
@@ -665,9 +665,9 @@ async function refreshStartupReportFromLocalUI(
   };
 }
 
-function localEnvironmentRuntimeStateFile(environment: DesktopLocalEnvironmentState): string {
+function localEnvironmentStateRoot(environment: DesktopLocalEnvironmentState): string {
   const stateDir = compact(environment.local_hosting.state_dir);
-  return stateDir === '' ? '' : path.join(stateDir, 'runtime', 'local-ui.json');
+  return stateDir === '' ? '' : path.dirname(stateDir);
 }
 
 function localRuntimeMatchesProvider(
@@ -1155,7 +1155,7 @@ function localEnvironmentRuntimeRecordFromHandle(
   return {
     environment_id: environment.id,
     label: environment.label,
-    state_file: localEnvironmentRuntimeStateFile(environment),
+    state_root: localEnvironmentStateRoot(environment),
     startup,
     runtime_handle: runtimeHandle,
   };
@@ -1401,7 +1401,7 @@ async function currentManagedRuntimePresenceByTargetID(
   if (localRecord) {
     const targetID = desktopProviderRuntimeLinkTargetID('local_environment', preferences.local_environment.id);
     const hostAccess: DesktopRuntimeHostAccess = { kind: 'local_host' };
-    const placement: DesktopRuntimePlacement = { kind: 'host_process', runtime_root: localRecord.state_file ? path.dirname(localRecord.state_file) : '' };
+    const placement: DesktopRuntimePlacement = { kind: 'host_process', runtime_root: localRecord.state_root };
     out[targetID] = managedRuntimePresence({
       targetID,
       placementTargetID: desktopRuntimeTargetID(
@@ -2208,6 +2208,7 @@ async function buildCurrentDesktopWelcomeSnapshot(
   const welcomePreferences = await hydrateWelcomeLocalEnvironmentRuntimeState(preferences, openSessions, {
     desktopOwnerID: await desktopRuntimeOwnerID(),
     expectedRuntimeIdentity: bundledRuntimeIdentity(),
+    executablePath: bundledRuntimeExecutablePath(),
   });
   const [savedExternalRuntimeHealth, savedSSHRuntimeHealth] = await Promise.all([
     collectSavedExternalRuntimeHealth(welcomePreferences),
@@ -3097,10 +3098,10 @@ async function prepareManagedTarget(
     executablePath,
     runtimeArgs: launchPlan.args,
     env: launchPlan.env,
+    stateRoot: launchPlan.state_layout.stateRoot,
     desktopOwnerID,
     expectedRuntimeIdentity: bundledRuntimeIdentity(),
     forceRuntimeUpdate: options.forceRuntimeUpdate === true,
-    runtimeStateFile: launchPlan.state_layout.runtimeStateFile,
     passwordStdin: launchPlan.password_stdin,
     tempRoot: app.getPath('temp'),
     onProgress: options.onProgress,
@@ -3160,8 +3161,9 @@ async function attachLocalEnvironmentRuntime(
     clearLocalEnvironmentRuntimeRecord(environment);
   }
 
-  const attachedRuntime = await attachManagedRuntimeFromStateFile({
-    runtimeStateFile: localEnvironmentRuntimeStateFile(environment),
+  const attachedRuntime = await attachManagedRuntimeFromStatus({
+    executablePath: bundledRuntimeExecutablePath(),
+    stateRoot: localEnvironmentStateRoot(environment),
     runtimeAttachTimeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
   });
   if (!attachedRuntime) {

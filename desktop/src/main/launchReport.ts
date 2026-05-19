@@ -3,7 +3,12 @@ import { parseStartupReport, type StartupReport } from './startup';
 export type LaunchReportDiagnostics = Readonly<{
   lock_path?: string;
   state_dir?: string;
-  runtime_state_path?: string;
+  runtime_control_socket_path?: string;
+  attach_state?: string;
+  failure_code?: string;
+  lock_pid?: number;
+  pid_alive?: boolean;
+  socket_reachable?: boolean;
   target_url?: string;
   config_path?: string;
   command?: string;
@@ -15,8 +20,9 @@ export type LaunchReportLockOwner = Readonly<{
   desktop_managed?: boolean;
   local_ui_enabled?: boolean;
   config_path?: string;
+  state_root?: string;
   state_dir?: string;
-  runtime_state_path?: string;
+  runtime_control_socket_path?: string;
 }>;
 
 export type LaunchReadyReport = Readonly<{
@@ -85,14 +91,20 @@ export function parseLaunchReport(raw: string): LaunchReport {
           local_ui_enabled: normalizeBoolean((lockOwnerRecord as Record<string, unknown>).local_ui_enabled),
           config_path: normalizeOptionalString((lockOwnerRecord as Record<string, unknown>).config_path),
           state_dir: normalizeOptionalString((lockOwnerRecord as Record<string, unknown>).state_dir),
-          runtime_state_path: normalizeOptionalString((lockOwnerRecord as Record<string, unknown>).runtime_state_path),
+          state_root: normalizeOptionalString((lockOwnerRecord as Record<string, unknown>).state_root),
+          runtime_control_socket_path: normalizeOptionalString((lockOwnerRecord as Record<string, unknown>).runtime_control_socket_path),
         }
       : undefined,
     diagnostics: diagnosticsRecord && typeof diagnosticsRecord === 'object'
       ? {
           lock_path: normalizeOptionalString((diagnosticsRecord as Record<string, unknown>).lock_path),
           state_dir: normalizeOptionalString((diagnosticsRecord as Record<string, unknown>).state_dir),
-          runtime_state_path: normalizeOptionalString((diagnosticsRecord as Record<string, unknown>).runtime_state_path),
+          runtime_control_socket_path: normalizeOptionalString((diagnosticsRecord as Record<string, unknown>).runtime_control_socket_path),
+          attach_state: normalizeOptionalString((diagnosticsRecord as Record<string, unknown>).attach_state),
+          failure_code: normalizeOptionalString((diagnosticsRecord as Record<string, unknown>).failure_code),
+          lock_pid: normalizeInteger((diagnosticsRecord as Record<string, unknown>).lock_pid),
+          pid_alive: normalizeBoolean((diagnosticsRecord as Record<string, unknown>).pid_alive),
+          socket_reachable: normalizeBoolean((diagnosticsRecord as Record<string, unknown>).socket_reachable),
           target_url: normalizeOptionalString((diagnosticsRecord as Record<string, unknown>).target_url),
           config_path: normalizeOptionalString((diagnosticsRecord as Record<string, unknown>).config_path),
           command: normalizeOptionalString((diagnosticsRecord as Record<string, unknown>).command),
@@ -123,8 +135,14 @@ export function formatBlockedLaunchDiagnostics(report: LaunchBlockedReport): str
   if (report.diagnostics?.lock_path) {
     lines.push(`lock path: ${report.diagnostics.lock_path}`);
   }
-  if (report.diagnostics?.runtime_state_path) {
-    lines.push(`runtime state path: ${report.diagnostics.runtime_state_path}`);
+  if (report.diagnostics?.runtime_control_socket_path) {
+    lines.push(`runtime control socket: ${report.diagnostics.runtime_control_socket_path}`);
+  }
+  if (report.diagnostics?.attach_state) {
+    lines.push(`attach state: ${report.diagnostics.attach_state}`);
+  }
+  if (report.diagnostics?.failure_code) {
+    lines.push(`failure code: ${report.diagnostics.failure_code}`);
   }
   if (report.diagnostics?.config_path) {
     lines.push(`config path: ${report.diagnostics.config_path}`);
