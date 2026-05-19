@@ -52,6 +52,8 @@ type launchReport struct {
 	RuntimeControlSocketPath string                  `json:"runtime_control_socket_path,omitempty"`
 	PID                      int                     `json:"pid,omitempty"`
 	RuntimeService           map[string]any          `json:"runtime_service,omitempty"`
+	LockOwner                *runtimeLockOwner       `json:"lock_owner,omitempty"`
+	Diagnostics              *runtimeDiagnostics     `json:"diagnostics,omitempty"`
 }
 
 type runtimeControlEndpoint struct {
@@ -59,6 +61,20 @@ type runtimeControlEndpoint struct {
 	BaseURL         string `json:"base_url"`
 	Token           string `json:"token"`
 	DesktopOwnerID  string `json:"desktop_owner_id"`
+}
+
+type runtimeLockOwner struct {
+	PID            int    `json:"pid,omitempty"`
+	DesktopManaged bool   `json:"desktop_managed"`
+	DesktopOwnerID string `json:"desktop_owner_id,omitempty"`
+}
+
+type runtimeDiagnostics struct {
+	LockPID         int    `json:"lock_pid,omitempty"`
+	AttachState     string `json:"attach_state,omitempty"`
+	FailureCode     string `json:"failure_code,omitempty"`
+	PIDAlive        bool   `json:"pid_alive,omitempty"`
+	SocketReachable bool   `json:"socket_reachable,omitempty"`
 }
 
 type helperResult struct {
@@ -119,11 +135,13 @@ func TestDockerUbuntuDesktopRuntimeLifecycle(t *testing.T) {
 		t.Fatalf("second runtime attached PID = %d, want existing PID %d", conflict.PID, initial.PID)
 	}
 
-	restart := f.runHelper(ctx, initial.LocalUIURL, "restart", "")
+	afterSocketRecovery := f.recoverRuntimeAfterManagementSocketLoss(ctx, initialPing.Ping.ProcessStartedAtMs)
+
+	restart := f.runHelper(ctx, afterSocketRecovery.LocalUIURL, "restart", "")
 	if restart.Restart == nil || !restart.Restart.OK {
 		t.Fatalf("unexpected restart result: %#v", restart)
 	}
-	afterRestart := f.waitPingAfter(ctx, initialPing.Ping.ProcessStartedAtMs)
+	afterRestart := f.waitPingAfter(ctx, afterSocketRecovery.ProcessStartedAtMs)
 
 	if _, err := f.tryHelper(ctx, afterRestart.LocalUIURL, "upgrade", targetVersion); err == nil || !strings.Contains(err.Error(), "upgrade not supported") {
 		t.Fatalf("desktop-managed sys.upgrade error = %v, want unsupported", err)
@@ -263,6 +281,31 @@ func (f *fixture) stopRuntime(ctx context.Context) {
 	}
 	f.dumpContainerDiagnostics(ctx)
 	f.t.Fatalf("runtime did not stop")
+}
+
+func (f *fixture) recoverRuntimeAfterManagementSocketLoss(ctx context.Context, previousProcessStartedAtMs int64) pingSnapshot {
+	f.t.Helper()
+	status := f.waitReady(ctx)
+	if strings.TrimSpace(status.RuntimeControlSocketPath) == "" {
+		f.t.Fatalf("runtime status did not report a management socket path: %#v", status)
+	}
+	f.dockerExec(ctx, nil, "rm", "-f", status.RuntimeControlSocketPath)
+	blocked, err := f.runtimeStatus(ctx)
+	if err != nil {
+		f.t.Fatalf("runtime status after socket removal: %v", err)
+	}
+	if blocked.Status != "blocked" || blocked.Code != "live_process_without_management_socket" {
+		f.t.Fatalf("socket removal status = %#v, want live_process_without_management_socket", blocked)
+	}
+	if blocked.LockOwner == nil || !blocked.LockOwner.DesktopManaged || blocked.LockOwner.PID != status.PID {
+		f.t.Fatalf("blocked status did not preserve desktop-managed lock owner: %#v", blocked)
+	}
+	if blocked.Diagnostics == nil || !blocked.Diagnostics.PIDAlive || blocked.Diagnostics.SocketReachable {
+		f.t.Fatalf("blocked status did not expose socket diagnostics: %#v", blocked)
+	}
+	f.stopRuntime(ctx)
+	f.startRuntime(ctx, containerRedeven)
+	return f.waitPingAfter(ctx, previousProcessStartedAtMs)
 }
 
 func (f *fixture) waitReady(ctx context.Context) launchReport {

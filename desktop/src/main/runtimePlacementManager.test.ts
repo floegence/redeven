@@ -34,14 +34,25 @@ describe('runtimePlacementManager', () => {
     process.env.PATH = originalPath;
   });
 
-  async function installFakeDocker(tempDir: string): Promise<string> {
+  async function installFakeDocker(tempDir: string): Promise<Readonly<{
+    markerPath: string;
+    daemonPath: string;
+    orphanPath: string;
+    eventsPath: string;
+  }>> {
     const dockerPath = path.join(tempDir, 'docker');
     const markerPath = path.join(tempDir, 'installed');
     const daemonPath = path.join(tempDir, 'daemon');
+    const orphanPath = path.join(tempDir, 'orphan');
+    const eventsPath = path.join(tempDir, 'events');
     await fs.writeFile(dockerPath, [
       '#!/usr/bin/env node',
       'const fs = require("node:fs");',
       `const marker = ${JSON.stringify(markerPath)};`,
+      `const daemon = ${JSON.stringify(daemonPath)};`,
+      `const orphan = ${JSON.stringify(orphanPath)};`,
+      `const events = ${JSON.stringify(eventsPath)};`,
+      'function event(name) { fs.appendFileSync(events, `${name}\\n`); }',
       'const args = process.argv.slice(2);',
       'if (args[0] === "inspect") {',
       '  process.stdout.write(JSON.stringify([{ Id: args[1], Name: "/dev", State: { Running: true, Status: "running" } }]));',
@@ -49,12 +60,14 @@ describe('runtimePlacementManager', () => {
       '}',
       'if (args[0] === "exec") {',
       '  const markerIndex = args.findIndex((value) => value.startsWith("redeven-container-"));',
-      '  if (args.includes("run") && args.includes("--desktop-managed")) { fs.writeFileSync(' + JSON.stringify(daemonPath) + ', "running"); process.exit(0); }',
+      '  if (args.includes("run") && args.includes("--desktop-managed")) { event("run"); fs.writeFileSync(daemon, "running"); process.exit(0); }',
       '  if (args.includes("desktop-runtime-status")) {',
-      '    if (!fs.existsSync(' + JSON.stringify(daemonPath) + ')) { process.stderr.write("runtime daemon is not running\\n"); process.exit(1); }',
+      '    if (fs.existsSync(orphan)) { process.stdout.write(JSON.stringify({ status: "blocked", code: "live_process_without_management_socket", message: "A Redeven runtime process is alive, but its management socket is not reachable.", lock_owner: { pid: 4242, desktop_managed: true, desktop_owner_id: "owner" }, diagnostics: { lock_pid: 4242, pid_alive: true, attach_state: "live_process_without_management_socket", failure_code: "management_socket_unreachable", socket_reachable: false } })); process.exit(0); }',
+      '    if (!fs.existsSync(daemon)) { process.stderr.write("runtime daemon is not running\\n"); process.exit(1); }',
       '    process.stdout.write(JSON.stringify({ local_ui_url: "http://127.0.0.1:43210/", local_ui_urls: ["http://127.0.0.1:43210/"], password_required: false, desktop_managed: true, desktop_owner_id: "owner", runtime_control: { protocol_version: "runtime-control-v1", base_url: "http://127.0.0.1:43211/", token: "token", desktop_owner_id: "owner" }, runtime_service: { status: "online", desktop_managed: true, effective_run_mode: "local", remote_enabled: false } }));',
       '    process.exit(0);',
       '  }',
+      '  if (args.includes("desktop-runtime-stop")) { event("stop"); try { fs.unlinkSync(daemon); } catch {} try { fs.unlinkSync(orphan); } catch {} process.exit(0); }',
       '  const script = args.includes("-c") ? args[args.indexOf("-c") + 1] : "";',
       '  if (script.includes("uname -s")) { process.stdout.write("Linux\\nx86_64\\n"); process.exit(0); }',
       '  if (args[markerIndex] === "redeven-container-runtime-probe") {',
@@ -76,7 +89,7 @@ describe('runtimePlacementManager', () => {
       'process.exit(1);',
     ].join('\n'), { mode: 0o755 });
     process.env.PATH = `${tempDir}${path.delimiter}${originalPath}`;
-    return markerPath;
+    return { markerPath, daemonPath, orphanPath, eventsPath };
   }
 
   async function installFakeSSH(tempDir: string): Promise<void> {
@@ -102,7 +115,7 @@ describe('runtimePlacementManager', () => {
 
   it('installs a missing runtime inside a running local container before returning a bridge binary path', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-placement-manager-'));
-    const markerPath = await installFakeDocker(tempDir);
+    const { markerPath } = await installFakeDocker(tempDir);
     const progressPhases: RuntimePlacementProgressPhase[] = [];
 
     const ready = await ensureRuntimePlacementReady({
@@ -145,7 +158,7 @@ describe('runtimePlacementManager', () => {
 
   it('replaces a ready container runtime when Desktop is using the current source runtime', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-placement-manager-'));
-    const markerPath = await installFakeDocker(tempDir);
+    const { markerPath } = await installFakeDocker(tempDir);
     await fs.writeFile(markerPath, 'old-runtime');
 
     const ready = await ensureRuntimePlacementReady({
@@ -175,9 +188,50 @@ describe('runtimePlacementManager', () => {
     }));
   });
 
+  it('replaces a desktop-managed container daemon when the management socket is unreachable', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-placement-manager-'));
+    const { markerPath, orphanPath, eventsPath } = await installFakeDocker(tempDir);
+    await fs.writeFile(markerPath, 'current-runtime');
+    await fs.writeFile(orphanPath, 'old-daemon-without-management-socket');
+    const progressPhases: RuntimePlacementProgressPhase[] = [];
+
+    const ready = await ensureRuntimePlacementReady({
+      host_access: { kind: 'local_host' },
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'dev',
+        container_ref: 'dev',
+        container_label: 'dev',
+        runtime_root: '/root/.redeven',
+        bridge_strategy: 'exec_stream',
+      },
+      runtime_release_tag: 'v1.2.3',
+      release_base_url: 'https://example.invalid/releases',
+      asset_cache_root: tempDir,
+      desktop_owner_id: 'owner',
+      on_progress: (progress) => {
+        progressPhases.push(progress.phase);
+      },
+    });
+
+    expect(ready.startup?.pid).toBeUndefined();
+    expect(await fs.readFile(eventsPath, 'utf8')).toBe('run\nstop\nrun\n');
+    expect(progressPhases).toEqual([
+      'checking_container',
+      'detecting_platform',
+      'checking_runtime',
+      'starting_runtime_daemon',
+      'waiting_runtime_daemon',
+      'starting_runtime_daemon',
+      'waiting_runtime_daemon',
+      'runtime_ready',
+    ]);
+  });
+
   it('installs an SSH container runtime through the same Desktop package cache path', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-placement-manager-'));
-    const markerPath = await installFakeDocker(tempDir);
+    const { markerPath } = await installFakeDocker(tempDir);
     await installFakeSSH(tempDir);
     const progressPhases: RuntimePlacementProgressPhase[] = [];
 

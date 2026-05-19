@@ -106,6 +106,7 @@ func TestHandleDesktopLockConflictWritesBlockedReportWhenRuntimeIsUnavailable(t 
 		"remote",
 		"rt_conflict",
 		false,
+		"",
 		false,
 		config.StateLayout{
 			ConfigPath:               cfgPath,

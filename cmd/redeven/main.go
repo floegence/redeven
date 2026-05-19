@@ -387,10 +387,6 @@ func (c *cli) runCmd(args []string) int {
 	}
 	defer func() { _ = lk.Release() }()
 
-	if err := writeAgentLockMetadata(lk, newAgentLockMetadata(string(mode), runtimeInstanceID, *desktopManaged, mode != runModeRemote, stateLayout)); err != nil {
-		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to write runtime lock metadata: %v", err))
-	}
-
 	runPassword, err := resolveRunPassword(runPasswordOptions{
 		password:      *password,
 		passwordStdin: *passwordStdin,
@@ -490,6 +486,9 @@ func (c *cli) runCmd(args []string) int {
 	desktopOwnerID := ""
 	if *desktopManaged {
 		desktopOwnerID = strings.TrimSpace(os.Getenv(desktopOwnerIDEnvName))
+	}
+	if err := writeAgentLockMetadata(lk, newAgentLockMetadata(string(mode), runtimeInstanceID, *desktopManaged, desktopOwnerID, mode != runModeRemote, stateLayout)); err != nil {
+		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to write runtime lock metadata: %v", err))
 	}
 	if err := config.WriteEnvironmentCatalogRecord(stateLayout, cfg, localUIBindLabel, accessGate.Enabled()); err != nil {
 		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to update environment catalog: %v", err))
