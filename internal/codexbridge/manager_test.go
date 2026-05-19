@@ -214,6 +214,49 @@ func TestHandleEnvelope_ProjectsLiveThreadState(t *testing.T) {
 	}
 }
 
+func TestStatusIncludesAppServerRuntimeDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewManager(Options{AgentHomeDir: "/workspace"})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	proc, _ := newScriptedProcess(t, nil)
+	proc.path = "/opt/codex/bin:/opt/node/bin"
+	proc.appendStderr("env: node: No such file or directory")
+
+	manager.mu.Lock()
+	manager.proc = proc
+	manager.binaryPath = "/opt/codex/bin/codex"
+	manager.runtimeInfo = initializeResponse{
+		UserAgent:      "Codex Desktop/0.131.0 (test)",
+		CodexHome:      "/Users/alice/.codex-cc",
+		PlatformFamily: "unix",
+		PlatformOS:     "macos",
+	}
+	manager.mu.Unlock()
+
+	status := manager.Status(context.Background())
+	if !status.Ready {
+		t.Fatalf("Status.Ready=false, want true")
+	}
+	if status.CodexHome != "/Users/alice/.codex-cc" {
+		t.Fatalf("Status.CodexHome=%q", status.CodexHome)
+	}
+	if status.UserAgent != "Codex Desktop/0.131.0 (test)" {
+		t.Fatalf("Status.UserAgent=%q", status.UserAgent)
+	}
+	if status.PlatformFamily != "unix" || status.PlatformOS != "macos" {
+		t.Fatalf("unexpected platform: %+v", status)
+	}
+	if status.LastStderr != "env: node: No such file or directory" {
+		t.Fatalf("Status.LastStderr=%q", status.LastStderr)
+	}
+	if status.RuntimePATH != "/opt/codex/bin:/opt/node/bin" {
+		t.Fatalf("Status.RuntimePATH=%q", status.RuntimePATH)
+	}
+}
+
 func TestReadThread_PreservesCompletedProjectedItemLifecycleWithoutExplicitUpstreamStatus(t *testing.T) {
 	t.Parallel()
 

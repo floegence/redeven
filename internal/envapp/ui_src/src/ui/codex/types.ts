@@ -3,6 +3,12 @@ export type CodexStatus = Readonly<{
   ready: boolean;
   binary_path?: string;
   agent_home_dir?: string;
+  codex_home?: string;
+  user_agent?: string;
+  platform_family?: string;
+  platform_os?: string;
+  last_stderr?: string;
+  runtime_path?: string;
   error?: string;
 }>;
 

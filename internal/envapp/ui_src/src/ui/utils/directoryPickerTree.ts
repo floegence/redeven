@@ -1,6 +1,5 @@
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { normalizeAbsolutePath } from './askFlowerPath';
-import { toFileBrowserAbsolutePath, toFileBrowserDisplayPath } from './fileBrowserDisplayPath';
 
 type DirectoryEntryLike = {
   name?: string | null;
@@ -36,15 +35,45 @@ export function listPickerTreePathChain(path: string): string[] {
   return chain;
 }
 
+function pathIsAtOrUnderRoot(pathAbs: string, rootPathAbs: string): boolean {
+  if (!pathAbs || !rootPathAbs) return false;
+  return pathAbs === rootPathAbs || pathAbs.startsWith(`${rootPathAbs}/`);
+}
+
 export function toPickerTreePath(pathAbs: string, rootPathAbs?: string | null): string {
   const normalizedRoot = normalizeAbsolutePath(rootPathAbs ?? '');
   const normalizedPath = normalizeAbsolutePath(pathAbs);
-  return toFileBrowserDisplayPath(normalizedPath || pathAbs, normalizedRoot);
+  if (!normalizedPath) return '/';
+  if (!normalizedRoot || !pathIsAtOrUnderRoot(normalizedPath, normalizedRoot)) {
+    return normalizePickerTreePath(normalizedPath);
+  }
+  if (normalizedPath === normalizedRoot) return '/';
+  return normalizePickerTreePath(normalizedPath.slice(normalizedRoot.length));
 }
 
 export function toPickerTreeAbsolutePath(path: string, rootPathAbs?: string | null): string {
   const normalizedRoot = normalizeAbsolutePath(rootPathAbs ?? '');
-  return toFileBrowserAbsolutePath(normalizePickerTreePath(path), normalizedRoot);
+  const raw = String(path ?? '').trim();
+  const normalizedRawAbsolute = normalizeAbsolutePath(raw);
+  if (normalizedRoot && pathIsAtOrUnderRoot(normalizedRawAbsolute, normalizedRoot)) {
+    return normalizedRawAbsolute;
+  }
+
+  const treePath = normalizePickerTreePath(path);
+  if (!normalizedRoot) {
+    return normalizeAbsolutePath(treePath);
+  }
+  if (treePath === '/') return normalizedRoot;
+  return normalizeAbsolutePath(`${normalizedRoot}${treePath}`);
+}
+
+export function normalizePickerTreeInput(path: string, rootPathAbs?: string | null): string {
+  const normalizedRoot = normalizeAbsolutePath(rootPathAbs ?? '');
+  const normalizedRawAbsolute = normalizeAbsolutePath(String(path ?? '').trim());
+  if (normalizedRoot && pathIsAtOrUnderRoot(normalizedRawAbsolute, normalizedRoot)) {
+    return toPickerTreePath(normalizedRawAbsolute, normalizedRoot);
+  }
+  return normalizePickerTreePath(path);
 }
 
 export function toPickerFolderItem(entry: DirectoryEntryLike, rootPathAbs?: string | null): FileItem | null {

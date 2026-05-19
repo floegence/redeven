@@ -40,10 +40,13 @@ type Manager struct {
 	startMu sync.Mutex
 	mu      sync.Mutex
 
-	proc       *appServerProcess
-	lastError  string
-	binaryPath string
-	threads    map[string]*threadState
+	proc        *appServerProcess
+	lastError   string
+	binaryPath  string
+	runtimeInfo initializeResponse
+	lastStderr  string
+	runtimePATH string
+	threads     map[string]*threadState
 
 	nextCallID       atomic.Int64
 	nextSubscriberID atomic.Int64
@@ -235,6 +238,17 @@ func (m *Manager) Status(_ context.Context) Status {
 	if m.binaryPath != "" {
 		out.BinaryPath = m.binaryPath
 	}
+	if m.proc != nil {
+		out.LastStderr = strings.TrimSpace(m.proc.lastStderr())
+		out.RuntimePATH = strings.TrimSpace(m.proc.runtimePATH())
+	} else {
+		out.LastStderr = strings.TrimSpace(m.lastStderr)
+		out.RuntimePATH = strings.TrimSpace(m.runtimePATH)
+	}
+	out.CodexHome = strings.TrimSpace(m.runtimeInfo.CodexHome)
+	out.UserAgent = strings.TrimSpace(m.runtimeInfo.UserAgent)
+	out.PlatformFamily = strings.TrimSpace(m.runtimeInfo.PlatformFamily)
+	out.PlatformOS = strings.TrimSpace(m.runtimeInfo.PlatformOS)
 	m.mu.Unlock()
 	if err != nil && out.Error == "" {
 		out.Error = err.Error()
@@ -919,10 +933,13 @@ func (m *Manager) ensureProcess(ctx context.Context) (*appServerProcess, error) 
 		select {
 		case err := <-m.proc.done:
 			m.lastError = err.Error()
+			m.lastStderr = strings.TrimSpace(m.proc.lastStderr())
+			m.runtimePATH = strings.TrimSpace(m.proc.runtimePATH())
 			m.proc = nil
 			m.invalidateLiveThreadsLocked()
 			m.logStreamDiagnostic("runtime_disconnected", "codex app-server process exited", map[string]any{
-				"error": err.Error(),
+				"error":       err.Error(),
+				"last_stderr": m.lastStderr,
 			})
 		default:
 			proc := m.proc
@@ -955,13 +972,21 @@ func (m *Manager) ensureProcess(ctx context.Context) (*appServerProcess, error) 
 			RequestAttestation: false,
 		},
 	}
-	var initResp map[string]any
+	var initResp initializeResponse
 	if err := proc.call(initCtx, strconv.FormatInt(m.nextCallID.Add(1), 10), "initialize", initParams, &initResp); err != nil {
+		m.mu.Lock()
+		m.lastStderr = strings.TrimSpace(proc.lastStderr())
+		m.runtimePATH = strings.TrimSpace(proc.runtimePATH())
+		m.mu.Unlock()
 		_ = proc.close()
 		m.recordError(err)
 		return nil, err
 	}
 	if err := proc.notify("initialized", map[string]any{}); err != nil {
+		m.mu.Lock()
+		m.lastStderr = strings.TrimSpace(proc.lastStderr())
+		m.runtimePATH = strings.TrimSpace(proc.runtimePATH())
+		m.mu.Unlock()
 		_ = proc.close()
 		m.recordError(err)
 		return nil, err
@@ -970,6 +995,9 @@ func (m *Manager) ensureProcess(ctx context.Context) (*appServerProcess, error) 
 	nextEpoch := m.runtimeEpoch.Add(1)
 	m.proc = proc
 	m.binaryPath = binaryPath
+	m.runtimeInfo = initResp
+	m.lastStderr = ""
+	m.runtimePATH = strings.TrimSpace(proc.runtimePATH())
 	m.lastError = ""
 	for _, state := range m.threads {
 		if state == nil {
@@ -981,6 +1009,8 @@ func (m *Manager) ensureProcess(ctx context.Context) (*appServerProcess, error) 
 	m.mu.Unlock()
 	m.logStreamDiagnostic("runtime_connected", "codex app-server process connected", map[string]any{
 		"binary_path":   binaryPath,
+		"codex_home":    strings.TrimSpace(initResp.CodexHome),
+		"user_agent":    strings.TrimSpace(initResp.UserAgent),
 		"runtime_epoch": nextEpoch,
 	})
 	return proc, nil

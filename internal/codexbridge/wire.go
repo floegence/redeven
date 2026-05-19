@@ -34,6 +34,13 @@ type initializeCapabilities struct {
 	RequestAttestation bool `json:"requestAttestation"`
 }
 
+type initializeResponse struct {
+	UserAgent      string `json:"userAgent"`
+	CodexHome      string `json:"codexHome"`
+	PlatformFamily string `json:"platformFamily"`
+	PlatformOS     string `json:"platformOs"`
+}
+
 type wireThreadStatus struct {
 	Type        string   `json:"type"`
 	ActiveFlags []string `json:"activeFlags,omitempty"`

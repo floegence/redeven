@@ -13,11 +13,17 @@ const (
 )
 
 type Status struct {
-	Available    bool   `json:"available"`
-	Ready        bool   `json:"ready"`
-	BinaryPath   string `json:"binary_path,omitempty"`
-	AgentHomeDir string `json:"agent_home_dir,omitempty"`
-	Error        string `json:"error,omitempty"`
+	Available      bool   `json:"available"`
+	Ready          bool   `json:"ready"`
+	BinaryPath     string `json:"binary_path,omitempty"`
+	AgentHomeDir   string `json:"agent_home_dir,omitempty"`
+	CodexHome      string `json:"codex_home,omitempty"`
+	UserAgent      string `json:"user_agent,omitempty"`
+	PlatformFamily string `json:"platform_family,omitempty"`
+	PlatformOS     string `json:"platform_os,omitempty"`
+	LastStderr     string `json:"last_stderr,omitempty"`
+	RuntimePATH    string `json:"runtime_path,omitempty"`
+	Error          string `json:"error,omitempty"`
 }
 
 type ThreadRuntimeConfig struct {

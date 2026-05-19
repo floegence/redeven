@@ -65,11 +65,12 @@ func TestLookPathFromLoginShell_IgnoresInteractiveShellNoise(t *testing.T) {
 
 func TestBuildAppServerCommand_UsesLoginShellPathForNodeShim(t *testing.T) {
 	dir := t.TempDir()
-	codexPath := writeExecutableAt(t, dir, "codex")
+	codexPath := writeNodeShimAt(t, dir, "codex")
 	nodeDir := filepath.Join(t.TempDir(), "node-bin")
 	if err := os.MkdirAll(nodeDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
+	_ = writeExecutableAt(t, nodeDir, "node")
 	shellPath := filepath.Join(t.TempDir(), "shell")
 	script := "#!/bin/sh\nif [ \"$1\" = \"-l\" ] && [ \"$2\" = \"-i\" ] && [ \"$3\" = \"-c\" ]; then\n  PATH=\"" + nodeDir + ":$PATH\" /bin/sh -c \"$4\" \"$5\"\n  exit $?\nfi\nexit 64\n"
 	if err := os.WriteFile(shellPath, []byte(script), 0o755); err != nil {
@@ -84,6 +85,18 @@ func TestBuildAppServerCommand_UsesLoginShellPathForNodeShim(t *testing.T) {
 	parts := strings.Split(pathValue, string(os.PathListSeparator))
 	if len(parts) < 2 || parts[0] != dir || parts[1] != nodeDir {
 		t.Fatalf("PATH=%q, want binary dir then shell PATH", pathValue)
+	}
+}
+
+func TestBuildAppServerCommand_RejectsNodeShimWithoutNodeInRuntimePath(t *testing.T) {
+	dir := t.TempDir()
+	codexPath := writeNodeShimAt(t, dir, "codex")
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("SHELL", "")
+
+	_, err := buildAppServerCommand("", codexPath)
+	if err == nil || !strings.Contains(err.Error(), "Node.js shim") || !strings.Contains(err.Error(), "`node` is not available") {
+		t.Fatalf("buildAppServerCommand error=%v, want actionable node shim error", err)
 	}
 }
 
@@ -117,6 +130,15 @@ func writeExecutableAt(t *testing.T, dir string, name string) string {
 	path := filepath.Join(dir, name)
 	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatalf("write executable %q: %v", path, err)
+	}
+	return path
+}
+
+func writeNodeShimAt(t *testing.T, dir string, name string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte("#!/usr/bin/env node\nprocess.exit(0)\n"), 0o755); err != nil {
+		t.Fatalf("write node shim %q: %v", path, err)
 	}
 	return path
 }

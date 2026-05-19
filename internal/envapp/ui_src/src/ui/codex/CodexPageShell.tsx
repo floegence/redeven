@@ -657,6 +657,7 @@ export function CodexPageShell() {
                 statusError={codex.statusError()}
                 threadError={codex.activeThreadError()}
                 streamTransportState={codex.streamTransportState()}
+                status={codex.status()}
                 hostAvailable={summary().hostReady}
               />
             </div>
