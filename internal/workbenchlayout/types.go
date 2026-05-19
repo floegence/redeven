@@ -145,6 +145,7 @@ type WidgetState struct {
 type WidgetStateData struct {
 	Kind         string       `json:"kind"`
 	CurrentPath  string       `json:"current_path,omitempty"`
+	RootID       string       `json:"root_id,omitempty"`
 	SessionIDs   []string     `json:"session_ids,omitempty"`
 	FontSize     *int         `json:"font_size,omitempty"`
 	FontFamilyID string       `json:"font_family_id,omitempty"`
@@ -653,7 +654,7 @@ func normalizeWidgetStateData(widgetType string, state WidgetStateData) (WidgetS
 		if path == "" {
 			return WidgetStateData{}, &ValidationError{Message: "state.current_path is required"}
 		}
-		return WidgetStateData{Kind: kind, CurrentPath: path}, nil
+		return WidgetStateData{Kind: kind, CurrentPath: path, RootID: normalizeRootID(state.RootID)}, nil
 	case WidgetStateKindTerminal:
 		return WidgetStateData{
 			Kind:         kind,
@@ -685,6 +686,14 @@ func normalizeAbsolutePath(value string) string {
 		return ""
 	}
 	return path
+}
+
+func normalizeRootID(value string) string {
+	id := strings.TrimSpace(value)
+	if id == "" || len(id) > 4096 {
+		return ""
+	}
+	return id
 }
 
 func normalizeTerminalFontSize(value *int) *int {
@@ -801,7 +810,7 @@ func basename(path string) string {
 }
 
 func widgetStateDataEqual(left WidgetStateData, right WidgetStateData) bool {
-	if left.Kind != right.Kind || left.CurrentPath != right.CurrentPath || left.FontFamilyID != right.FontFamilyID {
+	if left.Kind != right.Kind || left.CurrentPath != right.CurrentPath || left.RootID != right.RootID || left.FontFamilyID != right.FontFamilyID {
 		return false
 	}
 	if !terminalFontSizesEqual(left.FontSize, right.FontSize) {

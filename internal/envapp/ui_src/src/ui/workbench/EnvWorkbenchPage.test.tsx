@@ -2238,6 +2238,7 @@ describe('EnvWorkbenchPage', () => {
           state: {
             kind: 'files',
             current_path: '/workspace/src',
+            root_id: 'workspace',
           },
         },
       ],
@@ -2264,6 +2265,7 @@ describe('EnvWorkbenchPage', () => {
     expect(contextProbeState.fileOpenRequest).toMatchObject({
       widgetId: 'widget-files-1',
       path: '/workspace/src',
+      rootId: 'workspace',
     });
 
     (host.querySelector('[data-testid="commit-files-path"]') as HTMLButtonElement).click();

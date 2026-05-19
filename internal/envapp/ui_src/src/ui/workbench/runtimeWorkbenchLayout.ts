@@ -280,6 +280,11 @@ function normalizeAbsolutePath(value: unknown): string {
   return path.length <= 4096 ? path : '';
 }
 
+function normalizeRootID(value: unknown): string {
+  const rootId = compact(value);
+  return rootId.length <= 4096 ? rootId : '';
+}
+
 function basenameFromPath(path: string): string {
   const normalized = normalizeAbsolutePath(path);
   if (!normalized || normalized === '/') return '';
@@ -320,7 +325,7 @@ function normalizeRuntimeWorkbenchWidgetStateData(
   const kind = compact(value.kind);
   if (widgetType === 'redeven.files' && (!kind || kind === 'files')) {
     const currentPath = normalizeAbsolutePath(value.current_path);
-    const rootId = compact(value.root_id);
+    const rootId = normalizeRootID(value.root_id);
     return currentPath ? {
       kind: 'files',
       current_path: currentPath,

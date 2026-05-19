@@ -938,13 +938,14 @@ func TestServicePutWidgetStateCAS(t *testing.T) {
 		State: WidgetStateData{
 			Kind:        WidgetStateKindFiles,
 			CurrentPath: "/workspace/src",
+			RootID:      "workspace",
 		},
 	})
 	if err != nil {
 		t.Fatalf("PutWidgetState() error = %v", err)
 	}
-	if state.Revision != 1 || state.State.CurrentPath != "/workspace/src" {
-		t.Fatalf("state = %#v, want revision 1 current_path /workspace/src", state)
+	if state.Revision != 1 || state.State.CurrentPath != "/workspace/src" || state.State.RootID != "workspace" {
+		t.Fatalf("state = %#v, want revision 1 files state with workspace root", state)
 	}
 
 	persisted, err := svc.Snapshot(ctx)
@@ -957,7 +958,7 @@ func TestServicePutWidgetStateCAS(t *testing.T) {
 	if persisted.Seq != state.Revision+1 {
 		t.Fatalf("snapshot seq = %d, want widget-state event seq 2", persisted.Seq)
 	}
-	if len(persisted.WidgetStates) != 1 || persisted.WidgetStates[0].State.CurrentPath != "/workspace/src" {
+	if len(persisted.WidgetStates) != 1 || persisted.WidgetStates[0].State.CurrentPath != "/workspace/src" || persisted.WidgetStates[0].State.RootID != "workspace" {
 		t.Fatalf("persisted widget states = %#v, want files path", persisted.WidgetStates)
 	}
 
@@ -967,6 +968,7 @@ func TestServicePutWidgetStateCAS(t *testing.T) {
 		State: WidgetStateData{
 			Kind:        WidgetStateKindFiles,
 			CurrentPath: "/workspace/src",
+			RootID:      "workspace",
 		},
 	})
 	if err != nil {
@@ -974,6 +976,22 @@ func TestServicePutWidgetStateCAS(t *testing.T) {
 	}
 	if same.Revision != state.Revision || same.UpdatedAtUnixMs != state.UpdatedAtUnixMs {
 		t.Fatalf("same state = %#v, want unchanged %#v", same, state)
+	}
+
+	rootChanged, err := svc.PutWidgetState(ctx, "widget-files-1", PutWidgetStateRequest{
+		BaseRevision: same.Revision,
+		WidgetType:   WidgetTypeFiles,
+		State: WidgetStateData{
+			Kind:        WidgetStateKindFiles,
+			CurrentPath: "/workspace/src",
+			RootID:      "other-root",
+		},
+	})
+	if err != nil {
+		t.Fatalf("root changed PutWidgetState() error = %v", err)
+	}
+	if rootChanged.Revision != same.Revision+1 || rootChanged.State.CurrentPath != "/workspace/src" || rootChanged.State.RootID != "other-root" {
+		t.Fatalf("root changed state = %#v, want next revision with other-root", rootChanged)
 	}
 
 	_, err = svc.PutWidgetState(ctx, "widget-files-1", PutWidgetStateRequest{
@@ -991,8 +1009,8 @@ func TestServicePutWidgetStateCAS(t *testing.T) {
 	if !errors.As(err, &conflict) {
 		t.Fatalf("error = %v, want WidgetStateRevisionConflictError", err)
 	}
-	if conflict.WidgetID != "widget-files-1" || conflict.CurrentRevision != 1 {
-		t.Fatalf("conflict = %#v, want widget-files-1 revision 1", conflict)
+	if conflict.WidgetID != "widget-files-1" || conflict.CurrentRevision != rootChanged.Revision {
+		t.Fatalf("conflict = %#v, want widget-files-1 revision %d", conflict, rootChanged.Revision)
 	}
 }
 
