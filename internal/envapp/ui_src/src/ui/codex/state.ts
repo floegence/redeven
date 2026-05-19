@@ -3,6 +3,7 @@ import type {
   CodexItem,
   CodexPendingRequest,
   CodexThreadStreamState,
+  CodexTurnError,
   CodexTurn,
   CodexThreadTokenUsage,
   CodexThread,
@@ -111,6 +112,14 @@ function addOrUpdateItem(
   options?: { replaceEmptyText?: boolean },
 ): CodexThreadSession {
   const next = cloneSession(session);
+  const incomingTurnID = itemTurnID(item);
+  if (incomingTurnID && isAssistantOwnedTurnItem(item)) {
+    const emptyDiagnosticID = turnDiagnosticID(incomingTurnID, 'empty_response');
+    if (next.items_by_id[emptyDiagnosticID]) {
+      delete next.items_by_id[emptyDiagnosticID];
+      next.item_order = next.item_order.filter((itemID) => itemID !== emptyDiagnosticID);
+    }
+  }
   const existing = next.items_by_id[item.id];
   if (!existing) {
     next.items_by_id[item.id] = {
@@ -275,6 +284,102 @@ function itemTextOrContent(item: CodexItem | null | undefined): string {
   return content;
 }
 
+function itemTurnID(item: CodexItem | null | undefined): string {
+  return String(item?.turn_id ?? '').trim();
+}
+
+function isAssistantOwnedTurnItem(item: CodexItem | null | undefined): boolean {
+  const itemType = String(item?.type ?? '').trim();
+  return Boolean(itemType && itemType !== 'userMessage' && itemType !== 'turnDiagnostic');
+}
+
+function turnHasAssistantOwnedItem(turn: CodexTurn | null | undefined): boolean {
+  return (turn?.items ?? []).some(isAssistantOwnedTurnItem);
+}
+
+function sessionHasAssistantOwnedTurnItem(session: CodexThreadSession, turnID: string): boolean {
+  return session.item_order.some((itemID) => {
+    const item = session.items_by_id[itemID];
+    return itemTurnID(item) === turnID && isAssistantOwnedTurnItem(item);
+  });
+}
+
+function formatTurnErrorDetails(error: CodexTurnError | null | undefined): string {
+  if (!error) return '';
+  const message = String(error.message ?? '').trim();
+  const details = String(error.additional_details ?? '').trim();
+  const code = String(error.codex_error_code ?? '').trim();
+  return [
+    message,
+    details,
+    code ? `Codex error code: ${code}` : '',
+  ].filter(Boolean).join('\n\n').trim();
+}
+
+function turnDiagnosticID(turnID: string, kind: 'turn_error' | 'empty_response'): string {
+  return `turn:${turnID}:diagnostic:${kind}`;
+}
+
+function buildTurnDiagnosticItem(args: {
+  turnID: string;
+  kind: 'turn_error' | 'empty_response';
+  status: string;
+  text: string;
+  turnError?: CodexTurnError | null;
+}): CodexItem {
+  return {
+    id: turnDiagnosticID(args.turnID, args.kind),
+    type: 'turnDiagnostic',
+    turn_id: args.turnID,
+    diagnostic_kind: args.kind,
+    status: args.status,
+    text: args.text,
+    turn_error: args.turnError ?? null,
+  };
+}
+
+function applyTurnDiagnosticItem(
+  session: CodexThreadSession,
+  turnID: string,
+  item: CodexItem,
+): CodexThreadSession {
+  const afterTurnItems = session.item_order.filter((itemID) => itemTurnID(session.items_by_id[itemID]) === turnID);
+  const orderHint = afterTurnItems.length > 0
+    ? Math.max(...afterTurnItems.map((itemID) => Number(session.items_by_id[itemID]?.order ?? 0) || 0)) + 1
+    : session.item_order.length;
+  return addOrUpdateItem(session, item, orderHint, { replaceEmptyText: true });
+}
+
+function reconcileTurnDiagnostics(
+  session: CodexThreadSession,
+  turn: CodexTurn | null | undefined,
+  incomingError?: CodexTurnError | null,
+): CodexThreadSession {
+  const turnID = String(turn?.id ?? '').trim();
+  if (!turnID) return session;
+  const status = String(turn?.status ?? '').trim().toLowerCase();
+  const turnError = incomingError ?? turn?.error ?? null;
+  if (status === 'failed' || turnError) {
+    const text = formatTurnErrorDetails(turnError) || 'Codex reported that this turn failed, but did not provide error details.';
+    return applyTurnDiagnosticItem(session, turnID, buildTurnDiagnosticItem({
+      turnID,
+      kind: 'turn_error',
+      status: 'failed',
+      text,
+      turnError,
+    }));
+  }
+  if (status === 'completed' && !turnHasAssistantOwnedItem(turn) && !sessionHasAssistantOwnedTurnItem(session, turnID)) {
+    return applyTurnDiagnosticItem(session, turnID, buildTurnDiagnosticItem({
+      turnID,
+      kind: 'empty_response',
+      status: 'empty_response',
+      text: 'Codex completed this turn without a visible response.\n\nThe app-server reported completion, but no assistant message or activity item was materialized for this turn.',
+    }));
+  }
+  return session;
+}
+
 export function buildCodexThreadSession(detail: CodexThreadDetail): CodexThreadSession {
   const items_by_id: Record<string, CodexTranscriptItem> = {};
   const item_order: string[] = [];
@@ -284,6 +389,7 @@ export function buildCodexThreadSession(detail: CodexThreadDetail): CodexThreadS
     for (const item of Array.isArray(turn.items) ? turn.items : []) {
       const normalized: CodexItem = {
         ...item,
+        turn_id: String(item.turn_id ?? turn.id ?? '').trim() || undefined,
         status: inferItemStatus(item.status, turn.status),
         text: itemTextOrContent(item),
       };
@@ -301,7 +407,7 @@ export function buildCodexThreadSession(detail: CodexThreadDetail): CodexThreadS
     pending_requests[request.id] = request;
   }
 
-  return {
+  let session: CodexThreadSession = {
     thread: detail.thread,
     runtime_config: detail.runtime_config ?? {},
     items_by_id,
@@ -313,6 +419,10 @@ export function buildCodexThreadSession(detail: CodexThreadDetail): CodexThreadS
     active_status: String(detail.active_status ?? detail.thread.status ?? '').trim(),
     active_status_flags: Array.isArray(detail.active_status_flags) ? [...detail.active_status_flags] : [...(detail.thread.active_flags ?? [])],
   };
+  for (const turn of Array.isArray(detail.thread.turns) ? detail.thread.turns : []) {
+    session = reconcileTurnDiagnostics(session, turn);
+  }
+  return session;
 }
 
 export function buildEmptyCodexThreadSession(args: {
@@ -379,6 +489,7 @@ export function applyCodexEvent(session: CodexThreadSession | null, event: Codex
       if (event.turn) {
         next.active_status = String(event.turn.status ?? next.active_status).trim();
         next.thread = upsertThreadTurn(next.thread, event.turn);
+        next = reconcileTurnDiagnostics(next, event.turn);
       }
       return next;
     case 'item_started':
@@ -388,6 +499,7 @@ export function applyCodexEvent(session: CodexThreadSession | null, event: Codex
         next,
         {
           ...event.item,
+          turn_id: String(event.item.turn_id ?? event.turn_id ?? '').trim() || undefined,
           status: inferItemStatus(
             event.item.status,
             event.type === 'item_completed' ? 'completed' : 'inProgress',
@@ -400,12 +512,24 @@ export function applyCodexEvent(session: CodexThreadSession | null, event: Codex
     case 'agent_message_delta': {
       const itemID = String(event.item_id ?? '').trim();
       if (!itemID) return next;
-      return appendItemText(next, itemID, { id: itemID, type: 'agentMessage', text: '', status: 'inProgress' }, String(event.delta ?? ''));
+      return appendItemText(next, itemID, {
+        id: itemID,
+        type: 'agentMessage',
+        turn_id: String(event.turn_id ?? '').trim() || undefined,
+        text: '',
+        status: 'inProgress',
+      }, String(event.delta ?? ''));
     }
     case 'command_output_delta': {
       const itemID = String(event.item_id ?? '').trim();
       if (!itemID) return next;
-      next = ensureLiveItem(next, itemID, { id: itemID, type: 'commandExecution', aggregated_output: '', status: 'inProgress' });
+      next = ensureLiveItem(next, itemID, {
+        id: itemID,
+        type: 'commandExecution',
+        turn_id: String(event.turn_id ?? '').trim() || undefined,
+        aggregated_output: '',
+        status: 'inProgress',
+      });
       const existing = next.items_by_id[itemID];
       next.items_by_id[itemID] = {
         ...existing,
@@ -416,21 +540,46 @@ export function applyCodexEvent(session: CodexThreadSession | null, event: Codex
     case 'file_change_delta': {
       const itemID = String(event.item_id ?? '').trim();
       if (!itemID) return next;
+      next = ensureLiveItem(next, itemID, {
+        id: itemID,
+        type: 'fileChange',
+        turn_id: String(event.turn_id ?? '').trim() || undefined,
+        changes: [],
+        status: 'inProgress',
+      });
       return appendFileChangeDiff(next, itemID, String(event.delta ?? ''));
     }
     case 'plan_delta': {
       const itemID = String(event.item_id ?? '').trim();
       if (!itemID) return next;
-      return appendItemText(next, itemID, { id: itemID, type: 'plan', text: '', status: 'inProgress' }, String(event.delta ?? ''));
+      return appendItemText(next, itemID, {
+        id: itemID,
+        type: 'plan',
+        turn_id: String(event.turn_id ?? '').trim() || undefined,
+        text: '',
+        status: 'inProgress',
+      }, String(event.delta ?? ''));
     }
     case 'reasoning_delta': {
       const itemID = String(event.item_id ?? '').trim();
       if (!itemID) return next;
       const delta = String(event.delta ?? '');
       if (typeof event.content_index === 'number') {
-        return appendItemContent(next, itemID, { id: itemID, type: 'reasoning', content: [], status: 'inProgress' }, event.content_index, delta);
+        return appendItemContent(next, itemID, {
+          id: itemID,
+          type: 'reasoning',
+          turn_id: String(event.turn_id ?? '').trim() || undefined,
+          content: [],
+          status: 'inProgress',
+        }, event.content_index, delta);
       }
-      return appendItemText(next, itemID, { id: itemID, type: 'reasoning', text: '', status: 'inProgress' }, delta);
+      return appendItemText(next, itemID, {
+        id: itemID,
+        type: 'reasoning',
+        turn_id: String(event.turn_id ?? '').trim() || undefined,
+        text: '',
+        status: 'inProgress',
+      }, delta);
     }
     case 'reasoning_summary_delta': {
       const itemID = String(event.item_id ?? '').trim();
@@ -438,7 +587,13 @@ export function applyCodexEvent(session: CodexThreadSession | null, event: Codex
       return appendItemSummary(
         next,
         itemID,
-        { id: itemID, type: 'reasoning', summary: [], status: 'inProgress' },
+        {
+          id: itemID,
+          type: 'reasoning',
+          turn_id: String(event.turn_id ?? '').trim() || undefined,
+          summary: [],
+          status: 'inProgress',
+        },
         Math.max(0, Number(event.summary_index ?? 0) || 0),
         String(event.delta ?? ''),
       );
@@ -449,7 +604,13 @@ export function applyCodexEvent(session: CodexThreadSession | null, event: Codex
       return appendItemSummary(
         next,
         itemID,
-        { id: itemID, type: 'reasoning', summary: [], status: 'inProgress' },
+        {
+          id: itemID,
+          type: 'reasoning',
+          turn_id: String(event.turn_id ?? '').trim() || undefined,
+          summary: [],
+          status: 'inProgress',
+        },
         Math.max(0, Number(event.summary_index ?? 0) || 0),
         '',
       );
@@ -482,6 +643,26 @@ export function applyCodexEvent(session: CodexThreadSession | null, event: Codex
       next.active_status = 'systemError';
       next.active_status_flags = [];
       next.thread = { ...next.thread, status: 'systemError', active_flags: [] };
+      if (event.turn_id) {
+        const turnID = String(event.turn_id).trim();
+        const turn = next.thread.turns?.find((entry) => String(entry.id ?? '').trim() === turnID) ?? {
+          id: turnID,
+          status: 'failed',
+          error: event.turn_error ?? {
+            message: String(event.error ?? '').trim() || 'Codex reported an error.',
+          },
+          items: [],
+        };
+        const fallbackTurnError = event.turn_error ?? turn.error ?? {
+          message: String(event.error ?? '').trim() || 'Codex reported an error.',
+        };
+        next.thread = upsertThreadTurn(next.thread, {
+          ...turn,
+          status: 'failed',
+          error: fallbackTurnError,
+        });
+        next = reconcileTurnDiagnostics(next, turn, fallbackTurnError);
+      }
       return next;
     case 'stream_desynced':
       return next;

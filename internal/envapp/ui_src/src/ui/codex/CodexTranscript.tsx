@@ -356,6 +356,9 @@ function WorkingStateRow(props: { phaseLabel: string }) {
 }
 
 function shouldRenderTranscriptItem(item: CodexTranscriptItem): boolean {
+  if (item.type === 'turnDiagnostic') {
+    return Boolean(itemText(item).trim());
+  }
   if (
     (item.type === 'reasoning' || item.type === 'plan') &&
     (item.summary?.length ?? 0) === 0 &&

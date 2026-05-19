@@ -258,9 +258,17 @@ func upsertProjectedTurn(thread *Thread, turn Turn) *Turn {
 			existing.Error = &errCopy
 		}
 		for _, item := range turn.Items {
+			if strings.TrimSpace(item.TurnID) == "" {
+				item.TurnID = normalizedTurnID
+			}
 			upsertProjectedItem(existing, item)
 		}
 		return existing
+	}
+	for i := range turn.Items {
+		if strings.TrimSpace(turn.Items[i].TurnID) == "" {
+			turn.Items[i].TurnID = normalizedTurnID
+		}
 	}
 	thread.Turns = append(thread.Turns, cloneTurn(turn))
 	return &thread.Turns[len(thread.Turns)-1]
@@ -283,6 +291,15 @@ func ensureProjectedTurn(thread *Thread, turnID string) *Turn {
 	return &thread.Turns[len(thread.Turns)-1]
 }
 
+func markProjectedTurnError(turn *Turn, turnError *TurnError) {
+	if turn == nil || turnError == nil {
+		return
+	}
+	errCopy := *turnError
+	turn.Error = &errCopy
+	turn.Status = "failed"
+}
+
 func upsertProjectedItem(turn *Turn, item Item) *Item {
 	if turn == nil {
 		return nil
@@ -296,6 +313,9 @@ func upsertProjectedItem(turn *Turn, item Item) *Item {
 			continue
 		}
 		existing := &turn.Items[index]
+		if strings.TrimSpace(item.TurnID) != "" {
+			existing.TurnID = item.TurnID
+		}
 		if strings.TrimSpace(item.Type) != "" {
 			existing.Type = strings.TrimSpace(item.Type)
 		}
@@ -344,6 +364,9 @@ func upsertProjectedItem(turn *Turn, item Item) *Item {
 			existing.Inputs = cloneUserInputs(item.Inputs)
 		}
 		return existing
+	}
+	if strings.TrimSpace(item.TurnID) == "" {
+		item.TurnID = strings.TrimSpace(turn.ID)
 	}
 	if strings.TrimSpace(item.Type) == "agentMessage" && strings.TrimSpace(item.Status) == "completed" {
 		item.Text = cleanAssistantHostDirectiveText(item.Text)

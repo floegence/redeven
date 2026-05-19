@@ -213,6 +213,16 @@ function sameReadStatus(
   );
 }
 
+function formatCodexErrorForNotification(error: unknown): string {
+  if (error instanceof CodexGatewayError) {
+    const message = String(error.message ?? '').trim();
+    const details = String(error.details ?? '').trim();
+    const code = String(error.errorCode ?? '').trim();
+    return [message, details, code ? `Codex error code: ${code}` : ''].filter(Boolean).join('\n\n') || 'Request failed.';
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
 function sameTurnSummary(left: CodexThread['turns'], right: CodexThread['turns']): boolean {
   const normalizedLeft = Array.isArray(left) ? left : [];
   const normalizedRight = Array.isArray(right) ? right : [];
@@ -1235,7 +1245,7 @@ export function CodexProvider(props: ParentProps) {
         String(detail.runtime_config?.cwd ?? detail.thread.cwd ?? '').trim(),
       );
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = formatCodexErrorForNotification(error);
       if (!threadController.failThreadBootstrap(token, message)) return;
     }
   };
@@ -1569,7 +1579,7 @@ export function CodexProvider(props: ParentProps) {
           preview_url: dataURL,
         });
       } catch (error) {
-        notify.error('Attachment failed', error instanceof Error ? error.message : String(error));
+        notify.error('Attachment failed', formatCodexErrorForNotification(error));
       }
     }
     if (rejectedCount > 0) {
@@ -1626,7 +1636,7 @@ export function CodexProvider(props: ParentProps) {
           : Promise.resolve(),
       ]);
     } catch (error) {
-      notify.error('Refresh failed', error instanceof Error ? error.message : String(error));
+      notify.error('Refresh failed', formatCodexErrorForNotification(error));
     }
   };
 
@@ -2002,7 +2012,7 @@ export function CodexProvider(props: ParentProps) {
       }
       notify.error(
         args?.failureMessage ?? 'Queued follow-up failed',
-        error instanceof Error ? error.message : String(error),
+        formatCodexErrorForNotification(error),
       );
       return false;
     }
@@ -2045,7 +2055,7 @@ export function CodexProvider(props: ParentProps) {
         },
         onFailure: (_failedInput, error) => {
           restoreComposerSnapshot(ownerID, snapshot);
-          notify.error('Send failed', error instanceof Error ? error.message : String(error));
+          notify.error('Send failed', formatCodexErrorForNotification(error));
         },
       });
       return;
@@ -2071,7 +2081,7 @@ export function CodexProvider(props: ParentProps) {
           : ownerID
       );
       restoreComposerSnapshot(restoreOwnerID, snapshot);
-      notify.error('Send failed', error instanceof Error ? error.message : String(error));
+      notify.error('Send failed', formatCodexErrorForNotification(error));
     }
   };
 
@@ -2123,7 +2133,7 @@ export function CodexProvider(props: ParentProps) {
         followupController.prependFollowup(
           queuedFollowupFromDispatching(failedInput, followup.source),
         );
-        notify.error('Guide failed', error instanceof Error ? error.message : String(error));
+        notify.error('Guide failed', formatCodexErrorForNotification(error));
       },
     });
   };
@@ -2153,7 +2163,7 @@ export function CodexProvider(props: ParentProps) {
       threadController.removeThreadState(normalizedThreadID);
       await refetchThreads();
     } catch (error) {
-      notify.error('Archive failed', error instanceof Error ? error.message : String(error));
+      notify.error('Archive failed', formatCodexErrorForNotification(error));
     } finally {
       setArchivingThreadID((current) => (current === normalizedThreadID ? null : current));
     }
@@ -2197,7 +2207,7 @@ export function CodexProvider(props: ParentProps) {
       requestScrollToBottom('bootstrap');
       await refetchThreads();
     } catch (error) {
-      notify.error('Fork failed', error instanceof Error ? error.message : String(error));
+      notify.error('Fork failed', formatCodexErrorForNotification(error));
     } finally {
       setForkingThreadID((current) => (current === threadID ? null : current));
     }
@@ -2222,7 +2232,7 @@ export function CodexProvider(props: ParentProps) {
         turn_id: turnID,
       });
     } catch (error) {
-      notify.error('Interrupt failed', error instanceof Error ? error.message : String(error));
+      notify.error('Interrupt failed', formatCodexErrorForNotification(error));
     } finally {
       setInterruptingTurnID((current) => (current === turnID ? null : current));
     }
@@ -2254,7 +2264,7 @@ export function CodexProvider(props: ParentProps) {
       requestScrollToBottom('send');
       await refetchThreads();
     } catch (error) {
-      notify.error('Review failed', error instanceof Error ? error.message : String(error));
+      notify.error('Review failed', formatCodexErrorForNotification(error));
     } finally {
       setReviewingThreadID((current) => (current === threadID ? null : current));
     }
@@ -2331,7 +2341,7 @@ export function CodexProvider(props: ParentProps) {
         answers: request.type === 'user_input' ? requestDrafts()[request.id] ?? {} : undefined,
       });
     } catch (error) {
-      notify.error('Request failed', error instanceof Error ? error.message : String(error));
+      notify.error('Request failed', formatCodexErrorForNotification(error));
     }
   };
 

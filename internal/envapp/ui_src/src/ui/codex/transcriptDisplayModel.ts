@@ -16,6 +16,7 @@ export type CodexTranscriptAttentionReason =
   | 'error'
   | 'approval'
   | 'user_input'
+  | 'empty_response'
   | 'stream_desync';
 
 export type CodexTranscriptAttentionNode = Readonly<{
@@ -437,6 +438,7 @@ function isActivityItem(item: CodexTranscriptItem): boolean {
 }
 
 function attentionReason(item: CodexTranscriptItem): CodexTranscriptAttentionReason | null {
+  if (item.type === 'turnDiagnostic' && item.diagnostic_kind === 'empty_response') return 'empty_response';
   const status = String(item.status ?? '').trim().toLowerCase();
   if (status === 'desynced' || status.includes('desync')) return 'stream_desync';
   if (status.includes('approval') || status.includes('waiting')) return 'approval';

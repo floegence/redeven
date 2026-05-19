@@ -157,4 +157,37 @@ describe('buildCodexTranscriptDisplayNodes', () => {
     expect(group.items.map((entry) => entry.kind)).toEqual(['reasoning', 'plan']);
     expect(group.items.map((entry) => entry.detail.type)).toEqual(['reasoning', 'plan']);
   });
+
+  it('renders turn diagnostics as attention rows instead of activity noise', () => {
+    const nodes = buildCodexTranscriptDisplayNodes([
+      item({
+        id: 'turn:turn_1:diagnostic:empty_response',
+        type: 'turnDiagnostic',
+        turn_id: 'turn_1',
+        diagnostic_kind: 'empty_response',
+        status: 'empty_response',
+        text: 'Codex completed this turn without a visible response.',
+        order: 2,
+      }),
+      item({
+        id: 'turn:turn_2:diagnostic:turn_error',
+        type: 'turnDiagnostic',
+        turn_id: 'turn_2',
+        diagnostic_kind: 'turn_error',
+        status: 'failed',
+        text: 'Provider failed.',
+        order: 3,
+      }),
+    ]);
+
+    expect(nodes).toHaveLength(2);
+    expect(nodes[0]).toMatchObject({
+      kind: 'attention',
+      reason: 'empty_response',
+    });
+    expect(nodes[1]).toMatchObject({
+      kind: 'attention',
+      reason: 'error',
+    });
+  });
 });

@@ -237,8 +237,11 @@ export type CodexStreamTransportState = Readonly<{
 export type CodexItem = Readonly<{
   id: string;
   type: string;
+  turn_id?: string;
   text?: string;
   phase?: string;
+  diagnostic_kind?: 'turn_error' | 'empty_response' | string;
+  turn_error?: CodexTurnError | null;
   summary?: string[];
   content?: string[];
   command?: string;
@@ -371,6 +374,7 @@ export type CodexEvent = Readonly<{
   token_usage?: CodexThreadTokenUsage | null;
   stream?: CodexThreadStreamState;
   transport?: CodexEventTransport;
+  turn_error?: CodexTurnError | null;
   delta?: string;
   status?: string;
   flags?: string[];

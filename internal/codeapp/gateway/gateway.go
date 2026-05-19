@@ -634,10 +634,11 @@ func validateEnvAppShellFS(distFS fs.FS) error {
 }
 
 type apiResp struct {
-	OK        bool        `json:"ok"`
-	Error     string      `json:"error,omitempty"`
-	ErrorCode string      `json:"error_code,omitempty"`
-	Data      interface{} `json:"data,omitempty"`
+	OK           bool        `json:"ok"`
+	Error        string      `json:"error,omitempty"`
+	ErrorCode    string      `json:"error_code,omitempty"`
+	ErrorDetails string      `json:"error_details,omitempty"`
+	Data         interface{} `json:"data,omitempty"`
 }
 
 type settingsView struct {
@@ -761,6 +762,7 @@ func writeAISkillError(w http.ResponseWriter, fallbackStatus int, err error) {
 func writeCodexError(w http.ResponseWriter, err error) {
 	var status int
 	errorCode := ""
+	errorDetails := ""
 	switch {
 	case err == nil:
 		status = http.StatusOK
@@ -774,7 +776,10 @@ func writeCodexError(w http.ResponseWriter, err error) {
 		status = http.StatusBadRequest
 	}
 	errorCode = codexbridge.CodexErrorCode(err)
-	writeJSON(w, status, apiResp{OK: false, Error: err.Error(), ErrorCode: errorCode})
+	if turnErr := codexbridge.TurnErrorFromError(err); turnErr != nil {
+		errorDetails = strings.TrimSpace(turnErr.AdditionalDetails)
+	}
+	writeJSON(w, status, apiResp{OK: false, Error: err.Error(), ErrorCode: errorCode, ErrorDetails: errorDetails})
 }
 
 type diagnosticsView struct {
