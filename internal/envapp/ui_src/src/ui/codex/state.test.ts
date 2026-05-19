@@ -345,6 +345,35 @@ describe('applyCodexEvent', () => {
     ]);
   });
 
+  it('lets completed agent items replace dirty live deltas with empty clean text', () => {
+    const initial = buildCodexThreadSession(sampleDetail());
+
+    const dirty = applyCodexEvent(initial, {
+      seq: 5,
+      type: 'agent_message_delta',
+      thread_id: 'thread_1',
+      item_id: 'item_agent',
+      delta: '::git-stage{cwd="/repo"}',
+    });
+    expect(dirty?.items_by_id.item_agent.text).toBe('::git-stage{cwd="/repo"}');
+
+    const completed = applyCodexEvent(dirty ?? null, {
+      seq: 6,
+      type: 'item_completed',
+      thread_id: 'thread_1',
+      item_id: 'item_agent',
+      item: {
+        id: 'item_agent',
+        type: 'agentMessage',
+        text: '',
+        status: 'completed',
+      },
+    });
+
+    expect(completed?.items_by_id.item_agent.text).toBe('');
+    expect(completed?.items_by_id.item_agent.status).toBe('completed');
+  });
+
   it('projects completed web search items from bridge-normalized events', () => {
     const initial = buildCodexThreadSession(sampleDetail());
 

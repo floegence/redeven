@@ -153,6 +153,9 @@ func normalizeProjectedItemStatus(raw string, phase projectedItemLifecyclePhase)
 
 func normalizeProjectedItemForLifecycle(item Item, phase projectedItemLifecyclePhase) Item {
 	item.Status = normalizeProjectedItemStatus(item.Status, phase)
+	if phase == projectedItemLifecycleCompleted && strings.TrimSpace(item.Type) == "agentMessage" {
+		item.Text = cleanAssistantHostDirectiveText(item.Text)
+	}
 	return item
 }
 
@@ -317,6 +320,9 @@ func upsertProjectedItem(turn *Turn, item Item) *Item {
 		if strings.TrimSpace(item.Status) != "" {
 			existing.Status = item.Status
 		}
+		if strings.TrimSpace(existing.Type) == "agentMessage" && strings.TrimSpace(existing.Status) == "completed" {
+			existing.Text = cleanAssistantHostDirectiveText(existing.Text)
+		}
 		if strings.TrimSpace(item.AggregatedOutput) != "" {
 			existing.AggregatedOutput = item.AggregatedOutput
 		}
@@ -338,6 +344,9 @@ func upsertProjectedItem(turn *Turn, item Item) *Item {
 			existing.Inputs = cloneUserInputs(item.Inputs)
 		}
 		return existing
+	}
+	if strings.TrimSpace(item.Type) == "agentMessage" && strings.TrimSpace(item.Status) == "completed" {
+		item.Text = cleanAssistantHostDirectiveText(item.Text)
 	}
 	turn.Items = append(turn.Items, cloneItem(item))
 	return &turn.Items[len(turn.Items)-1]

@@ -104,7 +104,12 @@ function upsertThreadTurn(thread: CodexThread, incoming: CodexTurn): CodexThread
   };
 }
 
-function addOrUpdateItem(session: CodexThreadSession, item: CodexItem, orderHint: number): CodexThreadSession {
+function addOrUpdateItem(
+  session: CodexThreadSession,
+  item: CodexItem,
+  orderHint: number,
+  options?: { replaceEmptyText?: boolean },
+): CodexThreadSession {
   const next = cloneSession(session);
   const existing = next.items_by_id[item.id];
   if (!existing) {
@@ -118,7 +123,7 @@ function addOrUpdateItem(session: CodexThreadSession, item: CodexItem, orderHint
   next.items_by_id[item.id] = {
     ...existing,
     ...item,
-    text: String(item.text ?? '').trim() ? item.text : existing.text,
+    text: (options?.replaceEmptyText || String(item.text ?? '').trim()) ? item.text : existing.text,
     status: String(item.status ?? '').trim() || existing.status,
     changes: item.changes && item.changes.length > 0 ? item.changes : existing.changes,
     inputs: item.inputs && item.inputs.length > 0 ? item.inputs : existing.inputs,
@@ -390,6 +395,7 @@ export function applyCodexEvent(session: CodexThreadSession | null, event: Codex
           text: itemTextOrContent(event.item),
         },
         next.item_order.length,
+        { replaceEmptyText: event.type === 'item_completed' && String(event.item.type ?? '').trim() === 'agentMessage' },
       );
     case 'agent_message_delta': {
       const itemID = String(event.item_id ?? '').trim();

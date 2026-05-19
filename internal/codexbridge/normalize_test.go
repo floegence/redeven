@@ -96,6 +96,34 @@ func TestNormalizeItem_MapsWebSearchActionAndQuery(t *testing.T) {
 	}
 }
 
+func TestNormalizeItem_StripsAssistantHostDirectives(t *testing.T) {
+	t.Parallel()
+
+	item := normalizeItem(wireThreadItem{
+		ID:   "item_agent",
+		Type: "agentMessage",
+		Text: "Done.\n\n::git-stage{cwd=\"/repo\"}\n::git-commit{cwd=\"/repo\"}",
+	})
+
+	if item.Text != "Done." {
+		t.Fatalf("Text=%q, want Done.", item.Text)
+	}
+}
+
+func TestNormalizeItem_DoesNotStripUserMessageHostDirectiveText(t *testing.T) {
+	t.Parallel()
+
+	item := normalizeItem(wireThreadItem{
+		ID:   "item_user",
+		Type: "userMessage",
+		Text: "::git-stage{cwd=\"/repo\"}",
+	})
+
+	if item.Text != "::git-stage{cwd=\"/repo\"}" {
+		t.Fatalf("Text=%q, want original user text", item.Text)
+	}
+}
+
 func TestNormalizeRawResponseItem_MapsOpenPageWebSearchAction(t *testing.T) {
 	t.Parallel()
 
