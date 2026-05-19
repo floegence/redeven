@@ -5,6 +5,7 @@ import { normalizeAbsolutePath } from './askFlowerPath';
 import {
   hasPickerFolderPath,
   listPickerTreePathChain,
+  normalizePickerTreeInput,
   normalizePickerTreePath,
   replacePickerChildren,
   sortPickerFolderItems,
@@ -89,7 +90,7 @@ export function createDirectoryPickerDataSource<Entry extends DirectoryEntryLike
   };
 
   const ensurePath: PickerEnsurePath = async (path) => {
-    const targetPath = normalizePickerTreePath(path);
+    const targetPath = normalizePickerTreeInput(path, readHomePath());
     if (targetPath === '/') {
       return { status: 'ready', resolvedPath: '/' };
     }

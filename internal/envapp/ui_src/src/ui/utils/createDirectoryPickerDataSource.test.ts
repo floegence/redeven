@@ -86,6 +86,45 @@ describe('createDirectoryPickerDataSource', () => {
     });
   });
 
+  it('accepts absolute host paths under home when hydrating unloaded ancestors', async () => {
+    const listDirectory = vi.fn(async (absolutePath: string): Promise<readonly DirectoryEntry[]> => {
+      if (absolutePath === '/Users/alice') {
+        return [{
+          name: 'Downloads',
+          path: '/Users/alice/Downloads',
+          isDirectory: true,
+        }];
+      }
+      if (absolutePath === '/Users/alice/Downloads') {
+        return [{
+          name: 'code',
+          path: '/Users/alice/Downloads/code',
+          isDirectory: true,
+        }];
+      }
+      if (absolutePath === '/Users/alice/Downloads/code') {
+        return [{
+          name: 'redeven',
+          path: '/Users/alice/Downloads/code/redeven',
+          isDirectory: true,
+        }];
+      }
+      return [];
+    });
+
+    await withDataSource(listDirectory, async (dataSource) => {
+      const result = await dataSource.ensurePath('/Users/alice/Downloads/code/redeven', { reason: 'path-input' });
+
+      expect(result).toEqual({
+        status: 'ready',
+        resolvedPath: '/Downloads/code/redeven',
+      });
+      expect(listDirectory).toHaveBeenNthCalledWith(1, '/Users/alice');
+      expect(listDirectory).toHaveBeenNthCalledWith(2, '/Users/alice/Downloads');
+      expect(listDirectory).toHaveBeenNthCalledWith(3, '/Users/alice/Downloads/code');
+    });
+  });
+
   it('deduplicates concurrent loads for the same directory', async () => {
     const rootLoad = deferred<readonly DirectoryEntry[]>();
     const listDirectory = vi.fn(async (absolutePath: string): Promise<readonly DirectoryEntry[]> => {

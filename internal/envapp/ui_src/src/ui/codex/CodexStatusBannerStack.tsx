@@ -1,7 +1,7 @@
 import { HighlightBlock } from '@floegence/floe-webapp-core/ui';
 import { Show } from 'solid-js';
 
-import type { CodexStreamTransportState } from './types';
+import type { CodexStatus, CodexStreamTransportState } from './types';
 
 function Banner(props: {
   title: string;
@@ -19,6 +19,7 @@ export function CodexStatusBannerStack(props: {
   statusError: string | null;
   threadError: string | null;
   streamTransportState: CodexStreamTransportState;
+  status?: CodexStatus | null;
   hostAvailable: boolean;
 }) {
   const streamPhase = () => String(props.streamTransportState.phase ?? '').trim();
@@ -27,6 +28,14 @@ export function CodexStatusBannerStack(props: {
     props.streamTransportState.last_disconnect_reason ??
     '',
   ).trim();
+  const hostDiagnostics = () => [
+    ['Binary', props.status?.binary_path],
+    ['Codex Home', props.status?.codex_home],
+    ['Runtime', props.status?.user_agent],
+    ['Platform', [props.status?.platform_family, props.status?.platform_os].filter(Boolean).join(' / ')],
+    ['Last stderr', props.status?.last_stderr],
+  ].map(([label, value]) => [String(label), String(value ?? '').trim()] as const)
+    .filter(([, value]) => value);
   return (
     <>
       <Show when={props.statusError}>
@@ -59,11 +68,19 @@ export function CodexStatusBannerStack(props: {
         />
       </Show>
       <Show when={!props.hostAvailable}>
-        <Banner
-          title="Host diagnostics"
-          body="Redeven uses the host's `codex` binary directly. There is no separate in-app Codex runtime toggle to manage here."
-          variant="warning"
-        />
+        <HighlightBlock variant="warning" title="Host diagnostics">
+          <p>Redeven uses the host's `codex` binary directly. There is no separate in-app Codex runtime toggle to manage here.</p>
+          <Show when={hostDiagnostics().length > 0}>
+            <dl class="mt-3 grid gap-2 text-xs">
+              {hostDiagnostics().map(([label, value]) => (
+                <div class="grid gap-1 sm:grid-cols-[7rem_minmax(0,1fr)]">
+                  <dt class="font-medium text-muted-foreground">{label}</dt>
+                  <dd class="break-words font-mono text-foreground">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </Show>
+        </HighlightBlock>
       </Show>
     </>
   );

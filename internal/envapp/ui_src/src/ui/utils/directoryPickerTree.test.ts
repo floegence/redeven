@@ -3,6 +3,7 @@ import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import {
   hasPickerFolderPath,
   listPickerTreePathChain,
+  normalizePickerTreeInput,
   replacePickerChildren,
   toPickerFolderItem,
   toPickerTreeAbsolutePath,
@@ -13,10 +14,13 @@ describe('directoryPickerTree', () => {
   it('maps picker root to the configured home directory', () => {
     expect(toPickerTreeAbsolutePath('/', '/Users/alice')).toBe('/Users/alice');
     expect(toPickerTreeAbsolutePath('/project', '/Users/alice')).toBe('/Users/alice/project');
+    expect(toPickerTreeAbsolutePath('/Users/alice/project', '/Users/alice')).toBe('/Users/alice/project');
   });
 
   it('maps absolute directories into picker-relative tree paths', () => {
     expect(toPickerTreePath('/Users/alice/project', '/Users/alice')).toBe('/project');
+    expect(toPickerTreePath('/Users/alice', '/Users/alice')).toBe('/');
+    expect(toPickerTreePath('/Volumes/team/project', '/Users/alice')).toBe('/Volumes/team/project');
 
     const item = toPickerFolderItem(
       {
@@ -35,6 +39,11 @@ describe('directoryPickerTree', () => {
       type: 'folder',
     });
     expect(item?.modifiedAt).toBeInstanceOf(Date);
+  });
+
+  it('normalizes absolute input under the configured root into picker tree paths', () => {
+    expect(normalizePickerTreeInput('/Users/alice/project/src', '/Users/alice')).toBe('/project/src');
+    expect(normalizePickerTreeInput('/project/src', '/Users/alice')).toBe('/project/src');
   });
 
   it('lists the full picker path chain from root to target', () => {

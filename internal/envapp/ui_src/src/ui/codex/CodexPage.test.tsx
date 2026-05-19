@@ -101,11 +101,14 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
   const Icon = () => <span />;
   return {
     Activity: Icon,
+    ChevronRight: Icon,
     Code: Icon,
     FileText: Icon,
     Folder: Icon,
     Refresh: Icon,
+    Search: Icon,
     Send: Icon,
+    Sparkles: Icon,
     Terminal: Icon,
     Trash: Icon,
   };
@@ -733,7 +736,13 @@ describe('CodexPage', () => {
     fetchCodexStatusMock.mockResolvedValue({
       available: false,
       ready: false,
+      binary_path: '/Users/alice/.nvm/versions/node/v24.14.1/bin/codex',
       agent_home_dir: '/workspace',
+      codex_home: '/Users/alice/.codex-cc',
+      user_agent: 'Codex Desktop/0.131.0 (test)',
+      platform_family: 'unix',
+      platform_os: 'macos',
+      last_stderr: 'env: node: No such file or directory',
     });
     listCodexThreadsMock.mockResolvedValue([
       {
@@ -762,6 +771,9 @@ describe('CodexPage', () => {
     expect(host.textContent).toContain('Install Codex on the host');
     expect(host.textContent).toContain('There is no separate in-app Codex runtime toggle to manage here');
     expect(host.textContent).toContain('Redeven does not install Codex for you');
+    expect(host.textContent).toContain('/Users/alice/.codex-cc');
+    expect(host.textContent).toContain('Codex Desktop/0.131.0 (test)');
+    expect(host.textContent).toContain('env: node: No such file or directory');
     expect(host.querySelector('.highlight-block-warning')).not.toBeNull();
     expect(host.querySelector('.codex-empty-ornament')).not.toBeNull();
     expect(host.querySelector('button[aria-label="Send to Codex"]')).not.toBeNull();
@@ -3946,9 +3958,10 @@ describe('CodexPage', () => {
 
       renderPage(host);
 
-      await flushAsync();
-      await flushAsync();
-      await flushAsync();
+      await waitForCondition(
+        () => host.querySelectorAll('.codex-transcript-row').length === 3,
+        'transcript row bootstrap',
+      );
 
       const scrollRegion = host.querySelector('[data-codex-transcript-scroll-region="true"]') as HTMLDivElement | null;
       const transcriptRoot = host.querySelector('[data-codex-surface="transcript"]') as HTMLDivElement | null;

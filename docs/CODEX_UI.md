@@ -79,8 +79,10 @@ Redeven resolves `codex` like this:
 1. Resolve `codex` through the user's configured shell in `login + interactive` mode so host-specific PATH setup from tools such as nvm or Homebrew is visible.
 2. Sanitize the shell output and keep only a real executable path, ignoring interactive startup noise such as aliases or banners.
 3. Start `codex app-server --listen stdio://` on demand by executing the resolved binary directly, with the binary directory prepended to `PATH` so npm-style `#!/usr/bin/env node` shims can still find their runtime.
-4. Inherit the rest of the runtime process environment as-is, including `CODEX_HOME` and related Codex runtime configuration.
-5. Let the local Codex installation keep its own defaults for model, approvals, sandboxing, and other runtime behavior unless the user explicitly overrides a field in the Codex page request itself.
+4. If the resolved binary is a Node.js shim, verify that `node` is available in the final app-server `PATH` before starting the child process. A missing Node runtime is reported as a host diagnostic instead of surfacing as an opaque exit status.
+5. Inherit the rest of the runtime process environment as-is, including `CODEX_HOME` and related Codex runtime configuration.
+6. Store the app-server `initialize` response (`codexHome`, `userAgent`, and platform fields) in the Codex status contract so the browser can show the actual host runtime context.
+7. Let the local Codex installation keep its own defaults for model, approvals, sandboxing, and other runtime behavior unless the user explicitly overrides a field in the Codex page request itself.
 
 Runtime Settings -> `AI & Extensions` -> Codex is diagnostic-only and currently shows:
 
@@ -88,7 +90,15 @@ Runtime Settings -> `AI & Extensions` -> Codex is diagnostic-only and currently 
 - `ready`
 - `binary_path`
 - `agent_home_dir`
+- `codex_home`
+- `user_agent`
+- `platform_family`
+- `platform_os`
+- `last_stderr`
+- `runtime_path`
 - `error`
+
+`last_stderr` is a bounded tail of the current or most recently exited app-server process. It is diagnostic-only; the browser displays it when the host is unavailable but does not parse it to infer behavior.
 
 Codex working directories are resolved through the runtime filesystem-scope registry before a request is forwarded. `agent_home_dir` remains the default and the `~` expansion target, but a user-selected Codex `cwd` may live under any authorized filesystem root.
 

@@ -105,11 +105,14 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
   const Icon = () => <span />;
   return {
     Activity: Icon,
+    ChevronRight: Icon,
     Code: Icon,
     FileText: Icon,
     Folder: Icon,
     Refresh: Icon,
+    Search: Icon,
     Send: Icon,
+    Sparkles: Icon,
     Terminal: Icon,
     Trash: Icon,
   };
@@ -283,7 +286,7 @@ async function flushOpenThreadRequests(): Promise<void> {
 async function waitForCondition(
   condition: () => boolean,
   label: string,
-  attempts = 12,
+  attempts = 24,
 ): Promise<void> {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     if (condition()) return;

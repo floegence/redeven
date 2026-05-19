@@ -20,11 +20,13 @@ type appServerProcess struct {
 
 	cmd   *exec.Cmd
 	stdin io.WriteCloser
+	path  string
 
 	writeMu sync.Mutex
 
 	mu      sync.Mutex
 	pending map[string]chan rpcEnvelope
+	stderr  []string
 
 	onEnvelope func(rpcEnvelope)
 	done       chan error
@@ -61,6 +63,21 @@ func asRPCMethodError(err error) (*rpcMethodError, bool) {
 }
 
 func buildAppServerCommand(shell string, binaryPath string) (*exec.Cmd, error) {
+	plan, err := buildAppServerLaunchPlan(shell, binaryPath)
+	if err != nil {
+		return nil, err
+	}
+	return commandFromLaunchPlan(plan), nil
+}
+
+type appServerLaunchPlan struct {
+	BinaryPath string
+	Args       []string
+	Env        []string
+	PATH       string
+}
+
+func buildAppServerLaunchPlan(shell string, binaryPath string) (*appServerLaunchPlan, error) {
 	resolved, err := sanitizeExecutablePath(binaryPath)
 	if err != nil {
 		return nil, err
@@ -68,16 +85,30 @@ func buildAppServerCommand(shell string, binaryPath string) (*exec.Cmd, error) {
 	if resolved == "" {
 		return nil, errors.New("missing codex binary")
 	}
-	cmd := exec.Command(resolved, "app-server", "--listen", "stdio://")
-	cmd.Env = environWithPath(composeAppServerPath(filepath.Dir(resolved), loginShellPath(shell)))
-	return cmd, nil
+	pathValue := composeAppServerPath(filepath.Dir(resolved), loginShellPath(shell))
+	if err := validateAppServerRuntime(resolved, pathValue); err != nil {
+		return nil, err
+	}
+	return &appServerLaunchPlan{
+		BinaryPath: resolved,
+		Args:       []string{resolved, "app-server", "--listen", "stdio://"},
+		Env:        environWithPath(pathValue),
+		PATH:       pathValue,
+	}, nil
+}
+
+func commandFromLaunchPlan(plan *appServerLaunchPlan) *exec.Cmd {
+	cmd := exec.Command(plan.BinaryPath, plan.Args[1:]...)
+	cmd.Env = plan.Env
+	return cmd
 }
 
 func startAppServerProcess(logger *slog.Logger, shell string, binaryPath string, onEnvelope func(rpcEnvelope)) (*appServerProcess, error) {
-	cmd, err := buildAppServerCommand(shell, binaryPath)
+	plan, err := buildAppServerLaunchPlan(shell, binaryPath)
 	if err != nil {
 		return nil, err
 	}
+	cmd := commandFromLaunchPlan(plan)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err
@@ -97,6 +128,7 @@ func startAppServerProcess(logger *slog.Logger, shell string, binaryPath string,
 		log:        logger,
 		cmd:        cmd,
 		stdin:      stdin,
+		path:       plan.PATH,
 		pending:    make(map[string]chan rpcEnvelope),
 		onEnvelope: onEnvelope,
 		done:       make(chan error, 1),
@@ -151,6 +183,22 @@ func (p *appServerProcess) call(ctx context.Context, id string, method string, p
 		}
 		return nil
 	}
+}
+
+func (p *appServerProcess) runtimePATH() string {
+	if p == nil {
+		return ""
+	}
+	return strings.TrimSpace(p.path)
+}
+
+func (p *appServerProcess) lastStderr() string {
+	if p == nil {
+		return ""
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return strings.Join(p.stderr, "\n")
 }
 
 func (p *appServerProcess) notify(method string, params any) error {
@@ -225,7 +273,25 @@ func (p *appServerProcess) stderrLoop(r io.Reader) {
 		if line == "" {
 			continue
 		}
+		p.appendStderr(line)
 		p.log.Warn("codex app-server", "stderr", line)
+	}
+}
+
+func (p *appServerProcess) appendStderr(line string) {
+	if p == nil {
+		return
+	}
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	const maxLines = 20
+	p.stderr = append(p.stderr, line)
+	if len(p.stderr) > maxLines {
+		p.stderr = append([]string(nil), p.stderr[len(p.stderr)-maxLines:]...)
 	}
 }
 
@@ -343,6 +409,57 @@ func composeAppServerPath(binaryDir string, shellPath string) string {
 		return binaryDir
 	}
 	return binaryDir + string(os.PathListSeparator) + shellPath
+}
+
+func validateAppServerRuntime(binaryPath string, pathValue string) error {
+	if !isNodeEnvShim(binaryPath) {
+		return nil
+	}
+	if lookPathInPath("node", pathValue) != "" {
+		return nil
+	}
+	return errors.Join(
+		ErrUnavailable,
+		errors.New("host codex binary is a Node.js shim, but `node` is not available in the app-server PATH"),
+	)
+}
+
+func isNodeEnvShim(binaryPath string) bool {
+	f, err := os.Open(binaryPath)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	reader := bufio.NewReader(f)
+	line, err := reader.ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return false
+	}
+	line = strings.TrimSpace(line)
+	return strings.HasPrefix(line, "#!") &&
+		strings.Contains(line, "/env") &&
+		strings.Contains(line, "node")
+}
+
+func lookPathInPath(binaryName string, pathValue string) string {
+	binaryName = strings.TrimSpace(binaryName)
+	pathValue = strings.TrimSpace(pathValue)
+	if binaryName == "" || pathValue == "" {
+		return ""
+	}
+	for _, dir := range filepath.SplitList(pathValue) {
+		dir = strings.TrimSpace(dir)
+		if dir == "" {
+			continue
+		}
+		candidate := filepath.Join(dir, binaryName)
+		info, err := os.Stat(candidate)
+		if err != nil || info.IsDir() || info.Mode().Perm()&0o111 == 0 {
+			continue
+		}
+		return candidate
+	}
+	return ""
 }
 
 func environWithPath(pathValue string) []string {

@@ -224,10 +224,16 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 		Codex: &stubCodexBackend{
 			status: func(ctx context.Context) codexbridge.Status {
 				return codexbridge.Status{
-					Available:    true,
-					Ready:        true,
-					BinaryPath:   "/usr/local/bin/codex",
-					AgentHomeDir: "/workspace",
+					Available:      true,
+					Ready:          true,
+					BinaryPath:     "/usr/local/bin/codex",
+					AgentHomeDir:   "/workspace",
+					CodexHome:      "/Users/alice/.codex-cc",
+					UserAgent:      "Codex Desktop/0.131.0 (test)",
+					PlatformFamily: "unix",
+					PlatformOS:     "macos",
+					RuntimePATH:    "/usr/local/bin:/opt/node/bin",
+					LastStderr:     "env: node: No such file or directory",
 				}
 			},
 			readCapabilities: func(ctx context.Context, cwd string) (*codexbridge.Capabilities, error) {
@@ -435,6 +441,11 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 		}
 		if !bytes.Contains(rr.Body.Bytes(), []byte(`"/usr/local/bin/codex"`)) {
 			t.Fatalf("unexpected body: %s", rr.Body.String())
+		}
+		if !bytes.Contains(rr.Body.Bytes(), []byte(`"codex_home":"/Users/alice/.codex-cc"`)) ||
+			!bytes.Contains(rr.Body.Bytes(), []byte(`"user_agent":"Codex Desktop/0.131.0 (test)"`)) ||
+			!bytes.Contains(rr.Body.Bytes(), []byte(`"last_stderr":"env: node: No such file or directory"`)) {
+			t.Fatalf("missing runtime diagnostics: %s", rr.Body.String())
 		}
 	})
 
