@@ -107,7 +107,7 @@ func TestClassifyError_InvalidPathNormalizesAbsolutePathOutsideWorkingDir(t *tes
 		WorkingDir:   project,
 		AgentHomeDir: home,
 		Args: map[string]any{
-			"cwd": filepath.Join(other, "docs"),
+			"cwd": filepath.Join(other, "..", "other", "docs") + string(os.PathSeparator),
 		},
 	}
 	toolErr := ClassifyError(inv, errors.New("invalid cwd"))
