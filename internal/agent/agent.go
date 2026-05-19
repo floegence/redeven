@@ -106,6 +106,12 @@ type Options struct {
 	// This hook is intended for CLI UX (e.g., printing the environment access URL)
 	// and must not be used for authorization decisions.
 	OnControlConnected func()
+	// OnControlConnecting is called before a control-channel connection attempt.
+	OnControlConnecting func()
+	// OnControlRetry is called after a failed control-channel attempt with the retry delay.
+	OnControlRetry func(error, time.Duration)
+	// OnControlDisabled is called when the runtime starts without a control channel.
+	OnControlDisabled func()
 
 	AccessGate *accessgate.Gate
 }
@@ -143,6 +149,9 @@ type Agent struct {
 
 	controlConnectedOnce sync.Once
 	onControlConnected   func()
+	onControlConnecting  func()
+	onControlRetry       func(error, time.Duration)
+	onControlDisabled    func()
 	runCtx               context.Context
 	controlCancel        context.CancelFunc
 	controlRPC           rpcutil.Caller
@@ -230,6 +239,9 @@ func New(opts Options) (*Agent, error) {
 		mon:                   monitor.NewService(logger),
 		sessions:              make(map[string]*activeSession),
 		onControlConnected:    opts.OnControlConnected,
+		onControlConnecting:   opts.OnControlConnecting,
+		onControlRetry:        opts.OnControlRetry,
+		onControlDisabled:     opts.OnControlDisabled,
 		localUIEnabled:        opts.LocalUIEnabled,
 		controlChannelEnabled: opts.ControlChannelEnabled,
 		desktopManaged:        opts.DesktopManaged,
@@ -383,6 +395,9 @@ func (a *Agent) Run(ctx context.Context) error {
 		a.startControlChannel(ctx)
 	} else {
 		a.log.Info("control channel disabled; running without remote connection")
+		if a.onControlDisabled != nil {
+			a.onControlDisabled()
+		}
 	}
 
 	<-ctx.Done()
@@ -466,6 +481,9 @@ func (a *Agent) runControlLoop(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
+		if a.onControlConnecting != nil {
+			a.onControlConnecting()
+		}
 		err := a.runControlOnce(ctx)
 		if ctx.Err() != nil {
 			return
@@ -473,6 +491,9 @@ func (a *Agent) runControlLoop(ctx context.Context) {
 		a.log.Warn("control channel disconnected; retrying", "error", err)
 
 		d := backoff.Next()
+		if a.onControlRetry != nil {
+			a.onControlRetry(err, d)
+		}
 		timer := time.NewTimer(d)
 		select {
 		case <-ctx.Done():

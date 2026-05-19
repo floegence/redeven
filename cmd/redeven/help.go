@@ -247,6 +247,8 @@ Flags:
   --state-root <path>               State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
   --desktop-managed                 Disable CLI self-upgrade for desktop-managed Local UI runs.
   --startup-report-file <path>      Write structured Local UI readiness JSON.
+  --presentation <auto|rich|plain|machine>
+                                    Startup presentation (default: auto).
 
 Examples:
   Remote mode:
@@ -259,7 +261,7 @@ Examples:
     redeven run --mode local
 
   Desktop shell mode:
-    redeven run --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0
+    redeven run --mode desktop --desktop-managed --presentation machine --local-ui-bind 127.0.0.1:0
 
   Hybrid mode exposed to another trusted device on your local network:
     %[7]s=replace-with-a-long-password \
@@ -269,7 +271,7 @@ Examples:
     redeven run --mode hybrid --controlplane %[1]s --env-id %[2]s --bootstrap-ticket %[3]s
 
   One-shot desktop handoff run with a bootstrap ticket:
-    %[6]s=%[3]s redeven run --mode desktop --desktop-managed --controlplane %[1]s --env-id %[2]s --bootstrap-ticket-env %[6]s
+    %[6]s=%[3]s redeven run --mode desktop --desktop-managed --presentation machine --controlplane %[1]s --env-id %[2]s --bootstrap-ticket-env %[6]s
 `, exampleControlplaneURL, exampleEnvID, exampleBootstrapTicket, "`redeven bootstrap`", "`redeven run`", exampleBootstrapEnv, examplePasswordEnv), "\n")
 }
 

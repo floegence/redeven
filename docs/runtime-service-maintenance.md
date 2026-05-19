@@ -288,7 +288,7 @@ Env App protocol SDK types.
 
 The Docker runtime E2E gate (`./scripts/check_docker_runtime_e2e.sh`) exercises
 these carriers against a real `ubuntu:24.04` container. It builds the current
-Linux runtime binary, starts `redeven run --mode desktop --desktop-managed`
+Linux runtime binary, starts `redeven run --mode desktop --desktop-managed --presentation machine`
 inside the container, verifies `desktop-runtime-status`, attaches with
 `desktop-bridge`, requests Local UI and runtime-control through bridge streams,
 then performs direct `sys.ping` and `sys.restart` calls. It also verifies that

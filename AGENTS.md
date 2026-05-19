@@ -178,6 +178,13 @@ git config --global merge.conflictstyle zdiff3
 - Do not ship controls that look clickable while still using the default arrow cursor.
 - Disabled controls are the exception and must use a clearly non-interactive cursor treatment.
 
+## Runtime Startup Presentation
+
+- `redeven run` startup output must be driven by structured runtime presentation events, not by ad hoc `fmt.Print*` banners inside startup logic.
+- Human terminal presentation (`rich` / `plain`) and Desktop/automation presentation (`machine`) are renderers over the same startup lifecycle events.
+- Desktop-managed startup must use `--presentation machine` and `--startup-report-file`; Desktop readiness must never depend on parsing human terminal output.
+- The compact Redeven character mark belongs in the rich renderer only. Do not reintroduce a separate large startup banner or duplicate brand art in command code.
+
 ## Workbench Wheel Ownership
 
 - Inside Workbench, wheel / trackpad scrolling belongs to the canvas by default. Blank canvas areas and unselected widget bounds may zoom the canvas.

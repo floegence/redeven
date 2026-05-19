@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/localui"
 	"github.com/floegence/redeven/internal/lockfile"
+	"github.com/floegence/redeven/internal/runtimepresentation"
 )
 
 var (
@@ -220,6 +222,7 @@ func (c *cli) runCmd(args []string) int {
 	passwordFile := fs.String("password-file", "", "File path holding the access password")
 	desktopManaged := fs.Bool("desktop-managed", false, "Disable CLI self-upgrade semantics for desktop-managed Local UI runs")
 	startupReportFile := fs.String("startup-report-file", "", "Write Local UI readiness JSON to the given file (advanced)")
+	presentationRaw := fs.String("presentation", string(runtimepresentation.ModeAuto), "Startup presentation: auto|rich|plain|machine")
 	var desktopLaunchFailure func(string, string, config.StateLayout, int) int
 
 	if err := parseCommandFlags(fs, args); err != nil {
@@ -229,6 +232,20 @@ func (c *cli) runCmd(args []string) int {
 		}
 		message, details := translateFlagParseError("run", err)
 		writeErrorWithHelp(c.stderr, message, details, runHelpText())
+		return 2
+	}
+
+	requestedPresentation, err := runtimepresentation.ParseMode(*presentationRaw)
+	if err != nil {
+		writeErrorWithHelp(
+			c.stderr,
+			fmt.Sprintf("invalid value for `--presentation`: %s", strings.TrimSpace(*presentationRaw)),
+			[]string{
+				"Allowed values: auto, rich, plain, machine.",
+				"Example: redeven run --mode hybrid --presentation rich",
+			},
+			runHelpText(),
+		)
 		return 2
 	}
 
@@ -271,7 +288,7 @@ func (c *cli) runCmd(args []string) int {
 		writeErrorWithHelp(
 			c.stderr,
 			"`--desktop-managed` requires a Local UI run mode",
-			[]string{"Hint: use `redeven run --mode desktop --desktop-managed` for the packaged desktop shell."},
+			[]string{"Hint: use `redeven run --mode desktop --desktop-managed --presentation machine` for the packaged desktop shell."},
 			runHelpText(),
 		)
 		return 2
@@ -280,16 +297,53 @@ func (c *cli) runCmd(args []string) int {
 		writeErrorWithHelp(
 			c.stderr,
 			"`--startup-report-file` requires a Local UI run mode",
-			[]string{"Hint: use `redeven run --mode desktop --startup-report-file <path>` when a desktop shell needs machine-readable readiness output."},
+			[]string{"Hint: use `redeven run --mode desktop --presentation machine --startup-report-file <path>` when a desktop shell needs machine-readable readiness output."},
+			runHelpText(),
+		)
+		return 2
+	}
+	if (*desktopManaged || strings.TrimSpace(*startupReportFile) != "") &&
+		requestedPresentation != runtimepresentation.ModeAuto &&
+		requestedPresentation != runtimepresentation.ModeMachine {
+		writeErrorWithHelp(
+			c.stderr,
+			"`--desktop-managed` and `--startup-report-file` require `--presentation machine`",
+			[]string{"Hint: Desktop and startup-report consumers must use the machine presentation contract."},
 			runHelpText(),
 		)
 		return 2
 	}
 
+	presentationConfig := runtimepresentation.ResolveConfig(requestedPresentation, runtimepresentation.ResolveInput{
+		Stdout:            c.stdout,
+		Stderr:            c.stderr,
+		DesktopManaged:    *desktopManaged,
+		StartupReportFile: *startupReportFile,
+	})
+
 	stateLayout, err := resolveRunStateLayout(*stateRoot)
 	if err != nil {
 		return c.printRunStateLayoutGuidance(err)
 	}
+	presentationSnapshot := runtimepresentation.Snapshot{
+		Version:          Version,
+		Commit:           Commit,
+		RequestedRunMode: string(mode),
+		PresentationMode: string(presentationConfig.Effective),
+		DesktopManaged:   *desktopManaged,
+		StateDir:         stateLayout.StateDir,
+		LocalUIBind:      localUIBind.ListenLabel(),
+	}
+	startupReporter := runtimepresentation.NewReporter(
+		presentationSnapshot,
+		runtimepresentation.NewRenderer(c.stderr, presentationConfig),
+	)
+	_ = startupReporter.Start()
+	_ = startupReporter.Emit(runtimepresentation.Event{
+		Kind:  runtimepresentation.EventPhaseDone,
+		Phase: runtimepresentation.PhaseResolveState,
+		Title: fmt.Sprintf("local state: %s", stateLayout.StateDir),
+	})
 	if desktopLaunchReportEnabled(mode, *desktopManaged, *startupReportFile) {
 		desktopLaunchFailure = func(code string, message string, layout config.StateLayout, exitCode int) int {
 			if reportErr := writeDesktopBlockedLaunchReport(*startupReportFile, code, message, layout); reportErr != nil {
@@ -300,12 +354,31 @@ func (c *cli) runCmd(args []string) int {
 			return exitCode
 		}
 	}
-	failDesktopLaunch := func(code string, message string) int {
-		if desktopLaunchFailure != nil {
-			return desktopLaunchFailure(code, message, stateLayout, 1)
+	failRuntimeLaunch := func(code string, message string, exitCode int, remediation string) int {
+		if remediation == "" {
+			remediation = remediationForStartupFailure(code)
 		}
-		fmt.Fprintf(c.stderr, "%s\n", message)
-		return 1
+		if presentationConfig.Effective != runtimepresentation.ModeMachine {
+			_ = startupReporter.Emit(runtimepresentation.Event{
+				Kind:        runtimepresentation.EventFailure,
+				Phase:       runtimepresentation.PhaseShutdown,
+				Title:       message,
+				ErrorCode:   code,
+				Severity:    runtimepresentation.SeverityError,
+				Remediation: remediation,
+			})
+			_ = startupReporter.Close(runtimepresentation.Result{Success: false, Error: errors.New(message)})
+		}
+		if desktopLaunchFailure != nil {
+			return desktopLaunchFailure(code, message, stateLayout, exitCode)
+		}
+		if presentationConfig.Effective == runtimepresentation.ModeMachine {
+			fmt.Fprintf(c.stderr, "%s\n", message)
+		}
+		return exitCode
+	}
+	failDesktopLaunch := func(code string, message string) int {
+		return failRuntimeLaunch(code, message, 1, "")
 	}
 
 	bootstrapViaFlags := strings.TrimSpace(*controlplane) != "" ||
@@ -335,7 +408,7 @@ func (c *cli) runCmd(args []string) int {
 						exampleBootstrapTicket,
 					),
 					fmt.Sprintf(
-						"Example: %s=%s redeven run --mode desktop --desktop-managed --controlplane %s --env-id %s --bootstrap-ticket-env %s",
+						"Example: %s=%s redeven run --mode desktop --desktop-managed --presentation machine --controlplane %s --env-id %s --bootstrap-ticket-env %s",
 						exampleBootstrapEnv,
 						exampleBootstrapTicket,
 						exampleControlplaneURL,
@@ -354,6 +427,11 @@ func (c *cli) runCmd(args []string) int {
 
 	// Ensure the state/config directory exists before taking the lock.
 	// Local mode must work on a clean Local Environment (no bootstrap yet).
+	_ = startupReporter.Emit(runtimepresentation.Event{
+		Kind:  runtimepresentation.EventPhaseStarted,
+		Phase: runtimepresentation.PhaseResolveState,
+		Title: "Preparing local state",
+	})
 	if err := os.MkdirAll(stateLayout.StateDir, 0o700); err != nil {
 		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to init state dir: %v", err))
 	}
@@ -365,6 +443,11 @@ func (c *cli) runCmd(args []string) int {
 		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to create runtime instance id: %v", err))
 	}
 	lockPath := filepath.Join(stateLayout.StateDir, "agent.lock")
+	_ = startupReporter.Emit(runtimepresentation.Event{
+		Kind:  runtimepresentation.EventPhaseStarted,
+		Phase: runtimepresentation.PhaseAcquireLock,
+		Title: "Acquiring runtime lock",
+	})
 	lk, err := lockfile.Acquire(lockPath)
 	if err != nil {
 		if errors.Is(err, lockfile.ErrAlreadyLocked) {
@@ -386,6 +469,12 @@ func (c *cli) runCmd(args []string) int {
 		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to acquire runtime lock (%s): %v", lockPath, err))
 	}
 	defer func() { _ = lk.Release() }()
+	_ = startupReporter.Emit(runtimepresentation.Event{
+		Kind:   runtimepresentation.EventPhaseDone,
+		Phase:  runtimepresentation.PhaseAcquireLock,
+		Title:  "runtime lock acquired",
+		Detail: lockPath,
+	})
 
 	runPassword, err := resolveRunPassword(runPasswordOptions{
 		password:      *password,
@@ -427,6 +516,11 @@ func (c *cli) runCmd(args []string) int {
 	}
 
 	if bootstrapViaFlags {
+		_ = startupReporter.Emit(runtimepresentation.Event{
+			Kind:  runtimepresentation.EventPhaseStarted,
+			Phase: runtimepresentation.PhaseBootstrap,
+			Title: "Bootstrapping provider binding",
+		})
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 
@@ -443,8 +537,18 @@ func (c *cli) runCmd(args []string) int {
 		if err != nil {
 			return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("bootstrap failed: %v", err))
 		}
+		_ = startupReporter.Emit(runtimepresentation.Event{
+			Kind:  runtimepresentation.EventPhaseDone,
+			Phase: runtimepresentation.PhaseBootstrap,
+			Title: "provider binding saved",
+		})
 	}
 
+	_ = startupReporter.Emit(runtimepresentation.Event{
+		Kind:  runtimepresentation.EventPhaseStarted,
+		Phase: runtimepresentation.PhaseLoadConfig,
+		Title: "Loading runtime config",
+	})
 	cfg, err := config.Load(stateLayout.ConfigPath)
 	if err != nil {
 		// Local mode must be able to start from a clean Local Environment (no bootstrap yet).
@@ -464,6 +568,11 @@ func (c *cli) runCmd(args []string) int {
 			return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to load config: %v", err))
 		}
 	}
+	_ = startupReporter.Emit(runtimepresentation.Event{
+		Kind:  runtimepresentation.EventPhaseDone,
+		Phase: runtimepresentation.PhaseLoadConfig,
+		Title: "runtime config loaded",
+	})
 	remoteErr := cfg.ValidateRemoteStrict()
 	remoteEnabled := remoteErr == nil
 
@@ -472,6 +581,17 @@ func (c *cli) runCmd(args []string) int {
 	localUIEnabled := launchPolicy.localUIEnabled
 	effectiveRunMode := launchPolicy.effectiveRunMode
 	processRemoteEnabled := launchPolicy.remoteEnabled
+	startupReporter.UpdateSnapshot(func(snapshot *runtimepresentation.Snapshot) {
+		snapshot.EffectiveRunMode = string(effectiveRunMode)
+		snapshot.RemoteEnabled = processRemoteEnabled
+		snapshot.ControlChannelEnabled = controlChannelEnabled
+		snapshot.LocalUIEnabled = localUIEnabled
+		snapshot.ControlplaneBaseURL = cfg.ControlplaneBaseURL
+		snapshot.ControlplaneProviderID = cfg.ControlplaneProviderID
+		snapshot.EnvPublicID = cfg.EnvironmentID
+		snapshot.RuntimeControlSocketPath = stateLayout.RuntimeControlSocketPath
+		snapshot.EnvironmentURL = runtimepresentation.BuildEnvironmentURL(cfg.ControlplaneBaseURL, cfg.EnvironmentID)
+	})
 
 	if controlChannelEnabled && !remoteEnabled {
 		message := fmt.Sprintf("runtime is not bootstrapped for remote or hybrid mode: %v", remoteErr)
@@ -494,15 +614,21 @@ func (c *cli) runCmd(args []string) int {
 		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to update environment catalog: %v", err))
 	}
 	announce := func() {
-		printWelcomeBanner(c.stderr, welcomeBannerOptions{
-			Version:             Version,
-			ControlplaneBaseURL: cfg.ControlplaneBaseURL,
-			EnvironmentID:       cfg.EnvironmentID,
-			LocalUIEnabled:      localUIEnabled,
-			LocalUIBind:         localUIBindLabel,
-			LocalUIURLs:         localUIURLs,
+		startupReporter.UpdateSnapshot(func(snapshot *runtimepresentation.Snapshot) {
+			snapshot.LocalUIBind = localUIBindLabel
+			snapshot.LocalUIURLs = append([]string(nil), localUIURLs...)
+			snapshot.EnvironmentURL = runtimepresentation.BuildEnvironmentURL(cfg.ControlplaneBaseURL, cfg.EnvironmentID)
+		})
+		_ = startupReporter.Emit(runtimepresentation.Event{
+			Kind:     runtimepresentation.EventReady,
+			Phase:    runtimepresentation.PhaseReady,
+			Title:    "Redeven runtime is ready",
+			Snapshot: startupReporter.Snapshot(),
 		})
 	}
+	logOutput, closeLogOutput := runtimeLogOutput(stateLayout.StateDir, presentationConfig, c.stderr)
+	defer closeLogOutput()
+	localUILogger := slog.New(slog.NewTextHandler(logOutput, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	a, err := agent.New(agent.Options{
 		Config:                cfg,
@@ -518,8 +644,37 @@ func (c *cli) runCmd(args []string) int {
 		Version:               Version,
 		Commit:                Commit,
 		BuildTime:             BuildTime,
+		LogOutput:             logOutput,
 		OnControlConnected:    announce,
-		AccessGate:            accessGate,
+		OnControlConnecting: func() {
+			_ = startupReporter.Emit(runtimepresentation.Event{
+				Kind:   runtimepresentation.EventPhaseStarted,
+				Phase:  runtimepresentation.PhaseConnectControl,
+				Title:  "Connecting control plane",
+				Detail: cfg.ControlplaneBaseURL,
+			})
+		},
+		OnControlRetry: func(err error, delay time.Duration) {
+			_ = startupReporter.Emit(runtimepresentation.Event{
+				Kind:        runtimepresentation.EventWarning,
+				Phase:       runtimepresentation.PhaseConnectControl,
+				Title:       "Control plane is temporarily unreachable.",
+				Detail:      "Redeven will keep retrying; Local UI remains available.",
+				Severity:    runtimepresentation.SeverityWarning,
+				Remediation: fmt.Sprintf("Next retry in %s.", delay.Round(time.Second)),
+			})
+		},
+		OnControlDisabled: func() {
+			if localUIEnabled {
+				return
+			}
+			_ = startupReporter.Emit(runtimepresentation.Event{
+				Kind:  runtimepresentation.EventPhaseDone,
+				Phase: runtimepresentation.PhaseConnectControl,
+				Title: "control channel disabled",
+			})
+		},
+		AccessGate: accessGate,
 	})
 	if err != nil {
 		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to init runtime: %v", err))
@@ -527,10 +682,6 @@ func (c *cli) runCmd(args []string) int {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	if localUIEnabled {
-		a.StartBackgroundServices(ctx)
-	}
 
 	// Graceful shutdown on SIGINT/SIGTERM.
 	stop := make(chan os.Signal, 1)
@@ -543,12 +694,18 @@ func (c *cli) runCmd(args []string) int {
 	// Start the Local UI server before running the control channel loop so users can open
 	// the local page immediately.
 	if localUIEnabled {
+		_ = startupReporter.Emit(runtimepresentation.Event{
+			Kind:  runtimepresentation.EventPhaseStarted,
+			Phase: runtimepresentation.PhaseStartLocalUI,
+			Title: "Starting Local UI",
+		})
 		gw := a.CodeGateway()
 		if gw == nil {
 			return failDesktopLaunch(desktopLaunchCodeStartupFailed, "local ui unavailable: gateway not initialized")
 		}
 
 		srv, err := localui.New(localui.Options{
+			Logger:                   localUILogger,
 			Bind:                     localUIBind,
 			DesktopManaged:           *desktopManaged,
 			DesktopOwnerID:           desktopOwnerID,
@@ -570,11 +727,26 @@ func (c *cli) runCmd(args []string) int {
 			return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to init local ui: %v", err))
 		}
 		if err := srv.Start(ctx); err != nil {
-			return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to start local ui: %v", err))
+			return failRuntimeLaunch(
+				desktopLaunchCodeStartupFailed,
+				fmt.Sprintf("failed to start local ui: %v", err),
+				1,
+				"Start Redeven on another local port, for example: redeven run --mode hybrid --local-ui-bind 127.0.0.1:24000",
+			)
 		}
 		localUIBindLabel = srv.ListenLabel()
 		localUIURLs = srv.DisplayURLs()
 		a.SetLocalUIBind(localUIBindLabel)
+		startupReporter.UpdateSnapshot(func(snapshot *runtimepresentation.Snapshot) {
+			snapshot.LocalUIBind = localUIBindLabel
+			snapshot.LocalUIURLs = append([]string(nil), localUIURLs...)
+		})
+		_ = startupReporter.Emit(runtimepresentation.Event{
+			Kind:   runtimepresentation.EventPhaseDone,
+			Phase:  runtimepresentation.PhaseStartLocalUI,
+			Title:  "Local UI ready",
+			Detail: firstNonEmptyString(localUIURLs),
+		})
 		if err := config.WriteEnvironmentCatalogRecord(stateLayout, cfg, localUIBindLabel, accessGate.Enabled()); err != nil {
 			return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to refresh environment catalog: %v", err))
 		}
@@ -618,6 +790,11 @@ func (c *cli) runCmd(args []string) int {
 		// In remote-connected modes, print after the control channel connects so the
 		// final environment URL and Local UI URL are both available together.
 		if !controlChannelEnabled {
+			_ = startupReporter.Emit(runtimepresentation.Event{
+				Kind:  runtimepresentation.EventPhaseDone,
+				Phase: runtimepresentation.PhaseConnectControl,
+				Title: "control channel disabled",
+			})
 			announce()
 		}
 	}
@@ -625,6 +802,7 @@ func (c *cli) runCmd(args []string) int {
 	if err := a.Run(ctx); err != nil && ctx.Err() == nil {
 		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("runtime exited with error: %v", err))
 	}
+	_ = startupReporter.Close(runtimepresentation.Result{Success: true, Snapshot: startupReporter.Snapshot()})
 	return 0
 }
 
@@ -680,6 +858,34 @@ func buildRunBootstrapArgs(
 	return args
 }
 
+func runtimeLogOutput(stateDir string, presentation runtimepresentation.Config, fallback io.Writer) (io.Writer, func()) {
+	if presentation.Effective == runtimepresentation.ModeMachine {
+		return fallback, func() {}
+	}
+	if strings.TrimSpace(stateDir) == "" {
+		return fallback, func() {}
+	}
+	logPath := filepath.Join(stateDir, "runtime.log")
+	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return fallback, func() {}
+	}
+	return f, func() { _ = f.Close() }
+}
+
+func remediationForStartupFailure(code string) string {
+	switch code {
+	case desktopLaunchCodeStateDirLocked:
+		return "Stop the existing Redeven runtime for this state directory, or start with a different --state-root."
+	case desktopLaunchCodeStartupInvalid:
+		return "Check the startup flags and run `redeven help run` for the supported startup shapes."
+	case desktopLaunchCodeStartupFailed:
+		return "Check the diagnostics log in the Local Environment state directory."
+	default:
+		return ""
+	}
+}
+
 func (c *cli) printNotBootstrappedGuidance(reason error) int {
 	writeErrorWithHelp(
 		c.stderr,
@@ -689,7 +895,7 @@ func (c *cli) printNotBootstrappedGuidance(reason error) int {
 			"Examples:",
 			fmt.Sprintf("  redeven bootstrap --controlplane %s --env-id %s --bootstrap-ticket %s", exampleControlplaneURL, exampleEnvID, exampleBootstrapTicket),
 			fmt.Sprintf("  redeven run --mode hybrid --controlplane %s --env-id %s --bootstrap-ticket %s", exampleControlplaneURL, exampleEnvID, exampleBootstrapTicket),
-			fmt.Sprintf("  %s=%s redeven run --mode desktop --desktop-managed --controlplane %s --env-id %s --bootstrap-ticket-env %s", exampleBootstrapEnv, exampleBootstrapTicket, exampleControlplaneURL, exampleEnvID, exampleBootstrapEnv),
+			fmt.Sprintf("  %s=%s redeven run --mode desktop --desktop-managed --presentation machine --controlplane %s --env-id %s --bootstrap-ticket-env %s", exampleBootstrapEnv, exampleBootstrapTicket, exampleControlplaneURL, exampleEnvID, exampleBootstrapEnv),
 		},
 		"",
 	)

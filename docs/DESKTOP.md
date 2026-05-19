@@ -13,7 +13,7 @@ This document describes the public Electron desktop shell that ships with each `
 
 ## Architecture
 
-- Electron is a thin shell around Redeven Local UI. The bundled-runtime entrypoint is `redeven run --mode desktop --desktop-managed`.
+- Electron is a thin shell around Redeven Local UI. The bundled-runtime entrypoint is `redeven run --mode desktop --desktop-managed --presentation machine`.
 - Desktop owns one Local Environment for the current OS user / Redeven profile state root. Desktop and standalone CLI/runtime mode share the same state directory and profile catalog under `~/.redeven/`.
 - The launcher is a singleton shell-owned window. Each opened Environment owns its own session window, and reopening the launcher never disconnects existing sessions.
 - Session identity is keyed by target type: managed Local Environment/provider route, saved Local UI URL, or SSH Host entry.
@@ -24,7 +24,7 @@ This document describes the public Electron desktop shell that ships with each `
 
 ## Runtime Contract
 
-Desktop packages always start the bundled binary through `redeven run --mode desktop --desktop-managed`.
+Desktop packages always start the bundled binary through `redeven run --mode desktop --desktop-managed --presentation machine`.
 
 The base launch shape is:
 
@@ -32,6 +32,7 @@ The base launch shape is:
 redeven run \
   --mode desktop \
   --desktop-managed \
+  --presentation machine \
   --state-root <absolute-state-root> \
   --local-ui-bind localhost:23998 \
   --startup-report-file <temp-path>
@@ -49,6 +50,7 @@ Behavior:
 - Desktop is a view and control panel for runtimes the user can manage from this device. It does not act as a background supervisor for automatic start, stop, restart, or update work.
 - Local UI starts for the Local Environment runtime selected by the user through an explicit runtime action.
 - `--password-stdin` is the non-interactive desktop-managed password transport.
+- `--presentation machine` disables rich terminal rendering, colors, and cursor-control output for Desktop-managed startup. Desktop readiness remains `--startup-report-file`; Electron must not parse human terminal output.
 - Desktop creates one stable, non-secret runtime owner id in Electron `userData` and passes it only to Desktop-managed runtimes through `REDEVEN_DESKTOP_OWNER_ID`.
 - Desktop resolves the managed state root before spawn and passes it explicitly to `redeven run`.
 - The Desktop-owned local runtime uses `~/.redeven/local-environment/config.json`.
@@ -98,7 +100,7 @@ When the selected target is `Remote Environment`, Desktop does not start the bun
 Instead it validates and probes the configured Local UI base URL, then opens that exact origin in the shell.
 
 When the selected target is `SSH Host Environment`, Desktop still keeps Redeven Local UI as the only runtime contract.
-It does not introduce a second SSH-native file or terminal protocol. Electron main validates the SSH entry, opens an SSH control connection, installs or reuses the pinned Desktop-managed Redeven release on the host, starts `redeven run --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0` remotely with Desktop ownership, verifies the reported Runtime Service snapshot, and forwards both the remote Local UI and runtime-control endpoint back to the user's machine.
+It does not introduce a second SSH-native file or terminal protocol. Electron main validates the SSH entry, opens an SSH control connection, installs or reuses the pinned Desktop-managed Redeven release on the host, starts `redeven run --mode desktop --desktop-managed --presentation machine --local-ui-bind 127.0.0.1:0` remotely with Desktop ownership, verifies the reported Runtime Service snapshot, and forwards both the remote Local UI and runtime-control endpoint back to the user's machine.
 
 The SSH Host runtime flow stays two-step: `Start runtime` prepares or attaches the runtime, and the user still chooses `Open` before Desktop opens the forwarded Local UI origin. Env App receives an `ssh_environment` session context so Web Services treat remote-host `localhost` targets as remote loopback and open through `/pf/<forward_id>/`.
 
