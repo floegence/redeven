@@ -75,10 +75,11 @@ There is **no** `config.codex` block in the runtime Local Environment config (fo
 
 Redeven resolves `codex` like this:
 
-1. Look up `codex` on the host `PATH`.
-2. Start `codex app-server` on demand when a Codex route needs it by spawning the user's configured shell in `login + interactive` mode and executing `codex app-server --listen stdio://` through that shell.
-3. Inherit the runtime process environment as-is and let the user's shell startup files resolve host-specific settings such as `PATH`, `CODEX_HOME`, and related Codex runtime configuration.
-4. Let the local Codex installation keep its own defaults for model, approvals, sandboxing, and other runtime behavior unless the user explicitly overrides a field in the Codex page request itself.
+1. Resolve `codex` through the user's configured shell in `login + interactive` mode so host-specific PATH setup from tools such as nvm or Homebrew is visible.
+2. Sanitize the shell output and keep only a real executable path, ignoring interactive startup noise such as aliases or banners.
+3. Start `codex app-server --listen stdio://` on demand by executing the resolved binary directly, with the binary directory prepended to `PATH` so npm-style `#!/usr/bin/env node` shims can still find their runtime.
+4. Inherit the rest of the runtime process environment as-is, including `CODEX_HOME` and related Codex runtime configuration.
+5. Let the local Codex installation keep its own defaults for model, approvals, sandboxing, and other runtime behavior unless the user explicitly overrides a field in the Codex page request itself.
 
 Runtime Settings -> `AI & Extensions` -> Codex is diagnostic-only and currently shows:
 

@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 )
@@ -60,14 +61,16 @@ func asRPCMethodError(err error) (*rpcMethodError, bool) {
 }
 
 func buildAppServerCommand(shell string, binaryPath string) (*exec.Cmd, error) {
-	if strings.TrimSpace(binaryPath) == "" {
-		return nil, errors.New("missing codex binary")
-	}
-	shellPath, err := resolveInteractiveLoginShell(shell)
+	resolved, err := sanitizeExecutablePath(binaryPath)
 	if err != nil {
 		return nil, err
 	}
-	return exec.Command(shellPath, "-l", "-i", "-c", `exec "$0" app-server --listen stdio://`, binaryPath), nil
+	if resolved == "" {
+		return nil, errors.New("missing codex binary")
+	}
+	cmd := exec.Command(resolved, "app-server", "--listen", "stdio://")
+	cmd.Env = environWithPath(composeAppServerPath(filepath.Dir(resolved), loginShellPath(shell)))
+	return cmd, nil
 }
 
 func startAppServerProcess(logger *slog.Logger, shell string, binaryPath string, onEnvelope func(rpcEnvelope)) (*appServerProcess, error) {
@@ -88,7 +91,7 @@ func startAppServerProcess(logger *slog.Logger, shell string, binaryPath string,
 		return nil, err
 	}
 	if err := cmd.Start(); err != nil {
-		return nil, err
+		return nil, errors.Join(ErrUnavailable, fmt.Errorf("start codex app-server: %w", err))
 	}
 	p := &appServerProcess{
 		log:        logger,
@@ -229,7 +232,7 @@ func (p *appServerProcess) stderrLoop(r io.Reader) {
 func (p *appServerProcess) waitLoop() {
 	err := p.cmd.Wait()
 	if err != nil {
-		p.signalDone(fmt.Errorf("codex app-server exited: %w", err))
+		p.signalDone(errors.Join(ErrUnavailable, fmt.Errorf("codex app-server exited: %w", err)))
 		return
 	}
 	p.signalDone(errors.New("codex app-server exited"))
@@ -271,6 +274,97 @@ func mustJSONRaw(v any) json.RawMessage {
 
 func bytesTrimSpace(b []byte) []byte {
 	return []byte(strings.TrimSpace(string(b)))
+}
+
+func sanitizeExecutablePath(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+	for _, candidate := range strings.Split(raw, "\n") {
+		if path, ok := resolveExecutableCandidate(candidate); ok {
+			return path, nil
+		}
+	}
+	return "", fmt.Errorf("codex binary path is not executable: %q", raw)
+}
+
+func resolveExecutableCandidate(candidate string) (string, bool) {
+	candidate = strings.TrimSpace(candidate)
+	if candidate == "" || strings.Contains(candidate, "=") || strings.Contains(candidate, "'") || strings.Contains(candidate, "\"") {
+		return "", false
+	}
+	var path string
+	var err error
+	if filepath.IsAbs(candidate) || strings.ContainsRune(candidate, filepath.Separator) {
+		path = candidate
+	} else {
+		path, err = exec.LookPath(candidate)
+		if err != nil {
+			return "", false
+		}
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.IsDir() || info.Mode().Perm()&0o111 == 0 {
+		return "", false
+	}
+	return path, true
+}
+
+func loginShellPath(shell string) string {
+	shellPath, err := resolveInteractiveLoginShell(shell)
+	if err != nil {
+		return ""
+	}
+	out, err := exec.Command(shellPath, "-l", "-i", "-c", `printf '__REDEVEN_CODEX_ENV_PATH__%s\n' "$PATH"`).Output()
+	if err != nil {
+		return ""
+	}
+	const marker = "__REDEVEN_CODEX_ENV_PATH__"
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, marker) {
+			return strings.TrimSpace(strings.TrimPrefix(line, marker))
+		}
+	}
+	return ""
+}
+
+func composeAppServerPath(binaryDir string, shellPath string) string {
+	binaryDir = strings.TrimSpace(binaryDir)
+	shellPath = strings.TrimSpace(shellPath)
+	if binaryDir == "" {
+		return shellPath
+	}
+	if shellPath == "" {
+		shellPath = os.Getenv("PATH")
+	}
+	if shellPath == "" {
+		return binaryDir
+	}
+	return binaryDir + string(os.PathListSeparator) + shellPath
+}
+
+func environWithPath(pathValue string) []string {
+	pathValue = strings.TrimSpace(pathValue)
+	if pathValue == "" {
+		return nil
+	}
+	env := os.Environ()
+	out := make([]string, 0, len(env)+1)
+	replaced := false
+	for _, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			out = append(out, "PATH="+pathValue)
+			replaced = true
+			continue
+		}
+		out = append(out, kv)
+	}
+	if !replaced {
+		out = append(out, "PATH="+pathValue)
+	}
+	return out
 }
 
 func resolveInteractiveLoginShell(shell string) (string, error) {

@@ -318,8 +318,6 @@ func (m *Manager) StartThread(ctx context.Context, req StartThreadRequest) (*Thr
 	var params wireThreadStartParams
 	params.CWD = stringPtr(cwd)
 	params.ServiceName = stringPtr("redeven_envapp")
-	params.ExperimentalRawEvents = true
-	params.PersistExtendedHistory = true
 	if model != "" {
 		params.Model = stringPtr(model)
 	}
@@ -371,8 +369,7 @@ func (m *Manager) ensureThreadLoaded(ctx context.Context, threadID string) error
 
 	var resp wireThreadResumeResponse
 	if err := m.call(ctx, "thread/resume", wireThreadResumeParams{
-		ThreadID:               threadID,
-		PersistExtendedHistory: true,
+		ThreadID: threadID,
 	}, &resp); err != nil {
 		if isThreadNotFoundError(err) {
 			return ErrThreadNotFound
@@ -615,9 +612,8 @@ func (m *Manager) ForkThread(ctx context.Context, req ForkThreadRequest) (*Threa
 	sandboxMode := normalizeSandboxModeRequest(req.SandboxMode)
 	approvalsReviewer := normalizeApprovalsReviewer(req.ApprovalsReviewer)
 	params := wireThreadForkParams{
-		ThreadID:               threadID,
-		Model:                  stringPtr(req.Model),
-		PersistExtendedHistory: true,
+		ThreadID: threadID,
+		Model:    stringPtr(req.Model),
 	}
 	if approvalPolicy != "" {
 		params.ApprovalPolicy = stringPtr(approvalPolicy)
@@ -955,7 +951,8 @@ func (m *Manager) ensureProcess(ctx context.Context) (*appServerProcess, error) 
 			Version: "1",
 		},
 		Capabilities: &initializeCapabilities{
-			ExperimentalAPI: true,
+			ExperimentalAPI:    true,
+			RequestAttestation: false,
 		},
 	}
 	var initResp map[string]any
@@ -1582,11 +1579,27 @@ func lookPathFromLoginShell(shell string, binaryName string) string {
 	if err != nil {
 		return ""
 	}
-	out, err := exec.Command(shellPath, "-l", "-i", "-c", `command -v "$0"`, binaryName).Output()
+	out, err := exec.Command(shellPath, "-l", "-i", "-c", `unalias "$0" >/dev/null 2>&1 || true; redeven_codex_path="$(command -v "$0")"; printf '__REDEVEN_CODEX_PATH__%s\n' "$redeven_codex_path"`, binaryName).Output()
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(out))
+	path, err := pathFromMarkedShellOutput(string(out))
+	if err != nil {
+		return ""
+	}
+	return path
+}
+
+func pathFromMarkedShellOutput(out string) (string, error) {
+	const marker = "__REDEVEN_CODEX_PATH__"
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, marker) {
+			continue
+		}
+		return sanitizeExecutablePath(strings.TrimPrefix(line, marker))
+	}
+	return "", errors.New("codex path marker not found")
 }
 
 func (m *Manager) ensureThreadStateLocked(threadID string) *threadState {
