@@ -700,6 +700,7 @@ function buildManagedSSHRuntimeStatusScript(): string {
 export async function probeManagedSSHRuntimeStatus(
   args: Readonly<{
     target: DesktopSSHEnvironmentDetails;
+    runtimeReleaseTag: string;
     sshPassword?: string;
     sshBinary?: string;
     tempRoot?: string;
@@ -708,6 +709,7 @@ export async function probeManagedSSHRuntimeStatus(
   }>,
 ): Promise<DesktopSSHRuntimeStatusProbe> {
   const target = normalizeDesktopSSHEnvironmentDetails(args.target);
+  const runtimeReleaseTag = normalizeRuntimeReleaseTag(args.runtimeReleaseTag);
   const sshBinary = compact(args.sshBinary) || 'ssh';
   const tempRoot = compact(args.tempRoot) || os.tmpdir();
   const connectTimeoutSeconds = args.connectTimeoutSeconds ?? DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS;
@@ -732,6 +734,7 @@ export async function probeManagedSSHRuntimeStatus(
         ...sshTargetArgs(target),
         remoteShellCommand(buildManagedSSHRuntimeStatusScript(), 'redeven-ssh-runtime-status', [
           target.runtime_root,
+          runtimeReleaseTag,
         ]),
       ],
       auth,

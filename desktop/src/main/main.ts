@@ -2264,6 +2264,7 @@ async function collectSavedSSHRuntimeHealth(
       }
       const probe = await probeManagedSSHRuntimeStatus({
         target: environment,
+        runtimeReleaseTag: resolveSSHRuntimeReleaseTag(),
         sshPassword: environment.ssh_password_configured ? environment.ssh_password : undefined,
         tempRoot: app.getPath('temp'),
         connectTimeoutSeconds: environment.connect_timeout_seconds ?? undefined,
@@ -3762,6 +3763,7 @@ async function startSSHEnvironmentRuntimeRecord(
       const sshPassword = savedSSHPasswordForDetails(preferences, sshDetails, environmentID);
       const statusProbe = await probeManagedSSHRuntimeStatus({
         target: sshDetails,
+        runtimeReleaseTag: resolveSSHRuntimeReleaseTag(),
         sshPassword,
         tempRoot: app.getPath('temp'),
         connectTimeoutSeconds: typeof sshDetails.connect_timeout_seconds === 'number'

@@ -13,6 +13,7 @@ import {
   DesktopSSHRuntimeCanceledError,
   ensureManagedSSHRuntimeReady,
   openManagedSSHRuntimeConnection,
+  probeManagedSSHRuntimeStatus,
   startManagedSSHRuntime,
   type ManagedSSHRuntime,
   type ManagedSSHRuntimeReady,
@@ -298,6 +299,7 @@ function marker() {
     'redeven-ssh-cleanup-path',
     'redeven-ssh-start',
     'redeven-ssh-read-report',
+    'redeven-ssh-runtime-status',
     'redeven-ssh-stop',
   ];
   const words = remoteCommandWords();
@@ -342,6 +344,29 @@ function writeProbeResult() {
     'reason=' + reason,
     '',
   ].join('\n'));
+}
+
+function writeRuntimeStatus() {
+  const state = readState();
+  if (state.installed !== true) {
+    process.exit(127);
+  }
+  process.stdout.write(JSON.stringify({
+    local_ui_url: 'http://127.0.0.1:39001/',
+    local_ui_urls: ['http://127.0.0.1:39001/'],
+    runtime_control: {
+      protocol_version: 'redeven-runtime-control-v1',
+      base_url: 'http://127.0.0.1:39002/',
+      token: 'runtime-control-token',
+      desktop_owner_id: 'desktop-owner-test',
+      expires_at_unix_ms: Date.now() + 60 * 60 * 1000,
+    },
+    password_required: true,
+    effective_run_mode: 'local',
+    desktop_managed: true,
+    pid: 4242,
+    runtime_service: runtimeServiceForScenario(),
+  }));
 }
 
 function readStdin(callback) {
@@ -452,6 +477,11 @@ if (args.includes('-M') && args.includes('-N')) {
         open_ssh_remote_command: args.some((value) => String(value).startsWith('sh -c ') || String(value).startsWith('sh -lc ')),
       });
       writeProbeResult();
+      process.exit(0);
+      break;
+    case 'redeven-ssh-runtime-status':
+      appendLog('runtime_status', { script_args: remoteScriptArgs() });
+      writeRuntimeStatus();
       process.exit(0);
       break;
     case 'redeven-ssh-probe-platform':
@@ -766,6 +796,26 @@ afterEach(() => {
 });
 
 describe('sshRuntime integration', () => {
+  it('passes the release tag to the SSH runtime status probe before manual start decisions', async () => {
+    const fixture = await createFakeSSHFixture('ready');
+    try {
+      const probe = await withFakeSSHEnv(fixture, () => probeManagedSSHRuntimeStatus({
+        target: targetFor('auto'),
+        runtimeReleaseTag: 'v1.2.3',
+        sshBinary: fixture.sshBinary,
+        tempRoot: fixture.root,
+        connectTimeoutSeconds: 1,
+      }));
+
+      expect(probe.status).toBe('ready');
+      const events = await readFakeSSHEvents(fixture);
+      const statusEvent = events.find((event) => event.event === 'runtime_status');
+      expect(statusEvent?.data?.script_args).toEqual(['remote_default', 'v1.2.3']);
+    } finally {
+      await removeFakeSSHFixture(fixture);
+    }
+  });
+
   it('keeps SSH runtime readiness separate from the Open connection tunnel', async () => {
     const fixture = await createFakeSSHFixture('ready');
     let ready: ManagedSSHRuntimeReady | null = null;
