@@ -183,6 +183,7 @@ type TurnError struct {
 type Item struct {
 	ID               string           `json:"id"`
 	Type             string           `json:"type"`
+	TurnID           string           `json:"turn_id,omitempty"`
 	Text             string           `json:"text,omitempty"`
 	Phase            string           `json:"phase,omitempty"`
 	Summary          []string         `json:"summary,omitempty"`
@@ -292,5 +293,6 @@ type Event struct {
 	SummaryIndex *int64             `json:"summary_index,omitempty"`
 	ContentIndex *int64             `json:"content_index,omitempty"`
 	Error        string             `json:"error,omitempty"`
+	TurnError    *TurnError         `json:"turn_error,omitempty"`
 	WillRetry    bool               `json:"will_retry,omitempty"`
 }

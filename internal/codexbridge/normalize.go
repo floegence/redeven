@@ -43,7 +43,9 @@ func normalizeTurn(in wireTurn) Turn {
 	if len(in.Items) > 0 {
 		out.Items = make([]Item, 0, len(in.Items))
 		for i := range in.Items {
-			out.Items = append(out.Items, normalizeItem(in.Items[i]))
+			item := normalizeItem(in.Items[i])
+			item.TurnID = out.ID
+			out.Items = append(out.Items, item)
 		}
 	}
 	return out

@@ -98,6 +98,103 @@ describe('buildCodexThreadSession', () => {
     expect(session.runtime_config.model).toBe('gpt-5.4');
   });
 
+  it('adds a visible diagnostic for completed turns without assistant output', () => {
+    const detail = sampleDetail();
+    const session = buildCodexThreadSession({
+      ...detail,
+      thread: {
+        ...detail.thread,
+        turns: [
+          {
+            id: 'turn_empty',
+            status: 'completed',
+            items: [
+              {
+                id: 'item_user_only',
+                type: 'userMessage',
+                inputs: [{ type: 'text', text: 'hi' }],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(session.item_order).toEqual([
+      'item_user_only',
+      'turn:turn_empty:diagnostic:empty_response',
+    ]);
+    expect(session.items_by_id['turn:turn_empty:diagnostic:empty_response']).toMatchObject({
+      type: 'turnDiagnostic',
+      turn_id: 'turn_empty',
+      diagnostic_kind: 'empty_response',
+      status: 'empty_response',
+    });
+    expect(session.items_by_id['turn:turn_empty:diagnostic:empty_response'].text).toContain('without a visible response');
+  });
+
+  it('does not add an empty-response diagnostic when a completed turn has assistant output', () => {
+    const detail = sampleDetail();
+    const session = buildCodexThreadSession({
+      ...detail,
+      thread: {
+        ...detail.thread,
+        turns: [
+          {
+            id: 'turn_answered',
+            status: 'completed',
+            items: [
+              { id: 'item_user', type: 'userMessage', inputs: [{ type: 'text', text: 'hi' }] },
+              { id: 'item_answer', type: 'agentMessage', text: 'Hello' },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(session.item_order).toEqual(['item_user', 'item_answer']);
+    expect(session.items_by_id['turn:turn_answered:diagnostic:empty_response']).toBeUndefined();
+  });
+
+  it('adds failed turn diagnostics with detailed Codex error fields', () => {
+    const detail = sampleDetail();
+    const session = buildCodexThreadSession({
+      ...detail,
+      thread: {
+        ...detail.thread,
+        turns: [
+          {
+            id: 'turn_failed',
+            status: 'failed',
+            error: {
+              message: 'Provider rejected the request',
+              additional_details: 'HTTP 429 rate limit exceeded',
+              codex_error_code: 'rateLimit',
+            },
+            items: [
+              { id: 'item_user', type: 'userMessage', inputs: [{ type: 'text', text: 'hi' }] },
+            ],
+          },
+        ],
+      },
+    });
+
+    const diagnostic = session.items_by_id['turn:turn_failed:diagnostic:turn_error'];
+    expect(diagnostic).toMatchObject({
+      type: 'turnDiagnostic',
+      turn_id: 'turn_failed',
+      diagnostic_kind: 'turn_error',
+      status: 'failed',
+      turn_error: {
+        message: 'Provider rejected the request',
+        additional_details: 'HTTP 429 rate limit exceeded',
+        codex_error_code: 'rateLimit',
+      },
+    });
+    expect(diagnostic.text).toContain('HTTP 429 rate limit exceeded');
+    expect(diagnostic.text).toContain('Codex error code: rateLimit');
+  });
+
   it('does not inherit terminal turn failure onto items without explicit status', () => {
     const detail = sampleDetail();
     const session = buildCodexThreadSession({
@@ -343,6 +440,59 @@ describe('applyCodexEvent', () => {
       { id: 'turn_1', status: 'completed' },
       { id: 'turn_2', status: 'completed' },
     ]);
+    expect(completed?.items_by_id['turn:turn_2:diagnostic:empty_response']?.text).toContain('without a visible response');
+  });
+
+  it('projects non-retryable error events into detailed turn diagnostics', () => {
+    const initial = buildCodexThreadSession(sampleDetail());
+
+    const next = applyCodexEvent(initial, {
+      seq: 5,
+      type: 'error',
+      thread_id: 'thread_1',
+      turn_id: 'turn_failed_event',
+      error: 'Provider failed',
+      turn_error: {
+        message: 'Provider failed',
+        additional_details: 'Upstream returned HTTP 500',
+        codex_error_code: 'serverError',
+      },
+    });
+
+    expect(next?.active_status).toBe('systemError');
+    expect(next?.items_by_id['turn:turn_failed_event:diagnostic:turn_error']).toMatchObject({
+      type: 'turnDiagnostic',
+      turn_id: 'turn_failed_event',
+      diagnostic_kind: 'turn_error',
+      status: 'failed',
+      text: expect.stringContaining('Upstream returned HTTP 500'),
+    });
+  });
+
+  it('uses the error event message when structured turn details are absent', () => {
+    const initial = buildCodexThreadSession({
+      ...sampleDetail(),
+      thread: {
+        ...sampleDetail().thread,
+        turns: [
+          {
+            id: 'turn_existing_failed',
+            status: 'in_progress',
+            items: [],
+          },
+        ],
+      },
+    });
+
+    const next = applyCodexEvent(initial, {
+      seq: 6,
+      type: 'error',
+      thread_id: 'thread_1',
+      turn_id: 'turn_existing_failed',
+      error: 'codex app-server exited: exit status 127',
+    });
+
+    expect(next?.items_by_id['turn:turn_existing_failed:diagnostic:turn_error']?.text).toBe('codex app-server exited: exit status 127');
   });
 
   it('lets completed agent items replace dirty live deltas with empty clean text', () => {

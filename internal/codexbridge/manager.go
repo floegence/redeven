@@ -1082,6 +1082,7 @@ func (m *Manager) handleEnvelope(env rpcEnvelope) {
 			threadID := strings.TrimSpace(msg.ThreadID)
 			turnID := strings.TrimSpace(msg.TurnID)
 			item := normalizeProjectedItemForLifecycle(normalizeItem(msg.Item), projectedItemLifecycleStarted)
+			item.TurnID = turnID
 			m.mu.Lock()
 			state := m.ensureThreadStateLocked(threadID)
 			thread := ensureProjectedThread(state, threadID)
@@ -1104,6 +1105,7 @@ func (m *Manager) handleEnvelope(env rpcEnvelope) {
 			threadID := strings.TrimSpace(msg.ThreadID)
 			turnID := strings.TrimSpace(msg.TurnID)
 			item := normalizeProjectedItemForLifecycle(normalizeItem(msg.Item), projectedItemLifecycleCompleted)
+			item.TurnID = turnID
 			m.mu.Lock()
 			state := m.ensureThreadStateLocked(threadID)
 			thread := ensureProjectedThread(state, threadID)
@@ -1253,11 +1255,17 @@ func (m *Manager) handleEnvelope(env rpcEnvelope) {
 		if json.Unmarshal(env.Params, &msg) == nil {
 			threadID := strings.TrimSpace(msg.ThreadID)
 			turnID := strings.TrimSpace(msg.TurnID)
+			turnError := normalizeTurnError(&msg.Error)
 			message := strings.TrimSpace(msg.Error.Message)
+			if message == "" && turnError != nil {
+				message = strings.TrimSpace(turnError.Message)
+			}
 			m.mu.Lock()
 			state := m.ensureThreadStateLocked(threadID)
 			if !msg.WillRetry {
 				thread := ensureProjectedThread(state, threadID)
+				turn := ensureProjectedTurn(thread, turnID)
+				markProjectedTurnError(turn, turnError)
 				thread.Status = "systemError"
 				thread.ActiveFlags = nil
 				thread.UpdatedAtUnixS = time.Now().Unix()
@@ -1267,6 +1275,7 @@ func (m *Manager) handleEnvelope(env rpcEnvelope) {
 				ThreadID:  threadID,
 				TurnID:    turnID,
 				Error:     message,
+				TurnError: turnError,
 				WillRetry: msg.WillRetry,
 			})
 			m.mu.Unlock()
@@ -1310,6 +1319,7 @@ func (m *Manager) handleDeltaEvent(raw json.RawMessage, typ string, itemType str
 	thread := ensureProjectedThread(state, threadID)
 	turn := ensureProjectedTurn(thread, turnID)
 	item := ensureProjectedItem(turn, itemID, itemType)
+	item.TurnID = turnID
 	switch typ {
 	case "agent_message_delta", "plan_delta", "reasoning_delta":
 		appendProjectedItemText(item, msg.Delta)
@@ -1343,6 +1353,7 @@ func (m *Manager) handleReasoningSummaryTextDelta(raw json.RawMessage) {
 	thread := ensureProjectedThread(state, threadID)
 	turn := ensureProjectedTurn(thread, turnID)
 	item := ensureProjectedItem(turn, itemID, "reasoning")
+	item.TurnID = turnID
 	appendProjectedItemSummary(item, summaryIndex, msg.Delta)
 	thread.UpdatedAtUnixS = time.Now().Unix()
 	m.appendEventLocked(state, Event{
@@ -1370,6 +1381,7 @@ func (m *Manager) handleReasoningSummaryPartAdded(raw json.RawMessage) {
 	thread := ensureProjectedThread(state, threadID)
 	turn := ensureProjectedTurn(thread, turnID)
 	item := ensureProjectedItem(turn, itemID, "reasoning")
+	item.TurnID = turnID
 	appendProjectedItemSummary(item, summaryIndex, "")
 	thread.UpdatedAtUnixS = time.Now().Unix()
 	m.appendEventLocked(state, Event{
@@ -1396,6 +1408,7 @@ func (m *Manager) handleReasoningTextDelta(raw json.RawMessage) {
 	thread := ensureProjectedThread(state, threadID)
 	turn := ensureProjectedTurn(thread, turnID)
 	item := ensureProjectedItem(turn, itemID, "reasoning")
+	item.TurnID = turnID
 	appendProjectedItemContent(item, contentIndex, msg.Delta)
 	thread.UpdatedAtUnixS = time.Now().Unix()
 	m.appendEventLocked(state, Event{
@@ -1427,6 +1440,7 @@ func (m *Manager) handleRawResponseItemCompleted(raw json.RawMessage) {
 		return
 	}
 	item = normalizeProjectedItemForLifecycle(item, projectedItemLifecycleCompleted)
+	item.TurnID = turnID
 	thread := ensureProjectedThread(state, threadID)
 	turn := ensureProjectedTurn(thread, turnID)
 	upsertProjectedItem(turn, item)

@@ -51,6 +51,15 @@ func turnErrorFromCallError(err error) *TurnError {
 	return normalized
 }
 
+func TurnErrorFromError(err error) *TurnError {
+	var turnErr *turnRPCError
+	if errors.As(err, &turnErr) {
+		out := turnErr.turnError
+		return &out
+	}
+	return turnErrorFromCallError(err)
+}
+
 func wrapTurnCallError(method string, err error) error {
 	normalized := turnErrorFromCallError(err)
 	if normalized == nil {
@@ -64,9 +73,8 @@ func wrapTurnCallError(method string, err error) error {
 }
 
 func CodexErrorCode(err error) string {
-	var turnErr *turnRPCError
-	if errors.As(err, &turnErr) {
-		return strings.TrimSpace(turnErr.turnError.CodexErrorCode)
+	if turnErr := TurnErrorFromError(err); turnErr != nil {
+		return strings.TrimSpace(turnErr.CodexErrorCode)
 	}
 	return ""
 }

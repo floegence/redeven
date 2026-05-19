@@ -45,12 +45,14 @@ const notification = {
 };
 const MockCodexGatewayError = vi.hoisted(() => class MockCodexGatewayError extends Error {
   errorCode: string;
+  details: string;
   status: number;
 
-  constructor(message: string, errorCode = '', status = 400) {
+  constructor(message: string, errorCode = '', status = 400, details = '') {
     super(message);
     this.name = 'CodexGatewayError';
     this.errorCode = errorCode;
+    this.details = details;
     this.status = status;
   }
 });
@@ -2629,12 +2631,20 @@ describe('CodexPage', () => {
 
     expect(textarea.value).toBe('');
 
-    rejectStartTurn(new Error('Turn start failed'));
+    rejectStartTurn(new MockCodexGatewayError(
+      'Turn start failed',
+      'rateLimitExceeded',
+      400,
+      'HTTP 429 rate limit exceeded',
+    ));
     await flushAsync();
     await flushAsync();
 
     expect(textarea.value).toBe('Restore me after failure');
-    expect(notification.error).toHaveBeenCalledWith('Send failed', 'Turn start failed');
+    expect(notification.error).toHaveBeenCalledWith(
+      'Send failed',
+      'Turn start failed\n\nHTTP 429 rate limit exceeded\n\nCodex error code: rateLimitExceeded',
+    );
   });
 
   it('wires the working-directory picker through the shared async path loader', async () => {

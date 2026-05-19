@@ -55,6 +55,8 @@ export function itemTitle(item: CodexItem): string {
       return 'Reasoning note';
     case 'plan':
       return 'Execution plan';
+    case 'turnDiagnostic':
+      return item.diagnostic_kind === 'empty_response' ? 'Turn completed without response' : 'Turn diagnostics';
     default:
       return item.type || 'Event';
   }
@@ -149,6 +151,9 @@ export function statusTagVariant(status: string | null | undefined): TagProps['v
   if (normalized === 'completed' || normalized === 'success') return 'success';
   if (isWorkingStatus(normalized)) {
     return 'info';
+  }
+  if (normalized === 'empty_response' || normalized === 'empty response') {
+    return 'warning';
   }
   if (normalized.includes('approval') || normalized.includes('waiting') || normalized.includes('input')) {
     return 'warning';
