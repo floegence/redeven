@@ -5267,9 +5267,8 @@ function EnvironmentConnectionCard(props: Readonly<{
                       placement="bottom"
                       delay={300}
                       closeDelay={150}
-                      class="min-w-[14rem]"
                       content={
-                        <div class="flex items-start gap-2 p-1">
+                        <div class="flex items-start gap-1.5 p-1">
                           <span class="min-w-0 flex-1 text-xs leading-snug break-words">
                             {failure().message}
                           </span>
