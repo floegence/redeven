@@ -48,6 +48,8 @@ type FakeSSHFixture = Readonly<{
   scenario: FakeSSHScenario;
 }>;
 
+const SSH_RUNTIME_MAINTENANCE_TEST_TIMEOUT_MS = 15_000;
+
 function sha256(data: Buffer | string): string {
   return createHash('sha256').update(data).digest('hex');
 }
@@ -972,24 +974,27 @@ describe('sshRuntime integration', () => {
 
   it('surfaces lifecycle update maintenance for an idle attached runtime before Desktop model source setup', async () => {
     const fixture = await createFakeSSHFixture('attached_unsupported_idle');
-    await expect(startWithFakeSSH(fixture, 'auto', {
-      requireDesktopModelSource: true,
-    })).rejects.toMatchObject({
-      name: 'DesktopSSHRuntimeMaintenanceRequiredError',
-      maintenance: expect.objectContaining({
-        kind: 'ssh_runtime_update_required',
-        required_for: 'open',
-        has_active_work: false,
-      }),
-    });
+    try {
+      await expect(startWithFakeSSH(fixture, 'auto', {
+        requireDesktopModelSource: true,
+      })).rejects.toMatchObject({
+        name: 'DesktopSSHRuntimeMaintenanceRequiredError',
+        maintenance: expect.objectContaining({
+          kind: 'ssh_runtime_update_required',
+          required_for: 'open',
+          has_active_work: false,
+        }),
+      });
 
-    await waitForFakeSSHEvent(fixture, 'start_runtime');
-    const events = await readFakeSSHEvents(fixture);
-    expect(events.map((event) => event.event)).toContain('start_runtime');
-    expect(events.map((event) => event.event)).not.toContain('stop_runtime');
-    expect(events.map((event) => event.event)).not.toContain('runtime_control_forward_start');
-    await removeFakeSSHFixture(fixture);
-  });
+      await waitForFakeSSHEvent(fixture, 'start_runtime');
+      const events = await readFakeSSHEvents(fixture);
+      expect(events.map((event) => event.event)).toContain('start_runtime');
+      expect(events.map((event) => event.event)).not.toContain('stop_runtime');
+      expect(events.map((event) => event.event)).not.toContain('runtime_control_forward_start');
+    } finally {
+      await removeFakeSSHFixture(fixture);
+    }
+  }, SSH_RUNTIME_MAINTENANCE_TEST_TIMEOUT_MS);
 
   it('surfaces restart maintenance when an idle SSH runtime is missing Desktop runtime-control', async () => {
     const fixture = await createFakeSSHFixture('missing_runtime_control_idle');
@@ -1070,23 +1075,26 @@ describe('sshRuntime integration', () => {
 
   it('blocks lifecycle update for an active attached runtime before Desktop model source setup', async () => {
     const fixture = await createFakeSSHFixture('attached_unsupported_active');
-    await expect(startWithFakeSSH(fixture, 'auto', {
-      requireDesktopModelSource: true,
-    })).rejects.toMatchObject({
-      name: 'DesktopSSHRuntimeMaintenanceRequiredError',
-      maintenance: expect.objectContaining({
-        kind: 'ssh_runtime_update_required',
-        required_for: 'open',
-        has_active_work: true,
-      }),
-    });
+    try {
+      await expect(startWithFakeSSH(fixture, 'auto', {
+        requireDesktopModelSource: true,
+      })).rejects.toMatchObject({
+        name: 'DesktopSSHRuntimeMaintenanceRequiredError',
+        maintenance: expect.objectContaining({
+          kind: 'ssh_runtime_update_required',
+          required_for: 'open',
+          has_active_work: true,
+        }),
+      });
 
-    await waitForFakeSSHEvent(fixture, 'start_runtime');
-    const events = await readFakeSSHEvents(fixture);
-    expect(events.map((event) => event.event)).toContain('start_runtime');
-    expect(events.map((event) => event.event)).not.toContain('stop_runtime');
-    await removeFakeSSHFixture(fixture);
-  });
+      await waitForFakeSSHEvent(fixture, 'start_runtime');
+      const events = await readFakeSSHEvents(fixture);
+      expect(events.map((event) => event.event)).toContain('start_runtime');
+      expect(events.map((event) => event.event)).not.toContain('stop_runtime');
+    } finally {
+      await removeFakeSSHFixture(fixture);
+    }
+  }, SSH_RUNTIME_MAINTENANCE_TEST_TIMEOUT_MS);
 
   it('keeps the SSH tunnel attached but blocks Open when the forwarded Env App shell is invalid', async () => {
     const fixture = await createFakeSSHFixture('forwarded_invalid_env_shell');
