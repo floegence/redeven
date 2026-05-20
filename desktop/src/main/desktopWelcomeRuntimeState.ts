@@ -77,11 +77,11 @@ function runtimeStateFromStartup(
       ? normalizeRuntimeServiceSnapshot({
           ...runtimeService,
           compatibility: 'update_required',
-          compatibility_message: 'Desktop has a newer bundled runtime. Restart the Local Runtime before opening.',
+          compatibility_message: 'Redeven Desktop has a newer bundled runtime. Open the Desktop update handoff before opening this Local Environment.',
           open_readiness: {
             state: 'blocked',
             reason_code: 'runtime_update_required',
-            message: 'Desktop has a newer bundled runtime. Restart the Local Runtime before opening.',
+            message: 'Redeven Desktop has a newer bundled runtime. Open the Desktop update handoff before opening this Local Environment.',
           },
         })
       : runtimeService,

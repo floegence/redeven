@@ -260,7 +260,7 @@ export function buildDesktopLocalRuntimeOpenPlan(
         requiresRestart: true,
         requiresConfirmation: true,
         runtimeURL,
-        message: 'This runtime needs an update, but active work is still running. Close or stop that work before restarting the runtime.',
+        message: 'Redeven Desktop needs an update, but active work is still running. Close or stop that work before opening the Desktop update handoff.',
       });
     }
     return plan({
@@ -275,7 +275,7 @@ export function buildDesktopLocalRuntimeOpenPlan(
       requiresRestart: true,
       requiresConfirmation: false,
       runtimeURL,
-      message: 'Update and restart this Local Runtime before opening. Open stays separate from runtime maintenance.',
+      message: 'Open the Redeven Desktop update handoff before opening this Local Environment. Open stays separate from runtime maintenance.',
     });
   }
 
