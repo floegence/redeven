@@ -329,6 +329,33 @@ describe('launcherBusyState', () => {
   });
 
   it('matches Open connection progress without treating it as runtime lifecycle progress', () => {
+    const localHostEnvironment: RuntimeProgressEnvironmentMatch = {
+      id: 'local',
+      managed_runtime_target_id: undefined,
+      managed_runtime_placement_target_id: undefined,
+      provider_runtime_link_target: providerRuntimeTarget('local', 'local:local'),
+    };
+    const localHostProgress = {
+      action: 'open_local_environment' as const,
+      environment_id: 'local',
+      operation_key: 'local:host:local:open',
+      subject_kind: 'local_environment' as const,
+      subject_id: 'local',
+      phase: 'checking_runtime_record',
+      title: 'Checking runtime status',
+      detail: 'Desktop is checking the runtime status before opening this environment.',
+      open_progress: {
+        kind: 'open_connection' as const,
+        location: 'local_host' as const,
+        phase: 'checking_runtime_record' as const,
+        stage_index: 1,
+        stage_count: 4,
+        environment_id: 'local',
+        environment_label: 'Local Environment',
+        target_id: 'local:host:local',
+        target_label: 'Local Environment',
+      },
+    };
     const environment: RuntimeProgressEnvironmentMatch = {
       id: 'ssh-env',
       managed_runtime_target_id: runtimeID('ssh:devbox'),
@@ -357,6 +384,12 @@ describe('launcherBusyState', () => {
       },
     };
 
+    expect(environmentMatchesRuntimeLifecycleProgress(localHostEnvironment, localHostProgress)).toBe(false);
+    expect(activeOpenConnectionProgressForEnvironment(
+      localHostEnvironment as never,
+      IDLE_LAUNCHER_BUSY_STATE,
+      [localHostProgress],
+    )).toBe(localHostProgress);
     expect(environmentMatchesRuntimeLifecycleProgress(environment, progress)).toBe(false);
     expect(activeOpenConnectionProgressForEnvironment(
       environment as never,

@@ -278,6 +278,35 @@ describe('main routing', () => {
     expect(refreshRuntimeSrc).not.toContain('markSavedRuntimeTargetUsed(preferences');
   });
 
+  it('keeps Local Host Open under the same Open-owned runtime preflight contract', () => {
+    const mainSrc = readMainSource();
+    const localOpenStart = mainSrc.indexOf('async function openLocalEnvironmentRecord(');
+    const localOpenEnd = mainSrc.indexOf('function remoteManagedSessionStartup(', localOpenStart);
+    expect(localOpenStart).toBeGreaterThanOrEqual(0);
+    expect(localOpenEnd).toBeGreaterThan(localOpenStart);
+    const localOpenSrc = mainSrc.slice(localOpenStart, localOpenEnd);
+
+    expect(mainSrc).toContain('type LocalHostOpenTarget = Readonly<{');
+    expect(mainSrc).toContain('function localHostOpenTarget(environment: DesktopLocalEnvironmentState): LocalHostOpenTarget');
+    expect(localOpenSrc).toContain("action: 'open_local_environment'");
+    expect(localOpenSrc).toContain("subject_kind: 'local_environment'");
+    expect(localOpenSrc).toContain("phase: 'checking_runtime_record'");
+    expect(localOpenSrc).toContain('open_progress: buildOpenConnectionProgress({');
+    expect(localOpenSrc).toContain('await refreshWelcomeRuntimeHealthForEnvironment(environment.id)');
+    expect(localOpenSrc).toContain('runtimeRecord = await attachLocalEnvironmentRuntime(environment)');
+    expect(localOpenSrc).toContain('localRuntimeHealthForOpenPreflight(environment.id)');
+    expect(localOpenSrc).toContain('finishLocalHostOpenFailure(operationKey, openTarget, signal, result)');
+    expect(localOpenSrc).toContain("phase: 'checking_env_app_readiness'");
+    expect(localOpenSrc).toContain("phase: 'opening_window'");
+    expect(localOpenSrc).toContain("phase: 'open_ready'");
+    expect(localOpenSrc).not.toContain('Start the runtime first, then open this environment.');
+
+    const refreshRuntimeStart = mainSrc.indexOf('async function refreshEnvironmentRuntimeFromLauncher(');
+    const refreshRuntimeEnd = mainSrc.indexOf('async function refreshAllEnvironmentRuntimesFromLauncher(', refreshRuntimeStart);
+    const refreshRuntimeSrc = mainSrc.slice(refreshRuntimeStart, refreshRuntimeEnd);
+    expect(refreshRuntimeSrc).toContain('const runtimeRecord = currentLocalEnvironmentRuntimeRecord(localEnvironment)\n      ?? await attachLocalEnvironmentRuntime(localEnvironment);');
+  });
+
   it('keeps provider-link tickets separate from remote open route readiness', () => {
     const mainSrc = readMainSource();
 

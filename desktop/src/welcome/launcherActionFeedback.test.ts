@@ -82,6 +82,18 @@ describe('launcherActionFeedback', () => {
       refresh_snapshot: false,
       delivery: 'toast',
     });
+
+    expect(launcherActionFailurePresentation({
+      ok: false,
+      code: 'runtime_not_started',
+      scope: 'environment',
+      message: '',
+    })).toEqual({
+      message: 'Start the runtime before opening this environment.',
+      tone: 'warning',
+      refresh_snapshot: false,
+      delivery: 'toast',
+    });
   });
 
   it('turns provider authorization failures into persistent reconnect actions', () => {

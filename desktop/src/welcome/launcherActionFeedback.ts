@@ -80,7 +80,7 @@ export function launcherActionFailurePresentation(
       };
     case 'runtime_not_started':
       return {
-        message: failure.message || 'Start the runtime first, then open this environment.',
+        message: failure.message || 'Start the runtime before opening this environment.',
         tone: 'warning',
         refresh_snapshot: refreshSnapshot,
         delivery,

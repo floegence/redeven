@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/floegence/redeven/internal/lockfile"
 	"github.com/floegence/redeven/internal/runtimemanagement"
 )
 
@@ -71,7 +72,14 @@ func (c *cli) desktopRuntimeStopCmd(args []string) int {
 		fmt.Fprintf(c.stderr, "desktop-runtime-stop failed: %v\n", err)
 		return 1
 	}
-	if status.State == runtimemanagement.AttachStateNotRunning || status.State == runtimemanagement.AttachStateStaleLock {
+	if status.State == runtimemanagement.AttachStateNotRunning {
+		return 0
+	}
+	if status.State == runtimemanagement.AttachStateStaleLock {
+		if err := retireStaleRuntimeLease(status, 0); err != nil {
+			fmt.Fprintf(c.stderr, "desktop-runtime-stop failed: %v\n", err)
+			return 1
+		}
 		return 0
 	}
 	if status.Identity.PID <= 0 {
@@ -90,14 +98,53 @@ func (c *cli) desktopRuntimeStopCmd(args []string) int {
 		}
 	}
 	deadline := time.Now().Add(*gracePeriod)
+	var lastStatus runtimemanagement.RuntimeAttachStatus
+	var lastStaleRetireErr error
 	for time.Now().Before(deadline) {
 		attached, probeErr := loadDesktopRuntimeStatus(*stateRoot, *probeTimeout)
-		if probeErr == nil && (attached.State == runtimemanagement.AttachStateNotRunning || attached.State == runtimemanagement.AttachStateStaleLock) {
-			return 0
+		if probeErr == nil {
+			lastStatus = attached
+			if attached.State == runtimemanagement.AttachStateNotRunning {
+				return 0
+			}
+			if attached.State == runtimemanagement.AttachStateStaleLock {
+				if err := retireStaleRuntimeLease(attached, status.Identity.PID); err != nil {
+					lastStaleRetireErr = err
+				}
+			}
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
+	if lastStatus.State == runtimemanagement.AttachStateStaleLock && lastStaleRetireErr == nil {
+		confirmed, probeErr := loadDesktopRuntimeStatus(*stateRoot, *probeTimeout)
+		if probeErr == nil && confirmed.State == runtimemanagement.AttachStateNotRunning {
+			return 0
+		}
+	}
+	if lastStaleRetireErr != nil {
+		fmt.Fprintf(c.stderr, "desktop-runtime-stop failed: %v\n", lastStaleRetireErr)
+		return 1
+	}
 	return 0
+}
+
+func retireStaleRuntimeLease(status runtimemanagement.RuntimeAttachStatus, expectedPID int) error {
+	if status.State != runtimemanagement.AttachStateStaleLock {
+		return nil
+	}
+	lockPath := strings.TrimSpace(status.Diagnostics.LockPath)
+	if lockPath == "" {
+		return errors.New("stale runtime lock did not report a lock path")
+	}
+	lockPID := status.Diagnostics.LockPID
+	if expectedPID > 0 && lockPID > 0 && lockPID != expectedPID {
+		return fmt.Errorf("stale runtime lock belongs to pid %d, expected stopped pid %d", lockPID, expectedPID)
+	}
+	lk, err := lockfile.Acquire(lockPath)
+	if err != nil {
+		return fmt.Errorf("retire stale runtime lock: %w", err)
+	}
+	return lk.Release()
 }
 
 func desktopLaunchReportFromRuntimeStatus(state runtimemanagement.RuntimeAttachStatus, status desktopLaunchStatus) desktopLaunchReport {
