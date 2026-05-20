@@ -1648,6 +1648,61 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildProviderBackedEnvironmentActionModel(externalEntry!).action_presentation.primary_action_overlay).toBeUndefined();
   });
 
+  it('restores Local Host start guidance after Open-owned preflight confirms the runtime is offline', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment(),
+      }),
+      localRuntimeHealth: {
+        local: {
+          status: 'offline',
+          checked_at_unix_ms: 100,
+          source: 'local_runtime_probe',
+          freshness: 'fresh',
+          offline_reason_code: 'not_started',
+          offline_reason: 'Start the local runtime before opening this environment.',
+        },
+      },
+    });
+    const localEntry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
+    expect(localEntry).toBeTruthy();
+
+    const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);
+    expect(actionModel).toMatchObject({
+      status_label: 'RUNTIME OFFLINE',
+      status_tone: 'warning',
+      action_presentation: {
+        primary_action: {
+          intent: 'open',
+          label: 'Open',
+          enabled: false,
+        },
+        primary_action_overlay: {
+          kind: 'popover',
+          title: 'Start the local runtime to continue',
+          detail: 'Open becomes available once the runtime is ready on this device.',
+          actions: expect.arrayContaining([
+            expect.objectContaining({
+              label: 'Start runtime',
+              action: expect.objectContaining({
+                intent: 'start_runtime',
+                enabled: true,
+                runtime_operation_method: 'local_host',
+              }),
+            }),
+            expect.objectContaining({
+              label: 'Refresh status',
+              action: expect.objectContaining({
+                intent: 'refresh_runtime',
+                enabled: true,
+              }),
+            }),
+          ]),
+        },
+      },
+    });
+  });
+
   it('shows runtime refresh freshness as an in-card status without replacing environment details', () => {
     const localSnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({

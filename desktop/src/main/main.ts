@@ -2334,7 +2334,7 @@ async function probeLocalEnvironmentRuntimeHealth(
   const runtime = hydratedPreferences.local_environment.local_hosting.current_runtime;
   if (!runtime) {
     return {
-      health: offlineRuntimeHealth('local_runtime_probe', 'not_started', 'Serve the runtime first'),
+      health: offlineRuntimeHealth('local_runtime_probe', 'not_started', 'Start the local runtime before opening this environment.'),
     };
   }
   return {
@@ -5304,6 +5304,39 @@ function launcherActionFailureForRuntimeHealthPreflight(
   );
 }
 
+function launcherActionFailureForRuntimeOpenPreflightMessage(
+  code: DesktopLauncherActionFailureCode,
+  message: string,
+  options: Readonly<{
+    environmentID: string;
+    targetLabel: string;
+    providerOrigin?: string;
+    providerID?: string;
+    envPublicID?: string;
+  }>,
+): DesktopLauncherActionFailure {
+  const summary = compact(message) || 'Desktop could not verify this runtime before opening it.';
+  const failure = desktopOperationFailurePresentation({
+    code: 'environment_open_failed',
+    title: 'Open Failed',
+    summary,
+    targetLabel: options.targetLabel,
+  });
+  return launcherActionFailure(
+    code,
+    'environment',
+    failure.summary,
+    {
+      environmentID: options.environmentID,
+      providerOrigin: options.providerOrigin,
+      providerID: options.providerID,
+      envPublicID: options.envPublicID,
+      shouldRefreshSnapshot: true,
+      failure,
+    },
+  );
+}
+
 function launcherActionFailureFromSessionOpenError(
   error: unknown,
   options: Readonly<{
@@ -5327,6 +5360,74 @@ function launcherActionFailureFromSessionOpenError(
       failure,
     },
   );
+}
+
+type LocalHostOpenTarget = Readonly<{
+  environmentID: string;
+  environmentLabel: string;
+  hostAccess: Extract<DesktopRuntimeHostAccess, Readonly<{ kind: 'local_host' }>>;
+  placement: Extract<DesktopRuntimePlacement, Readonly<{ kind: 'host_process' }>>;
+  targetID: DesktopRuntimeTargetID;
+  targetLabel: string;
+}>;
+
+function localHostOpenTarget(environment: DesktopLocalEnvironmentState): LocalHostOpenTarget {
+  const hostAccess: Extract<DesktopRuntimeHostAccess, Readonly<{ kind: 'local_host' }>> = { kind: 'local_host' };
+  const placement: Extract<DesktopRuntimePlacement, Readonly<{ kind: 'host_process' }>> = {
+    kind: 'host_process',
+    runtime_root: environment.local_hosting.state_dir,
+  };
+  return {
+    environmentID: environment.id,
+    environmentLabel: environment.label,
+    hostAccess,
+    placement,
+    targetID: desktopRuntimeTargetID(hostAccess, placement, environment.id),
+    targetLabel: environment.label,
+  };
+}
+
+function localRuntimeHealthForOpenPreflight(environmentID: string): DesktopRuntimeHealth | undefined {
+  return welcomeRuntimeHealthStore.snapshot().localRuntimeHealth[environmentID];
+}
+
+function localEnvironmentFailureContext(environment: DesktopLocalEnvironmentState): Readonly<{
+  environmentID: string;
+  providerOrigin?: string;
+  providerID?: string;
+  envPublicID?: string;
+}> {
+  return {
+    environmentID: environment.id,
+    providerOrigin: localEnvironmentProviderOrigin(environment),
+    providerID: localEnvironmentProviderID(environment),
+    envPublicID: localEnvironmentPublicID(environment),
+  };
+}
+
+function finishLocalHostOpenFailure(
+  operationKey: string,
+  target: LocalHostOpenTarget,
+  signal: AbortSignal | undefined,
+  result: DesktopLauncherActionFailure,
+): DesktopLauncherActionFailure {
+  launcherOperations.finish(operationKey, signal?.aborted ? 'canceled' : 'failed', {
+    phase: signal?.aborted ? 'canceled' : 'failed',
+    title: signal?.aborted ? 'Open canceled' : 'Open failed',
+    detail: signal?.aborted ? 'Desktop canceled this open request.' : result.message,
+    open_progress: buildOpenConnectionProgress({
+      hostAccess: target.hostAccess,
+      placement: target.placement,
+      phase: signal?.aborted ? 'canceled' : 'failed',
+      environmentID: target.environmentID,
+      environmentLabel: target.environmentLabel,
+      targetID: target.targetID,
+      targetLabel: target.targetLabel,
+    }),
+    ...(signal?.aborted || !result.failure ? {} : { failure: result.failure }),
+  });
+  scheduleLauncherOperationRemoval(operationKey);
+  return result;
 }
 
 async function openLocalEnvironmentRecord(
@@ -5355,56 +5456,113 @@ async function openLocalEnvironmentRecord(
     });
   }
 
-  let runtimeRecord = await attachLocalEnvironmentRuntime(environment);
-  const ownerID = await desktopRuntimeOwnerID();
-  const expectedRuntimeIdentity = bundledRuntimeIdentity();
-  if (!runtimeRecord) {
-    return launcherActionFailure(
-      'runtime_not_started',
-      'environment',
-      'Start the runtime first, then open this environment.',
-      {
-        environmentID: environment.id,
-        providerOrigin: localEnvironmentProviderOrigin(environment),
-        providerID: localEnvironmentProviderID(environment),
-        envPublicID: localEnvironmentPublicID(environment),
-        shouldRefreshSnapshot: true,
-      },
-    );
-  }
-  const runtimePlan = buildDesktopLocalRuntimeOpenPlan(
-    { kind: 'local_environment' },
-    runtimeRecord.startup,
-    {
-      desktopOwnerID: ownerID,
-      expectedRuntimeIdentity,
-    },
-  );
-  if (runtimePlan.requires_restart || !runtimePlan.can_open) {
-    return launcherActionFailure(
-      'runtime_not_ready',
-      'environment',
-      runtimePlan.message,
-      {
-        environmentID: environment.id,
-        providerOrigin: localEnvironmentProviderOrigin(environment),
-        providerID: localEnvironmentProviderID(environment),
-        envPublicID: localEnvironmentPublicID(environment),
-        shouldRefreshSnapshot: true,
-      },
-    );
-  }
-  if (!runtimeServiceIsOpenable(runtimeRecord.startup.runtime_service)) {
-    return launcherActionFailureForRuntimeNotOpenable(runtimeRecord.startup, {
-      environmentID: environment.id,
-      providerOrigin: localEnvironmentProviderOrigin(environment),
-      providerID: localEnvironmentProviderID(environment),
-      envPublicID: localEnvironmentPublicID(environment),
-    });
-  }
-
+  const openTarget = localHostOpenTarget(environment);
+  const operationKey = `${openTarget.targetID}:open`;
+  const operation = launcherOperations.create({
+    operation_key: operationKey,
+    action: 'open_local_environment',
+    subject_kind: 'local_environment',
+    subject_id: environment.id,
+    environment_id: environment.id,
+    environment_label: environment.label,
+    phase: 'checking_runtime_record',
+    title: 'Checking runtime status',
+    detail: 'Desktop is checking the runtime status before opening this environment.',
+    open_progress: buildOpenConnectionProgress({
+      hostAccess: openTarget.hostAccess,
+      placement: openTarget.placement,
+      phase: 'checking_runtime_record',
+      environmentID: openTarget.environmentID,
+      environmentLabel: openTarget.environmentLabel,
+      targetID: openTarget.targetID,
+      targetLabel: openTarget.targetLabel,
+    }),
+    cancelable: true,
+    interrupt_label: 'Stop opening',
+    interrupt_detail: 'Desktop is stopping this open request before opening the local environment window.',
+    interrupt_kind: 'stop_opening',
+  });
+  const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
+  const failureContext = localEnvironmentFailureContext(environment);
+  let runtimeRecord: LocalEnvironmentRuntimeRecord | null = null;
   let sessionRecord: DesktopSessionRecord | null = null;
+
   try {
+    runtimeRecord = await attachLocalEnvironmentRuntime(environment);
+    if (!runtimeRecord) {
+      updateOpenConnectionOperation(operationKey, {
+        hostAccess: openTarget.hostAccess,
+        placement: openTarget.placement,
+        phase: 'checking_runtime_record',
+        environmentID: openTarget.environmentID,
+        environmentLabel: openTarget.environmentLabel,
+        targetID: openTarget.targetID,
+        targetLabel: openTarget.targetLabel,
+        title: 'Checking runtime status',
+        detail: 'Desktop is checking the runtime status before opening this environment.',
+      });
+      await refreshWelcomeRuntimeHealthForEnvironment(environment.id);
+      runtimeRecord = await attachLocalEnvironmentRuntime(environment);
+      if (!runtimeRecord) {
+        const result = launcherActionFailureForRuntimeHealthPreflight(
+          localRuntimeHealthForOpenPreflight(environment.id),
+          {
+            environmentID: environment.id,
+            targetLabel: environment.label,
+          },
+        );
+        return finishLocalHostOpenFailure(operationKey, openTarget, signal, result);
+      }
+    }
+
+    const ownerID = await desktopRuntimeOwnerID();
+    const runtimePlan = buildDesktopLocalRuntimeOpenPlan(
+      { kind: 'local_environment' },
+      runtimeRecord.startup,
+      {
+        desktopOwnerID: ownerID,
+        expectedRuntimeIdentity: bundledRuntimeIdentity(),
+      },
+    );
+    if (runtimePlan.requires_restart || !runtimePlan.can_open) {
+      const result = launcherActionFailureForRuntimeOpenPreflightMessage(
+        'runtime_not_ready',
+        runtimePlan.message,
+        {
+          ...failureContext,
+          targetLabel: environment.label,
+        },
+      );
+      return finishLocalHostOpenFailure(operationKey, openTarget, signal, result);
+    }
+
+    updateOpenConnectionOperation(operationKey, {
+      hostAccess: openTarget.hostAccess,
+      placement: openTarget.placement,
+      phase: 'checking_env_app_readiness',
+      environmentID: openTarget.environmentID,
+      environmentLabel: openTarget.environmentLabel,
+      targetID: openTarget.targetID,
+      targetLabel: openTarget.targetLabel,
+      title: 'Checking app readiness',
+      detail: 'Desktop is checking whether the local Env App is ready to open.',
+    });
+    if (!runtimeServiceIsOpenable(runtimeRecord.startup.runtime_service)) {
+      const result = launcherActionFailureForRuntimeNotOpenable(runtimeRecord.startup, failureContext);
+      return finishLocalHostOpenFailure(operationKey, openTarget, signal, result);
+    }
+
+    updateOpenConnectionOperation(operationKey, {
+      hostAccess: openTarget.hostAccess,
+      placement: openTarget.placement,
+      phase: 'opening_window',
+      environmentID: openTarget.environmentID,
+      environmentLabel: openTarget.environmentLabel,
+      targetID: openTarget.targetID,
+      targetLabel: openTarget.targetLabel,
+      title: 'Opening environment',
+      detail: 'Desktop is opening the local Env App window.',
+    });
     sessionRecord = await createSessionRecord(target, runtimeRecord.startup, {
       runtimeHandle: runtimeRecord.runtime_handle,
       attached: runtimeRecord.runtime_handle.launch_mode === 'attached',
@@ -5412,15 +5570,26 @@ async function openLocalEnvironmentRecord(
     });
     await waitForSessionInitialLoad(sessionRecord);
   } catch (error) {
-    return launcherActionFailureFromSessionOpenError(error, {
-      environmentID: environment.id,
-      providerOrigin: localEnvironmentProviderOrigin(environment),
-      providerID: localEnvironmentProviderID(environment),
-      envPublicID: localEnvironmentPublicID(environment),
-    });
+    const result = launcherActionFailureFromSessionOpenError(error, failureContext);
+    return finishLocalHostOpenFailure(operationKey, openTarget, signal, result);
   }
   resetLauncherIssueState();
   await persistDesktopPreferences(rememberLocalEnvironmentUse(preferences, environment.id, 'local_host'));
+  launcherOperations.finish(operationKey, 'succeeded', {
+    phase: 'open_ready',
+    title: 'Environment open',
+    detail: 'Desktop opened this environment.',
+    open_progress: buildOpenConnectionProgress({
+      hostAccess: openTarget.hostAccess,
+      placement: openTarget.placement,
+      phase: 'open_ready',
+      environmentID: openTarget.environmentID,
+      environmentLabel: openTarget.environmentLabel,
+      targetID: openTarget.targetID,
+      targetLabel: openTarget.targetLabel,
+    }),
+  });
+  scheduleLauncherOperationRemoval(operationKey);
   return launcherActionSuccess('opened_environment_window', {
     sessionKey: target.session_key,
   });
@@ -7302,7 +7471,8 @@ async function refreshEnvironmentRuntimeFromLauncher(
 
   const localEnvironment = findLocalEnvironmentByID(preferences, environmentID);
   if (localEnvironment?.local_hosting) {
-    const runtimeRecord = currentLocalEnvironmentRuntimeRecord(localEnvironment);
+    const runtimeRecord = currentLocalEnvironmentRuntimeRecord(localEnvironment)
+      ?? await attachLocalEnvironmentRuntime(localEnvironment);
     if (runtimeRecord?.startup.runtime_service) {
       await syncLinkedProviderRuntimeHealthFromService(runtimeRecord.startup.runtime_service).catch(() => undefined);
     }

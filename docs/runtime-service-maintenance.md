@@ -82,8 +82,8 @@ Detection rules:
   non-provider entry, even when `Auto status detection` is off.
 - `NOT CHECKED` means status freshness is unknown, not that the runtime is
   offline. `Open` remains clickable for Local/SSH/container runtime cards and
-  starts with the same read-only preflight before opening any bridge, tunnel, or
-  Env App window.
+  starts with the same read-only preflight before attaching a Local Host runtime,
+  opening any bridge or tunnel, or creating an Env App window.
 - If a target already has a probe in flight, Desktop reuses that in-flight probe
   instead of starting a duplicate probe.
 - A target with a running and openable Runtime Service becomes `Open`-ready
@@ -456,6 +456,9 @@ Desktop launcher cards keep their current dense SaaS tool layout:
   runtime health for that environment.
 - Primary actions remain route-aware:
   - compatible: `Open`
+  - unknown Local Host freshness: `Open` first checks the Local Host runtime; if
+    the probe reports stopped, the card settles to stopped-runtime guidance with
+    `Start runtime` and `Refresh status`
   - not running: `Open` stays disabled and offers `Start runtime`
   - first install needed: `Open` stays disabled and offers `Start runtime`
   - stale lease diagnostic: presented as not running; `Open` stays disabled and offers `Start runtime` plus `Refresh status`
