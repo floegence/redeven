@@ -105,7 +105,7 @@ type fixture struct {
 }
 
 func TestDockerUbuntuDesktopRuntimeLifecycle(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
 
 	f := newFixture(t)
@@ -114,6 +114,7 @@ func TestDockerUbuntuDesktopRuntimeLifecycle(t *testing.T) {
 	defer f.cleanup(context.Background())
 	f.detectContainerArch(ctx)
 	f.buildBinaries(ctx)
+	f.assertRuntimeNotStarted(ctx)
 
 	f.startRuntime(ctx, containerRedeven)
 	initial := f.waitReady(ctx)
@@ -143,11 +144,16 @@ func TestDockerUbuntuDesktopRuntimeLifecycle(t *testing.T) {
 	}
 	afterRestart := f.waitPingAfter(ctx, afterSocketRecovery.ProcessStartedAtMs)
 
-	if _, err := f.tryHelper(ctx, afterRestart.LocalUIURL, "upgrade", targetVersion); err == nil || !strings.Contains(err.Error(), "upgrade not supported") {
+	stoppedAfterStop := f.stopRuntime(ctx)
+	f.assertStoppedRuntimeStatus(stoppedAfterStop)
+	f.startRuntime(ctx, containerRedeven)
+	afterManualStart := f.waitPingAfter(ctx, afterRestart.ProcessStartedAtMs)
+
+	if _, err := f.tryHelper(ctx, afterManualStart.LocalUIURL, "upgrade", targetVersion); err == nil || !strings.Contains(err.Error(), "upgrade not supported") {
 		t.Fatalf("desktop-managed sys.upgrade error = %v, want unsupported", err)
 	}
 	f.performDesktopOwnedUpgrade(ctx)
-	afterUpgrade := f.waitPingAfter(ctx, afterRestart.ProcessStartedAtMs)
+	afterUpgrade := f.waitPingAfter(ctx, afterManualStart.ProcessStartedAtMs)
 
 	finalStatus := f.waitReady(ctx)
 	if finalStatus.LocalUIURL == "" {
@@ -268,19 +274,21 @@ func (f *fixture) performDesktopOwnedUpgrade(ctx context.Context) {
 	f.startRuntime(ctx, upgradedRedeven)
 }
 
-func (f *fixture) stopRuntime(ctx context.Context) {
+func (f *fixture) stopRuntime(ctx context.Context) launchReport {
 	f.t.Helper()
 	f.dockerExec(ctx, nil, containerRedeven, "desktop-runtime-stop", "--state-root", containerStateRoot, "--grace-period", "10s")
 	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		report, err := f.runtimeStatus(ctx)
 		if err == nil && report.Status != "ready" {
-			return
+			f.assertStoppedRuntimeStatus(report)
+			return report
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
 	f.dumpContainerDiagnostics(ctx)
 	f.t.Fatalf("runtime did not stop")
+	return launchReport{}
 }
 
 func (f *fixture) recoverRuntimeAfterManagementSocketLoss(ctx context.Context, previousProcessStartedAtMs int64) pingSnapshot {
@@ -303,9 +311,47 @@ func (f *fixture) recoverRuntimeAfterManagementSocketLoss(ctx context.Context, p
 	if blocked.Diagnostics == nil || !blocked.Diagnostics.PIDAlive || blocked.Diagnostics.SocketReachable {
 		f.t.Fatalf("blocked status did not expose socket diagnostics: %#v", blocked)
 	}
+	if blocked.Diagnostics.AttachState != "live_process_without_management_socket" || blocked.Diagnostics.FailureCode != "management_socket_unreachable" {
+		f.t.Fatalf("blocked diagnostics = %#v, want live_process_without_management_socket/management_socket_unreachable", blocked.Diagnostics)
+	}
 	f.stopRuntime(ctx)
 	f.startRuntime(ctx, containerRedeven)
 	return f.waitPingAfter(ctx, previousProcessStartedAtMs)
+}
+
+func (f *fixture) assertRuntimeNotStarted(ctx context.Context) launchReport {
+	f.t.Helper()
+	report, err := f.runtimeStatus(ctx)
+	if err != nil {
+		f.t.Fatalf("runtime status before start: %v", err)
+	}
+	f.assertStoppedRuntimeStatus(report)
+	if report.Code != "not_running" {
+		f.t.Fatalf("runtime status before start code = %q, want not_running; report=%#v", report.Code, report)
+	}
+	return report
+}
+
+func (f *fixture) assertStoppedRuntimeStatus(report launchReport) {
+	f.t.Helper()
+	if report.Status != "blocked" {
+		f.t.Fatalf("stopped runtime status = %q, want blocked; report=%#v", report.Status, report)
+	}
+	if report.Code != "not_running" && report.Code != "stale_lock" {
+		f.t.Fatalf("stopped runtime code = %q, want not_running or stale_lock; report=%#v", report.Code, report)
+	}
+	if report.LocalUIURL != "" || report.RuntimeControl != nil {
+		f.t.Fatalf("stopped runtime exposed open surfaces: %#v", report)
+	}
+	if report.Diagnostics == nil {
+		f.t.Fatalf("stopped runtime did not expose diagnostics: %#v", report)
+	}
+	if report.Diagnostics.AttachState != report.Code {
+		f.t.Fatalf("stopped runtime attach_state = %q, want %q; diagnostics=%#v", report.Diagnostics.AttachState, report.Code, report.Diagnostics)
+	}
+	if report.Diagnostics.PIDAlive || report.Diagnostics.SocketReachable {
+		f.t.Fatalf("stopped runtime diagnostics should not report a live reachable runtime: %#v", report.Diagnostics)
+	}
 }
 
 func (f *fixture) waitReady(ctx context.Context) launchReport {
@@ -318,6 +364,7 @@ func (f *fixture) waitReady(ctx context.Context) launchReport {
 		if err == nil {
 			last = report
 			if report.Status == "ready" && report.LocalUIURL != "" && report.RuntimeControl != nil && report.PID > 0 {
+				f.assertReadyRuntimeStatus(report)
 				return report
 			}
 			lastErr = fmt.Errorf("runtime status is not ready: %#v", report)
@@ -329,6 +376,19 @@ func (f *fixture) waitReady(ctx context.Context) launchReport {
 	f.dumpContainerDiagnostics(ctx)
 	f.t.Fatalf("runtime did not become ready: %v; last=%#v", lastErr, last)
 	return launchReport{}
+}
+
+func (f *fixture) assertReadyRuntimeStatus(report launchReport) {
+	f.t.Helper()
+	if !report.DesktopManaged || report.DesktopOwnerID != desktopOwnerID {
+		f.t.Fatalf("ready runtime ownership = desktop_managed:%v owner:%q, want owner %q; report=%#v", report.DesktopManaged, report.DesktopOwnerID, desktopOwnerID, report)
+	}
+	if report.RuntimeControl == nil || report.RuntimeControl.DesktopOwnerID != desktopOwnerID || report.RuntimeControl.Token == "" {
+		f.t.Fatalf("ready runtime-control endpoint is incomplete: %#v", report.RuntimeControl)
+	}
+	if report.RuntimeService == nil {
+		f.t.Fatalf("ready status did not include runtime_service: %#v", report)
+	}
 }
 
 func (f *fixture) waitPingAfter(ctx context.Context, previousProcessStartedAtMs int64) pingSnapshot {

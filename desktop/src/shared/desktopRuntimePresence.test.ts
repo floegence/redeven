@@ -8,6 +8,15 @@ import {
 } from './desktopRuntimePresence';
 
 const hostPlacement = { kind: 'host_process' as const, runtime_root: '' };
+const localContainerPlacement = {
+  kind: 'container_process' as const,
+  container_engine: 'docker' as const,
+  container_id: 'abc123',
+  container_ref: 'redeven-nginx-dev',
+  container_label: 'redeven-nginx-dev',
+  runtime_root: '/root/.redeven',
+  bridge_strategy: 'exec_stream' as const,
+};
 
 describe('desktopRuntimePresence', () => {
   it('uses explicit operation plans for running managed runtimes', () => {
@@ -79,13 +88,9 @@ describe('desktopRuntimePresence', () => {
       surface: 'managed_runtime_card',
       host_access: { kind: 'local_host' },
       placement: {
-        kind: 'container_process',
-        container_engine: 'docker',
-        container_id: 'abc123',
+        ...localContainerPlacement,
         container_ref: 'web',
         container_label: 'web',
-        runtime_root: '/root/.redeven',
-        bridge_strategy: 'exec_stream',
       },
       running: false,
       openable: false,
@@ -124,13 +129,9 @@ describe('desktopRuntimePresence', () => {
       surface: 'managed_runtime_card',
       host_access: { kind: 'local_host' },
       placement: {
-        kind: 'container_process',
-        container_engine: 'docker',
-        container_id: 'abc123',
+        ...localContainerPlacement,
         container_ref: 'web',
         container_label: 'web',
-        runtime_root: '/root/.redeven',
-        bridge_strategy: 'exec_stream',
       },
       running: false,
       openable: false,
@@ -158,19 +159,145 @@ describe('desktopRuntimePresence', () => {
     expect(plans.refresh.availability).toBe('available');
   });
 
+  it('offers Start for a stopped container runtime when the container target is reachable', () => {
+    const plans = buildDesktopRuntimeOperationPlans({
+      surface: 'managed_runtime_card',
+      host_access: { kind: 'local_host' },
+      placement: localContainerPlacement,
+      running: false,
+      openable: false,
+      runtime_control_status: desktopRuntimeControlStatusMissing(
+        'not_started',
+        'Start this runtime before connecting it to a provider.',
+      ),
+    });
+
+    expect(plans.open).toMatchObject({
+      availability: 'blocked',
+      method: 'local_container_exec',
+      reason_code: 'runtime_not_started',
+      message: 'Start this runtime before opening it.',
+    });
+    expect(plans.start).toMatchObject({
+      availability: 'available',
+      method: 'local_container_exec',
+      menu_visibility: 'contextual',
+    });
+    expect(plans.stop).toMatchObject({
+      availability: 'unavailable',
+      reason_code: 'runtime_not_started',
+      menu_visibility: 'stable',
+    });
+    expect(plans.restart).toMatchObject({
+      availability: 'unavailable',
+      reason_code: 'runtime_not_started',
+      menu_visibility: 'stable',
+    });
+    expect(plans.update).toMatchObject({
+      availability: 'available',
+      method: 'local_container_exec',
+      menu_visibility: 'stable',
+    });
+  });
+
+  it('blocks Open, Start, and Restart until an outdated container runtime is updated', () => {
+    const plans = buildDesktopRuntimeOperationPlans({
+      surface: 'managed_runtime_card',
+      host_access: { kind: 'local_host' },
+      placement: localContainerPlacement,
+      running: false,
+      openable: false,
+      package_state: {
+        state: 'outdated',
+        current_version: 'v0.5.9',
+        target_version: 'v0.6.7',
+      },
+      runtime_control_status: desktopRuntimeControlStatusMissing(
+        'not_started',
+        'Start this runtime before connecting it to a provider.',
+      ),
+    });
+
+    expect(plans.open).toMatchObject({
+      availability: 'blocked',
+      method: 'local_container_exec',
+      message: 'Update this runtime from v0.5.9 to v0.6.7 before continuing.',
+    });
+    expect(plans.start).toMatchObject({
+      availability: 'blocked',
+      reason_code: 'runtime_update_required',
+      message: 'Update this runtime from v0.5.9 to v0.6.7 before continuing.',
+    });
+    expect(plans.restart).toMatchObject({
+      availability: 'unavailable',
+      reason_code: 'runtime_update_required',
+      message: 'Update this runtime from v0.5.9 to v0.6.7 before continuing.',
+    });
+    expect(plans.update).toMatchObject({
+      availability: 'available',
+      method: 'local_container_exec',
+      reason_code: 'runtime_update_required',
+      menu_visibility: 'stable',
+    });
+  });
+
+  it('guides running container runtime-control failures through Restart while preserving Stop and Update', () => {
+    const maintenance = {
+      kind: 'runtime_restart_required' as const,
+      required_for: 'open' as const,
+      recovery_action: 'restart_runtime' as const,
+      can_desktop_start: false,
+      can_desktop_restart: true,
+      has_active_work: true,
+      active_work_label: 'Existing runtime work may be active',
+      attach_state: 'live_process_without_management_socket',
+      failure_code: 'management_socket_unreachable',
+      lock_pid: 4242,
+      message: 'A Redeven runtime process is alive, but its management socket is not reachable.',
+    };
+    const plans = buildDesktopRuntimeOperationPlans({
+      surface: 'managed_runtime_card',
+      host_access: { kind: 'local_host' },
+      placement: localContainerPlacement,
+      running: true,
+      openable: true,
+      runtime_control_status: desktopRuntimeControlStatusMissing(
+        'not_reported',
+        'Restart this runtime from Desktop so runtime-control can be prepared.',
+      ),
+      maintenance,
+    });
+
+    expect(plans.open).toMatchObject({
+      availability: 'blocked',
+      method: 'local_container_exec',
+      message: maintenance.message,
+      maintenance,
+    });
+    expect(plans.stop).toMatchObject({
+      availability: 'available',
+      method: 'local_container_exec',
+      menu_visibility: 'stable',
+    });
+    expect(plans.restart).toMatchObject({
+      availability: 'available',
+      method: 'local_container_exec',
+      message: maintenance.message,
+      menu_visibility: 'stable',
+    });
+    expect(plans.update).toMatchObject({
+      availability: 'available',
+      method: 'local_container_exec',
+      message: maintenance.message,
+      menu_visibility: 'stable',
+    });
+  });
+
   it('routes stale lock container recovery through Start instead of Restart', () => {
     const plans = buildDesktopRuntimeOperationPlans({
       surface: 'managed_runtime_card',
       host_access: { kind: 'local_host' },
-      placement: {
-        kind: 'container_process',
-        container_engine: 'docker',
-        container_id: 'abc123',
-        container_ref: 'redeven-nginx-dev',
-        container_label: 'redeven-nginx-dev',
-        runtime_root: '/root/.redeven',
-        bridge_strategy: 'exec_stream',
-      },
+      placement: localContainerPlacement,
       running: false,
       openable: false,
       runtime_control_status: desktopRuntimeControlStatusMissing(
@@ -239,13 +366,9 @@ describe('desktopRuntimePresence', () => {
         connect_timeout_seconds: 10,
       } },
       placement: {
-        kind: 'container_process',
-        container_engine: 'docker',
-        container_id: 'abc123',
+        ...localContainerPlacement,
         container_ref: 'web',
         container_label: 'web',
-        runtime_root: '/root/.redeven',
-        bridge_strategy: 'exec_stream',
       },
       running: true,
       openable: true,
@@ -264,15 +387,7 @@ describe('desktopRuntimePresence', () => {
     const plans = buildDesktopRuntimeOperationPlans({
       surface: 'managed_runtime_card',
       host_access: { kind: 'local_host' },
-      placement: {
-        kind: 'container_process',
-        container_engine: 'docker',
-        container_id: 'abc123',
-        container_ref: 'redeven-nginx-dev',
-        container_label: 'redeven-nginx-dev',
-        runtime_root: '/root/.redeven',
-        bridge_strategy: 'exec_stream',
-      },
+      placement: localContainerPlacement,
       running: true,
       openable: false,
       open_connection_required: true,
