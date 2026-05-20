@@ -991,13 +991,13 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
       expect.objectContaining({
-          id: 'start_runtime',
-          action: expect.objectContaining({
-            intent: 'start_runtime',
-            enabled: false,
-            disabled_reason: 'Update this runtime before continuing.',
-          }),
+        id: 'start_runtime',
+        action: expect.objectContaining({
+          intent: 'start_runtime',
+          enabled: false,
+          disabled_reason: 'Update this runtime from v0.5.9 to v0.6.7 before continuing.',
         }),
+      }),
       expect.objectContaining({
         id: 'update_runtime',
         action: expect.objectContaining({
@@ -1360,6 +1360,48 @@ describe('buildEnvironmentCardModel', () => {
         }),
       }),
     ]));
+  });
+
+  it('does not render stale restart maintenance when the runtime is openable', () => {
+    const runtimeService = providerRuntimeService();
+    const restartMaintenance = {
+      kind: 'runtime_restart_required' as const,
+      required_for: 'open' as const,
+      recovery_action: 'restart_runtime' as const,
+      can_desktop_start: false,
+      can_desktop_restart: true,
+      has_active_work: true,
+      active_work_label: 'Existing runtime work may be active',
+      message: 'A Redeven runtime process is alive, but its management socket is not reachable.',
+    };
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment(),
+      }),
+      localRuntimeHealth: {
+        local: {
+          status: 'online',
+          checked_at_unix_ms: Date.now(),
+          source: 'local_runtime_probe',
+          local_ui_url: 'http://127.0.0.1:24001/',
+          runtime_service: runtimeService,
+          runtime_maintenance: restartMaintenance,
+        },
+      },
+      managedRuntimePresenceByTargetID: {
+        'local:local': localRuntimePresence(runtimeService, {
+          maintenance: restartMaintenance,
+        }),
+      },
+    });
+    const entry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
+
+    expect(entry).toBeTruthy();
+    expect(entry?.runtime_maintenance).toBeUndefined();
+    expect(buildEnvironmentCardModel(entry!).status_label).toBe('Open');
+    const actionModel = buildProviderBackedEnvironmentActionModel(entry!);
+    expect(actionModel.status_label).not.toBe('RESTART REQUIRED');
+    expect(actionModel.action_presentation.primary_action_overlay).toBeUndefined();
   });
 
   it('keeps offline runtime controls separate from the primary Open action', () => {

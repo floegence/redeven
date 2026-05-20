@@ -1294,6 +1294,81 @@ describe('desktopWelcomeState', () => {
     });
   });
 
+  it('drops stale open maintenance when a saved runtime target reports an openable runtime', () => {
+    const targetID = 'local:container:docker:redeven-nginx-dev:63ce185e';
+    const placement = {
+      kind: 'container_process' as const,
+      container_engine: 'docker' as const,
+      container_id: 'container-stable-id',
+      container_ref: 'redeven-nginx-dev',
+      container_label: 'redeven-nginx-dev',
+      runtime_root: '/root/.redeven',
+      bridge_strategy: 'exec_stream' as const,
+    };
+    const maintenance = {
+      kind: 'runtime_restart_required' as const,
+      required_for: 'open' as const,
+      recovery_action: 'restart_runtime' as const,
+      can_desktop_start: false,
+      can_desktop_restart: true,
+      has_active_work: true,
+      active_work_label: 'Existing runtime work may be active',
+      target_runtime_version: 'v0.0.0-dev',
+      message: 'A Redeven runtime process is alive, but its management socket is not reachable.',
+    };
+    const presence = localRuntimePresence({
+      target_id: `local:${targetID}`,
+      placement_target_id: targetID,
+      environment_id: targetID,
+      label: 'redeven-nginx-dev',
+      runtime_key: targetID,
+      placement,
+      local_ui_url: 'http://127.0.0.1:40123/',
+      maintenance,
+    });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        saved_runtime_targets: [{
+          schema_version: 1,
+          id: targetID,
+          label: 'redeven-nginx-dev',
+          host_access: { kind: 'local_host' },
+          placement,
+          pinned: false,
+          last_used_at_ms: 1779100944496,
+          created_at_ms: 1779100944496,
+          updated_at_ms: 1779100944496,
+        }],
+      }),
+      savedRuntimeTargetHealth: {
+        [targetID]: {
+          status: 'online',
+          checked_at_unix_ms: 1000,
+          source: 'local_runtime_probe',
+          local_ui_url: 'http://127.0.0.1:40123/',
+          runtime_service: presence.runtime_service,
+          runtime_maintenance: maintenance,
+        },
+      },
+      managedRuntimePresenceByTargetID: {
+        [presence.target_id]: presence,
+      },
+    });
+
+    const entry = snapshot.environments.find((environment) => environment.id === targetID);
+
+    expect(entry).toMatchObject({
+      runtime_health: expect.not.objectContaining({
+        runtime_maintenance: expect.anything(),
+      }),
+      runtime_operations: expect.objectContaining({
+        open: expect.objectContaining({ availability: 'available' }),
+      }),
+    });
+    expect(entry?.runtime_maintenance).toBeUndefined();
+    expect(JSON.stringify(entry?.runtime_operations)).not.toContain('runtime_restart_required');
+  });
+
   it('preserves SSH runtime maintenance requirements before a window is open', () => {
     const sshID = 'ssh:devbox:2222:key_agent:remote_default';
     const snapshot = buildDesktopWelcomeSnapshot({

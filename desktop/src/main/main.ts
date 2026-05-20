@@ -303,6 +303,7 @@ import {
 import {
   buildDesktopRuntimeMaintenanceRequirement,
   desktopRuntimeBlockedReportIsStaleLock,
+  desktopRuntimeMaintenanceForRuntimeService,
   desktopRuntimeMaintenanceIsStaleLock,
   desktopRuntimeMaintenanceFromBlockedLaunchReport,
   type DesktopRuntimeHealth,
@@ -1341,7 +1342,8 @@ function managedRuntimePresence(args: Readonly<{
   maintenance?: DesktopRuntimeMaintenanceRequirement;
 }>): DesktopManagedRuntimePresence {
   const runtimeService = args.runtimeService ? normalizeRuntimeServiceSnapshot(args.runtimeService) : undefined;
-  const runtimePackageState = desktopRuntimePackageStateFromRuntimeService(runtimeService, args.maintenance);
+  const maintenance = desktopRuntimeMaintenanceForRuntimeService(args.maintenance, runtimeService);
+  const runtimePackageState = desktopRuntimePackageStateFromRuntimeService(runtimeService, maintenance);
   const openable = runtimeServiceIsOpenable(runtimeService);
   const openConnectionRequired = args.openConnectionRequired === true;
   return {
@@ -1370,11 +1372,39 @@ function managedRuntimePresence(args: Readonly<{
       package_state: runtimePackageState,
       runtime_service: runtimeService,
       runtime_control_status: args.runtimeControlStatus,
-      maintenance: args.maintenance,
+      maintenance,
     }),
-    ...(args.maintenance ? { maintenance: args.maintenance } : {}),
+    ...(maintenance ? { maintenance } : {}),
     checked_at_unix_ms: Date.now(),
   };
+}
+
+function runtimePlacementMaintenanceForRuntimeService(
+  targetID: DesktopRuntimeTargetID,
+  runtimeService: RuntimeServiceSnapshot | null | undefined,
+): DesktopRuntimeMaintenanceRequirement | undefined {
+  const maintenance = desktopRuntimeMaintenanceForRuntimeService(
+    runtimePlacementMaintenanceByTargetID.get(targetID),
+    runtimeService,
+  );
+  if (!maintenance) {
+    runtimePlacementMaintenanceByTargetID.delete(targetID);
+  }
+  return maintenance;
+}
+
+function sshRuntimeMaintenanceForRuntimeService(
+  runtimeKey: `ssh:${string}`,
+  runtimeService: RuntimeServiceSnapshot | null | undefined,
+): DesktopRuntimeMaintenanceRequirement | undefined {
+  const maintenance = desktopRuntimeMaintenanceForRuntimeService(
+    sshRuntimeMaintenanceByKey.get(runtimeKey),
+    runtimeService,
+  );
+  if (!maintenance) {
+    sshRuntimeMaintenanceByKey.delete(runtimeKey);
+  }
+  return maintenance;
 }
 
 async function inspectSavedRuntimeTargetState(
@@ -1388,7 +1418,7 @@ async function inspectSavedRuntimeTargetState(
       local_ui_url: bridgeRecord.startup.local_ui_url,
       runtime_service: bridgeRecord.startup.runtime_service,
       runtime_control_status: await runtimeControlStatusForStartup(bridgeRecord.startup),
-      maintenance: runtimePlacementMaintenanceByTargetID.get(target.id),
+      maintenance: runtimePlacementMaintenanceForRuntimeService(target.id, bridgeRecord.startup.runtime_service),
       placement: bridgeRecord.session.placement,
     };
   }
@@ -1404,7 +1434,7 @@ async function inspectSavedRuntimeTargetState(
         'forward_unavailable',
         'Open this runtime to prepare the Desktop bridge and provider connection.',
       ),
-      maintenance: runtimePlacementMaintenanceByTargetID.get(target.id),
+      maintenance: runtimePlacementMaintenanceForRuntimeService(target.id, readyRecord.startup?.runtime_service),
       placement: readyRecord.placement,
     };
   }
@@ -1471,7 +1501,7 @@ async function inspectSavedRuntimeTargetState(
             placement: resolution.placement,
           };
         }
-        const maintenance = runtimePlacementMaintenanceByTargetID.get(target.id);
+        const maintenance = runtimePlacementMaintenanceForRuntimeService(target.id, report.startup.runtime_service);
         if (runtimeServiceIsOpenable(report.startup.runtime_service)) {
           runtimePlacementReadyByTargetID.set(target.id, {
             runtime_key: target.id,
@@ -1494,9 +1524,7 @@ async function inspectSavedRuntimeTargetState(
             'forward_unavailable',
             'Open this runtime to prepare the Desktop bridge and provider connection.',
           ),
-          maintenance: maintenance && !runtimeServiceIsOpenable(report.startup.runtime_service)
-            ? maintenance
-            : undefined,
+          maintenance,
           placement: resolution.placement,
         };
       }
@@ -2136,13 +2164,15 @@ function onlineRuntimeHealth(
   runtimeService?: RuntimeServiceSnapshot,
   runtimeMaintenance?: DesktopRuntimeMaintenanceRequirement,
 ): DesktopRuntimeHealth {
+  const normalizedRuntimeService = runtimeService ? normalizeRuntimeServiceSnapshot(runtimeService) : undefined;
+  const effectiveMaintenance = desktopRuntimeMaintenanceForRuntimeService(runtimeMaintenance, normalizedRuntimeService);
   return {
     status: 'online',
     checked_at_unix_ms: Date.now(),
     source,
     local_ui_url: localUIURL,
-    ...(runtimeService ? { runtime_service: normalizeRuntimeServiceSnapshot(runtimeService) } : {}),
-    ...(runtimeMaintenance ? { runtime_maintenance: runtimeMaintenance } : {}),
+    ...(normalizedRuntimeService ? { runtime_service: normalizedRuntimeService } : {}),
+    ...(effectiveMaintenance ? { runtime_maintenance: effectiveMaintenance } : {}),
   };
 }
 
@@ -2308,12 +2338,7 @@ async function probeSavedSSHRuntimeHealth(
   const runtimeRecord = sshEnvironmentRuntimeByKey.get(runtimeKey) ?? null;
   const readyRecord = sshRuntimeReadyByKey.get(runtimeKey) ?? null;
   if (!runtimeRecord && readyRecord) {
-    const runtimeMaintenance = maintenance && !runtimeServiceIsOpenable(readyRecord.startup.runtime_service)
-      ? maintenance
-      : undefined;
-    if (!runtimeMaintenance) {
-      sshRuntimeMaintenanceByKey.delete(runtimeKey);
-    }
+    const runtimeMaintenance = sshRuntimeMaintenanceForRuntimeService(runtimeKey, readyRecord.startup.runtime_service);
     const health = onlineRuntimeHealth(
       'ssh_runtime_probe',
       readyRecord.startup.local_ui_url,
@@ -2339,12 +2364,7 @@ async function probeSavedSSHRuntimeHealth(
       connectTimeoutSeconds: environment.connect_timeout_seconds ?? undefined,
     });
     if (probe.status === 'ready') {
-      const runtimeMaintenance = maintenance && !runtimeServiceIsOpenable(probe.startup.runtime_service)
-        ? maintenance
-        : undefined;
-      if (!runtimeMaintenance) {
-        sshRuntimeMaintenanceByKey.delete(runtimeKey);
-      }
+      const runtimeMaintenance = sshRuntimeMaintenanceForRuntimeService(runtimeKey, probe.startup.runtime_service);
       const attachedHandle: DesktopSessionRuntimeHandle = {
         runtime_kind: 'ssh',
         lifecycle_owner: 'external',
@@ -2422,12 +2442,7 @@ async function probeSavedSSHRuntimeHealth(
     };
     sshEnvironmentRuntimeByKey.set(runtimeKey, updatedRuntimeRecord);
     const nextRuntimeService = startup.runtime_service ?? runtimeRecord.startup.runtime_service;
-    const runtimeMaintenance = maintenance && !runtimeServiceIsOpenable(nextRuntimeService)
-      ? maintenance
-      : undefined;
-    if (!runtimeMaintenance) {
-      sshRuntimeMaintenanceByKey.delete(runtimeKey);
-    }
+    const runtimeMaintenance = sshRuntimeMaintenanceForRuntimeService(runtimeKey, nextRuntimeService);
     const health = onlineRuntimeHealth('ssh_runtime_probe', startup.local_ui_url, nextRuntimeService, runtimeMaintenance);
     return {
       health,
