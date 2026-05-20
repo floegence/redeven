@@ -1625,6 +1625,7 @@ describe('desktopWelcomeState', () => {
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',
       local_ui_password_mode: 'replace',
+      auto_runtime_probe_enabled: false,
     });
   });
 

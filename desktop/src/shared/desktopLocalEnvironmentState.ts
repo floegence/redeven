@@ -49,6 +49,7 @@ export type DesktopLocalEnvironmentState = Readonly<{
   id: typeof LOCAL_ENVIRONMENT_ID;
   label: string;
   pinned: boolean;
+  auto_runtime_probe_enabled: boolean;
   created_at_ms: number;
   updated_at_ms: number;
   last_used_at_ms: number;
@@ -191,6 +192,7 @@ type CreateDesktopLocalEnvironmentStateOptions = Readonly<{
   label?: string;
   pinned?: boolean;
   access?: DesktopLocalEnvironmentAccess;
+  autoRuntimeProbeEnabled?: boolean;
   preferredOpenRoute?: DesktopLocalEnvironmentPreferredOpenRoute;
   currentProviderBinding?: DesktopLocalEnvironmentProviderBinding;
   owner?: DesktopLocalEnvironmentOwner;
@@ -214,6 +216,7 @@ export function createDesktopLocalEnvironmentState(
     id: LOCAL_ENVIRONMENT_ID,
     label: compact(options.label) || defaultDesktopLocalEnvironmentLabel(),
     pinned: options.pinned === true,
+    auto_runtime_probe_enabled: options.autoRuntimeProbeEnabled === true,
     created_at_ms: Number(options.createdAtMS ?? now) || now,
     updated_at_ms: Number(options.updatedAtMS ?? now) || now,
     last_used_at_ms: Number(options.lastUsedAtMS ?? 0) || 0,
@@ -244,6 +247,7 @@ export function projectProviderEnvironmentToLocalRuntimeTarget(
   return createDesktopLocalEnvironmentState({
     label: providerEnvironment.label,
     pinned: localEnvironment.pinned,
+    autoRuntimeProbeEnabled: localEnvironment.auto_runtime_probe_enabled,
     preferredOpenRoute: providerEnvironment.preferred_open_route,
     currentProviderBinding,
     access: localEnvironment.local_hosting.access,

@@ -26,6 +26,7 @@ export type DesktopWelcomeRuntimeHealthTarget = Readonly<{
   environment_id: string;
   slot: DesktopWelcomeRuntimeHealthSlot;
   presence_target_id?: DesktopProviderRuntimeLinkTargetID;
+  auto_refresh_enabled: boolean;
   checking_health: DesktopRuntimeHealth;
   probe: () => Promise<DesktopWelcomeRuntimeHealthProbeResult>;
 }>;
@@ -91,7 +92,6 @@ export class DesktopWelcomeRuntimeHealthStore {
       this.cache.set(target.key, {
         generation: 0,
         target,
-        health: withFreshness(target.checking_health, 'checking'),
       });
     }
   }
@@ -164,7 +164,7 @@ export class DesktopWelcomeRuntimeHealthStore {
     options: Readonly<{ force?: boolean }>,
   ): Promise<void> {
     const existingTask = this.inFlight.get(target.key);
-    if (existingTask && options.force !== true) {
+    if (existingTask) {
       return existingTask.promise;
     }
 

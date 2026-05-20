@@ -78,6 +78,7 @@ export type DesktopSavedEnvironment = Readonly<{
   label: string;
   local_ui_url: string;
   pinned: boolean;
+  auto_runtime_probe_enabled: boolean;
   created_at_ms: number;
   last_used_at_ms: number;
 }>;
@@ -88,6 +89,7 @@ export type DesktopSavedSSHEnvironment = Readonly<DesktopSSHEnvironmentDetails &
   ssh_password?: string;
   ssh_password_configured?: boolean;
   pinned: boolean;
+  auto_runtime_probe_enabled: boolean;
   created_at_ms: number;
   last_used_at_ms: number;
 }>;
@@ -101,6 +103,7 @@ export type DesktopSavedRuntimeTarget = Readonly<{
   ssh_password?: string;
   ssh_password_configured?: boolean;
   pinned: boolean;
+  auto_runtime_probe_enabled: boolean;
   last_used_at_ms: number;
   created_at_ms: number;
   updated_at_ms: number;
@@ -179,6 +182,7 @@ type DesktopSavedEnvironmentFile = Readonly<{
   label?: unknown;
   local_ui_url?: unknown;
   pinned?: unknown;
+  auto_runtime_probe_enabled?: unknown;
   created_at_ms?: unknown;
   last_used_at_ms?: unknown;
 }>;
@@ -198,6 +202,7 @@ type DesktopSavedSSHEnvironmentFile = Readonly<{
   created_at_ms?: unknown;
   updated_at_ms?: unknown;
   pinned?: unknown;
+  auto_runtime_probe_enabled?: unknown;
   last_used_at_ms?: unknown;
 }>;
 
@@ -207,6 +212,7 @@ type DesktopLocalEnvironmentStateCatalogFile = Readonly<{
   id?: unknown;
   label?: unknown;
   pinned?: unknown;
+  auto_runtime_probe_enabled?: unknown;
   created_at_ms?: unknown;
   updated_at_ms?: unknown;
   last_used_at_ms?: unknown;
@@ -245,6 +251,7 @@ type DesktopConnectionCatalogFile = Readonly<{
   host_access?: unknown;
   placement?: unknown;
   pinned?: unknown;
+  auto_runtime_probe_enabled?: unknown;
   created_at_ms?: unknown;
   updated_at_ms?: unknown;
   last_used_at_ms?: unknown;
@@ -348,6 +355,7 @@ export type UpsertDesktopSavedEnvironmentInput = Readonly<{
   environment_id: string;
   label: string;
   local_ui_url: string;
+  auto_runtime_probe_enabled?: boolean;
   pinned?: boolean;
   created_at_ms?: number;
   last_used_at_ms?: number;
@@ -358,6 +366,7 @@ export type UpsertDesktopSavedSSHEnvironmentInput = Readonly<DesktopSSHEnvironme
   label: string;
   ssh_password?: string;
   ssh_password_configured?: boolean;
+  auto_runtime_probe_enabled?: boolean;
   pinned?: boolean;
   created_at_ms?: number;
   last_used_at_ms?: number;
@@ -370,6 +379,7 @@ export type UpsertDesktopSavedRuntimeTargetInput = Readonly<{
   placement: DesktopRuntimePlacement;
   ssh_password?: string;
   ssh_password_configured?: boolean;
+  auto_runtime_probe_enabled?: boolean;
   pinned?: boolean;
   last_used_at_ms?: number;
   created_at_ms?: number;
@@ -464,8 +474,8 @@ export function desktopPreferencesToDraft(
   environmentID?: string,
 ): DesktopSettingsDraft {
   const localEnvironment = preferences.local_environment;
+  const selectedLocalEnvironment = environmentID ? findLocalEnvironmentByID(preferences, environmentID) : null;
   const access = (() => {
-    const selectedLocalEnvironment = environmentID ? findLocalEnvironmentByID(preferences, environmentID) : null;
     if (selectedLocalEnvironment) {
       return localEnvironmentAccess(selectedLocalEnvironment);
     }
@@ -475,6 +485,7 @@ export function desktopPreferencesToDraft(
     local_ui_bind: access.local_ui_bind,
     local_ui_password: '',
     local_ui_password_mode: access.local_ui_password_configured ? 'keep' : 'replace',
+    auto_runtime_probe_enabled: (selectedLocalEnvironment ?? localEnvironment).auto_runtime_probe_enabled,
   };
 }
 
@@ -574,6 +585,10 @@ function normalizePinned(value: unknown): boolean {
   return value === true;
 }
 
+function normalizeRuntimeAutoProbeEnabled(value: unknown): boolean {
+  return value === true;
+}
+
 function normalizePreferredOpenRoute(
   value: unknown,
   fallback: 'auto' | 'local_host' | 'remote_desktop' = 'auto',
@@ -599,6 +614,7 @@ function normalizeLocalEnvironmentAccess(
     local_ui_bind: compact(localUIBind) || DEFAULT_DESKTOP_LOCAL_UI_BIND,
     local_ui_password: localUIPassword,
     local_ui_password_mode: localUIPasswordConfigured && compact(localUIPassword) === '' ? 'keep' : compact(localUIPassword) === '' ? 'replace' : 'keep',
+    auto_runtime_probe_enabled: false,
   }, {
     currentLocalUIPassword: localUIPassword,
     currentLocalUIPasswordConfigured: localUIPasswordConfigured,
@@ -615,6 +631,7 @@ function normalizeLocalEnvironmentState(
     label: defaultDesktopLocalEnvironmentLabel(),
     pinned: source?.pinned,
     access: source?.local_hosting.access,
+    autoRuntimeProbeEnabled: source?.auto_runtime_probe_enabled,
     preferredOpenRoute: source?.preferred_open_route,
     currentProviderBinding: source?.current_provider_binding,
     owner: source?.local_hosting.owner,
@@ -673,6 +690,7 @@ function normalizeSavedEnvironmentCandidate(
     label,
     local_ui_url: normalizedURL,
     pinned: normalizePinned(candidate.pinned),
+    auto_runtime_probe_enabled: normalizeRuntimeAutoProbeEnabled(candidate.auto_runtime_probe_enabled),
     created_at_ms: normalizeCreatedAtMS(candidate.created_at_ms, fallbackCreatedAtMS),
     last_used_at_ms: normalizeLastUsedAtMS(candidate.last_used_at_ms, fallbackLastUsedAtMS),
   };
@@ -730,6 +748,7 @@ function normalizeSavedSSHEnvironmentCandidate(
       ssh_password: sshPassword,
       ssh_password_configured: sshPasswordConfigured,
       pinned: normalizePinned(candidate.pinned),
+      auto_runtime_probe_enabled: normalizeRuntimeAutoProbeEnabled(candidate.auto_runtime_probe_enabled),
       created_at_ms: normalizeCreatedAtMS(candidate.created_at_ms, fallbackCreatedAtMS),
       last_used_at_ms: normalizeLastUsedAtMS(candidate.last_used_at_ms, fallbackLastUsedAtMS),
     },
@@ -790,6 +809,7 @@ function normalizeSavedRuntimeTargetCandidate(
       ssh_password: sshPassword,
       ssh_password_configured: sshPasswordConfigured,
       pinned: normalizePinned(candidate.pinned),
+      auto_runtime_probe_enabled: normalizeRuntimeAutoProbeEnabled(candidate.auto_runtime_probe_enabled),
       last_used_at_ms: normalizeLastUsedAtMS(candidate.last_used_at_ms, fallbackLastUsedAtMS),
       created_at_ms: normalizeCreatedAtMS(candidate.created_at_ms, fallbackCreatedAtMS),
       updated_at_ms: normalizeLastUsedAtMS(candidate.updated_at_ms, now),
@@ -1426,7 +1446,21 @@ export function updateLocalEnvironmentAccess(
   environmentID: string,
   access: DesktopLocalEnvironmentAccess,
 ): DesktopPreferences {
-  const cleanEnvironmentID = compact(environmentID);
+  return updateLocalEnvironmentSettings(preferences, {
+    environmentID,
+    access,
+  });
+}
+
+export function updateLocalEnvironmentSettings(
+  preferences: DesktopPreferences,
+  input: Readonly<{
+    environmentID: string;
+    access?: DesktopLocalEnvironmentAccess;
+    autoRuntimeProbeEnabled?: boolean;
+  }>,
+): DesktopPreferences {
+  const cleanEnvironmentID = compact(input.environmentID);
   if (cleanEnvironmentID !== LOCAL_ENVIRONMENT_ID) {
     return preferences;
   }
@@ -1434,10 +1468,17 @@ export function updateLocalEnvironmentAccess(
     ...preferences,
     local_environment: {
       ...preferences.local_environment,
-      local_hosting: {
-        ...preferences.local_environment.local_hosting,
-        access,
-      },
+      ...(input.access
+        ? {
+            local_hosting: {
+              ...preferences.local_environment.local_hosting,
+              access: input.access,
+            },
+          }
+        : {}),
+      ...(input.autoRuntimeProbeEnabled === undefined
+        ? {}
+        : { auto_runtime_probe_enabled: input.autoRuntimeProbeEnabled }),
       updated_at_ms: Date.now(),
     },
   };
@@ -1556,6 +1597,7 @@ export function upsertSavedEnvironment(
     label,
     local_ui_url: normalizedURL,
     pinned: input.pinned ?? existing?.pinned ?? false,
+    auto_runtime_probe_enabled: input.auto_runtime_probe_enabled ?? existing?.auto_runtime_probe_enabled ?? false,
     created_at_ms: normalizeCreatedAtMS(input.created_at_ms, existing?.created_at_ms ?? now),
     last_used_at_ms: normalizeLastUsedAtMS(input.last_used_at_ms, now),
   };
@@ -1620,6 +1662,7 @@ export function upsertSavedSSHEnvironment(
     ssh_password: sshPassword,
     ssh_password_configured: sshPasswordConfigured,
     pinned: input.pinned ?? existing?.pinned ?? false,
+    auto_runtime_probe_enabled: input.auto_runtime_probe_enabled ?? existing?.auto_runtime_probe_enabled ?? false,
     created_at_ms: normalizeCreatedAtMS(input.created_at_ms, existing?.created_at_ms ?? now),
     last_used_at_ms: normalizeLastUsedAtMS(input.last_used_at_ms, now),
   };
@@ -1682,6 +1725,7 @@ export function upsertSavedRuntimeTarget(
     ssh_password: sshPassword,
     ssh_password_configured: sshPasswordConfigured,
     pinned: input.pinned ?? existing?.pinned ?? false,
+    auto_runtime_probe_enabled: input.auto_runtime_probe_enabled ?? existing?.auto_runtime_probe_enabled ?? false,
     last_used_at_ms: normalizeLastUsedAtMS(input.last_used_at_ms, now),
     created_at_ms: normalizeLastUsedAtMS(input.created_at_ms, existing?.created_at_ms ?? now),
     updated_at_ms: normalizeLastUsedAtMS(input.updated_at_ms, now),
@@ -2215,6 +2259,7 @@ function normalizeLocalEnvironmentCatalogCandidate(
       environment: createDesktopLocalEnvironmentState({
         label: defaultDesktopLocalEnvironmentLabel(),
         pinned: normalizePinned(candidate.pinned),
+        autoRuntimeProbeEnabled: normalizeRuntimeAutoProbeEnabled(candidate.auto_runtime_probe_enabled),
         preferredOpenRoute: normalizePreferredOpenRoute(candidate.preferred_open_route),
         currentProviderBinding: currentProviderBinding ?? undefined,
         access: localHosting.access,
@@ -2272,6 +2317,7 @@ function serializeLocalEnvironmentCatalog(environment: DesktopLocalEnvironmentSt
     id: environment.id,
     label: defaultDesktopLocalEnvironmentLabel(),
     pinned: environment.pinned,
+    auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled,
     created_at_ms: environment.created_at_ms,
     updated_at_ms: environment.updated_at_ms,
     last_used_at_ms: environment.last_used_at_ms,
@@ -2307,6 +2353,7 @@ function serializeSavedEnvironmentCatalog(environment: DesktopSavedEnvironment):
     label: environment.label,
     local_ui_url: environment.local_ui_url,
     pinned: environment.pinned,
+    auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled,
     created_at_ms: environment.created_at_ms,
     last_used_at_ms: environment.last_used_at_ms,
   };
@@ -2327,6 +2374,7 @@ function serializeSavedSSHEnvironmentCatalog(environment: DesktopSavedSSHEnviron
     release_base_url: environment.release_base_url,
     connect_timeout_seconds: environment.connect_timeout_seconds,
     pinned: environment.pinned,
+    auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled,
     created_at_ms: environment.created_at_ms,
     last_used_at_ms: environment.last_used_at_ms,
   };
@@ -2342,6 +2390,7 @@ function serializeSavedRuntimeTargetCatalog(target: DesktopSavedRuntimeTarget): 
     host_access: target.host_access,
     placement: target.placement,
     pinned: target.pinned,
+    auto_runtime_probe_enabled: target.auto_runtime_probe_enabled,
     created_at_ms: target.created_at_ms,
     updated_at_ms: target.updated_at_ms,
     last_used_at_ms: target.last_used_at_ms,

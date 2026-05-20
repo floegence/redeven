@@ -936,6 +936,19 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Next start');
   });
 
+  it('exposes auto status detection only on non-provider runtime forms', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain('auto_runtime_probe_enabled: overrides.auto_runtime_probe_enabled === true');
+    expect(appSrc).toContain('toggleAutoRuntimeProbe={toggleConnectionRuntimeAutoProbe}');
+    expect(appSrc).toContain('Status Detection');
+    expect(appSrc).toContain('Auto status detection');
+    expect(appSrc).toContain('Welcome checks this runtime automatically while open. Refresh status always checks now.');
+    expect(appSrc).toContain('auto_runtime_probe_configurable');
+    expect(appSrc).toContain('title="Add Provider"');
+    expect(appSrc).not.toContain('ControlPlaneDialog(props: Readonly<{\\n  state: ControlPlaneDialogState;\\n  auto_runtime_probe_enabled');
+  });
+
   it('keeps destructive hover affordances aligned with floe-webapp dialog close behavior', () => {
     const styles = readWelcomeStyles();
     const dialogSrc = readInstalledDialogSource();

@@ -65,9 +65,12 @@ starts only from an explicit user action.
 ## Welcome Detection And Safe Start
 
 Desktop treats saved runtimes as long-lived services that can outlive the
-Desktop process. On Welcome startup, Refresh, and restored visibility, Desktop
-performs read-only detection for saved SSH Host, Local Container, SSH Container,
-and saved Redeven URL entries.
+Desktop process. Provider Environment cards refresh runtime status
+automatically through the provider runtime-health API and do not expose a local
+detection switch. Local Environment, saved SSH Host, Local Container, SSH
+Container, and saved Redeven URL entries expose `Auto status detection`, which
+defaults off and controls only background Welcome probes on startup, polling,
+resume, and save-triggered refreshes.
 
 Detection rules:
 
@@ -75,14 +78,19 @@ Detection rules:
   runtime.
 - Detection never creates a session window, Local UI tunnel, container bridge,
   runtime-control forward, desktop model-source connection, or provider binding.
+- `Refresh status` always runs the read-only probe for the selected
+  non-provider entry, even when `Auto status detection` is off.
+- If a target already has a probe in flight, Desktop reuses that in-flight probe
+  instead of starting a duplicate probe.
 - A target with a running and openable Runtime Service becomes `Open`-ready
   even after Desktop has restarted, because runtime readiness is not tied to
   Electron process memory.
 - A saved Redeven URL probe failure is `Unverified`, not `Not started`, and
   `Open` remains available.
-- Password-based SSH detection is non-interactive. Automatic detection may use
-  a locally stored SSH password for that saved entry; otherwise the card reports
-  `Auto detection waits for manual authentication`.
+- Password-based SSH automatic detection is non-interactive and may use a
+  locally stored SSH password only when the saved entry has opted into automatic
+  status detection. Manual refresh/start/open paths can still request
+  authentication explicitly.
 
 Container detection has an additional host-command discovery state. When a
 Local Container target cannot find the local Docker/Podman CLI, Desktop reports

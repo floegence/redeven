@@ -1606,8 +1606,8 @@ describe('buildEnvironmentCardModel', () => {
     const localEntry = localSnapshot.environments.find((environment) => environment.kind === 'local_environment');
     expect(localEntry).toBeTruthy();
     expect(buildProviderBackedEnvironmentActionModel(localEntry!)).toMatchObject({
-      status_label: 'RUNTIME OFFLINE',
-      status_tone: 'warning',
+      status_label: 'NOT CHECKED',
+      status_tone: 'neutral',
       action_presentation: {
         primary_action: {
           intent: 'open',
@@ -1618,26 +1618,26 @@ describe('buildEnvironmentCardModel', () => {
         primary_action_overlay: {
           kind: 'popover',
           tone: 'warning',
-          eyebrow: 'Runtime offline',
-          title: 'Start the local runtime to continue',
-          detail: 'Open becomes available once the runtime is ready on this device.',
+          eyebrow: 'Status not checked',
+          title: 'Refresh status to continue',
+          detail: 'Desktop has not checked this runtime yet. Refresh status now, or start the runtime when you already know it is offline.',
           actions: [
             {
-              label: 'Start runtime',
+              label: 'Refresh status',
               emphasis: 'primary',
               action: {
-                intent: 'start_runtime',
-                label: 'Start runtime',
+                intent: 'refresh_runtime',
+                label: 'Refresh runtime status',
                 enabled: true,
                 variant: 'outline',
               },
             },
             {
-              label: 'Refresh status',
+              label: 'Start runtime',
               emphasis: 'secondary',
               action: {
-                intent: 'refresh_runtime',
-                label: 'Refresh runtime status',
+                intent: 'start_runtime',
+                label: 'Start runtime',
                 enabled: true,
                 variant: 'outline',
               },
@@ -1662,8 +1662,8 @@ describe('buildEnvironmentCardModel', () => {
     const externalEntry = externalSnapshot.environments.find((environment) => environment.kind === 'external_local_ui');
     expect(externalEntry).toBeTruthy();
     expect(buildProviderBackedEnvironmentActionModel(externalEntry!)).toMatchObject({
-      status_label: 'UNVERIFIED',
-      status_tone: 'warning',
+      status_label: 'NOT CHECKED',
+      status_tone: 'neutral',
       action_presentation: {
         primary_action: {
           intent: 'open',

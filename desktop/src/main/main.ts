@@ -38,7 +38,7 @@ import {
   setSavedEnvironmentPinned,
   setSavedRuntimeTargetPinned,
   setSavedSSHEnvironmentPinned,
-  updateLocalEnvironmentAccess,
+  updateLocalEnvironmentSettings,
   upsertSavedControlPlane,
   upsertSavedEnvironment,
   upsertSavedRuntimeTarget,
@@ -2555,6 +2555,7 @@ function buildWelcomeRuntimeHealthTargets(
       environment_id: preferences.local_environment.id,
       slot: 'local_environment' as const,
       presence_target_id: desktopProviderRuntimeLinkTargetID('local_environment', preferences.local_environment.id),
+      auto_refresh_enabled: preferences.local_environment.auto_runtime_probe_enabled,
       checking_health: checkingRuntimeHealth('local_runtime_probe', 'not_started', 'Checking Local Runtime status.'),
       probe: () => probeLocalEnvironmentRuntimeHealth(preferences, openSessions),
     },
@@ -2562,6 +2563,7 @@ function buildWelcomeRuntimeHealthTargets(
       key: `external:${environment.id}`,
       environment_id: environment.id,
       slot: 'external_local_ui' as const,
+      auto_refresh_enabled: environment.auto_runtime_probe_enabled,
       checking_health: checkingRuntimeHealth('external_local_ui_probe', 'unverified', 'Checking saved Environment status.'),
       probe: () => probeSavedExternalRuntimeHealth(environment),
     })),
@@ -2570,6 +2572,7 @@ function buildWelcomeRuntimeHealthTargets(
       environment_id: environment.id,
       slot: 'ssh_environment' as const,
       presence_target_id: desktopProviderRuntimeLinkTargetID('ssh_environment', desktopSSHEnvironmentID(environment)),
+      auto_refresh_enabled: environment.auto_runtime_probe_enabled,
       checking_health: checkingRuntimeHealth('ssh_runtime_probe', 'not_started', 'Checking SSH Runtime status.'),
       probe: () => probeSavedSSHRuntimeHealth(environment),
     })),
@@ -2580,6 +2583,7 @@ function buildWelcomeRuntimeHealthTargets(
         environment_id: target.id,
         slot: 'runtime_target' as const,
         presence_target_id: desktopProviderRuntimeLinkTargetID(targetKind, target.id),
+        auto_refresh_enabled: target.auto_runtime_probe_enabled,
         checking_health: checkingRuntimeHealth(
           runtimeTargetProbeSource(target),
           'not_started',
@@ -2593,23 +2597,27 @@ function buildWelcomeRuntimeHealthTargets(
 
 async function refreshWelcomeRuntimeHealth(options: Readonly<{
   force?: boolean;
+  mode?: 'auto' | 'manual';
   targetEnvironmentIDs?: readonly string[];
 }> = {}): Promise<void> {
   const preferences = await loadDesktopPreferencesCached();
   const openSessions = openSessionSummaries();
+  const mode = options.mode ?? 'auto';
   const targetEnvironmentIDs = new Set((options.targetEnvironmentIDs ?? [])
     .map((value) => compact(value))
     .filter((value) => value !== ''));
   const targets = buildWelcomeRuntimeHealthTargets(preferences, openSessions)
-    .filter((target) => targetEnvironmentIDs.size === 0 || targetEnvironmentIDs.has(target.environment_id));
+    .filter((target) => targetEnvironmentIDs.size === 0 || targetEnvironmentIDs.has(target.environment_id))
+    .filter((target) => mode === 'manual' || target.auto_refresh_enabled);
   await welcomeRuntimeHealthStore.refresh(targets, {
     force: options.force === true,
-    pruneMissing: targetEnvironmentIDs.size === 0,
+    pruneMissing: mode === 'manual' && targetEnvironmentIDs.size === 0,
   });
 }
 
 function scheduleWelcomeRuntimeHealthRefresh(options: Readonly<{
   force?: boolean;
+  mode?: 'auto' | 'manual';
   targetEnvironmentIDs?: readonly string[];
 }> = {}): void {
   void refreshWelcomeRuntimeHealth(options).catch((error) => {
@@ -2624,7 +2632,7 @@ function launcherActionEnvironmentID(request: DesktopLauncherActionRequest): str
 
 function launcherActionRefreshScope(
   request: DesktopLauncherActionRequest,
-): Readonly<{ force: boolean; targetEnvironmentIDs?: readonly string[] }> | null {
+): Readonly<{ force: boolean; mode: 'auto' | 'manual'; targetEnvironmentIDs?: readonly string[] }> | null {
   const targetEnvironmentID = launcherActionEnvironmentID(request);
   const targetScope = targetEnvironmentID ? [targetEnvironmentID] : undefined;
   const actionKind: DesktopLauncherActionKind = request.kind;
@@ -2637,7 +2645,7 @@ function launcherActionRefreshScope(
     case 'connect_provider_runtime':
     case 'disconnect_provider_runtime':
     case 'stop_environment_runtime':
-      return { force: true, targetEnvironmentIDs: targetScope };
+      return { force: true, mode: 'manual', targetEnvironmentIDs: targetScope };
     case 'save_local_environment_settings':
     case 'upsert_saved_environment':
     case 'upsert_saved_ssh_environment':
@@ -2645,7 +2653,7 @@ function launcherActionRefreshScope(
     case 'delete_saved_environment':
     case 'delete_saved_ssh_environment':
     case 'delete_saved_runtime_target':
-      return { force: true, targetEnvironmentIDs: targetScope };
+      return { force: true, mode: 'auto', targetEnvironmentIDs: targetScope };
     default:
       return null;
   }
@@ -7104,6 +7112,7 @@ async function refreshEnvironmentRuntimeFromLauncher(
   const environmentID = compact(request.environment_id);
   scheduleWelcomeRuntimeHealthRefresh({
     force: true,
+    mode: 'manual',
     targetEnvironmentIDs: environmentID ? [environmentID] : [],
   });
 
@@ -7171,7 +7180,7 @@ async function refreshEnvironmentRuntimeFromLauncher(
 }
 
 async function refreshAllEnvironmentRuntimesFromLauncher(): Promise<DesktopLauncherActionResult> {
-  scheduleWelcomeRuntimeHealthRefresh({ force: true });
+  scheduleWelcomeRuntimeHealthRefresh({ force: true, mode: 'manual' });
   void refreshAllProviderEnvironmentRuntimeHealth().then(() => {
     broadcastDesktopWelcomeSnapshots();
   }).catch((error) => {
@@ -7973,6 +7982,7 @@ async function upsertSavedEnvironmentFromWelcome(
   environmentID: string,
   label: string,
   externalLocalUIURL: string,
+  autoRuntimeProbeEnabled: boolean,
 ): Promise<void> {
   const preferences = await loadDesktopPreferencesCached();
   const existing = preferences.saved_environments.find((environment) => environment.id === environmentID);
@@ -7980,6 +7990,7 @@ async function upsertSavedEnvironmentFromWelcome(
     environment_id: environmentID,
     label,
     local_ui_url: externalLocalUIURL,
+    auto_runtime_probe_enabled: autoRuntimeProbeEnabled,
     last_used_at_ms: existing?.last_used_at_ms ?? Date.now(),
   });
   await persistDesktopPreferences(next);
@@ -7995,7 +8006,11 @@ async function saveLocalEnvironmentSettingsFromWelcome(
     currentLocalUIPassword: existingAccess?.local_ui_password ?? '',
     currentLocalUIPasswordConfigured: existingAccess?.local_ui_password_configured === true,
   });
-  const next = updateLocalEnvironmentAccess(preferences, existing.id, access);
+  const next = updateLocalEnvironmentSettings(preferences, {
+    environmentID: existing.id,
+    access,
+    autoRuntimeProbeEnabled: draft.auto_runtime_probe_enabled,
+  });
   const resolvedEnvironment = next.local_environment;
   await persistDesktopPreferences(next);
   return resolvedEnvironment;
@@ -8008,6 +8023,7 @@ async function upsertSavedSSHEnvironmentFromWelcome(
   passwordInput: Readonly<{
     ssh_password?: string;
     ssh_password_mode?: 'keep' | 'replace' | 'clear';
+    auto_runtime_probe_enabled?: boolean;
   }>,
 ): Promise<void> {
   const preferences = await loadDesktopPreferencesCached();
@@ -8032,6 +8048,7 @@ async function upsertSavedSSHEnvironmentFromWelcome(
     connect_timeout_seconds: details.connect_timeout_seconds,
     ssh_password: passwordMode === 'replace' ? compact(passwordInput.ssh_password) : '',
     ...(sshPasswordConfigured === undefined ? {} : { ssh_password_configured: sshPasswordConfigured }),
+    auto_runtime_probe_enabled: passwordInput.auto_runtime_probe_enabled === true,
     last_used_at_ms: existing?.last_used_at_ms ?? Date.now(),
   });
   await persistDesktopPreferences(next);
@@ -8127,6 +8144,7 @@ async function upsertSavedRuntimeTargetFromWelcome(
       : request.ssh_password_mode === 'replace'
         ? { ssh_password_configured: compact(request.ssh_password) !== '' }
         : {}),
+    auto_runtime_probe_enabled: request.auto_runtime_probe_enabled,
     last_used_at_ms: Date.now(),
   });
   await persistDesktopPreferences(next);
@@ -8325,6 +8343,7 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
           local_ui_bind: request.local_ui_bind,
           local_ui_password: request.local_ui_password,
           local_ui_password_mode: request.local_ui_password_mode,
+          auto_runtime_probe_enabled: request.auto_runtime_probe_enabled,
         });
         return launcherActionSuccess('saved_environment');
       } catch (error) {
@@ -8335,7 +8354,12 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
         );
       }
     case 'upsert_saved_environment':
-      await upsertSavedEnvironmentFromWelcome(request.environment_id, request.label, request.external_local_ui_url);
+      await upsertSavedEnvironmentFromWelcome(
+        request.environment_id,
+        request.label,
+        request.external_local_ui_url,
+        request.auto_runtime_probe_enabled,
+      );
       return launcherActionSuccess('saved_environment');
     case 'upsert_saved_ssh_environment':
       await upsertSavedSSHEnvironmentFromWelcome(request.environment_id, request.label, {
@@ -8349,6 +8373,7 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       }, {
         ssh_password: request.ssh_password,
         ssh_password_mode: request.ssh_password_mode,
+        auto_runtime_probe_enabled: request.auto_runtime_probe_enabled,
       });
       return launcherActionSuccess('saved_environment');
     case 'upsert_saved_runtime_target':
@@ -8844,7 +8869,11 @@ if (!app.requestSingleInstanceLock()) {
         currentLocalUIPassword: access.local_ui_password,
         currentLocalUIPasswordConfigured: access.local_ui_password_configured,
       });
-      const next = updateLocalEnvironmentAccess(previous, settingsEnvironment.id, validated);
+      const next = updateLocalEnvironmentSettings(previous, {
+        environmentID: settingsEnvironment.id,
+        access: validated,
+        autoRuntimeProbeEnabled: draft.auto_runtime_probe_enabled,
+      });
       await persistDesktopPreferences(next);
       return { ok: true };
     } catch (error) {

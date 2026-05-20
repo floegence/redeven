@@ -23,6 +23,7 @@ type LocalEnvironmentSettingsSnapshotOptions = DesktopAccessModelOptions & Reado
   environment_id: string;
   environment_label: string;
   environment_kind: 'local' | 'controlplane';
+  auto_runtime_probe_configurable?: boolean;
 }>;
 
 export function pageWindowTitle(_mode: DesktopPageMode, environmentLabel: string): string {
@@ -130,6 +131,7 @@ export function buildDesktopSettingsSurfaceSnapshot(
     local_ui_password_configured: localUIPasswordConfigured,
     runtime_password_required: options.runtime_password_required === true,
     local_ui_password_can_clear: canClearLocalUIPassword,
+    auto_runtime_probe_configurable: options.auto_runtime_probe_configurable !== false,
     summary_items: buildDesktopSettingsSummaryItems(draft, options),
     host_fields: hostFields(draft, options),
     draft,

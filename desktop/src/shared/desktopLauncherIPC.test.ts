@@ -157,11 +157,13 @@ describe('desktopLauncherIPC', () => {
       local_ui_bind: ' localhost:23998 ',
       local_ui_password: ' secret ',
       local_ui_password_mode: ' replace ',
+      auto_runtime_probe_enabled: true,
     })).toEqual({
       kind: 'save_local_environment_settings',
       local_ui_bind: 'localhost:23998',
       local_ui_password: ' secret ',
       local_ui_password_mode: 'replace',
+      auto_runtime_probe_enabled: true,
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'open_remote_environment',
@@ -186,11 +188,13 @@ describe('desktopLauncherIPC', () => {
       environment_id: ' env-1 ',
       label: ' Work laptop ',
       external_local_ui_url: ' http://192.168.1.11:24000/ ',
+      auto_runtime_probe_enabled: true,
     })).toEqual({
       kind: 'upsert_saved_environment',
       environment_id: 'env-1',
       label: 'Work laptop',
       external_local_ui_url: 'http://192.168.1.11:24000/',
+      auto_runtime_probe_enabled: true,
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'delete_saved_environment',
@@ -323,6 +327,7 @@ describe('desktopLauncherIPC', () => {
       connect_timeout_seconds: 10,
       ssh_password: '',
       ssh_password_mode: 'replace',
+      auto_runtime_probe_enabled: false,
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'delete_saved_ssh_environment',
@@ -388,6 +393,7 @@ describe('desktopLauncherIPC', () => {
       },
       ssh_password: '',
       ssh_password_mode: 'replace',
+      auto_runtime_probe_enabled: false,
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'set_saved_runtime_target_pinned',
