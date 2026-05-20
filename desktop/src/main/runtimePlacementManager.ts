@@ -1,15 +1,16 @@
 import {
-  desktopRuntimeContainerReference,
   type DesktopRuntimeHostAccess,
   type DesktopRuntimePlacement,
 } from '../shared/desktopRuntimePlacement';
 import type { DesktopRuntimeMaintenanceRequirement } from '../shared/desktopRuntimeHealth';
 import {
   containerInspectCommand,
+  containerRuntimeCommandFailureStatus,
   containerRuntimeDaemonStartCommand,
   containerRuntimeDaemonStatusCommand,
   containerRuntimePlatformProbeCommand,
   containerRuntimeProbeCommand,
+  containerRuntimeUnavailableMessage,
   containerRuntimeUploadedInstallCommand,
   parseContainerInspectJSON,
   parseContainerPlatformProbeOutput,
@@ -175,32 +176,24 @@ async function startContainerRuntimeDaemon(args: Readonly<{
   }), { signal: args.signal });
 }
 
-function containerUnavailableMessage(
-  placement: Extract<DesktopRuntimePlacement, Readonly<{ kind: 'container_process' }>>,
-  status: string,
-): string {
-  const label = placement.container_label || desktopRuntimeContainerReference(placement);
-  if (status === 'missing') {
-    return `Container ${label} was not found. Choose a running container, then try again.`;
-  }
-  if (status === 'no_permission') {
-    return `Desktop does not have permission to inspect ${label}. Check ${placement.container_engine} access, then try again.`;
-  }
-  return `Container ${label} is not running. Start it outside Redeven, then refresh and try again.`;
-}
-
 async function assertContainerRunning(
   executor: RuntimeHostAccessExecutor,
   placement: Extract<DesktopRuntimePlacement, Readonly<{ kind: 'container_process' }>>,
   signal?: AbortSignal,
 ): Promise<void> {
-  const result = await executor.run(containerInspectCommand(
-    placement.container_engine,
-    placement.container_id,
-  ), { signal });
-  const inspected = parseContainerInspectJSON(placement.container_engine, result.stdout);
+  let inspected: ReturnType<typeof parseContainerInspectJSON>;
+  try {
+    const result = await executor.run(containerInspectCommand(
+      placement.container_engine,
+      placement.container_id,
+    ), { signal });
+    inspected = parseContainerInspectJSON(placement.container_engine, result.stdout);
+  } catch (error) {
+    const status = containerRuntimeCommandFailureStatus(error);
+    throw new Error(containerRuntimeUnavailableMessage(placement, status));
+  }
   if (inspected.status !== 'running') {
-    throw new Error(containerUnavailableMessage(placement, inspected.status));
+    throw new Error(containerRuntimeUnavailableMessage(placement, inspected.status));
   }
 }
 

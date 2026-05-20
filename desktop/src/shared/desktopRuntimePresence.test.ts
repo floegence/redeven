@@ -90,7 +90,7 @@ describe('desktopRuntimePresence', () => {
       running: false,
       openable: false,
       runtime_control_status: desktopRuntimeControlStatusMissing(
-        'forward_unavailable',
+        'container_not_running',
         'Container web is not running.',
       ),
     });
@@ -117,6 +117,45 @@ describe('desktopRuntimePresence', () => {
       menu_visibility: 'stable',
       message: 'Container web is not running.',
     });
+  });
+
+  it('blocks container lifecycle actions when the local container engine CLI is unavailable', () => {
+    const plans = buildDesktopRuntimeOperationPlans({
+      surface: 'managed_runtime_card',
+      host_access: { kind: 'local_host' },
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'abc123',
+        container_ref: 'web',
+        container_label: 'web',
+        runtime_root: '/root/.redeven',
+        bridge_strategy: 'exec_stream',
+      },
+      running: false,
+      openable: false,
+      runtime_control_status: desktopRuntimeControlStatusMissing(
+        'container_engine_unavailable',
+        'Docker CLI was not found. Install Docker Desktop or make docker available to Redeven Desktop, then refresh and try again.',
+      ),
+    });
+
+    expect(plans.open).toMatchObject({
+      availability: 'blocked',
+      reason_code: 'runtime_target_unavailable',
+      message: 'Docker CLI was not found. Install Docker Desktop or make docker available to Redeven Desktop, then refresh and try again.',
+    });
+    expect(plans.start).toMatchObject({
+      availability: 'blocked',
+      reason_code: 'runtime_target_unavailable',
+      message: 'Docker CLI was not found. Install Docker Desktop or make docker available to Redeven Desktop, then refresh and try again.',
+    });
+    expect(plans.update).toMatchObject({
+      availability: 'blocked',
+      method: 'local_container_exec',
+      message: 'Docker CLI was not found. Install Docker Desktop or make docker available to Redeven Desktop, then refresh and try again.',
+    });
+    expect(plans.refresh.availability).toBe('available');
   });
 
   it('keeps provider cards out of runtime lifecycle management', () => {

@@ -11,12 +11,22 @@ import {
   resolveDesktopSSHRemotePlatform,
   type DesktopSSHRemotePlatform,
 } from './sshReleaseAssets';
+import {
+  desktopHostCommandNotFoundMessage,
+  isDesktopHostCommandNotFoundError,
+} from './desktopHostCommand';
 
 export type DesktopContainerRuntimeStatus =
   | 'running'
   | 'stopped'
   | 'missing'
   | 'no_permission';
+
+export type DesktopRuntimeContainerUnavailableStatus =
+  | Exclude<DesktopContainerRuntimeStatus, 'running'>
+  | 'ambiguous'
+  | 'command_not_found'
+  | 'engine_unavailable';
 
 type ContainerProcessPlacement = Extract<DesktopRuntimePlacement, Readonly<{ kind: 'container_process' }>>;
 
@@ -47,7 +57,7 @@ export type DesktopResolvedRuntimeContainerPlacement = Readonly<{
 }>;
 
 export type DesktopRuntimeContainerResolution = DesktopResolvedRuntimeContainerPlacement | Readonly<{
-  status: Exclude<DesktopContainerRuntimeStatus, 'running'> | 'ambiguous';
+  status: DesktopRuntimeContainerUnavailableStatus;
   message: string;
 }>;
 
@@ -220,11 +230,19 @@ function placementChanged(
     || left.container_label !== right.container_label;
 }
 
-function containerUnavailableMessage(
+export function containerRuntimeUnavailableMessage(
   placement: ContainerProcessPlacement,
-  status: DesktopRuntimeContainerResolution['status'],
+  status: DesktopRuntimeContainerUnavailableStatus,
 ): string {
   const label = placement.container_label || desktopRuntimeContainerReference(placement);
+  const engine = placement.container_engine === 'podman' ? 'Podman' : 'Docker';
+  const command = placement.container_engine === 'podman' ? 'podman' : 'docker';
+  if (status === 'command_not_found') {
+    return desktopHostCommandNotFoundMessage(command);
+  }
+  if (status === 'engine_unavailable') {
+    return `${engine} is unavailable. Make sure ${engine} is running and the ${command} CLI can reach it, then refresh and try again.`;
+  }
   if (status === 'missing') {
     return `Container ${label} was not found. Choose a running container, then try again.`;
   }
@@ -237,12 +255,42 @@ function containerUnavailableMessage(
   return `Container ${label} is not running. Start it outside Redeven, then refresh and try again.`;
 }
 
-function inspectFailureStatus(error: unknown): Exclude<DesktopContainerRuntimeStatus, 'running' | 'stopped'> {
-  const message = error instanceof Error ? error.message : String(error ?? '');
+export function containerRuntimeCommandFailureStatus(
+  error: unknown,
+): Exclude<DesktopRuntimeContainerUnavailableStatus, 'stopped' | 'ambiguous'> {
+  if (isDesktopHostCommandNotFoundError(error)) {
+    return 'command_not_found';
+  }
+  const record = error && typeof error === 'object'
+    ? error as {
+        message?: unknown;
+        presentation?: {
+          diagnostics?: readonly { text?: unknown }[];
+        };
+        cause?: unknown;
+      }
+    : null;
+  const diagnosticText = record?.presentation?.diagnostics
+    ?.map((item) => compact(item.text))
+    .filter(Boolean)
+    .join('\n') ?? '';
+  const causeText = record?.cause instanceof Error ? record.cause.message : '';
+  const message = [
+    error instanceof Error ? error.message : String(error ?? ''),
+    diagnosticText,
+    causeText,
+  ].filter((part) => compact(part) !== '').join('\n');
+  const commandNotFoundPattern = /\b(docker|podman)\s+cli was not found\b|\bspawn\s+(docker|podman)\s+enoent\b|\b(docker|podman)\b.*\benoent\b/iu;
+  if (commandNotFoundPattern.test(message)) {
+    return 'command_not_found';
+  }
   if (/permission denied|access denied|unauthorized|forbidden|operation not permitted/iu.test(message)) {
     return 'no_permission';
   }
-  return 'missing';
+  if (/no such (object|container)|not found|does not exist|no container with/iu.test(message)) {
+    return 'missing';
+  }
+  return 'engine_unavailable';
 }
 
 function listItemMatchesReference(item: DesktopRuntimeContainerListItem, reference: string): boolean {
@@ -284,7 +332,7 @@ export async function resolveRuntimeContainerPlacement(
     if (inspected.status !== 'running') {
       return {
         status: inspected.status,
-        message: containerUnavailableMessage(placement, inspected.status),
+        message: containerRuntimeUnavailableMessage(placement, inspected.status),
       };
     }
     if (inspectedContainerMatchesReference(inspected, placement)) {
@@ -297,11 +345,11 @@ export async function resolveRuntimeContainerPlacement(
       };
     }
   } catch (error) {
-    const directStatus = inspectFailureStatus(error);
-    if (directStatus === 'no_permission') {
+    const directStatus = containerRuntimeCommandFailureStatus(error);
+    if (directStatus !== 'missing') {
       return {
         status: directStatus,
-        message: containerUnavailableMessage(placement, directStatus),
+        message: containerRuntimeUnavailableMessage(placement, directStatus),
       };
     }
   }
@@ -311,23 +359,23 @@ export async function resolveRuntimeContainerPlacement(
   try {
     containers = await resolver.listRunning(placement.container_engine);
   } catch (error) {
-    const status = inspectFailureStatus(error);
+    const status = containerRuntimeCommandFailureStatus(error);
     return {
       status,
-      message: containerUnavailableMessage(placement, status),
+      message: containerRuntimeUnavailableMessage(placement, status),
     };
   }
   const matches = containers.filter((item) => listItemMatchesReference(item, reference));
   if (matches.length === 0) {
     return {
       status: 'missing',
-      message: containerUnavailableMessage(placement, 'missing'),
+      message: containerRuntimeUnavailableMessage(placement, 'missing'),
     };
   }
   if (matches.length > 1) {
     return {
       status: 'ambiguous',
-      message: containerUnavailableMessage(placement, 'ambiguous'),
+      message: containerRuntimeUnavailableMessage(placement, 'ambiguous'),
     };
   }
   const [match] = matches;

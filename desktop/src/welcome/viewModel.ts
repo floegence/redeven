@@ -702,6 +702,9 @@ function runtimeStatusLabel(environment: DesktopEnvironmentEntry): string {
     if (environment.runtime_health.offline_reason_code === 'unverified') {
       return 'UNVERIFIED';
     }
+    if (environment.runtime_health.offline_reason_code === 'container_engine_unavailable') {
+      return 'SETUP REQUIRED';
+    }
     return 'RUNTIME OFFLINE';
   }
   if (environmentRuntimeMaintenance(environment)) {

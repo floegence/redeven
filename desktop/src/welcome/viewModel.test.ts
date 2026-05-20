@@ -644,7 +644,7 @@ describe('buildEnvironmentCardModel', () => {
           openable: false,
           runtime_control_status: {
             state: 'missing',
-            reason_code: 'forward_unavailable',
+            reason_code: 'container_not_running',
             message: 'Container dev-container was not found. Choose a running container, then try again.',
           },
         }),
@@ -704,6 +704,67 @@ describe('buildEnvironmentCardModel', () => {
       kind: 'tooltip',
       message: 'Container dev-container was not found. Choose a running container, then try again.',
     });
+  });
+
+  it('shows setup-required guidance when the local container engine CLI is unavailable', () => {
+    const message = 'Docker CLI was not found. Install Docker Desktop or make docker available to Redeven Desktop, then refresh and try again.';
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment(),
+      }),
+      managedRuntimePresenceByTargetID: {
+        'local:local': localRuntimePresence(undefined, {
+          placement_target_id: 'local:container:docker:container-stable-id:abc12345',
+          placement: {
+            kind: 'container_process',
+            container_engine: 'docker',
+            container_id: 'container-stable-id',
+            container_ref: 'dev-container',
+            container_label: 'dev-container',
+            runtime_root: '/root/.redeven',
+            bridge_strategy: 'exec_stream',
+          },
+          running: false,
+          local_ui_url: '',
+          openable: false,
+          runtime_control_status: {
+            state: 'missing',
+            reason_code: 'container_engine_unavailable',
+            message,
+          },
+        }),
+      },
+    });
+    const localEntry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
+    const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);
+
+    expect(actionModel).toMatchObject({
+      status_label: 'SETUP REQUIRED',
+      action_presentation: {
+        primary_action: {
+          enabled: false,
+        },
+        primary_action_overlay: {
+          kind: 'tooltip',
+          message,
+        },
+      },
+    });
+    expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'start_runtime',
+        action: expect.objectContaining({
+          enabled: false,
+          disabled_reason: message,
+        }),
+      }),
+      expect.objectContaining({
+        id: 'refresh_runtime',
+        action: expect.objectContaining({
+          enabled: true,
+        }),
+      }),
+    ]));
   });
 
   it('shows Start runtime for a running container target without an active bridge', () => {

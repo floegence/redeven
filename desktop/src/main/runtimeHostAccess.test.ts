@@ -32,6 +32,18 @@ describe('runtimeHostAccess', () => {
     });
   });
 
+  it('surfaces missing local host commands as structured command-not-found errors', async () => {
+    await expect(createLocalRuntimeHostExecutor().run([
+      'redeven-missing-host-command-for-test',
+    ], {
+      env: { PATH: '' },
+    })).rejects.toMatchObject({
+      name: 'DesktopHostCommandNotFoundError',
+      command_name: 'redeven-missing-host-command-for-test',
+      message: 'redeven-missing-host-command-for-test was not found. Install it or make it available to Redeven Desktop, then try again.',
+    });
+  });
+
   it('passes explicit bridge environment variables to the remote SSH command', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-ssh-test-'));
     const argsPath = path.join(tempDir, 'ssh-args.json');

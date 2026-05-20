@@ -13,6 +13,12 @@ import {
   DesktopOperationFailureError,
   desktopOperationFailurePresentation,
 } from './desktopOperationFailure';
+import {
+  DesktopHostCommandNotFoundError,
+  desktopHostCommandEnvironment,
+  isDesktopHostCommandNotFoundError,
+  resolveDesktopHostCommand,
+} from './desktopHostCommand';
 
 export type RuntimeHostCommandResult = Readonly<{
   stdout: string;
@@ -40,6 +46,11 @@ type RuntimeHostFailureContext = Readonly<{
   detail?: string;
   recoveryHint?: string;
   targetLabel?: string;
+}>;
+type SpawnPreparation = Readonly<{
+  command: string;
+  args: readonly string[];
+  env: NodeJS.ProcessEnv;
 }>;
 
 export type RuntimeHostStreamingCommand = Readonly<{
@@ -163,6 +174,61 @@ async function createSSHPasswordAskPassScript(): Promise<Readonly<{
   };
 }
 
+function mergedProcessEnvironment(options: RuntimeHostCommandOptions): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    ...options.env,
+  };
+}
+
+function prepareSpawnCommand(
+  command: string,
+  args: readonly string[],
+  options: RuntimeHostCommandOptions,
+): SpawnPreparation {
+  const baseEnv = mergedProcessEnvironment(options);
+  const resolution = resolveDesktopHostCommand(command, { env: baseEnv });
+  return {
+    command: resolution.command,
+    args,
+    env: desktopHostCommandEnvironment(baseEnv),
+  };
+}
+
+function commandSpawnError(command: string, error: unknown): Error {
+  const nodeError = error && typeof error === 'object'
+    ? error as NodeJS.ErrnoException
+    : null;
+  if (nodeError?.code === 'ENOENT') {
+    return new DesktopHostCommandNotFoundError(command, []);
+  }
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+function rejectSpawnError(
+  reject: (reason?: unknown) => void,
+  failureContext: RuntimeHostFailureContext,
+  command: string,
+  error: unknown,
+  output: Readonly<{
+    stdout?: string;
+    stderr?: string;
+  }> = {},
+): void {
+  const spawnError = commandSpawnError(command, error);
+  if (isDesktopHostCommandNotFoundError(spawnError)) {
+    reject(spawnError);
+    return;
+  }
+  reject(runtimeHostCommandFailure(failureContext, {
+    command,
+    reason: spawnError.message,
+    stdout: output.stdout,
+    stderr: output.stderr,
+    cause: spawnError,
+  }));
+}
+
 function spawnCommand(
   command: string,
   args: readonly string[],
@@ -172,13 +238,16 @@ function spawnCommand(
   if (compact(command) === '' || args.some((arg) => compact(arg) === '')) {
     return Promise.reject(new Error('Runtime host command argv must be non-empty.'));
   }
+  let prepared: SpawnPreparation;
+  try {
+    prepared = prepareSpawnCommand(command, args, options);
+  } catch (error) {
+    return Promise.reject(error);
+  }
   return new Promise((resolve, reject) => {
-    const child = childProcess.spawn(command, args, {
+    const child = childProcess.spawn(prepared.command, prepared.args, {
       cwd: compact(options.cwd) || undefined,
-      env: {
-        ...process.env,
-        ...options.env,
-      },
+      env: prepared.env,
       stdio: [options.stdinData ? 'pipe' : 'ignore', 'pipe', 'pipe'],
       signal: options.signal,
     }) as SpawnedCommand;
@@ -194,13 +263,7 @@ function spawnCommand(
       stderr += chunk;
     });
     child.once('error', (error) => {
-      reject(runtimeHostCommandFailure(failureContext, {
-        command,
-        reason: error.message,
-        stdout,
-        stderr,
-        cause: error,
-      }));
+      rejectSpawnError(reject, failureContext, command, error, { stdout, stderr });
     });
     if (options.stdinData && child.stdin) {
       child.stdin.end(options.stdinData);
@@ -230,22 +293,16 @@ function spawnStreamingCommand(
   if (compact(command) === '' || args.some((arg) => compact(arg) === '')) {
     throw new Error('Runtime host command argv must be non-empty.');
   }
-  const child = childProcess.spawn(command, args, {
+  const prepared = prepareSpawnCommand(command, args, options);
+  const child = childProcess.spawn(prepared.command, prepared.args, {
     cwd: compact(options.cwd) || undefined,
-    env: {
-      ...process.env,
-      ...options.env,
-    },
+    env: prepared.env,
     stdio: ['pipe', 'pipe', 'pipe'],
     signal: options.signal,
   }) as SpawnedStreamingCommand;
   const closed = new Promise<void>((resolve, reject) => {
     child.once('error', (error) => {
-      reject(runtimeHostCommandFailure(failureContext, {
-        command,
-        reason: error.message,
-        cause: error,
-      }));
+      rejectSpawnError(reject, failureContext, command, error);
     });
     child.once('close', (exitCode, closeSignal) => {
       if (exitCode === 0 && !closeSignal) {
