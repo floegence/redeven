@@ -1024,7 +1024,7 @@ describe('buildEnvironmentCardModel', () => {
     });
   });
 
-  it('guides local container stale lock recovery through Start runtime', () => {
+  it('guides stale lease recovery as a stopped local container runtime', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: testLocalEnvironment(),
@@ -1069,11 +1069,11 @@ describe('buildEnvironmentCardModel', () => {
     expect(localEntry).toBeTruthy();
 
     const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);
-    expect(actionModel.status_label).toBe('RUNTIME STALE LOCK');
+    expect(actionModel.status_label).toBe('RUNTIME OFFLINE');
     expect(actionModel.action_presentation.primary_action_overlay).toMatchObject({
       kind: 'popover',
-      title: 'Runtime stale lock',
-      detail: 'This local container runtime has lock metadata from an older runtime, but no live runtime is reachable. Start the runtime again; Open stays locked until the runtime reports ready.',
+      title: 'Start the runtime to continue',
+      detail: 'This local container runtime is not running. Start the runtime again; Open becomes available after the runtime reports ready.',
       actions: expect.arrayContaining([
         expect.objectContaining({
           label: 'Start runtime',

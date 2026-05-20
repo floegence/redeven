@@ -337,8 +337,8 @@ func (f *fixture) assertStoppedRuntimeStatus(report launchReport) {
 	if report.Status != "blocked" {
 		f.t.Fatalf("stopped runtime status = %q, want blocked; report=%#v", report.Status, report)
 	}
-	if report.Code != "not_running" && report.Code != "stale_lock" {
-		f.t.Fatalf("stopped runtime code = %q, want not_running or stale_lock; report=%#v", report.Code, report)
+	if report.Code != "not_running" {
+		f.t.Fatalf("stopped runtime code = %q, want not_running; report=%#v", report.Code, report)
 	}
 	if report.LocalUIURL != "" || report.RuntimeControl != nil {
 		f.t.Fatalf("stopped runtime exposed open surfaces: %#v", report)

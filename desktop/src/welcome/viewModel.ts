@@ -737,7 +737,7 @@ function runtimeStatusLabel(environment: DesktopEnvironmentEntry): string {
   if (environmentRuntimeMaintenance(environment)) {
     const maintenance = environmentRuntimeMaintenance(environment);
     if (desktopRuntimeMaintenanceIsStaleLock(maintenance)) {
-      return 'RUNTIME STALE LOCK';
+      return 'RUNTIME OFFLINE';
     }
     return desktopRuntimeMaintenanceRequiresRestart(maintenance)
       ? 'RESTART REQUIRED'
@@ -1215,7 +1215,7 @@ function blockedRuntimePrimaryActionTitle(
     return 'Desktop model source needs update';
   }
   if (desktopRuntimeMaintenanceIsStaleLock(maintenance)) {
-    return 'Runtime stale lock';
+    return 'Start the runtime to continue';
   }
   if (desktopRuntimeMaintenanceRequiresRestart(maintenance)) {
     return 'Runtime restart required';
@@ -1238,7 +1238,7 @@ function blockedRuntimePrimaryActionDetail(
       return `This ${runtimeMaintenanceSubject(environment)} needs an update before Desktop can make your local model settings available here. Update and restart the runtime first; Open stays separate and becomes available after the runtime is ready.`;
     }
     if (desktopRuntimeMaintenanceIsStaleLock(maintenance)) {
-      return `This ${runtimeMaintenanceSubject(environment)} has lock metadata from an older runtime, but no live runtime is reachable. Start the runtime again; Open stays locked until the runtime reports ready.`;
+      return `This ${runtimeMaintenanceSubject(environment)} is not running. Start the runtime again; Open becomes available after the runtime reports ready.`;
     }
     if (desktopRuntimeMaintenanceRequiresRestart(maintenance)) {
       return `This ${runtimeMaintenanceSubject(environment)} needs a confirmed restart before it can open this environment. Open stays locked until the runtime restarts and reports ready.`;

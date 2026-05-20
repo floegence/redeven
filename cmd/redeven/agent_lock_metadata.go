@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/floegence/redeven/internal/config"
@@ -65,9 +66,17 @@ func readAgentLockMetadata(path string) (*agentLockMetadata, error) {
 	if err != nil {
 		return nil, err
 	}
+	trimmedBody := strings.TrimSpace(string(body))
+	if trimmedBody == "" {
+		return nil, errors.New("runtime lock has no active lease metadata")
+	}
 	var metadata agentLockMetadata
 	if err := json.Unmarshal(body, &metadata); err != nil {
-		return nil, err
+		pid, parseErr := strconv.Atoi(trimmedBody)
+		if parseErr != nil || pid <= 0 {
+			return nil, err
+		}
+		return &agentLockMetadata{PID: pid}, nil
 	}
 	metadata.Mode = strings.TrimSpace(metadata.Mode)
 	metadata.InstanceID = strings.TrimSpace(metadata.InstanceID)

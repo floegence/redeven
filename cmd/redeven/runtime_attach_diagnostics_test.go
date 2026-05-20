@@ -45,3 +45,38 @@ func TestDiagnoseRuntimeAttachFailureUsesLockMetadataAsRuntimeIdentity(t *testin
 		t.Fatalf("unexpected diagnostics: %#v", status.Diagnostics)
 	}
 }
+
+func TestDiagnoseRuntimeAttachFailureTreatsMissingLeaseAsNotRunning(t *testing.T) {
+	status := diagnoseRuntimeAttachFailure(
+		"/root/.redeven/local-environment/agent.lock",
+		"/root/.redeven/local-environment/runtime/control.sock",
+		nil,
+		errors.New("dial unix control.sock: connect: no such file or directory"),
+	)
+
+	if status.State != runtimemanagement.AttachStateNotRunning {
+		t.Fatalf("State = %q, want not_running", status.State)
+	}
+	if status.Diagnostics.FailureCode != "runtime_not_running" {
+		t.Fatalf("FailureCode = %q", status.Diagnostics.FailureCode)
+	}
+	if status.Diagnostics.PIDAlive {
+		t.Fatalf("PIDAlive = true, want false")
+	}
+}
+
+func TestDiagnoseRuntimeAttachFailureUsesTransitionalRawPIDLease(t *testing.T) {
+	status := diagnoseRuntimeAttachFailure(
+		"/root/.redeven/local-environment/agent.lock",
+		"/root/.redeven/local-environment/runtime/control.sock",
+		&agentLockMetadata{PID: os.Getpid()},
+		errors.New("dial unix control.sock: connect: no such file or directory"),
+	)
+
+	if status.State != runtimemanagement.AttachStateLiveProcessWithoutSocket {
+		t.Fatalf("State = %q, want live_process_without_management_socket", status.State)
+	}
+	if status.Identity.PID != os.Getpid() || !status.Diagnostics.PIDAlive {
+		t.Fatalf("unexpected identity/diagnostics: %#v %#v", status.Identity, status.Diagnostics)
+	}
+}

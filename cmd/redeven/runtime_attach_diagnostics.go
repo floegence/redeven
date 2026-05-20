@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -76,10 +74,6 @@ func diagnoseRuntimeAttachFailure(lockPath string, socketPath string, metadata *
 	} else if metadata != nil && lockPID > 0 && !pidAlive {
 		state = runtimemanagement.AttachStateStaleLock
 		failureCode = "lock_pid_not_alive"
-		message = desktopRuntimeAttachMessage(state)
-	} else if fileExists(lockPath) {
-		state = runtimemanagement.AttachStateStaleLock
-		failureCode = "lock_without_runtime_metadata"
 		message = desktopRuntimeAttachMessage(state)
 	}
 	if loadErr != nil && strings.TrimSpace(loadErr.Error()) != "" && failureCode == "" {
@@ -162,12 +156,4 @@ func desktopLaunchDiagnosticsFromAttach(status runtimemanagement.RuntimeAttachSt
 		PIDAlive:                 status.Diagnostics.PIDAlive,
 		SocketReachable:          status.Diagnostics.SocketReachable,
 	}
-}
-
-func fileExists(path string) bool {
-	if strings.TrimSpace(path) == "" {
-		return false
-	}
-	_, err := os.Stat(path)
-	return err == nil || !errors.Is(err, os.ErrNotExist)
 }

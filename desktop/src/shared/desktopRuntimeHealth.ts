@@ -255,8 +255,7 @@ export function desktopRuntimeBlockedReportIsStaleLock(
   const failureCode = compact(report.diagnostics?.failure_code);
   return code === 'stale_lock'
     || attachState === 'stale_lock'
-    || failureCode === 'lock_pid_not_alive'
-    || failureCode === 'lock_without_runtime_metadata';
+    || failureCode === 'lock_pid_not_alive';
 }
 
 function launchBlockedReportPID(report: DesktopRuntimeBlockedReportLike): number {
