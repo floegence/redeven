@@ -231,6 +231,13 @@ Password rules:
   - Set exactly one of --password, --password-stdin, --password-env, or --password-file.
   - --password-env and --password-file trigger startup verification in an interactive terminal.
 
+Rich terminal controls:
+  - Arrow keys move focus between Control plane, Sessions, and Logs.
+  - Enter on Sessions opens the active-session view; type to filter by user, app, channel, or target.
+  - Enter on Logs opens the full runtime log view; Esc returns to the overview.
+  - Enter on Control plane connects or disconnects when remote config is valid.
+  - If remote config is missing, Enter opens Control URL, Environment, and bootstrap ticket setup fields.
+
 Flags:
   --mode <remote|hybrid|local|desktop>
                                     Run mode (default: remote).

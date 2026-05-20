@@ -1,27 +1,23 @@
 {
   "schema_version": 1,
   "release_review": {
-    "release_version": "unreleased",
+    "release_version": "v0.6.8",
     "previous_release": "v0.6.7",
-    "reviewed_at": "2026-05-16",
-    "review_id": "desktop-model-source-rpc-v1",
-    "summary": "Runtime-control adds Desktop Model Source RPC so Desktop-managed SSH and container runtimes can use Local Environment model settings without SSH reverse forwards or provider-specific broker endpoints.",
+    "reviewed_at": "2026-05-20",
+    "review_id": "runtime-rich-tui-overview-v1",
+    "summary": "Runtime rich terminal presentation now exposes runtime version, protocol, workload counts, active sessions, provider link state, and real log tailing without changing the Runtime Service wire protocol.",
     "checked_surfaces": [
-      "Desktop Model Source RPC connect, disconnect, status, and WebSocket frame protocol",
-      "Runtime Service desktop_model_source capability and binding normalization",
-      "Runtime AI model listing, model selection, thread title, run, and subagent paths for desktop:model_ identifiers",
-      "Desktop connector subprocess lifecycle for SSH and Runtime Placement Bridge runtimes",
-      "Desktop Runtime Lifecycle and Open Connection IPC progress split",
-      "Desktop SSH Open connection setup separated from SSH runtime install/start readiness",
-      "Desktop SSH startup without reverse forwarding or legacy broker binding",
-      "Runtime Placement Bridge runtime-control forwarding for Desktop Model Source RPC",
-      "Env App Flower model source grouping and unavailable-state copy",
-      "Runtime Service provider_link capability and binding normalization",
-      "Desktop startup reports and attachable runtime state runtime_control metadata",
-      "Runtime-control authorization, Desktop owner checks, and loopback-only exposure",
-      "Local UI health and runtime state token exposure boundaries",
-      "Legacy Desktop model HTTP binding endpoint removal"
-    ]
+      "Runtime rich presentation overview, activity metrics, access section, and narrow terminal layout",
+      "Runtime presentation active sessions panel, keyboard focus routing, filtering, and empty states",
+      "Runtime Service Snapshot workload counts for active sessions, terminal sessions, active AI runs, and port-forward sessions",
+      "Agent active session summary exported only for presentation and monitoring, not for authorization decisions",
+      "Control plane connect, disconnect, and bootstrap setup actions from the interactive terminal UI",
+      "Real runtime log ring buffer integration and expanded logs panel",
+      "Desktop-managed machine presentation and startup report paths remain separated from human terminal UI",
+      "Local UI health and runtime status endpoints continue to normalize the same Runtime Service protocol snapshot",
+      "Runtime Service compatibility contract fields and protocol version remain unchanged"
+    ],
+    "same_window_rationale": "The release changes terminal presentation, local in-process workload counting, and monitoring summaries only. It does not add, remove, or rename Runtime Service JSON fields, does not change the protocol version, and keeps Desktop attach/start, Local UI health, sys.ping, provider link, runtime-control, SSH runtime bootstrap, and startup report consumers on the existing compatibility window."
   },
   "runtime_protocol_version": "redeven-runtime-v1",
   "compatibility_epoch": 5,

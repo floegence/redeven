@@ -315,6 +315,7 @@ func (c *cli) runCmd(args []string) int {
 	}
 
 	presentationConfig := runtimepresentation.ResolveConfig(requestedPresentation, runtimepresentation.ResolveInput{
+		Stdin:             c.stdin,
 		Stdout:            c.stdout,
 		Stderr:            c.stderr,
 		DesktopManaged:    *desktopManaged,
@@ -334,9 +335,14 @@ func (c *cli) runCmd(args []string) int {
 		StateDir:         stateLayout.StateDir,
 		LocalUIBind:      localUIBind.ListenLabel(),
 	}
+	logBuffer := runtimepresentation.NewLogBuffer(500)
+	presentationRenderer := runtimepresentation.NewRendererWithOptions(c.stderr, presentationConfig, runtimepresentation.RendererOptions{
+		Input: c.stdin,
+		Logs:  logBuffer,
+	})
 	startupReporter := runtimepresentation.NewReporter(
 		presentationSnapshot,
-		runtimepresentation.NewRenderer(c.stderr, presentationConfig),
+		presentationRenderer,
 	)
 	_ = startupReporter.Start()
 	_ = startupReporter.Emit(runtimepresentation.Event{
@@ -626,7 +632,7 @@ func (c *cli) runCmd(args []string) int {
 			Snapshot: startupReporter.Snapshot(),
 		})
 	}
-	logOutput, closeLogOutput := runtimeLogOutput(stateLayout.StateDir, presentationConfig, c.stderr)
+	logOutput, closeLogOutput := runtimeLogOutput(stateLayout.StateDir, presentationConfig, c.stderr, logBuffer)
 	defer closeLogOutput()
 	localUILogger := slog.New(slog.NewTextHandler(logOutput, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
@@ -679,6 +685,7 @@ func (c *cli) runCmd(args []string) int {
 	if err != nil {
 		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to init runtime: %v", err))
 	}
+	presentationRenderer.SetController(&runtimePresentationController{agent: a})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -858,19 +865,35 @@ func buildRunBootstrapArgs(
 	return args
 }
 
-func runtimeLogOutput(stateDir string, presentation runtimepresentation.Config, fallback io.Writer) (io.Writer, func()) {
+func runtimeLogOutput(stateDir string, presentation runtimepresentation.Config, fallback io.Writer, extra ...io.Writer) (io.Writer, func()) {
+	writers := make([]io.Writer, 0, 2+len(extra))
+	for _, writer := range extra {
+		if writer != nil {
+			writers = append(writers, writer)
+		}
+	}
 	if presentation.Effective == runtimepresentation.ModeMachine {
-		return fallback, func() {}
+		if len(writers) == 0 {
+			return fallback, func() {}
+		}
+		return io.MultiWriter(append([]io.Writer{fallback}, writers...)...), func() {}
 	}
 	if strings.TrimSpace(stateDir) == "" {
-		return fallback, func() {}
+		if len(writers) == 0 {
+			return fallback, func() {}
+		}
+		return io.MultiWriter(append([]io.Writer{fallback}, writers...)...), func() {}
 	}
 	logPath := filepath.Join(stateDir, "runtime.log")
 	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
-		return fallback, func() {}
+		if len(writers) == 0 {
+			return fallback, func() {}
+		}
+		return io.MultiWriter(append([]io.Writer{fallback}, writers...)...), func() {}
 	}
-	return f, func() { _ = f.Close() }
+	writers = append([]io.Writer{f}, writers...)
+	return io.MultiWriter(writers...), func() { _ = f.Close() }
 }
 
 func remediationForStartupFailure(code string) string {

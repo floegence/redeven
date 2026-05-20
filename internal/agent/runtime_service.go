@@ -17,6 +17,13 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 	if a.term != nil {
 		terminalCount = len(a.term.VisibleSessionIDs())
 	}
+	sessions := a.listActiveSessionsSnapshot()
+	portForwardCount := 0
+	for _, session := range sessions {
+		if session.FloeApp == FloeAppRedevenPortForward {
+			portForwardCount++
+		}
+	}
 
 	capabilities := runtimeservice.Capabilities{
 		DesktopModelSource: runtimeservice.Capability{
@@ -51,6 +58,10 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 			cancel()
 		}
 	}
+	taskCount := 0
+	if a.code != nil && a.code.AI() != nil {
+		taskCount = a.code.AI().ActiveRunCount("")
+	}
 
 	return runtimeservice.ApplyCompatibilityContract(runtimeservice.Snapshot{
 		RuntimeVersion:   strings.TrimSpace(a.version),
@@ -68,9 +79,9 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 		RemoteEnabled:    a.remoteEnabled,
 		ActiveWorkload: runtimeservice.Workload{
 			TerminalCount:    terminalCount,
-			SessionCount:     len(a.listActiveSessionsSnapshot()),
-			TaskCount:        0,
-			PortForwardCount: 0,
+			SessionCount:     len(sessions),
+			TaskCount:        taskCount,
+			PortForwardCount: portForwardCount,
 		},
 		Capabilities: capabilities,
 		Bindings:     bindings,

@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
+	"time"
 )
 
 const (
 	ansiReset     = "\033[0m"
-	ansiDim       = "\033[2m"
 	ansiBold      = "\033[1m"
 	ansiCyan      = "\033[96m"
 	ansiGreen     = "\033[32m"
@@ -18,24 +19,98 @@ const (
 )
 
 type Renderer struct {
-	w      io.Writer
-	cfg    Config
-	events []Event
-	latest Event
+	w     io.Writer
+	input io.Reader
+	cfg   Config
+	logs  *LogBuffer
+
+	mu            sync.Mutex
+	events        []Event
+	latest        Event
+	snapshot      Snapshot
+	controller    Controller
+	startedAt     time.Time
+	host          HostInfo
+	focus         RichFocus
+	expanded      RichPanel
+	notice        string
+	sessionFilter string
+	frame         int
+	forcedWidth   int
+	forcedHeight  int
+	setup         controlPlaneSetupState
+	lastFrame     []string
+
+	redraw      chan struct{}
+	stop        chan struct{}
+	done        chan struct{}
+	interactive bool
+	started     bool
+}
+
+type RendererOptions struct {
+	Input          io.Reader
+	Logs           *LogBuffer
+	Controller     Controller
+	StartedAt      time.Time
+	TerminalWidth  int
+	TerminalHeight int
 }
 
 func NewRenderer(w io.Writer, cfg Config) *Renderer {
+	return NewRendererWithOptions(w, cfg, RendererOptions{})
+}
+
+func NewRendererWithOptions(w io.Writer, cfg Config, opts RendererOptions) *Renderer {
 	if w == nil {
 		w = io.Discard
 	}
-	return &Renderer{w: w, cfg: cfg}
+	startedAt := opts.StartedAt
+	if startedAt.IsZero() {
+		startedAt = time.Now()
+	}
+	return &Renderer{
+		w:            w,
+		input:        opts.Input,
+		cfg:          cfg,
+		logs:         opts.Logs,
+		controller:   opts.Controller,
+		startedAt:    startedAt,
+		host:         DetectHostInfo(),
+		focus:        RichFocusSessions,
+		forcedWidth:  opts.TerminalWidth,
+		forcedHeight: opts.TerminalHeight,
+		redraw:       make(chan struct{}, 1),
+		stop:         make(chan struct{}),
+		done:         make(chan struct{}),
+		interactive:  cfg.Interactive,
+	}
+}
+
+func (r *Renderer) SetController(controller Controller) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	r.controller = controller
+	r.mu.Unlock()
+	r.signalRedraw()
 }
 
 func (r *Renderer) Start(snapshot Snapshot) error {
 	if r.cfg.Effective == ModeMachine {
 		return nil
 	}
-	return r.render(Event{Kind: EventInfo, Snapshot: snapshot, Title: "Redeven runtime starting"})
+	event := Event{Kind: EventInfo, Snapshot: snapshot, Title: "Redeven runtime starting"}.withTime()
+	if r.interactive {
+		r.mu.Lock()
+		r.snapshot = snapshot
+		r.latest = event
+		r.events = append(r.events, event)
+		r.mu.Unlock()
+		return r.startInteractive()
+	}
+	return r.render(event)
 }
 
 func (r *Renderer) Emit(event Event) error {
@@ -45,6 +120,15 @@ func (r *Renderer) Emit(event Event) error {
 		}
 		return nil
 	}
+	if r.interactive {
+		r.mu.Lock()
+		r.events = append(r.events, event)
+		r.latest = event
+		r.snapshot = event.Snapshot
+		r.mu.Unlock()
+		r.signalRedraw()
+		return nil
+	}
 	r.events = append(r.events, event)
 	r.latest = event
 	return r.render(event)
@@ -52,6 +136,24 @@ func (r *Renderer) Emit(event Event) error {
 
 func (r *Renderer) Close(result Result) error {
 	if r.cfg.Effective == ModeMachine {
+		return nil
+	}
+	if r.interactive {
+		if result.Error != nil {
+			r.mu.Lock()
+			r.latest = Event{
+				Kind:        EventFailure,
+				Severity:    SeverityError,
+				Title:       "Runtime stopped with an error",
+				ErrorDetail: result.Error.Error(),
+				Snapshot:    result.Snapshot,
+			}.withTime()
+			r.events = append(r.events, r.latest)
+			r.snapshot = result.Snapshot
+			r.mu.Unlock()
+			r.signalRedraw()
+		}
+		r.stopInteractive()
 		return nil
 	}
 	if result.Success {
@@ -84,103 +186,31 @@ func (r *Renderer) renderRich(event Event) error {
 	if r.cfg.Dynamic {
 		_, _ = io.WriteString(r.w, "\033[2J\033[H")
 	}
+	var err error
 	switch event.Kind {
 	case EventFailure:
-		return r.renderRichFailure(event)
+		err = r.renderRichFailure(event)
 	case EventReady:
-		return r.renderRichReady(event.Snapshot)
+		err = r.renderRichReady(event.Snapshot)
 	default:
-		return r.renderRichStatus(event)
+		err = r.renderRichStatus(event)
 	}
+	if r.cfg.Dynamic {
+		r.frame++
+	}
+	return err
 }
 
 func (r *Renderer) renderRichStatus(event Event) error {
-	s := event.Snapshot
-	headerRight := valueOr(s.Version, "starting")
-	if event.Kind == EventWarning {
-		headerRight = "warning"
-	}
-	lines := []string{
-		fmt.Sprintf("┌─ %s  Redeven Runtime %s %s ─────┐", r.brandLine(0), strings.Repeat("─", 30), headerRight),
-		fmt.Sprintf("│  %s  %s  provider: %s", r.brandLine(1), valueOr(s.EffectiveRunMode, s.RequestedRunMode), valueOr(s.ControlplaneProviderID, "local")),
-		"│",
-		"│  Local foundation",
-		fmt.Sprintf("│    %s State root      %s", r.statusSymbol(PhaseResolveState, event), valueOr(s.StateDir, "resolving")),
-		fmt.Sprintf("│    %s Runtime lock    %s", r.statusSymbol(PhaseAcquireLock, event), phaseText(PhaseAcquireLock, event, "waiting")),
-		"│",
-		"│  Access surfaces",
-		fmt.Sprintf("│    %s Local UI        %s", r.statusSymbol(PhaseStartLocalUI, event), firstNonEmpty(s.LocalUIURLs, s.LocalUIBind, "not started")),
-		fmt.Sprintf("│    %s Control plane   %s", r.statusSymbol(PhaseConnectControl, event), controlPlaneText(s, event)),
-		fmt.Sprintf("│    %s Environment     %s", r.statusSymbol(PhaseReady, event), valueOr(s.EnvironmentURL, "waiting for runtime registration")),
-	}
-	if event.Kind == EventWarning {
-		lines = append(lines,
-			"│",
-			colorize("│  Warning", ansiYellow, r.cfg.Color),
-			"│    "+valueOr(event.Title, "Runtime is degraded"),
-		)
-		if event.Detail != "" {
-			lines = append(lines, "│    "+event.Detail)
-		}
-		if event.Remediation != "" {
-			lines = append(lines, "│    "+event.Remediation)
-		}
-	} else if event.Title != "" {
-		lines = append(lines,
-			"│",
-			"│  Activity",
-			"│    "+event.Title,
-		)
-		if event.Detail != "" {
-			lines = append(lines, "│    "+event.Detail)
-		}
-	}
-	lines = append(lines, "└──────────────────────────────────────────────────────────────┘")
-	_, err := fmt.Fprintln(r.w, strings.Join(lines, "\n"))
-	return err
+	return r.renderRichPanel(event)
 }
 
 func (r *Renderer) renderRichReady(s Snapshot) error {
-	envURL := s.EnvironmentURL
-	if envURL == "" {
-		envURL = buildEnvironmentURL(s.ControlplaneBaseURL, s.EnvPublicID)
-	}
-	lines := []string{
-		colorize(fmt.Sprintf("%s  Redeven Runtime is ready", r.brandLine(0)), ansiGreen+ansiBold, r.cfg.Color),
-		r.brandLine(1),
-		"",
-		"  Environment  " + styleURL(valueOr(envURL, "not connected"), r.cfg.Color),
-		"  Local UI     " + styleURL(firstNonEmpty(s.LocalUIURLs, s.LocalUIBind, "not started"), r.cfg.Color),
-		"  Mode         " + valueOr(s.EffectiveRunMode, s.RequestedRunMode),
-		"  State        " + valueOr(s.StateDir, "unknown"),
-		"",
-		"Press Ctrl+C to stop the runtime.",
-	}
-	_, err := fmt.Fprintln(r.w, strings.Join(lines, "\n"))
-	return err
+	return r.renderRichPanel(Event{Kind: EventReady, Phase: PhaseReady, Title: "Redeven runtime is ready", Snapshot: s})
 }
 
 func (r *Renderer) renderRichFailure(event Event) error {
-	title := valueOr(event.Title, "Runtime startup failed")
-	detail := valueOr(event.ErrorDetail, event.Detail)
-	lines := []string{
-		fmt.Sprintf("┌─ %s  Redeven Runtime ───────────────────────── startup failed ┐", r.brandLine(0)),
-		fmt.Sprintf("│  %s", r.brandLine(1)),
-		"│",
-		"│  " + colorize(title, ansiRed+ansiBold, r.cfg.Color),
-	}
-	if detail != "" {
-		lines = append(lines, "│", "│  "+detail)
-	}
-	if event.Remediation != "" {
-		lines = append(lines, "│", "│  Fix", "│    "+event.Remediation)
-	}
-	if event.ErrorCode != "" {
-		lines = append(lines, "│", "│  Details", "│    code: "+event.ErrorCode)
-	}
-	lines = append(lines, "└──────────────────────────────────────────────────────────────┘")
-	_, err := fmt.Fprintln(r.w, strings.Join(lines, "\n"))
-	return err
+	return r.renderRichPanel(event)
 }
 
 func (r *Renderer) renderPlain(event Event) error {
@@ -243,49 +273,6 @@ func (r *Renderer) renderMachineFailure(event Event) error {
 	return err
 }
 
-func (r *Renderer) brandLine(index int) string {
-	mark := CompactBrandMark()
-	if index >= 0 && index < len(mark.Lines) {
-		return colorize(mark.Lines[index], ansiCyan+ansiBold, r.cfg.Color)
-	}
-	return ""
-}
-
-func (r *Renderer) statusSymbol(phase Phase, event Event) string {
-	if event.Kind == EventWarning && phase == event.Phase {
-		return colorize("!", ansiYellow, r.cfg.Color)
-	}
-	if event.Kind == EventPhaseStarted && phase == event.Phase {
-		return colorize("◐", ansiCyan, r.cfg.Color)
-	}
-	if phaseDone(phase, r.events, event) {
-		return colorize("●", ansiGreen, r.cfg.Color)
-	}
-	return "○"
-}
-
-func phaseDone(phase Phase, events []Event, latest Event) bool {
-	if latest.Kind == EventPhaseDone && latest.Phase == phase {
-		return true
-	}
-	for _, event := range events {
-		if event.Kind == EventPhaseDone && event.Phase == phase {
-			return true
-		}
-	}
-	return false
-}
-
-func phaseText(phase Phase, event Event, fallback string) string {
-	if event.Phase == phase && event.Detail != "" {
-		return event.Detail
-	}
-	if event.Phase == phase && event.Title != "" {
-		return event.Title
-	}
-	return fallback
-}
-
 func controlPlaneText(s Snapshot, event Event) string {
 	if !s.ControlChannelEnabled {
 		return "disabled"
@@ -320,18 +307,4 @@ func valueOr(values ...string) string {
 		}
 	}
 	return ""
-}
-
-func colorize(text string, color string, enabled bool) string {
-	if !enabled || strings.TrimSpace(text) == "" {
-		return text
-	}
-	return color + text + ansiReset
-}
-
-func styleURL(url string, enabled bool) string {
-	if !enabled || strings.TrimSpace(url) == "" {
-		return url
-	}
-	return colorize(url, ansiCyan+ansiUnderline, true)
 }
