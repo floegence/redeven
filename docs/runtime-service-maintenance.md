@@ -348,18 +348,26 @@ kind and runtime placement. A Local Container must never inherit copy such as
 `This SSH host is reachable` simply because the same lower-level recovery model
 is used for SSH runtimes.
 
-`runtime_stale_lock` is the explicit state for blocked reports whose launch code,
-attach state, or failure code is `stale_lock`, `lock_pid_not_alive`, or
-`lock_without_runtime_metadata`. It means a lock file or lock metadata remains,
-but no live runtime can be reached. Desktop treats it as not running:
+`runtime_stale_lock` is the internal attach diagnostic for blocked reports whose
+launch code, attach state, or failure code is `stale_lock` or
+`lock_pid_not_alive`. It means active runtime lease metadata names a process
+that is no longer alive. An empty lock file is not an active lease and must
+normalize to `not_running`. Desktop treats stale lease diagnostics as a stopped
+runtime lifecycle, not as a user-facing maintenance badge:
 
-- `Open` stays blocked with the runtime attach message.
+- Welcome presents `RUNTIME OFFLINE`, not `RUNTIME STALE LOCK`.
+- `Open` stays blocked with stopped-runtime guidance.
 - `Start runtime` is the primary recovery action when the target can be managed.
 - `Restart runtime` is unavailable because there is no live process to stop.
 - Active-work confirmation is not shown because stale metadata is not active
   workload.
 - `Refresh status` remains available for users who repaired the runtime outside
   Desktop.
+
+Normal `Stop runtime` retires the active lease while the runtime still holds the
+lock, then releases the lock. The next `desktop-runtime-status` after a clean
+stop must report `not_running`. A stale lease is reserved for an unclean exit or
+older runtime that left active metadata behind.
 
 `runtime_restart_required` remains reserved for a live runtime that cannot be
 reused without replacement, for example a Desktop-managed process whose
@@ -387,7 +395,8 @@ inside the container, verifies `desktop-runtime-status`, attaches with
 `desktop-bridge`, requests Local UI and runtime-control through bridge streams,
 then performs direct `sys.ping` and `sys.restart` calls. It also verifies that
 desktop-managed runtimes reject runtime-owned `sys.upgrade` and that a
-Desktop-owned package update followed by daemon restart is attachable again.
+clean `desktop-runtime-stop` settles as `not_running`, not a stale lease. A
+Desktop-owned package update followed by daemon restart must be attachable again.
 This is the regression boundary for container daemon lifecycle, bridge
 forwarding, and maintenance behavior.
 
@@ -445,7 +454,7 @@ Desktop launcher cards keep their current dense SaaS tool layout:
   - compatible: `Open`
   - not running: `Open` stays disabled and offers `Start runtime`
   - first install needed: `Open` stays disabled and offers `Start runtime`
-  - stale lock: `Open` stays disabled and offers `Start runtime` plus `Refresh status`
+  - stale lease diagnostic: presented as not running; `Open` stays disabled and offers `Start runtime` plus `Refresh status`
   - restart required: `Open` stays disabled and offers `Restart runtime`
   - update required: `Open` stays disabled and offers `Update runtime`, or
     `Update Redeven Desktop` with `DESKTOP UPDATE REQUIRED` / `Redeven Desktop update required` presentation for the Local Host bundled runtime

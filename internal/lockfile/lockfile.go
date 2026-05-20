@@ -74,10 +74,15 @@ func (l *Lock) Release() error {
 	if l == nil || l.f == nil {
 		return nil
 	}
-	// Unlock first; close always.
+	// The file content represents the active lease, so retire it while the
+	// lock is still held and before another process can acquire the path.
+	clearErr := l.SetContent(nil)
 	unlockErr := unlockFile(l.f)
 	closeErr := l.f.Close()
 	l.f = nil
+	if clearErr != nil {
+		return clearErr
+	}
 	if unlockErr != nil {
 		return unlockErr
 	}
