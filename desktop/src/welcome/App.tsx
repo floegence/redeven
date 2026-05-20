@@ -2416,9 +2416,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     errorTarget: 'connect' | 'dialog' = 'connect',
     route: 'auto' | DesktopLocalEnvironmentStateRoute = 'auto',
   ): Promise<boolean> {
+    const canCheckBeforeOpen = environment.runtime_health.freshness === 'unknown'
+      && environment.kind !== 'provider_environment';
     if (
       environment.window_state === 'closed'
       && environment.runtime_health.status !== 'online'
+      && !canCheckBeforeOpen
     ) {
       const message = runtimeUnavailableMessage(environment);
       setErrorMessage(errorTarget, message);

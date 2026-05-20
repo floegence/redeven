@@ -1597,7 +1597,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(actionModel.action_presentation.primary_action_overlay).toBeUndefined();
   });
 
-  it('keeps offline runtime controls separate from the primary Open action', () => {
+  it('lets NOT CHECKED runtime cards start Open-owned status preflight', () => {
     const localSnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: testLocalEnvironment(),
@@ -1612,40 +1612,12 @@ describe('buildEnvironmentCardModel', () => {
         primary_action: {
           intent: 'open',
           label: 'Open',
-          enabled: false,
+          enabled: true,
           variant: 'default',
-        },
-        primary_action_overlay: {
-          kind: 'popover',
-          tone: 'warning',
-          eyebrow: 'Status not checked',
-          title: 'Refresh status to continue',
-          detail: 'Desktop has not checked this runtime yet. Refresh status now, or start the runtime when you already know it is offline.',
-          actions: [
-            {
-              label: 'Refresh status',
-              emphasis: 'primary',
-              action: {
-                intent: 'refresh_runtime',
-                label: 'Refresh runtime status',
-                enabled: true,
-                variant: 'outline',
-              },
-            },
-            {
-              label: 'Start runtime',
-              emphasis: 'secondary',
-              action: {
-                intent: 'start_runtime',
-                label: 'Start runtime',
-                enabled: true,
-                variant: 'outline',
-              },
-            },
-          ],
         },
       },
     });
+    expect(buildProviderBackedEnvironmentActionModel(localEntry!).action_presentation.primary_action_overlay).toBeUndefined();
 
     const externalSnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({

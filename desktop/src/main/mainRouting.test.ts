@@ -96,9 +96,9 @@ describe('main routing', () => {
 
     expect(mainSrc).toContain('function runtimePlacementMaintenanceForRuntimeService(');
     expect(mainSrc).toContain('runtimePlacementMaintenanceByTargetID.delete(targetID)');
-    expect(inspectSrc).toContain('maintenance: runtimePlacementMaintenanceForRuntimeService(target.id, bridgeRecord.startup.runtime_service)');
-    expect(inspectSrc).toContain('maintenance: runtimePlacementMaintenanceForRuntimeService(target.id, readyRecord.startup?.runtime_service)');
-    expect(inspectSrc).toContain('const maintenance = runtimePlacementMaintenanceForRuntimeService(target.id, report.startup.runtime_service);');
+    expect(inspectSrc).toContain('maintenance: runtimePlacementMaintenanceForRuntimeService(target.targetID, bridgeRecord.startup.runtime_service)');
+    expect(inspectSrc).toContain('maintenance: runtimePlacementMaintenanceForRuntimeService(target.targetID, cachedReadyRecord.startup?.runtime_service)');
+    expect(inspectSrc).toContain('const maintenance = runtimePlacementMaintenanceForRuntimeService(target.targetID, report.startup.runtime_service);');
     expect(inspectSrc).not.toContain('maintenance: maintenance && !runtimeServiceIsOpenable(report.startup.runtime_service)');
   });
 
@@ -237,7 +237,12 @@ describe('main routing', () => {
     expect(mainSrc).toContain('open_connection_required: true');
     expect(mainSrc).toContain('openConnectionRequired: state.open_connection_required === true');
     expect(mainSrc).toContain('async function openRuntimePlacementBridgeFromLauncher(');
-    expect(mainSrc).toContain('Start this runtime first, then open it.');
+    const bridgeOpenStart = mainSrc.indexOf('async function openRuntimePlacementBridgeFromLauncher(');
+    const bridgeOpenEnd = mainSrc.indexOf('async function startEnvironmentRuntimeFromLauncher(', bridgeOpenStart);
+    const bridgeOpenSrc = mainSrc.slice(bridgeOpenStart, bridgeOpenEnd);
+    expect(bridgeOpenSrc).toContain('await refreshWelcomeRuntimeHealthForEnvironment(environmentID)');
+    expect(bridgeOpenSrc).toContain("title: 'Checking runtime status'");
+    expect(bridgeOpenSrc).not.toContain('Start this runtime first, then open it.');
     expect(mainSrc).toContain('resolveRuntimeContainerPlacement');
     expect(mainSrc).toContain('DESKTOP_LAUNCHER_LIST_RUNTIME_CONTAINERS_CHANNEL');
     expect(mainSrc).not.toContain('containerStartCommand');
@@ -267,9 +272,7 @@ describe('main routing', () => {
     const refreshRuntimeEnd = mainSrc.indexOf('async function refreshAllEnvironmentRuntimesFromLauncher(', refreshRuntimeStart);
     const refreshRuntimeSrc = mainSrc.slice(refreshRuntimeStart, refreshRuntimeEnd);
     expect(refreshRuntimeSrc).toContain("if (placement.kind === 'container_process')");
-    expect(refreshRuntimeSrc).toContain('scheduleWelcomeRuntimeHealthRefresh({');
-    expect(refreshRuntimeSrc).toContain('targetEnvironmentIDs: environmentID ? [environmentID] : []');
-    expect(refreshRuntimeSrc).toContain("mode: 'manual'");
+    expect(refreshRuntimeSrc).toContain('await refreshWelcomeRuntimeHealthForEnvironment(environmentID)');
     expect(refreshRuntimeSrc).not.toContain('loadExternalLocalUIStartup(runtimeRecord.startup.local_ui_url');
     expect(refreshRuntimeSrc).not.toContain('assertRuntimeTargetContainerRunning(hostAccess, placement)');
     expect(refreshRuntimeSrc).not.toContain('markSavedRuntimeTargetUsed(preferences');
@@ -358,9 +361,8 @@ describe('main routing', () => {
     expect(refreshRuntimeStart).toBeGreaterThanOrEqual(0);
     expect(refreshRuntimeEnd).toBeGreaterThan(refreshRuntimeStart);
     const refreshRuntimeSrc = mainSrc.slice(refreshRuntimeStart, refreshRuntimeEnd);
-    expect(refreshRuntimeSrc).toContain('scheduleWelcomeRuntimeHealthRefresh({');
-    expect(refreshRuntimeSrc).toContain("mode: 'manual'");
-    expect(refreshRuntimeSrc).toContain('void syncLinkedProviderRuntimeHealthFromService(runtimeRecord.startup.runtime_service)');
+    expect(refreshRuntimeSrc).toContain('await refreshWelcomeRuntimeHealthForEnvironment(environmentID)');
+    expect(refreshRuntimeSrc).toContain('await syncLinkedProviderRuntimeHealthFromService(runtimeService).catch(() => undefined)');
   });
 
   it('forces provider catalog sync before refreshing a provider environment card', () => {

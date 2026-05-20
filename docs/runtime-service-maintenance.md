@@ -80,6 +80,10 @@ Detection rules:
   runtime-control forward, desktop model-source connection, or provider binding.
 - `Refresh status` always runs the read-only probe for the selected
   non-provider entry, even when `Auto status detection` is off.
+- `NOT CHECKED` means status freshness is unknown, not that the runtime is
+  offline. `Open` remains clickable for Local/SSH/container runtime cards and
+  starts with the same read-only preflight before opening any bridge, tunnel, or
+  Env App window.
 - If a target already has a probe in flight, Desktop reuses that in-flight probe
   instead of starting a duplicate probe.
 - A target with a running and openable Runtime Service becomes `Open`-ready
