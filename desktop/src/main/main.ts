@@ -300,9 +300,13 @@ import {
   normalizeDesktopSSHEnvironmentDetails,
   type DesktopSSHEnvironmentDetails,
 } from '../shared/desktopSSH';
-import type {
-  DesktopRuntimeHealth,
-  DesktopRuntimeMaintenanceRequirement,
+import {
+  buildDesktopRuntimeMaintenanceRequirement,
+  desktopRuntimeBlockedReportIsStaleLock,
+  desktopRuntimeMaintenanceIsStaleLock,
+  desktopRuntimeMaintenanceFromBlockedLaunchReport,
+  type DesktopRuntimeHealth,
+  type DesktopRuntimeMaintenanceRequirement,
 } from '../shared/desktopRuntimeHealth';
 import type { DesktopOperationFailurePresentation } from '../shared/desktopOperationFailure';
 import {
@@ -1451,20 +1455,16 @@ async function inspectSavedRuntimeTargetState(
         });
         const report = parseLaunchReport(statusResult.stdout);
         if (report.status === 'blocked') {
-          const maintenance: DesktopRuntimeMaintenanceRequirement = {
-            kind: 'ssh_runtime_restart_required',
-            required_for: 'open',
-            can_desktop_restart: false,
-            has_active_work: true,
-            active_work_label: 'Existing runtime work may be active',
-            message: report.message,
-          };
+          const maintenance = desktopRuntimeMaintenanceFromBlockedLaunchReport(report, {
+            target_runtime_version: resolveSSHRuntimeReleaseTag(),
+          });
+          const staleLock = desktopRuntimeBlockedReportIsStaleLock(report);
           runtimePlacementMaintenanceByTargetID.set(target.id, maintenance);
           return {
-            running: true,
+            running: !staleLock,
             local_ui_url: '',
             runtime_control_status: desktopRuntimeControlStatusMissing(
-              'not_reported',
+              staleLock ? 'not_started' : 'not_reported',
               report.message,
             ),
             maintenance,
@@ -1501,16 +1501,18 @@ async function inspectSavedRuntimeTargetState(
         };
       }
       if (probe.status !== 'missing_binary') {
-        const maintenance: DesktopRuntimeMaintenanceRequirement = {
-          kind: 'ssh_runtime_update_required',
+        const maintenance = buildDesktopRuntimeMaintenanceRequirement({
+          kind: 'runtime_update_required',
           required_for: 'open',
+          recovery_action: 'update_runtime',
+          can_desktop_start: false,
           can_desktop_restart: false,
           has_active_work: true,
           active_work_label: 'Existing runtime work may be active',
           current_runtime_version: probe.reported_release_tag ?? undefined,
           target_runtime_version: probe.expected_release_tag,
           message: 'Update this container runtime before opening it with this Desktop.',
-        };
+        });
         runtimePlacementMaintenanceByTargetID.set(target.id, maintenance);
         return {
           running: false,
@@ -3938,46 +3940,26 @@ function sshRuntimeMaintenanceFromStartup(
   const message = compact(runtimeService?.open_readiness?.message)
     || compact(runtimeService?.compatibility_message)
     || fallbackMessage;
-  return {
-    kind: needsUpdate ? 'ssh_runtime_update_required' : 'ssh_runtime_restart_required',
+  return buildDesktopRuntimeMaintenanceRequirement({
+    kind: needsUpdate ? 'runtime_update_required' : 'runtime_restart_required',
     required_for: 'open',
+    recovery_action: needsUpdate ? 'update_runtime' : 'restart_runtime',
+    can_desktop_start: false,
     can_desktop_restart: Number.isInteger(startup.pid) && Number(startup.pid) > 0,
     has_active_work: runtimeServiceHasActiveWork(runtimeService),
     active_work_label: formatRuntimeServiceWorkload(runtimeService),
     current_runtime_version: runtimeService?.runtime_version,
     target_runtime_version: resolveSSHRuntimeReleaseTag(),
     message,
-  };
-}
-
-function launchBlockedReportPID(report: LaunchBlockedReport): number {
-  const candidates = [
-    report.lock_owner?.pid,
-    report.diagnostics?.lock_pid,
-  ];
-  for (const candidate of candidates) {
-    const pid = Number(candidate ?? Number.NaN);
-    if (Number.isInteger(pid) && pid > 0) {
-      return pid;
-    }
-  }
-  return 0;
+  });
 }
 
 function sshRuntimeMaintenanceFromBlockedLaunchReport(
   report: LaunchBlockedReport,
 ): DesktopRuntimeMaintenanceRequirement {
-  const canRestart = launchBlockedReportPID(report) > 0
-    && (report.lock_owner?.desktop_managed !== false);
-  return {
-    kind: 'ssh_runtime_restart_required',
-    required_for: 'open',
-    can_desktop_restart: canRestart,
-    has_active_work: true,
-    active_work_label: 'Existing runtime work may be active',
+  return desktopRuntimeMaintenanceFromBlockedLaunchReport(report, {
     target_runtime_version: resolveSSHRuntimeReleaseTag(),
-    message: report.message,
-  };
+  });
 }
 
 async function startSSHEnvironmentRuntimeRecord(
@@ -4103,7 +4085,7 @@ async function startSSHEnvironmentRuntimeRecord(
         if (options.allowActiveWorkReplacement !== true || !maintenance.can_desktop_restart) {
           throw new DesktopSSHRuntimeMaintenanceRequiredError(maintenance.message, maintenance);
         }
-        const pid = launchBlockedReportPID(statusProbe.report);
+        const pid = maintenance.lock_pid ?? 0;
         launcherOperations.update(runtimeKey, {
           phase: 'ssh_starting_runtime',
           title: 'Restarting blocked SSH runtime',
@@ -6038,52 +6020,51 @@ async function ensureRuntimePlacementReadyRecordFromLauncher(
           }), { signal });
           const report = parseLaunchReport(statusResult.stdout);
           if (report.status === 'blocked') {
-            const maintenance: DesktopRuntimeMaintenanceRequirement = {
-              kind: 'ssh_runtime_restart_required',
-              required_for: 'open',
-              can_desktop_restart: false,
-              has_active_work: true,
-              active_work_label: 'Existing runtime work may be active',
-              message: report.message,
-            };
+            const maintenance = desktopRuntimeMaintenanceFromBlockedLaunchReport(report, {
+              target_runtime_version: resolveSSHRuntimeReleaseTag(),
+            });
+            runtimePlacementMaintenanceByTargetID.set(targetID, maintenance);
+            if (!desktopRuntimeMaintenanceIsStaleLock(maintenance)) {
+              throw new RuntimePlacementMaintenanceRequiredError(maintenance.message, maintenance);
+            }
+          }
+          if (report.status !== 'blocked') {
+            if (runtimeServiceIsOpenable(report.startup.runtime_service)) {
+              const readyRecord: RuntimePlacementReadyRecord = {
+                runtime_key: targetID,
+                environment_id: environmentID,
+                label,
+                target_id: providerRuntimeLinkTargetIDForRuntimeTarget(hostAccess, targetID),
+                host_access: hostAccess,
+                placement,
+                runtime_binary_path: probe.binary_path,
+                startup: report.startup,
+              };
+              runtimePlacementReadyByTargetID.set(targetID, readyRecord);
+              runtimePlacementMaintenanceByTargetID.delete(targetID);
+              launcherOperations.finish(targetID, 'succeeded', {
+                phase: 'runtime_ready',
+                title: 'Runtime already running',
+                detail: 'Desktop found an openable runtime in the container and did not start a new process.',
+                lifecycle_progress: buildRuntimeLifecycleProgress({
+                  hostAccess,
+                  placement,
+                  phase: 'runtime_ready',
+                  targetID,
+                  targetLabel: label,
+                }),
+              });
+              scheduleLauncherOperationRemoval(targetID);
+              operationSettled = true;
+              return readyRecord;
+            }
+            const maintenance = sshRuntimeMaintenanceFromStartup(
+              report.startup,
+              'This container runtime is running but cannot open with this Desktop yet.',
+            );
             runtimePlacementMaintenanceByTargetID.set(targetID, maintenance);
             throw new RuntimePlacementMaintenanceRequiredError(maintenance.message, maintenance);
           }
-          if (runtimeServiceIsOpenable(report.startup.runtime_service)) {
-            const readyRecord: RuntimePlacementReadyRecord = {
-              runtime_key: targetID,
-              environment_id: environmentID,
-              label,
-              target_id: providerRuntimeLinkTargetIDForRuntimeTarget(hostAccess, targetID),
-              host_access: hostAccess,
-              placement,
-              runtime_binary_path: probe.binary_path,
-              startup: report.startup,
-            };
-            runtimePlacementReadyByTargetID.set(targetID, readyRecord);
-            runtimePlacementMaintenanceByTargetID.delete(targetID);
-            launcherOperations.finish(targetID, 'succeeded', {
-              phase: 'runtime_ready',
-              title: 'Runtime already running',
-              detail: 'Desktop found an openable runtime in the container and did not start a new process.',
-              lifecycle_progress: buildRuntimeLifecycleProgress({
-                hostAccess,
-                placement,
-                phase: 'runtime_ready',
-                targetID,
-                targetLabel: label,
-              }),
-            });
-            scheduleLauncherOperationRemoval(targetID);
-            operationSettled = true;
-            return readyRecord;
-          }
-          const maintenance = sshRuntimeMaintenanceFromStartup(
-            report.startup,
-            'This container runtime is running but cannot open with this Desktop yet.',
-          );
-          runtimePlacementMaintenanceByTargetID.set(targetID, maintenance);
-          throw new RuntimePlacementMaintenanceRequiredError(maintenance.message, maintenance);
         }
       } catch (error) {
         if (error instanceof RuntimePlacementMaintenanceRequiredError) {

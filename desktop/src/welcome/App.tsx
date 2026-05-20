@@ -2184,7 +2184,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       await updateEnvironmentRuntime(latestTarget, confirmation.runtime_action, 'connect');
       return;
     }
-    if (confirmation.action === 'restart' && target.kind === 'ssh_environment' && target.runtime_maintenance) {
+    if (
+      confirmation.action === 'restart'
+      && target.runtime_maintenance?.recovery_action === 'restart_runtime'
+    ) {
       setRuntimeMaintenanceConfirmation(null);
       const latestTarget = await loadLatestEnvironmentEntry(target.id) ?? target;
       await startEnvironmentRuntime(latestTarget, 'connect', { allowActiveWorkReplacement: true });

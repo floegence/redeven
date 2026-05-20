@@ -1,4 +1,7 @@
-import type { DesktopRuntimeMaintenanceRequirement } from './desktopRuntimeHealth';
+import {
+  desktopRuntimeMaintenanceRequiresUpdate,
+  type DesktopRuntimeMaintenanceRequirement,
+} from './desktopRuntimeHealth';
 import {
   runtimeServiceNeedsRuntimeUpdate,
   type RuntimeServiceSnapshot,
@@ -41,7 +44,7 @@ export function desktopRuntimePackageStateFromRuntimeService(
 ): DesktopRuntimePackageState | undefined {
   const targetVersion = compact(maintenance?.target_runtime_version);
   const currentVersion = compact(maintenance?.current_runtime_version ?? runtimeService?.runtime_version);
-  if (maintenance?.kind === 'ssh_runtime_update_required' || maintenance?.kind === 'desktop_model_source_requires_runtime_update') {
+  if (desktopRuntimeMaintenanceRequiresUpdate(maintenance)) {
     return {
       state: 'outdated',
       current_version: currentVersion || 'unknown',

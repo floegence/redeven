@@ -158,6 +158,57 @@ describe('desktopRuntimePresence', () => {
     expect(plans.refresh.availability).toBe('available');
   });
 
+  it('routes stale lock container recovery through Start instead of Restart', () => {
+    const plans = buildDesktopRuntimeOperationPlans({
+      surface: 'managed_runtime_card',
+      host_access: { kind: 'local_host' },
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'abc123',
+        container_ref: 'redeven-nginx-dev',
+        container_label: 'redeven-nginx-dev',
+        runtime_root: '/root/.redeven',
+        bridge_strategy: 'exec_stream',
+      },
+      running: false,
+      openable: false,
+      runtime_control_status: desktopRuntimeControlStatusMissing(
+        'not_started',
+        'Runtime lock metadata is present but no live runtime is reachable.',
+      ),
+      maintenance: {
+        kind: 'runtime_stale_lock',
+        required_for: 'open',
+        recovery_action: 'start_runtime',
+        can_desktop_start: true,
+        can_desktop_restart: false,
+        has_active_work: false,
+        active_work_label: 'No active work',
+        attach_state: 'stale_lock',
+        failure_code: 'lock_pid_not_alive',
+        lock_pid: 4321,
+        message: 'Runtime lock metadata is present but no live runtime is reachable.',
+      },
+    });
+
+    expect(plans.open).toMatchObject({
+      availability: 'blocked',
+      method: 'local_container_exec',
+      message: 'Runtime lock metadata is present but no live runtime is reachable.',
+    });
+    expect(plans.start).toMatchObject({
+      availability: 'available',
+      method: 'local_container_exec',
+      menu_visibility: 'contextual',
+    });
+    expect(plans.restart).toMatchObject({
+      availability: 'unavailable',
+      reason_code: 'runtime_not_started',
+      menu_visibility: 'stable',
+    });
+  });
+
   it('keeps provider cards out of runtime lifecycle management', () => {
     const plans = buildDesktopRuntimeOperationPlans({
       surface: 'provider_card',

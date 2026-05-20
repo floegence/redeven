@@ -1,5 +1,10 @@
 import type { DesktopRuntimeControlStatus } from './desktopRuntimePresence';
-import type { DesktopRuntimeMaintenanceRequirement } from './desktopRuntimeHealth';
+import {
+  desktopRuntimeMaintenanceIsStaleLock,
+  desktopRuntimeMaintenanceRequiresRestart,
+  desktopRuntimeMaintenanceRequiresUpdate,
+  type DesktopRuntimeMaintenanceRequirement,
+} from './desktopRuntimeHealth';
 import type { DesktopRuntimePackageState } from './desktopRuntimePackageState';
 import type {
   DesktopRuntimeHostAccess,
@@ -140,9 +145,9 @@ export function buildDesktopRuntimeOperationPlans(
   const hasManagement = method !== 'none';
   const requiresUpdate = packageRequiresUpdate(input.package_state);
   const maintenance = input.maintenance;
-  const restartMaintenance = maintenance?.kind === 'ssh_runtime_restart_required';
-  const updateMaintenance = maintenance?.kind === 'ssh_runtime_update_required'
-    || maintenance?.kind === 'desktop_model_source_requires_runtime_update';
+  const restartMaintenance = desktopRuntimeMaintenanceRequiresRestart(maintenance);
+  const staleLockMaintenance = desktopRuntimeMaintenanceIsStaleLock(maintenance);
+  const updateMaintenance = desktopRuntimeMaintenanceRequiresUpdate(maintenance);
   const openConnectionRequired = input.open_connection_required === true;
   const blockedByUpdate = requiresUpdate || updateMaintenance;
   const updateMessage = updateMethod === 'desktop_local_update_handoff'
@@ -151,20 +156,19 @@ export function buildDesktopRuntimeOperationPlans(
   const canOpen = input.openable || openConnectionRequired;
   const managementBlockedStatus = runtimeTargetUnavailableStatus(input.runtime_control_status, openConnectionRequired);
   const managementBlocked = !!managementBlockedStatus;
-  const openAvailability = input.running && canOpen && !blockedByUpdate && !restartMaintenance && !managementBlocked
+  const blockedByRecoveryMaintenance = restartMaintenance || staleLockMaintenance;
+  const openAvailability = input.running && canOpen && !blockedByUpdate && !blockedByRecoveryMaintenance && !managementBlocked
     ? 'available'
     : 'blocked';
   const openMessage = managementBlocked
     ? managementBlockedStatus.message
+    : blockedByUpdate || blockedByRecoveryMaintenance
+      ? maintenance?.message ?? updateMessage
     : !input.running
     ? 'Start this runtime before opening it.'
-    : blockedByUpdate
-      ? updateMessage
-      : restartMaintenance
-        ? maintenance.message
-        : canOpen
-          ? undefined
-          : 'Runtime is not ready to open yet.';
+    : canOpen
+      ? undefined
+      : 'Runtime is not ready to open yet.';
 
   return {
     open: desktopRuntimeOperationPlan('open', openAvailability, method, {
@@ -217,7 +221,7 @@ export function buildDesktopRuntimeOperationPlans(
       'restart',
       hasManagement
         ? input.running
-          ? blockedByUpdate
+          ? blockedByUpdate || staleLockMaintenance
             ? 'blocked'
             : 'available'
           : 'unavailable'
@@ -225,8 +229,20 @@ export function buildDesktopRuntimeOperationPlans(
       method,
       {
         requiresConfirmation: input.running,
-        reasonCode: blockedByUpdate ? 'runtime_update_required' : input.running ? undefined : 'runtime_not_started',
-        message: blockedByUpdate ? updateMessage : input.running ? maintenance?.message ?? activeWorkMessage(input.runtime_service) : 'Runtime is not running.',
+        reasonCode: blockedByUpdate
+          ? 'runtime_update_required'
+          : staleLockMaintenance
+            ? 'runtime_not_started'
+            : input.running
+              ? undefined
+              : 'runtime_not_started',
+        message: blockedByUpdate
+          ? updateMessage
+          : staleLockMaintenance
+            ? maintenance?.message
+            : input.running
+              ? maintenance?.message ?? activeWorkMessage(input.runtime_service)
+              : 'Runtime is not running.',
         packageState: input.package_state,
         maintenance,
         menuVisibility: hasManagement ? 'stable' : 'hidden',

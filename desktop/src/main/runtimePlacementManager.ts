@@ -2,7 +2,11 @@ import {
   type DesktopRuntimeHostAccess,
   type DesktopRuntimePlacement,
 } from '../shared/desktopRuntimePlacement';
-import type { DesktopRuntimeMaintenanceRequirement } from '../shared/desktopRuntimeHealth';
+import {
+  buildDesktopRuntimeMaintenanceRequirement,
+  desktopRuntimeMaintenanceFromBlockedLaunchReport,
+  type DesktopRuntimeMaintenanceRequirement,
+} from '../shared/desktopRuntimeHealth';
 import {
   containerInspectCommand,
   containerRuntimeCommandFailureStatus,
@@ -142,15 +146,9 @@ async function waitForContainerRuntimeDaemon(args: Readonly<{
       }
     } else {
       lastError = new Error(report.message);
-      const maintenance: DesktopRuntimeMaintenanceRequirement = {
-        kind: 'ssh_runtime_restart_required',
-        required_for: 'open',
-        can_desktop_restart: false,
-        has_active_work: true,
-        active_work_label: 'Existing runtime work may be active',
+      const maintenance = desktopRuntimeMaintenanceFromBlockedLaunchReport(report, {
         target_runtime_version: args.runtime_release_tag,
-        message: report.message,
-      };
+      });
       throw new RuntimePlacementMaintenanceRequiredError(maintenance.message, maintenance);
     }
     if (Date.now() >= deadline) {
@@ -281,16 +279,18 @@ export async function ensureRuntimePlacementReady(
     && args.force_runtime_update !== true
     && sourceRuntimeRoot === ''
   ) {
-    const maintenance: DesktopRuntimeMaintenanceRequirement = {
-      kind: 'ssh_runtime_update_required',
+    const maintenance = buildDesktopRuntimeMaintenanceRequirement({
+      kind: 'runtime_update_required',
       required_for: 'open',
+      recovery_action: 'update_runtime',
+      can_desktop_start: false,
       can_desktop_restart: true,
       has_active_work: false,
       active_work_label: 'No active work',
       current_runtime_version: probe.reported_release_tag ?? undefined,
       target_runtime_version: probe.expected_release_tag,
       message: 'Update this container runtime before starting it with the bundled runtime.',
-    };
+    });
     throw new RuntimePlacementMaintenanceRequiredError(maintenance.message, maintenance);
   }
   if (shouldInstallRuntime) {
