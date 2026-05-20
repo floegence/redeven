@@ -1092,7 +1092,7 @@ describe('sshRuntime integration', () => {
       })).rejects.toMatchObject({
         name: 'DesktopSSHRuntimeMaintenanceRequiredError',
         maintenance: expect.objectContaining({
-          kind: 'ssh_runtime_update_required',
+          kind: 'runtime_update_required',
           required_for: 'open',
           has_active_work: false,
         }),
@@ -1111,7 +1111,7 @@ describe('sshRuntime integration', () => {
     await expect(startWithFakeSSH(fixture, 'auto')).rejects.toMatchObject({
       name: 'DesktopSSHRuntimeMaintenanceRequiredError',
       maintenance: expect.objectContaining({
-        kind: 'ssh_runtime_restart_required',
+        kind: 'runtime_restart_required',
         required_for: 'open',
         can_desktop_restart: true,
         has_active_work: false,
@@ -1133,7 +1133,7 @@ describe('sshRuntime integration', () => {
     await expect(startWithFakeSSH(fixture, 'auto')).rejects.toMatchObject({
       name: 'DesktopSSHRuntimeMaintenanceRequiredError',
       maintenance: expect.objectContaining({
-        kind: 'ssh_runtime_restart_required',
+        kind: 'runtime_restart_required',
         required_for: 'open',
         can_desktop_restart: true,
         has_active_work: true,
@@ -1191,7 +1191,7 @@ describe('sshRuntime integration', () => {
       })).rejects.toMatchObject({
         name: 'DesktopSSHRuntimeMaintenanceRequiredError',
         maintenance: expect.objectContaining({
-          kind: 'ssh_runtime_update_required',
+          kind: 'runtime_update_required',
           required_for: 'open',
           has_active_work: true,
         }),

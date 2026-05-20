@@ -28,6 +28,11 @@ import {
   type DesktopRuntimeOperationMethod,
   type DesktopRuntimeOperationPlan,
 } from '../shared/desktopRuntimeOperations';
+import {
+  desktopRuntimeMaintenanceIsStaleLock,
+  desktopRuntimeMaintenanceRequiresRestart,
+  desktopRuntimeMaintenanceRequiresUpdate,
+} from '../shared/desktopRuntimeHealth';
 
 export type DesktopWelcomeShellViewModel = Readonly<{
   shell_title: 'Redeven Desktop';
@@ -729,6 +734,15 @@ function runtimeStatusLabel(environment: DesktopEnvironmentEntry): string {
   if (environment.runtime_health.freshness === 'failed') {
     return 'CHECK FAILED';
   }
+  if (environmentRuntimeMaintenance(environment)) {
+    const maintenance = environmentRuntimeMaintenance(environment);
+    if (desktopRuntimeMaintenanceIsStaleLock(maintenance)) {
+      return 'RUNTIME STALE LOCK';
+    }
+    return desktopRuntimeMaintenanceRequiresRestart(maintenance)
+      ? 'RESTART REQUIRED'
+      : 'RUNTIME NEEDS UPDATE';
+  }
   if (environment.runtime_health.status !== 'online') {
     if (environment.runtime_health.offline_reason_code === 'auth_required') {
       return 'MANUAL AUTH REQUIRED';
@@ -740,11 +754,6 @@ function runtimeStatusLabel(environment: DesktopEnvironmentEntry): string {
       return 'SETUP REQUIRED';
     }
     return 'RUNTIME OFFLINE';
-  }
-  if (environmentRuntimeMaintenance(environment)) {
-    return environmentRuntimeMaintenance(environment)?.kind === 'ssh_runtime_restart_required'
-      ? 'RESTART REQUIRED'
-      : runtimeUpdatePresentation(environment).status_label;
   }
   if (environment.managed_runtime_open_connection_required === true) {
     return 'READY TO OPEN';
@@ -1132,23 +1141,34 @@ function blockedRuntimePrimaryActionGuidanceActions(
 ): readonly EnvironmentGuidanceActionModel[] {
   const updateSource = menuActions.find((item) => item.action.enabled && item.action.intent === 'update_runtime');
   const restartSource = menuActions.find((item) => item.action.enabled && item.action.intent === 'restart_runtime');
+  const startSource = menuActions.find((item) => item.action.enabled && item.action.intent === 'start_runtime');
   const stopSource = menuActions.find((item) => item.action.enabled && item.action.intent === 'stop_runtime');
   const refreshSource = menuActions.find((item) => item.action.intent === 'refresh_runtime');
   const maintenance = environmentRuntimeMaintenance(environment);
-  const primarySource = maintenance?.kind === 'ssh_runtime_restart_required'
-    ? restartSource
-    : updateSource ?? restartSource ?? stopSource;
+  const primarySource = maintenance?.recovery_action === 'start_runtime'
+    ? startSource
+    : maintenance?.recovery_action === 'restart_runtime'
+      ? restartSource
+      : maintenance?.recovery_action === 'update_runtime'
+        ? updateSource
+        : updateSource ?? restartSource ?? startSource ?? stopSource;
   const primaryLabel = (() => {
     if (!primarySource) {
       return '';
     }
     if (primarySource.action.intent === 'update_runtime') {
-      return primarySource.action.runtime_operation_method === 'desktop_local_update_handoff'
-        ? primarySource.action.label
-        : 'Update and restart…';
+      if (primarySource.action.runtime_operation_method === 'desktop_local_update_handoff') {
+        return primarySource.action.label;
+      }
+      return environment.runtime_health.status === 'online' || maintenance?.has_active_work === true
+        ? 'Update and restart…'
+        : primarySource.action.label;
     }
     if (primarySource.action.intent === 'restart_runtime') {
       return 'Restart runtime…';
+    }
+    if (primarySource.action.intent === 'start_runtime') {
+      return 'Start runtime';
     }
     return primarySource.action.label;
   })();
@@ -1173,6 +1193,19 @@ function blockedRuntimePrimaryActionGuidanceActions(
   ].filter((item): item is EnvironmentGuidanceActionModel => item !== null);
 }
 
+function runtimeMaintenanceSubject(environment: DesktopEnvironmentEntry): string {
+  if (environment.managed_runtime_placement?.kind === 'container_process') {
+    return environment.kind === 'ssh_environment' ? 'SSH container runtime' : 'local container runtime';
+  }
+  if (environment.kind === 'ssh_environment') {
+    return 'SSH runtime';
+  }
+  if (environment.kind === 'local_environment') {
+    return 'local runtime';
+  }
+  return 'runtime';
+}
+
 function blockedRuntimePrimaryActionTitle(
   environment: DesktopEnvironmentEntry,
   snapshot: RuntimeServiceSnapshot | undefined,
@@ -1181,10 +1214,13 @@ function blockedRuntimePrimaryActionTitle(
   if (maintenance?.kind === 'desktop_model_source_requires_runtime_update') {
     return 'Desktop model source needs update';
   }
-  if (maintenance?.kind === 'ssh_runtime_restart_required') {
+  if (desktopRuntimeMaintenanceIsStaleLock(maintenance)) {
+    return 'Runtime stale lock';
+  }
+  if (desktopRuntimeMaintenanceRequiresRestart(maintenance)) {
     return 'Runtime restart required';
   }
-  if (maintenance?.kind === 'ssh_runtime_update_required') {
+  if (desktopRuntimeMaintenanceRequiresUpdate(maintenance)) {
     return runtimeUpdatePresentation(environment).required_title;
   }
   return runtimeServiceNeedsRuntimeUpdate(snapshot)
@@ -1199,16 +1235,22 @@ function blockedRuntimePrimaryActionDetail(
   const maintenance = environmentRuntimeMaintenance(environment);
   if (maintenance) {
     if (maintenance.kind === 'desktop_model_source_requires_runtime_update') {
-      return 'This SSH host is reachable, but the running runtime needs an update before Desktop can make your local model settings available here. Update and restart the runtime first; Open stays separate and becomes available after the runtime is ready.';
+      return `This ${runtimeMaintenanceSubject(environment)} needs an update before Desktop can make your local model settings available here. Update and restart the runtime first; Open stays separate and becomes available after the runtime is ready.`;
     }
-    if (maintenance.kind === 'ssh_runtime_restart_required') {
-      return 'This SSH host is reachable, but the running runtime needs a confirmed restart before it can open this environment. Open stays locked until the runtime restarts and reports ready.';
+    if (desktopRuntimeMaintenanceIsStaleLock(maintenance)) {
+      return `This ${runtimeMaintenanceSubject(environment)} has lock metadata from an older runtime, but no live runtime is reachable. Start the runtime again; Open stays locked until the runtime reports ready.`;
+    }
+    if (desktopRuntimeMaintenanceRequiresRestart(maintenance)) {
+      return `This ${runtimeMaintenanceSubject(environment)} needs a confirmed restart before it can open this environment. Open stays locked until the runtime restarts and reports ready.`;
     }
     const presentation = runtimeUpdatePresentation(environment);
     if (presentation.uses_desktop_update_handoff) {
       return presentation.blocked_detail;
     }
-    return 'This SSH host is reachable, but the running runtime needs an update before it can open this environment. Update and restart the runtime first; Open stays separate and becomes available after the runtime is ready.';
+    const updateAction = environment.runtime_health.status === 'online' || maintenance.has_active_work
+      ? 'Update and restart the runtime first'
+      : 'Update the runtime first';
+    return `This ${runtimeMaintenanceSubject(environment)} needs an update before it can open this environment. ${updateAction}; Open stays separate and becomes available after the runtime is ready.`;
   }
   if (runtimeServiceNeedsRuntimeUpdate(snapshot)) {
     const presentation = runtimeUpdatePresentation(environment);
@@ -1319,6 +1361,17 @@ function primaryActionOverlay(
       detail: environment.remote_state_reason
         || 'Remote open is not ready yet. Open stays separate from runtime start and provider link actions.',
       actions: refreshAction ? [refreshAction] : [],
+    };
+  }
+  if (environmentRuntimeMaintenance(environment) && !environmentOpenOperationAvailable(environment)) {
+    const snapshot = environmentRuntimeService(environment);
+    return {
+      kind: 'popover',
+      tone: 'warning',
+      eyebrow: 'Runtime blocked',
+      title: blockedRuntimePrimaryActionTitle(environment, snapshot),
+      detail: blockedRuntimePrimaryActionDetail(environment, snapshot),
+      actions: blockedRuntimePrimaryActionGuidanceActions(environment, menuActions),
     };
   }
   if (environment.runtime_health.status === 'online') {

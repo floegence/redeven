@@ -986,10 +986,10 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('<Show when={!item.canConnect}>');
   });
 
-  it('restarts SSH runtime maintenance through the SSH start flow when no runtime record exists yet', () => {
+  it('restarts runtime maintenance through the recovery action contract when no runtime record exists yet', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain("confirmation.action === 'restart' && target.kind === 'ssh_environment' && target.runtime_maintenance");
+    expect(appSrc).toContain("target.runtime_maintenance?.recovery_action === 'restart_runtime'");
     expect(appSrc).toContain("await startEnvironmentRuntime(latestTarget, 'connect', { allowActiveWorkReplacement: true });");
   });
 });

@@ -1321,6 +1321,8 @@ describe('desktopWelcomeState', () => {
           runtime_maintenance: {
             kind: 'desktop_model_source_requires_runtime_update',
             required_for: 'desktop_model_source',
+            recovery_action: 'update_runtime',
+            can_desktop_start: false,
             can_desktop_restart: true,
             has_active_work: true,
             active_work_label: '2 sessions',

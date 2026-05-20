@@ -972,8 +972,10 @@ describe('buildEnvironmentCardModel', () => {
             message: 'Start this runtime before connecting it to a provider.',
           },
           maintenance: {
-            kind: 'ssh_runtime_update_required',
+            kind: 'runtime_update_required',
             required_for: 'open',
+            recovery_action: 'update_runtime',
+            can_desktop_start: false,
             can_desktop_restart: true,
             has_active_work: false,
             active_work_label: 'No active work',
@@ -1007,8 +1009,8 @@ describe('buildEnvironmentCardModel', () => {
     ]));
     expect(actionModel.action_presentation.primary_action_overlay).toMatchObject({
       kind: 'popover',
-      title: 'Update the runtime to continue',
-      detail: 'Open becomes available after Desktop updates the runtime package in this running container and the runtime reports ready.',
+      title: 'Runtime update required',
+      detail: 'This local container runtime needs an update before it can open this environment. Update the runtime first; Open stays separate and becomes available after the runtime is ready.',
       actions: expect.arrayContaining([
         expect.objectContaining({
           label: 'Update runtime',
@@ -1020,6 +1022,84 @@ describe('buildEnvironmentCardModel', () => {
         }),
       ]),
     });
+  });
+
+  it('guides local container stale lock recovery through Start runtime', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment(),
+      }),
+      managedRuntimePresenceByTargetID: {
+        'local:local': localRuntimePresence(undefined, {
+          placement_target_id: 'local:container:docker:redeven-nginx-dev:abc12345',
+          placement: {
+            kind: 'container_process',
+            container_engine: 'docker',
+            container_id: 'abc12345',
+            container_ref: 'redeven-nginx-dev',
+            container_label: 'redeven-nginx-dev',
+            runtime_root: '/root/.redeven',
+            bridge_strategy: 'exec_stream',
+          },
+          running: false,
+          local_ui_url: '',
+          openable: false,
+          runtime_control_status: {
+            state: 'missing',
+            reason_code: 'not_started',
+            message: 'Runtime lock metadata is present but no live runtime is reachable.',
+          },
+          maintenance: {
+            kind: 'runtime_stale_lock',
+            required_for: 'open',
+            recovery_action: 'start_runtime',
+            can_desktop_start: true,
+            can_desktop_restart: false,
+            has_active_work: false,
+            active_work_label: 'No active work',
+            attach_state: 'stale_lock',
+            failure_code: 'lock_pid_not_alive',
+            lock_pid: 4321,
+            message: 'Runtime lock metadata is present but no live runtime is reachable.',
+          },
+        }),
+      },
+    });
+    const localEntry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
+    expect(localEntry).toBeTruthy();
+
+    const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);
+    expect(actionModel.status_label).toBe('RUNTIME STALE LOCK');
+    expect(actionModel.action_presentation.primary_action_overlay).toMatchObject({
+      kind: 'popover',
+      title: 'Runtime stale lock',
+      detail: 'This local container runtime has lock metadata from an older runtime, but no live runtime is reachable. Start the runtime again; Open stays locked until the runtime reports ready.',
+      actions: expect.arrayContaining([
+        expect.objectContaining({
+          label: 'Start runtime',
+          action: expect.objectContaining({
+            intent: 'start_runtime',
+            enabled: true,
+          }),
+        }),
+        expect.objectContaining({
+          label: 'Refresh status',
+          action: expect.objectContaining({
+            intent: 'refresh_runtime',
+            enabled: true,
+          }),
+        }),
+      ]),
+    });
+    expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'restart_runtime',
+        action: expect.objectContaining({
+          intent: 'restart_runtime',
+          enabled: false,
+        }),
+      }),
+    ]));
   });
 
   it('keeps an online SSH runtime visible but blocks Open when the running runtime needs an update', () => {
@@ -1046,8 +1126,10 @@ describe('buildEnvironmentCardModel', () => {
           source: 'ssh_runtime_probe',
           local_ui_url: 'http://127.0.0.1:24111/',
           runtime_maintenance: {
-            kind: 'ssh_runtime_update_required',
+            kind: 'runtime_update_required',
             required_for: 'open',
+            recovery_action: 'update_runtime',
+            can_desktop_start: false,
             can_desktop_restart: true,
             has_active_work: true,
             active_work_label: '1 terminal, 1 session, 1 port forward',
@@ -1231,8 +1313,10 @@ describe('buildEnvironmentCardModel', () => {
           checked_at_unix_ms: Date.now(),
           source: 'ssh_runtime_probe',
           runtime_maintenance: {
-            kind: 'ssh_runtime_restart_required',
+            kind: 'runtime_restart_required',
             required_for: 'open',
+            recovery_action: 'restart_runtime',
+            can_desktop_start: false,
             can_desktop_restart: true,
             has_active_work: true,
             active_work_label: '1 terminal, 1 session, 1 port forward',

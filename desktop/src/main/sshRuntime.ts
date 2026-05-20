@@ -44,7 +44,10 @@ import {
   runtimeServiceSupportsDesktopModelSource,
   type RuntimeServiceIdentity,
 } from '../shared/runtimeService';
-import type { DesktopRuntimeMaintenanceRequirement } from '../shared/desktopRuntimeHealth';
+import {
+  buildDesktopRuntimeMaintenanceRequirement,
+  type DesktopRuntimeMaintenanceRequirement,
+} from '../shared/desktopRuntimeHealth';
 import type { DesktopOperationFailurePresentation } from '../shared/desktopOperationFailure';
 
 const PUBLIC_INSTALL_SCRIPT_URL = 'https://redeven.com/install.sh';
@@ -1848,16 +1851,18 @@ async function ensureRemoteRuntimeInstalled(args: Readonly<{
     return;
   }
   if (!shouldForceInstall && initialProbe.status !== 'missing_binary') {
-    const maintenance: DesktopRuntimeMaintenanceRequirement = {
-      kind: 'ssh_runtime_update_required',
+    const maintenance = buildDesktopRuntimeMaintenanceRequirement({
+      kind: 'runtime_update_required',
       required_for: 'open',
+      recovery_action: 'update_runtime',
+      can_desktop_start: false,
       can_desktop_restart: true,
       has_active_work: false,
       active_work_label: 'No active work',
       current_runtime_version: initialProbe.reported_release_tag ?? undefined,
       target_runtime_version: initialProbe.expected_release_tag,
       message: 'Update this SSH runtime before starting it with the bundled runtime.',
-    };
+    });
     throw new DesktopSSHRuntimeMaintenanceRequiredError(
       maintenance.message,
       maintenance,
@@ -2091,8 +2096,8 @@ function managedSSHRuntimeAttachPolicy(
   const maintenanceKind = modelSourceUnsupported
     ? 'desktop_model_source_requires_runtime_update'
     : needsRuntimeUpdate
-      ? 'ssh_runtime_update_required'
-      : 'ssh_runtime_restart_required';
+      ? 'runtime_update_required'
+      : 'runtime_restart_required';
   const maintenanceRequiredFor = modelSourceUnsupported ? 'desktop_model_source' : 'open';
   const maintenanceMessage = modelSourceUnsupported
     ? 'Update and restart this SSH runtime before Desktop can make your local model settings available here.'
@@ -2101,16 +2106,18 @@ function managedSSHRuntimeAttachPolicy(
       : runtimeControlUnavailable
         ? 'Restart this SSH runtime so Desktop can prepare runtime-control before provider linking or opening this environment.'
         : 'Restart this SSH runtime before opening this environment.';
-  const maintenance: DesktopRuntimeMaintenanceRequirement = {
+  const maintenance = buildDesktopRuntimeMaintenanceRequirement({
     kind: maintenanceKind,
     required_for: maintenanceRequiredFor,
+    recovery_action: needsRuntimeUpdate || modelSourceUnsupported ? 'update_runtime' : 'restart_runtime',
+    can_desktop_start: false,
     can_desktop_restart: startupReportsStoppablePID(startup),
     has_active_work: runtimeServiceHasActiveWork(runtimeService),
     active_work_label: formatRuntimeServiceWorkload(runtimeService),
     current_runtime_version: runtimeService?.runtime_version,
     target_runtime_version: args.expectedRuntimeIdentity.runtime_version,
     message: maintenanceMessage,
-  };
+  });
 
   if (!args.allowRuntimeReplacement) {
     return {
@@ -2521,16 +2528,18 @@ export async function openManagedSSHRuntimeConnection(
     const expectedRuntimeIdentity = {
       runtime_version: normalizeRuntimeReleaseTag(args.runtimeReleaseTag ?? remoteStartup.runtime_service?.runtime_version ?? ''),
     };
-    const maintenance: DesktopRuntimeMaintenanceRequirement = {
+    const maintenance = buildDesktopRuntimeMaintenanceRequirement({
       kind: 'desktop_model_source_requires_runtime_update',
       required_for: 'desktop_model_source',
+      recovery_action: 'update_runtime',
+      can_desktop_start: false,
       can_desktop_restart: startupReportsStoppablePID(remoteStartup),
       has_active_work: runtimeServiceHasActiveWork(remoteStartup.runtime_service),
       active_work_label: formatRuntimeServiceWorkload(remoteStartup.runtime_service),
       current_runtime_version: remoteStartup.runtime_service?.runtime_version,
       target_runtime_version: expectedRuntimeIdentity.runtime_version,
       message: 'Update and restart this SSH runtime before Desktop can make your local model settings available here.',
-    };
+    });
     throw new DesktopSSHRuntimeMaintenanceRequiredError(
       maintenance.message,
       maintenance,

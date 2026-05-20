@@ -298,6 +298,67 @@ The same snapshot also carries explicit runtime-control surfaces:
 - `capabilities.provider_link` and `bindings.provider_link` describe whether a Desktop-managed Local or SSH runtime can accept an explicit provider-link command and which provider Environment, if any, is currently connected.
 - Container runtime targets resolve a stable `container_ref` to the current concrete `container_id` before bridge startup or maintenance actions. Runtime-control UI should reflect the resolver result: running containers without an active bridge remain startable, while stopped, missing, ambiguous, or inaccessible containers stay observe-only with the resolver message.
 
+### Desktop Runtime Maintenance Requirement
+
+Desktop normalizes Runtime Service readiness, blocked launch reports, package
+stamps, and model-source capability gaps into one placement-agnostic maintenance
+shape before the Welcome UI or Env App shell renders recovery actions:
+
+```ts
+type DesktopRuntimeMaintenanceKind =
+  | 'runtime_update_required'
+  | 'runtime_restart_required'
+  | 'runtime_stale_lock'
+  | 'desktop_model_source_requires_runtime_update';
+
+type DesktopRuntimeMaintenanceRecoveryAction =
+  | 'update_runtime'
+  | 'restart_runtime'
+  | 'start_runtime'
+  | 'refresh_status';
+
+type DesktopRuntimeMaintenanceRequirement = Readonly<{
+  kind: DesktopRuntimeMaintenanceKind;
+  required_for: 'open' | 'desktop_model_source';
+  recovery_action: DesktopRuntimeMaintenanceRecoveryAction;
+  can_desktop_start: boolean;
+  can_desktop_restart: boolean;
+  has_active_work: boolean;
+  active_work_label: string;
+  current_runtime_version?: string;
+  target_runtime_version?: string;
+  attach_state?: string;
+  failure_code?: string;
+  lock_pid?: number;
+  message: string;
+}>;
+```
+
+The kind names describe runtime facts, not transport. SSH Host, Local Host, Local
+Container, and SSH Container cards derive user-facing copy from the environment
+kind and runtime placement. A Local Container must never inherit copy such as
+`This SSH host is reachable` simply because the same lower-level recovery model
+is used for SSH runtimes.
+
+`runtime_stale_lock` is the explicit state for blocked reports whose launch code,
+attach state, or failure code is `stale_lock`, `lock_pid_not_alive`, or
+`lock_without_runtime_metadata`. It means a lock file or lock metadata remains,
+but no live runtime can be reached. Desktop treats it as not running:
+
+- `Open` stays blocked with the runtime attach message.
+- `Start runtime` is the primary recovery action when the target can be managed.
+- `Restart runtime` is unavailable because there is no live process to stop.
+- Active-work confirmation is not shown because stale metadata is not active
+  workload.
+- `Refresh status` remains available for users who repaired the runtime outside
+  Desktop.
+
+`runtime_restart_required` remains reserved for a live runtime that cannot be
+reused without replacement, for example a Desktop-managed process whose
+management socket or runtime-control surface cannot be reached. That state may
+carry `has_active_work` and requires explicit restart confirmation before
+Desktop interrupts work.
+
 ### Contract Carriers
 
 - `desktop-runtime-status`: structured attach status used by Desktop before spawn.
@@ -376,6 +437,7 @@ Desktop launcher cards keep their current dense SaaS tool layout:
   - compatible: `Open`
   - not running: `Open` stays disabled and offers `Start runtime`
   - first install needed: `Open` stays disabled and offers `Start runtime`
+  - stale lock: `Open` stays disabled and offers `Start runtime` plus `Refresh status`
   - restart required: `Open` stays disabled and offers `Restart runtime`
   - update required: `Open` stays disabled and offers `Update runtime`, or
     `Update Redeven Desktop` with `DESKTOP UPDATE REQUIRED` / `Redeven Desktop update required` presentation for the Local Host bundled runtime
