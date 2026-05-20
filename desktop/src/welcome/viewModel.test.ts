@@ -1102,6 +1102,107 @@ describe('buildEnvironmentCardModel', () => {
     ]));
   });
 
+  it('guides stopped local container runtimes through Start while keeping other lifecycle actions explicit', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment(),
+      }),
+      managedRuntimePresenceByTargetID: {
+        'local:local': localRuntimePresence(undefined, {
+          placement_target_id: 'local:container:docker:redeven-nginx-dev:abc12345',
+          placement: {
+            kind: 'container_process',
+            container_engine: 'docker',
+            container_id: 'abc12345',
+            container_ref: 'redeven-nginx-dev',
+            container_label: 'redeven-nginx-dev',
+            runtime_root: '/root/.redeven',
+            bridge_strategy: 'exec_stream',
+          },
+          running: false,
+          local_ui_url: '',
+          openable: false,
+          runtime_control_status: {
+            state: 'missing',
+            reason_code: 'not_started',
+            message: 'Start this runtime before connecting it to a provider.',
+          },
+        }),
+      },
+    });
+    const localEntry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
+    expect(localEntry).toBeTruthy();
+
+    const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);
+    expect(actionModel).toMatchObject({
+      status_label: 'RUNTIME OFFLINE',
+      status_tone: 'warning',
+      action_presentation: {
+        primary_action: {
+          intent: 'open',
+          label: 'Open',
+          enabled: false,
+        },
+        primary_action_overlay: {
+          kind: 'popover',
+          title: 'Start the local runtime to continue',
+          detail: 'Open becomes available once the runtime package is ready in this running container.',
+          actions: expect.arrayContaining([
+            expect.objectContaining({
+              label: 'Start runtime',
+              action: expect.objectContaining({
+                intent: 'start_runtime',
+                enabled: true,
+                runtime_operation_method: 'local_container_exec',
+              }),
+            }),
+            expect.objectContaining({
+              label: 'Refresh status',
+              action: expect.objectContaining({
+                intent: 'refresh_runtime',
+                enabled: true,
+              }),
+            }),
+          ]),
+        },
+      },
+    });
+    expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'start_runtime',
+        action: expect.objectContaining({
+          intent: 'start_runtime',
+          enabled: true,
+          runtime_operation_method: 'local_container_exec',
+        }),
+      }),
+      expect.objectContaining({
+        id: 'stop_runtime',
+        action: expect.objectContaining({
+          intent: 'stop_runtime',
+          enabled: false,
+          disabled_reason: 'Runtime is not running.',
+        }),
+      }),
+      expect.objectContaining({
+        id: 'restart_runtime',
+        action: expect.objectContaining({
+          intent: 'restart_runtime',
+          enabled: false,
+          disabled_reason: 'Runtime is not running.',
+        }),
+      }),
+      expect.objectContaining({
+        id: 'update_runtime',
+        action: expect.objectContaining({
+          intent: 'update_runtime',
+          enabled: true,
+          runtime_operation_method: 'local_container_exec',
+        }),
+      }),
+    ]));
+  });
+
   it('keeps an online SSH runtime visible but blocks Open when the running runtime needs an update', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
@@ -1357,6 +1458,98 @@ describe('buildEnvironmentCardModel', () => {
         action: expect.objectContaining({
           intent: 'restart_runtime',
           enabled: true,
+        }),
+      }),
+    ]));
+  });
+
+  it('keeps Stop, Restart, and Update available for running local container restart maintenance', () => {
+    const restartMaintenance = {
+      kind: 'runtime_restart_required' as const,
+      required_for: 'open' as const,
+      recovery_action: 'restart_runtime' as const,
+      can_desktop_start: false,
+      can_desktop_restart: true,
+      has_active_work: true,
+      active_work_label: 'Existing runtime work may be active',
+      attach_state: 'live_process_without_management_socket',
+      failure_code: 'management_socket_unreachable',
+      lock_pid: 4242,
+      message: 'A Redeven runtime process is alive, but its management socket is not reachable.',
+    };
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment(),
+      }),
+      managedRuntimePresenceByTargetID: {
+        'local:local': localRuntimePresence(providerRuntimeService({
+          state: 'blocked',
+          reason_code: 'runtime_control_missing',
+          message: 'A Redeven runtime process is alive, but its management socket is not reachable.',
+        }), {
+          placement_target_id: 'local:container:docker:redeven-nginx-dev:abc12345',
+          placement: {
+            kind: 'container_process',
+            container_engine: 'docker',
+            container_id: 'abc12345',
+            container_ref: 'redeven-nginx-dev',
+            container_label: 'redeven-nginx-dev',
+            runtime_root: '/root/.redeven',
+            bridge_strategy: 'exec_stream',
+          },
+          openable: false,
+          maintenance: restartMaintenance,
+          runtime_control_status: {
+            state: 'missing',
+            reason_code: 'not_reported',
+            message: 'Restart this runtime from Desktop so runtime-control can be prepared.',
+          },
+        }),
+      },
+    });
+    const localEntry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
+    expect(localEntry).toBeTruthy();
+
+    const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);
+    expect(actionModel.status_label).toBe('RESTART REQUIRED');
+    expect(actionModel.action_presentation.primary_action_overlay).toMatchObject({
+      kind: 'popover',
+      title: 'Runtime restart required',
+      detail: 'This local container runtime needs a confirmed restart before it can open this environment. Open stays locked until the runtime restarts and reports ready.',
+      actions: expect.arrayContaining([
+        expect.objectContaining({
+          label: 'Restart runtime…',
+          action: expect.objectContaining({
+            intent: 'restart_runtime',
+            enabled: true,
+            runtime_operation_method: 'local_container_exec',
+          }),
+        }),
+      ]),
+    });
+    expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'stop_runtime',
+        action: expect.objectContaining({
+          intent: 'stop_runtime',
+          enabled: true,
+          runtime_operation_method: 'local_container_exec',
+        }),
+      }),
+      expect.objectContaining({
+        id: 'restart_runtime',
+        action: expect.objectContaining({
+          intent: 'restart_runtime',
+          enabled: true,
+          runtime_operation_method: 'local_container_exec',
+        }),
+      }),
+      expect.objectContaining({
+        id: 'update_runtime',
+        action: expect.objectContaining({
+          intent: 'update_runtime',
+          enabled: true,
+          runtime_operation_method: 'local_container_exec',
         }),
       }),
     ]));

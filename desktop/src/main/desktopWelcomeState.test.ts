@@ -1294,6 +1294,84 @@ describe('desktopWelcomeState', () => {
     });
   });
 
+  it('projects a stopped container target into offline health with actionable operation plans', () => {
+    const targetID = 'local:container:docker:redeven-nginx-dev:63ce185e';
+    const placement = {
+      kind: 'container_process' as const,
+      container_engine: 'docker' as const,
+      container_id: 'container-stable-id',
+      container_ref: 'redeven-nginx-dev',
+      container_label: 'redeven-nginx-dev',
+      runtime_root: '/root/.redeven',
+      bridge_strategy: 'exec_stream' as const,
+    };
+    const presence = localRuntimePresence({
+      target_id: `local:${targetID}`,
+      placement_target_id: targetID,
+      environment_id: targetID,
+      label: 'redeven-nginx-dev',
+      runtime_key: targetID,
+      placement,
+      running: false,
+      local_ui_url: '',
+      openable: false,
+      runtime_service: undefined,
+      runtime_control_status: {
+        state: 'missing',
+        reason_code: 'container_not_running',
+        message: 'Container redeven-nginx-dev is not running.',
+      },
+    });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        saved_runtime_targets: [{
+          schema_version: 1,
+          id: targetID,
+          label: 'redeven-nginx-dev',
+          host_access: { kind: 'local_host' },
+          placement,
+          pinned: false,
+          last_used_at_ms: 1779100944496,
+          created_at_ms: 1779100944496,
+          updated_at_ms: 1779100944496,
+        }],
+      }),
+      managedRuntimePresenceByTargetID: {
+        [presence.target_id]: presence,
+      },
+    });
+
+    const entry = snapshot.environments.find((environment) => environment.id === targetID);
+
+    expect(entry).toMatchObject({
+      runtime_health: expect.objectContaining({
+        status: 'offline',
+        offline_reason_code: 'container_not_running',
+        offline_reason: 'Container redeven-nginx-dev is not running.',
+      }),
+      runtime_operations: expect.objectContaining({
+        open: expect.objectContaining({
+          availability: 'blocked',
+          reason_code: 'runtime_target_unavailable',
+          message: 'Container redeven-nginx-dev is not running.',
+        }),
+        start: expect.objectContaining({
+          availability: 'blocked',
+          reason_code: 'runtime_target_unavailable',
+        }),
+        update: expect.objectContaining({
+          availability: 'blocked',
+          method: 'local_container_exec',
+        }),
+      }),
+      provider_runtime_link_target: expect.objectContaining({
+        runtime_running: false,
+        runtime_openable: false,
+        blocked_reason_code: 'target_not_running',
+      }),
+    });
+  });
+
   it('drops stale open maintenance when a saved runtime target reports an openable runtime', () => {
     const targetID = 'local:container:docker:redeven-nginx-dev:63ce185e';
     const placement = {
