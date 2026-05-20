@@ -49,6 +49,7 @@ export type DesktopSettingsSurfaceSnapshot = Readonly<{
   local_ui_password_configured: boolean;
   runtime_password_required: boolean;
   local_ui_password_can_clear: boolean;
+  auto_runtime_probe_configurable: boolean;
   summary_items: readonly DesktopSettingsSummaryItem[];
   host_fields: readonly DesktopPageFieldModel[];
   draft: DesktopSettingsDraft;

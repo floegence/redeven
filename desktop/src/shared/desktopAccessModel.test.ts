@@ -15,6 +15,7 @@ function draft(overrides: Partial<DesktopSettingsDraft>): DesktopSettingsDraft {
     local_ui_bind: 'localhost:23998',
     local_ui_password: '',
     local_ui_password_mode: 'replace',
+    auto_runtime_probe_enabled: false,
     ...overrides,
   };
 }

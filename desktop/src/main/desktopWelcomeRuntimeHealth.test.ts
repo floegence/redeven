@@ -41,6 +41,7 @@ function target(
     key: 'external:demo',
     environment_id: 'demo',
     slot: 'external_local_ui',
+    auto_refresh_enabled: false,
     checking_health: health({ checked_at_unix_ms: 1 }),
     probe,
     ...overrides,
@@ -48,7 +49,7 @@ function target(
 }
 
 describe('DesktopWelcomeRuntimeHealthStore', () => {
-  it('primes missing targets as checking without starting their probes', () => {
+  it('primes missing targets without starting probes or fabricating health', () => {
     let probeCount = 0;
     const store = new DesktopWelcomeRuntimeHealthStore(() => undefined);
 
@@ -57,10 +58,7 @@ describe('DesktopWelcomeRuntimeHealthStore', () => {
       return { health: health({ status: 'online' }) };
     })], { pruneMissing: true });
 
-    expect(store.snapshot().savedExternalRuntimeHealth.demo).toEqual(expect.objectContaining({
-      freshness: 'checking',
-      offline_reason: 'Checking runtime status.',
-    }));
+    expect(store.snapshot().savedExternalRuntimeHealth.demo).toBeUndefined();
     expect(probeCount).toBe(0);
   });
 
@@ -93,7 +91,7 @@ describe('DesktopWelcomeRuntimeHealthStore', () => {
     expect(changes.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('deduplicates in-flight probes unless the caller forces a new generation', async () => {
+  it('deduplicates in-flight probes', async () => {
     let probeCount = 0;
     const probeResult = deferred<{ health: DesktopRuntimeHealth }>();
     const store = new DesktopWelcomeRuntimeHealthStore(() => undefined);
@@ -110,22 +108,18 @@ describe('DesktopWelcomeRuntimeHealthStore', () => {
     await Promise.all([first, second]);
   });
 
-  it('prevents a stale forced refresh result from overwriting the newer generation', async () => {
+  it('reuses an in-flight probe even when the caller forces refresh', async () => {
     const firstProbe = deferred<{ health: DesktopRuntimeHealth }>();
-    const secondProbe = deferred<{ health: DesktopRuntimeHealth }>();
+    let probeCount = 0;
     const store = new DesktopWelcomeRuntimeHealthStore(() => undefined);
 
-    const first = store.refresh([target(() => firstProbe.promise)]);
-    const second = store.refresh([target(() => secondProbe.promise)], { force: true });
-
-    secondProbe.resolve({
-      health: health({
-        status: 'online',
-        local_ui_url: 'http://127.0.0.1:25000/',
-        checked_at_unix_ms: Date.now(),
-      }),
+    const runtimeTarget = target(() => {
+      probeCount += 1;
+      return firstProbe.promise;
     });
-    await second;
+    const first = store.refresh([runtimeTarget]);
+    const second = store.refresh([runtimeTarget], { force: true });
+
     firstProbe.resolve({
       health: health({
         status: 'online',
@@ -133,11 +127,12 @@ describe('DesktopWelcomeRuntimeHealthStore', () => {
         checked_at_unix_ms: Date.now(),
       }),
     });
-    await first;
+    await Promise.all([first, second]);
 
+    expect(probeCount).toBe(1);
     expect(store.snapshot().savedExternalRuntimeHealth.demo).toEqual(expect.objectContaining({
       freshness: 'fresh',
-      local_ui_url: 'http://127.0.0.1:25000/',
+      local_ui_url: 'http://127.0.0.1:24000/',
     }));
   });
 

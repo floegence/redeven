@@ -344,6 +344,15 @@ function offlineRuntimeHealth(
   };
 }
 
+function unknownRuntimeHealth(
+  source: DesktopRuntimeHealth['source'],
+): DesktopRuntimeHealth {
+  return {
+    ...offlineRuntimeHealth(source, 'unverified', 'Status has not been checked yet'),
+    freshness: 'unknown',
+  };
+}
+
 function buildOpenEnvironmentWindows(
   sessions: readonly DesktopSessionSummary[],
 ): readonly DesktopOpenEnvironmentWindow[] {
@@ -924,6 +933,7 @@ function runtimeHealthFromPresence(
       ...fallback,
       checked_at_unix_ms: presence.checked_at_unix_ms,
       source,
+      freshness: fallback.freshness === 'unknown' ? undefined : fallback.freshness,
       offline_reason_code:
         runtimeControlMissing?.reason_code === 'not_started'
         || runtimeControlMissing?.reason_code === 'auth_required'
@@ -940,7 +950,7 @@ function runtimeHealthFromPresence(
     status: 'online',
     checked_at_unix_ms: presence.checked_at_unix_ms,
     source,
-    freshness: fallback.freshness,
+    freshness: fallback.freshness === 'unknown' ? undefined : fallback.freshness,
     local_ui_url: presence.local_ui_url || undefined,
     runtime_service: presenceRuntimeService,
     runtime_maintenance: presenceMaintenance,
@@ -1108,10 +1118,16 @@ function buildLocalEnvironmentEntry(
   );
   const providerLink = runtimeService?.bindings?.provider_link;
   const resolvedLocalCloseBehavior = localCloseBehavior(resolvedLocalRuntimeState);
+  const localRuntimeFallbackHealth = cachedRuntimeHealth
+    ?? (
+      resolvedLocalRuntimeState === 'not_running'
+        ? unknownRuntimeHealth('local_runtime_probe')
+        : localEnvironmentRuntimeHealth(resolvedLocalRuntimeState, resolvedLocalRuntimeURL, runtimeService)
+    );
   const runtimeHealth = runtimeHealthFromPresence(
     'local_runtime_probe',
     presence,
-    cachedRuntimeHealth ?? localEnvironmentRuntimeHealth(resolvedLocalRuntimeState, resolvedLocalRuntimeURL, runtimeService),
+    localRuntimeFallbackHealth,
   );
   const runtimeMaintenance = runtimeMaintenanceFromHealth(runtimeHealth);
   const runtimeOperations = managedRuntimeOperations({
@@ -1216,6 +1232,7 @@ function buildLocalEnvironmentEntry(
     runtime_service: runtimeService,
     runtime_maintenance: runtimeMaintenance,
     runtime_operations: runtimeOperations,
+    auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled,
     open_session_key: localSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(localSession),
     open_action_label: localEnvironmentOpenActionLabel({
@@ -1532,11 +1549,7 @@ function buildSavedEnvironmentEntry(
     : undefined;
   const runtimeHealth = sessionRuntimeHealth
     ?? savedRuntimeHealth
-    ?? offlineRuntimeHealth(
-      'external_local_ui_probe',
-      'unverified',
-      'Could not verify runtime health',
-    );
+    ?? unknownRuntimeHealth('external_local_ui_probe');
   const externalOpenable = runtimeHealth.status === 'online'
     || runtimeHealth.offline_reason_code === 'unverified'
     || runtimeHealth.offline_reason_code === 'external_unreachable';
@@ -1556,6 +1569,7 @@ function buildSavedEnvironmentEntry(
     runtime_service: preferredRuntimeService(openSession?.startup?.runtime_service, savedRuntimeHealth),
     runtime_maintenance: runtimeMaintenanceFromHealth(runtimeHealth),
     runtime_operations: externalLocalUIRuntimeOperations(externalOpenable),
+    auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled,
     open_session_key: openSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(openSession),
     open_action_label: isOpen ? 'Focus' : isOpening ? 'Opening…' : 'Open',
@@ -1583,18 +1597,10 @@ function buildSavedSSHEnvironmentEntry(
       'ssh_runtime_probe',
       presence,
       savedRuntimeHealth
-        ?? offlineRuntimeHealth(
-          'ssh_runtime_probe',
-          'not_started',
-          'Serve the runtime first',
-        ),
+        ?? unknownRuntimeHealth('ssh_runtime_probe'),
     )
     ?? savedRuntimeHealth
-    ?? offlineRuntimeHealth(
-      'ssh_runtime_probe',
-      'not_started',
-      'Serve the runtime first',
-    );
+    ?? unknownRuntimeHealth('ssh_runtime_probe');
   const runtimeService = preferredRuntimeService(openSession?.startup?.runtime_service, savedRuntimeHealth, presence);
   const runtimeMaintenance = runtimeMaintenanceFromHealth(runtimeHealth);
   const runtimeKey = desktopSSHEnvironmentID(environment);
@@ -1653,6 +1659,7 @@ function buildSavedSSHEnvironmentEntry(
     provider_environment_candidates: providerEnvironmentCandidates,
     ...managedRuntimeEntryFields(presence),
     runtime_operations: runtimeOperations,
+    auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled,
     open_session_key: openSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(openSession),
     open_action_label: isOpen ? 'Focus' : isOpening ? 'Opening…' : 'Open',
@@ -1716,11 +1723,7 @@ function buildSavedRuntimeTargetEntry(
     presence,
     sessionRuntimeHealth
     ?? cachedRuntimeHealth
-    ?? offlineRuntimeHealth(
-      target.host_access.kind === 'ssh_host' ? 'ssh_runtime_probe' : 'local_runtime_probe',
-      'not_started',
-      'Serve the runtime first',
-    ),
+    ?? unknownRuntimeHealth(target.host_access.kind === 'ssh_host' ? 'ssh_runtime_probe' : 'local_runtime_probe'),
   );
   const runtimeService = preferredRuntimeService(openSession?.startup?.runtime_service, runtimeHealth, presence);
   const targetKind = providerRuntimeLinkKindForHostAccess(target.host_access);
@@ -1781,6 +1784,7 @@ function buildSavedRuntimeTargetEntry(
     managed_runtime_host_access: effectiveHostAccess,
     managed_runtime_placement: effectivePlacement,
     runtime_operations: runtimeOperations,
+    auto_runtime_probe_enabled: target.auto_runtime_probe_enabled,
     open_session_key: openSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(openSession),
     open_action_label: isOpen ? 'Focus' : isOpening ? 'Opening…' : 'Open',
@@ -1851,6 +1855,7 @@ export function buildDesktopWelcomeSnapshot(
           ?? compact(selectedProviderEnvironment.remote_catalog_entry?.environment_url),
         local_ui_password_configured: localEnvironmentAccess(localEnvironment).local_ui_password_configured,
         runtime_password_required: providerSession?.startup?.password_required === true,
+        auto_runtime_probe_configurable: false,
       };
     }
     const localEnvironment = (
@@ -1870,6 +1875,7 @@ export function buildDesktopWelcomeSnapshot(
       current_runtime_url: managedSession?.entry_url ?? managedSession?.startup?.local_ui_url ?? '',
       local_ui_password_configured: localEnvironmentAccess(localEnvironment).local_ui_password_configured,
       runtime_password_required: managedSession?.startup?.password_required === true,
+      auto_runtime_probe_configurable: true,
     };
   })();
 

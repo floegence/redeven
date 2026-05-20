@@ -269,6 +269,7 @@ describe('main routing', () => {
     expect(refreshRuntimeSrc).toContain("if (placement.kind === 'container_process')");
     expect(refreshRuntimeSrc).toContain('scheduleWelcomeRuntimeHealthRefresh({');
     expect(refreshRuntimeSrc).toContain('targetEnvironmentIDs: environmentID ? [environmentID] : []');
+    expect(refreshRuntimeSrc).toContain("mode: 'manual'");
     expect(refreshRuntimeSrc).not.toContain('loadExternalLocalUIStartup(runtimeRecord.startup.local_ui_url');
     expect(refreshRuntimeSrc).not.toContain('assertRuntimeTargetContainerRunning(hostAccess, placement)');
     expect(refreshRuntimeSrc).not.toContain('markSavedRuntimeTargetUsed(preferences');
@@ -358,6 +359,7 @@ describe('main routing', () => {
     expect(refreshRuntimeEnd).toBeGreaterThan(refreshRuntimeStart);
     const refreshRuntimeSrc = mainSrc.slice(refreshRuntimeStart, refreshRuntimeEnd);
     expect(refreshRuntimeSrc).toContain('scheduleWelcomeRuntimeHealthRefresh({');
+    expect(refreshRuntimeSrc).toContain("mode: 'manual'");
     expect(refreshRuntimeSrc).toContain('void syncLinkedProviderRuntimeHealthFromService(runtimeRecord.startup.runtime_service)');
   });
 
@@ -454,7 +456,8 @@ describe('main routing', () => {
 
     expect(mainSrc).toContain('async function saveLocalEnvironmentSettingsFromWelcome(');
     expect(mainSrc).toContain("case 'save_local_environment_settings':");
-    expect(mainSrc).toContain('updateLocalEnvironmentAccess(preferences, existing.id, access)');
+    expect(mainSrc).toContain('updateLocalEnvironmentSettings(preferences, {');
+    expect(mainSrc).toContain('autoRuntimeProbeEnabled: draft.auto_runtime_probe_enabled');
     expect(mainSrc).toContain("'action_invalid',");
     expect(mainSrc).toContain("'dialog',");
   });

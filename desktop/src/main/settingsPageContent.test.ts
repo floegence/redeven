@@ -8,6 +8,7 @@ function draft(overrides: Partial<DesktopSettingsDraft>): DesktopSettingsDraft {
     local_ui_bind: 'localhost:23998',
     local_ui_password: '',
     local_ui_password_mode: 'replace',
+    auto_runtime_probe_enabled: false,
     ...overrides,
   };
 }
@@ -17,15 +18,21 @@ function settingsOptions(overrides: Partial<Parameters<typeof buildDesktopSettin
     environment_id: 'local',
     environment_label: 'Local Environment',
     environment_kind: 'local' as const,
+    auto_runtime_probe_configurable: true,
     ...overrides,
   };
 }
 
 describe('settingsPageContent', () => {
   it('derives the local-only access mode from the default loopback draft', () => {
-    expect(desktopAccessModeForDraft(draft({
+    const snapshot = buildDesktopSettingsSurfaceSnapshot('environment_settings', draft({
       local_ui_bind: '127.0.0.1:0',
-    }))).toBe('local_only');
+      auto_runtime_probe_enabled: true,
+    }), settingsOptions());
+
+    expect(desktopAccessModeForDraft(snapshot.draft)).toBe('local_only');
+    expect(snapshot.auto_runtime_probe_configurable).toBe(true);
+    expect(snapshot.draft.auto_runtime_probe_enabled).toBe(true);
   });
 
   it('derives shared local network mode and describes the next start address', () => {

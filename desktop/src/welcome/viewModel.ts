@@ -1399,6 +1399,32 @@ function primaryActionOverlay(
     return undefined;
   }
 
+  if (environment.runtime_health.freshness === 'unknown') {
+    const refreshAction = blockedPrimaryActionRefreshGuidanceAction(menuActions);
+    const recoveryAction = blockedPrimaryActionGuidanceAction(environment, menuActions);
+    return {
+      kind: 'popover',
+      tone: 'warning',
+      eyebrow: 'Status not checked',
+      title: 'Refresh status to continue',
+      detail: 'Desktop has not checked this runtime yet. Refresh status now, or start the runtime when you already know it is offline.',
+      actions: [
+        ...(refreshAction
+          ? [{
+              ...refreshAction,
+              emphasis: 'primary' as const,
+            }]
+          : []),
+        ...(recoveryAction
+          ? [{
+              ...recoveryAction,
+              emphasis: 'secondary' as const,
+            }]
+          : []),
+      ],
+    };
+  }
+
   const recoveryAction = blockedPrimaryActionGuidanceAction(environment, menuActions);
   if (recoveryAction) {
     const refreshAction = blockedPrimaryActionRefreshGuidanceAction(menuActions);

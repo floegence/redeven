@@ -42,6 +42,7 @@ import {
   setSavedRuntimeTargetPinned,
   setSavedSSHEnvironmentPinned,
   updateLocalEnvironmentAccess,
+  updateLocalEnvironmentSettings,
   upsertSavedControlPlane,
   upsertSavedEnvironment,
   upsertSavedRuntimeTarget,
@@ -54,6 +55,7 @@ function draft(overrides: Partial<DesktopSettingsDraft> = {}): DesktopSettingsDr
     local_ui_bind: 'localhost:23998',
     local_ui_password: '',
     local_ui_password_mode: 'replace',
+    auto_runtime_probe_enabled: false,
     ...overrides,
   };
 }
@@ -144,6 +146,7 @@ describe('desktopPreferences', () => {
   it('preserves the single Local Environment state when editing access without resending it', () => {
     const existing = testLocalEnvironment({
       label: 'Lab',
+      autoRuntimeProbeEnabled: true,
       access: testLocalAccess({
         local_ui_bind: 'localhost:23998',
       }),
@@ -159,8 +162,64 @@ describe('desktopPreferences', () => {
     expect(updated).toEqual(expect.objectContaining({
       id: existing.id,
       label: existing.label,
+      auto_runtime_probe_enabled: true,
     }));
     expect(updated?.local_hosting?.access.local_ui_bind).toBe('localhost:24000');
+  });
+
+  it('defaults non-provider automatic runtime probes off and persists explicit opt-in', () => {
+    const initial = defaultDesktopPreferences();
+    expect(initial.local_environment.auto_runtime_probe_enabled).toBe(false);
+
+    const withLocalProbe = updateLocalEnvironmentSettings(initial, {
+      environmentID: initial.local_environment.id,
+      autoRuntimeProbeEnabled: true,
+    });
+    expect(withLocalProbe.local_environment.auto_runtime_probe_enabled).toBe(true);
+
+    const withURL = upsertSavedEnvironment(withLocalProbe, {
+      environment_id: 'env-1',
+      label: 'Work laptop',
+      local_ui_url: 'http://192.168.1.11:24000/',
+    });
+    expect(withURL.saved_environments[0]?.auto_runtime_probe_enabled).toBe(false);
+
+    const withURLOptIn = upsertSavedEnvironment(withURL, {
+      environment_id: 'env-1',
+      label: 'Work laptop',
+      local_ui_url: 'http://192.168.1.11:24000/',
+      auto_runtime_probe_enabled: true,
+    });
+    expect(withURLOptIn.saved_environments[0]?.auto_runtime_probe_enabled).toBe(true);
+
+    const withSSH = upsertSavedSSHEnvironment(withURLOptIn, {
+      environment_id: '',
+      label: 'SSH Lab',
+      ssh_destination: 'devbox',
+      ssh_port: 2222,
+      auth_mode: 'key_agent',
+      runtime_root: 'remote_default',
+      bootstrap_strategy: 'desktop_upload',
+      release_base_url: '',
+      connect_timeout_seconds: 10,
+    });
+    expect(withSSH.saved_ssh_environments[0]?.auto_runtime_probe_enabled).toBe(false);
+
+    const withRuntimeTarget = upsertSavedRuntimeTarget(withSSH, {
+      label: 'Local Container Runtime',
+      host_access: { kind: 'local_host' },
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'container-stable-id',
+        container_ref: 'dev-container',
+        container_label: 'dev-container',
+        runtime_root: '/root/.redeven',
+        bridge_strategy: 'exec_stream',
+      },
+      auto_runtime_probe_enabled: true,
+    });
+    expect(withRuntimeTarget.saved_runtime_targets[0]?.auto_runtime_probe_enabled).toBe(true);
   });
 
   it('keeps or clears the stored password according to the write-only mode', () => {
@@ -195,6 +254,7 @@ describe('desktopPreferences', () => {
       const codec = createPlaintextSecretCodec();
       const preferences: DesktopPreferences = testDesktopPreferences({
         local_environment: testLocalEnvironment({
+          autoRuntimeProbeEnabled: true,
           access: testLocalAccess({
             local_ui_bind: '0.0.0.0:23998',
             local_ui_password: 'super-secret',
@@ -207,6 +267,7 @@ describe('desktopPreferences', () => {
             label: 'Staging',
             local_ui_url: 'http://192.168.1.12:24000/',
             pinned: true,
+            auto_runtime_probe_enabled: true,
             created_at_ms: 50,
             last_used_at_ms: 100,
           },
@@ -225,6 +286,7 @@ describe('desktopPreferences', () => {
             ssh_password: '',
             ssh_password_configured: false,
             pinned: false,
+            auto_runtime_probe_enabled: true,
             created_at_ms: 60,
             last_used_at_ms: 90,
           },
@@ -247,6 +309,7 @@ describe('desktopPreferences', () => {
             ssh_password: '',
             ssh_password_configured: false,
             pinned: false,
+            auto_runtime_probe_enabled: true,
             created_at_ms: 70,
             updated_at_ms: 80,
             last_used_at_ms: 95,
@@ -655,6 +718,7 @@ describe('desktopPreferences', () => {
         label: 'Laptop',
         local_ui_url: 'http://192.168.1.11:24000/',
         pinned: false,
+        auto_runtime_probe_enabled: false,
         created_at_ms: 10,
         last_used_at_ms: 300,
       },
@@ -663,6 +727,7 @@ describe('desktopPreferences', () => {
         label: defaultSavedEnvironmentLabel('http://192.168.1.12:24000/'),
         local_ui_url: 'http://192.168.1.12:24000/',
         pinned: false,
+        auto_runtime_probe_enabled: false,
         created_at_ms: 20,
         last_used_at_ms: 200,
       },
@@ -674,6 +739,7 @@ describe('desktopPreferences', () => {
         label: 'Laptop',
         local_ui_url: 'http://192.168.1.11:24000/',
         pinned: false,
+        auto_runtime_probe_enabled: false,
         created_at_ms: 10,
         last_used_at_ms: 300,
       },
@@ -718,6 +784,7 @@ describe('desktopPreferences', () => {
         ssh_password: '',
         ssh_password_configured: false,
         pinned: false,
+        auto_runtime_probe_enabled: false,
         created_at_ms: 10,
         last_used_at_ms: 500,
       },
@@ -1070,6 +1137,7 @@ describe('desktopPreferences', () => {
         host_access: { kind: 'local_host' as const },
         placement: oldPlacement,
         pinned: false,
+        auto_runtime_probe_enabled: false,
         created_at_ms: 10,
         updated_at_ms: 20,
         last_used_at_ms: 30,
@@ -1515,6 +1583,7 @@ describe('desktopPreferences', () => {
   it('serializes local-environment settings into a settings draft', () => {
     expect(desktopPreferencesToDraft(testDesktopPreferences({
       local_environment: testLocalEnvironment({
+          autoRuntimeProbeEnabled: true,
           access: {
             local_ui_bind: '0.0.0.0:23998',
             local_ui_password: 'secret',
@@ -1525,6 +1594,7 @@ describe('desktopPreferences', () => {
       local_ui_bind: '0.0.0.0:23998',
       local_ui_password: '',
       local_ui_password_mode: 'keep',
+      auto_runtime_probe_enabled: true,
     });
   });
 

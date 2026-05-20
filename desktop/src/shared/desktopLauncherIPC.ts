@@ -175,6 +175,7 @@ export type DesktopLauncherRuntimeTarget = Readonly<
     label: string;
     force_runtime_update: boolean;
     allow_active_work_replacement: boolean;
+    auto_runtime_probe_enabled: boolean;
     ssh_password: string;
     ssh_password_mode: 'keep' | 'replace' | 'clear';
   }>
@@ -242,6 +243,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   runtime_service?: RuntimeServiceSnapshot;
   runtime_maintenance?: DesktopRuntimeMaintenanceRequirement;
   runtime_operations: DesktopRuntimeOperationPlans;
+  auto_runtime_probe_enabled?: boolean;
   open_session_key: string;
   open_session_lifecycle?: DesktopLauncherSessionLifecycle;
   open_action_label: 'Open' | 'Opening…' | 'Focus';
@@ -405,12 +407,14 @@ export type DesktopLauncherActionRequest = Readonly<
       local_ui_bind: string;
       local_ui_password: string;
       local_ui_password_mode: 'keep' | 'replace' | 'clear';
+      auto_runtime_probe_enabled: boolean;
     }
   | {
       kind: 'upsert_saved_environment';
       environment_id: string;
       label: string;
       external_local_ui_url: string;
+      auto_runtime_probe_enabled: boolean;
     }
   | ({
       kind: 'upsert_saved_ssh_environment';
@@ -418,11 +422,13 @@ export type DesktopLauncherActionRequest = Readonly<
       label: string;
       ssh_password: string;
       ssh_password_mode: 'keep' | 'replace' | 'clear';
+      auto_runtime_probe_enabled: boolean;
     } & DesktopSSHEnvironmentDetails)
   | ({
       kind: 'upsert_saved_runtime_target';
       environment_id?: string;
       label: string;
+      auto_runtime_probe_enabled: boolean;
     } & Required<Pick<DesktopLauncherRuntimeTarget, 'host_access' | 'placement'>>
       & Pick<DesktopLauncherRuntimeTarget, 'ssh_password' | 'ssh_password_mode'>)
   | {
@@ -585,6 +591,7 @@ function normalizeDesktopLauncherRuntimeTarget(
     ...(candidate.connect_timeout_seconds != null ? { connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds(candidate.connect_timeout_seconds) } : {}),
     ...(candidate.force_runtime_update === true ? { force_runtime_update: true } : {}),
     ...(candidate.allow_active_work_replacement === true ? { allow_active_work_replacement: true } : {}),
+    ...(candidate.auto_runtime_probe_enabled === true ? { auto_runtime_probe_enabled: true } : {}),
   };
 
   if (
@@ -842,6 +849,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         local_ui_password_mode: compact(
           (candidate as { local_ui_password_mode?: unknown }).local_ui_password_mode,
         ) as 'keep' | 'replace' | 'clear',
+        auto_runtime_probe_enabled: (candidate as { auto_runtime_probe_enabled?: unknown }).auto_runtime_probe_enabled === true,
       };
     }
     case 'focus_environment_window': {
@@ -873,6 +881,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         environment_id: compact((candidate as { environment_id?: unknown }).environment_id),
         label: compact((candidate as { label?: unknown }).label),
         external_local_ui_url: compact((candidate as { external_local_ui_url?: unknown }).external_local_ui_url),
+        auto_runtime_probe_enabled: (candidate as { auto_runtime_probe_enabled?: unknown }).auto_runtime_probe_enabled === true,
       };
     case 'upsert_saved_ssh_environment':
       {
@@ -892,6 +901,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         bootstrap_strategy: compact((candidate as { bootstrap_strategy?: unknown }).bootstrap_strategy) as DesktopSSHEnvironmentDetails['bootstrap_strategy'],
         release_base_url: compact((candidate as { release_base_url?: unknown }).release_base_url),
         connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds((candidate as { connect_timeout_seconds?: unknown }).connect_timeout_seconds),
+        auto_runtime_probe_enabled: (candidate as { auto_runtime_probe_enabled?: unknown }).auto_runtime_probe_enabled === true,
       };
       }
     case 'upsert_saved_runtime_target': {
@@ -911,6 +921,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         placement,
         ssh_password: String((candidate as { ssh_password?: unknown }).ssh_password ?? ''),
         ssh_password_mode: normalizeSSHPasswordMode((candidate as { ssh_password_mode?: unknown }).ssh_password_mode),
+        auto_runtime_probe_enabled: (candidate as { auto_runtime_probe_enabled?: unknown }).auto_runtime_probe_enabled === true,
       };
     }
     case 'delete_saved_environment': {

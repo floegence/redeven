@@ -72,6 +72,7 @@ describe('launcherBusyState', () => {
       local_ui_bind: '127.0.0.1:24000',
       local_ui_password: '',
       local_ui_password_mode: 'replace',
+      auto_runtime_probe_enabled: false,
     })).toEqual({
       action: 'save_settings',
       environment_id: '',

@@ -1,4 +1,9 @@
-import type { DesktopPreferences } from '../main/desktopPreferences';
+import type {
+  DesktopPreferences,
+  DesktopSavedEnvironment,
+  DesktopSavedRuntimeTarget,
+  DesktopSavedSSHEnvironment,
+} from '../main/desktopPreferences';
 import { defaultDesktopPreferences } from '../main/desktopPreferences';
 import { localEnvironmentStateLayout } from '../main/statePaths';
 import {
@@ -32,6 +37,7 @@ type TestLocalEnvironmentOptions = Readonly<{
   label?: string;
   access?: TestLocalAccessOverrides;
   pinned?: boolean;
+  autoRuntimeProbeEnabled?: boolean;
   stateDir?: string;
   owner?: DesktopLocalEnvironmentOwner;
   preferredOpenRoute?: DesktopLocalEnvironmentPreferredOpenRoute;
@@ -46,6 +52,7 @@ type TestProviderBoundLocalEnvironmentOptions = Readonly<{
   label?: string;
   access?: TestLocalAccessOverrides;
   pinned?: boolean;
+  autoRuntimeProbeEnabled?: boolean;
   stateDir?: string;
   owner?: DesktopLocalEnvironmentOwner;
   preferredOpenRoute?: DesktopLocalEnvironmentPreferredOpenRoute;
@@ -56,8 +63,21 @@ type TestProviderBoundLocalEnvironmentOptions = Readonly<{
   lastUsedAtMS?: number;
 }>;
 
-type TestDesktopPreferencesOptions = Readonly<Partial<DesktopPreferences> & {
+type TestSavedEnvironmentInput =
+  | DesktopSavedEnvironment
+  | Omit<DesktopSavedEnvironment, 'auto_runtime_probe_enabled'> & Partial<Pick<DesktopSavedEnvironment, 'auto_runtime_probe_enabled'>>;
+type TestSavedSSHEnvironmentInput =
+  | DesktopSavedSSHEnvironment
+  | Omit<DesktopSavedSSHEnvironment, 'auto_runtime_probe_enabled'> & Partial<Pick<DesktopSavedSSHEnvironment, 'auto_runtime_probe_enabled'>>;
+type TestSavedRuntimeTargetInput =
+  | DesktopSavedRuntimeTarget
+  | Omit<DesktopSavedRuntimeTarget, 'auto_runtime_probe_enabled'> & Partial<Pick<DesktopSavedRuntimeTarget, 'auto_runtime_probe_enabled'>>;
+
+type TestDesktopPreferencesOptions = Readonly<Omit<Partial<DesktopPreferences>, 'saved_environments' | 'saved_ssh_environments' | 'saved_runtime_targets'> & {
   local_environment?: DesktopLocalEnvironmentState;
+  saved_environments?: readonly TestSavedEnvironmentInput[];
+  saved_ssh_environments?: readonly TestSavedSSHEnvironmentInput[];
+  saved_runtime_targets?: readonly TestSavedRuntimeTargetInput[];
 }>;
 
 type TestProviderEnvironmentOptions = Readonly<{
@@ -83,6 +103,27 @@ function testCurrentRuntime(
   };
 }
 
+function normalizeTestSavedEnvironment(environment: TestSavedEnvironmentInput): DesktopSavedEnvironment {
+  return {
+    ...environment,
+    auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled === true,
+  };
+}
+
+function normalizeTestSavedSSHEnvironment(environment: TestSavedSSHEnvironmentInput): DesktopSavedSSHEnvironment {
+  return {
+    ...environment,
+    auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled === true,
+  };
+}
+
+function normalizeTestSavedRuntimeTarget(target: TestSavedRuntimeTargetInput): DesktopSavedRuntimeTarget {
+  return {
+    ...target,
+    auto_runtime_probe_enabled: target.auto_runtime_probe_enabled === true,
+  };
+}
+
 export function testLocalAccess(
   overrides: TestLocalAccessOverrides = {},
 ): DesktopLocalEnvironmentAccess {
@@ -98,6 +139,7 @@ export function testLocalEnvironment(
   return createDesktopLocalEnvironmentState({
     label: options.label,
     pinned: options.pinned,
+    autoRuntimeProbeEnabled: options.autoRuntimeProbeEnabled,
     stateDir: options.stateDir ?? localEnvironmentStateLayout().stateDir,
     owner: options.owner,
     preferredOpenRoute: options.preferredOpenRoute,
@@ -128,6 +170,7 @@ export function testProviderBoundLocalEnvironment(
     providerEnvironment,
     testLocalEnvironment({
       access: options.access,
+      autoRuntimeProbeEnabled: options.autoRuntimeProbeEnabled,
       owner: options.owner ?? 'desktop',
       stateDir: options.stateDir ?? layout.stateDir,
       currentRuntime: testCurrentRuntime(options.currentRuntime),
@@ -205,6 +248,9 @@ export function testDesktopPreferences(
     ...preferenceOverrides,
     local_environment: localEnvironment,
     provider_environments: [...providerEnvironmentsByID.values()],
+    saved_environments: (options.saved_environments ?? base.saved_environments).map(normalizeTestSavedEnvironment),
+    saved_ssh_environments: (options.saved_ssh_environments ?? base.saved_ssh_environments).map(normalizeTestSavedSSHEnvironment),
+    saved_runtime_targets: (options.saved_runtime_targets ?? base.saved_runtime_targets).map(normalizeTestSavedRuntimeTarget),
   };
 }
 
