@@ -486,6 +486,11 @@ type SavedRuntimeTargetState = Readonly<{
   placement?: DesktopRuntimePlacement;
 }>;
 
+type RuntimePlacementInspectionState = Readonly<SavedRuntimeTargetState & {
+  ready_record?: RuntimePlacementReadyRecord;
+  runtime_target_available?: boolean;
+}>;
+
 type PendingSSHRuntimeStart = Readonly<{
   runtime_key: `ssh:${string}`;
   environment_id: string;
@@ -1410,7 +1415,31 @@ function sshRuntimeMaintenanceForRuntimeService(
 async function inspectSavedRuntimeTargetState(
   target: DesktopPreferences['saved_runtime_targets'][number],
 ): Promise<SavedRuntimeTargetState> {
-  const bridgeRecord = runtimePlacementBridgeByTargetID.get(target.id) ?? null;
+  const inspection = await inspectRuntimePlacementTargetState({
+    targetID: target.id,
+    environmentID: target.id,
+    label: target.label,
+    hostAccess: target.host_access,
+    placement: target.placement,
+    sshPassword: target.host_access.kind === 'ssh_host' && target.ssh_password_configured
+      ? target.ssh_password ?? ''
+      : undefined,
+  });
+  return inspection;
+}
+
+async function inspectRuntimePlacementTargetState(
+  target: Readonly<{
+    targetID: DesktopRuntimeTargetID;
+    environmentID: string;
+    label: string;
+    hostAccess: DesktopRuntimeHostAccess;
+    placement: DesktopRuntimePlacement;
+    sshPassword?: string;
+    signal?: AbortSignal;
+  }>,
+): Promise<RuntimePlacementInspectionState> {
+  const bridgeRecord = runtimePlacementBridgeByTargetID.get(target.targetID) ?? null;
   if (bridgeRecord) {
     return {
       running: true,
@@ -1418,61 +1447,69 @@ async function inspectSavedRuntimeTargetState(
       local_ui_url: bridgeRecord.startup.local_ui_url,
       runtime_service: bridgeRecord.startup.runtime_service,
       runtime_control_status: await runtimeControlStatusForStartup(bridgeRecord.startup),
-      maintenance: runtimePlacementMaintenanceForRuntimeService(target.id, bridgeRecord.startup.runtime_service),
+      maintenance: runtimePlacementMaintenanceForRuntimeService(target.targetID, bridgeRecord.startup.runtime_service),
       placement: bridgeRecord.session.placement,
+      runtime_target_available: true,
     };
   }
-  const readyRecord = runtimePlacementReadyByTargetID.get(target.id) ?? null;
-  if (readyRecord) {
+  const cachedReadyRecord = runtimePlacementReadyByTargetID.get(target.targetID) ?? null;
+  if (cachedReadyRecord) {
     return {
       running: true,
-      startup: readyRecord.startup,
+      startup: cachedReadyRecord.startup,
       local_ui_url: '',
       open_connection_required: true,
-      runtime_service: readyRecord.startup?.runtime_service,
+      runtime_service: cachedReadyRecord.startup?.runtime_service,
       runtime_control_status: desktopRuntimeControlStatusMissing(
         'forward_unavailable',
         'Open this runtime to prepare the Desktop bridge and provider connection.',
       ),
-      maintenance: runtimePlacementMaintenanceForRuntimeService(target.id, readyRecord.startup?.runtime_service),
-      placement: readyRecord.placement,
+      maintenance: runtimePlacementMaintenanceForRuntimeService(target.targetID, cachedReadyRecord.startup?.runtime_service),
+      placement: cachedReadyRecord.placement,
+      ready_record: cachedReadyRecord,
+      runtime_target_available: true,
     };
   }
   if (target.placement.kind !== 'container_process') {
     return {
       running: false,
       local_ui_url: '',
-      runtime_control_status: desktopRuntimeControlStatusMissing('not_started', 'Start this runtime before connecting it to a provider.'),
-      maintenance: runtimePlacementMaintenanceByTargetID.get(target.id),
+      runtime_control_status: desktopRuntimeControlStatusMissing(
+        'not_started',
+        'Start this runtime before connecting it to a provider.',
+      ),
+      maintenance: runtimePlacementMaintenanceByTargetID.get(target.targetID),
+      placement: target.placement,
+      runtime_target_available: false,
     };
   }
-  if (target.host_access.kind === 'ssh_host' && target.host_access.ssh.auth_mode === 'password' && !target.ssh_password_configured) {
+  const sshPassword = compact(target.sshPassword);
+  if (target.hostAccess.kind === 'ssh_host' && target.hostAccess.ssh.auth_mode === 'password' && sshPassword === '') {
     return {
       running: false,
       local_ui_url: '',
       runtime_control_status: desktopRuntimeControlStatusMissing('auth_required', 'Auto detection waits for manual authentication.'),
-      maintenance: runtimePlacementMaintenanceByTargetID.get(target.id),
+      maintenance: runtimePlacementMaintenanceByTargetID.get(target.targetID),
       placement: target.placement,
+      runtime_target_available: false,
     };
   }
-  const sshPassword = target.host_access.kind === 'ssh_host' && target.ssh_password_configured
-    ? target.ssh_password ?? ''
-    : undefined;
+  const commandOptions = () => ({
+    signal: target.signal ?? AbortSignal.timeout(DESKTOP_RUNTIME_PROBE_TIMEOUT_MS),
+  });
   const resolution = await resolveRuntimeContainerPlacement(
-    runtimeContainerResolver(target.host_access, undefined, sshPassword),
+    runtimeContainerResolver(target.hostAccess, target.signal, sshPassword || undefined),
     target.placement,
   );
   if (resolution.status === 'running') {
-    const executor = runtimeHostExecutor(target.host_access, sshPassword);
+    const executor = runtimeHostExecutor(target.hostAccess, sshPassword || undefined);
     try {
       const probeResult = await executor.run(containerRuntimeProbeCommand({
         engine: resolution.placement.container_engine,
         container_id: resolution.placement.container_id,
         runtime_root: resolution.placement.runtime_root,
         runtime_release_tag: resolveSSHRuntimeReleaseTag(),
-      }), {
-        signal: AbortSignal.timeout(DESKTOP_RUNTIME_PROBE_TIMEOUT_MS),
-      });
+      }), commandOptions());
       const probe = parseManagedSSHRuntimeProbeResult(probeResult.stdout);
       if (probe.status === 'ready') {
         const statusResult = await executor.run(containerRuntimeDaemonStatusCommand({
@@ -1480,16 +1517,14 @@ async function inspectSavedRuntimeTargetState(
           container_id: resolution.placement.container_id,
           runtime_root: resolution.placement.runtime_root,
           runtime_binary_path: probe.binary_path,
-        }), {
-          signal: AbortSignal.timeout(DESKTOP_RUNTIME_PROBE_TIMEOUT_MS),
-        });
+        }), commandOptions());
         const report = parseLaunchReport(statusResult.stdout);
         if (report.status === 'blocked') {
           const maintenance = desktopRuntimeMaintenanceFromBlockedLaunchReport(report, {
             target_runtime_version: resolveSSHRuntimeReleaseTag(),
           });
           const staleLock = desktopRuntimeBlockedReportIsStaleLock(report);
-          runtimePlacementMaintenanceByTargetID.set(target.id, maintenance);
+          runtimePlacementMaintenanceByTargetID.set(target.targetID, maintenance);
           return {
             running: !staleLock,
             local_ui_url: '',
@@ -1499,21 +1534,44 @@ async function inspectSavedRuntimeTargetState(
             ),
             maintenance,
             placement: resolution.placement,
+            runtime_target_available: true,
           };
         }
-        const maintenance = runtimePlacementMaintenanceForRuntimeService(target.id, report.startup.runtime_service);
+        const maintenance = runtimePlacementMaintenanceForRuntimeService(target.targetID, report.startup.runtime_service);
         if (runtimeServiceIsOpenable(report.startup.runtime_service)) {
-          runtimePlacementReadyByTargetID.set(target.id, {
-            runtime_key: target.id,
-            environment_id: target.id,
+          const readyRecord: RuntimePlacementReadyRecord = {
+            runtime_key: target.targetID,
+            environment_id: target.environmentID,
             label: target.label,
-            target_id: providerRuntimeLinkTargetIDForRuntimeTarget(target.host_access, target.id),
-            host_access: target.host_access,
+            target_id: providerRuntimeLinkTargetIDForRuntimeTarget(target.hostAccess, target.targetID),
+            host_access: target.hostAccess,
             placement: resolution.placement,
             runtime_binary_path: probe.binary_path,
             startup: report.startup,
-          });
+          };
+          runtimePlacementReadyByTargetID.set(target.targetID, readyRecord);
+          runtimePlacementMaintenanceByTargetID.delete(target.targetID);
+          return {
+            running: true,
+            startup: report.startup,
+            local_ui_url: '',
+            open_connection_required: true,
+            runtime_service: report.startup.runtime_service,
+            runtime_control_status: desktopRuntimeControlStatusMissing(
+              'forward_unavailable',
+              'Open this runtime to prepare the Desktop bridge and provider connection.',
+            ),
+            maintenance,
+            placement: resolution.placement,
+            ready_record: readyRecord,
+            runtime_target_available: true,
+          };
         }
+        const runtimeMaintenance = sshRuntimeMaintenanceFromStartup(
+          report.startup,
+          'This container runtime is running but cannot open with this Desktop yet.',
+        );
+        runtimePlacementMaintenanceByTargetID.set(target.targetID, runtimeMaintenance);
         return {
           running: true,
           startup: report.startup,
@@ -1524,8 +1582,9 @@ async function inspectSavedRuntimeTargetState(
             'forward_unavailable',
             'Open this runtime to prepare the Desktop bridge and provider connection.',
           ),
-          maintenance,
+          maintenance: runtimeMaintenance,
           placement: resolution.placement,
+          runtime_target_available: true,
         };
       }
       if (probe.status !== 'missing_binary') {
@@ -1541,13 +1600,14 @@ async function inspectSavedRuntimeTargetState(
           target_runtime_version: probe.expected_release_tag,
           message: 'Update this container runtime before opening it with this Desktop.',
         });
-        runtimePlacementMaintenanceByTargetID.set(target.id, maintenance);
+        runtimePlacementMaintenanceByTargetID.set(target.targetID, maintenance);
         return {
           running: false,
           local_ui_url: '',
           runtime_control_status: desktopRuntimeControlStatusMissing('not_reported', maintenance.message),
           maintenance,
           placement: resolution.placement,
+          runtime_target_available: true,
         };
       }
     } catch (error) {
@@ -1559,8 +1619,9 @@ async function inspectSavedRuntimeTargetState(
           'unverified',
           `Could not verify runtime status: ${error instanceof Error ? error.message : String(error)}`,
         ),
-        maintenance: runtimePlacementMaintenanceByTargetID.get(target.id),
+        maintenance: runtimePlacementMaintenanceByTargetID.get(target.targetID),
         placement: resolution.placement,
+        runtime_target_available: true,
       };
     }
     return {
@@ -1570,8 +1631,9 @@ async function inspectSavedRuntimeTargetState(
         'not_started',
         'Start this runtime before connecting it to a provider.',
       ),
-      maintenance: runtimePlacementMaintenanceByTargetID.get(target.id),
+      maintenance: runtimePlacementMaintenanceByTargetID.get(target.targetID),
       placement: resolution.placement,
+      runtime_target_available: true,
     };
   }
   return {
@@ -1581,8 +1643,9 @@ async function inspectSavedRuntimeTargetState(
       runtimeControlReasonCodeForContainerResolution(resolution.status),
       resolution.message,
     ),
-    maintenance: runtimePlacementMaintenanceByTargetID.get(target.id),
+    maintenance: runtimePlacementMaintenanceByTargetID.get(target.targetID),
     placement: target.placement,
+    runtime_target_available: false,
   };
 }
 
@@ -2624,6 +2687,33 @@ function scheduleWelcomeRuntimeHealthRefresh(options: Readonly<{
     const message = error instanceof Error ? error.message : String(error);
     console.warn(`[redeven:welcome-runtime] Runtime health refresh failed: ${message}`);
   });
+}
+
+async function refreshWelcomeRuntimeHealthForEnvironment(environmentID: string): Promise<void> {
+  const cleanEnvironmentID = compact(environmentID);
+  await refreshWelcomeRuntimeHealth({
+    force: true,
+    mode: 'manual',
+    targetEnvironmentIDs: cleanEnvironmentID ? [cleanEnvironmentID] : [],
+  });
+}
+
+function savedRuntimeTargetHealthForOpenPreflight(
+  environmentID: string,
+  targetID: DesktopRuntimeTargetID,
+): DesktopRuntimeHealth | undefined {
+  const snapshot = welcomeRuntimeHealthStore.snapshot();
+  return snapshot.savedRuntimeTargetHealth[environmentID]
+    ?? snapshot.savedRuntimeTargetHealth[targetID];
+}
+
+function savedSSHRuntimeHealthForOpenPreflight(
+  environmentID: string,
+  runtimeKey: `ssh:${string}`,
+): DesktopRuntimeHealth | undefined {
+  const snapshot = welcomeRuntimeHealthStore.snapshot();
+  return snapshot.savedSSHRuntimeHealth[environmentID]
+    ?? snapshot.savedSSHRuntimeHealth[runtimeKey];
 }
 
 function launcherActionEnvironmentID(request: DesktopLauncherActionRequest): string {
@@ -5176,6 +5266,44 @@ function launcherActionFailureForRuntimeNotOpenable(
   );
 }
 
+function launcherActionFailureForRuntimeHealthPreflight(
+  health: DesktopRuntimeHealth | undefined,
+  options: Readonly<{
+    environmentID: string;
+    targetLabel: string;
+    maintenance?: DesktopRuntimeMaintenanceRequirement | null;
+  }>,
+): DesktopLauncherActionFailure {
+  const maintenance = options.maintenance ?? health?.runtime_maintenance;
+  const message = compact(maintenance?.message) || compact(health?.offline_reason)
+    || 'Desktop could not verify this runtime before opening it.';
+  const failure = desktopOperationFailurePresentation({
+    code: 'environment_open_failed',
+    title: 'Open Failed',
+    summary: message,
+    targetLabel: options.targetLabel,
+    ...(maintenance?.message ? { detail: maintenance.message } : {}),
+    ...(maintenance?.recovery_action === 'start_runtime' ? { recoveryHint: 'Start the runtime, then try again.' } : {}),
+  });
+  const code: DesktopLauncherActionFailureCode = (
+    maintenance
+    || health?.offline_reason_code === 'unverified'
+    || health?.offline_reason_code === 'probe_failed'
+  )
+    ? 'runtime_not_ready'
+    : 'runtime_not_started';
+  return launcherActionFailure(
+    code,
+    'environment',
+    failure.summary,
+    {
+      environmentID: options.environmentID,
+      shouldRefreshSnapshot: true,
+      failure,
+    },
+  );
+}
+
 function launcherActionFailureFromSessionOpenError(
   error: unknown,
   options: Readonly<{
@@ -5589,18 +5717,8 @@ async function openSSHEnvironmentFromLauncher(
     });
   }
 
-  const readyRecord = sshRuntimeReadyByKey.get(optimisticSessionKey) ?? null;
+  let readyRecord = sshRuntimeReadyByKey.get(optimisticSessionKey) ?? null;
   const existingRuntimeRecord = sshEnvironmentRuntimeByKey.get(optimisticSessionKey) ?? null;
-  if (!readyRecord && !existingRuntimeRecord) {
-    return launcherActionFailure(
-      'runtime_not_started',
-      'environment',
-      'Start the SSH runtime first, then open this environment.',
-      {
-        environmentID: request.environment_id,
-      },
-    );
-  }
 
   const target = buildSSHDesktopTarget(sshDetails, {
     environmentID: request.environment_id,
@@ -5637,8 +5755,8 @@ async function openSSHEnvironmentFromLauncher(
     environment_id: request.environment_id,
     environment_label: request.label,
     phase: 'checking_runtime_record',
-    title: 'Preparing SSH connection',
-    detail: 'Desktop is checking the SSH runtime before opening this environment.',
+    title: 'Checking runtime status',
+    detail: 'Desktop is checking the runtime status before opening this environment.',
     open_progress: buildOpenConnectionProgress({
       hostAccess: { kind: 'ssh_host', ssh: sshDetails },
       placement: { kind: 'host_process', runtime_root: sshDetails.runtime_root },
@@ -5660,6 +5778,36 @@ async function openSSHEnvironmentFromLauncher(
     const preferences = await loadDesktopPreferencesCached();
     const sshPassword = savedSSHPasswordForDetails(preferences, sshDetails, request.environment_id);
     if (!runtimeRecord) {
+      if (!readyRecord) {
+        await refreshWelcomeRuntimeHealthForEnvironment(request.environment_id ?? optimisticSessionKey);
+        readyRecord = sshRuntimeReadyByKey.get(optimisticSessionKey) ?? null;
+        if (!readyRecord) {
+          const health = savedSSHRuntimeHealthForOpenPreflight(request.environment_id ?? optimisticSessionKey, optimisticSessionKey);
+          const maintenance = sshRuntimeMaintenanceByKey.get(optimisticSessionKey) ?? health?.runtime_maintenance;
+          const result = launcherActionFailureForRuntimeHealthPreflight(health, {
+            environmentID: request.environment_id ?? optimisticSessionKey,
+            targetLabel: request.label ?? defaultSavedSSHEnvironmentLabel(sshDetails),
+            maintenance,
+          });
+          launcherOperations.finish(operationKey, signal?.aborted ? 'canceled' : 'failed', {
+            phase: signal?.aborted ? 'canceled' : 'failed',
+            title: signal?.aborted ? 'Open canceled' : 'Open failed',
+            detail: signal?.aborted ? 'Desktop canceled this open request.' : result.message,
+            open_progress: buildOpenConnectionProgress({
+              hostAccess: { kind: 'ssh_host', ssh: sshDetails },
+              placement: { kind: 'host_process', runtime_root: sshDetails.runtime_root },
+              phase: signal?.aborted ? 'canceled' : 'failed',
+              environmentID: request.environment_id ?? optimisticSessionKey,
+              environmentLabel: request.label ?? defaultSavedSSHEnvironmentLabel(sshDetails),
+              targetID: optimisticSessionKey,
+              targetLabel: request.label ?? defaultSavedSSHEnvironmentLabel(sshDetails),
+            }),
+            ...(signal?.aborted || !result.failure ? {} : { failure: result.failure }),
+          });
+          scheduleLauncherOperationRemoval(operationKey);
+          return result;
+        }
+      }
       updateOpenConnectionOperation(operationKey, {
         hostAccess: { kind: 'ssh_host', ssh: sshDetails },
         placement: { kind: 'host_process', runtime_root: sshDetails.runtime_root },
@@ -6020,80 +6168,47 @@ async function ensureRuntimePlacementReadyRecordFromLauncher(
       const sshPassword = savedTarget?.ssh_password_configured === true
         ? savedTarget.ssh_password ?? ''
         : compact(request.ssh_password);
-      const resolution = await resolveRuntimeContainerPlacement(runtimeContainerResolver(hostAccess, signal, sshPassword), placement);
-      if (resolution.status !== 'running') {
-        throw new Error(resolution.message);
+      const inspection = await inspectRuntimePlacementTargetState({
+        targetID,
+        environmentID,
+        label,
+        hostAccess,
+        placement,
+        sshPassword,
+        signal,
+      });
+      if (inspection.placement?.kind === 'container_process') {
+        placement = inspection.placement;
       }
-      placement = resolution.placement;
-      const executor = runtimeHostExecutor(hostAccess, sshPassword);
-      try {
-        const probeResult = await executor.run(containerRuntimeProbeCommand({
-          engine: placement.container_engine,
-          container_id: placement.container_id,
-          runtime_root: placement.runtime_root,
-          runtime_release_tag: resolveSSHRuntimeReleaseTag(),
-        }), { signal });
-        const probe = parseManagedSSHRuntimeProbeResult(probeResult.stdout);
-        if (probe.status === 'ready') {
-          const statusResult = await executor.run(containerRuntimeDaemonStatusCommand({
-            engine: placement.container_engine,
-            container_id: placement.container_id,
-            runtime_root: placement.runtime_root,
-            runtime_binary_path: probe.binary_path,
-          }), { signal });
-          const report = parseLaunchReport(statusResult.stdout);
-          if (report.status === 'blocked') {
-            const maintenance = desktopRuntimeMaintenanceFromBlockedLaunchReport(report, {
-              target_runtime_version: resolveSSHRuntimeReleaseTag(),
-            });
-            runtimePlacementMaintenanceByTargetID.set(targetID, maintenance);
-            if (!desktopRuntimeMaintenanceIsStaleLock(maintenance)) {
-              throw new RuntimePlacementMaintenanceRequiredError(maintenance.message, maintenance);
-            }
-          }
-          if (report.status !== 'blocked') {
-            if (runtimeServiceIsOpenable(report.startup.runtime_service)) {
-              const readyRecord: RuntimePlacementReadyRecord = {
-                runtime_key: targetID,
-                environment_id: environmentID,
-                label,
-                target_id: providerRuntimeLinkTargetIDForRuntimeTarget(hostAccess, targetID),
-                host_access: hostAccess,
-                placement,
-                runtime_binary_path: probe.binary_path,
-                startup: report.startup,
-              };
-              runtimePlacementReadyByTargetID.set(targetID, readyRecord);
-              runtimePlacementMaintenanceByTargetID.delete(targetID);
-              launcherOperations.finish(targetID, 'succeeded', {
-                phase: 'runtime_ready',
-                title: 'Runtime already running',
-                detail: 'Desktop found an openable runtime in the container and did not start a new process.',
-                lifecycle_progress: buildRuntimeLifecycleProgress({
-                  hostAccess,
-                  placement,
-                  phase: 'runtime_ready',
-                  targetID,
-                  targetLabel: label,
-                }),
-              });
-              scheduleLauncherOperationRemoval(targetID);
-              operationSettled = true;
-              return readyRecord;
-            }
-            const maintenance = sshRuntimeMaintenanceFromStartup(
-              report.startup,
-              'This container runtime is running but cannot open with this Desktop yet.',
-            );
-            runtimePlacementMaintenanceByTargetID.set(targetID, maintenance);
-            throw new RuntimePlacementMaintenanceRequiredError(maintenance.message, maintenance);
-          }
-        }
-      } catch (error) {
-        if (error instanceof RuntimePlacementMaintenanceRequiredError) {
-          throw error;
-        }
-        throw new Error(`Desktop could not verify the selected container runtime before starting: ${error instanceof Error ? error.message : String(error)}`);
+      if (inspection.ready_record) {
+        launcherOperations.finish(targetID, 'succeeded', {
+          phase: 'runtime_ready',
+          title: 'Runtime already running',
+          detail: 'Desktop found an openable runtime in the container and did not start a new process.',
+          lifecycle_progress: buildRuntimeLifecycleProgress({
+            hostAccess,
+            placement,
+            phase: 'runtime_ready',
+            targetID,
+            targetLabel: label,
+          }),
+        });
+        scheduleLauncherOperationRemoval(targetID);
+        operationSettled = true;
+        return inspection.ready_record;
+      }
+      const inspectionMaintenance = runtimePlacementMaintenanceByTargetID.get(targetID) ?? inspection.maintenance;
+      if (inspectionMaintenance && !desktopRuntimeMaintenanceIsStaleLock(inspectionMaintenance)) {
+        throw new RuntimePlacementMaintenanceRequiredError(inspectionMaintenance.message, inspectionMaintenance);
+      }
+      const runtimeControlStatus = inspection.runtime_control_status;
+      if (inspection.runtime_target_available !== true || (
+        runtimeControlStatus.state === 'missing'
+        && runtimeControlStatus.reason_code === 'unverified'
+      )) {
+        throw new Error(runtimeControlStatus.state === 'missing'
+          ? runtimeControlStatus.message
+          : 'Desktop could not verify the selected container runtime before starting.');
       }
       let readyPlacement: Awaited<ReturnType<typeof ensureRuntimePlacementReady>>;
       try {
@@ -6228,26 +6343,15 @@ async function openRuntimePlacementBridgeFromLauncher(
   const environmentID = runtimeTargetEnvironmentIDFromRequest(request);
   const label = runtimeTargetLabelFromRequest(request);
   const existingBridge = runtimePlacementBridgeByTargetID.get(targetID) ?? null;
-  const readyRecord = runtimePlacementReadyByTargetID.get(targetID) ?? null;
-  if (!readyRecord && !existingBridge) {
-    return launcherActionFailure(
-      'runtime_not_started',
-      'environment',
-      'Start this runtime first, then open it.',
-      {
-        environmentID,
-        shouldRefreshSnapshot: true,
-      },
-    );
-  }
-  const target = (readyRecord?.host_access ?? existingBridge!.session.host_access).kind === 'ssh_host'
+  let readyRecord = runtimePlacementReadyByTargetID.get(targetID) ?? null;
+  const target = (readyRecord?.host_access ?? existingBridge?.session.host_access ?? hostAccess).kind === 'ssh_host'
     ? buildSSHDesktopTarget(sshDetailsFromRuntimePlacement(
-        (readyRecord?.host_access ?? existingBridge!.session.host_access) as Extract<DesktopRuntimeHostAccess, Readonly<{ kind: 'ssh_host' }>>,
-        readyRecord?.placement ?? existingBridge!.session.placement,
+        (readyRecord?.host_access ?? existingBridge?.session.host_access ?? hostAccess) as Extract<DesktopRuntimeHostAccess, Readonly<{ kind: 'ssh_host' }>>,
+        readyRecord?.placement ?? existingBridge?.session.placement ?? placement,
       ), {
         environmentID,
         label,
-        forwardedLocalUIURL: existingBridge?.startup.local_ui_url ?? 'http://127.0.0.1/',
+        forwardedLocalUIURL: existingBridge?.startup.local_ui_url ?? readyRecord?.startup?.local_ui_url ?? 'http://127.0.0.1/',
         sessionKeyOverride: desktopSessionKeyFromRuntimeTargetID(targetID) as `ssh:${string}`,
       })
     : buildManagedLocalRuntimeDesktopTarget(environmentID, label);
@@ -6272,8 +6376,8 @@ async function openRuntimePlacementBridgeFromLauncher(
     environment_id: environmentID,
     environment_label: label,
     phase: 'checking_runtime_record',
-    title: 'Preparing runtime connection',
-    detail: 'Desktop is checking the runtime record before opening this environment.',
+    title: 'Checking runtime status',
+    detail: 'Desktop is checking the runtime status before opening this environment.',
     open_progress: buildOpenConnectionProgress({
       hostAccess,
       placement,
@@ -6295,6 +6399,47 @@ async function openRuntimePlacementBridgeFromLauncher(
   let record = existingBridge;
   try {
     if (!record) {
+      if (!readyRecord) {
+        updateOpenConnectionOperation(operationKey, {
+          hostAccess,
+          placement,
+          phase: 'checking_runtime_record',
+          environmentID,
+          environmentLabel: label,
+          targetID,
+          targetLabel: label,
+          title: 'Checking runtime status',
+          detail: 'Desktop is checking the runtime status before opening this environment.',
+        });
+        await refreshWelcomeRuntimeHealthForEnvironment(environmentID);
+        readyRecord = runtimePlacementReadyByTargetID.get(targetID) ?? null;
+        if (!readyRecord) {
+          const health = savedRuntimeTargetHealthForOpenPreflight(environmentID, targetID);
+          const maintenance = runtimePlacementMaintenanceByTargetID.get(targetID) ?? health?.runtime_maintenance;
+          const result = launcherActionFailureForRuntimeHealthPreflight(health, {
+            environmentID,
+            targetLabel: label,
+            maintenance,
+          });
+          launcherOperations.finish(operationKey, signal?.aborted ? 'canceled' : 'failed', {
+            phase: signal?.aborted ? 'canceled' : 'failed',
+            title: signal?.aborted ? 'Open canceled' : 'Open failed',
+            detail: signal?.aborted ? 'Desktop canceled this open request.' : result.message,
+            open_progress: buildOpenConnectionProgress({
+              hostAccess,
+              placement,
+              phase: signal?.aborted ? 'canceled' : 'failed',
+              environmentID,
+              environmentLabel: label,
+              targetID,
+              targetLabel: label,
+            }),
+            ...(signal?.aborted || !result.failure ? {} : { failure: result.failure }),
+          });
+          scheduleLauncherOperationRemoval(operationKey);
+          return result;
+        }
+      }
       const runtimeBinaryPath = readyRecord!.runtime_binary_path;
       placement = readyRecord!.placement;
       const preferences = await loadDesktopPreferencesCached();
@@ -7110,44 +7255,35 @@ async function refreshEnvironmentRuntimeFromLauncher(
 ): Promise<DesktopLauncherActionResult> {
   const preferences = await loadDesktopPreferencesCached();
   const environmentID = compact(request.environment_id);
-  scheduleWelcomeRuntimeHealthRefresh({
-    force: true,
-    mode: 'manual',
-    targetEnvironmentIDs: environmentID ? [environmentID] : [],
-  });
-
-  const placement = runtimePlacementFromRequest(request);
-  if (placement.kind === 'container_process') {
-    const runtimeRecord = runtimePlacementBridgeRecordForRequest(request);
-    if (runtimeRecord?.startup.runtime_service) {
-      void syncLinkedProviderRuntimeHealthFromService(runtimeRecord.startup.runtime_service)
-        .then(() => broadcastDesktopWelcomeSnapshots())
-        .catch(() => undefined);
-    }
-    broadcastDesktopWelcomeSnapshots();
-    return launcherActionSuccess('refreshed_environment_runtime');
-  }
-
   const providerEnvironment = environmentID
     ? findProviderEnvironmentByID(preferences, environmentID)
     : null;
   if (providerEnvironment) {
-    void (async () => {
-      await syncSavedControlPlaneAccountWithState(
-        providerEnvironment.provider_origin,
-        providerEnvironment.provider_id,
-        { force: true },
-      );
-      await refreshProviderEnvironmentRuntimeHealth(
-        providerEnvironment.provider_origin,
-        providerEnvironment.provider_id,
-        [providerEnvironment.env_public_id],
-      );
-      broadcastDesktopWelcomeSnapshots();
-    })().catch((error) => {
-      const message = error instanceof Error ? error.message : String(error);
-      console.warn(`[redeven:provider-runtime] Provider runtime refresh failed: ${message}`);
-    });
+    await syncSavedControlPlaneAccountWithState(
+      providerEnvironment.provider_origin,
+      providerEnvironment.provider_id,
+      { force: true },
+    );
+    await refreshProviderEnvironmentRuntimeHealth(
+      providerEnvironment.provider_origin,
+      providerEnvironment.provider_id,
+      [providerEnvironment.env_public_id],
+    );
+    broadcastDesktopWelcomeSnapshots();
+    return launcherActionSuccess('refreshed_environment_runtime');
+  }
+
+  await refreshWelcomeRuntimeHealthForEnvironment(environmentID);
+
+  const placement = runtimePlacementFromRequest(request);
+  if (placement.kind === 'container_process') {
+    const targetID = runtimeTargetIDFromRequest(request);
+    const runtimeRecord = runtimePlacementBridgeRecordForRequest(request);
+    const readyRecord = runtimePlacementReadyByTargetID.get(targetID) ?? null;
+    const runtimeService = runtimeRecord?.startup.runtime_service ?? readyRecord?.startup?.runtime_service;
+    if (runtimeService) {
+      await syncLinkedProviderRuntimeHealthFromService(runtimeService).catch(() => undefined);
+    }
     broadcastDesktopWelcomeSnapshots();
     return launcherActionSuccess('refreshed_environment_runtime');
   }
@@ -7155,10 +7291,10 @@ async function refreshEnvironmentRuntimeFromLauncher(
   const sshDetails = sshDetailsFromRuntimeTargetRequest(request);
   if (sshDetails) {
     const runtimeRecord = sshEnvironmentRuntimeByKey.get(sshDesktopSessionKey(sshDetails)) ?? null;
-    if (runtimeRecord?.startup.runtime_service) {
-      void syncLinkedProviderRuntimeHealthFromService(runtimeRecord.startup.runtime_service)
-        .then(() => broadcastDesktopWelcomeSnapshots())
-        .catch(() => undefined);
+    const readyRecord = sshRuntimeReadyByKey.get(sshDesktopSessionKey(sshDetails)) ?? null;
+    const runtimeService = runtimeRecord?.startup.runtime_service ?? readyRecord?.startup.runtime_service;
+    if (runtimeService) {
+      await syncLinkedProviderRuntimeHealthFromService(runtimeService).catch(() => undefined);
     }
     broadcastDesktopWelcomeSnapshots();
     return launcherActionSuccess('refreshed_environment_runtime');
@@ -7168,9 +7304,7 @@ async function refreshEnvironmentRuntimeFromLauncher(
   if (localEnvironment?.local_hosting) {
     const runtimeRecord = currentLocalEnvironmentRuntimeRecord(localEnvironment);
     if (runtimeRecord?.startup.runtime_service) {
-      void syncLinkedProviderRuntimeHealthFromService(runtimeRecord.startup.runtime_service)
-        .then(() => broadcastDesktopWelcomeSnapshots())
-        .catch(() => undefined);
+      await syncLinkedProviderRuntimeHealthFromService(runtimeRecord.startup.runtime_service).catch(() => undefined);
     }
     broadcastDesktopWelcomeSnapshots();
     return launcherActionSuccess('refreshed_environment_runtime');
@@ -7180,10 +7314,8 @@ async function refreshEnvironmentRuntimeFromLauncher(
 }
 
 async function refreshAllEnvironmentRuntimesFromLauncher(): Promise<DesktopLauncherActionResult> {
-  scheduleWelcomeRuntimeHealthRefresh({ force: true, mode: 'manual' });
-  void refreshAllProviderEnvironmentRuntimeHealth().then(() => {
-    broadcastDesktopWelcomeSnapshots();
-  }).catch((error) => {
+  await refreshWelcomeRuntimeHealth({ force: true, mode: 'manual' });
+  await refreshAllProviderEnvironmentRuntimeHealth().catch((error) => {
     const message = error instanceof Error ? error.message : String(error);
     console.warn(`[redeven:provider-runtime] Provider runtime refresh failed: ${message}`);
   });

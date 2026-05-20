@@ -487,6 +487,16 @@ function environmentOpenOperationAvailable(environment: DesktopEnvironmentEntry)
   return environment.runtime_operations.open.availability === 'available';
 }
 
+function environmentOpenPreflightAvailable(environment: DesktopEnvironmentEntry): boolean {
+  if (environment.window_state !== 'closed' || environment.runtime_health.freshness !== 'unknown') {
+    return false;
+  }
+  if (environment.kind === 'provider_environment') {
+    return false;
+  }
+  return true;
+}
+
 function environmentRuntimeMaintenance(environment: DesktopEnvironmentEntry) {
   return environment.runtime_maintenance;
 }
@@ -820,8 +830,11 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
     label: 'Open',
     enabled: canOpenProviderRemoteRoute
       || (environment.kind !== 'provider_environment'
-        && (environment.runtime_health.status === 'online' || environment.kind === 'external_local_ui')
-        && environmentOpenOperationAvailable(environment)),
+        && (
+          ((environment.runtime_health.status === 'online' || environment.kind === 'external_local_ui')
+            && environmentOpenOperationAvailable(environment))
+          || environmentOpenPreflightAvailable(environment)
+        )),
     variant: 'default',
     ...(environment.kind === 'provider_environment'
       ? { route: desktopProviderEnvironmentOpenRoute() }
@@ -1396,6 +1409,10 @@ function primaryActionOverlay(
     };
   }
   if (environment.kind === 'external_local_ui' && environmentOpenOperationAvailable(environment)) {
+    return undefined;
+  }
+
+  if (environmentOpenPreflightAvailable(environment)) {
     return undefined;
   }
 
