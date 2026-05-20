@@ -27,6 +27,37 @@ describe('desktopShellRuntimeIPC', () => {
       started: true,
       message: 'done',
     });
+    expect(normalizeDesktopShellRuntimeActionResponse({
+      ok: false,
+      started: false,
+      message: 'control_stderr:',
+      failure: {
+        code: 'ssh_runtime_launch_failed',
+        severity: 'error',
+        title: 'SSH Runtime Start Failed',
+        summary: 'SSH connection to "dify" failed.',
+        diagnostics: [{
+          channel: 'control_stderr',
+          label: 'SSH command stderr',
+          text: 'ssh: Could not resolve hostname dify',
+        }],
+      },
+    })).toEqual({
+      ok: false,
+      started: false,
+      message: 'SSH connection to "dify" failed.',
+      failure: {
+        code: 'ssh_runtime_launch_failed',
+        severity: 'error',
+        title: 'SSH Runtime Start Failed',
+        summary: 'SSH connection to "dify" failed.',
+        diagnostics: [{
+          channel: 'control_stderr',
+          label: 'SSH command stderr',
+          text: 'ssh: Could not resolve hostname dify',
+        }],
+      },
+    });
   });
 
   it('rejects unsupported actions', () => {

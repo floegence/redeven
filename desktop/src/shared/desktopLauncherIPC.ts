@@ -16,6 +16,7 @@ import type {
 import type { DesktopRuntimeOperationPlans } from './desktopRuntimeOperations';
 import type { DesktopOpenConnectionProgress } from './desktopOpenConnectionProgress';
 import type { DesktopRuntimeLifecycleProgress } from './desktopRuntimeLifecycleProgress';
+import type { DesktopOperationFailurePresentation } from './desktopOperationFailure';
 import type { DesktopLocalRuntimeOpenPlan } from './localRuntimeSupervisor';
 import type { RuntimeServiceProviderConnectionState, RuntimeServiceSnapshot } from './runtimeService';
 import {
@@ -288,7 +289,7 @@ export type DesktopLauncherOperationSnapshot = Readonly<{
   interrupt_detail?: string;
   interrupt_kind?: 'stop_opening' | 'cleanup_deleted_subject' | 'generic';
   deleted_subject: boolean;
-  error_message?: string;
+  failure?: DesktopOperationFailurePresentation;
 }>;
 
 export type DesktopLauncherActionRequest = Readonly<
@@ -462,6 +463,7 @@ export type DesktopLauncherActionFailure = Readonly<{
   provider_id?: string;
   env_public_id?: string;
   should_refresh_snapshot?: boolean;
+  failure?: DesktopOperationFailurePresentation;
 }>;
 
 export type DesktopLauncherActionResult = DesktopLauncherActionSuccess | DesktopLauncherActionFailure;
@@ -486,7 +488,7 @@ export type DesktopLauncherActionProgress = Readonly<{
   interrupt_detail?: string;
   interrupt_kind?: 'stop_opening' | 'cleanup_deleted_subject' | 'generic';
   deleted_subject?: boolean;
-  error_message?: string;
+  failure?: DesktopOperationFailurePresentation;
 }>;
 
 export function isDesktopLauncherActionFailure(

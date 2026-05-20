@@ -89,6 +89,11 @@ import { DesktopThemeState } from './desktopThemeState';
 import { loadOrCreateDesktopRuntimeOwnerID } from './desktopRuntimeOwner';
 import { readBundledDesktopRuntimeIdentity, type DesktopRuntimeIdentity } from './desktopRuntimeIdentity';
 import { DesktopDiagnosticsRecorder } from './diagnostics';
+import {
+  DesktopOperationFailureError,
+  desktopOperationFailurePresentation,
+  operationFailureFromUnknown,
+} from './desktopOperationFailure';
 import { LauncherOperationRegistry, launcherOperationProgress } from './launcherOperations';
 import { buildLocalUIEnvAppEntryURL } from './localUIURL';
 import { isAllowedAppNavigation } from './navigation';
@@ -298,6 +303,7 @@ import type {
   DesktopRuntimeHealth,
   DesktopRuntimeMaintenanceRequirement,
 } from '../shared/desktopRuntimeHealth';
+import type { DesktopOperationFailurePresentation } from '../shared/desktopOperationFailure';
 import {
   desktopRuntimeControlStatusAvailable,
   desktopRuntimeControlStatusMissing,
@@ -1621,18 +1627,21 @@ function launcherActionFailure(
     providerID?: string;
     envPublicID?: string;
     shouldRefreshSnapshot?: boolean;
+    failure?: DesktopOperationFailurePresentation;
   }> = {},
 ): DesktopLauncherActionFailure {
+  const failure = options.failure;
   return {
     ok: false,
     code,
     scope,
-    message: compact(message),
+    message: compact(failure?.summary) || compact(message),
     environment_id: compact(options.environmentID) || undefined,
     provider_origin: compact(options.providerOrigin) || undefined,
     provider_id: compact(options.providerID) || undefined,
     env_public_id: compact(options.envPublicID) || undefined,
     should_refresh_snapshot: options.shouldRefreshSnapshot === true || undefined,
+    ...(failure ? { failure } : {}),
   };
 }
 
@@ -1700,19 +1709,25 @@ function launcherActionFailureFromUnexpectedError(error: unknown): DesktopLaunch
   );
 }
 
-function firstDisplayLine(value: unknown): string {
-  return String(value ?? '')
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .find(Boolean) ?? '';
-}
-
-function friendlyRuntimeStartErrorMessage(error: unknown): string {
-  if (error instanceof DesktopSSHRuntimeCanceledError) {
-    return 'SSH runtime startup was canceled.';
-  }
-  const rawMessage = error instanceof Error ? error.message : String(error);
-  return firstDisplayLine(rawMessage);
+function desktopFailureFromError(
+  error: unknown,
+  fallback: Readonly<{
+    code?: DesktopOperationFailurePresentation['code'];
+    title: string;
+    summary: string;
+    detail?: string;
+    recoveryHint?: string;
+    targetLabel?: string;
+  }>,
+): DesktopOperationFailurePresentation {
+  return operationFailureFromUnknown(error, desktopOperationFailurePresentation({
+    code: fallback.code,
+    title: fallback.title,
+    summary: fallback.summary,
+    detail: fallback.detail,
+    recoveryHint: fallback.recoveryHint,
+    targetLabel: fallback.targetLabel,
+  }));
 }
 
 function launcherActionFailureFromRuntimeStartError(
@@ -1724,17 +1739,25 @@ function launcherActionFailureFromRuntimeStartError(
     envPublicID?: string;
   }> = {},
 ): DesktopLauncherActionFailure {
-  const message = friendlyRuntimeStartErrorMessage(error);
+  const fallback = desktopOperationFailurePresentation({
+    code: 'operation_failed',
+    title: 'Runtime Start Failed',
+    summary: error instanceof DesktopSSHRuntimeCanceledError
+      ? 'SSH runtime startup was canceled.'
+      : 'Start Runtime did not complete.',
+  });
+  const failure = operationFailureFromUnknown(error, fallback);
   return launcherActionFailure(
     'runtime_start_failed',
     'environment',
-    message || 'Start Runtime did not complete.',
+    failure.summary,
     {
       environmentID: options.environmentID,
       providerOrigin: options.providerOrigin,
       providerID: options.providerID,
       envPublicID: options.envPublicID,
       shouldRefreshSnapshot: true,
+      failure,
     },
   );
 }
@@ -3637,7 +3660,7 @@ function updateRuntimeLifecycleOperation(
     title: string;
     detail: string;
     status?: DesktopLauncherOperationSnapshot['status'];
-    errorMessage?: string;
+    failure?: DesktopOperationFailurePresentation;
     cancelable?: boolean;
   }>,
 ): void {
@@ -3650,7 +3673,7 @@ function updateRuntimeLifecycleOperation(
       ...input,
       targetID: input.targetID ?? operationKey,
     }),
-    ...(input.errorMessage ? { error_message: input.errorMessage } : {}),
+    ...(input.failure ? { failure: input.failure } : {}),
     ...(input.cancelable !== undefined ? { cancelable: input.cancelable } : {}),
   });
 }
@@ -3728,7 +3751,7 @@ function updateOpenConnectionOperation(
     title: string;
     detail: string;
     status?: DesktopLauncherOperationSnapshot['status'];
-    errorMessage?: string;
+    failure?: DesktopOperationFailurePresentation;
     cancelable?: boolean;
   }>,
 ): void {
@@ -3738,7 +3761,7 @@ function updateOpenConnectionOperation(
     title: input.title,
     detail: input.detail,
     open_progress: buildOpenConnectionProgress(input),
-    ...(input.errorMessage ? { error_message: input.errorMessage } : {}),
+    ...(input.failure ? { failure: input.failure } : {}),
     ...(input.cancelable !== undefined ? { cancelable: input.cancelable } : {}),
   });
 }
@@ -4094,7 +4117,7 @@ async function startSSHEnvironmentRuntimeRecord(
         });
       }
       if (statusProbe.status === 'failed') {
-        throw new Error(statusProbe.message || 'Desktop could not verify the SSH runtime status.');
+        throw new DesktopOperationFailureError(statusProbe.failure);
       }
       const managedSSHRuntime = await ensureManagedSSHRuntimeReady({
         target: sshDetails,
@@ -4159,10 +4182,16 @@ async function startSSHEnvironmentRuntimeRecord(
           scheduleLauncherOperationRemoval(runtimeKey);
           operationSettled = true;
         } catch (cleanupError) {
+          const failure = desktopFailureFromError(cleanupError, {
+            code: 'operation_failed',
+            title: 'SSH Startup Cleanup Failed',
+            summary: 'Desktop could not clean up this removed SSH startup task.',
+            targetLabel: desktopSSHAuthority(sshDetails),
+          });
           launcherOperations.finish(runtimeKey, 'cleanup_failed', {
             phase: 'cleanup_failed',
             title: 'Connection removed; cleanup needs attention',
-            detail: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+            detail: failure.summary,
             lifecycle_progress: runtimeLifecycleProgress({
               location: 'ssh_host',
               phase: 'failed',
@@ -4171,7 +4200,7 @@ async function startSSHEnvironmentRuntimeRecord(
               targetDetail: desktopSSHAuthority(sshDetails),
             }),
             deleted_subject: true,
-            error_message: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+            failure,
           });
           operationSettled = true;
         }
@@ -4235,20 +4264,25 @@ async function startSSHEnvironmentRuntimeRecord(
             deleted_subject: launcherOperations.get(runtimeKey)?.deleted_subject === true,
           });
         } else {
-          const message = error instanceof Error ? error.message : String(error);
           if (error instanceof DesktopSSHRuntimeMaintenanceRequiredError) {
             sshRuntimeMaintenanceByKey.set(runtimeKey, error.maintenance);
           }
+          const failure = desktopFailureFromError(error, {
+            code: 'ssh_runtime_launch_failed',
+            title: error instanceof DesktopSSHRuntimeMaintenanceRequiredError
+              ? 'SSH Runtime Needs Attention'
+              : 'SSH Runtime Start Failed',
+            summary: error instanceof DesktopSSHRuntimeMaintenanceRequiredError
+              ? 'Update or restart the SSH runtime from the Welcome page.'
+              : 'Desktop could not start the SSH runtime.',
+            targetLabel: desktopSSHAuthority(sshDetails),
+          });
           launcherOperations.finish(runtimeKey, 'failed', {
             phase: 'failed',
             title: error instanceof DesktopSSHRuntimeMaintenanceRequiredError
               ? 'SSH runtime needs attention'
               : 'SSH runtime start failed',
-            detail: firstDisplayLine(message) || (
-              error instanceof DesktopSSHRuntimeMaintenanceRequiredError
-                ? 'Update or restart the SSH runtime from the Welcome page.'
-                : 'Desktop could not start the SSH runtime.'
-            ),
+            detail: failure.summary,
             lifecycle_progress: runtimeLifecycleProgress({
               location: 'ssh_host',
               phase: 'failed',
@@ -4256,7 +4290,7 @@ async function startSSHEnvironmentRuntimeRecord(
               targetLabel: label,
               targetDetail: desktopSSHAuthority(sshDetails),
             }),
-            error_message: message,
+            failure,
           });
         }
         scheduleLauncherOperationRemoval(runtimeKey);
@@ -5129,11 +5163,19 @@ function launcherActionFailureFromSessionOpenError(
     envPublicID?: string;
   }> = {},
 ): DesktopLauncherActionFailure {
+  const failure = desktopFailureFromError(error, {
+    code: 'environment_open_failed',
+    title: 'Open Failed',
+    summary: 'Desktop could not open that environment.',
+  });
   return launcherActionFailure(
     'action_invalid',
     'environment',
-    error instanceof Error ? error.message : String(error) || 'Desktop could not open that environment.',
-    options,
+    failure.summary,
+    {
+      ...options,
+      failure,
+    },
   );
 }
 
@@ -5715,11 +5757,16 @@ async function openSSHEnvironmentFromLauncher(
       await runtimeRecord?.disconnect().catch(() => undefined);
       sshEnvironmentRuntimeByKey.delete(optimisticSessionKey);
     }
-    const message = error instanceof Error ? error.message : String(error);
+    const failure = desktopFailureFromError(error, {
+      code: 'environment_open_failed',
+      title: 'Open Failed',
+      summary: 'Desktop could not open this SSH environment.',
+      targetLabel: request.label ?? defaultSavedSSHEnvironmentLabel(sshDetails),
+    });
     launcherOperations.finish(operationKey, signal?.aborted ? 'canceled' : 'failed', {
       phase: signal?.aborted ? 'canceled' : 'failed',
       title: signal?.aborted ? 'Open canceled' : 'Open failed',
-      detail: firstDisplayLine(message) || 'Desktop could not open this SSH environment.',
+      detail: signal?.aborted ? 'Desktop canceled this open request.' : failure.summary,
       open_progress: buildOpenConnectionProgress({
         hostAccess: { kind: 'ssh_host', ssh: sshDetails },
         placement: { kind: 'host_process', runtime_root: sshDetails.runtime_root },
@@ -5729,7 +5776,7 @@ async function openSSHEnvironmentFromLauncher(
         targetID: optimisticSessionKey,
         targetLabel: request.label ?? defaultSavedSSHEnvironmentLabel(sshDetails),
       }),
-      ...(signal?.aborted ? {} : { error_message: message }),
+      ...(signal?.aborted ? {} : { failure }),
     });
     scheduleLauncherOperationRemoval(operationKey);
     return launcherActionFailureFromSessionOpenError(error, {
@@ -6106,7 +6153,13 @@ async function ensureRuntimePlacementReadyRecordFromLauncher(
           });
         } else {
           const launcherFailure = thrownLauncherActionFailure(error);
-          const message = launcherFailure?.message ?? (error instanceof Error ? error.message : String(error));
+          const fallbackFailure = launcherFailure?.failure ?? desktopOperationFailurePresentation({
+            code: 'container_runtime_launch_failed',
+            title: 'Container Runtime Start Failed',
+            summary: launcherFailure?.message || 'Desktop could not start the runtime.',
+            targetLabel: label,
+          });
+          const failure = operationFailureFromUnknown(error, fallbackFailure);
           const location = desktopRuntimeLifecycleLocation(hostAccess, placement);
           launcherOperations.finish(targetID, 'failed', {
             phase: 'failed',
@@ -6114,7 +6167,7 @@ async function ensureRuntimePlacementReadyRecordFromLauncher(
               location,
               error instanceof RuntimePlacementMaintenanceRequiredError || launcherFailure?.code === 'runtime_not_ready',
             ),
-            detail: firstDisplayLine(message) || 'Desktop could not start the runtime.',
+            detail: failure.summary,
             lifecycle_progress: buildRuntimeLifecycleProgress({
               hostAccess,
               placement,
@@ -6122,7 +6175,7 @@ async function ensureRuntimePlacementReadyRecordFromLauncher(
               targetID,
               targetLabel: label,
             }),
-            error_message: message,
+            failure,
           });
         }
         scheduleLauncherOperationRemoval(targetID);
@@ -6316,11 +6369,16 @@ async function openRuntimePlacementBridgeFromLauncher(
     if (bridgeSession) {
       runtimePlacementBridgeByTargetID.delete(bridgeSession.placement_target_id);
     }
-    const message = error instanceof Error ? error.message : String(error);
+    const failure = desktopFailureFromError(error, {
+      code: 'environment_open_failed',
+      title: 'Open Failed',
+      summary: 'Desktop could not open this environment.',
+      targetLabel: label,
+    });
     launcherOperations.finish(operationKey, signal?.aborted ? 'canceled' : 'failed', {
       phase: signal?.aborted ? 'canceled' : 'failed',
       title: signal?.aborted ? 'Open canceled' : 'Open failed',
-      detail: firstDisplayLine(message) || 'Desktop could not open this environment.',
+      detail: signal?.aborted ? 'Desktop canceled this open request.' : failure.summary,
       open_progress: buildOpenConnectionProgress({
         hostAccess,
         placement,
@@ -6330,7 +6388,7 @@ async function openRuntimePlacementBridgeFromLauncher(
         targetID,
         targetLabel: label,
       }),
-      ...(signal?.aborted ? {} : { error_message: message }),
+      ...(signal?.aborted ? {} : { failure }),
     });
     scheduleLauncherOperationRemoval(operationKey);
     return launcherActionFailureFromSessionOpenError(error, {
@@ -6479,10 +6537,16 @@ async function startEnvironmentRuntimeFromLauncher(
       },
     });
     if (!prepared.ok) {
+      const failure = desktopOperationFailurePresentation({
+        code: 'local_runtime_launch_failed',
+        title: 'Runtime Start Blocked',
+        summary: prepared.issue.message,
+        targetLabel: environment.label,
+      });
       launcherOperations.finish(operationKey, 'failed', {
         phase: 'failed',
         title: 'Runtime start blocked',
-        detail: prepared.issue.message,
+        detail: failure.summary,
         lifecycle_progress: buildRuntimeLifecycleProgress({
           hostAccess,
           placement: localHostPlacement,
@@ -6490,7 +6554,7 @@ async function startEnvironmentRuntimeFromLauncher(
           targetID: operationKey,
           targetLabel: environment.label,
         }),
-        error_message: prepared.issue.message,
+        failure,
       });
       scheduleLauncherOperationRemoval(operation.operation_key);
       return launcherActionFailure(
@@ -6537,11 +6601,16 @@ async function startEnvironmentRuntimeFromLauncher(
     scheduleLauncherOperationRemoval(operation.operation_key);
     return launcherActionSuccess('started_environment_runtime');
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const failure = desktopFailureFromError(error, {
+      code: 'local_runtime_launch_failed',
+      title: 'Runtime Start Failed',
+      summary: 'Desktop could not start the local runtime.',
+      targetLabel: environment.label,
+    });
     launcherOperations.finish(operationKey, 'failed', {
       phase: 'failed',
       title: 'Runtime start failed',
-      detail: firstDisplayLine(message) || 'Desktop could not start the local runtime.',
+      detail: failure.summary,
       lifecycle_progress: buildRuntimeLifecycleProgress({
         hostAccess,
         placement: localHostPlacement,
@@ -6549,7 +6618,7 @@ async function startEnvironmentRuntimeFromLauncher(
         targetID: operationKey,
         targetLabel: environment.label,
       }),
-      error_message: message,
+      failure,
     });
     scheduleLauncherOperationRemoval(operation.operation_key);
     return thrownLauncherActionFailure(error)
@@ -7510,11 +7579,14 @@ function runtimeMaintenanceContextFromSession(
   };
 }
 
-function desktopShellRuntimeActionUnavailable(message: string): DesktopShellRuntimeActionResponse {
+function desktopShellRuntimeActionUnavailable(messageOrFailure: string | DesktopOperationFailurePresentation): DesktopShellRuntimeActionResponse {
+  const failure = typeof messageOrFailure === 'string' ? null : messageOrFailure;
+  const message = failure?.summary ?? compact(messageOrFailure);
   return {
     ok: false,
     started: false,
     message,
+    ...(failure ? { failure } : {}),
   };
 }
 
@@ -7689,8 +7761,13 @@ async function restartSSHRuntimeFromShell(
       await previousRuntimeHandle.stop();
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return desktopShellRuntimeActionUnavailable(message || 'Failed to stop the SSH runtime.');
+    const failure = desktopFailureFromError(error, {
+      code: 'ssh_runtime_stop_failed',
+      title: 'SSH Runtime Stop Failed',
+      summary: 'Desktop could not stop the SSH runtime.',
+      targetLabel: desktopSSHAuthority(sshDetails),
+    });
+    return desktopShellRuntimeActionUnavailable(failure);
   }
 
   sessionRecord.runtime_handle = null;
@@ -7704,8 +7781,13 @@ async function restartSSHRuntimeFromShell(
       allowActiveWorkReplacement: true,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return desktopShellRuntimeActionUnavailable(firstDisplayLine(message) || 'Desktop could not start the SSH runtime.');
+    const failure = desktopFailureFromError(error, {
+      code: 'ssh_runtime_launch_failed',
+      title: 'SSH Runtime Start Failed',
+      summary: 'Desktop could not start the SSH runtime.',
+      targetLabel: desktopSSHAuthority(sshDetails),
+    });
+    return desktopShellRuntimeActionUnavailable(failure);
   }
 
   let openRecord: SSHEnvironmentRuntimeRecord | null = null;
@@ -7724,8 +7806,13 @@ async function restartSSHRuntimeFromShell(
     });
     openRecord = sshEnvironmentRuntimeByKey.get(runtimeKey) ?? null;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return desktopShellRuntimeActionUnavailable(firstDisplayLine(message) || 'Desktop could not reopen the SSH runtime connection.');
+    const failure = desktopFailureFromError(error, {
+      code: 'environment_open_failed',
+      title: 'SSH Runtime Open Failed',
+      summary: 'Desktop could not reopen the SSH runtime connection.',
+      targetLabel: desktopSSHAuthority(sshDetails),
+    });
+    return desktopShellRuntimeActionUnavailable(failure);
   }
   if (!openRecord) {
     return desktopShellRuntimeActionUnavailable('Desktop restarted the SSH runtime, but could not prepare the SSH connection.');
@@ -8115,10 +8202,22 @@ async function listRuntimeContainersFromLauncher(
     const hostLabel = normalized.host_access.kind === 'ssh_host'
       ? ` on ${normalized.host_access.ssh.ssh_destination}`
       : '';
-    const message = firstDisplayLine(error instanceof Error ? error.message : String(error));
+    const targetLabel = normalized.host_access.kind === 'ssh_host'
+      ? desktopSSHAuthority(normalized.host_access.ssh)
+      : 'Local Host';
+    const failure = desktopFailureFromError(error, {
+      code: 'runtime_host_command_failed',
+      title: 'Container List Failed',
+      summary: `Desktop could not list running ${normalized.engine} containers${hostLabel}.`,
+      recoveryHint: normalized.host_access.kind === 'ssh_host'
+        ? 'Check the SSH host, ~/.ssh/config alias, VPN, network connection, and authentication method.'
+        : 'Check that the container engine is installed and running on this device.',
+      targetLabel,
+    });
     return {
       ok: false,
-      message: message || `Desktop could not list running ${normalized.engine} containers${hostLabel}.`,
+      message: failure.summary,
+      failure,
     };
   }
 }

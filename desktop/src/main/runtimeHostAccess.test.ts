@@ -8,6 +8,7 @@ import {
   createLocalRuntimeHostExecutor,
   createSSHRuntimeHostExecutor,
 } from './runtimeHostAccess';
+import { DesktopOperationFailureError } from './desktopOperationFailure';
 
 describe('runtimeHostAccess', () => {
   it('describes local host access without placement details', () => {
@@ -114,5 +115,36 @@ describe('runtimeHostAccess', () => {
       stdinData: Buffer.from('ssh-archive'),
     });
     expect(await fs.readFile(sshOut, 'utf8')).toBe('ssh-archive');
+  });
+
+  it('keeps SSH host command stderr as diagnostics instead of the visible summary', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-host-error-test-'));
+    const fakeSSH = path.join(tempDir, 'ssh');
+    await fs.writeFile(fakeSSH, [
+      '#!/usr/bin/env bash',
+      'echo "ssh: Could not resolve hostname dify" >&2',
+      'exit 255',
+    ].join('\n'), { mode: 0o755 });
+    const executor = createSSHRuntimeHostExecutor({
+      ssh_destination: 'dify',
+      ssh_port: null,
+      auth_mode: 'key_agent',
+      connect_timeout_seconds: 15,
+    }, { sshBinary: fakeSSH });
+
+    try {
+      await executor.run(['docker', 'ps']);
+      throw new Error('expected host command failure');
+    } catch (error) {
+      expect(error).toBeInstanceOf(DesktopOperationFailureError);
+      const failure = (error as DesktopOperationFailureError).presentation;
+      expect(failure.summary).toBe('SSH command on "dify" failed.');
+      expect(failure.diagnostics).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          channel: 'stderr',
+          text: 'ssh: Could not resolve hostname dify',
+        }),
+      ]));
+    }
   });
 });

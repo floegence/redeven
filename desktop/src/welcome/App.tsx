@@ -111,6 +111,10 @@ import type {
   DesktopRuntimeContainerOption,
 } from '../shared/desktopContainerRuntime';
 import {
+  formatDesktopOperationFailureForClipboard,
+  type DesktopOperationFailurePresentation,
+} from '../shared/desktopOperationFailure';
+import {
   applyDesktopAccessAutoPortToDraft,
   applyDesktopAccessFixedPortToDraft,
   applyDesktopAccessModeToDraft,
@@ -329,8 +333,7 @@ const LOGO_LIGHT_URL = new URL('../../../internal/envapp/ui_src/public/logo.svg'
 const LOGO_DARK_URL = new URL('../../../internal/envapp/ui_src/public/logo-dark.svg', import.meta.url).href;
 
 type EnvironmentFailureState = Readonly<{
-  message: string;
-  tone: 'error' | 'warning';
+  failure: DesktopOperationFailurePresentation;
 }>;
 
 type RuntimeMaintenanceConfirmationAction = 'stop' | 'restart' | 'update';
@@ -481,8 +484,26 @@ function getErrorMessage(error: unknown): string {
   return trimString(error);
 }
 
-function firstLine(value: unknown): string {
-  return trimString(value).split(/\r?\n/u).map((line) => line.trim()).find(Boolean) ?? '';
+function inlineFailurePresentation(
+  message: string,
+  tone: 'error' | 'warning',
+): DesktopOperationFailurePresentation {
+  return {
+    code: 'operation_failed',
+    severity: tone,
+    title: tone === 'warning' ? 'Warning' : 'Error',
+    summary: trimString(message) || 'Desktop could not complete that action.',
+  };
+}
+
+type SilentLauncherActionFailure = Readonly<{
+  ok: false;
+  message: string;
+  failure?: DesktopOperationFailurePresentation;
+}>;
+
+function launcherFailureSummary(failure: SilentLauncherActionFailure): string {
+  return trimString(failure.failure?.summary) || trimString(failure.message);
 }
 
 function formatIssueToastMessage(issue: DesktopWelcomeIssue): string {
@@ -1326,7 +1347,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         }
       } else {
         setRuntimeContainerOptions([]);
-        setRuntimeContainerOptionsError(result.message);
+        setRuntimeContainerOptionsError(result.failure?.summary ?? result.message);
       }
     } catch (error) {
       if (requestID !== runtimeContainerOptionsRequestID) {
@@ -1464,7 +1485,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         const tone: 'error' | 'warning' = presentation.tone;
         setEnvironmentFailures((current) => {
           const next = new Map(current);
-          next.set(environmentID, { message: presentation.message, tone });
+          next.set(environmentID, {
+            failure: failure.failure ?? inlineFailurePresentation(presentation.message, tone),
+          });
           return next;
         });
       }
@@ -1475,7 +1498,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     request: DesktopLauncherActionRequest,
   ): Promise<
     | Extract<DesktopLauncherActionResult, Readonly<{ ok: true }>>
-    | Readonly<{ ok: false; message: string }>
+    | SilentLauncherActionFailure
   > {
     setBusyState(busyStateForLauncherRequest(request));
     try {
@@ -1495,6 +1518,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         return {
           ok: false,
           message: presentation.message || 'Desktop could not complete that action.',
+          ...(result.failure ? { failure: result.failure } : {}),
         };
       }
       if (isDesktopLauncherActionSuccess(result)) {
@@ -2373,7 +2397,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       setErrorMessage(errorTarget, message);
       setEnvironmentFailures((current) => {
         const next = new Map(current);
-        next.set(environment.id, { message, tone: 'warning' });
+        next.set(environment.id, { failure: inlineFailurePresentation(message, 'warning') });
         return next;
       });
       return false;
@@ -2452,9 +2476,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       }
       const result = await performLauncherActionSilently(request);
       if (!result.ok) {
+        const message = launcherFailureSummary(result);
         return {
           close_panel: false,
-          next_session: failEnvironmentGuidanceIntent(currentSession, result.message),
+          next_session: failEnvironmentGuidanceIntent(currentSession, message),
         };
       }
 
@@ -2518,14 +2543,15 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       }
       const result = await performLauncherActionSilently(request);
       if (!result.ok) {
+        const failure = result.failure ?? inlineFailurePresentation(launcherFailureSummary(result), 'error');
         setEnvironmentFailures((current) => {
           const next = new Map(current);
-          next.set(environment.id, { message: result.message, tone: 'error' });
+          next.set(environment.id, { failure });
           return next;
         });
         return {
           close_panel: false,
-          next_session: failEnvironmentGuidanceIntent(currentSession, result.message),
+          next_session: failEnvironmentGuidanceIntent(currentSession, failure.summary),
         };
       }
 
@@ -4646,11 +4672,11 @@ function EnvironmentProgressPanel(props: Readonly<{
           </>
         )}
       </Show>
-      <Show when={props.progress.error_message}>
-        {(message) => (
+      <Show when={props.progress.failure}>
+        {(failure) => (
           <div class="redeven-action-popover__notice" data-tone="error">
             <div class="redeven-action-popover__notice-title">{openConnection() ? 'Open needs attention' : 'Startup needs attention'}</div>
-            <div class="redeven-action-popover__notice-detail">{firstLine(message())}</div>
+            <div class="redeven-action-popover__notice-detail">{failure().summary}</div>
           </div>
         )}
       </Show>
@@ -5341,8 +5367,8 @@ function EnvironmentConnectionCard(props: Readonly<{
         ? 'redeven-environment-card--open'
         : 'border-border',
       props.environmentFailure && 'redeven-environment-card--failure',
-      props.environmentFailure?.tone === 'error' && 'redeven-environment-card--failure-error',
-      props.environmentFailure?.tone === 'warning' && 'redeven-environment-card--failure-warning',
+      props.environmentFailure?.failure.severity === 'error' && 'redeven-environment-card--failure-error',
+      props.environmentFailure?.failure.severity === 'warning' && 'redeven-environment-card--failure-warning',
     )}>
       <CardHeader class="px-3.5 pb-2 pt-3.5">
         <div class="flex items-start justify-between gap-2">
@@ -5358,9 +5384,10 @@ function EnvironmentConnectionCard(props: Readonly<{
                 {(failure) => {
                   const [popoverOpen, setPopoverOpen] = createSignal(false);
                   const [copied, setCopied] = createSignal(false);
+                  const presentation = createMemo(() => failure().failure);
 
                   const handleCopy = async () => {
-                    await copyToClipboard(failure().message);
+                    await copyToClipboard(formatDesktopOperationFailureForClipboard(presentation()));
                     setCopied(true);
                     setTimeout(() => setCopied(false), 1500);
                   };
@@ -5376,13 +5403,13 @@ function EnvironmentConnectionCard(props: Readonly<{
                         <div class="py-2.5 px-3">
                           <div class="flex items-center gap-1.5 mb-1.5">
                             <Show
-                              when={failure().tone === 'error'}
+                              when={presentation().severity === 'error'}
                               fallback={<AlertTriangle class="h-3.5 w-3.5 shrink-0 text-amber-400" />}
                             >
                               <AlertCircle class="h-3.5 w-3.5 shrink-0 text-red-400" />
                             </Show>
                             <span class="text-xs font-semibold">
-                              {failure().tone === 'error' ? 'Error' : 'Warning'}
+                              {presentation().title}
                             </span>
                             <button
                               type="button"
@@ -5396,19 +5423,44 @@ function EnvironmentConnectionCard(props: Readonly<{
                               <span>{copied() ? 'Copied' : 'Copy'}</span>
                             </button>
                           </div>
-                          <p class="text-xs leading-relaxed text-muted-foreground font-mono break-words">
-                            {failure().message}
-                          </p>
+                          <div class="space-y-1.5">
+                            <p class="text-xs leading-relaxed text-foreground break-words">
+                              {presentation().summary}
+                            </p>
+                            <Show when={presentation().detail}>
+                              {(detail) => <p class="text-xs leading-relaxed text-muted-foreground break-words">{detail()}</p>}
+                            </Show>
+                            <Show when={presentation().recovery_hint}>
+                              {(hint) => <p class="text-xs leading-relaxed text-muted-foreground break-words">{hint()}</p>}
+                            </Show>
+                            <Show when={(presentation().diagnostics ?? []).length > 0}>
+                              <details class="redeven-environment-card__failure-details">
+                                <summary>Details</summary>
+                                <div class="mt-1.5 space-y-1.5">
+                                  <For each={presentation().diagnostics ?? []}>
+                                    {(diagnostic) => (
+                                      <div>
+                                        <div class="text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                                          {diagnostic.label}
+                                        </div>
+                                        <pre class="redeven-environment-card__failure-diagnostic">{diagnostic.text}</pre>
+                                      </div>
+                                    )}
+                                  </For>
+                                </div>
+                              </details>
+                            </Show>
+                          </div>
                         </div>
                       }
                     >
                       <span
                         class="redeven-environment-card__failure-badge"
-                        data-tone={failure().tone}
+                        data-tone={presentation().severity}
                         onClick={props.dismissEnvironmentFailure}
                         role="button"
                         tabIndex={0}
-                        aria-label={`Dismiss startup failure: ${failure().message}`}
+                        aria-label={`Dismiss startup failure: ${presentation().summary}`}
                       >
                         <span class="redeven-environment-card__failure-badge-icon" aria-hidden="true">!</span>
                       </span>

@@ -1,3 +1,8 @@
+import {
+  normalizeDesktopOperationFailurePresentation,
+  type DesktopOperationFailurePresentation,
+} from './desktopOperationFailure';
+
 export const DESKTOP_SHELL_RUNTIME_ACTION_CHANNEL = 'redeven-desktop:shell-runtime-action';
 export const DESKTOP_SHELL_RUNTIME_MAINTENANCE_CONTEXT_CHANNEL = 'redeven-desktop:shell-runtime-maintenance-context';
 
@@ -75,6 +80,7 @@ export type DesktopShellRuntimeActionResponse = Readonly<{
   ok: boolean;
   started: boolean;
   message?: string;
+  failure?: DesktopOperationFailurePresentation;
 }>;
 
 function compact(value: unknown): string {
@@ -130,11 +136,13 @@ export function normalizeDesktopShellRuntimeActionResponse(value: unknown): Desk
   }
 
   const candidate = value as Partial<DesktopShellRuntimeActionResponse>;
-  const message = String(candidate.message ?? '').trim();
+  const failure = normalizeDesktopOperationFailurePresentation(candidate.failure);
+  const message = failure?.summary || String(candidate.message ?? '').trim();
   return {
     ok: candidate.ok === true,
     started: candidate.started === true,
     message: message || undefined,
+    ...(failure ? { failure } : {}),
   };
 }
 

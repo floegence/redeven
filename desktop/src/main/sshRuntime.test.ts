@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -13,6 +14,7 @@ import {
   buildManagedSSHReportReadScript,
   describeManagedSSHRuntimeProbeResult,
   parseManagedSSHRuntimeProbeResult,
+  probeManagedSSHRuntimeStatus,
 } from './sshRuntime';
 
 function readSSHRuntimeSource(): string {
@@ -20,6 +22,53 @@ function readSSHRuntimeSource(): string {
 }
 
 describe('sshRuntime', () => {
+  it('returns a structured SSH connection failure without exposing stderr labels as the summary', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-ssh-runtime-test-'));
+    const fakeSSH = path.join(tempDir, 'ssh.cjs');
+    fs.writeFileSync(fakeSSH, [
+      '#!/usr/bin/env node',
+      'process.stderr.write("ssh: Could not resolve hostname dify: nodename nor servname provided\\n");',
+      'process.exit(255);',
+      '',
+    ].join('\n'), 'utf8');
+    fs.chmodSync(fakeSSH, 0o755);
+
+    try {
+      const probe = await probeManagedSSHRuntimeStatus({
+        target: {
+          ssh_destination: 'dify',
+          ssh_port: null,
+          auth_mode: 'key_agent',
+          runtime_root: 'remote_default',
+          bootstrap_strategy: 'auto',
+          release_base_url: '',
+          connect_timeout_seconds: 1,
+        },
+        runtimeReleaseTag: 'v1.2.3',
+        sshBinary: fakeSSH,
+        tempRoot: tempDir,
+        connectTimeoutSeconds: 1,
+      });
+
+      expect(probe.status).toBe('failed');
+      if (probe.status !== 'failed') {
+        return;
+      }
+      expect(probe.message).toBe('SSH connection to "dify" failed.');
+      expect(probe.failure.summary).toBe('SSH connection to "dify" failed.');
+      expect(probe.failure.summary).not.toContain('control_stderr');
+      expect(probe.failure.diagnostics).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          channel: 'control_stderr',
+          label: 'SSH command stderr',
+          text: expect.stringContaining('Could not resolve hostname dify'),
+        }),
+      ]));
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('builds remote install, upload-install, runtime-probe, and report scripts around the unified runtime root', () => {
     expect(buildManagedSSHRemoteInstallScript()).toContain('REDEVEN_INSTALL_MODE=upgrade');
     expect(buildManagedSSHStartScript()).toContain('--state-root "$state_root"');

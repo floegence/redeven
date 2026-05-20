@@ -146,8 +146,10 @@ describe('main routing', () => {
     expect(mainSrc).toContain('onProgress: (progress: ManagedRuntimeProgress) => {');
     expect(mainSrc).toContain('launcherOperations.isStale(runtimeKey)');
     expect(mainSrc).toContain('scheduleLauncherOperationRemoval(runtimeKey);');
-    expect(mainSrc).toContain('function friendlyRuntimeStartErrorMessage(');
-    expect(mainSrc).toContain('return firstDisplayLine(rawMessage);');
+    expect(mainSrc).toContain('function desktopFailureFromError(');
+    expect(mainSrc).toContain('operationFailureFromUnknown(error, desktopOperationFailurePresentation({');
+    expect(mainSrc).not.toContain('function friendlyRuntimeStartErrorMessage(');
+    expect(mainSrc).not.toContain('firstDisplayLine(');
     expect(mainSrc).not.toContain(['The SSH host resolved its runtime directory to', '/root'].join(' '));
   });
 

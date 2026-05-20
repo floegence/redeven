@@ -140,6 +140,33 @@ describe('launcherActionFeedback', () => {
     });
   });
 
+  it('uses structured failure summaries instead of raw launcher messages', () => {
+    expect(launcherActionFailurePresentation({
+      ok: false,
+      code: 'runtime_start_failed',
+      scope: 'environment',
+      message: 'control_stderr:',
+      should_refresh_snapshot: true,
+      failure: {
+        code: 'ssh_connection_failed',
+        severity: 'error',
+        title: 'SSH Connection Failed',
+        summary: 'SSH connection to "dify" failed.',
+        diagnostics: [{
+          channel: 'control_stderr',
+          label: 'SSH stderr',
+          text: 'ssh: Could not resolve hostname dify',
+        }],
+      },
+    })).toEqual({
+      title: 'SSH Connection Failed',
+      message: 'SSH connection to "dify" failed.',
+      tone: 'error',
+      refresh_snapshot: true,
+      delivery: 'toast',
+    });
+  });
+
   it('keeps dialog-scoped validation failures inline', () => {
     expect(launcherActionFailurePresentation({
       ok: false,

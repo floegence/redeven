@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { DesktopOperationFailureError } from './desktopOperationFailure';
 import { launchStartedFreshManagedRuntime, startManagedRuntime } from './runtimeProcess';
 import { parseStartupReport } from './startup';
 
@@ -85,6 +86,10 @@ if (process.argv[2] === 'desktop-runtime-status') {
 
 const reportFile = argValue('--startup-report-file');
 const mode = process.env.REDEVEN_TEST_RUNTIME_MODE || 'openable';
+if (mode === 'stderr_exit') {
+  process.stderr.write('runtime stderr detail that should stay diagnostic\\n');
+  process.exit(42);
+}
 const server = http.createServer((request, response) => {
   if (request.url === '/_redeven_proxy/env/') {
     response.writeHead(200, { 'content-type': 'text/html' });
@@ -205,6 +210,39 @@ describe('runtimeProcess', () => {
         'runtime_ready',
       ]);
       await launch.managedRuntime.stop();
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps local runtime stderr as diagnostics instead of the visible failure summary', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-'));
+    const executablePath = await writeFakeRuntimeExecutable(dir);
+    try {
+      try {
+        await startManagedRuntime({
+          executablePath,
+          runtimeArgs: [],
+          env: { REDEVEN_TEST_RUNTIME_MODE: 'stderr_exit' },
+          tempRoot: dir,
+          startupTimeoutMs: 5_000,
+          runtimeAttachTimeoutMs: 100,
+          desktopOwnerID: 'desktop-owner-1',
+        });
+        throw new Error('expected runtime startup failure');
+      } catch (error) {
+        expect(error).toBeInstanceOf(DesktopOperationFailureError);
+        const failure = (error as DesktopOperationFailureError).presentation;
+        expect(failure.summary).toBe('redeven exited before reporting readiness (exit code: 42)');
+        expect(failure.summary).not.toContain('stderr:');
+        expect(failure.diagnostics).toEqual(expect.arrayContaining([
+          expect.objectContaining({
+            channel: 'stderr',
+            label: 'Runtime stderr',
+            text: 'runtime stderr detail that should stay diagnostic',
+          }),
+        ]));
+      }
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }

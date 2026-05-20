@@ -5,6 +5,11 @@ import os from 'node:os';
 import path from 'node:path';
 import type { Readable, Writable } from 'node:stream';
 
+import {
+  DesktopOperationFailureError,
+  desktopOperationFailurePresentation,
+  diagnosticsFromRecentLogs,
+} from './desktopOperationFailure';
 import { parseLaunchReport, type LaunchBlockedReport, type LaunchReport } from './launchReport';
 import { type StartupReport } from './startup';
 import {
@@ -113,25 +118,28 @@ function emitManagedRuntimeProgress(
   });
 }
 
-function formatRecentLogs(logs: RecentLogs): string {
-  const sections: string[] = [];
-  const stderr = logs.stderr.trim();
-  const stdout = logs.stdout.trim();
-  if (stderr) {
-    sections.push(`stderr:\n${stderr}`);
-  }
-  if (stdout) {
-    sections.push(`stdout:\n${stdout}`);
-  }
-  return sections.join('\n\n');
-}
+const LOCAL_RUNTIME_LOG_LABELS: Record<keyof RecentLogs, string> = {
+  stderr: 'Runtime stderr',
+  stdout: 'Runtime stdout',
+};
 
-function readinessFailure(message: string, logs: RecentLogs): Error {
-  const details = formatRecentLogs(logs);
-  if (!details) {
-    return new Error(message);
-  }
-  return new Error(`${message}\n\n${details}`);
+function readinessFailure(
+  message: string,
+  logs: RecentLogs,
+  options: Readonly<{
+    title?: string;
+    detail?: string;
+    recoveryHint?: string;
+  }> = {},
+): Error {
+  return new DesktopOperationFailureError(desktopOperationFailurePresentation({
+    code: 'local_runtime_launch_failed',
+    title: options.title ?? 'Local Runtime Start Failed',
+    summary: message,
+    detail: options.detail,
+    recoveryHint: options.recoveryHint,
+    diagnostics: diagnosticsFromRecentLogs(logs, LOCAL_RUNTIME_LOG_LABELS),
+  }));
 }
 
 async function readLaunchReport(reportFile: string): Promise<LaunchReport | null> {

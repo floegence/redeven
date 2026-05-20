@@ -166,4 +166,38 @@ describe('LauncherOperationRegistry', () => {
       deleted_subject: true,
     }));
   });
+
+  it('carries structured failure presentation without rewriting it', () => {
+    const registry = new LauncherOperationRegistry();
+    const operation = registry.create({
+      operation_key: 'ssh:dify:default:key_agent:remote_default',
+      action: 'start_environment_runtime',
+      subject_kind: 'ssh_environment',
+      subject_id: 'ssh:dify:default:key_agent:remote_default',
+      phase: 'ssh_waiting_report',
+      title: 'Waiting for runtime readiness',
+      detail: 'Waiting.',
+      cancelable: true,
+    });
+    const failure = {
+      code: 'ssh_connection_failed' as const,
+      severity: 'error' as const,
+      title: 'SSH Connection Failed',
+      summary: 'SSH connection to "dify" failed.',
+      diagnostics: [{
+        channel: 'control_stderr',
+        label: 'SSH command stderr',
+        text: 'ssh: Could not resolve hostname dify',
+      }],
+    };
+
+    registry.finish(operation.operation_key, 'failed', {
+      phase: 'failed',
+      title: 'SSH runtime start failed',
+      detail: failure.summary,
+      failure,
+    });
+
+    expect(registry.progressItems()[0]?.failure).toEqual(failure);
+  });
 });

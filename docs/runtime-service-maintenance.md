@@ -92,6 +92,21 @@ existing process alone. Explicit restart/update actions may be offered by the
 operation planner, but they require user confirmation and must preserve active
 work unless the user accepts the interruption risk.
 
+Blocked runtime reports and operation failures have separate responsibilities.
+Runtime reports describe machine-readable attach or maintenance state, such as
+`state_dir_locked`, owner metadata, active workload, and compatibility fields.
+Desktop operation failures describe the user-visible outcome of an attempted
+launcher action through `DesktopOperationFailurePresentation`.
+
+When a start/open/update action fails, the launcher card, progress popover,
+toast, and shell maintenance response must render the operation failure
+`summary` first. Raw report fields and process streams remain diagnostics. For
+example, an unreachable SSH host should surface `SSH connection to "dify"
+failed.` while preserving `control_stderr` and the OpenSSH output only under
+`Details` / copied diagnostics. Maintenance requirements may include diagnostic
+details for support, but those details must not be concatenated into
+`Error.message` and must not replace the operation-level summary.
+
 ## Data Structures
 
 ### Runtime Service Snapshot
