@@ -158,6 +158,15 @@ export type ProviderBackedEnvironmentActionModel = Readonly<{
   action_presentation: EnvironmentActionPresentation;
 }>;
 
+type RuntimeUpdatePresentation = Readonly<{
+  uses_desktop_update_handoff: boolean;
+  status_label: string;
+  required_title: string;
+  continue_title: string;
+  blocked_detail: string;
+  recovery_detail: string;
+}>;
+
 export type ControlPlaneStatusModel = Readonly<{
   label: string;
   tone: EnvironmentCardTone;
@@ -662,6 +671,31 @@ export function splitPinnedEnvironmentEntries(
   };
 }
 
+function environmentUsesDesktopUpdateHandoff(environment: DesktopEnvironmentEntry): boolean {
+  return environment.runtime_operations.update.method === 'desktop_local_update_handoff';
+}
+
+function runtimeUpdatePresentation(environment: DesktopEnvironmentEntry): RuntimeUpdatePresentation {
+  if (environmentUsesDesktopUpdateHandoff(environment)) {
+    return {
+      uses_desktop_update_handoff: true,
+      status_label: 'DESKTOP UPDATE REQUIRED',
+      required_title: 'Redeven Desktop update required',
+      continue_title: 'Update Redeven Desktop to continue',
+      blocked_detail: 'This Local Environment uses the runtime bundled with Redeven Desktop. Open becomes available after the Desktop update handoff refreshes the app and bundled local runtime.',
+      recovery_detail: 'Open becomes available after the Desktop update handoff refreshes the app and bundled local runtime.',
+    };
+  }
+  return {
+    uses_desktop_update_handoff: false,
+    status_label: 'RUNTIME NEEDS UPDATE',
+    required_title: 'Runtime update required',
+    continue_title: 'Update the runtime to continue',
+    blocked_detail: '',
+    recovery_detail: '',
+  };
+}
+
 function runtimeStatusLabel(environment: DesktopEnvironmentEntry): string {
   if (environment.kind === 'provider_environment' && environment.control_plane_sync_state === 'auth_required') {
     return 'RECONNECT REQUIRED';
@@ -710,7 +744,7 @@ function runtimeStatusLabel(environment: DesktopEnvironmentEntry): string {
   if (environmentRuntimeMaintenance(environment)) {
     return environmentRuntimeMaintenance(environment)?.kind === 'ssh_runtime_restart_required'
       ? 'RESTART REQUIRED'
-      : 'RUNTIME NEEDS UPDATE';
+      : runtimeUpdatePresentation(environment).status_label;
   }
   if (environment.managed_runtime_open_connection_required === true) {
     return 'READY TO OPEN';
@@ -724,7 +758,7 @@ function runtimeStatusLabel(environment: DesktopEnvironmentEntry): string {
   }
   if (snapshot?.open_readiness?.state === 'blocked') {
     return runtimeServiceNeedsRuntimeUpdate(snapshot)
-      ? 'RUNTIME NEEDS UPDATE'
+      ? runtimeUpdatePresentation(environment).status_label
       : 'RUNTIME BLOCKED';
   }
   return 'RUNTIME PREPARING';
@@ -1151,10 +1185,10 @@ function blockedRuntimePrimaryActionTitle(
     return 'Runtime restart required';
   }
   if (maintenance?.kind === 'ssh_runtime_update_required') {
-    return 'Runtime update required';
+    return runtimeUpdatePresentation(environment).required_title;
   }
   return runtimeServiceNeedsRuntimeUpdate(snapshot)
-    ? 'Runtime update required'
+    ? runtimeUpdatePresentation(environment).required_title
     : 'Runtime cannot open yet';
 }
 
@@ -1170,9 +1204,17 @@ function blockedRuntimePrimaryActionDetail(
     if (maintenance.kind === 'ssh_runtime_restart_required') {
       return 'This SSH host is reachable, but the running runtime needs a confirmed restart before it can open this environment. Open stays locked until the runtime restarts and reports ready.';
     }
+    const presentation = runtimeUpdatePresentation(environment);
+    if (presentation.uses_desktop_update_handoff) {
+      return presentation.blocked_detail;
+    }
     return 'This SSH host is reachable, but the running runtime needs an update before it can open this environment. Update and restart the runtime first; Open stays separate and becomes available after the runtime is ready.';
   }
   if (runtimeServiceNeedsRuntimeUpdate(snapshot)) {
+    const presentation = runtimeUpdatePresentation(environment);
+    if (presentation.uses_desktop_update_handoff) {
+      return presentation.blocked_detail;
+    }
     return environment.kind === 'ssh_environment'
       ? 'SSH is connected, but the running runtime on this host needs an update before it can open the Environment App. Open will stay locked until the runtime is updated and restarted when active work can be interrupted.'
       : 'This running runtime needs an update before it can open the Environment App. Open will stay locked until the runtime is updated and restarted when active work can be interrupted.';
@@ -1189,7 +1231,7 @@ function blockedPrimaryActionTitle(
   }
   if (action.intent === 'update_runtime') {
     if (action.runtime_operation_method === 'desktop_local_update_handoff') {
-      return 'Update Redeven Desktop to continue';
+      return runtimeUpdatePresentation(environment).continue_title;
     }
     return 'Update the runtime to continue';
   }
@@ -1210,7 +1252,7 @@ function blockedPrimaryActionDetail(
   }
   if (action.intent === 'update_runtime') {
     if (action.runtime_operation_method === 'desktop_local_update_handoff') {
-      return 'Open becomes available after Redeven Desktop is updated and the local runtime is restarted with the bundled runtime.';
+      return runtimeUpdatePresentation(environment).recovery_detail;
     }
     if (environment.managed_runtime_placement?.kind === 'container_process') {
       return 'Open becomes available after Desktop updates the runtime package in this running container and the runtime reports ready.';

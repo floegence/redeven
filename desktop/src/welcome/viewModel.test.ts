@@ -2249,6 +2249,63 @@ describe('buildEnvironmentCardModel', () => {
     ]));
   });
 
+  it('uses Desktop update wording when the Local Environment bundled runtime blocks Open', () => {
+    const local = testLocalEnvironment({
+      currentRuntime: {
+        local_ui_url: 'http://127.0.0.1:24001/',
+        desktop_managed: true,
+        runtime_service: providerRuntimeService({
+          state: 'blocked',
+          reason_code: 'runtime_update_required',
+          message: 'Redeven Desktop has a newer bundled runtime. Open the Desktop update handoff before opening this Local Environment.',
+        }),
+      },
+    });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: local,
+      }),
+    });
+    const entry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
+
+    expect(entry).toBeTruthy();
+    expect(buildEnvironmentCardModel(entry!)).toEqual(expect.objectContaining({
+      kind_label: 'Local',
+      status_label: 'DESKTOP UPDATE REQUIRED',
+      status_tone: 'warning',
+    }));
+    expect(buildProviderBackedEnvironmentActionModel(entry!)).toMatchObject({
+      status_label: 'DESKTOP UPDATE REQUIRED',
+      status_tone: 'warning',
+      action_presentation: {
+        primary_action: {
+          intent: 'open',
+          label: 'Open',
+          enabled: false,
+        },
+        primary_action_overlay: {
+          kind: 'popover',
+          eyebrow: 'Runtime blocked',
+          title: 'Redeven Desktop update required',
+          detail: 'This Local Environment uses the runtime bundled with Redeven Desktop. Open becomes available after the Desktop update handoff refreshes the app and bundled local runtime.',
+          actions: expect.arrayContaining([
+            expect.objectContaining({
+              label: 'Update Redeven Desktop',
+              action: expect.objectContaining({
+                intent: 'update_runtime',
+                label: 'Update Redeven Desktop',
+                runtime_operation_method: 'desktop_local_update_handoff',
+              }),
+            }),
+            expect.objectContaining({
+              label: 'Refresh status',
+            }),
+          ]),
+        },
+      },
+    });
+  });
+
   it('keeps Open disabled while an online runtime is still preparing Env App readiness', () => {
     const local = testLocalEnvironment({
       currentRuntime: {
