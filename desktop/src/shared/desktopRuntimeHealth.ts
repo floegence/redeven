@@ -1,4 +1,7 @@
-import type { RuntimeServiceSnapshot } from './runtimeService';
+import {
+  runtimeServiceIsOpenable,
+  type RuntimeServiceSnapshot,
+} from './runtimeService';
 
 export type DesktopRuntimeStatus = 'online' | 'offline';
 export type DesktopRuntimeHealthFreshness =
@@ -154,6 +157,20 @@ export function normalizeDesktopRuntimeMaintenanceRequirement(
     lock_pid: normalizeOptionalInteger(record.lock_pid),
     message: message || 'Runtime maintenance is required before this environment can open.',
   };
+}
+
+export function desktopRuntimeMaintenanceForRuntimeService(
+  maintenance: DesktopRuntimeMaintenanceRequirement | null | undefined,
+  runtimeService: RuntimeServiceSnapshot | null | undefined,
+): DesktopRuntimeMaintenanceRequirement | undefined {
+  const normalized = normalizeDesktopRuntimeMaintenanceRequirement(maintenance);
+  if (!normalized) {
+    return undefined;
+  }
+  if (normalized.required_for === 'open' && runtimeServiceIsOpenable(runtimeService)) {
+    return undefined;
+  }
+  return normalized;
 }
 
 export function buildDesktopRuntimeMaintenanceRequirement(

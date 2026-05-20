@@ -53,6 +53,7 @@ import {
 } from '../shared/providerEnvironmentState';
 import type { DesktopRuntimeHealth } from '../shared/desktopRuntimeHealth';
 import {
+  desktopRuntimeMaintenanceForRuntimeService,
   normalizeDesktopRuntimeMaintenanceRequirement,
 } from '../shared/desktopRuntimeHealth';
 import {
@@ -378,7 +379,6 @@ function managedRuntimeEntryFields(
   | 'managed_runtime_host_access'
   | 'managed_runtime_placement'
   | 'managed_runtime_open_connection_required'
-  | 'runtime_operations'
 >> {
   if (!presence) {
     return {};
@@ -389,7 +389,6 @@ function managedRuntimeEntryFields(
     managed_runtime_host_access: presence.host_access,
     managed_runtime_placement: presence.placement,
     ...(presence.open_connection_required ? { managed_runtime_open_connection_required: true } : {}),
-    runtime_operations: presence.operations,
   };
 }
 
@@ -404,21 +403,25 @@ function managedRuntimeOperations(args: Readonly<{
   runtimeControlStatus?: DesktopRuntimeControlStatus;
   maintenance?: DesktopEnvironmentEntry['runtime_maintenance'];
 }>): DesktopRuntimeOperationPlans {
-  if (args.presence) {
-    return args.presence.operations;
-  }
-  const runtimePackageState = desktopRuntimePackageStateFromRuntimeService(args.runtimeService, args.maintenance);
+  const runtimeService = args.presence?.runtime_service
+    ? normalizeRuntimeServiceSnapshot(args.presence.runtime_service)
+    : args.runtimeService;
+  const maintenance = desktopRuntimeMaintenanceForRuntimeService(
+    args.presence?.maintenance ?? args.maintenance,
+    runtimeService,
+  );
+  const runtimePackageState = desktopRuntimePackageStateFromRuntimeService(runtimeService, maintenance);
   return buildDesktopRuntimeOperationPlans({
     surface: 'managed_runtime_card',
-    host_access: args.hostAccess,
-    placement: args.placement,
-    running: args.running,
-    openable: args.openable,
-    open_connection_required: args.openConnectionRequired === true,
+    host_access: args.presence?.host_access ?? args.hostAccess,
+    placement: args.presence?.placement ?? args.placement,
+    running: args.presence?.running ?? args.running,
+    openable: args.presence?.openable ?? args.openable,
+    open_connection_required: args.presence?.open_connection_required ?? (args.openConnectionRequired === true),
     package_state: runtimePackageState,
-    runtime_service: args.runtimeService,
-    runtime_control_status: args.runtimeControlStatus,
-    maintenance: args.maintenance,
+    runtime_service: runtimeService,
+    runtime_control_status: args.presence?.runtime_control_status ?? args.runtimeControlStatus,
+    maintenance,
   });
 }
 
@@ -865,7 +868,18 @@ function runtimeServiceFromPresence(presence: DesktopManagedRuntimePresence | un
 function runtimeMaintenanceFromHealth(
   health: DesktopRuntimeHealth | null | undefined,
 ): DesktopEnvironmentEntry['runtime_maintenance'] {
-  return normalizeDesktopRuntimeMaintenanceRequirement(health?.runtime_maintenance);
+  return desktopRuntimeMaintenanceForRuntimeService(
+    normalizeDesktopRuntimeMaintenanceRequirement(health?.runtime_maintenance),
+    health?.runtime_service,
+  );
+}
+
+function runtimeHealthWithEffectiveMaintenance(health: DesktopRuntimeHealth): DesktopRuntimeHealth {
+  const runtimeMaintenance = runtimeMaintenanceFromHealth(health);
+  const { runtime_maintenance: _runtimeMaintenance, ...rest } = health;
+  return runtimeMaintenance
+    ? { ...rest, runtime_maintenance: runtimeMaintenance }
+    : rest;
 }
 
 function preferredRuntimeService(
@@ -898,8 +912,10 @@ function runtimeHealthFromPresence(
   fallback: DesktopRuntimeHealth,
 ): DesktopRuntimeHealth {
   if (!presence) {
-    return fallback;
+    return runtimeHealthWithEffectiveMaintenance(fallback);
   }
+  const presenceRuntimeService = presence.runtime_service ? normalizeRuntimeServiceSnapshot(presence.runtime_service) : undefined;
+  const presenceMaintenance = desktopRuntimeMaintenanceForRuntimeService(presence.maintenance, presenceRuntimeService);
   if (!presence.running) {
     const runtimeControlMissing = presence.runtime_control_status.state === 'missing'
       ? presence.runtime_control_status
@@ -917,7 +933,7 @@ function runtimeHealthFromPresence(
           ? runtimeControlMissing.reason_code
           : fallback.offline_reason_code,
       offline_reason: runtimeControlMissing?.message || fallback.offline_reason,
-      runtime_maintenance: presence.maintenance ?? fallback.runtime_maintenance,
+      runtime_maintenance: presenceMaintenance ?? runtimeMaintenanceFromHealth(fallback),
     };
   }
   return {
@@ -926,8 +942,8 @@ function runtimeHealthFromPresence(
     source,
     freshness: fallback.freshness,
     local_ui_url: presence.local_ui_url || undefined,
-    runtime_service: presence.runtime_service ? normalizeRuntimeServiceSnapshot(presence.runtime_service) : undefined,
-    runtime_maintenance: presence.maintenance,
+    runtime_service: presenceRuntimeService,
+    runtime_maintenance: presenceMaintenance,
   };
 }
 

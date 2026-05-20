@@ -86,6 +86,22 @@ describe('main routing', () => {
     expect(snapshotSrc).not.toContain('refreshAllProviderEnvironmentRuntimeHealth');
   });
 
+  it('reconciles saved runtime target maintenance before exposing Welcome state', () => {
+    const mainSrc = readMainSource();
+    const inspectStart = mainSrc.indexOf('async function inspectSavedRuntimeTargetState(');
+    const inspectEnd = mainSrc.indexOf('function createInitialLoadDeferred(', inspectStart);
+    expect(inspectStart).toBeGreaterThanOrEqual(0);
+    expect(inspectEnd).toBeGreaterThan(inspectStart);
+    const inspectSrc = mainSrc.slice(inspectStart, inspectEnd);
+
+    expect(mainSrc).toContain('function runtimePlacementMaintenanceForRuntimeService(');
+    expect(mainSrc).toContain('runtimePlacementMaintenanceByTargetID.delete(targetID)');
+    expect(inspectSrc).toContain('maintenance: runtimePlacementMaintenanceForRuntimeService(target.id, bridgeRecord.startup.runtime_service)');
+    expect(inspectSrc).toContain('maintenance: runtimePlacementMaintenanceForRuntimeService(target.id, readyRecord.startup?.runtime_service)');
+    expect(inspectSrc).toContain('const maintenance = runtimePlacementMaintenanceForRuntimeService(target.id, report.startup.runtime_service);');
+    expect(inspectSrc).not.toContain('maintenance: maintenance && !runtimeServiceIsOpenable(report.startup.runtime_service)');
+  });
+
   it('lets dev SSH bootstrap use an explicit runtime release tag without changing the bundled runtime version', () => {
     const mainSrc = readMainSource();
 
