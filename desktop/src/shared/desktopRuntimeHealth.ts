@@ -26,6 +26,7 @@ export type DesktopRuntimeOfflineReasonCode =
   | 'auth_required'
   | 'unverified'
   | 'container_not_running'
+  | 'container_engine_unavailable'
   | 'probe_failed'
   | 'provider_reported_offline'
   | 'provider_unavailable'

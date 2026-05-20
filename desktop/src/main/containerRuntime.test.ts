@@ -16,6 +16,7 @@ import {
   resolveRuntimeContainerPlacement,
   type DesktopRuntimeContainerResolver,
 } from './containerRuntime';
+import { DesktopHostCommandNotFoundError } from './desktopHostCommand';
 
 describe('containerRuntime', () => {
   it('parses Docker inspect records into stable container facts', () => {
@@ -274,6 +275,47 @@ describe('containerRuntime', () => {
     });
   });
 
+  it('uses structured host command diagnostics when recovering stale container ids', async () => {
+    const resolver: DesktopRuntimeContainerResolver = {
+      inspect: async () => {
+        throw Object.assign(new Error('Desktop could not run the runtime host command on this device.'), {
+          presentation: {
+            diagnostics: [
+              { text: 'exit code 1' },
+              { text: 'Error: No such object: old-container-id' },
+            ],
+          },
+        });
+      },
+      listRunning: async () => [
+        {
+          engine: 'docker',
+          container_id: 'new-container-id',
+          container_ref: 'redeven-nginx-dev',
+          container_label: 'redeven-nginx-dev',
+          image: 'nginx:latest',
+          status_text: 'Up 5 seconds',
+        },
+      ],
+    };
+
+    await expect(resolveRuntimeContainerPlacement(resolver, {
+      kind: 'container_process',
+      container_engine: 'docker',
+      container_id: 'old-container-id',
+      container_ref: 'redeven-nginx-dev',
+      container_label: 'redeven-nginx-dev',
+      runtime_root: '/root/.redeven',
+      bridge_strategy: 'exec_stream',
+    })).resolves.toMatchObject({
+      status: 'running',
+      changed: true,
+      placement: {
+        container_id: 'new-container-id',
+      },
+    });
+  });
+
   it('does not accept a stale concrete id when it conflicts with the stable reference', async () => {
     const inspected = {
       engine: 'docker' as const,
@@ -337,6 +379,60 @@ describe('containerRuntime', () => {
       status: 'missing',
       message: 'Container redeven-nginx-dev was not found. Choose a running container, then try again.',
     });
+  });
+
+  it('reports a missing local Docker CLI instead of treating the container as missing', async () => {
+    let listed = false;
+    const resolver: DesktopRuntimeContainerResolver = {
+      inspect: async () => {
+        throw new DesktopHostCommandNotFoundError('docker', ['/usr/bin', '/bin']);
+      },
+      listRunning: async () => {
+        listed = true;
+        return [];
+      },
+    };
+
+    await expect(resolveRuntimeContainerPlacement(resolver, {
+      kind: 'container_process',
+      container_engine: 'docker',
+      container_id: 'old-container-id',
+      container_ref: 'redeven-nginx-dev',
+      container_label: 'redeven-nginx-dev',
+      runtime_root: '/root/.redeven',
+      bridge_strategy: 'exec_stream',
+    })).resolves.toEqual({
+      status: 'command_not_found',
+      message: 'Docker CLI was not found. Install Docker Desktop or make docker available to Redeven Desktop, then refresh and try again.',
+    });
+    expect(listed).toBe(false);
+  });
+
+  it('does not collapse container engine failures into container-missing guidance', async () => {
+    let listed = false;
+    const resolver: DesktopRuntimeContainerResolver = {
+      inspect: async () => {
+        throw new Error('Cannot connect to the Docker daemon at unix:///var/run/docker.sock.');
+      },
+      listRunning: async () => {
+        listed = true;
+        return [];
+      },
+    };
+
+    await expect(resolveRuntimeContainerPlacement(resolver, {
+      kind: 'container_process',
+      container_engine: 'docker',
+      container_id: 'old-container-id',
+      container_ref: 'redeven-nginx-dev',
+      container_label: 'redeven-nginx-dev',
+      runtime_root: '/root/.redeven',
+      bridge_strategy: 'exec_stream',
+    })).resolves.toEqual({
+      status: 'engine_unavailable',
+      message: 'Docker is unavailable. Make sure Docker is running and the docker CLI can reach it, then refresh and try again.',
+    });
+    expect(listed).toBe(false);
   });
 
   it('does not use arbitrary container-name prefixes as id matches', async () => {

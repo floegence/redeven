@@ -124,6 +124,7 @@ import {
   parseContainerListOutput,
   parseContainerInspectJSON,
   resolveRuntimeContainerPlacement,
+  type DesktopRuntimeContainerResolution,
   type DesktopRuntimeContainerResolver,
 } from './containerRuntime';
 import { parseLaunchReport, type LaunchBlockedReport } from './launchReport';
@@ -1306,6 +1307,19 @@ function runtimeContainerResolver(
   };
 }
 
+function runtimeControlReasonCodeForContainerResolution(
+  status: Exclude<DesktopRuntimeContainerResolution['status'], 'running'>,
+): Extract<DesktopRuntimeControlStatus, Readonly<{ state: 'missing' }>>['reason_code'] {
+  switch (status) {
+    case 'command_not_found':
+    case 'engine_unavailable':
+    case 'no_permission':
+      return 'container_engine_unavailable';
+    default:
+      return 'container_not_running';
+  }
+}
+
 function managedRuntimePresence(args: Readonly<{
   targetID: DesktopProviderRuntimeLinkTargetID;
   placementTargetID: DesktopRuntimeTargetID;
@@ -1533,7 +1547,10 @@ async function inspectSavedRuntimeTargetState(
   return {
     running: false,
     local_ui_url: '',
-    runtime_control_status: desktopRuntimeControlStatusMissing('container_not_running', resolution.message),
+    runtime_control_status: desktopRuntimeControlStatusMissing(
+      runtimeControlReasonCodeForContainerResolution(resolution.status),
+      resolution.message,
+    ),
     maintenance: runtimePlacementMaintenanceByTargetID.get(target.id),
     placement: target.placement,
   };

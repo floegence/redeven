@@ -17,6 +17,8 @@ import {
   type DesktopRuntimeOperationPlans,
 } from './desktopRuntimeOperations';
 
+type MissingRuntimeControlStatus = Extract<DesktopRuntimeControlStatus, Readonly<{ state: 'missing' }>>;
+
 export type DesktopRuntimeOperationPlanningSurface =
   | 'managed_runtime_card'
   | 'provider_card'
@@ -81,6 +83,22 @@ function activeWorkMessage(runtimeService: RuntimeServiceSnapshot | undefined): 
     : '';
 }
 
+function runtimeTargetUnavailableStatus(
+  runtimeControlStatus: DesktopRuntimeControlStatus | undefined,
+  openConnectionRequired: boolean,
+): MissingRuntimeControlStatus | null {
+  if (runtimeControlStatus?.state !== 'missing') {
+    return null;
+  }
+  if (runtimeControlStatus.reason_code === 'container_not_running'
+    || runtimeControlStatus.reason_code === 'container_engine_unavailable') {
+    return runtimeControlStatus;
+  }
+  return runtimeControlStatus.reason_code === 'forward_unavailable' && !openConnectionRequired
+    ? runtimeControlStatus
+    : null;
+}
+
 export function buildDesktopRuntimeOperationPlans(
   input: DesktopRuntimeOperationPlannerInput,
 ): DesktopRuntimeOperationPlans {
@@ -126,19 +144,18 @@ export function buildDesktopRuntimeOperationPlans(
   const updateMaintenance = maintenance?.kind === 'ssh_runtime_update_required'
     || maintenance?.kind === 'desktop_model_source_requires_runtime_update';
   const openConnectionRequired = input.open_connection_required === true;
-  const managementBlocked = input.runtime_control_status?.state === 'missing'
-    && input.runtime_control_status.reason_code === 'forward_unavailable'
-    && !openConnectionRequired;
   const blockedByUpdate = requiresUpdate || updateMaintenance;
   const updateMessage = updateMethod === 'desktop_local_update_handoff'
     ? localDesktopUpdateMessage(input.package_state)
     : updateRequiredMessage(input.package_state);
   const canOpen = input.openable || openConnectionRequired;
-  const openAvailability = input.running && canOpen && !blockedByUpdate && !restartMaintenance
+  const managementBlockedStatus = runtimeTargetUnavailableStatus(input.runtime_control_status, openConnectionRequired);
+  const managementBlocked = !!managementBlockedStatus;
+  const openAvailability = input.running && canOpen && !blockedByUpdate && !restartMaintenance && !managementBlocked
     ? 'available'
     : 'blocked';
   const openMessage = managementBlocked
-    ? input.runtime_control_status?.message
+    ? managementBlockedStatus.message
     : !input.running
     ? 'Start this runtime before opening it.'
     : blockedByUpdate
@@ -179,7 +196,7 @@ export function buildDesktopRuntimeOperationPlans(
       method,
       {
         reasonCode: managementBlocked ? 'runtime_target_unavailable' : blockedByUpdate ? 'runtime_update_required' : input.running ? 'runtime_already_running' : undefined,
-        message: managementBlocked ? input.runtime_control_status?.message : blockedByUpdate ? updateMessage : undefined,
+        message: managementBlocked ? managementBlockedStatus.message : blockedByUpdate ? updateMessage : undefined,
         packageState: input.package_state,
         maintenance,
         menuVisibility: hasManagement && !input.running ? 'contextual' : 'hidden',
@@ -227,7 +244,7 @@ export function buildDesktopRuntimeOperationPlans(
         requiresConfirmation: true,
         reasonCode: blockedByUpdate ? 'runtime_update_required' : undefined,
         label: updateMethod === 'desktop_local_update_handoff' ? 'Update Redeven Desktop' : undefined,
-        message: managementBlocked ? input.runtime_control_status?.message : maintenance?.message ?? updateMessage,
+        message: managementBlocked ? managementBlockedStatus.message : maintenance?.message ?? updateMessage,
         packageState: input.package_state,
         maintenance,
         menuVisibility: hasManagement ? 'stable' : 'hidden',

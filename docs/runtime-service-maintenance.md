@@ -84,6 +84,16 @@ Detection rules:
   a locally stored SSH password for that saved entry; otherwise the card reports
   `Auto detection waits for manual authentication`.
 
+Container detection has an additional host-command discovery state. When a
+Local Container target cannot find the local Docker/Podman CLI, Desktop reports
+`runtime_control_status.state = "missing"` with
+`reason_code = "container_engine_unavailable"` and a message that names the
+missing CLI. This is distinct from `container_not_running`, which means the
+container reference was inspected or listed successfully but is stopped, missing,
+or ambiguous. `container_engine_unavailable` blocks Open, Start, and Update while
+leaving Refresh available; fixing the host CLI installation or PATH and then
+refreshing is the recovery path.
+
 Manual `Start runtime` uses the same probe-first policy. If the runtime is
 already running and openable, Start succeeds without launching a replacement
 process. If the runtime is running but incompatible, blocked, or missing a
