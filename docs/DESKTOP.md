@@ -86,6 +86,35 @@ Behavior:
 - Runtime lifecycle and Open connection progress are separate launcher operation contracts. Local Host, Local Container, SSH Host, and SSH Container start/update actions publish canonical `lifecycle_progress` metadata; Open actions publish `open_progress` metadata for SSH tunnels, container bridges, runtime-control forwarding, Desktop model source preparation, and Env App window creation.
 - `./scripts/check_docker_runtime_e2e.sh` is the real container lifecycle regression gate. It starts an `ubuntu:24.04` Docker container, runs the current Linux `redeven` binary as a desktop-managed daemon inside that container, verifies `desktop-runtime-status`, attaches through `desktop-bridge`, requests Local UI and runtime-control over bridge streams, calls direct `sys.ping`, exercises `sys.restart`, verifies runtime-owned `sys.upgrade` is unavailable for desktop-managed runtimes, then performs a Desktop-owned package update and reconnects.
 
+### Desktop Operation Failure Presentation
+
+Launcher runtime and Open operations carry user-facing failures with
+`DesktopOperationFailurePresentation` instead of raw exception text.
+The contract separates:
+
+- `title` and `summary`: short user-visible copy for toasts, card badges,
+  progress notices, and shell runtime maintenance responses.
+- `detail` and `recovery_hint`: optional user-facing context and the next
+  practical action.
+- `target_label`: the host, container, URL, or environment label involved in
+  the failed operation.
+- `diagnostics`: raw stdout/stderr streams, SSH channels, exit reasons, report
+  paths, and other debugging material.
+
+Runtime startup, SSH bootstrap, container host commands, and shell maintenance
+must never promote diagnostic channel names such as `stderr`,
+`control_stderr`, `master_stderr`, or `runtime_control_forward_stderr` into the
+visible failure summary. Those streams remain available under `Details` and in
+the copy-to-clipboard diagnostic payload. If a host named `dify` is unreachable,
+the visible copy should be a workflow-level message such as
+`SSH connection to "dify" failed.`, while the OpenSSH output stays in
+diagnostics.
+
+Launcher operation snapshots, action progress events, and action failures all
+carry the same `failure` presentation object. The operation registry only
+transports this object; domain code is responsible for choosing the failure code
+and user copy from the operation phase and typed error, not by parsing stderr.
+
 Desktop-managed Local Runtime also exposes a separate runtime-control endpoint when it is started by Desktop:
 
 - It listens on a random loopback-only address (`127.0.0.1:0`).

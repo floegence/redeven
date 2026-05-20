@@ -4,6 +4,10 @@ import {
   type DesktopContainerEngine,
   type DesktopRuntimeHostAccess,
 } from './desktopRuntimePlacement';
+import {
+  normalizeDesktopOperationFailurePresentation,
+  type DesktopOperationFailurePresentation,
+} from './desktopOperationFailure';
 
 export const DESKTOP_LAUNCHER_LIST_RUNTIME_CONTAINERS_CHANNEL = 'redeven-desktop:launcher-list-runtime-containers';
 
@@ -29,6 +33,7 @@ export type DesktopRuntimeContainerListResponse =
   | Readonly<{
       ok: false;
       message: string;
+      failure?: DesktopOperationFailurePresentation;
     }>;
 
 function compact(value: unknown): string {
@@ -89,9 +94,12 @@ export function normalizeDesktopRuntimeContainerListResponse(
   }
   const record = value as Record<string, unknown>;
   if (record.ok !== true) {
+    const failure = normalizeDesktopOperationFailurePresentation(record.failure);
+    const message = failure?.summary || compact(record.message) || 'Desktop could not list containers.';
     return {
       ok: false,
-      message: compact(record.message) || 'Desktop could not list containers.',
+      message,
+      ...(failure ? { failure } : {}),
     };
   }
   const containers = Array.isArray(record.containers)

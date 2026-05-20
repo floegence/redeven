@@ -659,6 +659,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('runtimeLifecycleProgress={runtimeLifecycleProgress()}');
     expect(appSrc).toContain('openConnectionProgress={openConnectionProgress()}');
     expect(appSrc).toContain('function EnvironmentProgressPanel');
+    expect(appSrc).toContain('<Show when={props.progress.failure}>');
+    expect(appSrc).toContain('<div class="redeven-action-popover__notice-detail">{failure().summary}</div>');
+    expect(appSrc).not.toContain('props.progress.error_message');
     expect(appSrc).toContain("primaryProgress()?.open_progress ? 'Opening...' : runtimeMenuProgress()?.action === 'update_environment_runtime' ? 'Updating...' : 'Starting...'");
     expect(appSrc).toContain('redeven-environment-progress');
     expect(appSrc).toContain('redeven-split-action-trigger--progress');
@@ -677,6 +680,21 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('.redeven-environment-progress__meta');
     expect(styles).toContain('.redeven-split-action-trigger--progress');
     expect(styles).not.toContain('.redeven-ssh-runtime-activity');
+  });
+
+  it('shows structured card failures with diagnostics behind Details', () => {
+    const appSrc = readWelcomeSource();
+    const styles = readWelcomeStyles();
+
+    expect(appSrc).toContain('formatDesktopOperationFailureForClipboard(presentation())');
+    expect(appSrc).toContain('{presentation().summary}');
+    expect(appSrc).toContain('{presentation().recovery_hint}');
+    expect(appSrc).toContain('<summary>Details</summary>');
+    expect(appSrc).toContain('diagnostic.label');
+    expect(appSrc).toContain('diagnostic.text');
+    expect(styles).toContain('.redeven-environment-card__failure-details summary');
+    expect(styles).toContain('cursor: pointer;');
+    expect(styles).toContain('.redeven-environment-card__failure-diagnostic');
   });
 
   it('lets users inspect and cancel lifecycle or Open progress from the Open popup while shimmer feedback stays active', () => {

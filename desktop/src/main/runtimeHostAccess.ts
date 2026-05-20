@@ -7,7 +7,12 @@ import type { ChildProcessByStdio } from 'node:child_process';
 import type { Readable, Writable } from 'node:stream';
 
 import type { DesktopRuntimeHostAccess } from '../shared/desktopRuntimePlacement';
-import type { DesktopSSHHostAccessDetails } from '../shared/desktopSSH';
+import { desktopSSHAuthority, type DesktopSSHHostAccessDetails } from '../shared/desktopSSH';
+import type { DesktopFailureCode, DesktopFailureDiagnostic } from '../shared/desktopOperationFailure';
+import {
+  DesktopOperationFailureError,
+  desktopOperationFailurePresentation,
+} from './desktopOperationFailure';
 
 export type RuntimeHostCommandResult = Readonly<{
   stdout: string;
@@ -28,6 +33,14 @@ export type RuntimeHostCommandOptions = Readonly<{
 
 type SpawnedCommand = ChildProcessByStdio<Writable | null, Readable | null, Readable | null>;
 type SpawnedStreamingCommand = ChildProcessByStdio<Writable, Readable, Readable>;
+type RuntimeHostFailureContext = Readonly<{
+  code?: DesktopFailureCode;
+  title: string;
+  summary: string;
+  detail?: string;
+  recoveryHint?: string;
+  targetLabel?: string;
+}>;
 
 export type RuntimeHostStreamingCommand = Readonly<{
   stdin: Writable;
@@ -73,6 +86,60 @@ function sshRemoteCommandWithEnv(argv: readonly string[], env: NodeJS.ProcessEnv
   return `${sshRemoteEnvPrefix(env)}${sshRemoteCommand(argv)}`;
 }
 
+function commandFailureDiagnostics(args: Readonly<{
+  command: string;
+  reason: string;
+  stdout?: string;
+  stderr?: string;
+}>): readonly DesktopFailureDiagnostic[] {
+  return [
+    {
+      channel: 'process_exit',
+      label: 'Process exit',
+      text: args.reason,
+    },
+    {
+      channel: 'command',
+      label: 'Command',
+      text: args.command,
+    },
+    {
+      channel: 'stdout',
+      label: 'Command stdout',
+      text: compact(args.stdout),
+    },
+    {
+      channel: 'stderr',
+      label: 'Command stderr',
+      text: compact(args.stderr),
+    },
+  ].filter((item) => item.text !== '');
+}
+
+function runtimeHostCommandFailure(
+  context: RuntimeHostFailureContext,
+  args: Readonly<{
+    command: string;
+    reason: string;
+    stdout?: string;
+    stderr?: string;
+    cause?: unknown;
+  }>,
+): DesktopOperationFailureError {
+  return new DesktopOperationFailureError(desktopOperationFailurePresentation({
+    code: context.code ?? 'runtime_host_command_failed',
+    title: context.title,
+    summary: context.summary,
+    detail: context.detail,
+    recoveryHint: context.recoveryHint,
+    targetLabel: context.targetLabel,
+    diagnostics: commandFailureDiagnostics(args),
+  }), { cause: args.cause });
+}
+
+// IMPORTANT: Host command stdout/stderr are diagnostics. Runtime host access
+// must not splice command output into Error.message for UI-facing paths.
+
 function buildSSHPasswordAskPassScript(): string {
   return [
     '#!/bin/sh',
@@ -100,6 +167,7 @@ function spawnCommand(
   command: string,
   args: readonly string[],
   options: RuntimeHostCommandOptions,
+  failureContext: RuntimeHostFailureContext,
 ): Promise<RuntimeHostCommandResult> {
   if (compact(command) === '' || args.some((arg) => compact(arg) === '')) {
     return Promise.reject(new Error('Runtime host command argv must be non-empty.'));
@@ -125,7 +193,15 @@ function spawnCommand(
     child.stderr?.on('data', (chunk: string) => {
       stderr += chunk;
     });
-    child.once('error', reject);
+    child.once('error', (error) => {
+      reject(runtimeHostCommandFailure(failureContext, {
+        command,
+        reason: error.message,
+        stdout,
+        stderr,
+        cause: error,
+      }));
+    });
     if (options.stdinData && child.stdin) {
       child.stdin.end(options.stdinData);
     }
@@ -135,7 +211,12 @@ function spawnCommand(
         return;
       }
       const reason = closeSignal ? `signal ${closeSignal}` : `exit code ${exitCode ?? 'unknown'}`;
-      reject(new Error(`${command} failed with ${reason}${stderr.trim() ? `: ${stderr.trim()}` : ''}`));
+      reject(runtimeHostCommandFailure(failureContext, {
+        command,
+        reason,
+        stdout,
+        stderr,
+      }));
     });
   });
 }
@@ -144,6 +225,7 @@ function spawnStreamingCommand(
   command: string,
   args: readonly string[],
   options: RuntimeHostCommandOptions,
+  failureContext: RuntimeHostFailureContext,
 ): RuntimeHostStreamingCommand {
   if (compact(command) === '' || args.some((arg) => compact(arg) === '')) {
     throw new Error('Runtime host command argv must be non-empty.');
@@ -158,14 +240,23 @@ function spawnStreamingCommand(
     signal: options.signal,
   }) as SpawnedStreamingCommand;
   const closed = new Promise<void>((resolve, reject) => {
-    child.once('error', reject);
+    child.once('error', (error) => {
+      reject(runtimeHostCommandFailure(failureContext, {
+        command,
+        reason: error.message,
+        cause: error,
+      }));
+    });
     child.once('close', (exitCode, closeSignal) => {
       if (exitCode === 0 && !closeSignal) {
         resolve();
         return;
       }
       const reason = closeSignal ? `signal ${closeSignal}` : `exit code ${exitCode ?? 'unknown'}`;
-      reject(new Error(`${command} failed with ${reason}`));
+      reject(runtimeHostCommandFailure(failureContext, {
+        command,
+        reason,
+      }));
     });
   });
   return {
@@ -187,7 +278,12 @@ export function createLocalRuntimeHostExecutor(): RuntimeHostAccessExecutor {
         throw new Error('Runtime host command argv must be non-empty.');
       }
       const [command, ...args] = argv.map((part) => compact(part));
-      return spawnCommand(command!, args, options);
+      return spawnCommand(command!, args, options, {
+        title: 'Runtime Host Command Failed',
+        summary: 'Desktop could not run the runtime host command on this device.',
+        detail: 'The local command did not complete successfully.',
+        targetLabel: 'Local Host',
+      });
     },
   };
 }
@@ -200,7 +296,12 @@ export function spawnLocalRuntimeHostCommand(
     throw new Error('Runtime host command argv must be non-empty.');
   }
   const [command, ...args] = argv.map((part) => compact(part));
-  return spawnStreamingCommand(command!, args, options);
+  return spawnStreamingCommand(command!, args, options, {
+    title: 'Runtime Host Command Failed',
+    summary: 'Desktop could not run the runtime host command on this device.',
+    detail: 'The local streaming command did not complete successfully.',
+    targetLabel: 'Local Host',
+  });
 }
 
 export function createSSHRuntimeHostExecutor(
@@ -218,6 +319,7 @@ export function createSSHRuntimeHostExecutor(
       }
       const sshBinary = compact(options.sshBinary) || 'ssh';
       const sshPassword = compact(options.sshPassword);
+      const targetLabel = desktopSSHAuthority(ssh);
       const askPass = ssh.auth_mode === 'password' && sshPassword !== ''
         ? await createSSHPasswordAskPassScript()
         : null;
@@ -241,6 +343,12 @@ export function createSSHRuntimeHostExecutor(
                 REDEVEN_DESKTOP_SSH_PASSWORD: sshPassword,
               }
             : undefined,
+        }, {
+          title: 'SSH Host Command Failed',
+          summary: `SSH command on "${targetLabel}" failed.`,
+          detail: 'Desktop could not run the requested runtime management command on this SSH host.',
+          recoveryHint: 'Check the SSH host, ~/.ssh/config alias, VPN, network connection, and authentication method.',
+          targetLabel,
         });
       } finally {
         await askPass?.cleanup();
@@ -262,6 +370,7 @@ export function spawnSSHRuntimeHostCommand(
   }
   const sshBinary = compact(options.sshBinary) || 'ssh';
   const sshPassword = compact(options.sshPassword);
+  const targetLabel = desktopSSHAuthority(ssh);
   const askPass = ssh.auth_mode === 'password' && sshPassword !== ''
     ? (() => {
         const tempDir = fsSync.mkdtempSync(path.join(os.tmpdir(), 'rdv-host-ssh-stream-'));
@@ -290,8 +399,14 @@ export function spawnSSHRuntimeHostCommand(
           SSH_ASKPASS: askPass.scriptPath,
           SSH_ASKPASS_REQUIRE: 'force',
           REDEVEN_DESKTOP_SSH_PASSWORD: sshPassword,
-        }
+      }
       : undefined,
+  }, {
+    title: 'SSH Host Command Failed',
+    summary: `SSH command on "${targetLabel}" failed.`,
+    detail: 'Desktop could not keep the requested runtime management stream open on this SSH host.',
+    recoveryHint: 'Check the SSH host, ~/.ssh/config alias, VPN, network connection, and authentication method.',
+    targetLabel,
   });
   if (askPass) {
     void command.closed.finally(() => askPass.cleanup()).catch(() => undefined);

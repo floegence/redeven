@@ -1503,7 +1503,7 @@ describe('sshRuntime integration', () => {
     ]));
     expect(Number(events.find((event) => event.event === 'upload_archive')?.data?.bytes ?? 0)).toBeGreaterThan(0);
     await removeFakeSSHFixture(fixture);
-  });
+  }, SSH_RUNTIME_MAINTENANCE_TEST_TIMEOUT_MS);
 
   it('rebuilds and uploads source-dev runtime even when the remote tag already looks installed', async () => {
     const fixture = await createFakeSSHFixture('ready');
@@ -1535,7 +1535,7 @@ describe('sshRuntime integration', () => {
       'start_runtime',
     ]));
     await removeFakeSSHFixture(fixture);
-  });
+  }, SSH_RUNTIME_MAINTENANCE_TEST_TIMEOUT_MS);
 
   it('cleans up long-lived SSH processes and the control socket directory when startup report polling times out', async () => {
     const fixture = await createFakeSSHFixture('no_report');

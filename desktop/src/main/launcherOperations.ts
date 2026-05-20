@@ -9,6 +9,7 @@ import { openConnectionProgress } from '../shared/desktopOpenConnectionProgress'
 import type { DesktopOpenConnectionProgress } from '../shared/desktopOpenConnectionProgress';
 import { runtimeLifecycleProgress } from '../shared/desktopRuntimeLifecycleProgress';
 import type { DesktopRuntimeLifecycleProgress } from '../shared/desktopRuntimeLifecycleProgress';
+import type { DesktopOperationFailurePresentation } from '../shared/desktopOperationFailure';
 
 type OperationChangeListener = (snapshot: DesktopLauncherOperationSnapshot) => void;
 
@@ -30,6 +31,7 @@ type CreateLauncherOperationInput = Readonly<{
   interrupt_label?: string;
   interrupt_detail?: string;
   interrupt_kind?: DesktopLauncherOperationSnapshot['interrupt_kind'];
+  failure?: DesktopOperationFailurePresentation;
 }>;
 
 function compact(value: unknown): string {
@@ -41,6 +43,8 @@ function subjectKey(kind: DesktopLauncherOperationSubjectKind, id: string): stri
 }
 
 function operationProgress(snapshot: DesktopLauncherOperationSnapshot): DesktopLauncherActionProgress {
+  // IMPORTANT: Launcher operations transport structured failure presentation
+  // only. The registry must not infer user-facing copy from raw errors.
   return {
     action: snapshot.action,
     operation_key: snapshot.operation_key,
@@ -61,7 +65,7 @@ function operationProgress(snapshot: DesktopLauncherOperationSnapshot): DesktopL
     interrupt_detail: snapshot.interrupt_detail,
     interrupt_kind: snapshot.interrupt_kind,
     deleted_subject: snapshot.deleted_subject,
-    error_message: snapshot.error_message,
+    failure: snapshot.failure,
   };
 }
 
@@ -150,6 +154,7 @@ export class LauncherOperationRegistry {
       interrupt_detail: compact(input.interrupt_detail) || undefined,
       interrupt_kind: input.interrupt_kind,
       deleted_subject: false,
+      ...(input.failure ? { failure: input.failure } : {}),
     };
     this.operationsByKey.set(operationKey, snapshot);
     this.abortControllersByKey.set(operationKey, new AbortController());

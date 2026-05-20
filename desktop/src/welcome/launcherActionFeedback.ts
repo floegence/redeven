@@ -46,6 +46,16 @@ export function launcherActionFailurePresentation(
 ): LauncherActionFailurePresentation {
   const refreshSnapshot = failure.should_refresh_snapshot === true;
   const delivery = failure.scope === 'dialog' ? 'inline' : 'toast';
+  const structured = failure.failure;
+  if (structured) {
+    return {
+      title: structured.title,
+      message: structured.summary,
+      tone: structured.severity,
+      refresh_snapshot: refreshSnapshot,
+      delivery,
+    };
+  }
   switch (failure.code) {
     case 'session_stale':
       return {

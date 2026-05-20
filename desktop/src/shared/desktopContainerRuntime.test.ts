@@ -86,5 +86,34 @@ describe('desktopContainerRuntime', () => {
       ok: false,
       message: 'docker is not available',
     });
+    expect(normalizeDesktopRuntimeContainerListResponse({
+      ok: false,
+      message: 'stderr: raw failure',
+      failure: {
+        code: 'runtime_host_command_failed',
+        severity: 'error',
+        title: 'Container List Failed',
+        summary: 'Desktop could not list running docker containers on dify.',
+        diagnostics: [{
+          channel: 'stderr',
+          label: 'Command stderr',
+          text: 'Cannot connect to the Docker daemon',
+        }],
+      },
+    })).toEqual({
+      ok: false,
+      message: 'Desktop could not list running docker containers on dify.',
+      failure: {
+        code: 'runtime_host_command_failed',
+        severity: 'error',
+        title: 'Container List Failed',
+        summary: 'Desktop could not list running docker containers on dify.',
+        diagnostics: [{
+          channel: 'stderr',
+          label: 'Command stderr',
+          text: 'Cannot connect to the Docker daemon',
+        }],
+      },
+    });
   });
 });
