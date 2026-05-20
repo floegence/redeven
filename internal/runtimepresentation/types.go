@@ -19,6 +19,7 @@ const (
 )
 
 type ResolveInput struct {
+	Stdin             io.Reader
 	Stdout            io.Writer
 	Stderr            io.Writer
 	Env               map[string]string
@@ -27,10 +28,11 @@ type ResolveInput struct {
 }
 
 type Config struct {
-	Requested Mode
-	Effective Mode
-	Color     bool
-	Dynamic   bool
+	Requested   Mode
+	Effective   Mode
+	Color       bool
+	Dynamic     bool
+	Interactive bool
 }
 
 func ParseMode(raw string) (Mode, error) {
@@ -53,7 +55,8 @@ func ResolveConfig(requested Mode, in ResolveInput) Config {
 	if env == nil {
 		env = environMap()
 	}
-	tty := isTerminalWriter(in.Stderr)
+	stdinTTY := isTerminalReader(in.Stdin)
+	stderrTTY := isTerminalWriter(in.Stderr)
 	noColor := envTruthy(env["NO_COLOR"]) || strings.EqualFold(strings.TrimSpace(env["TERM"]), "dumb")
 	ci := envTruthy(env["CI"])
 	effective := requested
@@ -61,17 +64,18 @@ func ResolveConfig(requested Mode, in ResolveInput) Config {
 		switch {
 		case in.DesktopManaged || strings.TrimSpace(in.StartupReportFile) != "":
 			effective = ModeMachine
-		case tty && !noColor && !ci:
+		case stderrTTY && !noColor && !ci:
 			effective = ModeRich
 		default:
 			effective = ModePlain
 		}
 	}
 	return Config{
-		Requested: requested,
-		Effective: effective,
-		Color:     effective == ModeRich && !noColor,
-		Dynamic:   effective == ModeRich && tty && !noColor,
+		Requested:   requested,
+		Effective:   effective,
+		Color:       effective == ModeRich && !noColor,
+		Dynamic:     effective == ModeRich && stderrTTY && !noColor,
+		Interactive: effective == ModeRich && stdinTTY && stderrTTY && !noColor && !ci,
 	}
 }
 
@@ -97,6 +101,14 @@ func envTruthy(value string) bool {
 
 func isTerminalWriter(w io.Writer) bool {
 	f, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+	return term.IsTerminal(int(f.Fd()))
+}
+
+func isTerminalReader(r io.Reader) bool {
+	f, ok := r.(*os.File)
 	if !ok {
 		return false
 	}

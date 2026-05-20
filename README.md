@@ -72,7 +72,7 @@ redeven run --mode hybrid
 
 Bootstrap writes your Local Environment config to `~/.redeven/local-environment/config.json`. Each OS user has one Local Environment identity, bound to one provider Environment at a time. Desktop and browser flows use the same one-time ticket contract.
 
-Interactive terminals use Redeven's rich startup presentation by default: a compact character mark, grouped startup status, Local UI and Environment URLs, and actionable warning/error panels. Non-interactive shells fall back to plain text, and Desktop-managed launches use the machine presentation contract with structured startup reports instead of terminal UI.
+Interactive terminals use Redeven's rich runtime presentation by default: a compact animated character mark, runtime version/protocol details, active session/workload counts, Local UI and Environment URLs, real runtime log tailing, and actionable warning/error panels. Use the arrow keys to move between Control plane, Sessions, and Logs. Press Enter on Sessions to open a filterable active-session view, Enter on Logs to expand the full runtime log view, Enter on Control plane to connect, disconnect, or open the bootstrap setup fields, Esc to return, and Ctrl+C to stop the runtime. Non-interactive shells fall back to plain text, and Desktop-managed launches use the machine presentation contract with structured startup reports instead of terminal UI.
 
 **Run modes at a glance:**
 

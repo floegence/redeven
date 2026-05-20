@@ -133,19 +133,113 @@ func TestRichRendererShowsBrandReadyWarningAndError(t *testing.T) {
 	}
 	text := out.String()
 	for _, want := range []string{
-		"██  Redeven Runtime",
-		"Local foundation",
-		"Access surfaces",
-		"Warning",
-		"Redeven Runtime is ready",
+		"╭",
+		"▝▌  ▐▘  Redeven Runtime",
+		"RUNTIME",
+		"ACTIVITY",
+		"ACCESS",
+		"LATEST LOGS",
+		"DEGRADED",
+		"READY",
 		"Could not start the Local UI",
-		"Fix",
+		"ADVISORY",
+		"FIX",
 		"LOCAL_UI_BIND_UNAVAILABLE",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("expected rich output to contain %q\n%s", want, text)
 		}
 	}
+}
+
+func TestCompactBrandMarkAnimationSwapsInteriorBars(t *testing.T) {
+	first := CompactBrandMarkFrame(0)
+	second := CompactBrandMarkFrame(1)
+	if len(first.Lines) != 5 || len(second.Lines) != 5 {
+		t.Fatalf("brand mark heights = %d and %d, want 5", len(first.Lines), len(second.Lines))
+	}
+	if first.Lines[2] != "▌▝▀  ▐" || first.Lines[3] != "▌▝▀▀▘▐" {
+		t.Fatalf("frame 0 interior bars = %q / %q", first.Lines[2], first.Lines[3])
+	}
+	if second.Lines[2] != "▌▝▀▀▘▐" || second.Lines[3] != "▌▝▀  ▐" {
+		t.Fatalf("frame 1 interior bars = %q / %q", second.Lines[2], second.Lines[3])
+	}
+}
+
+func TestDynamicRichRendererAdvancesBrandFrames(t *testing.T) {
+	snapshot := Snapshot{
+		Version:                "v1.2.3",
+		EffectiveRunMode:       "hybrid",
+		ControlplaneProviderID: "example_provider",
+		StateDir:               "/tmp/redeven/local-environment",
+	}
+	var out bytes.Buffer
+	renderer := NewRenderer(&out, Config{Effective: ModeRich, Dynamic: true})
+	if err := renderer.Start(snapshot); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if err := renderer.Emit(Event{Kind: EventPhaseStarted, Phase: PhaseAcquireLock, Title: "Acquiring runtime lock", Snapshot: snapshot}); err != nil {
+		t.Fatalf("Emit() error = %v", err)
+	}
+	text := out.String()
+	assertContains(t, text, "│ ▌▝▀  ▐  Uptime")
+	assertContains(t, text, "│ ▌▝▀▀▘▐  Surface")
+	assertContains(t, text, "│ ▌▝▀▀▘▐  Uptime")
+	assertContains(t, text, "│ ▌▝▀  ▐  Surface")
+}
+
+func TestRichRendererFitsNarrowTerminal(t *testing.T) {
+	snapshot := Snapshot{
+		Version:                "v1.2.3",
+		EffectiveRunMode:       "hybrid",
+		ControlplaneProviderID: "example_provider_with_a_long_name",
+		ControlChannelEnabled:  true,
+		LocalUIEnabled:         true,
+		ControlplaneBaseURL:    "https://very-long-control-plane.example.redeven.test",
+		EnvPublicID:            "env_1234567890",
+		StateDir:               "/tmp/redeven/local-environment/with/a/very/long/path",
+		LocalUIURLs:            []string{"http://127.0.0.1:23998/some/long/path"},
+		EnvironmentURL:         "https://very-long-control-plane.example.redeven.test/env/env_1234567890",
+	}
+	var out bytes.Buffer
+	renderer := NewRendererWithOptions(&out, Config{Effective: ModeRich}, RendererOptions{
+		TerminalWidth:  42,
+		TerminalHeight: 20,
+	})
+	if err := renderer.Start(snapshot); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	text := out.String()
+	assertRichLinesFit(t, text, 41)
+	if lines := richVisibleLineCount(text); lines > 20 {
+		t.Fatalf("rich output line count = %d, want <= 20\n%s", lines, text)
+	}
+	assertContains(t, text, "Redeven Runtime")
+	assertContains(t, text, "LATEST LOGS")
+}
+
+func TestRichRendererFitsWideTwoColumnTerminal(t *testing.T) {
+	snapshot := Snapshot{
+		Version:                "v1.2.3",
+		EffectiveRunMode:       "hybrid",
+		ControlplaneProviderID: "example_provider_with_a_long_name",
+		ControlChannelEnabled:  true,
+		LocalUIEnabled:         true,
+		ControlplaneBaseURL:    "https://very-long-control-plane.example.redeven.test",
+		EnvPublicID:            "env_1234567890",
+		StateDir:               "/tmp/redeven/local-environment/with/a/very/long/path",
+		LocalUIURLs:            []string{"http://127.0.0.1:23998/some/long/path"},
+		EnvironmentURL:         "https://very-long-control-plane.example.redeven.test/env/env_1234567890",
+	}
+	var out bytes.Buffer
+	renderer := NewRendererWithOptions(&out, Config{Effective: ModeRich}, RendererOptions{
+		TerminalWidth:  160,
+		TerminalHeight: 40,
+	})
+	if err := renderer.Start(snapshot); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	assertRichLinesFit(t, out.String(), 132)
 }
 
 func TestPlainAndMachineRenderer(t *testing.T) {
@@ -175,6 +269,15 @@ func TestPlainAndMachineRenderer(t *testing.T) {
 	}
 	if strings.TrimSpace(machine.String()) != "startup failed" {
 		t.Fatalf("machine failure output = %q, want title without decoration", machine.String())
+	}
+}
+
+func assertRichLinesFit(t *testing.T, text string, width int) {
+	t.Helper()
+	for _, line := range strings.Split(text, "\n") {
+		if got := richVisibleLen(line); got > width {
+			t.Fatalf("line width = %d, want <= %d\nline: %q\nfull:\n%s", got, width, richStripANSI(line), text)
+		}
 	}
 }
 

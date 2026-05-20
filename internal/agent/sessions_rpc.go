@@ -44,6 +44,34 @@ type sessionsActiveSession struct {
 	CanExecute bool `json:"can_execute"`
 }
 
+type RuntimePresentationSession struct {
+	ChannelID string
+
+	UserPublicID string
+	UserEmail    string
+
+	FloeApp     string
+	CodeSpaceID string
+	SessionKind string
+	TunnelURL   string
+
+	CreatedAtUnixMs   int64
+	ConnectedAtUnixMs int64
+
+	CanRead    bool
+	CanWrite   bool
+	CanExecute bool
+}
+
+func (a *Agent) RuntimePresentationSessions() []RuntimePresentationSession {
+	sessions := a.listActiveSessionsSnapshot()
+	out := make([]RuntimePresentationSession, 0, len(sessions))
+	for _, s := range sessions {
+		out = append(out, RuntimePresentationSession(s))
+	}
+	return out
+}
+
 func (a *Agent) registerSessionsRPCWithAccessGate(r *rpc.Router, meta *session.Meta, gate *accessgate.Gate) {
 	if a == nil || r == nil {
 		return
