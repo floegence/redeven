@@ -686,6 +686,15 @@ function runtimeStatusLabel(environment: DesktopEnvironmentEntry): string {
         return 'REFRESH NEEDED';
     }
   }
+  if (environment.runtime_health.freshness === 'checking') {
+    return 'CHECKING';
+  }
+  if (environment.runtime_health.freshness === 'unknown') {
+    return 'NOT CHECKED';
+  }
+  if (environment.runtime_health.freshness === 'failed') {
+    return 'CHECK FAILED';
+  }
   if (environment.runtime_health.status !== 'online') {
     if (environment.runtime_health.offline_reason_code === 'auth_required') {
       return 'MANUAL AUTH REQUIRED';
@@ -724,6 +733,15 @@ function runtimeStatusTone(environment: DesktopEnvironmentEntry): EnvironmentCar
   }
   if (environment.kind === 'provider_environment' && providerPrimaryRoute(environment) === 'remote_desktop') {
     return providerRemoteOpenLooksAvailable(environment) ? 'success' : 'warning';
+  }
+  if (environment.runtime_health.freshness === 'checking') {
+    return 'primary';
+  }
+  if (environment.runtime_health.freshness === 'unknown') {
+    return 'neutral';
+  }
+  if (environment.runtime_health.freshness === 'failed') {
+    return 'warning';
   }
   return environment.runtime_health.status === 'online'
     && (runtimeServiceIsOpenable(environmentRuntimeService(environment)) || environmentOpenOperationAvailable(environment))

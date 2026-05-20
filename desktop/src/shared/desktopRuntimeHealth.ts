@@ -1,6 +1,11 @@
 import type { RuntimeServiceSnapshot } from './runtimeService';
 
 export type DesktopRuntimeStatus = 'online' | 'offline';
+export type DesktopRuntimeHealthFreshness =
+  | 'unknown'
+  | 'checking'
+  | 'fresh'
+  | 'failed';
 export type DesktopRuntimeMaintenanceKind =
   | 'ssh_runtime_update_required'
   | 'ssh_runtime_restart_required'
@@ -42,6 +47,7 @@ export type DesktopRuntimeHealth = Readonly<{
   status: DesktopRuntimeStatus;
   checked_at_unix_ms: number;
   source: DesktopRuntimeHealthSource;
+  freshness?: DesktopRuntimeHealthFreshness;
   local_ui_url?: string;
   runtime_service?: RuntimeServiceSnapshot;
   runtime_maintenance?: DesktopRuntimeMaintenanceRequirement;

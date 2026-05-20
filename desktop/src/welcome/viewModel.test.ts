@@ -1296,6 +1296,88 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildProviderBackedEnvironmentActionModel(externalEntry!).action_presentation.primary_action_overlay).toBeUndefined();
   });
 
+  it('shows runtime refresh freshness as an in-card status without replacing environment details', () => {
+    const localSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment(),
+      }),
+      localRuntimeHealth: {
+        local: {
+          status: 'offline',
+          checked_at_unix_ms: 1,
+          source: 'local_runtime_probe',
+          freshness: 'checking',
+          offline_reason_code: 'not_started',
+          offline_reason: 'Checking Local Runtime status.',
+        },
+      },
+    });
+    const localEntry = localSnapshot.environments.find((environment) => environment.kind === 'local_environment');
+    expect(localEntry).toBeTruthy();
+    expect(buildEnvironmentCardModel(localEntry!)).toEqual(expect.objectContaining({
+      status_label: 'CHECKING',
+      status_tone: 'primary',
+    }));
+
+    const url = 'http://192.168.1.77:24000/';
+    const externalSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        saved_environments: [{
+          id: url,
+          label: 'Lab URL',
+          local_ui_url: url,
+          pinned: false,
+          created_at_ms: 20,
+          last_used_at_ms: 20,
+        }],
+      }),
+      savedExternalRuntimeHealth: {
+        [url]: {
+          status: 'online',
+          checked_at_unix_ms: 2,
+          source: 'external_local_ui_probe',
+          freshness: 'checking',
+          local_ui_url: url,
+        },
+      },
+    });
+    const externalEntry = externalSnapshot.environments.find((environment) => environment.kind === 'external_local_ui');
+    expect(externalEntry).toBeTruthy();
+    expect(buildEnvironmentCardModel(externalEntry!)).toEqual(expect.objectContaining({
+      target_primary: url,
+      status_label: 'CHECKING',
+      status_tone: 'primary',
+    }));
+
+    const failedSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        saved_environments: [{
+          id: url,
+          label: 'Lab URL',
+          local_ui_url: url,
+          pinned: false,
+          created_at_ms: 20,
+          last_used_at_ms: 20,
+        }],
+      }),
+      savedExternalRuntimeHealth: {
+        [url]: {
+          status: 'offline',
+          checked_at_unix_ms: 3,
+          source: 'external_local_ui_probe',
+          freshness: 'failed',
+          offline_reason_code: 'unverified',
+          offline_reason: 'Connection timed out',
+        },
+      },
+    });
+    const failedEntry = failedSnapshot.environments.find((environment) => environment.kind === 'external_local_ui');
+    expect(buildEnvironmentCardModel(failedEntry!)).toEqual(expect.objectContaining({
+      status_label: 'CHECK FAILED',
+      status_tone: 'warning',
+    }));
+  });
+
   it('builds provider-card actions around provider remote availability', () => {
     const controlPlane = buildControlPlaneSummary({
       status: 'offline',

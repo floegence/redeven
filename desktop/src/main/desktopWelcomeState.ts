@@ -97,8 +97,10 @@ export type BuildDesktopWelcomeSnapshotArgs = Readonly<{
   preferences: DesktopPreferences;
   controlPlanes?: readonly DesktopControlPlaneSummary[];
   openSessions?: readonly DesktopSessionSummary[];
+  localRuntimeHealth?: Readonly<Record<string, DesktopRuntimeHealth>>;
   savedExternalRuntimeHealth?: Readonly<Record<string, DesktopRuntimeHealth>>;
   savedSSHRuntimeHealth?: Readonly<Record<string, DesktopRuntimeHealth>>;
+  savedRuntimeTargetHealth?: Readonly<Record<string, DesktopRuntimeHealth>>;
   managedRuntimePresenceByTargetID?: Readonly<Record<string, DesktopManagedRuntimePresence>>;
   actionProgress?: DesktopWelcomeSnapshot['action_progress'];
   operations?: DesktopWelcomeSnapshot['operations'];
@@ -921,10 +923,21 @@ function runtimeHealthFromPresence(
     status: 'online',
     checked_at_unix_ms: presence.checked_at_unix_ms,
     source,
+    freshness: fallback.freshness,
     local_ui_url: presence.local_ui_url || undefined,
     runtime_service: presence.runtime_service ? normalizeRuntimeServiceSnapshot(presence.runtime_service) : undefined,
     runtime_maintenance: presence.maintenance,
   };
+}
+
+function localRuntimeStateFromCachedHealth(
+  fallback: DesktopLocalRuntimeState,
+  health: DesktopRuntimeHealth | undefined,
+): DesktopLocalRuntimeState {
+  if (health?.status !== 'online') {
+    return fallback;
+  }
+  return health.runtime_service?.desktop_managed === true ? 'running_desktop' : 'running_external';
 }
 
 function providerEnvironmentRuntimeHealth(
@@ -1056,6 +1069,7 @@ function buildLocalEnvironmentEntry(
   openSessions: Readonly<Partial<Record<DesktopLocalEnvironmentStateRoute, DesktopSessionSummary>>>,
   controlPlanes: readonly DesktopControlPlaneSummary[],
   providerEnvironmentCandidates: readonly DesktopProviderEnvironmentCandidate[],
+  cachedRuntimeHealth: DesktopRuntimeHealth | undefined,
   presence: DesktopManagedRuntimePresence | undefined,
 ): DesktopEnvironmentEntry {
   const localSession = openSessions.local_host ?? null;
@@ -1066,9 +1080,11 @@ function buildLocalEnvironmentEntry(
   const providerOrigin = localEnvironmentProviderOrigin(environment);
   const providerID = localEnvironmentProviderID(environment);
   const envPublicID = localEnvironmentPublicID(environment);
-  const resolvedLocalRuntimeState = localRuntimeState(environment);
-  const resolvedLocalRuntimeURL = presence?.local_ui_url ?? localRuntimeURL(environment);
-  const runtimeService = preferredRuntimeService(localEnvironmentRuntimeService(environment), undefined, presence);
+  const resolvedLocalRuntimeState = presence?.running
+    ? (presence.runtime_service?.desktop_managed === false ? 'running_external' : 'running_desktop')
+    : localRuntimeStateFromCachedHealth(localRuntimeState(environment), cachedRuntimeHealth);
+  const resolvedLocalRuntimeURL = presence?.local_ui_url ?? cachedRuntimeHealth?.local_ui_url ?? localRuntimeURL(environment);
+  const runtimeService = preferredRuntimeService(localEnvironmentRuntimeService(environment), cachedRuntimeHealth, presence);
   const localRuntimePlan = buildDesktopLocalRuntimeOpenPlan(
     { kind: 'local_environment' },
     environment.local_hosting?.current_runtime,
@@ -1078,7 +1094,7 @@ function buildLocalEnvironmentEntry(
   const runtimeHealth = runtimeHealthFromPresence(
     'local_runtime_probe',
     presence,
-    localEnvironmentRuntimeHealth(resolvedLocalRuntimeState, resolvedLocalRuntimeURL, runtimeService),
+    cachedRuntimeHealth ?? localEnvironmentRuntimeHealth(resolvedLocalRuntimeState, resolvedLocalRuntimeURL, runtimeService),
   );
   const runtimeMaintenance = runtimeMaintenanceFromHealth(runtimeHealth);
   const runtimeOperations = managedRuntimeOperations({
@@ -1369,8 +1385,10 @@ function buildEnvironmentEntries(
   preferences: DesktopPreferences,
   controlPlanes: readonly DesktopControlPlaneSummary[],
   openSessions: readonly DesktopSessionSummary[],
+  localRuntimeHealth: Readonly<Record<string, DesktopRuntimeHealth>>,
   savedExternalRuntimeHealth: Readonly<Record<string, DesktopRuntimeHealth>>,
   savedSSHRuntimeHealth: Readonly<Record<string, DesktopRuntimeHealth>>,
+  savedRuntimeTargetHealth: Readonly<Record<string, DesktopRuntimeHealth>>,
   managedRuntimePresenceByTargetID: Readonly<Record<string, DesktopManagedRuntimePresence>>,
 ): readonly DesktopEnvironmentEntry[] {
   const localLocalEnvironments = [preferences.local_environment];
@@ -1437,6 +1455,7 @@ function buildEnvironmentEntries(
           openSessionsByLocalEnvironment(openSessions, environment),
           controlPlanes,
           providerEnvironmentCandidatesForTarget(localRuntimeTarget.id),
+          localRuntimeHealth[environment.id],
           localPresence,
         )
       )),
@@ -1474,6 +1493,7 @@ function buildEnvironmentEntries(
     entries.push(buildSavedRuntimeTargetEntry(
       target,
       openSessionByRuntimeTarget(openSessions, target),
+      savedRuntimeTargetHealth[target.id],
       managedRuntimePresenceByTargetID[runtimeTargetID],
       providerEnvironmentCandidatesForTarget(runtimeTargetID),
     ));
@@ -1661,15 +1681,25 @@ function sshDetailsFromRuntimeTarget(target: DesktopSavedRuntimeTarget): Desktop
 function buildSavedRuntimeTargetEntry(
   target: DesktopSavedRuntimeTarget,
   openSession: DesktopSessionSummary | null,
+  cachedRuntimeHealth: DesktopRuntimeHealth | undefined,
   presence: DesktopManagedRuntimePresence | undefined,
   providerEnvironmentCandidates: readonly DesktopProviderEnvironmentCandidate[],
 ): DesktopEnvironmentEntry {
   const isOpen = sessionIsOpen(openSession);
   const isOpening = sessionIsOpening(openSession);
+  const sessionRuntimeHealth = (isOpen || isOpening)
+    ? onlineRuntimeHealth(
+      target.host_access.kind === 'ssh_host' ? 'ssh_runtime_probe' : 'local_runtime_probe',
+      openSession?.entry_url ?? openSession?.startup?.local_ui_url ?? '',
+      openSession?.startup?.runtime_service,
+    )
+    : undefined;
   const runtimeHealth = runtimeHealthFromPresence(
     target.host_access.kind === 'ssh_host' ? 'ssh_runtime_probe' : 'local_runtime_probe',
     presence,
-    offlineRuntimeHealth(
+    sessionRuntimeHealth
+    ?? cachedRuntimeHealth
+    ?? offlineRuntimeHealth(
       target.host_access.kind === 'ssh_host' ? 'ssh_runtime_probe' : 'local_runtime_probe',
       'not_started',
       'Serve the runtime first',
@@ -1777,8 +1807,10 @@ export function buildDesktopWelcomeSnapshot(
     snapshotPreferences,
     controlPlanes,
     openSessions,
+    args.localRuntimeHealth ?? {},
     args.savedExternalRuntimeHealth ?? {},
     args.savedSSHRuntimeHealth ?? {},
+    args.savedRuntimeTargetHealth ?? {},
     args.managedRuntimePresenceByTargetID ?? {},
   );
   const selectedEnvironmentID = args.selectedEnvironmentID ?? '';
