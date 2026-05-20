@@ -67,6 +67,25 @@ describe('main routing', () => {
     expect(mainSrc).toContain('backgroundThrottling: false,');
   });
 
+  it('keeps launcher snapshot construction on the fast in-memory path', () => {
+    const mainSrc = readMainSource();
+    const snapshotStart = mainSrc.indexOf('async function buildCurrentDesktopWelcomeSnapshot(');
+    const snapshotEnd = mainSrc.indexOf('function stampDesktopWelcomeSnapshot(', snapshotStart);
+    expect(snapshotStart).toBeGreaterThanOrEqual(0);
+    expect(snapshotEnd).toBeGreaterThan(snapshotStart);
+    const snapshotSrc = mainSrc.slice(snapshotStart, snapshotEnd);
+
+    expect(snapshotSrc).toContain('welcomeRuntimeHealthStore.prime(');
+    expect(snapshotSrc).toContain('buildWelcomeRuntimeHealthTargets(preferences, openSessions)');
+    expect(snapshotSrc).toContain('welcomeRuntimeHealthStore.snapshot()');
+    expect(snapshotSrc).not.toContain('hydrateWelcomeLocalEnvironmentRuntimeState');
+    expect(snapshotSrc).not.toContain('probeManagedSSHRuntimeStatus');
+    expect(snapshotSrc).not.toContain('loadExternalLocalUIStartup');
+    expect(snapshotSrc).not.toContain('inspectSavedRuntimeTargetState');
+    expect(snapshotSrc).not.toContain('queryProviderEnvironmentRuntimeHealth');
+    expect(snapshotSrc).not.toContain('refreshAllProviderEnvironmentRuntimeHealth');
+  });
+
   it('lets dev SSH bootstrap use an explicit runtime release tag without changing the bundled runtime version', () => {
     const mainSrc = readMainSource();
 
@@ -198,7 +217,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain('runtimePlacementReadyByTargetID.set(targetID, readyRecord)');
     expect(mainSrc).toContain('runtimePlacementBridgeByTargetID.set(bridgeSession.placement_target_id, record)');
     expect(mainSrc).toContain('open_connection_required: true');
-    expect(mainSrc).toContain('openConnectionRequired: targetState.open_connection_required === true');
+    expect(mainSrc).toContain('openConnectionRequired: state.open_connection_required === true');
     expect(mainSrc).toContain('async function openRuntimePlacementBridgeFromLauncher(');
     expect(mainSrc).toContain('Start this runtime first, then open it.');
     expect(mainSrc).toContain('resolveRuntimeContainerPlacement');
@@ -230,9 +249,11 @@ describe('main routing', () => {
     const refreshRuntimeEnd = mainSrc.indexOf('async function refreshAllEnvironmentRuntimesFromLauncher(', refreshRuntimeStart);
     const refreshRuntimeSrc = mainSrc.slice(refreshRuntimeStart, refreshRuntimeEnd);
     expect(refreshRuntimeSrc).toContain("if (placement.kind === 'container_process')");
-    expect(refreshRuntimeSrc).toContain('loadExternalLocalUIStartup(runtimeRecord.startup.local_ui_url');
-    expect(refreshRuntimeSrc).toContain('assertRuntimeTargetContainerRunning(hostAccess, placement)');
-    expect(refreshRuntimeSrc).toContain('markSavedRuntimeTargetUsed(preferences');
+    expect(refreshRuntimeSrc).toContain('scheduleWelcomeRuntimeHealthRefresh({');
+    expect(refreshRuntimeSrc).toContain('targetEnvironmentIDs: environmentID ? [environmentID] : []');
+    expect(refreshRuntimeSrc).not.toContain('loadExternalLocalUIStartup(runtimeRecord.startup.local_ui_url');
+    expect(refreshRuntimeSrc).not.toContain('assertRuntimeTargetContainerRunning(hostAccess, placement)');
+    expect(refreshRuntimeSrc).not.toContain('markSavedRuntimeTargetUsed(preferences');
   });
 
   it('keeps provider-link tickets separate from remote open route readiness', () => {
@@ -318,8 +339,8 @@ describe('main routing', () => {
     expect(refreshRuntimeStart).toBeGreaterThanOrEqual(0);
     expect(refreshRuntimeEnd).toBeGreaterThan(refreshRuntimeStart);
     const refreshRuntimeSrc = mainSrc.slice(refreshRuntimeStart, refreshRuntimeEnd);
-    expect(refreshRuntimeSrc).toContain('await syncLinkedProviderRuntimeHealthFromService(runtimeServiceForProviderHealth);');
-    expect(refreshRuntimeSrc).toContain('await syncLinkedProviderRuntimeHealthFromService(runtimeRecord?.startup.runtime_service);');
+    expect(refreshRuntimeSrc).toContain('scheduleWelcomeRuntimeHealthRefresh({');
+    expect(refreshRuntimeSrc).toContain('void syncLinkedProviderRuntimeHealthFromService(runtimeRecord.startup.runtime_service)');
   });
 
   it('forces provider catalog sync before refreshing a provider environment card', () => {

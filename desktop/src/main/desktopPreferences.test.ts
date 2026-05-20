@@ -488,6 +488,51 @@ describe('desktopPreferences', () => {
     });
   });
 
+  it('does not persist detected Local Runtime state across Desktop launches', async () => {
+    await withTempPreferencesDir(async (root) => {
+      const paths = defaultDesktopPreferencesPaths(root);
+      const codec = createPlaintextSecretCodec();
+      const preferences = testDesktopPreferences({
+        local_environment: testLocalEnvironment({
+          currentRuntime: {
+            local_ui_url: 'http://127.0.0.1:24000/',
+            desktop_managed: true,
+            effective_run_mode: 'desktop',
+            remote_enabled: false,
+            password_required: false,
+            diagnostics_enabled: false,
+            pid: 1234,
+          },
+        }),
+      });
+
+      await saveDesktopPreferences(paths, preferences, codec);
+
+      const catalogPath = path.join(paths.stateRoot, 'catalog', 'local-environment.json');
+      const catalogJSON = await fs.readFile(catalogPath, 'utf8');
+      expect(catalogJSON).not.toContain('current_runtime');
+      expect(catalogJSON).not.toContain('127.0.0.1:24000');
+
+      const legacyCatalog = JSON.parse(catalogJSON) as {
+        local_hosting?: Record<string, unknown>;
+      };
+      await fs.writeFile(catalogPath, `${JSON.stringify({
+        ...legacyCatalog,
+        local_hosting: {
+          ...legacyCatalog.local_hosting,
+          current_runtime: {
+            local_ui_url: 'http://127.0.0.1:25000/',
+            desktop_managed: true,
+            effective_run_mode: 'desktop',
+          },
+        },
+      }, null, 2)}\n`, 'utf8');
+
+      const loaded = await loadDesktopPreferences(paths, codec);
+      expect(loaded.local_environment.local_hosting.current_runtime).toBeUndefined();
+    });
+  });
+
   it('falls back to defaults when the preferences json is malformed', async () => {
     await withTempPreferencesDir(async (root) => {
       const paths = defaultDesktopPreferencesPaths(root);
