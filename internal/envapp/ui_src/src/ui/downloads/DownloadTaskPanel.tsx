@@ -1,9 +1,12 @@
-import { For, Show, createMemo } from 'solid-js';
+import { For, Show, createMemo, type Component } from 'solid-js';
 import {
   AlertCircle,
   CheckCircle,
   Clock,
   Download,
+  FolderOpen,
+  Refresh,
+  X,
   XCircle,
 } from '@floegence/floe-webapp-core/icons';
 
@@ -88,6 +91,7 @@ function speedLabel(task: DownloadTask): string {
 }
 
 function DownloadTaskAction(props: {
+  icon: Component<{ class?: string }>;
   label: string;
   onClick: () => void;
   tone?: 'default' | 'danger';
@@ -95,14 +99,15 @@ function DownloadTaskAction(props: {
   return (
     <button
       type="button"
-      class={`inline-flex h-7 cursor-pointer items-center justify-center rounded-md border px-2.5 text-[11px] font-medium transition-all duration-100 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 ${
+      title={props.label}
+      class={`inline-flex size-6 cursor-pointer items-center justify-center rounded-md transition-all duration-100 active:scale-[0.97] ${
         props.tone === 'danger'
-          ? 'border-destructive/30 text-destructive hover:bg-destructive/10 active:bg-destructive/15'
-          : 'border-border/70 text-foreground hover:bg-accent hover:text-accent-foreground active:bg-accent/80'
+          ? 'text-destructive/70 hover:text-destructive hover:bg-destructive/10 active:bg-destructive/15'
+          : 'text-muted-foreground/50 hover:text-foreground hover:bg-accent active:bg-accent/80'
       }`}
       onClick={props.onClick}
     >
-      {props.label}
+      <props.icon class="size-3.5" />
     </button>
   );
 }
@@ -166,15 +171,25 @@ export function DownloadTaskPanel(props: { manager: DownloadManager }) {
                       {taskMeta(task)}
                     </div>
                   </div>
-                  <div class={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold leading-none ${
-                    task.status === 'failed'
-                      ? 'bg-destructive/10 text-destructive'
-                      : task.status === 'completed'
-                        ? 'bg-success/10 text-success'
-                        : task.status === 'canceled'
-                          ? 'bg-muted text-muted-foreground'
-                          : 'bg-primary/10 text-primary'
-                  }`}>
+                  <div class="flex shrink-0 items-start gap-1">
+                    <Show when={task.status === 'completed' && task.destination?.canReveal}>
+                      <DownloadTaskAction
+                        icon={FolderOpen}
+                        label="Reveal"
+                        onClick={() => {
+                          void props.manager.reveal(task.id);
+                        }}
+                      />
+                    </Show>
+                    <div class={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold leading-none ${
+                      task.status === 'failed'
+                        ? 'bg-destructive/10 text-destructive'
+                        : task.status === 'completed'
+                          ? 'bg-success/10 text-success'
+                          : task.status === 'canceled'
+                            ? 'bg-muted text-muted-foreground'
+                            : 'bg-primary/10 text-primary'
+                    }`}>
                     <Show when={task.status === 'queued' || task.status === 'choosing_destination'}>
                       <span class="animate-pulse"><Clock class="size-3" /></span>
                     </Show>
@@ -191,6 +206,7 @@ export function DownloadTaskPanel(props: { manager: DownloadManager }) {
                       <XCircle class="size-3" />
                     </Show>
                     {statusLabel(task)}
+                    </div>
                   </div>
                 </div>
 
@@ -222,37 +238,25 @@ export function DownloadTaskPanel(props: { manager: DownloadManager }) {
                   </div>
                 </Show>
 
-                <div class="mt-2.5 flex flex-wrap justify-end gap-1.5">
-                  <Show when={task.cancelable && ACTIVE_STATUSES.has(task.status)}>
-                    <DownloadTaskAction
-                      label="Cancel"
-                      tone="danger"
-                      onClick={() => props.manager.cancel(task.id)}
-                    />
-                  </Show>
-                  <Show when={task.status === 'failed' || task.status === 'canceled'}>
-                    <DownloadTaskAction
-                      label="Retry"
-                      onClick={() => props.manager.retry(task.id)}
-                    />
-                  </Show>
-                  <Show when={task.status === 'completed' && task.destination?.canReveal}>
-                    <DownloadTaskAction
-                      label="Reveal"
-                      onClick={() => {
-                        void props.manager.reveal(task.id);
-                      }}
-                    />
-                  </Show>
-                  <Show when={task.status === 'completed' && task.destination?.canOpen}>
-                    <DownloadTaskAction
-                      label="Open"
-                      onClick={() => {
-                        void props.manager.open(task.id);
-                      }}
-                    />
-                  </Show>
-                </div>
+                <Show when={(task.cancelable && ACTIVE_STATUSES.has(task.status)) || task.status === 'failed' || task.status === 'canceled'}>
+                  <div class="mt-2.5 flex flex-wrap justify-end gap-1.5">
+                    <Show when={task.cancelable && ACTIVE_STATUSES.has(task.status)}>
+                      <DownloadTaskAction
+                        icon={X}
+                        label="Cancel"
+                        tone="danger"
+                        onClick={() => props.manager.cancel(task.id)}
+                      />
+                    </Show>
+                    <Show when={task.status === 'failed' || task.status === 'canceled'}>
+                      <DownloadTaskAction
+                        icon={Refresh}
+                        label="Retry"
+                        onClick={() => props.manager.retry(task.id)}
+                      />
+                    </Show>
+                  </div>
+                </Show>
               </article>
             )}
           </For>
