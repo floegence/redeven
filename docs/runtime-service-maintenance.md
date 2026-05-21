@@ -67,10 +67,12 @@ starts only from an explicit user action.
 Desktop treats saved runtimes as long-lived services that can outlive the
 Desktop process. Provider Environment cards refresh runtime status
 automatically through the provider runtime-health API and do not expose a local
-detection switch. Local Environment, saved SSH Host, Local Container, SSH
-Container, and saved Redeven URL entries expose `Auto status detection`, which
-defaults off and controls only background Welcome probes on startup, polling,
-resume, and save-triggered refreshes.
+detection switch. Local Environment and Local Container entries also do not
+expose that switch because Desktop owns their local management channel and
+always probes them automatically. Saved SSH Host, SSH Container, and saved
+Redeven URL entries expose `Auto status detection`, which defaults off and
+controls only background Welcome probes on startup, polling, resume, and
+save-triggered refreshes.
 
 Detection rules:
 

@@ -30,14 +30,14 @@ function surface(
     local_ui_password_configured: false,
     runtime_password_required: false,
     local_ui_password_can_clear: false,
-    auto_runtime_probe_configurable: environmentKind === 'local',
+    auto_runtime_probe_configurable: false,
     summary_items: [],
     host_fields: [],
     draft: {
       local_ui_bind: localUIBind,
       local_ui_password: '',
       local_ui_password_mode: 'replace',
-      auto_runtime_probe_enabled: false,
+      auto_runtime_probe_enabled: true,
     },
   };
 }

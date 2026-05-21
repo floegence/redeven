@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   desktopRuntimeContainerReference,
   desktopRuntimeTargetID,
+  desktopRuntimeTargetAutoStatusDetectionConfigurable,
+  desktopRuntimeTargetAutoStatusDetectionEnabled,
   normalizeDesktopRuntimeHostAccess,
   normalizeDesktopRuntimePlacement,
 } from './desktopRuntimePlacement';
@@ -85,6 +87,32 @@ describe('desktopRuntimePlacement', () => {
     expect(desktopRuntimeTargetID(localHost, { kind: 'host_process', runtime_root: '' }, 'local')).toBe('local:host:local');
     expect(desktopRuntimeTargetID(localHost, container)).toMatch(/^local:container:podman:dev-container:/u);
     expect(desktopRuntimeTargetID(sshHost, container)).toMatch(/^ssh:container:root%40gzcom:podman:dev-container:/u);
+  });
+
+  it('treats local container status detection as automatic rather than configurable', () => {
+    const localHost = normalizeDesktopRuntimeHostAccess({ kind: 'local_host' });
+    const sshHost = normalizeDesktopRuntimeHostAccess({
+      kind: 'ssh_host',
+      ssh: {
+        ssh_destination: 'devbox',
+        ssh_port: '',
+        auth_mode: 'key_agent',
+      },
+    });
+    const localProcess = normalizeDesktopRuntimePlacement({ kind: 'host_process' });
+    const container = normalizeDesktopRuntimePlacement({
+      kind: 'container_process',
+      container_engine: 'docker',
+      container_id: 'dev',
+      runtime_root: '/root/.redeven',
+    });
+
+    expect(desktopRuntimeTargetAutoStatusDetectionConfigurable(localHost, container)).toBe(false);
+    expect(desktopRuntimeTargetAutoStatusDetectionEnabled(localHost, container, false)).toBe(true);
+    expect(desktopRuntimeTargetAutoStatusDetectionConfigurable(sshHost, container)).toBe(true);
+    expect(desktopRuntimeTargetAutoStatusDetectionEnabled(sshHost, container, false)).toBe(false);
+    expect(desktopRuntimeTargetAutoStatusDetectionConfigurable(localHost, localProcess)).toBe(true);
+    expect(desktopRuntimeTargetAutoStatusDetectionEnabled(localHost, localProcess, false)).toBe(false);
   });
 
   it('keeps container target ids stable when concrete container ids change', () => {

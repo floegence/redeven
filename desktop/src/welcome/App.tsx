@@ -315,6 +315,7 @@ type RuntimeContainerConnectionDialogState = Readonly<{
   container_label: string;
   runtime_root: string;
   auto_runtime_probe_enabled: boolean;
+  auto_runtime_probe_configurable: boolean;
 }>;
 
 type ConnectionDialogKind = 'external_local_ui' | 'ssh_environment' | 'local_container_runtime' | 'ssh_container_runtime';
@@ -689,8 +690,26 @@ function createRuntimeContainerConnectionDialogState(
     container_ref: trimString(overrides.container_ref) || trimString(overrides.container_label) || trimString(overrides.container_id),
     container_label: trimString(overrides.container_label),
     runtime_root: trimString(overrides.runtime_root) || '/root/.redeven',
-    auto_runtime_probe_enabled: overrides.auto_runtime_probe_enabled === true,
+    auto_runtime_probe_enabled: kind === 'local_container_runtime'
+      ? true
+      : overrides.auto_runtime_probe_enabled === true,
+    auto_runtime_probe_configurable: kind === 'local_container_runtime'
+      ? false
+      : overrides.auto_runtime_probe_configurable !== false,
   };
+}
+
+function connectionDialogAutoRuntimeProbeConfigurable(state: ConnectionDialogState): boolean {
+  if (!state) {
+    return false;
+  }
+  if (state.connection_kind === 'local_container_runtime') {
+    return false;
+  }
+  if (state.connection_kind === 'ssh_container_runtime') {
+    return state.auto_runtime_probe_configurable !== false;
+  }
+  return true;
 }
 
 function isSSHPasswordConnectionDialogState(
@@ -1651,6 +1670,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         container_label: environment.managed_runtime_placement.container_label,
         runtime_root: environment.managed_runtime_placement.runtime_root,
         auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled === true,
+        auto_runtime_probe_configurable: environment.auto_runtime_probe_configurable !== false,
       }));
     } else if (environment.kind === 'local_environment') {
       openSettingsSurface(environment.id);
@@ -1758,7 +1778,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       if (kind === 'local_container_runtime' || kind === 'ssh_container_runtime') {
         return createRuntimeContainerConnectionDialogState('create', kind, {
           label,
-          auto_runtime_probe_enabled: current.auto_runtime_probe_enabled,
+          auto_runtime_probe_enabled: kind === 'local_container_runtime'
+            ? true
+            : current.auto_runtime_probe_enabled,
         });
       }
       return createExternalURLConnectionDialogState('create', {
@@ -1826,6 +1848,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   function toggleConnectionRuntimeAutoProbe(enabled: boolean): void {
     setConnectionDialogState((current) => {
       if (!current) {
+        return current;
+      }
+      if (!connectionDialogAutoRuntimeProbeConfigurable(current)) {
         return current;
       }
       return {
@@ -2740,13 +2765,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     updateSettingsDraft((current) => applyDesktopAccessAutoPortToDraft(current, enabled));
   }
 
-  function toggleLocalRuntimeAutoProbe(enabled: boolean): void {
-    updateSettingsDraft((current) => ({
-      ...current,
-      auto_runtime_probe_enabled: enabled,
-    }));
-  }
-
   function clearStoredLocalUIPassword(): void {
     updateSettingsDraft((current) => ({
       ...current,
@@ -3317,7 +3335,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         applyAccessMode={applyAccessMode}
         applyAccessFixedPort={applyAccessFixedPort}
         toggleAutoPort={toggleAutoPort}
-        toggleAutoRuntimeProbe={toggleLocalRuntimeAutoProbe}
         saveSettings={saveSettings}
         cancelSettings={cancelSettings}
         clearStoredLocalUIPassword={clearStoredLocalUIPassword}
@@ -6152,7 +6169,6 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
   applyAccessMode: (mode: DesktopAccessMode) => void;
   applyAccessFixedPort: (portText: string) => void;
   toggleAutoPort: (enabled: boolean) => void;
-  toggleAutoRuntimeProbe: (enabled: boolean) => void;
   saveSettings: () => Promise<void>;
   cancelSettings: () => void;
   clearStoredLocalUIPassword: () => void;
@@ -6287,31 +6303,6 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
             </div>
           </div>
         </div>
-
-        <Show when={props.baselineSnapshot.auto_runtime_probe_configurable}>
-          <section>
-            <SettingsSectionHeader
-              label="Runtime Status"
-              hint="Control whether Welcome checks this runtime in the background"
-            />
-            <div class="mt-3 rounded-md border border-border/70 bg-muted/15 px-4 py-3">
-              <div class="flex items-start justify-between gap-4">
-                <div class="min-w-0">
-                  <div class="text-sm font-medium text-foreground">Auto status detection</div>
-                  <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
-                    Welcome checks this runtime automatically while open. Refresh status still checks immediately when this is off.
-                  </div>
-                </div>
-                <Checkbox
-                  checked={props.draft.auto_runtime_probe_enabled}
-                  onChange={props.toggleAutoRuntimeProbe}
-                  label="Enabled"
-                  size="sm"
-                />
-              </div>
-            </div>
-          </section>
-        </Show>
 
         {/* Section header */}
         <div class="flex flex-wrap items-center justify-between gap-3">
@@ -7417,27 +7408,29 @@ function ConnectionDialog(props: Readonly<{
           </div>
         </Show>
 
-        <div class="redeven-dialog-section">
-          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            Status Detection
-          </div>
-          <div class="mt-2 rounded-md border border-border/70 bg-muted/20 px-3 py-3">
-            <div class="flex items-start justify-between gap-4">
-              <div class="min-w-0">
-                <div class="text-xs font-medium text-foreground">Auto status detection</div>
-                <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
-                  Welcome checks this runtime automatically while open. Refresh status always checks now.
+        <Show when={connectionDialogAutoRuntimeProbeConfigurable(props.state)}>
+          <div class="redeven-dialog-section">
+            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              Status Detection
+            </div>
+            <div class="mt-2 rounded-md border border-border/70 bg-muted/20 px-3 py-3">
+              <div class="flex items-start justify-between gap-4">
+                <div class="min-w-0">
+                  <div class="text-xs font-medium text-foreground">Auto status detection</div>
+                  <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
+                    Welcome checks this runtime automatically while open. Refresh status always checks now.
+                  </div>
                 </div>
+                <Checkbox
+                  checked={props.state?.auto_runtime_probe_enabled === true}
+                  onChange={props.toggleAutoRuntimeProbe}
+                  label="Enabled"
+                  size="sm"
+                />
               </div>
-              <Checkbox
-                checked={props.state?.auto_runtime_probe_enabled === true}
-                onChange={props.toggleAutoRuntimeProbe}
-                label="Enabled"
-                size="sm"
-              />
             </div>
           </div>
-        </div>
+        </Show>
 
         <div class="space-y-1.5 rounded-md border border-dashed border-border/30 bg-background/40 px-3 py-3">
           <label for="environment-label" class="block text-xs font-medium text-foreground">

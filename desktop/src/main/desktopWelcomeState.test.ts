@@ -1163,6 +1163,8 @@ describe('desktopWelcomeState', () => {
       managed_runtime_placement_target_id: localContainerID,
       managed_runtime_host_access: { kind: 'local_host' },
       managed_runtime_placement: containerPlacement,
+      auto_runtime_probe_enabled: true,
+      auto_runtime_probe_configurable: false,
       provider_runtime_link_target: {
         id: `local:${localContainerID}`,
         kind: 'local_environment',
@@ -1188,6 +1190,8 @@ describe('desktopWelcomeState', () => {
       managed_runtime_host_access: expect.objectContaining({ kind: 'ssh_host' }),
       managed_runtime_placement: containerPlacement,
       ssh_details: sshHostAccess.ssh,
+      auto_runtime_probe_enabled: false,
+      auto_runtime_probe_configurable: true,
       provider_runtime_link_target: {
         id: `ssh:${sshContainerID}`,
         kind: 'ssh_environment',
@@ -1625,8 +1629,9 @@ describe('desktopWelcomeState', () => {
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',
       local_ui_password_mode: 'replace',
-      auto_runtime_probe_enabled: false,
+      auto_runtime_probe_enabled: true,
     });
+    expect(snapshot.settings_surface.auto_runtime_probe_configurable).toBe(false);
   });
 
   it('threads the current Local Environment runtime url into the settings surface when Local Environment is open', () => {

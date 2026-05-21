@@ -488,7 +488,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain('async function saveLocalEnvironmentSettingsFromWelcome(');
     expect(mainSrc).toContain("case 'save_local_environment_settings':");
     expect(mainSrc).toContain('updateLocalEnvironmentSettings(preferences, {');
-    expect(mainSrc).toContain('autoRuntimeProbeEnabled: draft.auto_runtime_probe_enabled');
+    expect(mainSrc).not.toContain('autoRuntimeProbeEnabled: draft.auto_runtime_probe_enabled');
     expect(mainSrc).toContain("'action_invalid',");
     expect(mainSrc).toContain("'dialog',");
   });

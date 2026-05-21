@@ -335,6 +335,7 @@ import { buildDesktopRuntimeOperationPlans } from '../shared/desktopRuntimeOpera
 import { desktopRuntimePackageStateFromRuntimeService } from '../shared/desktopRuntimePackageState';
 import {
   desktopRuntimeTargetID,
+  desktopRuntimeTargetAutoStatusDetectionEnabled,
   type DesktopRuntimeHostAccess,
   type DesktopRuntimePlacement,
   type DesktopRuntimeTargetID,
@@ -2633,7 +2634,7 @@ function buildWelcomeRuntimeHealthTargets(
       environment_id: preferences.local_environment.id,
       slot: 'local_environment' as const,
       presence_target_id: desktopProviderRuntimeLinkTargetID('local_environment', preferences.local_environment.id),
-      auto_refresh_enabled: preferences.local_environment.auto_runtime_probe_enabled,
+      auto_refresh_enabled: true,
       checking_health: checkingRuntimeHealth('local_runtime_probe', 'not_started', 'Checking Local Runtime status.'),
       probe: () => probeLocalEnvironmentRuntimeHealth(preferences, openSessions),
     },
@@ -2661,7 +2662,11 @@ function buildWelcomeRuntimeHealthTargets(
         environment_id: target.id,
         slot: 'runtime_target' as const,
         presence_target_id: desktopProviderRuntimeLinkTargetID(targetKind, target.id),
-        auto_refresh_enabled: target.auto_runtime_probe_enabled,
+        auto_refresh_enabled: desktopRuntimeTargetAutoStatusDetectionEnabled(
+          target.host_access,
+          target.placement,
+          target.auto_runtime_probe_enabled,
+        ),
         checking_health: checkingRuntimeHealth(
           runtimeTargetProbeSource(target),
           'not_started',
@@ -8326,7 +8331,6 @@ async function saveLocalEnvironmentSettingsFromWelcome(
   const next = updateLocalEnvironmentSettings(preferences, {
     environmentID: existing.id,
     access,
-    autoRuntimeProbeEnabled: draft.auto_runtime_probe_enabled,
   });
   const resolvedEnvironment = next.local_environment;
   await persistDesktopPreferences(next);
@@ -9250,7 +9254,6 @@ if (!app.requestSingleInstanceLock()) {
       const next = updateLocalEnvironmentSettings(previous, {
         environmentID: settingsEnvironment.id,
         access: validated,
-        autoRuntimeProbeEnabled: draft.auto_runtime_probe_enabled,
       });
       await persistDesktopPreferences(next);
       return { ok: true };
