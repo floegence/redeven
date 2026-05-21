@@ -934,6 +934,14 @@ export function buildManagedSSHStopScript(): string {
     '  fi',
     '  sleep 0.1',
     'done',
+    'deadline=$(( $(date +%s) + 5 ))',
+    'while kill -0 "$pid" 2>/dev/null; do',
+    '  if [ "$(date +%s)" -ge "$deadline" ]; then',
+    '    echo "runtime process $pid is still running after stop" >&2',
+    '    exit 1',
+    '  fi',
+    '  sleep 0.1',
+    'done',
   ].join('\n');
 }
 

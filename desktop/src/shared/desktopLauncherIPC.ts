@@ -51,6 +51,7 @@ export type DesktopLocalCloseBehavior = 'detaches' | 'not_applicable';
 export type DesktopLauncherSessionLifecycle = 'opening' | 'open' | 'closing';
 export type DesktopLauncherOperationStatus =
   | 'running'
+  | 'awaiting_confirmation'
   | 'canceling'
   | 'canceled'
   | 'cleanup_running'
@@ -69,11 +70,13 @@ export type DesktopLauncherActionOutcome =
   | 'started_environment_runtime'
   | 'restarted_environment_runtime'
   | 'updated_environment_runtime'
+  | 'runtime_lifecycle_confirmation_required'
   | 'opened_desktop_update_handoff'
   | 'connected_provider_runtime'
   | 'disconnected_provider_runtime'
   | 'stopped_environment_runtime'
   | 'canceled_launcher_operation'
+  | 'dismissed_launcher_operation'
   | 'refreshed_environment_runtime'
   | 'refreshed_all_environment_runtimes'
   | 'opened_utility_window'
@@ -142,6 +145,8 @@ export type DesktopLauncherActionKind =
   | 'delete_saved_ssh_environment'
   | 'delete_saved_runtime_target'
   | 'cancel_launcher_operation'
+  | 'continue_launcher_operation'
+  | 'dismiss_launcher_operation'
   | 'close_launcher_or_quit';
 
 export type DesktopWelcomeIssue = Readonly<{
@@ -294,8 +299,48 @@ export type DesktopLauncherOperationSnapshot = Readonly<{
   interrupt_detail?: string;
   interrupt_kind?: 'stop_opening' | 'cleanup_deleted_subject' | 'generic';
   deleted_subject: boolean;
+  confirmation?: DesktopLauncherOperationConfirmation;
+  next_actions?: readonly DesktopLauncherOperationNextAction[];
   failure?: DesktopOperationFailurePresentation;
 }>;
+
+export type DesktopLauncherOperationConfirmation = Readonly<{
+  confirmation_id: string;
+  title: string;
+  summary: string;
+  active_work_label?: string;
+  confirm_label: string;
+  cancel_label: string;
+}>;
+
+export type DesktopLauncherOperationNextAction = Readonly<
+  | {
+      kind: 'continue_after_confirmation';
+      operation_key: string;
+      confirmation_id: string;
+      label: string;
+    }
+  | {
+      kind: 'retry';
+      operation_key: string;
+      label: string;
+    }
+  | {
+      kind: 'refresh_status';
+      environment_id?: string;
+      label: string;
+    }
+  | {
+      kind: 'copy_diagnostics';
+      operation_key: string;
+      label: string;
+    }
+  | {
+      kind: 'dismiss';
+      operation_key: string;
+      label: string;
+    }
+>;
 
 export type DesktopLauncherActionRequest = Readonly<
   | {
@@ -454,6 +499,15 @@ export type DesktopLauncherActionRequest = Readonly<
       operation_key: string;
     }
   | {
+      kind: 'continue_launcher_operation';
+      operation_key: string;
+      confirmation_id: string;
+    }
+  | {
+      kind: 'dismiss_launcher_operation';
+      operation_key: string;
+    }
+  | {
       kind: 'close_launcher_or_quit';
     }
 >;
@@ -500,6 +554,8 @@ export type DesktopLauncherActionProgress = Readonly<{
   interrupt_detail?: string;
   interrupt_kind?: 'stop_opening' | 'cleanup_deleted_subject' | 'generic';
   deleted_subject?: boolean;
+  confirmation?: DesktopLauncherOperationConfirmation;
+  next_actions?: readonly DesktopLauncherOperationNextAction[];
   failure?: DesktopOperationFailurePresentation;
 }>;
 
@@ -962,6 +1018,28 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       };
     }
     case 'cancel_launcher_operation': {
+      const operationKey = compact((candidate as { operation_key?: unknown }).operation_key);
+      if (operationKey === '') {
+        return null;
+      }
+      return {
+        kind,
+        operation_key: operationKey,
+      };
+    }
+    case 'continue_launcher_operation': {
+      const operationKey = compact((candidate as { operation_key?: unknown }).operation_key);
+      const confirmationID = compact((candidate as { confirmation_id?: unknown }).confirmation_id);
+      if (operationKey === '' || confirmationID === '') {
+        return null;
+      }
+      return {
+        kind,
+        operation_key: operationKey,
+        confirmation_id: confirmationID,
+      };
+    }
+    case 'dismiss_launcher_operation': {
       const operationKey = compact((candidate as { operation_key?: unknown }).operation_key);
       if (operationKey === '') {
         return null;

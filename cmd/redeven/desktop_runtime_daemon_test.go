@@ -68,3 +68,23 @@ func TestRetireStaleRuntimeLeaseRejectsDifferentStoppedPID(t *testing.T) {
 		t.Fatalf("lock content changed to %q, want %q", string(body), string(original))
 	}
 }
+
+func TestStoppedRuntimeStatusErrorRequiresConfirmedNotRunning(t *testing.T) {
+	if err := stoppedRuntimeStatusError(runtimemanagement.RuntimeAttachStatus{
+		State: runtimemanagement.AttachStateNotRunning,
+	}); err != nil {
+		t.Fatalf("stoppedRuntimeStatusError(not_running) error = %v", err)
+	}
+
+	err := stoppedRuntimeStatusError(runtimemanagement.RuntimeAttachStatus{
+		State: runtimemanagement.AttachStateReady,
+	})
+	if err == nil || !strings.Contains(err.Error(), "state ready") {
+		t.Fatalf("stoppedRuntimeStatusError(ready) error = %v, want ready state failure", err)
+	}
+
+	err = stoppedRuntimeStatusError(runtimemanagement.RuntimeAttachStatus{})
+	if err == nil || !strings.Contains(err.Error(), "did not report a state") {
+		t.Fatalf("stoppedRuntimeStatusError(empty) error = %v, want missing state failure", err)
+	}
+}

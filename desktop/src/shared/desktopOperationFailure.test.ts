@@ -66,5 +66,17 @@ describe('desktopOperationFailure', () => {
       title: 'SSH Runtime Stop Failed',
       summary: 'Desktop could not stop the SSH runtime.',
     })?.code).toBe('ssh_runtime_stop_failed');
+    expect(normalizeDesktopOperationFailurePresentation({
+      code: 'local_runtime_stop_failed',
+      severity: 'error',
+      title: 'Runtime Stop Failed',
+      summary: 'Desktop could not stop the local runtime.',
+    })?.code).toBe('local_runtime_stop_failed');
+    expect(normalizeDesktopOperationFailurePresentation({
+      code: 'container_runtime_stop_failed',
+      severity: 'error',
+      title: 'Container Runtime Stop Failed',
+      summary: 'Desktop could not stop the container runtime.',
+    })?.code).toBe('container_runtime_stop_failed');
   });
 });

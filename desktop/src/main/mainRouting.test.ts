@@ -274,10 +274,19 @@ describe('main routing', () => {
     const stopRuntimeEnd = mainSrc.indexOf('async function refreshEnvironmentRuntimeFromLauncher(', stopRuntimeStart);
     const stopRuntimeSrc = mainSrc.slice(stopRuntimeStart, stopRuntimeEnd);
     expect(stopRuntimeSrc).toContain("if (placement.kind === 'container_process')");
+    expect(stopRuntimeSrc).toContain("action: 'stop_environment_runtime'");
+    expect(stopRuntimeSrc).toContain("operation: lifecycleOperation");
+    expect(stopRuntimeSrc).toContain("phase: 'stopping_runtime_process'");
+    expect(stopRuntimeSrc).toContain("phase: 'verifying_runtime_stopped'");
+    expect(stopRuntimeSrc).toContain("phase: 'runtime_stopped'");
     expect(stopRuntimeSrc).toContain('containerRuntimeDaemonStopCommand({');
+    expect(stopRuntimeSrc).toContain('containerRuntimeDaemonStatusCommand({');
+    expect(stopRuntimeSrc).toContain('assertRuntimeStopVerifiedFromLaunchReport(parseLaunchReport(statusResult.stdout))');
     expect(stopRuntimeSrc).toContain('await runtimeRecord?.session.disconnect().catch(() => undefined);');
     expect(stopRuntimeSrc).toContain('runtimePlacementBridgeByTargetID.delete(targetID)');
     expect(stopRuntimeSrc).toContain('runtimePlacementReadyByTargetID.delete(targetID)');
+    expect(stopRuntimeSrc).toContain('sshRuntimeReadyByKey.delete(runtimeKey)');
+    expect(stopRuntimeSrc).toContain('runtimeLifecycleFailureNextActions');
     expect(stopRuntimeSrc).toContain('const sshDetails = sshDetailsFromRuntimeTargetRequest(request);');
 
     const refreshRuntimeStart = mainSrc.indexOf('async function refreshEnvironmentRuntimeFromLauncher(');

@@ -367,6 +367,22 @@ describe('desktopLauncherIPC', () => {
       operation_key: 'ssh:devbox:default:key_agent:remote_default',
     });
     expect(normalizeDesktopLauncherActionRequest({
+      kind: 'continue_launcher_operation',
+      operation_key: ' ssh:devbox:default:key_agent:remote_default ',
+      confirmation_id: ' confirmation-1 ',
+    })).toEqual({
+      kind: 'continue_launcher_operation',
+      operation_key: 'ssh:devbox:default:key_agent:remote_default',
+      confirmation_id: 'confirmation-1',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'dismiss_launcher_operation',
+      operation_key: ' ssh:devbox:default:key_agent:remote_default ',
+    })).toEqual({
+      kind: 'dismiss_launcher_operation',
+      operation_key: 'ssh:devbox:default:key_agent:remote_default',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
       kind: 'set_saved_ssh_environment_pinned',
       environment_id: ' ssh-1 ',
       label: ' SSH lab ',
@@ -542,6 +558,19 @@ describe('desktopLauncherIPC', () => {
       lifecycle_progress: runtimeLifecycle,
       cancelable: true,
       deleted_subject: false,
+      confirmation: {
+        confirmation_id: 'confirm-1',
+        title: 'Runtime update needs confirmation',
+        summary: 'Updating will stop the current Runtime Service.',
+        confirm_label: 'Update runtime',
+        cancel_label: 'Cancel',
+      },
+      next_actions: [{
+        kind: 'continue_after_confirmation',
+        operation_key: 'local:container:docker:dev:abcd1234',
+        confirmation_id: 'confirm-1',
+        label: 'Update runtime',
+      }],
     };
     const progress: DesktopLauncherActionProgress = {
       action: operation.action,
@@ -559,6 +588,8 @@ describe('desktopLauncherIPC', () => {
       lifecycle_progress: operation.lifecycle_progress,
       cancelable: operation.cancelable,
       deleted_subject: operation.deleted_subject,
+      confirmation: operation.confirmation,
+      next_actions: operation.next_actions,
     };
 
     expect(operation.subject_kind).toBe('runtime_target');

@@ -76,6 +76,57 @@ describe('desktopRuntimeLifecycleProgress', () => {
     ]);
   });
 
+  it('keeps confirmation and stop verification in restart/update workflows', () => {
+    expect(runtimeLifecyclePhaseSequence('ssh_host', 'restart')).toEqual([
+      'checking_host',
+      'checking_runtime_package',
+      'awaiting_confirmation',
+      'stopping_runtime_process',
+      'verifying_runtime_stopped',
+      'starting_runtime_process',
+      'checking_runtime_service',
+      'runtime_ready',
+    ]);
+    expect(runtimeLifecyclePhaseSequence('ssh_host', 'update')).toEqual([
+      'checking_host',
+      'checking_runtime_package',
+      'awaiting_confirmation',
+      'stopping_runtime_process',
+      'verifying_runtime_stopped',
+      'detecting_platform',
+      'preparing_runtime_package',
+      'installing_runtime_package',
+      'starting_runtime_process',
+      'checking_runtime_service',
+      'runtime_ready',
+    ]);
+    expect(runtimeLifecyclePhaseSequence('ssh_host', 'stop')).toEqual([
+      'checking_host',
+      'stopping_runtime_process',
+      'verifying_runtime_stopped',
+      'runtime_stopped',
+    ]);
+    expect(runtimeLifecyclePhaseSequence('local_host', 'stop')).toEqual([
+      'checking_existing_runtime',
+      'stopping_runtime_process',
+      'verifying_runtime_stopped',
+      'runtime_stopped',
+    ]);
+    expect(runtimeLifecyclePhaseSequence('local_container', 'stop')).toEqual([
+      'checking_container',
+      'stopping_runtime_process',
+      'verifying_runtime_stopped',
+      'runtime_stopped',
+    ]);
+    expect(runtimeLifecyclePhaseSequence('ssh_container', 'stop')).toEqual([
+      'checking_host',
+      'checking_container',
+      'stopping_runtime_process',
+      'verifying_runtime_stopped',
+      'runtime_stopped',
+    ]);
+  });
+
   it('builds bounded stage metadata without faking percentage precision', () => {
     expect(runtimeLifecycleProgress({
       location: 'ssh_container',

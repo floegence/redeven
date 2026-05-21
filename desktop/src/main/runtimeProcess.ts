@@ -534,6 +534,16 @@ async function stopAttachedProcess(pid: number, timeoutMs: number): Promise<void
     }
     throw error;
   }
+  const forceDeadline = Date.now() + timeoutMs;
+  while (Date.now() < forceDeadline) {
+    if (!processExists(pid)) {
+      return;
+    }
+    await delay(100);
+  }
+  if (processExists(pid)) {
+    throw new Error(`Redeven runtime process ${pid} is still running after stop.`);
+  }
 }
 
 function attachedStop(startup: StartupReport, timeoutMs: number): () => Promise<void> {

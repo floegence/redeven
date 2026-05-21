@@ -80,6 +80,10 @@ func (c *cli) desktopRuntimeStopCmd(args []string) int {
 			fmt.Fprintf(c.stderr, "desktop-runtime-stop failed: %v\n", err)
 			return 1
 		}
+		if err := confirmDesktopRuntimeStopped(*stateRoot, *probeTimeout); err != nil {
+			fmt.Fprintf(c.stderr, "desktop-runtime-stop failed: %v\n", err)
+			return 1
+		}
 		return 0
 	}
 	if status.Identity.PID <= 0 {
@@ -93,7 +97,7 @@ func (c *cli) desktopRuntimeStopCmd(args []string) int {
 	}
 	if err := process.Signal(os.Interrupt); err != nil && !errors.Is(err, os.ErrProcessDone) {
 		if killErr := process.Kill(); killErr != nil && !errors.Is(killErr, os.ErrProcessDone) {
-			fmt.Fprintf(c.stderr, "desktop-runtime-stop failed: %v\n", err)
+			fmt.Fprintf(c.stderr, "desktop-runtime-stop failed: %v\n", killErr)
 			return 1
 		}
 	}
@@ -125,7 +129,41 @@ func (c *cli) desktopRuntimeStopCmd(args []string) int {
 		fmt.Fprintf(c.stderr, "desktop-runtime-stop failed: %v\n", lastStaleRetireErr)
 		return 1
 	}
-	return 0
+	if err := process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+		fmt.Fprintf(c.stderr, "desktop-runtime-stop failed: %v\n", err)
+		return 1
+	}
+	forceDeadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(forceDeadline) {
+		attached, probeErr := loadDesktopRuntimeStatus(*stateRoot, *probeTimeout)
+		if probeErr == nil {
+			lastStatus = attached
+			if attached.State == runtimemanagement.AttachStateNotRunning {
+				return 0
+			}
+			if attached.State == runtimemanagement.AttachStateStaleLock {
+				if err := retireStaleRuntimeLease(attached, status.Identity.PID); err != nil {
+					lastStaleRetireErr = err
+				} else {
+					confirmed, confirmErr := loadDesktopRuntimeStatus(*stateRoot, *probeTimeout)
+					if confirmErr == nil && confirmed.State == runtimemanagement.AttachStateNotRunning {
+						return 0
+					}
+				}
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if lastStaleRetireErr != nil {
+		fmt.Fprintf(c.stderr, "desktop-runtime-stop failed: %v\n", lastStaleRetireErr)
+		return 1
+	}
+	if lastStatus.State != "" {
+		fmt.Fprintf(c.stderr, "desktop-runtime-stop failed: runtime did not stop before timeout; last state %s\n", lastStatus.State)
+		return 1
+	}
+	fmt.Fprintln(c.stderr, "desktop-runtime-stop failed: runtime did not stop before timeout")
+	return 1
 }
 
 func retireStaleRuntimeLease(status runtimemanagement.RuntimeAttachStatus, expectedPID int) error {
@@ -145,6 +183,24 @@ func retireStaleRuntimeLease(status runtimemanagement.RuntimeAttachStatus, expec
 		return fmt.Errorf("retire stale runtime lock: %w", err)
 	}
 	return lk.Release()
+}
+
+func confirmDesktopRuntimeStopped(stateRoot string, probeTimeout time.Duration) error {
+	status, err := loadDesktopRuntimeStatus(stateRoot, probeTimeout)
+	if err != nil {
+		return fmt.Errorf("confirm runtime stopped: %w", err)
+	}
+	return stoppedRuntimeStatusError(status)
+}
+
+func stoppedRuntimeStatusError(status runtimemanagement.RuntimeAttachStatus) error {
+	if status.State == runtimemanagement.AttachStateNotRunning {
+		return nil
+	}
+	if status.State == "" {
+		return errors.New("runtime stop verification did not report a state")
+	}
+	return fmt.Errorf("runtime stop verification found state %s", status.State)
 }
 
 func desktopLaunchReportFromRuntimeStatus(state runtimemanagement.RuntimeAttachStatus, status desktopLaunchStatus) desktopLaunchReport {
