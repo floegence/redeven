@@ -16,6 +16,10 @@ const filePreviewContextMock = vi.hoisted(() => ({
   openPreview: vi.fn(async () => undefined),
 }));
 
+const fileStreamReaderMock = vi.hoisted(() => ({
+  readFileBytesOnce: vi.fn(),
+}));
+
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Button: (props: any) => (
     <button type="button" onClick={props.onClick} disabled={props.disabled}>
@@ -49,16 +53,11 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     Folder: Icon,
     FileText: Icon,
     Paperclip: Icon,
+    Activity: Icon,
     Terminal: Icon,
     Send: Icon,
   };
 });
-
-vi.mock('@floegence/floe-webapp-protocol', () => ({
-  useProtocol: () => ({
-    client: () => null,
-  }),
-}));
 
 vi.mock('./FilePreviewContext', () => ({
   useFilePreviewContext: () => ({
@@ -82,9 +81,7 @@ vi.mock('../utils/filePreview', () => ({
   mimeFromExtDot: () => 'text/plain',
 }));
 
-vi.mock('../utils/fileStreamReader', () => ({
-  readFileBytesOnce: vi.fn(),
-}));
+vi.mock('../utils/fileStreamReader', () => fileStreamReaderMock);
 
 vi.mock('./FilePreviewContent', () => ({
   FilePreviewContent: (props: any) => (
@@ -172,6 +169,7 @@ beforeEach(() => {
   vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => setTimeout(() => cb(performance.now()), 0));
   vi.stubGlobal('cancelAnimationFrame', (id: number) => clearTimeout(id));
   filePreviewContextMock.openPreview.mockClear();
+  fileStreamReaderMock.readFileBytesOnce.mockClear();
 });
 
 afterEach(() => {
@@ -389,6 +387,43 @@ describe('AskFlowerComposerWindow', () => {
     expect(host.textContent).toContain('const answer = 42;');
   });
 
+  it('opens the live file preview from the selection secondary action', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <AskFlowerComposerWindow
+        open
+        intent={{
+          ...baseIntent,
+          source: 'file_preview',
+          contextItems: [
+            {
+              kind: 'file_selection',
+              path: '/Users/demo/notes.md',
+              selection: 'const answer = 42;',
+              selectionChars: 18,
+            },
+          ],
+        }}
+        onClose={() => undefined}
+        onSend={async () => undefined}
+      />
+    ), host);
+
+    const liveFileButton = host.querySelector('button[aria-label="Open live file preview for notes.md"]') as HTMLButtonElement | null;
+    expect(liveFileButton).toBeTruthy();
+    liveFileButton?.click();
+    await flushAsync();
+
+    expect(filePreviewContextMock.openPreview).toHaveBeenCalledWith(expect.objectContaining({
+      path: '/Users/demo/notes.md',
+      name: 'notes.md',
+      type: 'file',
+    }));
+    expect(host.querySelector('[data-testid="preview-window"]')).toBeFalsy();
+  });
+
   it('renders the Flower bubble as a plain question with linked context below it', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -450,6 +485,83 @@ describe('AskFlowerComposerWindow', () => {
 
     expect(host.querySelector('[data-testid="remote-file-browser"]')).toBeTruthy();
     expect(host.textContent).toContain('/Users/demo/project');
+  });
+
+  it('opens file-browser file linked context in the full live file preview', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <AskFlowerComposerWindow
+        open
+        intent={{
+          ...baseIntent,
+          source: 'file_browser',
+          contextItems: [
+            {
+              kind: 'file_path',
+              path: '/Users/demo/app.ts',
+              isDirectory: false,
+            },
+          ],
+        }}
+        onClose={() => undefined}
+        onSend={async () => undefined}
+      />
+    ), host);
+
+    const fileButton = Array.from(host.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('app.ts') && button.getAttribute('title')?.includes('/Users/demo/app.ts'),
+    );
+    expect(fileButton).toBeTruthy();
+    fileButton?.click();
+    await flushAsync();
+
+    expect(filePreviewContextMock.openPreview).toHaveBeenCalledWith(expect.objectContaining({
+      path: '/Users/demo/app.ts',
+      name: 'app.ts',
+      type: 'file',
+    }));
+    expect(host.querySelector('[data-testid="preview-window"]')).toBeFalsy();
+  });
+
+  it('opens file-preview file linked context in the full live file preview without the inline reader', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <AskFlowerComposerWindow
+        open
+        intent={{
+          ...baseIntent,
+          source: 'file_preview',
+          contextItems: [
+            {
+              kind: 'file_path',
+              path: '/Users/demo/current.md',
+              isDirectory: false,
+            },
+          ],
+        }}
+        onClose={() => undefined}
+        onSend={async () => undefined}
+      />
+    ), host);
+
+    const fileButton = Array.from(host.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('current.md') && button.getAttribute('title')?.includes('/Users/demo/current.md'),
+    );
+    expect(fileButton).toBeTruthy();
+    fileButton?.click();
+    await flushAsync();
+
+    expect(filePreviewContextMock.openPreview).toHaveBeenCalledWith(expect.objectContaining({
+      path: '/Users/demo/current.md',
+      name: 'current.md',
+      type: 'file',
+    }));
+    expect(fileStreamReaderMock.readFileBytesOnce).not.toHaveBeenCalled();
+    expect(host.querySelector('[data-testid="preview-window"]')).toBeFalsy();
   });
 
   it('collapses a matching file-browser attachment into one live file entry with an explicit snapshot action', async () => {
