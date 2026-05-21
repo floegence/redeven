@@ -31,6 +31,11 @@ import {
   REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_PROPS,
   resolveWorkbenchTextSelectionSurfaceTarget,
 } from './workbenchTextSelectionSurface';
+import {
+  REDEVEN_WORKBENCH_ACTION_SURFACE_ATTR,
+  REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS,
+  REDEVEN_WORKBENCH_ACTION_SURFACE_SELECTOR,
+} from './workbenchActionSurface';
 
 describe('workbenchInputRouting', () => {
   afterEach(() => {
@@ -47,6 +52,27 @@ describe('workbenchInputRouting', () => {
     expect(REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_PROPS[LOCAL_INTERACTION_SURFACE_ATTR]).toBe('true');
     expect(REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_PROPS[REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_ATTR]).toBe('true');
     expect(REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS[REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR]).toBe('true');
+  });
+
+  it('publishes explicit action-surface marker props without granting wheel ownership by themselves', () => {
+    expect(REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS[REDEVEN_WORKBENCH_ACTION_SURFACE_ATTR]).toBe('true');
+    const widget = document.createElement('article');
+    widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
+    widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-files-1');
+
+    const actionSurface = document.createElement('button');
+    actionSurface.type = 'button';
+    actionSurface.setAttribute(REDEVEN_WORKBENCH_ACTION_SURFACE_ATTR, 'true');
+    actionSurface.textContent = 'Refresh';
+    widget.appendChild(actionSurface);
+    document.body.appendChild(widget);
+
+    expect(actionSurface.matches(REDEVEN_WORKBENCH_ACTION_SURFACE_SELECTOR)).toBe(true);
+    expect(resolveWorkbenchWheelRouting({
+      target: actionSurface,
+      disablePanZoom: false,
+      selectedWidgetId: 'widget-files-1',
+    })).toEqual({ kind: 'ignore', reason: 'selected_widget_boundary' });
   });
 
   it('projects native text labels into the text-selection contract without granting wheel ownership', () => {
@@ -83,7 +109,7 @@ describe('workbenchInputRouting', () => {
     expect(resolveWorkbenchTextSelectionSurfaceTarget({
       target: actionButton,
       widgetRoot: widget,
-    })).toBe(actionButton);
+    })).toBeNull();
 
     expect(ensureWorkbenchTextSelectionSurfaceContract({
       target: textSpan,
@@ -95,9 +121,9 @@ describe('workbenchInputRouting', () => {
     expect(ensureWorkbenchTextSelectionSurfaceContract({
       target: actionButton,
       widgetRoot: widget,
-    })).toBe(actionButton);
-    expect(actionButton.getAttribute(LOCAL_INTERACTION_SURFACE_ATTR)).toBe('true');
-    expect(actionButton.getAttribute(REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_ATTR)).toBe('true');
+    })).toBeNull();
+    expect(actionButton.getAttribute(LOCAL_INTERACTION_SURFACE_ATTR)).toBeNull();
+    expect(actionButton.getAttribute(REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_ATTR)).toBeNull();
     expect(resolveWorkbenchWheelRouting({
       target: actionButton,
       disablePanZoom: false,
@@ -347,6 +373,24 @@ describe('workbenchInputRouting', () => {
       disablePanZoom: false,
       selectedWidgetId: null,
     })).toEqual({ kind: 'canvas_zoom' });
+  });
+
+  it('keeps action surfaces from being projected as text selection even when they contain plain text', () => {
+    const widget = document.createElement('article');
+    widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
+    widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-files-1');
+
+    const actionSurface = document.createElement('button');
+    actionSurface.type = 'button';
+    actionSurface.setAttribute(REDEVEN_WORKBENCH_ACTION_SURFACE_ATTR, 'true');
+    actionSurface.textContent = 'Computer';
+    widget.appendChild(actionSurface);
+    document.body.appendChild(widget);
+
+    expect(resolveWorkbenchTextSelectionSurfaceTarget({
+      target: actionSurface,
+      widgetRoot: widget,
+    })).toBeNull();
   });
 
   it('suppresses selected terminal wheels while terminal focus is elsewhere', () => {

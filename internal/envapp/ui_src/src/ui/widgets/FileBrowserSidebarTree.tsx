@@ -5,6 +5,7 @@ import { FileItemIcon, useFileBrowser, type FileItem } from '@floegence/floe-web
 import { ConfirmDialog } from '@floegence/floe-webapp-core/ui';
 import type { NormalizedFilesystemRoot } from '../utils/filesystemRoots';
 import { matchFilesystemRoot } from '../utils/filesystemRoots';
+import { REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS } from '../workbench/surface/workbenchActionSurface';
 
 const MAX_VISIBLE_DEPTH = 5;
 const TREE_ROW_BASE_PADDING = 8;
@@ -129,6 +130,7 @@ function FileBrowserSidebarTreeRow(props: FileBrowserSidebarTreeRowProps) {
   return (
     <div class="flex flex-col">
       <div
+        {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
         class={cn(
           'group flex items-center rounded-md py-0.5 text-xs transition-all duration-150 ease-out',
           isCurrent() ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium' : 'hover:bg-sidebar-accent/60',
@@ -301,6 +303,7 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
                 const saving = createMemo(() => permissionSavingRootID() === root.id);
                 return (
                   <div
+                    {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
                     data-filesystem-root-id={root.id}
                     data-filesystem-root-path={root.pathAbs}
                     class={cn(

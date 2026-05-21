@@ -942,7 +942,7 @@ describe('RedevenWorkbenchSurface interaction contract', () => {
     expect(activationSeq()).toBe('1');
   });
 
-  it('projects native widget text into the text-selection contract before widget activation runs', async () => {
+  it('keeps native widget text selectable while treating button-like text as action surfaces', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const originalGetComputedStyle = window.getComputedStyle.bind(window);
@@ -1035,14 +1035,14 @@ describe('RedevenWorkbenchSurface interaction contract', () => {
 
     expect(buttonPointerDown.defaultPrevented).toBe(false);
     expect(activationSeq()).toBe('0');
-    expect(nativeTextButton?.getAttribute(REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_ATTR)).toBe('true');
+    expect(nativeTextButton?.getAttribute(REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_ATTR)).toBeNull();
 
     const nestedPointerDown = dispatchPointerEvent('pointerdown', nestedNativeTextTarget!, { pointerId: 19 });
     await flushWorkbenchInteraction();
 
     expect(nestedPointerDown.defaultPrevented).toBe(false);
     expect(activationSeq()).toBe('0');
-    expect(nestedNativeTextTarget?.getAttribute(REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_ATTR)).toBe('true');
+    expect(nestedNativeTextTarget?.getAttribute(REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_ATTR)).toBeNull();
     getComputedStyleSpy.mockRestore();
   });
 });

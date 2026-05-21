@@ -9,6 +9,7 @@ import {
   resolveFileBrowserPathLayout,
   type FileBrowserPathSegment,
 } from './fileBrowserPathLayout'
+import { REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS } from '../workbench/surface/workbenchActionSurface'
 
 export interface FileBrowserPathBreadcrumbProps {
   class?: string
@@ -117,6 +118,7 @@ export function FileBrowserPathBreadcrumb(props: FileBrowserPathBreadcrumbProps)
               <ChevronRight class="h-3 w-3 shrink-0 text-muted-foreground/50" />
             </Show>
             <PathBreadcrumbItem
+              actionSurfaceProps={REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
               segment={segment}
               isLast={index() === layout().visible.length - 1}
               onClick={() => handleSegmentSelect(segment)}
@@ -150,6 +152,7 @@ export function FileBrowserPathBreadcrumb(props: FileBrowserPathBreadcrumbProps)
         <button
           ref={ellipsisMeasureRef}
           type="button"
+          {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
           tabindex={-1}
           class={cn(PATH_BREADCRUMB_ITEM_BASE_CLASS, PATH_BREADCRUMB_ANCESTOR_CLASS)}
         >
@@ -183,6 +186,7 @@ function CollapsedSegments(props: CollapsedSegmentsProps) {
       trigger={(
         <button
           type="button"
+          {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
           class={cn(PATH_BREADCRUMB_ITEM_BASE_CLASS, PATH_BREADCRUMB_ANCESTOR_CLASS)}
           title="Show hidden path segments"
         >
@@ -197,6 +201,7 @@ function CollapsedSegments(props: CollapsedSegmentsProps) {
 }
 
 interface PathBreadcrumbItemProps {
+  actionSurfaceProps: typeof REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS
   segment: FileBrowserPathSegment
   isLast: boolean
   onClick: () => void
@@ -209,6 +214,7 @@ function PathBreadcrumbItem(props: PathBreadcrumbItemProps) {
   return (
     <button
       type="button"
+      {...props.actionSurfaceProps}
       onClick={() => {
         if (clickableCurrentPath()) {
           props.onActivate?.()

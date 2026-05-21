@@ -1,23 +1,22 @@
 {
   "schema_version": 1,
   "release_review": {
-    "release_version": "v0.6.8",
-    "previous_release": "v0.6.7",
-    "reviewed_at": "2026-05-20",
-    "review_id": "runtime-rich-tui-overview-v1",
-    "summary": "Runtime rich terminal presentation now exposes runtime version, protocol, workload counts, active sessions, provider link state, and real log tailing without changing the Runtime Service wire protocol.",
+    "release_version": "v0.6.9",
+    "previous_release": "v0.6.8",
+    "reviewed_at": "2026-05-21",
+    "review_id": "workbench-filebrowser-action-surface-v1",
+    "summary": "Workbench File Browser now treats roots, breadcrumb, toolbar, segmented controls, and overflow triggers as action surfaces so workbench hover keeps pointer cursors while real reading surfaces preserve text selection.",
     "checked_surfaces": [
-      "Runtime rich presentation overview, activity metrics, access section, and narrow terminal layout",
-      "Runtime presentation active sessions panel, keyboard focus routing, filtering, and empty states",
-      "Runtime Service Snapshot workload counts for active sessions, terminal sessions, active AI runs, and port-forward sessions",
-      "Agent active session summary exported only for presentation and monitoring, not for authorization decisions",
-      "Control plane connect, disconnect, and bootstrap setup actions from the interactive terminal UI",
-      "Real runtime log ring buffer integration and expanded logs panel",
+      "Workbench File Browser root rows, RO/RW toggles, breadcrumb segments, toolbar buttons, segmented controls, and overflow/menu triggers",
+      "Workbench text-selection projection keeps true reading surfaces selectable while excluding action surfaces",
+      "Workbench input routing keeps wheel ownership unchanged for selected widgets and explicit scroll viewports",
+      "File Browser interaction tests cover action-surface and text-selection separation",
+      "File Browser E2E hover coverage confirms pointer cursor behavior and no I-beam regression",
+      "Docs and design notes describe the action-surface versus text-selection boundary consistently",
       "Desktop-managed machine presentation and startup report paths remain separated from human terminal UI",
-      "Local UI health and runtime status endpoints continue to normalize the same Runtime Service protocol snapshot",
       "Runtime Service compatibility contract fields and protocol version remain unchanged"
     ],
-    "same_window_rationale": "The release changes terminal presentation, local in-process workload counting, and monitoring summaries only. It does not add, remove, or rename Runtime Service JSON fields, does not change the protocol version, and keeps Desktop attach/start, Local UI health, sys.ping, provider link, runtime-control, SSH runtime bootstrap, and startup report consumers on the existing compatibility window."
+    "same_window_rationale": "The release changes Workbench File Browser interaction classification and documentation only. It does not add, remove, or rename Runtime Service JSON fields, does not change the protocol version, and keeps Desktop attach/start, Local UI health, sys.ping, provider link, runtime-control, SSH runtime bootstrap, and startup report consumers on the existing compatibility window."
   },
   "runtime_protocol_version": "redeven-runtime-v1",
   "compatibility_epoch": 5,

@@ -55,6 +55,7 @@ import {
   describeCopiedFileBrowserItemNames,
   describeCopiedFileBrowserItemPaths,
 } from '../utils/fileBrowserClipboard';
+import { REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS } from '../workbench/surface/workbenchActionSurface';
 import { buildFilePathAskFlowerIntent } from '../utils/filePathAskFlower';
 import { buildGitAskFlowerIntent, type GitAskFlowerRequest, type GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
 import { canOpenDirectoryPathInTerminal, openDirectoryInTerminal } from '../utils/openDirectoryInTerminal';
@@ -3257,6 +3258,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         size="sm"
         variant="outline"
         icon={Refresh}
+        {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
         class="cursor-pointer"
         aria-label="Refresh current directory"
         onClick={() => { void refreshCurrentDirectory({ forceReload: true }); }}
@@ -3269,6 +3271,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         <Button
           size="sm"
           variant="outline"
+          {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
           class="cursor-pointer"
           aria-label="More file browser options"
           title="More options"

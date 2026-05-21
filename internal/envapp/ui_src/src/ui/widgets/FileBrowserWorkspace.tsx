@@ -22,6 +22,7 @@ import { GitHistoryModeSwitch, type GitHistoryMode } from './GitHistoryModeSwitc
 import { useFileBrowserTypeToFilter } from './fileBrowserTypeToFilter';
 import { resolveFileBrowserToolbarLayout } from './fileBrowserPathLayout';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
+import { REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS } from '../workbench/surface/workbenchActionSurface';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { formatFileBrowserPathInputValue, parseFileBrowserPathInput } from '../utils/fileBrowserPathInput';
 import type { NormalizedFilesystemRoot } from '../utils/filesystemRoots';
@@ -151,6 +152,7 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
               size="sm"
               variant="outline"
               icon={FilesIcon}
+              {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
               class={FILE_WORKSPACE_OUTLINE_CONTROL_CLASS}
               aria-label="Toggle browser sidebar"
               onClick={props.onToggleSidebar}
@@ -159,7 +161,7 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
             </Button>
           </Show>
 
-          <Button size="sm" variant="outline" icon={ArrowUp} class={FILE_WORKSPACE_OUTLINE_CONTROL_CLASS} onClick={browser.navigateUp} disabled={!canNavigateUp()}>
+          <Button size="sm" variant="outline" icon={ArrowUp} {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS} class={FILE_WORKSPACE_OUTLINE_CONTROL_CLASS} onClick={browser.navigateUp} disabled={!canNavigateUp()}>
             Up
           </Button>
         </div>
@@ -212,6 +214,7 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
               size="sm"
               class={FILE_WORKSPACE_TOOLBAR_SEGMENTED_CLASS}
               value={browser.viewMode()}
+              {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
               onChange={(value) => browser.setViewMode(value === 'grid' ? 'grid' : 'list')}
               options={[
                 { value: 'list', label: 'List' },

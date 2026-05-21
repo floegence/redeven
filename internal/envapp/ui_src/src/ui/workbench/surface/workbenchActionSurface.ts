@@ -1,0 +1,8 @@
+export const REDEVEN_WORKBENCH_ACTION_SURFACE_ATTR =
+  'data-redeven-workbench-action-surface';
+export const REDEVEN_WORKBENCH_ACTION_SURFACE_SELECTOR =
+  `[${REDEVEN_WORKBENCH_ACTION_SURFACE_ATTR}="true"]`;
+
+export const REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS = {
+  [REDEVEN_WORKBENCH_ACTION_SURFACE_ATTR]: 'true',
+} as const;

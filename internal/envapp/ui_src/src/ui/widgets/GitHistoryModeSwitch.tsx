@@ -3,6 +3,7 @@ import { cn } from '@floegence/floe-webapp-core';
 import { Files as FilesIcon, History } from '@floegence/floe-webapp-core/icons';
 import { Tooltip } from '../primitives/Tooltip';
 import { redevenSegmentedItemClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
+import { REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS } from '../workbench/surface/workbenchActionSurface';
 
 export type GitHistoryMode = 'files' | 'git';
 
@@ -22,6 +23,7 @@ export function GitHistoryModeSwitch(props: GitHistoryModeSwitchProps) {
     <button
       type="button"
       role="radio"
+      {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
       aria-checked={props.mode === 'git'}
       disabled={props.gitHistoryDisabled}
       class={cn(
@@ -47,6 +49,7 @@ export function GitHistoryModeSwitch(props: GitHistoryModeSwitchProps) {
       <button
         type="button"
         role="radio"
+        {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
         aria-checked={props.mode === 'files'}
         class={cn(
           buttonBaseClass,
