@@ -3608,6 +3608,39 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if r.Method == http.MethodGet && len(parts) == 4 && action == "tools" && strings.TrimSpace(parts[3]) == "detail" {
+			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			if !ok {
+				return
+			}
+			toolID := strings.TrimSpace(parts[2])
+			if toolID == "" {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing tool_id"})
+				return
+			}
+			out, err := g.ai.GetToolDetail(r.Context(), meta, runID, toolID)
+			if err != nil {
+				g.appendAudit(meta, "ai_tool_detail", "failure", map[string]any{
+					"run_id":  runID,
+					"tool_id": toolID,
+				}, err)
+				status := http.StatusBadRequest
+				if errors.Is(err, sql.ErrNoRows) {
+					status = http.StatusNotFound
+				}
+				writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			g.appendAudit(meta, "ai_tool_detail", "success", map[string]any{
+				"run_id":    runID,
+				"tool_id":   toolID,
+				"tool_name": strings.TrimSpace(out.ToolName),
+				"status":    strings.TrimSpace(out.Status),
+			}, nil)
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
+			return
+		}
+
 		if r.Method == http.MethodPost && action == "cancel" {
 			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 			if !ok {

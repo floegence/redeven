@@ -1,7 +1,5 @@
 import type { Message, MessageBlock } from '../chat/types';
 import {
-  extractSubagentViewsFromWaitResult,
-  mapSubagentPayloadSnakeToCamel,
   mergeSubagentEventsByTimestamp,
   normalizeSubagentStatus,
   type SubagentView,
@@ -76,31 +74,6 @@ function normalizeSubagentHistory(
   return history;
 }
 
-function emptySubagentView(subagentId: string, fallbackUpdatedAt = 0): SubagentView {
-  return {
-    subagentId,
-    taskId: '',
-    agentType: '',
-    triggerReason: '',
-    status: 'unknown',
-    summary: '',
-    evidenceRefs: [],
-    keyFiles: [],
-    openRisks: [],
-    nextActions: [],
-    history: [],
-    stats: {
-      steps: 0,
-      toolCalls: 0,
-      tokens: 0,
-      elapsedMs: 0,
-      outcome: '',
-    },
-    updatedAtUnixMs: Math.max(0, Number(fallbackUpdatedAt || 0)),
-    error: undefined,
-  };
-}
-
 function mergeIntoSubagentMap(
   current: Record<string, SubagentView>,
   incoming: SubagentView | null,
@@ -165,60 +138,6 @@ function walkSubagentBlocks(
 
     if (block.type === 'subagent') {
       mergeIntoSubagentMap(nextMap, deriveSubagentViewFromBlock(block, messageTimestamp), messageTimestamp);
-    } else if (block.type === 'tool-call') {
-      const toolName = String(block.toolName ?? '').trim();
-      const toolStatus = String(block.status ?? '').trim().toLowerCase();
-      const args = asRecord(block.args);
-      const result = asRecord(block.result);
-
-      if (toolName === 'subagents' && toolStatus === 'success') {
-        const action = String(args.action ?? result.action ?? '').trim().toLowerCase();
-        if (action === 'create') {
-          mergeIntoSubagentMap(nextMap, mapSubagentPayloadSnakeToCamel({
-            ...result,
-            status: result.subagent_status ?? result.subagentStatus ?? result.status,
-            spec_id: result.spec_id ?? result.specId,
-            title: result.title ?? args.title,
-            objective: result.objective ?? args.objective,
-            context_mode: result.context_mode ?? args.context_mode,
-            prompt_hash: result.prompt_hash ?? result.promptHash,
-            delegation_prompt_markdown: result.delegation_prompt_markdown ?? result.delegationPromptMarkdown,
-            deliverables: result.deliverables ?? args.deliverables,
-            definition_of_done: result.definition_of_done ?? args.definition_of_done,
-            output_schema: result.output_schema ?? args.output_schema,
-            agent_type: result.agent_type ?? args.agent_type,
-            trigger_reason: result.trigger_reason ?? args.trigger_reason,
-          }), messageTimestamp);
-        } else if (action === 'wait') {
-          const views = extractSubagentViewsFromWaitResult({
-            status: result.snapshots ?? {},
-          });
-          views.forEach((item) => mergeIntoSubagentMap(nextMap, item, messageTimestamp));
-        } else if (action === 'list') {
-          const listItems = Array.isArray(result.items) ? result.items : [];
-          listItems.forEach((entry) => mergeIntoSubagentMap(nextMap, mapSubagentPayloadSnakeToCamel(entry), messageTimestamp));
-        } else if (action === 'inspect') {
-          mergeIntoSubagentMap(nextMap, mapSubagentPayloadSnakeToCamel(result.item), messageTimestamp);
-        } else if (action === 'steer' || action === 'terminate') {
-          mergeIntoSubagentMap(nextMap, mapSubagentPayloadSnakeToCamel(result.snapshot), messageTimestamp);
-        } else if (action === 'terminate_all') {
-          const ids = Array.isArray(result.affected_ids) ? result.affected_ids : [];
-          ids.forEach((rawId) => {
-            const subagentId = String(rawId ?? '').trim();
-            if (!subagentId) return;
-            const previous = nextMap[subagentId] ?? emptySubagentView(subagentId, messageTimestamp);
-            mergeIntoSubagentMap(nextMap, {
-              ...previous,
-              status: 'canceled',
-              updatedAtUnixMs: Math.max(previous.updatedAtUnixMs, messageTimestamp),
-            }, messageTimestamp);
-          });
-        }
-      }
-    }
-
-    if ('children' in block && Array.isArray(block.children) && block.children.length > 0) {
-      walkSubagentBlocks(block.children, messageTimestamp, nextMap);
     }
   }
 }

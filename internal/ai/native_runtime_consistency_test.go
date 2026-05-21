@@ -1280,8 +1280,8 @@ func TestIntegration_NativeSDK_OpenAI_MissingExplicitCompletionDoesNotPolluteAss
 		t.Fatalf("stream output missing reply token %q, body=%q", mock.replyToken, body)
 	}
 	fallbackText := "I still do not have explicit completion."
-	if !strings.Contains(body, `"toolName":"ask_user"`) {
-		t.Fatalf("stream output missing ask_user tool block, body=%q", body)
+	if !strings.Contains(body, `"type":"activity-timeline"`) || !strings.Contains(body, `"toolName":"ask_user"`) {
+		t.Fatalf("stream output missing ask_user activity timeline, body=%q", body)
 	}
 	if !strings.Contains(body, fallbackText) {
 		t.Fatalf("stream output missing fallback question text %q, body=%q", fallbackText, body)
@@ -1458,19 +1458,21 @@ func TestIntegration_NativeSDK_OpenAI_TextThenAskUser_ReconcilesFinalWaitingTran
 			if strings.TrimSpace(markdown.Content) != "" {
 				t.Fatalf("markdown block should be cleared, got %q", markdown.Content)
 			}
-		case "tool-call":
-			var tool struct {
-				ToolName string `json:"toolName"`
+		case activityTimelineBlockType:
+			var timeline ActivityTimelineBlock
+			if err := json.Unmarshal(raw, &timeline); err != nil {
+				t.Fatalf("json.Unmarshal activity timeline block: %v", err)
 			}
-			if err := json.Unmarshal(raw, &tool); err != nil {
-				t.Fatalf("json.Unmarshal tool block: %v", err)
-			}
-			if strings.TrimSpace(tool.ToolName) == "ask_user" {
-				foundAskUser = true
+			for _, group := range timeline.Groups {
+				for _, item := range group.Items {
+					if strings.TrimSpace(item.ToolName) == "ask_user" {
+						foundAskUser = true
+					}
+				}
 			}
 		}
 	}
 	if !foundAskUser {
-		t.Fatalf("assistant message missing ask_user tool block")
+		t.Fatalf("assistant message missing ask_user activity item")
 	}
 }

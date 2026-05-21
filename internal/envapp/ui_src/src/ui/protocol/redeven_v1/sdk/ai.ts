@@ -191,17 +191,6 @@ export type AIGetActiveRunSnapshotResponse = {
   messageJson?: any;
 };
 
-export type AISetToolCollapsedRequest = {
-  threadId: string;
-  messageId: string;
-  toolId: string;
-  collapsed: boolean;
-};
-
-export type AISetToolCollapsedResponse = {
-  ok: boolean;
-};
-
 export type AIToolApprovalRequest = {
   runId: string;
   toolId: string;

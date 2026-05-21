@@ -6,7 +6,6 @@ import type { Message, SubagentBlock as SubagentBlockType } from '../types';
 import { useChatContext } from '../ChatProvider';
 import { ActivityStatusIcon, type ActivityStatus } from '../status/ActivityLine';
 import {
-  mapSubagentPayloadSnakeToCamel,
   mergeSubagentEventsByTimestamp,
   normalizeSubagentStatus,
   type SubagentView,
@@ -16,8 +15,6 @@ export interface SubagentBlockProps {
   block: SubagentBlockType;
   class?: string;
 }
-
-const SUBAGENTS_TOOL_NAME = 'subagents';
 
 function subagentStatusLabel(status: SubagentBlockType['status']): string {
   switch (status) {
@@ -222,44 +219,7 @@ function resolveLatestSubagentView(messages: Message[], subagentId: string, seed
       const blockType = String(rec.type ?? '').trim().toLowerCase();
       if (blockType === 'subagent') {
         mergeCandidate(subagentBlockToView(rec as unknown as SubagentBlockType), messageTimestamp);
-      } else if (blockType === 'tool-call') {
-        const toolName = String(rec.toolName ?? '').trim();
-        const toolStatus = String(rec.status ?? '').trim().toLowerCase();
-        const args = asRecord(rec.args) ?? {};
-        const result = asRecord(rec.result) ?? {};
-        if (toolName === SUBAGENTS_TOOL_NAME && toolStatus === 'success') {
-          const action = String((args as any).action ?? (result as any).action ?? '').trim().toLowerCase();
-          if (action === 'create') {
-            mergeCandidate(
-              mapSubagentPayloadSnakeToCamel({
-                ...(result as any),
-                status: (result as any).subagent_status ?? (result as any).subagentStatus ?? (result as any).status,
-                title: (result as any).title ?? (args as any).title,
-                objective: (result as any).objective ?? (args as any).objective,
-                context_mode: (result as any).context_mode ?? (args as any).context_mode,
-                delegation_prompt_markdown: (result as any).delegation_prompt_markdown,
-                deliverables: (result as any).deliverables ?? (args as any).deliverables,
-                definition_of_done: (result as any).definition_of_done ?? (args as any).definition_of_done,
-                output_schema: (result as any).output_schema ?? (args as any).output_schema,
-                agent_type: (result as any).agent_type ?? (args as any).agent_type,
-                trigger_reason: (result as any).trigger_reason ?? (args as any).trigger_reason,
-              }),
-              messageTimestamp,
-            );
-          } else if (action === 'wait') {
-            const statusPayload = asRecord((result as any).snapshots);
-            for (const value of Object.values(statusPayload ?? {})) {
-              mergeCandidate(mapSubagentPayloadSnakeToCamel(value), messageTimestamp);
-            }
-          } else if (action === 'inspect') {
-            mergeCandidate(mapSubagentPayloadSnakeToCamel((result as any).item), messageTimestamp);
-          } else if (action === 'steer' || action === 'terminate') {
-            mergeCandidate(mapSubagentPayloadSnakeToCamel((result as any).snapshot), messageTimestamp);
-          }
-        }
       }
-      const children = Array.isArray((rec as any).children) ? ((rec as any).children as unknown[]) : [];
-      if (children.length > 0) walkBlocks(children, messageTimestamp);
     }
   };
 

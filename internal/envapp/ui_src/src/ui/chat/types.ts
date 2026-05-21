@@ -90,18 +90,83 @@ export interface ThinkingBlock {
   duration?: number;
 }
 
-export interface ToolCallBlock {
-  type: 'tool-call';
-  toolName: string;
-  toolId: string;
-  args: Record<string, unknown>;
+export interface ActivityChip {
+  kind: string;
+  label: string;
+  value?: string;
+  tone?: string;
+}
+
+export interface ActivityTargetRef {
+  kind: string;
+  label: string;
+  uri?: string;
+  path?: string;
+  line?: number;
+}
+
+export interface ActivityDetailRef {
+  refId: string;
+  kind: string;
+  toolId?: string;
+  fetchMode: 'inline' | 'endpoint';
+  endpoint?: string;
+  title: string;
+}
+
+export type ActivityItemStatus = 'pending' | 'running' | 'success' | 'error' | 'waiting' | string;
+
+export interface ActivityItem {
+  itemId: string;
+  groupId?: string;
+  toolId?: string;
+  toolName?: string;
+  kind?: string;
+  renderer?: string;
+  status: ActivityItemStatus;
+  severity?: 'quiet' | 'normal' | 'warning' | 'error' | 'blocking' | string;
+  label: string;
+  description?: string;
+  targetRefs?: ActivityTargetRef[];
+  chips?: ActivityChip[];
+  detailRefs?: ActivityDetailRef[];
   requiresApproval?: boolean;
-  approvalState?: 'required' | 'approved' | 'rejected';
-  status: 'pending' | 'running' | 'success' | 'error';
-  result?: unknown;
-  error?: string;
-  children?: MessageBlock[];
-  collapsed?: boolean;
+  approvalState?: 'required' | 'approved' | 'rejected' | string;
+  payload?: Record<string, unknown>;
+  metrics?: Record<string, unknown>;
+  startedAtUnixMs?: number;
+  endedAtUnixMs?: number;
+}
+
+export interface ActivityGroup {
+  groupId: string;
+  kind: string;
+  renderer: string;
+  status: ActivityItemStatus;
+  title: string;
+  subtitle?: string;
+  severity?: 'quiet' | 'normal' | 'warning' | 'error' | 'blocking' | string;
+  defaultOpen: boolean;
+  items: ActivityItem[];
+  chips?: ActivityChip[];
+  detailRefs?: ActivityDetailRef[];
+  startedAtUnixMs?: number;
+  endedAtUnixMs?: number;
+}
+
+export interface ActivityTimelineBlock {
+  type: 'activity-timeline';
+  schemaVersion: number;
+  runId: string;
+  messageId: string;
+  summary: {
+    status: ActivityItemStatus;
+    totalItems: number;
+    visibleItems: number;
+    durationMs?: number;
+    label: string;
+  };
+  groups: ActivityGroup[];
 }
 
 export interface TodosBlock {
@@ -202,7 +267,7 @@ export type MessageBlock =
   | ShellBlock
   | FileBlock
   | ThinkingBlock
-  | ToolCallBlock
+  | ActivityTimelineBlock
   | TodosBlock
   | SourcesBlock
   | RequestUserInputResponseBlock

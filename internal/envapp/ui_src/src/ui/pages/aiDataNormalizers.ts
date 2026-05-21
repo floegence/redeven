@@ -1,6 +1,4 @@
 // Shared data normalizers for AI chat blocks and page-level views.
-// Extracted from EnvAIPage.tsx so that both aiBlockPresentation and EnvAIPage can share
-// the same logic without circular dependencies.
 
 export type TodoStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
 

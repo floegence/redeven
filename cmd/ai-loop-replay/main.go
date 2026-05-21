@@ -93,6 +93,11 @@ func runReplay(path string) (replayReport, error) {
 				if structuredFallback == "" {
 					structuredFallback = structuredAssistantText(block)
 				}
+			case "activity-timeline":
+				toolCalls += countActivityTimelineItems(block)
+				if structuredFallback == "" {
+					structuredFallback = structuredAssistantText(block)
+				}
 			case "markdown", "text", "thinking":
 				content := strings.TrimSpace(anyToString(block["content"]))
 				if content == "" {
@@ -162,17 +167,43 @@ func containsAny(text string, hints []string) bool {
 }
 
 func structuredAssistantText(block map[string]any) string {
-	if strings.TrimSpace(strings.ToLower(anyToString(block["type"]))) != "tool-call" {
-		return ""
+	switch strings.TrimSpace(strings.ToLower(anyToString(block["type"]))) {
+	case "tool-call":
+		switch strings.TrimSpace(anyToString(block["toolName"])) {
+		case "ask_user":
+			return extractAskUserText(block["result"], block["args"])
+		case "task_complete":
+			return extractTaskCompleteText(block["args"])
+		}
+	case "activity-timeline":
+		groups, _ := block["groups"].([]any)
+		for i := len(groups) - 1; i >= 0; i-- {
+			group, _ := groups[i].(map[string]any)
+			items, _ := group["items"].([]any)
+			for j := len(items) - 1; j >= 0; j-- {
+				item, _ := items[j].(map[string]any)
+				payload := item["payload"]
+				switch strings.TrimSpace(anyToString(item["toolName"])) {
+				case "ask_user":
+					return extractAskUserText(payload)
+				case "task_complete":
+					return extractTaskCompleteText(payload)
+				}
+			}
+		}
 	}
-	switch strings.TrimSpace(anyToString(block["toolName"])) {
-	case "ask_user":
-		return extractAskUserText(block["result"], block["args"])
-	case "task_complete":
-		return extractTaskCompleteText(block["args"])
-	default:
-		return ""
+	return ""
+}
+
+func countActivityTimelineItems(block map[string]any) int {
+	count := 0
+	groups, _ := block["groups"].([]any)
+	for _, rawGroup := range groups {
+		group, _ := rawGroup.(map[string]any)
+		items, _ := group["items"].([]any)
+		count += len(items)
 	}
+	return count
 }
 
 func extractAskUserText(candidates ...any) string {

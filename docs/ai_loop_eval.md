@@ -105,11 +105,14 @@ Assertion groups are intentionally structural:
 - events: required event types, forbidden event types, hard-fail event types
 - todos: snapshot presence, non-empty plan, closed plan, in-progress discipline
 
-Runtime-owned signal tools such as `ask_user` and `exit_plan_mode` are expected to appear as normal successful tool-call records in reports so eval assertions can treat them the same way as scheduler-dispatched tools.
+Runtime-owned signal tools such as `ask_user` and `exit_plan_mode` are expected to appear as normal successful tool-call records in reports so eval assertions can treat them the same way as scheduler-dispatched tools. Chat presentation is separate: these signals render inside the runtime-owned `activity-timeline` block, not as raw visible tool cards.
 
 Runtime-output invariants worth asserting explicitly:
 
 - a single assistant run should converge to one canonical visible answer, not multiple concatenated final-answer revisions
+- tool-heavy runs should expose one compact activity timeline and lazy details, not raw tool JSON, command logs, or duplicate source blocks in the visible answer
+- `ask_user` and `exit_plan_mode` should surface exactly one structured interaction prompt while keeping provisional markdown questions out of the final transcript
+- activity projection should emit `activity.item.projected`, `activity.group.updated`, and `activity.timeline.persisted` so compact UI behavior is replayable from runtime events
 - draft text from a still-active run must not be replayed into later provider turns as committed assistant history
 - `execution_contract` should explain why a run ended directly, promoted into an agentic loop, or persisted into `waiting_user`
 - `protocol_closeout` may recover only clean in-band completion; interrupted or canceled runs must never be reported as successful closeout
@@ -168,7 +171,7 @@ The evaluator still accepts the legacy event names `turn.completion.continue`, `
 - tool-heavy runs without a concrete conclusion
 - empty assistant output after structured Flower tool completion
 
-Replay now treats `ask_user` and `task_complete` blocks as valid assistant-visible output when no markdown/text block exists.
+Replay now treats `activity-timeline` interaction items, legacy `ask_user` tool blocks, and `task_complete` blocks as valid assistant-visible output when no markdown/text block exists.
 
 Fixtures live in:
 

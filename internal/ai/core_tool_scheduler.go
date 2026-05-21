@@ -65,6 +65,9 @@ func (r *InMemoryToolRegistry) Register(tool ToolDef, handler ToolHandler) error
 	if tool.Namespace == "" {
 		tool.Namespace = "builtin"
 	}
+	if err := aitools.ValidatePresentationSpec(name, tool.Presentation); err != nil {
+		return err
+	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()

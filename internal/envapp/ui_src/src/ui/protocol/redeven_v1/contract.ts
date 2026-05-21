@@ -13,8 +13,6 @@ import type {
   AISendUserTurnResponse,
   AISubmitStructuredPromptResponseRequest,
   AISubmitStructuredPromptResponseResponse,
-  AISetToolCollapsedRequest,
-  AISetToolCollapsedResponse,
   AIStopThreadRequest,
   AIStopThreadResponse,
   AISubscribeSummaryResponse,
@@ -104,7 +102,6 @@ import {
   fromWireAISubscribeSummaryResponse,
   fromWireAISubscribeThreadResponse,
   fromWireAIStopThreadResponse,
-  fromWireAISetToolCollapsedResponse,
   fromWireAIToolApprovalResponse,
   toWireAICancelRunRequest,
   toWireAIGetActiveRunSnapshotRequest,
@@ -113,7 +110,6 @@ import {
   toWireAISubmitStructuredPromptResponseRequest,
   toWireAISubscribeThreadRequest,
   toWireAIStopThreadRequest,
-  toWireAISetToolCollapsedRequest,
   toWireAIToolApprovalRequest,
 } from './codec/ai';
 import { fromWireAccessResumeResponse, fromWireAccessStatusResponse, toWireAccessResumeRequest } from './codec/access';
@@ -200,8 +196,6 @@ import type {
   wire_ai_send_user_turn_resp,
   wire_ai_submit_structured_prompt_response_req,
   wire_ai_submit_structured_prompt_response_resp,
-  wire_ai_set_tool_collapsed_req,
-  wire_ai_set_tool_collapsed_resp,
   wire_ai_stop_thread_req,
   wire_ai_stop_thread_resp,
   wire_ai_subscribe_summary_resp,
@@ -348,7 +342,6 @@ export type RedevenV1Rpc = {
     listMessages: (req: AIListMessagesRequest) => Promise<AIListMessagesResponse>;
     getActiveRunSnapshot: (req: AIGetActiveRunSnapshotRequest) => Promise<AIGetActiveRunSnapshotResponse>;
     approveTool: (req: AIToolApprovalRequest) => Promise<AIToolApprovalResponse>;
-    setToolCollapsed: (req: AISetToolCollapsedRequest) => Promise<AISetToolCollapsedResponse>;
     onEvent: (handler: (event: AIRealtimeEvent) => void) => () => void;
   };
   monitor: {
@@ -689,11 +682,6 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
         const payload = toWireAIToolApprovalRequest(req);
         const resp = await call<wire_ai_tool_approval_req, wire_ai_tool_approval_resp>(redevenV1TypeIds.ai.toolApproval, payload);
         return fromWireAIToolApprovalResponse(resp);
-      },
-      setToolCollapsed: async (req) => {
-        const payload = toWireAISetToolCollapsedRequest(req);
-        const resp = await call<wire_ai_set_tool_collapsed_req, wire_ai_set_tool_collapsed_resp>(redevenV1TypeIds.ai.setToolCollapsed, payload);
-        return fromWireAISetToolCollapsedResponse(resp);
       },
       onEvent: (handler) =>
         onNotify<wire_ai_event_notify>(redevenV1TypeIds.ai.event, (payload) => {

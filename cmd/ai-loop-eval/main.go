@@ -225,19 +225,38 @@ func (m *streamMonitor) consumeBlock(block map[string]any) {
 	if len(block) == 0 {
 		return
 	}
-	if strings.TrimSpace(strings.ToLower(anyToString(block["type"]))) != "tool-call" {
+	switch strings.TrimSpace(strings.ToLower(anyToString(block["type"]))) {
+	case "tool-call":
+		m.consumeToolActivity(anyToString(block["toolName"]), anyToString(block["toolId"]), block["args"], anyToBool(block["requiresApproval"]), anyToString(block["approvalState"]))
+	case "activity-timeline":
+		groups, _ := block["groups"].([]any)
+		for _, rawGroup := range groups {
+			group, _ := rawGroup.(map[string]any)
+			items, _ := group["items"].([]any)
+			for _, rawItem := range items {
+				item, _ := rawItem.(map[string]any)
+				if len(item) == 0 {
+					continue
+				}
+				m.consumeToolActivity(anyToString(item["toolName"]), anyToString(item["toolId"]), item["payload"], anyToBool(item["requiresApproval"]), anyToString(item["approvalState"]))
+			}
+		}
+	}
+}
+
+func (m *streamMonitor) consumeToolActivity(toolName string, toolID string, rawArgs any, requiresApproval bool, approvalStateRaw string) {
+	toolName = strings.TrimSpace(strings.ToLower(toolName))
+	toolID = strings.TrimSpace(toolID)
+	if toolName == "" && toolID == "" {
 		return
 	}
-	toolName := strings.TrimSpace(strings.ToLower(anyToString(block["toolName"])))
-	toolID := strings.TrimSpace(anyToString(block["toolId"]))
-	args, _ := block["args"].(map[string]any)
+	args, _ := rawArgs.(map[string]any)
 	signature := toolName + "|" + compactJSON(args)
 
 	m.mu.Lock()
 	m.toolSigCounter[signature] = m.toolSigCounter[signature] + 1
 	count := m.toolSigCounter[signature]
-	requiresApproval := anyToBool(block["requiresApproval"])
-	approvalState := strings.TrimSpace(strings.ToLower(anyToString(block["approvalState"])))
+	approvalState := strings.TrimSpace(strings.ToLower(approvalStateRaw))
 	_, approvalHandled := m.approvalSeen[toolID]
 	if requiresApproval && approvalState == "required" && toolID != "" && !approvalHandled {
 		m.approvalSeen[toolID] = struct{}{}
@@ -903,17 +922,32 @@ func extractLatestAssistantText(ctx context.Context, svc *ai.Service, meta *sess
 }
 
 func structuredAssistantText(block map[string]any) string {
-	if normalizeName(anyToString(block["type"])) != "tool-call" {
-		return ""
+	switch normalizeName(anyToString(block["type"])) {
+	case "tool-call":
+		switch strings.TrimSpace(anyToString(block["toolName"])) {
+		case "ask_user":
+			return extractAskUserText(block["result"], block["args"])
+		case "task_complete":
+			return extractTaskCompleteText(block["args"])
+		}
+	case "activity-timeline":
+		groups, _ := block["groups"].([]any)
+		for i := len(groups) - 1; i >= 0; i-- {
+			group, _ := groups[i].(map[string]any)
+			items, _ := group["items"].([]any)
+			for j := len(items) - 1; j >= 0; j-- {
+				item, _ := items[j].(map[string]any)
+				payload := item["payload"]
+				switch strings.TrimSpace(anyToString(item["toolName"])) {
+				case "ask_user":
+					return extractAskUserText(payload)
+				case "task_complete":
+					return extractTaskCompleteText(payload)
+				}
+			}
+		}
 	}
-	switch strings.TrimSpace(anyToString(block["toolName"])) {
-	case "ask_user":
-		return extractAskUserText(block["result"], block["args"])
-	case "task_complete":
-		return extractTaskCompleteText(block["args"])
-	default:
-		return ""
-	}
+	return ""
 }
 
 func extractAskUserText(candidates ...any) string {

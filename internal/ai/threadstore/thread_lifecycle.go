@@ -35,6 +35,10 @@ func deleteThreadRunArtifactsTx(ctx context.Context, tx *sql.Tx, endpointID stri
 			sql:  `DELETE FROM ai_run_events WHERE endpoint_id = ? AND thread_id = ?`,
 		},
 		{
+			name: "ai_activity_items",
+			sql:  `DELETE FROM ai_activity_items WHERE endpoint_id = ? AND thread_id = ?`,
+		},
+		{
 			name: "ai_tool_calls",
 			sql: `
 DELETE FROM ai_tool_calls

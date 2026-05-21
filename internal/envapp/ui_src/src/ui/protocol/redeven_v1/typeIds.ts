@@ -68,7 +68,6 @@ export const redevenV1TypeIds = {
     toolApproval: 6005,
     listMessages: 6006,
     getActiveRunSnapshot: 6007,
-    setToolCollapsed: 6008,
     subscribeThread: 6009,
     stopThread: 6011,
     submitStructuredPromptResponse: 6012,

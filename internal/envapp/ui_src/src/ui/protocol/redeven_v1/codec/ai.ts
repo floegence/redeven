@@ -9,8 +9,6 @@ import type {
   AIListMessagesRequest,
   AIListMessagesResponse,
   AIRealtimeEvent,
-  AISetToolCollapsedRequest,
-  AISetToolCollapsedResponse,
   AISendUserTurnRequest,
   AISendUserTurnResponse,
   AISubmitStructuredPromptResponseRequest,
@@ -41,8 +39,6 @@ import type {
   wire_ai_get_active_run_snapshot_resp,
   wire_ai_list_messages_req,
   wire_ai_list_messages_resp,
-  wire_ai_set_tool_collapsed_req,
-  wire_ai_set_tool_collapsed_resp,
   wire_ai_send_user_turn_req,
   wire_ai_send_user_turn_resp,
   wire_ai_submit_structured_prompt_response_req,
@@ -388,19 +384,6 @@ export function fromWireAIGetActiveRunSnapshotResponse(resp: wire_ai_get_active_
     runId: ok && runId ? runId : undefined,
     messageJson: ok ? resp?.message_json : undefined,
   };
-}
-
-export function toWireAISetToolCollapsedRequest(req: AISetToolCollapsedRequest): wire_ai_set_tool_collapsed_req {
-  return {
-    thread_id: String(req.threadId ?? '').trim(),
-    message_id: String(req.messageId ?? '').trim(),
-    tool_id: String(req.toolId ?? '').trim(),
-    collapsed: Boolean(req.collapsed),
-  };
-}
-
-export function fromWireAISetToolCollapsedResponse(resp: wire_ai_set_tool_collapsed_resp): AISetToolCollapsedResponse {
-  return { ok: Boolean(resp?.ok ?? false) };
 }
 
 export function fromWireAIEventNotify(payload: wire_ai_event_notify): AIRealtimeEvent | null {

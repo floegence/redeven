@@ -205,6 +205,8 @@ The current UI maps existing Ask Flower entries into `assistant.ask.flower` enve
 
 Ask Flower composer presentation keeps linked context actions explicit: live file references open the shared File Preview surface, directories open the floating file browser, and only materialized selections or snapshots render inside the composer-owned preview window. Attachment snapshots attached to a live file appear as secondary paperclip actions instead of changing the file chip into an inline live-file preview.
 
+When Flower consumes a context action, the runtime carries source evidence into activity target refs and detail refs rather than asking the model or UI to infer it later. File and directory handoffs become `file` target refs, terminal handoffs become command or terminal-output detail refs, Git context becomes file/diff target refs, and delegated work records subagent ids as activity detail refs. The chat transcript therefore stays compact while still letting users open the exact file, command output, source, diff, or subagent report behind each activity row.
+
 ## Right-Click Menu Model
 
 Assistant and handoff actions share one priority order:

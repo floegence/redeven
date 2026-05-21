@@ -15,7 +15,7 @@
     "flowersec": "92e438b6c438c8e694b0cdd9fcac3bb8a378e58b",
     "redeven": "5747429801be3e0ccb04f0c72d18682daa6c80cd"
   },
-  "source_sha256": "f9e1de4e85fd34567d598c3209d1a7f1abc3a7bfc033dd2826e59cd915a26e73",
+  "source_sha256": "ab314ae12a44fc5fdcf89f8c42148679c662b09b48d5ffdcf4bd50ff634dfd51",
   "cards": [
     {
       "id": "K-AGENT-001",
@@ -318,8 +318,8 @@
         "knowledge",
         "ui"
       ],
-      "summary": "Redeven exposes the embedded knowledge bundle through a read-only `knowledge.search` builtin tool, and Env App renders structured knowledge-search results inside the chat tool UI.",
-      "mechanism": "Runtime knowledge code loads the embedded bundle once, scores cards in memory, builtin tool registration advertises `knowledge.search` as a non-mutating tool, tool execution dispatches to `knowledge.Search` behind a read-permission gate, and `ToolCallBlock` renders query, match, repo, and summary details for the result set.",
+      "summary": "Redeven exposes the embedded knowledge bundle through a read-only `knowledge.search` builtin tool, and Env App renders structured knowledge-search results inside Flower's compact activity timeline.",
+      "mechanism": "Runtime knowledge code loads the embedded bundle once, scores cards in memory, builtin tool registration advertises `knowledge.search` as a non-mutating tool with a `knowledge` presentation spec, tool execution dispatches to `knowledge.Search` behind a read-permission gate, and `ActivityTimelineBlock` renders the compact research row with detail access for query, match, repo, and summary payloads.",
       "boundaries": "The tool returns scoped summaries rather than raw file-level evidence details and does not mutate the knowledge source or dist artifacts.",
       "invalid_conditions": "This card becomes invalid if knowledge queries stop reading the embedded bundle, expose raw file-level evidence by default, or bypass the read-permission gate.",
       "evidence": [
@@ -337,27 +337,33 @@
         },
         {
           "repo": "redeven",
+          "path": "internal/ai/tools/registry.go",
+          "line": 67,
+          "note": "Builtin presentation metadata classifies knowledge.search as research rendered by the knowledge activity renderer."
+        },
+        {
+          "repo": "redeven",
           "path": "internal/ai/builtin_tool_handlers.go",
-          "line": 481,
+          "line": 501,
           "note": "Builtin tool registry declares knowledge.search as a non-mutating knowledge tool."
         },
         {
           "repo": "redeven",
           "path": "internal/ai/run.go",
-          "line": 3092,
+          "line": 3015,
           "note": "Tool execution enforces read permission and dispatches to knowledge.Search."
         },
         {
           "repo": "redeven",
-          "path": "internal/envapp/ui_src/src/ui/chat/blocks/ToolCallBlock.tsx",
-          "line": 1949,
-          "note": "Chat UI builds a dedicated knowledge display model from tool args and results."
+          "path": "internal/ai/activity_timeline.go",
+          "line": 438,
+          "note": "Activity projection summarizes knowledge.search as compact research activity."
         },
         {
           "repo": "redeven",
-          "path": "internal/envapp/ui_src/src/ui/chat/blocks/ToolCallBlock.tsx",
-          "line": 2743,
-          "note": "Tool call rendering includes a dedicated Knowledge result surface in chat."
+          "path": "internal/envapp/ui_src/src/ui/chat/blocks/ActivityTimelineBlock.tsx",
+          "line": 289,
+          "note": "Chat UI renders runtime-projected activity timelines instead of raw tool cards."
         }
       ],
       "source_card_id": "K-TOOL-001"
@@ -569,10 +575,16 @@
         "K-AGENT-001",
         "K-DEP-001"
       ],
+      "redeven/internal/ai/activity_timeline.go": [
+        "K-TOOL-001"
+      ],
       "redeven/internal/ai/builtin_tool_handlers.go": [
         "K-TOOL-001"
       ],
       "redeven/internal/ai/run.go": [
+        "K-TOOL-001"
+      ],
+      "redeven/internal/ai/tools/registry.go": [
         "K-TOOL-001"
       ],
       "redeven/internal/config/permission_policy.go": [
@@ -584,7 +596,7 @@
       "redeven/internal/envapp/ui_src/src/ui/EnvAppShell.tsx": [
         "K-WEB-001"
       ],
-      "redeven/internal/envapp/ui_src/src/ui/chat/blocks/ToolCallBlock.tsx": [
+      "redeven/internal/envapp/ui_src/src/ui/chat/blocks/ActivityTimelineBlock.tsx": [
         "K-TOOL-001"
       ],
       "redeven/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts": [

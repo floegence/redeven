@@ -13,6 +13,7 @@ import { ThinkingBlock } from './ThinkingBlock';
 import { TodosBlock } from './TodosBlock';
 import { SourcesBlock } from './SourcesBlock';
 import { SubagentBlock } from './SubagentBlock';
+import { ActivityTimelineBlock } from './ActivityTimelineBlock';
 
 // Lazy-load heavy components that rely on large third-party libraries
 const CodeBlock = lazy(() =>
@@ -27,10 +28,6 @@ const MermaidBlock = lazy(() =>
 const SvgBlock = lazy(() =>
   import('./SvgBlock').then((m) => ({ default: m.SvgBlock })),
 );
-const ToolCallBlock = lazy(() =>
-  import('./ToolCallBlock').then((m) => ({ default: m.ToolCallBlock })),
-);
-
 export interface BlockRendererProps {
   block: MessageBlock;
   messageId: string;
@@ -55,7 +52,7 @@ const BlockSkeleton: Component = () => (
 
 /**
  * Dispatches to the correct block component based on `block.type`.
- * Heavy components (code, diff, mermaid, svg, tool-call) are lazy-loaded
+ * Heavy components (code, diff, mermaid, svg) are lazy-loaded
  * and wrapped in Suspense with a skeleton fallback.
  */
 export const BlockRenderer: Component<BlockRendererProps> = (props) => {
@@ -172,9 +169,9 @@ export const BlockRenderer: Component<BlockRendererProps> = (props) => {
               ? b.responses.map((item) => String(item?.public_summary ?? '').trim()).filter(Boolean).join(' ')
               : '');
           return (
-            <div class="chat-tool-ask-user-submitted">
-              <span class="chat-tool-ask-user-submitted-label">Input Submitted</span>
-              <p class="chat-tool-ask-user-submitted-text">
+            <div class="chat-structured-receipt">
+              <span class="chat-structured-receipt-label">Input Submitted</span>
+              <p class="chat-structured-receipt-text">
                 {summary || (b.contains_secret ? 'Secret input submitted.' : 'Structured input submitted.')}
               </p>
             </div>
@@ -245,21 +242,6 @@ export const BlockRenderer: Component<BlockRendererProps> = (props) => {
         })()}
       </Match>
 
-      <Match when={props.block.type === 'tool-call'}>
-        {(() => {
-          const b = props.block as import('../types').ToolCallBlock;
-          return (
-            <Suspense fallback={<BlockSkeleton />}>
-              <ToolCallBlock
-                block={b}
-                messageId={props.messageId}
-                blockIndex={props.blockIndex}
-              />
-            </Suspense>
-          );
-        })()}
-      </Match>
-
       <Match when={props.block.type === 'todos'}>
         {(() => {
           const b = props.block as import('../types').TodosBlock;
@@ -279,6 +261,14 @@ export const BlockRenderer: Component<BlockRendererProps> = (props) => {
 
       <Match when={props.block.type === 'subagent'}>
         <SubagentBlock block={props.block as import('../types').SubagentBlock} />
+      </Match>
+
+      <Match when={props.block.type === 'activity-timeline'}>
+        <ActivityTimelineBlock
+          block={props.block as import('../types').ActivityTimelineBlock}
+          messageId={props.messageId}
+          blockIndex={props.blockIndex}
+        />
       </Match>
     </Switch>
   );

@@ -65,6 +65,10 @@ Built-in tools:
 - `apply_patch`
 - `write_todos`
 - `exit_plan_mode`
+- `ask_user`
+- `task_complete`
+- `use_skill`
+- `subagents`
 - `web.search` (optional; exposed only for `openai_compatible` providers with `providers[].web_search.mode = "brave"`)
 
 Structured file-tool notes:
@@ -117,6 +121,10 @@ Behavior summary:
 - `ask_user`, `exit_plan_mode`, and `task_complete` are runtime-owned signal tools. They are persisted and deterministically validated before the thread enters `waiting_user` or a terminal state.
 - `ask_user` uses the canonical question-level response contract (`response_mode`, `choices[]`, and `choices_exhaustive` for choice-based questions). The visible question belongs inside the structured payload, not in a duplicate markdown questionnaire.
 - Guided structured interactions are classified into an interaction contract and preserved across prompts, validation, waiting-user rendering, and continuation turns.
+- Every built-in tool must declare a runtime-owned presentation spec (`kind`, `renderer`, grouping policy, detail kinds, and summary version) before it can be registered. Missing presentation metadata is a registration error, because the UI must not infer tool presentation from ad hoc tool-name checks.
+- Chat transcript presentation uses a single `activity-timeline` block for tool work. Tool lifecycle snapshots remain internal runtime records, while the Env App receives compact activity groups and lazy detail refs for command output, sources, diffs, subagent reports, and generic tool details.
+- The activity timeline is observable through `activity.item.projected`, `activity.group.updated`, and `activity.timeline.persisted` run events. These events make UI compactness and grouping decisions auditable without exposing raw tool args as primary chat content.
+- Approval prompts and `ask_user` questions render from structured activity items. The main markdown answer remains reserved for the assistant's natural-language response, so Flower does not show duplicate questionnaires, raw tool JSON, or large command logs in the main message body.
 - No-user-interaction runs must finish through `task_complete`; delegated child runs use the `subagent_autonomous` prompt profile and report to their parent, not directly to the end user.
 - The Env App shows approval prompts only when `require_user_approval` is enabled.
 - `write_todos` is expected for multi-step tasks; exactly one todo should stay in `in_progress`, and `task_complete` is rejected while tracked todos remain open.
@@ -132,10 +140,11 @@ Installer note:
 
 ## Threadstore Persistence Contract
 
-- Flower thread persistence is thread-scoped by default. Deleting a thread removes its transcript rows, queued followups, run records, tool-call records, run events, checkpoints, structured waiting-input rows, todos, thread state, and derived context planes.
+- Flower thread persistence is thread-scoped by default. Deleting a thread removes its transcript rows, queued followups, run records, tool-call records, activity items, run events, checkpoints, structured waiting-input rows, todos, thread state, and derived context planes.
 - Upload blobs are persisted as first-class threadstore resources (`ai_uploads`) with explicit message/followup references (`ai_upload_refs`) instead of relying on transcript JSON scraping as the steady-state ownership source.
 - Fresh uploads start as staged runtime-local blobs. Once a message or queued followup claims them, they become thread-owned resources; deleting that thread or deleting an unconsumed followup removes the corresponding refs, deletes any newly unreferenced upload blobs/metadata, and then runs best-effort SQLite compaction so on-disk usage converges after cleanup.
-- Checkpoint restore follows the same ownership boundary: thread-scoped run/tool/event artifacts that were created after the checkpoint are pruned during restore instead of being left behind as residual history.
+- Checkpoint restore follows the same ownership boundary: thread-scoped run/tool/activity/event artifacts that were created after the checkpoint are pruned during restore instead of being left behind as residual history.
+- Historical transcript rows that still contain raw `tool-call` blocks are migrated into `activity-timeline` blocks, and recoverable activity items are inserted into `ai_activity_items`. The current renderer does not keep a parallel raw tool-card display path.
 - The `workspace_json` column is now a legacy compatibility payload only. New checkpoints are thread-state-only; old workspace checkpoint artifacts are cleaned up best-effort during retention pruning, thread deletion, and startup orphan sweeps.
 - OpenAI Responses continuation state is persisted in `ai_thread_state` together with other thread-scoped runtime metadata. Flower updates that state only after the assistant transcript has been durably appended, clears it when a run reaches terminal task completion or when no fresh continuation survives the run, and invalidates it before retrying a local replay turn if the provider rejects `previous_response_id`.
 - `provider_capabilities` is intentionally a global cache keyed by provider/model and is not deleted with any single thread.
@@ -152,6 +161,7 @@ The eval harness runs real Flower tasks and asserts:
 - final thread state (`run_status`, `execution_mode`, waiting prompt behavior)
 - structural tool behavior (`file.read`, `file.edit`, `file.write`, `terminal.exec`, `write_todos`, `exit_plan_mode`, `task_complete`, forbidden tools)
 - runtime events such as `ask_user.waiting`, `todos.updated`, and loop-failure signals
+- activity timeline events such as `activity.timeline.persisted`, plus compactness checks that forbid raw tool JSON in visible assistant text
 - structured filesystem-scope enforcement for `file.read`, `file.edit`, `file.write`, `apply_patch`, and `terminal.exec`
 - todo discipline, including final closeout and single `in_progress` execution
 - assistant-visible output, evidence paths, and fallback-free closeout

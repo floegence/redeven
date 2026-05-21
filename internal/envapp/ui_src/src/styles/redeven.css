@@ -1898,33 +1898,6 @@ html.dark .redeven-codex-workbench-icon {
   will-change: auto;
 }
 
-/* Tool-call status colors and spinner behavior. */
-.chat-tool-status-icon {
-  flex-shrink: 0;
-}
-
-.chat-tool-status-pending {
-  color: var(--warning);
-}
-
-.chat-tool-status-running {
-  color: var(--info);
-}
-
-.chat-tool-status-success {
-  color: var(--success);
-}
-
-.chat-tool-status-error {
-  color: var(--error);
-}
-
-.chat-tool-spinner {
-  animation: spin 0.95s linear infinite;
-  transform-origin: center;
-  transform-box: fill-box;
-}
-
 .redeven-file-list-compact > div:first-child {
   font-size: 0.625rem;
 }
@@ -1963,10 +1936,6 @@ html.dark .redeven-codex-workbench-icon {
   color: #e6edf3;
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.18);
   transition: box-shadow 200ms ease;
-}
-
-.chat-tool-call-block {
-  margin: 0.125rem 0;
 }
 
 .chat-message-bubble-assistant > .chat-message-block-slot.chat-message-block-slot-compact {
@@ -2360,242 +2329,7 @@ html.dark .redeven-codex-workbench-icon {
   word-break: break-word;
 }
 
-/* ask_user: render as an in-message interaction block instead of input panel. */
-.chat-tool-ask-user-block {
-  margin: 0.125rem 0;
-  border-radius: 0.875rem;
-  border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--border));
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--primary) 6%, transparent),
-    color-mix(in srgb, var(--card) 96%, transparent)
-  );
-  padding: 0.875rem;
-  box-shadow: 0 1px 3px rgb(0 0 0 / 0.04);
-}
-
-.chat-tool-ask-user-block-completed {
-  border-color: color-mix(in srgb, var(--success) 46%, var(--border));
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--success) 8%, transparent),
-    color-mix(in srgb, var(--card) 96%, transparent)
-  );
-}
-
-.chat-tool-ask-user-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
-}
-
-.chat-tool-ask-user-badge {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 9999px;
-  border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border));
-  background-color: color-mix(in srgb, var(--primary) 10%, transparent);
-  color: var(--primary);
-  font-size: 0.625rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  padding: 0.125rem 0.5rem;
-}
-
-.chat-tool-ask-user-question {
-  margin: 0;
-  font-size: 0.8125rem;
-  line-height: 1.55;
-  color: var(--foreground);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.chat-tool-ask-user-question-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.chat-tool-ask-user-question-group + .chat-tool-ask-user-question-group {
-  margin-top: 0.875rem;
-  padding-top: 0.875rem;
-  border-top: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
-}
-
-.chat-tool-ask-user-options {
-  display: grid;
-  gap: 0.5rem;
-}
-
-label.chat-tool-ask-user-option-row {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-  border-radius: 0.625rem;
-  border: 1px solid color-mix(in srgb, var(--border) 86%, var(--primary));
-  background-color: var(--card);
-  padding: 0.625rem 0.6875rem;
-  cursor: pointer;
-  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
-}
-
-label.chat-tool-ask-user-option-row:hover {
-  border-color: color-mix(in srgb, var(--primary) 38%, var(--border));
-  background-color: color-mix(in srgb, var(--primary) 6%, var(--card));
-}
-
-label.chat-tool-ask-user-option-row:focus-within {
-  border-color: color-mix(in srgb, var(--primary) 52%, var(--border));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent);
-}
-
-.chat-tool-ask-user-option-row-selected {
-  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
-  background-color: color-mix(in srgb, var(--primary) 8%, var(--card));
-}
-
-input.chat-tool-ask-user-option-radio {
-  width: 1rem;
-  height: 1rem;
-  margin: 0;
-  flex-shrink: 0;
-  accent-color: var(--primary);
-}
-
-.chat-tool-ask-user-option-text {
-  font-size: 0.8125rem;
-  line-height: 1.45;
-  color: var(--foreground);
-  word-break: break-word;
-}
-
-.chat-tool-ask-user-option-copy {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-}
-
-.chat-tool-ask-user-option-description {
-  font-size: 0.6875rem;
-  line-height: 1.35;
-  color: var(--muted-foreground);
-}
-
-.chat-tool-ask-user-custom-row {
-  align-items: stretch;
-}
-
-.chat-tool-ask-user-custom-row-active {
-  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
-  background-color: color-mix(in srgb, var(--primary) 5%, var(--card));
-}
-
-.chat-tool-ask-user-custom-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-input.chat-tool-ask-user-custom-input {
-  flex: 1;
-  min-width: 0;
-  border: none;
-  background: transparent;
-  color: var(--foreground);
-  font-size: 0.8125rem;
-  line-height: 1.45;
-  padding: 0;
-}
-
-input.chat-tool-ask-user-custom-input::placeholder {
-  color: var(--muted-foreground);
-}
-
-input.chat-tool-ask-user-custom-input:focus {
-  outline: none;
-}
-
-.chat-tool-ask-user-detail-input-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-  border-radius: 0.625rem;
-  border: 1px solid color-mix(in srgb, var(--border) 82%, var(--primary));
-  background-color: color-mix(in srgb, var(--primary) 4%, var(--card));
-  padding: 0.625rem 0.6875rem;
-}
-
-.chat-tool-ask-user-detail-hint,
-.chat-tool-ask-user-inline-hint {
-  margin: 0;
-  font-size: 0.6875rem;
-  line-height: 1.35;
-  color: var(--muted-foreground);
-}
-
-button.chat-tool-ask-user-custom-submit {
-  height: 2rem;
-  min-width: 4.75rem;
-  border-radius: 0.5rem;
-  border: 1px solid color-mix(in srgb, var(--primary) 42%, var(--border));
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--primary) 92%, #000),
-    color-mix(in srgb, var(--primary) 78%, #000)
-  );
-  color: var(--primary-foreground);
-  font-size: 0.6875rem;
-  font-weight: 600;
-  line-height: 1;
-  padding: 0 0.75rem;
-  cursor: pointer;
-  transition: filter 150ms ease, transform 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
-}
-
-button.chat-tool-ask-user-custom-submit:hover:not(:disabled) {
-  filter: brightness(1.05);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--primary) 24%, transparent);
-}
-
-button.chat-tool-ask-user-custom-submit:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
-}
-
-button.chat-tool-ask-user-custom-submit:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
-}
-
-.chat-tool-ask-user-hint {
-  margin: 0;
-  font-size: 0.6875rem;
-  line-height: 1.35;
-  color: var(--muted-foreground);
-}
-
-.chat-tool-ask-user-submit-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-top: 1rem;
-  padding-top: 0.875rem;
-  border-top: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
-}
-
-.chat-tool-ask-user-submitted {
+.chat-structured-receipt {
   margin-top: 0.75rem;
   border-radius: 0.625rem;
   border: 1px solid color-mix(in srgb, var(--success) 22%, var(--border));
@@ -2609,11 +2343,11 @@ button.chat-tool-ask-user-custom-submit:disabled {
   padding: 0.625rem 0.6875rem;
 }
 
-.chat-message-bubble-receipt .chat-tool-ask-user-submitted {
+.chat-message-bubble-receipt .chat-structured-receipt {
   margin-top: 0;
 }
 
-.chat-tool-ask-user-submitted-label {
+.chat-structured-receipt-label {
   font-size: 0.625rem;
   font-weight: 600;
   letter-spacing: 0.03em;
@@ -2621,35 +2355,13 @@ button.chat-tool-ask-user-custom-submit:disabled {
   color: color-mix(in srgb, var(--success) 58%, var(--foreground));
 }
 
-.chat-tool-ask-user-submitted-text {
+.chat-structured-receipt-text {
   margin-top: 0.3125rem;
   font-size: 0.75rem;
   line-height: 1.4;
   color: var(--foreground);
   white-space: pre-wrap;
   word-break: break-word;
-}
-
-.chat-tool-ask-user-error {
-  margin-top: 0.625rem;
-  font-size: 0.6875rem;
-  color: var(--error);
-}
-
-@media (max-width: 640px) {
-  .chat-tool-ask-user-submit-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .chat-tool-ask-user-custom-main {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  button.chat-tool-ask-user-custom-submit {
-    width: 100%;
-  }
 }
 
 /* Render write_todos snapshots as a structured table-like block. */

@@ -59,6 +59,14 @@ the interaction and performance contract, not the exact UI tree.
 - Mermaid rendering must be scheduled after paint, and large diagrams should prefer idle-time work.
 - Cached diagrams should be reused to avoid repeat renders for the same content.
 
+### Activity Timeline
+
+- Flower tool activity must enter chat as stable `activity-timeline` block-set updates. Updating the same timeline block must not create duplicate assistant messages, duplicate activity blocks, or a visible jump in the transcript.
+- Compact activity rows own the primary chat footprint. Long command output, source payloads, diffs, subagent reports, args, and result JSON must open through a bounded detail dialog or mobile sheet instead of expanding inline inside the message flow.
+- Detail bodies must use an explicitly constrained scroll viewport so long output does not resize the transcript, block the composer, or steal page-level scroll ownership.
+- Activity text remains selectable and copyable. Buttons, headers, chips, and detail actions need pointer and focus states, but read-only labels and detail text must keep normal text selection behavior.
+- Approval and waiting-input rows may default open because they block progress; completed context, search, command, and mutation groups should remain compact unless the user opens them.
+
 ## Engineering guardrails
 
 - Heavy transcript blocks must keep their own non-blocking strategy local to this repository.

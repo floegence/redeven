@@ -33,7 +33,7 @@ function makeSubagentView(summary = 'summary'): SubagentView {
 }
 
 describe('aiSubagentState', () => {
-  it('derives the latest subagent snapshot from transcript messages and subagents tool results', () => {
+  it('derives the latest subagent snapshot from transcript subagent blocks', () => {
     const messages: Message[] = [
       {
         id: 'm_ai_1',
@@ -69,21 +69,28 @@ describe('aiSubagentState', () => {
         status: 'complete',
         timestamp: 200,
         blocks: [{
-          type: 'tool-call',
-          toolName: 'subagents',
-          toolId: 'tool_1',
-          status: 'success',
-          args: { action: 'create', title: 'Worker title' },
-          result: {
-            subagent_id: 'sa_1',
-            task_id: 'task_1',
-            agent_type: 'worker',
-            trigger_reason: 'delegate',
-            status: 'running',
-            result: 'running summary',
-            updated_at_ms: 200,
+          type: 'subagent',
+          subagentId: 'sa_1',
+          taskId: 'task_1',
+          title: 'Worker title',
+          agentType: 'worker',
+          triggerReason: 'delegate',
+          status: 'running',
+          summary: 'running summary',
+          evidenceRefs: [],
+          keyFiles: [],
+          openRisks: [],
+          nextActions: [],
+          history: [],
+          stats: {
+            steps: 1,
+            toolCalls: 0,
+            tokens: 0,
+            elapsedMs: 0,
+            outcome: '',
           },
-        } as any],
+          updatedAtUnixMs: 200,
+        }],
       },
     ];
 

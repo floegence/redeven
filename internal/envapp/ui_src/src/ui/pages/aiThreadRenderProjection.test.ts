@@ -34,19 +34,35 @@ describe('aiThreadRenderProjection', () => {
     expect(projected.map((message: Message) => message.id)).toEqual(['m_ai_1', 'u_local_1']);
   });
 
-  it('carries forward transient tool collapse state during transcript refresh', () => {
+  it('carries forward optimistic activity approval state during transcript refresh', () => {
     const previousRendered: Message[] = [
       {
         id: 'm_ai_1',
         role: 'assistant',
         blocks: [
           {
-            type: 'tool-call',
-            toolName: 'web.search',
-            toolId: 'tool_1',
-            args: {},
-            status: 'success',
-            collapsed: true,
+            type: 'activity-timeline',
+            schemaVersion: 1,
+            runId: 'run_1',
+            messageId: 'm_ai_1',
+            summary: { status: 'running', totalItems: 1, visibleItems: 1, label: '1 activity item' },
+            groups: [{
+              groupId: 'approval',
+              kind: 'interaction',
+              renderer: 'blocking_prompt',
+              status: 'running',
+              title: 'Needs input',
+              defaultOpen: true,
+              items: [{
+                itemId: 'tool_1',
+                toolId: 'tool_1',
+                toolName: 'file.edit',
+                status: 'running',
+                label: 'Edited file',
+                requiresApproval: true,
+                approvalState: 'approved',
+              }],
+            }],
           },
         ],
         status: 'complete',
@@ -59,11 +75,28 @@ describe('aiThreadRenderProjection', () => {
         role: 'assistant',
         blocks: [
           {
-            type: 'tool-call',
-            toolName: 'web.search',
-            toolId: 'tool_1',
-            args: {},
-            status: 'success',
+            type: 'activity-timeline',
+            schemaVersion: 1,
+            runId: 'run_1',
+            messageId: 'm_ai_1',
+            summary: { status: 'waiting', totalItems: 1, visibleItems: 1, label: '1 activity item' },
+            groups: [{
+              groupId: 'approval',
+              kind: 'interaction',
+              renderer: 'blocking_prompt',
+              status: 'waiting',
+              title: 'Needs input',
+              defaultOpen: true,
+              items: [{
+                itemId: 'tool_1',
+                toolId: 'tool_1',
+                toolName: 'file.edit',
+                status: 'pending',
+                label: 'Edited file',
+                requiresApproval: true,
+                approvalState: 'required',
+              }],
+            }],
           },
         ],
         status: 'complete',
@@ -72,7 +105,8 @@ describe('aiThreadRenderProjection', () => {
     ];
 
     const carried = carryForwardTransientMessageState(previousRendered, refreshedTranscript);
-    expect((carried[0].blocks[0] as any).collapsed).toBe(true);
+    expect((carried[0].blocks[0] as any).groups[0].items[0].approvalState).toBe('approved');
+    expect((carried[0].blocks[0] as any).groups[0].items[0].status).toBe('running');
   });
 
   it('syncs subagent blocks with the latest derived snapshot', () => {

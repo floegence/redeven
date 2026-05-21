@@ -675,7 +675,7 @@ PRAGMA user_version=1;
 		}
 	}
 
-	for _, table := range []string{"ai_runs", "ai_tool_calls", "ai_run_events", "ai_thread_todos", "ai_thread_checkpoints", "transcript_messages", "conversation_turns", "execution_spans", "memory_items", "context_snapshots", "provider_capabilities", "structured_user_inputs", "request_user_input_secret_answers"} {
+	for _, table := range []string{"ai_runs", "ai_tool_calls", "ai_run_events", "ai_activity_items", "ai_thread_todos", "ai_thread_checkpoints", "transcript_messages", "conversation_turns", "execution_spans", "memory_items", "context_snapshots", "provider_capabilities", "structured_user_inputs", "request_user_input_secret_answers"} {
 		var exists int
 		if err := s.db.QueryRowContext(ctx, `
 SELECT COUNT(1)
@@ -698,6 +698,85 @@ WHERE type = 'table' AND name = ?
 	}
 	if version != CurrentSchemaVersion() {
 		t.Fatalf("user_version=%d, want %d", version, CurrentSchemaVersion())
+	}
+}
+
+func TestStore_MigrateFromV25ConvertsLegacyToolCallBlocks(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open initial: %v", err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("close initial store: %v", err)
+	}
+
+	raw, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	messageJSON := `{"id":"msg_legacy","role":"assistant","blocks":[{"type":"markdown","content":"Done."},{"type":"tool-call","toolName":"terminal.exec","toolId":"tool_terminal_1","args":{"command":"go test ./..."},"status":"success","result":{"stdout":"ok","exit_code":0}},{"type":"tool-call","toolName":"ask_user","toolId":"tool_ask_1","args":{"questions":[{"id":"q1","header":"Need input","question":"Choose next step","response_mode":"write"}]},"status":"success","result":{"questions":[{"id":"q1","header":"Need input","question":"Choose next step","response_mode":"write"}],"waiting_user":true}}],"status":"complete","timestamp":1700000000000}`
+	if _, err := raw.Exec(`
+INSERT INTO ai_threads(
+  thread_id, endpoint_id, namespace_public_id, title,
+  created_at_unix_ms, updated_at_unix_ms, last_message_at_unix_ms, last_message_preview
+) VALUES ('th_legacy', 'env_legacy', '', 'Legacy', 1, 1, 1, '')
+`); err != nil {
+		_ = raw.Close()
+		t.Fatalf("insert thread: %v", err)
+	}
+	if _, err := raw.Exec(`
+INSERT INTO transcript_messages(
+  thread_id, endpoint_id, message_id, role, status,
+  created_at_unix_ms, updated_at_unix_ms, text_content, message_json
+) VALUES ('th_legacy', 'env_legacy', 'msg_legacy', 'assistant', 'complete', 1, 1, '', ?)
+`, messageJSON); err != nil {
+		_ = raw.Close()
+		t.Fatalf("insert legacy transcript: %v", err)
+	}
+	if _, err := raw.Exec(`PRAGMA user_version=25;`); err != nil {
+		_ = raw.Close()
+		t.Fatalf("set user_version: %v", err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatalf("close raw db: %v", err)
+	}
+
+	migrated, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open migrated: %v", err)
+	}
+	defer func() { _ = migrated.Close() }()
+
+	ctx := context.Background()
+	msgs, _, _, err := migrated.ListMessages(ctx, "env_legacy", "th_legacy", 10, 0)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("messages len=%d, want 1", len(msgs))
+	}
+	if strings.Contains(msgs[0].MessageJSON, `"tool-call"`) {
+		t.Fatalf("legacy tool-call block still present: %s", msgs[0].MessageJSON)
+	}
+	if !strings.Contains(msgs[0].MessageJSON, `"activity-timeline"`) {
+		t.Fatalf("missing activity timeline block: %s", msgs[0].MessageJSON)
+	}
+
+	items, err := migrated.ListRunActivityItems(ctx, "env_legacy", "legacy_msg_legacy")
+	if err != nil {
+		t.Fatalf("ListRunActivityItems: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("activity items len=%d, want 2", len(items))
+	}
+	if items[0].ToolName != "terminal.exec" || items[1].ToolName != "ask_user" {
+		t.Fatalf("unexpected migrated activity items: %+v", items)
+	}
+	if items[1].Status != "waiting" {
+		t.Fatalf("ask_user status=%q, want waiting", items[1].Status)
 	}
 }
 
@@ -963,6 +1042,30 @@ INSERT INTO ai_messages(
 	}); err != nil {
 		t.Fatalf("AppendRunEvent: %v", err)
 	}
+	if err := s.UpsertActivityItem(ctx, ActivityItemRecord{
+		EndpointID:      endpointID,
+		ThreadID:        threadID,
+		RunID:           "run_1",
+		MessageID:       "msg_1",
+		GroupID:         "command",
+		ItemID:          "tool_1",
+		ToolID:          "tool_1",
+		ToolName:        "terminal.exec",
+		Kind:            "command",
+		Renderer:        "command",
+		Status:          "success",
+		Severity:        "quiet",
+		SummaryJSON:     `{"label":"Ran command"}`,
+		DetailRefsJSON:  `[]`,
+		TargetRefsJSON:  `[]`,
+		PayloadJSON:     `{}`,
+		OrderIndex:      0,
+		StartedAtUnixMs: 111,
+		EndedAtUnixMs:   112,
+		UpdatedAtUnixMs: 113,
+	}); err != nil {
+		t.Fatalf("UpsertActivityItem: %v", err)
+	}
 	if _, err := s.CreateThreadCheckpoint(ctx, endpointID, threadID, "cp_1", "run_1", CheckpointKindPreRun); err != nil {
 		t.Fatalf("CreateThreadCheckpoint: %v", err)
 	}
@@ -1000,6 +1103,7 @@ INSERT INTO ai_messages(
 		"ai_queued_turns":                   countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_queued_turns WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"ai_runs":                           countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_runs WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"ai_run_events":                     countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_run_events WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
+		"ai_activity_items":                 countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_activity_items WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"ai_thread_checkpoints":             countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_thread_checkpoints WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"ai_tool_calls": countRowsForTest(t, s.db, `
 SELECT COUNT(1)
@@ -1156,7 +1260,7 @@ func TestStore_UpdateTranscriptMessageJSONByRowID_DoesNotTouchThreadUpdatedAt(t 
 		CreatedAtUnixMs: 123,
 		UpdatedAtUnixMs: 123,
 		TextContent:     "hello",
-		MessageJSON:     `{"id":"msg_1","role":"assistant","blocks":[{"type":"tool-call","toolName":"terminal.exec","toolId":"tool_1","args":{},"status":"success"}],"status":"complete","timestamp":123}`,
+		MessageJSON:     `{"id":"msg_1","role":"assistant","blocks":[{"type":"markdown","content":"hello"}],"status":"complete","timestamp":123}`,
 	}, "u1", "u1@example.com")
 	if err != nil {
 		t.Fatalf("AppendMessage: %v", err)
@@ -1177,7 +1281,7 @@ func TestStore_UpdateTranscriptMessageJSONByRowID_DoesNotTouchThreadUpdatedAt(t 
 		t.Fatalf("UpdatedAtUnixMs=%d, want > 0", updatedAt)
 	}
 
-	nextJSON := `{"id":"msg_1","role":"assistant","blocks":[{"type":"tool-call","toolName":"terminal.exec","toolId":"tool_1","args":{},"status":"success","collapsed":false}],"status":"complete","timestamp":123}`
+	nextJSON := `{"id":"msg_1","role":"assistant","blocks":[{"type":"markdown","content":"updated"}],"status":"complete","timestamp":123}`
 	if err := s.UpdateTranscriptMessageJSONByRowID(ctx, "env_1", rowID, nextJSON, 0); err != nil {
 		t.Fatalf("UpdateTranscriptMessageJSONByRowID: %v", err)
 	}

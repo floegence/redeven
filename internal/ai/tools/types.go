@@ -92,9 +92,50 @@ func (e *ToolResultEnvelope) Normalize() {
 	}
 }
 
+// ToolPresentationKind classifies a tool for compact chat activity rendering.
+type ToolPresentationKind string
+
+const (
+	ToolPresentationContext     ToolPresentationKind = "context"
+	ToolPresentationCommand     ToolPresentationKind = "command"
+	ToolPresentationMutation    ToolPresentationKind = "mutation"
+	ToolPresentationResearch    ToolPresentationKind = "research"
+	ToolPresentationTodo        ToolPresentationKind = "todo"
+	ToolPresentationDelegation  ToolPresentationKind = "delegation"
+	ToolPresentationInteraction ToolPresentationKind = "interaction"
+	ToolPresentationSignal      ToolPresentationKind = "signal"
+)
+
+// ToolGroupingPolicy describes how adjacent tool activity can be grouped in chat.
+type ToolGroupingPolicy struct {
+	Enabled        bool     `json:"enabled"`
+	GroupKey       string   `json:"group_key"`
+	MergeWindowMS  int64    `json:"merge_window_ms,omitempty"`
+	MaxInlineItems int      `json:"max_inline_items,omitempty"`
+	TargetFields   []string `json:"target_fields,omitempty"`
+}
+
+// ToolRedactionSpec records which fields must stay out of compact activity payloads.
+type ToolRedactionSpec struct {
+	ArgFields    []string `json:"arg_fields,omitempty"`
+	ResultFields []string `json:"result_fields,omitempty"`
+}
+
+// ToolPresentationSpec is the runtime-owned display contract consumed by the chat UI.
+type ToolPresentationSpec struct {
+	Kind           ToolPresentationKind `json:"kind"`
+	Risk           string               `json:"risk"` // readonly|mutating|approval|blocking
+	Renderer       string               `json:"renderer"`
+	Grouping       ToolGroupingPolicy   `json:"grouping"`
+	DetailKinds    []string             `json:"detail_kinds,omitempty"`
+	Redaction      ToolRedactionSpec    `json:"redaction,omitempty"`
+	SummaryVersion int                  `json:"summary_version"`
+}
+
 // Definition describes built-in tool properties used by policies.
 type Definition struct {
 	Name             string
 	Mutating         bool
 	RequiresApproval bool
+	Presentation     ToolPresentationSpec
 }

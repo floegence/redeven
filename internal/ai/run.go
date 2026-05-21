@@ -136,11 +136,15 @@ type run struct {
 	needNewTextBlock          bool
 	currentThinkingBlockIndex int
 	needNewThinkingBlock      bool
+	activityBlockIndex        int
+	activityTimelineStarted   bool
 
 	muAssistant              sync.Mutex
 	assistantCreatedAtUnixMs int64
 	assistantBlocks          []any
 	assistantAnswer          assistantAnswerState
+	activityItems            map[string]ActivityItem
+	activityOrder            []string
 	providerContinuation     threadstore.ThreadProviderContinuation
 
 	finalizationReason string
@@ -223,6 +227,9 @@ func newRun(opts runOptions) *run {
 		collectedWebSources:       make(map[string]SourceRef),
 		collectedWebSourceOrder:   make([]string, 0, 8),
 		currentThinkingBlockIndex: -1,
+		activityBlockIndex:        -1,
+		activityItems:             make(map[string]ActivityItem),
+		activityOrder:             make([]string, 0, 16),
 		subagentDepth:             opts.SubagentDepth,
 		forceReadonlyExec:         opts.ForceReadonlyExec,
 		skillManager:              opts.SkillManager,
@@ -515,83 +522,6 @@ func (r *run) isDetached() bool {
 func (r *run) sendStreamEvent(ev any) {
 	if r == nil || ev == nil {
 		return
-	}
-
-	// Preserve UI-only tool-call state (e.g. collapsed) across block-set replacements.
-	//
-	// The client ChatProvider replaces blocks on "block-set". If a tool-call block update does
-	// not include the collapsed field, the UI will reset it to default. Since collapsed is
-	// persisted in assistantBlocks when set, merge it into outgoing frames as a best-effort.
-	if bs, ok := ev.(streamEventBlockSet); ok {
-		getCollapsed := func(idx int) (*bool, bool) {
-			if idx < 0 {
-				return nil, false
-			}
-			r.muAssistant.Lock()
-			defer r.muAssistant.Unlock()
-			if idx >= len(r.assistantBlocks) {
-				return nil, false
-			}
-			switch prev := r.assistantBlocks[idx].(type) {
-			case ToolCallBlock:
-				if prev.Collapsed == nil {
-					return nil, false
-				}
-				v := *prev.Collapsed
-				return &v, true
-			case *ToolCallBlock:
-				if prev == nil || prev.Collapsed == nil {
-					return nil, false
-				}
-				v := *prev.Collapsed
-				return &v, true
-			case map[string]any:
-				if c, ok := prev["collapsed"].(bool); ok {
-					v := c
-					return &v, true
-				}
-				return nil, false
-			default:
-				return nil, false
-			}
-		}
-
-		switch blk := bs.Block.(type) {
-		case ToolCallBlock:
-			if blk.Collapsed == nil {
-				if c, ok := getCollapsed(bs.BlockIndex); ok {
-					blk.Collapsed = c
-					bs.Block = blk
-					ev = bs
-				}
-			}
-		case *ToolCallBlock:
-			if blk != nil {
-				cp := *blk
-				if cp.Collapsed == nil {
-					if c, ok := getCollapsed(bs.BlockIndex); ok {
-						cp.Collapsed = c
-					}
-				}
-				bs.Block = cp
-				ev = bs
-			}
-		case map[string]any:
-			typ, _ := blk["type"].(string)
-			if strings.TrimSpace(typ) == "tool-call" {
-				if _, has := blk["collapsed"]; !has {
-					if c, ok := getCollapsed(bs.BlockIndex); ok {
-						cp := make(map[string]any, len(blk)+1)
-						for k, v := range blk {
-							cp[k] = v
-						}
-						cp["collapsed"] = *c
-						bs.Block = cp
-						ev = bs
-					}
-				}
-			}
-		}
 	}
 
 	r.touchActivity()
@@ -1995,8 +1925,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	)
 
 	r.mu.Lock()
-	idx := r.nextBlockIndex
-	r.nextBlockIndex++
+	idx := r.reserveActivityTimelineBlockIndexLocked()
 	r.needNewTextBlock = true
 	r.needNewThinkingBlock = true
 	r.toolBlockIndex[toolID] = idx
@@ -2277,8 +2206,6 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 				block.Children = []any{map[string]any{"type": "markdown", "content": md}}
 			}
 		}
-		expanded := false
-		block.Collapsed = &expanded
 	}
 	r.emitPersistedToolBlockSet(idx, block)
 	r.persistToolCallSnapshot(toolID, toolName, block.Status, args, result, nil, "", toolStartedAt, time.Now())
@@ -2405,42 +2332,13 @@ func (r *run) persistAppendThinkingDelta(idx int, delta string) {
 	}
 }
 
-func (r *run) persistSetToolBlock(idx int, block ToolCallBlock) {
-	if r == nil || idx < 0 {
-		return
-	}
-	r.muAssistant.Lock()
-	defer r.muAssistant.Unlock()
-	if block.Collapsed == nil && idx >= 0 && idx < len(r.assistantBlocks) {
-		switch prev := r.assistantBlocks[idx].(type) {
-		case ToolCallBlock:
-			if prev.Collapsed != nil {
-				v := *prev.Collapsed
-				block.Collapsed = &v
-			}
-		case *ToolCallBlock:
-			if prev != nil && prev.Collapsed != nil {
-				v := *prev.Collapsed
-				block.Collapsed = &v
-			}
-		case map[string]any:
-			if c, ok := prev["collapsed"].(bool); ok {
-				v := c
-				block.Collapsed = &v
-			}
-		}
-	}
-	r.persistEnsureIndex(idx)
-	r.assistantBlocks[idx] = block
-}
-
 func (r *run) emitPersistedToolBlockSet(idx int, block ToolCallBlock) {
 	if r == nil || idx < 0 {
 		return
 	}
-	// Persist first so active-run snapshots cannot regress behind already emitted stream frames.
-	r.persistSetToolBlock(idx, block)
-	r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
+	// Persist the compact activity projection before emitting so active-run snapshots cannot regress.
+	activityIdx, timeline := r.projectAndPersistToolActivity(idx, block)
+	r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: activityIdx, Block: timeline})
 }
 
 func normalizeSnapshotMessageStatus(status string) string {
@@ -2539,6 +2437,9 @@ func (r *run) snapshotAssistantMessageJSON() (string, string, int64, error) {
 }
 
 func extractAskUserSummaryFromBlock(block any) string {
+	if summary := activityAskUserSummaryFromBlock(block); summary != "" {
+		return summary
+	}
 	switch v := block.(type) {
 	case ToolCallBlock:
 		switch strings.TrimSpace(v.ToolName) {
@@ -2710,6 +2611,9 @@ func parseAskUserQuestionsAny(value any) []RequestUserInputQuestion {
 }
 
 func extractAskUserToolIdentity(block any) (toolID string, askUser bool, waitingUser bool, questions []RequestUserInputQuestion) {
+	if prompt, waiting := activityPromptSnapshotFromBlock(block, ""); prompt != nil && strings.TrimSpace(prompt.ToolID) != "" {
+		return strings.TrimSpace(prompt.ToolID), true, waiting, prompt.Questions
+	}
 	switch v := block.(type) {
 	case ToolCallBlock:
 		switch strings.TrimSpace(v.ToolName) {
@@ -2793,6 +2697,9 @@ func extractAskUserWaitingFlag(value any) bool {
 }
 
 func extractAskUserPromptSnapshot(block any, messageID string) (*RequestUserInputPrompt, bool) {
+	if prompt, waitingUser := activityPromptSnapshotFromBlock(block, messageID); prompt != nil {
+		return prompt, waitingUser
+	}
 	toolID, askUser, waitingUser, questions := extractAskUserToolIdentity(block)
 	if !askUser || strings.TrimSpace(toolID) == "" {
 		return nil, false
@@ -2870,82 +2777,6 @@ func (r *run) snapshotWaitingPrompt() *RequestUserInputPrompt {
 		}
 	}
 	return fallbackPrompt
-}
-
-func (r *run) setToolCollapsed(toolID string, collapsed bool) bool {
-	if r == nil {
-		return false
-	}
-	toolID = strings.TrimSpace(toolID)
-	if toolID == "" {
-		return false
-	}
-
-	var (
-		idx      = -1
-		nextAny  any
-		nextTool ToolCallBlock
-	)
-
-	r.muAssistant.Lock()
-	for i, blk := range r.assistantBlocks {
-		switch v := blk.(type) {
-		case ToolCallBlock:
-			if strings.TrimSpace(v.ToolID) != toolID {
-				continue
-			}
-			idx = i
-			b := collapsed
-			v.Collapsed = &b
-			r.assistantBlocks[i] = v
-			nextTool = v
-			nextAny = v
-		case *ToolCallBlock:
-			if v == nil || strings.TrimSpace(v.ToolID) != toolID {
-				continue
-			}
-			idx = i
-			cp := *v
-			b := collapsed
-			cp.Collapsed = &b
-			r.assistantBlocks[i] = cp
-			nextTool = cp
-			nextAny = cp
-		case map[string]any:
-			typ, _ := v["type"].(string)
-			if strings.TrimSpace(typ) != "tool-call" {
-				continue
-			}
-			rawToolID, _ := v["toolId"].(string)
-			if strings.TrimSpace(rawToolID) != toolID {
-				continue
-			}
-			idx = i
-			cp := make(map[string]any, len(v)+1)
-			for k, val := range v {
-				cp[k] = val
-			}
-			cp["collapsed"] = collapsed
-			r.assistantBlocks[i] = cp
-			nextAny = cp
-		default:
-			continue
-		}
-		if idx >= 0 {
-			break
-		}
-	}
-	r.muAssistant.Unlock()
-
-	if idx < 0 {
-		return false
-	}
-	if nextAny == nil {
-		nextAny = nextTool
-	}
-
-	r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: nextAny})
-	return true
 }
 
 func parseWebSearchResult(result any) (websearch.SearchResult, bool) {
@@ -3152,8 +2983,7 @@ func (r *run) emitSourcesToolBlock(source string) {
 		return
 	}
 	r.sourcesBlockAlreadyEmitted = true
-	idx = r.nextBlockIndex
-	r.nextBlockIndex++
+	idx = r.reserveActivityTimelineBlockIndexLocked()
 	r.needNewTextBlock = true
 	r.needNewThinkingBlock = true
 	r.mu.Unlock()
@@ -3162,16 +2992,14 @@ func (r *run) emitSourcesToolBlock(source string) {
 	if err != nil {
 		toolID = "tool_sources"
 	}
-	expanded := false
 	block := ToolCallBlock{
-		Type:      "tool-call",
-		ToolName:  "sources",
-		ToolID:    toolID,
-		Args:      map[string]any{"source": source},
-		Status:    ToolCallStatusSuccess,
-		Result:    map[string]any{"sources": sources},
-		Children:  nil,
-		Collapsed: &expanded,
+		Type:     "tool-call",
+		ToolName: "sources",
+		ToolID:   toolID,
+		Args:     map[string]any{"source": source},
+		Status:   ToolCallStatusSuccess,
+		Result:   map[string]any{"sources": sources},
+		Children: nil,
 	}
 	if md := formatSourcesMarkdown(sources); md != "" {
 		block.Children = []any{map[string]any{"type": "markdown", "content": md}}
