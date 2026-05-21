@@ -73,6 +73,7 @@ export type EnvironmentCardFactModel = Readonly<{
   value: string;
   value_tone: 'default' | 'placeholder';
   action?: EnvironmentCardFactActionModel;
+  label_icon?: string;
   leading_icon?: string;
   endpoints?: readonly EnvironmentCardEndpointModel[];
 }>;
@@ -91,6 +92,29 @@ const PODMAN_ICON = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53M
 const CONTAINER_ENGINE_ICON: Record<string, string> = {
   docker: DOCKER_ICON,
   podman: PODMAN_ICON,
+};
+
+const ICON_RUNS_ON = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMS40IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxyZWN0IHg9IjIiIHk9IjIuNSIgd2lkdGg9IjEyIiBoZWlnaHQ9IjgiIHJ4PSIxIi8+PHBhdGggZD0iTTUuNSAxMi41aDUiLz48cGF0aCBkPSJNOCAxMC41djIiLz48L3N2Zz4K';
+
+const ICON_CONTAINER = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMS40IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik04IDJMMiA1djZsNiAzIDYtM1Y1TDggMnoiLz48cGF0aCBkPSJNMiA1bDYgMyA2LTMiLz48cGF0aCBkPSJNOCA4djYiLz48L3N2Zz4K';
+
+const ICON_VERSION = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMS40IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDN2NC41bDYgNkwxMi41IDkgNy41IDNIMnoiLz48Y2lyY2xlIGN4PSI1IiBjeT0iNSIgcj0iLjkiLz48L3N2Zz4K';
+
+const ICON_PROVIDER = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMS40IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik01IDEySDMuNUEyLjggMi44IDAgMDEzLjUgNi41Yy4yLTEuNiAxLjctMyAzLjUtM2EzLjQgMy40IDAgMDEzLjIgMi4yIDIuMyAyLjMgMCAwMTEuMyA0LjNIOSIvPjwvc3ZnPgo=';
+
+const ICON_LOCAL_LINK = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMS40IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik01LjUgOC41YTMgMyAwIDAxMC00TDcuNSAyLjVhMyAzIDAgMDE0LjIgNC4yTDEwIDguNSIvPjxwYXRoIGQ9Ik0xMC41IDcuNWEzIDMgMCAwMTAgNEw4LjUgMTMuNWEzIDMgMCAwMS00LjItNC4yTDYgNy41Ii8+PC9zdmc+Cg==';
+
+const ICON_ENV_ID = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMS40IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxjaXJjbGUgY3g9IjUuNSIgY3k9IjUuNSIgcj0iMi44Ii8+PHBhdGggZD0iTTcuNSA3LjVMMTIuNSAxMi41Ii8+PHBhdGggZD0iTTEwIDEwbDIuNSAyLjUiLz48L3N2Zz4K';
+
+export const ICON_ENDPOINTS = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMS40IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxjaXJjbGUgY3g9IjIuNSIgY3k9IjEwLjUiIHI9IjEuOCIvPjxjaXJjbGUgY3g9IjEzLjUiIGN5PSIxMC41IiByPSIxLjgiLz48Y2lyY2xlIGN4PSI4IiBjeT0iMi41IiByPSIxLjgiLz48cGF0aCBkPSJNNCA5bDMtNSIvPjxwYXRoIGQ9Ik0xMiA5TDkgNCIvPjwvc3ZnPgo=';
+
+export const FACT_LABEL_ICONS: Record<string, string> = {
+  'RUNS ON': ICON_RUNS_ON,
+  CONTAINER: ICON_CONTAINER,
+  VERSION: ICON_VERSION,
+  PROVIDER: ICON_PROVIDER,
+  'LOCAL LINK': ICON_LOCAL_LINK,
+  'ENV ID': ICON_ENV_ID,
 };
 
 export type EnvironmentCardModel = Readonly<{
@@ -436,6 +460,7 @@ function buildEnvironmentCardFact(
     label,
     value,
     value_tone: 'default',
+    ...(FACT_LABEL_ICONS[label] ? { label_icon: FACT_LABEL_ICONS[label] } : {}),
     ...(opts?.action ? { action: opts.action } : {}),
     ...(opts?.leading_icon ? { leading_icon: opts.leading_icon } : {}),
     ...(opts?.endpoints ? { endpoints: opts.endpoints } : {}),
@@ -450,6 +475,7 @@ function buildPlaceholderEnvironmentCardFact(
     label,
     value,
     value_tone: 'placeholder',
+    ...(FACT_LABEL_ICONS[label] ? { label_icon: FACT_LABEL_ICONS[label] } : {}),
   };
 }
 

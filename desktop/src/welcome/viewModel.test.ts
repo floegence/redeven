@@ -34,6 +34,7 @@ import {
   buildEnvironmentCardModel,
   buildEnvironmentCardEndpointsModel,
   buildEnvironmentCardFactsModel,
+  FACT_LABEL_ICONS,
   buildProviderBackedEnvironmentActionModel,
   environmentLibraryCount,
   filterEnvironmentLibrary,
@@ -47,19 +48,23 @@ import {
 } from './viewModel';
 
 function defaultFact(label: string, value: string, extras?: Record<string, unknown>) {
+  const labelIcon = FACT_LABEL_ICONS[label];
   return {
     label,
     value,
     value_tone: 'default' as const,
+    ...(labelIcon ? { label_icon: labelIcon } : {}),
     ...extras,
   };
 }
 
 function placeholderFact(label: string, value = 'None') {
+  const labelIcon = FACT_LABEL_ICONS[label];
   return {
     label,
     value,
     value_tone: 'placeholder' as const,
+    ...(labelIcon ? { label_icon: labelIcon } : {}),
   };
 }
 
