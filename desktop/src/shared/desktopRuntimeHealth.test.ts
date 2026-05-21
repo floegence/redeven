@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  classifyDesktopRuntimeBlockedLaunchReport,
   desktopRuntimeMaintenanceForRuntimeService,
   desktopRuntimeMaintenanceFromBlockedLaunchReport,
   normalizeDesktopRuntimeMaintenanceRequirement,
@@ -80,8 +81,25 @@ describe('desktopRuntimeHealth', () => {
     })).toBeUndefined();
   });
 
-  it('maps stale lock blocked reports to start recovery', () => {
-    expect(desktopRuntimeMaintenanceFromBlockedLaunchReport({
+  it('classifies not-running blocked reports as stopped without maintenance', () => {
+    const report = {
+      code: 'not_running',
+      message: 'Runtime daemon is not running.',
+      diagnostics: {
+        attach_state: 'not_running',
+      },
+    };
+    expect(classifyDesktopRuntimeBlockedLaunchReport(report)).toMatchObject({
+      kind: 'stopped',
+      reason: 'not_running',
+      message: 'Runtime daemon is not running.',
+      attach_state: 'not_running',
+    });
+    expect(desktopRuntimeMaintenanceFromBlockedLaunchReport(report)).toBeUndefined();
+  });
+
+  it('classifies stale lock blocked reports as stopped-like recovery without maintenance', () => {
+    const report = {
       code: 'stale_lock',
       message: 'Runtime lock metadata is present but no live runtime is reachable.',
       diagnostics: {
@@ -89,21 +107,16 @@ describe('desktopRuntimeHealth', () => {
         failure_code: 'lock_pid_not_alive',
         lock_pid: 4321,
       },
-    })).toEqual({
-      kind: 'runtime_stale_lock',
-      required_for: 'open',
-      recovery_action: 'start_runtime',
-      can_desktop_start: true,
-      can_desktop_restart: false,
-      has_active_work: false,
-      active_work_label: 'No active work',
-      current_runtime_version: undefined,
-      target_runtime_version: undefined,
+    };
+    expect(classifyDesktopRuntimeBlockedLaunchReport(report)).toMatchObject({
+      kind: 'stopped',
+      reason: 'stale_lock',
       attach_state: 'stale_lock',
       failure_code: 'lock_pid_not_alive',
       lock_pid: 4321,
       message: 'Runtime lock metadata is present but no live runtime is reachable.',
     });
+    expect(desktopRuntimeMaintenanceFromBlockedLaunchReport(report)).toBeUndefined();
   });
 
   it('maps live blocked reports to restart recovery', () => {

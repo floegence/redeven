@@ -40,6 +40,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain("case 'start_control_plane_connect':");
     expect(mainSrc).toContain("case 'open_environment_settings':");
     expect(mainSrc).toContain("case 'start_environment_runtime':");
+    expect(mainSrc).toContain("case 'restart_environment_runtime':");
     expect(mainSrc).toContain("case 'stop_environment_runtime':");
     expect(mainSrc).toContain("case 'refresh_environment_runtime':");
     expect(mainSrc).toContain("case 'refresh_all_environment_runtimes':");
@@ -144,8 +145,8 @@ describe('main routing', () => {
     expect(mainSrc).toContain('sshRuntimeMaintenanceByKey.delete(runtimeKey)');
     expect(mainSrc).toContain('const operation = launcherOperations.create({');
     expect(mainSrc).toContain("phase: 'ssh_preparing_start'");
-    expect(mainSrc).toContain("title: 'Preparing SSH runtime'");
-    expect(mainSrc).toContain("action: 'start_environment_runtime'");
+    expect(mainSrc).toContain('title: runtimeLifecycleStartTitle(action)');
+    expect(mainSrc).toContain('action,');
     expect(mainSrc).toContain("subject_kind: 'ssh_environment'");
     expect(mainSrc).toContain('cancelable: true');
     expect(mainSrc).toContain("interrupt_label: 'Stop startup'");
@@ -155,7 +156,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain('environment_label: label');
     expect(mainSrc).toContain('phase: sshRuntimeLifecyclePhase(progress.phase)');
     expect(mainSrc).toContain('detail: progress.detail');
-    expect(mainSrc).toContain('runtimeLifecycleProgressFromSSH(sshDetails, progress, label)');
+    expect(mainSrc).toContain('runtimeLifecycleProgressFromSSH(sshDetails, progress, label, lifecycleOperation)');
     expect(mainSrc).toContain('ensureRuntimePlacementReady({');
     expect(mainSrc).toContain('on_progress: (progress: RuntimePlacementProgress) => {');
     expect(mainSrc).toContain('const launch = await startManagedRuntime({');
@@ -180,7 +181,10 @@ describe('main routing', () => {
     expect(mainSrc).toContain("method: 'desktop_local_update_handoff'");
     expect(mainSrc).toContain('async function restartSSHRuntimeFromShell(');
     expect(mainSrc).toContain('async function manageDesktopUpdateFromLauncher(');
+    expect(mainSrc).toContain('async function runEnvironmentRuntimeLifecycleFromLauncher(');
+    expect(mainSrc).toContain('async function restartEnvironmentRuntimeFromLauncher(');
     expect(mainSrc).toContain("case 'manage_desktop_update':");
+    expect(mainSrc).toContain("case 'restart_environment_runtime':");
     expect(mainSrc).toContain("launcherActionSuccess('opened_desktop_update_handoff')");
     expect(mainSrc).toContain('forceRuntimeUpdate: options.forceRuntimeUpdate === true');
     expect(mainSrc).toContain('allowActiveWorkReplacement: true');
@@ -212,16 +216,17 @@ describe('main routing', () => {
     expect(sshStartTaskEnd).toBeGreaterThan(sshStartStart);
     const sshStartTaskSrc = mainSrc.slice(sshStartStart, sshStartTaskEnd);
     expect(sshStartTaskSrc).toContain("if (statusProbe.status === 'blocked')");
+    expect(sshStartTaskSrc).toContain('const replacingReadySSHRuntime = action === \'restart_environment_runtime\'');
+    expect(sshStartTaskSrc).toContain('await stopManagedSSHRuntimeProcess({');
     expect(sshStartTaskSrc).toContain('options.allowActiveWorkReplacement !== true');
     expect(sshStartTaskSrc).toContain('maintenance.can_desktop_restart');
-    expect(sshStartTaskSrc).toContain('await stopManagedSSHRuntimeProcess({');
 
     const openSSHStart = mainSrc.indexOf('async function openSSHEnvironmentFromLauncher(');
     const openSSHEnd = mainSrc.indexOf('const optimisticSessionKey = sshDesktopSessionKey(sshDetails);', openSSHStart);
     expect(mainSrc.slice(openSSHStart, openSSHEnd)).toContain('connect_timeout_seconds: request.connect_timeout_seconds');
 
     const startRuntimeStart = mainSrc.indexOf('function sshDetailsFromRuntimeTargetRequest(');
-    const startRuntimeEnd = mainSrc.indexOf('async function startEnvironmentRuntimeFromLauncher(', startRuntimeStart);
+    const startRuntimeEnd = mainSrc.indexOf('async function runEnvironmentRuntimeLifecycleFromLauncher(', startRuntimeStart);
     expect(mainSrc.slice(startRuntimeStart, startRuntimeEnd)).toContain('connect_timeout_seconds: request.connect_timeout_seconds');
   });
 
@@ -238,7 +243,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain('openConnectionRequired: state.open_connection_required === true');
     expect(mainSrc).toContain('async function openRuntimePlacementBridgeFromLauncher(');
     const bridgeOpenStart = mainSrc.indexOf('async function openRuntimePlacementBridgeFromLauncher(');
-    const bridgeOpenEnd = mainSrc.indexOf('async function startEnvironmentRuntimeFromLauncher(', bridgeOpenStart);
+    const bridgeOpenEnd = mainSrc.indexOf('async function runEnvironmentRuntimeLifecycleFromLauncher(', bridgeOpenStart);
     const bridgeOpenSrc = mainSrc.slice(bridgeOpenStart, bridgeOpenEnd);
     expect(bridgeOpenSrc).toContain('await refreshWelcomeRuntimeHealthForEnvironment(environmentID)');
     expect(bridgeOpenSrc).toContain("title: 'Checking runtime status'");
@@ -250,7 +255,14 @@ describe('main routing', () => {
     expect(mainSrc).not.toContain("container_engine, 'start'");
     expect(mainSrc).not.toContain("container_engine, 'stop'");
 
-    const startRuntimeStart = mainSrc.indexOf('async function startEnvironmentRuntimeFromLauncher(');
+    const ensureRuntimeStart = mainSrc.indexOf('async function ensureRuntimePlacementReadyRecordFromLauncher(');
+    const ensureRuntimeEnd = mainSrc.indexOf('async function runEnvironmentRuntimeLifecycleFromLauncher(', ensureRuntimeStart);
+    expect(ensureRuntimeStart).toBeGreaterThanOrEqual(0);
+    expect(ensureRuntimeEnd).toBeGreaterThan(ensureRuntimeStart);
+    const ensureRuntimeSrc = mainSrc.slice(ensureRuntimeStart, ensureRuntimeEnd);
+    expect(ensureRuntimeSrc).toContain('inspection.ready_record && replacementRequested');
+
+    const startRuntimeStart = mainSrc.indexOf('async function runEnvironmentRuntimeLifecycleFromLauncher(');
     const startRuntimeEnd = mainSrc.indexOf('async function connectProviderRuntimeFromLauncher(', startRuntimeStart);
     const startRuntimeSrc = mainSrc.slice(startRuntimeStart, startRuntimeEnd);
     expect(startRuntimeSrc).toContain("if (requestedPlacement.kind === 'container_process')");
@@ -371,7 +383,7 @@ describe('main routing', () => {
     expect(helperSrc).toContain("if (binding.state !== 'linked')");
     expect(helperSrc).toContain('await refreshProviderEnvironmentRuntimeHealth(providerOrigin, providerID, [envPublicID]);');
 
-    const startRuntimeStart = mainSrc.indexOf('async function startEnvironmentRuntimeFromLauncher(');
+    const startRuntimeStart = mainSrc.indexOf('async function runEnvironmentRuntimeLifecycleFromLauncher(');
     const startRuntimeEnd = mainSrc.indexOf('async function connectProviderRuntimeFromLauncher(', startRuntimeStart);
     expect(startRuntimeStart).toBeGreaterThanOrEqual(0);
     expect(startRuntimeEnd).toBeGreaterThan(startRuntimeStart);

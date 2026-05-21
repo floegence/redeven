@@ -1,6 +1,5 @@
 import type { DesktopRuntimeControlStatus } from './desktopRuntimePresence';
 import {
-  desktopRuntimeMaintenanceIsStaleLock,
   desktopRuntimeMaintenanceRequiresRestart,
   desktopRuntimeMaintenanceRequiresUpdate,
   type DesktopRuntimeMaintenanceRequirement,
@@ -146,7 +145,6 @@ export function buildDesktopRuntimeOperationPlans(
   const requiresUpdate = packageRequiresUpdate(input.package_state);
   const maintenance = input.maintenance;
   const restartMaintenance = desktopRuntimeMaintenanceRequiresRestart(maintenance);
-  const staleLockMaintenance = desktopRuntimeMaintenanceIsStaleLock(maintenance);
   const updateMaintenance = desktopRuntimeMaintenanceRequiresUpdate(maintenance);
   const openConnectionRequired = input.open_connection_required === true;
   const blockedByUpdate = requiresUpdate || updateMaintenance;
@@ -156,7 +154,7 @@ export function buildDesktopRuntimeOperationPlans(
   const canOpen = input.openable || openConnectionRequired;
   const managementBlockedStatus = runtimeTargetUnavailableStatus(input.runtime_control_status, openConnectionRequired);
   const managementBlocked = !!managementBlockedStatus;
-  const blockedByRecoveryMaintenance = restartMaintenance || staleLockMaintenance;
+  const blockedByRecoveryMaintenance = restartMaintenance;
   const openAvailability = input.running && canOpen && !blockedByUpdate && !blockedByRecoveryMaintenance && !managementBlocked
     ? 'available'
     : 'blocked';
@@ -220,29 +218,25 @@ export function buildDesktopRuntimeOperationPlans(
     restart: desktopRuntimeOperationPlan(
       'restart',
       hasManagement
-        ? input.running
-          ? blockedByUpdate || staleLockMaintenance
+        ? managementBlocked
+          ? 'blocked'
+          : blockedByUpdate
             ? 'blocked'
             : 'available'
-          : 'unavailable'
         : 'hidden',
       method,
       {
-        requiresConfirmation: input.running,
-        reasonCode: blockedByUpdate
+        requiresConfirmation: input.running || maintenance?.has_active_work === true,
+        reasonCode: managementBlocked
+          ? 'runtime_target_unavailable'
+          : blockedByUpdate
           ? 'runtime_update_required'
-          : staleLockMaintenance
-            ? 'runtime_not_started'
-            : input.running
-              ? undefined
-              : 'runtime_not_started',
-        message: blockedByUpdate
+          : undefined,
+        message: managementBlocked
+          ? managementBlockedStatus.message
+          : blockedByUpdate
           ? updateMessage
-          : staleLockMaintenance
-            ? maintenance?.message
-            : input.running
-              ? maintenance?.message ?? activeWorkMessage(input.runtime_service)
-              : 'Runtime is not running.',
+          : maintenance?.message ?? activeWorkMessage(input.runtime_service),
         packageState: input.package_state,
         maintenance,
         menuVisibility: hasManagement ? 'stable' : 'hidden',
@@ -257,7 +251,7 @@ export function buildDesktopRuntimeOperationPlans(
         : 'hidden',
       updateMethod,
       {
-        requiresConfirmation: true,
+        requiresConfirmation: input.running || maintenance?.has_active_work === true,
         reasonCode: blockedByUpdate ? 'runtime_update_required' : undefined,
         label: updateMethod === 'desktop_local_update_handoff' ? 'Update Redeven Desktop' : undefined,
         message: managementBlocked ? managementBlockedStatus.message : maintenance?.message ?? updateMessage,

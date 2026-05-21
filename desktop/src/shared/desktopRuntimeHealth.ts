@@ -244,8 +244,35 @@ type DesktopRuntimeBlockedReportLike = Readonly<{
     attach_state?: string;
     failure_code?: string;
     lock_pid?: number;
+    pid_alive?: boolean;
+    socket_reachable?: boolean;
   }>;
 }>;
+
+export type DesktopRuntimeBlockedClassification =
+  | Readonly<{
+      kind: 'stopped';
+      reason: 'not_running' | 'stale_lock';
+      message: string;
+      attach_state?: string;
+      failure_code?: string;
+      lock_pid?: number;
+    }>
+  | Readonly<{
+      kind: 'restart_required';
+      maintenance: DesktopRuntimeMaintenanceRequirement;
+    }>
+  | Readonly<{
+      kind: 'update_required';
+      maintenance: DesktopRuntimeMaintenanceRequirement;
+    }>
+  | Readonly<{
+      kind: 'unverified';
+      message: string;
+      attach_state?: string;
+      failure_code?: string;
+      lock_pid?: number;
+    }>;
 
 export function desktopRuntimeBlockedReportIsStaleLock(
   report: DesktopRuntimeBlockedReportLike,
@@ -256,6 +283,45 @@ export function desktopRuntimeBlockedReportIsStaleLock(
   return code === 'stale_lock'
     || attachState === 'stale_lock'
     || failureCode === 'lock_pid_not_alive';
+}
+
+function desktopRuntimeBlockedReportIsNotRunning(
+  report: DesktopRuntimeBlockedReportLike,
+): boolean {
+  const code = compact(report.code);
+  const attachState = compact(report.diagnostics?.attach_state);
+  return code === 'not_running'
+    || code === 'runtime_not_running'
+    || attachState === 'not_running';
+}
+
+function desktopRuntimeBlockedReportNeedsUpdate(
+  report: DesktopRuntimeBlockedReportLike,
+): boolean {
+  const code = compact(report.code);
+  const attachState = compact(report.diagnostics?.attach_state);
+  const failureCode = compact(report.diagnostics?.failure_code);
+  return code === 'runtime_update_required'
+    || code === 'desktop_model_source_requires_runtime_update'
+    || attachState === 'runtime_update_required'
+    || failureCode === 'runtime_update_required'
+    || failureCode === 'runtime_version_mismatch'
+    || failureCode === 'runtime_protocol_incompatible';
+}
+
+function desktopRuntimeBlockedReportHasLiveUnreachableRuntime(
+  report: DesktopRuntimeBlockedReportLike,
+): boolean {
+  const code = compact(report.code);
+  const attachState = compact(report.diagnostics?.attach_state);
+  const failureCode = compact(report.diagnostics?.failure_code);
+  const lockPID = launchBlockedReportPID(report);
+  return code === 'live_process_without_management_socket'
+    || attachState === 'live_process_without_management_socket'
+    || failureCode === 'management_socket_unreachable'
+    || (lockPID > 0
+      && report.diagnostics?.pid_alive === true
+      && report.diagnostics?.socket_reachable === false);
 }
 
 function launchBlockedReportPID(report: DesktopRuntimeBlockedReportLike): number {
@@ -278,25 +344,91 @@ export function desktopRuntimeMaintenanceFromBlockedLaunchReport(
     target_runtime_version?: string;
     fallback_message?: string;
   }> = {},
-): DesktopRuntimeMaintenanceRequirement {
-  const staleLock = desktopRuntimeBlockedReportIsStaleLock(report);
+): DesktopRuntimeMaintenanceRequirement | undefined {
+  const classification = classifyDesktopRuntimeBlockedLaunchReport(report, options);
+  return classification.kind === 'restart_required' || classification.kind === 'update_required'
+    ? classification.maintenance
+    : undefined;
+}
+
+export function classifyDesktopRuntimeBlockedLaunchReport(
+  report: DesktopRuntimeBlockedReportLike,
+  options: Readonly<{
+    target_runtime_version?: string;
+    fallback_message?: string;
+  }> = {},
+): DesktopRuntimeBlockedClassification {
   const lockPID = launchBlockedReportPID(report);
-  const canRestart = !staleLock && lockPID > 0 && report.lock_owner?.desktop_managed !== false;
-  return buildDesktopRuntimeMaintenanceRequirement({
-    kind: staleLock ? 'runtime_stale_lock' : 'runtime_restart_required',
-    required_for: 'open',
-    recovery_action: staleLock ? 'start_runtime' : 'restart_runtime',
-    can_desktop_start: staleLock,
-    can_desktop_restart: canRestart,
-    has_active_work: !staleLock,
-    active_work_label: staleLock ? 'No active work' : 'Existing runtime work may be active',
-    target_runtime_version: options.target_runtime_version,
-    attach_state: report.diagnostics?.attach_state,
-    failure_code: report.diagnostics?.failure_code,
-    lock_pid: lockPID || undefined,
-    message: compact(report.message) || compact(options.fallback_message)
-      || (staleLock
-        ? 'Runtime lock metadata is present but no live runtime is reachable.'
-        : 'Runtime maintenance is required before this environment can open.'),
-  });
+  const message = compact(report.message) || compact(options.fallback_message);
+  const attachState = compact(report.diagnostics?.attach_state);
+  const failureCode = compact(report.diagnostics?.failure_code);
+  const diagnostics = {
+    ...(attachState ? { attach_state: attachState } : {}),
+    ...(failureCode ? { failure_code: failureCode } : {}),
+    ...(lockPID > 0 ? { lock_pid: lockPID } : {}),
+  };
+
+  if (desktopRuntimeBlockedReportIsNotRunning(report)) {
+    return {
+      kind: 'stopped',
+      reason: 'not_running',
+      message: message || 'Runtime daemon is not running.',
+      ...diagnostics,
+    };
+  }
+  if (desktopRuntimeBlockedReportIsStaleLock(report)) {
+    return {
+      kind: 'stopped',
+      reason: 'stale_lock',
+      message: message || 'Runtime lock metadata is present but no live runtime is reachable.',
+      ...diagnostics,
+    };
+  }
+  if (desktopRuntimeBlockedReportNeedsUpdate(report)) {
+    return {
+      kind: 'update_required',
+      maintenance: buildDesktopRuntimeMaintenanceRequirement({
+        kind: compact(report.code) === 'desktop_model_source_requires_runtime_update'
+          ? 'desktop_model_source_requires_runtime_update'
+          : 'runtime_update_required',
+        required_for: compact(report.code) === 'desktop_model_source_requires_runtime_update'
+          ? 'desktop_model_source'
+          : 'open',
+        recovery_action: 'update_runtime',
+        can_desktop_start: false,
+        can_desktop_restart: lockPID > 0 && report.lock_owner?.desktop_managed !== false,
+        has_active_work: lockPID > 0,
+        active_work_label: lockPID > 0 ? 'Existing runtime work may be active' : 'No active work',
+        target_runtime_version: options.target_runtime_version,
+        attach_state: attachState,
+        failure_code: failureCode,
+        lock_pid: lockPID || undefined,
+        message: message || 'Update this runtime before opening it with this Desktop.',
+      }),
+    };
+  }
+  if (desktopRuntimeBlockedReportHasLiveUnreachableRuntime(report)) {
+    return {
+      kind: 'restart_required',
+      maintenance: buildDesktopRuntimeMaintenanceRequirement({
+        kind: 'runtime_restart_required',
+        required_for: 'open',
+        recovery_action: 'restart_runtime',
+        can_desktop_start: false,
+        can_desktop_restart: lockPID > 0 && report.lock_owner?.desktop_managed !== false,
+        has_active_work: true,
+        active_work_label: 'Existing runtime work may be active',
+        target_runtime_version: options.target_runtime_version,
+        attach_state: attachState,
+        failure_code: failureCode,
+        lock_pid: lockPID || undefined,
+        message: message || 'Runtime maintenance is required before this environment can open.',
+      }),
+    };
+  }
+  return {
+    kind: 'unverified',
+    message: message || 'Runtime status could not be verified.',
+    ...diagnostics,
+  };
 }

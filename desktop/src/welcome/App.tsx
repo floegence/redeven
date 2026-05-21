@@ -53,6 +53,7 @@ import type {
   DesktopLauncherActionResult,
   DesktopLauncherActionRequest,
   DesktopLauncherSurface,
+  DesktopLauncherRuntimeTarget,
   DesktopLocalEnvironmentStateRoute,
   DesktopWelcomeIssue,
   DesktopWelcomeSnapshot,
@@ -341,6 +342,16 @@ type EnvironmentFailureState = Readonly<{
 }>;
 
 type RuntimeMaintenanceConfirmationAction = 'stop' | 'restart' | 'update';
+type RuntimeLauncherActionKind =
+  | 'start_environment_runtime'
+  | 'restart_environment_runtime'
+  | 'update_environment_runtime'
+  | 'stop_environment_runtime'
+  | 'refresh_environment_runtime';
+type DesktopEnvironmentRuntimeActionRequest = Extract<
+  DesktopLauncherActionRequest,
+  Readonly<{ kind: RuntimeLauncherActionKind }>
+>;
 
 type RuntimeMaintenanceConfirmationState = Readonly<{
   environment: DesktopEnvironmentEntry;
@@ -2038,51 +2049,62 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   function runtimeActionRequest(
     environment: DesktopEnvironmentEntry,
-    kind: 'start_environment_runtime' | 'update_environment_runtime' | 'stop_environment_runtime' | 'refresh_environment_runtime',
+    kind: RuntimeLauncherActionKind,
     options: Readonly<{ forceRuntimeUpdate?: boolean; allowActiveWorkReplacement?: boolean }> = {},
-  ): DesktopLauncherActionRequest | null {
-    const runtimeTarget = {
+  ): DesktopEnvironmentRuntimeActionRequest | null {
+    function withKind(target: DesktopLauncherRuntimeTarget): DesktopEnvironmentRuntimeActionRequest {
+      switch (kind) {
+        case 'start_environment_runtime':
+          return { kind, ...target };
+        case 'restart_environment_runtime':
+          return { kind, ...target };
+        case 'update_environment_runtime':
+          return { kind, ...target };
+        case 'stop_environment_runtime':
+          return { kind, ...target };
+        case 'refresh_environment_runtime':
+          return { kind, ...target };
+      }
+    }
+
+    const runtimeTarget: DesktopLauncherRuntimeTarget = {
       ...(environment.managed_runtime_target_id ? { runtime_target_id: environment.managed_runtime_target_id } : {}),
       ...(environment.managed_runtime_placement_target_id ? { placement_target_id: environment.managed_runtime_placement_target_id } : {}),
       ...(environment.managed_runtime_host_access ? { host_access: environment.managed_runtime_host_access } : {}),
       ...(environment.managed_runtime_placement ? { placement: environment.managed_runtime_placement } : {}),
     };
     if (environment.kind === 'local_environment') {
-      return {
-        kind,
+      return withKind({
         ...runtimeTarget,
         environment_id: environment.id,
         label: environment.label,
         ...(options.forceRuntimeUpdate ? { force_runtime_update: true } : {}),
         ...(options.allowActiveWorkReplacement ? { allow_active_work_replacement: true } : {}),
-      };
+      });
     }
     if (environment.kind === 'provider_environment') {
-      return {
-        kind,
+      return withKind({
         ...runtimeTarget,
         environment_id: environment.id,
         label: environment.label,
         ...(options.forceRuntimeUpdate ? { force_runtime_update: true } : {}),
         ...(options.allowActiveWorkReplacement ? { allow_active_work_replacement: true } : {}),
-      };
+      });
     }
     if (environment.kind === 'external_local_ui') {
-      return {
-        kind,
+      return withKind({
         ...runtimeTarget,
         environment_id: environment.id,
         external_local_ui_url: environment.local_ui_url,
         label: environment.label,
         ...(options.forceRuntimeUpdate ? { force_runtime_update: true } : {}),
         ...(options.allowActiveWorkReplacement ? { allow_active_work_replacement: true } : {}),
-      };
+      });
     }
     if (!environment.ssh_details) {
       return null;
     }
-    return {
-      kind,
+    return withKind({
       ...runtimeTarget,
       environment_id: environment.id,
       label: environment.label,
@@ -2095,7 +2117,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       connect_timeout_seconds: environment.ssh_details.connect_timeout_seconds,
       ...(options.forceRuntimeUpdate ? { force_runtime_update: true } : {}),
       ...(options.allowActiveWorkReplacement ? { allow_active_work_replacement: true } : {}),
-    };
+    });
   }
 
   async function reconnectProviderForEnvironment(
@@ -2159,6 +2181,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel | undefined,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
+    options: Readonly<{ allowActiveWorkReplacement?: boolean }> = {},
   ): Promise<boolean> {
     if (action?.runtime_operation_method === 'desktop_local_update_handoff') {
       const result = await performLauncherAction({
@@ -2174,18 +2197,48 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     const request = runtimeActionRequest(environment, 'update_environment_runtime', {
       forceRuntimeUpdate: true,
-      allowActiveWorkReplacement: true,
+      allowActiveWorkReplacement: options.allowActiveWorkReplacement,
     });
     if (!request) {
       setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', 'Desktop could not resolve that runtime target.');
       return false;
     }
     const result = await performLauncherAction(request, errorTarget);
-    const updated = result?.outcome === 'updated_environment_runtime' || result?.outcome === 'started_environment_runtime';
+    const updated = result?.outcome === 'updated_environment_runtime';
     if (updated) {
       showActionToast(`Runtime updated for ${environment.label}.`);
     }
     return updated;
+  }
+
+  async function restartEnvironmentRuntime(
+    environment: DesktopEnvironmentEntry,
+    errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
+    options: Readonly<{ allowActiveWorkReplacement?: boolean }> = {},
+  ): Promise<boolean> {
+    const request = runtimeActionRequest(environment, 'restart_environment_runtime', {
+      allowActiveWorkReplacement: options.allowActiveWorkReplacement,
+    });
+    if (!request) {
+      setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', 'Desktop could not resolve that runtime target.');
+      return false;
+    }
+    const result = await performLauncherAction(request, errorTarget);
+    const restarted = result?.outcome === 'restarted_environment_runtime';
+    if (restarted) {
+      showActionToast(`Runtime restarted for ${environment.label}.`);
+    }
+    return restarted;
+  }
+
+  function runtimeActionRequiresConfirmation(
+    environment: DesktopEnvironmentEntry,
+    action: EnvironmentActionModel | undefined,
+  ): boolean {
+    if (!action?.runtime_operation) {
+      return false;
+    }
+    return environment.runtime_operations[action.runtime_operation]?.requires_confirmation === true;
   }
 
   async function stopEnvironmentRuntime(
@@ -2230,16 +2283,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (confirmation.action === 'update') {
       setRuntimeMaintenanceConfirmation(null);
       const latestTarget = await loadLatestEnvironmentEntry(target.id) ?? target;
-      await updateEnvironmentRuntime(latestTarget, confirmation.runtime_action, 'connect');
+      await updateEnvironmentRuntime(latestTarget, confirmation.runtime_action, 'connect', { allowActiveWorkReplacement: true });
       return;
     }
-    if (
-      confirmation.action === 'restart'
-      && target.runtime_maintenance?.recovery_action === 'restart_runtime'
-    ) {
+    if (confirmation.action === 'restart') {
       setRuntimeMaintenanceConfirmation(null);
       const latestTarget = await loadLatestEnvironmentEntry(target.id) ?? target;
-      await startEnvironmentRuntime(latestTarget, 'connect', { allowActiveWorkReplacement: true });
+      await restartEnvironmentRuntime(latestTarget, 'connect', { allowActiveWorkReplacement: true });
       return;
     }
     const stopped = await stopEnvironmentRuntime(target, 'connect');
@@ -2247,10 +2297,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return;
     }
     setRuntimeMaintenanceConfirmation(null);
-    if (confirmation.action === 'restart') {
-      const latestTarget = await loadLatestEnvironmentEntry(target.id) ?? target;
-      await startEnvironmentRuntime(latestTarget, 'connect', { allowActiveWorkReplacement: true });
-    }
   }
 
   async function refreshEnvironmentRuntime(
@@ -2486,14 +2532,23 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       case 'start_runtime':
         return startEnvironmentRuntime(environment, errorTarget);
       case 'stop_runtime':
-        requestRuntimeMaintenanceConfirmation(environment, 'stop', action);
-        return true;
+        if (runtimeActionRequiresConfirmation(environment, action)) {
+          requestRuntimeMaintenanceConfirmation(environment, 'stop', action);
+          return true;
+        }
+        return stopEnvironmentRuntime(environment, errorTarget);
       case 'restart_runtime':
-        requestRuntimeMaintenanceConfirmation(environment, 'restart', action);
-        return true;
+        if (runtimeActionRequiresConfirmation(environment, action)) {
+          requestRuntimeMaintenanceConfirmation(environment, 'restart', action);
+          return true;
+        }
+        return restartEnvironmentRuntime(environment, errorTarget);
       case 'update_runtime':
-        requestRuntimeMaintenanceConfirmation(environment, 'update', action);
-        return true;
+        if (runtimeActionRequiresConfirmation(environment, action)) {
+          requestRuntimeMaintenanceConfirmation(environment, 'update', action);
+          return true;
+        }
+        return updateEnvironmentRuntime(environment, action, errorTarget);
       case 'refresh_runtime':
         return refreshEnvironmentRuntime(environment, errorTarget);
       case 'reconnect_provider':
@@ -2562,7 +2617,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
 
     if (action.intent === 'stop_runtime') {
-      requestRuntimeMaintenanceConfirmation(environment, 'stop', action);
+      if (runtimeActionRequiresConfirmation(environment, action)) {
+        requestRuntimeMaintenanceConfirmation(environment, 'stop', action);
+      } else {
+        await stopEnvironmentRuntime(environment, 'connect');
+      }
       return {
         close_panel: true,
         next_session: null,
@@ -2570,7 +2629,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
 
     if (action.intent === 'restart_runtime') {
-      requestRuntimeMaintenanceConfirmation(environment, 'restart', action);
+      if (runtimeActionRequiresConfirmation(environment, action)) {
+        requestRuntimeMaintenanceConfirmation(environment, 'restart', action);
+      } else {
+        await restartEnvironmentRuntime(environment, 'connect');
+      }
       return {
         close_panel: true,
         next_session: null,
@@ -2578,7 +2641,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
 
     if (action.intent === 'update_runtime') {
-      requestRuntimeMaintenanceConfirmation(environment, 'update', action);
+      if (runtimeActionRequiresConfirmation(environment, action)) {
+        requestRuntimeMaintenanceConfirmation(environment, 'update', action);
+      } else {
+        await updateEnvironmentRuntime(environment, action, 'connect');
+      }
       return {
         close_panel: true,
         next_session: null,
@@ -3447,10 +3514,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             ? 'Continue'
             : 'Update and Restart'
           : runtimeMaintenanceConfirmation()?.action === 'restart'
-            ? 'Stop and Restart'
+            ? 'Restart'
             : 'Stop Runtime'}
         variant="destructive"
         loading={busyStateMatchesAction(busyState(), 'stop_environment_runtime')
+          || busyStateMatchesAction(busyState(), 'restart_environment_runtime')
           || busyStateMatchesAction(busyState(), 'update_environment_runtime')
           || busyStateMatchesAction(busyState(), 'manage_desktop_update')}
         onConfirm={() => void confirmRuntimeMaintenance()}
@@ -4538,6 +4606,8 @@ function isEnvironmentActionBusy(
         && busyState.action === 'start_control_plane_connect';
     case 'start_runtime':
       return busyStateMatchesEnvironment(busyState, environmentID, ['start_environment_runtime']);
+    case 'restart_runtime':
+      return busyStateMatchesEnvironment(busyState, environmentID, ['restart_environment_runtime']);
     case 'update_runtime':
       return busyStateMatchesEnvironment(busyState, environmentID, ['update_environment_runtime', 'manage_desktop_update']);
     case 'connect_provider_runtime':
@@ -4663,8 +4733,26 @@ function EnvironmentProgressPanel(props: Readonly<{
     if (!current) {
       return [];
     }
-    const phases = runtimeLifecyclePhaseSequence(current.location);
+    const operation = props.progress.action === 'restart_environment_runtime'
+      ? 'restart'
+      : props.progress.action === 'update_environment_runtime'
+        ? 'update'
+        : 'start';
+    const phases = runtimeLifecyclePhaseSequence(current.location, operation);
     return phases.map((p) => ({ phase: p, label: RUNTIME_LIFECYCLE_PHASE_LABELS[p] }));
+  });
+  const failureNoticeTitle = createMemo(() => {
+    if (openConnection()) {
+      return 'Open needs attention';
+    }
+    switch (props.progress.action) {
+      case 'restart_environment_runtime':
+        return 'Restart needs attention';
+      case 'update_environment_runtime':
+        return 'Update needs attention';
+      default:
+        return 'Startup needs attention';
+    }
   });
   const stepState = (index: number, currentPhase: string | undefined, opStatus: string): 'done' | 'active' | 'pending' | 'error' => {
     if (!currentPhase) {
@@ -4738,7 +4826,7 @@ function EnvironmentProgressPanel(props: Readonly<{
       <Show when={props.progress.failure}>
         {(failure) => (
           <div class="redeven-action-popover__notice" data-tone="error">
-            <div class="redeven-action-popover__notice-title">{openConnection() ? 'Open needs attention' : 'Startup needs attention'}</div>
+            <div class="redeven-action-popover__notice-title">{failureNoticeTitle()}</div>
             <div class="redeven-action-popover__notice-detail">{failure().summary}</div>
           </div>
         )}
@@ -5002,7 +5090,13 @@ function EnvironmentSplitActionButton(props: Readonly<{
     hasOpenConnectionProgress() || hasRuntimeLifecycleProgress() ? false : blockedPrimaryActionDisabled()
   ));
   const environmentProgressTriggerLabel = createMemo(() => (
-    primaryProgress()?.open_progress ? 'Opening...' : runtimeMenuProgress()?.action === 'update_environment_runtime' ? 'Updating...' : 'Starting...'
+    primaryProgress()?.open_progress
+      ? 'Opening...'
+      : runtimeMenuProgress()?.action === 'restart_environment_runtime'
+        ? 'Restarting...'
+        : runtimeMenuProgress()?.action === 'update_environment_runtime'
+          ? 'Updating...'
+          : 'Starting...'
   ));
   const primaryButtonClass = createMemo(() => (
     cn('w-full justify-center', hasMenuActions() && 'rounded-r-none border-r-0')
@@ -5399,13 +5493,14 @@ function EnvironmentConnectionCard(props: Readonly<{
   const isRuntimeActionBusy = createMemo(() => (
     busyStateMatchesEnvironment(props.busyState, props.environment.id, [
       'start_environment_runtime',
+      'restart_environment_runtime',
       'update_environment_runtime',
       'manage_desktop_update',
       'stop_environment_runtime',
       'refresh_environment_runtime',
     ])
     || busyStateMatchesAction(props.busyState, 'refresh_all_environment_runtimes')
-    || ['start_environment_runtime', 'update_environment_runtime'].includes(
+    || ['start_environment_runtime', 'restart_environment_runtime', 'update_environment_runtime'].includes(
       activeProgressForEnvironment(props.environment.id, props.busyState, props.actionProgress)?.action ?? '',
     )
     || (runtimeLifecycleProgress() !== null && !runtimeOpenable())

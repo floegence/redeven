@@ -662,7 +662,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('<Show when={props.progress.failure}>');
     expect(appSrc).toContain('<div class="redeven-action-popover__notice-detail">{failure().summary}</div>');
     expect(appSrc).not.toContain('props.progress.error_message');
-    expect(appSrc).toContain("primaryProgress()?.open_progress ? 'Opening...' : runtimeMenuProgress()?.action === 'update_environment_runtime' ? 'Updating...' : 'Starting...'");
+    expect(appSrc).toContain("runtimeMenuProgress()?.action === 'restart_environment_runtime'");
+    expect(appSrc).toContain("'Restarting...'");
+    expect(appSrc).toContain("'Updating...'");
     expect(appSrc).toContain('redeven-environment-progress');
     expect(appSrc).toContain('redeven-split-action-trigger--progress');
     expect(appSrc).toContain('autoOpenedEnvironmentProgressOperation');
@@ -1005,8 +1007,8 @@ describe('DesktopWelcomeShell', () => {
   it('restarts runtime maintenance through the recovery action contract when no runtime record exists yet', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain("target.runtime_maintenance?.recovery_action === 'restart_runtime'");
-    expect(appSrc).toContain("await startEnvironmentRuntime(latestTarget, 'connect', { allowActiveWorkReplacement: true });");
+    expect(appSrc).toContain("runtimeActionRequest(environment, 'restart_environment_runtime'");
+    expect(appSrc).toContain("await restartEnvironmentRuntime(latestTarget, 'connect', { allowActiveWorkReplacement: true });");
   });
 });
 
