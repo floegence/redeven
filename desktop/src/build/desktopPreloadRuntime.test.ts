@@ -193,6 +193,13 @@ function snapshotBridgeState() {
       && typeof window.redevenDesktopShell?.getRuntimeMaintenanceContext === 'function'
       && typeof window.redevenDesktopShell?.performRuntimeMaintenanceAction === 'function'
       && typeof window.redevenDesktopShell?.restartManagedRuntime === 'function',
+    hasDesktopDownloadsBridge: typeof window.redevenDesktopDownloads === 'object'
+      && typeof window.redevenDesktopDownloads?.prepare === 'function'
+      && typeof window.redevenDesktopDownloads?.write === 'function'
+      && typeof window.redevenDesktopDownloads?.complete === 'function'
+      && typeof window.redevenDesktopDownloads?.abort === 'function'
+      && typeof window.redevenDesktopDownloads?.reveal === 'function'
+      && typeof window.redevenDesktopDownloads?.open === 'function',
     hasStateStorageBridge: typeof window.redevenDesktopStateStorage === 'object',
     hasDesktopThemeBridge: typeof window.redevenDesktopTheme === 'object'
       && typeof window.redevenDesktopTheme?.getSnapshot === 'function'
@@ -246,6 +253,7 @@ app.whenReady().then(async () => {
         hasDesktopSessionContextBridge: boolean;
         hasDesktopEmbeddedDragBridge: boolean;
         hasDesktopShellBridge: boolean;
+        hasDesktopDownloadsBridge: boolean;
         hasStateStorageBridge: boolean;
         hasDesktopThemeBridge: boolean;
         hasDesktopWindowChromeBridge: boolean;
@@ -256,6 +264,7 @@ app.whenReady().then(async () => {
         hasDesktopSessionContextBridge: boolean;
         hasDesktopEmbeddedDragBridge: boolean;
         hasDesktopShellBridge: boolean;
+        hasDesktopDownloadsBridge: boolean;
         hasStateStorageBridge: boolean;
         hasDesktopThemeBridge: boolean;
         hasDesktopWindowChromeBridge: boolean;
@@ -290,6 +299,7 @@ app.whenReady().then(async () => {
     expect(utility.main.hasDesktopSessionContextBridge).toBe(false);
     expect(utility.main.hasDesktopEmbeddedDragBridge).toBe(false);
     expect(utility.main.hasDesktopShellBridge).toBe(true);
+    expect(utility.main.hasDesktopDownloadsBridge).toBe(true);
     expect(utility.main.hasStateStorageBridge).toBe(true);
     expect(utility.main.hasDesktopThemeBridge).toBe(true);
     expect(utility.main.hasDesktopWindowChromeBridge).toBe(true);
@@ -301,6 +311,7 @@ app.whenReady().then(async () => {
     expect(session.main.hasDesktopSessionContextBridge).toBe(true);
     expect(session.main.hasDesktopEmbeddedDragBridge).toBe(true);
     expect(session.main.hasDesktopShellBridge).toBe(true);
+    expect(session.main.hasDesktopDownloadsBridge).toBe(true);
     expect(session.main.hasStateStorageBridge).toBe(true);
     expect(session.main.hasDesktopThemeBridge).toBe(true);
     expect(session.main.hasDesktopWindowChromeBridge).toBe(true);

@@ -32,6 +32,7 @@ describe('buildDesktopPreloads', () => {
     expect(utilityOutput).toContain('redevenDesktopLauncher');
     expect(utilityOutput).toContain('redevenDesktopSettings');
     expect(utilityOutput).toContain('redevenDesktopShell');
+    expect(utilityOutput).toContain('redevenDesktopDownloads');
     expect(utilityOutput).toContain('redevenDesktopStateStorage');
     expect(utilityOutput).not.toContain('redevenDesktopAskFlowerHandoff');
     expect(utilityOutput).not.toContain('redevenDesktopSessionContext');
@@ -40,6 +41,7 @@ describe('buildDesktopPreloads', () => {
     expect(sessionOutput).toContain('redevenDesktopEmbeddedDragRegions');
     expect(sessionOutput).toContain('redevenDesktopSessionContext');
     expect(sessionOutput).toContain('redevenDesktopShell');
+    expect(sessionOutput).toContain('redevenDesktopDownloads');
     expect(sessionOutput).toContain('redevenDesktopStateStorage');
     expect(sessionOutput).toContain('redevenDesktopTheme');
     expect(sessionOutput).not.toContain('redevenDesktopAskFlowerHandoff');

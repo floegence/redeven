@@ -1,5 +1,7 @@
 import { useNotification } from '@floegence/floe-webapp-core';
 import { useEnvContext } from '../pages/EnvContext';
+import { useDownloadManager } from '../downloads/DownloadContext';
+import { buildFilePreviewDownloadCommand } from '../downloads/downloadCommands';
 import { writeTextToClipboard } from '../utils/clipboard';
 import { buildFilePreviewAskFlowerIntent } from '../utils/filePreviewAskFlower';
 import { useFilePreviewContext } from './FilePreviewContext';
@@ -9,6 +11,7 @@ export function FilePreviewHost() {
   const notification = useNotification();
   const env = useEnvContext();
   const filePreview = useFilePreviewContext();
+  const downloads = useDownloadManager();
 
   const handleCopyPath = async (): Promise<boolean> => {
     const path = String(filePreview.controller.item()?.path ?? '').trim();
@@ -37,6 +40,21 @@ export function FilePreviewHost() {
     }
     if (!result.intent) return;
     env.openAskFlowerComposer(result.intent);
+  };
+
+  const handleDownload = () => {
+    const command = buildFilePreviewDownloadCommand({
+      item: filePreview.controller.item(),
+      descriptor: filePreview.controller.descriptor(),
+      dirty: filePreview.controller.dirty(),
+      draftText: filePreview.controller.draftText(),
+      origin: 'file_preview',
+    });
+    if (!command) {
+      notification.error('Download unavailable', 'Only files can be downloaded.');
+      return;
+    }
+    downloads.enqueue(command);
   };
 
   return (
@@ -73,11 +91,8 @@ export function FilePreviewHost() {
       error={filePreview.controller.error()}
       xlsxSheetName={filePreview.controller.xlsxSheetName()}
       xlsxRows={filePreview.controller.xlsxRows()}
-      downloadLoading={filePreview.controller.downloadLoading()}
       onCopyPath={handleCopyPath}
-      onDownload={() => {
-        void filePreview.controller.downloadCurrent();
-      }}
+      onDownload={handleDownload}
       onAskFlower={handleAskFlower}
     />
   );

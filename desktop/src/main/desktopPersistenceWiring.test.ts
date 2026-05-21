@@ -18,6 +18,8 @@ describe('desktop persistence wiring', () => {
     expect(utilityPreloadSrc).toContain('bootstrapDesktopSettingsBridge();');
     expect(utilityPreloadSrc).toContain("import { bootstrapDesktopShellBridge } from './desktopShell';");
     expect(utilityPreloadSrc).toContain('bootstrapDesktopShellBridge();');
+    expect(utilityPreloadSrc).toContain("import { bootstrapDesktopDownloadsBridge } from './desktopDownloads';");
+    expect(utilityPreloadSrc).toContain('bootstrapDesktopDownloadsBridge();');
     expect(utilityPreloadSrc).toContain("import { bootstrapDesktopStateStorageBridge } from './desktopStateStorage';");
     expect(utilityPreloadSrc).toContain('bootstrapDesktopStateStorageBridge();');
     expect(utilityPreloadSrc).not.toContain('bootstrapDesktopAskFlowerHandoffBridge');
@@ -29,6 +31,8 @@ describe('desktop persistence wiring', () => {
     expect(sessionPreloadSrc).toContain('bootstrapDesktopSessionContextBridge();');
     expect(sessionPreloadSrc).toContain("import { bootstrapDesktopShellBridge } from './desktopShell';");
     expect(sessionPreloadSrc).toContain('bootstrapDesktopShellBridge();');
+    expect(sessionPreloadSrc).toContain("import { bootstrapDesktopDownloadsBridge } from './desktopDownloads';");
+    expect(sessionPreloadSrc).toContain('bootstrapDesktopDownloadsBridge();');
     expect(sessionPreloadSrc).toContain("import { bootstrapDesktopStateStorageBridge } from './desktopStateStorage';");
     expect(sessionPreloadSrc).toContain('bootstrapDesktopStateStorageBridge();');
     expect(sessionPreloadSrc).toContain("import { bootstrapDesktopThemeBridge } from './windowTheme';");
@@ -65,6 +69,11 @@ describe('desktop persistence wiring', () => {
     expect(mainSrc).toContain('DESKTOP_SHELL_OPEN_EXTERNAL_URL_CHANNEL');
     expect(mainSrc).toContain('DESKTOP_SHELL_OPEN_DASHBOARD_CHANNEL');
     expect(mainSrc).toContain('normalizeDesktopShellOpenExternalURLRequest');
+    expect(mainSrc).toContain("from './desktopDownloadWriter';");
+    expect(mainSrc).toContain('DesktopDownloadWriter');
+    expect(mainSrc).toContain('DESKTOP_DOWNLOAD_PREPARE_CHANNEL');
+    expect(mainSrc).toContain('DESKTOP_DOWNLOAD_COMPLETE_CHANNEL');
+    expect(mainSrc).toContain('normalizeDesktopDownloadPrepareRequest');
     expect(mainSrc).toContain('const utilityWindowKindByWebContentsID = new Map<number, DesktopUtilityWindowKind>();');
     expect(mainSrc).toContain("from './windowRecord';");
     expect(mainSrc).toContain('DesktopTrackedWindow');

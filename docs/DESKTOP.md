@@ -549,6 +549,8 @@ Desktop-specific outcomes from this implementation:
 
 - Desktop-managed Local UI exposes `desktop_managed`, `desktop_owner_id`, `effective_run_mode`, `remote_enabled`, and the normalized Runtime Service snapshot through local runtime/version endpoints.
 - When the runtime reports a desktop-owned release policy, Env App turns `Update Redeven` into `Manage in Desktop`.
+- Env App downloads use the Desktop download bridge instead of renderer filesystem access. The preload surface exposes `window.redevenDesktopDownloads.prepare/write/complete/abort/reveal/open`, and Electron main owns the save dialog, temp file, final rename, and destination actions.
+- Desktop download writes always target `<selected-path>.download.tmp` first. `complete` closes the handle and renames to the final path; `abort` closes the handle and removes the temp file. Renderer code receives only a destination presentation plus an opaque token for subsequent write/action calls.
 - Env App receives Desktop's explicit maintenance context and must not infer restart/update availability from `desktop_managed` or process provenance.
 - When Desktop is attached to a local runtime through a host management channel, explicit restart/stop actions use that channel. Desktop quit and window close still detach without stopping the runtime.
 - When a desktop-managed restart finishes, Env App recovers in place through the same shell-owned reconnect/access-gate flow used by other reconnect scenarios.

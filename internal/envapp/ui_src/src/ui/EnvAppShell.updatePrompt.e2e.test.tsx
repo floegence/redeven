@@ -138,6 +138,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     ArrowRightLeft: Icon,
     Code: Icon,
     Copy: Icon,
+    Download: Icon,
     Files: Icon,
     Globe: Icon,
     Grid3x3: Icon,

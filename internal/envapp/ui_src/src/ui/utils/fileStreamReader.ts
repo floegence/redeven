@@ -1,4 +1,4 @@
-// 流式文件读取工具函数，从 RemoteFileBrowser 提取共享
+// Shared streaming file reader utilities used by preview and downloads.
 
 import type { Client } from '@floegence/flowersec-core';
 import { openJsonFrameChannel, readNBytes, type JsonFrameChannel } from '@floegence/flowersec-core/streamio';
@@ -95,4 +95,59 @@ export async function readFileBytesOnce(params: {
   } finally {
     await closeChannelBestEffort(channel);
   }
+}
+
+type StreamFileBytesParams = {
+  client: Client;
+  path: string;
+  offset?: number;
+  maxBytes?: number;
+  chunkSize?: number;
+  signal?: AbortSignal;
+};
+
+export async function openFileByteStream(params: StreamFileBytesParams): Promise<{
+  meta: FsReadFileStreamRespMeta;
+  chunks: AsyncGenerator<{ bytes: Uint8Array<ArrayBuffer>; meta: FsReadFileStreamRespMeta; bytesRead: number }, FsReadFileStreamRespMeta, void>;
+}> {
+  const { channel, meta } = await openReadFileStreamChannel(params);
+  const chunkSize = Math.max(1, Math.floor(Number(params.chunkSize ?? 64 * 1024)));
+
+  async function* chunks(): AsyncGenerator<{ bytes: Uint8Array<ArrayBuffer>; meta: FsReadFileStreamRespMeta; bytesRead: number }, FsReadFileStreamRespMeta, void> {
+    let bytesRead = 0;
+    const want = Math.max(0, Math.floor(Number(meta.content_len ?? 0)));
+    try {
+      while (bytesRead < want) {
+        if (params.signal?.aborted) {
+          throw new DOMException('Download canceled.', 'AbortError');
+        }
+        const remaining = want - bytesRead;
+        const nextSize = Math.min(chunkSize, remaining);
+        const bytes = cloneToOwnedBytes(await readNBytes(channel.reader, nextSize));
+        bytesRead += bytes.byteLength;
+        yield { bytes, meta, bytesRead };
+      }
+      return meta;
+    } finally {
+      if (params.signal?.aborted) {
+        try {
+          channel.stream.reset(new DOMException('Download canceled.', 'AbortError'));
+        } catch {
+        }
+      }
+      await closeChannelBestEffort(channel);
+    }
+  }
+
+  return { meta, chunks: chunks() };
+}
+
+export async function* streamFileBytes(
+  params: StreamFileBytesParams,
+): AsyncGenerator<{ bytes: Uint8Array<ArrayBuffer>; meta: FsReadFileStreamRespMeta; bytesRead: number }, FsReadFileStreamRespMeta, void> {
+  const stream = await openFileByteStream(params);
+  for await (const part of stream.chunks) {
+    yield part;
+  }
+  return stream.meta;
 }

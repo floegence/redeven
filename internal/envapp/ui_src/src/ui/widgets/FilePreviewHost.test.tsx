@@ -7,6 +7,7 @@ import { FilePreviewHost } from './FilePreviewHost';
 
 const openAskFlowerComposerMock = vi.fn();
 const notificationErrorMock = vi.fn();
+const enqueueDownloadMock = vi.fn();
 
 const filePreviewController = {
   open: () => true,
@@ -17,7 +18,7 @@ const filePreviewController = {
     path: '/workspace/demo.txt',
     isDirectory: false,
   }),
-  descriptor: () => null,
+  descriptor: () => ({ mode: 'text' }),
   text: () => 'file text',
   draftText: () => 'file text',
   editing: () => false,
@@ -43,8 +44,6 @@ const filePreviewController = {
   error: () => null,
   xlsxSheetName: () => '',
   xlsxRows: () => [],
-  downloadLoading: () => false,
-  downloadCurrent: vi.fn(async () => undefined),
 };
 
 vi.mock('@floegence/floe-webapp-core', () => ({
@@ -69,15 +68,30 @@ vi.mock('./FilePreviewContext', () => ({
   }),
 }));
 
+vi.mock('../downloads/DownloadContext', () => ({
+  useDownloadManager: () => ({
+    enqueue: enqueueDownloadMock,
+  }),
+}));
+
 vi.mock('./FilePreviewSurface', () => ({
   FilePreviewSurface: (props: any) => (
-    <button
-      type="button"
-      data-testid="ask-flower"
-      onClick={() => props.onAskFlower('selected line')}
-    >
-      Ask Flower
-    </button>
+    <div>
+      <button
+        type="button"
+        data-testid="ask-flower"
+        onClick={() => props.onAskFlower('selected line')}
+      >
+        Ask Flower
+      </button>
+      <button
+        type="button"
+        data-testid="download"
+        onClick={() => props.onDownload()}
+      >
+        Download
+      </button>
+    </div>
   ),
 }));
 
@@ -112,5 +126,23 @@ describe('FilePreviewHost', () => {
       ],
     }));
     expect(notificationErrorMock).not.toHaveBeenCalled();
+  });
+
+  it('submits preview downloads to the shared download manager', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <FilePreviewHost />, host);
+
+    (host.querySelector('[data-testid="download"]') as HTMLButtonElement).click();
+
+    expect(enqueueDownloadMock).toHaveBeenCalledWith(expect.objectContaining({
+      origin: 'file_preview',
+      source: expect.objectContaining({
+        kind: 'runtime_file',
+        path: '/workspace/demo.txt',
+        name: 'demo.txt',
+      }),
+    }));
   });
 });

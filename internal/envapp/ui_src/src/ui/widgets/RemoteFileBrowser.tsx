@@ -1,7 +1,7 @@
 import { Show, batch, createEffect, createMemo, createSignal, untrack } from 'solid-js';
 import { useDeck, useLayout, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
 import { KeepAliveStack } from '@floegence/floe-webapp-core/layout';
-import { Copy, MoreHorizontal, Pencil, Plus, Refresh, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
+import { Copy, Download, MoreHorizontal, Pencil, Plus, Refresh, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import {
   type ContextMenuCallbacks,
   type ContextMenuEvent,
@@ -32,6 +32,8 @@ import {
 import { getExtDot, mimeFromExtDot } from '../utils/filePreview';
 import { readFileBytesOnce } from '../utils/fileStreamReader';
 import { useEnvContext } from '../pages/EnvContext';
+import { useDownloadManager } from '../downloads/DownloadContext';
+import { buildRuntimeFileDownloadCommand } from '../downloads/downloadCommands';
 import type { AskFlowerIntent } from '../pages/askFlowerIntent';
 import { sortContextActionMenuItems } from '../contextActions/menu';
 import { resolveRendererStorageScopeID } from '../services/desktopSessionContext';
@@ -516,6 +518,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const layout = useLayout();
   const notification = useNotification();
   const filePreview = useFilePreviewContext();
+  const downloads = useDownloadManager();
 
   const envId = () => resolveRendererStorageScopeID(ctx.env_id() ?? '');
   const persistenceTarget = () => props.persistenceTarget ?? (props.widgetId ? 'deck' : 'page');
@@ -4395,6 +4398,21 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     })();
   };
 
+  const handleDownloadItems = (items: FileItem[]) => {
+    const fileItems = items.filter((item) => item.type === 'file');
+    if (fileItems.length <= 0) {
+      notification.error('Download unavailable', 'Only files can be downloaded.');
+      return;
+    }
+
+    for (const item of fileItems) {
+      const command = buildRuntimeFileDownloadCommand(item, 'file_browser_context_menu');
+      if (command) {
+        downloads.enqueue(command);
+      }
+    }
+  };
+
   const canOpenDirectoryContextInTerminal = (event?: ContextMenuEvent | null) => {
     const directory = resolveDirectoryContextTarget(event);
     return Boolean(
@@ -4608,6 +4626,17 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     },
   });
 
+  const buildDownloadMenuItem = (separator = false): ContextMenuItem => ({
+    id: 'download',
+    label: 'Download',
+    type: 'custom',
+    icon: (props) => <Download class={props.class} />,
+    separator,
+    onAction: (items) => {
+      handleDownloadItems(items);
+    },
+  });
+
   const buildNewContextMenuItem = (separator = false, disabled = false): ContextMenuItem => ({
     id: 'new',
     label: 'New',
@@ -4673,8 +4702,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
 
     const canMutate = canMutateContext(event);
+    const primaryFileItems = event.items.length > 0 && event.items.every((item) => item.type === 'file')
+      ? [buildAskFlowerMenuItem(), buildDownloadMenuItem(true)]
+      : [buildAskFlowerMenuItem({ separator: true })];
     return [
-      buildAskFlowerMenuItem({ separator: true }),
+      ...primaryFileItems,
       ...filterSecondaryContextMenuItems(
         scope === 'multi-select'
           ? multiSelectSecondaryContextMenuItemIds

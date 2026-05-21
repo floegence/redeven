@@ -15,7 +15,7 @@ import {
   mimeFromExtDot,
   type FilePreviewDescriptor,
 } from '../utils/filePreview';
-import { openReadFileStreamChannel, readFileBytesOnce } from '../utils/fileStreamReader';
+import { openReadFileStreamChannel } from '../utils/fileStreamReader';
 import { getFilePreviewBlockReason } from './FileBrowserShared';
 
 type PendingPreviewAction =
@@ -43,16 +43,6 @@ function getErrorMessage(error: unknown): string {
   return String(error ?? '').trim();
 }
 
-function downloadBlob(params: { name: string; blob: Blob }) {
-  const url = URL.createObjectURL(params.blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = params.name || 'download';
-  anchor.rel = 'noopener';
-  anchor.click();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
-}
-
 export interface FilePreviewController {
   open: Accessor<boolean>;
   item: Accessor<FileItem | null>;
@@ -75,7 +65,6 @@ export interface FilePreviewController {
   error: Accessor<string | null>;
   xlsxSheetName: Accessor<string>;
   xlsxRows: Accessor<string[][]>;
-  downloadLoading: Accessor<boolean>;
   openPreview: (item: FileItem) => Promise<void>;
   closePreview: () => void;
   handleOpenChange: (open: boolean) => void;
@@ -86,7 +75,6 @@ export interface FilePreviewController {
   updateSelection: (selectionText: string) => void;
   saveCurrent: () => Promise<boolean>;
   revertCurrent: () => void;
-  downloadCurrent: () => Promise<void>;
 }
 
 export function createFilePreviewController(params: {
@@ -115,7 +103,6 @@ export function createFilePreviewController(params: {
   const [previewError, setPreviewError] = createSignal<string | null>(null);
   const [xlsxSheetName, setXlsxSheetName] = createSignal('');
   const [xlsxRows, setXlsxRows] = createSignal<string[][]>([]);
-  const [downloadLoading, setDownloadLoading] = createSignal(false);
   const [pendingConnectionLoad, setPendingConnectionLoad] = createSignal<PendingConnectionPreviewLoad | null>(null);
 
   let activePreviewChannel: JsonFrameChannel | null = null;
@@ -179,7 +166,6 @@ export function createFilePreviewController(params: {
     cleanupPreviewContent();
     setPreviewItem(null);
     setPreviewOpen(false);
-    setDownloadLoading(false);
   };
 
   const hasUnsavedChanges = () => previewOpen() && (previewDescriptor().mode === 'text' || previewDescriptor().mode === 'markdown') && previewDirty();
@@ -557,36 +543,6 @@ export function createFilePreviewController(params: {
     resetEditorState(previewText());
   };
 
-  const downloadCurrent = async () => {
-    const client = params.client();
-    const item = previewItem();
-    if (!client || !item || downloadLoading()) return;
-
-    setDownloadLoading(true);
-    try {
-      if ((previewDescriptor().mode === 'text' || previewDescriptor().mode === 'markdown') && previewDirty()) {
-        const mime = mimeFromExtDot(getExtDot(item.name)) ?? 'text/plain;charset=utf-8';
-        downloadBlob({ name: item.name, blob: new Blob([previewDraftText()], { type: mime }) });
-        return;
-      }
-
-      const cached = previewBytes();
-      const truncated = previewTruncated();
-      if (cached && !truncated) {
-        const mime = mimeFromExtDot(getExtDot(item.name)) ?? 'application/octet-stream';
-        downloadBlob({ name: item.name, blob: new Blob([cached], { type: mime }) });
-        return;
-      }
-
-      const size = typeof item.size === 'number' ? item.size : undefined;
-      const { bytes } = await readFileBytesOnce({ client, path: item.path, maxBytes: size ?? 0 });
-      const mime = mimeFromExtDot(getExtDot(item.name)) ?? 'application/octet-stream';
-      downloadBlob({ name: item.name, blob: new Blob([bytes], { type: mime }) });
-    } finally {
-      setDownloadLoading(false);
-    }
-  };
-
   onCleanup(() => {
     forceClosePreview();
   });
@@ -613,7 +569,6 @@ export function createFilePreviewController(params: {
     error: previewError,
     xlsxSheetName,
     xlsxRows,
-    downloadLoading,
     openPreview,
     closePreview,
     handleOpenChange,
@@ -624,6 +579,5 @@ export function createFilePreviewController(params: {
     updateSelection,
     saveCurrent,
     revertCurrent,
-    downloadCurrent,
   };
 }

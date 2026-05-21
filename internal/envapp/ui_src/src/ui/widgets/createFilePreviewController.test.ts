@@ -4,11 +4,9 @@ import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { createFilePreviewController } from './createFilePreviewController';
 
 const openReadFileStreamChannelMock = vi.fn();
-const readFileBytesOnceMock = vi.fn();
 
 vi.mock('../utils/fileStreamReader', () => ({
   openReadFileStreamChannel: (...args: unknown[]) => openReadFileStreamChannelMock(...args),
-  readFileBytesOnce: (...args: unknown[]) => readFileBytesOnceMock(...args),
 }));
 
 function flushAsync(): Promise<void> {
@@ -41,7 +39,6 @@ function createTextChannel(text: string, truncated = false) {
 
 afterEach(() => {
   openReadFileStreamChannelMock.mockReset();
-  readFileBytesOnceMock.mockReset();
 });
 
 describe('createFilePreviewController', () => {

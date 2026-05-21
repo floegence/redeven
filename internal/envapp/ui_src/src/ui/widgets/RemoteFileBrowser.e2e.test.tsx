@@ -108,6 +108,10 @@ const filePreviewStore = vi.hoisted(() => ({
   closePreview: vi.fn(),
 }));
 
+const downloadManagerStore = vi.hoisted(() => ({
+  enqueue: vi.fn(),
+}));
+
 const fileBrowserSurfaceStore = vi.hoisted(() => ({
   openBrowser: vi.fn(async () => undefined),
   closeBrowser: vi.fn(),
@@ -229,6 +233,21 @@ vi.mock('./FilePreviewContext', () => ({
   }),
 }));
 
+vi.mock('../downloads/DownloadContext', () => ({
+  useDownloadManager: () => ({
+    enqueue: downloadManagerStore.enqueue,
+    tasks: () => [],
+    activeCount: () => 0,
+    latestTask: () => null,
+    getTask: () => undefined,
+    cancel: vi.fn(),
+    retry: vi.fn(),
+    reveal: vi.fn(async () => undefined),
+    open: vi.fn(async () => undefined),
+    clearFinished: vi.fn(),
+  }),
+}));
+
 vi.mock('../services/gatewayApi', () => ({
   fetchGatewayJSON: gatewayFetchStore.fetchGatewayJSON,
 }));
@@ -325,6 +344,13 @@ vi.mock('./FileBrowserWorkspace', () => ({
       type: 'folder',
       path: '/workspace/repo/src',
     };
+    const secondFileTarget: FileItem = {
+      id: '/workspace/repo/src/app.log',
+      name: 'app.log',
+      type: 'file',
+      path: '/workspace/repo/src/app.log',
+      size: 512,
+    };
     const fileEvent: ContextMenuEvent = {
       x: 40,
       y: 44,
@@ -352,6 +378,14 @@ vi.mock('./FileBrowserWorkspace', () => ({
       source: 'list',
       directory: null,
     };
+    const multiFileSelectEvent: ContextMenuEvent = {
+      x: 52,
+      y: 60,
+      items: [copyNameTarget, secondFileTarget],
+      targetKind: 'item',
+      source: 'list',
+      directory: null,
+    };
     const backgroundEvent: ContextMenuEvent = {
       x: 16,
       y: 24,
@@ -368,6 +402,7 @@ vi.mock('./FileBrowserWorkspace', () => ({
     const folderItems = resolveItems(folderEvent);
     const fileItems = resolveItems(fileEvent);
     const multiSelectItems = resolveItems(multiSelectEvent);
+    const multiFileSelectItems = resolveItems(multiFileSelectEvent);
     const backgroundItems = () => resolveItems({
       ...backgroundEvent,
       directory: {
@@ -413,6 +448,7 @@ vi.mock('./FileBrowserWorkspace', () => ({
         <div data-testid="mock-background-menu-order">{describeMenuItems(backgroundItems())}</div>
         <div data-testid="mock-file-menu-order">{describeMenuItems(fileItems)}</div>
         <div data-testid="mock-multi-menu-order">{describeMenuItems(multiSelectItems)}</div>
+        <div data-testid="mock-multi-file-menu-order">{describeMenuItems(multiFileSelectItems)}</div>
         <div data-testid="mock-folder-new-has-icon">{findMenuItem(folderItems, 'new')?.icon ? 'yes' : 'no'}</div>
         <div data-testid="mock-background-new-has-icon">{findMenuItem(backgroundItems(), 'new')?.icon ? 'yes' : 'no'}</div>
         <div data-testid="mock-files-tree">{flattenTreePaths(props.files).join(',')}</div>
@@ -485,6 +521,22 @@ vi.mock('./FileBrowserWorkspace', () => ({
             onClick={() => multiSelectItems.find((item) => item.id === 'ask-flower')?.onAction?.(multiSelectEvent.items, multiSelectEvent)}
           >
             mock-ask-flower-multi
+          </button>
+        ) : null}
+        {fileItems.some((item) => item.id === 'download') ? (
+          <button
+            type="button"
+            onClick={() => fileItems.find((item) => item.id === 'download')?.onAction?.(fileEvent.items, fileEvent)}
+          >
+            mock-download-file
+          </button>
+        ) : null}
+        {multiFileSelectItems.some((item) => item.id === 'download') ? (
+          <button
+            type="button"
+            onClick={() => multiFileSelectItems.find((item) => item.id === 'download')?.onAction?.(multiFileSelectEvent.items, multiFileSelectEvent)}
+          >
+            mock-download-multi-file
           </button>
         ) : null}
         {folderItems.some((item) => item.id === 'open-in-terminal') ? (
@@ -1013,6 +1065,7 @@ beforeEach(() => {
   fileBrowserSurfaceStore.openBrowser.mockReset();
   fileBrowserSurfaceStore.openBrowser.mockResolvedValue(undefined);
   fileBrowserSurfaceStore.closeBrowser.mockReset();
+  downloadManagerStore.enqueue.mockReset();
   envActionSpies.openAskFlowerComposer.mockReset();
 
   Object.defineProperty(window.navigator, 'clipboard', {
@@ -3130,6 +3183,56 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
+  it('enqueues file downloads from single-file and multi-file context menus', async () => {
+    widgetStateStore.values['widget-1'] = {
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const singleDownloadButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-download-file') as HTMLButtonElement | undefined;
+      const multiDownloadButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-download-multi-file') as HTMLButtonElement | undefined;
+      expect(singleDownloadButton).toBeTruthy();
+      expect(multiDownloadButton).toBeTruthy();
+
+      singleDownloadButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      multiDownloadButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(downloadManagerStore.enqueue).toHaveBeenCalledTimes(3);
+      expect(downloadManagerStore.enqueue).toHaveBeenNthCalledWith(1, expect.objectContaining({
+        origin: 'file_browser_context_menu',
+        source: expect.objectContaining({
+          kind: 'runtime_file',
+          path: '/workspace/repo/src/.env',
+          name: '.env',
+        }),
+      }));
+      expect(downloadManagerStore.enqueue).toHaveBeenNthCalledWith(3, expect.objectContaining({
+        source: expect.objectContaining({
+          path: '/workspace/repo/src/app.log',
+          size: 512,
+        }),
+      }));
+    } finally {
+      dispose();
+    }
+  });
+
   it('routes multi-select Ask Flower through the entire current selection', async () => {
     widgetStateStore.values['widget-1'] = {
       lastPathByEnv: { 'env-1': '/workspace/repo/src' },
@@ -3210,10 +3313,13 @@ describe('RemoteFileBrowser persistence', () => {
       expect(host.querySelector('[data-testid="mock-folder-new-has-icon"]')?.textContent).toBe('yes');
       expect(host.querySelector('[data-testid="mock-background-new-has-icon"]')?.textContent).toBe('yes');
       expect(host.querySelector('[data-testid="mock-file-menu-order"]')?.textContent).toBe(
-        'ask-flower,separator:ask-flower,duplicate,copy-name,copy-path,rename,delete',
+        'ask-flower,download,separator:download,duplicate,copy-name,copy-path,rename,delete',
       );
       expect(host.querySelector('[data-testid="mock-multi-menu-order"]')?.textContent).toBe(
         'ask-flower,separator:ask-flower,duplicate,copy-name,copy-path,delete',
+      );
+      expect(host.querySelector('[data-testid="mock-multi-file-menu-order"]')?.textContent).toBe(
+        'ask-flower,download,separator:download,duplicate,copy-name,copy-path,delete',
       );
 
       const folderButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-open-terminal-folder') as HTMLButtonElement | undefined;

@@ -35,7 +35,6 @@ export interface FilePreviewContentProps {
   onSelectionChange?: (selectionText: string) => void;
   onSave?: () => void;
   onDiscard?: () => void;
-  downloadLoading?: boolean;
   onDownload?: () => void;
   onAskFlower?: (selectionText: string) => void | Promise<void>;
 }
@@ -187,12 +186,10 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
               class={PREVIEW_HEADER_ICON_BUTTON_CLASS}
               aria-label="Download file"
               title="Download file"
-              disabled={!props.item || props.loading || props.downloadLoading}
+              disabled={!props.item || props.loading}
               onClick={() => props.onDownload?.()}
             >
-              <Show when={props.downloadLoading} fallback={<Download class="size-3.5" />}>
-                <Loader2 class="size-3.5 animate-spin" />
-              </Show>
+              <Download class="size-3.5" />
             </button>
           </div>
         </div>

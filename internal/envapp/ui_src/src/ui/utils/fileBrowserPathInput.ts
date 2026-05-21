@@ -17,6 +17,14 @@ function compactPathInput(value: string): string {
   return String(value ?? '').trim();
 }
 
+function resolveBrowserRootRelativePath(rawValue: string, rootPathAbs: string): string {
+  const raw = compactPathInput(rawValue);
+  if (!raw.startsWith('/')) return raw;
+  if (raw === '/') return raw;
+  if (isWithinAbsolutePath(raw, rootPathAbs)) return raw;
+  return normalizeAbsolutePath(`${rootPathAbs}/${raw.slice(1)}`);
+}
+
 export function formatFileBrowserPathInputValue(pathAbs: string, rootPathAbs?: string | null): string {
   const normalizedPath = normalizeAbsolutePath(pathAbs);
   if (!normalizedPath) return '';
@@ -34,10 +42,16 @@ export function parseFileBrowserPathInput(rawValue: string, rootPathAbs?: string
   const normalizedRoot = normalizeAbsolutePath(rootPathAbs ?? '');
 
   if (!raw.startsWith('/') && raw !== '~' && !raw.startsWith('~/') && !raw.startsWith('~\\')) {
-    return { kind: 'error', message: 'Use "/" or "~" to enter a path.' };
+    return {
+      kind: 'error',
+      message: normalizedRoot ? 'Use "/" or "~" to enter a path.' : 'Enter an absolute path.',
+    };
   }
 
-  const absolutePath = parseFilesystemPathInput(raw, normalizedRoot);
+  const absolutePath = parseFilesystemPathInput(
+    normalizedRoot ? resolveBrowserRootRelativePath(raw, normalizedRoot) : raw,
+    normalizedRoot,
+  );
   if (!absolutePath) {
     return { kind: 'error', message: raw.startsWith('~') ? 'Home directory is unavailable.' : 'Enter an absolute path.' };
   }

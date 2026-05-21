@@ -26,7 +26,6 @@ const controllerStore = vi.hoisted(() => ({
   updateSelection: vi.fn(),
   saveCurrent: vi.fn(async () => true),
   revertCurrent: vi.fn(),
-  downloadCurrent: vi.fn(async () => undefined),
 }));
 
 const workbenchStore = vi.hoisted(() => ({
@@ -35,6 +34,10 @@ const workbenchStore = vi.hoisted(() => ({
   registerWidgetRemoveGuard: vi.fn(),
   consumePreviewOpenRequest: vi.fn(),
   removeWidget: vi.fn(),
+}));
+
+const downloadManagerStore = vi.hoisted(() => ({
+  enqueue: vi.fn(),
 }));
 
 vi.mock('@floegence/floe-webapp-core', () => ({
@@ -71,8 +74,20 @@ vi.mock('../utils/filePreviewAskFlower', () => ({
   buildFilePreviewAskFlowerIntent: () => ({}),
 }));
 
+vi.mock('../downloads/DownloadContext', () => ({
+  useDownloadManager: () => ({
+    enqueue: downloadManagerStore.enqueue,
+  }),
+}));
+
 vi.mock('../widgets/FilePreviewPanel', () => ({
-  FilePreviewPanel: () => <div data-testid="file-preview-panel" />,
+  FilePreviewPanel: (props: any) => (
+    <div data-testid="file-preview-panel">
+      <button type="button" data-testid="download-preview" onClick={() => props.onDownload?.()}>
+        Download
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock('../widgets/createFilePreviewController', () => ({
@@ -98,7 +113,6 @@ vi.mock('../widgets/createFilePreviewController', () => ({
     error: () => null,
     xlsxSheetName: () => '',
     xlsxRows: () => [],
-    downloadLoading: () => false,
     openPreview: controllerStore.openPreview,
     closePreview: vi.fn(),
     handleOpenChange: controllerStore.handleOpenChange,
@@ -109,7 +123,6 @@ vi.mock('../widgets/createFilePreviewController', () => ({
     updateSelection: controllerStore.updateSelection,
     saveCurrent: controllerStore.saveCurrent,
     revertCurrent: controllerStore.revertCurrent,
-    downloadCurrent: controllerStore.downloadCurrent,
   }),
 }));
 
@@ -383,6 +396,26 @@ describe('WorkbenchFilePreviewWidget', () => {
 
       expect(controllerStore.openPreview).toHaveBeenCalledTimes(1);
       expect(controllerStore.item?.()?.path).toBe('/workspace/target.ts');
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  it('submits workbench preview downloads to the shared download manager', async () => {
+    const harness = renderPreviewWidget({ initialDirty: false });
+
+    try {
+      await flush();
+      (harness.host.querySelector('[data-testid="download-preview"]') as HTMLButtonElement | null)?.click();
+
+      expect(downloadManagerStore.enqueue).toHaveBeenCalledWith(expect.objectContaining({
+        origin: 'workbench_preview',
+        source: expect.objectContaining({
+          kind: 'runtime_file',
+          path: '/workspace/local.ts',
+          name: 'local.ts',
+        }),
+      }));
     } finally {
       harness.dispose();
     }
