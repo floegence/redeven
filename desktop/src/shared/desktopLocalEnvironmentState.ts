@@ -216,7 +216,7 @@ export function createDesktopLocalEnvironmentState(
     id: LOCAL_ENVIRONMENT_ID,
     label: compact(options.label) || defaultDesktopLocalEnvironmentLabel(),
     pinned: options.pinned === true,
-    auto_runtime_probe_enabled: options.autoRuntimeProbeEnabled === true,
+    auto_runtime_probe_enabled: true,
     created_at_ms: Number(options.createdAtMS ?? now) || now,
     updated_at_ms: Number(options.updatedAtMS ?? now) || now,
     last_used_at_ms: Number(options.lastUsedAtMS ?? 0) || 0,

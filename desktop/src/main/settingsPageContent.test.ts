@@ -18,7 +18,7 @@ function settingsOptions(overrides: Partial<Parameters<typeof buildDesktopSettin
     environment_id: 'local',
     environment_label: 'Local Environment',
     environment_kind: 'local' as const,
-    auto_runtime_probe_configurable: true,
+    auto_runtime_probe_configurable: false,
     ...overrides,
   };
 }
@@ -31,7 +31,7 @@ describe('settingsPageContent', () => {
     }), settingsOptions());
 
     expect(desktopAccessModeForDraft(snapshot.draft)).toBe('local_only');
-    expect(snapshot.auto_runtime_probe_configurable).toBe(true);
+    expect(snapshot.auto_runtime_probe_configurable).toBe(false);
     expect(snapshot.draft.auto_runtime_probe_enabled).toBe(true);
   });
 

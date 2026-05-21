@@ -173,3 +173,21 @@ export function desktopRuntimeTargetID(
   }
   return `ssh:host:${encoded(sshAuthority)}:${hashRuntimeRoot(placement.runtime_root)}`;
 }
+
+export function desktopRuntimeTargetAutoStatusDetectionConfigurable(
+  hostAccess: DesktopRuntimeHostAccess,
+  placement: DesktopRuntimePlacement,
+): boolean {
+  return !(hostAccess.kind === 'local_host' && placement.kind === 'container_process');
+}
+
+export function desktopRuntimeTargetAutoStatusDetectionEnabled(
+  hostAccess: DesktopRuntimeHostAccess,
+  placement: DesktopRuntimePlacement,
+  configured: unknown,
+): boolean {
+  if (!desktopRuntimeTargetAutoStatusDetectionConfigurable(hostAccess, placement)) {
+    return true;
+  }
+  return configured === true;
+}

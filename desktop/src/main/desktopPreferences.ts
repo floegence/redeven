@@ -46,6 +46,7 @@ import {
 } from './statePaths';
 import {
   desktopRuntimeTargetID,
+  desktopRuntimeTargetAutoStatusDetectionEnabled,
   normalizeDesktopRuntimeHostAccess,
   normalizeDesktopRuntimePlacement,
   type DesktopRuntimeHostAccess,
@@ -589,6 +590,14 @@ function normalizeRuntimeAutoProbeEnabled(value: unknown): boolean {
   return value === true;
 }
 
+function normalizeSavedRuntimeTargetAutoProbeEnabled(
+  hostAccess: DesktopRuntimeHostAccess,
+  placement: DesktopRuntimePlacement,
+  value: unknown,
+): boolean {
+  return desktopRuntimeTargetAutoStatusDetectionEnabled(hostAccess, placement, value);
+}
+
 function normalizePreferredOpenRoute(
   value: unknown,
   fallback: 'auto' | 'local_host' | 'remote_desktop' = 'auto',
@@ -631,7 +640,7 @@ function normalizeLocalEnvironmentState(
     label: defaultDesktopLocalEnvironmentLabel(),
     pinned: source?.pinned,
     access: source?.local_hosting.access,
-    autoRuntimeProbeEnabled: source?.auto_runtime_probe_enabled,
+    autoRuntimeProbeEnabled: true,
     preferredOpenRoute: source?.preferred_open_route,
     currentProviderBinding: source?.current_provider_binding,
     owner: source?.local_hosting.owner,
@@ -809,7 +818,11 @@ function normalizeSavedRuntimeTargetCandidate(
       ssh_password: sshPassword,
       ssh_password_configured: sshPasswordConfigured,
       pinned: normalizePinned(candidate.pinned),
-      auto_runtime_probe_enabled: normalizeRuntimeAutoProbeEnabled(candidate.auto_runtime_probe_enabled),
+      auto_runtime_probe_enabled: normalizeSavedRuntimeTargetAutoProbeEnabled(
+        hostAccess,
+        placement,
+        candidate.auto_runtime_probe_enabled,
+      ),
       last_used_at_ms: normalizeLastUsedAtMS(candidate.last_used_at_ms, fallbackLastUsedAtMS),
       created_at_ms: normalizeCreatedAtMS(candidate.created_at_ms, fallbackCreatedAtMS),
       updated_at_ms: normalizeLastUsedAtMS(candidate.updated_at_ms, now),
@@ -1468,6 +1481,7 @@ export function updateLocalEnvironmentSettings(
     ...preferences,
     local_environment: {
       ...preferences.local_environment,
+      auto_runtime_probe_enabled: true,
       ...(input.access
         ? {
             local_hosting: {
@@ -1476,9 +1490,6 @@ export function updateLocalEnvironmentSettings(
             },
           }
         : {}),
-      ...(input.autoRuntimeProbeEnabled === undefined
-        ? {}
-        : { auto_runtime_probe_enabled: input.autoRuntimeProbeEnabled }),
       updated_at_ms: Date.now(),
     },
   };
@@ -1497,6 +1508,7 @@ export function rememberLocalEnvironmentUse(
     ...preferences,
     local_environment: {
       ...preferences.local_environment,
+      auto_runtime_probe_enabled: true,
       last_used_at_ms: Date.now(),
       preferred_open_route: route === 'local_host' || route === 'remote_desktop'
         ? route
@@ -1519,6 +1531,7 @@ export function setLocalEnvironmentPinned(
     ...preferences,
     local_environment: {
       ...preferences.local_environment,
+      auto_runtime_probe_enabled: true,
       pinned,
       updated_at_ms: Date.now(),
     },
@@ -1725,7 +1738,11 @@ export function upsertSavedRuntimeTarget(
     ssh_password: sshPassword,
     ssh_password_configured: sshPasswordConfigured,
     pinned: input.pinned ?? existing?.pinned ?? false,
-    auto_runtime_probe_enabled: input.auto_runtime_probe_enabled ?? existing?.auto_runtime_probe_enabled ?? false,
+    auto_runtime_probe_enabled: normalizeSavedRuntimeTargetAutoProbeEnabled(
+      hostAccess,
+      placement,
+      input.auto_runtime_probe_enabled ?? existing?.auto_runtime_probe_enabled,
+    ),
     last_used_at_ms: normalizeLastUsedAtMS(input.last_used_at_ms, now),
     created_at_ms: normalizeLastUsedAtMS(input.created_at_ms, existing?.created_at_ms ?? now),
     updated_at_ms: normalizeLastUsedAtMS(input.updated_at_ms, now),
@@ -2259,7 +2276,7 @@ function normalizeLocalEnvironmentCatalogCandidate(
       environment: createDesktopLocalEnvironmentState({
         label: defaultDesktopLocalEnvironmentLabel(),
         pinned: normalizePinned(candidate.pinned),
-        autoRuntimeProbeEnabled: normalizeRuntimeAutoProbeEnabled(candidate.auto_runtime_probe_enabled),
+        autoRuntimeProbeEnabled: true,
         preferredOpenRoute: normalizePreferredOpenRoute(candidate.preferred_open_route),
         currentProviderBinding: currentProviderBinding ?? undefined,
         access: localHosting.access,
@@ -2317,7 +2334,7 @@ function serializeLocalEnvironmentCatalog(environment: DesktopLocalEnvironmentSt
     id: environment.id,
     label: defaultDesktopLocalEnvironmentLabel(),
     pinned: environment.pinned,
-    auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled,
+    auto_runtime_probe_enabled: true,
     created_at_ms: environment.created_at_ms,
     updated_at_ms: environment.updated_at_ms,
     last_used_at_ms: environment.last_used_at_ms,

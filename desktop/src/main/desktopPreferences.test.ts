@@ -167,13 +167,19 @@ describe('desktopPreferences', () => {
     expect(updated?.local_hosting?.access.local_ui_bind).toBe('localhost:24000');
   });
 
-  it('defaults non-provider automatic runtime probes off and persists explicit opt-in', () => {
+  it('keeps local runtime probes automatic while preserving saved remote opt-in', () => {
     const initial = defaultDesktopPreferences();
-    expect(initial.local_environment.auto_runtime_probe_enabled).toBe(false);
+    expect(initial.local_environment.auto_runtime_probe_enabled).toBe(true);
 
-    const withLocalProbe = updateLocalEnvironmentSettings(initial, {
+    const withLocalProbe = updateLocalEnvironmentSettings({
+      ...initial,
+      local_environment: {
+        ...initial.local_environment,
+        auto_runtime_probe_enabled: false,
+      },
+    }, {
       environmentID: initial.local_environment.id,
-      autoRuntimeProbeEnabled: true,
+      autoRuntimeProbeEnabled: false,
     });
     expect(withLocalProbe.local_environment.auto_runtime_probe_enabled).toBe(true);
 
@@ -205,7 +211,7 @@ describe('desktopPreferences', () => {
     });
     expect(withSSH.saved_ssh_environments[0]?.auto_runtime_probe_enabled).toBe(false);
 
-    const withRuntimeTarget = upsertSavedRuntimeTarget(withSSH, {
+    const withLocalContainer = upsertSavedRuntimeTarget(withSSH, {
       label: 'Local Container Runtime',
       host_access: { kind: 'local_host' },
       placement: {
@@ -217,9 +223,33 @@ describe('desktopPreferences', () => {
         runtime_root: '/root/.redeven',
         bridge_strategy: 'exec_stream',
       },
-      auto_runtime_probe_enabled: true,
+      auto_runtime_probe_enabled: false,
     });
-    expect(withRuntimeTarget.saved_runtime_targets[0]?.auto_runtime_probe_enabled).toBe(true);
+    expect(withLocalContainer.saved_runtime_targets[0]?.auto_runtime_probe_enabled).toBe(true);
+
+    const withSSHContainer = upsertSavedRuntimeTarget(withLocalContainer, {
+      label: 'SSH Container Runtime',
+      host_access: {
+        kind: 'ssh_host',
+        ssh: {
+          ssh_destination: 'devbox',
+          ssh_port: 2222,
+          auth_mode: 'key_agent',
+          connect_timeout_seconds: 10,
+        },
+      },
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'container-stable-id',
+        container_ref: 'dev-container',
+        container_label: 'dev-container',
+        runtime_root: '/root/.redeven',
+        bridge_strategy: 'exec_stream',
+      },
+      auto_runtime_probe_enabled: false,
+    });
+    expect(withSSHContainer.saved_runtime_targets.find((target) => target.label === 'SSH Container Runtime')?.auto_runtime_probe_enabled).toBe(false);
   });
 
   it('keeps or clears the stored password according to the write-only mode', () => {
@@ -947,6 +977,7 @@ describe('desktopPreferences', () => {
         host_access: { kind: 'local_host' },
         placement,
         pinned: false,
+        auto_runtime_probe_enabled: true,
         created_at_ms: 10,
         updated_at_ms: 20,
         last_used_at_ms: 30,
@@ -1156,6 +1187,7 @@ describe('desktopPreferences', () => {
     expect(healed.saved_runtime_targets).toHaveLength(1);
     expect(healed.saved_runtime_targets[0]).toMatchObject({
       id: canonicalTargetID,
+      auto_runtime_probe_enabled: true,
       placement: {
         container_id: 'new-concrete-id',
         container_ref: 'redeven-nginx-dev',

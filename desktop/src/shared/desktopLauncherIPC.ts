@@ -244,6 +244,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   runtime_maintenance?: DesktopRuntimeMaintenanceRequirement;
   runtime_operations: DesktopRuntimeOperationPlans;
   auto_runtime_probe_enabled?: boolean;
+  auto_runtime_probe_configurable?: boolean;
   open_session_key: string;
   open_session_lifecycle?: DesktopLauncherSessionLifecycle;
   open_action_label: 'Open' | 'Opening…' | 'Focus';

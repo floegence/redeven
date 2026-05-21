@@ -85,6 +85,8 @@ import {
 } from '../shared/providerRuntimeLinkTarget';
 import {
   desktopRuntimeTargetID,
+  desktopRuntimeTargetAutoStatusDetectionConfigurable,
+  desktopRuntimeTargetAutoStatusDetectionEnabled,
   type DesktopRuntimeHostAccess,
   type DesktopRuntimePlacement,
 } from '../shared/desktopRuntimePlacement';
@@ -1784,7 +1786,15 @@ function buildSavedRuntimeTargetEntry(
     managed_runtime_host_access: effectiveHostAccess,
     managed_runtime_placement: effectivePlacement,
     runtime_operations: runtimeOperations,
-    auto_runtime_probe_enabled: target.auto_runtime_probe_enabled,
+    auto_runtime_probe_enabled: desktopRuntimeTargetAutoStatusDetectionEnabled(
+      effectiveHostAccess,
+      effectivePlacement,
+      target.auto_runtime_probe_enabled,
+    ),
+    auto_runtime_probe_configurable: desktopRuntimeTargetAutoStatusDetectionConfigurable(
+      effectiveHostAccess,
+      effectivePlacement,
+    ),
     open_session_key: openSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(openSession),
     open_action_label: isOpen ? 'Focus' : isOpening ? 'Opening…' : 'Open',
@@ -1875,7 +1885,7 @@ export function buildDesktopWelcomeSnapshot(
       current_runtime_url: managedSession?.entry_url ?? managedSession?.startup?.local_ui_url ?? '',
       local_ui_password_configured: localEnvironmentAccess(localEnvironment).local_ui_password_configured,
       runtime_password_required: managedSession?.startup?.password_required === true,
-      auto_runtime_probe_configurable: true,
+      auto_runtime_probe_configurable: false,
     };
   })();
 
