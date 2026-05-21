@@ -5,7 +5,7 @@ import { ShellBlock } from '../chat/blocks/ShellBlock';
 import { CodexFileChangeDiff } from './CodexFileChangeDiff';
 import { displayStatus, itemText } from './presentation';
 import type { CodexActivityDetailRef } from './transcriptDisplayModel';
-import type { CodexTranscriptItem } from './types';
+import type { CodexFileChange, CodexTranscriptItem } from './types';
 
 function normalizeExecutionStatus(status: string | null | undefined, exitCode: number | null | undefined): 'running' | 'success' | 'error' {
   const normalized = String(status ?? '').trim().toLowerCase();
@@ -60,6 +60,10 @@ export function CodexActivityDetailPanel(props: {
   onClose: () => void;
 }) {
   const title = createMemo(() => detailTitle(props.detail, props.item));
+  const selectedFileChange = createMemo<CodexFileChange | null>(() => {
+    if (props.detail.type !== 'file_diff') return null;
+    return props.item?.changes?.[props.detail.changeIndex] ?? null;
+  });
   const markdown = createMemo(() => {
     const item = props.item;
     if (!item) return '';
@@ -89,10 +93,9 @@ export function CodexActivityDetailPanel(props: {
         {(itemAccessor) => {
           const item = () => itemAccessor();
           if (props.detail.type === 'file_diff') {
-            const change = item().changes?.[props.detail.changeIndex];
             return (
               <Show
-                when={change}
+                when={selectedFileChange()}
                 fallback={<div class="codex-activity-detail-empty">No file change details were provided.</div>}
               >
                 {(changeAccessor) => <CodexFileChangeDiff change={changeAccessor()} />}

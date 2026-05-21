@@ -47,6 +47,7 @@ Codex transcript activity is intentionally compact because long-running agent wo
 - Thinking, streaming, shell, tool, patch, and subagent states share one quiet activity-row visual language.
 - The default transcript shows concise action summaries such as `Thinking`, `Running exec_command`, or `Edited file.go +12 -171`.
 - Arguments, command output, diffs, reasoning text, and diagnostics stay collapsed until the user opens the corresponding row.
+- When a file-change activity contains multiple edit rows, the selected row, detail header, and rendered diff body must all derive from the same file-diff detail reference.
 - Running state uses a small status dot and honors reduced-motion preferences; decorative loaders such as bouncing dots, snake loaders, sparkles, and large spinners are not part of the Codex transcript contract.
 - Completed and failed states update in place instead of appending duplicate status blocks.
 
