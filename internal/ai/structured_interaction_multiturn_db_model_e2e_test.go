@@ -258,7 +258,7 @@ func assertWaitingAssistantMessageHasNoDuplicateMarkdown(t *testing.T, svc *Serv
 			if block == nil {
 				continue
 			}
-			if strings.TrimSpace(fmt.Sprint(block["type"])) == "tool-call" && strings.TrimSpace(fmt.Sprint(block["toolName"])) == "ask_user" {
+			if activityTimelineHasToolForTest(block, "ask_user") {
 				hasAskUser = true
 				continue
 			}
@@ -267,9 +267,27 @@ func assertWaitingAssistantMessageHasNoDuplicateMarkdown(t *testing.T, svc *Serv
 			}
 		}
 		if !hasAskUser {
-			t.Fatalf("latest assistant waiting message should contain ask_user block: %s", msgs[i].MessageJSON)
+			t.Fatalf("latest assistant waiting message should contain ask_user activity: %s", msgs[i].MessageJSON)
 		}
 		return
 	}
 	t.Fatalf("missing assistant message in thread %s", threadID)
+}
+
+func activityTimelineHasToolForTest(block map[string]any, toolName string) bool {
+	if strings.TrimSpace(fmt.Sprint(block["type"])) != "activity-timeline" {
+		return false
+	}
+	groups, _ := block["groups"].([]any)
+	for _, rawGroup := range groups {
+		group, _ := rawGroup.(map[string]any)
+		items, _ := group["items"].([]any)
+		for _, rawItem := range items {
+			item, _ := rawItem.(map[string]any)
+			if strings.TrimSpace(fmt.Sprint(item["toolName"])) == toolName {
+				return true
+			}
+		}
+	}
+	return false
 }

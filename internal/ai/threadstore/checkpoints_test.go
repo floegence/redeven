@@ -155,6 +155,30 @@ func TestThreadCheckpoint_RestoreReplacesDerivedAndPreservesUserTranscript(t *te
 	}); err != nil {
 		t.Fatalf("AppendRunEvent baseline: %v", err)
 	}
+	if err := s.UpsertActivityItem(ctx, ActivityItemRecord{
+		EndpointID:      endpointID,
+		ThreadID:        threadID,
+		RunID:           "run_old",
+		MessageID:       "m_assistant_1",
+		GroupID:         "command",
+		ItemID:          "tool_old",
+		ToolID:          "tool_old",
+		ToolName:        "terminal.exec",
+		Kind:            "command",
+		Renderer:        "command",
+		Status:          "success",
+		Severity:        "quiet",
+		SummaryJSON:     `{"label":"Ran command"}`,
+		DetailRefsJSON:  `[]`,
+		TargetRefsJSON:  `[]`,
+		PayloadJSON:     `{}`,
+		OrderIndex:      0,
+		StartedAtUnixMs: now,
+		EndedAtUnixMs:   now,
+		UpdatedAtUnixMs: now,
+	}); err != nil {
+		t.Fatalf("UpsertActivityItem baseline: %v", err)
+	}
 
 	if err := s.UpsertThreadState(ctx, ThreadState{
 		EndpointID:           endpointID,
@@ -303,6 +327,30 @@ func TestThreadCheckpoint_RestoreReplacesDerivedAndPreservesUserTranscript(t *te
 	}); err != nil {
 		t.Fatalf("AppendRunEvent after: %v", err)
 	}
+	if err := s.UpsertActivityItem(ctx, ActivityItemRecord{
+		EndpointID:      endpointID,
+		ThreadID:        threadID,
+		RunID:           "run_new",
+		MessageID:       "m_assistant_2",
+		GroupID:         "mutation",
+		ItemID:          "tool_new",
+		ToolID:          "tool_new",
+		ToolName:        "apply_patch",
+		Kind:            "mutation",
+		Renderer:        "file_change",
+		Status:          "success",
+		Severity:        "normal",
+		SummaryJSON:     `{"label":"Applied patch"}`,
+		DetailRefsJSON:  `[]`,
+		TargetRefsJSON:  `[]`,
+		PayloadJSON:     `{}`,
+		OrderIndex:      1,
+		StartedAtUnixMs: msg2At,
+		EndedAtUnixMs:   msg2At,
+		UpdatedAtUnixMs: msg2At,
+	}); err != nil {
+		t.Fatalf("UpsertActivityItem after: %v", err)
+	}
 
 	if err := s.UpsertThreadState(ctx, ThreadState{
 		EndpointID:           endpointID,
@@ -395,6 +443,21 @@ func TestThreadCheckpoint_RestoreReplacesDerivedAndPreservesUserTranscript(t *te
 	}
 	if len(toolCalls) != 1 || toolCalls[0].RunID != "run_old" || toolCalls[0].ToolID != "tool_old" {
 		t.Fatalf("toolCalls=%v, want only run_old/tool_old", toolCalls)
+	}
+
+	oldActivity, err := s.ListRunActivityItems(ctx, endpointID, "run_old")
+	if err != nil {
+		t.Fatalf("ListRunActivityItems run_old: %v", err)
+	}
+	if len(oldActivity) != 1 || oldActivity[0].ItemID != "tool_old" {
+		t.Fatalf("run_old activity=%v, want tool_old", oldActivity)
+	}
+	newActivity, err := s.ListRunActivityItems(ctx, endpointID, "run_new")
+	if err != nil {
+		t.Fatalf("ListRunActivityItems run_new: %v", err)
+	}
+	if len(newActivity) != 0 {
+		t.Fatalf("run_new activity=%v, want none after restore", newActivity)
 	}
 
 	runNewEvents, err := s.ListRunEvents(ctx, endpointID, "run_new", 10)

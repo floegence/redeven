@@ -486,7 +486,7 @@ type streamEventContextCompaction struct {
 	Payload   map[string]any `json:"payload,omitempty"`
 }
 
-// Convenience helpers for tool-call blocks (MessageBlock).
+// ToolCallBlock is the runtime-internal source snapshot projected into ActivityTimelineBlock.
 
 type ToolCallStatus string
 
@@ -510,8 +510,86 @@ type ToolCallBlock struct {
 	Error            string             `json:"error,omitempty"`
 	ErrorDetails     *aitools.ToolError `json:"errorDetails,omitempty"`
 	Children         []any              `json:"children,omitempty"`
-	Collapsed        *bool              `json:"collapsed,omitempty"`
 	StartedAt        *time.Time         `json:"-"`
+}
+
+type ActivityTimelineBlock struct {
+	Type          string          `json:"type"` // activity-timeline
+	SchemaVersion int             `json:"schemaVersion"`
+	RunID         string          `json:"runId"`
+	MessageID     string          `json:"messageId"`
+	Summary       ActivitySummary `json:"summary"`
+	Groups        []ActivityGroup `json:"groups"`
+}
+
+type ActivitySummary struct {
+	Status       string `json:"status"` // running|success|error|waiting|canceled
+	TotalItems   int    `json:"totalItems"`
+	VisibleItems int    `json:"visibleItems"`
+	DurationMS   int64  `json:"durationMs,omitempty"`
+	Label        string `json:"label"`
+}
+
+type ActivityGroup struct {
+	GroupID         string              `json:"groupId"`
+	Kind            string              `json:"kind"`
+	Renderer        string              `json:"renderer"`
+	Status          string              `json:"status"`
+	Title           string              `json:"title"`
+	Subtitle        string              `json:"subtitle,omitempty"`
+	Severity        string              `json:"severity,omitempty"` // quiet|normal|warning|error|blocking
+	DefaultOpen     bool                `json:"defaultOpen"`
+	Items           []ActivityItem      `json:"items"`
+	Chips           []ActivityChip      `json:"chips,omitempty"`
+	DetailRefs      []ActivityDetailRef `json:"detailRefs,omitempty"`
+	StartedAtUnixMS int64               `json:"startedAtUnixMs,omitempty"`
+	EndedAtUnixMS   int64               `json:"endedAtUnixMs,omitempty"`
+}
+
+type ActivityItem struct {
+	ItemID           string              `json:"itemId"`
+	GroupID          string              `json:"groupId,omitempty"`
+	ToolID           string              `json:"toolId,omitempty"`
+	ToolName         string              `json:"toolName,omitempty"`
+	Kind             string              `json:"kind,omitempty"`
+	Renderer         string              `json:"renderer,omitempty"`
+	Status           string              `json:"status"`
+	Severity         string              `json:"severity,omitempty"`
+	Label            string              `json:"label"`
+	Description      string              `json:"description,omitempty"`
+	TargetRefs       []ActivityTargetRef `json:"targetRefs,omitempty"`
+	Chips            []ActivityChip      `json:"chips,omitempty"`
+	DetailRefs       []ActivityDetailRef `json:"detailRefs,omitempty"`
+	RequiresApproval bool                `json:"requiresApproval,omitempty"`
+	ApprovalState    string              `json:"approvalState,omitempty"`
+	Payload          map[string]any      `json:"payload,omitempty"`
+	Metrics          map[string]any      `json:"metrics,omitempty"`
+	StartedAtUnixMS  int64               `json:"startedAtUnixMs,omitempty"`
+	EndedAtUnixMS    int64               `json:"endedAtUnixMs,omitempty"`
+}
+
+type ActivityChip struct {
+	Kind  string `json:"kind"`
+	Label string `json:"label"`
+	Value string `json:"value,omitempty"`
+	Tone  string `json:"tone,omitempty"`
+}
+
+type ActivityTargetRef struct {
+	Kind  string `json:"kind"`
+	Label string `json:"label"`
+	URI   string `json:"uri,omitempty"`
+	Path  string `json:"path,omitempty"`
+	Line  int    `json:"line,omitempty"`
+}
+
+type ActivityDetailRef struct {
+	RefID     string `json:"refId"`
+	Kind      string `json:"kind"`
+	ToolID    string `json:"toolId,omitempty"`
+	FetchMode string `json:"fetchMode"` // inline|endpoint
+	Endpoint  string `json:"endpoint,omitempty"`
+	Title     string `json:"title"`
 }
 
 // RealtimeEventType defines the high-level AI event category sent over Flowersec RPC notify.

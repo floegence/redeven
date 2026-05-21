@@ -78,7 +78,6 @@ const listMessagesMock = vi.fn(async (_req: unknown) => ({ messages: [], nextAft
 const getActiveRunSnapshotMock = vi.fn(async (_req: unknown) => ({ ok: false }));
 const getPathContextMock = vi.fn(async () => ({ agentHomePathAbs: '/workspace' }));
 const listFsEntriesMock = vi.fn(async (_req: unknown): Promise<MockFsListResponse> => ({ entries: [] }));
-const setToolCollapsedMock = vi.fn(async () => ({ ok: true }));
 const stopThreadMock = vi.fn(async () => ({ ok: true, recoveredFollowups: [] }));
 const approveToolMock = vi.fn(async () => ({ ok: true }));
 let lastDirectoryPickerProps: any = null;
@@ -588,7 +587,6 @@ vi.mock('../protocol/redeven_v1', () => ({
       sendUserTurn: sendUserTurnMock,
       listMessages: listMessagesMock,
       getActiveRunSnapshot: getActiveRunSnapshotMock,
-      setToolCollapsed: setToolCollapsedMock,
       stopThread: stopThreadMock,
       approveTool: approveToolMock,
     },
@@ -616,11 +614,6 @@ vi.mock('../widgets/ChatFileBrowserFAB', () => ({
 
 vi.mock('../icons/FlowerIcon', () => ({
   FlowerIcon: () => <span />,
-}));
-
-vi.mock('./aiBlockPresentation', () => ({
-  decorateMessageBlocks: (message: unknown) => message,
-  decorateStreamEvent: (event: unknown) => event,
 }));
 
 vi.mock('../primitives/Tooltip', () => ({

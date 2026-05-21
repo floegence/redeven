@@ -5762,8 +5762,7 @@ func (r *run) waitForTaskCompleteConfirm(ctx context.Context, resultText string)
 		return false, err
 	}
 	r.mu.Lock()
-	idx := r.nextBlockIndex
-	r.nextBlockIndex++
+	idx := r.reserveActivityTimelineBlockIndexLocked()
 	r.needNewTextBlock = true
 	r.mu.Unlock()
 	block := ToolCallBlock{
@@ -5842,8 +5841,7 @@ func (r *run) emitAskUserToolBlock(signal askUserSignal, source string, contract
 		toolID = "tool_ask_user_waiting"
 	}
 	r.mu.Lock()
-	idx := r.nextBlockIndex
-	r.nextBlockIndex++
+	idx := r.reserveActivityTimelineBlockIndexLocked()
 	r.needNewTextBlock = true
 	r.mu.Unlock()
 	args := map[string]any{
@@ -5893,8 +5891,7 @@ func (r *run) emitExitPlanModeToolBlock(toolID string, args ExitPlanModeArgs, re
 		return
 	}
 	r.mu.Lock()
-	idx := r.nextBlockIndex
-	r.nextBlockIndex++
+	idx := r.reserveActivityTimelineBlockIndexLocked()
 	r.needNewTextBlock = true
 	r.mu.Unlock()
 	blockArgs := map[string]any{}

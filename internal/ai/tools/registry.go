@@ -1,52 +1,110 @@
 package tools
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
+
+func presentation(kind ToolPresentationKind, risk string, renderer string, groupKey string, detailKinds ...string) ToolPresentationSpec {
+	return ToolPresentationSpec{
+		Kind:     kind,
+		Risk:     strings.TrimSpace(risk),
+		Renderer: strings.TrimSpace(renderer),
+		Grouping: ToolGroupingPolicy{
+			Enabled:        strings.TrimSpace(groupKey) != "",
+			GroupKey:       strings.TrimSpace(groupKey),
+			MergeWindowMS:  2500,
+			MaxInlineItems: 4,
+		},
+		DetailKinds:    append([]string(nil), detailKinds...),
+		SummaryVersion: 1,
+	}
+}
 
 var builtinDefinitions = map[string]Definition{
 	"file.read": {
 		Name:             "file.read",
 		Mutating:         false,
 		RequiresApproval: false,
+		Presentation:     presentation(ToolPresentationContext, "readonly", "file_context", "context", "args", "result"),
 	},
 	"file.edit": {
 		Name:             "file.edit",
 		Mutating:         true,
 		RequiresApproval: true,
+		Presentation:     presentation(ToolPresentationMutation, "approval", "file_change", "mutation", "args", "result", "error"),
 	},
 	"file.write": {
 		Name:             "file.write",
 		Mutating:         true,
 		RequiresApproval: true,
+		Presentation:     presentation(ToolPresentationMutation, "approval", "file_change", "mutation", "args", "result", "error"),
 	},
 	"apply_patch": {
 		Name:             "apply_patch",
 		Mutating:         true,
 		RequiresApproval: true,
+		Presentation:     presentation(ToolPresentationMutation, "approval", "file_change", "mutation", "args", "result", "error"),
 	},
 	"terminal.exec": {
 		Name:             "terminal.exec",
 		Mutating:         false,
 		RequiresApproval: false,
+		Presentation:     presentation(ToolPresentationCommand, "readonly", "command", "command", "terminal_output", "error"),
 	},
 	"web.search": {
 		Name:             "web.search",
 		Mutating:         false,
 		RequiresApproval: false,
+		Presentation:     presentation(ToolPresentationResearch, "readonly", "sources", "research", "sources", "args"),
+	},
+	"sources": {
+		Name:             "sources",
+		Mutating:         false,
+		RequiresApproval: false,
+		Presentation:     presentation(ToolPresentationResearch, "readonly", "sources", "research", "sources"),
 	},
 	"knowledge.search": {
 		Name:             "knowledge.search",
 		Mutating:         false,
 		RequiresApproval: false,
+		Presentation:     presentation(ToolPresentationResearch, "readonly", "knowledge", "research", "result", "args"),
 	},
 	"write_todos": {
 		Name:             "write_todos",
 		Mutating:         false,
 		RequiresApproval: false,
+		Presentation:     presentation(ToolPresentationTodo, "readonly", "todos", "todo", "result"),
 	},
 	"exit_plan_mode": {
 		Name:             "exit_plan_mode",
 		Mutating:         false,
 		RequiresApproval: false,
+		Presentation:     presentation(ToolPresentationSignal, "blocking", "run_signal", "interaction", "args", "result"),
+	},
+	"task_complete": {
+		Name:             "task_complete",
+		Mutating:         false,
+		RequiresApproval: false,
+		Presentation:     presentation(ToolPresentationSignal, "blocking", "run_signal", "interaction", "args", "result"),
+	},
+	"ask_user": {
+		Name:             "ask_user",
+		Mutating:         false,
+		RequiresApproval: false,
+		Presentation:     presentation(ToolPresentationInteraction, "blocking", "blocking_prompt", "interaction", "args", "result"),
+	},
+	"use_skill": {
+		Name:             "use_skill",
+		Mutating:         false,
+		RequiresApproval: false,
+		Presentation:     presentation(ToolPresentationContext, "readonly", "skill", "context", "args", "result"),
+	},
+	"subagents": {
+		Name:             "subagents",
+		Mutating:         false,
+		RequiresApproval: false,
+		Presentation:     presentation(ToolPresentationDelegation, "readonly", "subagent_group", "delegation", "args", "result", "error"),
 	},
 }
 
@@ -70,6 +128,42 @@ func RequiresApproval(toolName string) bool {
 func IsMutating(toolName string) bool {
 	def, ok := LookupDefinition(toolName)
 	return ok && def.Mutating
+}
+
+func PresentationSpec(toolName string) (ToolPresentationSpec, bool) {
+	def, ok := LookupDefinition(toolName)
+	if !ok || ValidatePresentationSpec(toolName, def.Presentation) != nil {
+		return ToolPresentationSpec{}, false
+	}
+	return def.Presentation, true
+}
+
+func MustPresentationSpec(toolName string) ToolPresentationSpec {
+	spec, ok := PresentationSpec(toolName)
+	if !ok {
+		panic(fmt.Sprintf("missing presentation spec for tool %q", strings.TrimSpace(toolName)))
+	}
+	return spec
+}
+
+func ValidatePresentationSpec(toolName string, spec ToolPresentationSpec) error {
+	name := strings.TrimSpace(toolName)
+	if name == "" {
+		return fmt.Errorf("tool name is required")
+	}
+	if spec.Kind == "" {
+		return fmt.Errorf("tool %s missing presentation kind", name)
+	}
+	if strings.TrimSpace(spec.Renderer) == "" {
+		return fmt.Errorf("tool %s missing presentation renderer", name)
+	}
+	if strings.TrimSpace(spec.Grouping.GroupKey) == "" {
+		return fmt.Errorf("tool %s missing presentation group key", name)
+	}
+	if spec.SummaryVersion <= 0 {
+		return fmt.Errorf("tool %s missing presentation summary version", name)
+	}
+	return nil
 }
 
 func RequiresApprovalForInvocation(toolName string, args map[string]any) bool {

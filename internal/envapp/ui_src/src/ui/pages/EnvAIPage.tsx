@@ -43,10 +43,8 @@ import { useAIChatContext, type AIModelOption } from './AIChatContext';
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import { Tooltip } from '../primitives/Tooltip';
 import { fetchGatewayJSON, prepareGatewayRequestInit, uploadGatewayFile } from '../services/gatewayApi';
-import { decorateMessageBlocks, decorateStreamEvent } from './aiBlockPresentation';
 import {
   normalizeThreadTodosView,
-  normalizeWriteTodosToolView,
   todoStatusBadgeClass,
   todoStatusLabel,
   type SubagentView,
@@ -148,6 +146,17 @@ function formatQueuedTurnTime(unixMs: number | null | undefined): string {
   const value = Number(unixMs ?? 0);
   if (!Number.isFinite(value) || value <= 0) return '';
   return queuedTurnTimeFormatter.format(new Date(value));
+}
+
+function activityTimelineHasSuccessfulTool(block: unknown, toolName: string): boolean {
+  const groups = Array.isArray((block as any)?.groups) ? (block as any).groups : [];
+  return groups.some((group: any) => {
+    const items = Array.isArray(group?.items) ? group.items : [];
+    return items.some((item: any) => (
+      String(item?.toolName ?? '').trim() === toolName
+      && String(item?.status ?? '').trim().toLowerCase() === 'success'
+    ));
+  });
 }
 
 const ChatCapture: Component<{ onReady: (ctx: ChatContextValue) => void }> = (props) => {
@@ -2091,7 +2100,7 @@ export function EnvAIPage() {
 
       const items = Array.isArray((resp as any)?.messages) ? (resp as any).messages : [];
       const loaded: Message[] = items
-        .map((it: any) => decorateMessageBlocks((it?.messageJson ?? it?.message_json) as Message))
+        .map((it: any) => (it?.messageJson ?? it?.message_json) as Message)
         .filter((m: any) => !!String(m?.id ?? '').trim());
 
       const isActiveTid = tid === String(ai.activeThreadId() ?? '').trim();
@@ -2151,8 +2160,7 @@ export function EnvAIPage() {
       // Realtime events that arrived during fetch are newer than this snapshot.
       if (assistantSeqAtStart !== activeAssistantMessageSeq) return;
 
-      const decorated = decorateMessageBlocks(resp.messageJson as Message);
-      threadRenderController.applyLiveRunSnapshot(decorated);
+      threadRenderController.applyLiveRunSnapshot(resp.messageJson as Message);
     } catch {
       // Best-effort: ignore snapshot failures (realtime frames / transcript refresh can self-heal).
     }
@@ -2700,8 +2708,8 @@ export function EnvAIPage() {
         const messageID = String(messageJson?.id ?? '').trim();
         if (!messageID) return;
 
-        const decorated = decorateMessageBlocks(messageJson as Message);
-        const messageRole = String((decorated as Message)?.role ?? messageJson?.role ?? '').trim().toLowerCase();
+        const message = messageJson as Message;
+        const messageRole = String(message?.role ?? messageJson?.role ?? '').trim().toLowerCase();
 
         const isActiveTid = tid === String(ai.activeThreadId() ?? '').trim();
         if (isActiveTid) {
@@ -2718,7 +2726,7 @@ export function EnvAIPage() {
             activeTranscriptCursor = Math.max(activeTranscriptCursor, rowId);
           }
 
-          threadRenderController.upsertTranscriptMessage(decorated);
+          threadRenderController.upsertTranscriptMessage(message);
         }
         return;
       }
@@ -2761,16 +2769,8 @@ export function EnvAIPage() {
         if (isActiveTid) {
           const block = streamEvent?.block as any;
           const blockType = String(block?.type ?? '').trim().toLowerCase();
-          const toolName = String(block?.toolName ?? '').trim();
-          const toolStatus = String(block?.status ?? '').trim().toLowerCase();
-          if (streamType === 'block-set' && blockType === 'tool-call' && toolName === 'write_todos' && toolStatus === 'success') {
-            const next = normalizeWriteTodosToolView(block?.result, block?.args);
-            if (next.version > 0) {
-              setThreadTodosIfChanged(next);
-              setTodosError('');
-            } else {
-              void loadThreadTodos(tid, { silent: true, notifyError: false });
-            }
+          if (streamType === 'block-set' && blockType === 'activity-timeline' && activityTimelineHasSuccessfulTool(block, 'write_todos')) {
+            void loadThreadTodos(tid, { silent: true, notifyError: false });
           }
         }
         if (isActiveTid) {
@@ -2783,7 +2783,7 @@ export function EnvAIPage() {
             activeAssistantMessageSeq += 1;
             cancelActiveRunSnapshotRecovery();
           }
-          threadRenderController.applyLiveRunStreamEvent(decorateStreamEvent(streamEvent) as StreamEvent);
+          threadRenderController.applyLiveRunStreamEvent(streamEvent as StreamEvent);
         }
         return;
       }
@@ -2946,38 +2946,6 @@ export function EnvAIPage() {
     const rid = String(ai.runIdForThread(tid) ?? '').trim();
     if (!rid) return;
     await rpc.ai.approveTool({ runId: rid, toolId, approved });
-  };
-
-  const installSharedToolCollapse = (ctx: ChatContextValue) => {
-    const key = '__redeven_shared_tool_collapse_v1';
-    const anyCtx = ctx as any;
-    if (anyCtx[key]) return;
-    anyCtx[key] = true;
-
-    const original = ctx.toggleToolCollapse.bind(ctx);
-    ctx.toggleToolCollapse = (messageId: string, toolId: string) => {
-      original(messageId, toolId);
-
-      if (protocol.status() !== 'connected' || !ai.aiEnabled()) return;
-      if (!canRWXReady()) return;
-
-      const tid = String(ai.activeThreadId() ?? '').trim();
-      const mid = String(messageId ?? '').trim();
-      const tidTool = String(toolId ?? '').trim();
-      if (!tid || !mid || !tidTool) return;
-
-      const msg = (ctx.messages() ?? []).find((m: any) => String(m?.id ?? '').trim() === mid);
-      const blocks: any[] = Array.isArray((msg as any)?.blocks) ? ((msg as any).blocks as any[]) : [];
-      const toolBlock = blocks.find((b) => b && typeof b === 'object' && b.type === 'tool-call' && String((b as any).toolId ?? '').trim() === tidTool);
-      const collapsed = (toolBlock as any)?.collapsed;
-      if (typeof collapsed !== 'boolean') return;
-
-      const persistedMessageId = String((msg as any)?.sourceMessageId ?? mid).trim() || mid;
-
-      void rpc.ai.setToolCollapsed({ threadId: tid, messageId: persistedMessageId, toolId: tidTool, collapsed }).catch(() => {
-        // Best-effort: ignore persistence failures (snapshot/transcript refresh can self-heal).
-      });
-    };
   };
 
   type SendUserTurnOptions = {
@@ -3577,7 +3545,6 @@ export function EnvAIPage() {
         <ChatCapture
           onReady={(ctx) => {
             chat = ctx;
-            installSharedToolCollapse(ctx);
             setChatReady(true);
           }}
         />

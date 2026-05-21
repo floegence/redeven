@@ -2,7 +2,6 @@ package ai
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -23,7 +22,6 @@ const (
 	TypeID_AI_TOOL_APPROVAL                     uint32 = 6005
 	TypeID_AI_MESSAGES_LIST                     uint32 = 6006
 	TypeID_AI_ACTIVE_RUN_SNAPSHOT               uint32 = 6007
-	TypeID_AI_SET_TOOL_COLLAPSED                uint32 = 6008
 	TypeID_AI_SUBSCRIBE_THREAD                  uint32 = 6009
 	TypeID_AI_STOP_THREAD                       uint32 = 6011
 	TypeID_AI_SUBMIT_STRUCTURED_PROMPT_RESPONSE uint32 = 6012
@@ -134,17 +132,6 @@ type aiGetActiveRunSnapshotResp struct {
 	OK          bool            `json:"ok"`
 	RunID       string          `json:"run_id,omitempty"`
 	MessageJSON json.RawMessage `json:"message_json,omitempty"`
-}
-
-type aiSetToolCollapsedReq struct {
-	ThreadID  string `json:"thread_id"`
-	MessageID string `json:"message_id"`
-	ToolID    string `json:"tool_id"`
-	Collapsed bool   `json:"collapsed"`
-}
-
-type aiSetToolCollapsedResp struct {
-	OK bool `json:"ok"`
 }
 
 func (s *Service) RegisterRPC(r *rpc.Router, meta *session.Meta, streamServer *rpc.Server) {
@@ -427,48 +414,6 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 		}, nil
 	})
 
-	accessgate.RegisterTyped[aiSetToolCollapsedReq, aiSetToolCollapsedResp](r, TypeID_AI_SET_TOOL_COLLAPSED, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *aiSetToolCollapsedReq) (*aiSetToolCollapsedResp, error) {
-		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
-			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
-		}
-		if req == nil {
-			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
-		}
-		threadID := strings.TrimSpace(req.ThreadID)
-		messageID := strings.TrimSpace(req.MessageID)
-		toolID := strings.TrimSpace(req.ToolID)
-		if threadID == "" {
-			return nil, &rpc.Error{Code: 400, Message: "missing thread_id"}
-		}
-		if messageID == "" {
-			return nil, &rpc.Error{Code: 400, Message: "missing message_id"}
-		}
-		if toolID == "" {
-			return nil, &rpc.Error{Code: 400, Message: "missing tool_id"}
-		}
-
-		s.mu.Lock()
-		db := s.threadsDB
-		s.mu.Unlock()
-		if db == nil {
-			return nil, &rpc.Error{Code: 503, Message: "threads store not ready"}
-		}
-
-		// Ensure thread exists (consistent with other endpoints).
-		if th, err := db.GetThread(ctx, strings.TrimSpace(meta.EndpointID), threadID); err != nil {
-			return nil, &rpc.Error{Code: 400, Message: err.Error()}
-		} else if th == nil {
-			return nil, &rpc.Error{Code: 404, Message: "thread not found"}
-		}
-
-		if err := s.SetToolCollapsed(meta, threadID, messageID, toolID, req.Collapsed); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return nil, &rpc.Error{Code: 404, Message: "message not found"}
-			}
-			return nil, toAIRPCError(err)
-		}
-		return &aiSetToolCollapsedResp{OK: true}, nil
-	})
 }
 
 func toAIRPCError(err error) *rpc.Error {

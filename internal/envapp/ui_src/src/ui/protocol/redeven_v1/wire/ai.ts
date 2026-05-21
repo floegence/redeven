@@ -232,14 +232,3 @@ export type wire_ai_get_active_run_snapshot_resp = {
   run_id?: string;
   message_json?: any;
 };
-
-export type wire_ai_set_tool_collapsed_req = {
-  thread_id: string;
-  message_id: string;
-  tool_id: string;
-  collapsed: boolean;
-};
-
-export type wire_ai_set_tool_collapsed_resp = {
-  ok: boolean;
-};

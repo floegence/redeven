@@ -154,7 +154,7 @@ func TestPersistToolCallSnapshot_TerminalExecResult_NotTruncated(t *testing.T) {
 	}
 }
 
-func TestHandleToolCall_TerminalExec_AlwaysEmitsOutputRefForStatusFrames(t *testing.T) {
+func TestHandleToolCall_TerminalExec_EmitsActivityTimelineFrames(t *testing.T) {
 	t.Parallel()
 
 	runID := "run_terminal_output_ref"
@@ -162,8 +162,8 @@ func TestHandleToolCall_TerminalExec_AlwaysEmitsOutputRefForStatusFrames(t *test
 	workspace := t.TempDir()
 
 	var (
-		mu         sync.Mutex
-		toolFrames []ToolCallBlock
+		mu        sync.Mutex
+		timelines []ActivityTimelineBlock
 	)
 
 	r := newRun(runOptions{
@@ -182,15 +182,15 @@ func TestHandleToolCall_TerminalExec_AlwaysEmitsOutputRefForStatusFrames(t *test
 			if !ok {
 				return
 			}
-			block, ok := bs.Block.(ToolCallBlock)
+			block, ok := bs.Block.(ActivityTimelineBlock)
 			if !ok {
 				return
 			}
-			if strings.TrimSpace(block.ToolID) != toolID || strings.TrimSpace(block.ToolName) != "terminal.exec" {
+			if _, ok := findActivityItemForTest(block, toolID); !ok {
 				return
 			}
 			mu.Lock()
-			toolFrames = append(toolFrames, block)
+			timelines = append(timelines, block)
 			mu.Unlock()
 		},
 	})
@@ -206,42 +206,38 @@ func TestHandleToolCall_TerminalExec_AlwaysEmitsOutputRefForStatusFrames(t *test
 	}
 
 	mu.Lock()
-	frames := append([]ToolCallBlock(nil), toolFrames...)
+	frames := append([]ActivityTimelineBlock(nil), timelines...)
 	mu.Unlock()
 
 	if len(frames) == 0 {
-		t.Fatalf("expected tool block-set frames")
+		t.Fatalf("expected activity timeline frames")
 	}
 
-	foundStatus := map[ToolCallStatus]bool{}
+	foundStatus := map[string]bool{}
 	for _, frame := range frames {
-		if frame.Status != ToolCallStatusPending && frame.Status != ToolCallStatusRunning && frame.Status != ToolCallStatusSuccess {
+		item, ok := findActivityItemForTest(frame, toolID)
+		if !ok {
 			continue
 		}
-		foundStatus[frame.Status] = true
-		resultMap, ok := frame.Result.(map[string]any)
-		if !ok || resultMap == nil {
-			t.Fatalf("status=%s missing result map for output_ref", frame.Status)
+		switch item.Status {
+		case string(ToolCallStatusPending), string(ToolCallStatusRunning), string(ToolCallStatusSuccess):
+			foundStatus[item.Status] = true
+		default:
+			continue
 		}
-		outputRef, ok := resultMap["output_ref"].(map[string]any)
-		if !ok || outputRef == nil {
-			t.Fatalf("status=%s missing output_ref", frame.Status)
+		ref, ok := findActivityDetailRefForTest(item, "terminal_output")
+		if !ok {
+			t.Fatalf("status=%s missing terminal_output detail ref", item.Status)
 		}
-		if got := strings.TrimSpace(anyToString(outputRef["run_id"])); got != runID {
-			t.Fatalf("status=%s output_ref.run_id=%q, want %q", frame.Status, got, runID)
+		if !strings.Contains(ref.Endpoint, runID) || !strings.Contains(ref.Endpoint, toolID) {
+			t.Fatalf("status=%s detail endpoint=%q, want run/tool ids", item.Status, ref.Endpoint)
 		}
-		if got := strings.TrimSpace(anyToString(outputRef["tool_id"])); got != toolID {
-			t.Fatalf("status=%s output_ref.tool_id=%q, want %q", frame.Status, got, toolID)
-		}
-		if got := readInt64Field(resultMap, "timeout_ms", "timeoutMs"); got != 120_000 {
-			t.Fatalf("status=%s timeout_ms=%d, want 120000", frame.Status, got)
-		}
-		if got := strings.TrimSpace(anyToString(resultMap["timeout_source"])); got != terminalExecTimeoutSourceDefault {
-			t.Fatalf("status=%s timeout_source=%q, want %q", frame.Status, got, terminalExecTimeoutSourceDefault)
+		if strings.TrimSpace(item.ToolName) != "terminal.exec" || strings.TrimSpace(item.Renderer) != "command" {
+			t.Fatalf("unexpected terminal activity item: %+v", item)
 		}
 	}
 
-	for _, status := range []ToolCallStatus{ToolCallStatusPending, ToolCallStatusRunning, ToolCallStatusSuccess} {
+	for _, status := range []string{string(ToolCallStatusPending), string(ToolCallStatusRunning), string(ToolCallStatusSuccess)} {
 		if !foundStatus[status] {
 			t.Fatalf("missing tool frame for status=%s", status)
 		}
@@ -278,11 +274,12 @@ func TestHandleToolCall_PendingFrameVisibleInSnapshotImmediately(t *testing.T) {
 			if !ok {
 				return
 			}
-			block, ok := bs.Block.(ToolCallBlock)
+			block, ok := bs.Block.(ActivityTimelineBlock)
 			if !ok {
 				return
 			}
-			if strings.TrimSpace(block.ToolID) != toolID || block.Status != ToolCallStatusPending {
+			item, ok := findActivityItemForTest(block, toolID)
+			if !ok || item.Status != string(ToolCallStatusPending) {
 				return
 			}
 
@@ -311,12 +308,13 @@ func TestHandleToolCall_PendingFrameVisibleInSnapshotImmediately(t *testing.T) {
 				snapshotConsistent = false
 				return
 			}
-			var persisted ToolCallBlock
+			var persisted ActivityTimelineBlock
 			if err := json.Unmarshal(rawBlock, &persisted); err != nil {
 				snapshotConsistent = false
 				return
 			}
-			if strings.TrimSpace(persisted.ToolID) != toolID || persisted.Status != ToolCallStatusPending {
+			item, ok = findActivityItemForTest(persisted, toolID)
+			if !ok || item.Status != string(ToolCallStatusPending) {
 				snapshotConsistent = false
 			}
 		},
@@ -368,7 +366,7 @@ func TestHandleToolCall_TerminalExecTimeout_PersistsErrorWithOutputRefAndResult(
 
 	var (
 		mu         sync.Mutex
-		errorFrame ToolCallBlock
+		errorFrame ActivityTimelineBlock
 	)
 
 	r := newRun(runOptions{
@@ -391,8 +389,12 @@ func TestHandleToolCall_TerminalExecTimeout_PersistsErrorWithOutputRefAndResult(
 			if !ok {
 				return
 			}
-			block, ok := bs.Block.(ToolCallBlock)
-			if !ok || strings.TrimSpace(block.ToolID) != toolID || block.Status != ToolCallStatusError {
+			block, ok := bs.Block.(ActivityTimelineBlock)
+			if !ok {
+				return
+			}
+			item, ok := findActivityItemForTest(block, toolID)
+			if !ok || item.Status != string(ToolCallStatusError) {
 				return
 			}
 			mu.Lock()
@@ -438,31 +440,19 @@ func TestHandleToolCall_TerminalExecTimeout_PersistsErrorWithOutputRefAndResult(
 	mu.Lock()
 	frame := errorFrame
 	mu.Unlock()
-	if frame.Status != ToolCallStatusError {
-		t.Fatalf("missing error frame, got status=%q", frame.Status)
+	item, ok := findActivityItemForTest(frame, toolID)
+	if !ok || item.Status != string(ToolCallStatusError) {
+		t.Fatalf("missing error activity, got block=%+v", frame)
 	}
-	frameResult, _ := frame.Result.(map[string]any)
-	if frameResult == nil {
-		t.Fatalf("error frame missing terminal result payload")
+	ref, ok := findActivityDetailRefForTest(item, "terminal_output")
+	if !ok {
+		t.Fatalf("error activity missing terminal_output detail ref: %+v", item)
 	}
-	outputRef, _ := frameResult["output_ref"].(map[string]any)
-	if outputRef == nil {
-		t.Fatalf("error frame missing output_ref")
+	if !strings.Contains(ref.Endpoint, "run_terminal_timeout") || !strings.Contains(ref.Endpoint, toolID) {
+		t.Fatalf("terminal detail endpoint=%q, want run/tool ids", ref.Endpoint)
 	}
-	if got := strings.TrimSpace(anyToString(outputRef["run_id"])); got != "run_terminal_timeout" {
-		t.Fatalf("output_ref.run_id=%q, want %q", got, "run_terminal_timeout")
-	}
-	if got := strings.TrimSpace(anyToString(outputRef["tool_id"])); got != toolID {
-		t.Fatalf("output_ref.tool_id=%q, want %q", got, toolID)
-	}
-	if !readBoolField(frameResult, "timed_out", "timedOut") {
-		t.Fatalf("frame timed_out=%v, want true", frameResult["timed_out"])
-	}
-	if got := readInt64Field(frameResult, "timeout_ms", "timeoutMs"); got != 20 {
-		t.Fatalf("frame timeout_ms=%d, want 20", got)
-	}
-	if got := strings.TrimSpace(anyToString(frameResult["timeout_source"])); got != terminalExecTimeoutSourceRequested {
-		t.Fatalf("frame timeout_source=%q, want %q", got, terminalExecTimeoutSourceRequested)
+	if !activityItemHasChipForTest(item, "status", "Error", "") {
+		t.Fatalf("error activity missing status chip: %+v", item.Chips)
 	}
 
 	rec, err := store.GetToolCall(ctx, "env_1", "run_terminal_timeout", toolID)
@@ -492,4 +482,61 @@ func TestHandleToolCall_TerminalExecTimeout_PersistsErrorWithOutputRefAndResult(
 	if got := strings.TrimSpace(anyToString(persisted["timeout_source"])); got != terminalExecTimeoutSourceRequested {
 		t.Fatalf("persisted timeout_source=%q, want %q", got, terminalExecTimeoutSourceRequested)
 	}
+
+	events, err := store.ListRunEvents(ctx, "env_1", "run_terminal_timeout", 200)
+	if err != nil {
+		t.Fatalf("ListRunEvents: %v", err)
+	}
+	for _, eventType := range []string{"activity.item.projected", "activity.group.updated", "activity.timeline.persisted"} {
+		if !hasRunEventForTest(events, eventType) {
+			t.Fatalf("missing activity projection event %q in %#v", eventType, events)
+		}
+	}
+}
+
+func findActivityItemForTest(block ActivityTimelineBlock, toolID string) (ActivityItem, bool) {
+	toolID = strings.TrimSpace(toolID)
+	for _, group := range block.Groups {
+		for _, item := range group.Items {
+			if strings.TrimSpace(item.ToolID) == toolID {
+				return item, true
+			}
+		}
+	}
+	return ActivityItem{}, false
+}
+
+func findActivityDetailRefForTest(item ActivityItem, kind string) (ActivityDetailRef, bool) {
+	kind = strings.TrimSpace(kind)
+	for _, ref := range item.DetailRefs {
+		if strings.TrimSpace(ref.Kind) == kind {
+			return ref, true
+		}
+	}
+	return ActivityDetailRef{}, false
+}
+
+func activityItemHasChipForTest(item ActivityItem, kind string, label string, value string) bool {
+	kind = strings.TrimSpace(kind)
+	label = strings.TrimSpace(label)
+	value = strings.TrimSpace(value)
+	for _, chip := range item.Chips {
+		if strings.TrimSpace(chip.Kind) != kind || strings.TrimSpace(chip.Label) != label {
+			continue
+		}
+		if value == "" || strings.TrimSpace(chip.Value) == value {
+			return true
+		}
+	}
+	return false
+}
+
+func hasRunEventForTest(events []threadstore.RunEventRecord, eventType string) bool {
+	eventType = strings.TrimSpace(eventType)
+	for _, event := range events {
+		if strings.TrimSpace(event.EventType) == eventType {
+			return true
+		}
+	}
+	return false
 }

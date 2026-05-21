@@ -35,6 +35,10 @@ paths:
     - K-DEP-001
   redeven/internal/ai/builtin_tool_handlers.go:
     - K-TOOL-001
+  redeven/internal/ai/tools/registry.go:
+    - K-TOOL-001
+  redeven/internal/ai/activity_timeline.go:
+    - K-TOOL-001
   redeven/internal/ai/run.go:
     - K-TOOL-001
   redeven/internal/config/permission_policy.go:
@@ -43,7 +47,7 @@ paths:
     - K-WEB-001
   redeven/internal/envapp/ui_src/src/ui/EnvAppShell.tsx:
     - K-WEB-001
-  redeven/internal/envapp/ui_src/src/ui/chat/blocks/ToolCallBlock.tsx:
+  redeven/internal/envapp/ui_src/src/ui/chat/blocks/ActivityTimelineBlock.tsx:
     - K-TOOL-001
   redeven/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts:
     - K-WEB-001

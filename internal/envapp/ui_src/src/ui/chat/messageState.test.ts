@@ -36,26 +36,32 @@ describe('messageState', () => {
     );
     expect((withDelta.messages[0].blocks[0] as any).content).toBe('hello');
 
-    const withToolBlock = applyStreamEventToMessages(
+    const withActivityBlock = applyStreamEventToMessages(
       withDelta.messages,
       {
         type: 'block-set',
         messageId: 'm_ai_1',
         blockIndex: 1,
-        block: { type: 'tool-call', toolName: 'ask_user', toolId: 'tool_1', args: {}, status: 'running' },
+        block: {
+          type: 'activity-timeline',
+          schemaVersion: 1,
+          runId: 'run_1',
+          messageId: 'm_ai_1',
+          summary: { status: 'running', totalItems: 1, visibleItems: 1, label: '1 activity item' },
+          groups: [],
+        },
       },
       { currentStreamingMessageId: withDelta.streamingMessageId, now: 120 },
     );
-    expect(withToolBlock.messages[0].blocks[1]).toMatchObject({
-      type: 'tool-call',
-      toolName: 'ask_user',
-      toolId: 'tool_1',
+    expect(withActivityBlock.messages[0].blocks[1]).toMatchObject({
+      type: 'activity-timeline',
+      runId: 'run_1',
     });
 
     const ended = applyStreamEventToMessages(
-      withToolBlock.messages,
+      withActivityBlock.messages,
       { type: 'message-end', messageId: 'm_ai_1' },
-      { currentStreamingMessageId: withToolBlock.streamingMessageId, now: 130 },
+      { currentStreamingMessageId: withActivityBlock.streamingMessageId, now: 130 },
     );
     expect(ended.streamingMessageId).toBeNull();
     expect(ended.messages[0].status).toBe('complete');

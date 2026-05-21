@@ -2,7 +2,7 @@ import type { Message, MessageBlock } from '../chat/types';
 import type { SubagentView } from './aiDataNormalizers';
 import { sameSubagentViewContent } from './aiSubagentState';
 
-type ToolCallBlock = Extract<MessageBlock, { type: 'tool-call' }>;
+type ActivityTimelineBlock = Extract<MessageBlock, { type: 'activity-timeline' }>;
 type ChecklistBlock = Extract<MessageBlock, { type: 'checklist' }>;
 
 export interface ProjectThreadTranscriptMessagesArgs {
@@ -107,17 +107,6 @@ export function syncSubagentBlocksWithLatest(inputMessages: Message[], latestByI
         }
       }
 
-      if (nextBlock.type === 'tool-call' && Array.isArray(nextBlock.children) && nextBlock.children.length > 0) {
-        const patchedChildren = patchBlocks(nextBlock.children);
-        if (patchedChildren !== nextBlock.children) {
-          nextBlock = {
-            ...nextBlock,
-            children: patchedChildren,
-          };
-          blockChanged = true;
-        }
-      }
-
       return nextBlock;
     });
 
@@ -196,12 +185,12 @@ function carryForwardBlocks(previousBlocks: MessageBlock[], nextBlocks: MessageB
     const previousBlock = findMatchingPreviousBlock(previousBlocks, nextBlock, index);
     if (!previousBlock) return nextBlock;
 
-    if (nextBlock.type === 'tool-call' && previousBlock.type === 'tool-call') {
-      const carriedToolState = carryForwardToolCallState(previousBlock, nextBlock);
-      if (carriedToolState !== nextBlock) {
+    if (nextBlock.type === 'activity-timeline' && previousBlock.type === 'activity-timeline') {
+      const carriedActivityState = carryForwardActivityTimelineState(previousBlock, nextBlock);
+      if (carriedActivityState !== nextBlock) {
         changed = true;
       }
-      return carriedToolState;
+      return carriedActivityState;
     }
 
     if (nextBlock.type === 'checklist' && previousBlock.type === 'checklist') {
@@ -219,11 +208,11 @@ function carryForwardBlocks(previousBlocks: MessageBlock[], nextBlocks: MessageB
 }
 
 function findMatchingPreviousBlock(previousBlocks: MessageBlock[], nextBlock: MessageBlock, index: number): MessageBlock | null {
-  if (nextBlock.type === 'tool-call') {
-    const toolId = String(nextBlock.toolId ?? '').trim();
-    if (toolId) {
+  if (nextBlock.type === 'activity-timeline') {
+    const runId = String(nextBlock.runId ?? '').trim();
+    if (runId) {
       const match = previousBlocks.find(
-        (block) => block.type === 'tool-call' && String(block.toolId ?? '').trim() === toolId,
+        (block) => block.type === 'activity-timeline' && String(block.runId ?? '').trim() === runId,
       );
       if (match) return match;
     }
@@ -234,53 +223,58 @@ function findMatchingPreviousBlock(previousBlocks: MessageBlock[], nextBlock: Me
   return candidate.type === nextBlock.type ? candidate : null;
 }
 
-function carryForwardToolCallState(previous: ToolCallBlock, next: ToolCallBlock): ToolCallBlock {
+function carryForwardActivityTimelineState(previous: ActivityTimelineBlock, next: ActivityTimelineBlock): ActivityTimelineBlock {
+  const previousByToolId = new Map<string, {
+    approvalState?: string;
+    status?: string;
+    severity?: string;
+  }>();
+  for (const group of previous.groups) {
+    for (const item of group.items) {
+      const toolId = String(item.toolId ?? '').trim();
+      if (!toolId || item.requiresApproval !== true) continue;
+      previousByToolId.set(toolId, {
+        approvalState: item.approvalState,
+        status: item.status,
+        severity: item.severity,
+      });
+    }
+  }
+  if (previousByToolId.size === 0) {
+    return next;
+  }
+
   let changed = false;
-  let carried: ToolCallBlock = next;
+  const groups = next.groups.map((group) => {
+    let groupChanged = false;
+    const items = group.items.map((item) => {
+      const toolId = String(item.toolId ?? '').trim();
+      const previousItem = toolId ? previousByToolId.get(toolId) : undefined;
+      if (
+        !previousItem ||
+        item.requiresApproval !== true ||
+        !previousItem.approvalState ||
+        previousItem.approvalState === item.approvalState
+      ) {
+        return item;
+      }
+      groupChanged = true;
+      changed = true;
+      return {
+        ...item,
+        approvalState: previousItem.approvalState,
+        status: previousItem.status === 'error' || previousItem.approvalState === 'rejected'
+          ? 'error'
+          : previousItem.approvalState === 'approved' && item.status === 'pending'
+            ? 'running'
+            : item.status,
+        severity: previousItem.approvalState === 'rejected' ? 'error' : item.severity,
+      };
+    });
+    return groupChanged ? { ...group, items } : group;
+  });
 
-  if (previous.collapsed !== undefined && previous.collapsed !== next.collapsed) {
-    carried = {
-      ...carried,
-      collapsed: previous.collapsed,
-    };
-    changed = true;
-  }
-
-  if (
-    previous.requiresApproval === true
-    && next.requiresApproval === true
-    && previous.approvalState
-    && previous.approvalState !== next.approvalState
-  ) {
-    carried = {
-      ...carried,
-      approvalState: previous.approvalState,
-      status:
-        previous.approvalState === 'approved' && next.status === 'pending'
-          ? 'running'
-          : previous.approvalState === 'rejected'
-            ? 'error'
-            : carried.status,
-      error:
-        previous.approvalState === 'rejected'
-          ? carried.error || previous.error || 'Rejected by user'
-          : carried.error,
-    };
-    changed = true;
-  }
-
-  const nextChildren = Array.isArray(carried.children) ? carried.children : [];
-  const previousChildren = Array.isArray(previous.children) ? previous.children : [];
-  const mergedChildren = carryForwardBlocks(previousChildren, nextChildren);
-  if (mergedChildren !== nextChildren) {
-    carried = {
-      ...carried,
-      children: mergedChildren,
-    };
-    changed = true;
-  }
-
-  return changed ? carried : next;
+  return changed ? { ...next, groups } : next;
 }
 
 function carryForwardChecklistState(previous: ChecklistBlock, next: ChecklistBlock): ChecklistBlock {

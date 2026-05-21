@@ -61,7 +61,7 @@ describe('chat responsiveness guardrails', () => {
     const chatCss = readText('src/ui/chat/chat.css');
     const workingIndicator = readText('src/ui/chat/status/WorkingIndicator.tsx');
     const streamingCursor = readText('src/ui/chat/status/StreamingCursor.tsx');
-    const toolCallBlock = readText('src/ui/chat/blocks/ToolCallBlock.tsx');
+    const activityTimelineBlock = readText('src/ui/chat/blocks/ActivityTimelineBlock.tsx');
 
     expect(chatCss).toContain('@media (prefers-reduced-motion: reduce)');
     expect(chatCss).toContain('.chat-activity-running-dot');
@@ -72,6 +72,6 @@ describe('chat responsiveness guardrails', () => {
 
     expect(workingIndicator).not.toContain('chat-working-dot');
     expect(streamingCursor).not.toContain('\\u258B');
-    expect(toolCallBlock).not.toContain('SnakeLoader');
+    expect(activityTimelineBlock).not.toContain('SnakeLoader');
   });
 });

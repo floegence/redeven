@@ -592,6 +592,9 @@ func builtInToolDefinitions() []ToolDef {
 			Priority:     100,
 		},
 	}
+	for i := range defs {
+		defs[i].Presentation = aitools.MustPresentationSpec(defs[i].Name)
+	}
 	return defs
 }
 

@@ -30,6 +30,86 @@ type TerminalToolOutput struct {
 	RawResult          string `json:"raw_result,omitempty"`
 }
 
+type ToolDetail struct {
+	RunID           string         `json:"run_id"`
+	ToolID          string         `json:"tool_id"`
+	ToolName        string         `json:"tool_name"`
+	Status          string         `json:"status"`
+	Args            map[string]any `json:"args,omitempty"`
+	Result          any            `json:"result,omitempty"`
+	ErrorCode       string         `json:"error_code,omitempty"`
+	ErrorMessage    string         `json:"error_message,omitempty"`
+	Retryable       bool           `json:"retryable,omitempty"`
+	RecoveryAction  string         `json:"recovery_action,omitempty"`
+	StartedAtUnixMs int64          `json:"started_at_unix_ms,omitempty"`
+	EndedAtUnixMs   int64          `json:"ended_at_unix_ms,omitempty"`
+	LatencyMS       int64          `json:"latency_ms,omitempty"`
+	RawArgs         string         `json:"raw_args,omitempty"`
+	RawResult       string         `json:"raw_result,omitempty"`
+}
+
+func (s *Service) GetToolDetail(ctx context.Context, meta *session.Meta, runID string, toolID string) (*ToolDetail, error) {
+	if s == nil {
+		return nil, errors.New("service not ready")
+	}
+	if err := requireRWX(meta); err != nil {
+		return nil, err
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID := strings.TrimSpace(meta.EndpointID)
+	runID = strings.TrimSpace(runID)
+	toolID = strings.TrimSpace(toolID)
+	if endpointID == "" || runID == "" || toolID == "" {
+		return nil, errors.New("invalid request")
+	}
+
+	s.mu.Lock()
+	db := s.threadsDB
+	s.mu.Unlock()
+	if db == nil {
+		return nil, errors.New("threads store not ready")
+	}
+
+	rec, err := db.GetToolCall(ctx, endpointID, runID, toolID)
+	if err != nil {
+		return nil, err
+	}
+	if rec == nil {
+		return nil, sql.ErrNoRows
+	}
+	argsObj, argsErr := parseObjectJSON(rec.ArgsJSON)
+	var result any
+	if strings.TrimSpace(rec.ResultJSON) != "" {
+		if err := json.Unmarshal([]byte(rec.ResultJSON), &result); err != nil {
+			result = nil
+		}
+	}
+	detail := &ToolDetail{
+		RunID:           strings.TrimSpace(rec.RunID),
+		ToolID:          strings.TrimSpace(rec.ToolID),
+		ToolName:        strings.TrimSpace(rec.ToolName),
+		Status:          strings.TrimSpace(rec.Status),
+		Args:            argsObj,
+		Result:          result,
+		ErrorCode:       strings.TrimSpace(rec.ErrorCode),
+		ErrorMessage:    strings.TrimSpace(rec.ErrorMessage),
+		Retryable:       rec.Retryable,
+		RecoveryAction:  strings.TrimSpace(rec.RecoveryAction),
+		StartedAtUnixMs: rec.StartedAtUnixMs,
+		EndedAtUnixMs:   rec.EndedAtUnixMs,
+		LatencyMS:       rec.LatencyMS,
+	}
+	if argsErr != nil && strings.TrimSpace(rec.ArgsJSON) != "" {
+		detail.RawArgs = strings.TrimSpace(rec.ArgsJSON)
+	}
+	if result == nil && strings.TrimSpace(rec.ResultJSON) != "" {
+		detail.RawResult = strings.TrimSpace(rec.ResultJSON)
+	}
+	return detail, nil
+}
+
 func (s *Service) GetTerminalToolOutput(ctx context.Context, meta *session.Meta, runID string, toolID string) (*TerminalToolOutput, error) {
 	if s == nil {
 		return nil, errors.New("service not ready")

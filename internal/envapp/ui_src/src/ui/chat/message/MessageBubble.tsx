@@ -32,7 +32,7 @@ const ErrorIcon: Component = () => (
 );
 
 function isCompactToolBlock(block: MessageBlock): boolean {
-  return block.type === 'tool-call' || block.type === 'shell';
+  return block.type === 'activity-timeline' || block.type === 'shell';
 }
 
 function isStructuredReceiptBlock(block: MessageBlock): boolean {

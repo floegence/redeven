@@ -103,11 +103,26 @@ describe('flowerLiveRunState', () => {
       status: 'complete',
       blocks: [
         {
-          type: 'tool-call',
-          toolName: 'terminal.exec',
-          toolId: 'tool_1',
-          args: {},
-          status: 'running',
+          type: 'activity-timeline',
+          schemaVersion: 1,
+          runId: 'run_1',
+          messageId: 'm_live_4',
+          summary: { status: 'running', totalItems: 1, visibleItems: 1, label: '1 command' },
+          groups: [{
+            groupId: 'command',
+            kind: 'command',
+            renderer: 'command',
+            status: 'running',
+            title: 'Ran command',
+            defaultOpen: false,
+            items: [{
+              itemId: 'tool_1',
+              toolId: 'tool_1',
+              toolName: 'terminal.exec',
+              status: 'running',
+              label: 'Ran command',
+            }],
+          }],
         },
       ],
     });

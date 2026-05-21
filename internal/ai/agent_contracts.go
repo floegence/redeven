@@ -147,15 +147,16 @@ type directTurnProvider interface {
 }
 
 type ToolDef struct {
-	Name             string          `json:"name"`
-	Description      string          `json:"description,omitempty"`
-	InputSchema      json.RawMessage `json:"input_schema,omitempty"`
-	ParallelSafe     bool            `json:"parallel_safe,omitempty"`
-	Mutating         bool            `json:"mutating,omitempty"`
-	RequiresApproval bool            `json:"requires_approval,omitempty"`
-	Source           string          `json:"source,omitempty"`
-	Namespace        string          `json:"namespace,omitempty"`
-	Priority         int             `json:"priority,omitempty"`
+	Name             string                       `json:"name"`
+	Description      string                       `json:"description,omitempty"`
+	InputSchema      json.RawMessage              `json:"input_schema,omitempty"`
+	ParallelSafe     bool                         `json:"parallel_safe,omitempty"`
+	Mutating         bool                         `json:"mutating,omitempty"`
+	RequiresApproval bool                         `json:"requires_approval,omitempty"`
+	Presentation     aitools.ToolPresentationSpec `json:"presentation,omitempty"`
+	Source           string                       `json:"source,omitempty"`
+	Namespace        string                       `json:"namespace,omitempty"`
+	Priority         int                          `json:"priority,omitempty"`
 }
 
 type ToolHandler interface {

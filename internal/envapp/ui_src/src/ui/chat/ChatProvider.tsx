@@ -20,6 +20,9 @@ import type {
   ChatCallbacks,
   VirtualListConfig,
   StreamEvent,
+  ActivityGroup,
+  ActivityItem,
+  ActivityTimelineBlock,
 } from './types';
 import { DEFAULT_VIRTUAL_LIST_CONFIG } from './types';
 import { createClientId } from '../utils/clientId';
@@ -33,6 +36,95 @@ function deferNonBlocking(fn: () => void): void {
   } else {
     Promise.resolve().then(fn);
   }
+}
+
+function activityStatusRank(status: string | undefined): number {
+  switch (String(status ?? '').trim()) {
+    case 'error':
+      return 5;
+    case 'waiting':
+    case 'waiting_approval':
+      return 4;
+    case 'running':
+      return 3;
+    case 'pending':
+      return 2;
+    case 'success':
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+function activitySeverityRank(severity: string | undefined): number {
+  switch (String(severity ?? '').trim()) {
+    case 'error':
+      return 4;
+    case 'blocking':
+      return 3;
+    case 'warning':
+      return 2;
+    case 'normal':
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+function rollupActivityStatus(items: ActivityItem[]): string {
+  let status = 'success';
+  for (const item of items) {
+    if (activityStatusRank(item.status) > activityStatusRank(status)) {
+      status = item.status;
+    }
+  }
+  return status;
+}
+
+function rollupActivitySeverity(items: ActivityItem[]): string {
+  let severity = 'quiet';
+  for (const item of items) {
+    const next = String(item.severity ?? '').trim() || (item.status === 'error' ? 'error' : 'quiet');
+    if (activitySeverityRank(next) > activitySeverityRank(severity)) {
+      severity = next;
+    }
+  }
+  return severity;
+}
+
+function updateActivityApprovalGroup(group: ActivityGroup, toolId: string, approved: boolean): ActivityGroup {
+  let changed = false;
+  const items = group.items.map((item) => {
+    if (
+      String(item.toolId ?? '').trim() !== toolId ||
+      item.requiresApproval !== true ||
+      item.approvalState !== 'required'
+    ) {
+      return item;
+    }
+    changed = true;
+    return approved
+      ? { ...item, approvalState: 'approved' as const, status: 'running' as const, severity: 'normal' as const }
+      : { ...item, approvalState: 'rejected' as const, status: 'error' as const, severity: 'error' as const };
+  });
+  if (!changed) return group;
+  return {
+    ...group,
+    items,
+    status: rollupActivityStatus(items),
+    severity: rollupActivitySeverity(items),
+    defaultOpen: items.some((item) => item.status === 'waiting' || item.status === 'error' || item.requiresApproval === true),
+  };
+}
+
+function updateActivityApprovalSummary(block: ActivityTimelineBlock, groups: ActivityGroup[]): ActivityTimelineBlock['summary'] {
+  const items = groups.flatMap((group) => group.items);
+  return {
+    ...block.summary,
+    status: rollupActivityStatus(items),
+    totalItems: block.summary.totalItems || items.length,
+    visibleItems: block.summary.visibleItems || items.length,
+  };
 }
 
 // ---- Context value type ----
@@ -58,7 +150,6 @@ export interface ChatContextValue {
   setMessages: (messages: Message[]) => void;
   handleStreamEvent: (event: StreamEvent) => void;
   uploadAttachment: (file: File) => Promise<string>;
-  toggleToolCollapse: (messageId: string, toolId: string) => void;
   approveToolCall: (messageId: string, toolId: string, approved: boolean) => void;
   scrollToBottomRequest: Accessor<ScrollToBottomRequest | null>;
   requestScrollToBottom: (options?: ScrollToBottomRequestOptions) => void;
@@ -362,33 +453,20 @@ export const ChatProvider: ParentComponent<ChatProviderProps> = (props) => {
       return onUpload ? await onUpload(file) : URL.createObjectURL(file);
     },
 
-    toggleToolCollapse: (messageId, toolId) => {
-      updateMessage(messageId, (msg) => ({
-        ...msg,
-        blocks: msg.blocks.map((block) => {
-          if (block.type === 'tool-call' && block.toolId === toolId) {
-            return { ...block, collapsed: block.collapsed === undefined ? false : !block.collapsed };
-          }
-          return block;
-        }),
-      }));
-    },
-
     approveToolCall: (messageId, toolId, approved) => {
       updateMessage(messageId, (msg) => ({
         ...msg,
         blocks: msg.blocks.map((block) => {
-          if (
-            block.type !== 'tool-call' ||
-            block.toolId !== toolId ||
-            block.requiresApproval !== true ||
-            block.approvalState !== 'required'
-          ) {
-            return block;
+          if (block.type === 'activity-timeline') {
+            let changed = false;
+            const groups = block.groups.map((group) => {
+              const next = updateActivityApprovalGroup(group, toolId, approved);
+              if (next !== group) changed = true;
+              return next;
+            });
+            return changed ? { ...block, groups, summary: updateActivityApprovalSummary(block, groups) } : block;
           }
-          return approved
-            ? { ...block, approvalState: 'approved' as const, status: 'running' as const }
-            : { ...block, approvalState: 'rejected' as const, status: 'error' as const, error: block.error || 'Rejected by user' };
+          return block;
         }),
       }));
 
