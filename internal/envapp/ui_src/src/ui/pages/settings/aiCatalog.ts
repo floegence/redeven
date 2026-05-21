@@ -1,4 +1,5 @@
 import type {
+  AIInputModality,
   AIProviderModelPreset,
   AIProviderPreset,
   AIProviderRow,
@@ -7,15 +8,17 @@ import type {
 
 export const DEFAULT_OPENAI_COMPAT_CONTEXT_WINDOW = 128000;
 export const DEFAULT_EFFECTIVE_CONTEXT_WINDOW_PERCENT = 95;
+export const DEFAULT_INPUT_MODALITIES: readonly AIInputModality[] = ['text'];
+export const VISION_INPUT_MODALITIES: readonly AIInputModality[] = ['text', 'image'];
 
 export const AI_PROVIDER_TYPE_OPTIONS: ReadonlyArray<{ value: AIProviderType; label: string }> = [
-  { value: 'openai', label: 'openai' },
-  { value: 'anthropic', label: 'anthropic' },
-  { value: 'moonshot', label: 'moonshot' },
-  { value: 'chatglm', label: 'chatglm' },
-  { value: 'deepseek', label: 'deepseek' },
-  { value: 'qwen', label: 'qwen' },
-  { value: 'openai_compatible', label: 'openai_compatible' },
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'anthropic', label: 'Anthropic' },
+  { value: 'moonshot', label: 'Moonshot' },
+  { value: 'chatglm', label: 'ChatGLM' },
+  { value: 'deepseek', label: 'DeepSeek' },
+  { value: 'qwen', label: 'Qwen' },
+  { value: 'openai_compatible', label: 'OpenAI Compatible' },
 ];
 
 export const AI_PROVIDER_PRESET_CATALOG: Record<AIProviderType, AIProviderPreset> = {
@@ -24,14 +27,14 @@ export const AI_PROVIDER_PRESET_CATALOG: Record<AIProviderType, AIProviderPreset
     name: 'OpenAI',
     default_base_url: 'https://api.openai.com/v1',
     models: [
-      { model_name: 'gpt-5.5', context_window: 1050000, max_output_tokens: 128000, note: 'Latest frontier model for complex reasoning and coding' },
-      { model_name: 'gpt-5.4', context_window: 1050000, max_output_tokens: 128000, note: 'Affordable frontier model for professional work' },
-      { model_name: 'gpt-5.4-mini', context_window: 400000, max_output_tokens: 128000, note: 'Fast, cost-effective GPT-5.4 variant' },
-      { model_name: 'gpt-5.4-nano', context_window: 400000, max_output_tokens: 128000, note: 'Low-cost option for simple high-volume tasks' },
-      { model_name: 'gpt-5.2', context_window: 400000, max_output_tokens: 128000, note: 'Previous flagship model' },
-      { model_name: 'gpt-5.2-mini', context_window: 400000, max_output_tokens: 128000, note: 'Cost-effective flagship variant' },
-      { model_name: 'gpt-5', context_window: 400000, max_output_tokens: 128000, note: 'Stable flagship' },
-      { model_name: 'gpt-5-mini', context_window: 400000, max_output_tokens: 128000, note: 'Stable lightweight option' },
+      { model_name: 'gpt-5.5', context_window: 1050000, max_output_tokens: 128000, input_modalities: VISION_INPUT_MODALITIES, note: 'Latest frontier model for complex reasoning and coding' },
+      { model_name: 'gpt-5.4', context_window: 1050000, max_output_tokens: 128000, input_modalities: VISION_INPUT_MODALITIES, note: 'Affordable frontier model for professional work' },
+      { model_name: 'gpt-5.4-mini', context_window: 400000, max_output_tokens: 128000, input_modalities: VISION_INPUT_MODALITIES, note: 'Fast, cost-effective GPT-5.4 variant' },
+      { model_name: 'gpt-5.4-nano', context_window: 400000, max_output_tokens: 128000, input_modalities: VISION_INPUT_MODALITIES, note: 'Low-cost option for simple high-volume tasks' },
+      { model_name: 'gpt-5.2', context_window: 400000, max_output_tokens: 128000, input_modalities: VISION_INPUT_MODALITIES, note: 'Previous flagship model' },
+      { model_name: 'gpt-5.2-mini', context_window: 400000, max_output_tokens: 128000, input_modalities: VISION_INPUT_MODALITIES, note: 'Cost-effective flagship variant' },
+      { model_name: 'gpt-5', context_window: 400000, max_output_tokens: 128000, input_modalities: VISION_INPUT_MODALITIES, note: 'Stable flagship' },
+      { model_name: 'gpt-5-mini', context_window: 400000, max_output_tokens: 128000, input_modalities: VISION_INPUT_MODALITIES, note: 'Stable lightweight option' },
     ],
   },
   anthropic: {
@@ -39,9 +42,9 @@ export const AI_PROVIDER_PRESET_CATALOG: Record<AIProviderType, AIProviderPreset
     name: 'Anthropic',
     default_base_url: 'https://api.anthropic.com/v1',
     models: [
-      { model_name: 'claude-opus-4-7', context_window: 1000000, max_output_tokens: 128000, note: 'Most capable Claude model for complex agentic coding' },
-      { model_name: 'claude-sonnet-4-6', context_window: 1000000, max_output_tokens: 64000, note: 'Best balance of speed and intelligence' },
-      { model_name: 'claude-haiku-4-5-20251001', context_window: 200000, max_output_tokens: 64000, note: 'Fastest current Claude model' },
+      { model_name: 'claude-opus-4-7', context_window: 1000000, max_output_tokens: 128000, input_modalities: VISION_INPUT_MODALITIES, note: 'Most capable Claude model for complex agentic coding' },
+      { model_name: 'claude-sonnet-4-6', context_window: 1000000, max_output_tokens: 64000, input_modalities: VISION_INPUT_MODALITIES, note: 'Best balance of speed and intelligence' },
+      { model_name: 'claude-haiku-4-5-20251001', context_window: 200000, max_output_tokens: 64000, input_modalities: VISION_INPUT_MODALITIES, note: 'Fastest current Claude model' },
     ],
   },
   moonshot: {
@@ -49,7 +52,7 @@ export const AI_PROVIDER_PRESET_CATALOG: Record<AIProviderType, AIProviderPreset
     name: 'Moonshot',
     default_base_url: 'https://api.moonshot.cn/v1',
     models: [
-      { model_name: 'kimi-k2.6', context_window: 256000, max_output_tokens: 96000, note: 'Current Kimi flagship with built-in web search' },
+      { model_name: 'kimi-k2.6', context_window: 256000, max_output_tokens: 96000, input_modalities: DEFAULT_INPUT_MODALITIES, note: 'Current Kimi flagship with built-in web search' },
     ],
   },
   chatglm: {
@@ -57,7 +60,7 @@ export const AI_PROVIDER_PRESET_CATALOG: Record<AIProviderType, AIProviderPreset
     name: 'ChatGLM',
     default_base_url: 'https://api.z.ai/api/paas/v4/',
     models: [
-      { model_name: 'glm-5.1', context_window: 200000, max_output_tokens: 128000, note: 'Current GLM flagship with built-in web search' },
+      { model_name: 'glm-5.1', context_window: 200000, max_output_tokens: 128000, input_modalities: DEFAULT_INPUT_MODALITIES, note: 'Current GLM flagship with built-in web search' },
     ],
   },
   deepseek: {
@@ -65,8 +68,8 @@ export const AI_PROVIDER_PRESET_CATALOG: Record<AIProviderType, AIProviderPreset
     name: 'DeepSeek',
     default_base_url: 'https://api.deepseek.com',
     models: [
-      { model_name: 'deepseek-v4-pro', context_window: 1000000, max_output_tokens: 384000, note: 'Current V4 flagship model' },
-      { model_name: 'deepseek-v4-flash', context_window: 1000000, max_output_tokens: 384000, note: 'Current V4 fast model' },
+      { model_name: 'deepseek-v4-pro', context_window: 1000000, max_output_tokens: 384000, input_modalities: DEFAULT_INPUT_MODALITIES, note: 'Current V4 flagship model' },
+      { model_name: 'deepseek-v4-flash', context_window: 1000000, max_output_tokens: 384000, input_modalities: DEFAULT_INPUT_MODALITIES, note: 'Current V4 fast model' },
     ],
   },
   qwen: {
@@ -74,10 +77,10 @@ export const AI_PROVIDER_PRESET_CATALOG: Record<AIProviderType, AIProviderPreset
     name: 'Qwen',
     default_base_url: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
     models: [
-      { model_name: 'qwen3.6-plus', context_window: 1000000, max_output_tokens: 65536, note: 'Current Qwen3.6 Plus with built-in web search' },
-      { model_name: 'qwen3.6-plus-2026-04-02', context_window: 1000000, max_output_tokens: 65536, note: 'Pinned Qwen3.6 Plus snapshot with built-in web search' },
-      { model_name: 'qwen3.6-flash', context_window: 1000000, max_output_tokens: 65536, note: 'Current Qwen3.6 Flash with built-in web search' },
-      { model_name: 'qwen3.6-flash-2026-04-16', context_window: 1000000, max_output_tokens: 65536, note: 'Pinned Qwen3.6 Flash snapshot with built-in web search' },
+      { model_name: 'qwen3.6-plus', context_window: 1000000, max_output_tokens: 65536, input_modalities: DEFAULT_INPUT_MODALITIES, note: 'Current Qwen3.6 Plus with built-in web search' },
+      { model_name: 'qwen3.6-plus-2026-04-02', context_window: 1000000, max_output_tokens: 65536, input_modalities: DEFAULT_INPUT_MODALITIES, note: 'Pinned Qwen3.6 Plus snapshot with built-in web search' },
+      { model_name: 'qwen3.6-flash', context_window: 1000000, max_output_tokens: 65536, input_modalities: DEFAULT_INPUT_MODALITIES, note: 'Current Qwen3.6 Flash with built-in web search' },
+      { model_name: 'qwen3.6-flash-2026-04-16', context_window: 1000000, max_output_tokens: 65536, input_modalities: DEFAULT_INPUT_MODALITIES, note: 'Pinned Qwen3.6 Flash snapshot with built-in web search' },
     ],
   },
   openai_compatible: {
@@ -140,6 +143,26 @@ export function normalizeEffectiveContextPercent(raw: unknown): number | undefin
   return parsed;
 }
 
+export function normalizeInputModalities(raw: unknown): AIInputModality[] {
+  const source = Array.isArray(raw) ? raw : DEFAULT_INPUT_MODALITIES;
+  const out: AIInputModality[] = [];
+  for (const item of source) {
+    const modality = String(item ?? '').trim().toLowerCase();
+    if (modality !== 'text' && modality !== 'image') continue;
+    if (!out.includes(modality)) out.push(modality);
+  }
+  if (!out.includes('text')) out.unshift('text');
+  return out.length > 0 ? out : ['text'];
+}
+
+export function modelSupportsImageInput(raw: unknown): boolean {
+  return normalizeInputModalities(raw).includes('image');
+}
+
+export function modalitySummary(raw: unknown): string {
+  return modelSupportsImageInput(raw) ? 'Text + Image' : 'Text only';
+}
+
 export function defaultBaseURLForProviderType(providerType: AIProviderType): string {
   return providerPresetForType(providerType).default_base_url;
 }
@@ -179,6 +202,7 @@ export function cloneAIProviderRow(row: AIProviderRow): AIProviderRow {
       context_window: normalizePositiveInteger(m?.context_window),
       max_output_tokens: normalizePositiveInteger(m?.max_output_tokens),
       effective_context_window_percent: normalizeEffectiveContextPercent(m?.effective_context_window_percent),
+      input_modalities: normalizeInputModalities(m?.input_modalities),
     })),
   };
 }
@@ -187,13 +211,14 @@ export function normalizeAIProviderRowDraft(row: AIProviderRow): AIProviderRow {
   const out = cloneAIProviderRow(row);
   const models = Array.isArray(out.models) ? out.models : [];
   if (models.length === 0) {
-    out.models = [{ model_name: '', context_window: defaultContextWindowForProviderType(out.type) }];
+    out.models = [{ model_name: '', context_window: defaultContextWindowForProviderType(out.type), input_modalities: ['text'] }];
   } else {
     out.models = models.map((m) => ({
       model_name: String(m?.model_name ?? ''),
       context_window: normalizeContextWindowByProvider(out.type, m?.context_window),
       max_output_tokens: normalizePositiveInteger(m?.max_output_tokens),
       effective_context_window_percent: normalizeEffectiveContextPercent(m?.effective_context_window_percent),
+      input_modalities: normalizeInputModalities(m?.input_modalities),
     }));
   }
   return out;

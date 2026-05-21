@@ -206,6 +206,47 @@ export function SettingsPill(props: { tone?: 'default' | 'success' | 'warning' |
   );
 }
 
+export function CapabilityTag(props: { active?: boolean; children: JSX.Element }) {
+  return (
+    <Tag variant={props.active ? 'success' : 'neutral'} tone="soft" size="sm" class="whitespace-nowrap">
+      {props.children}
+    </Tag>
+  );
+}
+
+export function SectionCollapse(props: {
+  title: string;
+  description?: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  children: JSX.Element;
+}) {
+  return (
+    <div class={cn('rounded-lg border', redevenSurfaceRoleClass('panel'))}>
+      <button
+        type="button"
+        class="flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-2.5 text-left transition hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-60"
+        onClick={() => props.onOpenChange(!props.open)}
+      >
+        <span class="min-w-0">
+          <span class="block text-sm font-semibold text-foreground">{props.title}</span>
+          <Show when={props.description}>
+            <span class="mt-0.5 block text-xs text-muted-foreground">{props.description}</span>
+          </Show>
+        </span>
+        <span class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md border text-xs text-muted-foreground">
+          {props.open ? '-' : '+'}
+        </span>
+      </button>
+      <Show when={props.open}>
+        <div class={cn('border-t p-3', redevenDividerRoleClass())}>{props.children}</div>
+      </Show>
+    </div>
+  );
+}
+
+export const AdvancedCollapse = SectionCollapse;
+
 export function SettingsTable(props: { children: JSX.Element; minWidthClass?: string; class?: string; stickyHeader?: boolean }) {
   return (
     <div class={cn('overflow-auto rounded-lg border bg-background', redevenSurfaceRoleClass('panel'), props.class)}>

@@ -47,7 +47,16 @@ const STORAGE_KEYS = [
 
 type MutableModelsResponse = {
   current_model: string;
-  models: Array<{ id: string; label?: string; source?: string; source_label?: string }>;
+  models: Array<{
+    id: string;
+    label?: string;
+    source?: string;
+    source_label?: string;
+    context_window?: number;
+    max_output_tokens?: number;
+    input_modalities?: string[];
+    supports_image_input?: boolean;
+  }>;
 };
 
 const baseModels = (): MutableModelsResponse => ({
@@ -296,23 +305,25 @@ describe('AIChatContext model selection', () => {
 
     const { ctx, dispose } = await renderContext();
 
-    expect(ctx.modelOptions()).toEqual([
-      { value: 'remote/model-a', label: 'Remote A', source: 'runtime_config', sourceLabel: 'Runtime config' },
-      { value: 'desktop:model_local_b', label: 'Desktop B', source: 'desktop_model_source', sourceLabel: 'Desktop' },
+    expect(ctx.modelOptions().map((option) => ({
+      value: option.value,
+      label: option.label,
+      source: option.source,
+      sourceLabel: option.sourceLabel,
+      inputModalities: option.inputModalities,
+      supportsImageInput: option.supportsImageInput,
+    }))).toEqual([
+      { value: 'remote/model-a', label: 'Remote A', source: 'runtime_config', sourceLabel: 'Runtime config', inputModalities: ['text'], supportsImageInput: false },
+      { value: 'desktop:model_local_b', label: 'Desktop B', source: 'desktop_model_source', sourceLabel: 'Desktop', inputModalities: ['text'], supportsImageInput: false },
     ]);
-    expect(ctx.modelSourceGroups()).toEqual([
-      {
-        source: 'runtime_config',
-        sourceLabel: 'Runtime config',
-        available: true,
-        models: [{ value: 'remote/model-a', label: 'Remote A', source: 'runtime_config', sourceLabel: 'Runtime config' }],
-      },
-      {
-        source: 'desktop_model_source',
-        sourceLabel: 'Desktop',
-        available: true,
-        models: [{ value: 'desktop:model_local_b', label: 'Desktop B', source: 'desktop_model_source', sourceLabel: 'Desktop' }],
-      },
+    expect(ctx.modelSourceGroups().map((group) => ({
+      source: group.source,
+      sourceLabel: group.sourceLabel,
+      available: group.available,
+      models: group.models.map((model) => model.value),
+    }))).toEqual([
+      { source: 'runtime_config', sourceLabel: 'Runtime config', available: true, models: ['remote/model-a'] },
+      { source: 'desktop_model_source', sourceLabel: 'Desktop', available: true, models: ['desktop:model_local_b'] },
     ]);
 
     dispose();
@@ -392,6 +403,29 @@ describe('AIChatContext model selection', () => {
     expect(threadId).toBe('thread-created');
     expect(createThreadBodies).toHaveLength(1);
     expect(createThreadBodies[0]?.model_id).toBe('openai/model-b');
+
+    dispose();
+  });
+
+  it('does not silently select the first model when current_model is invalid', async () => {
+    modelsState = {
+      current_model: 'openai/missing',
+      models: [
+        { id: 'openai/model-a', label: 'Model A' },
+        { id: 'openai/model-b', label: 'Model B' },
+      ],
+    };
+
+    const { ctx, dispose } = await renderContext();
+
+    expect(ctx.selectedCurrentModel()).toBe('');
+    expect(ctx.selectedSendModel()).toBe('');
+
+    const threadId = await ctx.ensureThreadForSend();
+
+    expect(threadId).toBeNull();
+    expect(createThreadBodies).toEqual([]);
+    expect(notificationMock.error).toHaveBeenCalledWith('Missing model', 'Select a Current Model before starting a chat.');
 
     dispose();
   });

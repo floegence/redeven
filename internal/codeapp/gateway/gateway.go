@@ -1760,7 +1760,6 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid ai json"})
 					return
 				}
-				cfg.NormalizeCurrentModelID()
 				if err := cfg.Validate(); err != nil {
 					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: fmt.Sprintf("invalid ai: %s", err.Error())})
 					return
@@ -2370,6 +2369,242 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 			return
 		}
+
+	case r.Method == http.MethodPut && r.URL.Path == "/_redeven_proxy/api/ai/provider_bundle":
+		meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
+		if !ok {
+			return
+		}
+		if g.ai == nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			return
+		}
+		if g.secrets == nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "secrets store not ready"})
+			return
+		}
+		type keyPatch struct {
+			ProviderID string  `json:"provider_id"`
+			APIKey     *string `json:"api_key"`
+		}
+		type reqBody struct {
+			AI                          config.AIConfig `json:"ai"`
+			ProviderAPIKeyPatches       []keyPatch      `json:"provider_api_key_patches,omitempty"`
+			WebSearchProviderKeyPatches []keyPatch      `json:"web_search_provider_key_patches,omitempty"`
+		}
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		var body reqBody
+		if err := dec.Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		if err := dec.Decode(&struct{}{}); err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+
+		nextAI := body.AI
+		if err := nextAI.Validate(); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: fmt.Sprintf("invalid ai: %s", err.Error())})
+			return
+		}
+		providerIDs := make(map[string]struct{}, len(nextAI.Providers))
+		for i := range nextAI.Providers {
+			id := strings.TrimSpace(nextAI.Providers[i].ID)
+			if id != "" {
+				providerIDs[id] = struct{}{}
+			}
+		}
+
+		aiKeyPatches := make([]settings.AIProviderAPIKeyPatch, 0, len(body.ProviderAPIKeyPatches))
+		webSearchKeyPatches := make([]settings.WebSearchProviderAPIKeyPatch, 0, len(body.WebSearchProviderKeyPatches))
+		for i := range body.ProviderAPIKeyPatches {
+			p := body.ProviderAPIKeyPatches[i]
+			id := strings.TrimSpace(p.ProviderID)
+			if _, ok := providerIDs[id]; id == "" || !ok {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid provider_api_key_patches.provider_id"})
+				return
+			}
+			var key *string
+			if p.APIKey != nil {
+				v := strings.TrimSpace(*p.APIKey)
+				if v == "" {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing api key"})
+					return
+				}
+				key = &v
+			}
+			aiKeyPatches = append(aiKeyPatches, settings.AIProviderAPIKeyPatch{ProviderID: id, APIKey: key})
+		}
+		for i := range body.WebSearchProviderKeyPatches {
+			p := body.WebSearchProviderKeyPatches[i]
+			id := strings.TrimSpace(p.ProviderID)
+			if _, ok := providerIDs[id]; id == "" || !ok {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid web_search_provider_key_patches.provider_id"})
+				return
+			}
+			var key *string
+			if p.APIKey != nil {
+				v := strings.TrimSpace(*p.APIKey)
+				if v == "" {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing web search api key"})
+					return
+				}
+				key = &v
+			}
+			webSearchKeyPatches = append(webSearchKeyPatches, settings.WebSearchProviderAPIKeyPatch{ProviderID: id, APIKey: key})
+		}
+
+		activeRunCount := g.ai.ActiveRunCount(strings.TrimSpace(meta.EndpointID))
+		aiUpdate := &settingsAIUpdateView{
+			ApplyScope:     "future_runs",
+			ActiveRunCount: activeRunCount,
+		}
+		auditDetail := map[string]any{
+			"ai_updated":           true,
+			"provider_key_count":   len(aiKeyPatches),
+			"web_search_key_count": len(webSearchKeyPatches),
+			"ai_apply_scope":       aiUpdate.ApplyScope,
+			"ai_active_run_count":  activeRunCount,
+		}
+
+		prevConfig, err := g.loadConfigLocked()
+		if err != nil {
+			g.appendAudit(meta, "ai_provider_bundle_update", "failure", auditDetail, err)
+			writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		type secretSnapshot struct {
+			hasValue bool
+			value    string
+		}
+		prevAIKeys := map[string]secretSnapshot{}
+		prevWebSearchKeys := map[string]secretSnapshot{}
+		seenAIKeyIDs := map[string]struct{}{}
+		seenWebSearchKeyIDs := map[string]struct{}{}
+		for _, patch := range aiKeyPatches {
+			if _, ok := seenAIKeyIDs[patch.ProviderID]; ok {
+				continue
+			}
+			seenAIKeyIDs[patch.ProviderID] = struct{}{}
+			value, ok, snapErr := g.secrets.GetAIProviderAPIKey(patch.ProviderID)
+			if snapErr != nil {
+				g.appendAudit(meta, "ai_provider_bundle_update", "failure", auditDetail, snapErr)
+				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: snapErr.Error()})
+				return
+			}
+			prevAIKeys[patch.ProviderID] = secretSnapshot{hasValue: ok, value: value}
+		}
+		for _, patch := range webSearchKeyPatches {
+			if _, ok := seenWebSearchKeyIDs[patch.ProviderID]; ok {
+				continue
+			}
+			seenWebSearchKeyIDs[patch.ProviderID] = struct{}{}
+			value, ok, snapErr := g.secrets.GetWebSearchProviderAPIKey(patch.ProviderID)
+			if snapErr != nil {
+				g.appendAudit(meta, "ai_provider_bundle_update", "failure", auditDetail, snapErr)
+				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: snapErr.Error()})
+				return
+			}
+			prevWebSearchKeys[patch.ProviderID] = secretSnapshot{hasValue: ok, value: value}
+		}
+
+		restoreSecrets := func() error {
+			aiRestore := make([]settings.AIProviderAPIKeyPatch, 0, len(prevAIKeys))
+			for id, snap := range prevAIKeys {
+				if snap.hasValue {
+					value := snap.value
+					aiRestore = append(aiRestore, settings.AIProviderAPIKeyPatch{ProviderID: id, APIKey: &value})
+				} else {
+					aiRestore = append(aiRestore, settings.AIProviderAPIKeyPatch{ProviderID: id, APIKey: nil})
+				}
+			}
+			webRestore := make([]settings.WebSearchProviderAPIKeyPatch, 0, len(prevWebSearchKeys))
+			for id, snap := range prevWebSearchKeys {
+				if snap.hasValue {
+					value := snap.value
+					webRestore = append(webRestore, settings.WebSearchProviderAPIKeyPatch{ProviderID: id, APIKey: &value})
+				} else {
+					webRestore = append(webRestore, settings.WebSearchProviderAPIKeyPatch{ProviderID: id, APIKey: nil})
+				}
+			}
+			var errs []error
+			if err := g.secrets.ApplyAIProviderAPIKeyPatches(aiRestore); err != nil {
+				errs = append(errs, err)
+			}
+			if err := g.secrets.ApplyWebSearchProviderAPIKeyPatches(webRestore); err != nil {
+				errs = append(errs, err)
+			}
+			return errors.Join(errs...)
+		}
+
+		var updated *config.Config
+		restoreConfig := func() error {
+			if prevConfig == nil {
+				return nil
+			}
+			return g.ai.UpdateConfig(prevConfig.AI, func() error {
+				_, err := g.updateConfigLocked(func(c *config.Config) error {
+					*c = *prevConfig
+					return nil
+				})
+				return err
+			})
+		}
+		rollbackProviderBundle := func() error {
+			return errors.Join(restoreConfig(), restoreSecrets())
+		}
+
+		persist := func() error {
+			cfg, err := g.updateConfigLocked(func(c *config.Config) error {
+				c.AI = &nextAI
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+			updated = cfg
+			return nil
+		}
+		if err := g.ai.UpdateConfig(&nextAI, persist); err != nil {
+			g.appendAudit(meta, "ai_provider_bundle_update", "failure", auditDetail, err)
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		if err := g.secrets.ApplyAIProviderAPIKeyPatches(aiKeyPatches); err != nil {
+			rollbackErr := rollbackProviderBundle()
+			if rollbackErr != nil {
+				err = errors.Join(err, rollbackErr)
+				g.appendAudit(meta, "ai_provider_bundle_update", "failure", auditDetail, err)
+				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			g.appendAudit(meta, "ai_provider_bundle_update", "failure", auditDetail, err)
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		if err := g.secrets.ApplyWebSearchProviderAPIKeyPatches(webSearchKeyPatches); err != nil {
+			rollbackErr := rollbackProviderBundle()
+			if rollbackErr != nil {
+				err = errors.Join(err, rollbackErr)
+				g.appendAudit(meta, "ai_provider_bundle_update", "failure", auditDetail, err)
+				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			g.appendAudit(meta, "ai_provider_bundle_update", "failure", auditDetail, err)
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		g.appendAudit(meta, "ai_provider_bundle_update", "success", auditDetail, nil)
+		writeJSON(w, http.StatusOK, apiResp{
+			OK: true,
+			Data: settingsUpdateView{
+				Settings: g.toSettingsView(updated),
+				AIUpdate: aiUpdate,
+			},
+		})
+		return
 
 	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/provider_keys/status":
 		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {

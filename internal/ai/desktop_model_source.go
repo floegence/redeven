@@ -60,12 +60,14 @@ type AIRuntimeStatus struct {
 }
 
 type DesktopModelSourceModel struct {
-	ID                            string `json:"id"`
-	Label                         string `json:"label,omitempty"`
-	Provider                      string `json:"provider,omitempty"`
-	ContextWindow                 int    `json:"context_window,omitempty"`
-	MaxOutputTokens               int    `json:"max_output_tokens,omitempty"`
-	EffectiveContextWindowPercent int    `json:"effective_context_window_percent,omitempty"`
+	ID                            string   `json:"id"`
+	Label                         string   `json:"label,omitempty"`
+	Provider                      string   `json:"provider,omitempty"`
+	ContextWindow                 int      `json:"context_window,omitempty"`
+	MaxOutputTokens               int      `json:"max_output_tokens,omitempty"`
+	EffectiveContextWindowPercent int      `json:"effective_context_window_percent,omitempty"`
+	InputModalities               []string `json:"input_modalities,omitempty"`
+	SupportsImageInput            bool     `json:"supports_image_input,omitempty"`
 }
 
 type DesktopModelSourceModelSnapshot struct {
@@ -1132,6 +1134,8 @@ func buildDesktopModelSourceModelSnapshot(cfg *config.AIConfig, secretStore *set
 				ContextWindow:                 m.ContextWindow,
 				MaxOutputTokens:               m.MaxOutputTokens,
 				EffectiveContextWindowPercent: m.EffectiveContextWindowPercent,
+				InputModalities:               m.NormalizedInputModalities(),
+				SupportsImageInput:            m.SupportsImageInput(),
 			}
 			out.Models = append(out.Models, model)
 			registry[publicID] = desktopModelSourceRegistryEntry{
@@ -1149,9 +1153,6 @@ func buildDesktopModelSourceModelSnapshot(cfg *config.AIConfig, secretStore *set
 		out.MissingKeyProviderIDs = append(out.MissingKeyProviderIDs, id)
 	}
 	sort.Strings(out.MissingKeyProviderIDs)
-	if out.CurrentModel == "" && len(out.Models) > 0 {
-		out.CurrentModel = out.Models[0].ID
-	}
 	return out, registry, nil
 }
 

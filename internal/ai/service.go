@@ -598,34 +598,30 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 	out := &ModelsResponse{
 		Runtime: s.RuntimeStatus(context.Background()),
 	}
-	modelLabelByID, modelOrder, currentModelID, err := configModelLabels(cfg)
+	configModels, currentModelID, err := configModelViews(cfg)
 	if err != nil && cfg != nil {
 		return nil, err
 	}
-	seen := make(map[string]struct{}, len(modelOrder))
+	seen := make(map[string]struct{}, len(configModels))
 	if currentModelID != "" {
 		out.CurrentModel = currentModelID
-		out.Models = append(out.Models, Model{
-			ID:          currentModelID,
-			Label:       strings.TrimSpace(modelLabelByID[currentModelID]),
-			Source:      modelSourceRuntimeConfig,
-			SourceLabel: modelSourceRuntimeConfigLabel,
-		})
-		seen[currentModelID] = struct{}{}
 	}
-	for _, id := range modelOrder {
+	for _, m := range configModels {
+		if strings.TrimSpace(m.ID) == currentModelID {
+			out.Models = append(out.Models, m)
+			seen[m.ID] = struct{}{}
+			break
+		}
+	}
+	for _, m := range configModels {
+		id := strings.TrimSpace(m.ID)
 		if id == "" {
 			continue
 		}
 		if _, ok := seen[id]; ok {
 			continue
 		}
-		out.Models = append(out.Models, Model{
-			ID:          id,
-			Label:       strings.TrimSpace(modelLabelByID[id]),
-			Source:      modelSourceRuntimeConfig,
-			SourceLabel: modelSourceRuntimeConfigLabel,
-		})
+		out.Models = append(out.Models, m)
 		seen[id] = struct{}{}
 	}
 
@@ -642,14 +638,6 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 				sourceCurrent = modelSourceCurrent
 			} else if desktopModelSourceSnapshotHasModel(snapshot, snapshot.CurrentModel) {
 				sourceCurrent = strings.TrimSpace(snapshot.CurrentModel)
-			}
-			if sourceCurrent == "" {
-				for _, m := range snapshot.Models {
-					if isDesktopModelSourceModelID(m.ID) {
-						sourceCurrent = strings.TrimSpace(m.ID)
-						break
-					}
-				}
 			}
 			if sourceCurrent != "" && modelSourceCurrent != "" {
 				out.CurrentModel = sourceCurrent
@@ -672,10 +660,14 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 					label = "Desktop / " + label
 				}
 				model := Model{
-					ID:          modelID,
-					Label:       label,
-					Source:      modelSourceDesktopModelSource,
-					SourceLabel: modelSourceDesktopModelSourceLabel,
+					ID:                 modelID,
+					Label:              label,
+					Source:             modelSourceDesktopModelSource,
+					SourceLabel:        modelSourceDesktopModelSourceLabel,
+					ContextWindow:      m.ContextWindow,
+					MaxOutputTokens:    m.MaxOutputTokens,
+					InputModalities:    append([]string(nil), m.InputModalities...),
+					SupportsImageInput: m.SupportsImageInput,
 				}
 				if modelID == sourceCurrent && out.CurrentModel == sourceCurrent {
 					out.Models = append([]Model{model}, out.Models...)
@@ -694,9 +686,9 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 	return out, nil
 }
 
-func configModelLabels(cfg *config.AIConfig) (map[string]string, []string, string, error) {
+func configModelViews(cfg *config.AIConfig) ([]Model, string, error) {
 	if cfg == nil {
-		return map[string]string{}, nil, "", nil
+		return nil, "", nil
 	}
 	providerNameByID := make(map[string]string, len(cfg.Providers))
 	for _, p := range cfg.Providers {
@@ -714,8 +706,7 @@ func configModelLabels(cfg *config.AIConfig) (map[string]string, []string, strin
 		providerNameByID[id] = name
 	}
 
-	modelLabelByID := make(map[string]string, len(cfg.Providers))
-	modelOrder := make([]string, 0, 16)
+	models := make([]Model, 0, 16)
 	seenModel := make(map[string]struct{}, 16)
 	for _, p := range cfg.Providers {
 		providerID := strings.TrimSpace(p.ID)
@@ -736,21 +727,33 @@ func configModelLabels(cfg *config.AIConfig) (map[string]string, []string, strin
 				continue
 			}
 			seenModel[id] = struct{}{}
-			modelOrder = append(modelOrder, id)
-			modelLabelByID[id] = pn + " / " + modelName
+			models = append(models, configModelView(id, pn+" / "+modelName, m))
 		}
 	}
-	if len(modelOrder) == 0 {
-		return modelLabelByID, modelOrder, "", errors.New("invalid ai config: missing models")
+	if len(models) == 0 {
+		return models, "", errors.New("invalid ai config: missing models")
 	}
 	currentModelID := strings.TrimSpace(cfg.CurrentModelID)
-	if !cfg.IsAllowedModelID(currentModelID) {
-		currentModelID = modelOrder[0]
-	}
 	if currentModelID == "" {
-		return modelLabelByID, modelOrder, "", errors.New("invalid ai config: missing current model")
+		return models, "", errors.New("invalid ai config: missing current model")
 	}
-	return modelLabelByID, modelOrder, currentModelID, nil
+	if !cfg.IsAllowedModelID(currentModelID) {
+		return models, "", fmt.Errorf("invalid ai config: current_model_id is not in providers[].models[]: %s", currentModelID)
+	}
+	return models, currentModelID, nil
+}
+
+func configModelView(id string, label string, m config.AIProviderModel) Model {
+	return Model{
+		ID:                 strings.TrimSpace(id),
+		Label:              strings.TrimSpace(label),
+		Source:             modelSourceRuntimeConfig,
+		SourceLabel:        modelSourceRuntimeConfigLabel,
+		ContextWindow:      m.EffectiveInputWindowTokens(),
+		MaxOutputTokens:    m.MaxOutputTokens,
+		InputModalities:    m.NormalizedInputModalities(),
+		SupportsImageInput: m.SupportsImageInput(),
+	}
 }
 
 func (s *Service) desktopModelSourceModelAllowed(ctx context.Context, modelID string) (bool, error) {
@@ -1689,7 +1692,7 @@ func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, req
 		}
 	}
 	if model == "" && cfg != nil {
-		if id, ok := cfg.ResolvedCurrentModelID(); ok {
+		if id := strings.TrimSpace(cfg.CurrentModelID); id != "" && cfg.IsAllowedModelID(id) {
 			model = id
 		}
 	}
@@ -1959,17 +1962,13 @@ func defaultModelCapability(providerID string, modelName string) contextmodel.Mo
 		SupportsTools:                  true,
 		SupportsParallelTools:          false,
 		SupportsStrictJSONSchema:       true,
-		SupportsImageInput:             true,
-		SupportsFileInput:              true,
+		SupportsImageInput:             false,
+		SupportsFileInput:              false,
 		SupportsReasoningTokens:        true,
 		SupportsAskUserQuestionBatches: true,
 		MaxContextTokens:               128000,
 		MaxOutputTokens:                4096,
 		PreferredToolSchemaMode:        "json_schema",
-	}
-	if strings.Contains(strings.ToLower(modelName), "mini") {
-		cap.MaxContextTokens = 64000
-		cap.MaxOutputTokens = 4096
 	}
 	return contextmodel.NormalizeCapability(cap)
 }

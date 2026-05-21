@@ -1871,6 +1871,28 @@ export function EnvAIPage() {
       </Tooltip>
     </Show>
   );
+  const selectedModelCapabilityTag = () => {
+    const option = selectedHeaderModelOption();
+    if (!option) return null;
+    const label = option.supportsImageInput ? 'IMAGE' : 'TEXT';
+    const tooltip = option.supportsImageInput
+      ? 'This model accepts text and image input.'
+      : 'This model is configured for text input only. Image attachments will be converted before the run.';
+    return (
+      <Tooltip content={tooltip} placement="bottom" delay={0}>
+        <span
+          tabIndex={0}
+          class={`inline-flex h-6 shrink-0 cursor-help items-center rounded-full border px-2 text-[10px] font-semibold uppercase tracking-[0.08em] outline-none transition-colors focus-visible:ring-2 ${
+            option.supportsImageInput
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 focus-visible:ring-emerald-500/30 dark:text-emerald-300'
+              : 'border-border bg-muted/30 text-muted-foreground focus-visible:ring-primary/20'
+          }`}
+        >
+          {label}
+        </span>
+      </Tooltip>
+    );
+  };
   const desktopModelSourceMissingKeys = createMemo(() => (
     ai.settings()?.ai_runtime?.desktop_model_source?.missing_key_provider_ids?.filter(Boolean) ?? []
   ));
@@ -3673,6 +3695,7 @@ export function EnvAIPage() {
                               class="ai-model-select-trigger flower-chat-model-select min-w-[120px] max-w-[160px] sm:min-w-[140px] sm:max-w-[200px] h-7 text-[11px]"
                             />
                             {remoteModelTag()}
+                            {selectedModelCapabilityTag()}
                           </div>
                         )}
                       >

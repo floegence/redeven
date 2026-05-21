@@ -89,10 +89,11 @@ Important rules:
 
 - `providers[].models[]` is the allow-list exposed to the UI.
 - `current_model_id` must reference one allowed wire id.
-- If the stored `current_model_id` becomes invalid, the runtime falls back to the first available model.
+- If the stored `current_model_id` becomes invalid, the runtime reports that state explicitly and the UI asks the user to choose a valid current model.
 - `model_name` must not contain `/`.
 - `context_window` is used by runtime budgeting.
 - `max_output_tokens` and `effective_context_window_percent` are optional overrides.
+- `input_modalities` is the explicit capability list for each model. `text` is required; `image` marks image input support.
 - Native provider model support is an explicit allow-list, not a prefix match:
   - Moonshot: `kimi-k2.6`
   - GLM/Z.ai: `glm-5.1`
@@ -158,13 +159,16 @@ The API response field `ai_runtime.desktop_model_source` reports the `Desktop` s
 Current Runtime Settings UI behavior is:
 
 - Flower lives under Runtime Settings -> `AI & Extensions` as its own card, while permission policy and diagnostics stay in separate top-level groups.
+- The Flower card is organized around provider cards and a dedicated current-model selector instead of a wide editable table.
+- Each provider editor starts with provider type selection, then connection details, then models, then an `Advanced` collapse for low-frequency fields.
 - On SSH Host sessions, the Flower card separates persisted remote runtime provider settings from the Desktop source session capability.
-- The chat header shows a single `MODEL` control. It does not show model-source or tools-location summary badges.
+- The chat header shows a single `MODEL` control plus lightweight capability tags. It does not show model-source or tools-location summary badges.
 - When the selected model is served through Desktop Model Source RPC, the chat header shows a `REMOTE` tag. Its tooltip explains that AI requests are handled by Desktop while files, terminal, Git, and workspace actions still run in the current environment.
 - When the selected model uses the current environment runtime's own AI config, the chat header shows no source tag.
 - Add Provider generates a provider id automatically.
 - Provider id is shown as read-only.
 - API keys are stored locally and shown only as status (`Key set` / `Key not set`).
+- Provider and secret changes are saved together from one provider editor action.
 - Web search controls are shown only inside OpenAI-compatible provider editing.
 - Native providers show built-in web-search status only; they do not show Brave or hosted-search configuration.
 - Models are configured inside each provider entry.

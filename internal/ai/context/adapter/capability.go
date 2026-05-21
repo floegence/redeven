@@ -11,6 +11,48 @@ import (
 
 const capabilityResolverVersion = 1
 
+type explicitCapabilityMetadata struct {
+	MaxContextTokens     int
+	MaxOutputTokens      int
+	InputModalities      []string
+	SupportsStrictSchema *bool
+	ToolSchemaMode       string
+}
+
+var explicitModelCapabilityMetadata = map[string]map[string]explicitCapabilityMetadata{
+	"openai": {
+		"gpt-5.5":      {MaxContextTokens: 1050000, MaxOutputTokens: 128000, InputModalities: []string{config.AIInputModalityText, config.AIInputModalityImage}},
+		"gpt-5.4":      {MaxContextTokens: 1050000, MaxOutputTokens: 128000, InputModalities: []string{config.AIInputModalityText, config.AIInputModalityImage}},
+		"gpt-5.4-mini": {MaxContextTokens: 400000, MaxOutputTokens: 128000, InputModalities: []string{config.AIInputModalityText, config.AIInputModalityImage}},
+		"gpt-5.4-nano": {MaxContextTokens: 400000, MaxOutputTokens: 128000, InputModalities: []string{config.AIInputModalityText, config.AIInputModalityImage}},
+		"gpt-5.2":      {MaxContextTokens: 400000, MaxOutputTokens: 128000, InputModalities: []string{config.AIInputModalityText, config.AIInputModalityImage}},
+		"gpt-5.2-mini": {MaxContextTokens: 400000, MaxOutputTokens: 128000, InputModalities: []string{config.AIInputModalityText, config.AIInputModalityImage}},
+		"gpt-5":        {MaxContextTokens: 400000, MaxOutputTokens: 128000, InputModalities: []string{config.AIInputModalityText, config.AIInputModalityImage}},
+		"gpt-5-mini":   {MaxContextTokens: 400000, MaxOutputTokens: 128000, InputModalities: []string{config.AIInputModalityText, config.AIInputModalityImage}},
+	},
+	"anthropic": {
+		"claude-opus-4-7":           {MaxContextTokens: 1000000, MaxOutputTokens: 128000, InputModalities: []string{config.AIInputModalityText, config.AIInputModalityImage}, SupportsStrictSchema: boolPtr(false), ToolSchemaMode: "relaxed_json"},
+		"claude-sonnet-4-6":         {MaxContextTokens: 1000000, MaxOutputTokens: 64000, InputModalities: []string{config.AIInputModalityText, config.AIInputModalityImage}, SupportsStrictSchema: boolPtr(false), ToolSchemaMode: "relaxed_json"},
+		"claude-haiku-4-5-20251001": {MaxContextTokens: 200000, MaxOutputTokens: 64000, InputModalities: []string{config.AIInputModalityText, config.AIInputModalityImage}, SupportsStrictSchema: boolPtr(false), ToolSchemaMode: "relaxed_json"},
+	},
+	"moonshot": {
+		"kimi-k2.6": {MaxContextTokens: 256000, MaxOutputTokens: 96000, InputModalities: []string{config.AIInputModalityText}, SupportsStrictSchema: boolPtr(false), ToolSchemaMode: "relaxed_json"},
+	},
+	"chatglm": {
+		"glm-5.1": {MaxContextTokens: 200000, MaxOutputTokens: 128000, InputModalities: []string{config.AIInputModalityText}, SupportsStrictSchema: boolPtr(false), ToolSchemaMode: "relaxed_json"},
+	},
+	"deepseek": {
+		"deepseek-v4-pro":   {MaxContextTokens: 1000000, MaxOutputTokens: 384000, InputModalities: []string{config.AIInputModalityText}, SupportsStrictSchema: boolPtr(false), ToolSchemaMode: "relaxed_json"},
+		"deepseek-v4-flash": {MaxContextTokens: 1000000, MaxOutputTokens: 384000, InputModalities: []string{config.AIInputModalityText}, SupportsStrictSchema: boolPtr(false), ToolSchemaMode: "relaxed_json"},
+	},
+	"qwen": {
+		"qwen3.6-plus":             {MaxContextTokens: 1000000, MaxOutputTokens: 65536, InputModalities: []string{config.AIInputModalityText}, SupportsStrictSchema: boolPtr(false), ToolSchemaMode: "relaxed_json"},
+		"qwen3.6-plus-2026-04-02":  {MaxContextTokens: 1000000, MaxOutputTokens: 65536, InputModalities: []string{config.AIInputModalityText}, SupportsStrictSchema: boolPtr(false), ToolSchemaMode: "relaxed_json"},
+		"qwen3.6-flash":            {MaxContextTokens: 1000000, MaxOutputTokens: 65536, InputModalities: []string{config.AIInputModalityText}, SupportsStrictSchema: boolPtr(false), ToolSchemaMode: "relaxed_json"},
+		"qwen3.6-flash-2026-04-16": {MaxContextTokens: 1000000, MaxOutputTokens: 65536, InputModalities: []string{config.AIInputModalityText}, SupportsStrictSchema: boolPtr(false), ToolSchemaMode: "relaxed_json"},
+	},
+}
+
 // Resolver builds and caches provider/model capability descriptors.
 type Resolver struct {
 	repo *contextstore.Repository
@@ -82,15 +124,14 @@ func modelNameFromID(modelID string) string {
 func defaultCapability(provider config.AIProvider, modelName string) model.ModelCapability {
 	providerType := strings.ToLower(strings.TrimSpace(provider.Type))
 	modelName = strings.TrimSpace(modelName)
-	modelLower := strings.ToLower(modelName)
 	cap := model.ModelCapability{
 		ProviderType:                   providerType,
 		ResolverVersion:                capabilityResolverVersion,
 		SupportsTools:                  true,
 		SupportsParallelTools:          false,
 		SupportsStrictJSONSchema:       true,
-		SupportsImageInput:             true,
-		SupportsFileInput:              true,
+		SupportsImageInput:             false,
+		SupportsFileInput:              false,
 		SupportsReasoningTokens:        true,
 		SupportsAskUserQuestionBatches: true,
 		MaxContextTokens:               128000,
@@ -142,36 +183,20 @@ func defaultCapability(provider config.AIProvider, modelName string) model.Model
 		cap.PreferredToolSchemaMode = "json_schema"
 	}
 
-	if strings.Contains(modelLower, "mini") {
-		cap.MaxContextTokens = min(cap.MaxContextTokens, 64000)
-		cap.MaxOutputTokens = min(cap.MaxOutputTokens, 4096)
-	}
-	if strings.Contains(modelLower, "nano") {
-		cap.MaxContextTokens = min(cap.MaxContextTokens, 32000)
-		cap.MaxOutputTokens = min(cap.MaxOutputTokens, 2048)
-	}
-	if strings.Contains(modelLower, "haiku") {
-		cap.MaxContextTokens = min(cap.MaxContextTokens, 128000)
-		cap.MaxOutputTokens = min(cap.MaxOutputTokens, 4096)
-	}
-	switch modelLower {
-	case "qwen3.6-plus", "qwen3.6-plus-2026-04-02", "qwen3.6-flash", "qwen3.6-flash-2026-04-16":
-		cap.MaxContextTokens = max(cap.MaxContextTokens, 1000000)
-	}
-	switch modelLower {
-	case "kimi-k2.6":
-		cap.MaxContextTokens = max(cap.MaxContextTokens, 256000)
-		cap.MaxOutputTokens = max(cap.MaxOutputTokens, 96000)
-	}
-	switch modelLower {
-	case "deepseek-v4-pro", "deepseek-v4-flash":
-		cap.MaxContextTokens = max(cap.MaxContextTokens, 1000000)
-		cap.MaxOutputTokens = max(cap.MaxOutputTokens, 384000)
-	}
-	switch modelLower {
-	case "glm-5.1":
-		cap.MaxContextTokens = max(cap.MaxContextTokens, 200000)
-		cap.MaxOutputTokens = max(cap.MaxOutputTokens, 128000)
+	if metadata, ok := explicitCapabilityFor(providerType, modelName); ok {
+		if metadata.MaxContextTokens > 0 {
+			cap.MaxContextTokens = metadata.MaxContextTokens
+		}
+		if metadata.MaxOutputTokens > 0 {
+			cap.MaxOutputTokens = metadata.MaxOutputTokens
+		}
+		cap.SupportsImageInput = modalitiesSupportImage(metadata.InputModalities)
+		if metadata.SupportsStrictSchema != nil {
+			cap.SupportsStrictJSONSchema = *metadata.SupportsStrictSchema
+		}
+		if strings.TrimSpace(metadata.ToolSchemaMode) != "" {
+			cap.PreferredToolSchemaMode = strings.TrimSpace(metadata.ToolSchemaMode)
+		}
 	}
 
 	if providerModel, ok := providerModelByName(provider, modelName); ok {
@@ -181,8 +206,31 @@ func defaultCapability(provider config.AIProvider, modelName string) model.Model
 		if providerModel.MaxOutputTokens > 0 {
 			cap.MaxOutputTokens = providerModel.MaxOutputTokens
 		}
+		cap.SupportsImageInput = providerModel.SupportsImageInput()
 	}
 	return cap
+}
+
+func explicitCapabilityFor(providerType string, modelName string) (explicitCapabilityMetadata, bool) {
+	models, ok := explicitModelCapabilityMetadata[strings.ToLower(strings.TrimSpace(providerType))]
+	if !ok {
+		return explicitCapabilityMetadata{}, false
+	}
+	metadata, ok := models[strings.ToLower(strings.TrimSpace(modelName))]
+	return metadata, ok
+}
+
+func modalitiesSupportImage(modalities []string) bool {
+	for _, item := range modalities {
+		if strings.ToLower(strings.TrimSpace(item)) == config.AIInputModalityImage {
+			return true
+		}
+	}
+	return false
+}
+
+func boolPtr(v bool) *bool {
+	return &v
 }
 
 func providerModelByName(provider config.AIProvider, modelName string) (config.AIProviderModel, bool) {
@@ -217,18 +265,4 @@ func AdaptAttachments(cap model.ModelCapability, in []model.AttachmentManifest) 
 		out = append(out, item)
 	}
 	return out
-}
-
-func min(a int, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func max(a int, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

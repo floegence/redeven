@@ -261,7 +261,7 @@ func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title st
 		}
 	}
 	if modelID == "" && cfg != nil {
-		if id, ok := cfg.ResolvedCurrentModelID(); ok {
+		if id := strings.TrimSpace(cfg.CurrentModelID); id != "" && cfg.IsAllowedModelID(id) {
 			modelID = id
 		}
 	}

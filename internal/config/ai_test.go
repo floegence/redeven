@@ -36,7 +36,7 @@ func TestAIConfigValidate_RequiresCurrentModel(t *testing.T) {
 	}
 }
 
-func TestAIConfigValidate_AllowsInvalidCurrentModelForFallback(t *testing.T) {
+func TestAIConfigValidate_RejectsInvalidCurrentModel(t *testing.T) {
 	t.Parallel()
 
 	cfg := &AIConfig{
@@ -52,12 +52,8 @@ func TestAIConfigValidate_AllowsInvalidCurrentModelForFallback(t *testing.T) {
 		},
 	}
 
-	if err := cfg.Validate(); err != nil {
-		t.Fatalf("Validate should allow invalid current model fallback: %v", err)
-	}
-	modelID, ok := cfg.ResolvedCurrentModelID()
-	if !ok || modelID != "openai/gpt-5-mini" {
-		t.Fatalf("ResolvedCurrentModelID=(%q,%v), want fallback openai/gpt-5-mini", modelID, ok)
+	if err := cfg.Validate(); err == nil {
+		t.Fatalf("expected validation error for invalid current_model_id")
 	}
 }
 
@@ -227,6 +223,60 @@ func TestAIProviderModel_EffectiveInputWindowTokens(t *testing.T) {
 	}
 }
 
+func TestAIProviderModel_InputModalities(t *testing.T) {
+	t.Parallel()
+
+	textOnly := AIProviderModel{}
+	if got := textOnly.NormalizedInputModalities(); len(got) != 1 || got[0] != AIInputModalityText {
+		t.Fatalf("NormalizedInputModalities default=%v, want [text]", got)
+	}
+	if textOnly.SupportsImageInput() {
+		t.Fatalf("SupportsImageInput default=true, want false")
+	}
+
+	vision := AIProviderModel{InputModalities: []string{" text ", "image", "image"}}
+	if got := vision.NormalizedInputModalities(); len(got) != 2 || got[0] != AIInputModalityText || got[1] != AIInputModalityImage {
+		t.Fatalf("NormalizedInputModalities vision=%v, want [text image]", got)
+	}
+	if !vision.SupportsImageInput() {
+		t.Fatalf("SupportsImageInput vision=false, want true")
+	}
+}
+
+func TestAIConfigValidate_InputModalities(t *testing.T) {
+	t.Parallel()
+
+	base := AIConfig{
+		CurrentModelID: "openai/gpt-5-mini",
+		Providers: []AIProvider{
+			{
+				ID:      "openai",
+				Name:    "OpenAI",
+				Type:    "openai",
+				BaseURL: "https://api.openai.com/v1",
+				Models:  []AIProviderModel{{ModelName: "gpt-5-mini", InputModalities: []string{AIInputModalityText, AIInputModalityImage}}},
+			},
+		},
+	}
+	if err := base.Validate(); err != nil {
+		t.Fatalf("Validate explicit modalities: %v", err)
+	}
+
+	withoutText := base
+	withoutText.Providers = []AIProvider{base.Providers[0]}
+	withoutText.Providers[0].Models = []AIProviderModel{{ModelName: "gpt-5-mini", InputModalities: []string{AIInputModalityImage}}}
+	if err := withoutText.Validate(); err == nil {
+		t.Fatalf("expected validation error when input_modalities omits text")
+	}
+
+	unknown := base
+	unknown.Providers = []AIProvider{base.Providers[0]}
+	unknown.Providers[0].Models = []AIProviderModel{{ModelName: "gpt-5-mini", InputModalities: []string{AIInputModalityText, "audio"}}}
+	if err := unknown.Validate(); err == nil {
+		t.Fatalf("expected validation error for unsupported modality")
+	}
+}
+
 func TestAIConfigValidate_OK(t *testing.T) {
 	t.Parallel()
 
@@ -338,58 +388,6 @@ func TestAIConfigValidate_ProviderScopedWebSearch(t *testing.T) {
 	cfg.Providers[0].WebSearch.Mode = AIProviderWebSearchModeDisabled
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Validate disabled native provider web_search: %v", err)
-	}
-}
-
-func TestAIConfig_ResolvedCurrentModelID_FallbacksToFirstModel(t *testing.T) {
-	t.Parallel()
-
-	cfg := &AIConfig{
-		CurrentModelID: "openai/missing",
-		Providers: []AIProvider{
-			{
-				ID:      "openai",
-				Name:    "OpenAI",
-				Type:    "openai",
-				BaseURL: "https://api.openai.com/v1",
-				Models:  []AIProviderModel{{ModelName: "gpt-5-mini"}, {ModelName: "gpt-5"}},
-			},
-		},
-	}
-
-	modelID, ok := cfg.ResolvedCurrentModelID()
-	if !ok {
-		t.Fatalf("ResolvedCurrentModelID should return a fallback model")
-	}
-	if modelID != "openai/gpt-5-mini" {
-		t.Fatalf("ResolvedCurrentModelID=%q, want %q", modelID, "openai/gpt-5-mini")
-	}
-	if err := cfg.Validate(); err != nil {
-		t.Fatalf("Validate should allow fallback current_model_id: %v", err)
-	}
-}
-
-func TestAIConfig_NormalizeCurrentModelID(t *testing.T) {
-	t.Parallel()
-
-	cfg := &AIConfig{
-		CurrentModelID: "openai/missing",
-		Providers: []AIProvider{
-			{
-				ID:      "openai",
-				Name:    "OpenAI",
-				Type:    "openai",
-				BaseURL: "https://api.openai.com/v1",
-				Models:  []AIProviderModel{{ModelName: "gpt-5-mini"}},
-			},
-		},
-	}
-
-	if ok := cfg.NormalizeCurrentModelID(); !ok {
-		t.Fatalf("NormalizeCurrentModelID should set current_model_id")
-	}
-	if cfg.CurrentModelID != "openai/gpt-5-mini" {
-		t.Fatalf("CurrentModelID=%q, want %q", cfg.CurrentModelID, "openai/gpt-5-mini")
 	}
 }
 

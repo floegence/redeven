@@ -14,6 +14,17 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       {props.children}
     </button>
   ),
+  Checkbox: (props: any) => (
+    <label>
+      <input
+        type="checkbox"
+        checked={props.checked}
+        disabled={props.disabled}
+        onChange={(event) => props.onChange?.((event.currentTarget as HTMLInputElement).checked)}
+      />
+      {props.label}
+    </label>
+  ),
   Dialog: (props: any) => (
     <Show when={props.open}>
       <div data-dialog-class={props.class}>
@@ -57,6 +68,7 @@ function baseProvider(): AIProviderRow {
         context_window: 400000,
         max_output_tokens: 128000,
         effective_context_window_percent: 95,
+        input_modalities: ['text', 'image'],
       },
     ],
   };
@@ -77,42 +89,42 @@ function makeProps(overrides: Partial<AIProviderDialogProps> = {}): AIProviderDi
     webSearchKeySet: false,
     webSearchKeyDraft: '',
     webSearchKeySaving: false,
-    presetModel: 'gpt-5.4',
     recommendedModels: [
       {
         model_name: 'gpt-5.4',
         context_window: 400000,
         max_output_tokens: 128000,
         effective_context_window_percent: 95,
+        input_modalities: ['text', 'image'],
         note: 'Latest preset',
       },
     ],
-    recommendedModelOptions: [{ value: 'gpt-5.4', label: 'gpt-5.4 (ctx 400,000 / max 128,000)' }],
     onOpenChange: vi.fn(),
     onConfirm: vi.fn(),
     onChangeName: vi.fn(),
     onChangeType: vi.fn(),
     onChangeBaseURL: vi.fn(),
     onChangeKeyDraft: vi.fn(),
-    onSaveKey: vi.fn(),
-    onClearKey: vi.fn(),
     onChangeWebSearchMode: vi.fn(),
     onChangeWebSearchKeyDraft: vi.fn(),
-    onSaveWebSearchKey: vi.fn(),
-    onClearWebSearchKey: vi.fn(),
-    onSetPresetModel: vi.fn(),
     onApplyAllPresets: vi.fn(),
     onAddSelectedPreset: vi.fn(),
-    onAddModel: vi.fn(),
+    onAddCustomModel: vi.fn(),
     onChangeModelName: vi.fn(),
     onChangeModelNumber: vi.fn(),
+    onChangeModelImageInput: vi.fn(),
     onRemoveModel: vi.fn(),
     ...overrides,
   };
 }
 
 function clickButton(host: HTMLElement, label: string) {
-  const button = Array.from(host.querySelectorAll('button')).find((candidate) => candidate.textContent?.trim() === label);
+  const button = Array.from(host.querySelectorAll('button')).find((candidate) => {
+    const strongLabel = candidate.querySelector('.text-sm.font-semibold')?.textContent?.trim();
+    if (strongLabel === label) return true;
+    const text = candidate.textContent?.replace(/\s+/g, ' ').trim();
+    return text === label;
+  });
   if (!button) throw new Error(`Button not found: ${label}`);
   button.click();
 }
@@ -122,29 +134,30 @@ afterEach(() => {
 });
 
 describe('AIProviderDialog', () => {
-  it('renders read-only provider id and derived wire model id', () => {
+  it('renders the provider editor without exposing internal ids in the main path', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
     render(() => <AIProviderDialog {...makeProps()} />, host);
 
-    expect(host.textContent).toContain('provider_id');
-    expect(host.textContent).toContain('prov_openai');
-    expect(host.textContent).toContain('prov_openai/gpt-5.2');
-    expect(host.textContent).toContain('ctx 400,000');
-    expect(host.textContent).toContain('Key set');
+    expect(host.textContent).toContain('Provider Type');
+    expect(host.textContent).toContain('Connection');
+    expect(host.textContent).toContain('Recommended Models');
+    expect(host.textContent).toContain('Enabled Models');
+    expect(host.textContent).toContain('Save Provider');
+    expect(host.textContent).toContain('Key ready');
     expect(host.textContent).toContain('OpenAI built-in web search');
-    expect(host.textContent).not.toContain('web_search.mode');
-    expect(host.querySelector('[data-dialog-class]')?.getAttribute('data-dialog-class')).toContain('w-[min(80rem,96vw)]');
+    expect(host.textContent).not.toContain('provider_id');
+    expect(host.textContent).not.toContain('Save key');
+    expect(host.querySelector('[data-dialog-class]')?.getAttribute('data-dialog-class')).toContain('w-[min(68rem,96vw)]');
     expect(host.querySelector('[data-dialog-class]')?.getAttribute('data-dialog-class')).toContain('max-w-[96vw]');
   });
 
   it('wires provider actions through the dialog controls', () => {
     const onChangeType = vi.fn();
-    const onSetPresetModel = vi.fn();
     const onApplyAllPresets = vi.fn();
     const onAddSelectedPreset = vi.fn();
-    const onAddModel = vi.fn();
+    const onAddCustomModel = vi.fn();
     const onConfirm = vi.fn();
 
     const host = document.createElement('div');
@@ -155,10 +168,9 @@ describe('AIProviderDialog', () => {
         <AIProviderDialog
           {...makeProps({
             onChangeType,
-            onSetPresetModel,
             onApplyAllPresets,
             onAddSelectedPreset,
-            onAddModel,
+            onAddCustomModel,
             onConfirm,
             recommendedModels: [
               {
@@ -172,36 +184,26 @@ describe('AIProviderDialog', () => {
                 max_output_tokens: 128000,
               },
             ],
-            recommendedModelOptions: [
-              { value: 'gpt-5.4', label: 'gpt-5.4' },
-              { value: 'gpt-5.2-mini', label: 'gpt-5.2-mini' },
-            ],
           })}
         />
       ),
       host,
     );
 
-    const selects = host.querySelectorAll('select');
-    const typeSelect = selects[0] as HTMLSelectElement;
-    const presetSelect = selects[1] as HTMLSelectElement;
+    clickButton(host, 'Anthropic');
 
-    typeSelect.value = 'anthropic';
-    typeSelect.dispatchEvent(new Event('change', { bubbles: true }));
-
-    presetSelect.value = 'gpt-5.2-mini';
-    presetSelect.dispatchEvent(new Event('change', { bubbles: true }));
-
-    clickButton(host, 'Apply all presets');
-    clickButton(host, 'Add selected preset');
-    clickButton(host, 'Add Model');
-    clickButton(host, 'Confirm');
+    clickButton(host, 'Use All');
+    clickButton(host, 'Use');
+    const customInput = Array.from(host.querySelectorAll('input')).find((input) => input.getAttribute('placeholder') === 'Custom model name') as HTMLInputElement;
+    customInput.value = 'custom-model';
+    customInput.dispatchEvent(new Event('input', { bubbles: true }));
+    clickButton(host, 'Add Custom Model');
+    clickButton(host, 'Save Provider');
 
     expect(onChangeType).toHaveBeenCalledWith('anthropic');
-    expect(onSetPresetModel).toHaveBeenCalledWith('gpt-5.2-mini');
     expect(onApplyAllPresets).toHaveBeenCalledOnce();
-    expect(onAddSelectedPreset).toHaveBeenCalledOnce();
-    expect(onAddModel).toHaveBeenCalledOnce();
+    expect(onAddSelectedPreset).toHaveBeenCalledWith('gpt-5.4');
+    expect(onAddCustomModel).toHaveBeenCalledWith('custom-model');
     expect(onConfirm).toHaveBeenCalledOnce();
   });
 
@@ -228,9 +230,11 @@ describe('AIProviderDialog', () => {
       host,
     );
 
-    expect(host.textContent).toContain('web_search.mode');
-    expect(host.textContent).toContain('brave_api_key');
-    expect(host.textContent).toContain('Save Brave key');
-    expect(host.textContent).toContain('Clear Brave');
+    expect(host.textContent).not.toContain('Brave API Key');
+    clickButton(host, 'Advanced');
+    expect(host.textContent).toContain('Web Search');
+    expect(host.textContent).toContain('Brave API Key');
+    expect(host.textContent).not.toContain('Save Brave key');
+    expect(host.textContent).not.toContain('Clear Brave');
   });
 });
