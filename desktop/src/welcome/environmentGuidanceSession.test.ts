@@ -44,6 +44,30 @@ describe('environmentGuidanceSession', () => {
     });
   });
 
+  it('tracks pending runtime stops with operation-specific notice and failure copy', () => {
+    const state = startEnvironmentGuidanceIntent(null, 'env_demo', 'stop_runtime');
+
+    expect(state).toEqual({
+      environment_id: 'env_demo',
+      pending_intent: 'stop_runtime',
+      feedback: null,
+    });
+    expect(guidanceSessionNotice(state)).toEqual({
+      tone: 'info',
+      title: 'Stopping runtime…',
+      detail: 'Desktop is stopping the runtime and verifying that the process has exited.',
+    });
+    expect(failEnvironmentGuidanceIntent(state, '')).toEqual({
+      environment_id: 'env_demo',
+      pending_intent: null,
+      feedback: {
+        tone: 'error',
+        title: 'Runtime stop failed',
+        detail: 'Desktop could not stop the runtime for this environment.',
+      },
+    });
+  });
+
   it('stores inline failures without dropping the active session', () => {
     const state = failEnvironmentGuidanceIntent(
       startEnvironmentGuidanceIntent(null, 'env_demo', 'refresh_runtime'),

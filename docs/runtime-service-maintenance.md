@@ -496,10 +496,13 @@ Desktop launcher cards keep their current dense SaaS tool layout:
   work has a separate progress model for SSH tunnels, container bridges,
   runtime-control forwarding, Desktop model source preparation, and window
   creation. During either operation, the `Open` trigger remains clickable for
-  progress inspection, keeps the existing flowing shimmer treatment, and returns
-  to direct `Open` behavior once the runtime is openable and the current Desktop
-  connection is ready. Progress must not use a bottom-right SSH-only activity
-  overlay. The progress sequence and failure notice must reflect the operation:
+  progress inspection, keeps the existing flowing shimmer treatment, and keeps
+  the popup open after the user starts `Start runtime`, `Stop runtime`,
+  `Restart runtime`, or `Update runtime` until the user closes it or clicks
+  elsewhere. It returns to direct `Open` behavior once the runtime is openable
+  and the current Desktop connection is ready. Progress must not use a
+  bottom-right SSH-only activity overlay. The progress sequence and failure
+  notice must reflect the operation:
   start uses `Starting...` / startup wording, stop uses `Stopping...` plus
   `Verifying runtime stopped`, restart uses `Restarting...` / restart wording,
   and update uses `Updating...` / update wording.
