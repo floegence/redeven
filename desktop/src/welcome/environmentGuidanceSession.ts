@@ -7,7 +7,7 @@ import {
 
 export type EnvironmentGuidancePendingIntent = Extract<
   EnvironmentActionIntent,
-  'refresh_runtime' | 'start_runtime' | 'restart_runtime' | 'connect_provider_runtime' | 'disconnect_provider_runtime' | 'update_runtime'
+  'refresh_runtime' | 'start_runtime' | 'stop_runtime' | 'restart_runtime' | 'connect_provider_runtime' | 'disconnect_provider_runtime' | 'update_runtime'
 >;
 
 export type EnvironmentGuidanceFeedbackTone = 'info' | 'warning' | 'error' | 'success';
@@ -31,6 +31,7 @@ export function isEnvironmentGuidancePendingIntent(
 ): intent is EnvironmentGuidancePendingIntent {
   return intent === 'refresh_runtime'
     || intent === 'start_runtime'
+    || intent === 'stop_runtime'
     || intent === 'restart_runtime'
     || intent === 'connect_provider_runtime'
     || intent === 'disconnect_provider_runtime'
@@ -74,36 +75,53 @@ export function failEnvironmentGuidanceIntent(
     return state;
   }
 
-  const title = state.pending_intent === 'start_runtime'
-    ? 'Runtime start failed'
-    : state.pending_intent === 'restart_runtime'
-      ? 'Runtime restart failed'
-    : state.pending_intent === 'update_runtime'
-      ? 'Runtime update failed'
-      : state.pending_intent === 'connect_provider_runtime'
-      ? 'Provider link failed'
-      : state.pending_intent === 'disconnect_provider_runtime'
-        ? 'Provider unlink failed'
-        : 'Status refresh failed';
-  const fallbackDetail = state.pending_intent === 'start_runtime'
-    ? 'Desktop could not start the runtime for this environment.'
-    : state.pending_intent === 'restart_runtime'
-      ? 'Desktop could not restart the runtime for this environment.'
-    : state.pending_intent === 'update_runtime'
-      ? 'Desktop could not update and restart the runtime for this environment.'
-      : state.pending_intent === 'connect_provider_runtime'
-        ? 'Desktop could not connect this runtime to the provider Environment.'
-      : state.pending_intent === 'disconnect_provider_runtime'
-          ? 'Desktop could not disconnect this runtime from its provider Environment.'
-          : 'Desktop could not refresh the runtime status.';
+  const fallback = (() => {
+    switch (state.pending_intent) {
+      case 'start_runtime':
+        return {
+          title: 'Runtime start failed',
+          detail: 'Desktop could not start the runtime for this environment.',
+        };
+      case 'stop_runtime':
+        return {
+          title: 'Runtime stop failed',
+          detail: 'Desktop could not stop the runtime for this environment.',
+        };
+      case 'restart_runtime':
+        return {
+          title: 'Runtime restart failed',
+          detail: 'Desktop could not restart the runtime for this environment.',
+        };
+      case 'update_runtime':
+        return {
+          title: 'Runtime update failed',
+          detail: 'Desktop could not update and restart the runtime for this environment.',
+        };
+      case 'connect_provider_runtime':
+        return {
+          title: 'Provider link failed',
+          detail: 'Desktop could not connect this runtime to the provider Environment.',
+        };
+      case 'disconnect_provider_runtime':
+        return {
+          title: 'Provider unlink failed',
+          detail: 'Desktop could not disconnect this runtime from its provider Environment.',
+        };
+      default:
+        return {
+          title: 'Status refresh failed',
+          detail: 'Desktop could not refresh the runtime status.',
+        };
+    }
+  })();
 
   return {
     ...state,
     pending_intent: null,
     feedback: {
       tone: 'error',
-      title,
-      detail: detail.trim() || fallbackDetail,
+      title: fallback.title,
+      detail: detail.trim() || fallback.detail,
     },
   };
 }
@@ -221,6 +239,12 @@ export function guidanceSessionNotice(
         tone: 'info',
         title: 'Starting runtime…',
         detail: 'Desktop is starting the local runtime and waiting for the next status update.',
+      };
+    case 'stop_runtime':
+      return {
+        tone: 'info',
+        title: 'Stopping runtime…',
+        detail: 'Desktop is stopping the runtime and verifying that the process has exited.',
       };
     case 'restart_runtime':
       return {

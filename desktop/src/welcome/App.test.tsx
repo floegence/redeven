@@ -661,9 +661,14 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('<Show when={props.progress.failure}>');
     expect(appSrc).toContain('<div class="redeven-action-popover__notice-detail">{failure().summary}</div>');
     expect(appSrc).not.toContain('props.progress.error_message');
+    expect(appSrc).toContain("runtimeMenuProgress()?.action === 'stop_environment_runtime'");
+    expect(appSrc).toContain("'Stopping...'");
     expect(appSrc).toContain("runtimeMenuProgress()?.action === 'restart_environment_runtime'");
     expect(appSrc).toContain("'Restarting...'");
     expect(appSrc).toContain("'Updating...'");
+    expect(appSrc).toContain('const environmentProgressTriggerIcon = createMemo(() => (');
+    expect(appSrc).toContain("runtimeMenuProgress()?.action === 'stop_environment_runtime' ? Stop : Play");
+    expect(appSrc).toContain('aria-label={`${environmentProgressTriggerLabel()} progress`}');
     expect(appSrc).toContain('redeven-environment-progress');
     expect(appSrc).toContain('redeven-split-action-trigger--progress');
     expect(appSrc).toContain('autoOpenedEnvironmentProgressOperation');
@@ -721,7 +726,10 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("class={shimmerBlocked() ? 'redeven-blocked-shimmer-overlay' : 'redeven-loading-shimmer-overlay'}");
     expect(appSrc).toContain('disabled={props.loading && !hasOpenConnectionProgress() && !hasRuntimeLifecycleProgress()}');
     expect(appSrc).toContain('disabled={props.loading && popoverPrimaryRunsAction()}');
-    expect(appSrc).toContain("if (action.intent === 'start_runtime') {\n              props.onPrimaryActionGuidanceOpenChange(true);");
+    expect(appSrc).toContain('function environmentActionOpensRuntimeLifecycleProgress(action: EnvironmentActionModel): boolean');
+    expect(appSrc).toContain("action.intent === 'stop_runtime'");
+    expect(appSrc).toContain('props.setGuidanceSession(startEnvironmentGuidanceIntent(');
+    expect(appSrc).toContain('props.onPrimaryActionGuidanceOpenChange(environmentActionOpensRuntimeLifecycleProgress(action));');
     expect(styles).toContain('.redeven-loading-shimmer-overlay');
     expect(styles).toContain('.redeven-blocked-shimmer-overlay');
     expect(appSrc).not.toContain('Cancel\n                      </Button>\n                    </Show>');

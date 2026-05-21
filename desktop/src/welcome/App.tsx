@@ -4967,6 +4967,16 @@ function splitMenuItemTone(intent: EnvironmentActionIntent): string {
   }
 }
 
+function environmentActionOpensRuntimeLifecycleProgress(action: EnvironmentActionModel): boolean {
+  if (action.intent === 'update_runtime' && action.runtime_operation_method === 'desktop_local_update_handoff') {
+    return false;
+  }
+  return action.intent === 'start_runtime'
+    || action.intent === 'stop_runtime'
+    || action.intent === 'restart_runtime'
+    || action.intent === 'update_runtime';
+}
+
 function EnvironmentSplitActionButton(props: Readonly<{
   presentation: Extract<EnvironmentActionPresentation, Readonly<{ kind: 'split_button' }>>;
   environmentID: string;
@@ -5079,11 +5089,16 @@ function EnvironmentSplitActionButton(props: Readonly<{
   const environmentProgressTriggerLabel = createMemo(() => (
     primaryProgress()?.open_progress
       ? 'Opening...'
-      : runtimeMenuProgress()?.action === 'restart_environment_runtime'
-        ? 'Restarting...'
-        : runtimeMenuProgress()?.action === 'update_environment_runtime'
-          ? 'Updating...'
-          : 'Starting...'
+      : runtimeMenuProgress()?.action === 'stop_environment_runtime'
+        ? 'Stopping...'
+        : runtimeMenuProgress()?.action === 'restart_environment_runtime'
+          ? 'Restarting...'
+          : runtimeMenuProgress()?.action === 'update_environment_runtime'
+            ? 'Updating...'
+            : 'Starting...'
+  ));
+  const environmentProgressTriggerIcon = createMemo(() => (
+    runtimeMenuProgress()?.action === 'stop_environment_runtime' ? Stop : Play
   ));
   const primaryButtonClass = createMemo(() => (
     cn('w-full justify-center', hasMenuActions() && 'rounded-r-none border-r-0')
@@ -5093,6 +5108,10 @@ function EnvironmentSplitActionButton(props: Readonly<{
       ? <ShieldCheck class="mr-1 h-3.5 w-3.5" />
       : null
   );
+  const renderEnvironmentProgressTriggerIcon = () => {
+    const ProgressIcon = environmentProgressTriggerIcon();
+    return <ProgressIcon class="redeven-split-action-trigger__icon h-3.5 w-3.5" />;
+  };
   let rootRef: HTMLDivElement | undefined;
   let menuRef: HTMLDivElement | undefined;
   let menuFocusFrame = 0;
@@ -5286,14 +5305,14 @@ function EnvironmentSplitActionButton(props: Readonly<{
                 style={{ 'min-width': 'var(--redeven-split-action-primary-min-width)' }}
                 aria-haspopup="dialog"
                 aria-expanded={props.guidanceOpen}
-                aria-label={`${props.presentation.primary_action.label} progress`}
+                aria-label={`${environmentProgressTriggerLabel()} progress`}
                 onClick={() => {
                   closeMenu();
                   props.onGuidanceOpenChange(!props.guidanceOpen);
                 }}
               >
                 <span class="redeven-split-action-trigger__content">
-                  <Play class="redeven-split-action-trigger__icon h-3.5 w-3.5" />
+                  {renderEnvironmentProgressTriggerIcon()}
                   <span>{environmentProgressTriggerLabel()}</span>
                 </span>
               </Button>
@@ -5674,7 +5693,12 @@ function EnvironmentConnectionCard(props: Readonly<{
           dismissOperation={props.dismissOperation}
           copyOperationDiagnostics={props.copyOperationDiagnostics}
           onRunAction={(action) => {
-            if (action.intent === 'start_runtime') {
+            if (isEnvironmentGuidancePendingIntent(action.intent) && environmentActionOpensRuntimeLifecycleProgress(action)) {
+              props.setGuidanceSession(startEnvironmentGuidanceIntent(
+                props.guidanceSession,
+                props.environment.id,
+                action.intent,
+              ));
               props.onPrimaryActionGuidanceOpenChange(true);
             }
             void props.runLocalEnvironmentAction(
@@ -5693,11 +5717,11 @@ function EnvironmentConnectionCard(props: Readonly<{
                 ));
               }
               const resolution = await props.runEnvironmentGuidanceAction(props.environment, action);
-              props.setGuidanceSession(action.intent === 'start_runtime' && resolution.close_panel
+              props.setGuidanceSession(environmentActionOpensRuntimeLifecycleProgress(action) && resolution.close_panel
                 ? openEnvironmentGuidanceSession(props.environment.id)
                 : resolution.next_session);
               if (resolution.close_panel) {
-                props.onPrimaryActionGuidanceOpenChange(action.intent === 'start_runtime');
+                props.onPrimaryActionGuidanceOpenChange(environmentActionOpensRuntimeLifecycleProgress(action));
               }
             })();
           }}
