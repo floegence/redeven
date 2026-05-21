@@ -28,6 +28,8 @@
 6. symlink 解析必须以 root scope 为准，禁止通过符号链接逃逸到未授权目录。
 7. Git、Terminal、AI working dir、File Preview、Ask Flower/Codex context handoff 使用同一套路径规范。
 
+在 Workbench 场景下，文件浏览器的 root 行、breadcrumb、toolbar、RO/RW 分段控件、more trigger 与目录条目都应被视为 `action surface`。它们的鼠标样式、可选中文本边界与点击命中范围来自统一的表面契约，而不是来自具体文案是否看起来像普通文本。
+
 ## 3. 核心数据结构
 
 ### 3.1 Runtime config
@@ -496,6 +498,7 @@ RO/RW 控件的产品语义：
 - RO 表示该 root 允许读，不允许通过 Redeven 文件 API 执行 create、delete、rename、copy target、overwrite、mkdir 等 mutation。
 - RW 表示 Redeven 文件 API 可以在该 root 下执行写操作，但最终仍与 `permission_policy`、session capability、runtime registry 与 OS 用户权限取交集。
 - Computer 从 RO 切到 RW 等价于允许 Redeven 对 `/` 下“当前 OS 用户本来就有权限写入”的路径发起写操作；它不是提权，也不是绕过系统保护。
+- roots sidebar 的每一个可点击控件都属于 `action surface`，因此 hover 必须保持 pointer，不能被 Workbench 文本选择逻辑回投成 I-beam。root 行文本、RO/RW segmented toggle、breadcrumb 段、toolbar 按钮以及 more trigger 都共享同一套 cursor 语义，不再按文案单独推断为可选文本。
 - 切换权限必须走 runtime 一等更新路径：校验 root id/kind、持久化 `filesystem_scope`、原子重建 registry、发布新的 path context，UI 再刷新 mutation affordance。禁止只在前端本地改按钮状态，也禁止用失败后再兜底回退的补丁逻辑。
 
 Computer RO -> RW 确认：

@@ -3,6 +3,10 @@ import {
   WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR,
 } from '@floegence/floe-webapp-core/ui';
 
+import {
+  REDEVEN_WORKBENCH_ACTION_SURFACE_ATTR,
+  REDEVEN_WORKBENCH_ACTION_SURFACE_SELECTOR,
+} from './workbenchActionSurface';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from './workbenchWheelInteractive';
 
 export const REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_ATTR =
@@ -19,6 +23,34 @@ export const REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS = {
   ...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS,
   ...REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_PROPS,
 } as const;
+
+function isActionSurfaceElement(element: Element | null): boolean {
+  if (!element || typeof HTMLElement === 'undefined' || !(element instanceof HTMLElement)) {
+    return false;
+  }
+
+  if (element.matches('button, a[href], summary')) {
+    return true;
+  }
+
+  const role = element.getAttribute('role');
+  if (
+    role === 'button'
+    || role === 'link'
+    || role === 'menuitem'
+    || role === 'option'
+    || role === 'switch'
+    || role === 'tab'
+    || role === 'checkbox'
+    || role === 'radio'
+    || role === 'radio'
+  ) {
+    return true;
+  }
+
+  return element.closest(REDEVEN_WORKBENCH_ACTION_SURFACE_SELECTOR) !== null
+    || element.getAttribute(REDEVEN_WORKBENCH_ACTION_SURFACE_ATTR) === 'true';
+}
 
 function resolveElement(target: Element | EventTarget | null): Element | null {
   if (typeof Element !== 'undefined' && target instanceof Element) {
@@ -121,6 +153,25 @@ export function resolveWorkbenchTextSelectionSurfaceTarget(args: {
     return null;
   }
 
+  let currentElement: Element | null = targetElement;
+  while (currentElement && currentElement !== widgetElement) {
+    if (isTypingElement(currentElement)) {
+      return null;
+    }
+
+    if (isActionSurfaceElement(currentElement)) {
+      return null;
+    }
+
+    if (
+      currentElement.closest(`[${WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR}="true"]`) !== null
+    ) {
+      return null;
+    }
+
+    currentElement = currentElement.parentElement;
+  }
+
   const explicitSurface = targetElement.closest(REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_SELECTOR);
   if (explicitSurface instanceof HTMLElement && widgetElement.contains(explicitSurface)) {
     return explicitSurface;
@@ -130,18 +181,8 @@ export function resolveWorkbenchTextSelectionSurfaceTarget(args: {
     return null;
   }
 
-  if (
-    targetElement.closest(`[${WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR}="true"]`) !== null
-  ) {
-    return null;
-  }
-
-  let currentElement: Element | null = targetElement;
+  currentElement = targetElement;
   while (currentElement && currentElement !== widgetElement) {
-    if (isTypingElement(currentElement)) {
-      return null;
-    }
-
     if (supportsNativeTextSelection(currentElement) && currentElement instanceof HTMLElement) {
       return currentElement;
     }
