@@ -1930,19 +1930,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
   }
 
-  async function continueLauncherOperation(progress: DesktopLauncherActionProgress): Promise<void> {
-    const operationKey = trimString(progress.operation_key);
-    const confirmationID = trimString(progress.confirmation?.confirmation_id);
-    if (operationKey === '' || confirmationID === '') {
-      return;
-    }
-    await performLauncherAction({
-      kind: 'continue_launcher_operation',
-      operation_key: operationKey,
-      confirmation_id: confirmationID,
-    });
-  }
-
   async function dismissLauncherOperation(progress: DesktopLauncherActionProgress): Promise<void> {
     const operationKey = trimString(progress.operation_key);
     if (operationKey === '') {
@@ -2059,7 +2046,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   function runtimeActionRequest(
     environment: DesktopEnvironmentEntry,
     kind: RuntimeLauncherActionKind,
-    options: Readonly<{ forceRuntimeUpdate?: boolean; allowActiveWorkReplacement?: boolean }> = {},
+    options: Readonly<{ forceRuntimeUpdate?: boolean }> = {},
   ): DesktopEnvironmentRuntimeActionRequest | null {
     function withKind(target: DesktopLauncherRuntimeTarget): DesktopEnvironmentRuntimeActionRequest {
       switch (kind) {
@@ -2088,7 +2075,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         environment_id: environment.id,
         label: environment.label,
         ...(options.forceRuntimeUpdate ? { force_runtime_update: true } : {}),
-        ...(options.allowActiveWorkReplacement ? { allow_active_work_replacement: true } : {}),
       });
     }
     if (environment.kind === 'provider_environment') {
@@ -2097,7 +2083,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         environment_id: environment.id,
         label: environment.label,
         ...(options.forceRuntimeUpdate ? { force_runtime_update: true } : {}),
-        ...(options.allowActiveWorkReplacement ? { allow_active_work_replacement: true } : {}),
       });
     }
     if (environment.kind === 'external_local_ui') {
@@ -2107,7 +2092,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         external_local_ui_url: environment.local_ui_url,
         label: environment.label,
         ...(options.forceRuntimeUpdate ? { force_runtime_update: true } : {}),
-        ...(options.allowActiveWorkReplacement ? { allow_active_work_replacement: true } : {}),
       });
     }
     if (!environment.ssh_details) {
@@ -2125,7 +2109,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       release_base_url: environment.ssh_details.release_base_url,
       connect_timeout_seconds: environment.ssh_details.connect_timeout_seconds,
       ...(options.forceRuntimeUpdate ? { force_runtime_update: true } : {}),
-      ...(options.allowActiveWorkReplacement ? { allow_active_work_replacement: true } : {}),
     });
   }
 
@@ -2168,12 +2151,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
     options: Readonly<{
       announceSuccess?: boolean;
-      allowActiveWorkReplacement?: boolean;
     }> = {},
   ): Promise<boolean> {
-    const request = runtimeActionRequest(environment, 'start_environment_runtime', {
-      allowActiveWorkReplacement: options.allowActiveWorkReplacement,
-    });
+    const request = runtimeActionRequest(environment, 'start_environment_runtime');
     if (!request) {
       setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', 'Desktop could not resolve that runtime target.');
       return false;
@@ -2190,7 +2170,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel | undefined,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
-    options: Readonly<{ allowActiveWorkReplacement?: boolean }> = {},
   ): Promise<boolean> {
     if (action?.runtime_operation_method === 'desktop_local_update_handoff') {
       const result = await performLauncherAction({
@@ -2206,7 +2185,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     const request = runtimeActionRequest(environment, 'update_environment_runtime', {
       forceRuntimeUpdate: true,
-      allowActiveWorkReplacement: options.allowActiveWorkReplacement,
     });
     if (!request) {
       setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', 'Desktop could not resolve that runtime target.');
@@ -2223,11 +2201,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function restartEnvironmentRuntime(
     environment: DesktopEnvironmentEntry,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
-    options: Readonly<{ allowActiveWorkReplacement?: boolean }> = {},
   ): Promise<boolean> {
-    const request = runtimeActionRequest(environment, 'restart_environment_runtime', {
-      allowActiveWorkReplacement: options.allowActiveWorkReplacement,
-    });
+    const request = runtimeActionRequest(environment, 'restart_environment_runtime');
     if (!request) {
       setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', 'Desktop could not resolve that runtime target.');
       return false;
@@ -3304,9 +3279,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           cancelOperation={(progress) => {
             void cancelLauncherOperation(progress);
           }}
-          continueOperation={(progress) => {
-            void continueLauncherOperation(progress);
-          }}
           dismissOperation={(progress) => {
             void dismissLauncherOperation(progress);
           }}
@@ -3698,7 +3670,6 @@ function ConnectEnvironmentSurface(props: Readonly<{
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
   cancelOperation: (progress: DesktopLauncherActionProgress) => void;
-  continueOperation: (progress: DesktopLauncherActionProgress) => void;
   dismissOperation: (progress: DesktopLauncherActionProgress) => void;
   copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
   controlPlanes: readonly DesktopControlPlaneSummary[];
@@ -3991,7 +3962,6 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 editEnvironment={props.editEnvironment}
                 deleteEnvironment={props.deleteEnvironment}
                 cancelOperation={props.cancelOperation}
-                continueOperation={props.continueOperation}
                 dismissOperation={props.dismissOperation}
                 copyOperationDiagnostics={props.copyOperationDiagnostics}
                 environmentFailures={props.environmentFailures}
@@ -4037,7 +4007,6 @@ function EnvironmentCardsPanel(props: Readonly<{
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
   cancelOperation: (progress: DesktopLauncherActionProgress) => void;
-  continueOperation: (progress: DesktopLauncherActionProgress) => void;
   dismissOperation: (progress: DesktopLauncherActionProgress) => void;
   copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
   environmentFailures: ReadonlyMap<string, EnvironmentFailureState>;
@@ -4212,7 +4181,6 @@ function EnvironmentCardsPanel(props: Readonly<{
                     editEnvironment={props.editEnvironment}
                     deleteEnvironment={props.deleteEnvironment}
                     cancelOperation={props.cancelOperation}
-                    continueOperation={props.continueOperation}
                     dismissOperation={props.dismissOperation}
                     copyOperationDiagnostics={props.copyOperationDiagnostics}
                     setGuidanceSession={(nextSession) => setGuidanceSessionState(nextSession)}
@@ -4248,7 +4216,6 @@ function EnvironmentCardsPanel(props: Readonly<{
                     editEnvironment={props.editEnvironment}
                     deleteEnvironment={props.deleteEnvironment}
                     cancelOperation={props.cancelOperation}
-                    continueOperation={props.continueOperation}
                     dismissOperation={props.dismissOperation}
                     copyOperationDiagnostics={props.copyOperationDiagnostics}
                     setGuidanceSession={(nextSession) => setGuidanceSessionState(nextSession)}
@@ -4518,8 +4485,6 @@ function environmentProgressStatus(progress: DesktopLauncherActionProgress): str
     return 'Connection removed';
   }
   switch (progress.status) {
-    case 'awaiting_confirmation':
-      return 'Waiting for confirmation';
     case 'canceling':
     case 'cleanup_running':
       return 'Stopping';
@@ -4589,7 +4554,6 @@ function environmentProgressStatusIconTone(progress: DesktopLauncherActionProgre
 function EnvironmentProgressPanel(props: Readonly<{
   progress: DesktopLauncherActionProgress;
   cancelOperation: (progress: DesktopLauncherActionProgress) => void;
-  continueOperation: (progress: DesktopLauncherActionProgress) => void;
   dismissOperation: (progress: DesktopLauncherActionProgress) => void;
   copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
 }>) {
@@ -4613,7 +4577,6 @@ function EnvironmentProgressPanel(props: Readonly<{
   const canCancel = createMemo(() => (
     props.progress.cancelable === true && props.progress.status === 'running'
   ));
-  const awaitingConfirmation = createMemo(() => props.progress.status === 'awaiting_confirmation' && !!props.progress.confirmation);
   const canDismiss = createMemo(() => (
     props.progress.status === 'failed'
     || props.progress.status === 'cleanup_failed'
@@ -4654,9 +4617,6 @@ function EnvironmentProgressPanel(props: Readonly<{
         return 'Startup needs attention';
     }
   });
-  const primaryConfirmationLabel = createMemo(() => (
-    props.progress.confirmation?.confirm_label || 'Continue'
-  ));
   const stepState = (index: number, currentPhase: string | undefined, opStatus: string, currentStageIndex?: number): 'done' | 'active' | 'pending' | 'error' => {
     if (!currentPhase) {
       return 'pending';
@@ -4737,27 +4697,7 @@ function EnvironmentProgressPanel(props: Readonly<{
           </div>
         )}
       </Show>
-      <Show when={awaitingConfirmation()}>
-        <div class="redeven-action-popover__actions">
-          <Button
-            size="sm"
-            variant="outline"
-            class="flex-1 justify-center"
-            onClick={() => props.dismissOperation(props.progress)}
-          >
-            {props.progress.confirmation?.cancel_label || 'Cancel'}
-          </Button>
-          <Button
-            size="sm"
-            class="flex-1 justify-center gap-1.5"
-            onClick={() => props.continueOperation(props.progress)}
-          >
-            <Refresh class="h-3.5 w-3.5" />
-            {primaryConfirmationLabel()}
-          </Button>
-        </div>
-      </Show>
-      <Show when={!awaitingConfirmation() && canCancel()}>
+      <Show when={canCancel()}>
         <div class="redeven-action-popover__actions">
           <Button
             size="sm"
@@ -4771,7 +4711,7 @@ function EnvironmentProgressPanel(props: Readonly<{
           </Button>
         </div>
       </Show>
-      <Show when={!awaitingConfirmation() && canDismiss()}>
+      <Show when={canDismiss()}>
         <div class="redeven-action-popover__actions">
           <Show when={props.progress.failure}>
             <Button
@@ -4944,7 +4884,6 @@ function EnvironmentSplitActionButton(props: Readonly<{
   runtimeLifecycleProgress?: DesktopLauncherActionProgress | null;
   openConnectionProgress?: DesktopLauncherActionProgress | null;
   cancelOperation: (progress: DesktopLauncherActionProgress) => void;
-  continueOperation: (progress: DesktopLauncherActionProgress) => void;
   dismissOperation: (progress: DesktopLauncherActionProgress) => void;
   copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
   onRunAction: (action: EnvironmentActionModel) => void;
@@ -5187,7 +5126,6 @@ function EnvironmentSplitActionButton(props: Readonly<{
                         <EnvironmentProgressPanel
                           progress={p()}
                           cancelOperation={props.cancelOperation}
-                          continueOperation={props.continueOperation}
                           dismissOperation={props.dismissOperation}
                           copyOperationDiagnostics={props.copyOperationDiagnostics}
                         />
@@ -5415,7 +5353,6 @@ function EnvironmentConnectionCard(props: Readonly<{
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
   cancelOperation: (progress: DesktopLauncherActionProgress) => void;
-  continueOperation: (progress: DesktopLauncherActionProgress) => void;
   dismissOperation: (progress: DesktopLauncherActionProgress) => void;
   copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
   environmentFailure: EnvironmentFailureState | null;
@@ -5645,7 +5582,6 @@ function EnvironmentConnectionCard(props: Readonly<{
           runtimeLifecycleProgress={runtimeLifecycleProgress()}
           openConnectionProgress={openConnectionProgress()}
           cancelOperation={props.cancelOperation}
-          continueOperation={props.continueOperation}
           dismissOperation={props.dismissOperation}
           copyOperationDiagnostics={props.copyOperationDiagnostics}
           onRunAction={(action) => {

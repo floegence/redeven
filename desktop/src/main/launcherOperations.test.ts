@@ -201,47 +201,40 @@ describe('LauncherOperationRegistry', () => {
     expect(registry.progressItems()[0]?.failure).toEqual(failure);
   });
 
-  it('keeps confirmation operations durable until the user continues or cancels', () => {
+  it('keeps failed operation next actions durable until the user dismisses', () => {
     const registry = new LauncherOperationRegistry();
-    const confirmation = {
-      confirmation_id: 'confirm-runtime-update',
-      title: 'Runtime update needs confirmation',
-      summary: 'Updating will stop the current Runtime Service.',
-      active_work_label: '2 terminals',
-      confirm_label: 'Update runtime',
-      cancel_label: 'Cancel',
-    };
     const operation = registry.create({
       operation_key: 'ssh:devbox:default:key_agent:remote_default',
       action: 'update_environment_runtime',
       subject_kind: 'ssh_environment',
       subject_id: 'ssh:devbox:default:key_agent:remote_default',
-      status: 'awaiting_confirmation',
-      phase: 'awaiting_confirmation',
-      title: confirmation.title,
-      detail: confirmation.summary,
+      phase: 'checking_runtime_package',
+      title: 'Updating runtime',
+      detail: 'Desktop is checking the SSH runtime package.',
       lifecycle_progress: runtimeLifecycleProgress({
         location: 'ssh_host',
         operation: 'update',
-        phase: 'awaiting_confirmation',
+        phase: 'checking_runtime_package',
         targetLabel: 'Devbox',
       }),
       cancelable: true,
-      confirmation,
+    });
+
+    registry.finish(operation.operation_key, 'failed', {
+      phase: 'failed',
+      title: 'Runtime update failed',
+      detail: 'Desktop could not update the runtime.',
       next_actions: [{
-        kind: 'continue_after_confirmation',
-        operation_key: 'ssh:devbox:default:key_agent:remote_default',
-        confirmation_id: confirmation.confirmation_id,
-        label: 'Update runtime',
+        kind: 'dismiss',
+        operation_key: operation.operation_key,
+        label: 'Dismiss',
       }],
     });
 
-    expect(operation.status).toBe('awaiting_confirmation');
     expect(registry.progressItems()[0]).toEqual(expect.objectContaining({
-      status: 'awaiting_confirmation',
-      confirmation,
+      status: 'failed',
       next_actions: expect.arrayContaining([
-        expect.objectContaining({ kind: 'continue_after_confirmation' }),
+        expect.objectContaining({ kind: 'dismiss' }),
       ]),
     }));
   });

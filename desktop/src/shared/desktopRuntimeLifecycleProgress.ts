@@ -13,7 +13,6 @@ export type DesktopRuntimeLifecyclePhase =
   | 'checking_existing_runtime'
   | 'checking_host'
   | 'checking_container'
-  | 'awaiting_confirmation'
   | 'detecting_platform'
   | 'checking_runtime_package'
   | 'stopping_runtime_process'
@@ -96,7 +95,6 @@ const RUNTIME_LIFECYCLE_PHASES_BY_OPERATION: Record<DesktopRuntimeLifecycleOpera
   restart: {
     local_host: [
       'checking_existing_runtime',
-      'awaiting_confirmation',
       'stopping_runtime_process',
       'verifying_runtime_stopped',
       'starting_runtime_process',
@@ -106,7 +104,6 @@ const RUNTIME_LIFECYCLE_PHASES_BY_OPERATION: Record<DesktopRuntimeLifecycleOpera
     local_container: [
       'checking_container',
       'checking_runtime_package',
-      'awaiting_confirmation',
       'stopping_runtime_process',
       'verifying_runtime_stopped',
       'starting_runtime_process',
@@ -116,7 +113,6 @@ const RUNTIME_LIFECYCLE_PHASES_BY_OPERATION: Record<DesktopRuntimeLifecycleOpera
     ssh_host: [
       'checking_host',
       'checking_runtime_package',
-      'awaiting_confirmation',
       'stopping_runtime_process',
       'verifying_runtime_stopped',
       'starting_runtime_process',
@@ -127,7 +123,6 @@ const RUNTIME_LIFECYCLE_PHASES_BY_OPERATION: Record<DesktopRuntimeLifecycleOpera
       'checking_host',
       'checking_container',
       'checking_runtime_package',
-      'awaiting_confirmation',
       'stopping_runtime_process',
       'verifying_runtime_stopped',
       'starting_runtime_process',
@@ -140,7 +135,6 @@ const RUNTIME_LIFECYCLE_PHASES_BY_OPERATION: Record<DesktopRuntimeLifecycleOpera
     ssh_host: [
       'checking_host',
       'checking_runtime_package',
-      'awaiting_confirmation',
       'stopping_runtime_process',
       'verifying_runtime_stopped',
       'detecting_platform',
@@ -154,7 +148,6 @@ const RUNTIME_LIFECYCLE_PHASES_BY_OPERATION: Record<DesktopRuntimeLifecycleOpera
       'checking_host',
       'checking_container',
       'checking_runtime_package',
-      'awaiting_confirmation',
       'stopping_runtime_process',
       'verifying_runtime_stopped',
       'detecting_platform',
@@ -198,7 +191,6 @@ export const RUNTIME_LIFECYCLE_PHASE_LABELS: Record<DesktopRuntimeLifecyclePhase
   checking_existing_runtime: 'Checking existing runtime',
   checking_host: 'Checking host',
   checking_container: 'Checking container',
-  awaiting_confirmation: 'Confirm replacement',
   detecting_platform: 'Detecting platform',
   checking_runtime_package: 'Checking runtime package',
   stopping_runtime_process: 'Stopping runtime process',

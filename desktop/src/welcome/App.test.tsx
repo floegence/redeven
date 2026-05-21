@@ -601,10 +601,10 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('confirmRuntimeMaintenance');
     expect(appSrc).toContain('force_runtime_update');
     expect(appSrc).toContain('forceRuntimeUpdate: true');
-    expect(appSrc).toContain('allow_active_work_replacement');
+    expect(appSrc).not.toContain('allow_active_work_replacement');
     expect(appSrc).not.toContain('allowActiveWorkReplacement: true');
-    expect(appSrc).toContain('continueLauncherOperation');
-    expect(appSrc).toContain("kind: 'continue_launcher_operation'");
+    expect(appSrc).not.toContain('continueLauncherOperation');
+    expect(appSrc).not.toContain("kind: 'continue_launcher_operation'");
     expect(appSrc).toContain("kind: 'dismiss_launcher_operation'");
     expect(appSrc).toContain('IMPORTANT: Provider-link confirmation is intentionally reachable only from');
     expect(appSrc).toContain('desktopEntryKindOwnsRuntimeManagement(environment.kind)');
@@ -704,7 +704,7 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain('async function cancelLauncherOperation(progress: DesktopLauncherActionProgress): Promise<void>');
     expect(appSrc).toContain("kind: 'cancel_launcher_operation'");
-    expect(appSrc).toContain("kind: 'continue_launcher_operation'");
+    expect(appSrc).not.toContain("kind: 'continue_launcher_operation'");
     expect(appSrc).toContain("kind: 'dismiss_launcher_operation'");
     expect(appSrc).toContain("showActionToast(progress.open_progress ? 'Opening is stopping.' : 'Runtime startup is stopping.', 'info');");
     expect(appSrc).toContain('cancelOperation={(progress) => {\n            void cancelLauncherOperation(progress);');
@@ -712,8 +712,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("case 'cleanup_failed':\n      return 'Cleanup needs attention';");
     expect(appSrc).toContain('props.progress.cancelable === true && props.progress.status === \'running\'');
     expect(appSrc).toContain('onClick={() => props.cancelOperation(props.progress)}');
-    expect(appSrc).toContain("props.progress.status === 'awaiting_confirmation'");
-    expect(appSrc).toContain('onClick={() => props.continueOperation(props.progress)}');
+    expect(appSrc).not.toContain("props.progress.status === 'awaiting_confirmation'");
+    expect(appSrc).not.toContain('onClick={() => props.continueOperation(props.progress)}');
     expect(appSrc).toContain('onClick={() => props.dismissOperation(props.progress)}');
     expect(appSrc).toContain('Copy diagnostics');
     expect(appSrc).toContain('<Stop class="h-3.5 w-3.5" />');
@@ -1014,7 +1014,7 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain("runtimeActionRequest(environment, 'restart_environment_runtime'");
     expect(appSrc).not.toContain("allowActiveWorkReplacement: true");
-    expect(appSrc).toContain("kind: 'continue_launcher_operation'");
+    expect(appSrc).not.toContain("kind: 'continue_launcher_operation'");
   });
 });
 

@@ -71,7 +71,6 @@ describe('desktopLauncherIPC', () => {
         runtime_root: ' /workspace/.redeven ',
       },
       force_runtime_update: true,
-      allow_active_work_replacement: true,
     })).toEqual({
       kind: 'start_environment_runtime',
       environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
@@ -88,7 +87,6 @@ describe('desktopLauncherIPC', () => {
         bridge_strategy: 'exec_stream',
       },
       force_runtime_update: true,
-      allow_active_work_replacement: true,
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'restart_environment_runtime',
@@ -367,15 +365,6 @@ describe('desktopLauncherIPC', () => {
       operation_key: 'ssh:devbox:default:key_agent:remote_default',
     });
     expect(normalizeDesktopLauncherActionRequest({
-      kind: 'continue_launcher_operation',
-      operation_key: ' ssh:devbox:default:key_agent:remote_default ',
-      confirmation_id: ' confirmation-1 ',
-    })).toEqual({
-      kind: 'continue_launcher_operation',
-      operation_key: 'ssh:devbox:default:key_agent:remote_default',
-      confirmation_id: 'confirmation-1',
-    });
-    expect(normalizeDesktopLauncherActionRequest({
       kind: 'dismiss_launcher_operation',
       operation_key: ' ssh:devbox:default:key_agent:remote_default ',
     })).toEqual({
@@ -558,18 +547,10 @@ describe('desktopLauncherIPC', () => {
       lifecycle_progress: runtimeLifecycle,
       cancelable: true,
       deleted_subject: false,
-      confirmation: {
-        confirmation_id: 'confirm-1',
-        title: 'Runtime update needs confirmation',
-        summary: 'Updating will stop the current Runtime Service.',
-        confirm_label: 'Update runtime',
-        cancel_label: 'Cancel',
-      },
       next_actions: [{
-        kind: 'continue_after_confirmation',
+        kind: 'copy_diagnostics',
         operation_key: 'local:container:docker:dev:abcd1234',
-        confirmation_id: 'confirm-1',
-        label: 'Update runtime',
+        label: 'Copy diagnostics',
       }],
     };
     const progress: DesktopLauncherActionProgress = {
@@ -588,7 +569,6 @@ describe('desktopLauncherIPC', () => {
       lifecycle_progress: operation.lifecycle_progress,
       cancelable: operation.cancelable,
       deleted_subject: operation.deleted_subject,
-      confirmation: operation.confirmation,
       next_actions: operation.next_actions,
     };
 

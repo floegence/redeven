@@ -33,7 +33,6 @@ export type BusyAction =
   | 'set_saved_runtime_target_pinned'
   | 'delete_control_plane'
   | 'cancel_launcher_operation'
-  | 'continue_launcher_operation'
   | 'dismiss_launcher_operation'
   | 'close_launcher_or_quit'
   | 'save_local_environment_settings'
@@ -99,7 +98,6 @@ export function busyStateForLauncherRequest(
         progress: null,
       };
     case 'cancel_launcher_operation':
-    case 'continue_launcher_operation':
     case 'dismiss_launcher_operation':
       return {
         action: request.kind,

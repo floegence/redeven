@@ -280,7 +280,6 @@ import {
   type DesktopLauncherActionRequest,
   type DesktopLauncherActionResult,
   type DesktopLauncherActionSuccess,
-  type DesktopLauncherOperationConfirmation,
   type DesktopLauncherOperationNextAction,
   type DesktopLauncherSurface,
   type DesktopWelcomeSnapshot,
@@ -527,13 +526,6 @@ type PendingRuntimePlacementStart = Readonly<{
   task: Promise<RuntimePlacementReadyRecord>;
 }>;
 
-type PendingRuntimeLifecycleConfirmation = Readonly<{
-  operation_key: string;
-  confirmation_id: string;
-  request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'start_environment_runtime' | 'restart_environment_runtime' | 'update_environment_runtime' }>>;
-  created_at_unix_ms: number;
-}>;
-
 type PreparedExternalTargetResult = Readonly<
   | {
       ok: true;
@@ -618,7 +610,6 @@ const runtimePlacementMaintenanceByTargetID = new Map<DesktopRuntimeTargetID, De
 const runtimePlacementBridgeByTargetID = new Map<DesktopRuntimeTargetID, RuntimePlacementBridgeRecord>();
 const runtimePlacementReadyByTargetID = new Map<DesktopRuntimeTargetID, RuntimePlacementReadyRecord>();
 const pendingRuntimePlacementStartByTargetID = new Map<DesktopRuntimeTargetID, PendingRuntimePlacementStart>();
-const pendingRuntimeLifecycleConfirmationsByKey = new Map<string, PendingRuntimeLifecycleConfirmation>();
 const launcherOperationRemovalTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const launcherOperations = new LauncherOperationRegistry(handleLauncherOperationChange);
 const welcomeRuntimeHealthStore = new DesktopWelcomeRuntimeHealthStore(
@@ -2969,7 +2960,6 @@ function scheduleLauncherOperationRemoval(operationKey: string, delayMs = 4_000)
   if (
     snapshot?.status === 'failed'
     || snapshot?.status === 'cleanup_failed'
-    || snapshot?.status === 'awaiting_confirmation'
   ) {
     return;
   }
@@ -3882,159 +3872,6 @@ function buildRuntimeLifecycleProgress(input: Readonly<{
   });
 }
 
-class RuntimeLifecycleConfirmationRequiredError extends Error {
-  constructor(
-    message: string,
-    readonly operationKey: string,
-    readonly confirmationID: string,
-  ) {
-    super(message);
-    this.name = 'RuntimeLifecycleConfirmationRequiredError';
-  }
-}
-
-function runtimeLifecycleConfirmationCopy(
-  operation: DesktopRuntimeLifecycleOperation,
-): Readonly<{ title: string; confirmLabel: string; summary: string }> {
-  switch (operation) {
-    case 'restart':
-      return {
-        title: 'Runtime restart needs confirmation',
-        confirmLabel: 'Restart runtime',
-        summary: 'Restarting will stop the current Runtime Service before starting it again.',
-      };
-    case 'update':
-      return {
-        title: 'Runtime update needs confirmation',
-        confirmLabel: 'Update runtime',
-        summary: 'Updating will stop the current Runtime Service, replace the runtime package when needed, and start it again.',
-      };
-    default:
-      return {
-        title: 'Runtime replacement needs confirmation',
-        confirmLabel: 'Continue',
-        summary: 'This action will stop the current Runtime Service before continuing.',
-      };
-  }
-}
-
-function runtimeLifecyclePendingNextActions(
-  operationKey: string,
-  confirmationID: string,
-  environmentID: string,
-  confirmLabel: string,
-): readonly DesktopLauncherOperationNextAction[] {
-  return [
-    {
-      kind: 'continue_after_confirmation',
-      operation_key: operationKey,
-      confirmation_id: confirmationID,
-      label: confirmLabel,
-    },
-    {
-      kind: 'refresh_status',
-      environment_id: compact(environmentID) || undefined,
-      label: 'Refresh status',
-    },
-    {
-      kind: 'dismiss',
-      operation_key: operationKey,
-      label: 'Cancel',
-    },
-  ];
-}
-
-function markRuntimeLifecycleAwaitingConfirmation(input: Readonly<{
-  operationKey: string;
-  action: DesktopLauncherActionKind;
-  subjectKind: DesktopLauncherOperationSnapshot['subject_kind'];
-  subjectID: string;
-  environmentID: string;
-  environmentLabel: string;
-  hostAccess: DesktopRuntimeHostAccess;
-  placement: DesktopRuntimePlacement;
-  operation: DesktopRuntimeLifecycleOperation;
-  targetID: string;
-  targetLabel: string;
-  runtimeService?: RuntimeServiceSnapshot;
-}>): RuntimeLifecycleConfirmationRequiredError {
-  const copy = runtimeLifecycleConfirmationCopy(input.operation);
-  const activeWorkLabel = runtimeServiceHasActiveWork(input.runtimeService)
-    ? formatRuntimeServiceWorkload(input.runtimeService)
-    : '';
-  const confirmationID = `${input.operationKey}:${Date.now()}`;
-  const summary = activeWorkLabel
-    ? `${copy.summary} Active work: ${activeWorkLabel}.`
-    : copy.summary;
-  const confirmation: DesktopLauncherOperationConfirmation = {
-    confirmation_id: confirmationID,
-    title: copy.title,
-    summary,
-    ...(activeWorkLabel ? { active_work_label: activeWorkLabel } : {}),
-    confirm_label: copy.confirmLabel,
-    cancel_label: 'Cancel',
-  };
-  const nextActions = runtimeLifecyclePendingNextActions(
-    input.operationKey,
-    confirmationID,
-    input.environmentID,
-    copy.confirmLabel,
-  );
-  const lifecycleProgress = buildRuntimeLifecycleProgress({
-    hostAccess: input.hostAccess,
-    placement: input.placement,
-    operation: input.operation,
-    phase: 'awaiting_confirmation',
-    targetID: input.targetID,
-    targetLabel: input.targetLabel,
-  });
-  const existing = launcherOperations.get(input.operationKey);
-  const patch = {
-    status: 'awaiting_confirmation' as const,
-    phase: 'awaiting_confirmation',
-    title: copy.title,
-    detail: summary,
-    lifecycle_progress: lifecycleProgress,
-    cancelable: true,
-    interrupt_label: 'Cancel',
-    interrupt_detail: 'Desktop is waiting for confirmation before changing this runtime.',
-    interrupt_kind: 'generic' as const,
-    confirmation,
-    next_actions: nextActions,
-    failure: undefined,
-  };
-  if (existing) {
-    launcherOperations.update(input.operationKey, patch);
-  } else {
-    launcherOperations.create({
-      operation_key: input.operationKey,
-      action: input.action,
-      subject_kind: input.subjectKind,
-      subject_id: input.subjectID,
-      environment_id: input.environmentID,
-      environment_label: input.environmentLabel,
-      status: 'awaiting_confirmation',
-      phase: patch.phase,
-      title: patch.title,
-      detail: patch.detail,
-      lifecycle_progress: lifecycleProgress,
-      cancelable: true,
-      interrupt_label: patch.interrupt_label,
-      interrupt_detail: patch.interrupt_detail,
-      interrupt_kind: patch.interrupt_kind,
-      confirmation,
-      next_actions: nextActions,
-    });
-  }
-  const existingTimer = launcherOperationRemovalTimers.get(input.operationKey);
-  if (existingTimer) {
-    clearTimeout(existingTimer);
-    launcherOperationRemovalTimers.delete(input.operationKey);
-  }
-  broadcastDesktopWelcomeSnapshots();
-  return new RuntimeLifecycleConfirmationRequiredError(summary, input.operationKey, confirmationID);
-}
-
 function updateRuntimeLifecycleOperation(
   operationKey: string,
   input: Readonly<{
@@ -4443,12 +4280,14 @@ async function startSSHEnvironmentRuntimeRecord(
   const label = compact(options.label) || defaultSavedSSHEnvironmentLabel(sshDetails);
   const action = options.action ?? 'start_environment_runtime';
   const lifecycleOperation = runtimeLifecycleOperationFromAction(action);
-  const hostAccess: DesktopRuntimeHostAccess = { kind: 'ssh_host', ssh: sshDetails };
-  const hostPlacement: DesktopRuntimePlacement = { kind: 'host_process', runtime_root: sshDetails.runtime_root };
+  const activeWorkReplacementAllowed = options.allowActiveWorkReplacement === true
+    || action === 'restart_environment_runtime'
+    || action === 'update_environment_runtime'
+    || options.forceRuntimeUpdate === true;
   const existingRecord = sshRuntimeReadyByKey.get(runtimeKey) ?? null;
   if (existingRecord) {
     const canReuseExisting = options.forceRuntimeUpdate !== true
-      && options.allowActiveWorkReplacement !== true
+      && !activeWorkReplacementAllowed
       && action === 'start_environment_runtime'
       && desktopSSHRuntimeAffectingSettingsMatch(existingRecord.details, sshDetails);
     if (canReuseExisting) {
@@ -4456,25 +4295,6 @@ async function startSSHEnvironmentRuntimeRecord(
         sshRuntimeMaintenanceByKey.delete(runtimeKey);
       }
       return existingRecord;
-    }
-    if (
-      options.allowActiveWorkReplacement !== true
-      && (action === 'restart_environment_runtime' || runtimeServiceHasActiveWork(existingRecord.startup.runtime_service))
-    ) {
-      throw markRuntimeLifecycleAwaitingConfirmation({
-        operationKey: runtimeKey,
-        action,
-        subjectKind: 'ssh_environment',
-        subjectID: runtimeKey,
-        environmentID,
-        environmentLabel: label,
-        hostAccess,
-        placement: hostPlacement,
-        operation: lifecycleOperation,
-        targetID: runtimeKey,
-        targetLabel: label,
-        runtimeService: existingRecord.startup.runtime_service,
-      });
     }
     const openRecord = sshEnvironmentRuntimeByKey.get(runtimeKey) ?? null;
     await openRecord?.disconnect().catch(() => undefined);
@@ -4547,29 +4367,6 @@ async function startSSHEnvironmentRuntimeRecord(
           || action === 'update_environment_runtime'
           || options.forceRuntimeUpdate === true;
         if (replacingReadySSHRuntime) {
-          if (
-            options.allowActiveWorkReplacement !== true
-            && (
-              action === 'restart_environment_runtime'
-              || action === 'update_environment_runtime'
-              || runtimeServiceHasActiveWork(statusProbe.startup.runtime_service)
-            )
-          ) {
-            throw markRuntimeLifecycleAwaitingConfirmation({
-              operationKey: runtimeKey,
-              action,
-              subjectKind: 'ssh_environment',
-              subjectID: runtimeKey,
-              environmentID,
-              environmentLabel: label,
-              hostAccess,
-              placement: hostPlacement,
-              operation: lifecycleOperation,
-              targetID: runtimeKey,
-              targetLabel: label,
-              runtimeService: statusProbe.startup.runtime_service,
-            });
-          }
           const pid = statusProbe.startup.pid ?? 0;
           if (!Number.isInteger(pid) || pid <= 0) {
             throw new Error('Desktop cannot replace this SSH runtime because it did not report a process id.');
@@ -4671,22 +4468,7 @@ async function startSSHEnvironmentRuntimeRecord(
             && options.forceRuntimeUpdate === true
           ) {
             // Continue into the Desktop-owned package replacement path below.
-          } else if (options.allowActiveWorkReplacement !== true || !maintenance.can_desktop_restart) {
-            if (maintenance.can_desktop_restart) {
-              throw markRuntimeLifecycleAwaitingConfirmation({
-                operationKey: runtimeKey,
-                action,
-                subjectKind: 'ssh_environment',
-                subjectID: runtimeKey,
-                environmentID,
-                environmentLabel: label,
-                hostAccess,
-                placement: hostPlacement,
-                operation: lifecycleOperation,
-                targetID: runtimeKey,
-                targetLabel: label,
-              });
-            }
+          } else if (!maintenance.can_desktop_restart) {
             throw new DesktopSSHRuntimeMaintenanceRequiredError(maintenance.message, maintenance);
           }
           if (classification.kind === 'restart_required') {
@@ -4746,7 +4528,7 @@ async function startSSHEnvironmentRuntimeRecord(
         sshPassword,
         sourceRuntimeRoot: process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT,
         forceRuntimeUpdate: options.forceRuntimeUpdate,
-        allowActiveWorkReplacement: options.allowActiveWorkReplacement,
+        allowActiveWorkReplacement: activeWorkReplacementAllowed,
         connectTimeoutSeconds: typeof sshDetails.connect_timeout_seconds === 'number'
           ? sshDetails.connect_timeout_seconds
           : undefined,
@@ -4859,10 +4641,6 @@ async function startSSHEnvironmentRuntimeRecord(
       return runtimeRecord;
     } catch (error) {
       if (!operationSettled) {
-        if (error instanceof RuntimeLifecycleConfirmationRequiredError) {
-          operationSettled = true;
-          throw error;
-        }
         if (error instanceof DesktopSSHRuntimeCanceledError || signal?.aborted) {
           launcherOperations.update(runtimeKey, {
             status: 'cleanup_running',
@@ -6821,20 +6599,6 @@ function runtimeLifecycleSuccessOutcome(
   }
 }
 
-function rememberRuntimeLifecycleConfirmation(
-  error: RuntimeLifecycleConfirmationRequiredError,
-  request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'start_environment_runtime' | 'restart_environment_runtime' | 'update_environment_runtime' }>>,
-): DesktopLauncherActionSuccess {
-  pendingRuntimeLifecycleConfirmationsByKey.set(error.operationKey, {
-    operation_key: error.operationKey,
-    confirmation_id: error.confirmationID,
-    request,
-    created_at_unix_ms: Date.now(),
-  });
-  broadcastDesktopWelcomeSnapshots();
-  return launcherActionSuccess('runtime_lifecycle_confirmation_required');
-}
-
 function runtimePlacementBridgeRecordForRequest(
   request: DesktopLauncherAnyRuntimeTargetRequest,
 ): RuntimePlacementBridgeRecord | null {
@@ -6869,8 +6633,7 @@ async function ensureRuntimePlacementReadyRecordFromLauncher(
   const lifecycleOperation = runtimeLifecycleOperationFromAction(request.kind);
   const replacementRequested = request.kind === 'restart_environment_runtime'
     || request.kind === 'update_environment_runtime'
-    || request.force_runtime_update === true
-    || request.allow_active_work_replacement === true;
+    || request.force_runtime_update === true;
   if (existing && !replacementRequested) {
     return existing;
   }
@@ -6922,30 +6685,6 @@ async function ensureRuntimePlacementReadyRecordFromLauncher(
       if (existing && replacementRequested) {
         const bridgeRecord = runtimePlacementBridgeByTargetID.get(targetID) ?? null;
         const runtimePlacement = (bridgeRecord?.session.placement ?? existing.placement) as Extract<DesktopRuntimePlacement, Readonly<{ kind: 'container_process' }>>;
-        const activeRuntimeService = bridgeRecord?.startup.runtime_service ?? existing.startup?.runtime_service;
-        if (
-          request.allow_active_work_replacement !== true
-          && (
-            request.kind === 'restart_environment_runtime'
-            || request.kind === 'update_environment_runtime'
-            || runtimeServiceHasActiveWork(activeRuntimeService)
-          )
-        ) {
-          throw markRuntimeLifecycleAwaitingConfirmation({
-            operationKey: targetID,
-            action: request.kind,
-            subjectKind: 'runtime_target',
-            subjectID: targetID,
-            environmentID,
-            environmentLabel: label,
-            hostAccess: bridgeRecord?.session.host_access ?? existing.host_access,
-            placement: runtimePlacement,
-            operation: lifecycleOperation,
-            targetID,
-            targetLabel: label,
-            runtimeService: activeRuntimeService,
-          });
-        }
         updateRuntimeLifecycleOperation(targetID, {
           hostAccess: bridgeRecord?.session.host_access ?? existing.host_access,
           placement: runtimePlacement,
@@ -6996,21 +6735,6 @@ async function ensureRuntimePlacementReadyRecordFromLauncher(
       }
       let inspectionMaintenance = runtimePlacementMaintenanceByTargetID.get(targetID) ?? inspection.maintenance;
       if (inspectionMaintenance && desktopRuntimeMaintenanceRequiresRestart(inspectionMaintenance)) {
-        if (request.allow_active_work_replacement !== true) {
-          throw markRuntimeLifecycleAwaitingConfirmation({
-            operationKey: targetID,
-            action: request.kind,
-            subjectKind: 'runtime_target',
-            subjectID: targetID,
-            environmentID,
-            environmentLabel: label,
-            hostAccess,
-            placement,
-            operation: lifecycleOperation,
-            targetID,
-            targetLabel: label,
-          });
-        }
         updateRuntimeLifecycleOperation(targetID, {
           hostAccess,
           placement,
@@ -7041,30 +6765,6 @@ async function ensureRuntimePlacementReadyRecordFromLauncher(
         inspectionMaintenance = undefined;
       }
       if (inspection.ready_record && replacementRequested) {
-        const readyRuntimeService = inspection.ready_record.startup?.runtime_service;
-        if (
-          request.allow_active_work_replacement !== true
-          && (
-            request.kind === 'restart_environment_runtime'
-            || request.kind === 'update_environment_runtime'
-            || runtimeServiceHasActiveWork(readyRuntimeService)
-          )
-        ) {
-          throw markRuntimeLifecycleAwaitingConfirmation({
-            operationKey: targetID,
-            action: request.kind,
-            subjectKind: 'runtime_target',
-            subjectID: targetID,
-            environmentID,
-            environmentLabel: label,
-            hostAccess,
-            placement,
-            operation: lifecycleOperation,
-            targetID,
-            targetLabel: label,
-            runtimeService: readyRuntimeService,
-          });
-        }
         updateRuntimeLifecycleOperation(targetID, {
           hostAccess,
           placement,
@@ -7200,10 +6900,6 @@ async function ensureRuntimePlacementReadyRecordFromLauncher(
       return readyRecord;
     } catch (error) {
       if (!operationSettled) {
-        if (error instanceof RuntimeLifecycleConfirmationRequiredError) {
-          operationSettled = true;
-          throw error;
-        }
         if (signal?.aborted) {
           const currentDeleted = launcherOperations.get(targetID)?.deleted_subject === true;
           launcherOperations.finish(targetID, 'canceled', {
@@ -7543,9 +7239,6 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
       broadcastDesktopWelcomeSnapshots();
       return launcherActionSuccess(runtimeLifecycleSuccessOutcome(request.kind));
     } catch (error) {
-      if (error instanceof RuntimeLifecycleConfirmationRequiredError) {
-        return rememberRuntimeLifecycleConfirmation(error, request);
-      }
       return thrownLauncherActionFailure(error)
         ?? launcherActionFailureFromRuntimeStartError(error, {
           environmentID: runtimeTargetEnvironmentIDFromRequest(request),
@@ -7561,7 +7254,6 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
         environmentID: request.environment_id,
         label: request.label,
         forceRuntimeUpdate: request.force_runtime_update === true,
-        allowActiveWorkReplacement: request.allow_active_work_replacement === true,
         action: request.kind,
       });
       resetLauncherIssueState();
@@ -7573,9 +7265,6 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
       broadcastDesktopWelcomeSnapshots();
       return launcherActionSuccess(runtimeLifecycleSuccessOutcome(request.kind));
     } catch (error) {
-      if (error instanceof RuntimeLifecycleConfirmationRequiredError) {
-        return rememberRuntimeLifecycleConfirmation(error, request);
-      }
       return launcherActionFailureFromRuntimeStartError(error, {
         environmentID: request.environment_id,
         operation: lifecycleOperation,
@@ -7639,22 +7328,6 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
     if (request.kind === 'restart_environment_runtime') {
       const runtimeRecord = currentLocalEnvironmentRuntimeRecord(environment) ?? await attachLocalEnvironmentRuntime(environment);
       if (runtimeRecord) {
-        if (request.allow_active_work_replacement !== true && runtimeServiceHasActiveWork(runtimeRecord.startup.runtime_service)) {
-          throw markRuntimeLifecycleAwaitingConfirmation({
-            operationKey,
-            action: request.kind,
-            subjectKind: 'local_environment',
-            subjectID: environment.id,
-            environmentID: environment.id,
-            environmentLabel: environment.label,
-            hostAccess,
-            placement: localHostPlacement,
-            operation: lifecycleOperation,
-            targetID: operationKey,
-            targetLabel: environment.label,
-            runtimeService: runtimeRecord.startup.runtime_service,
-          });
-        }
         updateRuntimeLifecycleOperation(operationKey, {
           hostAccess,
           placement: localHostPlacement,
@@ -7766,9 +7439,6 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
     scheduleLauncherOperationRemoval(operation.operation_key);
     return launcherActionSuccess(runtimeLifecycleSuccessOutcome(request.kind));
   } catch (error) {
-    if (error instanceof RuntimeLifecycleConfirmationRequiredError) {
-      return rememberRuntimeLifecycleConfirmation(error, request);
-    }
     const failureTitle = runtimeLifecycleTitleForFailure('local_host', false, lifecycleOperation);
     const failure = desktopFailureFromError(error, {
       code: 'local_runtime_launch_failed',
@@ -7836,7 +7506,6 @@ async function updateEnvironmentRuntimeFromLauncher(
     ...request,
     kind: 'update_environment_runtime',
     force_runtime_update: true,
-    allow_active_work_replacement: request.allow_active_work_replacement === true,
   });
 }
 
@@ -8128,73 +7797,9 @@ async function cancelLauncherOperationFromLauncher(
       },
     );
   }
-  if (operation.status === 'awaiting_confirmation') {
-    pendingRuntimeLifecycleConfirmationsByKey.delete(request.operation_key);
-    launcherOperations.finish(request.operation_key, 'canceled', {
-      phase: 'canceled',
-      title: 'Runtime operation canceled',
-      detail: 'Desktop did not change this runtime because the confirmation was canceled.',
-      lifecycle_progress: operation.lifecycle_progress
-        ? runtimeLifecycleProgress({
-            location: operation.lifecycle_progress.location,
-            operation: runtimeLifecycleOperationFromAction(operation.action),
-            phase: 'canceled',
-            targetID: operation.lifecycle_progress.target_id,
-            targetLabel: operation.lifecycle_progress.target_label,
-            targetDetail: operation.lifecycle_progress.target_detail,
-          })
-        : undefined,
-    });
-    scheduleLauncherOperationRemoval(request.operation_key);
-    broadcastDesktopWelcomeSnapshots();
-    return launcherActionSuccess('canceled_launcher_operation');
-  }
-  pendingRuntimeLifecycleConfirmationsByKey.delete(request.operation_key);
   launcherOperations.cancel(request.operation_key, operation.interrupt_detail || 'Desktop is stopping this background task.');
   broadcastDesktopWelcomeSnapshots();
   return launcherActionSuccess('canceled_launcher_operation');
-}
-
-async function continueLauncherOperationFromLauncher(
-  request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'continue_launcher_operation' }>>,
-): Promise<DesktopLauncherActionResult> {
-  const pending = pendingRuntimeLifecycleConfirmationsByKey.get(request.operation_key) ?? null;
-  if (!pending || pending.confirmation_id !== request.confirmation_id) {
-    return launcherActionFailure(
-      'operation_missing',
-      'global',
-      'That confirmation is no longer active.',
-      {
-        shouldRefreshSnapshot: true,
-      },
-    );
-  }
-  const operation = launcherOperations.get(request.operation_key);
-  if (!operation || operation.status !== 'awaiting_confirmation') {
-    pendingRuntimeLifecycleConfirmationsByKey.delete(request.operation_key);
-    return launcherActionFailure(
-      'operation_missing',
-      'global',
-      'That runtime operation is no longer waiting for confirmation.',
-      {
-        shouldRefreshSnapshot: true,
-      },
-    );
-  }
-  pendingRuntimeLifecycleConfirmationsByKey.delete(request.operation_key);
-  launcherOperations.update(request.operation_key, {
-    status: 'running',
-    title: operation.title,
-    detail: 'Desktop is continuing the confirmed runtime operation.',
-    cancelable: true,
-    confirmation: undefined,
-    next_actions: undefined,
-  });
-  broadcastDesktopWelcomeSnapshots();
-  return performDesktopLauncherAction({
-    ...pending.request,
-    allow_active_work_replacement: true,
-  });
 }
 
 async function dismissLauncherOperationFromLauncher(
@@ -8205,8 +7810,7 @@ async function dismissLauncherOperationFromLauncher(
     return launcherActionSuccess('dismissed_launcher_operation');
   }
   if (
-    operation.status !== 'awaiting_confirmation'
-    && operation.status !== 'failed'
+    operation.status !== 'failed'
     && operation.status !== 'cleanup_failed'
     && operation.status !== 'canceled'
     && operation.status !== 'succeeded'
@@ -8220,7 +7824,6 @@ async function dismissLauncherOperationFromLauncher(
       },
     );
   }
-  pendingRuntimeLifecycleConfirmationsByKey.delete(request.operation_key);
   const existingTimer = launcherOperationRemovalTimers.get(request.operation_key);
   if (existingTimer) {
     clearTimeout(existingTimer);
@@ -9036,7 +8639,6 @@ function runtimeMaintenanceActionPlan(args: Readonly<{
   availability: DesktopShellRuntimeMaintenanceActionPlan['availability'];
   method: DesktopShellRuntimeMaintenanceMethod;
   label: string;
-  confirmLabel: string;
   title: string;
   message: string;
   detail?: string;
@@ -9047,7 +8649,6 @@ function runtimeMaintenanceActionPlan(args: Readonly<{
     availability: args.availability,
     method: args.method,
     label: args.label,
-    confirm_label: args.confirmLabel,
     title: args.title,
     message: args.message,
     detail: args.detail,
@@ -9066,8 +8667,7 @@ function unavailableRuntimeMaintenanceAction(
     availability,
     method: availability === 'external' ? 'host_device_handoff' : 'manual',
     label: kind === 'restart' ? 'Restart runtime' : 'Update Redeven',
-    confirmLabel: kind === 'restart' ? 'Restart' : 'Update',
-    title: kind === 'restart' ? 'Restart Runtime Service?' : 'Update Runtime Service?',
+    title: kind === 'restart' ? 'Restart Runtime Service' : 'Update Runtime Service',
     message,
     unavailableReasonCode: reasonCode,
     requiresTargetVersion: kind === 'upgrade',
@@ -9079,8 +8679,7 @@ function runtimeRPCMaintenanceAction(kind: 'restart' | 'upgrade'): DesktopShellR
     availability: 'available',
     method: kind === 'restart' ? 'runtime_rpc_restart' : 'runtime_rpc_upgrade',
     label: kind === 'restart' ? 'Restart runtime' : 'Update Redeven',
-    confirmLabel: kind === 'restart' ? 'Restart' : 'Update',
-    title: kind === 'restart' ? 'Restart Runtime Service?' : 'Update Runtime Service?',
+    title: kind === 'restart' ? 'Restart Runtime Service' : 'Update Runtime Service',
     message: kind === 'restart'
       ? 'The Runtime Service will restart itself through its secure runtime RPC.'
       : 'The Runtime Service will install the requested release through its secure runtime RPC.',
@@ -9137,8 +8736,7 @@ function runtimeMaintenanceContextFromSession(
         availability: 'available',
         method: 'desktop_ssh_restart',
         label: 'Restart SSH runtime',
-        confirmLabel: 'Restart',
-        title: 'Restart SSH Runtime?',
+        title: 'Restart SSH Runtime',
         message: 'Redeven Desktop will restart the SSH-hosted Runtime Service and reopen this session through a new local tunnel.',
         detail: 'Active work on the remote host may be interrupted while the runtime stops and starts again.',
         requiresTargetVersion: false,
@@ -9147,8 +8745,7 @@ function runtimeMaintenanceContextFromSession(
         availability: 'available',
         method: 'desktop_ssh_force_update',
         label: 'Update SSH runtime',
-        confirmLabel: 'Update',
-        title: 'Update SSH Runtime?',
+        title: 'Update SSH Runtime',
         message: 'Redeven Desktop will reinstall the SSH-hosted Runtime Service from the Desktop-managed release and reopen this session.',
         detail: 'The existing SSH bootstrap path, runtime package cache, and remote install fallback policy are reused for this update.',
         requiresTargetVersion: false,
@@ -9174,8 +8771,7 @@ function runtimeMaintenanceContextFromSession(
         availability: 'available',
         method: 'desktop_local_restart',
         label: 'Restart runtime',
-        confirmLabel: 'Restart',
-        title: 'Restart Runtime Service?',
+        title: 'Restart Runtime Service',
         message: 'Redeven Desktop will restart this local Runtime Service and reopen the current session.',
         detail: 'Active work may be interrupted while the persistent service restarts.',
         requiresTargetVersion: false,
@@ -9184,8 +8780,7 @@ function runtimeMaintenanceContextFromSession(
         availability: 'available',
         method: 'desktop_local_update_handoff',
         label: 'Manage in Desktop',
-        confirmLabel: 'Continue',
-        title: 'Update Redeven Desktop?',
+        title: 'Update Redeven Desktop',
         message: 'This Runtime Service is bundled with Redeven Desktop. Desktop will explain whether a newer app release is required.',
         detail: 'Desktop keeps this Environment bound to the same Local Environment profile after the update handoff.',
         requiresTargetVersion: false,
@@ -9922,8 +9517,6 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       return disconnectProviderRuntimeFromLauncher(request);
     case 'cancel_launcher_operation':
       return cancelLauncherOperationFromLauncher(request);
-    case 'continue_launcher_operation':
-      return continueLauncherOperationFromLauncher(request);
     case 'dismiss_launcher_operation':
       return dismissLauncherOperationFromLauncher(request);
     case 'stop_environment_runtime':

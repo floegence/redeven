@@ -1515,7 +1515,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(actionModel.action_presentation.primary_action_overlay).toMatchObject({
       kind: 'popover',
       title: 'Runtime restart required',
-      detail: 'This local container runtime needs a confirmed restart before it can open this environment. Open stays locked until the runtime restarts and reports ready.',
+      detail: 'This local container runtime needs a successful restart before it can open this environment. Open stays locked until the runtime restarts and reports ready.',
       actions: expect.arrayContaining([
         expect.objectContaining({
           label: 'Restart runtime…',

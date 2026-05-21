@@ -46,7 +46,6 @@ export type DesktopShellRuntimeMaintenanceActionPlan = Readonly<{
   availability: DesktopShellRuntimeMaintenanceAvailability;
   method: DesktopShellRuntimeMaintenanceMethod;
   label: string;
-  confirm_label: string;
   title: string;
   message: string;
   detail?: string;
@@ -252,8 +251,7 @@ function defaultActionPlan(kind: 'restart' | 'upgrade', message: string): Deskto
     availability: 'unavailable',
     method: 'manual',
     label: kind === 'restart' ? 'Restart runtime' : 'Update Redeven',
-    confirm_label: kind === 'restart' ? 'Restart' : 'Update',
-    title: kind === 'restart' ? 'Restart Runtime Service?' : 'Update Runtime Service?',
+    title: kind === 'restart' ? 'Restart Runtime Service' : 'Update Runtime Service',
     message,
     unavailable_reason_code: 'runtime_maintenance_context_unavailable',
     requires_target_version: kind === 'upgrade',
@@ -276,7 +274,6 @@ function normalizeActionPlan(
     availability,
     method,
     label: compactRaw(record.label) || fallback.label,
-    confirm_label: compactRaw(record.confirm_label) || fallback.confirm_label,
     title: compactRaw(record.title) || fallback.title,
     message: compactRaw(record.message) || fallback.message,
     detail: compactRaw(record.detail) || undefined,
