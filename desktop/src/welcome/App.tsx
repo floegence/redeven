@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Copy,
   Globe,
+  Link,
   Lock,
   Moon,
   Pin,
@@ -124,7 +125,6 @@ import {
   buildEnvironmentLibraryLayoutModel,
   buildDesktopWelcomeShellViewModel,
   buildEnvironmentCardModel,
-  buildEnvironmentCardEndpointsModel,
   buildEnvironmentCardFactsModel,
   buildControlPlaneStatusModel,
   buildProviderBackedEnvironmentActionModel,
@@ -4340,6 +4340,7 @@ function EnvironmentCardFactsBlock(props: Readonly<{
   facts: readonly EnvironmentCardFactModel[];
   minRows?: number;
   onFactAction: (action: EnvironmentCardFactActionModel) => void;
+  copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
 }>) {
   return (
     <div
@@ -4362,7 +4363,16 @@ function EnvironmentCardFactsBlock(props: Readonly<{
                   )}
                   title={fact.value}
                 >
+                  <Show when={fact.leading_icon}>
+                    {(icon) => <img src={icon()} class="redeven-card-fact-leading-icon" aria-hidden="true" />}
+                  </Show>
                   {fact.value}
+                  <Show when={fact.endpoints && fact.endpoints.length > 0}>
+                    <EndpointsPopover
+                      endpoints={fact.endpoints!}
+                      copyEnvironmentValue={props.copyEnvironmentValue}
+                    />
+                  </Show>
                 </div>
               )}
             >
@@ -4374,6 +4384,9 @@ function EnvironmentCardFactsBlock(props: Readonly<{
                   aria-label={action().aria_label}
                   onClick={() => props.onFactAction(action())}
                 >
+                  <Show when={fact.leading_icon}>
+                    {(icon) => <img src={icon()} class="redeven-card-fact-leading-icon" aria-hidden="true" />}
+                  </Show>
                   <span class="redeven-card-fact-value__text">{fact.value}</span>
                   <ChevronRight class="redeven-card-fact-value__icon h-3 w-3" aria-hidden="true" />
                 </button>
@@ -4383,6 +4396,105 @@ function EnvironmentCardFactsBlock(props: Readonly<{
         )}
       </For>
     </div>
+  );
+}
+
+function EndpointsPopover(props: Readonly<{
+  endpoints: readonly EnvironmentCardEndpointModel[];
+  copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
+}>) {
+  const [open, setOpen] = createSignal(false);
+  let anchorRef: HTMLSpanElement | undefined;
+  let popoverRef: HTMLDivElement | undefined;
+
+  const handlePointerDown = (event: MouseEvent) => {
+    if (popoverRef?.contains(event.target as Node) || anchorRef?.contains(event.target as Node)) {
+      return;
+    }
+    setOpen(false);
+  };
+
+  const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') {
+      setOpen(false);
+      anchorRef?.focus();
+    }
+  };
+
+  createEffect(() => {
+    if (open()) {
+      document.addEventListener('mousedown', handlePointerDown);
+      document.addEventListener('keydown', handleKeyDown);
+      onCleanup(() => {
+        document.removeEventListener('mousedown', handlePointerDown);
+        document.removeEventListener('keydown', handleKeyDown);
+      });
+    }
+  });
+
+  return (
+    <>
+      <span
+        ref={anchorRef}
+        class="redeven-card-fact-endpoint-trigger"
+        role="button"
+        tabIndex={0}
+        aria-label="Show endpoints"
+        aria-haspopup="dialog"
+        aria-expanded={open()}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen(!open());
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setOpen(true);
+          }
+        }}
+      >
+        <Link class="h-3 w-3" />
+      </span>
+      <Show when={open()}>
+        <DesktopAnchoredOverlaySurface
+          open={open()}
+          anchorRef={anchorRef}
+          placement="bottom"
+          role="dialog"
+          ariaModal={false}
+          ariaLabel="Environment endpoints"
+          interactive
+          class="z-[225] rounded-md border border-border/80 bg-popover text-popover-foreground shadow-[0_14px_40px_-22px_rgba(0,0,0,0.55),0_24px_50px_-28px_rgba(0,0,0,0.28)]"
+          onOverlayRef={(element) => {
+            popoverRef = element;
+          }}
+        >
+          <div class="redeven-endpoints-popover">
+            <div class="redeven-endpoints-popover-header">
+              <span class="redeven-endpoints-popover-title">Endpoints</span>
+              <button
+                type="button"
+                class="redeven-endpoints-popover-close"
+                aria-label="Close endpoints"
+                onClick={() => setOpen(false)}
+              >
+                <X class="h-3 w-3" />
+              </button>
+            </div>
+            <div class="space-y-0.5">
+              <For each={props.endpoints}>
+                {(endpoint) => (
+                  <EndpointCopyRow
+                    endpoint={endpoint}
+                    copyEnvironmentValue={props.copyEnvironmentValue}
+                  />
+                )}
+              </For>
+            </div>
+          </div>
+        </DesktopAnchoredOverlaySurface>
+      </Show>
+    </>
   );
 }
 
@@ -4418,27 +4530,6 @@ function EndpointCopyRow(props: Readonly<{
       <span class={cn('redeven-card-endpoint-copy', copied() && 'redeven-card-endpoint-copy--active')} aria-hidden="true">
         {copied() ? <Check class="h-3 w-3" /> : <Copy class="h-3 w-3" />}
       </span>
-    </div>
-  );
-}
-
-function EnvironmentCardEndpointBlock(props: Readonly<{
-  endpoints: readonly EnvironmentCardEndpointModel[];
-  copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
-}>) {
-  return (
-    <div class="redeven-endpoints-section">
-      <div class="redeven-endpoints-title">Endpoints</div>
-      <div class="space-y-0.5">
-        <For each={props.endpoints}>
-          {(endpoint) => (
-            <EndpointCopyRow
-              endpoint={endpoint}
-              copyEnvironmentValue={props.copyEnvironmentValue}
-            />
-          )}
-        </For>
-      </div>
     </div>
   );
 }
@@ -5360,7 +5451,7 @@ function EnvironmentConnectionCard(props: Readonly<{
 }>) {
   const card = createMemo(() => buildEnvironmentCardModel(props.environment));
   const facts = createMemo(() => buildEnvironmentCardFactsModel(props.environment));
-  const endpoints = createMemo(() => buildEnvironmentCardEndpointsModel(props.environment));
+
   const environmentActionModel = createMemo(() => buildProviderBackedEnvironmentActionModel(props.environment));
   const environmentActionPresentation = createMemo(() => environmentActionModel().action_presentation);
   const runtimeLifecycleProgress = createMemo(() => (
@@ -5556,17 +5647,10 @@ function EnvironmentConnectionCard(props: Readonly<{
       <CardContent class="flex flex-1 flex-col px-3.5 pb-2.5">
         <EnvironmentCardFactsBlock
           facts={facts()}
-          minRows={4}
+          minRows={3}
           onFactAction={props.runEnvironmentCardFactAction}
+          copyEnvironmentValue={props.copyEnvironmentValue}
         />
-        <Show when={endpoints().length > 0}>
-          <div class="mt-auto">
-            <EnvironmentCardEndpointBlock
-              endpoints={endpoints()}
-              copyEnvironmentValue={props.copyEnvironmentValue}
-            />
-          </div>
-        </Show>
       </CardContent>
       <CardFooter class="mt-auto flex items-center gap-2 border-t border-border px-3.5 py-2.5">
         <EnvironmentSplitActionButton

@@ -521,7 +521,7 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain('buildEnvironmentCardFactsModel');
     expect(appSrc).not.toContain('buildControlPlaneEnvironmentFactsModel');
-    expect(appSrc).toContain('buildEnvironmentCardEndpointsModel');
+    expect(appSrc).toContain('EndpointsPopover');
     expect(appSrc).toContain('splitPinnedEnvironmentEntryIDs');
     expect(appSrc).toContain('environmentLibraryEntryRecord');
     expect(appSrc).not.toContain('splitPinnedEnvironmentEntries(props.entries)');
@@ -532,7 +532,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('runtimeTargetEnvironmentLibraryFilterTargetID(props.librarySourceFilter)');
     expect(appSrc).toContain('Linked runtime · ${environment.label}');
     expect(appSrc).toContain('redeven-card-fact-value--action');
-    expect(appSrc).toContain('function EnvironmentCardEndpointBlock');
+    expect(appSrc).toContain('function EndpointsPopover');
     expect(appSrc).toContain('Pinned');
     expect(appSrc).toContain('copyEnvironmentValue');
     expect(appSrc).toContain('<Pin class=');
