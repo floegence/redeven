@@ -200,4 +200,49 @@ describe('LauncherOperationRegistry', () => {
 
     expect(registry.progressItems()[0]?.failure).toEqual(failure);
   });
+
+  it('keeps confirmation operations durable until the user continues or cancels', () => {
+    const registry = new LauncherOperationRegistry();
+    const confirmation = {
+      confirmation_id: 'confirm-runtime-update',
+      title: 'Runtime update needs confirmation',
+      summary: 'Updating will stop the current Runtime Service.',
+      active_work_label: '2 terminals',
+      confirm_label: 'Update runtime',
+      cancel_label: 'Cancel',
+    };
+    const operation = registry.create({
+      operation_key: 'ssh:devbox:default:key_agent:remote_default',
+      action: 'update_environment_runtime',
+      subject_kind: 'ssh_environment',
+      subject_id: 'ssh:devbox:default:key_agent:remote_default',
+      status: 'awaiting_confirmation',
+      phase: 'awaiting_confirmation',
+      title: confirmation.title,
+      detail: confirmation.summary,
+      lifecycle_progress: runtimeLifecycleProgress({
+        location: 'ssh_host',
+        operation: 'update',
+        phase: 'awaiting_confirmation',
+        targetLabel: 'Devbox',
+      }),
+      cancelable: true,
+      confirmation,
+      next_actions: [{
+        kind: 'continue_after_confirmation',
+        operation_key: 'ssh:devbox:default:key_agent:remote_default',
+        confirmation_id: confirmation.confirmation_id,
+        label: 'Update runtime',
+      }],
+    });
+
+    expect(operation.status).toBe('awaiting_confirmation');
+    expect(registry.progressItems()[0]).toEqual(expect.objectContaining({
+      status: 'awaiting_confirmation',
+      confirmation,
+      next_actions: expect.arrayContaining([
+        expect.objectContaining({ kind: 'continue_after_confirmation' }),
+      ]),
+    }));
+  });
 });

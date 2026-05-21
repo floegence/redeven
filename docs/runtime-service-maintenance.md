@@ -112,9 +112,11 @@ Manual `Start runtime` uses the same probe-first policy. If the runtime is
 already running and openable, Start succeeds without launching a replacement
 process. If the runtime is running but incompatible, blocked, or missing a
 management socket, Desktop surfaces a maintenance requirement and leaves the
-existing process alone. Explicit restart/update actions may be offered by the
-operation planner, but they require user confirmation and must preserve active
-work unless the user accepts the interruption risk.
+existing process alone. Explicit stop/restart/update actions are main-process
+launcher workflows. Restart and update require user confirmation when they
+would replace active work, and that confirmation is represented as an
+`awaiting_confirmation` operation state rather than a renderer-side retry based
+on cached snapshot data.
 
 Blocked runtime reports and operation failures have separate responsibilities.
 Runtime reports describe machine-readable attach or maintenance state, such as
@@ -122,14 +124,16 @@ Runtime reports describe machine-readable attach or maintenance state, such as
 Desktop operation failures describe the user-visible outcome of an attempted
 launcher action through `DesktopOperationFailurePresentation`.
 
-When a start/open/update action fails, the launcher card, progress popover,
+When a start/open/stop/restart/update action fails, the launcher card, progress popover,
 toast, and shell maintenance response must render the operation failure
 `summary` first. Raw report fields and process streams remain diagnostics. For
 example, an unreachable SSH host should surface `SSH connection to "dify"
 failed.` while preserving `control_stderr` and the OpenSSH output only under
 `Details` / copied diagnostics. Maintenance requirements may include diagnostic
 details for support, but those details must not be concatenated into
-`Error.message` and must not replace the operation-level summary.
+`Error.message` and must not replace the operation-level summary. Failed
+launcher operations remain visible with their completed steps, failed step,
+diagnostics, and next actions until the user handles or dismisses them.
 
 ## Data Structures
 
@@ -435,7 +439,7 @@ forwarding, and maintenance behavior.
 | `managed_elsewhere` | Runtime-control owner is not this Desktop | Provider-link guidance; host/container operations still use the runtime-card operation plan |
 | `unknown` | Metadata unavailable | Quiet degraded state; diagnostics available |
 
-Desktop treats the runtime as a singleton per Local Environment profile, but runtime-card management is no longer derived from whether Desktop "owns" that process. Electron still persists one `desktop_owner_id` under `userData` and passes it to managed child processes with `REDEVEN_DESKTOP_OWNER_ID`; that owner id remains a runtime-control lease for secure RPC surfaces such as provider linking and Desktop model-source binding. Stop, restart, start, and update availability comes from the runtime operation plan built from host access, placement, running state, package state, Runtime Service readiness, and maintenance requirements.
+Desktop treats the runtime as a singleton per Local Environment profile, but runtime-card management is no longer derived from whether Desktop "owns" that process. Electron still persists one `desktop_owner_id` under `userData` and passes it to managed child processes with `REDEVEN_DESKTOP_OWNER_ID`; that owner id remains a runtime-control lease for secure RPC surfaces such as provider linking and Desktop model-source binding. Stop, restart, start, and update availability comes from the runtime operation plan built from host access, placement, running state, package state, Runtime Service readiness, and maintenance requirements. Execution belongs to the main-process launcher operation; renderer menus submit intent and then render the authoritative operation snapshot.
 
 Provider binding is an explicit runtime-card action, not a side effect of `Open` and not a runtime restart plan. Provider cards always open through the provider tunnel and never manage runtime lifecycle. Welcome `Start runtime` starts only the Local/SSH/container runtime represented by that runtime card. It may install the runtime package when the target has no runtime yet, but it must not silently update or replace an existing package. `Restart runtime` and `Update runtime` are first-class launcher actions rather than UI-level stop/start compositions. `Restart runtime` can start from a stopped or stale-lock state without confirmation, while live runtimes require active-work replacement confirmation when work may be interrupted. `Update runtime` is the explicit user-visible path for outdated, incompatible, or maintenance-required runtime packages on SSH Host, Local Container, and SSH Container cards, and it remains allowed on stopped targets because no runtime work is active. Local Host update is different: the card uses `Update Redeven Desktop` and the `desktop_local_update_handoff` operation method because the bundled local runtime moves with the Desktop app release. Welcome presentation is derived from that operation method: Local Host update-required badges and disabled-Open popovers use Desktop update wording, while SSH/container cards keep runtime package wording. `Connect to provider...` obtains provider open-session material, sends the one-time provider-link ticket to the selected running Local/SSH runtime over runtime-control, and lets the runtime start or replace only the provider control-channel goroutine. Once that binding is persisted, it is explicit authorization for later Desktop-managed startup to restore the provider control channel from saved config as part of the runtime lifecycle. `Disconnect from provider` revokes that local authorization and clears the runtime's persisted provider binding; an active control channel is used to notify the provider first, but the local unlink still completes when that channel is already unavailable. Desktop then refreshes provider runtime health from the provider API when the provider Environment is still present instead of locally fabricating an offline state. Active provider-originated work blocks relink. Runtime-control owner mismatch blocks provider-link RPC but does not hide host/container stop or restart operations.
 
@@ -495,8 +499,9 @@ Desktop launcher cards keep their current dense SaaS tool layout:
   to direct `Open` behavior once the runtime is openable and the current Desktop
   connection is ready. Progress must not use a bottom-right SSH-only activity
   overlay. The progress sequence and failure notice must reflect the operation:
-  start uses `Starting...` / startup wording, restart uses `Restarting...` /
-  restart wording, and update uses `Updating...` / update wording.
+  start uses `Starting...` / startup wording, stop uses `Stopping...` plus
+  `Verifying runtime stopped`, restart uses `Restarting...` / restart wording,
+  and update uses `Updating...` / update wording.
 - Action feedback for completion, failure, and other ephemeral events continues
   through Desktop toasts. No launcher content should shift when a version event
   arrives, and toasts must not become the progress surface for runtime lifecycle
@@ -621,6 +626,6 @@ The stable flow is intentionally small:
    - `host_device` / `manual`: show guidance and keep direct actions disabled.
 6. Reconnect through the normal Env App recovery path and surface completion/failure through toast feedback.
 
-Welcome can run runtime restart/update before an Env App window exists. The card records the runtime maintenance requirement, asks for explicit confirmation, then reruns the launcher start path for target runtime package updates. For Local Host update, Welcome opens the Desktop update handoff instead of calling runtime package update, because the local bundled runtime is updated with the Desktop app; the visible badge, disabled-Open title, and primary recovery action all use the same Desktop update handoff wording. It does not auto-open the Environment after maintenance; it unlocks `Open` once the refreshed snapshot is openable.
+Welcome can run runtime restart/update before an Env App window exists. The card records the runtime maintenance requirement, then the main-process lifecycle workflow performs authoritative preflight and may enter `awaiting_confirmation` with active-work impact. Confirming continues the same operation with the same operation key and confirmation id; it does not submit a second independent update/restart request. For Local Host update, Welcome opens the Desktop update handoff instead of calling runtime package update, because the local bundled runtime is updated with the Desktop app; the visible badge, disabled-Open title, and primary recovery action all use the same Desktop update handoff wording. It does not auto-open the Environment after maintenance; it unlocks `Open` once the refreshed snapshot is openable.
 
-Startup cancellation uses the same lifecycle model for Local, SSH, and container runtime targets. `Stop startup` cancels the current start/update operation, broadcasts the shared cancellation signal through owned runtime subprocesses, downloads, SSH install/start commands, and readiness polling loops, then cleans up local lifecycle resources. Open cancellation is separate: `Stop opening` cancels SSH tunnels, container bridges, runtime-control forwarding, Desktop model source preparation, and Env App window creation for the current Desktop session. Successful cancellation is short-lived; cleanup failures remain visible for user attention.
+Startup cancellation uses the same lifecycle model for Local, SSH, and container runtime targets. `Stop startup` cancels the current start/update operation, broadcasts the shared cancellation signal through owned runtime subprocesses, downloads, SSH install/start commands, and readiness polling loops, then cleans up local lifecycle resources. Stop workflows must treat a successful stop command as insufficient until the Runtime Service has settled to `not_running` or a stale lock has been safely retired and rechecked. `redeven desktop-runtime-stop` therefore succeeds only after stop verification; if the process still appears alive or status cannot be verified, Desktop keeps the launcher operation failed at the verification step. Open cancellation is separate: `Stop opening` cancels SSH tunnels, container bridges, runtime-control forwarding, Desktop model source preparation, and Env App window creation for the current Desktop session. Successful cancellation is short-lived; cleanup failures remain visible for user attention.

@@ -8,7 +8,9 @@ export type DesktopFailureCode =
   | 'ssh_runtime_stop_failed'
   | 'ssh_forward_unavailable'
   | 'local_runtime_launch_failed'
+  | 'local_runtime_stop_failed'
   | 'container_runtime_launch_failed'
+  | 'container_runtime_stop_failed'
   | 'runtime_host_command_failed'
   | 'environment_open_failed'
   | 'provider_link_failed'
@@ -47,7 +49,9 @@ function normalizeFailureCode(value: unknown): DesktopFailureCode {
     case 'ssh_runtime_stop_failed':
     case 'ssh_forward_unavailable':
     case 'local_runtime_launch_failed':
+    case 'local_runtime_stop_failed':
     case 'container_runtime_launch_failed':
+    case 'container_runtime_stop_failed':
     case 'runtime_host_command_failed':
     case 'environment_open_failed':
     case 'provider_link_failed':

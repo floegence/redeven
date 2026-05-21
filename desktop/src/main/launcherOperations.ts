@@ -22,6 +22,7 @@ type CreateLauncherOperationInput = Readonly<{
   environment_label?: string;
   provider_origin?: string;
   provider_id?: string;
+  status?: DesktopLauncherOperationStatus;
   phase: string;
   title: string;
   detail: string;
@@ -32,6 +33,8 @@ type CreateLauncherOperationInput = Readonly<{
   interrupt_detail?: string;
   interrupt_kind?: DesktopLauncherOperationSnapshot['interrupt_kind'];
   failure?: DesktopOperationFailurePresentation;
+  confirmation?: DesktopLauncherOperationSnapshot['confirmation'];
+  next_actions?: DesktopLauncherOperationSnapshot['next_actions'];
 }>;
 
 function compact(value: unknown): string {
@@ -65,6 +68,8 @@ function operationProgress(snapshot: DesktopLauncherOperationSnapshot): DesktopL
     interrupt_detail: snapshot.interrupt_detail,
     interrupt_kind: snapshot.interrupt_kind,
     deleted_subject: snapshot.deleted_subject,
+    confirmation: snapshot.confirmation,
+    next_actions: snapshot.next_actions,
     failure: snapshot.failure,
   };
 }
@@ -143,7 +148,7 @@ export class LauncherOperationRegistry {
       provider_id: compact(input.provider_id) || undefined,
       started_at_unix_ms: now,
       updated_at_unix_ms: now,
-      status: 'running',
+      status: input.status ?? 'running',
       phase: compact(input.phase),
       title: compact(input.title),
       detail: compact(input.detail),
@@ -154,6 +159,8 @@ export class LauncherOperationRegistry {
       interrupt_detail: compact(input.interrupt_detail) || undefined,
       interrupt_kind: input.interrupt_kind,
       deleted_subject: false,
+      ...(input.confirmation ? { confirmation: input.confirmation } : {}),
+      ...(input.next_actions ? { next_actions: input.next_actions } : {}),
       ...(input.failure ? { failure: input.failure } : {}),
     };
     this.operationsByKey.set(operationKey, snapshot);
@@ -207,6 +214,8 @@ export class LauncherOperationRegistry {
       ...patch,
       status,
       cancelable: false,
+      confirmation: patch.confirmation,
+      next_actions: patch.next_actions,
     });
     this.abortControllersByKey.delete(compact(operationKey));
     return next;
@@ -314,6 +323,8 @@ export class LauncherOperationRegistry {
       interrupt_label: undefined,
       interrupt_detail: undefined,
       interrupt_kind: undefined,
+      confirmation: undefined,
+      next_actions: undefined,
     });
   }
 }

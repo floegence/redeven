@@ -99,6 +99,8 @@ describe('sshRuntime', () => {
     expect(buildManagedSSHReportReadScript()).toContain('runtime/sessions/${session_token}/startup-report.json');
     expect(buildManagedSSHStopScript()).toContain('kill "$pid"');
     expect(buildManagedSSHStopScript()).toContain('kill -KILL "$pid"');
+    expect(buildManagedSSHStopScript()).toContain('runtime process $pid is still running after stop');
+    expect(buildManagedSSHStopScript()).toContain('exit 1');
   });
 
   it('parses structured probe results and normalizes reported release tags', () => {

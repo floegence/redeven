@@ -13,15 +13,18 @@ export type DesktopRuntimeLifecyclePhase =
   | 'checking_existing_runtime'
   | 'checking_host'
   | 'checking_container'
+  | 'awaiting_confirmation'
   | 'detecting_platform'
   | 'checking_runtime_package'
   | 'stopping_runtime_process'
+  | 'verifying_runtime_stopped'
   | 'preparing_runtime_package'
   | 'installing_runtime_package'
   | 'starting_runtime_process'
   | 'attaching_existing_runtime'
   | 'checking_runtime_service'
   | 'runtime_ready'
+  | 'runtime_stopped'
   | 'failed'
   | 'canceled';
 
@@ -93,7 +96,9 @@ const RUNTIME_LIFECYCLE_PHASES_BY_OPERATION: Record<DesktopRuntimeLifecycleOpera
   restart: {
     local_host: [
       'checking_existing_runtime',
+      'awaiting_confirmation',
       'stopping_runtime_process',
+      'verifying_runtime_stopped',
       'starting_runtime_process',
       'checking_runtime_service',
       'runtime_ready',
@@ -101,7 +106,9 @@ const RUNTIME_LIFECYCLE_PHASES_BY_OPERATION: Record<DesktopRuntimeLifecycleOpera
     local_container: [
       'checking_container',
       'checking_runtime_package',
+      'awaiting_confirmation',
       'stopping_runtime_process',
+      'verifying_runtime_stopped',
       'starting_runtime_process',
       'checking_runtime_service',
       'runtime_ready',
@@ -109,7 +116,9 @@ const RUNTIME_LIFECYCLE_PHASES_BY_OPERATION: Record<DesktopRuntimeLifecycleOpera
     ssh_host: [
       'checking_host',
       'checking_runtime_package',
+      'awaiting_confirmation',
       'stopping_runtime_process',
+      'verifying_runtime_stopped',
       'starting_runtime_process',
       'checking_runtime_service',
       'runtime_ready',
@@ -118,7 +127,9 @@ const RUNTIME_LIFECYCLE_PHASES_BY_OPERATION: Record<DesktopRuntimeLifecycleOpera
       'checking_host',
       'checking_container',
       'checking_runtime_package',
+      'awaiting_confirmation',
       'stopping_runtime_process',
+      'verifying_runtime_stopped',
       'starting_runtime_process',
       'checking_runtime_service',
       'runtime_ready',
@@ -126,30 +137,59 @@ const RUNTIME_LIFECYCLE_PHASES_BY_OPERATION: Record<DesktopRuntimeLifecycleOpera
   },
   update: {
     local_container: CONTAINER_LIFECYCLE_PHASES,
-    ssh_host: SSH_HOST_LIFECYCLE_PHASES,
-    ssh_container: SSH_CONTAINER_LIFECYCLE_PHASES,
-  },
-  stop: {
-    local_host: [
-      'checking_existing_runtime',
-      'stopping_runtime_process',
-      'runtime_ready',
-    ],
-    local_container: [
-      'checking_container',
-      'stopping_runtime_process',
-      'runtime_ready',
-    ],
     ssh_host: [
       'checking_host',
+      'checking_runtime_package',
+      'awaiting_confirmation',
       'stopping_runtime_process',
+      'verifying_runtime_stopped',
+      'detecting_platform',
+      'preparing_runtime_package',
+      'installing_runtime_package',
+      'starting_runtime_process',
+      'checking_runtime_service',
       'runtime_ready',
     ],
     ssh_container: [
       'checking_host',
       'checking_container',
+      'checking_runtime_package',
+      'awaiting_confirmation',
       'stopping_runtime_process',
+      'verifying_runtime_stopped',
+      'detecting_platform',
+      'preparing_runtime_package',
+      'installing_runtime_package',
+      'starting_runtime_process',
+      'checking_runtime_service',
       'runtime_ready',
+    ],
+  },
+  stop: {
+    local_host: [
+      'checking_existing_runtime',
+      'stopping_runtime_process',
+      'verifying_runtime_stopped',
+      'runtime_stopped',
+    ],
+    local_container: [
+      'checking_container',
+      'stopping_runtime_process',
+      'verifying_runtime_stopped',
+      'runtime_stopped',
+    ],
+    ssh_host: [
+      'checking_host',
+      'stopping_runtime_process',
+      'verifying_runtime_stopped',
+      'runtime_stopped',
+    ],
+    ssh_container: [
+      'checking_host',
+      'checking_container',
+      'stopping_runtime_process',
+      'verifying_runtime_stopped',
+      'runtime_stopped',
     ],
   },
 };
@@ -158,15 +198,18 @@ export const RUNTIME_LIFECYCLE_PHASE_LABELS: Record<DesktopRuntimeLifecyclePhase
   checking_existing_runtime: 'Checking existing runtime',
   checking_host: 'Checking host',
   checking_container: 'Checking container',
+  awaiting_confirmation: 'Confirm replacement',
   detecting_platform: 'Detecting platform',
   checking_runtime_package: 'Checking runtime package',
   stopping_runtime_process: 'Stopping runtime process',
+  verifying_runtime_stopped: 'Verifying runtime stopped',
   preparing_runtime_package: 'Preparing runtime package',
   installing_runtime_package: 'Installing runtime package',
   starting_runtime_process: 'Starting runtime',
   attaching_existing_runtime: 'Attaching existing runtime',
   checking_runtime_service: 'Checking runtime service',
   runtime_ready: 'Runtime ready',
+  runtime_stopped: 'Runtime stopped',
   failed: 'Failed',
   canceled: 'Canceled',
 };

@@ -596,23 +596,22 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain("document.addEventListener('focusin', handleFocusIn);");
     expect(appSrc).toContain('startEnvironmentRuntime');
     expect(appSrc).toContain('stopEnvironmentRuntime');
-    expect(appSrc).toContain('runtimeMaintenanceConfirmation');
-    expect(appSrc).toContain('requestRuntimeMaintenanceConfirmation');
-    expect(appSrc).toContain('confirmRuntimeMaintenance');
+    expect(appSrc).not.toContain('runtimeMaintenanceConfirmation');
+    expect(appSrc).not.toContain('requestRuntimeMaintenanceConfirmation');
+    expect(appSrc).not.toContain('confirmRuntimeMaintenance');
     expect(appSrc).toContain('force_runtime_update');
     expect(appSrc).toContain('forceRuntimeUpdate: true');
     expect(appSrc).toContain('allow_active_work_replacement');
-    expect(appSrc).toContain('allowActiveWorkReplacement: true');
+    expect(appSrc).not.toContain('allowActiveWorkReplacement: true');
+    expect(appSrc).toContain('continueLauncherOperation');
+    expect(appSrc).toContain("kind: 'continue_launcher_operation'");
+    expect(appSrc).toContain("kind: 'dismiss_launcher_operation'");
     expect(appSrc).toContain('IMPORTANT: Provider-link confirmation is intentionally reachable only from');
     expect(appSrc).toContain('desktopEntryKindOwnsRuntimeManagement(environment.kind)');
-    expect(appSrc).toContain('This interrupts the background runtime service for this environment.');
-    expect(appSrc).toContain("runtime_action?.runtime_operation_method === 'desktop_local_update_handoff'");
+    expect(appSrc).toContain("action?.runtime_operation_method === 'desktop_local_update_handoff'");
     expect(appSrc).toContain("kind: 'manage_desktop_update'");
     expect(appSrc).toContain("result?.outcome === 'opened_desktop_update_handoff'");
     expect(appSrc).toContain('Desktop update options opened for ${environment.label}.');
-    expect(appSrc).toContain('This local runtime is bundled with Redeven Desktop. Desktop will open the update handoff so the app and local runtime move together.');
-    expect(appSrc).toContain('Desktop will update the runtime package and start it again. Open remains separate after the update.');
-    expect(appSrc).toContain('Active work:');
     expect(appSrc).toContain('formatRuntimeServiceWorkload');
     expect(appSrc).toContain("case 'start_runtime':");
     expect(appSrc).toContain("case 'connect_provider_runtime':");
@@ -705,12 +704,18 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain('async function cancelLauncherOperation(progress: DesktopLauncherActionProgress): Promise<void>');
     expect(appSrc).toContain("kind: 'cancel_launcher_operation'");
+    expect(appSrc).toContain("kind: 'continue_launcher_operation'");
+    expect(appSrc).toContain("kind: 'dismiss_launcher_operation'");
     expect(appSrc).toContain("showActionToast(progress.open_progress ? 'Opening is stopping.' : 'Runtime startup is stopping.', 'info');");
     expect(appSrc).toContain('cancelOperation={(progress) => {\n            void cancelLauncherOperation(progress);');
     expect(appSrc).toContain('cancelOperation: (progress: DesktopLauncherActionProgress) => void;');
     expect(appSrc).toContain("case 'cleanup_failed':\n      return 'Cleanup needs attention';");
     expect(appSrc).toContain('props.progress.cancelable === true && props.progress.status === \'running\'');
     expect(appSrc).toContain('onClick={() => props.cancelOperation(props.progress)}');
+    expect(appSrc).toContain("props.progress.status === 'awaiting_confirmation'");
+    expect(appSrc).toContain('onClick={() => props.continueOperation(props.progress)}');
+    expect(appSrc).toContain('onClick={() => props.dismissOperation(props.progress)}');
+    expect(appSrc).toContain('Copy diagnostics');
     expect(appSrc).toContain('<Stop class="h-3.5 w-3.5" />');
     expect(appSrc).toContain("{props.progress.interrupt_label || 'Stop startup'}");
     expect(appSrc).toContain("class={shimmerBlocked() ? 'redeven-blocked-shimmer-overlay' : 'redeven-loading-shimmer-overlay'}");
@@ -1004,11 +1009,12 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('<Show when={!item.canConnect}>');
   });
 
-  it('restarts runtime maintenance through the recovery action contract when no runtime record exists yet', () => {
+  it('routes runtime restart directly to the main-process lifecycle workflow', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain("runtimeActionRequest(environment, 'restart_environment_runtime'");
-    expect(appSrc).toContain("await restartEnvironmentRuntime(latestTarget, 'connect', { allowActiveWorkReplacement: true });");
+    expect(appSrc).not.toContain("allowActiveWorkReplacement: true");
+    expect(appSrc).toContain("kind: 'continue_launcher_operation'");
   });
 });
 
