@@ -1,5 +1,11 @@
 import { For, Show, createMemo } from 'solid-js';
-import { Check, Files } from '@floegence/floe-webapp-core/icons';
+import {
+  AlertCircle,
+  CheckCircle,
+  Clock,
+  Download,
+  XCircle,
+} from '@floegence/floe-webapp-core/icons';
 
 import type { DownloadManager, DownloadTask, DownloadTaskStatus } from './types';
 
@@ -89,10 +95,10 @@ function DownloadTaskAction(props: {
   return (
     <button
       type="button"
-      class={`inline-flex h-7 cursor-pointer items-center justify-center rounded-md border px-2 text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+      class={`inline-flex h-7 cursor-pointer items-center justify-center rounded-md border px-2.5 text-[11px] font-medium transition-all duration-100 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 ${
         props.tone === 'danger'
-          ? 'border-destructive/30 text-destructive hover:bg-destructive/10'
-          : 'border-border/70 text-foreground hover:bg-accent hover:text-accent-foreground'
+          ? 'border-destructive/30 text-destructive hover:bg-destructive/10 active:bg-destructive/15'
+          : 'border-border/70 text-foreground hover:bg-accent hover:text-accent-foreground active:bg-accent/80'
       }`}
       onClick={props.onClick}
     >
@@ -123,7 +129,7 @@ export function DownloadTaskPanel(props: { manager: DownloadManager }) {
         <Show when={hasFinished()}>
           <button
             type="button"
-            class="cursor-pointer rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            class="cursor-pointer rounded-md border border-transparent px-2.5 py-1 text-[11px] font-medium text-muted-foreground/70 transition-all duration-100 hover:border-border/70 hover:bg-accent hover:text-foreground active:scale-[0.97]"
             onClick={() => props.manager.clearFinished()}
           >
             Clear finished
@@ -134,31 +140,33 @@ export function DownloadTaskPanel(props: { manager: DownloadManager }) {
       <Show
         when={tasks().length > 0}
         fallback={(
-          <div class="flex min-h-[8rem] flex-col items-center justify-center gap-2 px-6 py-8 text-center">
-            <Files class="size-5 text-muted-foreground" />
-            <div class="text-sm font-medium">No downloads yet</div>
+          <div class="flex min-h-[10rem] flex-col items-center justify-center gap-2.5 px-6 py-10 text-center">
+            <div class="flex size-10 items-center justify-center rounded-full bg-muted">
+              <Download class="size-5 text-muted-foreground/60" />
+            </div>
+            <div class="text-sm font-semibold">No downloads yet</div>
             <div class="max-w-[18rem] text-xs leading-5 text-muted-foreground">
               Downloads from Files and Preview will appear here.
             </div>
           </div>
         )}
       >
-        <div class="max-h-[min(28rem,calc(100vh-7rem))] space-y-2 overflow-y-auto p-2">
+        <div class="max-h-[min(30rem,calc(100vh-8rem))] space-y-1.5 overflow-y-auto p-2">
           <For each={tasks()}>
             {(task) => (
               <article
                 data-download-task-id={task.id}
                 data-download-task-status={task.status}
-                class="rounded-md border border-border/60 bg-background/95 p-2.5"
+                class="rounded-lg border border-border/60 bg-background p-3 transition-opacity duration-150 animate-in fade-in"
               >
-                <div class="flex items-start justify-between gap-3">
-                  <div class="min-w-0">
-                    <div class="truncate text-sm font-medium" title={taskName(task)}>{taskName(task)}</div>
-                    <div class="mt-0.5 truncate text-[11px] text-muted-foreground" title={taskMeta(task)}>
+                <div class="flex items-start justify-between gap-2">
+                  <div class="min-w-0 flex-1">
+                    <div class="truncate text-sm font-semibold leading-5" title={taskName(task)}>{taskName(task)}</div>
+                    <div class="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground/80" title={taskMeta(task)}>
                       {taskMeta(task)}
                     </div>
                   </div>
-                  <div class={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                  <div class={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold leading-none ${
                     task.status === 'failed'
                       ? 'bg-destructive/10 text-destructive'
                       : task.status === 'completed'
@@ -167,29 +175,54 @@ export function DownloadTaskPanel(props: { manager: DownloadManager }) {
                           ? 'bg-muted text-muted-foreground'
                           : 'bg-primary/10 text-primary'
                   }`}>
+                    <Show when={task.status === 'queued' || task.status === 'choosing_destination'}>
+                      <span class="animate-pulse"><Clock class="size-3" /></span>
+                    </Show>
+                    <Show when={task.status === 'streaming' || task.status === 'finalizing'}>
+                      <Clock class="size-3" />
+                    </Show>
+                    <Show when={task.status === 'completed'}>
+                      <CheckCircle class="size-3" />
+                    </Show>
+                    <Show when={task.status === 'failed'}>
+                      <AlertCircle class="size-3" />
+                    </Show>
+                    <Show when={task.status === 'canceled'}>
+                      <XCircle class="size-3" />
+                    </Show>
                     {statusLabel(task)}
                   </div>
                 </div>
 
                 <Show when={task.status === 'streaming' || task.status === 'finalizing' || task.status === 'completed'}>
-                  <div class="mt-2">
+                  <div class="mt-2.5">
                     <div class="h-1.5 overflow-hidden rounded-full bg-muted">
                       <div
-                        class="h-full rounded-full bg-primary transition-[width] duration-150"
+                        class={`h-full rounded-full transition-all duration-150 ${
+                          task.status === 'completed'
+                            ? 'bg-success'
+                            : task.status === 'streaming'
+                              ? 'bg-primary'
+                              : 'bg-primary/80'
+                        }`}
                         style={{ width: progressWidth(task) }}
                       />
                     </div>
                     <div class="mt-1 flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
-                      <span>
+                      <span class="tabular-nums">
                         {formatDownloadBytes(task.bytesRead)}
-                        <Show when={typeof task.totalBytes === 'number'}> / {formatDownloadBytes(task.totalBytes)}</Show>
+                        <Show when={typeof task.totalBytes === 'number'}>
+                          <span class="text-muted-foreground/60"> / {formatDownloadBytes(task.totalBytes)}</span>
+                        </Show>
                       </span>
-                      <span>{speedLabel(task)}</span>
+                      <Show when={task.status === 'streaming' && speedLabel(task)}>
+                        <span class="tabular-nums">{speedLabel(task)}</span>
+                      </Show>
                     </div>
                   </div>
                 </Show>
 
-                <div class="mt-2 flex flex-wrap justify-end gap-1.5">
+                <div class="mt-2.5 flex flex-wrap justify-end gap-1.5">
                   <Show when={task.cancelable && ACTIVE_STATUSES.has(task.status)}>
                     <DownloadTaskAction
                       label="Cancel"
@@ -227,8 +260,8 @@ export function DownloadTaskPanel(props: { manager: DownloadManager }) {
       </Show>
 
       <Show when={props.manager.activeCount() === 0 && tasks().some((task) => task.status === 'completed')}>
-        <div class="flex items-center gap-2 border-t border-border/70 px-3 py-2 text-[11px] text-muted-foreground">
-          <Check class="size-3.5" />
+        <div class="flex items-center gap-2 border-t border-border/70 px-3 py-2.5 text-[11px] text-muted-foreground">
+          <CheckCircle class="size-3.5 text-success" />
           <span>All downloads are finished.</span>
         </div>
       </Show>
