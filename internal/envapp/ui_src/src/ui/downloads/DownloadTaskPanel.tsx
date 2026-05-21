@@ -78,7 +78,7 @@ function taskMeta(task: DownloadTask): string {
 
 function progressWidth(task: DownloadTask): string {
   if (typeof task.progressRatio !== 'number') {
-    return task.status === 'completed' ? '100%' : '0%';
+    return '0%';
   }
   return `${Math.round(Math.min(1, Math.max(0, task.progressRatio)) * 100)}%`;
 }
@@ -164,14 +164,11 @@ export function DownloadTaskPanel(props: { manager: DownloadManager }) {
                 data-download-task-status={task.status}
                 class="rounded-lg border border-border/60 bg-background p-3 transition-opacity duration-150 animate-in fade-in"
               >
-                <div class="flex items-start justify-between gap-2">
-                  <div class="min-w-0 flex-1">
-                    <div class="truncate text-sm font-semibold leading-5" title={taskName(task)}>{taskName(task)}</div>
-                    <div class="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground/80" title={taskMeta(task)}>
-                      {taskMeta(task)}
-                    </div>
+                <div class="flex items-center justify-between gap-2">
+                  <div class="min-w-0 flex-1" title={taskName(task)}>
+                    <div class="truncate text-sm font-semibold leading-5">{taskName(task)}</div>
                   </div>
-                  <div class="flex shrink-0 items-start gap-1">
+                  <div class="flex items-center gap-0.5 shrink-0">
                     <Show when={task.status === 'completed' && task.destination?.canReveal}>
                       <DownloadTaskAction
                         icon={FolderOpen}
@@ -179,6 +176,21 @@ export function DownloadTaskPanel(props: { manager: DownloadManager }) {
                         onClick={() => {
                           void props.manager.reveal(task.id);
                         }}
+                      />
+                    </Show>
+                    <Show when={task.cancelable && ACTIVE_STATUSES.has(task.status)}>
+                      <DownloadTaskAction
+                        icon={X}
+                        label="Cancel"
+                        tone="danger"
+                        onClick={() => props.manager.cancel(task.id)}
+                      />
+                    </Show>
+                    <Show when={task.status === 'failed' || task.status === 'canceled'}>
+                      <DownloadTaskAction
+                        icon={Refresh}
+                        label="Retry"
+                        onClick={() => props.manager.retry(task.id)}
                       />
                     </Show>
                     <div class={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold leading-none ${
@@ -190,37 +202,35 @@ export function DownloadTaskPanel(props: { manager: DownloadManager }) {
                             ? 'bg-muted text-muted-foreground'
                             : 'bg-primary/10 text-primary'
                     }`}>
-                    <Show when={task.status === 'queued' || task.status === 'choosing_destination'}>
-                      <span class="animate-pulse"><Clock class="size-3" /></span>
-                    </Show>
-                    <Show when={task.status === 'streaming' || task.status === 'finalizing'}>
-                      <Clock class="size-3" />
-                    </Show>
-                    <Show when={task.status === 'completed'}>
-                      <CheckCircle class="size-3" />
-                    </Show>
-                    <Show when={task.status === 'failed'}>
-                      <AlertCircle class="size-3" />
-                    </Show>
-                    <Show when={task.status === 'canceled'}>
-                      <XCircle class="size-3" />
-                    </Show>
-                    {statusLabel(task)}
+                      <Show when={task.status === 'queued' || task.status === 'choosing_destination'}>
+                        <span class="animate-pulse"><Clock class="size-3" /></span>
+                      </Show>
+                      <Show when={task.status === 'streaming' || task.status === 'finalizing'}>
+                        <Clock class="size-3" />
+                      </Show>
+                      <Show when={task.status === 'completed'}>
+                        <CheckCircle class="size-3" />
+                      </Show>
+                      <Show when={task.status === 'failed'}>
+                        <AlertCircle class="size-3" />
+                      </Show>
+                      <Show when={task.status === 'canceled'}>
+                        <XCircle class="size-3" />
+                      </Show>
+                      {statusLabel(task)}
                     </div>
                   </div>
                 </div>
 
-                <Show when={task.status === 'streaming' || task.status === 'finalizing' || task.status === 'completed'}>
+                <div class="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground/80" title={taskMeta(task)}>
+                  {taskMeta(task)}
+                </div>
+
+                <Show when={task.status === 'streaming' || task.status === 'finalizing'}>
                   <div class="mt-2.5">
                     <div class="h-1.5 overflow-hidden rounded-full bg-muted">
                       <div
-                        class={`h-full rounded-full transition-all duration-150 ${
-                          task.status === 'completed'
-                            ? 'bg-success'
-                            : task.status === 'streaming'
-                              ? 'bg-primary'
-                              : 'bg-primary/80'
-                        }`}
+                        class="h-full rounded-full bg-primary transition-all duration-150"
                         style={{ width: progressWidth(task) }}
                       />
                     </div>
@@ -238,23 +248,9 @@ export function DownloadTaskPanel(props: { manager: DownloadManager }) {
                   </div>
                 </Show>
 
-                <Show when={(task.cancelable && ACTIVE_STATUSES.has(task.status)) || task.status === 'failed' || task.status === 'canceled'}>
-                  <div class="mt-2.5 flex flex-wrap justify-end gap-1.5">
-                    <Show when={task.cancelable && ACTIVE_STATUSES.has(task.status)}>
-                      <DownloadTaskAction
-                        icon={X}
-                        label="Cancel"
-                        tone="danger"
-                        onClick={() => props.manager.cancel(task.id)}
-                      />
-                    </Show>
-                    <Show when={task.status === 'failed' || task.status === 'canceled'}>
-                      <DownloadTaskAction
-                        icon={Refresh}
-                        label="Retry"
-                        onClick={() => props.manager.retry(task.id)}
-                      />
-                    </Show>
+                <Show when={task.status === 'completed'}>
+                  <div class="mt-2 text-[11px] tabular-nums text-muted-foreground">
+                    {formatDownloadBytes(task.bytesRead)}
                   </div>
                 </Show>
               </article>
