@@ -1312,7 +1312,7 @@ describe('CodexPage', () => {
     expect(host.textContent).toContain('Codex page polish review');
     expect(host.textContent).toContain('src/ui/codex/CodexPage.tsx');
     expect(host.textContent).not.toContain('Command evidence');
-    expect(host.textContent).toContain('Finalizing...');
+    expect(host.textContent).toContain('Finalizing');
     expect(host.textContent).not.toContain('Prompt ideas');
     expect(host.textContent).not.toContain('Review recent changes');
     expect(host.textContent).not.toContain('Dedicated Codex review shell with isolated thread state.');
@@ -4670,7 +4670,7 @@ describe('CodexPage', () => {
         }),
       ],
     }));
-    expect(host.textContent).toContain('Working...');
+    expect(host.textContent).toContain('Thinking');
     expect(host.textContent).toContain('95% context left');
     expect(host.textContent).not.toContain('Codex is working');
     expect(host.querySelector('[data-codex-working-state="true"]')).not.toBeNull();

@@ -72,7 +72,7 @@ export function CodexActivityDetailPanel(props: {
   return (
     <div class="codex-activity-detail-panel" data-codex-activity-detail={props.detail.type}>
       <div class="codex-activity-detail-header">
-        <div class="codex-activity-detail-title" title={title()}>{title()}</div>
+        <div class="codex-activity-detail-title" data-codex-activity-detail-title={props.detail.type} title={title()}>{title()}</div>
         <button
           type="button"
           class="codex-activity-detail-close"

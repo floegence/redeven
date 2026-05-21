@@ -683,10 +683,11 @@ describe('CodexTranscript', () => {
     expect(preOutputRow?.querySelector('.chat-message-content-wrapper')?.classList.contains('codex-assistant-lead-aligned-content-prelude')).toBe(false);
     expect(preOutputRow?.querySelector('.chat-message-avatar')).toBeNull();
     expect(host.querySelector('[data-codex-working-state="true"]')).toBeTruthy();
-    expect(host.textContent).toContain('Working...');
+    expect(host.textContent).toContain('Thinking');
     expect(host.textContent).not.toContain('Codex is');
     expect(host.textContent).not.toContain('web search');
-    expect(host.querySelector('.codex-message-run-indicator-graph')).toBeTruthy();
+    expect(host.querySelector('.codex-message-run-indicator-graph')).toBeNull();
+    expect(host.querySelector('.codex-message-run-indicator-bars')).toBeNull();
     expect(host.querySelector('[data-codex-working-state="true"] [data-testid="streaming-cursor"]')).toBeNull();
     expect(workingRow?.querySelector('.chat-message-avatar')).toBeNull();
     expect(host.querySelectorAll('.chat-message-avatar')).toHaveLength(0);
@@ -741,8 +742,83 @@ describe('CodexTranscript', () => {
 
     expect(host.querySelector('[data-codex-pre-output="true"]')).toBeNull();
     expect(rows[0]?.querySelector('.chat-message-avatar')).toBeNull();
+    expect(host.textContent).toContain('Running command');
     expect(workingRow?.querySelector('.chat-message-avatar')).toBeNull();
     expect(host.querySelectorAll('.chat-message-avatar')).toHaveLength(0);
+
+    dispose();
+  });
+
+  it('shows the active file read path as the compact running status', () => {
+    const readItem = {
+      id: 'item_file_read_live',
+      type: 'fileRead',
+      path: '/workspace/src/ui/chat/markdown/markdownFileReference.test.ts',
+      status: 'inProgress',
+      order: 0,
+    } satisfies CodexTranscriptItem;
+
+    const { host, dispose } = renderTranscript([readItem], {
+      showWorkingState: true,
+      workingLabel: 'working',
+    });
+
+    expect(host.textContent).toContain('Reading markdownFileReference.test.ts');
+    expect(host.textContent).not.toContain('Reading /workspace');
+    expect(host.textContent).not.toContain('Working...');
+
+    dispose();
+  });
+
+  it('shows the active file change path as the compact running status', () => {
+    const { host, dispose } = renderTranscript([
+      {
+        id: 'item_file_change_live',
+        type: 'fileChange',
+        status: 'inProgress',
+        changes: [
+          {
+            path: 'src/ui/codex/CodexTranscript.tsx',
+            kind: 'modified',
+            diff: '+updated',
+          },
+        ],
+        order: 0,
+      },
+    ], {
+      showWorkingState: true,
+      workingLabel: 'working',
+    });
+
+    expect(host.textContent).toContain('Editing CodexTranscript.tsx');
+    expect(host.textContent).not.toContain('Working...');
+
+    dispose();
+  });
+
+  it('keeps terminal run phases ahead of stale in-progress activity labels', () => {
+    const { host, dispose } = renderTranscript([
+      {
+        id: 'item_file_change_finalizing',
+        type: 'fileChange',
+        status: 'inProgress',
+        changes: [
+          {
+            path: 'src/ui/codex/CodexTranscript.tsx',
+            kind: 'modified',
+            diff: '+updated',
+          },
+        ],
+        order: 0,
+      },
+    ], {
+      showWorkingState: true,
+      workingLabel: 'running',
+      workingFlags: ['finalizing'],
+    });
+
+    expect(host.textContent).toContain('Finalizing');
+    expect(host.textContent).not.toContain('Editing CodexTranscript.tsx');
 
     dispose();
   });

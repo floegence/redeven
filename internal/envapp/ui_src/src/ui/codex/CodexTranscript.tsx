@@ -54,6 +54,11 @@ type CodexTranscriptSurfaceState = CodexTranscriptFallbackState | Readonly<{
   mode: 'feed';
   hasRows: true;
 }>;
+type WorkingActivityHint = Readonly<{
+  priority: number;
+  order: number;
+  label: string;
+}>;
 export type CodexTranscriptRowHeightCache = Readonly<{
   readHeights: (rowIDs: readonly string[]) => Record<string, number>;
   writeHeight: (rowID: string, height: number) => void;
@@ -166,9 +171,132 @@ function titleCaseStatus(value: string): string {
     .trim();
 }
 
-function workingPhaseLabel(label: string, flags: readonly string[]): string {
-  const normalizedLabel = String(label ?? '').trim().toLowerCase();
-  const normalizedFlags = [...(flags ?? [])]
+function basenameFromPath(path: string | null | undefined): string {
+  const normalized = String(path ?? '').trim().replace(/\\/g, '/');
+  if (!normalized) return '';
+  const parts = normalized.split('/').filter(Boolean);
+  return parts.length > 0 ? parts[parts.length - 1] ?? normalized : normalized;
+}
+
+function itemPath(item: CodexTranscriptItem): string {
+  return String(item.path ?? '').trim();
+}
+
+function itemDisplayFilename(item: CodexTranscriptItem): string {
+  const path = itemPath(item);
+  return basenameFromPath(path);
+}
+
+function fileChangeWorkingVerb(kind: string | null | undefined): string {
+  const normalized = String(kind ?? '').trim().toLowerCase();
+  switch (normalized) {
+    case 'add':
+    case 'added':
+    case 'create':
+    case 'created':
+    case 'new':
+    case 'newfile':
+    case 'new_file':
+    case 'new file':
+      return 'Creating';
+    case 'delete':
+    case 'deleted':
+    case 'remove':
+    case 'removed':
+      return 'Deleting';
+    case 'rename':
+    case 'renamed':
+    case 'move':
+    case 'moved':
+      return 'Renaming';
+    default:
+      return 'Editing';
+  }
+}
+
+function fileChangeWorkingLabel(item: CodexTranscriptItem): string {
+  const changes = item.changes ?? [];
+  if (changes.length !== 1) return 'Editing files';
+  const change = changes[0];
+  if (!change) return 'Editing files';
+  const path = String(change.move_path ?? change.path ?? '').trim();
+  const name = basenameFromPath(path);
+  const suffix = name ? ` ${name}` : '';
+  return `${fileChangeWorkingVerb(change.kind)}${suffix}`;
+}
+
+function itemWorkingActivityHint(item: CodexTranscriptItem): WorkingActivityHint | null {
+  if (!isWorkingStatus(item.status)) return null;
+  const order = Number(item.order);
+  const safeOrder = Number.isFinite(order) ? order : 0;
+  const itemType = String(item.type ?? '').trim().toLowerCase();
+  switch (itemType) {
+    case 'fileread':
+    case 'file_read':
+    case 'read':
+    case 'filepreview':
+    case 'file_preview': {
+      const name = itemDisplayFilename(item);
+      return { priority: 80, order: safeOrder, label: name ? `Reading ${name}` : 'Reading files' };
+    }
+    case 'filechange':
+      return { priority: 80, order: safeOrder, label: fileChangeWorkingLabel(item) };
+    case 'commandexecution':
+      return { priority: 70, order: safeOrder, label: 'Running command' };
+    case 'websearch':
+      return { priority: 70, order: safeOrder, label: 'Searching web' };
+    case 'plan':
+      return { priority: 60, order: safeOrder, label: 'Planning' };
+    case 'reasoning':
+      return { priority: 60, order: safeOrder, label: 'Thinking' };
+    default:
+      return null;
+  }
+}
+
+function latestWorkingActivityLabel(
+  items: readonly CodexTranscriptItem[],
+  optimisticBoundaryOrder: number | null,
+): string {
+  let selected: WorkingActivityHint | null = null;
+  for (const item of items) {
+    if (optimisticBoundaryOrder !== null && Number(item.order) <= optimisticBoundaryOrder) continue;
+    const hint = itemWorkingActivityHint(item);
+    if (!hint) continue;
+    if (
+      !selected ||
+      hint.priority > selected.priority ||
+      (hint.priority === selected.priority && hint.order >= selected.order)
+    ) {
+      selected = hint;
+    }
+  }
+  return selected?.label ?? '';
+}
+
+function lockedPhaseLabel(value: string): string {
+  switch (value) {
+    case 'finalizing':
+      return 'Finalizing';
+    case 'recovering':
+      return 'Recovering';
+    case 'waiting approval':
+    case 'waiting_approval':
+    case 'waitingapproval':
+      return 'Waiting for approval';
+    default:
+      return '';
+  }
+}
+
+function workingPhaseLabel(args: {
+  label: string;
+  flags: readonly string[];
+  items: readonly CodexTranscriptItem[];
+  optimisticBoundaryOrder: number | null;
+}): string {
+  const normalizedLabel = String(args.label ?? '').trim().toLowerCase();
+  const normalizedFlags = [...(args.flags ?? [])]
     .map((entry) => String(entry ?? '').trim().toLowerCase())
     .filter(Boolean);
   const prioritizedFlag = normalizedFlags.find((entry) => {
@@ -182,17 +310,13 @@ function workingPhaseLabel(label: string, flags: readonly string[]): string {
     );
   });
   const selected = prioritizedFlag || normalizedLabel;
+  const lockedPhase = lockedPhaseLabel(selected);
+  if (lockedPhase) return lockedPhase;
+  const activityLabel = latestWorkingActivityLabel(args.items, args.optimisticBoundaryOrder);
+  if (activityLabel) return activityLabel;
   switch (selected) {
     case 'planning':
-      return 'Planning...';
-    case 'finalizing':
-      return 'Finalizing...';
-    case 'recovering':
-      return 'Recovering...';
-    case 'waiting approval':
-    case 'waiting_approval':
-    case 'waitingapproval':
-      return 'Waiting for approval...';
+      return 'Planning';
     case 'running':
     case 'working':
     case 'active':
@@ -200,10 +324,10 @@ function workingPhaseLabel(label: string, flags: readonly string[]): string {
     case 'in progress':
     case 'in_progress':
     case 'inprogress':
-      return 'Working...';
+      return 'Thinking';
     default: {
       const titled = titleCaseStatus(selected || 'working');
-      return titled.endsWith('...') ? titled : `${titled}...`;
+      return titled || 'Thinking';
     }
   }
 }
@@ -649,17 +773,23 @@ export function CodexTranscript(props: {
   });
   const pendingAssistantState = createMemo<PendingAssistantVisualState>(() => {
     const showWorkingRail = Boolean(props.showWorkingState);
+    const optimisticBoundaryOrder = latestOptimisticBoundaryOrder(optimisticUserTurns());
     const hasAssistantOutput = hasAssistantOutputInCurrentRun(
       props.items,
       props.items.length,
-      latestOptimisticBoundaryOrder(optimisticUserTurns()),
+      optimisticBoundaryOrder,
     );
     const showPrelude = showWorkingRail && !hasAssistantOutput;
     return {
       show: showPrelude,
       showPrelude,
       showWorkingRail: showPrelude && showWorkingRail,
-      phaseLabel: workingPhaseLabel(String(props.workingLabel ?? '').trim() || 'working', props.workingFlags ?? []),
+      phaseLabel: workingPhaseLabel({
+        label: String(props.workingLabel ?? '').trim() || 'working',
+        flags: props.workingFlags ?? [],
+        items: props.items,
+        optimisticBoundaryOrder,
+      }),
     };
   });
   const showStandaloneWorkingRow = createMemo(() => Boolean(props.showWorkingState) && !pendingAssistantState().show);
