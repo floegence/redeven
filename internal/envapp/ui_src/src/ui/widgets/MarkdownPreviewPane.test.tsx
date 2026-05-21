@@ -55,7 +55,6 @@ function createPreviewContext(openPreview: FilePreviewContextValue['openPreview'
       error: nullValue,
       xlsxSheetName: empty,
       xlsxRows: () => [],
-      downloadLoading: boolFalse,
       openPreview: vi.fn(async () => undefined),
       closePreview: vi.fn(),
       handleOpenChange: vi.fn(),
@@ -66,7 +65,6 @@ function createPreviewContext(openPreview: FilePreviewContextValue['openPreview'
       updateSelection: vi.fn(),
       saveCurrent: vi.fn(async () => true),
       revertCurrent: vi.fn(),
-      downloadCurrent: vi.fn(async () => undefined),
     },
   };
 }

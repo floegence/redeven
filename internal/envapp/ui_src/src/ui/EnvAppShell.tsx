@@ -72,6 +72,11 @@ import { RuntimeUpdateContext } from './maintenance/RuntimeUpdateContext';
 import { createAgentMaintenanceController } from './maintenance/createAgentMaintenanceController';
 import { createRuntimeUpdatePromptCoordinator } from './maintenance/createRuntimeUpdatePromptCoordinator';
 import { createAgentVersionModel } from './maintenance/createAgentVersionModel';
+import { DownloadContext } from './downloads/DownloadContext';
+import { DownloadTaskButton } from './downloads/DownloadTaskButton';
+import { createDownloadManager } from './downloads/createDownloadManager';
+import { createRuntimeDownloadSource } from './downloads/runtimeDownloadSource';
+import { resolveDownloadPlatformSink } from './downloads/downloadPlatformResolver';
 import {
   LOCAL_FAST_RECONNECT_POLICY,
   REMOTE_FAST_RECONNECT_POLICY,
@@ -317,6 +322,10 @@ export function EnvAppShell() {
   const cmd = useCommand();
   const deck = useDeck();
   const notify = useNotification();
+  const downloadManager = createDownloadManager({
+    source: createRuntimeDownloadSource(() => protocol.client()),
+    sink: resolveDownloadPlatformSink(),
+  });
   const filePreviewController = createFilePreviewController({
     client: () => protocol.client(),
     rpc: () => rpc,
@@ -2696,6 +2705,7 @@ export function EnvAppShell() {
       >
         <NotesOverlayIcon class="w-4 h-4" />
       </TopBarIconButton>
+      <DownloadTaskButton tooltip={topBarTooltip('Downloads')} />
       <TopBarIconButton
         label="Toggle theme"
         tooltip={topBarTooltip('Toggle theme')}
@@ -2901,34 +2911,36 @@ export function EnvAppShell() {
         focusAIThread,
       }}
     >
-      <FileBrowserSurfaceContext.Provider value={fileBrowserSurfaceContextValue}>
-        <FilePreviewContext.Provider value={filePreviewContextValue}>
-          <RuntimeUpdateContext.Provider
-            value={{
-              version: agentVersionModel,
-              maintenance: agentMaintenanceController,
-              maintenanceContext: runtimeMaintenanceContext,
-              refetchMaintenanceContext: refetchRuntimeMaintenanceContext,
-            }}
-          >
-            <FloeRegistryRuntime components={components()}>
-              <AIChatProviderBridge>
-                <CodexProvider>{renderMainShell()}</CodexProvider>
-                <Show when={viewMode() !== 'workbench'}>
-                  <FilePreviewHost />
-                </Show>
-                <AskFlowerComposerWindow
-                  open={askFlowerComposerOpen()}
-                  intent={askFlowerComposerIntent()}
-                  anchor={askFlowerComposerAnchor()}
-                  onClose={closeAskFlowerComposer}
-                  onSend={submitAskFlowerComposer}
-                />
-              </AIChatProviderBridge>
-            </FloeRegistryRuntime>
-          </RuntimeUpdateContext.Provider>
-        </FilePreviewContext.Provider>
-      </FileBrowserSurfaceContext.Provider>
+      <DownloadContext.Provider value={downloadManager}>
+        <FileBrowserSurfaceContext.Provider value={fileBrowserSurfaceContextValue}>
+          <FilePreviewContext.Provider value={filePreviewContextValue}>
+            <RuntimeUpdateContext.Provider
+              value={{
+                version: agentVersionModel,
+                maintenance: agentMaintenanceController,
+                maintenanceContext: runtimeMaintenanceContext,
+                refetchMaintenanceContext: refetchRuntimeMaintenanceContext,
+              }}
+            >
+              <FloeRegistryRuntime components={components()}>
+                <AIChatProviderBridge>
+                  <CodexProvider>{renderMainShell()}</CodexProvider>
+                  <Show when={viewMode() !== 'workbench'}>
+                    <FilePreviewHost />
+                  </Show>
+                  <AskFlowerComposerWindow
+                    open={askFlowerComposerOpen()}
+                    intent={askFlowerComposerIntent()}
+                    anchor={askFlowerComposerAnchor()}
+                    onClose={closeAskFlowerComposer}
+                    onSend={submitAskFlowerComposer}
+                  />
+                </AIChatProviderBridge>
+              </FloeRegistryRuntime>
+            </RuntimeUpdateContext.Provider>
+          </FilePreviewContext.Provider>
+        </FileBrowserSurfaceContext.Provider>
+      </DownloadContext.Provider>
     </EnvContext.Provider>
   );
 }

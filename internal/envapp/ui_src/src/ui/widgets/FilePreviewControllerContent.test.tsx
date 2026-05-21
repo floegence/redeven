@@ -52,7 +52,6 @@ describe('FilePreviewControllerContent', () => {
       error: () => null,
       xlsxSheetName: () => '',
       xlsxRows: () => [],
-      downloadLoading: () => false,
       openPreview: vi.fn(async () => undefined),
       closePreview: vi.fn(),
       handleOpenChange: vi.fn(),
@@ -63,7 +62,6 @@ describe('FilePreviewControllerContent', () => {
       updateSelection,
       saveCurrent,
       revertCurrent,
-      downloadCurrent: vi.fn(async () => undefined),
     };
 
     const host = document.createElement('div');

@@ -89,6 +89,7 @@ import { DesktopThemeState } from './desktopThemeState';
 import { loadOrCreateDesktopRuntimeOwnerID } from './desktopRuntimeOwner';
 import { readBundledDesktopRuntimeIdentity, type DesktopRuntimeIdentity } from './desktopRuntimeIdentity';
 import { DesktopDiagnosticsRecorder } from './diagnostics';
+import { DesktopDownloadWriter } from './desktopDownloadWriter';
 import {
   DesktopOperationFailureError,
   desktopOperationFailurePresentation,
@@ -251,6 +252,19 @@ import {
   normalizeDesktopShellOpenExternalURLRequest,
   type DesktopShellOpenExternalURLResponse,
 } from '../shared/desktopShellExternalURLIPC';
+import {
+  DESKTOP_DOWNLOAD_ABORT_CHANNEL,
+  DESKTOP_DOWNLOAD_COMPLETE_CHANNEL,
+  DESKTOP_DOWNLOAD_OPEN_CHANNEL,
+  DESKTOP_DOWNLOAD_PREPARE_CHANNEL,
+  DESKTOP_DOWNLOAD_REVEAL_CHANNEL,
+  DESKTOP_DOWNLOAD_WRITE_CHANNEL,
+  normalizeDesktopDownloadAbortRequest,
+  normalizeDesktopDownloadActionRequest,
+  normalizeDesktopDownloadCompleteRequest,
+  normalizeDesktopDownloadPrepareRequest,
+  normalizeDesktopDownloadWriteRequest,
+} from '../shared/desktopDownloadIPC';
 import {
   DESKTOP_LAUNCHER_ACTION_PROGRESS_CHANNEL,
   DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL,
@@ -566,6 +580,7 @@ const sessionKeyByWebContentsID = new Map<number, DesktopSessionKey>();
 const sessionCloseTasks = new Map<DesktopSessionKey, Promise<void>>();
 const confirmedFinalWindowCloseWebContentsIDs = new Set<number>();
 const windowStateCleanup = new Map<BrowserWindow, () => void>();
+const desktopDownloadWriter = new DesktopDownloadWriter();
 let lastFocusedSessionKey: DesktopSessionKey | null = null;
 let quitPhase: 'idle' | 'confirming' | 'requested' | 'shutting_down' = 'idle';
 let desktopPreferencesCache: DesktopPreferences | null = null;
@@ -9152,6 +9167,67 @@ if (!app.requestSingleInstanceLock()) {
   ipcMain.on(DESKTOP_WINDOW_CHROME_GET_SNAPSHOT_CHANNEL, (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     event.returnValue = desktopWindowChromeSnapshotForWindow(win, process.platform);
+  });
+
+  ipcMain.handle(DESKTOP_DOWNLOAD_PREPARE_CHANNEL, async (event, request) => {
+    const normalized = normalizeDesktopDownloadPrepareRequest(request);
+    if (!normalized) {
+      return {
+        ok: false,
+        message: 'Invalid desktop download request.',
+      };
+    }
+    return desktopDownloadWriter.prepare(BrowserWindow.fromWebContents(event.sender), normalized);
+  });
+  ipcMain.handle(DESKTOP_DOWNLOAD_WRITE_CHANNEL, async (_event, request) => {
+    const normalized = normalizeDesktopDownloadWriteRequest(request);
+    if (!normalized) {
+      return {
+        ok: false,
+        message: 'Invalid desktop download chunk.',
+      };
+    }
+    return desktopDownloadWriter.write(normalized);
+  });
+  ipcMain.handle(DESKTOP_DOWNLOAD_COMPLETE_CHANNEL, async (_event, request) => {
+    const normalized = normalizeDesktopDownloadCompleteRequest(request);
+    if (!normalized) {
+      return {
+        ok: false,
+        message: 'Invalid desktop download completion request.',
+      };
+    }
+    return desktopDownloadWriter.complete(normalized.token);
+  });
+  ipcMain.handle(DESKTOP_DOWNLOAD_ABORT_CHANNEL, async (_event, request) => {
+    const normalized = normalizeDesktopDownloadAbortRequest(request);
+    if (!normalized) {
+      return {
+        ok: false,
+        message: 'Invalid desktop download abort request.',
+      };
+    }
+    return desktopDownloadWriter.abort(normalized);
+  });
+  ipcMain.handle(DESKTOP_DOWNLOAD_REVEAL_CHANNEL, async (_event, request) => {
+    const normalized = normalizeDesktopDownloadActionRequest(request);
+    if (!normalized) {
+      return {
+        ok: false,
+        message: 'Invalid desktop download reveal request.',
+      };
+    }
+    return desktopDownloadWriter.reveal(normalized.token);
+  });
+  ipcMain.handle(DESKTOP_DOWNLOAD_OPEN_CHANNEL, async (_event, request) => {
+    const normalized = normalizeDesktopDownloadActionRequest(request);
+    if (!normalized) {
+      return {
+        ok: false,
+        message: 'Invalid desktop download open request.',
+      };
+    }
+    return desktopDownloadWriter.open(normalized.token);
   });
 
   ipcMain.handle(SAVE_DESKTOP_SETTINGS_CHANNEL, async (_event, draft: DesktopSettingsDraft): Promise<SaveDesktopSettingsResult> => {

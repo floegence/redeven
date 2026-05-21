@@ -18,6 +18,7 @@ Key points:
 - File Browser keeps Monaco as the single text preview/edit surface where possible, treats symbolic links explicitly, and enforces `fs/read_file` as file-only before raw bytes are streamed.
 - File Browser uses runtime `filesystem_scope` roots rather than treating Home as the only boundary. The sidebar shows Home, Computer, and custom roots above the current folder tree; the Path row keeps the existing filter, refresh, view switcher, and overflow menu while displaying real absolute paths (`/` is OS root, `~` is Home).
 - File Browser root rows own the high-frequency write toggle for exposed roots. Computer defaults to `RO`, custom roots reflect their configured `RO/RW` state, and enabling `RW` requires confirmation before the shared Runtime Settings update path persists the change and refreshes the runtime filesystem registry. Home shows its status but is managed from Runtime Settings rather than the root row. In Workbench mode, File Browser roots, breadcrumb segments, toolbar buttons, segmented controls, and overflow/menu triggers are all `action surface` items, so their hover cursor and selection behavior come from the surface contract rather than from the visible label text.
+- File downloads are owned by the Env App download manager. File Browser context menus and Preview buttons submit `DownloadCommand`s; source streaming, destination selection, task progress, cancel, retry, Open, and Reveal stay in the shared Downloads task center.
 - Terminal sessions are runtime-owned and may be attached by multiple Env App surfaces; only the focused surface emits resize ownership updates after attach.
 - Desktop-managed runs keep Preview, File Browser, Ask Flower, and Debug Console inside the main Env App window as product-owned floating surfaces. Browser-app windows such as Codespaces remain separate navigation flows.
 
@@ -30,6 +31,20 @@ Env App exposes a product-owned **Notes overlay** above the current workspace in
 - A fresh runtime seeds a default `Welcome` topic and note.
 - Notes use a runtime-authoritative snapshot + SSE stream under `/_redeven_proxy/api/notes/*`, so connected clients converge on the same topics, notes, style tokens, and trash state.
 - Deleted notes move to runtime-managed trash with a fixed 72-hour retention window before permanent removal.
+
+## File downloads
+
+Env App file downloads use a Source/Sink/Manager contract instead of component-local browser handoff logic.
+
+- `DownloadCommand` is the UI boundary. File Browser and Preview only describe the requested file, origin, preferred name, and source type.
+- `RuntimeFileDownloadSource` streams bytes from `fs/read_file`; it does not introduce an unaudited HTTP download endpoint and still requires `read` permission plus filesystem scope access.
+- `DraftTextSource` covers unsaved text/markdown Preview drafts, so downloading current edits still goes through the same task center.
+- `DownloadSink` is the platform boundary:
+  - Desktop uses the preload bridge `window.redevenDesktopDownloads`, a native save dialog, a `.download.tmp` file, atomic completion rename, and cleanup on cancel/failure.
+  - Web File System Access browsers stream directly into the selected writable handle.
+  - Web Blob downloads are an explicit browser sink: Env App tracks preparation progress, then marks the task as handed to browser downloads after the Blob URL click.
+- The Downloads task center is available from the top bar in Desktop and Web. It shows active count, progress, speed, failure details, cancel, retry, and destination actions when the sink supports them.
+- Directory download is intentionally not implemented in this contract. Future archive support must add a dedicated archive source rather than pretending folders are files.
 
 ## Workbench surface ownership
 

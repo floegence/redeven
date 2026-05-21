@@ -35,7 +35,6 @@ export interface FilePreviewPanelProps {
   xlsxSheetName?: string;
   xlsxRows?: string[][];
   onCopyPath?: () => boolean | Promise<boolean>;
-  downloadLoading?: boolean;
   onDownload?: () => void;
   onAskFlower?: (selectionText: string) => void | Promise<void>;
   closeConfirmVariant?: 'dialog' | 'floating' | 'none';
@@ -87,7 +86,6 @@ export function FilePreviewPanel(props: FilePreviewPanelProps) {
             onSelectionChange={props.onSelectionChange}
             onSave={props.onSave}
             onDiscard={props.onDiscard}
-            downloadLoading={props.downloadLoading}
             onDownload={props.onDownload}
             onAskFlower={props.onAskFlower}
           />

@@ -94,9 +94,11 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   FileCode: icon('FileCode'),
   Globe: icon('Globe'),
   Layers: icon('Layers'),
+  Plus: icon('Plus'),
   RefreshIcon: icon('RefreshIcon'),
   Shield: icon('Shield'),
   Terminal: icon('Terminal'),
+  Trash: icon('Trash'),
   Zap: icon('Zap'),
 }));
 

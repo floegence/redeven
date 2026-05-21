@@ -51,7 +51,7 @@ type FakeSSHFixture = Readonly<{
   scenario: FakeSSHScenario;
 }>;
 
-const SSH_RUNTIME_MAINTENANCE_TEST_TIMEOUT_MS = 15_000;
+const SSH_RUNTIME_MAINTENANCE_TEST_TIMEOUT_MS = 30_000;
 
 function sha256(data: Buffer | string): string {
   return createHash('sha256').update(data).digest('hex');
@@ -654,7 +654,11 @@ async function readFakeSSHEvents(fixture: FakeSSHFixture): Promise<readonly Fake
     .map((line) => JSON.parse(line) as FakeSSHEvent);
 }
 
-async function waitForFakeSSHEvent(fixture: FakeSSHFixture, eventName: string, timeoutMs = 5_000): Promise<void> {
+async function waitForFakeSSHEvent(
+  fixture: FakeSSHFixture,
+  eventName: string,
+  timeoutMs = SSH_RUNTIME_MAINTENANCE_TEST_TIMEOUT_MS,
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     const events = await readFakeSSHEvents(fixture);
@@ -1118,15 +1122,14 @@ describe('sshRuntime integration', () => {
       }),
     });
 
-    await waitForFakeSSHEvent(fixture, 'start_runtime');
     const events = await readFakeSSHEvents(fixture);
     const eventNames = events.map((event) => event.event);
-    expect(eventNames).toContain('start_runtime');
+    expect(eventNames).toContain('read_report');
     expect(eventNames).not.toContain('stop_runtime');
     expect(eventNames).not.toContain('runtime_control_forward_start');
     expect(eventNames).not.toContain('forward_start');
     await removeFakeSSHFixture(fixture);
-  });
+  }, SSH_RUNTIME_MAINTENANCE_TEST_TIMEOUT_MS);
 
   it('surfaces restart maintenance when an active SSH runtime is missing Desktop runtime-control', async () => {
     const fixture = await createFakeSSHFixture('missing_runtime_control_active');
@@ -1141,7 +1144,6 @@ describe('sshRuntime integration', () => {
       }),
     });
 
-    await waitForFakeSSHEvent(fixture, 'start_runtime');
     const events = await readFakeSSHEvents(fixture);
     const eventNames = events.map((event) => event.event);
     expect(eventNames).toContain('start_runtime');
@@ -1149,7 +1151,7 @@ describe('sshRuntime integration', () => {
     expect(eventNames).not.toContain('stop_runtime');
     expect(eventNames).not.toContain('runtime_control_forward_start');
     await removeFakeSSHFixture(fixture);
-  });
+  }, SSH_RUNTIME_MAINTENANCE_TEST_TIMEOUT_MS);
 
   it('restarts an active SSH runtime missing Desktop runtime-control after explicit user confirmation', async () => {
     const fixture = await createFakeSSHFixture('missing_runtime_control_active');

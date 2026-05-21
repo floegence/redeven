@@ -7,6 +7,8 @@ import { Button } from '@floegence/floe-webapp-core/ui';
 
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import { useEnvContext } from '../pages/EnvContext';
+import { useDownloadManager } from '../downloads/DownloadContext';
+import { buildFilePreviewDownloadCommand } from '../downloads/downloadCommands';
 import { writeTextToClipboard } from '../utils/clipboard';
 import { buildFilePreviewAskFlowerIntent } from '../utils/filePreviewAskFlower';
 import { FilePreviewPanel } from '../widgets/FilePreviewPanel';
@@ -111,6 +113,7 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
   const env = useEnvContext();
+  const downloads = useDownloadManager();
   const workbench = useEnvWorkbenchInstancesContext();
   const controller = createFilePreviewController({
     client: () => protocol.client(),
@@ -261,6 +264,21 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
     }
     if (!result.intent) return;
     env.openAskFlowerComposer(result.intent);
+  };
+
+  const handleDownload = () => {
+    const command = buildFilePreviewDownloadCommand({
+      item: controller.item(),
+      descriptor: controller.descriptor(),
+      dirty: controller.dirty(),
+      draftText: controller.draftText(),
+      origin: 'workbench_preview',
+    });
+    if (!command) {
+      notification.error('Download unavailable', 'Only files can be downloaded.');
+      return;
+    }
+    downloads.enqueue(command);
   };
 
   createEffect(() => {
@@ -416,11 +434,8 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
         error={controller.error()}
         xlsxSheetName={controller.xlsxSheetName()}
         xlsxRows={controller.xlsxRows()}
-        downloadLoading={controller.downloadLoading()}
         onCopyPath={handleCopyPath}
-        onDownload={() => {
-          void controller.downloadCurrent();
-        }}
+        onDownload={handleDownload}
         onAskFlower={handleAskFlower}
         closeConfirmVariant="dialog"
       />
