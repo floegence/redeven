@@ -46,11 +46,12 @@ import {
   splitPinnedEnvironmentEntries,
 } from './viewModel';
 
-function defaultFact(label: string, value: string) {
+function defaultFact(label: string, value: string, extras?: Record<string, unknown>) {
   return {
     label,
     value,
     value_tone: 'default' as const,
+    ...extras,
   };
 }
 
@@ -454,23 +455,40 @@ describe('buildEnvironmentCardModel', () => {
     }));
 
     expect(buildEnvironmentCardFactsModel(localEntry!)).toEqual([
-      defaultFact('RUNS ON', 'This device'),
+      defaultFact('RUNS ON', 'This device', {
+        endpoints: [
+          { label: 'URL', value: 'http://localhost:23998/', monospace: true, copy_label: 'Copy local endpoint' },
+        ],
+      }),
       defaultFact('VERSION', 'v1.4.2'),
       placeholderFact('PROVIDER'),
     ]);
     expect(buildEnvironmentCardFactsModel(providerEntry!)).toEqual([
-      defaultFact('RUNS ON', 'Provider remote'),
+      defaultFact('RUNS ON', 'Provider remote', {
+        endpoints: [
+          { label: 'PROVIDER', value: 'https://cp.example.invalid/env/env_demo', monospace: true, copy_label: 'Copy environment URL' },
+        ],
+      }),
       placeholderFact('VERSION', 'UNKNOWN'),
       defaultFact('PROVIDER', 'Demo Control Plane'),
       defaultFact('LOCAL LINK', 'No managed runtime linked'),
       defaultFact('ENV ID', 'env_demo'),
     ]);
     expect(buildEnvironmentCardFactsModel(urlEntry!)).toEqual([
-      defaultFact('RUNS ON', 'LAN host'),
+      defaultFact('RUNS ON', 'LAN host', {
+        endpoints: [
+          { label: 'URL', value: 'http://192.168.1.12:24000/', monospace: true, copy_label: 'Copy endpoint' },
+        ],
+      }),
       defaultFact('VERSION', 'v1.4.1'),
     ]);
     expect(buildEnvironmentCardFactsModel(sshEntry!)).toEqual([
-      defaultFact('RUNS ON', 'ops@example.internal:2222'),
+      defaultFact('RUNS ON', 'ops@example.internal:2222', {
+        endpoints: [
+          { label: 'SSH HOST', value: 'ops@example.internal:2222', monospace: true, copy_label: 'Copy SSH host' },
+          { label: 'FORWARDED URL', value: 'http://127.0.0.1:24111/', monospace: true, copy_label: 'Copy forwarded URL' },
+        ],
+      }),
       defaultFact('VERSION', 'v1.4.0'),
     ]);
 
@@ -600,7 +618,11 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(localEntry).toBeTruthy();
     expect(buildEnvironmentCardFactsModel(localEntry!)).toEqual([
-      defaultFact('RUNS ON', 'This device'),
+      defaultFact('RUNS ON', 'This device', {
+        endpoints: [
+          { label: 'URL', value: 'http://localhost:23998/', monospace: true, copy_label: 'Copy local endpoint' },
+        ],
+      }),
       defaultFact('VERSION', 'v1.4.3'),
       placeholderFact('PROVIDER'),
     ]);
@@ -616,7 +638,11 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(localEntry).toBeTruthy();
     expect(buildEnvironmentCardFactsModel(localEntry!)).toEqual([
-      defaultFact('RUNS ON', 'This device'),
+      defaultFact('RUNS ON', 'This device', {
+        endpoints: [
+          { label: 'LOCAL', value: 'localhost:23998', monospace: true, copy_label: 'Copy local endpoint' },
+        ],
+      }),
       placeholderFact('VERSION', 'UNKNOWN'),
       placeholderFact('PROVIDER'),
     ]);
@@ -662,9 +688,16 @@ describe('buildEnvironmentCardModel', () => {
       },
     });
     expect(buildEnvironmentCardFactsModel(localEntry!)).toEqual(expect.arrayContaining([
-      defaultFact('RUNS ON', 'This device'),
-      defaultFact('CONTAINER', 'dev-container'),
-      defaultFact('ENGINE', 'Docker'),
+      defaultFact('RUNS ON', 'This device', {
+        endpoints: [
+          { label: 'LOCAL', value: 'localhost:23998', monospace: true, copy_label: 'Copy local endpoint' },
+        ],
+      }),
+      expect.objectContaining({
+        label: 'CONTAINER',
+        value: 'dev-container',
+        leading_icon: expect.any(String) as unknown,
+      }),
     ]));
     const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);
     expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
@@ -1271,7 +1304,12 @@ describe('buildEnvironmentCardModel', () => {
       target_secondary: 'http://127.0.0.1:24111/',
     }));
     expect(buildEnvironmentCardFactsModel(entry!)).toEqual([
-      defaultFact('RUNS ON', 'ops@example.internal:2222'),
+      defaultFact('RUNS ON', 'ops@example.internal:2222', {
+        endpoints: [
+          { label: 'SSH HOST', value: 'ops@example.internal:2222', monospace: true, copy_label: 'Copy SSH host' },
+          { label: 'FORWARDED URL', value: 'http://127.0.0.1:24111/', monospace: true, copy_label: 'Copy forwarded URL' },
+        ],
+      }),
       defaultFact('VERSION', 'v0.5.9'),
     ]);
     const actionModel = buildProviderBackedEnvironmentActionModel(entry!);

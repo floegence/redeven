@@ -357,6 +357,92 @@ body {
   color: var(--muted-foreground);
 }
 
+/* ── Card body: leading icon ── */
+
+.redeven-card-fact-leading-icon {
+  display: inline-block;
+  width: 0.85rem;
+  height: 0.85rem;
+  flex-shrink: 0;
+  margin-right: 0.28rem;
+  vertical-align: -0.1rem;
+  opacity: 0.8;
+}
+
+/* ── Card body: endpoint trigger button ── */
+
+.redeven-card-fact-endpoint-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  flex-shrink: 0;
+  margin-left: 0.3rem;
+  border-radius: 0.25rem;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition:
+    color 150ms ease,
+    background-color 150ms ease;
+}
+
+.redeven-card-fact-endpoint-trigger:hover {
+  color: var(--primary);
+  background: color-mix(in srgb, var(--muted) 40%, transparent);
+}
+
+.redeven-card-fact-endpoint-trigger:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--ring) 70%, transparent);
+  outline-offset: 2px;
+}
+
+/* ── Endpoints popover ── */
+
+.redeven-endpoints-popover {
+  min-width: 13rem;
+  max-width: 19rem;
+  padding: 0.6rem;
+}
+
+.redeven-endpoints-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.45rem;
+  padding: 0 0.25rem;
+}
+
+.redeven-endpoints-popover-title {
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.redeven-endpoints-popover-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 0;
+  border-radius: 0.25rem;
+  background: transparent;
+  padding: 0;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition:
+    color 150ms ease,
+    background-color 150ms ease;
+}
+
+.redeven-endpoints-popover-close:hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--muted) 40%, transparent);
+}
+
 /* ── Card body: endpoints section ── */
 
 .redeven-endpoints-section {

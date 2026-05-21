@@ -73,6 +73,8 @@ export type EnvironmentCardFactModel = Readonly<{
   value: string;
   value_tone: 'default' | 'placeholder';
   action?: EnvironmentCardFactActionModel;
+  leading_icon?: string;
+  endpoints?: readonly EnvironmentCardEndpointModel[];
 }>;
 
 export type EnvironmentCardEndpointModel = Readonly<{
@@ -81,6 +83,15 @@ export type EnvironmentCardEndpointModel = Readonly<{
   monospace: boolean;
   copy_label: string;
 }>;
+
+const DOCKER_ICON = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0iY3VycmVudENvbG9yIj48cGF0aCBkPSJNMyAxMS41Yy0uMy0uMy0uMi0uOC4yLTFsLjgtLjMuNS0uNi45LS4zLjUtLjIuNS0uMS42LjEuNy4yLjYuMy42LjYuNS40Yy4yLjIuMi42IDAgLjgtLjIuMi0uNi4yLS44IDBsLS41LS41LS43LjItLjYuMy0uMy4zLS4yLjItLjQtLjMtLjYtLjMtLjYtLjMtLjQuMi0uNy4yYy0uMy4yLS42LjMtLjguNXoiLz48cGF0aCBkPSJNMyAxMS43bC0xIDEgLjQuNSIvPjxyZWN0IHg9IjUuNSIgeT0iNi41IiB3aWR0aD0iMS4yIiBoZWlnaHQ9IjEiIHJ4PSIuMyIgb3BhY2l0eT0iLjg1Ii8+PHJlY3QgeD0iNy4yIiB5PSI2LjUiIHdpZHRoPSIxLjIiIGhlaWdodD0iMSIgcng9Ii4zIiBvcGFjaXR5PSIuODUiLz48cmVjdCB4PSI4LjkiIHk9IjYuNSIgd2lkdGg9IjEuMiIgaGVpZ2h0PSIxIiByeD0iLjMiIG9wYWNpdHk9Ii44NSIvPjxyZWN0IHg9IjYuNCIgeT0iNSIgd2lkdGg9IjEuMiIgaGVpZ2h0PSIxIiByeD0iLjMiIG9wYWNpdHk9Ii43Ii8+PHJlY3QgeD0iOC4xIiB5PSI1IiB3aWR0aD0iMS4yIiBoZWlnaHQ9IjEiIHJ4PSIuMyIgb3BhY2l0eT0iLjciLz48L3N2Zz4K';
+
+const PODMAN_ICON = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0iY3VycmVudENvbG9yIj48ZWxsaXBzZSBjeD0iOCIgY3k9IjEwIiByeD0iMyIgcnk9IjIuNSIvPjxjaXJjbGUgY3g9IjciIGN5PSI5LjUiIHI9Ii41IiBvcGFjaXR5PSIuOCIvPjxjaXJjbGUgY3g9IjkiIGN5PSI5LjUiIHI9Ii41IiBvcGFjaXR5PSIuOCIvPjxwYXRoIGQ9Ik02LjUgMTEuMmMuMy4zLjkuNSAxLjUuNXMxLS4yIDEuMy0uNSIgb3BhY2l0eT0iLjgiLz48cmVjdCB4PSI1IiB5PSI1IiB3aWR0aD0iMS4yIiBoZWlnaHQ9IjEiIHJ4PSIuMyIgb3BhY2l0eT0iLjg1Ii8+PHJlY3QgeD0iNi44IiB5PSI1IiB3aWR0aD0iMS4yIiBoZWlnaHQ9IjEiIHJ4PSIuMyIgb3BhY2l0eT0iLjg1Ii8+PHJlY3QgeD0iOC42IiB5PSI1IiB3aWR0aD0iMS4yIiBoZWlnaHQ9IjEiIHJ4PSIuMyIgb3BhY2l0eT0iLjg1Ii8+PHJlY3QgeD0iNS45IiB5PSIzLjUiIHdpZHRoPSIxLjIiIGhlaWdodD0iMSIgcng9Ii4zIiBvcGFjaXR5PSIuNyIvPjxyZWN0IHg9IjcuNyIgeT0iMy41IiB3aWR0aD0iMS4yIiBoZWlnaHQ9IjEiIHJ4PSIuMyIgb3BhY2l0eT0iLjciLz48L3N2Zz4K';
+
+const CONTAINER_ENGINE_ICON: Record<string, string> = {
+  docker: DOCKER_ICON,
+  podman: PODMAN_ICON,
+};
 
 export type EnvironmentCardModel = Readonly<{
   kind_label: 'Local' | 'Provider' | 'Redeven URL' | 'SSH Host';
@@ -415,13 +426,19 @@ function externalLocalUINetworkLabel(environment: DesktopEnvironmentEntry): stri
 function buildEnvironmentCardFact(
   label: string,
   value: string,
-  action?: EnvironmentCardFactActionModel,
+  opts?: {
+    action?: EnvironmentCardFactActionModel;
+    leading_icon?: string;
+    endpoints?: readonly EnvironmentCardEndpointModel[];
+  },
 ): EnvironmentCardFactModel {
   return {
     label,
     value,
     value_tone: 'default',
-    ...(action ? { action } : {}),
+    ...(opts?.action ? { action: opts.action } : {}),
+    ...(opts?.leading_icon ? { leading_icon: opts.leading_icon } : {}),
+    ...(opts?.endpoints ? { endpoints: opts.endpoints } : {}),
   };
 }
 
@@ -439,7 +456,6 @@ function buildPlaceholderEnvironmentCardFact(
 const ENVIRONMENT_CARD_FACT_ORDER = [
   'RUNS ON',
   'CONTAINER',
-  'ENGINE',
   'OWNER',
   'VERSION',
   'PROVIDER',
@@ -518,9 +534,11 @@ function runtimePlacementFacts(environment: DesktopEnvironmentEntry): readonly E
   if (placement?.kind !== 'container_process') {
     return [];
   }
+  const engine = placement.container_engine === 'podman' ? 'podman' : 'docker';
   return [
-    buildEnvironmentCardFact('CONTAINER', placement.container_label || placement.container_id),
-    buildEnvironmentCardFact('ENGINE', placement.container_engine === 'podman' ? 'Podman' : 'Docker'),
+    buildEnvironmentCardFact('CONTAINER', placement.container_label || placement.container_id, {
+      leading_icon: CONTAINER_ENGINE_ICON[engine],
+    }),
   ];
 }
 
@@ -570,10 +588,12 @@ function providerLocalLinkFact(environment: DesktopEnvironmentEntry): Environmen
     return buildEnvironmentCardFact('LOCAL LINK', value);
   }
   return buildEnvironmentCardFact('LOCAL LINK', value, {
-    kind: 'filter_runtime_target',
-    runtime_target_id: linkedRuntime.runtime_target_id,
-    label: `Show ${linkedRuntime.label}`,
-    aria_label: `Show linked runtime ${linkedRuntime.label}`,
+    action: {
+      kind: 'filter_runtime_target',
+      runtime_target_id: linkedRuntime.runtime_target_id,
+      label: `Show ${linkedRuntime.label}`,
+      aria_label: `Show linked runtime ${linkedRuntime.label}`,
+    },
   });
 }
 
@@ -587,9 +607,12 @@ function providerEnvironmentIDFact(environment: DesktopEnvironmentEntry): Enviro
 export function buildEnvironmentCardFactsModel(
   environment: DesktopEnvironmentEntry,
 ): readonly EnvironmentCardFactModel[] {
+  const endpoints = buildEnvironmentCardEndpointsModel(environment);
+  const runsOnOpts = endpoints.length > 0 ? { endpoints } : undefined;
+
   if (environment.kind === 'local_environment') {
     return orderEnvironmentCardFacts([
-      buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment)),
+      buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment), runsOnOpts),
       ...runtimePlacementFacts(environment),
       runtimeVersionFact(environment),
       buildPlaceholderEnvironmentCardFact('PROVIDER'),
@@ -598,7 +621,7 @@ export function buildEnvironmentCardFactsModel(
 
   if (environment.kind === 'provider_environment') {
     return orderEnvironmentCardFacts([
-      buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment)),
+      buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment), runsOnOpts),
       runtimeVersionFact(environment),
       buildEnvironmentCardFact('PROVIDER', controlPlaneDisplayLabel(environment) || 'Unavailable'),
       providerLocalLinkFact(environment),
@@ -608,14 +631,14 @@ export function buildEnvironmentCardFactsModel(
 
   if (environment.kind === 'ssh_environment') {
     return orderEnvironmentCardFacts([
-      buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment)),
+      buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment), runsOnOpts),
       ...runtimePlacementFacts(environment),
       runtimeVersionFact(environment),
     ]);
   }
 
   return orderEnvironmentCardFacts([
-    buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment)),
+    buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment), runsOnOpts),
     ...runtimePlacementFacts(environment),
     runtimeVersionFact(environment),
   ]);
