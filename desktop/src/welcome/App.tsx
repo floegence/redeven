@@ -10,7 +10,6 @@ import {
   ChevronRight,
   Copy,
   Globe,
-  Link,
   Lock,
   Moon,
   Pin,
@@ -126,6 +125,7 @@ import {
   buildDesktopWelcomeShellViewModel,
   buildEnvironmentCardModel,
   buildEnvironmentCardFactsModel,
+  ICON_ENDPOINTS,
   buildControlPlaneStatusModel,
   buildProviderBackedEnvironmentActionModel,
   capabilityUnavailableMessage,
@@ -4352,7 +4352,12 @@ function EnvironmentCardFactsBlock(props: Readonly<{
       <For each={props.facts}>
         {(fact) => (
           <div class="redeven-card-fact-row">
-            <div class="redeven-card-fact-label">{fact.label}</div>
+            <div class="redeven-card-fact-label">
+              <Show when={fact.label_icon}>
+                {(icon) => <img src={icon()} class="redeven-card-fact-label-icon" aria-hidden="true" />}
+              </Show>
+              {fact.label}
+            </div>
             <Show
               when={fact.action}
               fallback={(
@@ -4453,7 +4458,7 @@ function EndpointsPopover(props: Readonly<{
           }
         }}
       >
-        <Link class="h-3 w-3" />
+        <img src={ICON_ENDPOINTS} class="redeven-endpoint-trigger-icon" aria-hidden="true" />
       </span>
       <Show when={open()}>
         <DesktopAnchoredOverlaySurface
