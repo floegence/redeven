@@ -111,6 +111,7 @@ export interface ActivityDetailRef {
   toolId?: string;
   fetchMode: 'inline' | 'endpoint';
   endpoint?: string;
+  payload?: unknown;
   title: string;
 }
 

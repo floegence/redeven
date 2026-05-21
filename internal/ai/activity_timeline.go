@@ -149,7 +149,7 @@ func (r *run) activityItemFromToolBlock(block ToolCallBlock, now int64) Activity
 	label, description := summarizeToolActivity(toolName, args, block.Result, block.Error, status)
 	targets := activityTargetsForTool(toolName, args, block.Result)
 	chips := activityChipsForTool(toolName, block, status)
-	detailRefs := r.activityDetailRefsForTool(toolName, toolID)
+	detailRefs := r.activityDetailRefsForTool(spec, toolID)
 	startedAt := now
 	if block.StartedAt != nil && !block.StartedAt.IsZero() {
 		startedAt = block.StartedAt.UnixMilli()
@@ -506,13 +506,14 @@ func activityChipsForTool(toolName string, block ToolCallBlock, status string) [
 	return chips
 }
 
-func (r *run) activityDetailRefsForTool(toolName string, toolID string) []ActivityDetailRef {
+func (r *run) activityDetailRefsForTool(spec aitools.ToolPresentationSpec, toolID string) []ActivityDetailRef {
 	toolID = strings.TrimSpace(toolID)
 	if toolID == "" {
 		return nil
 	}
 	runID := strings.TrimSpace(r.id)
-	if strings.TrimSpace(toolName) == "terminal.exec" {
+	detailKind := activityDetailKindForPresentation(spec)
+	if detailKind == "terminal_output" {
 		return []ActivityDetailRef{{
 			RefID:     "terminal_output:" + toolID,
 			Kind:      "terminal_output",
@@ -524,12 +525,27 @@ func (r *run) activityDetailRefsForTool(toolName string, toolID string) []Activi
 	}
 	return []ActivityDetailRef{{
 		RefID:     "tool_detail:" + toolID,
-		Kind:      "tool_detail",
+		Kind:      detailKind,
 		ToolID:    toolID,
 		FetchMode: "endpoint",
 		Endpoint:  "/_redeven_proxy/api/ai/runs/" + runID + "/tools/" + toolID + "/detail",
 		Title:     "Tool detail",
 	}}
+}
+
+func activityDetailKindForPresentation(spec aitools.ToolPresentationSpec) string {
+	switch strings.TrimSpace(spec.Renderer) {
+	case "command":
+		return "terminal_output"
+	case "todos":
+		return "todo_delta"
+	case "file_change", "file_context":
+		return "file_change"
+	case "sources", "knowledge":
+		return "web_results"
+	default:
+		return "structured_fields"
+	}
 }
 
 func itemDefaultOpen(item ActivityItem) bool {

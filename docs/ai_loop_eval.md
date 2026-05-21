@@ -110,7 +110,7 @@ Runtime-owned signal tools such as `ask_user` and `exit_plan_mode` are expected 
 Runtime-output invariants worth asserting explicitly:
 
 - a single assistant run should converge to one canonical visible answer, not multiple concatenated final-answer revisions
-- tool-heavy runs should expose one compact activity timeline and lazy details, not raw tool JSON, command logs, or duplicate source blocks in the visible answer
+- tool-heavy runs should expose one compact activity timeline with expandable structured details, not raw tool JSON, command logs, or duplicate source blocks in the visible answer
 - `ask_user` and `exit_plan_mode` should surface exactly one structured interaction prompt while keeping provisional markdown questions out of the final transcript
 - activity projection should emit `activity.item.projected`, `activity.group.updated`, and `activity.timeline.persisted` so compact UI behavior is replayable from runtime events
 - draft text from a still-active run must not be replayed into later provider turns as committed assistant history

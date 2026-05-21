@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 
-import { Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -11,17 +10,6 @@ const renderDisposers: Array<() => void> = [];
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...classes: Array<string | undefined | null | false>) => classes.filter(Boolean).join(' '),
-}));
-
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
-  Dialog: (props: any) => (
-    <Show when={props.open}>
-      <div data-testid="dialog">
-        <div>{props.title}</div>
-        {props.children}
-      </div>
-    </Show>
-  ),
 }));
 
 vi.mock('../../services/gatewayApi', () => ({
@@ -43,6 +31,8 @@ function renderShellBlock(props: Parameters<typeof ShellBlock>[0]) {
 async function flushAsync(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
 }
 
 afterEach(() => {
@@ -51,11 +41,12 @@ afterEach(() => {
     dispose?.();
   }
   writeTextToClipboardMock.mockReset();
+  vi.unstubAllGlobals();
   document.body.innerHTML = '';
 });
 
 describe('ShellBlock', () => {
-  it('collapses multiline commands into a stable single-line preview and exposes the full command in details', async () => {
+  it('collapses multiline commands into a stable single-line preview and exposes the full command inline', async () => {
     writeTextToClipboardMock.mockResolvedValue(undefined);
     const command = "printf 'alpha'\nprintf 'beta'";
     const { host } = renderShellBlock({
@@ -75,7 +66,7 @@ describe('ShellBlock', () => {
     detailButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await flushAsync();
 
-    expect(document.body.textContent).toContain('Command details');
+    expect(document.body.querySelector('.chat-shell-detail-panel')).toBeTruthy();
     expect(document.body.querySelector('.chat-shell-detail-command')?.textContent).toContain(command);
 
     const copyButton = document.body.querySelector('.chat-shell-detail-copy') as HTMLButtonElement | null;
@@ -121,5 +112,32 @@ describe('ShellBlock', () => {
     expect(host.querySelector('.chat-shell-detail-link')?.textContent).toBe('Command');
     expect(host.querySelector('.chat-shell-command-highlight')?.textContent).toContain('…');
     expect(host.textContent).not.toContain('2 lines');
+  });
+
+  it('does not render raw terminal result data when deferred output lacks streams', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify({
+        ok: true,
+        data: {
+          status: 'success',
+          raw_result: '{"api_key":"sk-secret"}',
+        },
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { host } = renderShellBlock({
+      command: 'redeven run',
+      outputRef: { runId: 'run_1', toolId: 'tool_1' },
+      status: 'success',
+    });
+
+    const toggleButton = host.querySelector('button[aria-label="Show output for command output"]') as HTMLButtonElement | null;
+    toggleButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsync();
+
+    expect(host.textContent).toContain('No output captured.');
+    expect(host.textContent).not.toContain('sk-secret');
+    expect(host.textContent).not.toContain('"api_key"');
   });
 });

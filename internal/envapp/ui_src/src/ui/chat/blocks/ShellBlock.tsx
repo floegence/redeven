@@ -1,7 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { Dialog } from '@floegence/floe-webapp-core/ui';
 import { prepareGatewayRequestInit } from '../../services/gatewayApi';
 import { writeTextToClipboard } from '../../utils/clipboard';
 import { ActivityStatusIcon, type ActivityStatus } from '../status/ActivityLine';
@@ -62,7 +61,6 @@ interface TerminalToolOutputPayload {
   timeout_ms?: number;
   requested_timeout_ms?: number;
   timeout_source?: string;
-  raw_result?: string;
 }
 
 const MULTI_CHAR_OPERATORS = ['&&', '||', '>>', '<<', '>|', '|&', '2>', '1>', '&>'] as const;
@@ -338,7 +336,6 @@ function formatTimeoutLabel(timeoutMs: number | undefined, timeoutSource: string
 function composeDeferredOutput(parts: {
   stdout: string;
   stderr: string;
-  rawResult: string;
   cwd: string;
   timeoutMs?: number;
   requestedTimeoutMs?: number;
@@ -374,10 +371,8 @@ function composeDeferredOutput(parts: {
 
   const stdout = String(parts.stdout ?? '').trimEnd();
   const stderr = String(parts.stderr ?? '').trimEnd();
-  const rawResult = String(parts.rawResult ?? '').trim();
   if (stdout) sections.push(stdout);
   if (stderr) sections.push(stdout ? `[stderr]\n${stderr}` : stderr);
-  if (rawResult && !stdout && !stderr) sections.push(rawResult);
 
   return sections.join('\n\n').trim();
 }
@@ -417,11 +412,12 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
   const [runtimeTimeoutMs, setRuntimeTimeoutMs] = createSignal<number | undefined>(undefined);
   const [runtimeRequestedTimeoutMs, setRuntimeRequestedTimeoutMs] = createSignal<number | undefined>(undefined);
   const [runtimeTimeoutSource, setRuntimeTimeoutSource] = createSignal<string | undefined>(undefined);
-  const [commandDialogOpen, setCommandDialogOpen] = createSignal(false);
+  const [commandDetailsOpen, setCommandDetailsOpen] = createSignal(false);
   const [commandCopied, setCommandCopied] = createSignal(false);
   let commandCopiedResetTimer: number | null = null;
 
   const outputPanelId = `chat-shell-output-${createUniqueId()}`;
+  const commandPanelId = `chat-shell-command-${createUniqueId()}`;
   const normalizedCommand = createMemo(() => normalizeCommandText(props.command));
   const commandPreviewSource = createMemo(() => normalizeCommandPreviewSource(props.command));
   const commandPreview = createMemo(() => summarizeCommandPreview(props.command));
@@ -469,7 +465,7 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
     setLoadAttempted(false);
     setLoadingOutput(false);
     setExpanded(false);
-    setCommandDialogOpen(false);
+    setCommandDetailsOpen(false);
     setCommandCopied(false);
     if (commandCopiedResetTimer != null) {
       window.clearTimeout(commandCopiedResetTimer);
@@ -557,7 +553,6 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
       const output = composeDeferredOutput({
         stdout: String(data.stdout ?? ''),
         stderr: String(data.stderr ?? ''),
-        rawResult: String(data.raw_result ?? ''),
         cwd: String(data.cwd ?? displayCwd()),
         timeoutMs:
           typeof data.timeout_ms === 'number' ? data.timeout_ms : displayTimeoutMs(),
@@ -709,7 +704,9 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
             <button
               type="button"
               class="chat-shell-detail-link"
-              onClick={() => setCommandDialogOpen(true)}
+              onClick={() => setCommandDetailsOpen((open) => !open)}
+              aria-expanded={commandDetailsOpen()}
+              aria-controls={commandPanelId}
             >
               Command
             </button>
@@ -734,6 +731,66 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
           </Show>
         </div>
       </div>
+
+      <Show when={showCommandDetails() && commandDetailsOpen()}>
+        <div id={commandPanelId} class="chat-shell-detail-panel">
+          <div class="chat-shell-detail-meta-grid">
+            <div class="chat-shell-detail-meta-card">
+              <div class="chat-shell-detail-meta-label">Status</div>
+              <div class="chat-shell-detail-meta-value">{formatShellStatus(displayStatus())}</div>
+            </div>
+            <Show when={displayExitCode() !== undefined}>
+              <div class="chat-shell-detail-meta-card">
+                <div class="chat-shell-detail-meta-label">Exit code</div>
+                <div class="chat-shell-detail-meta-value chat-shell-detail-meta-value-mono">{displayExitCode()}</div>
+              </div>
+            </Show>
+            <div class="chat-shell-detail-meta-card">
+              <div class="chat-shell-detail-meta-label">Lines</div>
+              <div class="chat-shell-detail-meta-value">{formatCommandLineCount(commandLineCount())}</div>
+            </div>
+            <Show when={displayCwd()}>
+              <div class="chat-shell-detail-meta-card">
+                <div class="chat-shell-detail-meta-label">Working directory</div>
+                <div class="chat-shell-detail-meta-value chat-shell-detail-meta-value-mono">{displayCwd()}</div>
+              </div>
+            </Show>
+            <Show when={formatDuration(displayDurationMs())}>
+              {(value) => (
+                <div class="chat-shell-detail-meta-card">
+                  <div class="chat-shell-detail-meta-label">Duration</div>
+                  <div class="chat-shell-detail-meta-value">{value()}</div>
+                </div>
+              )}
+            </Show>
+            <Show when={timeoutInlineLabel()}>
+              {(value) => (
+                <div class="chat-shell-detail-meta-card">
+                  <div class="chat-shell-detail-meta-label">Timeout</div>
+                  <div class="chat-shell-detail-meta-value">{value()}</div>
+                </div>
+              )}
+            </Show>
+          </div>
+
+          <div class="chat-shell-detail-toolbar">
+            <button
+              type="button"
+              class="chat-shell-detail-copy"
+              onClick={() => void handleCopyCommand()}
+            >
+              {commandCopied() ? 'Copied' : 'Copy command'}
+            </button>
+          </div>
+
+          <div class="chat-shell-detail-section">
+            <div class="chat-shell-detail-label">Full command</div>
+            <pre class="chat-shell-detail-command">
+              {normalizedCommand() || '(empty command)'}
+            </pre>
+          </div>
+        </div>
+      </Show>
 
       <Show when={canToggle() && expanded()}>
         <div id={outputPanelId} class="chat-shell-output-panel">
@@ -769,71 +826,6 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
         </div>
       </Show>
 
-      <Show when={showCommandDetails()}>
-        <Dialog
-          open={commandDialogOpen()}
-          onOpenChange={(open) => setCommandDialogOpen(open)}
-          title="Command details"
-        >
-          <div class="chat-shell-detail-dialog">
-            <div class="chat-shell-detail-meta-grid">
-              <div class="chat-shell-detail-meta-card">
-                <div class="chat-shell-detail-meta-label">Status</div>
-                <div class="chat-shell-detail-meta-value">{formatShellStatus(displayStatus())}</div>
-              </div>
-              <Show when={displayExitCode() !== undefined}>
-                <div class="chat-shell-detail-meta-card">
-                  <div class="chat-shell-detail-meta-label">Exit code</div>
-                  <div class="chat-shell-detail-meta-value chat-shell-detail-meta-value-mono">{displayExitCode()}</div>
-                </div>
-              </Show>
-              <div class="chat-shell-detail-meta-card">
-                <div class="chat-shell-detail-meta-label">Lines</div>
-                <div class="chat-shell-detail-meta-value">{formatCommandLineCount(commandLineCount())}</div>
-              </div>
-              <Show when={displayCwd()}>
-                <div class="chat-shell-detail-meta-card">
-                  <div class="chat-shell-detail-meta-label">Working directory</div>
-                  <div class="chat-shell-detail-meta-value chat-shell-detail-meta-value-mono">{displayCwd()}</div>
-                </div>
-              </Show>
-              <Show when={formatDuration(displayDurationMs())}>
-                {(value) => (
-                  <div class="chat-shell-detail-meta-card">
-                    <div class="chat-shell-detail-meta-label">Duration</div>
-                    <div class="chat-shell-detail-meta-value">{value()}</div>
-                  </div>
-                )}
-              </Show>
-              <Show when={timeoutInlineLabel()}>
-                {(value) => (
-                  <div class="chat-shell-detail-meta-card">
-                    <div class="chat-shell-detail-meta-label">Timeout</div>
-                    <div class="chat-shell-detail-meta-value">{value()}</div>
-                  </div>
-                )}
-              </Show>
-            </div>
-
-            <div class="chat-shell-detail-toolbar">
-              <button
-                type="button"
-                class="chat-shell-detail-copy"
-                onClick={() => void handleCopyCommand()}
-              >
-                {commandCopied() ? 'Copied' : 'Copy command'}
-              </button>
-            </div>
-
-            <div class="chat-shell-detail-section">
-              <div class="chat-shell-detail-label">Full command</div>
-              <pre class="chat-shell-detail-command">
-                {normalizedCommand() || '(empty command)'}
-              </pre>
-            </div>
-          </div>
-        </Dialog>
-      </Show>
     </div>
   );
 };

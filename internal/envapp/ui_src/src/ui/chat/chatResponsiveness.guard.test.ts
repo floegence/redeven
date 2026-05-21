@@ -61,7 +61,7 @@ describe('chat responsiveness guardrails', () => {
     const chatCss = readText('src/ui/chat/chat.css');
     const workingIndicator = readText('src/ui/chat/status/WorkingIndicator.tsx');
     const streamingCursor = readText('src/ui/chat/status/StreamingCursor.tsx');
-    const activityTimelineBlock = readText('src/ui/chat/blocks/ActivityTimelineBlock.tsx');
+    const activityTimelineBlock = readText('src/ui/chat/activity/ActivityTimelineBlock.tsx');
 
     expect(chatCss).toContain('@media (prefers-reduced-motion: reduce)');
     expect(chatCss).toContain('.chat-activity-running-dot');
