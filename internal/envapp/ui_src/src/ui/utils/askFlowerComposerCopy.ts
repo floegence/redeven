@@ -6,79 +6,55 @@ import {
   monitorProcessDisplayLabel,
 } from './monitorProcessAskFlower';
 
-export type AskFlowerComposerEntry =
+export type AskFlowerLinkedContextTone =
+  | 'file'
+  | 'directory'
+  | 'selection'
+  | 'snapshot'
+  | 'process'
+  | 'terminal'
+  | 'attachment';
+
+export type AskFlowerLinkedContextAction =
+  | Readonly<{ type: 'open_live_file_preview'; path: string }>
+  | Readonly<{ type: 'open_directory_browser'; path: string }>
   | Readonly<{
-      id: string;
-      kind: 'file';
-      itemIndex: number;
-      label: string;
+      type: 'open_text_context_preview';
       title: string;
-      detail: string;
-      path: string;
-      attachmentFile?: File;
+      subtitle: string;
+      body: string;
+      sourcePath?: string;
     }>
   | Readonly<{
-      id: string;
-      kind: 'directory';
-      itemIndex: number;
-      label: string;
+      type: 'open_process_snapshot_preview';
       title: string;
-      detail: string;
-      path: string;
-    }>
-  | Readonly<{
-      id: string;
-      kind: 'selection';
-      itemIndex: number;
-      label: string;
-      title: string;
-      detail: string;
-      content: string;
-      sourcePath: string;
-    }>
-  | Readonly<{
-      id: string;
-      kind: 'terminal_selection';
-      itemIndex: number;
-      label: string;
-      title: string;
-      detail: string;
-      content: string;
-      workingDir: string;
-    }>
-  | Readonly<{
-      id: string;
-      kind: 'process_snapshot';
-      itemIndex: number;
-      label: string;
-      title: string;
-      detail: string;
-      content: string;
+      subtitle: string;
+      body: string;
       pid: number;
     }>
   | Readonly<{
-      id: string;
-      kind: 'snapshot';
-      itemIndex: number;
-      label: string;
+      type: 'open_attachment_snapshot_preview';
       title: string;
-      detail: string;
-      content: string;
-    }>
-  | Readonly<{
-      id: string;
-      kind: 'attachment';
-      itemIndex: number | null;
-      label: string;
-      title: string;
-      detail: string;
+      subtitle: string;
       file: File;
+      livePath?: string;
     }>;
+
+export type AskFlowerLinkedContextChip = Readonly<{
+  id: string;
+  itemIndex: number | null;
+  label: string;
+  detail: string;
+  title: string;
+  tone: AskFlowerLinkedContextTone;
+  primaryAction: AskFlowerLinkedContextAction;
+  secondaryActions: readonly AskFlowerLinkedContextAction[];
+}>;
 
 export type AskFlowerComposerCopy = Readonly<{
   placeholder: string;
   question: string;
-  contextEntries: AskFlowerComposerEntry[];
+  contextEntries: AskFlowerLinkedContextChip[];
 }>;
 
 function basenameFromPath(path: string): string {
@@ -87,20 +63,49 @@ function basenameFromPath(path: string): string {
   return parts[parts.length - 1] || normalized || 'Context';
 }
 
-function buildContextEntries(intent: AskFlowerIntent): AskFlowerComposerEntry[] {
-  const entries: AskFlowerComposerEntry[] = [];
+function liveFileAction(path: string): AskFlowerLinkedContextAction {
+  return { type: 'open_live_file_preview', path };
+}
+
+function directoryBrowserAction(path: string): AskFlowerLinkedContextAction {
+  return { type: 'open_directory_browser', path };
+}
+
+function actionLiveFilePath(action: AskFlowerLinkedContextAction): string | null {
+  return action.type === 'open_live_file_preview' ? action.path : null;
+}
+
+function chipReferencesLiveFilePath(chip: AskFlowerLinkedContextChip, path: string): boolean {
+  const primaryPath = actionLiveFilePath(chip.primaryAction);
+  if (primaryPath === path) return true;
+  return chip.secondaryActions.some((action) => actionLiveFilePath(action) === path);
+}
+
+function withSecondaryAction(
+  chip: AskFlowerLinkedContextChip,
+  action: AskFlowerLinkedContextAction,
+): AskFlowerLinkedContextChip {
+  return {
+    ...chip,
+    secondaryActions: [...chip.secondaryActions, action],
+  };
+}
+
+function buildContextEntries(intent: AskFlowerIntent): AskFlowerLinkedContextChip[] {
+  const entries: AskFlowerLinkedContextChip[] = [];
 
   intent.contextItems.forEach((item, index) => {
     if (item.kind === 'file_path') {
       const label = basenameFromPath(item.path);
       entries.push({
         id: `context-${index}-${item.isDirectory ? 'directory' : 'file'}`,
-        kind: item.isDirectory ? 'directory' : 'file',
+        tone: item.isDirectory ? 'directory' : 'file',
         itemIndex: index,
         label,
-        title: item.isDirectory ? `Open folder ${item.path}` : `Preview ${item.path}`,
+        title: item.isDirectory ? `Browse folder ${item.path}` : `Open live file preview for ${item.path}`,
         detail: item.path,
-        path: item.path,
+        primaryAction: item.isDirectory ? directoryBrowserAction(item.path) : liveFileAction(item.path),
+        secondaryActions: [],
       });
       return;
     }
@@ -109,22 +114,19 @@ function buildContextEntries(intent: AskFlowerIntent): AskFlowerComposerEntry[] 
       const label = basenameFromPath(item.path);
       entries.push({
         id: `context-${index}-selection`,
-        kind: 'selection',
+        tone: 'selection',
         itemIndex: index,
         label: 'selected content',
         title: `Preview selected content from ${item.path}`,
         detail: label,
-        content: item.selection,
-        sourcePath: item.path,
-      });
-      entries.push({
-        id: `context-${index}-file`,
-        kind: 'file',
-        itemIndex: index,
-        label,
-        title: `Preview ${item.path}`,
-        detail: item.path,
-        path: item.path,
+        primaryAction: {
+          type: 'open_text_context_preview',
+          title: 'Selected content',
+          subtitle: label,
+          body: item.selection,
+          sourcePath: item.path,
+        },
+        secondaryActions: [liveFileAction(item.path)],
       });
       return;
     }
@@ -132,26 +134,40 @@ function buildContextEntries(intent: AskFlowerIntent): AskFlowerComposerEntry[] 
     if (item.kind === 'process_snapshot') {
       entries.push({
         id: `context-${index}-process-snapshot`,
-        kind: 'process_snapshot',
+        tone: 'process',
         itemIndex: index,
         label: monitorProcessDisplayLabel({ pid: item.pid, name: item.name }),
         title: `Preview monitoring snapshot for PID ${item.pid}`,
         detail: `${String(item.username ?? '').trim() || 'system'} · ${Number(item.cpuPercent ?? 0).toFixed(1)}% CPU · ${formatMonitorProcessBytes(item.memoryBytes)}`,
-        content: buildMonitorProcessSnapshotText(item),
-        pid: item.pid,
+        primaryAction: {
+          type: 'open_process_snapshot_preview',
+          title: 'Process snapshot',
+          subtitle: `${String(item.username ?? '').trim() || 'system'} · ${Number(item.cpuPercent ?? 0).toFixed(1)}% CPU · ${formatMonitorProcessBytes(item.memoryBytes)}`,
+          body: buildMonitorProcessSnapshotText(item),
+          pid: item.pid,
+        },
+        secondaryActions: [],
       });
       return;
     }
 
     if (item.kind === 'text_snapshot') {
+      const label = String(item.title ?? '').trim() || 'snapshot';
+      const detail = String(item.detail ?? '').trim() || 'Snapshot';
       entries.push({
         id: `context-${index}-snapshot`,
-        kind: 'snapshot',
+        tone: 'snapshot',
         itemIndex: index,
-        label: String(item.title ?? '').trim() || 'snapshot',
-        title: `Preview ${String(item.title ?? '').trim() || 'snapshot'}`,
-        detail: String(item.detail ?? '').trim() || 'Snapshot',
-        content: item.content,
+        label,
+        title: `Preview ${label}`,
+        detail,
+        primaryAction: {
+          type: 'open_text_context_preview',
+          title: label,
+          subtitle: detail,
+          body: item.content,
+        },
+        secondaryActions: [],
       });
       return;
     }
@@ -159,13 +175,19 @@ function buildContextEntries(intent: AskFlowerIntent): AskFlowerComposerEntry[] 
     if (String(item.selection ?? '').trim()) {
       entries.push({
         id: `context-${index}-terminal-selection`,
-        kind: 'terminal_selection',
+        tone: 'terminal',
         itemIndex: index,
         label: 'selected output',
         title: 'Preview selected terminal output',
         detail: item.workingDir || 'Terminal',
-        content: item.selection,
-        workingDir: item.workingDir,
+        primaryAction: {
+          type: 'open_text_context_preview',
+          title: 'Selected terminal output',
+          subtitle: item.workingDir || 'Terminal',
+          body: item.selection,
+          sourcePath: item.workingDir,
+        },
+        secondaryActions: [],
       });
     }
   });
@@ -173,14 +195,16 @@ function buildContextEntries(intent: AskFlowerIntent): AskFlowerComposerEntry[] 
   intent.pendingAttachments.forEach((file, index) => {
     const sourcePath = getAskFlowerAttachmentSourcePath(file);
     if (sourcePath) {
-      const existingFileIndex = entries.findIndex((entry) => entry.kind === 'file' && entry.path === sourcePath);
-      if (existingFileIndex >= 0) {
-        const existingEntry = entries[existingFileIndex];
-        if (existingEntry.kind !== 'file') return;
-        entries[existingFileIndex] = {
-          ...existingEntry,
-          attachmentFile: file,
-        };
+      const existingLiveFileIndex = entries.findIndex((entry) => chipReferencesLiveFilePath(entry, sourcePath));
+      if (existingLiveFileIndex >= 0) {
+        const existingEntry = entries[existingLiveFileIndex];
+        entries[existingLiveFileIndex] = withSecondaryAction(existingEntry, {
+          type: 'open_attachment_snapshot_preview',
+          title: `${existingEntry.label} snapshot`,
+          subtitle: sourcePath,
+          file,
+          livePath: sourcePath,
+        });
         return;
       }
     }
@@ -188,36 +212,48 @@ function buildContextEntries(intent: AskFlowerIntent): AskFlowerComposerEntry[] 
     const label = String(file.name ?? '').trim() || `attachment-${index + 1}`;
     entries.push({
       id: `attachment-${index}`,
-      kind: 'attachment',
+      tone: 'attachment',
       itemIndex: null,
       label,
       title: `Preview attachment ${label}`,
       detail: 'Queued attachment',
-      file,
+      primaryAction: {
+        type: 'open_attachment_snapshot_preview',
+        title: label,
+        subtitle: 'Queued attachment',
+        file,
+      },
+      secondaryActions: [],
     });
   });
 
   return entries;
 }
 
-function findEntryByKind(entries: AskFlowerComposerEntry[], kind: AskFlowerComposerEntry['kind']): AskFlowerComposerEntry | undefined {
-  return entries.find((item) => item.kind === kind);
+function findEntryByTone(
+  entries: AskFlowerLinkedContextChip[],
+  tone: AskFlowerLinkedContextTone,
+): AskFlowerLinkedContextChip | undefined {
+  return entries.find((item) => item.tone === tone);
 }
 
-function findEntryByItem(entries: AskFlowerComposerEntry[], itemIndex: number, kind: AskFlowerComposerEntry['kind']): AskFlowerComposerEntry | undefined {
-  return entries.find((item) => item.itemIndex === itemIndex && item.kind === kind);
+function findEntryByItem(
+  entries: AskFlowerLinkedContextChip[],
+  itemIndex: number,
+  tone: AskFlowerLinkedContextTone,
+): AskFlowerLinkedContextChip | undefined {
+  return entries.find((item) => item.itemIndex === itemIndex && item.tone === tone);
 }
 
 export function buildAskFlowerComposerCopy(intent: AskFlowerIntent): AskFlowerComposerCopy {
   const contextEntries = buildContextEntries(intent);
   const firstContext = intent.contextItems[0];
-  const fileEntries = contextEntries.filter((item) => item.kind === 'file' || item.kind === 'directory');
-  const hasDirectories = fileEntries.some((item) => item.kind === 'directory');
+  const fileEntries = contextEntries.filter((item) => item.tone === 'file' || item.tone === 'directory');
+  const hasDirectories = fileEntries.some((item) => item.tone === 'directory');
 
   if (firstContext?.kind === 'file_selection') {
     const selectionEntry = findEntryByItem(contextEntries, 0, 'selection');
-    const fileEntry = findEntryByItem(contextEntries, 0, 'file');
-    if (selectionEntry && fileEntry) {
+    if (selectionEntry) {
       return {
         placeholder: 'Ask about this selection, request a change, or describe what you need',
         question: 'What would you like to understand, change, or verify?',
@@ -227,7 +263,7 @@ export function buildAskFlowerComposerCopy(intent: AskFlowerIntent): AskFlowerCo
   }
 
   if (firstContext?.kind === 'terminal_selection') {
-    const selectionEntry = findEntryByItem(contextEntries, 0, 'terminal_selection');
+    const selectionEntry = findEntryByItem(contextEntries, 0, 'terminal');
     if (selectionEntry) {
       return {
         placeholder: 'Ask about the output, request a command, or describe the next step',
@@ -244,7 +280,7 @@ export function buildAskFlowerComposerCopy(intent: AskFlowerIntent): AskFlowerCo
   }
 
   if (firstContext?.kind === 'process_snapshot') {
-    const processEntry = findEntryByItem(contextEntries, 0, 'process_snapshot');
+    const processEntry = findEntryByItem(contextEntries, 0, 'process');
     if (processEntry) {
       return {
         placeholder: 'Ask why this process is busy, whether it is expected, or what to do next',
@@ -271,7 +307,7 @@ export function buildAskFlowerComposerCopy(intent: AskFlowerIntent): AskFlowerCo
   }
 
   if (intent.source === 'file_preview') {
-    const fileEntry = findEntryByKind(contextEntries, 'file');
+    const fileEntry = findEntryByTone(contextEntries, 'file');
     if (fileEntry) {
       return {
         placeholder: 'Ask about this file, request a change, or describe what you need',
@@ -283,7 +319,7 @@ export function buildAskFlowerComposerCopy(intent: AskFlowerIntent): AskFlowerCo
 
   if (intent.source === 'file_browser') {
     if (fileEntries.length === 1) {
-      const isDirectory = fileEntries[0].kind === 'directory';
+      const isDirectory = fileEntries[0].tone === 'directory';
       return {
         placeholder: isDirectory
           ? 'Ask about this folder, the files inside it, or describe what you need'
@@ -313,7 +349,7 @@ export function buildAskFlowerComposerCopy(intent: AskFlowerIntent): AskFlowerCo
     };
   }
 
-  const attachmentEntry = findEntryByKind(contextEntries, 'attachment');
+  const attachmentEntry = findEntryByTone(contextEntries, 'attachment');
   if (attachmentEntry) {
     return {
       placeholder: 'Ask about the attached context or describe what you need',

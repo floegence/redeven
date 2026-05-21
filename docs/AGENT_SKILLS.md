@@ -203,6 +203,8 @@ Assistant locality values:
 
 The current UI maps existing Ask Flower entries into `assistant.ask.flower` envelopes. This keeps compatibility while giving additional assistant providers the same context structure.
 
+Ask Flower composer presentation keeps linked context actions explicit: live file references open the shared File Preview surface, directories open the floating file browser, and only materialized selections or snapshots render inside the composer-owned preview window. Attachment snapshots attached to a live file appear as secondary paperclip actions instead of changing the file chip into an inline live-file preview.
+
 ## Right-Click Menu Model
 
 Assistant and handoff actions share one priority order:

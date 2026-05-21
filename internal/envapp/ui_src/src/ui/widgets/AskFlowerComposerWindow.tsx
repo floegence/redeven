@@ -1,12 +1,15 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, type Component } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { Activity, FileText, Folder, Paperclip, Send, Terminal } from '@floegence/floe-webapp-core/icons';
-import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { FlowerIcon } from '../icons/FlowerIcon';
 import type { AskFlowerComposerAnchor } from '../pages/EnvContext';
 import type { AskFlowerIntent } from '../pages/askFlowerIntent';
-import { buildAskFlowerComposerCopy, type AskFlowerComposerEntry } from '../utils/askFlowerComposerCopy';
+import {
+  buildAskFlowerComposerCopy,
+  type AskFlowerLinkedContextAction,
+  type AskFlowerLinkedContextChip,
+} from '../utils/askFlowerComposerCopy';
 import { resolveSuggestedWorkingDirAbsolute } from '../utils/askFlowerPath';
 import {
   describeFilePreview,
@@ -17,7 +20,6 @@ import {
   type FilePreviewDescriptor,
 } from '../utils/filePreview';
 import { basenameFromPath, fileItemFromPath } from '../utils/filePreviewItem';
-import { readFileBytesOnce } from '../utils/fileStreamReader';
 import { syncLiveTextValue } from '../utils/liveTextValue';
 import { shouldSubmitOnEnterKeydown } from '../utils/shouldSubmitOnEnterKeydown';
 import { useFilePreviewContext } from './FilePreviewContext';
@@ -39,7 +41,6 @@ const ASK_FLOWER_WINDOW_MIN_WIDTH_DESKTOP = 400;
 const ASK_FLOWER_WINDOW_MIN_HEIGHT_DESKTOP = 500;
 const ASK_FLOWER_WINDOW_MIN_WIDTH_COMPACT = 300;
 const ASK_FLOWER_WINDOW_MIN_HEIGHT_COMPACT = 420;
-const INLINE_FILE_PREVIEW_MAX_BYTES = 160 * 1024;
 const INLINE_TEXT_PREVIEW_MAX_CHARS = 120_000;
 const CONTEXT_PREVIEW_DEFAULT_SIZE = { width: 880, height: 640 };
 const CONTEXT_PREVIEW_MIN_SIZE = { width: 380, height: 280 };
@@ -166,15 +167,6 @@ function truncatePath(fullPath: string, maxSegments = 3): string {
 function fileItemForContextPreview(path: string, name?: string): FileItem {
   const normalizedPath = String(path ?? '').trim() || name || 'Context preview';
   return fileItemFromPath(normalizedPath, String(name ?? '').trim() || basenameFromPath(normalizedPath));
-}
-
-function previewNoticeForMode(mode: ReturnType<typeof describeFilePreview>['mode']): string {
-  if (mode === 'image') return 'This file uses an image preview. Open the full preview to inspect it.';
-  if (mode === 'pdf') return 'This file uses a PDF preview. Open the full preview to inspect it.';
-  if (mode === 'docx') return 'This file uses a document preview. Open the full preview to inspect it.';
-  if (mode === 'xlsx') return 'This file uses a spreadsheet preview. Open the full preview to inspect it.';
-  if (mode === 'unsupported') return 'This file type is not available in the inline preview.';
-  return 'This file is best viewed in the full preview.';
 }
 
 function attachmentSnapshotNoticeForMode(mode: ReturnType<typeof describeFilePreview>['mode']): string {
@@ -573,37 +565,49 @@ async function buildFileLikeContextPreview(params: {
   });
 }
 
-function entryIcon(entry: AskFlowerComposerEntry) {
-  if (entry.kind === 'directory') return <Folder class="size-3.5 shrink-0" />;
-  if (entry.kind === 'attachment') return <Paperclip class="size-3.5 shrink-0" />;
-  if (entry.kind === 'process_snapshot') return <Activity class="size-3.5 shrink-0" />;
-  if (entry.kind === 'snapshot') return <FileText class="size-3.5 shrink-0" />;
-  if (entry.kind === 'terminal_selection') return <Terminal class="size-3.5 shrink-0" />;
-  if (entry.kind === 'selection') return <FileText class="size-3.5 shrink-0" />;
+function entryIcon(entry: AskFlowerLinkedContextChip) {
+  if (entry.tone === 'directory') return <Folder class="size-3.5 shrink-0" />;
+  if (entry.tone === 'attachment') return <Paperclip class="size-3.5 shrink-0" />;
+  if (entry.tone === 'process') return <Activity class="size-3.5 shrink-0" />;
+  if (entry.tone === 'snapshot') return <FileText class="size-3.5 shrink-0" />;
+  if (entry.tone === 'terminal') return <Terminal class="size-3.5 shrink-0" />;
+  if (entry.tone === 'selection') return <FileText class="size-3.5 shrink-0" />;
   return <FileText class="size-3.5 shrink-0" />;
 }
 
-function entryButtonClass(entry: AskFlowerComposerEntry): string {
-  if (entry.kind === 'process_snapshot') {
+function entryButtonClass(entry: AskFlowerLinkedContextChip): string {
+  if (entry.tone === 'process') {
     return 'border-cyan-500/20 bg-cyan-500/10 text-cyan-700 hover:border-cyan-500/35 hover:bg-cyan-500/16 dark:text-cyan-200';
   }
-  if (entry.kind === 'selection' || entry.kind === 'terminal_selection') {
+  if (entry.tone === 'selection' || entry.tone === 'terminal') {
     return 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 hover:border-emerald-500/35 hover:bg-emerald-500/16 dark:text-emerald-200';
   }
-  if (entry.kind === 'snapshot') {
+  if (entry.tone === 'snapshot') {
     return 'border-violet-500/20 bg-violet-500/10 text-violet-700 hover:border-violet-500/35 hover:bg-violet-500/16 dark:text-violet-200';
   }
-  if (entry.kind === 'attachment') {
+  if (entry.tone === 'attachment') {
     return 'border-sky-500/20 bg-sky-500/10 text-sky-700 hover:border-sky-500/35 hover:bg-sky-500/16 dark:text-sky-200';
   }
-  if (entry.kind === 'directory') {
+  if (entry.tone === 'directory') {
     return 'border-amber-500/20 bg-amber-500/10 text-amber-700 hover:border-amber-500/35 hover:bg-amber-500/16 dark:text-amber-200';
   }
   return 'border-primary/20 bg-primary/10 text-primary hover:border-primary/35 hover:bg-primary/16';
 }
 
-function hasAttachedSnapshot(entry: AskFlowerComposerEntry): entry is Extract<AskFlowerComposerEntry, { kind: 'file' }> & { attachmentFile: File } {
-  return entry.kind === 'file' && !!entry.attachmentFile;
+function secondaryActionIcon(action: AskFlowerLinkedContextAction) {
+  if (action.type === 'open_attachment_snapshot_preview') return <Paperclip class="size-3.5" />;
+  if (action.type === 'open_directory_browser') return <Folder class="size-3.5" />;
+  if (action.type === 'open_process_snapshot_preview') return <Activity class="size-3.5" />;
+  if (action.type === 'open_text_context_preview') return <FileText class="size-3.5" />;
+  return <FileText class="size-3.5" />;
+}
+
+function secondaryActionLabel(action: AskFlowerLinkedContextAction, entry: AskFlowerLinkedContextChip): string {
+  if (action.type === 'open_attachment_snapshot_preview') return `Preview attached snapshot for ${entry.label}`;
+  if (action.type === 'open_live_file_preview') return `Open live file preview for ${basenameFromPath(action.path)}`;
+  if (action.type === 'open_directory_browser') return `Browse folder ${entry.label}`;
+  if (action.type === 'open_process_snapshot_preview') return action.title;
+  return action.title;
 }
 
 const FlowerComposerAvatar: Component = () => (
@@ -616,7 +620,6 @@ const FlowerComposerAvatar: Component = () => (
 );
 
 export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
-  const protocol = useProtocol();
   const filePreview = useFilePreviewContext();
   const [userPrompt, setUserPrompt] = createSignal('');
   const [validationError, setValidationError] = createSignal('');
@@ -744,21 +747,8 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
 
   const openFullFilePreview = async (path: string) => {
     closeContextPreview();
+    closeContextBrowser();
     await filePreview.openPreview(fileItemFromPath(path));
-  };
-
-  const openAttachedSnapshotPreview = async (entry: Extract<AskFlowerComposerEntry, { kind: 'file' }> & { attachmentFile: File }) => {
-    await openAttachmentPreview({
-      title: `${entry.label} snapshot`,
-      subtitle: entry.path,
-      item: fileItemForContextPreview(entry.path, entry.label),
-      file: entry.attachmentFile,
-      helper: 'Showing the attached snapshot that Flower will receive.',
-      actionLabel: 'Open live file preview',
-      onAction: () => {
-        void openFullFilePreview(entry.path);
-      },
-    });
   };
 
   const openAttachmentPreview = async (params: {
@@ -827,163 +817,73 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
     }
   };
 
-  const openContextEntry = async (entry: AskFlowerComposerEntry): Promise<void> => {
-    if (entry.kind === 'selection') {
-      const preview = trimPreviewBody(entry.content);
-      updateContextPreview(contextPreviewStateForText({
-        title: 'Selected content',
-        subtitle: entry.detail,
-        item: fileItemForContextPreview(entry.sourcePath || entry.detail, 'Selected content'),
-        text: preview.body,
-        helper: preview.truncated ? 'Showing the first part of the selected content.' : undefined,
-      }));
-      return;
-    }
-
-    if (entry.kind === 'process_snapshot') {
-      const preview = trimPreviewBody(entry.content);
-      updateContextPreview(contextPreviewStateForText({
-        title: 'Process snapshot',
-        subtitle: entry.detail,
-        item: fileItemForContextPreview(`process://${entry.pid}`, entry.label),
-        text: preview.body,
-        helper: preview.truncated ? 'Showing the first part of the process snapshot.' : undefined,
-      }));
-      return;
-    }
-
-    if (entry.kind === 'terminal_selection') {
-      const preview = trimPreviewBody(entry.content);
-      updateContextPreview(contextPreviewStateForText({
-        title: 'Selected terminal output',
-        subtitle: entry.detail,
-        item: fileItemForContextPreview(entry.workingDir || entry.detail, 'Selected terminal output'),
-        text: preview.body,
-        helper: preview.truncated ? 'Showing the first part of the selected terminal output.' : undefined,
-      }));
-      return;
-    }
-
-    if (entry.kind === 'snapshot') {
-      const preview = trimPreviewBody(entry.content);
-      updateContextPreview(contextPreviewStateForText({
-        title: entry.label,
-        subtitle: entry.detail,
-        item: fileItemForContextPreview(`snapshot://${entry.label}`, entry.label),
-        text: preview.body,
-        helper: preview.truncated ? 'Showing the first part of this context snapshot.' : undefined,
-      }));
-      return;
-    }
-
-    if (entry.kind === 'attachment') {
-      await openAttachmentPreview({
-        title: entry.label,
-        subtitle: entry.detail,
-        item: fileItemForContextPreview(entry.detail === 'Queued attachment' ? entry.file.name : entry.detail, entry.file.name),
-        file: entry.file,
-        helper: 'Queued with your Ask Flower message.',
-      });
-      return;
-    }
-
-    if (entry.kind === 'directory') {
-      setContextBrowser({
-        path: entry.path,
-        title: entry.label,
-        subtitle: entry.path,
-      });
-      return;
-    }
-
-    if (entry.attachmentFile) {
-      await openFullFilePreview(entry.path);
-      return;
-    }
-
-    const seq = ++previewRequestSeq;
-    updateContextPreview(contextPreviewStateLoading({
-      title: entry.label,
-      subtitle: entry.path,
-      item: fileItemForContextPreview(entry.path, entry.label),
-      helper: 'Loading preview...',
+  const openTextContextPreview = (action: Extract<AskFlowerLinkedContextAction, { type: 'open_text_context_preview' }>) => {
+    const preview = trimPreviewBody(action.body);
+    updateContextPreview(contextPreviewStateForText({
+      title: action.title,
+      subtitle: action.subtitle,
+      item: fileItemForContextPreview(action.sourcePath || action.subtitle, action.title),
+      text: preview.body,
+      helper: preview.truncated ? 'Showing the first part of this context.' : undefined,
     }));
+  };
 
-    const client = protocol.client();
-    if (!client) {
-      updateContextPreview(contextPreviewStateForMessage({
-        title: entry.label,
-        subtitle: entry.path,
-        item: fileItemForContextPreview(entry.path, entry.label),
-        message: 'Failed to load file preview.',
-        helper: 'Connection is not ready.',
-        error: 'Connection is not ready.',
-      }));
+  const openProcessSnapshotPreview = (action: Extract<AskFlowerLinkedContextAction, { type: 'open_process_snapshot_preview' }>) => {
+    const preview = trimPreviewBody(action.body);
+    updateContextPreview(contextPreviewStateForText({
+      title: action.title,
+      subtitle: action.subtitle,
+      item: fileItemForContextPreview(`process://${action.pid}`, action.title),
+      text: preview.body,
+      helper: preview.truncated ? 'Showing the first part of the process snapshot.' : undefined,
+    }));
+  };
+
+  const openAttachmentSnapshotAction = async (
+    action: Extract<AskFlowerLinkedContextAction, { type: 'open_attachment_snapshot_preview' }>,
+  ) => {
+    const livePath = String(action.livePath ?? '').trim();
+    await openAttachmentPreview({
+      title: action.title,
+      subtitle: action.subtitle,
+      item: fileItemForContextPreview(livePath || (action.subtitle === 'Queued attachment' ? action.file.name : action.subtitle), action.file.name),
+      file: action.file,
+      helper: livePath ? 'Showing the attached snapshot that Flower will receive.' : 'Queued with your Ask Flower message.',
+      actionLabel: livePath ? 'Open live file preview' : undefined,
+      onAction: livePath
+        ? () => {
+            void openFullFilePreview(livePath);
+          }
+        : undefined,
+    });
+  };
+
+  const executeLinkedContextAction = async (action: AskFlowerLinkedContextAction): Promise<void> => {
+    if (action.type === 'open_live_file_preview') {
+      await openFullFilePreview(action.path);
       return;
     }
 
-    try {
-      const { bytes, meta } = await readFileBytesOnce({
-        client,
-        path: entry.path,
-        maxBytes: INLINE_FILE_PREVIEW_MAX_BYTES,
+    if (action.type === 'open_directory_browser') {
+      setContextBrowser({
+        path: action.path,
+        title: basenameFromPath(action.path),
+        subtitle: action.path,
       });
-      if (seq !== previewRequestSeq) return;
-
-      const descriptor = describeFilePreview(entry.path);
-      const canRenderText = descriptor.mode === 'text' || (descriptor.mode === 'binary' && isLikelyTextContent(bytes));
-      if (!canRenderText) {
-        updateContextPreview(contextPreviewStateForMessage({
-          title: entry.label,
-          subtitle: entry.path,
-          item: fileItemForContextPreview(entry.path, entry.label),
-          message: previewNoticeForMode(descriptor.mode),
-          actionLabel: 'Open full preview',
-          onAction: () => {
-            void openFullFilePreview(entry.path);
-          },
-        }));
-        return;
-      }
-
-      const helperParts: string[] = [];
-      if (meta.truncated) {
-        helperParts.push(`Showing the first ${Math.round(INLINE_FILE_PREVIEW_MAX_BYTES / 1024)} KB.`);
-      }
-      const nextPreview = await buildFileLikeContextPreview({
-        title: entry.label,
-        subtitle: entry.path,
-        item: fileItemForContextPreview(entry.path, entry.label),
-        name: entry.path,
-        bytes,
-        truncated: meta.truncated,
-        helper: helperParts.join(' ') || undefined,
-        actionLabel: 'Open full preview',
-        onAction: () => {
-          void openFullFilePreview(entry.path);
-        },
-      });
-      if (seq !== previewRequestSeq) {
-        revokeContextPreviewResources(nextPreview);
-        return;
-      }
-      updateContextPreview(nextPreview);
-    } catch (error) {
-      if (seq !== previewRequestSeq) return;
-      const message = error instanceof Error ? error.message : String(error);
-      updateContextPreview(contextPreviewStateForMessage({
-        title: entry.label,
-        subtitle: entry.path,
-        item: fileItemForContextPreview(entry.path, entry.label),
-        message: 'Failed to load file preview.',
-        helper: message || undefined,
-        error: message || 'Failed to load file preview.',
-        actionLabel: 'Retry',
-        onAction: () => {
-          void openContextEntry(entry);
-        },
-      }));
+      return;
     }
+
+    if (action.type === 'open_text_context_preview') {
+      openTextContextPreview(action);
+      return;
+    }
+
+    if (action.type === 'open_process_snapshot_preview') {
+      openProcessSnapshotPreview(action);
+      return;
+    }
+
+    await openAttachmentSnapshotAction(action);
   };
 
   return (
@@ -1048,11 +948,11 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                                     <button
                                       type="button"
                                       class={`flex min-w-0 flex-1 items-start gap-2 border px-2 py-1.5 text-left text-[11px] font-medium transition-colors cursor-pointer ${
-                                        hasAttachedSnapshot(entry) ? 'rounded-l-[0.95rem] rounded-r-none' : 'rounded-[0.95rem]'
+                                        entry.secondaryActions.length > 0 ? 'rounded-l-[0.95rem] rounded-r-none' : 'rounded-[0.95rem]'
                                       } ${entryButtonClass(entry)}`}
                                       title={entry.title}
                                       onClick={() => {
-                                        void openContextEntry(entry);
+                                        void executeLinkedContextAction(entry.primaryAction);
                                       }}
                                     >
                                       <span class="mt-0.5 shrink-0">{entryIcon(entry)}</span>
@@ -1061,21 +961,26 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                                         <span class="mt-0.5 block truncate font-mono text-[11px] leading-4 opacity-75">{entry.detail}</span>
                                       </span>
                                     </button>
-                                    <Show when={hasAttachedSnapshot(entry)}>
-                                      <button
-                                        type="button"
-                                        class={`-ml-px flex w-9 shrink-0 items-center justify-center rounded-l-none rounded-r-[0.95rem] border px-0 py-1.5 transition-colors cursor-pointer ${entryButtonClass(entry)}`}
-                                        aria-label={`Preview attached snapshot for ${entry.label}`}
-                                        title={`Preview attached snapshot for ${entry.label}`}
-                                        onClick={() => {
-                                          if (hasAttachedSnapshot(entry)) {
-                                            void openAttachedSnapshotPreview(entry);
-                                          }
-                                        }}
-                                      >
-                                        <Paperclip class="size-3.5" />
-                                      </button>
-                                    </Show>
+                                    <For each={entry.secondaryActions}>
+                                      {(action, index) => {
+                                        const label = secondaryActionLabel(action, entry);
+                                        return (
+                                          <button
+                                            type="button"
+                                            class={`-ml-px flex w-9 shrink-0 items-center justify-center border px-0 py-1.5 transition-colors cursor-pointer ${
+                                              index() === entry.secondaryActions.length - 1 ? 'rounded-l-none rounded-r-[0.95rem]' : 'rounded-none'
+                                            } ${entryButtonClass(entry)}`}
+                                            aria-label={label}
+                                            title={label}
+                                            onClick={() => {
+                                              void executeLinkedContextAction(action);
+                                            }}
+                                          >
+                                            {secondaryActionIcon(action)}
+                                          </button>
+                                        );
+                                      }}
+                                    </For>
                                   </div>
                                 )}
                               </For>

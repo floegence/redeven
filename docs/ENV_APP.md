@@ -172,6 +172,17 @@ Implications:
 - Product-owned floating tools have one renderer path per feature instead of a parallel in-app plus child-window split.
 - Desktop child windows remain available only for legitimate top-level navigation flows that belong to separate browser windows, not for internal floating tools.
 
+## Ask Flower Linked Context
+
+Ask Flower linked context separates live references from materialized snapshots:
+
+- Live file references open through the shared `FilePreviewContext.openPreview()` path. The composer does not read or render live file bytes inline.
+- Directory references open the scoped floating file browser.
+- Materialized context such as selected text, terminal output, process snapshots, Git/text snapshots, and queued attachment snapshots can render inside the Ask Flower context preview window.
+- When a file reference also has a queued attachment snapshot, the file chip primary action opens the live preview and the secondary paperclip action previews the snapshot Flower will receive.
+
+This keeps File Preview as the single owner of live file loading, file-type rendering, edit state, and recovery UI while allowing the Ask Flower composer to remain a focused context-action surface.
+
 ## Git browse stash workflow
 
 Git stash stays a workflow overlay owned by Git browse rather than a separate primary navigation mode:
