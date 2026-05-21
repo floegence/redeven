@@ -593,6 +593,7 @@ type ActivityDetailRef struct {
 	ToolID    string `json:"toolId,omitempty"`
 	FetchMode string `json:"fetchMode"` // inline|endpoint
 	Endpoint  string `json:"endpoint,omitempty"`
+	Payload   any    `json:"payload,omitempty"`
 	Title     string `json:"title"`
 }
 
