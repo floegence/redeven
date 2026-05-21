@@ -1450,4 +1450,63 @@ describe('CodexTranscript', () => {
 
     dispose();
   });
+
+  it('switches the open file diff when another edit row in the same activity is clicked', async () => {
+    const { host, dispose } = renderTranscript([
+      {
+        id: 'item_multi_file_change',
+        type: 'fileChange',
+        changes: [
+          {
+            path: 'src/ui/codex/FirstChangedFile.tsx',
+            kind: 'modified',
+            diff: [
+              'diff --git a/src/ui/codex/FirstChangedFile.tsx b/src/ui/codex/FirstChangedFile.tsx',
+              '--- a/src/ui/codex/FirstChangedFile.tsx',
+              '+++ b/src/ui/codex/FirstChangedFile.tsx',
+              '@@ -1 +1 @@',
+              '-const first = "old";',
+              '+const first = "new";',
+            ].join('\n'),
+          },
+          {
+            path: 'src/ui/codex/SecondChangedFile.tsx',
+            kind: 'modified',
+            diff: [
+              'diff --git a/src/ui/codex/SecondChangedFile.tsx b/src/ui/codex/SecondChangedFile.tsx',
+              '--- a/src/ui/codex/SecondChangedFile.tsx',
+              '+++ b/src/ui/codex/SecondChangedFile.tsx',
+              '@@ -1 +1 @@',
+              '-const second = "old";',
+              '+const second = "new";',
+            ].join('\n'),
+          },
+        ],
+        order: 0,
+      },
+    ]);
+
+    const editRows = Array.from(host.querySelectorAll('[data-codex-activity-item-kind="file_change"]')) as HTMLButtonElement[];
+    expect(editRows).toHaveLength(2);
+
+    editRows[0]?.click();
+    await flushAsync();
+
+    expect(host.querySelector('.codex-chat-file-change')).toBeTruthy();
+    expect(editRows[0]?.classList.contains('codex-activity-item-selected')).toBe(true);
+    expect(host.textContent).toContain('FirstChangedFile.tsx');
+    expect(host.textContent).toContain('+const first = "new";');
+    expect(host.textContent).not.toContain('+const second = "new";');
+
+    editRows[1]?.click();
+    await flushAsync();
+
+    expect(editRows[0]?.classList.contains('codex-activity-item-selected')).toBe(false);
+    expect(editRows[1]?.classList.contains('codex-activity-item-selected')).toBe(true);
+    expect(host.textContent).toContain('SecondChangedFile.tsx');
+    expect(host.textContent).toContain('+const second = "new";');
+    expect(host.textContent).not.toContain('+const first = "new";');
+
+    dispose();
+  });
 });
