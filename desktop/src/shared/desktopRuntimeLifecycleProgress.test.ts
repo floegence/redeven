@@ -76,11 +76,10 @@ describe('desktopRuntimeLifecycleProgress', () => {
     ]);
   });
 
-  it('keeps confirmation and stop verification in restart/update workflows', () => {
+  it('keeps stop verification in uninterrupted restart/update workflows', () => {
     expect(runtimeLifecyclePhaseSequence('ssh_host', 'restart')).toEqual([
       'checking_host',
       'checking_runtime_package',
-      'awaiting_confirmation',
       'stopping_runtime_process',
       'verifying_runtime_stopped',
       'starting_runtime_process',
@@ -90,7 +89,6 @@ describe('desktopRuntimeLifecycleProgress', () => {
     expect(runtimeLifecyclePhaseSequence('ssh_host', 'update')).toEqual([
       'checking_host',
       'checking_runtime_package',
-      'awaiting_confirmation',
       'stopping_runtime_process',
       'verifying_runtime_stopped',
       'detecting_platform',

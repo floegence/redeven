@@ -1153,7 +1153,7 @@ describe('sshRuntime integration', () => {
     await removeFakeSSHFixture(fixture);
   }, SSH_RUNTIME_MAINTENANCE_TEST_TIMEOUT_MS);
 
-  it('restarts an active SSH runtime missing Desktop runtime-control after explicit user confirmation', async () => {
+  it('restarts an active SSH runtime missing Desktop runtime-control after explicit user action', async () => {
     const fixture = await createFakeSSHFixture('missing_runtime_control_active');
     let runtime: ManagedSSHRuntime | null = null;
     try {
@@ -1359,7 +1359,7 @@ describe('sshRuntime integration', () => {
     await removeFakeSSHFixture(fixture);
   });
 
-  it('replaces an active unsupported runtime after the user explicitly confirms an update', async () => {
+  it('replaces an active unsupported runtime after the user explicitly requests an update', async () => {
     const fixture = await createFakeSSHFixture('attached_unsupported_active');
     let runtime: ManagedSSHRuntime | null = null;
     try {

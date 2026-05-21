@@ -650,8 +650,6 @@ export function EnvSettingsPage() {
     setTargetVersionInput(preferred);
   });
 
-  const [upgradeOpen, setUpgradeOpen] = createSignal(false);
-  const [restartOpen, setRestartOpen] = createSignal(false);
   const statusLabel = createMemo(() => formatAgentStatusLabel(displayedStatus()));
 
   const refreshSettingsPage = async () => {
@@ -692,38 +690,30 @@ export function EnvSettingsPage() {
   });
 
   const startUpgrade = async () => {
-    try {
-      const state = upgradeState();
-      if (
-        state.actionMethod === 'desktop_local_update_handoff'
-        || (
-          runtimeMaintenanceMethodUsesDesktop(state.actionMethod)
-          && !state.requiresTargetVersion
-          && state.actionMethod !== 'desktop_ssh_force_update'
-        )
-      ) {
-        const desktopResult = await performRuntimeMaintenanceActionInDesktopShell({
-          action: 'upgrade',
-          target_version: targetUpgradeVersion(),
-        });
-        if (desktopResult?.ok) {
-          notify.success('Desktop handoff started', desktopResult.message || 'Redeven Desktop is handling this update.');
-        } else {
-          notify.error('Update failed', desktopResult?.message || state.message || 'Redeven Desktop could not start this update.');
-        }
-        return;
+    const state = upgradeState();
+    if (
+      state.actionMethod === 'desktop_local_update_handoff'
+      || (
+        runtimeMaintenanceMethodUsesDesktop(state.actionMethod)
+        && !state.requiresTargetVersion
+        && state.actionMethod !== 'desktop_ssh_force_update'
+      )
+    ) {
+      const desktopResult = await performRuntimeMaintenanceActionInDesktopShell({
+        action: 'upgrade',
+        target_version: targetUpgradeVersion(),
+      });
+      if (desktopResult?.ok) {
+        notify.success('Desktop handoff started', desktopResult.message || 'Redeven Desktop is handling this update.');
+      } else {
+        notify.error('Update failed', desktopResult?.message || state.message || 'Redeven Desktop could not start this update.');
       }
-      await runtimeUpdate.maintenance.startUpgrade(targetUpgradeVersion());
-    } finally {
-      setUpgradeOpen(false);
+      return;
     }
+    await runtimeUpdate.maintenance.startUpgrade(targetUpgradeVersion());
   };
   const startRestart = async () => {
-    try {
-      await runtimeUpdate.maintenance.startRestart();
-    } finally {
-      setRestartOpen(false);
-    }
+    await runtimeUpdate.maintenance.startRestart();
   };
 
   const connectOverlayMessage = createMemo(() => (maintaining() ? 'Runtime restarting...' : env.connectionOverlayMessage()));
@@ -2981,7 +2971,7 @@ export function EnvSettingsPage() {
                     size="sm"
                     variant="outline"
                     class="w-full sm:w-auto"
-                    onClick={() => setRestartOpen(true)}
+                    onClick={() => void startRestart()}
                     loading={isRestarting()}
                     disabled={!canStartRestart()}
                   >
@@ -2992,7 +2982,7 @@ export function EnvSettingsPage() {
                       size="sm"
                       variant="default"
                       class="w-full sm:w-auto"
-                      onClick={() => setUpgradeOpen(true)}
+                      onClick={() => void startUpgrade()}
                       loading={isUpgrading()}
                       disabled={!canStartUpgrade()}
                     >
@@ -4212,60 +4202,6 @@ export function EnvSettingsPage() {
           });
         }}
       />
-
-      {/* Update Runtime Confirmation Dialog */}
-      <ConfirmDialog
-        open={upgradeOpen()}
-        onOpenChange={(open) => setUpgradeOpen(open)}
-        title={maintenanceContext()?.upgrade.title || (upgradeState().policy === 'desktop_release' ? 'Update Redeven Desktop?' : 'Update Runtime Service?')}
-        confirmText={maintenanceContext()?.upgrade.confirm_label || (upgradeState().policy === 'desktop_release' ? 'Continue' : 'Update')}
-        loading={isUpgrading()}
-        onConfirm={() => void startUpgrade()}
-      >
-        <div class="space-y-3">
-          <Show
-            when={!upgradeState().requiresTargetVersion}
-            fallback={(
-              <>
-                <p class="text-sm">This Runtime Service is persistent and may have live work.</p>
-                <p class="text-xs text-muted-foreground">Active work: {activeWorkSummary()}.</p>
-                <p class="text-xs text-muted-foreground">You will reconnect automatically after the runtime comes back online.</p>
-                <p class="text-xs text-muted-foreground">If the secure session needs to be verified again, this page will ask for the access password without a manual refresh.</p>
-                <p class="text-xs text-muted-foreground">
-                  Target version: <span class="font-mono">{targetUpgradeVersion() || '—'}</span>
-                </p>
-                <Show when={targetUpgradeVersion() && !targetUpgradeVersionValid()}>
-                  <p class="text-xs text-destructive">Target version is invalid. Please use a release tag like v1.2.3.</p>
-                </Show>
-              </>
-            )}
-          >
-            <p class="text-sm">{upgradeState().message || 'This Runtime Service is managed by Redeven Desktop.'}</p>
-            <p class="text-xs text-muted-foreground">Active work: {activeWorkSummary()}.</p>
-            <Show when={maintenanceContext()?.upgrade.detail}>
-              <p class="text-xs text-muted-foreground">{maintenanceContext()?.upgrade.detail}</p>
-            </Show>
-            <p class="text-xs text-muted-foreground">You will reconnect automatically if this action restarts the Runtime Service.</p>
-          </Show>
-        </div>
-      </ConfirmDialog>
-
-      {/* Restart Runtime Confirmation Dialog */}
-      <ConfirmDialog
-        open={restartOpen()}
-        onOpenChange={(open) => setRestartOpen(open)}
-        title="Restart Runtime Service?"
-        confirmText="Restart"
-        loading={isRestarting()}
-        onConfirm={() => void startRestart()}
-      >
-        <div class="space-y-3">
-          <p class="text-sm">This Runtime Service is persistent and may have live work.</p>
-          <p class="text-xs text-muted-foreground">Active work: {activeWorkSummary()}.</p>
-          <p class="text-xs text-muted-foreground">You will reconnect automatically after the runtime comes back online.</p>
-          <p class="text-xs text-muted-foreground">If the secure session needs to be verified again, this page will ask for the access password without a manual refresh.</p>
-        </div>
-      </ConfirmDialog>
 
       <ConfirmDialog
         open={Boolean(filesystemWriteConfirmTarget())}

@@ -209,7 +209,7 @@ describe('main routing', () => {
     expect(sshStartEnd).toBeGreaterThan(sshStartStart);
     const sshStartSrc = mainSrc.slice(sshStartStart, sshStartEnd);
     expect(sshStartSrc).toContain('options.forceRuntimeUpdate !== true');
-    expect(sshStartSrc).toContain('options.allowActiveWorkReplacement !== true');
+    expect(sshStartSrc).toContain('!activeWorkReplacementAllowed');
     expect(sshStartSrc).toContain('desktopSSHRuntimeAffectingSettingsMatch(existingRecord.details, sshDetails)');
 
     const sshStartTaskEnd = mainSrc.indexOf('const managedSSHRuntime = await ensureManagedSSHRuntimeReady', sshStartStart);
@@ -218,7 +218,7 @@ describe('main routing', () => {
     expect(sshStartTaskSrc).toContain("if (statusProbe.status === 'blocked')");
     expect(sshStartTaskSrc).toContain('const replacingReadySSHRuntime = action === \'restart_environment_runtime\'');
     expect(sshStartTaskSrc).toContain('await stopManagedSSHRuntimeProcess({');
-    expect(sshStartTaskSrc).toContain('options.allowActiveWorkReplacement !== true');
+    expect(sshStartTaskSrc).toContain('!maintenance.can_desktop_restart');
     expect(sshStartTaskSrc).toContain('maintenance.can_desktop_restart');
 
     const openSSHStart = mainSrc.indexOf('async function openSSHEnvironmentFromLauncher(');

@@ -1254,7 +1254,7 @@ function blockedRuntimePrimaryActionDetail(
       return `This ${runtimeMaintenanceSubject(environment)} is not running. Start the runtime again; Open becomes available after the runtime reports ready.`;
     }
     if (desktopRuntimeMaintenanceRequiresRestart(maintenance)) {
-      return `This ${runtimeMaintenanceSubject(environment)} needs a confirmed restart before it can open this environment. Open stays locked until the runtime restarts and reports ready.`;
+      return `This ${runtimeMaintenanceSubject(environment)} needs a successful restart before it can open this environment. Open stays locked until the runtime restarts and reports ready.`;
     }
     const presentation = runtimeUpdatePresentation(environment);
     if (presentation.uses_desktop_update_handoff) {

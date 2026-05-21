@@ -209,7 +209,6 @@ export function buildDesktopRuntimeOperationPlans(
       hasManagement ? input.running ? 'available' : 'unavailable' : 'hidden',
       method,
       {
-        requiresConfirmation: input.running,
         reasonCode: input.running ? undefined : 'runtime_not_started',
         message: input.running ? activeWorkMessage(input.runtime_service) : 'Runtime is not running.',
         menuVisibility: hasManagement ? 'stable' : 'hidden',
@@ -226,7 +225,6 @@ export function buildDesktopRuntimeOperationPlans(
         : 'hidden',
       method,
       {
-        requiresConfirmation: input.running || maintenance?.has_active_work === true,
         reasonCode: managementBlocked
           ? 'runtime_target_unavailable'
           : blockedByUpdate
@@ -251,7 +249,6 @@ export function buildDesktopRuntimeOperationPlans(
         : 'hidden',
       updateMethod,
       {
-        requiresConfirmation: input.running || maintenance?.has_active_work === true,
         reasonCode: blockedByUpdate ? 'runtime_update_required' : undefined,
         label: updateMethod === 'desktop_local_update_handoff' ? 'Update Redeven Desktop' : undefined,
         message: managementBlocked ? managementBlockedStatus.message : maintenance?.message ?? updateMessage,
