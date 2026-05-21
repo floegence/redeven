@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import { AI_PROVIDER_PRESET_CATALOG, defaultBaseURLForProviderType, recommendedModelsForProviderType } from './aiCatalog';
+import {
+  AI_PROVIDER_PRESET_CATALOG,
+  AI_PROVIDER_TYPE_OPTIONS,
+  defaultBaseURLForProviderType,
+  providerBrandForType,
+  providerDisplayName,
+  providerTypeLabel,
+  providerUsesCustomConnectionName,
+  recommendedModelsForProviderType,
+} from './aiCatalog';
 import type { AIProviderType } from './types';
 
 function modelNames(providerType: AIProviderType): string[] {
@@ -42,5 +51,23 @@ describe('AI provider preset catalog', () => {
 
   it('uses the current Z.AI OpenAI-compatible endpoint for new ChatGLM providers', () => {
     expect(defaultBaseURLForProviderType('chatglm')).toBe('https://api.z.ai/api/paas/v4/');
+  });
+
+  it('keeps provider display metadata centralized for settings UI', () => {
+    const optionTypes = AI_PROVIDER_TYPE_OPTIONS.map((option) => option.value);
+
+    expect(optionTypes).toEqual(['openai', 'anthropic', 'moonshot', 'chatglm', 'deepseek', 'qwen', 'openai_compatible']);
+    for (const providerType of optionTypes) {
+      const brand = providerBrandForType(providerType);
+      expect(brand.label).toBe(providerTypeLabel(providerType));
+      expect(brand.icon.paths.join('')).not.toEqual('');
+      expect(brand.icon.viewBox).not.toEqual('');
+    }
+    expect(providerBrandForType('deepseek').icon.title).toBe('DeepSeek');
+    expect(providerUsesCustomConnectionName('openai')).toBe(false);
+    expect(providerUsesCustomConnectionName('deepseek')).toBe(false);
+    expect(providerUsesCustomConnectionName('openai_compatible')).toBe(true);
+    expect(providerDisplayName({ type: 'deepseek', name: 'Personal DeepSeek' })).toBe('DeepSeek');
+    expect(providerDisplayName({ type: 'openai_compatible', name: 'Gateway A' })).toBe('Gateway A');
   });
 });

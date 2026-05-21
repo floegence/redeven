@@ -85,6 +85,7 @@ function icon(name: string) {
 }
 
 vi.mock('@floegence/floe-webapp-core', () => ({
+  cn: (...values: any[]) => values.filter(Boolean).join(' '),
   useNotification: () => notificationMocks,
 }));
 

@@ -147,6 +147,11 @@ describe('AIProviderDialog', () => {
     expect(host.textContent).toContain('Save Provider');
     expect(host.textContent).toContain('Key ready');
     expect(host.textContent).toContain('OpenAI built-in web search');
+    expect(host.textContent).not.toContain('Status');
+    expect(host.textContent).not.toContain('enabled model(s)');
+    expect(host.textContent).not.toContain('Connection Name');
+    expect(host.querySelector('[data-provider-brand="openai"]')).not.toBeNull();
+    expect(host.querySelector('[data-provider-brand="deepseek"]')).not.toBeNull();
     expect(host.textContent).not.toContain('provider_id');
     expect(host.textContent).not.toContain('Save key');
     expect(host.querySelector('[data-dialog-class]')?.getAttribute('data-dialog-class')).toContain('w-[min(68rem,96vw)]');
@@ -230,11 +235,48 @@ describe('AIProviderDialog', () => {
       host,
     );
 
+    expect(host.textContent).toContain('Connection Name');
     expect(host.textContent).not.toContain('Brave API Key');
     clickButton(host, 'Advanced');
     expect(host.textContent).toContain('Web Search');
     expect(host.textContent).toContain('Brave API Key');
     expect(host.textContent).not.toContain('Save Brave key');
     expect(host.textContent).not.toContain('Clear Brave');
+  });
+
+  it('marks already enabled recommended models as added and keeps remaining presets usable', () => {
+    const onAddSelectedPreset = vi.fn();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(
+      () => (
+        <AIProviderDialog
+          {...makeProps({
+            onAddSelectedPreset,
+            recommendedModels: [
+              {
+                model_name: 'gpt-5.2',
+                context_window: 400000,
+                max_output_tokens: 128000,
+              },
+              {
+                model_name: 'gpt-5.4',
+                context_window: 400000,
+                max_output_tokens: 128000,
+              },
+            ],
+          })}
+        />
+      ),
+      host,
+    );
+
+    const addedButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Added') as HTMLButtonElement;
+    expect(addedButton).toBeTruthy();
+    expect(addedButton.disabled).toBe(true);
+
+    clickButton(host, 'Use');
+    expect(onAddSelectedPreset).toHaveBeenCalledWith('gpt-5.4');
   });
 });

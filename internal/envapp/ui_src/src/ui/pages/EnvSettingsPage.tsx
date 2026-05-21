@@ -60,11 +60,15 @@ import {
   normalizeInputModalities,
   normalizePositiveInteger,
   providerBuiltInWebSearchLabel,
+  providerDisplayName,
   providerNeedsWebSearchConfig,
   providerPresetForType,
+  providerTypeLabel,
   providerTypeRequiresBaseURL,
+  providerUsesCustomConnectionName,
   recommendedModelsForProviderType,
 } from './settings/aiCatalog';
+import { ProviderBrandIcon } from './settings/ProviderBrandIcon';
 import { buildPermissionPolicyValue } from './settings/permissionPolicy';
 import { PermissionMatrixTable, PermissionRuleTable } from './settings/PermissionPolicyTables';
 import {
@@ -320,7 +324,7 @@ function collectAIModelOptions(rows: AIProviderRow[]): AIModelOption[] {
   for (const p of Array.isArray(rows) ? rows : []) {
     const providerID = String(p?.id ?? '').trim();
     if (!providerID) continue;
-    const providerName = String(p?.name ?? '').trim() || providerID;
+    const providerName = providerDisplayName(p, providerID);
     for (const m of Array.isArray(p?.models) ? p.models : []) {
       const modelName = String(m?.model_name ?? '').trim();
       if (!modelName) continue;
@@ -1073,7 +1077,7 @@ export function EnvSettingsPage() {
         type: p.type,
         models: [] as AIProviderModel[],
       };
-      const name = String(p.name ?? '').trim();
+      const name = providerUsesCustomConnectionName(p.type) ? String(p.name ?? '').trim() : providerTypeLabel(p.type);
       if (name) out.name = name;
       const baseURL = String(p.base_url ?? '').trim();
       if (baseURL) out.base_url = baseURL;
@@ -1310,7 +1314,9 @@ export function EnvSettingsPage() {
   const normalizeAIProviders = (rows: AIProviderRow[]): AIProviderRow[] => {
     const list: AIProviderRow[] = (Array.isArray(rows) ? rows : []).map((p) => ({
       id: String((p as any).id ?? ''),
-      name: String((p as any).name ?? ''),
+      name: providerUsesCustomConnectionName((p as any).type as AIProviderType)
+        ? String((p as any).name ?? '')
+        : providerTypeLabel((p as any).type as AIProviderType),
       type: (p as any).type as AIProviderType,
       base_url: String((p as any).base_url ?? ''),
       web_search: normalizeAIProviderWebSearchForType((p as any).type as AIProviderType, (p as any).web_search),
@@ -3843,7 +3849,7 @@ export function EnvSettingsPage() {
 	                      <For each={aiProviders()}>
 	                        {(provider, index) => {
 	                          const providerID = () => String(provider.id ?? '').trim();
-	                          const displayName = () => String(provider.name ?? '').trim() || `Provider ${index() + 1}`;
+	                          const displayName = () => providerDisplayName(provider, `Provider ${index() + 1}`);
 	                          const modelNames = () =>
 	                            (Array.isArray(provider.models) ? provider.models : [])
 	                              .map((model) => String(model.model_name ?? '').trim())
@@ -3853,15 +3859,20 @@ export function EnvSettingsPage() {
 	                          return (
 	                            <div class="rounded-lg border border-border bg-background p-4 shadow-sm">
 	                              <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-	                                <div class="min-w-0 space-y-2">
-	                                  <div class="flex flex-wrap items-center gap-2">
-	                                    <div class="break-words text-sm font-semibold text-foreground">{displayName()}</div>
-	                                    <SettingsPill>{provider.type === 'openai_compatible' ? 'OpenAI Compatible' : provider.type}</SettingsPill>
-	                                    <Show when={aiCurrentModelID().startsWith(`${providerID()}/`)}>
-	                                      <SettingsPill tone="success">Current default</SettingsPill>
-	                                    </Show>
+	                                <div class="flex min-w-0 items-start gap-3">
+	                                  <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-muted/50 ring-1 ring-border">
+	                                    <ProviderBrandIcon type={provider.type} class="h-5 w-5" />
 	                                  </div>
-	                                  <div class="text-xs text-muted-foreground">{modelNames().length} enabled model(s)</div>
+	                                  <div class="min-w-0 space-y-2">
+	                                    <div class="flex flex-wrap items-center gap-2">
+	                                      <div class="break-words text-sm font-semibold text-foreground">{displayName()}</div>
+	                                      <SettingsPill>{providerTypeLabel(provider.type)}</SettingsPill>
+	                                      <Show when={aiCurrentModelID().startsWith(`${providerID()}/`)}>
+	                                        <SettingsPill tone="success">Current default</SettingsPill>
+	                                      </Show>
+	                                    </div>
+	                                    <div class="text-xs text-muted-foreground">{modelNames().length} enabled model(s)</div>
+	                                  </div>
 	                                </div>
 	                                <div class="flex items-center gap-2">
 	                                  <Button size="sm" variant="outline" onClick={() => openAIProviderDialog(index())} disabled={!canInteract()}>
@@ -4123,20 +4134,20 @@ export function EnvSettingsPage() {
             effective_context_window_percent: normalizeEffectiveContextPercent(model.effective_context_window_percent),
             input_modalities: normalizeInputModalities(model.input_modalities),
           }));
-          updateAIProviderDialogDraft((current) => ({
-            ...current,
-            name:
-              !String(current.name ?? '').trim() || String(current.name ?? '').trim() === providerPresetForType(current.type).name
-                ? nextPreset.name
-                : current.name,
-            type: nextType,
-            base_url: defaultBaseURLForProviderType(nextType),
-            web_search: normalizeAIProviderWebSearchForType(nextType, nextPreset.web_search),
-            models:
-              nextPresetModels.length > 0
-                ? nextPresetModels
-                : [{ model_name: '', context_window: defaultContextWindowForProviderType(nextType), input_modalities: ['text'] }],
-          }));
+          updateAIProviderDialogDraft((current) => {
+            if (current.type === nextType) return current;
+            return {
+              ...current,
+              name: providerUsesCustomConnectionName(nextType) ? nextPreset.name : providerTypeLabel(nextType),
+              type: nextType,
+              base_url: defaultBaseURLForProviderType(nextType),
+              web_search: normalizeAIProviderWebSearchForType(nextType, nextPreset.web_search),
+              models:
+                nextPresetModels.length > 0
+                  ? nextPresetModels
+                  : [{ model_name: '', context_window: defaultContextWindowForProviderType(nextType), input_modalities: ['text'] }],
+            };
+          });
         }}
         onChangeBaseURL={(value) => {
           updateAIProviderDialogDraft((current) => ({ ...current, base_url: value }));

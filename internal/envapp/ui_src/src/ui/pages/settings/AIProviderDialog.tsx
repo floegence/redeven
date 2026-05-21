@@ -10,8 +10,11 @@ import {
   modelSupportsImageInput,
   providerBuiltInWebSearchLabel,
   providerNeedsWebSearchConfig,
+  providerTypeLabel,
+  providerUsesCustomConnectionName,
   providerTypeRequiresBaseURL,
 } from './aiCatalog';
+import { ProviderBrandIcon } from './ProviderBrandIcon';
 import {
   AdvancedCollapse,
   CapabilityTag,
@@ -54,10 +57,6 @@ export type AIProviderDialogProps = {
   onRemoveModel: (index: number) => void;
 };
 
-function providerTypeLabel(providerType: AIProviderType): string {
-  return AI_PROVIDER_TYPE_OPTIONS.find((item) => item.value === providerType)?.label ?? providerType;
-}
-
 export function AIProviderDialog(props: AIProviderDialogProps) {
   const [advancedOpen, setAdvancedOpen] = createSignal(false);
   const [customModelName, setCustomModelName] = createSignal('');
@@ -98,6 +97,10 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
           const provider = () => providerAccessor();
           const providerID = () => String(provider().id ?? '').trim();
           const models = () => (Array.isArray(provider().models) ? provider().models : []);
+          const enabledModelNames = createMemo(
+            () => new Set(models().map((model) => String(model.model_name ?? '').trim()).filter(Boolean)),
+          );
+          const recommendedModelEnabled = (modelName: string) => enabledModelNames().has(String(modelName ?? '').trim());
           return (
             <div class="space-y-5">
               <section class="space-y-3">
@@ -110,15 +113,20 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                         <button
                           type="button"
                           class={cn(
-                            'cursor-pointer rounded-lg border px-3 py-3 text-left transition hover:border-primary/60 hover:bg-primary/5',
+                            'cursor-pointer rounded-lg border px-3 py-3 text-left transition hover:border-primary/60 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60',
                             active() ? 'border-primary bg-primary/10 ring-1 ring-primary/20' : 'border-border bg-background',
                           )}
                           onClick={() => props.onChangeType(item.value)}
                           disabled={!props.canInteract}
                         >
-                          <div class="text-sm font-semibold text-foreground">{item.label}</div>
-                          <div class="mt-1 text-[11px] text-muted-foreground">
-                            {item.value === 'openai_compatible' ? 'Custom gateway' : 'Native connection'}
+                          <div class="flex items-start gap-3">
+                            <div class={cn('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-muted/60 ring-1 ring-border', active() ? 'bg-background ring-primary/30' : '')}>
+                              <ProviderBrandIcon type={item.value} class="h-5 w-5" />
+                            </div>
+                            <div class="min-w-0">
+                              <div class="text-sm font-semibold text-foreground">{item.label}</div>
+                              <div class="mt-1 text-[11px] text-muted-foreground">{item.description}</div>
+                            </div>
                           </div>
                         </button>
                       );
@@ -127,12 +135,12 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                 </div>
               </section>
 
-              <section class="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,0.65fr)]">
-                <div class="space-y-3 rounded-lg border border-border bg-background p-3">
-                  <SubSectionHeader title="Connection" description="Secrets are saved with the provider; existing keys are never shown again." />
-                  <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <section class="space-y-3 rounded-lg border border-border bg-background p-3">
+                <SubSectionHeader title="Connection" description="Secrets are saved with the provider; existing keys are never shown again." />
+                <div class={cn('grid grid-cols-1 gap-3', providerUsesCustomConnectionName(provider().type) ? 'sm:grid-cols-2' : '')}>
+                  <Show when={providerUsesCustomConnectionName(provider().type)}>
                     <div>
-                      <FieldLabel>Name</FieldLabel>
+                      <FieldLabel>Connection Name</FieldLabel>
                       <Input
                         value={provider().name}
                         onInput={(event) => props.onChangeName(event.currentTarget.value)}
@@ -142,38 +150,28 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                         disabled={!props.canInteract}
                       />
                     </div>
-                    <div>
-                      <FieldLabel hint={props.keySet ? 'saved key will remain if left blank' : 'required before use'}>API Key</FieldLabel>
-                      <Input
-                        type="password"
-                        value={props.keyDraft}
-                        onInput={(event) => props.onChangeKeyDraft(event.currentTarget.value)}
-                        placeholder={props.keySet ? 'Keep existing key' : 'Paste API key'}
-                        size="sm"
-                        class="w-full"
-                        disabled={!props.canInteract || !props.canAdmin || !providerID()}
-                      />
-                    </div>
-                  </div>
-                  <div class="flex flex-wrap gap-2">
-                    <SettingsPill tone={props.keySet || String(props.keyDraft ?? '').trim() ? 'success' : 'default'}>
-                      {props.keySet || String(props.keyDraft ?? '').trim() ? 'Key ready' : 'Needs key'}
-                    </SettingsPill>
-                    <SettingsPill>{providerTypeLabel(provider().type)}</SettingsPill>
-                    <Show when={providerBuiltInWebSearchLabel(provider().type)}>
-                      {(label) => <SettingsPill tone="success">{label()}</SettingsPill>}
-                    </Show>
+                  </Show>
+                  <div>
+                    <FieldLabel hint={props.keySet ? 'saved key will remain if left blank' : 'required before use'}>API Key</FieldLabel>
+                    <Input
+                      type="password"
+                      value={props.keyDraft}
+                      onInput={(event) => props.onChangeKeyDraft(event.currentTarget.value)}
+                      placeholder={props.keySet ? 'Keep existing key' : 'Paste API key'}
+                      size="sm"
+                      class="w-full"
+                      disabled={!props.canInteract || !props.canAdmin || !providerID()}
+                    />
                   </div>
                 </div>
-
-                <div class="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
-                  <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</div>
-                  <div class="text-2xl font-semibold text-foreground">{models().filter((m) => String(m.model_name ?? '').trim()).length}</div>
-                  <div class="text-xs text-muted-foreground">enabled model(s)</div>
-                  <div class="flex flex-wrap gap-1.5 pt-1">
-                    <CapabilityTag active={models().some((m) => modelSupportsImageInput(m.input_modalities))}>Image Input</CapabilityTag>
-                    <CapabilityTag active>{providerNeedsWebSearchConfig(provider().type) ? 'Configurable Search' : 'Provider Defaults'}</CapabilityTag>
-                  </div>
+                <div class="flex flex-wrap gap-2">
+                  <SettingsPill tone={props.keySet || String(props.keyDraft ?? '').trim() ? 'success' : 'default'}>
+                    {props.keySet || String(props.keyDraft ?? '').trim() ? 'Key ready' : 'Needs key'}
+                  </SettingsPill>
+                  <SettingsPill>{providerTypeLabel(provider().type)}</SettingsPill>
+                  <Show when={providerBuiltInWebSearchLabel(provider().type)}>
+                    {(label) => <SettingsPill tone="success">{label()}</SettingsPill>}
+                  </Show>
                 </div>
               </section>
 
@@ -195,29 +193,32 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                 >
                   <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
                     <For each={props.recommendedModels}>
-                      {(preset) => (
-                        <div class="rounded-lg border border-border bg-background p-3">
-                          <div class="flex items-start justify-between gap-3">
-                            <div class="min-w-0">
-                              <div class="break-all font-mono text-sm font-semibold text-foreground">{preset.model_name}</div>
-                              <div class="mt-1 text-xs text-muted-foreground">
-                                Context {formatTokenCount(preset.context_window)}
-                                <Show when={preset.max_output_tokens}> · Output {formatTokenCount(Number(preset.max_output_tokens ?? 0))}</Show>
+                      {(preset) => {
+                        const enabled = () => recommendedModelEnabled(preset.model_name);
+                        return (
+                          <div class="rounded-lg border border-border bg-background p-3">
+                            <div class="flex items-start justify-between gap-3">
+                              <div class="min-w-0">
+                                <div class="break-all font-mono text-sm font-semibold text-foreground">{preset.model_name}</div>
+                                <div class="mt-1 text-xs text-muted-foreground">
+                                  Context {formatTokenCount(preset.context_window)}
+                                  <Show when={preset.max_output_tokens}> · Output {formatTokenCount(Number(preset.max_output_tokens ?? 0))}</Show>
+                                </div>
                               </div>
+                              <Button size="sm" variant="outline" onClick={() => props.onAddSelectedPreset(preset.model_name)} disabled={!props.canInteract || enabled()}>
+                                {enabled() ? 'Added' : 'Use'}
+                              </Button>
                             </div>
-                            <Button size="sm" variant="outline" onClick={() => props.onAddSelectedPreset(preset.model_name)} disabled={!props.canInteract}>
-                              Use
-                            </Button>
+                            <div class="mt-2 flex flex-wrap gap-1.5">
+                              <CapabilityTag active>Text</CapabilityTag>
+                              <CapabilityTag active={modelSupportsImageInput(preset.input_modalities)}>Image Input</CapabilityTag>
+                            </div>
+                            <Show when={preset.note}>
+                              <div class="mt-2 text-[11px] text-muted-foreground">{preset.note}</div>
+                            </Show>
                           </div>
-                          <div class="mt-2 flex flex-wrap gap-1.5">
-                            <CapabilityTag active>Text</CapabilityTag>
-                            <CapabilityTag active={modelSupportsImageInput(preset.input_modalities)}>Image Input</CapabilityTag>
-                          </div>
-                          <Show when={preset.note}>
-                            <div class="mt-2 text-[11px] text-muted-foreground">{preset.note}</div>
-                          </Show>
-                        </div>
-                      )}
+                        );
+                      }}
                     </For>
                   </div>
                 </Show>
