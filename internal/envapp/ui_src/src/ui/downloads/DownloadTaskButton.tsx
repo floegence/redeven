@@ -78,7 +78,7 @@ export function DownloadTaskButton(props: { tooltip?: string | false }) {
       </Show>
 
       <Show when={open()}>
-        <div class="absolute right-0 top-[calc(100%+0.5rem)] z-[80] max-sm:fixed max-sm:left-2 max-sm:right-2 max-sm:top-12">
+        <div class="absolute right-0 top-[calc(100%+0.5rem)] z-[80] animate-in fade-in zoom-in-95 duration-150 max-sm:fixed max-sm:left-2 max-sm:right-2 max-sm:top-12">
           <DownloadTaskPanel manager={manager} />
         </div>
       </Show>
