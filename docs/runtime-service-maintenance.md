@@ -354,6 +354,20 @@ kind and runtime placement. A Local Container must never inherit copy such as
 `This SSH host is reachable` simply because the same lower-level recovery model
 is used for SSH runtimes.
 
+Blocked launch reports are classified before they become maintenance:
+
+| Blocked fact | Desktop classification | Maintenance |
+| --- | --- | --- |
+| `not_running` / `runtime_not_running` / attach state `not_running` | stopped runtime lifecycle | none |
+| `stale_lock` / `lock_pid_not_alive` | stopped-like recovery lifecycle | none |
+| live process with unreachable management socket | restart required | `runtime_restart_required` |
+| package, protocol, or Desktop model-source compatibility gap | update required | `runtime_update_required` or `desktop_model_source_requires_runtime_update` |
+| incomplete or ambiguous diagnostics | unverified | none |
+
+This table replaces the older behavior where nearly every blocked report was
+treated as restart maintenance. `not_running` is a normal stopped state and must
+not create `runtime_restart_required`.
+
 `runtime_stale_lock` is the internal attach diagnostic for blocked reports whose
 launch code, attach state, or failure code is `stale_lock` or
 `lock_pid_not_alive`. It means active runtime lease metadata names a process
@@ -364,7 +378,8 @@ runtime lifecycle, not as a user-facing maintenance badge:
 - Welcome presents `RUNTIME OFFLINE`, not `RUNTIME STALE LOCK`.
 - `Open` stays blocked with stopped-runtime guidance.
 - `Start runtime` is the primary recovery action when the target can be managed.
-- `Restart runtime` is unavailable because there is no live process to stop.
+- `Restart runtime` remains available as start-from-stopped recovery when the target can be managed.
+- `Update runtime` remains available when the target can be managed and uses the Desktop-owned package update path.
 - Active-work confirmation is not shown because stale metadata is not active
   workload.
 - `Refresh status` remains available for users who repaired the runtime outside
@@ -401,8 +416,10 @@ inside the container, verifies `desktop-runtime-status`, attaches with
 `desktop-bridge`, requests Local UI and runtime-control through bridge streams,
 then performs direct `sys.ping` and `sys.restart` calls. It also verifies that
 desktop-managed runtimes reject runtime-owned `sys.upgrade` and that a
-clean `desktop-runtime-stop` settles as `not_running`, not a stale lease. A
-Desktop-owned package update followed by daemon restart must be attachable again.
+clean `desktop-runtime-stop` settles as `not_running`, not a stale lease.
+Stopped-runtime Desktop-owned restart and update paths must become ready again,
+and a Desktop-owned package update followed by daemon restart must be attachable
+again.
 This is the regression boundary for container daemon lifecycle, bridge
 forwarding, and maintenance behavior.
 
@@ -420,7 +437,7 @@ forwarding, and maintenance behavior.
 
 Desktop treats the runtime as a singleton per Local Environment profile, but runtime-card management is no longer derived from whether Desktop "owns" that process. Electron still persists one `desktop_owner_id` under `userData` and passes it to managed child processes with `REDEVEN_DESKTOP_OWNER_ID`; that owner id remains a runtime-control lease for secure RPC surfaces such as provider linking and Desktop model-source binding. Stop, restart, start, and update availability comes from the runtime operation plan built from host access, placement, running state, package state, Runtime Service readiness, and maintenance requirements.
 
-Provider binding is an explicit runtime-card action, not a side effect of `Open` and not a runtime restart plan. Provider cards always open through the provider tunnel and never manage runtime lifecycle. Welcome `Start runtime` starts only the Local/SSH/container runtime represented by that runtime card. It may install the runtime package when the target has no runtime yet, but it must not silently update or replace an existing package. `Update runtime` is the explicit user-visible path for outdated, incompatible, or maintenance-required runtime packages on SSH Host, Local Container, and SSH Container cards. Local Host update is different: the card uses `Update Redeven Desktop` and the `desktop_local_update_handoff` operation method because the bundled local runtime moves with the Desktop app release. Welcome presentation is derived from that operation method: Local Host update-required badges and disabled-Open popovers use Desktop update wording, while SSH/container cards keep runtime package wording. `Connect to provider...` obtains provider open-session material, sends the one-time provider-link ticket to the selected running Local/SSH runtime over runtime-control, and lets the runtime start or replace only the provider control-channel goroutine. Once that binding is persisted, it is explicit authorization for later Desktop-managed startup to restore the provider control channel from saved config as part of the runtime lifecycle. `Disconnect from provider` revokes that local authorization and clears the runtime's persisted provider binding; an active control channel is used to notify the provider first, but the local unlink still completes when that channel is already unavailable. Desktop then refreshes provider runtime health from the provider API when the provider Environment is still present instead of locally fabricating an offline state. Active provider-originated work blocks relink. Runtime-control owner mismatch blocks provider-link RPC but does not hide host/container stop or restart operations.
+Provider binding is an explicit runtime-card action, not a side effect of `Open` and not a runtime restart plan. Provider cards always open through the provider tunnel and never manage runtime lifecycle. Welcome `Start runtime` starts only the Local/SSH/container runtime represented by that runtime card. It may install the runtime package when the target has no runtime yet, but it must not silently update or replace an existing package. `Restart runtime` and `Update runtime` are first-class launcher actions rather than UI-level stop/start compositions. `Restart runtime` can start from a stopped or stale-lock state without confirmation, while live runtimes require active-work replacement confirmation when work may be interrupted. `Update runtime` is the explicit user-visible path for outdated, incompatible, or maintenance-required runtime packages on SSH Host, Local Container, and SSH Container cards, and it remains allowed on stopped targets because no runtime work is active. Local Host update is different: the card uses `Update Redeven Desktop` and the `desktop_local_update_handoff` operation method because the bundled local runtime moves with the Desktop app release. Welcome presentation is derived from that operation method: Local Host update-required badges and disabled-Open popovers use Desktop update wording, while SSH/container cards keep runtime package wording. `Connect to provider...` obtains provider open-session material, sends the one-time provider-link ticket to the selected running Local/SSH runtime over runtime-control, and lets the runtime start or replace only the provider control-channel goroutine. Once that binding is persisted, it is explicit authorization for later Desktop-managed startup to restore the provider control channel from saved config as part of the runtime lifecycle. `Disconnect from provider` revokes that local authorization and clears the runtime's persisted provider binding; an active control channel is used to notify the provider first, but the local unlink still completes when that channel is already unavailable. Desktop then refreshes provider runtime health from the provider API when the provider Environment is still present instead of locally fabricating an offline state. Active provider-originated work blocks relink. Runtime-control owner mismatch blocks provider-link RPC but does not hide host/container stop or restart operations.
 
 Welcome menu projection comes from the runtime operation plan. `Stop runtime`,
 `Restart runtime`, and the placement-specific update action use stable menu
@@ -463,7 +480,7 @@ Desktop launcher cards keep their current dense SaaS tool layout:
     `Start runtime` and `Refresh status`
   - not running: `Open` stays disabled and offers `Start runtime`
   - first install needed: `Open` stays disabled and offers `Start runtime`
-  - stale lease diagnostic: presented as not running; `Open` stays disabled and offers `Start runtime` plus `Refresh status`
+  - stale lease diagnostic: presented as not running; `Open` stays disabled, the primary recovery is `Start runtime`, and the runtime menu keeps `Restart runtime`, `Update runtime`, and `Refresh status`
   - restart required: `Open` stays disabled and offers `Restart runtime`
   - update required: `Open` stays disabled and offers `Update runtime`, or
     `Update Redeven Desktop` with `DESKTOP UPDATE REQUIRED` / `Redeven Desktop update required` presentation for the Local Host bundled runtime
@@ -477,7 +494,9 @@ Desktop launcher cards keep their current dense SaaS tool layout:
   progress inspection, keeps the existing flowing shimmer treatment, and returns
   to direct `Open` behavior once the runtime is openable and the current Desktop
   connection is ready. Progress must not use a bottom-right SSH-only activity
-  overlay.
+  overlay. The progress sequence and failure notice must reflect the operation:
+  start uses `Starting...` / startup wording, restart uses `Restarting...` /
+  restart wording, and update uses `Updating...` / update wording.
 - Action feedback for completion, failure, and other ephemeral events continues
   through Desktop toasts. No launcher content should shift when a version event
   arrives, and toasts must not become the progress surface for runtime lifecycle

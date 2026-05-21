@@ -91,6 +91,29 @@ describe('desktopLauncherIPC', () => {
       allow_active_work_replacement: true,
     });
     expect(normalizeDesktopLauncherActionRequest({
+      kind: 'restart_environment_runtime',
+      environment_id: ' cp:https%3A%2F%2Fcp.example.invalid:env:env_demo ',
+      runtime_target_id: ' local:container:docker:container-stable-id:abc12345 ',
+      placement_target_id: ' local:container:docker:container-stable-id:abc12345 ',
+      host_access: { kind: 'local_host' },
+      placement: {
+        kind: 'container_process',
+        container_engine: ' Docker ',
+        container_id: ' container-stable-id ',
+        container_ref: ' dev-container ',
+        container_label: ' Dev Container ',
+        runtime_root: ' /workspace/.redeven ',
+      },
+    })).toEqual(expect.objectContaining({
+      kind: 'restart_environment_runtime',
+      environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      runtime_target_id: 'local:container:docker:container-stable-id:abc12345',
+      placement: expect.objectContaining({
+        kind: 'container_process',
+        runtime_root: '/workspace/.redeven',
+      }),
+    }));
+    expect(normalizeDesktopLauncherActionRequest({
       kind: 'manage_desktop_update',
       environment_id: ' local ',
       label: ' Local Environment ',

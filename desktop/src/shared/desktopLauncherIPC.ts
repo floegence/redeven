@@ -67,6 +67,7 @@ export type DesktopLauncherActionOutcome =
   | 'opened_environment_window'
   | 'focused_environment_window'
   | 'started_environment_runtime'
+  | 'restarted_environment_runtime'
   | 'updated_environment_runtime'
   | 'opened_desktop_update_handoff'
   | 'connected_provider_runtime'
@@ -115,6 +116,7 @@ export type DesktopLauncherActionKind =
   | 'open_ssh_environment'
   | 'prepare_environment_open'
   | 'start_environment_runtime'
+  | 'restart_environment_runtime'
   | 'update_environment_runtime'
   | 'manage_desktop_update'
   | 'connect_provider_runtime'
@@ -322,6 +324,9 @@ export type DesktopLauncherActionRequest = Readonly<
     } & DesktopSSHEnvironmentDetails & DesktopLauncherRuntimeTarget)
   | ({
       kind: 'start_environment_runtime';
+    } & DesktopLauncherRuntimeTarget)
+  | ({
+      kind: 'restart_environment_runtime';
     } & DesktopLauncherRuntimeTarget)
   | ({
       kind: 'update_environment_runtime';
@@ -684,6 +689,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       } as DesktopLauncherActionRequest;
     }
     case 'start_environment_runtime':
+    case 'restart_environment_runtime':
     case 'update_environment_runtime':
     case 'stop_environment_runtime':
     case 'refresh_environment_runtime': {

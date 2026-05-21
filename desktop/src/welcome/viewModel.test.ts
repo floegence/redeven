@@ -1096,7 +1096,7 @@ describe('buildEnvironmentCardModel', () => {
         id: 'restart_runtime',
         action: expect.objectContaining({
           intent: 'restart_runtime',
-          enabled: false,
+          enabled: true,
         }),
       }),
     ]));
@@ -1188,8 +1188,8 @@ describe('buildEnvironmentCardModel', () => {
         id: 'restart_runtime',
         action: expect.objectContaining({
           intent: 'restart_runtime',
-          enabled: false,
-          disabled_reason: 'Runtime is not running.',
+          enabled: true,
+          runtime_operation_method: 'local_container_exec',
         }),
       }),
       expect.objectContaining({

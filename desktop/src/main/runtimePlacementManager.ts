@@ -4,7 +4,7 @@ import {
 } from '../shared/desktopRuntimePlacement';
 import {
   buildDesktopRuntimeMaintenanceRequirement,
-  desktopRuntimeMaintenanceFromBlockedLaunchReport,
+  classifyDesktopRuntimeBlockedLaunchReport,
   type DesktopRuntimeMaintenanceRequirement,
 } from '../shared/desktopRuntimeHealth';
 import {
@@ -146,10 +146,18 @@ async function waitForContainerRuntimeDaemon(args: Readonly<{
       }
     } else {
       lastError = new Error(report.message);
-      const maintenance = desktopRuntimeMaintenanceFromBlockedLaunchReport(report, {
+      const classification = classifyDesktopRuntimeBlockedLaunchReport(report, {
         target_runtime_version: args.runtime_release_tag,
       });
-      throw new RuntimePlacementMaintenanceRequiredError(maintenance.message, maintenance);
+      if (classification.kind === 'restart_required' || classification.kind === 'update_required') {
+        throw new RuntimePlacementMaintenanceRequiredError(
+          classification.maintenance.message,
+          classification.maintenance,
+        );
+      }
+      if (classification.kind === 'unverified') {
+        throw new Error(classification.message);
+      }
     }
     if (Date.now() >= deadline) {
       throw new Error(`Runtime daemon did not become ready before timeout.${lastError ? ` ${lastError.message}` : ''}`);

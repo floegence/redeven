@@ -15,6 +15,7 @@ export type DesktopRuntimeLifecyclePhase =
   | 'checking_container'
   | 'detecting_platform'
   | 'checking_runtime_package'
+  | 'stopping_runtime_process'
   | 'preparing_runtime_package'
   | 'installing_runtime_package'
   | 'starting_runtime_process'
@@ -34,6 +35,8 @@ export type DesktopRuntimeLifecycleProgress = Readonly<{
   target_label: string;
   target_detail?: string;
 }>;
+
+export type DesktopRuntimeLifecycleOperation = 'start' | 'restart' | 'update' | 'stop';
 
 const LOCAL_HOST_LIFECYCLE_PHASES: readonly DesktopRuntimeLifecyclePhase[] = [
   'checking_existing_runtime',
@@ -85,12 +88,79 @@ const RUNTIME_LIFECYCLE_PHASES_BY_LOCATION: Record<DesktopRuntimeLifecycleLocati
   ssh_container: SSH_CONTAINER_LIFECYCLE_PHASES,
 };
 
+const RUNTIME_LIFECYCLE_PHASES_BY_OPERATION: Record<DesktopRuntimeLifecycleOperation, Partial<Record<DesktopRuntimeLifecycleLocation, readonly DesktopRuntimeLifecyclePhase[]>>> = {
+  start: {},
+  restart: {
+    local_host: [
+      'checking_existing_runtime',
+      'stopping_runtime_process',
+      'starting_runtime_process',
+      'checking_runtime_service',
+      'runtime_ready',
+    ],
+    local_container: [
+      'checking_container',
+      'checking_runtime_package',
+      'stopping_runtime_process',
+      'starting_runtime_process',
+      'checking_runtime_service',
+      'runtime_ready',
+    ],
+    ssh_host: [
+      'checking_host',
+      'checking_runtime_package',
+      'stopping_runtime_process',
+      'starting_runtime_process',
+      'checking_runtime_service',
+      'runtime_ready',
+    ],
+    ssh_container: [
+      'checking_host',
+      'checking_container',
+      'checking_runtime_package',
+      'stopping_runtime_process',
+      'starting_runtime_process',
+      'checking_runtime_service',
+      'runtime_ready',
+    ],
+  },
+  update: {
+    local_container: CONTAINER_LIFECYCLE_PHASES,
+    ssh_host: SSH_HOST_LIFECYCLE_PHASES,
+    ssh_container: SSH_CONTAINER_LIFECYCLE_PHASES,
+  },
+  stop: {
+    local_host: [
+      'checking_existing_runtime',
+      'stopping_runtime_process',
+      'runtime_ready',
+    ],
+    local_container: [
+      'checking_container',
+      'stopping_runtime_process',
+      'runtime_ready',
+    ],
+    ssh_host: [
+      'checking_host',
+      'stopping_runtime_process',
+      'runtime_ready',
+    ],
+    ssh_container: [
+      'checking_host',
+      'checking_container',
+      'stopping_runtime_process',
+      'runtime_ready',
+    ],
+  },
+};
+
 export const RUNTIME_LIFECYCLE_PHASE_LABELS: Record<DesktopRuntimeLifecyclePhase, string> = {
   checking_existing_runtime: 'Checking existing runtime',
   checking_host: 'Checking host',
   checking_container: 'Checking container',
   detecting_platform: 'Detecting platform',
   checking_runtime_package: 'Checking runtime package',
+  stopping_runtime_process: 'Stopping runtime process',
   preparing_runtime_package: 'Preparing runtime package',
   installing_runtime_package: 'Installing runtime package',
   starting_runtime_process: 'Starting runtime',
@@ -108,8 +178,9 @@ function compact(value: unknown): string {
 function stageIndexForPhase(
   location: DesktopRuntimeLifecycleLocation,
   phase: DesktopRuntimeLifecyclePhase,
+  operation: DesktopRuntimeLifecycleOperation = 'start',
 ): number {
-  const phases = RUNTIME_LIFECYCLE_PHASES_BY_LOCATION[location];
+  const phases = runtimeLifecyclePhaseSequence(location, operation);
   const index = phases.indexOf(phase);
   if (index >= 0) {
     return index + 1;
@@ -132,13 +203,16 @@ export function desktopRuntimeLifecycleLocation(
 
 export function runtimeLifecyclePhaseSequence(
   location: DesktopRuntimeLifecycleLocation,
+  operation: DesktopRuntimeLifecycleOperation = 'start',
 ): readonly DesktopRuntimeLifecyclePhase[] {
-  return RUNTIME_LIFECYCLE_PHASES_BY_LOCATION[location];
+  return RUNTIME_LIFECYCLE_PHASES_BY_OPERATION[operation][location]
+    ?? RUNTIME_LIFECYCLE_PHASES_BY_LOCATION[location];
 }
 
 export function runtimeLifecycleProgress(
   input: Readonly<{
     location: DesktopRuntimeLifecycleLocation;
+    operation?: DesktopRuntimeLifecycleOperation;
     phase: DesktopRuntimeLifecyclePhase;
     targetID?: string;
     targetLabel: string;
@@ -146,13 +220,14 @@ export function runtimeLifecycleProgress(
   }>,
 ): DesktopRuntimeLifecycleProgress {
   const location = input.location;
-  const phases = RUNTIME_LIFECYCLE_PHASES_BY_LOCATION[location];
+  const operation = input.operation ?? 'start';
+  const phases = runtimeLifecyclePhaseSequence(location, operation);
   const targetDetail = compact(input.targetDetail);
   return {
     kind: 'runtime_lifecycle',
     location,
     phase: input.phase,
-    stage_index: stageIndexForPhase(location, input.phase),
+    stage_index: stageIndexForPhase(location, input.phase, operation),
     stage_count: phases.length,
     target_id: compact(input.targetID) || compact(input.targetLabel) || 'runtime',
     target_label: compact(input.targetLabel) || 'Runtime',

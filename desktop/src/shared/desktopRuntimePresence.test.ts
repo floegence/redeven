@@ -112,9 +112,10 @@ describe('desktopRuntimePresence', () => {
       message: 'Runtime is not running.',
     });
     expect(plans.restart).toMatchObject({
-      availability: 'unavailable',
+      availability: 'blocked',
+      reason_code: 'runtime_target_unavailable',
       menu_visibility: 'stable',
-      message: 'Runtime is not running.',
+      message: 'Container web is not running.',
     });
     expect(plans.update).toMatchObject({
       availability: 'blocked',
@@ -189,8 +190,7 @@ describe('desktopRuntimePresence', () => {
       menu_visibility: 'stable',
     });
     expect(plans.restart).toMatchObject({
-      availability: 'unavailable',
-      reason_code: 'runtime_not_started',
+      availability: 'available',
       menu_visibility: 'stable',
     });
     expect(plans.update).toMatchObject({
@@ -229,7 +229,7 @@ describe('desktopRuntimePresence', () => {
       message: 'Update this runtime from v0.5.9 to v0.6.7 before continuing.',
     });
     expect(plans.restart).toMatchObject({
-      availability: 'unavailable',
+      availability: 'blocked',
       reason_code: 'runtime_update_required',
       message: 'Update this runtime from v0.5.9 to v0.6.7 before continuing.',
     });
@@ -293,7 +293,7 @@ describe('desktopRuntimePresence', () => {
     });
   });
 
-  it('routes stale lock container recovery through Start instead of Restart', () => {
+  it('treats stale lock container recovery as stopped-like runtime management', () => {
     const plans = buildDesktopRuntimeOperationPlans({
       surface: 'managed_runtime_card',
       host_access: { kind: 'local_host' },
@@ -322,7 +322,7 @@ describe('desktopRuntimePresence', () => {
     expect(plans.open).toMatchObject({
       availability: 'blocked',
       method: 'local_container_exec',
-      message: 'Runtime lock metadata is present but no live runtime is reachable.',
+      message: 'Start this runtime before opening it.',
     });
     expect(plans.start).toMatchObject({
       availability: 'available',
@@ -330,8 +330,7 @@ describe('desktopRuntimePresence', () => {
       menu_visibility: 'contextual',
     });
     expect(plans.restart).toMatchObject({
-      availability: 'unavailable',
-      reason_code: 'runtime_not_started',
+      availability: 'available',
       menu_visibility: 'stable',
     });
   });
