@@ -141,10 +141,11 @@ type AIProviderWebSearch struct {
 }
 
 type AIProviderModel struct {
-	ModelName                     string `json:"model_name"`
-	ContextWindow                 int    `json:"context_window,omitempty"`
-	MaxOutputTokens               int    `json:"max_output_tokens,omitempty"`
-	EffectiveContextWindowPercent int    `json:"effective_context_window_percent,omitempty"`
+	ModelName                     string   `json:"model_name"`
+	ContextWindow                 int      `json:"context_window,omitempty"`
+	MaxOutputTokens               int      `json:"max_output_tokens,omitempty"`
+	EffectiveContextWindowPercent int      `json:"effective_context_window_percent,omitempty"`
+	InputModalities               []string `json:"input_modalities,omitempty"`
 }
 
 const (
@@ -172,6 +173,11 @@ const (
 	AIProviderWebSearchModeDisabled      = "disabled"
 	AIProviderWebSearchModeOpenAIBuiltin = "openai_builtin"
 	AIProviderWebSearchModeBrave         = "brave"
+)
+
+const (
+	AIInputModalityText  = "text"
+	AIInputModalityImage = "image"
 )
 
 var curatedNativeAIProviderModels = map[string]map[string]struct{}{
@@ -214,6 +220,67 @@ func (m AIProviderModel) EffectiveInputWindowTokens() int {
 		return 1
 	}
 	return effective
+}
+
+func (m AIProviderModel) NormalizedInputModalities() []string {
+	if len(m.InputModalities) == 0 {
+		return []string{AIInputModalityText}
+	}
+	out := make([]string, 0, len(m.InputModalities))
+	seen := make(map[string]struct{}, len(m.InputModalities))
+	for _, item := range m.InputModalities {
+		modality := strings.ToLower(strings.TrimSpace(item))
+		if modality == "" {
+			continue
+		}
+		if _, ok := seen[modality]; ok {
+			continue
+		}
+		seen[modality] = struct{}{}
+		out = append(out, modality)
+	}
+	if len(out) == 0 {
+		return []string{AIInputModalityText}
+	}
+	return out
+}
+
+func (m AIProviderModel) SupportsImageInput() bool {
+	for _, modality := range m.NormalizedInputModalities() {
+		if modality == AIInputModalityImage {
+			return true
+		}
+	}
+	return false
+}
+
+func validateAIInputModalities(modalities []string) error {
+	if len(modalities) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(modalities))
+	hasText := false
+	for _, raw := range modalities {
+		modality := strings.ToLower(strings.TrimSpace(raw))
+		if modality == "" {
+			return errors.New("empty input modality")
+		}
+		if _, ok := seen[modality]; ok {
+			return fmt.Errorf("duplicate input modality %q", modality)
+		}
+		seen[modality] = struct{}{}
+		switch modality {
+		case AIInputModalityText:
+			hasText = true
+		case AIInputModalityImage:
+		default:
+			return fmt.Errorf("unsupported input modality %q", modality)
+		}
+	}
+	if !hasText {
+		return fmt.Errorf("input_modalities must include %q", AIInputModalityText)
+	}
+	return nil
 }
 
 func requiresExplicitAIProviderBaseURL(providerType string) bool {
@@ -379,6 +446,9 @@ func (c *AIConfig) Validate() error {
 			if contextWindow > 0 && m.EffectiveInputWindowTokens() <= 0 {
 				return fmt.Errorf("providers[%d].models[%d]: effective input window is invalid", i, j)
 			}
+			if err := validateAIInputModalities(m.InputModalities); err != nil {
+				return fmt.Errorf("providers[%d].models[%d]: invalid input_modalities: %w", i, j, err)
+			}
 		}
 	}
 
@@ -386,56 +456,11 @@ func (c *AIConfig) Validate() error {
 	if currentModelID == "" {
 		return errors.New("missing current model (current_model_id)")
 	}
+	if !c.IsAllowedModelID(currentModelID) {
+		return fmt.Errorf("current_model_id is not in providers[].models[]: %s", currentModelID)
+	}
 
 	return nil
-}
-
-// FirstModelID returns the first available model wire id (<provider_id>/<model_name>) from providers[].models[] order.
-func (c *AIConfig) FirstModelID() (string, bool) {
-	if c == nil {
-		return "", false
-	}
-	for _, p := range c.Providers {
-		pid := strings.TrimSpace(p.ID)
-		if pid == "" {
-			continue
-		}
-		for _, m := range p.Models {
-			mn := strings.TrimSpace(m.ModelName)
-			if mn == "" {
-				continue
-			}
-			return pid + "/" + mn, true
-		}
-	}
-	return "", false
-}
-
-// ResolvedCurrentModelID returns the current model when valid; otherwise it falls back to the first available model.
-func (c *AIConfig) ResolvedCurrentModelID() (string, bool) {
-	if c == nil {
-		return "", false
-	}
-	current := strings.TrimSpace(c.CurrentModelID)
-	if current != "" && c.IsAllowedModelID(current) {
-		return current, true
-	}
-	return c.FirstModelID()
-}
-
-// NormalizeCurrentModelID rewrites current_model_id to a valid value.
-//
-// It returns true when a valid model exists and current_model_id was set.
-func (c *AIConfig) NormalizeCurrentModelID() bool {
-	if c == nil {
-		return false
-	}
-	modelID, ok := c.ResolvedCurrentModelID()
-	if !ok {
-		return false
-	}
-	c.CurrentModelID = modelID
-	return true
 }
 
 // IsAllowedModelID reports whether the given model wire id (<provider_id>/<model_name>) exists in the config allow-list.

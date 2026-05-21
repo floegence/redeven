@@ -914,10 +914,7 @@ export function EnvAppShell() {
     const currentModel = String(models?.current_model ?? '').trim();
     if (currentModel && allowed.has(currentModel)) return currentModel;
 
-    const first = String(options[0]?.id ?? '').trim();
-    if (first && allowed.has(first)) return first;
-
-    throw new Error('No available model. Configure AI in Runtime Settings or Local Environment Settings first.');
+    throw new Error('No current Flower model is selected. Choose a current model in Runtime Settings or Local Environment Settings first.');
   };
 
   const validateAskFlowerWorkingDir = async (workingDir: string): Promise<string> => {

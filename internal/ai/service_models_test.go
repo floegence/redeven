@@ -22,7 +22,10 @@ func TestService_ListModels_CurrentFirstAndDedup(t *testing.T) {
 					Name:    "OpenAI",
 					Type:    "openai",
 					BaseURL: "https://api.openai.com/v1",
-					Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}, {ModelName: "gpt-4o-mini"}},
+					Models: []config.AIProviderModel{
+						{ModelName: "gpt-5-mini", ContextWindow: 400000, MaxOutputTokens: 128000, InputModalities: []string{config.AIInputModalityText, config.AIInputModalityImage}},
+						{ModelName: "gpt-4o-mini", ContextWindow: 128000, MaxOutputTokens: 16384, InputModalities: []string{config.AIInputModalityText}},
+					},
 				},
 				{
 					ID:      "anthropic",
@@ -65,9 +68,18 @@ func TestService_ListModels_CurrentFirstAndDedup(t *testing.T) {
 	if out.Models[2].Label != "Anthropic / claude-sonnet-4-5" {
 		t.Fatalf("third label=%q", out.Models[2].Label)
 	}
+	if !out.Models[0].SupportsImageInput {
+		t.Fatalf("current model SupportsImageInput=false, want true")
+	}
+	if !reflect.DeepEqual(out.Models[0].InputModalities, []string{config.AIInputModalityText, config.AIInputModalityImage}) {
+		t.Fatalf("current model InputModalities=%v", out.Models[0].InputModalities)
+	}
+	if out.Models[0].ContextWindow != 380000 {
+		t.Fatalf("current model ContextWindow=%d, want effective window 380000", out.Models[0].ContextWindow)
+	}
 }
 
-func TestService_ListModels_InvalidCurrentFallsBackToFirst(t *testing.T) {
+func TestService_ListModels_InvalidCurrentReturnsError(t *testing.T) {
 	t.Parallel()
 
 	svc := &Service{
@@ -85,15 +97,8 @@ func TestService_ListModels_InvalidCurrentFallsBackToFirst(t *testing.T) {
 		},
 	}
 
-	out, err := svc.ListModels()
-	if err != nil {
-		t.Fatalf("ListModels: %v", err)
-	}
-	if out == nil {
-		t.Fatalf("ListModels returned nil")
-	}
-	if out.CurrentModel != "openai/gpt-5-mini" {
-		t.Fatalf("CurrentModel=%q, want %q", out.CurrentModel, "openai/gpt-5-mini")
+	if _, err := svc.ListModels(); err == nil {
+		t.Fatalf("expected invalid current model error")
 	}
 }
 

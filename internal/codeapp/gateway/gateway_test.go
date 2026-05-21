@@ -1474,6 +1474,155 @@ func TestGateway_AIProviderKeys_StatusAndUpdate(t *testing.T) {
 	}
 }
 
+func TestGateway_AIProviderBundle_SavesConfigAndSecretTogether(t *testing.T) {
+	t.Parallel()
+
+	dist := fstest.MapFS{
+		"env/index.html": {Data: []byte("<html>env</html>")},
+		"inject.js":      {Data: []byte("console.log('inject');")},
+	}
+
+	cfgPath := writeTestConfigWithAI(t)
+	channelID := "ch_test_provider_bundle"
+	envOrigin := envOriginWithChannel(channelID)
+	aiSvc, err := ai.NewService(ai.Options{
+		StateDir:     t.TempDir(),
+		AgentHomeDir: t.TempDir(),
+		Shell:        "/bin/sh",
+		Config: &config.AIConfig{
+			CurrentModelID: "openai/gpt-5-mini",
+			Providers: []config.AIProvider{{
+				ID:      "openai",
+				Name:    "OpenAI",
+				Type:    "openai",
+				BaseURL: "https://api.openai.com/v1",
+				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = aiSvc.Close()
+	})
+
+	gw, err := New(Options{
+		Backend:            &stubBackend{},
+		DistFS:             dist,
+		ListenAddr:         "127.0.0.1:0",
+		AI:                 aiSvc,
+		ConfigPath:         cfgPath,
+		ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanAdmin: true}),
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	body := `{
+	  "ai": {
+	    "current_model_id": "openai/gpt-5-mini",
+	    "providers": [
+	      {
+	        "id": "openai",
+	        "name": "OpenAI",
+	        "type": "openai",
+	        "base_url": "https://api.openai.com/v1",
+	        "models": [
+	          { "model_name": "gpt-5-mini", "input_modalities": ["text", "image"] }
+	        ]
+	      }
+	    ]
+	  },
+	  "provider_api_key_patches": [
+	    { "provider_id": "openai", "api_key": "sk-test" }
+	  ]
+	}`
+
+	req := httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/ai/provider_bundle", bytes.NewBufferString(body))
+	req.Header.Set("Origin", envOrigin)
+	rr := httptest.NewRecorder()
+	gw.serveHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("provider bundle code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.AI == nil || len(cfg.AI.Providers) != 1 || len(cfg.AI.Providers[0].Models) != 1 {
+		t.Fatalf("unexpected AI config: %#v", cfg.AI)
+	}
+	if !cfg.AI.Providers[0].Models[0].SupportsImageInput() {
+		t.Fatalf("saved model should support image input")
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/provider_keys/status", bytes.NewBufferString(`{"provider_ids":["openai"]}`))
+	req.Header.Set("Origin", envOrigin)
+	rr = httptest.NewRecorder()
+	gw.serveHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("key status code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	data, _ := resp["data"].(map[string]any)
+	set, _ := data["provider_api_key_set"].(map[string]any)
+	if set["openai"] != true {
+		t.Fatalf("openai set=%v, want=true", set["openai"])
+	}
+	if strings.Contains(rr.Body.String(), "sk-test") {
+		t.Fatalf("secret leaked in response: %s", rr.Body.String())
+	}
+
+	badBody := `{
+	  "ai": {
+	    "current_model_id": "broken/missing",
+	    "providers": [
+	      {
+	        "id": "broken",
+	        "name": "Broken",
+	        "type": "openai",
+	        "base_url": "https://api.openai.com/v1",
+	        "models": [
+	          { "model_name": "available-model" }
+	        ]
+	      }
+	    ]
+	  },
+	  "provider_api_key_patches": [
+	    { "provider_id": "broken", "api_key": "sk-should-not-save" }
+	  ]
+	}`
+	req = httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/ai/provider_bundle", bytes.NewBufferString(badBody))
+	req.Header.Set("Origin", envOrigin)
+	rr = httptest.NewRecorder()
+	gw.serveHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("invalid bundle code = %d, want %d body=%s", rr.Code, http.StatusBadRequest, rr.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/provider_keys/status", bytes.NewBufferString(`{"provider_ids":["broken"]}`))
+	req.Header.Set("Origin", envOrigin)
+	rr = httptest.NewRecorder()
+	gw.serveHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("broken key status code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	resp = map[string]any{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal broken status: %v", err)
+	}
+	data, _ = resp["data"].(map[string]any)
+	set, _ = data["provider_api_key_set"].(map[string]any)
+	if set["broken"] != false {
+		t.Fatalf("broken set=%v, want=false after validation failure", set["broken"])
+	}
+}
+
 func TestGateway_Settings_IncludesAIKeyStatus(t *testing.T) {
 	t.Parallel()
 

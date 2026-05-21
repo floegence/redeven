@@ -14,7 +14,10 @@ export type AIProviderModel = Readonly<{
   context_window?: number;
   max_output_tokens?: number;
   effective_context_window_percent?: number;
+  input_modalities?: readonly AIInputModality[];
 }>;
+
+export type AIInputModality = 'text' | 'image';
 
 export type AIProviderWebSearchMode = 'disabled' | 'openai_builtin' | 'brave';
 
@@ -255,6 +258,7 @@ export type AIProviderModelRow = {
   context_window?: number;
   max_output_tokens?: number;
   effective_context_window_percent?: number;
+  input_modalities?: AIInputModality[];
 };
 
 export type AIProviderRow = {
@@ -271,6 +275,7 @@ export type AIProviderModelPreset = Readonly<{
   context_window: number;
   max_output_tokens?: number;
   effective_context_window_percent?: number;
+  input_modalities?: readonly AIInputModality[];
   note?: string;
 }>;
 

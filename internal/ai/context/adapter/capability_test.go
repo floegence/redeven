@@ -204,6 +204,7 @@ func TestResolver_Resolve_UsesProviderModelContextWindow(t *testing.T) {
 				ContextWindow:                 200000,
 				MaxOutputTokens:               32000,
 				EffectiveContextWindowPercent: 90,
+				InputModalities:               []string{config.AIInputModalityText},
 			},
 		},
 	}
@@ -217,6 +218,57 @@ func TestResolver_Resolve_UsesProviderModelContextWindow(t *testing.T) {
 	}
 	if cap.MaxOutputTokens != 32000 {
 		t.Fatalf("MaxOutputTokens=%d, want 32000", cap.MaxOutputTokens)
+	}
+	if cap.SupportsImageInput {
+		t.Fatalf("SupportsImageInput=true, want false")
+	}
+}
+
+func TestResolver_Resolve_UsesExplicitProviderModelModalities(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewResolver(nil)
+	provider := config.AIProvider{
+		ID:   "compat",
+		Type: "openai_compatible",
+		Models: []config.AIProviderModel{
+			{
+				ModelName:       "custom-vision-model",
+				ContextWindow:   128000,
+				MaxOutputTokens: 8192,
+				InputModalities: []string{config.AIInputModalityText, config.AIInputModalityImage},
+			},
+		},
+	}
+
+	cap, err := resolver.Resolve(context.Background(), provider, "compat/custom-vision-model")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if !cap.SupportsImageInput {
+		t.Fatalf("SupportsImageInput=false, want true")
+	}
+	if cap.SupportsFileInput {
+		t.Fatalf("SupportsFileInput=true, want false")
+	}
+}
+
+func TestResolver_Resolve_DoesNotUseModelNameSubstringHeuristics(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewResolver(nil)
+	cap, err := resolver.Resolve(context.Background(), config.AIProvider{ID: "openai", Type: "openai"}, "openai/acme-mini-vision")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if cap.MaxContextTokens != 128000 {
+		t.Fatalf("MaxContextTokens=%d, want provider default 128000", cap.MaxContextTokens)
+	}
+	if cap.MaxOutputTokens != 4096 {
+		t.Fatalf("MaxOutputTokens=%d, want provider default 4096", cap.MaxOutputTokens)
+	}
+	if cap.SupportsImageInput {
+		t.Fatalf("SupportsImageInput=true, want false without explicit metadata")
 	}
 }
 

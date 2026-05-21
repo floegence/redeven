@@ -52,11 +52,12 @@ import {
   cloneAIProviderRow,
   defaultBaseURLForProviderType,
   defaultContextWindowForProviderType,
-  formatTokenCount,
   modelID,
+  modelSupportsImageInput,
   normalizeAIProviderRowDraft,
   normalizeContextWindowByProvider,
   normalizeEffectiveContextPercent,
+  normalizeInputModalities,
   normalizePositiveInteger,
   providerBuiltInWebSearchLabel,
   providerNeedsWebSearchConfig,
@@ -243,6 +244,7 @@ function newAIProviderDraft(): AIProviderRow {
         context_window: normalizePositiveInteger(firstPreset?.context_window),
         max_output_tokens: normalizePositiveInteger(firstPreset?.max_output_tokens),
         effective_context_window_percent: normalizeEffectiveContextPercent(firstPreset?.effective_context_window_percent),
+        input_modalities: normalizeInputModalities(firstPreset?.input_modalities),
       },
     ],
   });
@@ -275,6 +277,7 @@ function defaultAIConfig(): AIConfig {
             context_window: 400000,
             max_output_tokens: 128000,
             effective_context_window_percent: DEFAULT_EFFECTIVE_CONTEXT_WINDOW_PERCENT,
+            input_modalities: ['text', 'image'],
           },
         ],
       },
@@ -310,7 +313,7 @@ function providerWebSearchSummary(provider: AIProviderRow): string {
   }
 }
 
-type AIModelOption = Readonly<{ id: string; label: string }>;
+type AIModelOption = Readonly<{ id: string; label: string; supportsImageInput: boolean }>;
 
 function collectAIModelOptions(rows: AIProviderRow[]): AIModelOption[] {
   const options: AIModelOption[] = [];
@@ -324,6 +327,7 @@ function collectAIModelOptions(rows: AIProviderRow[]): AIModelOption[] {
       options.push({
         id: modelID(providerID, modelName),
         label: `${providerName} / ${modelName}`,
+        supportsImageInput: modelSupportsImageInput(m.input_modalities),
       });
     }
   }
@@ -333,9 +337,8 @@ function collectAIModelOptions(rows: AIProviderRow[]): AIModelOption[] {
 function normalizeAICurrentModelID(raw: string, rows: AIProviderRow[]): string {
   const current = String(raw ?? '').trim();
   const options = collectAIModelOptions(rows);
-  if (options.length === 0) return '';
   if (options.some((it) => it.id === current)) return current;
-  return options[0].id;
+  return '';
 }
 
 function isJSONObject(v: unknown): v is Record<string, unknown> {
@@ -864,7 +867,13 @@ export function EnvSettingsPage() {
       name: 'OpenAI',
       type: 'openai',
       base_url: 'https://api.openai.com/v1',
-      models: [{ model_name: 'gpt-5.2-mini', context_window: 400000, max_output_tokens: 128000, effective_context_window_percent: DEFAULT_EFFECTIVE_CONTEXT_WINDOW_PERCENT }],
+      models: [{
+        model_name: 'gpt-5.2-mini',
+        context_window: 400000,
+        max_output_tokens: 128000,
+        effective_context_window_percent: DEFAULT_EFFECTIVE_CONTEXT_WINDOW_PERCENT,
+        input_modalities: ['text', 'image'],
+      }],
     },
   ]);
   const [aiCurrentModelID, setAiCurrentModelID] = createSignal('openai/gpt-5.2-mini');
@@ -875,7 +884,6 @@ export function EnvSettingsPage() {
   const [aiProviderDialogMode, setAiProviderDialogMode] = createSignal<AIProviderDialogMode>('edit');
   const [aiProviderDialogSourceIndex, setAiProviderDialogSourceIndex] = createSignal<number | null>(null);
   const [aiProviderDialogDraft, setAiProviderDialogDraft] = createSignal<AIProviderRow | null>(null);
-  const [aiProviderPresetModel, setAiProviderPresetModel] = createSignal('');
 
   // AI provider keys (stored locally in secrets.json; never returned in plaintext).
   const [aiProviderKeySet, setAiProviderKeySet] = createSignal<Record<string, boolean>>({});
@@ -1021,21 +1029,13 @@ export function EnvSettingsPage() {
     return err instanceof Error ? err.message : String(err);
   });
   const aiModelOptions = createMemo(() => collectAIModelOptions(aiProviders()));
+  const aiCurrentModelOption = createMemo(() => aiModelOptions().find((item) => item.id === aiCurrentModelID()) ?? null);
   const aiProviderDialogProvider = createMemo(() => aiProviderDialogDraft());
   const aiProviderDialogRecommendedModels = createMemo<readonly AIProviderModelPreset[]>(() => {
     const provider = aiProviderDialogProvider();
     if (!provider) return [];
     return recommendedModelsForProviderType(provider.type);
   });
-  const aiProviderDialogRecommendedModelOptions = createMemo(() =>
-    aiProviderDialogRecommendedModels().map((model) => {
-      const output = model.max_output_tokens ? ` / max ${formatTokenCount(model.max_output_tokens)}` : '';
-      return {
-        value: model.model_name,
-        label: `${model.model_name} (ctx ${formatTokenCount(model.context_window)}${output})`,
-      };
-    }),
-  );
   const aiProviderDialogTitle = createMemo(() => (aiProviderDialogMode() === 'create' ? 'Add provider' : 'Edit provider'));
 
   const configPath = () => String(settings()?.config_path ?? '').trim();
@@ -1066,8 +1066,8 @@ export function EnvSettingsPage() {
     return buildPermissionPolicyValue(localMax, policyByUser(), policyByApp());
   };
 
-  const buildAIValue = (): AIConfig => {
-    const providers = aiProviders().map((p) => {
+  const buildAIValueFromRows = (rows: AIProviderRow[], currentModelRaw: string): AIConfig => {
+    const providers = rows.map((p) => {
       const out: any = {
         id: String(p.id ?? '').trim(),
         type: p.type,
@@ -1087,6 +1087,7 @@ export function EnvSettingsPage() {
         if (maxOutputTokens != null) modelOut.max_output_tokens = maxOutputTokens;
         const effectiveContextPercent = normalizeEffectiveContextPercent(m.effective_context_window_percent);
         if (effectiveContextPercent != null) modelOut.effective_context_window_percent = effectiveContextPercent;
+        modelOut.input_modalities = normalizeInputModalities(m.input_modalities);
         return modelOut as AIProviderModel;
       });
 
@@ -1094,8 +1095,8 @@ export function EnvSettingsPage() {
     });
 
     const preserved = aiPreservedFields();
-    const currentModelID = normalizeAICurrentModelID(aiCurrentModelID(), aiProviders());
-    if (!currentModelID) throw new Error('Flower JSON is missing current_model_id.');
+    const currentModelID = normalizeAICurrentModelID(currentModelRaw, rows);
+    if (!currentModelID) throw new Error('Select a valid Current Model before saving Flower settings.');
 
     const out: any = { current_model_id: currentModelID, providers };
     if (preserved.mode === 'act' || preserved.mode === 'plan') out.mode = preserved.mode;
@@ -1123,6 +1124,8 @@ export function EnvSettingsPage() {
     };
     return out as AIConfig;
   };
+
+  const buildAIValue = (): AIConfig => buildAIValueFromRows(aiProviders(), aiCurrentModelID());
 
   const validateAIValue = (cfg: AIConfig) => {
     const mode = String((cfg as any).mode ?? '').trim();
@@ -1282,6 +1285,18 @@ export function EnvSettingsPage() {
         if (hasEffectiveContextPercent && (effectiveContextPercent < 1 || effectiveContextPercent > 100)) {
           throw new Error(`Provider "${id}" model "${mn}" effective_context_window_percent must be in [1,100].`);
         }
+        if ((m as any).input_modalities !== undefined) {
+          if (!Array.isArray((m as any).input_modalities)) throw new Error(`Provider "${id}" model "${mn}" input_modalities must be an array.`);
+          let hasTextModality = false;
+          for (const item of (m as any).input_modalities as unknown[]) {
+            const modality = String(item ?? '').trim().toLowerCase();
+            if (modality !== 'text' && modality !== 'image') {
+              throw new Error(`Provider "${id}" model "${mn}" has unsupported input modality: ${modality || '(empty)'}`);
+            }
+            if (modality === 'text') hasTextModality = true;
+          }
+          if (!hasTextModality) throw new Error(`Provider "${id}" model "${mn}" input_modalities must include text.`);
+        }
         modelNames.add(mn);
         modelIDs.add(modelID(id, mn));
       }
@@ -1304,6 +1319,7 @@ export function EnvSettingsPage() {
         context_window: normalizePositiveInteger(m?.context_window),
         max_output_tokens: normalizePositiveInteger(m?.max_output_tokens),
         effective_context_window_percent: normalizeEffectiveContextPercent(m?.effective_context_window_percent),
+        input_modalities: normalizeInputModalities(m?.input_modalities),
       })),
     }));
 
@@ -1319,6 +1335,7 @@ export function EnvSettingsPage() {
         context_window: normalizeContextWindowByProvider(p.type, m?.context_window),
         max_output_tokens: normalizePositiveInteger(m?.max_output_tokens),
         effective_context_window_percent: normalizeEffectiveContextPercent(m?.effective_context_window_percent),
+        input_modalities: normalizeInputModalities(m?.input_modalities),
       }));
     }
     return list;
@@ -1457,62 +1474,6 @@ export function EnvSettingsPage() {
     updateFilesystemScopeRoots((roots) => roots.filter((root, rowIndex) => rowIndex !== index || root.system));
   };
 
-  const updateAIProviderKey = async (providerID: string, apiKey: string | null) => {
-    const id = String(providerID ?? '').trim();
-    if (!id) {
-      notify.error('Invalid provider', 'Provider id is required.');
-      return;
-    }
-    if (!canAdmin()) {
-      notify.error('Permission denied', 'Admin permission required.');
-      return;
-    }
-
-    setAiProviderKeySaving((prev) => ({ ...prev, [id]: true }));
-    try {
-      const body = { patches: [{ provider_id: id, api_key: apiKey }] };
-      const resp = await fetchGatewayJSON<{ provider_api_key_set: Record<string, boolean> }>('/_redeven_proxy/api/ai/provider_keys', {
-        method: 'PUT',
-        body: JSON.stringify(body),
-      });
-
-      const next = resp?.provider_api_key_set ?? {};
-      setAiProviderKeySet((prev) => ({ ...prev, ...next }));
-      setAiProviderKeyDraft((prev) => ({ ...prev, [id]: '' }));
-
-      if (apiKey) notify.success('Saved', `API key saved for provider "${id}".`);
-      else notify.success('Cleared', `API key cleared for provider "${id}".`);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      notify.error('Save failed', msg || 'Request failed.');
-    } finally {
-      setAiProviderKeySaving((prev) => ({ ...prev, [id]: false }));
-    }
-  };
-
-  const saveAIProviderKey = (providerID: string) => {
-    const id = String(providerID ?? '').trim();
-    if (!id) {
-      notify.error('Invalid provider', 'Provider id is required.');
-      return;
-    }
-    const key = String(aiProviderKeyDraft()?.[id] ?? '').trim();
-    if (!key) {
-      notify.error('Missing API key', 'Please paste an API key first.');
-      return;
-    }
-    void updateAIProviderKey(id, key);
-  };
-
-  const clearAIProviderKey = (providerID: string) => {
-    const id = String(providerID ?? '').trim();
-    if (!id) {
-      notify.error('Invalid provider', 'Provider id is required.');
-      return;
-    }
-    void updateAIProviderKey(id, null);
-  };
-
   const normalizeProviderModelRows = (providerType: AIProviderType, rows: AIProviderModelRow[]): AIProviderModelRow[] => {
     const seen = new Set<string>();
     const out: AIProviderModelRow[] = [];
@@ -1525,6 +1486,7 @@ export function EnvSettingsPage() {
         context_window: normalizeContextWindowByProvider(providerType, row?.context_window),
         max_output_tokens: normalizePositiveInteger(row?.max_output_tokens),
         effective_context_window_percent: normalizeEffectiveContextPercent(row?.effective_context_window_percent),
+        input_modalities: normalizeInputModalities(row?.input_modalities),
       });
     }
     return out;
@@ -1567,6 +1529,7 @@ export function EnvSettingsPage() {
           context_window: normalizePositiveInteger(targetPreset?.context_window),
           max_output_tokens: normalizePositiveInteger(targetPreset?.max_output_tokens),
           effective_context_window_percent: normalizeEffectiveContextPercent(targetPreset?.effective_context_window_percent),
+          input_modalities: normalizeInputModalities(targetPreset?.input_modalities),
         },
       ]);
       return {
@@ -1586,6 +1549,7 @@ export function EnvSettingsPage() {
         context_window: normalizePositiveInteger(model.context_window),
         max_output_tokens: normalizePositiveInteger(model.max_output_tokens),
         effective_context_window_percent: normalizeEffectiveContextPercent(model.effective_context_window_percent),
+        input_modalities: normalizeInputModalities(model.input_modalities),
       })),
     );
     if (recommendedRows.length === 0) {
@@ -1604,7 +1568,6 @@ export function EnvSettingsPage() {
     setAiProviderDialogMode('edit');
     setAiProviderDialogSourceIndex(null);
     setAiProviderDialogDraft(null);
-    setAiProviderPresetModel('');
   };
 
   const openAIProviderDialog = (index: number) => {
@@ -1614,7 +1577,6 @@ export function EnvSettingsPage() {
     setAiProviderDialogMode('edit');
     setAiProviderDialogSourceIndex(index);
     setAiProviderDialogDraft(draft);
-    setAiProviderPresetModel(String(recommendedModelsForProviderType(draft.type)[0]?.model_name ?? ''));
     setAiProviderDialogOpen(true);
   };
 
@@ -1623,11 +1585,10 @@ export function EnvSettingsPage() {
     setAiProviderDialogMode('create');
     setAiProviderDialogSourceIndex(null);
     setAiProviderDialogDraft(draft);
-    setAiProviderPresetModel(String(recommendedModelsForProviderType(draft.type)[0]?.model_name ?? ''));
     setAiProviderDialogOpen(true);
   };
 
-  const confirmAIProviderDialog = () => {
+  const confirmAIProviderDialog = async () => {
     const draft = aiProviderDialogDraft();
     if (!draft) {
       closeAIProviderDialog();
@@ -1652,16 +1613,22 @@ export function EnvSettingsPage() {
       nextProviders = [...nextProviders, normalizedDraft];
     }
 
-    const normalizedProviders = normalizeAIProviders(nextProviders);
-    setAiProviders(normalizedProviders);
-    setAiCurrentModelID(normalizeAICurrentModelID(aiCurrentModelID(), normalizedProviders));
-    setAiDirty(true);
-    if (normalizedDraft.type === 'openai_compatible' && normalizeAIProviderWebSearchMode(normalizedDraft.web_search?.mode) === 'brave') {
-      void refreshWebSearchKeyStatus([normalizedDraftID]);
-    }
-    closeAIProviderDialog();
-    if (mode === 'create') notify.success('Provider added', 'Changes confirmed. Auto-save is in progress.');
-    else notify.success('Provider updated', 'Changes confirmed. Auto-save is in progress.');
+	const normalizedProviders = normalizeAIProviders(nextProviders);
+	const nextCurrentModelID = normalizeAICurrentModelID(aiCurrentModelID(), normalizedProviders);
+	if (!nextCurrentModelID) {
+	  notify.error('Current model needs attention', 'Select a valid Current Model before saving this provider.');
+	  setAiCurrentModelID('');
+	  setAiDirty(true);
+	  return;
+	}
+	if (normalizedDraft.type === 'openai_compatible' && normalizeAIProviderWebSearchMode(normalizedDraft.web_search?.mode) === 'brave') {
+	  void refreshWebSearchKeyStatus([normalizedDraftID]);
+	}
+	const saved = await saveAIProviderBundle(normalizedProviders, nextCurrentModelID, normalizedDraftID);
+	if (!saved) return;
+	closeAIProviderDialog();
+	if (mode === 'create') notify.success('Provider added', 'Provider configuration and key state were saved.');
+	else notify.success('Provider updated', 'Provider configuration and key state were saved.');
   };
 
   const refreshWebSearchKeyStatus = async (providerIDs: string[]) => {
@@ -1685,62 +1652,6 @@ export function EnvSettingsPage() {
     } catch {
       // Best-effort only.
     }
-  };
-
-  const updateWebSearchKey = async (providerID: string, apiKey: string | null) => {
-    const id = String(providerID ?? '').trim();
-    if (!id) {
-      notify.error('Invalid provider', 'Provider id is required.');
-      return;
-    }
-    if (!canAdmin()) {
-      notify.error('Permission denied', 'Admin permission required.');
-      return;
-    }
-
-    setWebSearchKeySaving((prev) => ({ ...prev, [id]: true }));
-    try {
-      const body = { patches: [{ provider_id: id, api_key: apiKey }] };
-      const resp = await fetchGatewayJSON<{ provider_api_key_set: Record<string, boolean> }>('/_redeven_proxy/api/ai/web_search_provider_keys', {
-        method: 'PUT',
-        body: JSON.stringify(body),
-      });
-
-      const next = resp?.provider_api_key_set ?? {};
-      setWebSearchKeySet((prev) => ({ ...prev, ...next }));
-      setWebSearchKeyDraft((prev) => ({ ...prev, [id]: '' }));
-
-      if (apiKey) notify.success('Saved', `Web search API key saved for provider "${id}".`);
-      else notify.success('Cleared', `Web search API key cleared for provider "${id}".`);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      notify.error('Save failed', msg || 'Request failed.');
-    } finally {
-      setWebSearchKeySaving((prev) => ({ ...prev, [id]: false }));
-    }
-  };
-
-  const saveWebSearchKey = (providerID: string) => {
-    const id = String(providerID ?? '').trim();
-    if (!id) {
-      notify.error('Invalid provider', 'Provider id is required.');
-      return;
-    }
-    const key = String(webSearchKeyDraft()?.[id] ?? '').trim();
-    if (!key) {
-      notify.error('Missing API key', 'Please paste a Brave API key first.');
-      return;
-    }
-    void updateWebSearchKey(id, key);
-  };
-
-  const clearWebSearchKey = (providerID: string) => {
-    const id = String(providerID ?? '').trim();
-    if (!id) {
-      notify.error('Invalid provider', 'Provider id is required.');
-      return;
-    }
-    void updateWebSearchKey(id, null);
   };
 
   const filteredSkills = createMemo(() => {
@@ -2145,6 +2056,7 @@ export function EnvSettingsPage() {
           context_window: normalizePositiveInteger((m as any).context_window),
           max_output_tokens: normalizePositiveInteger((m as any).max_output_tokens),
           effective_context_window_percent: normalizeEffectiveContextPercent((m as any).effective_context_window_percent),
+          input_modalities: normalizeInputModalities((m as any).input_modalities),
         })),
       }));
       const fallback = defaultAIConfig();
@@ -2159,6 +2071,7 @@ export function EnvSettingsPage() {
           context_window: normalizePositiveInteger((m as any).context_window),
           max_output_tokens: normalizePositiveInteger((m as any).max_output_tokens),
           effective_context_window_percent: normalizeEffectiveContextPercent((m as any).effective_context_window_percent),
+          input_modalities: normalizeInputModalities((m as any).input_modalities),
         })),
       }));
       const normalizedProviders = normalizeAIProviders(rows.length > 0 ? rows : fallbackRows);
@@ -2187,21 +2100,6 @@ export function EnvSettingsPage() {
   createEffect(() => {
     if (aiView() !== 'ui' && aiProviderDialogOpen()) {
       closeAIProviderDialog();
-    }
-  });
-
-  createEffect(() => {
-    if (!aiProviderDialogOpen()) return;
-    const provider = aiProviderDialogProvider();
-    if (!provider) return;
-    const models = recommendedModelsForProviderType(provider.type);
-    const current = String(aiProviderPresetModel() ?? '').trim();
-    if (models.length === 0) {
-      if (current) setAiProviderPresetModel('');
-      return;
-    }
-    if (!models.some((it) => it.model_name === current)) {
-      setAiProviderPresetModel(models[0].model_name);
     }
   });
 
@@ -2372,6 +2270,7 @@ export function EnvSettingsPage() {
                 context_window: normalizePositiveInteger(m?.context_window),
                 max_output_tokens: normalizePositiveInteger(m?.max_output_tokens),
                 effective_context_window_percent: normalizeEffectiveContextPercent(m?.effective_context_window_percent),
+                input_modalities: normalizeInputModalities(m?.input_modalities),
               }))
             : [],
         })),
@@ -2632,6 +2531,72 @@ export function EnvSettingsPage() {
       notifyAutoSaveFailed('Flower settings', e);
     } finally {
       setAiSaving(false);
+    }
+  };
+
+  const saveAIProviderBundle = async (nextProviders: AIProviderRow[], nextCurrentModelID: string, providerID: string) => {
+    const id = String(providerID ?? '').trim();
+    if (!id) {
+      notify.error('Invalid provider', 'Provider id is required.');
+      return false;
+    }
+    if (!canAdmin()) {
+      notify.error('Permission denied', 'Admin permission required.');
+      return false;
+    }
+
+    let aiValue: AIConfig;
+    try {
+      aiValue = buildAIValueFromRows(nextProviders, nextCurrentModelID);
+      validateAIValue(aiValue);
+      setAiError(null);
+    } catch (e) {
+      const msg = formatUnknownError(e) || 'Save failed.';
+      setAiError(msg);
+      notify.error('Save failed', msg);
+      return false;
+    }
+
+    const providerKey = String(aiProviderKeyDraft()?.[id] ?? '').trim();
+    const webSearchKey = String(webSearchKeyDraft()?.[id] ?? '').trim();
+    const body: any = {
+      ai: aiValue,
+      provider_api_key_patches: providerKey ? [{ provider_id: id, api_key: providerKey }] : [],
+      web_search_provider_key_patches: webSearchKey ? [{ provider_id: id, api_key: webSearchKey }] : [],
+    };
+
+    setAiSaving(true);
+    setAiProviderKeySaving((prev) => ({ ...prev, [id]: true }));
+    setWebSearchKeySaving((prev) => ({ ...prev, [id]: true }));
+    try {
+      const saved = await fetchGatewayJSON<AgentSettingsResponse | SettingsUpdateResponse>('/_redeven_proxy/api/ai/provider_bundle', {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      });
+      const normalized = normalizeSettingsUpdateResponse(saved);
+      if (normalized.settings) mutateSettings(normalized.settings);
+      setAiProviders(nextProviders);
+      setAiCurrentModelID(nextCurrentModelID);
+      setAiProviderKeyDraft((prev) => ({ ...prev, [id]: '' }));
+      setWebSearchKeyDraft((prev) => ({ ...prev, [id]: '' }));
+      if (providerKey) setAiProviderKeySet((prev) => ({ ...prev, [id]: true }));
+      if (webSearchKey) setWebSearchKeySet((prev) => ({ ...prev, [id]: true }));
+      const now = Date.now();
+      setAiSavedAt(now);
+      setAiDirty(false);
+      setAiError(null);
+      notifyAutoSaveSuccess('Flower provider', now, { aiUpdate: normalized.aiUpdate });
+      return true;
+    } catch (e) {
+      const msg = formatUnknownError(e) || 'Save failed.';
+      setAiError(msg);
+      setAiDirty(true);
+      notifyAutoSaveFailed('Flower provider', e);
+      return false;
+    } finally {
+      setAiSaving(false);
+      setAiProviderKeySaving((prev) => ({ ...prev, [id]: false }));
+      setWebSearchKeySaving((prev) => ({ ...prev, [id]: false }));
     }
   };
 
@@ -3841,7 +3806,15 @@ export function EnvSettingsPage() {
                             disabled={!canInteract() || aiModelOptions().length === 0 || aiSaving() || disableAISaving()}
                           />
                         </SettingsTableCell>
-                        <SettingsTableCell class="text-[11px] text-muted-foreground">Current model used when a new chat thread is created. Individual threads may still select a different model.</SettingsTableCell>
+	                        <SettingsTableCell class="text-[11px] text-muted-foreground">
+	                          <div class="flex flex-wrap gap-1.5">
+	                            <SettingsPill tone="success">Text</SettingsPill>
+	                            <SettingsPill tone={aiCurrentModelOption()?.supportsImageInput ? 'success' : 'default'}>
+	                              {aiCurrentModelOption()?.supportsImageInput ? 'Image Input' : 'Text only'}
+	                            </SettingsPill>
+	                          </div>
+	                          <div class="mt-1">Used when a new chat thread is created. Individual threads may still select a different model.</div>
+	                        </SettingsTableCell>
                       </SettingsTableRow>
                     </SettingsTableBody>
                   </SettingsTable>
@@ -3855,112 +3828,97 @@ export function EnvSettingsPage() {
                     </div>
                   </Show>
 
-                  <div class="space-y-3">
-                    <SubSectionHeader
-                      title="Providers"
-                      description="Provider registry exposed to Flower Chat."
-                      actions={
-                        <Button size="sm" variant="outline" onClick={() => addAIProviderAndOpenDialog()} disabled={!canInteract()}>
-                          Add Provider
-                        </Button>
-                      }
-                    />
+	                  <div class="space-y-3">
+	                    <SubSectionHeader
+	                      title="Providers"
+	                      description="Provider connections exposed to Flower Chat."
+	                      actions={
+	                        <Button size="sm" variant="default" onClick={() => addAIProviderAndOpenDialog()} disabled={!canInteract()}>
+	                          Add Provider
+	                        </Button>
+	                      }
+	                    />
 
-                    <SettingsTable minWidthClass="min-w-[72rem]">
-                      <SettingsTableHead sticky>
-                      <SettingsTableHeaderRow>
-                        <SettingsTableHeaderCell class="w-48">Name</SettingsTableHeaderCell>
-                        <SettingsTableHeaderCell class="w-48">Provider ID</SettingsTableHeaderCell>
-                        <SettingsTableHeaderCell class="w-32">Type</SettingsTableHeaderCell>
-                        <SettingsTableHeaderCell>Base URL</SettingsTableHeaderCell>
-                        <SettingsTableHeaderCell class="w-28">API Key</SettingsTableHeaderCell>
-                        <SettingsTableHeaderCell class="w-48">Web Search</SettingsTableHeaderCell>
-                        <SettingsTableHeaderCell class="w-56">Models</SettingsTableHeaderCell>
-                        <SettingsTableHeaderCell class="w-32">Actions</SettingsTableHeaderCell>
-                      </SettingsTableHeaderRow>
-                      </SettingsTableHead>
-                      <SettingsTableBody>
-                        <For each={aiProviders()}>
-                          {(provider, index) => {
-                            const providerID = () => String(provider.id ?? '').trim();
-                            const displayName = () => String(provider.name ?? '').trim() || providerID() || `Provider ${index() + 1}`;
-                            const modelNames = () =>
-                              (Array.isArray(provider.models) ? provider.models : [])
-                                .map((model) => String(model.model_name ?? '').trim())
-                                .filter(Boolean);
-                            return (
-                              <SettingsTableRow>
-                                <SettingsTableCell>
-                                  <div class="space-y-1">
-                                    <div class="text-sm font-semibold text-foreground">{displayName()}</div>
-                                    <Show when={aiCurrentModelID().startsWith(`${providerID()}/`)}>
-                                      <SettingsPill tone="success">Current provider</SettingsPill>
-                                    </Show>
-                                  </div>
-                                </SettingsTableCell>
-                                <SettingsTableCell class="font-mono text-[11px] break-all">{providerID() || '—'}</SettingsTableCell>
-                                <SettingsTableCell>
-                                  <SettingsPill>{provider.type}</SettingsPill>
-                                </SettingsTableCell>
-                                <SettingsTableCell class="font-mono text-[11px] break-all">{String(provider.base_url ?? '').trim() || '—'}</SettingsTableCell>
-                                <SettingsTableCell>
-                                  <SettingsPill tone={aiProviderKeySet()?.[providerID()] ? 'success' : 'default'}>
-                                    {aiProviderKeySet()?.[providerID()] ? 'Key set' : 'Key not set'}
-                                  </SettingsPill>
-                                </SettingsTableCell>
-                                <SettingsTableCell>
-                                  <SettingsPill
-                                    tone={
-                                      providerBuiltInWebSearchLabel(provider.type) ||
-                                      (provider.type === 'openai_compatible' && normalizeAIProviderWebSearchMode(provider.web_search?.mode) !== 'disabled')
-                                        ? 'success'
-                                        : 'default'
-                                    }
-                                  >
-                                    {providerWebSearchSummary(provider)}
-                                  </SettingsPill>
-                                </SettingsTableCell>
-                                <SettingsTableCell>
-                                  <div class="space-y-1 text-[11px] text-muted-foreground">
-                                    <div>{provider.models?.length ?? 0} model(s)</div>
-                                    <div class="break-all font-mono">
-                                      {modelNames().slice(0, 2).join(', ') || '—'}
-                                      <Show when={modelNames().length > 2}>
-                                        <span>{` +${modelNames().length - 2} more`}</span>
-                                      </Show>
-                                    </div>
-                                  </div>
-                                </SettingsTableCell>
-                                <SettingsTableCell>
-                                  <div class="flex items-center gap-2">
-                                    <Button size="sm" variant="outline" onClick={() => openAIProviderDialog(index())} disabled={!canInteract()}>
-                                      Edit
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      class="text-muted-foreground hover:text-destructive"
-                                      onClick={() => {
-                                        setAiProviders((prev) => {
-                                          const normalizedProviders = normalizeAIProviders(prev.filter((_, rowIndex) => rowIndex !== index()));
-                                          setAiCurrentModelID(normalizeAICurrentModelID(aiCurrentModelID(), normalizedProviders));
-                                          return normalizedProviders;
-                                        });
-                                        setAiDirty(true);
-                                      }}
-                                      disabled={!canInteract() || aiProviders().length <= 1}
-                                    >
-                                      Remove
-                                    </Button>
-                                  </div>
-                                </SettingsTableCell>
-                              </SettingsTableRow>
-                            );
-                          }}
-                        </For>
-                      </SettingsTableBody>
-                    </SettingsTable>
-                  </div>
+	                    <div class="grid grid-cols-1 gap-3 xl:grid-cols-2">
+	                      <For each={aiProviders()}>
+	                        {(provider, index) => {
+	                          const providerID = () => String(provider.id ?? '').trim();
+	                          const displayName = () => String(provider.name ?? '').trim() || `Provider ${index() + 1}`;
+	                          const modelNames = () =>
+	                            (Array.isArray(provider.models) ? provider.models : [])
+	                              .map((model) => String(model.model_name ?? '').trim())
+	                              .filter(Boolean);
+	                          const hasImageModel = () =>
+	                            (Array.isArray(provider.models) ? provider.models : []).some((model) => modelSupportsImageInput(model.input_modalities));
+	                          return (
+	                            <div class="rounded-lg border border-border bg-background p-4 shadow-sm">
+	                              <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+	                                <div class="min-w-0 space-y-2">
+	                                  <div class="flex flex-wrap items-center gap-2">
+	                                    <div class="break-words text-sm font-semibold text-foreground">{displayName()}</div>
+	                                    <SettingsPill>{provider.type === 'openai_compatible' ? 'OpenAI Compatible' : provider.type}</SettingsPill>
+	                                    <Show when={aiCurrentModelID().startsWith(`${providerID()}/`)}>
+	                                      <SettingsPill tone="success">Current default</SettingsPill>
+	                                    </Show>
+	                                  </div>
+	                                  <div class="text-xs text-muted-foreground">{modelNames().length} enabled model(s)</div>
+	                                </div>
+	                                <div class="flex items-center gap-2">
+	                                  <Button size="sm" variant="outline" onClick={() => openAIProviderDialog(index())} disabled={!canInteract()}>
+	                                    Edit
+	                                  </Button>
+	                                  <Button
+	                                    size="sm"
+	                                    variant="ghost"
+	                                    class="text-muted-foreground hover:text-destructive"
+	                                    onClick={() => {
+	                                      setAiProviders((prev) => {
+	                                        const normalizedProviders = normalizeAIProviders(prev.filter((_, rowIndex) => rowIndex !== index()));
+	                                        setAiCurrentModelID(normalizeAICurrentModelID(aiCurrentModelID(), normalizedProviders));
+	                                        return normalizedProviders;
+	                                      });
+	                                      setAiDirty(true);
+	                                    }}
+	                                    disabled={!canInteract() || aiProviders().length <= 1}
+	                                  >
+	                                    Remove
+	                                  </Button>
+	                                </div>
+	                              </div>
+
+	                              <div class="mt-3 flex flex-wrap gap-2">
+	                                <SettingsPill tone={aiProviderKeySet()?.[providerID()] ? 'success' : 'default'}>
+	                                  {aiProviderKeySet()?.[providerID()] ? 'Key set' : 'Needs key'}
+	                                </SettingsPill>
+	                                <SettingsPill
+	                                  tone={
+	                                    providerBuiltInWebSearchLabel(provider.type) ||
+	                                    (provider.type === 'openai_compatible' && normalizeAIProviderWebSearchMode(provider.web_search?.mode) !== 'disabled')
+	                                      ? 'success'
+	                                      : 'default'
+	                                  }
+	                                >
+	                                  {providerWebSearchSummary(provider)}
+	                                </SettingsPill>
+	                                <SettingsPill tone={hasImageModel() ? 'success' : 'default'}>
+	                                  {hasImageModel() ? 'Image Input' : 'Text only'}
+	                                </SettingsPill>
+	                              </div>
+
+	                              <div class="mt-3 flex flex-wrap gap-1.5">
+	                                <For each={modelNames().slice(0, 4)}>
+	                                  {(name) => <code class="rounded bg-muted px-1.5 py-0.5 text-[11px]">{name}</code>}
+	                                </For>
+	                                <Show when={modelNames().length > 4}>
+	                                  <span class="text-[11px] text-muted-foreground">{`+${modelNames().length - 4} more`}</span>
+	                                </Show>
+	                              </div>
+	                            </div>
+	                          );
+	                        }}
+	                      </For>
+	                    </div>
+	                  </div>
                 </div>
               </Show>
             </SettingsCard>
@@ -4151,9 +4109,7 @@ export function EnvSettingsPage() {
         webSearchKeySet={!!webSearchKeySet()?.[String(aiProviderDialogProvider()?.id ?? '').trim()]}
         webSearchKeyDraft={webSearchKeyDraft()?.[String(aiProviderDialogProvider()?.id ?? '').trim()] ?? ''}
         webSearchKeySaving={!!webSearchKeySaving()?.[String(aiProviderDialogProvider()?.id ?? '').trim()]}
-        presetModel={aiProviderPresetModel()}
         recommendedModels={aiProviderDialogRecommendedModels()}
-        recommendedModelOptions={aiProviderDialogRecommendedModelOptions()}
         onConfirm={() => confirmAIProviderDialog()}
         onChangeName={(value) => {
           updateAIProviderDialogDraft((current) => ({ ...current, name: value }));
@@ -4165,6 +4121,7 @@ export function EnvSettingsPage() {
             context_window: normalizePositiveInteger(model.context_window),
             max_output_tokens: normalizePositiveInteger(model.max_output_tokens),
             effective_context_window_percent: normalizeEffectiveContextPercent(model.effective_context_window_percent),
+            input_modalities: normalizeInputModalities(model.input_modalities),
           }));
           updateAIProviderDialogDraft((current) => ({
             ...current,
@@ -4178,9 +4135,8 @@ export function EnvSettingsPage() {
             models:
               nextPresetModels.length > 0
                 ? nextPresetModels
-                : [{ model_name: '', context_window: defaultContextWindowForProviderType(nextType) }],
+                : [{ model_name: '', context_window: defaultContextWindowForProviderType(nextType), input_modalities: ['text'] }],
           }));
-          setAiProviderPresetModel(String(nextPreset.models[0]?.model_name ?? ''));
         }}
         onChangeBaseURL={(value) => {
           updateAIProviderDialogDraft((current) => ({ ...current, base_url: value }));
@@ -4190,8 +4146,6 @@ export function EnvSettingsPage() {
           if (!id) return;
           setAiProviderKeyDraft((prev) => ({ ...prev, [id]: value }));
         }}
-        onSaveKey={() => saveAIProviderKey(String(aiProviderDialogProvider()?.id ?? '').trim())}
-        onClearKey={() => clearAIProviderKey(String(aiProviderDialogProvider()?.id ?? '').trim())}
         onChangeWebSearchMode={(mode) => {
           updateAIProviderDialogDraft((current) => ({
             ...current,
@@ -4205,18 +4159,17 @@ export function EnvSettingsPage() {
           if (!id) return;
           setWebSearchKeyDraft((prev) => ({ ...prev, [id]: value }));
         }}
-        onSaveWebSearchKey={() => saveWebSearchKey(String(aiProviderDialogProvider()?.id ?? '').trim())}
-        onClearWebSearchKey={() => clearWebSearchKey(String(aiProviderDialogProvider()?.id ?? '').trim())}
-        onSetPresetModel={(value) => setAiProviderPresetModel(value)}
         onApplyAllPresets={() => applyRecommendedModelsToDraft()}
-        onAddSelectedPreset={() => addRecommendedModelToDraft(aiProviderPresetModel())}
-        onAddModel={() => {
+        onAddSelectedPreset={(modelName) => addRecommendedModelToDraft(String(modelName ?? ''))}
+        onAddCustomModel={(modelName) => {
+          const name = String(modelName ?? '').trim();
+          if (!name) return;
           updateAIProviderDialogDraft((current) => ({
             ...current,
-            models: [
+            models: normalizeProviderModelRows(current.type, [
               ...(Array.isArray(current.models) ? current.models : []),
-              { model_name: '', context_window: defaultContextWindowForProviderType(current.type) },
-            ],
+              { model_name: name, context_window: defaultContextWindowForProviderType(current.type), input_modalities: ['text'] },
+            ]),
           }));
         }}
         onChangeModelName={(index, value) => {
@@ -4230,12 +4183,20 @@ export function EnvSettingsPage() {
         onChangeModelNumber={(index, key, rawValue) => {
           updateAIProviderDialogModelField(index, key, rawValue);
         }}
+        onChangeModelImageInput={(index, enabled) => {
+          updateAIProviderDialogDraft((current) => ({
+            ...current,
+            models: (Array.isArray(current.models) ? current.models : []).map((model, modelIndex) =>
+              modelIndex === index ? { ...model, input_modalities: enabled ? ['text', 'image'] : ['text'] } : model,
+            ),
+          }));
+        }}
         onRemoveModel={(index) => {
           updateAIProviderDialogDraft((current) => {
             const nextModels = (Array.isArray(current.models) ? current.models : []).filter((_, modelIndex) => modelIndex !== index);
             return {
               ...current,
-              models: nextModels.length > 0 ? nextModels : [{ model_name: '', context_window: defaultContextWindowForProviderType(current.type) }],
+              models: nextModels.length > 0 ? nextModels : [{ model_name: '', context_window: defaultContextWindowForProviderType(current.type), input_modalities: ['text'] }],
             };
           });
         }}

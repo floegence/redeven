@@ -1040,7 +1040,7 @@ func (m *subagentManager) create(ctx context.Context, args map[string]any) (map[
 
 	modelID := strings.TrimSpace(m.parent.currentModelID)
 	if modelID == "" && m.parent.cfg != nil {
-		if def, ok := m.parent.cfg.ResolvedCurrentModelID(); ok {
+		if def := strings.TrimSpace(m.parent.cfg.CurrentModelID); def != "" && m.parent.cfg.IsAllowedModelID(def) {
 			modelID = def
 		}
 	}

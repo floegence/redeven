@@ -34,7 +34,16 @@ import {
 
 export type ModelsResponse = Readonly<{
   current_model: string;
-  models: Array<{ id: string; label?: string; source?: string; source_label?: string }>;
+  models: Array<{
+    id: string;
+    label?: string;
+    source?: string;
+    source_label?: string;
+    context_window?: number;
+    max_output_tokens?: number;
+    input_modalities?: string[];
+    supports_image_input?: boolean;
+  }>;
   runtime?: AIRuntimeStatus | null;
 }>;
 
@@ -45,6 +54,10 @@ export type AIModelOption = Readonly<{
   label: string;
   source: AIModelSourceKey;
   sourceLabel: string;
+  contextWindow?: number;
+  maxOutputTokens?: number;
+  inputModalities: readonly string[];
+  supportsImageInput: boolean;
 }>;
 
 export type AIModelSourceGroup = Readonly<{
@@ -436,24 +449,22 @@ export function createAIChatContextValue(): AIChatContextValue {
     return set;
   });
 
-  const fallbackModelId = createMemo(() => {
+  const validCurrentModelId = createMemo(() => {
     const m = models();
     if (!m) return '';
     const allowed = allowedModelIDs();
     const current = String(m.current_model ?? '').trim();
     if (current && allowed.has(current)) return current;
-    const first = m.models?.[0]?.id ? String(m.models[0].id).trim() : '';
-    if (first && allowed.has(first)) return first;
     return '';
   });
 
-  // Keep the draft model valid; fall back to current_model when needed.
+  // Keep the draft model aligned with the explicit current_model contract.
   createEffect(() => {
     if (!modelsReady()) return;
     const allowed = allowedModelIDs();
     const current = String(draftCurrentModelId() ?? '').trim();
     if (current && allowed.has(current)) return;
-    const next = fallbackModelId();
+    const next = validCurrentModelId();
     setDraftCurrentModelId(next);
   });
 
@@ -464,11 +475,16 @@ export function createAIChatContextValue(): AIChatContextValue {
       .map((it) => {
         const value = String(it.id ?? '').trim();
         const source = normalizeAIModelSource(it.source);
+        const inputModalities = Array.isArray(it.input_modalities) ? it.input_modalities.map((x) => String(x ?? '').trim()).filter(Boolean) : ['text'];
         return {
           value,
           label: String(it.label ?? value).trim() || value,
           source,
           sourceLabel: String(it.source_label ?? '').trim() || defaultModelSourceLabel(source),
+          contextWindow: typeof it.context_window === 'number' && Number.isFinite(it.context_window) ? Math.trunc(it.context_window) : undefined,
+          maxOutputTokens: typeof it.max_output_tokens === 'number' && Number.isFinite(it.max_output_tokens) ? Math.trunc(it.max_output_tokens) : undefined,
+          inputModalities,
+          supportsImageInput: Boolean(it.supports_image_input) || inputModalities.includes('image'),
         };
       })
       .filter((it) => it.value !== '');
@@ -1170,7 +1186,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     if (!tid) return '';
 
     const allowed = allowedModelIDs();
-    const fallback = fallbackModelId();
+    const currentDefault = validCurrentModelId();
 
     const overrides = threadModelOverride();
     const overridden = String(overrides?.[tid] ?? '').trim();
@@ -1180,7 +1196,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     const server = String(th?.model_id ?? '').trim();
     if (server && allowed.has(server)) return server;
 
-    return fallback;
+    return currentDefault;
   };
 
   // Keep the current model for draft chats separate from the active thread model.
@@ -1191,7 +1207,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     const draft = String(draftCurrentModelId() ?? '').trim();
     if (draft && allowed.has(draft)) return draft;
 
-    return fallbackModelId();
+    return validCurrentModelId();
   });
 
   const selectedThreadModel = createMemo(() => resolveThreadModelSelection(activeThreadId()));
@@ -1330,7 +1346,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     if (changed) setThreadModelOverride(next);
   });
 
-  // Auto-heal invalid/missing thread model_id by falling back to the current config default.
+  // Auto-heal invalid/missing thread model_id only to the explicit current config default.
   const healingLastAttempt = new Map<string, number>();
   createEffect(() => {
     if (protocol.status() !== 'connected') return;
@@ -1348,7 +1364,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     const server = String(th.model_id ?? '').trim();
     if (server && allowed.has(server)) return;
 
-    const desired = String(fallbackModelId() ?? '').trim();
+    const desired = String(validCurrentModelId() ?? '').trim();
     if (!desired) return;
 
     const now = Date.now();
@@ -1409,6 +1425,10 @@ export function createAIChatContextValue(): AIChatContextValue {
     if (existing) {
       setDraftMode(false);
       return existing;
+    }
+    if (!String(selectedCurrentModel() ?? '').trim()) {
+      notify.error('Missing model', 'Select a Current Model before starting a chat.');
+      return null;
     }
 
     setCreatingThread(true);

@@ -33,7 +33,7 @@ func TestDesktopModelSourceModelSnapshotFiltersMissingKeysAndUsesOpaqueIDs(t *te
 				Name:    "OpenAI",
 				Type:    "openai",
 				BaseURL: "https://api.openai.com/v1",
-				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
+				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini", InputModalities: []string{config.AIInputModalityText, config.AIInputModalityImage}}},
 			},
 			{
 				ID:      "anthropic",
@@ -60,6 +60,12 @@ func TestDesktopModelSourceModelSnapshotFiltersMissingKeysAndUsesOpaqueIDs(t *te
 	if strings.Contains(modelID, "openai") || strings.Contains(modelID, "gpt-5-mini") {
 		t.Fatalf("model ID leaks provider details: %q", modelID)
 	}
+	if !snapshot.Models[0].SupportsImageInput {
+		t.Fatalf("SupportsImageInput=false, want true")
+	}
+	if !reflect.DeepEqual(snapshot.Models[0].InputModalities, []string{config.AIInputModalityText, config.AIInputModalityImage}) {
+		t.Fatalf("InputModalities=%v", snapshot.Models[0].InputModalities)
+	}
 	if snapshot.CurrentModel != modelID {
 		t.Fatalf("CurrentModel=%q, want %q", snapshot.CurrentModel, modelID)
 	}
@@ -72,6 +78,37 @@ func TestDesktopModelSourceModelSnapshotFiltersMissingKeysAndUsesOpaqueIDs(t *te
 	}
 	if entry.ProviderID != "openai" || entry.ModelName != "gpt-5-mini" {
 		t.Fatalf("registry entry=%#v", entry)
+	}
+}
+
+func TestDesktopModelSourceModelSnapshotDoesNotFallbackToFirstModel(t *testing.T) {
+	t.Parallel()
+
+	secretStore := settings.NewSecretsStore(filepath.Join(t.TempDir(), "secrets.json"))
+	if err := secretStore.SetAIProviderAPIKey("openai", "sk-local"); err != nil {
+		t.Fatalf("SetAIProviderAPIKey: %v", err)
+	}
+	snapshot, _, err := buildDesktopModelSourceModelSnapshot(&config.AIConfig{
+		CurrentModelID: "openai/missing",
+		Providers: []config.AIProvider{{
+			ID:      "openai",
+			Name:    "OpenAI",
+			Type:    "openai",
+			BaseURL: "https://api.openai.com/v1",
+			Models: []config.AIProviderModel{
+				{ModelName: "gpt-5-mini"},
+				{ModelName: "gpt-5"},
+			},
+		}},
+	}, secretStore)
+	if err != nil {
+		t.Fatalf("buildDesktopModelSourceModelSnapshot: %v", err)
+	}
+	if got, want := len(snapshot.Models), 2; got != want {
+		t.Fatalf("len(Models)=%d, want %d", got, want)
+	}
+	if snapshot.CurrentModel != "" {
+		t.Fatalf("CurrentModel=%q, want empty for invalid current_model_id", snapshot.CurrentModel)
 	}
 }
 
@@ -96,9 +133,11 @@ func TestServiceListModelsUsesDesktopModelSourceWithoutRemoteConfig(t *testing.T
 				Configured:   true,
 				CurrentModel: modelID,
 				Models: []DesktopModelSourceModel{{
-					ID:       modelID,
-					Label:    "OpenAI / gpt-5-mini",
-					Provider: "OpenAI",
+					ID:                 modelID,
+					Label:              "OpenAI / gpt-5-mini",
+					Provider:           "OpenAI",
+					InputModalities:    []string{config.AIInputModalityText, config.AIInputModalityImage},
+					SupportsImageInput: true,
 				}},
 			})
 		default:
@@ -128,11 +167,59 @@ func TestServiceListModelsUsesDesktopModelSourceWithoutRemoteConfig(t *testing.T
 	if model.Source != "desktop_model_source" || model.SourceLabel != "Desktop" {
 		t.Fatalf("model source=(%q,%q), want desktop model source", model.Source, model.SourceLabel)
 	}
+	if !model.SupportsImageInput {
+		t.Fatalf("model.SupportsImageInput=false, want true")
+	}
 	if out.Runtime == nil || out.Runtime.RemoteConfigured {
 		t.Fatalf("Runtime=%#v, want model-source-only runtime status", out.Runtime)
 	}
 	if out.Runtime.DesktopModelSource == nil || !out.Runtime.DesktopModelSource.Connected {
 		t.Fatalf("DesktopModelSource=%#v, want connected", out.Runtime.DesktopModelSource)
+	}
+}
+
+func TestServiceListModelsDoesNotFallbackToFirstDesktopModel(t *testing.T) {
+	t.Parallel()
+
+	modelID := "desktop:model_test"
+	modelSource, cleanup := startTestDesktopModelSource(t, func(frame DesktopModelSourceRPCFrame) DesktopModelSourceRPCFrame {
+		switch frame.Method {
+		case "ai.status.get":
+			return testDesktopModelSourceResult(t, frame.ID, DesktopModelSourceStatus{
+				BindingState:    string(runtimeservice.BindingStateBound),
+				Connected:       true,
+				Available:       true,
+				ModelSource:     DesktopModelSourceDefaultSource,
+				SessionID:       "desktop-session",
+				ModelCount:      1,
+				ExpiresAtUnixMS: time.Now().Add(time.Hour).UnixMilli(),
+			})
+		case "ai.models.list":
+			return testDesktopModelSourceResult(t, frame.ID, DesktopModelSourceModelSnapshot{
+				Configured:   true,
+				CurrentModel: "desktop:model_missing",
+				Models: []DesktopModelSourceModel{{
+					ID:       modelID,
+					Label:    "OpenAI / gpt-5-mini",
+					Provider: "OpenAI",
+				}},
+			})
+		default:
+			return testDesktopModelSourceError(frame.ID, "METHOD_NOT_FOUND", "unexpected method")
+		}
+	})
+	defer cleanup()
+
+	svc := &Service{desktopModelSource: modelSource}
+	out, err := svc.ListModels()
+	if err != nil {
+		t.Fatalf("ListModels: %v", err)
+	}
+	if out.CurrentModel != "" {
+		t.Fatalf("CurrentModel=%q, want empty when Desktop source current is invalid", out.CurrentModel)
+	}
+	if got, want := len(out.Models), 1; got != want {
+		t.Fatalf("len(Models)=%d, want %d", got, want)
 	}
 }
 

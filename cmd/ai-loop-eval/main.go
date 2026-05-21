@@ -346,8 +346,8 @@ func main() {
 	if cfg.AI == nil {
 		fatalf("ai config is not enabled")
 	}
-	modelID, ok := cfg.AI.ResolvedCurrentModelID()
-	if !ok {
+	modelID := strings.TrimSpace(cfg.AI.CurrentModelID)
+	if modelID == "" || !cfg.AI.IsAllowedModelID(modelID) {
 		fatalf("missing current model in AI config")
 	}
 	secretsPath := filepath.Join(filepath.Dir(cfgPath), "secrets.json")

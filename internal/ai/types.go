@@ -17,10 +17,14 @@ import (
 )
 
 type Model struct {
-	ID          string `json:"id"`
-	Label       string `json:"label,omitempty"`
-	Source      string `json:"source,omitempty"`
-	SourceLabel string `json:"source_label,omitempty"`
+	ID                 string   `json:"id"`
+	Label              string   `json:"label,omitempty"`
+	Source             string   `json:"source,omitempty"`
+	SourceLabel        string   `json:"source_label,omitempty"`
+	ContextWindow      int      `json:"context_window,omitempty"`
+	MaxOutputTokens    int      `json:"max_output_tokens,omitempty"`
+	InputModalities    []string `json:"input_modalities,omitempty"`
+	SupportsImageInput bool     `json:"supports_image_input,omitempty"`
 }
 
 type RequestUserInputPrompt struct {
