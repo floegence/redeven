@@ -4,6 +4,7 @@ import {
   CheckCircle,
   Clock,
   Download,
+  ExternalLink,
   FolderOpen,
   Refresh,
   X,
@@ -175,6 +176,15 @@ export function DownloadTaskPanel(props: { manager: DownloadManager }) {
                         label="Reveal"
                         onClick={() => {
                           void props.manager.reveal(task.id);
+                        }}
+                      />
+                    </Show>
+                    <Show when={task.status === 'completed' && task.destination?.canOpen}>
+                      <DownloadTaskAction
+                        icon={ExternalLink}
+                        label="Open"
+                        onClick={() => {
+                          void props.manager.open(task.id);
                         }}
                       />
                     </Show>

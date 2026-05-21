@@ -58,6 +58,12 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
+function clickAction(host: HTMLElement, title: string) {
+  const button = Array.from(host.querySelectorAll('button')).find((candidate) => candidate.getAttribute('title') === title) as HTMLButtonElement | undefined;
+  if (!button) throw new Error(`Action not found: ${title}`);
+  button.click();
+}
+
 describe('DownloadTaskPanel', () => {
   it('shows active progress and exposes cancel', () => {
     const [tasks] = createSignal([task({})]);
@@ -72,7 +78,7 @@ describe('DownloadTaskPanel', () => {
     expect(host.textContent).toContain('50%');
     expect(host.textContent).toContain('2 KB/s');
 
-    (Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Cancel') as HTMLButtonElement | undefined)?.click();
+    clickAction(host, 'Cancel');
     expect(manager.cancel).toHaveBeenCalledWith('download-1');
   });
 
@@ -97,8 +103,8 @@ describe('DownloadTaskPanel', () => {
     render(() => <DownloadTaskPanel manager={manager} />, host);
 
     expect(host.textContent).toContain('Completed');
-    (Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Reveal') as HTMLButtonElement | undefined)?.click();
-    (Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Open') as HTMLButtonElement | undefined)?.click();
+    clickAction(host, 'Reveal');
+    clickAction(host, 'Open');
 
     expect(manager.reveal).toHaveBeenCalledWith('download-1');
     expect(manager.open).toHaveBeenCalledWith('download-1');

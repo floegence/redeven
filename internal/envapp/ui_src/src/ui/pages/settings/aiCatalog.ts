@@ -5,21 +5,87 @@ import type {
   AIProviderRow,
   AIProviderType,
 } from './types';
+import { AI_PROVIDER_ICON_DEFINITIONS, type AIProviderIconDefinition } from './providerBrandIcons';
 
 export const DEFAULT_OPENAI_COMPAT_CONTEXT_WINDOW = 128000;
 export const DEFAULT_EFFECTIVE_CONTEXT_WINDOW_PERCENT = 95;
 export const DEFAULT_INPUT_MODALITIES: readonly AIInputModality[] = ['text'];
 export const VISION_INPUT_MODALITIES: readonly AIInputModality[] = ['text', 'image'];
 
-export const AI_PROVIDER_TYPE_OPTIONS: ReadonlyArray<{ value: AIProviderType; label: string }> = [
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'anthropic', label: 'Anthropic' },
-  { value: 'moonshot', label: 'Moonshot' },
-  { value: 'chatglm', label: 'ChatGLM' },
-  { value: 'deepseek', label: 'DeepSeek' },
-  { value: 'qwen', label: 'Qwen' },
-  { value: 'openai_compatible', label: 'OpenAI Compatible' },
+export type AIProviderBrand = Readonly<{
+  type: AIProviderType;
+  label: string;
+  description: string;
+  customConnectionName: boolean;
+  icon: AIProviderIconDefinition;
+}>;
+
+const AI_PROVIDER_TYPE_ORDER: readonly AIProviderType[] = [
+  'openai',
+  'anthropic',
+  'moonshot',
+  'chatglm',
+  'deepseek',
+  'qwen',
+  'openai_compatible',
 ];
+
+export const AI_PROVIDER_BRANDS: Record<AIProviderType, AIProviderBrand> = {
+  openai: {
+    type: 'openai',
+    label: 'OpenAI',
+    description: 'Native connection',
+    customConnectionName: false,
+    icon: AI_PROVIDER_ICON_DEFINITIONS.openai,
+  },
+  anthropic: {
+    type: 'anthropic',
+    label: 'Anthropic',
+    description: 'Native connection',
+    customConnectionName: false,
+    icon: AI_PROVIDER_ICON_DEFINITIONS.anthropic,
+  },
+  moonshot: {
+    type: 'moonshot',
+    label: 'Moonshot',
+    description: 'Native connection',
+    customConnectionName: false,
+    icon: AI_PROVIDER_ICON_DEFINITIONS.moonshot,
+  },
+  chatglm: {
+    type: 'chatglm',
+    label: 'ChatGLM',
+    description: 'Native connection',
+    customConnectionName: false,
+    icon: AI_PROVIDER_ICON_DEFINITIONS.chatglm,
+  },
+  deepseek: {
+    type: 'deepseek',
+    label: 'DeepSeek',
+    description: 'Native connection',
+    customConnectionName: false,
+    icon: AI_PROVIDER_ICON_DEFINITIONS.deepseek,
+  },
+  qwen: {
+    type: 'qwen',
+    label: 'Qwen',
+    description: 'Native connection',
+    customConnectionName: false,
+    icon: AI_PROVIDER_ICON_DEFINITIONS.qwen,
+  },
+  openai_compatible: {
+    type: 'openai_compatible',
+    label: 'OpenAI Compatible',
+    description: 'Custom gateway',
+    customConnectionName: true,
+    icon: AI_PROVIDER_ICON_DEFINITIONS.openai_compatible,
+  },
+};
+
+export const AI_PROVIDER_TYPE_OPTIONS: ReadonlyArray<{ value: AIProviderType; label: string; description: string }> = AI_PROVIDER_TYPE_ORDER.map((providerType) => {
+  const brand = AI_PROVIDER_BRANDS[providerType];
+  return { value: brand.type, label: brand.label, description: brand.description };
+});
 
 export const AI_PROVIDER_PRESET_CATALOG: Record<AIProviderType, AIProviderPreset> = {
   openai: {
@@ -105,6 +171,25 @@ export function providerTypeRequiresBaseURL(providerType: AIProviderType): boole
 
 export function providerPresetForType(providerType: AIProviderType): AIProviderPreset {
   return AI_PROVIDER_PRESET_CATALOG[providerType] ?? AI_PROVIDER_PRESET_CATALOG.openai;
+}
+
+export function providerBrandForType(providerType: AIProviderType): AIProviderBrand {
+  return AI_PROVIDER_BRANDS[providerType];
+}
+
+export function providerTypeLabel(providerType: AIProviderType): string {
+  return providerBrandForType(providerType).label;
+}
+
+export function providerUsesCustomConnectionName(providerType: AIProviderType): boolean {
+  return providerBrandForType(providerType).customConnectionName;
+}
+
+export function providerDisplayName(row: Pick<AIProviderRow, 'name' | 'type'>, fallback = 'Provider'): string {
+  if (providerUsesCustomConnectionName(row.type)) {
+    return String(row.name ?? '').trim() || fallback;
+  }
+  return providerTypeLabel(row.type);
 }
 
 export function recommendedModelsForProviderType(providerType: AIProviderType): readonly AIProviderModelPreset[] {

@@ -32,7 +32,7 @@ The UI never receives stored plaintext secrets back from the runtime. It only ge
 
 ## 2. Provider registry
 
-Providers are stored in `config.json` with a stable internal id and a mutable display name.
+Providers are stored in `config.json` with a stable internal id and a display name.
 
 Example:
 
@@ -48,7 +48,8 @@ Example:
 Rules:
 
 - `provider.id` is stable and is used for secret lookup and wire model ids.
-- `provider.name` is user-facing and can be changed.
+- Native provider names are canonical vendor names in the UI and are not edited as custom connection names.
+- `openai_compatible` providers are custom gateways; their `provider.name` remains user-facing and can be changed.
 - `type` is one of:
   - `openai`
   - `anthropic`
@@ -59,6 +60,7 @@ Rules:
   - `openai_compatible`
 - `base_url` is optional for OpenAI and Anthropic, and required for Moonshot, GLM/Z.ai, DeepSeek, Qwen, and OpenAI-compatible providers.
 - `web_search` is valid only for `openai_compatible` providers.
+- Env App provider cards show the vendor icon and canonical vendor label for native providers. Recommended model cards mark already-enabled presets as `Added` instead of presenting a no-op `Use` action.
 
 OpenAI-compatible web-search example:
 
