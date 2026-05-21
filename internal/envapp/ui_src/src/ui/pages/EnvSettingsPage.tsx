@@ -65,6 +65,7 @@ import {
   providerPresetForType,
   providerTypeLabel,
   providerTypeRequiresBaseURL,
+  providerSupportsCustomModelNames,
   providerUsesCustomConnectionName,
   recommendedModelsForProviderType,
 } from './settings/aiCatalog';
@@ -1322,10 +1323,6 @@ export function EnvSettingsPage() {
     for (let i = 0; i < list.length; i++) {
       const p = list[i];
       const models = Array.isArray(p.models) ? p.models : [];
-      if (models.length === 0) {
-        p.models = [{ model_name: '', context_window: defaultContextWindowForProviderType(p.type) }];
-        continue;
-      }
       p.models = models.map((m) => ({
         model_name: String(m?.model_name ?? ''),
         context_window: normalizeContextWindowByProvider(p.type, m?.context_window),
@@ -1530,9 +1527,21 @@ export function EnvSettingsPage() {
       ]);
       return {
         ...current,
-        models: merged.length > 0 ? merged : [{ model_name: '', context_window: defaultContextWindowForProviderType(current.type) }],
+        models: merged,
       };
     });
+  };
+
+  const removeRecommendedModelFromDraft = (modelName: string) => {
+    const targetName = String(modelName ?? '').trim();
+    if (!targetName) return;
+    updateAIProviderDialogDraft((current) => ({
+      ...current,
+      models: normalizeProviderModelRows(
+        current.type,
+        (Array.isArray(current.models) ? current.models : []).filter((model) => String(model?.model_name ?? '').trim() !== targetName),
+      ),
+    }));
   };
 
   const applyRecommendedModelsToDraft = () => {
@@ -1540,13 +1549,16 @@ export function EnvSettingsPage() {
     if (!provider) return;
     const recommendedRows = normalizeProviderModelRows(
       provider.type,
-      recommendedModelsForProviderType(provider.type).map((model) => ({
-        model_name: model.model_name,
-        context_window: normalizePositiveInteger(model.context_window),
-        max_output_tokens: normalizePositiveInteger(model.max_output_tokens),
-        effective_context_window_percent: normalizeEffectiveContextPercent(model.effective_context_window_percent),
-        input_modalities: normalizeInputModalities(model.input_modalities),
-      })),
+      [
+        ...(Array.isArray(provider.models) ? provider.models : []),
+        ...recommendedModelsForProviderType(provider.type).map((model) => ({
+          model_name: model.model_name,
+          context_window: normalizePositiveInteger(model.context_window),
+          max_output_tokens: normalizePositiveInteger(model.max_output_tokens),
+          effective_context_window_percent: normalizeEffectiveContextPercent(model.effective_context_window_percent),
+          input_modalities: normalizeInputModalities(model.input_modalities),
+        })),
+      ],
     );
     if (recommendedRows.length === 0) {
       notify.info('No presets', `No recommended models are available for provider type "${provider.type}".`);
@@ -4132,10 +4144,7 @@ export function EnvSettingsPage() {
               type: nextType,
               base_url: defaultBaseURLForProviderType(nextType),
               web_search: normalizeAIProviderWebSearchForType(nextType, nextPreset.web_search),
-              models:
-                nextPresetModels.length > 0
-                  ? nextPresetModels
-                  : [{ model_name: '', context_window: defaultContextWindowForProviderType(nextType), input_modalities: ['text'] }],
+              models: nextPresetModels.length > 0 ? [nextPresetModels[0]] : [],
             };
           });
         }}
@@ -4162,9 +4171,11 @@ export function EnvSettingsPage() {
         }}
         onApplyAllPresets={() => applyRecommendedModelsToDraft()}
         onAddSelectedPreset={(modelName) => addRecommendedModelToDraft(String(modelName ?? ''))}
+        onRemoveRecommendedPreset={(modelName) => removeRecommendedModelFromDraft(String(modelName ?? ''))}
         onAddCustomModel={(modelName) => {
           const name = String(modelName ?? '').trim();
           if (!name) return;
+          if (!providerSupportsCustomModelNames(String(aiProviderDialogProvider()?.type ?? '') as AIProviderType)) return;
           updateAIProviderDialogDraft((current) => ({
             ...current,
             models: normalizeProviderModelRows(current.type, [
@@ -4197,7 +4208,7 @@ export function EnvSettingsPage() {
             const nextModels = (Array.isArray(current.models) ? current.models : []).filter((_, modelIndex) => modelIndex !== index);
             return {
               ...current,
-              models: nextModels.length > 0 ? nextModels : [{ model_name: '', context_window: defaultContextWindowForProviderType(current.type), input_modalities: ['text'] }],
+              models: nextModels,
             };
           });
         }}

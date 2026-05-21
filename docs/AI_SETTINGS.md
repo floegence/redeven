@@ -60,7 +60,7 @@ Rules:
   - `openai_compatible`
 - `base_url` is optional for OpenAI and Anthropic, and required for Moonshot, GLM/Z.ai, DeepSeek, Qwen, and OpenAI-compatible providers.
 - `web_search` is valid only for `openai_compatible` providers.
-- Env App provider cards show the vendor icon and canonical vendor label for native providers. Recommended model cards mark already-enabled presets as `Added` instead of presenting a no-op `Use` action.
+- Env App provider cards show the vendor icon and canonical vendor label for native providers. Provider type cards expand inline to reveal connection and model details. Recommended model cards let users add or remove presets directly instead of presenting a no-op `Use` action.
 
 OpenAI-compatible web-search example:
 
@@ -162,7 +162,7 @@ Current Runtime Settings UI behavior is:
 
 - Flower lives under Runtime Settings -> `AI & Extensions` as its own card, while permission policy and diagnostics stay in separate top-level groups.
 - The Flower card is organized around provider cards and a dedicated current-model selector instead of a wide editable table.
-- Each provider editor starts with provider type selection, then connection details, then models, then an `Advanced` collapse for low-frequency fields.
+- Each provider editor starts with provider type selection. Clicking a provider type expands its inline connection and model details, with `Advanced` reserved for low-frequency fields.
 - On SSH Host sessions, the Flower card separates persisted remote runtime provider settings from the Desktop source session capability.
 - The chat header shows a single `MODEL` control plus lightweight capability tags. It does not show model-source or tools-location summary badges.
 - When the selected model is served through Desktop Model Source RPC, the chat header shows a `REMOTE` tag. Its tooltip explains that AI requests are handled by Desktop while files, terminal, Git, and workspace actions still run in the current environment.
@@ -173,7 +173,7 @@ Current Runtime Settings UI behavior is:
 - Provider and secret changes are saved together from one provider editor action.
 - Web search controls are shown only inside OpenAI-compatible provider editing.
 - Native providers show built-in web-search status only; they do not show Brave or hosted-search configuration.
-- Models are configured inside each provider entry.
+- Models are configured inside each provider entry and the enabled-model list is the canonical allow-list for that provider.
 - In a draft chat with no active thread, the chat model picker updates `current_model_id` immediately for future thread creation.
 - In an active unlocked thread, the chat model picker updates only that thread's `model_id`.
 - Locked threads show the current thread model as read-only instead of as an editable picker.

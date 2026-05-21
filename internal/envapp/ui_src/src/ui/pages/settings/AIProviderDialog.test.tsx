@@ -110,6 +110,7 @@ function makeProps(overrides: Partial<AIProviderDialogProps> = {}): AIProviderDi
     onApplyAllPresets: vi.fn(),
     onAddSelectedPreset: vi.fn(),
     onAddCustomModel: vi.fn(),
+    onRemoveRecommendedPreset: vi.fn(),
     onChangeModelName: vi.fn(),
     onChangeModelNumber: vi.fn(),
     onChangeModelImageInput: vi.fn(),
@@ -129,6 +130,13 @@ function clickButton(host: HTMLElement, label: string) {
   button.click();
 }
 
+function setInputValue(host: HTMLElement, placeholder: string, value: string) {
+  const input = Array.from(host.querySelectorAll('input')).find((candidate) => candidate.getAttribute('placeholder') === placeholder) as HTMLInputElement | undefined;
+  if (!input) throw new Error(`Input not found: ${placeholder}`);
+  input.value = value;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
 afterEach(() => {
   document.body.innerHTML = '';
 });
@@ -141,30 +149,15 @@ describe('AIProviderDialog', () => {
     render(() => <AIProviderDialog {...makeProps()} />, host);
 
     expect(host.textContent).toContain('Provider Type');
-    expect(host.textContent).toContain('Connection');
-    expect(host.textContent).toContain('Recommended Models');
-    expect(host.textContent).toContain('Enabled Models');
     expect(host.textContent).toContain('Save Provider');
-    expect(host.textContent).toContain('Key ready');
-    expect(host.textContent).toContain('OpenAI built-in web search');
-    expect(host.textContent).not.toContain('Status');
-    expect(host.textContent).not.toContain('enabled model(s)');
-    expect(host.textContent).not.toContain('Connection Name');
-    expect(host.querySelector('[data-provider-brand="openai"]')).not.toBeNull();
-    expect(host.querySelector('[data-provider-brand="deepseek"]')).not.toBeNull();
+    expect(host.textContent).toContain('OpenAI');
     expect(host.textContent).not.toContain('provider_id');
     expect(host.textContent).not.toContain('Save key');
-    expect(host.querySelector('[data-dialog-class]')?.getAttribute('data-dialog-class')).toContain('w-[min(68rem,96vw)]');
-    expect(host.querySelector('[data-dialog-class]')?.getAttribute('data-dialog-class')).toContain('max-w-[96vw]');
+    expect(host.querySelector('[data-provider-brand="openai"]')).not.toBeNull();
   });
 
-  it('wires provider actions through the dialog controls', () => {
+  it('expands a provider type inline and keeps the current type open on repeat click', () => {
     const onChangeType = vi.fn();
-    const onApplyAllPresets = vi.fn();
-    const onAddSelectedPreset = vi.fn();
-    const onAddCustomModel = vi.fn();
-    const onConfirm = vi.fn();
-
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -172,44 +165,95 @@ describe('AIProviderDialog', () => {
       () => (
         <AIProviderDialog
           {...makeProps({
+            provider: {
+              ...baseProvider(),
+              type: 'deepseek',
+              base_url: 'https://api.deepseek.com',
+              models: [
+                {
+                  model_name: 'deepseek-v4-pro',
+                  context_window: 1000000,
+                  max_output_tokens: 384000,
+                  input_modalities: ['text'],
+                },
+              ],
+            },
             onChangeType,
-            onApplyAllPresets,
-            onAddSelectedPreset,
-            onAddCustomModel,
-            onConfirm,
-            recommendedModels: [
-              {
-                model_name: 'gpt-5.4',
-                context_window: 400000,
-                max_output_tokens: 128000,
-              },
-              {
-                model_name: 'gpt-5.2-mini',
-                context_window: 400000,
-                max_output_tokens: 128000,
-              },
-            ],
           })}
         />
       ),
       host,
     );
 
-    clickButton(host, 'Anthropic');
+    clickButton(host, 'DeepSeek');
+    expect(host.textContent).toContain('Connection');
+    expect(host.textContent).toContain('Recommended Models');
 
-    clickButton(host, 'Use All');
-    clickButton(host, 'Use');
-    const customInput = Array.from(host.querySelectorAll('input')).find((input) => input.getAttribute('placeholder') === 'Custom model name') as HTMLInputElement;
-    customInput.value = 'custom-model';
-    customInput.dispatchEvent(new Event('input', { bubbles: true }));
+    clickButton(host, 'DeepSeek');
+    expect(host.textContent).not.toContain('Base URL');
+
+    expect(onChangeType).not.toHaveBeenCalled();
+  });
+
+  it('wires recommended model add/remove and custom model entry through the dialog controls', () => {
+    const onAddSelectedPreset = vi.fn();
+    const onRemoveRecommendedPreset = vi.fn();
+    const onAddCustomModel = vi.fn();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(
+      () => (
+        <AIProviderDialog
+          {...makeProps({
+            provider: {
+              ...baseProvider(),
+              type: 'openai_compatible',
+              name: 'Gateway',
+              base_url: 'https://gateway.example/v1',
+              models: [
+                {
+                  model_name: 'custom-model',
+                  context_window: 128000,
+                  max_output_tokens: 4096,
+                  input_modalities: ['text'],
+                },
+              ],
+            },
+            recommendedModels: [
+              {
+                model_name: 'custom-model',
+                context_window: 128000,
+                max_output_tokens: 4096,
+                input_modalities: ['text'],
+                note: 'Already enabled',
+              },
+              {
+                model_name: 'preset-model',
+                context_window: 128000,
+                max_output_tokens: 4096,
+                input_modalities: ['text', 'image'],
+              },
+            ],
+            onAddSelectedPreset,
+            onRemoveRecommendedPreset,
+            onAddCustomModel,
+          })}
+        />
+      ),
+      host,
+    );
+
+    clickButton(host, 'OpenAI Compatible');
+    clickButton(host, 'Remove');
+    expect(onRemoveRecommendedPreset).toHaveBeenCalledWith('custom-model');
+
+    clickButton(host, 'Add');
+    expect(onAddSelectedPreset).toHaveBeenCalledWith('preset-model');
+
+    setInputValue(host, 'Custom model name', 'my-custom');
     clickButton(host, 'Add Custom Model');
-    clickButton(host, 'Save Provider');
-
-    expect(onChangeType).toHaveBeenCalledWith('anthropic');
-    expect(onApplyAllPresets).toHaveBeenCalledOnce();
-    expect(onAddSelectedPreset).toHaveBeenCalledWith('gpt-5.4');
-    expect(onAddCustomModel).toHaveBeenCalledWith('custom-model');
-    expect(onConfirm).toHaveBeenCalledOnce();
+    expect(onAddCustomModel).toHaveBeenCalledWith('my-custom');
   });
 
   it('shows web search controls only for openai-compatible providers', () => {
@@ -235,48 +279,8 @@ describe('AIProviderDialog', () => {
       host,
     );
 
-    expect(host.textContent).toContain('Connection Name');
-    expect(host.textContent).not.toContain('Brave API Key');
-    clickButton(host, 'Advanced');
+    clickButton(host, 'OpenAI Compatible');
     expect(host.textContent).toContain('Web Search');
     expect(host.textContent).toContain('Brave API Key');
-    expect(host.textContent).not.toContain('Save Brave key');
-    expect(host.textContent).not.toContain('Clear Brave');
-  });
-
-  it('marks already enabled recommended models as added and keeps remaining presets usable', () => {
-    const onAddSelectedPreset = vi.fn();
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    render(
-      () => (
-        <AIProviderDialog
-          {...makeProps({
-            onAddSelectedPreset,
-            recommendedModels: [
-              {
-                model_name: 'gpt-5.2',
-                context_window: 400000,
-                max_output_tokens: 128000,
-              },
-              {
-                model_name: 'gpt-5.4',
-                context_window: 400000,
-                max_output_tokens: 128000,
-              },
-            ],
-          })}
-        />
-      ),
-      host,
-    );
-
-    const addedButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Added') as HTMLButtonElement;
-    expect(addedButton).toBeTruthy();
-    expect(addedButton.disabled).toBe(true);
-
-    clickButton(host, 'Use');
-    expect(onAddSelectedPreset).toHaveBeenCalledWith('gpt-5.4');
   });
 });

@@ -256,6 +256,10 @@ export function providerNeedsWebSearchConfig(providerType: AIProviderType): bool
   return providerType === 'openai_compatible';
 }
 
+export function providerSupportsCustomModelNames(providerType: AIProviderType): boolean {
+  return providerType === 'openai' || providerType === 'anthropic' || providerType === 'openai_compatible';
+}
+
 export function providerBuiltInWebSearchLabel(providerType: AIProviderType): string | undefined {
   switch (providerType) {
     case 'openai':
@@ -295,16 +299,12 @@ export function cloneAIProviderRow(row: AIProviderRow): AIProviderRow {
 export function normalizeAIProviderRowDraft(row: AIProviderRow): AIProviderRow {
   const out = cloneAIProviderRow(row);
   const models = Array.isArray(out.models) ? out.models : [];
-  if (models.length === 0) {
-    out.models = [{ model_name: '', context_window: defaultContextWindowForProviderType(out.type), input_modalities: ['text'] }];
-  } else {
-    out.models = models.map((m) => ({
-      model_name: String(m?.model_name ?? ''),
-      context_window: normalizeContextWindowByProvider(out.type, m?.context_window),
-      max_output_tokens: normalizePositiveInteger(m?.max_output_tokens),
-      effective_context_window_percent: normalizeEffectiveContextPercent(m?.effective_context_window_percent),
-      input_modalities: normalizeInputModalities(m?.input_modalities),
-    }));
-  }
+  out.models = models.map((m) => ({
+    model_name: String(m?.model_name ?? ''),
+    context_window: normalizeContextWindowByProvider(out.type, m?.context_window),
+    max_output_tokens: normalizePositiveInteger(m?.max_output_tokens),
+    effective_context_window_percent: normalizeEffectiveContextPercent(m?.effective_context_window_percent),
+    input_modalities: normalizeInputModalities(m?.input_modalities),
+  }));
   return out;
 }
