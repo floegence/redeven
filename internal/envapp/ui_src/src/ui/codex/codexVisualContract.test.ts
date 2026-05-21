@@ -16,6 +16,22 @@ function readCodexTranscript(): string {
   return fs.readFileSync(resolveFromHere('./CodexTranscript.tsx'), 'utf8');
 }
 
+function readCodexRunIndicator(): string {
+  return fs.readFileSync(resolveFromHere('./CodexMessageRunIndicator.tsx'), 'utf8');
+}
+
+function readCodexActivityDetailPanel(): string {
+  return fs.readFileSync(resolveFromHere('./CodexActivityDetailPanel.tsx'), 'utf8');
+}
+
+function readCodexFileChangeDiff(): string {
+  return fs.readFileSync(resolveFromHere('./CodexFileChangeDiff.tsx'), 'utf8');
+}
+
+function readGitPatchViewer(): string {
+  return fs.readFileSync(resolveFromHere('../widgets/GitPatchViewer.tsx'), 'utf8');
+}
+
 function readCodexActivityStream(): string {
   return fs.readFileSync(resolveFromHere('./CodexActivityStream.tsx'), 'utf8');
 }
@@ -48,6 +64,49 @@ describe('Codex visual contract', () => {
     expect(src).not.toContain('.codex-chat-file-change-canvas {');
     expect(src).not.toContain('.codex-chat-file-change-kind-added {');
     expect(src).not.toContain('.codex-chat-markdown-block .chat-md-file-ref {');
+  });
+
+  it('scopes Codex file path and inline code emphasis without changing the shared patch viewer', () => {
+    const css = readCodexCss();
+    const detailPanelSrc = readCodexActivityDetailPanel();
+    const fileChangeDiffSrc = readCodexFileChangeDiff();
+    const gitPatchViewerSrc = readGitPatchViewer();
+
+    expect(css).toContain('--codex-file-path-fg:');
+    expect(css).toContain('--codex-file-path-hover-fg:');
+    expect(css).toContain('--codex-inline-code-bg:');
+    expect(css).toContain('--codex-inline-code-border:');
+    expect(css).toMatch(/\.codex-activity-file-path \{[\s\S]*color: var\(--codex-file-path-fg\);[\s\S]*\}/);
+    expect(css).toMatch(
+      /\.codex-activity-detail-title\[data-codex-activity-detail-title='file_diff'\],\s*\.codex-activity-detail-title\[data-codex-activity-detail-title='file_preview'\] \{[\s\S]*color: var\(--codex-file-path-fg\);[\s\S]*font-family: ui-monospace/
+    );
+    expect(css).toMatch(/\.codex-activity-detail-markdown \.chat-md-file-ref \{[\s\S]*color: var\(--codex-file-path-fg\);/);
+    expect(css).toMatch(/\.codex-chat-markdown-block \.chat-md-inline-code \{[\s\S]*background: var\(--codex-inline-code-bg\);/);
+    expect(css).not.toContain('.codex-chat-file-change-path');
+    expect(css).not.toContain('.git-patch-file-path');
+    expect(detailPanelSrc).toContain('data-codex-activity-detail-title={props.detail.type}');
+    expect(fileChangeDiffSrc).not.toContain('pathClass');
+    expect(gitPatchViewerSrc).not.toContain('pathClass');
+  });
+
+  it('keeps the Codex running indicator to a single accessible shimmer label', () => {
+    const css = readCodexCss();
+    const indicatorSrc = readCodexRunIndicator();
+
+    expect(indicatorSrc).toContain('role="status"');
+    expect(indicatorSrc).toContain('aria-live="polite"');
+    expect(indicatorSrc).toContain('codex-message-run-indicator-label');
+    expect(indicatorSrc).toContain("'Thinking'");
+    expect(indicatorSrc).not.toContain('<svg');
+    expect(indicatorSrc).not.toContain('createUniqueId');
+    expect(indicatorSrc).not.toContain('codex-message-run-indicator-graph');
+    expect(indicatorSrc).not.toContain('codex-message-run-indicator-bars');
+    expect(css).toContain('@keyframes codex-message-run-shimmer');
+    expect(css).toMatch(/\.codex-message-run-indicator-label \{[\s\S]*background-clip: text;[\s\S]*animation: codex-message-run-shimmer/);
+    expect(css).not.toContain('@keyframes codex-message-run-draw');
+    expect(css).not.toContain('@keyframes codex-message-run-bar');
+    expect(css).not.toContain('.codex-message-run-indicator-graph');
+    expect(css).not.toContain('.codex-message-run-indicator-bars');
   });
 
   it('keeps the Codex empty hero visually centered without phantom bottom spacing', () => {

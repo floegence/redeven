@@ -246,6 +246,7 @@ export type CodexItem = Readonly<{
   content?: string[];
   command?: string;
   cwd?: string;
+  path?: string;
   status?: string;
   aggregated_output?: string;
   exit_code?: number;
