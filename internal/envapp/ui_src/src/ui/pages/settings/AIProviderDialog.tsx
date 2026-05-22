@@ -137,7 +137,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
           const hasEnabledModels = () => models().length > 0;
 
           return (
-            <div class="space-y-5 overflow-y-auto" style="max-height:calc(100vh-14rem)">
+            <div class="space-y-5">
               <section class="space-y-3">
                 <SubSectionHeader title="Provider Type" description="Click a provider type to open its connection and model details inline. Click again to collapse it." />
                 <div class="space-y-2">
@@ -175,7 +175,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                           </button>
 
                           <Show when={expanded()}>
-                            <div class="border-t border-border/80 p-4">
+                            <div class="border-t border-border/80 p-4 overflow-y-auto" style="max-height:50vh">
                               <div class="space-y-5">
                                 <section class="space-y-3">
                                   <SubSectionHeader title="Connection" description="Secrets are saved with the provider; existing keys are never shown again." />
