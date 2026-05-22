@@ -28,8 +28,8 @@ importers:
         specifier: ^0.36.54
         version: 0.36.54
       '@floegence/floe-webapp-core':
-        specifier: ^0.36.54
-        version: 0.36.54(solid-js@1.9.11)
+        specifier: ^0.36.55
+        version: 0.36.55(solid-js@1.9.11)
       '@floegence/floe-webapp-protocol':
         specifier: ^0.36.54
         version: 0.36.54(solid-js@1.9.11)
@@ -492,8 +492,8 @@ packages:
   '@floegence/floe-webapp-boot@0.36.54':
     resolution: {integrity: sha512-pybjQUnHNSRn8xCIaQk/2vjuVTZK/vRa9wz6o1Q0+p58ygyupVhEq2BxWAbATv/VX9OX60AJEn3j20c37XXkTg==}
 
-  '@floegence/floe-webapp-core@0.36.54':
-    resolution: {integrity: sha512-hUFggNdviu2teErgNNAyMs7myScyKt4sC7IiWULD1PbwWgaOM0I7xBkWOHwMhCdRCvynnw5vMFFycww0BRbLeg==}
+  '@floegence/floe-webapp-core@0.36.55':
+    resolution: {integrity: sha512-wgM7FtT9QuHC35HgSe7lP5E/2RhCpCZjLxXLjkmWh4x5bn4MOlj7I0pMH9E/3KEFaX/LrlDXZPo164Ef1fH3Sg==}
     peerDependencies:
       solid-js: ^1.8.0
 
@@ -3093,7 +3093,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/floe-webapp-core@0.36.54(solid-js@1.9.11)':
+  '@floegence/floe-webapp-core@0.36.55(solid-js@1.9.11)':
     dependencies:
       clsx: 2.1.1
       diff: 8.0.3
