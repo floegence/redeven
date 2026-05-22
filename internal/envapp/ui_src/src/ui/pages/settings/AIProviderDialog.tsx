@@ -74,6 +74,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
   const [expandedProviderType, setExpandedProviderType] = createSignal<AIProviderType | null>(null);
   const saving = createMemo(() => props.aiSaving || props.keySaving || props.webSearchKeySaving);
   const providerHasEnabledModels = createMemo(() => Array.isArray(props.provider?.models) && (props.provider?.models.length ?? 0) > 0);
+  let expandedScrollRef: HTMLDivElement | undefined;
 
   createEffect(() => {
     if (!props.open) {
@@ -175,7 +176,17 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                           </button>
 
                           <Show when={expanded()}>
-                            <div class="border-t border-border/80 p-4 overflow-y-auto" style="max-height:50vh">
+                            <div
+                              ref={expandedScrollRef}
+                              class="border-t border-border/80 p-4 overflow-y-auto"
+                              style="max-height:50vh"
+                              onWheel={(e) => {
+                                const el = expandedScrollRef;
+                                if (!el) return;
+                                e.preventDefault();
+                                el.scrollTop += e.deltaY;
+                              }}
+                            >
                               <div class="space-y-5">
                                 <section class="space-y-3">
                                   <SubSectionHeader title="Connection" description="Secrets are saved with the provider; existing keys are never shown again." />
