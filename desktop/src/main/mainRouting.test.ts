@@ -123,11 +123,13 @@ describe('main routing', () => {
     expect(mainSrc).toContain('desktopRuntimeLifecycleLocation');
     expect(mainSrc).toContain('buildRuntimeLifecycleProgress');
     expect(mainSrc).toContain('updateRuntimeLifecycleOperation');
-    expect(mainSrc).toContain('runtimeLifecycleWorkflowAcceptsPhase');
-    expect(mainSrc).toContain('runtimeLifecyclePhaseSequence(input.location, input.operation)');
+    expect(mainSrc).toContain('RuntimeLifecycleWorkflow');
+    expect(mainSrc).toContain('runtimeLifecycleWorkflowFailure');
+    expect(mainSrc).toContain('currentRuntimeLifecycleWorkflowProgress');
+    expect(mainSrc).not.toContain('runtimeLifecycleWorkflowAcceptsPhase');
+    expect(mainSrc).not.toContain('currentRuntimeLifecyclePhase');
     expect(mainSrc).not.toContain('lifecycleProgress.stage_index < current.lifecycle_progress.stage_index');
-    expect(mainSrc).toContain("lifecycle_progress: runtimeLifecycleProgress({");
-    expect(mainSrc).toContain("location: 'ssh_host'");
+    expect(mainSrc).not.toContain("lifecycle_progress: runtimeLifecycleProgress({");
     expect(mainSrc).toContain("const hostAccess: DesktopRuntimeHostAccess = { kind: 'local_host' };");
     expect(mainSrc).toContain('const localHostPlacement: DesktopRuntimePlacement = { kind: \'host_process\'');
     expect(mainSrc).toContain("subject_kind: 'local_environment'");

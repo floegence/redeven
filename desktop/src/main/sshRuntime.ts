@@ -168,9 +168,22 @@ type SSHCommandResult = Readonly<{
   stderr: string;
 }>;
 
-class DesktopSSHUploadAssetPreparationError extends Error {
-  constructor(message: string) {
-    super(message);
+class DesktopSSHUploadAssetPreparationError extends DesktopOperationFailureError {
+  constructor(
+    failure: string | DesktopOperationFailurePresentation,
+    options: Readonly<{ cause?: unknown }> = {},
+  ) {
+    const presentation = typeof failure === 'string'
+      ? desktopOperationFailurePresentation({
+          code: 'ssh_runtime_launch_failed',
+          title: 'Runtime package preparation failed',
+          summary: failure,
+        })
+      : failure;
+    super(presentation, {
+      cause: options.cause,
+      runtimeLifecycleStepID: 'preparing_runtime_package',
+    });
     this.name = 'DesktopSSHUploadAssetPreparationError';
   }
 }
@@ -1727,10 +1740,11 @@ async function prepareDesktopSSHUploadAsset(args: Readonly<{
     return asset;
   } catch (error) {
     if (error instanceof DesktopOperationFailureError) {
-      throw error;
+      throw new DesktopSSHUploadAssetPreparationError(error.presentation, { cause: error });
     }
     throw new DesktopSSHUploadAssetPreparationError(
       `Desktop could not prepare the ${args.platform.platform_label} Redeven runtime package locally: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
     );
   }
 }

@@ -4,6 +4,7 @@ import type {
   DesktopFailureSeverity,
   DesktopOperationFailurePresentation,
 } from '../shared/desktopOperationFailure';
+import type { DesktopRuntimeLifecycleStepID } from '../shared/desktopRuntimeLifecycleProgress';
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -11,12 +12,17 @@ function compact(value: unknown): string {
 
 export class DesktopOperationFailureError extends Error {
   readonly presentation: DesktopOperationFailurePresentation;
+  readonly runtime_lifecycle_step_id?: DesktopRuntimeLifecycleStepID;
 
-  constructor(presentation: DesktopOperationFailurePresentation, options: Readonly<{ cause?: unknown }> = {}) {
+  constructor(presentation: DesktopOperationFailurePresentation, options: Readonly<{
+    cause?: unknown;
+    runtimeLifecycleStepID?: DesktopRuntimeLifecycleStepID;
+  }> = {}) {
     super(presentation.summary);
     this.name = 'DesktopOperationFailureError';
     this.presentation = presentation;
     this.cause = options.cause;
+    this.runtime_lifecycle_step_id = options.runtimeLifecycleStepID;
   }
 }
 

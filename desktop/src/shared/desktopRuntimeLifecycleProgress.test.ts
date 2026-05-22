@@ -196,7 +196,7 @@ describe('desktopRuntimeLifecycleProgress', () => {
     }));
   });
 
-  it('keeps the failed step anchored to the real workflow step', () => {
+  it('does not infer succeeded steps from the failed phase alone', () => {
     const progress = runtimeLifecycleProgress({
       location: 'local_container',
       operation: 'update',
@@ -214,16 +214,47 @@ describe('desktopRuntimeLifecycleProgress', () => {
       stage_count: 10,
     }));
     expect(progress.steps.map((step) => [step.id, step.status])).toEqual([
-      ['checking_container', 'succeeded'],
-      ['checking_runtime_package', 'succeeded'],
-      ['stopping_runtime_process', 'succeeded'],
-      ['verifying_runtime_stopped', 'succeeded'],
-      ['detecting_platform', 'succeeded'],
+      ['checking_container', 'pending'],
+      ['checking_runtime_package', 'pending'],
+      ['stopping_runtime_process', 'pending'],
+      ['verifying_runtime_stopped', 'pending'],
+      ['detecting_platform', 'pending'],
       ['preparing_runtime_package', 'failed'],
       ['installing_runtime_package', 'pending'],
       ['starting_runtime_process', 'pending'],
       ['checking_runtime_service', 'pending'],
       ['runtime_ready', 'pending'],
+    ]);
+  });
+
+  it('uses authoritative step states for completed restart/update steps', () => {
+    const progress = runtimeLifecycleProgress({
+      location: 'local_container',
+      operation: 'update',
+      phase: 'preparing_runtime_package',
+      failedPhase: 'preparing_runtime_package',
+      targetLabel: 'Dev Container',
+      stepStates: [
+        { id: 'checking_container', status: 'succeeded' },
+        { id: 'checking_runtime_package', status: 'succeeded' },
+        { id: 'stopping_runtime_process', status: 'succeeded' },
+        { id: 'verifying_runtime_stopped', status: 'succeeded' },
+        { id: 'detecting_platform', status: 'succeeded' },
+        { id: 'preparing_runtime_package', status: 'failed', detail: 'go build failed' },
+      ],
+    });
+
+    expect(progress.steps.map((step) => [step.id, step.status, step.detail ?? ''])).toEqual([
+      ['checking_container', 'succeeded', ''],
+      ['checking_runtime_package', 'succeeded', ''],
+      ['stopping_runtime_process', 'succeeded', ''],
+      ['verifying_runtime_stopped', 'succeeded', ''],
+      ['detecting_platform', 'succeeded', ''],
+      ['preparing_runtime_package', 'failed', 'go build failed'],
+      ['installing_runtime_package', 'pending', ''],
+      ['starting_runtime_process', 'pending', ''],
+      ['checking_runtime_service', 'pending', ''],
+      ['runtime_ready', 'pending', ''],
     ]);
   });
 });

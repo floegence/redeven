@@ -4727,11 +4727,15 @@ function EnvironmentProgressPanel(props: Readonly<{
   });
   const stepState = (index: number, currentPhase: string | undefined, opStatus: string): 'done' | 'active' | 'pending' | 'error' => {
     const step = phaseSequence()[index];
-    if (step?.status === 'failed') {
-      return 'error';
-    }
-    if (step?.status === 'succeeded') {
-      return 'done';
+    switch (step?.status) {
+      case 'failed':
+        return 'error';
+      case 'succeeded':
+        return 'done';
+      case 'running':
+        return 'active';
+      case 'pending':
+        return 'pending';
     }
     if (!currentPhase) {
       return 'pending';

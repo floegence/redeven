@@ -68,6 +68,13 @@ describe('LauncherOperationRegistry', () => {
         location: 'ssh_host',
         phase: 'installing_runtime_package',
         targetLabel: 'Devbox',
+        stepStates: [
+          { id: 'checking_host', status: 'succeeded' },
+          { id: 'checking_runtime_package', status: 'succeeded' },
+          { id: 'detecting_platform', status: 'succeeded' },
+          { id: 'preparing_runtime_package', status: 'succeeded' },
+          { id: 'installing_runtime_package', status: 'running', detail: 'Uploading.' },
+        ],
       }),
       cancelable: true,
     });
@@ -90,6 +97,16 @@ describe('LauncherOperationRegistry', () => {
         active_step_id: 'installing_runtime_package',
       }),
     }));
+    expect(touched[0]?.lifecycle_progress?.steps.map((step) => [step.id, step.status, step.detail ?? ''])).toEqual([
+      ['checking_host', 'succeeded', ''],
+      ['checking_runtime_package', 'succeeded', ''],
+      ['detecting_platform', 'succeeded', ''],
+      ['preparing_runtime_package', 'succeeded', ''],
+      ['installing_runtime_package', 'running', 'Uploading.'],
+      ['starting_runtime_process', 'pending', ''],
+      ['checking_runtime_service', 'pending', ''],
+      ['runtime_ready', 'pending', ''],
+    ]);
     expect(registry.currentSubjectGeneration('ssh_environment', operation.subject_id)).toBe(1);
     expect(registry.isStale(operation.operation_key)).toBe(true);
   });
