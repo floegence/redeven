@@ -477,7 +477,7 @@ describe('buildEnvironmentCardModel', () => {
       placeholderFact('VERSION', 'UNKNOWN'),
       defaultFact('PROVIDER', 'Demo Control Plane'),
       defaultFact('LOCAL LINK', 'No managed runtime linked'),
-      defaultFact('ENV ID', 'env_demo'),
+      defaultFact('ENV ID', 'env_demo', { copy_value: true }),
     ]);
     expect(buildEnvironmentCardFactsModel(urlEntry!)).toEqual([
       defaultFact('RUNS ON', 'LAN host', {

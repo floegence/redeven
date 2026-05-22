@@ -368,6 +368,16 @@ body {
   color: var(--muted-foreground);
 }
 
+.redeven-card-fact-value--copyable {
+  max-width: 50%;
+  cursor: pointer;
+  transition: color 150ms ease;
+}
+
+.redeven-card-fact-value--copyable:hover {
+  color: var(--primary);
+}
+
 /* ── Card body: leading icon ── */
 
 .redeven-card-fact-leading-icon {
@@ -390,6 +400,7 @@ body {
   height: 1.35rem;
   flex-shrink: 0;
   margin-left: 0.3rem;
+  vertical-align: middle;
   border-radius: 0.25rem;
   color: var(--muted-foreground);
   cursor: pointer;
