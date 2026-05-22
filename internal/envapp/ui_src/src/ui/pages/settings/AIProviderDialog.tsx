@@ -137,7 +137,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
           const hasEnabledModels = () => models().length > 0;
 
           return (
-            <div class="space-y-5">
+            <div class="space-y-5 overflow-y-auto" style="max-height:calc(100vh-14rem)">
               <section class="space-y-3">
                 <SubSectionHeader title="Provider Type" description="Click a provider type to open its connection and model details inline. Click again to collapse it." />
                 <div class="space-y-2">
@@ -156,7 +156,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                             onClick={() => toggleProviderType(item.value)}
                             disabled={!props.canInteract}
                           >
-                            <div class={cn('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-muted/60 ring-1 ring-border', active() ? 'bg-background ring-primary/30' : '')}>
+                            <div class={cn('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg', active() ? 'bg-background' : 'bg-muted/60')}>
                               <ProviderBrandIcon type={item.value} class="h-5 w-5" />
                             </div>
                             <div class="min-w-0 flex-1">
