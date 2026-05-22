@@ -1,18 +1,16 @@
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
+import { cn } from '@floegence/floe-webapp-core';
 import {
-  Activity,
-  Bot,
+  AlertTriangle,
   Code,
   Database,
   FileCode,
   FileText,
-  FolderOpen,
   Globe,
   Key,
   Layers,
   Link,
-  Package,
   Plus,
   RefreshIcon,
   Shield,
@@ -50,6 +48,7 @@ import {
 import { FlowerIcon } from '../icons/FlowerIcon';
 import { CodexIcon } from '../icons/CodexIcon';
 import { useEnvContext, type EnvSettingsSection } from './EnvContext';
+import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { EnvDebugConsoleSettingsPanel } from './EnvDebugConsoleSettingsPanel';
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { AIProviderDialog } from './settings/AIProviderDialog';
@@ -99,8 +98,6 @@ import {
   SettingsTableHeaderRow,
   SettingsTableRow,
   SubSectionHeader,
-  SummaryBar,
-  type SummaryMetricDef,
   ViewToggle,
   type ViewMode,
 } from './settings/SettingsPrimitives';
@@ -1050,53 +1047,6 @@ export function EnvSettingsPage() {
   const configJSONText = createMemo(() => JSON.stringify({ config_path: configPath() || '' }, null, 2));
   const connectionJSONText = createMemo(() => JSON.stringify(settings()?.connection ?? null, null, 2));
   const filesystemRootRows = createMemo(() => runtimeFilesystemRoots(agentHomeDir(), filesystemScope()));
-
-  const summaryMetrics = createMemo<SummaryMetricDef[]>(() => {
-    const online = displayedStatus() === 'online';
-    const roots = filesystemRootRows();
-    const skills = skillsCatalog()?.skills ?? [];
-    const aiModel = aiCurrentModelOption();
-    return [
-      {
-        icon: Activity,
-        value: online ? 'Online' : 'Offline',
-        label: 'Status',
-        tone: online ? 'success' : 'warning',
-        onClick: () => scrollToSection('agent'),
-      },
-      {
-        icon: Package,
-        value: runtimeUpdate.version.currentVersion() || '—',
-        label: 'Version',
-        onClick: () => scrollToSection('agent'),
-      },
-      {
-        icon: FolderOpen,
-        value: `${roots.length} roots`,
-        label: 'Workspace',
-        onClick: () => scrollToSection('runtime'),
-      },
-      {
-        icon: Bot,
-        value: aiModel?.label ?? (aiEnabled() ? 'Configured' : 'Disabled'),
-        label: 'AI Model',
-        onClick: () => scrollToSection('ai'),
-      },
-      {
-        icon: Layers,
-        value: `${skills.length}`,
-        label: 'Skills',
-        onClick: () => scrollToSection('skills'),
-      },
-      {
-        icon: Shield,
-        value: policyLocalRead() && policyLocalWrite() && policyLocalExecute() ? 'Permissive' : 'Restricted',
-        label: 'Default Perms',
-        tone: policyLocalRead() && policyLocalWrite() && policyLocalExecute() ? 'warning' : 'default',
-        onClick: () => scrollToSection('permission_policy'),
-      },
-    ];
-  });
 
   const buildRuntimePatch = () => ({
     agent_home_dir: String(agentHomeDir() ?? ''),
@@ -2944,9 +2894,6 @@ export function EnvSettingsPage() {
           </div>
         </Show>
 
-        {/* ── Summary Bar ── */}
-        <SummaryBar metrics={summaryMetrics()} />
-
         {/* ── Overview ── */}
         <SectionGroup title={SETTINGS_GROUP_META.overview.title} groupId={SETTINGS_GROUP_META.overview.id}>
           <SettingsCard
@@ -3750,195 +3697,218 @@ export function EnvSettingsPage() {
                   />
                 }
               >
-                <div class="space-y-6">
-                  <SettingsTable minWidthClass="min-w-[60rem]">
-                    <SettingsTableHead>
-                      <SettingsTableHeaderRow>
-                        <SettingsTableHeaderCell class="w-52">Setting</SettingsTableHeaderCell>
-                        <SettingsTableHeaderCell>Value</SettingsTableHeaderCell>
-                        <SettingsTableHeaderCell class="w-80">Notes</SettingsTableHeaderCell>
-                      </SettingsTableHeaderRow>
-                    </SettingsTableHead>
-                    <SettingsTableBody>
-                      <SettingsTableRow>
-                        <SettingsTableCell class="font-medium text-muted-foreground">Require user approval</SettingsTableCell>
-                        <SettingsTableCell>
-                          <Checkbox
-                            checked={aiRequireUserApproval()}
-                            onChange={(value) => {
-                              setAiRequireUserApproval(value);
-                              setAiDirty(true);
-                            }}
-                            disabled={!canInteract()}
-                            label="Require user approval for mutating tools"
-                            size="sm"
-                          />
-                        </SettingsTableCell>
-                        <SettingsTableCell class="text-[11px] text-muted-foreground">
-                          Plan mode remains strict readonly even when this toggle is off.
-                        </SettingsTableCell>
-                      </SettingsTableRow>
-                      <SettingsTableRow>
-                        <SettingsTableCell class="font-medium text-muted-foreground">Block dangerous commands</SettingsTableCell>
-                        <SettingsTableCell>
-                          <Checkbox
-                            checked={aiBlockDangerousCommands()}
-                            onChange={(value) => {
-                              setAiBlockDangerousCommands(value);
-                              setAiDirty(true);
-                            }}
-                            disabled={!canInteract()}
-                            label="Block dangerous terminal commands"
-                            size="sm"
-                          />
-                        </SettingsTableCell>
-                        <SettingsTableCell class="text-[11px] text-muted-foreground">
-                          Recommended safeguard for direct tool execution in act mode.
-                        </SettingsTableCell>
-                      </SettingsTableRow>
-                      <SettingsTableRow>
-                        <SettingsTableCell class="font-medium text-muted-foreground">Current model</SettingsTableCell>
-                        <SettingsTableCell>
-                          <Select
-                            value={aiCurrentModelID()}
-                            options={aiModelOptions().map((item) => ({ value: item.id, label: item.label }))}
-                            onChange={(value) => {
-                              const nextModelID = normalizeAICurrentModelID(String(value ?? '').trim(), aiProviders());
-                              if (!nextModelID) return;
-                              const prevModelID = normalizeAICurrentModelID(aiCurrentModelID(), aiProviders());
-                              if (nextModelID === prevModelID) return;
-                              setAiCurrentModelID(nextModelID);
-                              const canDirectSave = aiView() === 'ui' && !aiDirty() && !aiSaving() && !disableAISaving();
-                              if (canDirectSave) {
-                                void saveAICurrentModelDirectly(nextModelID, prevModelID || '');
-                                return;
-                              }
-                              setAiDirty(true);
-                            }}
-                            placeholder="Select current model..."
-                            class="w-full"
-                            disabled={!canInteract() || aiModelOptions().length === 0 || aiSaving() || disableAISaving()}
-                          />
-                        </SettingsTableCell>
-	                        <SettingsTableCell class="text-[11px] text-muted-foreground">
-	                          <div class="flex flex-wrap gap-1.5">
-	                            <SettingsPill tone="success">Text</SettingsPill>
-	                            <SettingsPill tone={aiCurrentModelOption()?.supportsImageInput ? 'success' : 'default'}>
-	                              {aiCurrentModelOption()?.supportsImageInput ? 'Image Input' : 'Text only'}
-	                            </SettingsPill>
-	                          </div>
-	                          <div class="mt-1">Used when a new chat thread is created. Individual threads may still select a different model.</div>
-	                        </SettingsTableCell>
-                      </SettingsTableRow>
-                    </SettingsTableBody>
-                  </SettingsTable>
+			<div class="space-y-6">
+			  {/* ── Execution Policy ── */}
+			  <div class="space-y-3">
+			    <SubSectionHeader title="Execution Policy" description="Guardrails for tool execution and user interaction." />
+			    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+			      <label
+			        class={cn(
+			          'group flex cursor-pointer flex-col gap-2.5 rounded-xl border px-4 py-3.5 transition-all duration-150',
+			          redevenSurfaceRoleClass('panel'),
+			          canInteract() && 'hover:border-primary/40 hover:shadow-sm',
+			          !canInteract() && 'cursor-not-allowed opacity-50',
+			        )}
+			      >
+			        <div class="flex items-center justify-between">
+			          <div class="flex items-center gap-2.5">
+			            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10">
+			              <Shield class="h-4 w-4 text-blue-500" />
+			            </div>
+			            <span class="text-sm font-semibold text-foreground">User approval</span>
+			          </div>
+			          <Checkbox
+			            checked={aiRequireUserApproval()}
+			            onChange={(value) => {
+			              setAiRequireUserApproval(value);
+			              setAiDirty(true);
+			            }}
+			            disabled={!canInteract()}
+			            label=""
+			            size="sm"
+			          />
+			        </div>
+			        <p class="text-xs leading-relaxed text-muted-foreground">
+			          Require explicit approval before executing mutating tools. Plan mode remains strict readonly even when off.
+			        </p>
+			      </label>
 
-                  <Show when={!aiBlockDangerousCommands()}>
-                    <div class="flex items-start gap-2.5 rounded-lg border border-warning/50 bg-warning/10 p-3">
-                      <Shield class="mt-0.5 h-4 w-4 shrink-0 text-warning" />
-                      <div class="text-xs font-medium text-foreground">
-                        Dangerous command blocking is disabled. The runtime may execute high-risk commands directly.
-                      </div>
-                    </div>
-                  </Show>
+			      <label
+			        class={cn(
+			          'group flex cursor-pointer flex-col gap-2.5 rounded-xl border px-4 py-3.5 transition-all duration-150',
+			          redevenSurfaceRoleClass('panel'),
+			          canInteract() && 'hover:border-primary/40 hover:shadow-sm',
+			          !canInteract() && 'cursor-not-allowed opacity-50',
+			        )}
+			      >
+			        <div class="flex items-center justify-between">
+			          <div class="flex items-center gap-2.5">
+			            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10">
+			              <AlertTriangle class="h-4 w-4 text-amber-500" />
+			            </div>
+			            <span class="text-sm font-semibold text-foreground">Block dangerous commands</span>
+			          </div>
+			          <Checkbox
+			            checked={aiBlockDangerousCommands()}
+			            onChange={(value) => {
+			              setAiBlockDangerousCommands(value);
+			              setAiDirty(true);
+			            }}
+			            disabled={!canInteract()}
+			            label=""
+			            size="sm"
+			          />
+			        </div>
+			        <p class="text-xs leading-relaxed text-muted-foreground">
+			          Prevent high-risk terminal commands from executing directly in act mode.
+			        </p>
+			      </label>
+			    </div>
 
-	                  <div class="space-y-3">
-	                    <SubSectionHeader
-	                      title="Providers"
-	                      description="Provider connections exposed to Flower Chat."
-	                      actions={
-	                        <Button size="sm" variant="default" onClick={() => addAIProviderAndOpenDialog()} disabled={!canInteract()}>
-	                          Add Provider
-	                        </Button>
-	                      }
-	                    />
+			    <Show when={!aiBlockDangerousCommands()}>
+			      <div class="flex items-start gap-2.5 rounded-lg border border-warning/50 bg-warning/10 p-3">
+			        <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+			        <div class="text-xs font-medium text-foreground">
+			          Dangerous command blocking is disabled. The runtime may execute high-risk commands directly.
+			        </div>
+			      </div>
+			    </Show>
+			  </div>
 
-	                    <div class="grid grid-cols-1 gap-3 xl:grid-cols-2">
-	                      <For each={aiProviders()}>
-	                        {(provider, index) => {
-	                          const providerID = () => String(provider.id ?? '').trim();
-	                          const displayName = () => providerDisplayName(provider, `Provider ${index() + 1}`);
-	                          const modelNames = () =>
-	                            (Array.isArray(provider.models) ? provider.models : [])
-	                              .map((model) => String(model.model_name ?? '').trim())
-	                              .filter(Boolean);
-	                          const hasImageModel = () =>
-	                            (Array.isArray(provider.models) ? provider.models : []).some((model) => modelSupportsImageInput(model.input_modalities));
-	                          return (
-	                            <div class="rounded-lg border border-border bg-background p-4 shadow-sm">
-	                              <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-	                                <div class="flex min-w-0 items-start gap-3">
-	                                  <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-muted/50 ring-1 ring-border">
-	                                    <ProviderBrandIcon type={provider.type} class="h-5 w-5" />
-	                                  </div>
-	                                  <div class="min-w-0 space-y-2">
-	                                    <div class="flex flex-wrap items-center gap-2">
-	                                      <div class="break-words text-sm font-semibold text-foreground">{displayName()}</div>
-	                                      <SettingsPill>{providerTypeLabel(provider.type)}</SettingsPill>
-	                                      <Show when={aiCurrentModelID().startsWith(`${providerID()}/`)}>
-	                                        <SettingsPill tone="success">Current default</SettingsPill>
-	                                      </Show>
-	                                    </div>
-	                                    <div class="text-xs text-muted-foreground">{modelNames().length} enabled model(s)</div>
-	                                  </div>
-	                                </div>
-	                                <div class="flex items-center gap-2">
-	                                  <Button size="sm" variant="outline" onClick={() => openAIProviderDialog(index())} disabled={!canInteract()}>
-	                                    Edit
-	                                  </Button>
-	                                  <Button
-	                                    size="sm"
-	                                    variant="ghost"
-	                                    class="text-muted-foreground hover:text-destructive"
-	                                    onClick={() => {
-	                                      setAiProviders((prev) => {
-	                                        const normalizedProviders = normalizeAIProviders(prev.filter((_, rowIndex) => rowIndex !== index()));
-	                                        setAiCurrentModelID(normalizeAICurrentModelID(aiCurrentModelID(), normalizedProviders));
-	                                        return normalizedProviders;
-	                                      });
-	                                      setAiDirty(true);
-	                                    }}
-	                                    disabled={!canInteract() || aiProviders().length <= 1}
-	                                  >
-	                                    Remove
-	                                  </Button>
-	                                </div>
-	                              </div>
+			  {/* ── Current Model ── */}
+			  <div class="space-y-2.5">
+			    <SubSectionHeader
+			      title="Current Model"
+			      description="Default model used when creating a new chat thread."
+			    />
+			    <div class="flex flex-wrap items-center gap-2.5">
+			      <div class="min-w-[240px] max-w-md flex-1">
+			        <Select
+			          value={aiCurrentModelID()}
+			          options={aiModelOptions().map((item) => ({ value: item.id, label: item.label }))}
+			          onChange={(value) => {
+			            const nextModelID = normalizeAICurrentModelID(String(value ?? '').trim(), aiProviders());
+			            if (!nextModelID) return;
+			            const prevModelID = normalizeAICurrentModelID(aiCurrentModelID(), aiProviders());
+			            if (nextModelID === prevModelID) return;
+			            setAiCurrentModelID(nextModelID);
+			            const canDirectSave = aiView() === 'ui' && !aiDirty() && !aiSaving() && !disableAISaving();
+			            if (canDirectSave) {
+			              void saveAICurrentModelDirectly(nextModelID, prevModelID || '');
+			              return;
+			            }
+			            setAiDirty(true);
+			          }}
+			          placeholder="Select current model..."
+			          class="w-full"
+			          disabled={!canInteract() || aiModelOptions().length === 0 || aiSaving() || disableAISaving()}
+			        />
+			      </div>
+			      <SettingsPill tone="success">Text</SettingsPill>
+			      <SettingsPill tone={aiCurrentModelOption()?.supportsImageInput ? 'success' : 'default'}>
+			        {aiCurrentModelOption()?.supportsImageInput ? 'Image Input' : 'Text only'}
+			      </SettingsPill>
+			    </div>
+			  </div>
 
-	                              <div class="mt-3 flex flex-wrap gap-2">
-	                                <SettingsPill tone={aiProviderKeySet()?.[providerID()] ? 'success' : 'default'}>
-	                                  {aiProviderKeySet()?.[providerID()] ? 'Key set' : 'Needs key'}
-	                                </SettingsPill>
-	                                <SettingsPill
-	                                  tone={
-	                                    providerBuiltInWebSearchLabel(provider.type) ||
-	                                    (provider.type === 'openai_compatible' && normalizeAIProviderWebSearchMode(provider.web_search?.mode) !== 'disabled')
-	                                      ? 'success'
-	                                      : 'default'
-	                                  }
-	                                >
-	                                  {providerWebSearchSummary(provider)}
-	                                </SettingsPill>
-	                                <SettingsPill tone={hasImageModel() ? 'success' : 'default'}>
-	                                  {hasImageModel() ? 'Image Input' : 'Text only'}
-	                                </SettingsPill>
-	                              </div>
+			  {/* ── Providers ── */}
+			  <div class="space-y-3">
+			    <SubSectionHeader
+			      title="Providers"
+			      description="AI service providers available to Flower Chat."
+			      actions={
+			        <Button size="sm" variant="default" onClick={() => addAIProviderAndOpenDialog()} disabled={!canInteract()}>
+			          Add Provider
+			        </Button>
+			      }
+			    />
 
-	                              <div class="mt-3 flex flex-wrap gap-1.5">
-	                                <For each={modelNames().slice(0, 4)}>
-	                                  {(name) => <code class="rounded bg-muted px-1.5 py-0.5 text-[11px]">{name}</code>}
-	                                </For>
-	                                <Show when={modelNames().length > 4}>
-	                                  <span class="text-[11px] text-muted-foreground">{`+${modelNames().length - 4} more`}</span>
-	                                </Show>
-	                              </div>
-	                            </div>
-	                          );
-	                        }}
-	                      </For>
-	                    </div>
-	                  </div>
-                </div>
+			    <div class="grid grid-cols-1 gap-3 xl:grid-cols-2">
+			      <For each={aiProviders()}>
+			        {(provider, index) => {
+			          const providerID = () => String(provider.id ?? '').trim();
+			          const displayName = () => providerDisplayName(provider, `Provider ${index() + 1}`);
+			          const modelNames = () =>
+			            (Array.isArray(provider.models) ? provider.models : [])
+			              .map((model) => String(model.model_name ?? '').trim())
+			              .filter(Boolean);
+			          const hasImageModel = () =>
+			            (Array.isArray(provider.models) ? provider.models : []).some((model) => modelSupportsImageInput(model.input_modalities));
+			          const isDefault = () => aiCurrentModelID().startsWith(`${providerID()}/`);
+			          return (
+			            <div class={cn('rounded-xl border bg-background p-4 shadow-sm transition-all', redevenSurfaceRoleClass('panel'), isDefault() && 'ring-2 ring-primary/20')}>
+			              {/* Top: brand + name + actions */}
+			              <div class="flex items-start justify-between gap-3">
+			                <div class="flex min-w-0 items-center gap-3">
+			                  <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-muted ring-1 ring-border/50">
+			                    <ProviderBrandIcon type={provider.type} class="h-5 w-5" />
+			                  </div>
+			                  <div class="min-w-0">
+			                    <div class="flex flex-wrap items-center gap-1.5">
+			                      <span class="truncate text-sm font-semibold text-foreground">{displayName()}</span>
+			                      <span class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{providerTypeLabel(provider.type)}</span>
+			                      <Show when={isDefault()}>
+			                        <span class="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">default</span>
+			                      </Show>
+			                    </div>
+			                    <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+			                      <span>{modelNames().length} model{modelNames().length !== 1 ? 's' : ''}</span>
+			                      <span aria-hidden="true">·</span>
+			                      <span class={aiProviderKeySet()?.[providerID()] ? 'text-success' : ''}>{aiProviderKeySet()?.[providerID()] ? 'Key verified' : 'Needs key'}</span>
+			                      <span aria-hidden="true">·</span>
+			                      <span>{providerWebSearchSummary(provider)}</span>
+			                      <Show when={hasImageModel()}>
+			                        <span aria-hidden="true">·</span>
+			                        <span>Image support</span>
+			                      </Show>
+			                    </div>
+			                  </div>
+			                </div>
+			                <div class="flex flex-shrink-0 items-center gap-1">
+			                  <Button size="sm" variant="outline" onClick={() => openAIProviderDialog(index())} disabled={!canInteract()}>
+			                    Edit
+			                  </Button>
+			                  <Button
+			                    size="sm"
+			                    variant="ghost"
+			                    class="text-muted-foreground hover:text-destructive"
+			                    onClick={() => {
+			                      setAiProviders((prev) => {
+			                        const normalizedProviders = normalizeAIProviders(prev.filter((_, rowIndex) => rowIndex !== index()));
+			                        setAiCurrentModelID(normalizeAICurrentModelID(aiCurrentModelID(), normalizedProviders));
+			                        return normalizedProviders;
+			                      });
+			                      setAiDirty(true);
+			                    }}
+			                    disabled={!canInteract() || aiProviders().length <= 1}
+			                  >
+			                    Remove
+			                  </Button>
+			                </div>
+			              </div>
+
+			              {/* Model name badges */}
+			              <Show when={modelNames().length > 0}>
+			                <div class="mt-3 flex flex-wrap gap-1">
+			                  <For each={modelNames().slice(0, 5)}>
+			                    {(name) => (
+			                      <code class={cn('rounded-md px-1.5 py-0.5 text-[10px] font-mono', isDefault() && aiCurrentModelID() === `${providerID()}/${name}` ? 'bg-primary/10 text-primary font-semibold' : 'bg-muted text-muted-foreground')}>
+			                        {name}
+			                      </code>
+			                    )}
+			                  </For>
+			                  <Show when={modelNames().length > 5}>
+			                    <span class="text-[10px] text-muted-foreground self-center">+{modelNames().length - 5} more</span>
+			                  </Show>
+			                </div>
+			              </Show>
+			            </div>
+			          );
+			        }}
+			      </For>
+			    </div>
+			  </div>
+			</div>
               </Show>
             </SettingsCard>
           </div>
