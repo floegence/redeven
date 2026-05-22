@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"net"
 	"net/http"
@@ -31,18 +32,20 @@ import (
 )
 
 type stubBackend struct {
-	listSpaces               func(ctx context.Context) ([]SpaceStatus, error)
-	createSpace              func(ctx context.Context, req CreateSpaceRequest) (*SpaceStatus, error)
-	updateSpace              func(ctx context.Context, codeSpaceID string, req UpdateSpaceRequest) (*SpaceStatus, error)
-	deleteSpace              func(ctx context.Context, codeSpaceID string) error
-	startSpace               func(ctx context.Context, codeSpaceID string) (*SpaceStatus, error)
-	stopSpace                func(ctx context.Context, codeSpaceID string) error
-	resolveCodeServerPort    func(ctx context.Context, codeSpaceID string) (int, error)
-	codeRuntimeStatus        func(ctx context.Context) (CodeRuntimeStatus, error)
-	installCodeRuntime       func(ctx context.Context) (CodeRuntimeStatus, error)
-	selectCodeRuntime        func(ctx context.Context, version string) (CodeRuntimeStatus, error)
-	removeCodeRuntimeVersion func(ctx context.Context, version string) (CodeRuntimeStatus, error)
-	cancelCodeRuntime        func(ctx context.Context) (CodeRuntimeStatus, error)
+	listSpaces                       func(ctx context.Context) ([]SpaceStatus, error)
+	createSpace                      func(ctx context.Context, req CreateSpaceRequest) (*SpaceStatus, error)
+	updateSpace                      func(ctx context.Context, codeSpaceID string, req UpdateSpaceRequest) (*SpaceStatus, error)
+	deleteSpace                      func(ctx context.Context, codeSpaceID string) error
+	startSpace                       func(ctx context.Context, codeSpaceID string) (*SpaceStatus, error)
+	stopSpace                        func(ctx context.Context, codeSpaceID string) error
+	resolveCodeServerPort            func(ctx context.Context, codeSpaceID string) (int, error)
+	codeRuntimeStatus                func(ctx context.Context) (CodeRuntimeStatus, error)
+	createCodeRuntimeImportSession   func(ctx context.Context, manifest CodeRuntimeArtifactManifest) (CodeRuntimeImportSession, error)
+	appendCodeRuntimeImportChunk     func(ctx context.Context, uploadID string, chunkIndex int64, body io.Reader) (CodeRuntimeImportChunkResult, error)
+	completeCodeRuntimeImportSession func(ctx context.Context, uploadID string) (CodeRuntimeStatus, error)
+	selectCodeRuntime                func(ctx context.Context, version string) (CodeRuntimeStatus, error)
+	removeCodeRuntimeVersion         func(ctx context.Context, version string) (CodeRuntimeStatus, error)
+	cancelCodeRuntime                func(ctx context.Context) (CodeRuntimeStatus, error)
 }
 
 func (s *stubBackend) ListSpaces(ctx context.Context) ([]SpaceStatus, error) {
@@ -93,9 +96,21 @@ func (s *stubBackend) CodeRuntimeStatus(ctx context.Context) (CodeRuntimeStatus,
 	}
 	return CodeRuntimeStatus{}, errors.New("not implemented")
 }
-func (s *stubBackend) InstallCodeRuntime(ctx context.Context) (CodeRuntimeStatus, error) {
-	if s.installCodeRuntime != nil {
-		return s.installCodeRuntime(ctx)
+func (s *stubBackend) CreateCodeRuntimeImportSession(ctx context.Context, manifest CodeRuntimeArtifactManifest) (CodeRuntimeImportSession, error) {
+	if s.createCodeRuntimeImportSession != nil {
+		return s.createCodeRuntimeImportSession(ctx, manifest)
+	}
+	return CodeRuntimeImportSession{}, errors.New("not implemented")
+}
+func (s *stubBackend) AppendCodeRuntimeImportChunk(ctx context.Context, uploadID string, chunkIndex int64, body io.Reader) (CodeRuntimeImportChunkResult, error) {
+	if s.appendCodeRuntimeImportChunk != nil {
+		return s.appendCodeRuntimeImportChunk(ctx, uploadID, chunkIndex, body)
+	}
+	return CodeRuntimeImportChunkResult{}, errors.New("not implemented")
+}
+func (s *stubBackend) CompleteCodeRuntimeImportSession(ctx context.Context, uploadID string) (CodeRuntimeStatus, error) {
+	if s.completeCodeRuntimeImportSession != nil {
+		return s.completeCodeRuntimeImportSession(ctx, uploadID)
 	}
 	return CodeRuntimeStatus{}, errors.New("not implemented")
 }
@@ -294,7 +309,6 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 	}
 	channelID := "ch_runtime"
 	envOrigin := envOriginWithChannel(channelID)
-	var installCalls int
 	var selectCalls int
 	var removeVersionCalls int
 	var cancelCalls int
@@ -312,31 +326,8 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 				ManagedPrefix:        "/tmp/runtime",
 				SharedRuntimeRoot:    "/tmp/shared-runtime",
 				ManagedRuntimeSource: "none",
-				InstallerScriptURL:   "https://code-server.dev/install.sh",
 				Operation: codeserver.RuntimeOperationStatus{
 					State: "idle",
-				},
-			}, nil
-		},
-		installCodeRuntime: func(ctx context.Context) (CodeRuntimeStatus, error) {
-			installCalls++
-			return CodeRuntimeStatus{
-				ActiveRuntime: codeserver.RuntimeTargetStatus{
-					DetectionState: "missing",
-					Source:         "none",
-				},
-				ManagedRuntime: codeserver.RuntimeTargetStatus{
-					DetectionState: "missing",
-					Source:         "managed",
-				},
-				ManagedPrefix:        "/tmp/runtime",
-				SharedRuntimeRoot:    "/tmp/shared-runtime",
-				ManagedRuntimeSource: "managed",
-				InstallerScriptURL:   "https://code-server.dev/install.sh",
-				Operation: codeserver.RuntimeOperationStatus{
-					Action: "install",
-					State:  "running",
-					Stage:  "installing",
 				},
 			}, nil
 		},
@@ -357,7 +348,6 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 				SharedRuntimeRoot:     "/tmp/shared-runtime",
 				ManagedRuntimeSource:  "managed",
 				ManagedRuntimeVersion: version,
-				InstallerScriptURL:    "https://code-server.dev/install.sh",
 			}, nil
 		},
 		removeCodeRuntimeVersion: func(ctx context.Context, version string) (CodeRuntimeStatus, error) {
@@ -366,7 +356,6 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 				ManagedPrefix:        "/tmp/runtime",
 				SharedRuntimeRoot:    "/tmp/shared-runtime",
 				ManagedRuntimeSource: "none",
-				InstallerScriptURL:   "https://code-server.dev/install.sh",
 				Operation: codeserver.RuntimeOperationStatus{
 					Action:        "remove_local_environment_version",
 					State:         "running",
@@ -389,9 +378,8 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 				ManagedPrefix:        "/tmp/runtime",
 				SharedRuntimeRoot:    "/tmp/shared-runtime",
 				ManagedRuntimeSource: "none",
-				InstallerScriptURL:   "https://code-server.dev/install.sh",
 				Operation: codeserver.RuntimeOperationStatus{
-					Action: "install",
+					Action: "prepare_workspace_engine",
 					State:  "cancelled",
 				},
 			}, nil
@@ -423,19 +411,8 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 	if statusResp.Code != http.StatusOK {
 		t.Fatalf("status code=%d, want %d", statusResp.Code, http.StatusOK)
 	}
-	if !bytes.Contains(statusResp.Body.Bytes(), []byte(`"installer_script_url":"https://code-server.dev/install.sh"`)) {
-		t.Fatalf("status body missing installer_script_url: %s", statusResp.Body.String())
-	}
-
-	installResp := request(http.MethodPost, "/_redeven_proxy/api/code-runtime/install", "")
-	if installResp.Code != http.StatusOK {
-		t.Fatalf("install code=%d, want %d", installResp.Code, http.StatusOK)
-	}
-	if installCalls != 1 {
-		t.Fatalf("install_calls=%d, want 1", installCalls)
-	}
-	if !bytes.Contains(installResp.Body.Bytes(), []byte(`"state":"running"`)) {
-		t.Fatalf("install body missing running state: %s", installResp.Body.String())
+	if !bytes.Contains(statusResp.Body.Bytes(), []byte(`"platform"`)) {
+		t.Fatalf("status body missing platform: %s", statusResp.Body.String())
 	}
 
 	selectResp := request(http.MethodPost, "/_redeven_proxy/api/code-runtime/select", `{"version":"4.109.1"}`)

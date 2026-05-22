@@ -68,11 +68,20 @@ const gatewayMocks = vi.hoisted(() => ({
   fetchGatewayJSON: vi.fn(async () => null),
 }));
 
+const desktopCodeWorkspaceMocks = vi.hoisted(() => ({
+  prepareAvailable: vi.fn(() => true),
+  prepareWorkspaceEngine: vi.fn(async () => ({ ok: true, prepared: true })),
+  prepareWorkspaceEngineWithDesktop: vi.fn(async (): Promise<any> => ({ ok: true, prepared: true })),
+}));
+
+const desktopSessionContextMocks = vi.hoisted(() => ({
+  readSnapshot: vi.fn(() => null),
+}));
+
 let settingsResponse: any = null;
 
 const codeRuntimeMocks = vi.hoisted(() => ({
   fetchCodeRuntimeStatus: vi.fn(async () => null),
-  installCodeRuntime: vi.fn(async () => undefined),
   selectCodeRuntimeVersion: vi.fn(async () => undefined),
   removeCodeRuntimeVersion: vi.fn(async () => undefined),
   cancelCodeRuntimeOperation: vi.fn(async () => undefined),
@@ -188,9 +197,18 @@ vi.mock('../services/gatewayApi', () => ({
   fetchGatewayJSON: gatewayMocks.fetchGatewayJSON,
 }));
 
+vi.mock('../services/desktopCodeWorkspaceBridge', () => ({
+  desktopCodeWorkspacePrepareAvailable: desktopCodeWorkspaceMocks.prepareAvailable,
+  prepareWorkspaceEngineInDesktop: desktopCodeWorkspaceMocks.prepareWorkspaceEngine,
+  prepareWorkspaceEngineWithDesktop: desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop,
+}));
+
+vi.mock('../services/desktopSessionContext', () => ({
+  readDesktopSessionContextSnapshot: desktopSessionContextMocks.readSnapshot,
+}));
+
 vi.mock('../services/codeRuntimeApi', () => ({
   fetchCodeRuntimeStatus: codeRuntimeMocks.fetchCodeRuntimeStatus,
-  installCodeRuntime: codeRuntimeMocks.installCodeRuntime,
   selectCodeRuntimeVersion: codeRuntimeMocks.selectCodeRuntimeVersion,
   removeCodeRuntimeVersion: codeRuntimeMocks.removeCodeRuntimeVersion,
   cancelCodeRuntimeOperation: codeRuntimeMocks.cancelCodeRuntimeOperation,
@@ -231,7 +249,14 @@ vi.mock('./settings/AIProviderDialog', () => ({
 }));
 
 vi.mock('./settings/CodeRuntimeSettingsCard', () => ({
-  CodeRuntimeSettingsCard: () => <section data-settings-card="code-server Runtime">code-server Runtime</section>,
+  CodeRuntimeSettingsCard: (props: any) => (
+    <section data-settings-card="Workspace Engine">
+      <div>Workspace Engine</div>
+      <button type="button" onClick={props.onPrepare} disabled={props.actionLoading}>
+        Prepare latest
+      </button>
+    </section>
+  ),
 }));
 
 vi.mock('./settings/PermissionPolicyTables', () => ({
@@ -301,6 +326,12 @@ describe('EnvSettingsPage', () => {
     vi.clearAllMocks();
     protocolMocks.status.mockReturnValue('disconnected');
     settingsResponse = null;
+    desktopCodeWorkspaceMocks.prepareAvailable.mockReset();
+    desktopCodeWorkspaceMocks.prepareAvailable.mockReturnValue(true);
+    desktopCodeWorkspaceMocks.prepareWorkspaceEngine.mockReset();
+    desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop.mockReset();
+    desktopSessionContextMocks.readSnapshot.mockReset();
+    desktopSessionContextMocks.readSnapshot.mockReturnValue(null);
     host = document.createElement('div');
     document.body.appendChild(host);
     (gatewayMocks.fetchGatewayJSON as any).mockImplementation(async (url: string) => {
@@ -434,5 +465,51 @@ describe('EnvSettingsPage', () => {
     const flowerCard = host.querySelector('[data-settings-card="Flower"]');
     expect(flowerCard?.textContent).toContain('The Desktop model source is available for this SSH environment.');
     expect(host.textContent).toContain('Desktop model source');
+  });
+
+  it('prepares the workspace engine from the settings page through Desktop', async () => {
+    settingsResponse = {
+      ai: null,
+    };
+
+    desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop.mockResolvedValueOnce({
+      ok: true,
+      prepared: true,
+      status: {
+        active_runtime: {
+          detection_state: 'ready',
+          present: true,
+          source: 'managed',
+        },
+        managed_runtime: {
+          detection_state: 'ready',
+          present: true,
+          source: 'managed',
+        },
+        managed_prefix: '/Users/test/.redeven/local-environment/apps/code/runtime/managed',
+        shared_runtime_root: '/Users/test/.redeven/shared/code-server/darwin-arm64',
+        managed_runtime_version: '4.109.1',
+        managed_runtime_source: 'managed',
+        installed_versions: [],
+        operation: { state: 'succeeded', action: 'prepare_workspace_engine', log_tail: [] },
+        updated_at_unix_ms: 1,
+      },
+    });
+
+    render(() => <EnvSettingsPage />, host);
+    await flushPage();
+
+    const button = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Prepare latest'));
+    expect(button).toBeTruthy();
+
+    button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushPage();
+
+    expect(desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop).toHaveBeenCalledWith({
+      reason: 'settings',
+      status: undefined,
+      preferSessionUpload: false,
+    });
+    expect(notificationMocks.error).not.toHaveBeenCalled();
   });
 });

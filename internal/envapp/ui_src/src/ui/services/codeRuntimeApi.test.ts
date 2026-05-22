@@ -38,9 +38,8 @@ function makeStatus(state: CodeRuntimeStatus['operation']['state']): CodeRuntime
         detection_state: 'ready',
       },
     ],
-    installer_script_url: 'https://code-server.dev/install.sh',
     operation: {
-      action: 'install',
+      action: 'prepare_workspace_engine',
       state,
       log_tail: [],
     },
@@ -62,7 +61,7 @@ describe('codeRuntimeApi selectors', () => {
     expect(codeRuntimeOperationSucceeded(makeStatus('idle'))).toBe(false);
   });
 
-  it('labels install actions around Local Environment-scoped reuse', () => {
+  it('labels workspace preparation actions around Local Environment-scoped reuse', () => {
     expect(codeRuntimeManagedActionLabel({
       ...makeStatus('idle'),
       installed_versions: [],
@@ -77,8 +76,8 @@ describe('codeRuntimeApi selectors', () => {
         source: 'managed',
       },
       managed_runtime_source: 'none',
-    })).toBe('Install and use for this Local Environment');
+    })).toBe('Prepare workspace for this Local Environment');
 
-    expect(codeRuntimeManagedActionLabel(makeStatus('idle'))).toBe('Install latest and use for this Local Environment');
+    expect(codeRuntimeManagedActionLabel(makeStatus('idle'))).toBe('Prepare latest workspace engine');
   });
 });

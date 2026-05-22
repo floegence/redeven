@@ -76,7 +76,15 @@ func (localUITestBackend) CodeRuntimeStatus(context.Context) (gatewaypkg.CodeRun
 	return gatewaypkg.CodeRuntimeStatus{}, nil
 }
 
-func (localUITestBackend) InstallCodeRuntime(context.Context) (gatewaypkg.CodeRuntimeStatus, error) {
+func (localUITestBackend) CreateCodeRuntimeImportSession(context.Context, gatewaypkg.CodeRuntimeArtifactManifest) (gatewaypkg.CodeRuntimeImportSession, error) {
+	return gatewaypkg.CodeRuntimeImportSession{}, nil
+}
+
+func (localUITestBackend) AppendCodeRuntimeImportChunk(context.Context, string, int64, io.Reader) (gatewaypkg.CodeRuntimeImportChunkResult, error) {
+	return gatewaypkg.CodeRuntimeImportChunkResult{}, nil
+}
+
+func (localUITestBackend) CompleteCodeRuntimeImportSession(context.Context, string) (gatewaypkg.CodeRuntimeStatus, error) {
 	return gatewaypkg.CodeRuntimeStatus{}, nil
 }
 

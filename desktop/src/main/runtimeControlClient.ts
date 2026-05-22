@@ -31,7 +31,11 @@ type RuntimeControlEnvelope = Readonly<{
 type RuntimeControlServiceRoute =
   | 'v1/provider-link'
   | 'v1/provider-link/connect'
-  | 'v1/provider-link/disconnect';
+  | 'v1/provider-link/disconnect'
+  | 'v1/code-workspace-engine/status'
+  | 'v1/code-workspace-engine/import-sessions'
+  | `v1/code-workspace-engine/import-sessions/${string}/chunks/${number}`
+  | `v1/code-workspace-engine/import-sessions/${string}/complete`;
 
 export type RuntimeControlProviderLinkStatus = Readonly<{
   linked?: boolean;
@@ -51,6 +55,17 @@ export type RuntimeControlProviderLinkRequest = Readonly<{
     env_public_id?: string;
     binding_generation?: number;
   }>;
+}>;
+
+export type CodeWorkspaceEngineImportSessionRequest = Readonly<{
+  manifest: unknown;
+}>;
+
+export type CodeWorkspaceEngineImportChunkResult = Readonly<{
+  upload_id: string;
+  received_bytes: number;
+  expected_bytes: number;
+  next_chunk_index: number;
 }>;
 
 function compact(value: unknown): string {
@@ -99,8 +114,10 @@ function requestRuntimeControl(
   endpoint: DesktopRuntimeControlEndpoint,
   route: RuntimeControlServiceRoute,
   options: Readonly<{
-    method: 'GET' | 'POST';
+    method: 'GET' | 'POST' | 'PUT';
     body?: unknown;
+    rawBody?: Buffer;
+    contentType?: string;
     timeoutMs?: number;
   }>,
 ): Promise<RuntimeControlEnvelope> {
@@ -117,7 +134,7 @@ function requestRuntimeControl(
   } catch (error) {
     return Promise.reject(error);
   }
-  const body = options.body == null ? '' : JSON.stringify(options.body);
+  const body = options.rawBody ?? (options.body == null ? Buffer.alloc(0) : Buffer.from(JSON.stringify(options.body), 'utf8'));
   const requestImpl = url.protocol === 'https:' ? https.request : http.request;
   return new Promise((resolve, reject) => {
     const req = requestImpl(url, {
@@ -127,9 +144,9 @@ function requestRuntimeControl(
         Accept: 'application/json',
         Authorization: `Bearer ${token}`,
         'X-Redeven-Desktop-Owner-ID': desktopOwnerID,
-        ...(body ? {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(body),
+        ...(body.length > 0 ? {
+          'Content-Type': options.contentType ?? (options.rawBody ? 'application/octet-stream' : 'application/json'),
+          'Content-Length': body.length,
         } : {}),
       },
     }, (response) => {
@@ -175,7 +192,7 @@ function requestRuntimeControl(
         ? error
         : new RuntimeControlError('RUNTIME_CONTROL_UNREACHABLE', error.message || 'Desktop could not reach Runtime control.'));
     });
-    if (body) {
+    if (body.length > 0) {
       req.write(body);
     }
     req.end();
@@ -221,4 +238,77 @@ export async function disconnectProviderLink(
     method: 'POST',
   });
   return parseProviderLinkStatus(envelope.data);
+}
+
+export async function getCodeWorkspaceEngineStatus(
+  endpoint: DesktopRuntimeControlEndpoint,
+): Promise<unknown> {
+  const envelope = await requestRuntimeControl(endpoint, 'v1/code-workspace-engine/status', { method: 'GET' });
+  return envelope.data;
+}
+
+export async function createCodeWorkspaceEngineImportSession(
+  endpoint: DesktopRuntimeControlEndpoint,
+  request: CodeWorkspaceEngineImportSessionRequest,
+): Promise<unknown> {
+  const envelope = await requestRuntimeControl(endpoint, 'v1/code-workspace-engine/import-sessions', {
+    method: 'POST',
+    body: request,
+    timeoutMs: 60_000,
+  });
+  return envelope.data;
+}
+
+export async function appendCodeWorkspaceEngineImportChunk(
+  endpoint: DesktopRuntimeControlEndpoint,
+  uploadID: string,
+  chunkIndex: number,
+  chunk: Buffer,
+): Promise<CodeWorkspaceEngineImportChunkResult> {
+  const cleanUploadID = encodeURIComponent(compact(uploadID));
+  const cleanChunkIndex = Math.max(0, Math.floor(chunkIndex));
+  const envelope = await requestRuntimeControl(
+    endpoint,
+    `v1/code-workspace-engine/import-sessions/${cleanUploadID}/chunks/${cleanChunkIndex}`,
+    {
+      method: 'PUT',
+      rawBody: chunk,
+      contentType: 'application/octet-stream',
+      timeoutMs: 120_000,
+    },
+  );
+  return parseCodeWorkspaceEngineImportChunkResult(envelope.data);
+}
+
+export async function completeCodeWorkspaceEngineImportSession(
+  endpoint: DesktopRuntimeControlEndpoint,
+  uploadID: string,
+): Promise<unknown> {
+  const cleanUploadID = encodeURIComponent(compact(uploadID));
+  const envelope = await requestRuntimeControl(
+    endpoint,
+    `v1/code-workspace-engine/import-sessions/${cleanUploadID}/complete`,
+    {
+      method: 'POST',
+      timeoutMs: 120_000,
+    },
+  );
+  return envelope.data;
+}
+
+function parseCodeWorkspaceEngineImportChunkResult(data: unknown): CodeWorkspaceEngineImportChunkResult {
+  const record = data && typeof data === 'object' ? data as Record<string, unknown> : {};
+  const uploadID = compact(record.upload_id);
+  const receivedBytes = Number(record.received_bytes);
+  const expectedBytes = Number(record.expected_bytes);
+  const nextChunkIndex = Number(record.next_chunk_index);
+  if (!uploadID || !Number.isFinite(receivedBytes) || !Number.isFinite(expectedBytes) || !Number.isFinite(nextChunkIndex)) {
+    throw new RuntimeControlError('CODE_WORKSPACE_ENGINE_INVALID_RESPONSE', 'Runtime control did not return a valid workspace engine chunk result.');
+  }
+  return {
+    upload_id: uploadID,
+    received_bytes: Math.max(0, Math.floor(receivedBytes)),
+    expected_bytes: Math.max(0, Math.floor(expectedBytes)),
+    next_chunk_index: Math.max(0, Math.floor(nextChunkIndex)),
+  };
 }

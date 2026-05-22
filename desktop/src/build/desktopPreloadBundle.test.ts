@@ -42,6 +42,7 @@ describe('buildDesktopPreloads', () => {
     expect(sessionOutput).toContain('redevenDesktopSessionContext');
     expect(sessionOutput).toContain('redevenDesktopShell');
     expect(sessionOutput).toContain('redevenDesktopDownloads');
+    expect(sessionOutput).toContain('redevenDesktopCodeWorkspace');
     expect(sessionOutput).toContain('redevenDesktopStateStorage');
     expect(sessionOutput).toContain('redevenDesktopTheme');
     expect(sessionOutput).not.toContain('redevenDesktopAskFlowerHandoff');

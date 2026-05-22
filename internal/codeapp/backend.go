@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -249,11 +250,26 @@ func (s *Service) CodeRuntimeStatus(ctx context.Context) (gateway.CodeRuntimeSta
 	return gateway.CodeRuntimeStatus(s.runtime.Status(ctx)), nil
 }
 
-func (s *Service) InstallCodeRuntime(ctx context.Context) (gateway.CodeRuntimeStatus, error) {
+func (s *Service) CreateCodeRuntimeImportSession(ctx context.Context, manifest gateway.CodeRuntimeArtifactManifest) (gateway.CodeRuntimeImportSession, error) {
+	if s == nil || s.runtime == nil {
+		return gateway.CodeRuntimeImportSession{}, errors.New("code runtime not ready")
+	}
+	return s.runtime.CreateImportSession(ctx, manifest)
+}
+
+func (s *Service) AppendCodeRuntimeImportChunk(ctx context.Context, uploadID string, chunkIndex int64, body io.Reader) (gateway.CodeRuntimeImportChunkResult, error) {
+	if s == nil || s.runtime == nil {
+		return gateway.CodeRuntimeImportChunkResult{}, errors.New("code runtime not ready")
+	}
+	return s.runtime.AppendImportChunk(ctx, uploadID, chunkIndex, body)
+}
+
+func (s *Service) CompleteCodeRuntimeImportSession(ctx context.Context, uploadID string) (gateway.CodeRuntimeStatus, error) {
 	if s == nil || s.runtime == nil {
 		return gateway.CodeRuntimeStatus{}, errors.New("code runtime not ready")
 	}
-	return gateway.CodeRuntimeStatus(s.runtime.StartInstall(ctx)), nil
+	status, err := s.runtime.CompleteImportSession(ctx, uploadID)
+	return gateway.CodeRuntimeStatus(status), err
 }
 
 func (s *Service) SelectCodeRuntimeVersion(ctx context.Context, version string) (gateway.CodeRuntimeStatus, error) {

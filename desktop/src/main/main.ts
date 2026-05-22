@@ -1,4 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, powerMonitor, safeStorage, session, shell, type MessageBoxOptions } from 'electron';
+import crypto from 'node:crypto';
+import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -107,6 +109,7 @@ import { resolveBundledRuntimePath, resolveSessionPreloadPath, resolveUtilityPre
 import { loadExternalLocalUIStartup } from './runtimeState';
 import {
   RuntimeControlError,
+  getCodeWorkspaceEngineStatus,
   connectProviderLink,
   disconnectProviderLink,
 } from './runtimeControlClient';
@@ -153,6 +156,16 @@ import {
   pruneDesktopRuntimePackageCache,
   runtimePackageCacheRoot,
 } from './runtimePackageCache';
+import {
+  codeWorkspaceEnginePackageCacheRoot,
+  prepareCodeWorkspaceEnginePackage,
+  type CodeWorkspaceEnginePackageCacheEntry,
+} from './codeWorkspaceEnginePackageCache';
+import {
+  DEFAULT_CODE_WORKSPACE_ENGINE_UPLOAD_ARCHIVE_LIMIT,
+  DEFAULT_CODE_WORKSPACE_ENGINE_UPLOAD_CHUNK_SIZE,
+  uploadCodeWorkspaceEngineViaRuntimeControl,
+} from './codeWorkspaceEngineTransfer';
 import { PUBLIC_REDEVEN_RELEASE_BASE_URL } from './sshReleaseAssets';
 import { installStdioBrokenPipeGuards } from './stdio';
 import type { StartupReport } from './startup';
@@ -270,6 +283,20 @@ import {
   normalizeDesktopDownloadPrepareRequest,
   normalizeDesktopDownloadWriteRequest,
 } from '../shared/desktopDownloadIPC';
+import {
+  DESKTOP_CODE_WORKSPACE_PACKAGE_CHUNK_CHANNEL,
+  DESKTOP_CODE_WORKSPACE_PACKAGE_DISPOSE_CHANNEL,
+  DESKTOP_CODE_WORKSPACE_PACKAGE_PREPARE_CHANNEL,
+  DESKTOP_CODE_WORKSPACE_PREPARE_CHANNEL,
+  normalizeDesktopCodeWorkspacePackageChunkRequest,
+  normalizeDesktopCodeWorkspacePackageDisposeRequest,
+  normalizeDesktopCodeWorkspacePackagePrepareRequest,
+  normalizeDesktopCodeWorkspacePrepareRequest,
+  type DesktopCodeWorkspacePackageChunkResponse,
+  type DesktopCodeWorkspacePackageDisposeResponse,
+  type DesktopCodeWorkspacePackagePrepareResponse,
+  type DesktopCodeWorkspacePrepareResponse,
+} from '../shared/desktopCodeWorkspaceIPC';
 import {
   DESKTOP_LAUNCHER_ACTION_PROGRESS_CHANNEL,
   DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL,
@@ -4354,6 +4381,34 @@ function resolveSSHRuntimeReleaseTag(): string {
 
 function desktopRuntimePackageCacheRoot(): string {
   return runtimePackageCacheRoot(app.getPath('userData'));
+}
+
+function desktopCodeWorkspaceEnginePackageCacheRoot(): string {
+  return codeWorkspaceEnginePackageCacheRoot(app.getPath('userData'));
+}
+
+type DesktopCodeWorkspaceEnginePackagePlatform = Parameters<typeof prepareCodeWorkspaceEnginePackage>[0]['platform'];
+
+type DesktopCodeWorkspaceEnginePackageJobRecord = Readonly<{
+  jobID: string;
+  archivePath: string;
+  manifest: unknown;
+  archiveSizeBytes: number;
+  chunkSizeBytes: number;
+  fromCache: boolean;
+  createdAtMs: number;
+}>;
+
+const desktopCodeWorkspaceEnginePackageJobs = new Map<string, DesktopCodeWorkspaceEnginePackageJobRecord>();
+const desktopCodeWorkspaceEnginePackageJobTTLMS = 30 * 60 * 1000;
+
+function pruneDesktopCodeWorkspaceEnginePackageJobs(): void {
+  const expiresBefore = Date.now() - desktopCodeWorkspaceEnginePackageJobTTLMS;
+  for (const [jobID, job] of desktopCodeWorkspaceEnginePackageJobs.entries()) {
+    if (job.createdAtMs < expiresBefore) {
+      desktopCodeWorkspaceEnginePackageJobs.delete(jobID);
+    }
+  }
 }
 
 async function pruneDesktopRuntimePackageCacheForCurrentRelease(): Promise<void> {
@@ -9459,6 +9514,214 @@ async function manageDesktopUpdateFromShell(webContentsID: number): Promise<Desk
   };
 }
 
+function codeWorkspaceEnginePlatformFromStatus(status: unknown): DesktopCodeWorkspaceEnginePackagePlatform {
+  const record = status && typeof status === 'object' ? status as Record<string, unknown> : {};
+  const platform = record.platform && typeof record.platform === 'object' ? record.platform as Record<string, unknown> : {};
+  const osName = String(platform.os ?? '').trim();
+  const arch = String(platform.arch ?? '').trim();
+  const libc = String(platform.libc ?? '').trim();
+  const platformID = String(platform.platform_id ?? '').trim();
+  if (osName !== 'linux' && osName !== 'darwin') {
+    throw new Error('This Environment is not supported by the managed workspace engine.');
+  }
+  if (arch !== 'amd64' && arch !== 'arm64') {
+    throw new Error('This Environment architecture is not supported by the managed workspace engine.');
+  }
+  if (osName === 'linux' && libc !== '' && libc !== 'glibc' && libc !== 'unknown') {
+    throw new Error('This Linux Environment is not supported by the managed workspace engine.');
+  }
+  return {
+    os: osName,
+    arch,
+    ...(osName === 'linux' ? { libc: libc === 'unknown' ? 'unknown' : 'glibc' } : {}),
+    platform_id: platformID || (osName === 'linux' ? `${osName}-${arch}-${libc || 'glibc'}` : `${osName}-${arch}`),
+  };
+}
+
+function codeWorkspaceEngineReady(status: unknown): boolean {
+  const record = status && typeof status === 'object' ? status as Record<string, unknown> : {};
+  const active = record.active_runtime && typeof record.active_runtime === 'object'
+    ? record.active_runtime as Record<string, unknown>
+    : {};
+  return String(active.detection_state ?? '').trim() === 'ready';
+}
+
+async function prepareCodeWorkspaceEnginePackageJob(
+  platform: DesktopCodeWorkspaceEnginePackagePlatform,
+): Promise<DesktopCodeWorkspacePackagePrepareResponse> {
+  try {
+    pruneDesktopCodeWorkspaceEnginePackageJobs();
+    const preparedPackage = await prepareCodeWorkspaceEnginePackage({
+      cacheRoot: desktopCodeWorkspaceEnginePackageCacheRoot(),
+      platform,
+      fetchPolicy: {
+        timeout_ms: 60_000,
+      },
+    });
+    const stat = await fs.stat(preparedPackage.archive_path);
+    if (!stat.isFile() || stat.size <= 0) {
+      throw new Error('Workspace engine package is empty.');
+    }
+    if (stat.size > DEFAULT_CODE_WORKSPACE_ENGINE_UPLOAD_ARCHIVE_LIMIT) {
+      throw new Error(`Workspace engine package is too large (${stat.size} bytes).`);
+    }
+    const jobID = `cwepkg_${crypto.randomBytes(18).toString('base64url')}`;
+    desktopCodeWorkspaceEnginePackageJobs.set(jobID, {
+      jobID,
+      archivePath: preparedPackage.archive_path,
+      manifest: preparedPackage.manifest,
+      archiveSizeBytes: stat.size,
+      chunkSizeBytes: DEFAULT_CODE_WORKSPACE_ENGINE_UPLOAD_CHUNK_SIZE,
+      fromCache: preparedPackage.from_cache,
+      createdAtMs: Date.now(),
+    });
+    return {
+      ok: true,
+      job: {
+        job_id: jobID,
+        manifest: preparedPackage.manifest,
+        archive_size_bytes: stat.size,
+        chunk_size_bytes: DEFAULT_CODE_WORKSPACE_ENGINE_UPLOAD_CHUNK_SIZE,
+        from_cache: preparedPackage.from_cache,
+      },
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : 'Desktop could not prepare the workspace package.',
+    };
+  }
+}
+
+async function readCodeWorkspaceEnginePackageJobChunk(
+  jobID: string,
+  offsetBytes: number,
+  lengthBytes: number,
+): Promise<DesktopCodeWorkspacePackageChunkResponse> {
+  pruneDesktopCodeWorkspaceEnginePackageJobs();
+  const job = desktopCodeWorkspaceEnginePackageJobs.get(jobID);
+  if (!job) {
+    return {
+      ok: false,
+      message: 'Workspace package is no longer available.',
+    };
+  }
+  const offset = Math.max(0, Math.floor(offsetBytes));
+  const length = Math.max(1, Math.min(Math.floor(lengthBytes), job.chunkSizeBytes));
+  if (offset > job.archiveSizeBytes) {
+    return {
+      ok: false,
+      message: 'Workspace package chunk offset is out of range.',
+    };
+  }
+  const bytesToRead = Math.min(length, job.archiveSizeBytes - offset);
+  if (bytesToRead <= 0) {
+    return {
+      ok: true,
+      chunk: new Uint8Array(),
+      offset_bytes: offset,
+      length_bytes: 0,
+      done: true,
+    };
+  }
+  const handle = await fs.open(job.archivePath, 'r');
+  try {
+    const buffer = Buffer.alloc(bytesToRead);
+    const { bytesRead } = await handle.read(buffer, 0, bytesToRead, offset);
+    return {
+      ok: true,
+      chunk: new Uint8Array(buffer.subarray(0, bytesRead)),
+      offset_bytes: offset,
+      length_bytes: bytesRead,
+      done: offset + bytesRead >= job.archiveSizeBytes,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : 'Desktop could not read the workspace package.',
+    };
+  } finally {
+    await handle.close();
+  }
+}
+
+function disposeCodeWorkspaceEnginePackageJob(jobID: string): DesktopCodeWorkspacePackageDisposeResponse {
+  desktopCodeWorkspaceEnginePackageJobs.delete(jobID);
+  return { ok: true };
+}
+
+async function prepareCodeWorkspaceEngineFromDesktop(webContentsID: number): Promise<DesktopCodeWorkspacePrepareResponse> {
+  const sessionRecord = sessionRecordForWebContentsID(webContentsID);
+  if (!sessionRecord) {
+    return {
+      ok: false,
+      prepared: false,
+      message: 'Desktop could not resolve this Environment session.',
+    };
+  }
+  const endpoint = sessionRecord.startup.runtime_control;
+  if (!endpoint) {
+    return {
+      ok: false,
+      prepared: false,
+      message: 'Restart this Environment from Desktop, then try opening the workspace again.',
+    };
+  }
+  if (endpoint.desktop_owner_id !== await desktopRuntimeOwnerID()) {
+    return {
+      ok: false,
+      prepared: false,
+      message: 'This Environment is managed by another Desktop instance.',
+    };
+  }
+
+  try {
+    const currentStatus = await getCodeWorkspaceEngineStatus(endpoint);
+    if (codeWorkspaceEngineReady(currentStatus)) {
+      return {
+        ok: true,
+        prepared: true,
+        status: currentStatus,
+      };
+    }
+    const platform = codeWorkspaceEnginePlatformFromStatus(currentStatus);
+    const preparedPackage: CodeWorkspaceEnginePackageCacheEntry = await prepareCodeWorkspaceEnginePackage({
+      cacheRoot: desktopCodeWorkspaceEnginePackageCacheRoot(),
+      platform,
+      fetchPolicy: {
+        timeout_ms: 60_000,
+      },
+    });
+    const status = await uploadCodeWorkspaceEngineViaRuntimeControl({
+      endpoint,
+      manifest: preparedPackage.manifest,
+      archivePath: preparedPackage.archive_path,
+      maxArchiveBytes: DEFAULT_CODE_WORKSPACE_ENGINE_UPLOAD_ARCHIVE_LIMIT,
+    });
+    return {
+      ok: true,
+      prepared: true,
+      status,
+      message: preparedPackage.from_cache ? 'Workspace engine was ready from Desktop cache.' : 'Workspace engine prepared.',
+    };
+  } catch (error) {
+    const failure = desktopFailureFromError(error, {
+      code: 'workspace_engine_prepare_failed',
+      title: 'Workspace Preparation Failed',
+      summary: 'Desktop could not prepare the workspace engine.',
+      targetLabel: sessionRecord.target.label,
+    });
+    return {
+      ok: false,
+      prepared: false,
+      message: failure.summary,
+      status: {
+        failure,
+      },
+    };
+  }
+}
+
 async function performRuntimeMaintenanceFromShell(
   webContentsID: number,
   action: 'restart' | 'upgrade',
@@ -10578,6 +10841,41 @@ if (!app.requestSingleInstanceLock()) {
       started: false,
       message: 'Unsupported desktop runtime action.',
     };
+  });
+  ipcMain.handle(DESKTOP_CODE_WORKSPACE_PREPARE_CHANNEL, async (event, request): Promise<DesktopCodeWorkspacePrepareResponse> => {
+    const normalized = normalizeDesktopCodeWorkspacePrepareRequest(request);
+    void normalized;
+    return prepareCodeWorkspaceEngineFromDesktop(event.sender.id);
+  });
+  ipcMain.handle(DESKTOP_CODE_WORKSPACE_PACKAGE_PREPARE_CHANNEL, async (_event, request): Promise<DesktopCodeWorkspacePackagePrepareResponse> => {
+    const normalized = normalizeDesktopCodeWorkspacePackagePrepareRequest(request);
+    if (!normalized) {
+      return {
+        ok: false,
+        message: 'Desktop received an invalid workspace package request.',
+      };
+    }
+    return prepareCodeWorkspaceEnginePackageJob(normalized.platform);
+  });
+  ipcMain.handle(DESKTOP_CODE_WORKSPACE_PACKAGE_CHUNK_CHANNEL, async (_event, request): Promise<DesktopCodeWorkspacePackageChunkResponse> => {
+    const normalized = normalizeDesktopCodeWorkspacePackageChunkRequest(request);
+    if (!normalized) {
+      return {
+        ok: false,
+        message: 'Desktop received an invalid workspace package chunk request.',
+      };
+    }
+    return readCodeWorkspaceEnginePackageJobChunk(normalized.job_id, normalized.offset_bytes, normalized.length_bytes);
+  });
+  ipcMain.handle(DESKTOP_CODE_WORKSPACE_PACKAGE_DISPOSE_CHANNEL, async (_event, request): Promise<DesktopCodeWorkspacePackageDisposeResponse> => {
+    const normalized = normalizeDesktopCodeWorkspacePackageDisposeRequest(request);
+    if (!normalized) {
+      return {
+        ok: false,
+        message: 'Desktop received an invalid workspace package cleanup request.',
+      };
+    }
+    return disposeCodeWorkspaceEnginePackageJob(normalized.job_id);
   });
   ipcMain.on(CANCEL_DESKTOP_SETTINGS_CHANNEL, () => {
     setLauncherViewState({

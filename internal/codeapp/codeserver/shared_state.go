@@ -89,10 +89,6 @@ func sharedDownloadsRoot(stateRoot string) string {
 	return filepath.Join(sharedRuntimeRoot(stateRoot), "downloads")
 }
 
-func sharedInstallerScriptPath(stateRoot string) string {
-	return filepath.Join(sharedDownloadsRoot(stateRoot), "install.sh")
-}
-
 func managedRuntimePrefix(stateDir string) string {
 	return filepath.Join(runtimeRoot(stateDir), "managed")
 }

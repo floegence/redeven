@@ -1,11 +1,17 @@
 package codeserver
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -45,9 +51,8 @@ func TestRuntimeManagerSelectedManagedVersionDoesNotSilentlyFallBackToSystem(t *
 	}
 
 	mgr := NewRuntimeManager(RuntimeManagerOptions{
-		StateDir:             stateDir,
-		StateRoot:            stateRoot,
-		InstallScriptContent: []byte(fakeInstallScript("4.109.1", false, 0)),
+		StateDir:  stateDir,
+		StateRoot: stateRoot,
 	})
 
 	status := mgr.Status(context.Background())
@@ -82,9 +87,8 @@ func TestRuntimeManagerStatusKeepsSelectedManagedRuntimeVisibleWhenOverrideIsAct
 	}
 
 	mgr := NewRuntimeManager(RuntimeManagerOptions{
-		StateDir:             stateDir,
-		StateRoot:            stateRoot,
-		InstallScriptContent: []byte(fakeInstallScript("4.109.1", false, 0)),
+		StateDir:  stateDir,
+		StateRoot: stateRoot,
 	})
 
 	status := waitForActiveRuntimeDetection(t, mgr, RuntimeDetectionReady)
@@ -106,17 +110,29 @@ func TestRuntimeManagerInstallPromotesSharedVersionAndSelectsEnvironment(t *test
 	stateDir := t.TempDir()
 	stateRoot := t.TempDir()
 	mgr := NewRuntimeManager(RuntimeManagerOptions{
-		StateDir:             stateDir,
-		StateRoot:            stateRoot,
-		InstallScriptContent: []byte(fakeInstallScript("4.109.1", false, 0)),
+		StateDir:  stateDir,
+		StateRoot: stateRoot,
 	})
-
-	status := mgr.StartInstall(context.Background())
-	if status.Operation.State != RuntimeOperationStateRunning && status.Operation.State != RuntimeOperationStateSucceeded {
-		t.Fatalf("initial operation.state=%q, want running or succeeded", status.Operation.State)
+	manifest, archivePath := writeFakeWorkspaceEngineArchive(t, "4.109.1", stateRoot)
+	session, err := mgr.CreateImportSession(context.Background(), manifest)
+	if err != nil {
+		t.Fatalf("CreateImportSession() error = %v", err)
+	}
+	archive, err := os.Open(archivePath)
+	if err != nil {
+		t.Fatalf("open archive: %v", err)
+	}
+	if _, err := mgr.AppendImportChunk(context.Background(), session.UploadID, 0, archive); err != nil {
+		t.Fatalf("AppendImportChunk() error = %v", err)
+	}
+	if err := archive.Close(); err != nil {
+		t.Fatalf("close archive: %v", err)
 	}
 
-	final := waitForOperationState(t, mgr, RuntimeOperationStateSucceeded)
+	final, err := mgr.CompleteImportSession(context.Background(), session.UploadID)
+	if err != nil {
+		t.Fatalf("CompleteImportSession() error = %v", err)
+	}
 	sharedBin := filepath.Join(sharedVersionRoot(stateRoot, "4.109.1"), "bin", codeServerBinaryName())
 	if final.ActiveRuntime.DetectionState != RuntimeDetectionReady {
 		t.Fatalf("active detection_state=%q, want ready", final.ActiveRuntime.DetectionState)
@@ -140,22 +156,34 @@ func TestRuntimeManagerInstallReusesExistingSharedVersion(t *testing.T) {
 	stateRoot := t.TempDir()
 	firstStateDir := t.TempDir()
 	secondStateDir := t.TempDir()
+	manifest, archivePath := writeFakeWorkspaceEngineArchive(t, "4.109.1", stateRoot)
 
 	first := NewRuntimeManager(RuntimeManagerOptions{
-		StateDir:             firstStateDir,
-		StateRoot:            stateRoot,
-		InstallScriptContent: []byte(fakeInstallScript("4.109.1", false, 0)),
+		StateDir:  firstStateDir,
+		StateRoot: stateRoot,
 	})
-	first.StartInstall(context.Background())
-	waitForOperationState(t, first, RuntimeOperationStateSucceeded)
+	firstSession, err := first.CreateImportSession(context.Background(), manifest)
+	if err != nil {
+		t.Fatalf("CreateImportSession(first) error = %v", err)
+	}
+	appendArchiveToSession(t, first, firstSession.UploadID, archivePath)
+	if _, err := first.CompleteImportSession(context.Background(), firstSession.UploadID); err != nil {
+		t.Fatalf("CompleteImportSession(first) error = %v", err)
+	}
 
 	second := NewRuntimeManager(RuntimeManagerOptions{
-		StateDir:             secondStateDir,
-		StateRoot:            stateRoot,
-		InstallScriptContent: []byte(fakeInstallScript("4.109.1", false, 0)),
+		StateDir:  secondStateDir,
+		StateRoot: stateRoot,
 	})
-	second.StartInstall(context.Background())
-	final := waitForOperationState(t, second, RuntimeOperationStateSucceeded)
+	secondSession, err := second.CreateImportSession(context.Background(), manifest)
+	if err != nil {
+		t.Fatalf("CreateImportSession(second) error = %v", err)
+	}
+	appendArchiveToSession(t, second, secondSession.UploadID, archivePath)
+	final, err := second.CompleteImportSession(context.Background(), secondSession.UploadID)
+	if err != nil {
+		t.Fatalf("CompleteImportSession(second) error = %v", err)
+	}
 
 	if final.ManagedRuntimeVersion != "4.109.1" {
 		t.Fatalf("managed_runtime_version=%q, want 4.109.1", final.ManagedRuntimeVersion)
@@ -169,6 +197,187 @@ func TestRuntimeManagerInstallReusesExistingSharedVersion(t *testing.T) {
 	}
 	if len(state.Versions) != 1 {
 		t.Fatalf("len(versions)=%d, want 1", len(state.Versions))
+	}
+}
+
+func TestRuntimeManagerInstallRollsBackExistingVersionOnInvalidReplacement(t *testing.T) {
+	stateRoot := t.TempDir()
+	stateDir := t.TempDir()
+	version := "4.109.1"
+	versionRoot := sharedVersionRoot(stateRoot, version)
+	existingBin := filepath.Join(versionRoot, "bin", codeServerBinaryName())
+	writeFakeCodeServerBinary(t, existingBin, version)
+	if err := saveLocalEnvironmentRuntimeState(stateRoot, localEnvironmentRuntimeState{
+		SelectedVersion: version,
+		UpdatedAtUnixMs: time.Now().UnixMilli(),
+		Versions: map[string]localEnvironmentRuntimeVersion{
+			version: {InstalledAtUnixMs: time.Now().UnixMilli(), BinaryRelPath: filepath.Join("bin", codeServerBinaryName())},
+		},
+	}); err != nil {
+		t.Fatalf("saveLocalEnvironmentRuntimeState() error = %v", err)
+	}
+
+	manifest, archivePath := writeFakeWorkspaceEngineArchive(t, version, stateRoot)
+	manifest.Layout.BinaryRelPath = filepath.Join("bin", "missing-code-server")
+	mgr := NewRuntimeManager(RuntimeManagerOptions{
+		StateDir:  stateDir,
+		StateRoot: stateRoot,
+	})
+	session, err := mgr.CreateImportSession(context.Background(), manifest)
+	if err != nil {
+		t.Fatalf("CreateImportSession() error = %v", err)
+	}
+	appendArchiveToSession(t, mgr, session.UploadID, archivePath)
+	if _, err := mgr.CompleteImportSession(context.Background(), session.UploadID); err == nil {
+		t.Fatalf("CompleteImportSession() error = nil, want validation failure")
+	}
+
+	if _, err := os.Stat(existingBin); err != nil {
+		t.Fatalf("existing version should be restored, stat error = %v", err)
+	}
+	state, err := loadLocalEnvironmentRuntimeState(stateRoot)
+	if err != nil {
+		t.Fatalf("loadLocalEnvironmentRuntimeState() error = %v", err)
+	}
+	if state.SelectedVersion != version {
+		t.Fatalf("selected_version=%q, want %q", state.SelectedVersion, version)
+	}
+	status := mgr.Status(context.Background())
+	if status.ManagedRuntime.DetectionState != RuntimeDetectionReady {
+		t.Fatalf("managed detection_state=%q, want ready", status.ManagedRuntime.DetectionState)
+	}
+}
+
+func TestRuntimeManagerCancelOperationRemovesActiveImportSession(t *testing.T) {
+	stateDir := t.TempDir()
+	stateRoot := t.TempDir()
+	mgr := NewRuntimeManager(RuntimeManagerOptions{
+		StateDir:  stateDir,
+		StateRoot: stateRoot,
+	})
+	manifest, archivePath := writeFakeWorkspaceEngineArchive(t, "4.109.1", stateRoot)
+	session, err := mgr.CreateImportSession(context.Background(), manifest)
+	if err != nil {
+		t.Fatalf("CreateImportSession() error = %v", err)
+	}
+	f, err := os.Open(archivePath)
+	if err != nil {
+		t.Fatalf("open archive: %v", err)
+	}
+	buf := make([]byte, 128)
+	n, err := f.Read(buf)
+	if err != nil {
+		t.Fatalf("read archive: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("close archive: %v", err)
+	}
+	if _, err := mgr.AppendImportChunk(context.Background(), session.UploadID, 0, strings.NewReader(string(buf[:n]))); err != nil {
+		t.Fatalf("AppendImportChunk() error = %v", err)
+	}
+
+	status := mgr.CancelOperation(context.Background())
+	if status.Operation.State != RuntimeOperationStateCancelled {
+		t.Fatalf("operation.state=%q, want cancelled", status.Operation.State)
+	}
+	if _, err := os.Stat(workspaceEngineUploadSessionPath(stateRoot, session.UploadID)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("session file should be removed, err=%v", err)
+	}
+	if _, err := os.Stat(workspaceEngineUploadPartPath(stateRoot, session.UploadID)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("part file should be removed, err=%v", err)
+	}
+}
+
+func TestRuntimeManagerRejectsOversizedImportChunkWithoutAppending(t *testing.T) {
+	stateDir := t.TempDir()
+	stateRoot := t.TempDir()
+	mgr := NewRuntimeManager(RuntimeManagerOptions{
+		StateDir:  stateDir,
+		StateRoot: stateRoot,
+	})
+	manifest, _ := writeFakeWorkspaceEngineArchive(t, "4.109.1", stateRoot)
+	manifest.Archive.SizeBytes = int64(defaultWorkspaceEngineChunkSize + 2)
+	session, err := mgr.CreateImportSession(context.Background(), manifest)
+	if err != nil {
+		t.Fatalf("CreateImportSession() error = %v", err)
+	}
+
+	_, err = mgr.AppendImportChunk(context.Background(), session.UploadID, 0, strings.NewReader(strings.Repeat("x", defaultWorkspaceEngineChunkSize+1)))
+	if err == nil || !strings.Contains(err.Error(), "chunk is too large") {
+		t.Fatalf("AppendImportChunk() error = %v, want chunk too large", err)
+	}
+	if stat, statErr := os.Stat(workspaceEngineUploadPartPath(stateRoot, session.UploadID)); statErr == nil && stat.Size() != 0 {
+		t.Fatalf("oversized chunk should not be appended, part size=%d", stat.Size())
+	} else if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("unexpected part stat error: %v", statErr)
+	}
+
+	reloaded, err := loadWorkspaceEngineImportSession(stateRoot, session.UploadID)
+	if err != nil {
+		t.Fatalf("loadWorkspaceEngineImportSession() error = %v", err)
+	}
+	if reloaded.ReceivedBytes != 0 || reloaded.NextChunkIndex != 0 {
+		t.Fatalf("session advanced after oversized chunk: received=%d next=%d", reloaded.ReceivedBytes, reloaded.NextChunkIndex)
+	}
+}
+
+func TestRuntimeManagerSerializesImportChunkAppend(t *testing.T) {
+	stateDir := t.TempDir()
+	stateRoot := t.TempDir()
+	mgr := NewRuntimeManager(RuntimeManagerOptions{
+		StateDir:  stateDir,
+		StateRoot: stateRoot,
+	})
+	manifest, _ := writeFakeWorkspaceEngineArchive(t, "4.109.1", stateRoot)
+	manifest.Archive.SizeBytes = 2
+	session, err := mgr.CreateImportSession(context.Background(), manifest)
+	if err != nil {
+		t.Fatalf("CreateImportSession() error = %v", err)
+	}
+
+	start := make(chan struct{})
+	errs := make(chan error, 2)
+	var wg sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			_, appendErr := mgr.AppendImportChunk(context.Background(), session.UploadID, 0, strings.NewReader("x"))
+			errs <- appendErr
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+
+	var successCount int
+	var mismatchCount int
+	for appendErr := range errs {
+		if appendErr == nil {
+			successCount++
+			continue
+		}
+		if strings.Contains(appendErr.Error(), "chunk index mismatch") {
+			mismatchCount++
+		}
+	}
+	if successCount != 1 || mismatchCount != 1 {
+		t.Fatalf("concurrent append outcomes success=%d mismatch=%d, want 1/1", successCount, mismatchCount)
+	}
+	reloaded, err := loadWorkspaceEngineImportSession(stateRoot, session.UploadID)
+	if err != nil {
+		t.Fatalf("loadWorkspaceEngineImportSession() error = %v", err)
+	}
+	if reloaded.ReceivedBytes != 1 || reloaded.NextChunkIndex != 1 {
+		t.Fatalf("session should advance exactly once: received=%d next=%d", reloaded.ReceivedBytes, reloaded.NextChunkIndex)
+	}
+	part, err := os.ReadFile(workspaceEngineUploadPartPath(stateRoot, session.UploadID))
+	if err != nil {
+		t.Fatalf("read part: %v", err)
+	}
+	if string(part) != "x" {
+		t.Fatalf("part=%q, want one chunk", string(part))
 	}
 }
 
@@ -279,21 +488,11 @@ func TestResolveBinaryReturnsSelectedManagedRuntime(t *testing.T) {
 	}
 }
 
-func TestRuntimeManagerStatusUsesOfficialLatestInstallerURL(t *testing.T) {
-	mgr := NewRuntimeManager(RuntimeManagerOptions{StateDir: t.TempDir(), StateRoot: t.TempDir()})
-
-	status := mgr.Status(context.Background())
-	if status.InstallerScriptURL != defaultInstallScriptURL {
-		t.Fatalf("installer_script_url=%q, want %q", status.InstallerScriptURL, defaultInstallScriptURL)
-	}
-}
-
 func newTestRuntimeManager(t *testing.T) *RuntimeManager {
 	t.Helper()
 	return NewRuntimeManager(RuntimeManagerOptions{
-		StateDir:             t.TempDir(),
-		StateRoot:            t.TempDir(),
-		InstallScriptContent: []byte(fakeInstallScript("4.109.1", false, 0)),
+		StateDir:  t.TempDir(),
+		StateRoot: t.TempDir(),
 	})
 }
 
@@ -346,34 +545,72 @@ echo "ok"
 	}
 }
 
-func fakeInstallScript(installedVersion string, fail bool, sleep time.Duration) string {
-	var b strings.Builder
-	b.WriteString("#!/bin/sh\nset -eu\n")
-	b.WriteString("prefix=\"\"\nrequested_version=\"\"\n")
-	b.WriteString("while [ $# -gt 0 ]; do\n")
-	b.WriteString("  case \"$1\" in\n")
-	b.WriteString("    --prefix) prefix=\"$2\"; shift 2 ;;\n")
-	b.WriteString("    --prefix=*) prefix=\"${1#*=}\"; shift ;;\n")
-	b.WriteString("    --version) requested_version=\"$2\"; shift 2 ;;\n")
-	b.WriteString("    --version=*) requested_version=\"${1#*=}\"; shift ;;\n")
-	b.WriteString("    *) shift ;;\n")
-	b.WriteString("  esac\n")
-	b.WriteString("done\n")
-	b.WriteString("if [ -n \"$requested_version\" ]; then\n")
-	b.WriteString("  echo \"unexpected --version flag: $requested_version\" >&2\n")
-	b.WriteString("  exit 1\n")
-	b.WriteString("fi\n")
-	if sleep > 0 {
-		b.WriteString(fmt.Sprintf("sleep %.3f\n", sleep.Seconds()))
+func writeFakeWorkspaceEngineArchive(t *testing.T, version string, root string) (WorkspaceEngineArtifactManifest, string) {
+	t.Helper()
+	archivePath := filepath.Join(t.TempDir(), "code-server.tar.gz")
+	file, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatalf("create archive: %v", err)
 	}
-	if fail {
-		b.WriteString("echo \"installer boom\" >&2\nexit 1\n")
-		return b.String()
+	gz := gzip.NewWriter(file)
+	tw := tar.NewWriter(gz)
+	script := fmt.Sprintf("#!/bin/sh\nif [ \"${1:-}\" = \"--version\" ]; then\n  echo \"%s\"\n  exit 0\nfi\necho ok\n", version)
+	entries := map[string][]byte{
+		fmt.Sprintf("code-server-%s/bin/%s", version, codeServerBinaryName()): []byte(script),
 	}
-	b.WriteString(fmt.Sprintf("bundle_version=%q\n", installedVersion))
-	b.WriteString("mkdir -p \"$prefix/lib/code-server-$bundle_version/bin\" \"$prefix/bin\"\n")
-	b.WriteString("printf '#!/bin/sh\nif [ \"${1:-}\" = \"--version\" ]; then\n  echo \"%s\"\n  exit 0\nfi\necho \"started\"\n' \"$bundle_version\" > \"$prefix/lib/code-server-$bundle_version/bin/code-server\"\n")
-	b.WriteString("chmod +x \"$prefix/lib/code-server-$bundle_version/bin/code-server\"\n")
-	b.WriteString("ln -fs \"$prefix/lib/code-server-$bundle_version/bin/code-server\" \"$prefix/bin/code-server\"\n")
-	return b.String()
+	for name, body := range entries {
+		if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o755, Size: int64(len(body))}); err != nil {
+			t.Fatalf("write tar header: %v", err)
+		}
+		if _, err := tw.Write(body); err != nil {
+			t.Fatalf("write tar body: %v", err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("close tar: %v", err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatalf("close gzip: %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("close archive: %v", err)
+	}
+	raw, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("read archive: %v", err)
+	}
+	sum := sha256.Sum256(raw)
+	platform := currentWorkspaceEnginePlatform()
+	platform.Supported = true
+	return WorkspaceEngineArtifactManifest{
+		SchemaVersion: workspaceEngineManifestSchemaVersion,
+		Engine:        workspaceEngineNameCodeServer,
+		Version:       version,
+		Source: WorkspaceEngineArtifactSource{
+			Kind:      "test",
+			AssetName: filepath.Base(archivePath),
+		},
+		Platform: platform,
+		Archive: WorkspaceEngineArchive{
+			SHA256:      hex.EncodeToString(sum[:]),
+			SizeBytes:   int64(len(raw)),
+			Compression: "tar.gz",
+		},
+		Layout: WorkspaceEngineArchiveLayout{
+			BinaryRelPath: filepath.Join("bin", codeServerBinaryName()),
+			RootDirHint:   fmt.Sprintf("code-server-%s", version),
+		},
+	}, archivePath
+}
+
+func appendArchiveToSession(t *testing.T, mgr *RuntimeManager, uploadID string, archivePath string) {
+	t.Helper()
+	f, err := os.Open(archivePath)
+	if err != nil {
+		t.Fatalf("open archive: %v", err)
+	}
+	defer f.Close()
+	if _, err := mgr.AppendImportChunk(context.Background(), uploadID, 0, f); err != nil {
+		t.Fatalf("AppendImportChunk() error = %v", err)
+	}
 }

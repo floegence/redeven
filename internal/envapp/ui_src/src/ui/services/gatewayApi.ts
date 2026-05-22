@@ -38,6 +38,8 @@ function shouldSetJSONContentType(body: BodyInit | null | undefined): boolean {
   if (typeof FormData !== 'undefined' && body instanceof FormData) return false;
   if (typeof URLSearchParams !== 'undefined' && body instanceof URLSearchParams) return false;
   if (typeof Blob !== 'undefined' && body instanceof Blob) return false;
+  if (typeof ArrayBuffer !== 'undefined' && body instanceof ArrayBuffer) return false;
+  if (typeof ArrayBuffer !== 'undefined' && ArrayBuffer.isView(body)) return false;
   return true;
 }
 
