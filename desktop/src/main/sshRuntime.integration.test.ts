@@ -35,6 +35,7 @@ type FakeSSHScenario =
   | 'no_report'
   | 'quick_exit_report'
   | 'blocked_report'
+  | 'transient_blocked_report'
   | 'status_blocked_without_socket';
 
 type FakeSSHEvent = Readonly<{
@@ -567,6 +568,30 @@ if (args.includes('-M') && args.includes('-N')) {
         }));
         process.exit(0);
       }
+      if (scenario === 'transient_blocked_report') {
+        const state = readState();
+        if (state.transient_block_seen !== true) {
+          writeState({ ...state, installed: true, transient_block_seen: true });
+          process.stdout.write(JSON.stringify({
+            status: 'blocked',
+            code: 'live_process_without_management_socket',
+            message: 'A Redeven runtime process is alive, but its management socket is not reachable.',
+            lock_owner: {
+              pid: 4242,
+              desktop_managed: true,
+              desktop_owner_id: 'desktop-owner-test',
+            },
+            diagnostics: {
+              lock_pid: 4242,
+              pid_alive: true,
+              attach_state: 'live_process_without_management_socket',
+              failure_code: 'management_socket_unreachable',
+              socket_reachable: false,
+            },
+          }));
+          process.exit(0);
+        }
+      }
       const state = readState();
       const attachedUnsupported = (
         (scenario === 'attached_unsupported_idle' || scenario === 'attached_unsupported_active')
@@ -877,6 +902,19 @@ describe('sshRuntime integration', () => {
 
       const events = await readFakeSSHEvents(fixture);
       expect(events.find((event) => event.event === 'stop_runtime')?.data).toEqual({ pid: '4242' });
+    } finally {
+      await removeFakeSSHFixture(fixture);
+    }
+  });
+
+  it('waits through a transient startup report with an unreachable management socket', async () => {
+    const fixture = await createFakeSSHFixture('transient_blocked_report');
+    try {
+      const ready = await ensureReadyWithFakeSSH(fixture, 'auto');
+
+      expect(ready.startup.local_ui_url).toBe('http://127.0.0.1:39001/');
+      const events = await readFakeSSHEvents(fixture);
+      expect(events.filter((event) => event.event === 'read_report')).toHaveLength(2);
     } finally {
       await removeFakeSSHFixture(fixture);
     }

@@ -233,6 +233,16 @@ export function desktopRuntimeMaintenanceIsStaleLock(
   return maintenance?.kind === 'runtime_stale_lock';
 }
 
+export function desktopRuntimeMaintenanceIsLiveManagementSocketUnreachable(
+  maintenance: DesktopRuntimeMaintenanceRequirement | null | undefined,
+): boolean {
+  return maintenance?.kind === 'runtime_restart_required'
+    && (
+      compact(maintenance.attach_state) === 'live_process_without_management_socket'
+      || compact(maintenance.failure_code) === 'management_socket_unreachable'
+    );
+}
+
 type DesktopRuntimeBlockedReportLike = Readonly<{
   code?: string;
   message?: string;

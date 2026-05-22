@@ -14,6 +14,7 @@ import {
   environmentSupportsGuidancePopover,
   failEnvironmentGuidanceIntent,
   guidanceSessionNotice,
+  isEnvironmentGuidancePendingIntent,
   openEnvironmentGuidanceSession,
   reconcileEnvironmentGuidanceSession,
   startEnvironmentGuidanceIntent,
@@ -44,28 +45,11 @@ describe('environmentGuidanceSession', () => {
     });
   });
 
-  it('tracks pending runtime stops with operation-specific notice and failure copy', () => {
-    const state = startEnvironmentGuidanceIntent(null, 'env_demo', 'stop_runtime');
-
-    expect(state).toEqual({
-      environment_id: 'env_demo',
-      pending_intent: 'stop_runtime',
-      feedback: null,
-    });
-    expect(guidanceSessionNotice(state)).toEqual({
-      tone: 'info',
-      title: 'Stopping runtime…',
-      detail: 'Desktop is stopping the runtime and verifying that the process has exited.',
-    });
-    expect(failEnvironmentGuidanceIntent(state, '')).toEqual({
-      environment_id: 'env_demo',
-      pending_intent: null,
-      feedback: {
-        tone: 'error',
-        title: 'Runtime stop failed',
-        detail: 'Desktop could not stop the runtime for this environment.',
-      },
-    });
+  it('does not claim runtime lifecycle operations as guidance pending intents', () => {
+    expect(isEnvironmentGuidancePendingIntent('start_runtime')).toBe(false);
+    expect(isEnvironmentGuidancePendingIntent('stop_runtime')).toBe(false);
+    expect(isEnvironmentGuidancePendingIntent('restart_runtime')).toBe(false);
+    expect(isEnvironmentGuidancePendingIntent('update_runtime')).toBe(false);
   });
 
   it('stores inline failures without dropping the active session', () => {
@@ -81,23 +65,6 @@ describe('environmentGuidanceSession', () => {
         tone: 'error',
         title: 'Status refresh failed',
         detail: 'Provider request timed out.',
-      },
-    });
-  });
-
-  it('uses action-specific failure copy for runtime starts', () => {
-    const state = failEnvironmentGuidanceIntent(
-      startEnvironmentGuidanceIntent(null, 'env_demo', 'start_runtime'),
-      '',
-    );
-
-    expect(state).toEqual({
-      environment_id: 'env_demo',
-      pending_intent: null,
-      feedback: {
-        tone: 'error',
-        title: 'Runtime start failed',
-        detail: 'Desktop could not start the runtime for this environment.',
       },
     });
   });
@@ -167,7 +134,7 @@ describe('environmentGuidanceSession', () => {
     expect(localEntry).toBeTruthy();
     expect(environmentSupportsGuidancePopover(localEntry!)).toBe(false);
     expect(reconcileEnvironmentGuidanceSession(
-      startEnvironmentGuidanceIntent(null, localEntry!.id, 'start_runtime'),
+      startEnvironmentGuidanceIntent(null, localEntry!.id, 'refresh_runtime'),
       snapshot.environments,
     )).toEqual({
       environment_id: localEntry!.id,
@@ -196,7 +163,7 @@ describe('environmentGuidanceSession', () => {
 
     expect(localEntry).toBeTruthy();
     const settled = reconcileEnvironmentGuidanceSession(
-      startEnvironmentGuidanceIntent(null, localEntry!.id, 'start_runtime'),
+      startEnvironmentGuidanceIntent(null, localEntry!.id, 'refresh_runtime'),
       snapshot.environments,
     );
 

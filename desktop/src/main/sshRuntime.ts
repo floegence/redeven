@@ -46,6 +46,8 @@ import {
 } from '../shared/runtimeService';
 import {
   buildDesktopRuntimeMaintenanceRequirement,
+  classifyDesktopRuntimeBlockedLaunchReport,
+  desktopRuntimeMaintenanceIsLiveManagementSocketUnreachable,
   type DesktopRuntimeMaintenanceRequirement,
 } from '../shared/desktopRuntimeHealth';
 import type { DesktopOperationFailurePresentation } from '../shared/desktopOperationFailure';
@@ -192,6 +194,13 @@ export class DesktopSSHRuntimeMaintenanceRequiredError extends Error {
   }
 }
 
+export class DesktopSSHRuntimeReadinessTimeoutError extends DesktopOperationFailureError {
+  constructor(presentation: DesktopOperationFailurePresentation) {
+    super(presentation);
+    this.name = 'DesktopSSHRuntimeReadinessTimeoutError';
+  }
+}
+
 export type ManagedSSHRuntime = Readonly<{
   startup: StartupReport;
   local_forward_url: string;
@@ -309,6 +318,25 @@ function readinessFailure(
     summary: compact(options.summary) || message,
     detail: options.detail,
     recoveryHint: options.recoveryHint,
+    targetLabel: options.targetLabel,
+    diagnostics: diagnosticsFromRecentLogs(logs, SSH_RECENT_LOG_LABELS),
+  }));
+}
+
+function readinessTimeoutFailure(
+  message: string,
+  logs: RecentLogs,
+  options: Readonly<{
+    title: string;
+    detail: string;
+    targetLabel: string;
+  }>,
+): Error {
+  return new DesktopSSHRuntimeReadinessTimeoutError(desktopOperationFailurePresentation({
+    code: 'ssh_runtime_launch_failed',
+    title: options.title,
+    summary: message,
+    detail: options.detail,
     targetLabel: options.targetLabel,
     diagnostics: diagnosticsFromRecentLogs(logs, SSH_RECENT_LOG_LABELS),
   }));
@@ -1967,6 +1995,7 @@ async function waitForRemoteStartupReport(args: Readonly<{
   connectTimeoutSeconds: number;
   auth: SSHCommandAuthContext;
   sessionToken: string;
+  runtimeReleaseTag: string;
   startupTimeoutMs: number;
   logs: MutableRecentLogs;
   onLog: StartManagedSSHRuntimeArgs['onLog'];
@@ -2015,6 +2044,27 @@ async function waitForRemoteStartupReport(args: Readonly<{
       try {
         const launchReport = parseLaunchReport(result.stdout);
         if (launchReport.status === 'blocked') {
+          const classification = classifyDesktopRuntimeBlockedLaunchReport(launchReport, {
+            target_runtime_version: args.runtimeReleaseTag,
+          });
+          if (
+            classification.kind === 'restart_required'
+            && desktopRuntimeMaintenanceIsLiveManagementSocketUnreachable(classification.maintenance)
+          ) {
+            if (Date.now() >= deadline) {
+              throw readinessTimeoutFailure(
+                classification.maintenance.message,
+                args.logs,
+                {
+                  title: 'SSH Runtime Launch Timed Out',
+                  detail: 'Redeven is running on the SSH host, but Desktop could not verify the management socket before the timeout.',
+                  targetLabel: desktopSSHAuthority(args.target),
+                },
+              );
+            }
+            await delay(DEFAULT_SSH_POLL_INTERVAL_MS);
+            continue;
+          }
           throw new Error(`Remote Redeven could not start:\n${formatBlockedLaunchDiagnostics(launchReport)}`);
         }
         return {
@@ -2022,6 +2072,9 @@ async function waitForRemoteStartupReport(args: Readonly<{
           launch_mode: launchReport.status === 'attached' ? 'attached' : 'spawned',
         };
       } catch (error) {
+        if (error instanceof DesktopSSHRuntimeReadinessTimeoutError) {
+          throw error;
+        }
         throw readinessFailure(
           error instanceof Error ? error.message : 'Remote Redeven startup report was invalid.',
           args.logs,
@@ -2038,8 +2091,7 @@ async function waitForRemoteStartupReport(args: Readonly<{
     if (controlProcess.exitCode !== null || controlProcess.signalCode) {
       if (controlProcess.exitCode === 0 && !controlProcess.signalCode) {
         if (Date.now() >= deadline) {
-          throw readinessFailure('Timed out waiting for remote Redeven to report readiness over SSH.', args.logs, {
-            code: 'ssh_runtime_launch_failed',
+          throw readinessTimeoutFailure('Timed out waiting for remote Redeven to report readiness over SSH.', args.logs, {
             title: 'SSH Runtime Launch Timed Out',
             detail: 'Redeven did not write its startup report on the SSH host before the timeout.',
             targetLabel: desktopSSHAuthority(args.target),
@@ -2060,8 +2112,7 @@ async function waitForRemoteStartupReport(args: Readonly<{
     }
 
     if (Date.now() >= deadline) {
-      throw readinessFailure('Timed out waiting for remote Redeven to report readiness over SSH.', args.logs, {
-        code: 'ssh_runtime_launch_failed',
+      throw readinessTimeoutFailure('Timed out waiting for remote Redeven to report readiness over SSH.', args.logs, {
         title: 'SSH Runtime Launch Timed Out',
         detail: 'Redeven did not write its startup report on the SSH host before the timeout.',
         targetLabel: desktopSSHAuthority(args.target),
@@ -2342,6 +2393,7 @@ async function startManagedSSHRuntimeInternal(
         connectTimeoutSeconds,
         auth,
         sessionToken,
+        runtimeReleaseTag,
         startupTimeoutMs,
         logs,
         onLog: args.onLog,
