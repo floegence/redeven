@@ -1,14 +1,4 @@
-import {
-  SettingsPill,
-  SettingsTable,
-  SettingsTableBody,
-  SettingsTableCell,
-  SettingsTableHead,
-  SettingsTableHeaderCell,
-  SettingsTableHeaderRow,
-  SettingsTableRow,
-  SubSectionHeader,
-} from './settings/SettingsPrimitives';
+import { SettingsPill } from './settings/SettingsPrimitives';
 
 export type EnvDebugConsoleSettingsPanelProps = Readonly<{
   enabled?: boolean;
@@ -35,44 +25,27 @@ function DebugConsoleSwitch(props: Readonly<{ checked: boolean; disabled?: boole
 
 export function EnvDebugConsoleSettingsPanel(props: EnvDebugConsoleSettingsPanelProps) {
   return (
-    <div class="space-y-4">
-      <SubSectionHeader
-        title="Debug Console"
-        description="Control the floating diagnostics window for this browser session. Logging stays independent, and diagnostics collection starts only while the floating console is open."
-        actions={(
-          <div class="flex flex-wrap items-center gap-2">
-            <SettingsPill tone="success">Frontend only</SettingsPill>
-            <SettingsPill tone="default">No runtime config writes</SettingsPill>
+    <div class="space-y-2">
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div class="flex items-center gap-3">
+          <DebugConsoleSwitch
+            checked={Boolean(props.enabled)}
+            onChange={(value) => props.onEnabledChange?.(value)}
+            disabled={!props.canInteract}
+          />
+          <div>
+            <div class="text-sm font-medium text-foreground">
+              {props.enabled ? 'Enabled' : 'Disabled'}
+            </div>
+            <p class="text-xs text-muted-foreground">
+              Local UI state only. Does not affect runtime configuration.
+            </p>
           </div>
-        )}
-      />
-
-      <SettingsTable minWidthClass="min-w-[44rem]">
-        <SettingsTableHead>
-          <SettingsTableHeaderRow>
-            <SettingsTableHeaderCell class="w-48">Setting</SettingsTableHeaderCell>
-            <SettingsTableHeaderCell>Value</SettingsTableHeaderCell>
-            <SettingsTableHeaderCell class="w-80">Notes</SettingsTableHeaderCell>
-          </SettingsTableHeaderRow>
-        </SettingsTableHead>
-        <SettingsTableBody>
-          <SettingsTableRow>
-            <SettingsTableCell class="font-medium text-muted-foreground">visible</SettingsTableCell>
-            <SettingsTableCell>
-              <div class="flex items-center">
-                <DebugConsoleSwitch
-                  checked={Boolean(props.enabled)}
-                  onChange={(value) => props.onEnabledChange?.(value)}
-                  disabled={!props.canInteract}
-                />
-              </div>
-            </SettingsTableCell>
-            <SettingsTableCell class="text-[11px] text-muted-foreground">
-              This switch is local to the current UI session. It does not change <code>log_level</code>, <code>log_format</code>, or any persisted runtime setting.
-            </SettingsTableCell>
-          </SettingsTableRow>
-        </SettingsTableBody>
-      </SettingsTable>
+        </div>
+        <div class="flex items-center gap-2">
+          <SettingsPill tone="success">Frontend only</SettingsPill>
+        </div>
+      </div>
     </div>
   );
 }

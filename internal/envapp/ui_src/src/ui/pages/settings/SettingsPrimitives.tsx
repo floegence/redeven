@@ -1,6 +1,7 @@
-import { For, Show, createMemo, type JSX } from 'solid-js';
+import { For, Show, createMemo, createSignal, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { Card, Tag, type TagProps } from '@floegence/floe-webapp-core/ui';
+import { Card, Tag, Button, type TagProps } from '@floegence/floe-webapp-core/ui';
+import { Copy, Check } from '@floegence/floe-webapp-core/icons';
 import { redevenDividerRoleClass, redevenSegmentedItemClass, redevenSurfaceRoleClass } from '../../utils/redevenSurfaceRoles';
 
 export type ViewMode = 'ui' | 'json';
@@ -318,5 +319,168 @@ export function SettingsKeyValueTable(props: {
         </For>
       </SettingsTableBody>
     </SettingsTable>
+  );
+}
+
+// ── Summary Bar ──────────────────────────────────────────────
+
+export interface SummaryMetricDef {
+  icon: (props: { class?: string }) => JSX.Element;
+  value: string;
+  label: string;
+  tone?: 'default' | 'success' | 'warning' | 'danger';
+  onClick?: () => void;
+}
+
+export function SummaryBar(props: { metrics: ReadonlyArray<SummaryMetricDef> }) {
+  return (
+    <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
+      <For each={props.metrics}>
+        {(m) => <SummaryMetric {...m} />}
+      </For>
+    </div>
+  );
+}
+
+export function SummaryMetric(props: SummaryMetricDef) {
+  const toneClass = () => {
+    switch (props.tone) {
+      case 'success': return 'text-success';
+      case 'warning': return 'text-warning';
+      case 'danger': return 'text-destructive';
+      default: return 'text-muted-foreground';
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      class={cn(
+        'flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-left transition-all duration-150',
+        redevenSurfaceRoleClass('panel'),
+        props.onClick ? 'cursor-pointer hover:border-primary/30 hover:bg-muted/30 hover:shadow-sm' : 'cursor-default',
+      )}
+      onClick={() => props.onClick?.()}
+      disabled={!props.onClick}
+    >
+      <div class={cn('flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-muted', toneClass())}>
+        <props.icon class="h-3.5 w-3.5" />
+      </div>
+      <div class="min-w-0">
+        <div class="text-sm font-semibold tracking-tight text-foreground">{props.value}</div>
+        <div class="truncate text-[10px] text-muted-foreground">{props.label}</div>
+      </div>
+    </button>
+  );
+}
+
+// ── Field Row (compact single-line field display) ────────────
+
+export function FieldRow(props: {
+  icon: (props: { class?: string }) => JSX.Element;
+  label: string;
+  children: JSX.Element;
+  note?: string;
+  actions?: JSX.Element;
+}) {
+  return (
+    <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+      <div class="flex min-w-0 flex-1 items-center gap-2">
+        <props.icon class="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+        <span class="text-xs font-medium text-muted-foreground">{props.label}</span>
+        <div class="min-w-0 flex-1">{props.children}</div>
+      </div>
+      <Show when={props.note}>
+        <span class="flex-shrink-0 text-[10px] text-muted-foreground">{props.note}</span>
+      </Show>
+      <Show when={props.actions}>
+        <div class="flex-shrink-0">{props.actions}</div>
+      </Show>
+    </div>
+  );
+}
+
+// ── Info Row (compact read-only key-value row) ───────────────
+
+export function InfoRow(props: {
+  icon: (props: { class?: string }) => JSX.Element;
+  label: string;
+  children: JSX.Element;
+  mono?: boolean;
+  actions?: JSX.Element;
+}) {
+  return (
+    <div class="flex items-start gap-2.5 py-1">
+      <props.icon class="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+      <span class="min-w-[5rem] flex-shrink-0 text-xs text-muted-foreground">{props.label}</span>
+      <div class={cn('min-w-0 flex-1 break-all text-xs', props.mono && 'font-mono text-[11px]')}>{props.children}</div>
+      <Show when={props.actions}>
+        <div class="flex-shrink-0">{props.actions}</div>
+      </Show>
+    </div>
+  );
+}
+
+// ── Empty State ──────────────────────────────────────────────
+
+export function EmptyState(props: {
+  icon: (props: { class?: string }) => JSX.Element;
+  message: string;
+  action?: JSX.Element;
+}) {
+  return (
+    <div class="flex flex-col items-center gap-2.5 py-8 text-center">
+      <props.icon class="h-8 w-8 text-muted-foreground/40" />
+      <p class="text-xs text-muted-foreground">{props.message}</p>
+      <Show when={props.action}>
+        <div>{props.action}</div>
+      </Show>
+    </div>
+  );
+}
+
+// ── Copy Button ──────────────────────────────────────────────
+
+export function CopyButton(props: { value: string; label?: string }) {
+  const [copied, setCopied] = createSignal(false);
+  let timer: ReturnType<typeof setTimeout>;
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(props.value);
+      setCopied(true);
+      clearTimeout(timer);
+      timer = setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard unavailable
+    }
+  };
+
+  return (
+    <Button
+      variant="ghost"
+      size="xs"
+      icon={copied() ? Check : Copy}
+      onClick={handleCopy}
+      aria-label={props.label ?? `Copy ${props.value}`}
+    >
+      {copied() ? 'Copied' : (props.label ?? '')}
+    </Button>
+  );
+}
+
+// ── Compact Field (editable field with icon) ─────────────────
+
+export function CompactField(props: {
+  icon: (props: { class?: string }) => JSX.Element;
+  label: string;
+  children: JSX.Element;
+}) {
+  return (
+    <div class="flex items-center gap-2">
+      <props.icon class="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+      <label class="flex-shrink-0 text-xs font-medium text-muted-foreground">{props.label}</label>
+      <div class="min-w-0 flex-1">{props.children}</div>
+    </div>
   );
 }

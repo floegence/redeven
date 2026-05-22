@@ -1,11 +1,18 @@
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
 import {
+  Activity,
+  Bot,
   Code,
   Database,
   FileCode,
+  FileText,
+  FolderOpen,
   Globe,
+  Key,
   Layers,
+  Link,
+  Package,
   Plus,
   RefreshIcon,
   Shield,
@@ -75,7 +82,10 @@ import { PermissionMatrixTable, PermissionRuleTable } from './settings/Permissio
 import {
   AutoSaveIndicator,
   CodeBadge,
+  CompactField,
+  CopyButton,
   FieldLabel,
+  InfoRow,
   JSONEditor,
   SectionGroup,
   SettingsCard,
@@ -89,6 +99,8 @@ import {
   SettingsTableHeaderRow,
   SettingsTableRow,
   SubSectionHeader,
+  SummaryBar,
+  type SummaryMetricDef,
   ViewToggle,
   type ViewMode,
 } from './settings/SettingsPrimitives';
@@ -1038,6 +1050,53 @@ export function EnvSettingsPage() {
   const configJSONText = createMemo(() => JSON.stringify({ config_path: configPath() || '' }, null, 2));
   const connectionJSONText = createMemo(() => JSON.stringify(settings()?.connection ?? null, null, 2));
   const filesystemRootRows = createMemo(() => runtimeFilesystemRoots(agentHomeDir(), filesystemScope()));
+
+  const summaryMetrics = createMemo<SummaryMetricDef[]>(() => {
+    const online = displayedStatus() === 'online';
+    const roots = filesystemRootRows();
+    const skills = skillsCatalog()?.skills ?? [];
+    const aiModel = aiCurrentModelOption();
+    return [
+      {
+        icon: Activity,
+        value: online ? 'Online' : 'Offline',
+        label: 'Status',
+        tone: online ? 'success' : 'warning',
+        onClick: () => scrollToSection('agent'),
+      },
+      {
+        icon: Package,
+        value: runtimeUpdate.version.currentVersion() || '—',
+        label: 'Version',
+        onClick: () => scrollToSection('agent'),
+      },
+      {
+        icon: FolderOpen,
+        value: `${roots.length} roots`,
+        label: 'Workspace',
+        onClick: () => scrollToSection('runtime'),
+      },
+      {
+        icon: Bot,
+        value: aiModel?.label ?? (aiEnabled() ? 'Configured' : 'Disabled'),
+        label: 'AI Model',
+        onClick: () => scrollToSection('ai'),
+      },
+      {
+        icon: Layers,
+        value: `${skills.length}`,
+        label: 'Skills',
+        onClick: () => scrollToSection('skills'),
+      },
+      {
+        icon: Shield,
+        value: policyLocalRead() && policyLocalWrite() && policyLocalExecute() ? 'Permissive' : 'Restricted',
+        label: 'Default Perms',
+        tone: policyLocalRead() && policyLocalWrite() && policyLocalExecute() ? 'warning' : 'default',
+        onClick: () => scrollToSection('permission_policy'),
+      },
+    ];
+  });
 
   const buildRuntimePatch = () => ({
     agent_home_dir: String(agentHomeDir() ?? ''),
@@ -2885,125 +2944,91 @@ export function EnvSettingsPage() {
           </div>
         </Show>
 
-        {/* ── Overview (read-only) ── */}
+        {/* ── Summary Bar ── */}
+        <SummaryBar metrics={summaryMetrics()} />
+
+        {/* ── Overview ── */}
         <SectionGroup title={SETTINGS_GROUP_META.overview.title} groupId={SETTINGS_GROUP_META.overview.id}>
-          <div id={settingsSectionElementID('config')} data-settings-section="config" class="scroll-mt-6">
-            <SettingsCard
-              icon={FileCode}
-              title="Config File"
-              description="Location of the runtime configuration file."
-              badge="Read-only"
-              actions={<ViewToggle value={configView} onChange={(value) => setConfigView(value)} />}
-            >
-              <Show when={configView() === 'ui'} fallback={<JSONEditor value={configJSONText()} onChange={() => undefined} disabled rows={4} />}>
-                <SettingsKeyValueTable
-                  rows={[
-                    {
-                      label: 'Path',
-                      value: configPath() || '(unknown)',
-                      note: 'Runtime config file on local disk.',
-                      mono: true,
-                    },
-                  ]}
-                />
-              </Show>
-            </SettingsCard>
-          </div>
-
-          <div id={settingsSectionElementID('connection')} data-settings-section="connection" class="scroll-mt-6">
-            <SettingsCard
-              icon={Globe}
-              title="Connection"
-              description="Connection details managed by the control plane."
-              badge="Read-only"
-              actions={<ViewToggle value={connectionView} onChange={(value) => setConnectionView(value)} />}
-            >
-              <Show when={connectionView() === 'ui'} fallback={<JSONEditor value={connectionJSONText()} onChange={() => undefined} disabled rows={10} />}>
-                <SettingsKeyValueTable
-                  minWidthClass="min-w-[52rem]"
-                  rows={[
-                    {
-                      label: 'Control Plane',
-                      value: String(settings()?.connection?.controlplane_base_url ?? ''),
-                      note: 'Base URL used for the control plane contract.',
-                      mono: true,
-                    },
-                    {
-                      label: 'Environment ID',
-                      value: String(settings()?.connection?.environment_id ?? ''),
-                      note: 'Public environment identifier.',
-                      mono: true,
-                    },
-                    {
-                      label: 'Runtime Instance ID',
-                      value: String(settings()?.connection?.agent_instance_id ?? ''),
-                      note: 'Current runtime instance identifier.',
-                      mono: true,
-                    },
-                    {
-                      label: 'Direct Channel',
-                      value: String(settings()?.connection?.direct?.channel_id ?? ''),
-                      note: 'Direct control channel id.',
-                      mono: true,
-                    },
-                    {
-                      label: 'Direct Suite',
-                      value: String(settings()?.connection?.direct?.default_suite ?? ''),
-                      note: 'Default cryptographic suite negotiated for direct sessions.',
-                      mono: true,
-                    },
-                    {
-                      label: 'E2EE PSK',
-                      value: settings()?.connection?.direct?.e2ee_psk_set ? 'Configured' : 'Not set',
-                      note: 'Derived status only. Plaintext secret is never shown.',
-                    },
-                    {
-                      label: 'Direct WebSocket URL',
-                      value: String(settings()?.connection?.direct?.ws_url ?? ''),
-                      note: 'WebSocket endpoint for the direct control connection.',
-                      mono: true,
-                    },
-                  ]}
-                />
-              </Show>
-            </SettingsCard>
-          </div>
-
-          <div id={settingsSectionElementID('agent')} data-settings-section="agent" class="scroll-mt-6">
-            <SettingsCard
-              icon={Zap}
-              title="Runtime Status"
-              description="Version, health, update, and restart controls for this runtime."
-              badge={agentCardBadge()}
-              badgeVariant={agentCardBadgeVariant()}
-              error={maintenanceError()}
-              actions={
-                <>
+          <SettingsCard
+            icon={Zap}
+            title="Overview"
+            description="Runtime identity, connectivity, and health at a glance."
+            badge={agentCardBadge()}
+            badgeVariant={agentCardBadgeVariant()}
+            error={maintenanceError()}
+            actions={
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  class="gap-1.5"
+                  onClick={() => void startRestart()}
+                  loading={isRestarting()}
+                  disabled={!canStartRestart()}
+                >
+                  <RefreshIcon class="w-3.5 h-3.5" />
+                  Restart
+                </Button>
+                <Show when={upgradeState().allowsUpgradeAction}>
                   <Button
                     size="sm"
-                    variant="outline"
-                    class="w-full sm:w-auto"
-                    onClick={() => void startRestart()}
-                    loading={isRestarting()}
-                    disabled={!canStartRestart()}
+                    variant="default"
+                    onClick={() => void startUpgrade()}
+                    loading={isUpgrading()}
+                    disabled={!canStartUpgrade()}
                   >
-                    Restart runtime
+                    {upgradeState().actionLabel}
                   </Button>
-                  <Show when={upgradeState().allowsUpgradeAction}>
-                    <Button
-                      size="sm"
-                      variant="default"
-                      class="w-full sm:w-auto"
-                      onClick={() => void startUpgrade()}
-                      loading={isUpgrading()}
-                      disabled={!canStartUpgrade()}
-                    >
-                      {upgradeState().actionLabel}
-                    </Button>
-                  </Show>
-                </>
-              }
-            >
+                </Show>
+              </>
+            }
+          >
+            {/* ── Config File ── */}
+            <div id={settingsSectionElementID('config')} data-settings-section="config" class="scroll-mt-6">
+              <SubSectionHeader
+                title="Config File"
+                description="Location of the runtime configuration file."
+                actions={<ViewToggle value={configView} onChange={(value) => setConfigView(value)} />}
+              />
+              <Show when={configView() === 'ui'} fallback={<JSONEditor value={configJSONText()} onChange={() => undefined} disabled rows={4} />}>
+                <div class="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+                  <FileCode class="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+                  <code class="min-w-0 flex-1 break-all font-mono text-[11px]">{configPath() || '(unknown)'}</code>
+                  <CopyButton value={configPath() || ''} />
+                </div>
+              </Show>
+            </div>
+
+            <div class="my-5 border-t border-border/40" />
+
+            {/* ── Connection ── */}
+            <div id={settingsSectionElementID('connection')} data-settings-section="connection" class="scroll-mt-6">
+              <SubSectionHeader
+                title="Connection"
+                description="Connection details managed by the control plane."
+                actions={<ViewToggle value={connectionView} onChange={(value) => setConnectionView(value)} />}
+              />
+              <Show when={connectionView() === 'ui'} fallback={<JSONEditor value={connectionJSONText()} onChange={() => undefined} disabled rows={10} />}>
+                <div class="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
+                  <InfoRow icon={Globe} label="Control Plane" mono>{String(settings()?.connection?.controlplane_base_url ?? '')}</InfoRow>
+                  <InfoRow icon={Key} label="E2EE PSK">{settings()?.connection?.direct?.e2ee_psk_set ? 'Configured' : 'Not set'}</InfoRow>
+                  <InfoRow icon={Link} label="Environment ID" mono actions={<CopyButton value={String(settings()?.connection?.environment_id ?? '')} />}>{String(settings()?.connection?.environment_id ?? '')}</InfoRow>
+                  <InfoRow icon={Link} label="Instance ID" mono>{String(settings()?.connection?.agent_instance_id ?? '')}</InfoRow>
+                  <InfoRow icon={Link} label="Direct Channel" mono>{String(settings()?.connection?.direct?.channel_id ?? '')}</InfoRow>
+                  <InfoRow icon={Link} label="Direct Suite" mono>{String(settings()?.connection?.direct?.default_suite ?? '')}</InfoRow>
+                  <InfoRow icon={Link} label="WebSocket URL" mono>{String(settings()?.connection?.direct?.ws_url ?? '')}</InfoRow>
+                </div>
+              </Show>
+            </div>
+
+            <div class="my-5 border-t border-border/40" />
+
+            {/* ── Runtime Status ── */}
+            <div id={settingsSectionElementID('agent')} data-settings-section="agent" class="scroll-mt-6">
+              <SubSectionHeader
+                title="Runtime Status"
+                description="Version, health, and maintenance controls for this runtime."
+              />
               <SettingsTable minWidthClass="min-w-[44rem]">
                 <SettingsTableHead>
                   <SettingsTableHeaderRow>
@@ -3102,7 +3127,7 @@ export function EnvSettingsPage() {
                 </SettingsTableBody>
               </SettingsTable>
 
-              <div class="space-y-2">
+              <div class="mt-3 space-y-2">
                 <Show when={upgradeState().requiresTargetVersion && targetUpgradeVersion() && !targetUpgradeVersionValid()}>
                   <div class="text-xs text-destructive">Use a valid release tag, for example: v1.2.3.</div>
                 </Show>
@@ -3125,8 +3150,8 @@ export function EnvSettingsPage() {
                   <div class="text-xs text-muted-foreground">{maintenanceStage()}</div>
                 </Show>
               </div>
-            </SettingsCard>
-          </div>
+            </div>
+          </SettingsCard>
         </SectionGroup>
 
         {/* ── Runtime Configuration ── */}
@@ -3347,60 +3372,41 @@ export function EnvSettingsPage() {
                   />
                 }
               >
-                <div class="space-y-4">
-                  <SettingsTable minWidthClass="min-w-[44rem]">
-                    <SettingsTableHead>
-                      <SettingsTableHeaderRow>
-                        <SettingsTableHeaderCell class="w-48">Setting</SettingsTableHeaderCell>
-                        <SettingsTableHeaderCell>Value</SettingsTableHeaderCell>
-                        <SettingsTableHeaderCell class="w-72">Notes</SettingsTableHeaderCell>
-                      </SettingsTableHeaderRow>
-                    </SettingsTableHead>
-                    <SettingsTableBody>
-                      <SettingsTableRow>
-                        <SettingsTableCell class="font-medium text-muted-foreground">log_format</SettingsTableCell>
-                        <SettingsTableCell>
-                          <Select
-                            value={logFormat()}
-                            onChange={(value) => {
-                              setLogFormat(value);
-                              setLoggingDirty(true);
-                            }}
-                            disabled={!canInteract()}
-                            options={[
-                              { value: '', label: 'Default (json)' },
-                              { value: 'json', label: 'json' },
-                              { value: 'text', label: 'text' },
-                            ]}
-                            class="w-full"
-                          />
-                        </SettingsTableCell>
-                        <SettingsTableCell class="text-[11px] text-muted-foreground">Choose the log serialization format.</SettingsTableCell>
-                      </SettingsTableRow>
-                      <SettingsTableRow>
-                        <SettingsTableCell class="font-medium text-muted-foreground">log_level</SettingsTableCell>
-                        <SettingsTableCell>
-                          <Select
-                            value={logLevel()}
-                            onChange={(value) => {
-                              setLogLevel(value);
-                              setLoggingDirty(true);
-                            }}
-                            disabled={!canInteract()}
-                            options={[
-                              { value: '', label: 'Default (info)' },
-                              { value: 'debug', label: 'debug' },
-                              { value: 'info', label: 'info' },
-                              { value: 'warn', label: 'warn' },
-                              { value: 'error', label: 'error' },
-                            ]}
-                            class="w-full"
-                          />
-                        </SettingsTableCell>
-                        <SettingsTableCell class="text-[11px] text-muted-foreground">Controls runtime log verbosity only. Debug Console is a separate frontend diagnostics surface.</SettingsTableCell>
-                      </SettingsTableRow>
-                    </SettingsTableBody>
-                  </SettingsTable>
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <CompactField icon={FileText} label="Format">
+                    <Select
+                      value={logFormat()}
+                      onChange={(value) => {
+                        setLogFormat(value);
+                        setLoggingDirty(true);
+                      }}
+                      disabled={!canInteract()}
+                      options={[
+                        { value: '', label: 'Default (json)' },
+                        { value: 'json', label: 'json' },
+                        { value: 'text', label: 'text' },
+                      ]}
+                      class="w-full"
+                    />
+                  </CompactField>
+                  <CompactField icon={Zap} label="Level">
+                    <Select
+                      value={logLevel()}
+                      onChange={(value) => {
+                        setLogLevel(value);
+                        setLoggingDirty(true);
+                      }}
+                      disabled={!canInteract()}
+                      options={[
+                        { value: '', label: 'Default (info)' },
+                        { value: 'debug', label: 'debug' },
+                        { value: 'info', label: 'info' },
+                        { value: 'warn', label: 'warn' },
+                        { value: 'error', label: 'error' },
+                      ]}
+                      class="w-full"
+                    />
+                  </CompactField>
                 </div>
               </Show>
             </SettingsCard>
