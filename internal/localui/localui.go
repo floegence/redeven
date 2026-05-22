@@ -266,7 +266,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	if s.desktopManaged && strings.TrimSpace(s.desktopOwnerID) != "" {
-		runtimeControl, err := newRuntimeControlServer(s.a, s.desktopOwnerID, s.log, nil)
+		runtimeControl, err := newRuntimeControlServer(s.a, s.gw, s.desktopOwnerID, s.log, nil)
 		if err != nil {
 			_ = s.Close()
 			return fmt.Errorf("init runtime-control: %w", err)
@@ -324,7 +324,7 @@ func (s *Server) StartOnListeners(ctx context.Context, listeners []net.Listener,
 	}
 
 	if s.desktopManaged && strings.TrimSpace(s.desktopOwnerID) != "" {
-		runtimeControl, err := newRuntimeControlServer(s.a, s.desktopOwnerID, s.log, nil)
+		runtimeControl, err := newRuntimeControlServer(s.a, s.gw, s.desktopOwnerID, s.log, nil)
 		if err != nil {
 			_ = s.Close()
 			return fmt.Errorf("init runtime-control: %w", err)

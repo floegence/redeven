@@ -20,6 +20,6 @@ func ResolveBinary(stateDir string, stateRoot string) (string, error) {
 		}
 		return "", errors.New("code-server binary is present but unusable")
 	default:
-		return "", errors.New("code-server binary not found; install it from Codespaces or set REDEVEN_CODE_SERVER_BIN")
+		return "", errors.New("code-server binary not found; prepare the workspace engine from Codespaces or set REDEVEN_CODE_SERVER_BIN")
 	}
 }

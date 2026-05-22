@@ -42,11 +42,12 @@ import {
   codeRuntimeOperationNeedsAttention,
   codeRuntimeOperationSucceeded,
   fetchCodeRuntimeStatus,
-  installCodeRuntime,
   removeCodeRuntimeVersion,
   selectCodeRuntimeVersion,
   type CodeRuntimeStatus,
 } from '../services/codeRuntimeApi';
+import { desktopCodeWorkspacePrepareAvailable, prepareWorkspaceEngineWithDesktop } from '../services/desktopCodeWorkspaceBridge';
+import { readDesktopSessionContextSnapshot } from '../services/desktopSessionContext';
 import { FlowerIcon } from '../icons/FlowerIcon';
 import { CodexIcon } from '../icons/CodexIcon';
 import { useEnvContext, type EnvSettingsSection } from './EnvContext';
@@ -637,9 +638,9 @@ export function EnvSettingsPage() {
 
     if (codeRuntimeOperationSucceeded(status) && operationAction === pendingAction) {
       if (pendingAction === 'remove_local_environment_version') {
-        notify.success('Version removed', 'The selected managed code-server version has been removed from the Local Environment inventory.');
+        notify.success('Version removed', 'The selected workspace engine version has been removed from the Local Environment inventory.');
       } else {
-        notify.success('Runtime ready', 'The latest managed code-server runtime is now installed for this Local Environment and selected for the current environment.');
+        notify.success('Workspace ready', 'The latest workspace engine is ready for this Local Environment.');
       }
       setPendingRuntimeSuccessAction('');
       return;
@@ -766,7 +767,7 @@ export function EnvSettingsPage() {
   const [codeRuntimeCancelLoading, setCodeRuntimeCancelLoading] = createSignal(false);
   const [codeRuntimeSelectionLoadingVersion, setCodeRuntimeSelectionLoadingVersion] = createSignal<string | null>(null);
   const [codeRuntimeRemoveVersionLoading, setCodeRuntimeRemoveVersionLoading] = createSignal<string | null>(null);
-  const [pendingRuntimeSuccessAction, setPendingRuntimeSuccessAction] = createSignal<'' | 'install' | 'remove_local_environment_version'>('');
+  const [pendingRuntimeSuccessAction, setPendingRuntimeSuccessAction] = createSignal<'' | 'prepare_workspace_engine' | 'remove_local_environment_version'>('');
 
   // Dirty flags
   const [runtimeDirty, setRuntimeDirty] = createSignal(false);
@@ -788,16 +789,26 @@ export function EnvSettingsPage() {
       notify.error('Runtime status refresh failed', msg || 'Request failed.');
     }
   };
-  const installManagedCodeRuntime = async () => {
+  const prepareManagedCodeRuntime = async () => {
     setCodeRuntimeActionLoading(true);
-    setPendingRuntimeSuccessAction('install');
+    setPendingRuntimeSuccessAction('prepare_workspace_engine');
     try {
-      await installCodeRuntime();
+      if (!desktopCodeWorkspacePrepareAvailable()) {
+        throw new Error('Open this Environment in Redeven Desktop to prepare the workspace.');
+      }
+      const result = await prepareWorkspaceEngineWithDesktop({
+        reason: 'settings',
+        status: codeRuntimeStatus(),
+        preferSessionUpload: readDesktopSessionContextSnapshot()?.target_route === 'remote_desktop',
+      });
+      if (!result.ok || !result.prepared) {
+        throw new Error(result.message || 'Workspace preparation did not finish.');
+      }
       await refetchCodeRuntimeStatus();
     } catch (e) {
       setPendingRuntimeSuccessAction('');
       const msg = e instanceof Error ? e.message : String(e);
-      notify.error('Install failed', msg || 'Request failed.');
+      notify.error('Workspace preparation failed', msg || 'Request failed.');
     } finally {
       setCodeRuntimeActionLoading(false);
     }
@@ -3378,7 +3389,7 @@ export function EnvSettingsPage() {
                 selectionLoadingVersion={codeRuntimeSelectionLoadingVersion()}
                 removeVersionLoading={codeRuntimeRemoveVersionLoading()}
                 onRefresh={() => void refreshCodeRuntimeStatus()}
-                onInstall={() => installManagedCodeRuntime()}
+                onPrepare={() => prepareManagedCodeRuntime()}
                 onSelectVersion={(version) => selectManagedCodeRuntimeVersion(version)}
                 onRemoveVersion={(version) => removeManagedCodeRuntimeVersion(version)}
                 onCancel={() => cancelManagedCodeRuntimeOperation()}

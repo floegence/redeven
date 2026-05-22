@@ -35,7 +35,7 @@ Redeven is a single binary that brings your computers and servers into one brows
 It runs on your machine, your remote servers, or any reachable SSH host. Your files, processes, API keys, and credentials stay where they belong — Redeven does not move your plaintext through anyone else's infrastructure.
 
 - **Browser or Desktop** — open your workspace from any browser, or use the native Desktop app for local and remote sessions.
-- **No agent protocol, no remote Node.js** — the runtime is a single Go binary. The optional browser IDE (code-server) is installed on demand, not bundled.
+- **No agent protocol, no remote Node.js** — the runtime is a single Go binary. Desktop prepares the optional browser workspace engine only after an explicit workspace action, then uploads the latest package to the target environment.
 - **AI that works where your data lives** — optional on-device AI assistance reads files, runs commands, and completes tasks under the same permission model as the rest of the workspace.
 
 ![Redeven architecture overview](docs/images/readme-architecture-overview.jpeg)
@@ -90,7 +90,7 @@ Interactive terminals use Redeven's rich runtime presentation by default: a comp
 | Files and Git | File upload/download, inline preview/edit, folder-scoped Git changes, diffs, and stash workflows. | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
 | Terminal | Multi-tab terminals rooted in the directories you are working with, under the same runtime permission model. | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
 | Monitor | CPU, memory, disk, network, and process views from the endpoint runtime. | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
-| Code App | code-server workspaces installed and managed on demand, isolated per codespace. | [`docs/CODE_APP.md`](docs/CODE_APP.md) |
+| Code App | Browser workspaces prepared explicitly by Desktop, isolated per codespace. | [`docs/CODE_APP.md`](docs/CODE_APP.md) |
 | Web Services | Runtime-managed service registration and port-forward access without hand-written SSH tunnels. | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
 | Flower and Codex | Optional AI surfaces that use runtime-validated tools and local model/host configuration. | [`docs/AI_AGENT.md`](docs/AI_AGENT.md), [`docs/AI_SETTINGS.md`](docs/AI_SETTINGS.md), [`docs/CODEX_UI.md`](docs/CODEX_UI.md) |
 | Desktop | Native launcher for local, provider-hosted, SSH-bootstrapped, and saved Local UI environments. | [`docs/DESKTOP.md`](docs/DESKTOP.md) |

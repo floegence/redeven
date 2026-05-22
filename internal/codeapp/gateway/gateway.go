@@ -82,7 +82,9 @@ type Backend interface {
 	StopSpace(ctx context.Context, codeSpaceID string) error
 	ResolveCodeServerPort(ctx context.Context, codeSpaceID string) (int, error)
 	CodeRuntimeStatus(ctx context.Context) (CodeRuntimeStatus, error)
-	InstallCodeRuntime(ctx context.Context) (CodeRuntimeStatus, error)
+	CreateCodeRuntimeImportSession(ctx context.Context, manifest CodeRuntimeArtifactManifest) (CodeRuntimeImportSession, error)
+	AppendCodeRuntimeImportChunk(ctx context.Context, uploadID string, chunkIndex int64, body io.Reader) (CodeRuntimeImportChunkResult, error)
+	CompleteCodeRuntimeImportSession(ctx context.Context, uploadID string) (CodeRuntimeStatus, error)
 	SelectCodeRuntimeVersion(ctx context.Context, version string) (CodeRuntimeStatus, error)
 	RemoveCodeRuntimeVersion(ctx context.Context, version string) (CodeRuntimeStatus, error)
 	CancelCodeRuntimeOperation(ctx context.Context) (CodeRuntimeStatus, error)
@@ -142,9 +144,57 @@ type UpdateSpaceRequest struct {
 }
 
 type CodeRuntimeStatus = codeserver.RuntimeStatus
+type CodeRuntimeArtifactManifest = codeserver.WorkspaceEngineArtifactManifest
+type CodeRuntimeImportSession = codeserver.WorkspaceEngineImportSession
+type CodeRuntimeImportChunkResult = codeserver.WorkspaceEngineImportChunkResult
 
 type CodeRuntimeVersionRequest struct {
 	Version string `json:"version"`
+}
+
+type CodeRuntimeImportSessionRequest struct {
+	Manifest CodeRuntimeArtifactManifest `json:"manifest"`
+}
+
+func codeRuntimeImportUploadIDFromPath(rawPath string, suffix string) string {
+	const prefix = "/_redeven_proxy/api/code-runtime/import-sessions/"
+	if !strings.HasPrefix(rawPath, prefix) {
+		return ""
+	}
+	rest := strings.TrimPrefix(rawPath, prefix)
+	if suffix != "" {
+		index := strings.Index(rest, suffix)
+		if index < 0 {
+			return ""
+		}
+		rest = rest[:index]
+	}
+	rest = strings.Trim(rest, "/")
+	if strings.Contains(rest, "/") {
+		return ""
+	}
+	value, err := url.PathUnescape(rest)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(value)
+}
+
+func codeRuntimeImportChunkIndexFromPath(rawPath string) (int64, bool) {
+	const marker = "/chunks/"
+	index := strings.Index(rawPath, marker)
+	if index < 0 {
+		return 0, false
+	}
+	rest := strings.Trim(strings.TrimPrefix(rawPath[index:], marker), "/")
+	if rest == "" || strings.Contains(rest, "/") {
+		return 0, false
+	}
+	value, err := strconv.ParseInt(rest, 10, 64)
+	if err != nil || value < 0 {
+		return 0, false
+	}
+	return value, true
 }
 
 type Gateway struct {
@@ -301,6 +351,34 @@ func New(opts Options) (*Gateway, error) {
 		distFS:                  opts.DistFS,
 		addr:                    addr,
 	}, nil
+}
+
+func (g *Gateway) CodeRuntimeStatus(ctx context.Context) (CodeRuntimeStatus, error) {
+	if g == nil || g.backend == nil {
+		return CodeRuntimeStatus{}, errors.New("gateway not ready")
+	}
+	return g.backend.CodeRuntimeStatus(ctx)
+}
+
+func (g *Gateway) CreateCodeRuntimeImportSession(ctx context.Context, manifest CodeRuntimeArtifactManifest) (CodeRuntimeImportSession, error) {
+	if g == nil || g.backend == nil {
+		return CodeRuntimeImportSession{}, errors.New("gateway not ready")
+	}
+	return g.backend.CreateCodeRuntimeImportSession(ctx, manifest)
+}
+
+func (g *Gateway) AppendCodeRuntimeImportChunk(ctx context.Context, uploadID string, chunkIndex int64, body io.Reader) (CodeRuntimeImportChunkResult, error) {
+	if g == nil || g.backend == nil {
+		return CodeRuntimeImportChunkResult{}, errors.New("gateway not ready")
+	}
+	return g.backend.AppendCodeRuntimeImportChunk(ctx, uploadID, chunkIndex, body)
+}
+
+func (g *Gateway) CompleteCodeRuntimeImportSession(ctx context.Context, uploadID string) (CodeRuntimeStatus, error) {
+	if g == nil || g.backend == nil {
+		return CodeRuntimeStatus{}, errors.New("gateway not ready")
+	}
+	return g.backend.CompleteCodeRuntimeImportSession(ctx, uploadID)
 }
 
 func (g *Gateway) Start(ctx context.Context) error {
@@ -1923,21 +2001,77 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: status})
 		return
 
-	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/code-runtime/install":
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/code-runtime/import-sessions":
 		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 		if !ok {
 			return
 		}
-		status, err := g.backend.InstallCodeRuntime(r.Context())
+		var body CodeRuntimeImportSessionRequest
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid request body"})
+			return
+		}
+		session, err := g.backend.CreateCodeRuntimeImportSession(r.Context(), body.Manifest)
 		if err != nil {
-			g.appendAudit(meta, "code_runtime_install", "failure", nil, err)
+			g.appendAudit(meta, "code_workspace_engine_upload", "failure", nil, err)
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 			return
 		}
-		g.appendAudit(meta, "code_runtime_install", "success", map[string]any{
+		g.appendAudit(meta, "code_workspace_engine_upload", "success", map[string]any{
+			"upload_id":      session.UploadID,
+			"operation_id":   session.OperationID,
+			"version":        session.Manifest.Version,
+			"expected_bytes": session.ExpectedBytes,
+		}, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: session})
+		return
+
+	case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/code-runtime/import-sessions/") && strings.Contains(r.URL.Path, "/chunks/"):
+		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+		if !ok {
+			return
+		}
+		uploadID := codeRuntimeImportUploadIDFromPath(r.URL.Path, "/chunks/")
+		if uploadID == "" {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing upload id"})
+			return
+		}
+		chunkIndex, ok := codeRuntimeImportChunkIndexFromPath(r.URL.Path)
+		if !ok {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid chunk index"})
+			return
+		}
+		result, err := g.backend.AppendCodeRuntimeImportChunk(r.Context(), uploadID, chunkIndex, r.Body)
+		if err != nil {
+			g.appendAudit(meta, "code_workspace_engine_upload_chunk", "failure", map[string]any{"upload_id": uploadID}, err)
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: result})
+		return
+
+	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/code-runtime/import-sessions/") && strings.HasSuffix(r.URL.Path, "/complete"):
+		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+		if !ok {
+			return
+		}
+		uploadID := codeRuntimeImportUploadIDFromPath(r.URL.Path, "/complete")
+		if uploadID == "" {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing upload id"})
+			return
+		}
+		status, err := g.backend.CompleteCodeRuntimeImportSession(r.Context(), uploadID)
+		if err != nil {
+			g.appendAudit(meta, "code_workspace_engine_prepare", "failure", map[string]any{"upload_id": uploadID}, err)
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		g.appendAudit(meta, "code_workspace_engine_prepare", "success", map[string]any{
+			"upload_id":       uploadID,
 			"operation_state": string(status.Operation.State),
-			"operation":       string(status.Operation.Action),
-			"source":          status.ActiveRuntime.Source,
+			"version":         status.ManagedRuntimeVersion,
 		}, nil)
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: status})
 		return

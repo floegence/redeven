@@ -1,14 +1,11 @@
 package codeserver
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,12 +16,9 @@ import (
 )
 
 const (
-	defaultInstallScriptURL         = "https://code-server.dev/install.sh"
-	installScriptURLOverrideEnv     = "REDEVEN_CODE_SERVER_INSTALL_SCRIPT_URL"
-	defaultInstallerDownloadTimeout = 2 * time.Minute
-	defaultRuntimeProbeTimeout      = 5 * time.Second
-	selectedRuntimeProbeTimeout     = 15 * time.Second
-	runtimeLogTailLimit             = 80
+	defaultRuntimeProbeTimeout  = 5 * time.Second
+	selectedRuntimeProbeTimeout = 15 * time.Second
+	runtimeLogTailLimit         = 80
 )
 
 type RuntimeDetectionState string
@@ -38,7 +32,7 @@ const (
 type RuntimeOperationAction string
 
 const (
-	RuntimeOperationActionInstall                       RuntimeOperationAction = "install"
+	RuntimeOperationActionPrepareWorkspaceEngine        RuntimeOperationAction = "prepare_workspace_engine"
 	RuntimeOperationActionRemoveLocalEnvironmentVersion RuntimeOperationAction = "remove_local_environment_version"
 )
 
@@ -55,12 +49,13 @@ const (
 type RuntimeOperationStage string
 
 const (
-	RuntimeOperationStagePreparing   RuntimeOperationStage = "preparing"
-	RuntimeOperationStageDownloading RuntimeOperationStage = "downloading"
-	RuntimeOperationStageInstalling  RuntimeOperationStage = "installing"
-	RuntimeOperationStageRemoving    RuntimeOperationStage = "removing"
-	RuntimeOperationStageValidating  RuntimeOperationStage = "validating"
-	RuntimeOperationStageFinalizing  RuntimeOperationStage = "finalizing"
+	RuntimeOperationStagePreparing  RuntimeOperationStage = "preparing"
+	RuntimeOperationStageReceiving  RuntimeOperationStage = "receiving"
+	RuntimeOperationStageVerifying  RuntimeOperationStage = "verifying"
+	RuntimeOperationStageInstalling RuntimeOperationStage = "installing"
+	RuntimeOperationStageRemoving   RuntimeOperationStage = "removing"
+	RuntimeOperationStageValidating RuntimeOperationStage = "validating"
+	RuntimeOperationStageFinalizing RuntimeOperationStage = "finalizing"
 )
 
 type RuntimeTargetStatus struct {
@@ -103,43 +98,40 @@ type RuntimeStatus struct {
 	ManagedRuntimeVersion string                          `json:"managed_runtime_version,omitempty"`
 	ManagedRuntimeSource  string                          `json:"managed_runtime_source"`
 	InstalledVersions     []RuntimeInstalledVersionStatus `json:"installed_versions,omitempty"`
-	InstallerScriptURL    string                          `json:"installer_script_url"`
+	Platform              WorkspaceEnginePlatform         `json:"platform"`
 	Operation             RuntimeOperationStatus          `json:"operation"`
 	UpdatedAtUnixMs       int64                           `json:"updated_at_unix_ms"`
 }
 
 type RuntimeManagerOptions struct {
-	Logger               *slog.Logger
-	StateDir             string
-	StateRoot            string
-	InstallScriptURL     string
-	InstallScriptContent []byte
-	HTTPClient           *http.Client
-	Now                  func() time.Time
+	Logger    *slog.Logger
+	StateDir  string
+	StateRoot string
+	Now       func() time.Time
 }
 
 type RuntimeManager struct {
 	log *slog.Logger
 
-	stateDir          string
-	stateRoot         string
-	installScriptURL  string
-	installScriptBody []byte
-	httpClient        *http.Client
-	now               func() time.Time
+	stateDir  string
+	stateRoot string
+	now       func() time.Time
 
-	mu                  sync.Mutex
-	operationAction     RuntimeOperationAction
-	operationState      RuntimeOperationState
-	operationStage      RuntimeOperationStage
-	lastError           string
-	lastErrorCode       string
-	targetVersion       string
-	operationStartedAt  time.Time
-	operationFinishedAt time.Time
-	updatedAt           time.Time
-	logTail             []string
-	cancelOperation     context.CancelFunc
+	mu                   sync.Mutex
+	importSessionMu      sync.Mutex
+	operationAction      RuntimeOperationAction
+	operationState       RuntimeOperationState
+	operationStage       RuntimeOperationStage
+	lastError            string
+	lastErrorCode        string
+	targetVersion        string
+	operationStartedAt   time.Time
+	operationFinishedAt  time.Time
+	updatedAt            time.Time
+	logTail              []string
+	cancelOperation      context.CancelFunc
+	operationContext     context.Context
+	activeImportUploadID string
 }
 
 type runtimeDetection struct {
@@ -163,41 +155,23 @@ func NewRuntimeManager(opts RuntimeManagerOptions) *RuntimeManager {
 		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	}
 	stateDir := strings.TrimSpace(opts.StateDir)
-	installScriptURL := strings.TrimSpace(opts.InstallScriptURL)
-	if installScriptURL == "" {
-		installScriptURL = strings.TrimSpace(os.Getenv(installScriptURLOverrideEnv))
-	}
-	if installScriptURL == "" {
-		installScriptURL = defaultInstallScriptURL
-	}
-	httpClient := opts.HTTPClient
-	if httpClient == nil {
-		httpClient = &http.Client{Timeout: defaultInstallerDownloadTimeout}
-	}
 	now := opts.Now
 	if now == nil {
 		now = time.Now
 	}
 
 	return &RuntimeManager{
-		log:               logger,
-		stateDir:          stateDir,
-		stateRoot:         strings.TrimSpace(opts.StateRoot),
-		installScriptURL:  installScriptURL,
-		installScriptBody: append([]byte(nil), opts.InstallScriptContent...),
-		httpClient:        httpClient,
-		now:               now,
-		operationState:    RuntimeOperationStateIdle,
-		updatedAt:         now(),
+		log:            logger,
+		stateDir:       stateDir,
+		stateRoot:      strings.TrimSpace(opts.StateRoot),
+		now:            now,
+		operationState: RuntimeOperationStateIdle,
+		updatedAt:      now(),
 	}
 }
 
 func (m *RuntimeManager) Status(ctx context.Context) RuntimeStatus {
 	if m == nil {
-		installScriptURL := strings.TrimSpace(os.Getenv(installScriptURLOverrideEnv))
-		if installScriptURL == "" {
-			installScriptURL = defaultInstallScriptURL
-		}
 		return RuntimeStatus{
 			ActiveRuntime: RuntimeTargetStatus{
 				DetectionState: RuntimeDetectionMissing,
@@ -210,7 +184,7 @@ func (m *RuntimeManager) Status(ctx context.Context) RuntimeStatus {
 			ManagedRuntimeSource: "none",
 			ManagedPrefix:        "",
 			SharedRuntimeRoot:    "",
-			InstallerScriptURL:   installScriptURL,
+			Platform:             currentWorkspaceEnginePlatform(),
 			Operation:            RuntimeOperationStatus{State: RuntimeOperationStateIdle},
 			UpdatedAtUnixMs:      time.Now().UnixMilli(),
 		}
@@ -235,7 +209,7 @@ func (m *RuntimeManager) Status(ctx context.Context) RuntimeStatus {
 			ManagedRuntimeVersion: parts.managedRuntimeVersion,
 			ManagedRuntimeSource:  parts.managedRuntimeSource,
 			InstalledVersions:     parts.installed,
-			InstallerScriptURL:    m.installScriptURL,
+			Platform:              currentWorkspaceEnginePlatform(),
 			Operation: RuntimeOperationStatus{
 				Action:           parts.snapshot.operationAction,
 				State:            parts.snapshot.operationState,
@@ -274,23 +248,6 @@ func (m *RuntimeManager) Status(ctx context.Context) RuntimeStatus {
 	return buildStatus(last)
 }
 
-func (m *RuntimeManager) StartInstall(ctx context.Context) RuntimeStatus {
-	if m == nil {
-		return RuntimeStatus{}
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	opCtx, started := m.startOperation(RuntimeOperationActionInstall, "")
-	if !started {
-		return m.Status(ctx)
-	}
-
-	go m.runInstall(opCtx)
-	return m.Status(ctx)
-}
-
 func (m *RuntimeManager) CancelOperation(ctx context.Context) RuntimeStatus {
 	if m == nil {
 		return RuntimeStatus{}
@@ -298,9 +255,19 @@ func (m *RuntimeManager) CancelOperation(ctx context.Context) RuntimeStatus {
 	m.mu.Lock()
 	cancel := m.cancelOperation
 	running := m.operationState == RuntimeOperationStateRunning
+	action := m.operationAction
 	m.mu.Unlock()
 	if running && cancel != nil {
 		cancel()
+	}
+	if running && action == RuntimeOperationActionPrepareWorkspaceEngine {
+		_ = m.CancelActiveImportSession(context.Background())
+		m.mu.Lock()
+		stillRunning := m.operationState == RuntimeOperationStateRunning && m.operationAction == RuntimeOperationActionPrepareWorkspaceEngine
+		m.mu.Unlock()
+		if stillRunning {
+			m.finishOperation("", "", true)
+		}
 	}
 	return m.Status(ctx)
 }
@@ -376,121 +343,16 @@ func (m *RuntimeManager) startOperation(action RuntimeOperationAction, targetVer
 	m.operationFinishedAt = time.Time{}
 	m.updatedAt = startedAt
 	m.cancelOperation = cancel
+	m.operationContext = opCtx
+	m.activeImportUploadID = ""
 	return opCtx, true
 }
 
-func (m *RuntimeManager) runInstall(ctx context.Context) {
-	errCode := ""
-	errMessage := ""
-	cancelled := false
-
-	jobID := m.now().UTC().Format("20060102-150405.000000000")
-	stagePrefix := filepath.Join(sharedStagingRoot(m.stateRoot), sanitizePathSegment(jobID))
-	linkPath := managedRuntimePrefix(m.stateDir)
-
-	m.appendLog("Preparing code-server install for this Local Environment.")
-	m.appendLog("Installer URL: " + m.installScriptURL)
-	m.appendLog("Shared runtime root: " + sharedRuntimeRoot(m.stateRoot))
-	m.appendLog("Current environment link: " + linkPath)
-
-	if err := m.prepareInstallPaths(stagePrefix); err != nil {
-		errCode = "prepare_failed"
-		errMessage = err.Error()
-		m.finishOperation(errCode, errMessage, false)
-		return
-	}
-
-	scriptPath, err := m.ensureInstallScript(ctx)
-	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			cancelled = true
-		} else {
-			errCode = "installer_download_failed"
-			errMessage = err.Error()
-		}
-		m.finishOperation(errCode, errMessage, cancelled)
-		return
-	}
-
-	m.setStage(RuntimeOperationStageInstalling)
-	if err := m.runOfficialInstaller(ctx, scriptPath, stagePrefix); err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
-			cancelled = true
-		} else {
-			errCode = "installer_failed"
-			errMessage = err.Error()
-		}
-		_ = os.RemoveAll(stagePrefix)
-		m.finishOperation(errCode, errMessage, cancelled)
-		return
-	}
-
-	m.setStage(RuntimeOperationStageValidating)
-	stagedBinary := filepath.Join(stagePrefix, "bin", codeServerBinaryName())
-	version, err := probeRuntimeBinaryVersion(ctx, stagedBinary)
-	if err != nil {
-		errCode = "validation_failed"
-		errMessage = err.Error()
-		_ = os.RemoveAll(stagePrefix)
-		m.finishOperation(errCode, errMessage, false)
-		return
-	}
-	version = strings.TrimSpace(version)
-	if version == "" {
-		errCode = "validation_failed"
-		errMessage = "installed managed runtime did not report a version"
-		_ = os.RemoveAll(stagePrefix)
-		m.finishOperation(errCode, errMessage, false)
-		return
-	}
-	m.setTargetVersion(version)
-	m.appendLog("Resolved managed version: " + version)
-
-	m.setStage(RuntimeOperationStageFinalizing)
-	err = withLocalEnvironmentRuntimeStateLock(m.stateRoot, func(state *localEnvironmentRuntimeState) error {
-		if existing, ok := state.Versions[version]; ok {
-			existingBinary := filepath.Join(sharedVersionRoot(m.stateRoot, version), strings.TrimSpace(existing.BinaryRelPath))
-			if err := probeRuntimeBinary(ctx, existingBinary); err == nil {
-				m.appendLog("Reusing existing Local Environment runtime version: " + version)
-				state.SelectedVersion = version
-				state.UpdatedAtUnixMs = m.now().UnixMilli()
-				_ = os.RemoveAll(stagePrefix)
-				return repairManagedRuntimeLink(m.stateDir, m.stateRoot, version)
-			}
-			delete(state.Versions, version)
-		}
-		versionRoot := sharedVersionRoot(m.stateRoot, version)
-		if err := promoteManagedRuntime(stagePrefix, versionRoot); err != nil {
-			return err
-		}
-		if err := repairRuntimeBinaryLink(versionRoot); err != nil {
-			return err
-		}
-		state.Versions[version] = localEnvironmentRuntimeVersion{
-			InstalledAtUnixMs: m.now().UnixMilli(),
-			BinaryRelPath:     filepath.Join("bin", codeServerBinaryName()),
-		}
-		state.SelectedVersion = version
-		state.UpdatedAtUnixMs = m.now().UnixMilli()
-		return repairManagedRuntimeLink(m.stateDir, m.stateRoot, version)
-	})
-	if err != nil {
-		errCode = "finalize_failed"
-		errMessage = err.Error()
-		_ = os.RemoveAll(stagePrefix)
-		m.finishOperation(errCode, errMessage, false)
-		return
-	}
-	managedDetection := detectSelectedManagedRuntime(ctx, m.stateDir, m.stateRoot)
-	if managedDetection.state != RuntimeDetectionReady {
-		errCode = "finalize_failed"
-		errMessage = runtimeDetectionError(managedDetection)
-		m.finishOperation(errCode, errMessage, false)
-		return
-	}
-
-	m.appendLog("The Local Environment runtime is ready for the current environment.")
-	m.finishOperation("", "", false)
+func (m *RuntimeManager) setActiveImportUploadID(uploadID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.activeImportUploadID = strings.TrimSpace(uploadID)
+	m.updatedAt = m.now()
 }
 
 func (m *RuntimeManager) runRemoveLocalEnvironmentVersion(ctx context.Context, version string) {
@@ -533,108 +395,6 @@ func (m *RuntimeManager) runRemoveLocalEnvironmentVersion(ctx context.Context, v
 	m.setStage(RuntimeOperationStageFinalizing)
 	m.appendLog("The Local Environment runtime version has been removed.")
 	m.finishOperation("", "", false)
-}
-
-func (m *RuntimeManager) prepareInstallPaths(stagePrefix string) error {
-	m.setStage(RuntimeOperationStagePreparing)
-	if err := ensureSharedRuntimeDirs(m.stateRoot); err != nil {
-		return err
-	}
-	if err := os.MkdirAll(runtimeRoot(m.stateDir), 0o700); err != nil {
-		return err
-	}
-	_ = os.RemoveAll(stagePrefix)
-	return os.MkdirAll(stagePrefix, 0o700)
-}
-
-func (m *RuntimeManager) ensureInstallScript(ctx context.Context) (string, error) {
-	cacheDir := sharedDownloadsRoot(m.stateRoot)
-	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
-		return "", err
-	}
-	scriptPath := sharedInstallerScriptPath(m.stateRoot)
-
-	m.setStage(RuntimeOperationStageDownloading)
-	var content []byte
-	if len(m.installScriptBody) > 0 {
-		content = append([]byte(nil), m.installScriptBody...)
-	} else {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.installScriptURL, nil)
-		if err != nil {
-			return "", err
-		}
-		resp, err := m.httpClient.Do(req)
-		if err != nil {
-			return "", err
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return "", fmt.Errorf("failed to download official installer: HTTP %d", resp.StatusCode)
-		}
-		content, err = io.ReadAll(resp.Body)
-		if err != nil {
-			return "", err
-		}
-	}
-	if len(content) == 0 {
-		return "", errors.New("official installer download returned empty content")
-	}
-	tmpPath := scriptPath + ".tmp"
-	if err := os.WriteFile(tmpPath, content, 0o700); err != nil {
-		return "", err
-	}
-	if err := os.Rename(tmpPath, scriptPath); err != nil {
-		_ = os.Remove(tmpPath)
-		return "", err
-	}
-	return scriptPath, nil
-}
-
-func (m *RuntimeManager) runOfficialInstaller(ctx context.Context, scriptPath string, prefix string) error {
-	cmd := exec.CommandContext(ctx, "/bin/sh", scriptPath, "--method=standalone", "--prefix", prefix)
-	cmd.Env = append(os.Environ(),
-		"XDG_CACHE_HOME="+sharedDownloadsRoot(m.stateRoot),
-	)
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return err
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return err
-	}
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go m.captureInstallOutput(&wg, stdout)
-	go m.captureInstallOutput(&wg, stderr)
-
-	waitErr := cmd.Wait()
-	wg.Wait()
-	if waitErr != nil {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		return waitErr
-	}
-	return nil
-}
-
-func (m *RuntimeManager) captureInstallOutput(wg *sync.WaitGroup, r io.Reader) {
-	defer wg.Done()
-	reader := bufio.NewScanner(r)
-	buf := make([]byte, 0, 64*1024)
-	reader.Buffer(buf, 512*1024)
-	for reader.Scan() {
-		m.appendLog(reader.Text())
-	}
-	if err := reader.Err(); err != nil {
-		m.appendLog("stream error: " + err.Error())
-	}
 }
 
 func (m *RuntimeManager) setStage(stage RuntimeOperationStage) {
@@ -681,6 +441,8 @@ func (m *RuntimeManager) finishOperation(errCode string, errMessage string, canc
 	m.operationFinishedAt = m.now()
 	m.updatedAt = m.operationFinishedAt
 	m.cancelOperation = nil
+	m.operationContext = nil
+	m.activeImportUploadID = ""
 }
 
 func (m *RuntimeManager) setTargetVersion(version string) {
@@ -772,12 +534,6 @@ func detectRuntime(ctx context.Context, stateDir string, stateRoot string, selec
 		}
 	}
 	return detectRuntimeFromCandidates(ctx, systemCandidates)
-}
-
-func detectSelectedManagedRuntime(ctx context.Context, stateDir string, stateRoot string) runtimeDetection {
-	localEnvironmentState, _ := loadLocalEnvironmentRuntimeState(stateRoot)
-	version, _ := resolveManagedRuntimeSelection(localEnvironmentState)
-	return detectManagedRuntime(ctx, stateDir, stateRoot, version)
 }
 
 func detectManagedRuntime(ctx context.Context, stateDir string, stateRoot string, version string) runtimeDetection {
@@ -969,10 +725,6 @@ func probeRuntimeBinary(ctx context.Context, binaryPath string) error {
 	return err
 }
 
-func probeRuntimeBinaryVersion(ctx context.Context, binaryPath string) (string, error) {
-	return probeRuntimeBinaryVersionWithTimeout(ctx, binaryPath, selectedRuntimeProbeTimeout)
-}
-
 func probeRuntimeBinaryVersionWithTimeout(ctx context.Context, binaryPath string, timeout time.Duration) (string, error) {
 	path := strings.TrimSpace(binaryPath)
 	if path == "" {
@@ -1032,26 +784,42 @@ func removeIfExists(path string) error {
 	return os.RemoveAll(target)
 }
 
-func promoteManagedRuntime(stagePrefix string, managedPrefix string) error {
+func promoteManagedRuntime(stagePrefix string, managedPrefix string) (commit func() error, revert func() error, err error) {
 	parent := filepath.Dir(managedPrefix)
 	if err := os.MkdirAll(parent, 0o700); err != nil {
-		return err
+		return nil, nil, err
 	}
 	backupPrefix := managedPrefix + ".bak"
 	_ = os.RemoveAll(backupPrefix)
+	hadExisting := false
 	if _, err := os.Stat(managedPrefix); err == nil {
+		hadExisting = true
 		if err := os.Rename(managedPrefix, backupPrefix); err != nil {
-			return err
+			return nil, nil, err
 		}
 	}
 	if err := os.Rename(stagePrefix, managedPrefix); err != nil {
-		if _, statErr := os.Stat(backupPrefix); statErr == nil {
+		if hadExisting {
 			_ = os.Rename(backupPrefix, managedPrefix)
 		}
-		return err
+		return nil, nil, err
 	}
-	_ = os.RemoveAll(backupPrefix)
-	return nil
+	return func() error {
+			if err := os.RemoveAll(backupPrefix); err != nil {
+				return err
+			}
+			return nil
+		}, func() error {
+			if err := os.RemoveAll(managedPrefix); err != nil {
+				return err
+			}
+			if hadExisting {
+				if err := os.Rename(backupPrefix, managedPrefix); err != nil {
+					return err
+				}
+			}
+			return nil
+		}, nil
 }
 
 func runtimeRoot(stateDir string) string {
@@ -1083,7 +851,7 @@ func sanitizePathSegment(value string) string {
 	}
 	out := strings.Trim(b.String(), "._")
 	if out == "" {
-		return "install"
+		return "workspace-engine"
 	}
 	return out
 }
@@ -1106,35 +874,4 @@ func runtimeDetectionError(detection runtimeDetection) string {
 		return fmt.Sprintf("%s is not usable", path)
 	}
 	return "managed runtime validation failed"
-}
-
-func repairRuntimeBinaryLink(prefix string) error {
-	binDir := filepath.Join(strings.TrimSpace(prefix), "bin")
-	target, err := locateRuntimeBinary(prefix)
-	if err != nil {
-		return err
-	}
-	link := filepath.Join(binDir, codeServerBinaryName())
-	if err := os.MkdirAll(binDir, 0o700); err != nil {
-		return err
-	}
-	_ = os.Remove(link)
-	return os.Symlink(target, link)
-}
-
-func locateRuntimeBinary(prefix string) (string, error) {
-	prefix = strings.TrimSpace(prefix)
-	if prefix == "" {
-		return "", errors.New("missing runtime prefix")
-	}
-	matches, err := filepath.Glob(filepath.Join(prefix, "lib", "code-server-*", "bin", codeServerBinaryName()))
-	if err != nil {
-		return "", err
-	}
-	for _, match := range matches {
-		if fi, statErr := os.Stat(match); statErr == nil && !fi.IsDir() {
-			return match, nil
-		}
-	}
-	return "", fmt.Errorf("runtime binary not found under %s", prefix)
 }

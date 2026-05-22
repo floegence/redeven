@@ -103,7 +103,6 @@ function makeStatus(overrides: any = {}) {
       },
       ...(overrides.installed_versions ?? []),
     ],
-    installer_script_url: 'https://code-server.dev/install.sh',
     operation: {
       state: 'idle',
       log_tail: [],
@@ -126,7 +125,7 @@ function renderCard(host: HTMLElement, overrides: Partial<CodeRuntimeSettingsCar
     selectionLoadingVersion: null,
     removeVersionLoading: null,
     onRefresh: () => undefined,
-    onInstall: () => undefined,
+    onPrepare: () => undefined,
     onSelectVersion: () => undefined,
     onRemoveVersion: () => undefined,
     onCancel: () => undefined,
@@ -157,12 +156,12 @@ describe('CodeRuntimeSettingsCard', () => {
     expect(host.textContent).toContain('Current Local Environment selection');
     expect(host.textContent).toContain('Shared runtime root');
     expect(host.textContent).toContain('Refresh');
-    expect(host.textContent).toContain('Install latest');
+    expect(host.textContent).toContain('Prepare latest');
     expect(host.textContent).toContain('Use for this Local Environment');
 
     const tooltipContents = Array.from(host.querySelectorAll('[data-testid="tooltip"]')).map((node) => node.getAttribute('data-content'));
     expect(tooltipContents).toContain('Re-scan the Local Environment inventory and the active runtime.');
-    expect(tooltipContents).toContain('Install the latest stable managed code-server for this Local Environment, then select it.');
+    expect(tooltipContents).toContain('Prepare the latest workspace engine for this Local Environment.');
   });
 
   it('shows an empty-state warning when no managed versions are installed for this Local Environment', () => {
@@ -186,23 +185,23 @@ describe('CodeRuntimeSettingsCard', () => {
       }),
     });
 
-    expect(host.textContent).toContain('No managed versions installed');
-    expect(host.textContent).toContain('Install the latest stable managed runtime for this Local Environment');
+    expect(host.textContent).toContain('Workspace preparation required');
+    expect(host.textContent).toContain('Prepare the workspace engine for this Local Environment');
   });
 
-  it('opens the install confirmation and calls the install action', () => {
-    const onInstall = vi.fn(async () => undefined);
-    renderCard(host, { onInstall });
+  it('opens the prepare confirmation and calls the prepare action', () => {
+    const onPrepare = vi.fn(async () => undefined);
+    renderCard(host, { onPrepare });
 
-    const installButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Install latest');
-    installButton?.click();
+    const prepareButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Prepare latest');
+    prepareButton?.click();
 
-    expect(host.textContent).toContain('Install latest runtime');
-    expect(host.textContent).toContain('Redeven will install the latest stable managed code-server runtime');
+    expect(host.textContent).toContain('Prepare workspace');
+    expect(host.textContent).toContain('Redeven Desktop will prepare the latest workspace engine');
 
-    const confirmButton = Array.from(host.querySelectorAll('button')).filter((button) => button.textContent === 'Install latest').at(-1);
+    const confirmButton = Array.from(host.querySelectorAll('button')).filter((button) => button.textContent === 'Prepare latest').at(-1);
     confirmButton?.click();
 
-    expect(onInstall).toHaveBeenCalledTimes(1);
+    expect(onPrepare).toHaveBeenCalledTimes(1);
   });
 });

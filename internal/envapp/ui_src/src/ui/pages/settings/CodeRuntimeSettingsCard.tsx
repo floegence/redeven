@@ -61,9 +61,9 @@ function operationLabel(status: CodeRuntimeStatus | null | undefined): string {
   const operation = status?.operation;
   if (!operation) return 'Idle';
   if (operation.state === 'running') return codeRuntimeStageLabel(operation.stage, operation.action);
-  if (operation.state === 'failed') return operation.action === 'remove_local_environment_version' ? 'Version removal failed' : 'Install failed';
-  if (operation.state === 'cancelled') return operation.action === 'remove_local_environment_version' ? 'Version removal cancelled' : 'Install cancelled';
-  if (operation.state === 'succeeded') return operation.action === 'remove_local_environment_version' ? 'Version removed' : 'Install completed';
+  if (operation.state === 'failed') return operation.action === 'remove_local_environment_version' ? 'Version removal failed' : 'Preparation failed';
+  if (operation.state === 'cancelled') return operation.action === 'remove_local_environment_version' ? 'Version removal cancelled' : 'Preparation cancelled';
+  if (operation.state === 'succeeded') return operation.action === 'remove_local_environment_version' ? 'Version removed' : 'Workspace ready';
   return 'Idle';
 }
 
@@ -151,14 +151,14 @@ export interface CodeRuntimeSettingsCardProps {
   selectionLoadingVersion: string | null;
   removeVersionLoading: string | null;
   onRefresh: () => void;
-  onInstall: () => Promise<void> | void;
+  onPrepare: () => Promise<void> | void;
   onSelectVersion: (version: string) => Promise<void> | void;
   onRemoveVersion: (version: string) => Promise<void> | void;
   onCancel: () => Promise<void> | void;
 }
 
 export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
-  const [installConfirmOpen, setInstallConfirmOpen] = createSignal(false);
+  const [prepareConfirmOpen, setPrepareConfirmOpen] = createSignal(false);
   const [removeVersionConfirmOpen, setRemoveVersionConfirmOpen] = createSignal<string | null>(null);
 
   const runtimeReady = createMemo(() => codeRuntimeReady(props.status));
@@ -170,10 +170,10 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
   const activeRuntime = createMemo(() => props.status?.active_runtime);
   const refreshActionLabel = () => 'Refresh';
   const refreshActionTooltip = () => 'Re-scan the Local Environment inventory and the active runtime.';
-  const installActionLabel = () => 'Install latest';
-  const installActionTooltip = () => 'Install the latest stable managed code-server for this Local Environment, then select it.';
+  const prepareActionLabel = () => 'Prepare latest';
+  const prepareActionTooltip = () => 'Prepare the latest workspace engine for this Local Environment.';
   const cancelActionLabel = () => 'Cancel';
-  const cancelActionTooltip = () => 'Cancel the current managed runtime install.';
+  const cancelActionTooltip = () => 'Cancel the current workspace preparation.';
 
   const currentRuntimeRows = createMemo<readonly RuntimeDetailRow[]>(() => {
     const active = activeRuntime();
@@ -184,7 +184,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
         note:
           props.status?.managed_runtime_source === 'managed'
             ? 'This Local Environment selects one managed runtime version.'
-            : 'Install or select a managed runtime version for this Local Environment.',
+            : 'Prepare or select a managed workspace engine version for this Local Environment.',
       },
       {
         label: 'Selected version',
@@ -213,7 +213,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
               ? 'Host discovery is active because no managed runtime is selected.'
               : active?.source === 'managed'
                 ? 'A managed runtime is currently active for this Local Environment.'
-                : 'No active code-server runtime is currently available.',
+                : 'No active workspace engine is currently available.',
       },
       {
         label: 'Active binary path',
@@ -228,25 +228,19 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
         mono: true,
       },
       {
-        label: 'Shared runtime root',
-        value: props.status?.shared_runtime_root || '-',
-        note: 'Managed runtime versions for this Local Environment are stored here once per host.',
-        mono: true,
-      },
-    ];
+      label: 'Shared runtime root',
+      value: props.status?.shared_runtime_root || '-',
+      note: 'Workspace engine versions for this Local Environment are stored here once per host.',
+      mono: true,
+    },
+  ];
   });
 
   const localEnvironmentRows = createMemo<readonly RuntimeDetailRow[]>(() => [
     {
       label: 'Installed versions',
       value: String(installedVersions().length),
-      note: installedVersions().length > 0 ? 'Managed versions currently installed for this Local Environment.' : 'No managed versions are currently installed for this Local Environment.',
-    },
-    {
-      label: 'Installer URL',
-      value: props.status?.installer_script_url || '-',
-      note: 'Redeven runs the official latest-stable installer only after you explicitly confirm the action.',
-      mono: true,
+      note: installedVersions().length > 0 ? 'Workspace engine versions currently available for this Local Environment.' : 'No workspace engine versions are currently available for this Local Environment.',
     },
   ]);
 
@@ -254,22 +248,22 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
     if (operationRunning()) {
       return props.status?.operation.action === 'remove_local_environment_version'
         ? 'Redeven is removing one Local Environment runtime version after your explicit request.'
-        : 'Redeven is installing the latest stable managed runtime for this Local Environment and then selecting it.';
+        : 'Redeven Desktop is preparing the workspace engine you explicitly requested.';
     }
     if (operationFailed()) {
-      return 'The last Local Environment runtime action did not finish successfully. Review the recent output below before retrying.';
+      return 'The last workspace engine action did not finish successfully. Review the recent output below before retrying.';
     }
     if (operationCancelled()) {
-      return 'The last Local Environment runtime action was cancelled before Redeven finished validating the result.';
+      return 'The last workspace engine action was cancelled before Redeven finished validating the result.';
     }
     return '';
   });
 
   const busy = createMemo(() => operationRunning() || props.actionLoading || Boolean(props.selectionLoadingVersion) || Boolean(props.removeVersionLoading));
 
-  const confirmInstall = async () => {
-    await props.onInstall();
-    setInstallConfirmOpen(false);
+  const confirmPrepare = async () => {
+    await props.onPrepare();
+    setPrepareConfirmOpen(false);
   };
 
   const confirmRemoveVersion = async () => {
@@ -283,9 +277,9 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
     <>
       <SettingsCard
         icon={Code}
-        title="code-server Runtime"
-        description="Manage the code-server runtime inventory and the current managed version for this Local Environment."
-        badge={operationRunning() ? operationLabel(props.status) : runtimeReady() ? 'Local Environment ready' : 'Runtime needs action'}
+        title="Workspace Engine"
+        description="Prepare and manage the browser workspace engine for this Local Environment."
+        badge={operationRunning() ? operationLabel(props.status) : runtimeReady() ? 'Local Environment ready' : 'Workspace needs action'}
         badgeVariant={operationRunning() ? 'warning' : runtimeReady() ? 'success' : 'warning'}
         error={props.error}
         actions={
@@ -301,16 +295,16 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
               fallback={
                 <>
                   <ActionButtonTooltip
-                    content={installActionTooltip()}
+                    content={prepareActionTooltip()}
                     disabled={!props.canInteract || !props.canManage || props.actionLoading}
                   >
                     <Button
                       size="sm"
                       variant="default"
-                      onClick={() => setInstallConfirmOpen(true)}
+                      onClick={() => setPrepareConfirmOpen(true)}
                       disabled={!props.canInteract || !props.canManage || props.actionLoading}
                     >
-                      {props.actionLoading ? 'Starting...' : installActionLabel()}
+                      {props.actionLoading ? 'Preparing...' : prepareActionLabel()}
                     </Button>
                   </ActionButtonTooltip>
                 </>
@@ -331,7 +325,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
         <div class="space-y-4">
           <Show when={!props.canManage}>
             <div class="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-              Installing, selecting, or removing Local Environment runtime versions requires read, write, and execute access for this session.
+              Preparing, selecting, or removing Local Environment workspace engine versions requires read, write, and execute access for this session.
             </div>
           </Show>
 
@@ -366,10 +360,10 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
           <Show
             when={installedVersions().length > 0}
             fallback={
-              <HighlightBlock variant="warning" title="No managed versions installed">
+              <HighlightBlock variant="warning" title="Workspace preparation required">
                 <div class="space-y-2 text-sm text-muted-foreground">
-                  <div>Install the latest stable managed runtime for this Local Environment.</div>
-                  <div>This action affects the Local Environment inventory, then selects the installed version.</div>
+                  <div>Prepare the workspace engine for this Local Environment.</div>
+                  <div>Desktop will cache and send the latest engine only after you confirm.</div>
                 </div>
               </HighlightBlock>
             }
@@ -394,19 +388,18 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
       </SettingsCard>
 
       <ConfirmDialog
-        open={installConfirmOpen()}
-        onOpenChange={(open) => setInstallConfirmOpen(open)}
-        title="Install latest runtime"
-        confirmText={installActionLabel()}
+        open={prepareConfirmOpen()}
+        onOpenChange={(open) => setPrepareConfirmOpen(open)}
+        title="Prepare workspace"
+        confirmText={prepareActionLabel()}
         loading={props.actionLoading}
-        onConfirm={() => void confirmInstall()}
+        onConfirm={() => void confirmPrepare()}
       >
         <div class="space-y-3">
-          <p class="text-sm">Redeven will install the latest stable managed code-server runtime into the Local Environment inventory, then select it.</p>
+          <p class="text-sm">Redeven Desktop will prepare the latest workspace engine for this Local Environment, then select it.</p>
           <div class="grid gap-2 rounded-lg border border-border bg-muted/20 p-3 text-[11px] text-muted-foreground">
-            <div>Shared runtime root: <span class="font-mono text-foreground break-all">{props.status?.shared_runtime_root || '-'}</span></div>
+            <div>Shared engine root: <span class="font-mono text-foreground break-all">{props.status?.shared_runtime_root || '-'}</span></div>
             <div>Local Environment link: <span class="font-mono text-foreground break-all">{props.status?.managed_prefix || '-'}</span></div>
-            <div>Installer URL: <span class="font-mono text-foreground break-all">{props.status?.installer_script_url || '-'}</span></div>
           </div>
         </div>
       </ConfirmDialog>

@@ -7,6 +7,7 @@ type FakeWindow = Window & {
   parent: Window;
   top: Window;
   redevenDesktopEmbeddedDragRegions?: unknown;
+  redevenDesktopCodeWorkspace?: unknown;
   redevenDesktopTheme?: unknown;
   redevenDesktopSessionContext?: unknown;
   redevenDesktopStateStorage?: unknown;

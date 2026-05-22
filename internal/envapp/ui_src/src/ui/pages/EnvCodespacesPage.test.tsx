@@ -36,6 +36,16 @@ const gatewayMocks = vi.hoisted(() => ({
   fetchGatewayJSON: vi.fn(),
 }));
 
+const desktopCodeWorkspaceMocks = vi.hoisted(() => ({
+  prepareAvailable: vi.fn(() => true),
+  prepareWorkspaceEngine: vi.fn(async () => ({ ok: true, prepared: true })),
+  prepareWorkspaceEngineWithDesktop: vi.fn(async () => ({ ok: true, prepared: true })),
+}));
+
+const desktopSessionContextMocks = vi.hoisted(() => ({
+  readSnapshot: vi.fn(() => null),
+}));
+
 const controlplaneMocks = vi.hoisted(() => ({
   getEnvPublicIDFromSession: vi.fn(),
   getLocalRuntime: vi.fn(),
@@ -145,6 +155,16 @@ vi.mock('../services/gatewayApi', () => ({
   fetchGatewayJSON: gatewayMocks.fetchGatewayJSON,
 }));
 
+vi.mock('../services/desktopCodeWorkspaceBridge', () => ({
+  desktopCodeWorkspacePrepareAvailable: desktopCodeWorkspaceMocks.prepareAvailable,
+  prepareWorkspaceEngineInDesktop: desktopCodeWorkspaceMocks.prepareWorkspaceEngine,
+  prepareWorkspaceEngineWithDesktop: desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop,
+}));
+
+vi.mock('../services/desktopSessionContext', () => ({
+  readDesktopSessionContextSnapshot: desktopSessionContextMocks.readSnapshot,
+}));
+
 vi.mock('../services/localAccessAuth', () => ({
   appendLocalAccessResumeQuery: (value: string) => value,
 }));
@@ -211,7 +231,6 @@ function makeRuntimeStatus(overrides: any = {}): any {
         detection_state: 'ready',
       },
     ],
-    installer_script_url: overrides.installer_script_url ?? 'https://code-server.dev/install.sh',
     operation: {
       state: 'idle',
       log_tail: [],
@@ -246,28 +265,86 @@ describe('EnvCodespacesPage', () => {
     controlplaneMocks.mintEnvEntryTicketForApp.mockReset();
     controlplaneMocks.mintEnvEntryTicketForApp.mockResolvedValue('entry-ticket-123');
     runtimeStatusResponse = makeRuntimeStatus();
+    desktopCodeWorkspaceMocks.prepareAvailable.mockReset();
+    desktopCodeWorkspaceMocks.prepareAvailable.mockReturnValue(true);
+    desktopCodeWorkspaceMocks.prepareWorkspaceEngine.mockReset();
+    desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop.mockReset();
+    desktopSessionContextMocks.readSnapshot.mockReset();
+    desktopSessionContextMocks.readSnapshot.mockReturnValue(null);
+    desktopCodeWorkspaceMocks.prepareWorkspaceEngine.mockImplementation(async () => {
+      runtimeStatusResponse = makeRuntimeStatus({
+        ...runtimeStatusResponse,
+        active_runtime: {
+          detection_state: 'ready',
+          present: true,
+          source: 'managed',
+          binary_path: '/Users/test/.redeven/shared/code-server/darwin-arm64/versions/4.109.1/bin/code-server',
+          version: '4.109.1',
+        },
+        managed_runtime: {
+          detection_state: 'ready',
+          present: true,
+          source: 'managed',
+          binary_path: '/Users/test/.redeven/shared/code-server/darwin-arm64/versions/4.109.1/bin/code-server',
+          version: '4.109.1',
+        },
+        installed_versions: [
+          {
+            version: '4.109.1',
+            binary_path: '/Users/test/.redeven/shared/code-server/darwin-arm64/versions/4.109.1/bin/code-server',
+            selected_by_local_environment: true,
+            removable: false,
+            detection_state: 'ready',
+          },
+        ],
+        managed_runtime_version: '4.109.1',
+        managed_runtime_source: 'managed',
+        operation: { state: 'succeeded', action: 'prepare_workspace_engine', log_tail: ['Workspace engine is ready.'] },
+      });
+      return { ok: true, prepared: true, status: runtimeStatusResponse };
+    });
+    desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop.mockImplementation(async () => {
+      runtimeStatusResponse = makeRuntimeStatus({
+        ...runtimeStatusResponse,
+        active_runtime: {
+          detection_state: 'ready',
+          present: true,
+          source: 'managed',
+          binary_path: '/Users/test/.redeven/shared/code-server/darwin-arm64/versions/4.109.1/bin/code-server',
+          version: '4.109.1',
+        },
+        managed_runtime: {
+          detection_state: 'ready',
+          present: true,
+          source: 'managed',
+          binary_path: '/Users/test/.redeven/shared/code-server/darwin-arm64/versions/4.109.1/bin/code-server',
+          version: '4.109.1',
+        },
+        installed_versions: [
+          {
+            version: '4.109.1',
+            binary_path: '/Users/test/.redeven/shared/code-server/darwin-arm64/versions/4.109.1/bin/code-server',
+            selected_by_local_environment: true,
+            removable: false,
+            detection_state: 'ready',
+          },
+        ],
+        managed_runtime_version: '4.109.1',
+        managed_runtime_source: 'managed',
+        operation: { state: 'succeeded', action: 'prepare_workspace_engine', log_tail: ['Workspace engine is ready.'] },
+      });
+      return { ok: true, prepared: true, status: runtimeStatusResponse };
+    });
     gatewayMocks.fetchGatewayJSON.mockReset();
     gatewayMocks.fetchGatewayJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/code-runtime/status') {
-        return runtimeStatusResponse;
-      }
-      if (url === '/_redeven_proxy/api/code-runtime/install') {
-        runtimeStatusResponse = makeRuntimeStatus({
-          ...runtimeStatusResponse,
-          operation: {
-            action: 'install',
-            state: 'running',
-            stage: 'installing',
-            log_tail: ['Installing the latest stable release from GitHub.'],
-          },
-        });
         return runtimeStatusResponse;
       }
       if (url === '/_redeven_proxy/api/code-runtime/cancel') {
         runtimeStatusResponse = makeRuntimeStatus({
           ...runtimeStatusResponse,
           operation: {
-            action: 'install',
+            action: 'prepare_workspace_engine',
             state: 'cancelled',
             stage: '',
             log_tail: runtimeStatusResponse.operation?.log_tail ?? [],
@@ -367,7 +444,7 @@ describe('EnvCodespacesPage', () => {
     expect(buildAskFlowerComposerCopy(intent).question).toBe('What would you like to explore inside it?');
   });
 
-  it('shows install guidance when the code-server runtime is missing', async () => {
+  it('shows preparation guidance when the workspace engine is missing', async () => {
     runtimeStatusResponse = makeRuntimeStatus({
       active_runtime: {
         detection_state: 'missing',
@@ -390,15 +467,15 @@ describe('EnvCodespacesPage', () => {
     render(() => <EnvCodespacesPage />, host);
     await flushPage();
 
-    const wizard = host.querySelector('[data-testid="code-runtime-install-wizard"]') as HTMLDivElement | null;
+    const wizard = host.querySelector('[data-testid="code-runtime-prepare-panel"]') as HTMLDivElement | null;
     expect(wizard).toBeTruthy();
-    expect(wizard?.textContent).toContain('code-server runtime');
-    expect(wizard?.textContent).toContain('Not installed');
-    expect(wizard?.textContent).toContain('Install and use for this Local Environment');
-    expect(wizard?.textContent).toContain('latest stable code-server');
+    expect(wizard?.textContent).toContain('Workspace engine');
+    expect(wizard?.textContent).toContain('Not ready');
+    expect(wizard?.textContent).toContain('Prepare workspace for this Local Environment');
+    expect(wizard?.textContent).toContain('prepare this Environment for browser workspaces');
   });
 
-  it('shows the install wizard inline while the initial runtime check is still running', async () => {
+  it('shows the workspace preparation panel inline while the initial runtime check is still running', async () => {
     let resolveRuntimeStatus!: (value: any) => void;
 
     gatewayMocks.fetchGatewayJSON.mockImplementation((url: string) => {
@@ -431,18 +508,18 @@ describe('EnvCodespacesPage', () => {
     render(() => <EnvCodespacesPage />, host);
     await flushPage();
 
-    const wizard = host.querySelector('[data-testid="code-runtime-install-wizard"]') as HTMLDivElement | null;
+    const wizard = host.querySelector('[data-testid="code-runtime-prepare-panel"]') as HTMLDivElement | null;
     expect(wizard).toBeTruthy();
-    expect(wizard?.textContent).toContain('code-server runtime');
+    expect(wizard?.textContent).toContain('Workspace engine');
     expect(wizard?.textContent).toContain('Checking');
 
     resolveRuntimeStatus(makeRuntimeStatus());
     await flushPage();
 
-    expect(host.querySelector('[data-testid="code-runtime-install-wizard"]')).toBeNull();
+    expect(host.querySelector('[data-testid="code-runtime-prepare-panel"]')).toBeNull();
   });
 
-  it('shows install inline in the wizard instead of starting a codespace when runtime is missing', async () => {
+  it('prepares the workspace through Desktop instead of calling the old gateway install path', async () => {
     runtimeStatusResponse = makeRuntimeStatus({
       active_runtime: {
         detection_state: 'missing',
@@ -487,6 +564,11 @@ describe('EnvCodespacesPage', () => {
       throw new Error(`Unexpected gateway call: ${url}`);
     });
 
+    let resolvePrepare!: (value: { ok: true; prepared: true; status: any }) => void;
+    desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop.mockImplementationOnce(() => new Promise((resolve) => {
+      resolvePrepare = resolve;
+    }));
+
     const windowOpenSpy = vi.spyOn(window, 'open');
     windowOpenSpy.mockImplementation(() => null);
 
@@ -499,13 +581,21 @@ describe('EnvCodespacesPage', () => {
     startButton?.click();
     await waitForHostText(host, 'Demo Space');
     expect(gatewayMocks.fetchGatewayJSON.mock.calls.filter(([url]) => url === '/_redeven_proxy/api/code-runtime/status').length).toBeGreaterThanOrEqual(2);
-    await waitForHostText(host, 'Will start codespace after install');
+    await vi.waitFor(() => {
+      expect(desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop).toHaveBeenCalledTimes(1);
+    });
 
     expect(windowOpenSpy).not.toHaveBeenCalled();
+    expect(desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop).toHaveBeenCalledWith({
+      reason: 'start',
+      status: expect.anything(),
+      preferSessionUpload: false,
+    });
+    expect(gatewayMocks.fetchGatewayJSON).not.toHaveBeenCalledWith('/_redeven_proxy/api/code-runtime/install', expect.anything());
     expect(gatewayMocks.fetchGatewayJSON).not.toHaveBeenCalledWith('/_redeven_proxy/api/spaces/space-1/start', expect.anything());
-    expect(host.textContent).toContain('Install and use for this Local Environment');
-    expect(host.textContent).toContain('Will start codespace after install');
 
+    resolvePrepare({ ok: true, prepared: true, status: makeRuntimeStatus() });
+    await flushPage();
     windowOpenSpy.mockRestore();
   });
 

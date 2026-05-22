@@ -339,7 +339,9 @@ The Env App UI manages local codespaces via the local runtime gateway API:
 - `POST /_redeven_proxy/api/spaces/:id/stop`
 - `DELETE /_redeven_proxy/api/spaces/:id`
 - `GET /_redeven_proxy/api/code-runtime/status`
-- `POST /_redeven_proxy/api/code-runtime/install`
+- `POST /_redeven_proxy/api/code-runtime/import-sessions`
+- `PUT /_redeven_proxy/api/code-runtime/import-sessions/:upload_id/chunks/:chunk_index`
+- `POST /_redeven_proxy/api/code-runtime/import-sessions/:upload_id/complete`
 - `POST /_redeven_proxy/api/code-runtime/select`
 - `POST /_redeven_proxy/api/code-runtime/remove-version`
 - `POST /_redeven_proxy/api/code-runtime/cancel`
@@ -351,8 +353,9 @@ Notes:
 - Redeven Desktop opens Codespaces in the system browser while preserving the same short-lived bootstrap contract.
 - Password-protected Desktop-managed Local UI can resume the first protected Codespaces request through `redeven_access_resume`, then exchange it for the normal local access cookie.
 - Codespace cards expose right-click `Ask Flower` and `Open in Terminal` actions rooted at `workspace_path`.
-- Codespaces does **not** auto-install `code-server`. Missing or unusable runtime state is handled by explicit install/select UI in Codespaces and Runtime Settings -> `Codespaces & Tooling` -> `code-server Runtime`.
-- Runtime management UI separates steady inventory/status from transient install, remove, cancel, failure, and recovery activity. See [`CODE_APP.md`](CODE_APP.md) for the full managed code-server contract.
+- Codespaces does **not** prepare the workspace engine until the user explicitly clicks `Open`, `Start`, or `Prepare latest`.
+- Missing or unusable runtime state is handled by explicit prepare/select UI in Codespaces and Runtime Settings -> `Codespaces & Tooling` -> `Workspace Engine`.
+- Runtime management UI separates steady inventory/status from transient prepare, remove, cancel, failure, and recovery activity. See [`CODE_APP.md`](CODE_APP.md) for the full managed workspace engine contract.
 
 ## Build
 
