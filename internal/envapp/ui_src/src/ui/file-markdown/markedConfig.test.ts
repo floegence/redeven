@@ -1,5 +1,9 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseMarkdown } from './markedConfig';
+
+const fileMarkdownStyles = readFileSync(resolve(process.cwd(), 'src/ui/file-markdown/FileMarkdown.css'), 'utf8');
 
 describe('file markdown marked renderer', () => {
   it('renders fenced code blocks with the file markdown code structure', () => {
@@ -60,5 +64,14 @@ describe('file markdown marked renderer', () => {
     expect(html).toContain('<div class="fm-alert-heading">');
     expect(html).toContain('<p>Hello <strong>world</strong></p>');
     expect(html).not.toContain('[!NOTE]');
+  });
+
+  it('keeps inline-code link labels on the link affordance path', () => {
+    const html = parseMarkdown('Open [`code-server`](https://github.com/coder/code-server).');
+
+    expect(html).toContain('<a class="fm-link" href="https://github.com/coder/code-server" target="_blank" rel="noopener noreferrer"><code class="fm-inline-code">code-server</code></a>');
+    expect(fileMarkdownStyles).toContain('.file-markdown-body a.fm-link code.fm-inline-code {');
+    expect(fileMarkdownStyles).toMatch(/\.file-markdown-body a\.fm-link \{[\s\S]*color: var\(--redeven-link-fg\);[\s\S]*cursor: pointer;/);
+    expect(fileMarkdownStyles).toMatch(/\.file-markdown-body a\.fm-link code\.fm-inline-code \{[\s\S]*color: inherit;/);
   });
 });

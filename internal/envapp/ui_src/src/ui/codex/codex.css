@@ -1836,17 +1836,32 @@ button.codex-pending-input-card-main:focus-visible .codex-pending-input-card-pre
 }
 
 .codex-chat-markdown-block .chat-md-link {
-  color: color-mix(in srgb, var(--primary) 84%, var(--foreground));
+  color: var(--redeven-link-fg);
   border-bottom: none;
   text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--primary) 28%, transparent);
+  text-decoration-color: var(--redeven-link-underline);
   text-decoration-thickness: 1px;
   text-underline-offset: 0.12em;
+  cursor: pointer;
+  transition: color 150ms ease, text-decoration-color 150ms ease, background-color 150ms ease;
   overflow-wrap: anywhere;
 }
 
 .codex-chat-markdown-block .chat-md-link:hover {
-  text-decoration-color: color-mix(in srgb, var(--primary) 58%, transparent);
+  color: var(--redeven-link-hover-fg);
+  text-decoration-color: var(--redeven-link-underline-hover);
+}
+
+.codex-chat-markdown-block .chat-md-link:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--redeven-link-fg) 48%, transparent);
+  outline-offset: 2px;
+  border-radius: 0.1875rem;
+}
+
+.codex-chat-markdown-block .chat-md-link .chat-md-inline-code {
+  border-color: var(--redeven-link-code-border);
+  background: var(--redeven-link-code-bg);
+  color: inherit;
 }
 
 .codex-chat-markdown-block pre.chat-md-code-block {

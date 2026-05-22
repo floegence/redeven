@@ -1,4 +1,4 @@
-import type { RendererObject } from 'marked';
+import type { RendererObject, Token } from 'marked';
 
 import { parseMarkdownFileReference } from './markdownFileReference';
 import type { MarkdownRendererOptions } from './markdownRendererOptions';
@@ -6,6 +6,21 @@ import type { MarkdownRendererOptions } from './markdownRendererOptions';
 interface MarkdownRenderContext {
   fileReferencePrefixByPath?: ReadonlyMap<string, string>;
 }
+
+type MarkdownInlineToken = Token & {
+  href?: string;
+  raw?: string;
+  text?: string;
+  title?: string | null;
+  tokens?: Token[];
+};
+
+type MarkdownLinkToken = {
+  href: string;
+  title?: string | null;
+  text: string;
+  tokens?: Token[];
+};
 
 let activeMarkdownRenderContext: MarkdownRenderContext | null = null;
 
@@ -25,12 +40,40 @@ function normalizeLanguageClass(lang?: string): string {
   return safe ? ` language-${safe}` : '';
 }
 
-function renderDefaultLink(token: { href: string; title?: string | null; text: string }): string {
-  const titleAttr = token.title ? ` title="${escapeHtml(token.title)}"` : '';
-  return `<a href="${escapeHtml(token.href)}" class="chat-md-link" target="_blank" rel="noopener noreferrer"${titleAttr}>${token.text}</a>`;
+function renderInlineTokens(tokens: readonly Token[] | undefined, fallbackText: string): string {
+  if (!tokens?.length) return escapeHtml(fallbackText);
+
+  return tokens.map((entry) => {
+    const token = entry as MarkdownInlineToken;
+    const text = String(token.text ?? '');
+    switch (token.type) {
+      case 'codespan':
+        return `<code class="chat-md-inline-code">${escapeHtml(text)}</code>`;
+      case 'strong':
+        return `<strong>${renderInlineTokens(token.tokens, text)}</strong>`;
+      case 'em':
+        return `<em>${renderInlineTokens(token.tokens, text)}</em>`;
+      case 'del':
+        return `<del>${renderInlineTokens(token.tokens, text)}</del>`;
+      case 'br':
+        return '<br>';
+      case 'link':
+        return renderInlineTokens(token.tokens, text);
+      case 'escape':
+      case 'text':
+        return escapeHtml(text);
+      default:
+        return escapeHtml(text || String(token.raw ?? ''));
+    }
+  }).join('');
 }
 
-function renderCodexFileReference(token: { href: string; title?: string | null; text: string }): string | null {
+function renderDefaultLink(token: MarkdownLinkToken): string {
+  const titleAttr = token.title ? ` title="${escapeHtml(token.title)}"` : '';
+  return `<a href="${escapeHtml(token.href)}" class="chat-md-link" target="_blank" rel="noopener noreferrer"${titleAttr}>${renderInlineTokens(token.tokens, token.text)}</a>`;
+}
+
+function renderCodexFileReference(token: MarkdownLinkToken): string | null {
   const reference = parseMarkdownFileReference(token.href, token.text);
   if (!reference) return null;
 
@@ -64,7 +107,7 @@ export function createMarkdownRenderer(options?: MarkdownRendererOptions): Rende
   const variant = options?.variant === 'codex' ? 'codex' : 'default';
 
   return {
-    link(token: { href: string; title?: string | null; text: string }) {
+    link(token: MarkdownLinkToken) {
       if (variant === 'codex') {
         const fileReferenceLink = renderCodexFileReference(token);
         if (fileReferenceLink) return fileReferenceLink;

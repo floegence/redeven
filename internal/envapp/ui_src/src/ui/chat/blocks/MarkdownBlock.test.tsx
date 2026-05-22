@@ -22,6 +22,7 @@ const renderMarkdownSnapshotMock = vi.fn();
 const openPreviewMock = vi.fn();
 const closePreviewMock = vi.fn();
 const chatStyles = readFileSync(resolve(process.cwd(), 'src/ui/chat/chat.css'), 'utf8');
+const codexStyles = readFileSync(resolve(process.cwd(), 'src/ui/codex/codex.css'), 'utf8');
 
 vi.mock('../workers/markdownWorkerClient', () => ({
   renderMarkdownSnapshot: (...args: unknown[]) => renderMarkdownSnapshotMock(...args),
@@ -455,6 +456,29 @@ describe('MarkdownBlock', () => {
 
     expect(host.querySelector('.chat-md-file-ref')).toBeNull();
     expect((host.querySelector('a.chat-md-link') as HTMLAnchorElement | null)?.textContent).toContain('controlplaneApi.ts');
+  });
+
+  it('keeps inline-code link labels visually identifiable as links', async () => {
+    const content = 'Install [`code-server`](https://github.com/coder/code-server) before continuing.';
+    const normalized = normalizeMarkdownForDisplay(content);
+    renderMarkdownSnapshotMock.mockResolvedValue(createSnapshot(normalized, false));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <MarkdownBlock content={content} />, host);
+
+    await waitFor(() => {
+      expect(host.querySelectorAll('a.chat-md-link code.chat-md-inline-code')).toHaveLength(1);
+    });
+
+    const linkedCode = host.querySelector('a.chat-md-link code.chat-md-inline-code') as HTMLElement | null;
+    expect(linkedCode?.textContent).toBe('code-server');
+    expect(chatStyles).toContain('.chat-md-link .chat-md-inline-code {');
+    expect(chatStyles).toMatch(/\.chat-md-link \{[\s\S]*color: var\(--redeven-link-fg\);[\s\S]*cursor: pointer;/);
+    expect(chatStyles).toMatch(/\.chat-md-link \.chat-md-inline-code \{[\s\S]*color: inherit;/);
+    expect(codexStyles).toMatch(/\.codex-chat-markdown-block \.chat-md-link \{[\s\S]*color: var\(--redeven-link-fg\);[\s\S]*cursor: pointer;/);
+    expect(codexStyles).toMatch(/\.codex-chat-markdown-block \.chat-md-link \.chat-md-inline-code \{[\s\S]*color: inherit;/);
   });
 
   it('opens the floating file preview instead of navigating local codex links', async () => {
