@@ -152,6 +152,54 @@ diagnostics, and next actions until the user handles or dismisses them.
 
 ## Data Structures
 
+### Runtime Lifecycle Progress
+
+Desktop launcher operations expose runtime lifecycle progress as a fixed
+workflow snapshot owned by Electron main:
+
+```ts
+type DesktopRuntimeLifecycleStepStatus =
+  | 'pending'
+  | 'running'
+  | 'succeeded'
+  | 'failed';
+
+type DesktopRuntimeLifecycleStepSnapshot = Readonly<{
+  id: DesktopRuntimeLifecycleStepID;
+  label: string;
+  status: DesktopRuntimeLifecycleStepStatus;
+  detail?: string;
+  attempt_count?: number;
+}>;
+
+type DesktopRuntimeLifecycleProgress = Readonly<{
+  kind: 'runtime_lifecycle';
+  location: 'local_host' | 'local_container' | 'ssh_host' | 'ssh_container';
+  operation: 'start' | 'restart' | 'update' | 'stop';
+  phase: DesktopRuntimeLifecycleStepID;
+  active_step_id: DesktopRuntimeLifecycleStepID;
+  failed_step_id?: DesktopRuntimeLifecycleStepID;
+  stage_index: number;
+  stage_count: number;
+  steps: readonly DesktopRuntimeLifecycleStepSnapshot[];
+  target_id: string;
+  target_label: string;
+  target_detail?: string;
+}>;
+```
+
+`steps` is the renderer's source of truth. `stage_index` and `stage_count`
+exist only for meter compatibility and must not be used to infer which step
+failed. Failed and canceled are launcher operation statuses, not lifecycle
+steps. When an operation fails, the main process preserves the active workflow
+step in `failed_step_id` and marks that step snapshot as `failed`.
+
+`Runtime ready` is emitted only as the successful terminal step. Helper
+observations that say a daemon is becoming reachable stay inside
+`Checking runtime service` until the launcher operation commits success.
+Provider runtime-health sync runs after success in the background so it cannot
+delay the lifecycle completion UI.
+
 ### Runtime Service Snapshot
 
 Runtime exposes a normalized service snapshot through all attach and health

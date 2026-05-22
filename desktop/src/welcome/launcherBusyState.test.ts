@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { runtimeLifecycleProgress } from '../shared/desktopRuntimeLifecycleProgress';
 import type { DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import type { DesktopProviderRuntimeLinkTarget } from '../shared/providerRuntimeLinkTarget';
 import {
@@ -216,15 +217,12 @@ describe('launcherBusyState', () => {
       phase: 'checking_existing_runtime',
       title: 'Checking existing runtime',
       detail: 'Desktop is checking whether a compatible local runtime is already running.',
-      lifecycle_progress: {
-        kind: 'runtime_lifecycle' as const,
-        location: 'local_host' as const,
-        phase: 'checking_existing_runtime' as const,
-        stage_index: 1,
-        stage_count: 5,
-        target_id: 'local:local',
-        target_label: 'Local Environment',
-      },
+      lifecycle_progress: runtimeLifecycleProgress({
+        location: 'local_host',
+        phase: 'checking_existing_runtime',
+        targetID: 'local:local',
+        targetLabel: 'Local Environment',
+      }),
     };
 
     const localContainerEnvironment: RuntimeProgressEnvironmentMatch = {
@@ -242,15 +240,12 @@ describe('launcherBusyState', () => {
       phase: 'installing_runtime_package',
       title: 'Installing runtime in container',
       detail: 'Desktop is installing Redeven inside the running container.',
-      lifecycle_progress: {
-        kind: 'runtime_lifecycle' as const,
-        location: 'local_container' as const,
-        phase: 'installing_runtime_package' as const,
-        stage_index: 5,
-        stage_count: 6,
-        target_id: 'local:container:docker:dev:abcd1234',
-        target_label: 'Dev Container',
-      },
+      lifecycle_progress: runtimeLifecycleProgress({
+        location: 'local_container',
+        phase: 'installing_runtime_package',
+        targetID: 'local:container:docker:dev:abcd1234',
+        targetLabel: 'Dev Container',
+      }),
     };
 
     const sshHostEnvironment: RuntimeProgressEnvironmentMatch = {
@@ -268,15 +263,12 @@ describe('launcherBusyState', () => {
       phase: 'ssh_remote_installing',
       title: 'Installing remote runtime',
       detail: 'Running the remote installer.',
-      lifecycle_progress: {
-        kind: 'runtime_lifecycle' as const,
-        location: 'ssh_host' as const,
-        phase: 'installing_runtime_package' as const,
-        stage_index: 5,
-        stage_count: 9,
-        target_id: 'ssh:%64evbox:default:key_agent:remote_default:envinst_demo',
-        target_label: 'Devbox',
-      },
+      lifecycle_progress: runtimeLifecycleProgress({
+        location: 'ssh_host',
+        phase: 'installing_runtime_package',
+        targetID: 'ssh:%64evbox:default:key_agent:remote_default:envinst_demo',
+        targetLabel: 'Devbox',
+      }),
     };
 
     const sshContainerEnvironment: RuntimeProgressEnvironmentMatch = {
@@ -294,15 +286,12 @@ describe('launcherBusyState', () => {
       phase: 'checking_host',
       title: 'Checking SSH container',
       detail: 'Desktop is checking the SSH host and selected running container.',
-      lifecycle_progress: {
-        kind: 'runtime_lifecycle' as const,
-        location: 'ssh_container' as const,
-        phase: 'checking_host' as const,
-        stage_index: 1,
-        stage_count: 7,
-        target_id: 'ssh:container:devbox:docker:dev:abcd1234',
-        target_label: 'Devbox Container',
-      },
+      lifecycle_progress: runtimeLifecycleProgress({
+        location: 'ssh_container',
+        phase: 'checking_host',
+        targetID: 'ssh:container:devbox:docker:dev:abcd1234',
+        targetLabel: 'Devbox Container',
+      }),
     };
 
     expect(environmentMatchesRuntimeLifecycleProgress(localHostEnvironment, localHostProgress)).toBe(true);

@@ -80,10 +80,6 @@ import {
 } from '../shared/runtimeService';
 import { desktopEntryKindOwnsRuntimeManagement } from '../shared/environmentManagementPrinciples';
 import {
-  RUNTIME_LIFECYCLE_PHASE_LABELS,
-  runtimeLifecyclePhaseSequence,
-} from '../shared/desktopRuntimeLifecycleProgress';
-import {
   OPEN_CONNECTION_PHASE_LABELS,
   openConnectionPhaseSequence,
 } from '../shared/desktopOpenConnectionProgress';
@@ -4698,7 +4694,7 @@ function EnvironmentProgressPanel(props: Readonly<{
     || props.progress.status === 'cleanup_failed'
     || props.progress.status === 'canceled'
   ));
-  const phaseSequence = createMemo<readonly { phase: string; label: string }[]>(() => {
+  const phaseSequence = createMemo<readonly { phase: string; label: string; status?: string }[]>(() => {
     const current = startup();
     const open = openConnection();
     if (open) {
@@ -4708,15 +4704,11 @@ function EnvironmentProgressPanel(props: Readonly<{
     if (!current) {
       return [];
     }
-    const operation = props.progress.action === 'restart_environment_runtime'
-      ? 'restart'
-      : props.progress.action === 'update_environment_runtime'
-        ? 'update'
-        : props.progress.action === 'stop_environment_runtime'
-          ? 'stop'
-          : 'start';
-    const phases = runtimeLifecyclePhaseSequence(current.location, operation);
-    return phases.map((p) => ({ phase: p, label: RUNTIME_LIFECYCLE_PHASE_LABELS[p] }));
+    return current.steps.map((step) => ({
+      phase: step.id,
+      label: step.label,
+      status: step.status,
+    }));
   });
   const failureNoticeTitle = createMemo(() => {
     if (openConnection()) {
@@ -4733,15 +4725,23 @@ function EnvironmentProgressPanel(props: Readonly<{
         return 'Startup needs attention';
     }
   });
-  const stepState = (index: number, currentPhase: string | undefined, opStatus: string, currentStageIndex?: number): 'done' | 'active' | 'pending' | 'error' => {
+  const stepState = (index: number, currentPhase: string | undefined, opStatus: string): 'done' | 'active' | 'pending' | 'error' => {
+    const step = phaseSequence()[index];
+    if (step?.status === 'failed') {
+      return 'error';
+    }
+    if (step?.status === 'succeeded') {
+      return 'done';
+    }
     if (!currentPhase) {
       return 'pending';
     }
+    if (opStatus === 'succeeded') {
+      const currentIdx = phaseSequence().findIndex((s) => s.phase === currentPhase);
+      return currentIdx >= 0 && index <= currentIdx ? 'done' : 'pending';
+    }
     if (opStatus === 'failed' || opStatus === 'canceled') {
-      const phaseIdx = phaseSequence().findIndex((s) => s.phase === currentPhase);
-      const currentIdx = phaseIdx >= 0
-        ? phaseIdx
-        : Math.max(0, Math.min(phaseSequence().length - 1, Number(currentStageIndex ?? 1) - 1));
+      const currentIdx = phaseSequence().findIndex((s) => s.phase === currentPhase);
       if (index < currentIdx) return 'done';
       if (index === currentIdx) return 'error';
       return 'pending';
@@ -4777,7 +4777,7 @@ function EnvironmentProgressPanel(props: Readonly<{
             <div class="redeven-environment-progress__steps" aria-hidden="true">
               <For each={phaseSequence()}>
                 {(step, index) => {
-                  const state = () => stepState(index(), currentStartup().phase, phaseStatus(), currentStartup().stage_index);
+                  const state = () => stepState(index(), currentStartup().phase, phaseStatus());
                   const isLast = () => index() === phaseSequence().length - 1;
                   return (
                     <div class="redeven-environment-progress__step">

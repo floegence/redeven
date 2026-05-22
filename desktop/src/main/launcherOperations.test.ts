@@ -86,7 +86,8 @@ describe('LauncherOperationRegistry', () => {
       status: 'canceling',
       lifecycle_progress: expect.objectContaining({
         location: 'ssh_host',
-        phase: 'canceled',
+        phase: 'installing_runtime_package',
+        active_step_id: 'installing_runtime_package',
       }),
     }));
     expect(registry.currentSubjectGeneration('ssh_environment', operation.subject_id)).toBe(1);
@@ -121,7 +122,8 @@ describe('LauncherOperationRegistry', () => {
       phase: 'runtime_lifecycle_canceling',
       title: 'Stopping runtime startup',
       lifecycle_progress: expect.objectContaining({
-        phase: 'canceled',
+        phase: 'checking_runtime_service',
+        active_step_id: 'checking_runtime_service',
       }),
       interrupt_label: undefined,
       interrupt_kind: undefined,

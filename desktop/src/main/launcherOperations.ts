@@ -238,7 +238,8 @@ export class LauncherOperationRegistry {
       const runtimeLifecycle = snapshot.lifecycle_progress
         ? runtimeLifecycleProgress({
             location: snapshot.lifecycle_progress.location,
-            phase: 'canceled',
+            operation: snapshot.lifecycle_progress.operation,
+            phase: snapshot.lifecycle_progress.active_step_id,
             targetID: snapshot.lifecycle_progress.target_id,
             targetLabel: snapshot.lifecycle_progress.target_label,
             targetDetail: snapshot.lifecycle_progress.target_detail,
@@ -291,7 +292,8 @@ export class LauncherOperationRegistry {
     const runtimeLifecycle = snapshot.lifecycle_progress
       ? runtimeLifecycleProgress({
           location: snapshot.lifecycle_progress.location,
-          phase: 'canceled',
+          operation: snapshot.lifecycle_progress.operation,
+          phase: snapshot.lifecycle_progress.active_step_id,
           targetID: snapshot.lifecycle_progress.target_id,
           targetLabel: snapshot.lifecycle_progress.target_label,
           targetDetail: snapshot.lifecycle_progress.target_detail,
