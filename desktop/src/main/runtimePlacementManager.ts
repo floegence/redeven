@@ -5,6 +5,7 @@ import {
 import {
   buildDesktopRuntimeMaintenanceRequirement,
   classifyDesktopRuntimeBlockedLaunchReport,
+  desktopRuntimeMaintenanceIsLiveManagementSocketUnreachable,
   type DesktopRuntimeMaintenanceRequirement,
 } from '../shared/desktopRuntimeHealth';
 import {
@@ -68,6 +69,13 @@ export class RuntimePlacementMaintenanceRequiredError extends Error {
     super(message);
     this.name = 'RuntimePlacementMaintenanceRequiredError';
     this.maintenance = maintenance;
+  }
+}
+
+export class RuntimePlacementReadinessTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RuntimePlacementReadinessTimeoutError';
   }
 }
 
@@ -149,7 +157,12 @@ async function waitForContainerRuntimeDaemon(args: Readonly<{
       const classification = classifyDesktopRuntimeBlockedLaunchReport(report, {
         target_runtime_version: args.runtime_release_tag,
       });
-      if (classification.kind === 'restart_required' || classification.kind === 'update_required') {
+      if (
+        classification.kind === 'restart_required'
+        && desktopRuntimeMaintenanceIsLiveManagementSocketUnreachable(classification.maintenance)
+      ) {
+        lastError = new Error(classification.maintenance.message);
+      } else if (classification.kind === 'restart_required' || classification.kind === 'update_required') {
         throw new RuntimePlacementMaintenanceRequiredError(
           classification.maintenance.message,
           classification.maintenance,
@@ -160,7 +173,9 @@ async function waitForContainerRuntimeDaemon(args: Readonly<{
       }
     }
     if (Date.now() >= deadline) {
-      throw new Error(`Runtime daemon did not become ready before timeout.${lastError ? ` ${lastError.message}` : ''}`);
+      throw new RuntimePlacementReadinessTimeoutError(
+        `Runtime daemon did not become ready before timeout.${lastError ? ` ${lastError.message}` : ''}`,
+      );
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }

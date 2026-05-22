@@ -7,7 +7,7 @@ import {
 
 export type EnvironmentGuidancePendingIntent = Extract<
   EnvironmentActionIntent,
-  'refresh_runtime' | 'start_runtime' | 'stop_runtime' | 'restart_runtime' | 'connect_provider_runtime' | 'disconnect_provider_runtime' | 'update_runtime'
+  'refresh_runtime' | 'connect_provider_runtime' | 'disconnect_provider_runtime'
 >;
 
 export type EnvironmentGuidanceFeedbackTone = 'info' | 'warning' | 'error' | 'success';
@@ -30,12 +30,8 @@ export function isEnvironmentGuidancePendingIntent(
   intent: EnvironmentActionIntent,
 ): intent is EnvironmentGuidancePendingIntent {
   return intent === 'refresh_runtime'
-    || intent === 'start_runtime'
-    || intent === 'stop_runtime'
-    || intent === 'restart_runtime'
     || intent === 'connect_provider_runtime'
-    || intent === 'disconnect_provider_runtime'
-    || intent === 'update_runtime';
+    || intent === 'disconnect_provider_runtime';
 }
 
 export function openEnvironmentGuidanceSession(
@@ -77,26 +73,6 @@ export function failEnvironmentGuidanceIntent(
 
   const fallback = (() => {
     switch (state.pending_intent) {
-      case 'start_runtime':
-        return {
-          title: 'Runtime start failed',
-          detail: 'Desktop could not start the runtime for this environment.',
-        };
-      case 'stop_runtime':
-        return {
-          title: 'Runtime stop failed',
-          detail: 'Desktop could not stop the runtime for this environment.',
-        };
-      case 'restart_runtime':
-        return {
-          title: 'Runtime restart failed',
-          detail: 'Desktop could not restart the runtime for this environment.',
-        };
-      case 'update_runtime':
-        return {
-          title: 'Runtime update failed',
-          detail: 'Desktop could not update and restart the runtime for this environment.',
-        };
       case 'connect_provider_runtime':
         return {
           title: 'Provider link failed',
@@ -234,24 +210,6 @@ export function guidanceSessionNotice(
         title: 'Checking runtime status…',
         detail: 'Desktop is probing the latest runtime health for this environment.',
       };
-    case 'start_runtime':
-      return {
-        tone: 'info',
-        title: 'Starting runtime…',
-        detail: 'Desktop is starting the local runtime and waiting for the next status update.',
-      };
-    case 'stop_runtime':
-      return {
-        tone: 'info',
-        title: 'Stopping runtime…',
-        detail: 'Desktop is stopping the runtime and verifying that the process has exited.',
-      };
-    case 'restart_runtime':
-      return {
-        tone: 'info',
-        title: 'Restarting runtime…',
-        detail: 'Desktop is restarting the runtime and waiting for it to report ready.',
-      };
     case 'connect_provider_runtime':
       return {
         tone: 'info',
@@ -263,12 +221,6 @@ export function guidanceSessionNotice(
         tone: 'info',
         title: 'Disconnecting runtime…',
         detail: 'Desktop is disconnecting the selected runtime from its provider.',
-      };
-    case 'update_runtime':
-      return {
-        tone: 'info',
-        title: 'Updating runtime…',
-        detail: 'Desktop is waiting for the SSH runtime update and restart to complete.',
       };
     default:
       return state.feedback;

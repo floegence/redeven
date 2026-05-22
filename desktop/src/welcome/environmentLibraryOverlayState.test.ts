@@ -49,6 +49,18 @@ describe('environmentLibraryOverlayState', () => {
     expect(reconcileEnvironmentLibraryOverlayState(state, refreshedSnapshot.environments)).toEqual(state);
   });
 
+  it('keeps a lifecycle progress overlay open across refresh while the same environment remains visible', () => {
+    const local = testLocalEnvironment({ label: 'Local Environment' });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: local,
+      }),
+    });
+    const state = openEnvironmentLibraryOverlayState('lifecycle_progress', local.id);
+
+    expect(reconcileEnvironmentLibraryOverlayState(state, snapshot.environments)).toEqual(state);
+  });
+
   it('keeps a guidance overlay open across refresh while the same environment still exposes popover guidance', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
@@ -119,7 +131,7 @@ describe('environmentLibraryOverlayState', () => {
     expect(reconcileEnvironmentLibraryOverlayState(state, snapshot.environments)).toEqual(closedEnvironmentLibraryOverlayState());
   });
 
-  it('keeps the primary action guidance overlay open while runtime lifecycle progress belongs to the environment', () => {
+  it('does not keep primary action guidance open only because runtime lifecycle progress exists', () => {
     const local = testLocalEnvironment({ label: 'Local Environment' });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
@@ -130,24 +142,7 @@ describe('environmentLibraryOverlayState', () => {
     const state = openEnvironmentLibraryOverlayState('primary_action_guidance', local.id);
 
     expect(localEntry).toBeTruthy();
-    expect(reconcileEnvironmentLibraryOverlayState(state, snapshot.environments, [{
-      action: 'start_environment_runtime',
-      environment_id: local.id,
-      subject_kind: 'local_environment',
-      subject_id: local.id,
-      phase: 'starting_runtime_process',
-      title: 'Starting runtime',
-      detail: 'Desktop is launching the bundled Redeven runtime on this device.',
-      lifecycle_progress: {
-        kind: 'runtime_lifecycle',
-        location: 'local_host',
-        phase: 'starting_runtime_process',
-        stage_index: 3,
-        stage_count: 5,
-        target_id: local.id,
-        target_label: local.label,
-      },
-    }])).toEqual(state);
+    expect(reconcileEnvironmentLibraryOverlayState(state, snapshot.environments)).toEqual(closedEnvironmentLibraryOverlayState());
   });
 
   it('closes a guidance overlay when the same environment now only exposes tooltip guidance', () => {

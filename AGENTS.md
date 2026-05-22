@@ -154,6 +154,13 @@ git config --global merge.conflictstyle zdiff3
 - Target generalized orchestration mechanisms rather than stacking special cases.
 - Keep important intent and policy decisions observable through events or logs.
 
+## Refactoring Simplicity Principle
+
+- Do not optimize for the smallest patch when a direct local fix would preserve confusing control flow or duplicated state ownership.
+- Prefer a coherent refactor that makes the final model simpler, easier to explain, and easier to test, even when it touches more files.
+- Avoid over-engineering: introduce a new abstraction only when it removes real branching, clarifies ownership, or turns repeated behavior into one obvious path.
+- The desired endpoint is fewer concepts and sharper contracts, not a larger framework around the same ambiguity.
+
 ## IMPORTANT Design Constraints
 
 - `IMPORTANT:` comments mark product, security, or interaction invariants that must stay rare, intentional, and backed by code or tests where practical.

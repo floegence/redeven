@@ -109,6 +109,7 @@ import { desktopSessionRuntimeHandleFromManagedRuntime, type DesktopSessionRunti
 import {
   DesktopSSHRuntimeCanceledError,
   DesktopSSHRuntimeMaintenanceRequiredError,
+  DesktopSSHRuntimeReadinessTimeoutError,
   ensureManagedSSHRuntimeReady,
   openManagedSSHRuntimeConnection,
   probeManagedSSHRuntimeStatus,
@@ -140,6 +141,7 @@ import {
 import {
   ensureRuntimePlacementReady,
   RuntimePlacementMaintenanceRequiredError,
+  RuntimePlacementReadinessTimeoutError,
   type RuntimePlacementProgress,
 } from './runtimePlacementManager';
 import { startDesktopModelSource, type ManagedDesktopModelSource } from './desktopModelSource';
@@ -4114,6 +4116,16 @@ function runtimeLifecycleFailureSummary(
   }
 }
 
+function runtimeLifecycleFailurePhase(error: unknown): DesktopRuntimeLifecyclePhase {
+  if (
+    error instanceof RuntimePlacementReadinessTimeoutError
+    || error instanceof DesktopSSHRuntimeReadinessTimeoutError
+  ) {
+    return 'checking_runtime_service';
+  }
+  return 'failed';
+}
+
 function runtimeLifecycleFailureNextActions(
   operationKey: string,
   environmentID: string,
@@ -4685,16 +4697,19 @@ async function startSSHEnvironmentRuntimeRecord(
               : runtimeLifecycleFailureSummary(lifecycleOperation),
             targetLabel: desktopSSHAuthority(sshDetails),
           });
+          const failurePhase = runtimeLifecycleFailurePhase(error);
           launcherOperations.finish(runtimeKey, 'failed', {
-            phase: 'failed',
-            title: error instanceof DesktopSSHRuntimeMaintenanceRequiredError
-              ? 'SSH runtime needs attention'
-              : 'SSH runtime start failed',
+            phase: failurePhase,
+            title: runtimeLifecycleTitleForFailure(
+              'ssh_host',
+              error instanceof DesktopSSHRuntimeMaintenanceRequiredError,
+              lifecycleOperation,
+            ),
             detail: failure.summary,
             lifecycle_progress: runtimeLifecycleProgress({
               location: 'ssh_host',
               operation: lifecycleOperation,
-              phase: 'failed',
+              phase: failurePhase,
               targetID: runtimeKey,
               targetLabel: label,
               targetDetail: desktopSSHAuthority(sshDetails),
@@ -6926,8 +6941,9 @@ async function ensureRuntimePlacementReadyRecordFromLauncher(
             targetLabel: label,
           });
           const failure = operationFailureFromUnknown(error, fallbackFailure);
+          const failurePhase = runtimeLifecycleFailurePhase(error);
           launcherOperations.finish(targetID, 'failed', {
-            phase: 'failed',
+            phase: failurePhase,
             title: runtimeLifecycleTitleForFailure(
               location,
               error instanceof RuntimePlacementMaintenanceRequiredError || launcherFailure?.code === 'runtime_not_ready',
@@ -6938,7 +6954,7 @@ async function ensureRuntimePlacementReadyRecordFromLauncher(
               hostAccess,
               placement,
               operation: lifecycleOperation,
-              phase: 'failed',
+              phase: failurePhase,
               targetID,
               targetLabel: label,
             }),

@@ -216,6 +216,19 @@ import {
   type EnvironmentGuidanceSessionState,
 } from './environmentGuidanceSession';
 import {
+  beginEnvironmentLifecycleDisclosure,
+  closeEnvironmentLifecycleDisclosure,
+  environmentActionStartsLifecycleDisclosure,
+  environmentLifecycleDisclosureForEnvironment,
+  lifecycleDisclosureIntentForActionKind,
+  lifecycleDisclosureTriggerLabel,
+  pendingEnvironmentLifecycleProgress,
+  reconcileEnvironmentLifecycleDisclosure,
+  reopenEnvironmentLifecycleDisclosure,
+  type EnvironmentLifecycleDisclosureIntent,
+  type EnvironmentLifecycleDisclosureState,
+} from './environmentLifecycleDisclosure';
+import {
   busyStateForLauncherRequest,
   busyStateWithActionProgress,
   activeProgressForEnvironment,
@@ -366,7 +379,6 @@ const DESKTOP_COMMAND_PLACEHOLDER = 'Search desktop commands...';
 const ACTION_TOAST_TTL_MS = 4_000;
 const GUIDANCE_SUCCESS_DISMISS_MS = 720;
 const GUIDANCE_SESSION_CLEAR_MS = 220;
-const OPEN_CONNECTION_PROGRESS_POPOVER_DELAY_MS = 520;
 
 function normalizePixelMeasurement(value: number): number {
   if (!Number.isFinite(value)) {
@@ -2494,6 +2506,19 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
   ): Promise<EnvironmentGuidanceActionResolution> {
+    if (
+      action.intent === 'start_runtime'
+      || action.intent === 'stop_runtime'
+      || action.intent === 'restart_runtime'
+      || action.intent === 'update_runtime'
+    ) {
+      await triggerLocalEnvironmentAction(environment, action, 'connect');
+      return {
+        close_panel: true,
+        next_session: null,
+      };
+    }
+
     const currentSession = isEnvironmentGuidancePendingIntent(action.intent)
       ? startEnvironmentGuidanceIntent(null, environment.id, action.intent)
       : openEnvironmentGuidanceSession(environment.id);
@@ -2538,86 +2563,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return {
         close_panel: false,
         next_session: nextSession,
-      };
-    }
-
-    if (action.intent === 'stop_runtime') {
-      await stopEnvironmentRuntime(environment, 'connect');
-      return {
-        close_panel: true,
-        next_session: null,
-      };
-    }
-
-    if (action.intent === 'restart_runtime') {
-      await restartEnvironmentRuntime(environment, 'connect');
-      return {
-        close_panel: true,
-        next_session: null,
-      };
-    }
-
-    if (action.intent === 'update_runtime') {
-      await updateEnvironmentRuntime(environment, action, 'connect');
-      return {
-        close_panel: true,
-        next_session: null,
-      };
-    }
-
-    if (action.intent === 'start_runtime') {
-      const request = runtimeActionRequest(environment, 'start_environment_runtime');
-      if (!request) {
-        return {
-          close_panel: false,
-          next_session: failEnvironmentGuidanceIntent(
-            currentSession,
-            'Desktop could not resolve that runtime target.',
-          ),
-        };
-      }
-      const result = await performLauncherActionSilently(request);
-      if (!result.ok) {
-        const failure = result.failure ?? inlineFailurePresentation(launcherFailureSummary(result), 'error');
-        setEnvironmentFailures((current) => {
-          const next = new Map(current);
-          next.set(environment.id, { failure });
-          return next;
-        });
-        return {
-          close_panel: false,
-          next_session: failEnvironmentGuidanceIntent(currentSession, failure.summary),
-        };
-      }
-
-      const nextEnvironment = await loadLatestEnvironmentEntry(environment.id);
-      const reconciledSession = nextEnvironment
-        ? reconcileEnvironmentGuidanceSession(currentSession, [nextEnvironment])
-        : null;
-      if (reconciledSession?.feedback?.tone === 'success') {
-        return {
-          close_panel: false,
-          next_session: reconciledSession,
-        };
-      }
-      if (!nextEnvironment || !reconciledSession) {
-        showActionToast(`Runtime started for ${environment.label}.`);
-        return {
-          close_panel: true,
-          next_session: null,
-        };
-      }
-      return {
-        close_panel: false,
-        next_session: {
-          ...currentSession,
-          pending_intent: null,
-          feedback: {
-            tone: 'info',
-            title: 'Runtime start requested',
-            detail: 'Desktop started the local runtime and is waiting for the next status update.',
-          },
-        },
       };
     }
 
@@ -4017,6 +3962,7 @@ function EnvironmentCardsPanel(props: Readonly<{
   const [rootFontSizePx, setRootFontSizePx] = createSignal(16);
   const [activeEnvironmentOverlayState, setActiveEnvironmentOverlayState] = createSignal(closedEnvironmentLibraryOverlayState());
   const [guidanceSessionState, setGuidanceSessionState] = createSignal<EnvironmentGuidanceSessionState>(null);
+  const [lifecycleDisclosureState, setLifecycleDisclosureState] = createSignal<EnvironmentLifecycleDisclosureState>(null);
   // Render cards by stable environment id so snapshot refreshes update data in place instead of remounting the card subtree.
   const projectedEntriesByID = createMemo(() => environmentLibraryEntryRecord(props.entries));
   const projectedEntryIDs = createMemo<readonly string[]>(() => props.entries.map((entry) => entry.id));
@@ -4033,8 +3979,28 @@ function EnvironmentCardsPanel(props: Readonly<{
   }));
 
   createEffect(() => {
+    setLifecycleDisclosureState((current) => (
+      reconcileEnvironmentLifecycleDisclosure(current, props.entries, props.actionProgress)
+    ));
+  });
+
+  createEffect(() => {
     setActiveEnvironmentOverlayState((current) => {
       const session = guidanceSessionState();
+      const lifecycleDisclosure = lifecycleDisclosureState();
+      if (current.kind === 'lifecycle_progress') {
+        const environment = props.entries.find((entry) => entry.id === current.environment_id);
+        const progressStillVisible = environment
+          ? activeOpenConnectionProgressForEnvironment(environment, props.busyState, props.actionProgress) !== null
+            || activeRuntimeLifecycleProgressForEnvironment(environment, props.busyState, props.actionProgress) !== null
+          : false;
+        return (
+          lifecycleDisclosure?.environment_id === current.environment_id
+          && lifecycleDisclosure.visibility === 'open'
+        ) || progressStillVisible
+          ? current
+          : closedEnvironmentLibraryOverlayState();
+      }
       if (
         current.kind === 'primary_action_guidance'
         && session?.environment_id === current.environment_id
@@ -4042,7 +4008,7 @@ function EnvironmentCardsPanel(props: Readonly<{
       ) {
         return current;
       }
-      return reconcileEnvironmentLibraryOverlayState(current, props.entries, props.actionProgress);
+      return reconcileEnvironmentLibraryOverlayState(current, props.entries);
     });
     setGuidanceSessionState((current) => reconcileEnvironmentGuidanceSession(current, props.entries));
   });
@@ -4074,6 +4040,9 @@ function EnvironmentCardsPanel(props: Readonly<{
   });
 
   const setRuntimeMenuOpen = (environmentID: string, open: boolean) => {
+    if (open) {
+      setLifecycleDisclosureState((current) => closeEnvironmentLifecycleDisclosure(current, environmentID));
+    }
     setActiveEnvironmentOverlayState((current) => (
       open
         ? openEnvironmentLibraryOverlayState('runtime_menu', environmentID)
@@ -4082,6 +4051,9 @@ function EnvironmentCardsPanel(props: Readonly<{
   };
 
   const setPrimaryActionGuidanceOpen = (environmentID: string, open: boolean) => {
+    if (open) {
+      setLifecycleDisclosureState((current) => closeEnvironmentLifecycleDisclosure(current, environmentID));
+    }
     setActiveEnvironmentOverlayState((current) => {
       const nextState = open
         ? openEnvironmentLibraryOverlayState('primary_action_guidance', environmentID)
@@ -4096,9 +4068,38 @@ function EnvironmentCardsPanel(props: Readonly<{
     });
   };
 
+  const setLifecycleProgressOpen = (environmentID: string, open: boolean) => {
+    setActiveEnvironmentOverlayState((current) => (
+      open
+        ? openEnvironmentLibraryOverlayState('lifecycle_progress', environmentID)
+        : closeEnvironmentLibraryOverlayState(current, 'lifecycle_progress', environmentID)
+    ));
+    setLifecycleDisclosureState((current) => (
+      open
+        ? reopenEnvironmentLifecycleDisclosure(current, environmentID)
+        : closeEnvironmentLifecycleDisclosure(current, environmentID)
+    ));
+  };
+
+  const beginLifecycleProgressDisclosure = (
+    environmentID: string,
+    intent: EnvironmentLifecycleDisclosureIntent,
+  ) => {
+    setGuidanceSessionState((current) => (
+      current?.environment_id === environmentID ? null : current
+    ));
+    setLifecycleDisclosureState((current) => (
+      beginEnvironmentLifecycleDisclosure(current, environmentID, intent)
+    ));
+    setActiveEnvironmentOverlayState(openEnvironmentLibraryOverlayState('lifecycle_progress', environmentID));
+  };
+
   const projectedEnvironment = (environmentID: string): DesktopEnvironmentEntry => projectedEntriesByID()[environmentID]!;
   const guidanceSessionForEnvironment = (environmentID: string): EnvironmentGuidanceSessionState => (
     guidanceSessionState()?.environment_id === environmentID ? guidanceSessionState() : null
+  );
+  const lifecycleDisclosureForEnvironment = (environmentID: string): EnvironmentLifecycleDisclosureState => (
+    environmentLifecycleDisclosureForEnvironment(lifecycleDisclosureState(), environmentID)
   );
 
   createEffect(() => {
@@ -4170,6 +4171,9 @@ function EnvironmentCardsPanel(props: Readonly<{
                     onRuntimeMenuOpenChange={(open) => setRuntimeMenuOpen(environmentID, open)}
                     primaryActionGuidanceOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'primary_action_guidance', environmentID)}
                     onPrimaryActionGuidanceOpenChange={(open) => setPrimaryActionGuidanceOpen(environmentID, open)}
+                    lifecycleProgressOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'lifecycle_progress', environmentID)}
+                    onLifecycleProgressOpenChange={(open) => setLifecycleProgressOpen(environmentID, open)}
+                    lifecycleDisclosure={lifecycleDisclosureForEnvironment(environmentID)}
                     guidanceSession={guidanceSessionForEnvironment(environmentID)}
                     openEnvironment={props.openEnvironment}
                     runLocalEnvironmentAction={props.runLocalEnvironmentAction}
@@ -4184,6 +4188,7 @@ function EnvironmentCardsPanel(props: Readonly<{
                     dismissOperation={props.dismissOperation}
                     copyOperationDiagnostics={props.copyOperationDiagnostics}
                     setGuidanceSession={(nextSession) => setGuidanceSessionState(nextSession)}
+                    beginLifecycleDisclosure={(intent) => beginLifecycleProgressDisclosure(environmentID, intent)}
                     environmentFailure={props.environmentFailures.get(environmentID) ?? null}
                     dismissEnvironmentFailure={() => props.dismissEnvironmentFailure(environmentID)}
                   />
@@ -4205,6 +4210,9 @@ function EnvironmentCardsPanel(props: Readonly<{
                     onRuntimeMenuOpenChange={(open) => setRuntimeMenuOpen(environmentID, open)}
                     primaryActionGuidanceOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'primary_action_guidance', environmentID)}
                     onPrimaryActionGuidanceOpenChange={(open) => setPrimaryActionGuidanceOpen(environmentID, open)}
+                    lifecycleProgressOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'lifecycle_progress', environmentID)}
+                    onLifecycleProgressOpenChange={(open) => setLifecycleProgressOpen(environmentID, open)}
+                    lifecycleDisclosure={lifecycleDisclosureForEnvironment(environmentID)}
                     guidanceSession={guidanceSessionForEnvironment(environmentID)}
                     openEnvironment={props.openEnvironment}
                     runLocalEnvironmentAction={props.runLocalEnvironmentAction}
@@ -4219,6 +4227,7 @@ function EnvironmentCardsPanel(props: Readonly<{
                     dismissOperation={props.dismissOperation}
                     copyOperationDiagnostics={props.copyOperationDiagnostics}
                     setGuidanceSession={(nextSession) => setGuidanceSessionState(nextSession)}
+                    beginLifecycleDisclosure={(intent) => beginLifecycleProgressDisclosure(environmentID, intent)}
                     environmentFailure={props.environmentFailures.get(environmentID) ?? null}
                     dismissEnvironmentFailure={() => props.dismissEnvironmentFailure(environmentID)}
                   />
@@ -4978,16 +4987,6 @@ function splitMenuItemTone(intent: EnvironmentActionIntent): string {
   }
 }
 
-function environmentActionOpensRuntimeLifecycleProgress(action: EnvironmentActionModel): boolean {
-  if (action.intent === 'update_runtime' && action.runtime_operation_method === 'desktop_local_update_handoff') {
-    return false;
-  }
-  return action.intent === 'start_runtime'
-    || action.intent === 'stop_runtime'
-    || action.intent === 'restart_runtime'
-    || action.intent === 'update_runtime';
-}
-
 function EnvironmentSplitActionButton(props: Readonly<{
   presentation: Extract<EnvironmentActionPresentation, Readonly<{ kind: 'split_button' }>>;
   environmentID: string;
@@ -4995,6 +4994,8 @@ function EnvironmentSplitActionButton(props: Readonly<{
   onMenuOpenChange: (open: boolean) => void;
   guidanceOpen: boolean;
   onGuidanceOpenChange: (open: boolean) => void;
+  progressOpen: boolean;
+  onProgressOpenChange: (open: boolean) => void;
   guidanceSession: EnvironmentGuidanceSessionState;
   busyState?: DesktopLauncherBusyState;
   loading?: boolean;
@@ -5028,53 +5029,10 @@ function EnvironmentSplitActionButton(props: Readonly<{
   const hasRuntimeLifecycleProgress = createMemo(() => runtimeMenuProgress()?.lifecycle_progress !== undefined);
   const showProgress = createMemo(() => hasOpenConnectionProgress() || hasRuntimeLifecycleProgress());
   const progressData = createMemo(() => primaryProgress() ?? runtimeMenuProgress());
+  const popoverOpen = createMemo(() => showProgress() ? props.progressOpen : props.guidanceOpen);
   const primaryActionOverlay = createMemo(() => (
     hasOpenConnectionProgress() ? undefined : props.presentation.primary_action_overlay ?? sessionPopoverOverlay()
   ));
-  const autoOpenedEnvironmentProgressOperation = new Set<string>();
-  const environmentProgressOperationKey = (progress: DesktopLauncherActionProgress | null | undefined): string => [
-    trimString(progress?.operation_key) || trimString(progress?.subject_id),
-    String(progress?.started_at_unix_ms ?? ''),
-  ].filter(Boolean).join(':');
-  createEffect(() => {
-    const progress = runtimeMenuProgress();
-    const operationKey = environmentProgressOperationKey(progress);
-    if (progress?.lifecycle_progress && operationKey !== '' && !autoOpenedEnvironmentProgressOperation.has(operationKey)) {
-      autoOpenedEnvironmentProgressOperation.add(operationKey);
-      closeMenu();
-      props.onGuidanceOpenChange(true);
-    }
-  });
-  createEffect(() => {
-    const progress = primaryProgress();
-    const operationKey = environmentProgressOperationKey(progress);
-    if (!progress?.open_progress || operationKey === '' || autoOpenedEnvironmentProgressOperation.has(operationKey)) {
-      return;
-    }
-    if (progress.status !== 'running') {
-      autoOpenedEnvironmentProgressOperation.add(operationKey);
-      closeMenu();
-      props.onGuidanceOpenChange(true);
-      return;
-    }
-    if (typeof window === 'undefined') {
-      return;
-    }
-    const handle = window.setTimeout(() => {
-      const currentProgress = primaryProgress();
-      if (
-        currentProgress?.open_progress
-        && currentProgress.status === 'running'
-        && environmentProgressOperationKey(currentProgress) === operationKey
-        && !autoOpenedEnvironmentProgressOperation.has(operationKey)
-      ) {
-        autoOpenedEnvironmentProgressOperation.add(operationKey);
-        closeMenu();
-        props.onGuidanceOpenChange(true);
-      }
-    }, OPEN_CONNECTION_PROGRESS_POPOVER_DELAY_MS);
-    onCleanup(() => window.clearTimeout(handle));
-  });
   const tooltipOverlay = createMemo<Extract<EnvironmentPrimaryActionOverlayModel, Readonly<{ kind: 'tooltip' }>> | undefined>(() => {
     const overlay = primaryActionOverlay();
     return overlay?.kind === 'tooltip' ? overlay : undefined;
@@ -5100,13 +5058,9 @@ function EnvironmentSplitActionButton(props: Readonly<{
   const environmentProgressTriggerLabel = createMemo(() => (
     primaryProgress()?.open_progress
       ? 'Opening...'
-      : runtimeMenuProgress()?.action === 'stop_environment_runtime'
-        ? 'Stopping...'
-        : runtimeMenuProgress()?.action === 'restart_environment_runtime'
-          ? 'Restarting...'
-          : runtimeMenuProgress()?.action === 'update_environment_runtime'
-            ? 'Updating...'
-            : 'Starting...'
+      : lifecycleDisclosureTriggerLabel(
+        lifecycleDisclosureIntentForActionKind(runtimeMenuProgress()?.action ?? 'start_environment_runtime') ?? 'start_runtime',
+      )
   ));
   const environmentProgressTriggerIcon = createMemo(() => (
     runtimeMenuProgress()?.action === 'stop_environment_runtime' ? Stop : Play
@@ -5212,10 +5166,14 @@ function EnvironmentSplitActionButton(props: Readonly<{
           )}
         >
           <DesktopActionPopover
-            open={props.guidanceOpen}
+            open={popoverOpen()}
             onOpenChange={(open) => {
               if (open) {
                 closeMenu();
+              }
+              if (showProgress()) {
+                props.onProgressOpenChange(open);
+                return;
               }
               props.onGuidanceOpenChange(open);
             }}
@@ -5252,7 +5210,10 @@ function EnvironmentSplitActionButton(props: Readonly<{
                         <EnvironmentProgressPanel
                           progress={p()}
                           cancelOperation={props.cancelOperation}
-                          dismissOperation={props.dismissOperation}
+                          dismissOperation={(progress) => {
+                            props.dismissOperation(progress);
+                            props.onProgressOpenChange(false);
+                          }}
                           copyOperationDiagnostics={props.copyOperationDiagnostics}
                         />
                       )}
@@ -5315,11 +5276,11 @@ function EnvironmentSplitActionButton(props: Readonly<{
                 class={cn(primaryButtonClass(), 'redeven-split-action-trigger--progress')}
                 style={{ 'min-width': 'var(--redeven-split-action-primary-min-width)' }}
                 aria-haspopup="dialog"
-                aria-expanded={props.guidanceOpen}
+                aria-expanded={props.progressOpen}
                 aria-label={`${environmentProgressTriggerLabel()} progress`}
                 onClick={() => {
                   closeMenu();
-                  props.onGuidanceOpenChange(!props.guidanceOpen);
+                  props.onProgressOpenChange(!props.progressOpen);
                 }}
               >
                 <span class="redeven-split-action-trigger__content">
@@ -5453,8 +5414,12 @@ function EnvironmentConnectionCard(props: Readonly<{
   onRuntimeMenuOpenChange: (open: boolean) => void;
   primaryActionGuidanceOpen: boolean;
   onPrimaryActionGuidanceOpenChange: (open: boolean) => void;
+  lifecycleProgressOpen: boolean;
+  onLifecycleProgressOpenChange: (open: boolean) => void;
+  lifecycleDisclosure: EnvironmentLifecycleDisclosureState;
   guidanceSession: EnvironmentGuidanceSessionState;
   setGuidanceSession: (state: EnvironmentGuidanceSessionState) => void;
+  beginLifecycleDisclosure: (intent: EnvironmentLifecycleDisclosureIntent) => void;
   openEnvironment: (
     environment: DesktopEnvironmentEntry,
     errorTarget?: 'connect' | 'dialog',
@@ -5494,6 +5459,16 @@ function EnvironmentConnectionCard(props: Readonly<{
   ));
   const openConnectionProgress = createMemo(() => (
     activeOpenConnectionProgressForEnvironment(props.environment, props.busyState, props.actionProgress)
+  ));
+  const disclosureRuntimeLifecycleProgress = createMemo(() => {
+    const disclosure = props.lifecycleDisclosure;
+    if (!disclosure) {
+      return null;
+    }
+    return disclosure.last_progress ?? pendingEnvironmentLifecycleProgress(props.environment, disclosure);
+  });
+  const visibleRuntimeLifecycleProgress = createMemo(() => (
+    runtimeLifecycleProgress() ?? disclosureRuntimeLifecycleProgress()
   ));
   const runtimeOpenable = createMemo(() => (
     props.environment.runtime_health.status === 'online'
@@ -5695,16 +5670,20 @@ function EnvironmentConnectionCard(props: Readonly<{
           onMenuOpenChange={props.onRuntimeMenuOpenChange}
           guidanceOpen={props.primaryActionGuidanceOpen}
           onGuidanceOpenChange={props.onPrimaryActionGuidanceOpenChange}
+          progressOpen={props.lifecycleProgressOpen}
+          onProgressOpenChange={props.onLifecycleProgressOpenChange}
           guidanceSession={props.guidanceSession}
           busyState={props.busyState}
           loading={isWindowActionBusy() || isRuntimeActionBusy()}
-          runtimeLifecycleProgress={runtimeLifecycleProgress()}
+          runtimeLifecycleProgress={visibleRuntimeLifecycleProgress()}
           openConnectionProgress={openConnectionProgress()}
           cancelOperation={props.cancelOperation}
           dismissOperation={props.dismissOperation}
           copyOperationDiagnostics={props.copyOperationDiagnostics}
           onRunAction={(action) => {
-            if (isEnvironmentGuidancePendingIntent(action.intent) && environmentActionOpensRuntimeLifecycleProgress(action)) {
+            if (environmentActionStartsLifecycleDisclosure(action)) {
+              props.beginLifecycleDisclosure(action.intent);
+            } else if (isEnvironmentGuidancePendingIntent(action.intent)) {
               props.setGuidanceSession(startEnvironmentGuidanceIntent(
                 props.guidanceSession,
                 props.environment.id,
@@ -5720,7 +5699,10 @@ function EnvironmentConnectionCard(props: Readonly<{
           }}
           onRunGuidanceAction={(action) => {
             void (async () => {
-              if (isEnvironmentGuidancePendingIntent(action.intent)) {
+              const startsLifecycleDisclosure = environmentActionStartsLifecycleDisclosure(action);
+              if (startsLifecycleDisclosure) {
+                props.beginLifecycleDisclosure(action.intent);
+              } else if (isEnvironmentGuidancePendingIntent(action.intent)) {
                 props.setGuidanceSession(startEnvironmentGuidanceIntent(
                   props.guidanceSession,
                   props.environment.id,
@@ -5728,11 +5710,9 @@ function EnvironmentConnectionCard(props: Readonly<{
                 ));
               }
               const resolution = await props.runEnvironmentGuidanceAction(props.environment, action);
-              props.setGuidanceSession(environmentActionOpensRuntimeLifecycleProgress(action) && resolution.close_panel
-                ? openEnvironmentGuidanceSession(props.environment.id)
-                : resolution.next_session);
+              props.setGuidanceSession(startsLifecycleDisclosure ? null : resolution.next_session);
               if (resolution.close_panel) {
-                props.onPrimaryActionGuidanceOpenChange(environmentActionOpensRuntimeLifecycleProgress(action));
+                props.onPrimaryActionGuidanceOpenChange(false);
               }
             })();
           }}

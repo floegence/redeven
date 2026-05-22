@@ -118,6 +118,14 @@ Desktop does not insert an intermediate confirmation step. The lifecycle
 operation keeps reporting each step, including stop and stop-verification, and
 remains cancelable while cancellation is still safe.
 
+Once Desktop is already inside an explicit restart/update/start readiness wait,
+`live_process_without_management_socket` and
+`management_socket_unreachable` are treated as transient readiness observations,
+not as new maintenance decisions. Desktop keeps polling until the runtime
+reports ready or the workflow timeout expires. A timeout fails the
+`Checking runtime service` step so the progress sequence matches the operation
+that actually stalled.
+
 Blocked runtime reports and operation failures have separate responsibilities.
 Runtime reports describe machine-readable attach or maintenance state, such as
 `state_dir_locked`, owner metadata, active workload, and compatibility fields.
@@ -506,6 +514,14 @@ Desktop launcher cards keep their current dense SaaS tool layout:
   start uses `Starting...` / startup wording, stop uses `Stopping...` plus
   `Verifying runtime stopped`, restart uses `Restarting...` / restart wording,
   and update uses `Updating...` / update wording.
+- Recovery guidance and progress disclosure must remain separate. Guidance is
+  for blocked or unavailable actions. Progress disclosure is created
+  immediately after the user launches lifecycle work, may show a pending
+  renderer projection before the main-process operation snapshot arrives, and
+  then binds to the authoritative launcher progress. Closing the popup changes
+  only visibility; it never cancels the workflow. Success remains visible while
+  the popup is open, and failed/canceled/cleanup-failed progress remains visible
+  until dismissed.
 - Action feedback for completion, failure, and other ephemeral events continues
   through Desktop toasts. No launcher content should shift when a version event
   arrives, and toasts must not become the progress surface for runtime lifecycle
