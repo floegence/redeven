@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import type { DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
+import { runtimeLifecycleProgress } from '../shared/desktopRuntimeLifecycleProgress';
 import {
   testDesktopPreferences,
   testLocalEnvironment,
@@ -43,15 +44,13 @@ function lifecycleProgress(environmentID: string): DesktopLauncherActionProgress
     phase: 'runtime_ready',
     title: 'Runtime ready',
     detail: 'The runtime is ready.',
-    lifecycle_progress: {
-      kind: 'runtime_lifecycle',
+    lifecycle_progress: runtimeLifecycleProgress({
       location: 'local_host',
+      operation: 'update',
       phase: 'runtime_ready',
-      stage_index: 5,
-      stage_count: 5,
-      target_id: environmentID,
-      target_label: 'Local Environment',
-    },
+      targetID: environmentID,
+      targetLabel: 'Local Environment',
+    }),
   };
 }
 

@@ -7,6 +7,7 @@ import {
   normalizeDesktopLauncherActionRequest,
 } from './desktopLauncherIPC';
 import type { DesktopLauncherActionProgress, DesktopLauncherOperationSnapshot } from './desktopLauncherIPC';
+import { runtimeLifecycleProgress } from './desktopRuntimeLifecycleProgress';
 
 describe('desktopLauncherIPC', () => {
   it('normalizes launcher actions and trims Environment inputs', () => {
@@ -520,16 +521,13 @@ describe('desktopLauncherIPC', () => {
   });
 
   it('carries runtime lifecycle metadata in launcher operation and progress contracts', () => {
-    const runtimeLifecycle = {
-      kind: 'runtime_lifecycle',
+    const runtimeLifecycle = runtimeLifecycleProgress({
       location: 'local_container',
       phase: 'installing_runtime_package',
-      stage_index: 5,
-      stage_count: 6,
-      target_id: 'local:container:docker:dev:abcd1234',
-      target_label: 'Dev Container',
-      target_detail: 'docker/dev',
-    } as const;
+      targetID: 'local:container:docker:dev:abcd1234',
+      targetLabel: 'Dev Container',
+      targetDetail: 'docker/dev',
+    });
     const operation: DesktopLauncherOperationSnapshot = {
       operation_key: 'local:container:docker:dev:abcd1234',
       action: 'start_environment_runtime',

@@ -123,7 +123,9 @@ describe('main routing', () => {
     expect(mainSrc).toContain('desktopRuntimeLifecycleLocation');
     expect(mainSrc).toContain('buildRuntimeLifecycleProgress');
     expect(mainSrc).toContain('updateRuntimeLifecycleOperation');
-    expect(mainSrc).toContain('lifecycleProgress.stage_index < current.lifecycle_progress.stage_index');
+    expect(mainSrc).toContain('runtimeLifecycleWorkflowAcceptsPhase');
+    expect(mainSrc).toContain('runtimeLifecyclePhaseSequence(input.location, input.operation)');
+    expect(mainSrc).not.toContain('lifecycleProgress.stage_index < current.lifecycle_progress.stage_index');
     expect(mainSrc).toContain("lifecycle_progress: runtimeLifecycleProgress({");
     expect(mainSrc).toContain("location: 'ssh_host'");
     expect(mainSrc).toContain("const hostAccess: DesktopRuntimeHostAccess = { kind: 'local_host' };");
@@ -157,7 +159,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain('environment_label: label');
     expect(mainSrc).toContain('phase: sshRuntimeLifecyclePhase(progress.phase)');
     expect(mainSrc).toContain('detail: progress.detail');
-    expect(mainSrc).toContain('runtimeLifecycleProgressFromSSH(sshDetails, progress, label, lifecycleOperation)');
+    expect(mainSrc).not.toContain('runtimeLifecycleProgressFromSSH(sshDetails, progress, label, lifecycleOperation)');
     expect(mainSrc).toContain('ensureRuntimePlacementReady({');
     expect(mainSrc).toContain('on_progress: (progress: RuntimePlacementProgress) => {');
     expect(mainSrc).toContain('const launch = await startManagedRuntime({');
@@ -283,8 +285,7 @@ describe('main routing', () => {
     expect(stopRuntimeSrc).toContain("phase: 'verifying_runtime_stopped'");
     expect(stopRuntimeSrc).toContain("phase: 'runtime_stopped'");
     expect(stopRuntimeSrc).toContain('containerRuntimeDaemonStopCommand({');
-    expect(stopRuntimeSrc).toContain('containerRuntimeDaemonStatusCommand({');
-    expect(stopRuntimeSrc).toContain('assertRuntimeStopVerifiedFromLaunchReport(parseLaunchReport(statusResult.stdout))');
+    expect(stopRuntimeSrc).toContain('assertContainerRuntimeStopped({');
     expect(stopRuntimeSrc).toContain('await runtimeRecord?.session.disconnect().catch(() => undefined);');
     expect(stopRuntimeSrc).toContain('runtimePlacementBridgeByTargetID.delete(targetID)');
     expect(stopRuntimeSrc).toContain('runtimePlacementReadyByTargetID.delete(targetID)');
@@ -400,8 +401,9 @@ describe('main routing', () => {
     expect(startRuntimeStart).toBeGreaterThanOrEqual(0);
     expect(startRuntimeEnd).toBeGreaterThan(startRuntimeStart);
     const startRuntimeSrc = mainSrc.slice(startRuntimeStart, startRuntimeEnd);
-    expect(startRuntimeSrc).toContain('await syncLinkedProviderRuntimeHealthFromService(runtimeRecord.startup.runtime_service);');
-    expect(startRuntimeSrc).toContain('await syncLinkedProviderRuntimeHealthFromService(prepared.launch.managedRuntime.startup.runtime_service);');
+    expect(startRuntimeSrc).toContain('void syncLinkedProviderRuntimeHealthFromService(runtimeRecord.startup.runtime_service)');
+    expect(startRuntimeSrc).toContain('void syncLinkedProviderRuntimeHealthFromService(prepared.launch.managedRuntime.startup.runtime_service)');
+    expect(startRuntimeSrc).toContain('.finally(() => broadcastDesktopWelcomeSnapshots())');
 
     const connectStart = mainSrc.indexOf('async function connectProviderRuntimeFromLauncher(');
     const connectEnd = mainSrc.indexOf('async function disconnectProviderRuntimeFromLauncher(', connectStart);
