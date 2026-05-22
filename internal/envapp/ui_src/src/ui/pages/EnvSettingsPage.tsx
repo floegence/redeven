@@ -3,6 +3,7 @@ import { useNotification } from '@floegence/floe-webapp-core';
 import { cn } from '@floegence/floe-webapp-core';
 import {
   AlertTriangle,
+  Bot,
   Code,
   Database,
   FileCode,
@@ -11,6 +12,7 @@ import {
   Key,
   Layers,
   Link,
+  Pencil,
   Plus,
   RefreshIcon,
   Shield,
@@ -3776,13 +3778,40 @@ export function EnvSettingsPage() {
 			  </div>
 
 			  {/* ── Current Model ── */}
-			  <div class="space-y-2.5">
+			  <div class="space-y-3">
 			    <SubSectionHeader
 			      title="Current Model"
 			      description="Default model used when creating a new chat thread."
 			    />
-			    <div class="flex flex-wrap items-center gap-2.5">
-			      <div class="min-w-[240px] max-w-md flex-1">
+			    <div class={cn('flex flex-col gap-4 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between', redevenSurfaceRoleClass('panel'))}>
+			      <div class="flex min-w-0 items-center gap-3">
+			        <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-muted ring-1 ring-border/30">
+			          <Show when={aiCurrentModelOption()} fallback={<Bot class="h-5 w-5 text-muted-foreground" />}>
+			            <ProviderBrandIcon type={aiProviders().find((p) => aiCurrentModelID().startsWith(String(p.id ?? '').trim() + '/'))?.type ?? 'openai'} class="h-5 w-5" />
+			          </Show>
+			        </div>
+			        <div class="min-w-0">
+			          <Show
+			            when={aiCurrentModelOption()}
+			            fallback={<span class="text-sm font-semibold text-muted-foreground">No model selected</span>}
+			          >
+			            <div class="truncate text-sm font-semibold text-foreground">{aiCurrentModelOption()!.label}</div>
+			            <div class="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
+			              <span class="inline-flex items-center gap-1">
+			                <span class="h-1.5 w-1.5 rounded-full bg-success"></span>
+			                Text
+			              </span>
+			              <Show when={aiCurrentModelOption()?.supportsImageInput}>
+			                <span class="inline-flex items-center gap-1">
+			                  <span class="h-1.5 w-1.5 rounded-full bg-success"></span>
+			                  Image Input
+			                </span>
+			              </Show>
+			            </div>
+			          </Show>
+			        </div>
+			      </div>
+			      <div class="flex-shrink-0">
 			        <Select
 			          value={aiCurrentModelID()}
 			          options={aiModelOptions().map((item) => ({ value: item.id, label: item.label }))}
@@ -3799,15 +3828,11 @@ export function EnvSettingsPage() {
 			            }
 			            setAiDirty(true);
 			          }}
-			          placeholder="Select current model..."
-			          class="w-full"
+			          placeholder="Select model..."
+			          class="w-56"
 			          disabled={!canInteract() || aiModelOptions().length === 0 || aiSaving() || disableAISaving()}
 			        />
 			      </div>
-			      <SettingsPill tone="success">Text</SettingsPill>
-			      <SettingsPill tone={aiCurrentModelOption()?.supportsImageInput ? 'success' : 'default'}>
-			        {aiCurrentModelOption()?.supportsImageInput ? 'Image Input' : 'Text only'}
-			      </SettingsPill>
 			    </div>
 			  </div>
 
@@ -3835,73 +3860,86 @@ export function EnvSettingsPage() {
 			          const hasImageModel = () =>
 			            (Array.isArray(provider.models) ? provider.models : []).some((model) => modelSupportsImageInput(model.input_modalities));
 			          const isDefault = () => aiCurrentModelID().startsWith(`${providerID()}/`);
+			          const keyOk = () => aiProviderKeySet()?.[providerID()];
+			          const webSearchLabel = () => providerWebSearchSummary(provider);
 			          return (
-			            <div class={cn('rounded-xl border bg-background p-4 shadow-sm transition-all', redevenSurfaceRoleClass('panel'), isDefault() && 'ring-2 ring-primary/20')}>
-			              {/* Top: brand + name + actions */}
-			              <div class="flex items-start justify-between gap-3">
-			                <div class="flex min-w-0 items-center gap-3">
-			                  <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-muted ring-1 ring-border/50">
-			                    <ProviderBrandIcon type={provider.type} class="h-5 w-5" />
-			                  </div>
-			                  <div class="min-w-0">
-			                    <div class="flex flex-wrap items-center gap-1.5">
-			                      <span class="truncate text-sm font-semibold text-foreground">{displayName()}</span>
-			                      <span class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{providerTypeLabel(provider.type)}</span>
-			                      <Show when={isDefault()}>
-			                        <span class="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">default</span>
-			                      </Show>
-			                    </div>
-			                    <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
-			                      <span>{modelNames().length} model{modelNames().length !== 1 ? 's' : ''}</span>
-			                      <span aria-hidden="true">·</span>
-			                      <span class={aiProviderKeySet()?.[providerID()] ? 'text-success' : ''}>{aiProviderKeySet()?.[providerID()] ? 'Key verified' : 'Needs key'}</span>
-			                      <span aria-hidden="true">·</span>
-			                      <span>{providerWebSearchSummary(provider)}</span>
-			                      <Show when={hasImageModel()}>
-			                        <span aria-hidden="true">·</span>
-			                        <span>Image support</span>
-			                      </Show>
-			                    </div>
-			                  </div>
-			                </div>
-			                <div class="flex flex-shrink-0 items-center gap-1">
-			                  <Button size="sm" variant="outline" onClick={() => openAIProviderDialog(index())} disabled={!canInteract()}>
-			                    Edit
-			                  </Button>
-			                  <Button
-			                    size="sm"
-			                    variant="ghost"
-			                    class="text-muted-foreground hover:text-destructive"
-			                    onClick={() => {
-			                      setAiProviders((prev) => {
-			                        const normalizedProviders = normalizeAIProviders(prev.filter((_, rowIndex) => rowIndex !== index()));
-			                        setAiCurrentModelID(normalizeAICurrentModelID(aiCurrentModelID(), normalizedProviders));
-			                        return normalizedProviders;
-			                      });
-			                      setAiDirty(true);
-			                    }}
-			                    disabled={!canInteract() || aiProviders().length <= 1}
-			                  >
-			                    Remove
-			                  </Button>
-			                </div>
-			              </div>
+			            <div class={cn('group relative rounded-xl border bg-background p-4 transition-all', redevenSurfaceRoleClass('panel'), isDefault() && 'border-primary/30 bg-primary/[0.02]')}>
+			              {/* Default indicator */}
+			              <Show when={isDefault()}>
+			                <div class="absolute -top-px left-4 right-4 h-px bg-gradient-to-r from-primary/40 via-primary/40 to-transparent"></div>
+			              </Show>
 
-			              {/* Model name badges */}
-			              <Show when={modelNames().length > 0}>
-			                <div class="mt-3 flex flex-wrap gap-1">
-			                  <For each={modelNames().slice(0, 5)}>
-			                    {(name) => (
-			                      <code class={cn('rounded-md px-1.5 py-0.5 text-[10px] font-mono', isDefault() && aiCurrentModelID() === `${providerID()}/${name}` ? 'bg-primary/10 text-primary font-semibold' : 'bg-muted text-muted-foreground')}>
-			                        {name}
-			                      </code>
-			                    )}
-			                  </For>
-			                  <Show when={modelNames().length > 5}>
-			                    <span class="text-[10px] text-muted-foreground self-center">+{modelNames().length - 5} more</span>
+			              {/* Top row: icon (fixed left) + info + actions */}
+			              <div class="flex gap-3">
+			                <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-muted ring-1 ring-border/30">
+			                  <ProviderBrandIcon type={provider.type} class="h-5 w-5" />
+			                </div>
+			                <div class="min-w-0 flex-1">
+			                  <div class="flex items-start justify-between gap-2">
+			                    <div class="min-w-0">
+			                      <div class="flex flex-wrap items-center gap-1.5">
+			                        <span class="truncate text-sm font-semibold text-foreground">{displayName()}</span>
+			                        <Show when={isDefault()}>
+			                          <span class="flex-shrink-0 rounded-full bg-primary/10 px-1.5 py-px text-[10px] font-medium text-primary">active</span>
+			                        </Show>
+			                      </div>
+			                      <div class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground/70">
+			                        <span>{providerTypeLabel(provider.type)}</span>
+			                        <span aria-hidden="true">·</span>
+			                        <span>{modelNames().length} model{modelNames().length !== 1 ? 's' : ''}</span>
+			                        <span aria-hidden="true">·</span>
+			                        <span class={keyOk() ? 'text-success' : ''}>{keyOk() ? 'Key verified' : 'Needs key'}</span>
+			                        <Show when={webSearchLabel() !== 'Not supported'}>
+			                          <span aria-hidden="true">·</span>
+			                          <span class={webSearchLabel() !== 'Disabled' ? 'text-success' : ''}>{webSearchLabel()}</span>
+			                        </Show>
+			                        <Show when={hasImageModel()}>
+			                          <span aria-hidden="true">·</span>
+			                          <span>Image</span>
+			                        </Show>
+			                      </div>
+			                    </div>
+			                    <div class="flex flex-shrink-0 items-center gap-0.5">
+			                      <Button size="icon" variant="ghost" class="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => openAIProviderDialog(index())} disabled={!canInteract()} aria-label="Edit provider">
+			                        <Pencil class="h-3.5 w-3.5" />
+			                      </Button>
+			                      <Button
+			                        size="icon"
+			                        variant="ghost"
+			                        class="h-7 w-7 text-muted-foreground hover:text-destructive"
+			                        onClick={() => {
+			                          setAiProviders((prev) => {
+			                            const normalizedProviders = normalizeAIProviders(prev.filter((_, rowIndex) => rowIndex !== index()));
+			                            setAiCurrentModelID(normalizeAICurrentModelID(aiCurrentModelID(), normalizedProviders));
+			                            return normalizedProviders;
+			                          });
+			                          setAiDirty(true);
+			                        }}
+			                        disabled={!canInteract() || aiProviders().length <= 1}
+			                        aria-label="Remove provider"
+			                      >
+			                        <Trash class="h-3.5 w-3.5" />
+			                      </Button>
+			                    </div>
+			                  </div>
+
+			                  {/* Model name badges */}
+			                  <Show when={modelNames().length > 0}>
+			                    <div class="mt-2.5 flex flex-wrap gap-1">
+			                      <For each={modelNames().slice(0, 5)}>
+			                        {(name) => (
+			                          <code class={cn('rounded-md px-1.5 py-0.5 text-[10px] font-mono', isDefault() && aiCurrentModelID() === `${providerID()}/${name}` ? 'bg-primary/10 text-primary font-semibold' : 'bg-muted text-muted-foreground')}>
+			                            {name}
+			                          </code>
+			                        )}
+			                      </For>
+			                      <Show when={modelNames().length > 5}>
+			                        <span class="self-center text-[10px] text-muted-foreground">+{modelNames().length - 5} more</span>
+			                      </Show>
+			                    </div>
 			                  </Show>
 			                </div>
-			              </Show>
+			              </div>
 			            </div>
 			          );
 			        }}
