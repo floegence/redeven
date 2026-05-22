@@ -158,7 +158,8 @@ describe('sshRuntime', () => {
     expect(source).toContain('async function probeRemotePlatform(');
     expect(source).toContain('function resolveDesktopSSHReleaseFetchPolicy(');
     expect(source).toContain("return ['desktop_upload', 'remote_install'];");
-    expect(source).toContain('class DesktopSSHUploadAssetPreparationError extends Error');
+    expect(source).toContain('class DesktopSSHUploadAssetPreparationError extends DesktopOperationFailureError');
+    expect(source).toContain("runtimeLifecycleStepID: 'preparing_runtime_package'");
     expect(source).toContain('fetchPolicy: releaseFetchPolicy,');
     expect(source).toContain("if (args.target.bootstrap_strategy === 'auto' && error instanceof DesktopSSHUploadAssetPreparationError)");
     expect(source).toContain('const uploadProbe = await probeRemoteRuntimeCompatibility(args);');

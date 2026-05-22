@@ -314,7 +314,10 @@ function runtimePackagePreparationFailure(
       label: 'Build output',
       text: message,
     }],
-  }), { cause: error });
+  }), {
+    cause: error,
+    runtimeLifecycleStepID: 'preparing_runtime_package',
+  });
 }
 
 async function prepareSourceRuntimeUploadAsset(args: Readonly<{
@@ -618,8 +621,20 @@ export async function prepareDesktopRuntimeUploadAsset(args: Readonly<{
     if (compact(args.sourceRuntimeRoot) !== '') {
       throw runtimePackagePreparationFailure(error, args.platform);
     }
-    throw new Error(
-      `Desktop could not prepare the ${args.platform.platform_label} Redeven runtime package: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    throw new DesktopOperationFailureError(desktopOperationFailurePresentation({
+      code: 'container_runtime_launch_failed',
+      title: 'Runtime package preparation failed',
+      summary: `Desktop could not prepare the ${args.platform.platform_label} Redeven runtime package.`,
+      detail: 'Desktop could not resolve a verified runtime release archive for the target platform.',
+      recoveryHint: 'Check network access to the Redeven release source and retry the runtime lifecycle action.',
+      diagnostics: [{
+        channel: 'runtime_package_cache',
+        label: 'Package preparation output',
+        text: error instanceof Error ? error.message : String(error),
+      }],
+    }), {
+      cause: error,
+      runtimeLifecycleStepID: 'preparing_runtime_package',
+    });
   }
 }

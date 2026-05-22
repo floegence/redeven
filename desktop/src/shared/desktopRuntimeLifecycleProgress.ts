@@ -57,6 +57,13 @@ export type DesktopRuntimeLifecycleProgress = Readonly<{
 
 export type DesktopRuntimeLifecycleOperation = 'start' | 'restart' | 'update' | 'stop';
 
+export type DesktopRuntimeLifecycleStepState = Readonly<{
+  id: DesktopRuntimeLifecycleStepID;
+  status: DesktopRuntimeLifecycleStepStatus;
+  detail?: string;
+  attempt_count?: number;
+}>;
+
 const LOCAL_HOST_LIFECYCLE_PHASES: readonly DesktopRuntimeLifecyclePhase[] = [
   'checking_existing_runtime',
   'starting_runtime_process',
@@ -251,11 +258,9 @@ function compact(value: unknown): string {
 }
 
 function stageIndexForPhase(
-  location: DesktopRuntimeLifecycleLocation,
+  phases: readonly DesktopRuntimeLifecyclePhase[],
   phase: DesktopRuntimeLifecyclePhase,
-  operation: DesktopRuntimeLifecycleOperation = 'start',
 ): number {
-  const phases = runtimeLifecyclePhaseSequence(location, operation);
   const index = phases.indexOf(phase);
   if (index >= 0) {
     return index + 1;
@@ -269,24 +274,18 @@ function runtimeLifecycleSteps(input: Readonly<{
   failedStepID?: DesktopRuntimeLifecyclePhase;
   activeDetail?: string;
   attemptCount?: number;
+  stepStates?: readonly DesktopRuntimeLifecycleStepState[];
 }>): readonly DesktopRuntimeLifecycleStepSnapshot[] {
-  const activeIndex = input.phases.indexOf(input.activeStepID);
+  const stateByID = new Map(input.stepStates?.map((step) => [step.id, step]) ?? []);
   const failedStepID = input.failedStepID;
-  return input.phases.map((phase, index) => {
-    let status: DesktopRuntimeLifecycleStepStatus;
-    if (failedStepID === phase) {
-      status = 'failed';
-    } else if (activeIndex >= 0 && index < activeIndex) {
-      status = 'succeeded';
-    } else if (phase === input.activeStepID && failedStepID === undefined) {
-      status = 'running';
-    } else if (phase === input.activeStepID && failedStepID !== undefined) {
-      status = 'failed';
-    } else {
-      status = 'pending';
-    }
-    const detail = phase === input.activeStepID ? compact(input.activeDetail) : '';
-    const attemptCount = phase === input.activeStepID && input.attemptCount !== undefined
+  return input.phases.map((phase) => {
+    const state = stateByID.get(phase);
+    const status = state?.status
+      ?? (failedStepID === phase ? 'failed' : phase === input.activeStepID && failedStepID === undefined ? 'running' : 'pending');
+    const detail = compact(state?.detail ?? (phase === input.activeStepID ? input.activeDetail : ''));
+    const attemptCount = state?.attempt_count !== undefined
+      ? Math.max(0, Math.floor(state.attempt_count))
+      : phase === input.activeStepID && input.attemptCount !== undefined
       ? Math.max(0, Math.floor(input.attemptCount))
       : undefined;
     return {
@@ -325,6 +324,7 @@ export function runtimeLifecycleProgress(
     failedPhase?: DesktopRuntimeLifecyclePhase;
     detail?: string;
     attemptCount?: number;
+    stepStates?: readonly DesktopRuntimeLifecycleStepState[];
     targetID?: string;
     targetLabel: string;
     targetDetail?: string;
@@ -333,23 +333,28 @@ export function runtimeLifecycleProgress(
   const location = input.location;
   const operation = input.operation ?? 'start';
   const phases = runtimeLifecyclePhaseSequence(location, operation);
-  const stageIndex = stageIndexForPhase(location, input.phase, operation);
+  const failedStepID = input.failedPhase ?? input.stepStates?.find((step) => step.status === 'failed')?.id;
+  const activeStepID = failedStepID
+    ?? input.stepStates?.find((step) => step.status === 'running')?.id
+    ?? input.phase;
+  const stageIndex = stageIndexForPhase(phases, activeStepID);
   const targetDetail = compact(input.targetDetail);
   return {
     kind: 'runtime_lifecycle',
     location,
     operation,
-    phase: input.phase,
-    active_step_id: input.phase,
-    ...(input.failedPhase ? { failed_step_id: input.failedPhase } : {}),
+    phase: activeStepID,
+    active_step_id: activeStepID,
+    ...(failedStepID ? { failed_step_id: failedStepID } : {}),
     stage_index: stageIndex,
     stage_count: phases.length,
     steps: runtimeLifecycleSteps({
       phases,
-      activeStepID: input.phase,
-      failedStepID: input.failedPhase,
+      activeStepID,
+      failedStepID,
       activeDetail: input.detail,
       attemptCount: input.attemptCount,
+      stepStates: input.stepStates,
     }),
     target_id: compact(input.targetID) || compact(input.targetLabel) || 'runtime',
     target_label: compact(input.targetLabel) || 'Runtime',

@@ -194,6 +194,13 @@ failed. Failed and canceled are launcher operation statuses, not lifecycle
 steps. When an operation fails, the main process preserves the active workflow
 step in `failed_step_id` and marks that step snapshot as `failed`.
 
+Electron main maintains that snapshot through a per-operation lifecycle
+workflow controller. The controller is the only component allowed to mark
+workflow steps as running, succeeded, or failed. Helper progress from SSH,
+local process, package, and container modules is an observation stream: it may
+update the current step detail or move to a later planned step, but it cannot
+rewind the user-visible workflow after the controller has advanced.
+
 `Runtime ready` is emitted only as the successful terminal step. Helper
 observations that say a daemon is becoming reachable stay inside
 `Checking runtime service` until the launcher operation commits success.

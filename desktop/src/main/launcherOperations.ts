@@ -7,7 +7,6 @@ import type {
 } from '../shared/desktopLauncherIPC';
 import { openConnectionProgress } from '../shared/desktopOpenConnectionProgress';
 import type { DesktopOpenConnectionProgress } from '../shared/desktopOpenConnectionProgress';
-import { runtimeLifecycleProgress } from '../shared/desktopRuntimeLifecycleProgress';
 import type { DesktopRuntimeLifecycleProgress } from '../shared/desktopRuntimeLifecycleProgress';
 import type { DesktopOperationFailurePresentation } from '../shared/desktopOperationFailure';
 
@@ -235,16 +234,7 @@ export class LauncherOperationRegistry {
       if (snapshot.subject_kind !== kind || snapshot.subject_id !== subjectID) {
         continue;
       }
-      const runtimeLifecycle = snapshot.lifecycle_progress
-        ? runtimeLifecycleProgress({
-            location: snapshot.lifecycle_progress.location,
-            operation: snapshot.lifecycle_progress.operation,
-            phase: snapshot.lifecycle_progress.active_step_id,
-            targetID: snapshot.lifecycle_progress.target_id,
-            targetLabel: snapshot.lifecycle_progress.target_label,
-            targetDetail: snapshot.lifecycle_progress.target_detail,
-          })
-        : undefined;
+      const runtimeLifecycle = snapshot.lifecycle_progress;
       const openConnection = snapshot.open_progress
         ? openConnectionProgress({
             location: snapshot.open_progress.location,
@@ -289,16 +279,7 @@ export class LauncherOperationRegistry {
       controller.abort(compact(reason) || 'Operation canceled.');
     }
     const cancelPhase = cancelPhaseForSnapshot(snapshot);
-    const runtimeLifecycle = snapshot.lifecycle_progress
-      ? runtimeLifecycleProgress({
-          location: snapshot.lifecycle_progress.location,
-          operation: snapshot.lifecycle_progress.operation,
-          phase: snapshot.lifecycle_progress.active_step_id,
-          targetID: snapshot.lifecycle_progress.target_id,
-          targetLabel: snapshot.lifecycle_progress.target_label,
-          targetDetail: snapshot.lifecycle_progress.target_detail,
-        })
-      : undefined;
+    const runtimeLifecycle = snapshot.lifecycle_progress;
     const openConnection = snapshot.open_progress
       ? openConnectionProgress({
           location: snapshot.open_progress.location,
