@@ -1,17 +1,10 @@
-import { For, Index } from 'solid-js';
+import { For, Index, Show, type JSX } from 'solid-js';
 import { Button, Checkbox, Input } from '@floegence/floe-webapp-core/ui';
+import { Eye, Pencil, Play, Plus, Trash } from '@floegence/floe-webapp-core/icons';
+import { cn } from '@floegence/floe-webapp-core';
 import type { PermissionRow } from './types';
-import {
-  SettingsPill,
-  SettingsTable,
-  SettingsTableBody,
-  SettingsTableCell,
-  SettingsTableEmptyRow,
-  SettingsTableHead,
-  SettingsTableHeaderCell,
-  SettingsTableHeaderRow,
-  SettingsTableRow,
-} from './SettingsPrimitives';
+import { EmptyState, SettingsPill } from './SettingsPrimitives';
+import { redevenSurfaceRoleClass } from '../../utils/redevenSurfaceRoles';
 
 export function PermissionRuleTable(props: {
   rows: PermissionRow[];
@@ -27,74 +20,85 @@ export function PermissionRuleTable(props: {
   onRemove: (index: number) => void;
 }) {
   return (
-    <SettingsTable minWidthClass="min-w-[38rem]">
-      <SettingsTableHead>
-        <SettingsTableHeaderRow>
-          <SettingsTableHeaderCell>{props.keyHeader}</SettingsTableHeaderCell>
-          <SettingsTableHeaderCell align="center" class="w-24">Read</SettingsTableHeaderCell>
-          <SettingsTableHeaderCell align="center" class="w-24">Write</SettingsTableHeaderCell>
-          <SettingsTableHeaderCell align="center" class="w-24">Execute</SettingsTableHeaderCell>
-          <SettingsTableHeaderCell class="w-24">Actions</SettingsTableHeaderCell>
-        </SettingsTableHeaderRow>
-      </SettingsTableHead>
-      <SettingsTableBody>
+    <div class="space-y-1.5">
+      <Show
+        when={props.rows.length > 0}
+        fallback={<EmptyState icon={Plus} message={props.emptyMessage} />}
+      >
         <Index each={props.rows}>
           {(row, index) => (
-            <SettingsTableRow>
-              <SettingsTableCell>
-                <Input
-                  value={row().key}
-                  onInput={(event) => props.onChangeKey(index, event.currentTarget.value)}
-                  placeholder={props.keyPlaceholder}
-                  size="sm"
-                  class="w-full font-mono text-xs"
-                  disabled={!props.canInteract}
-                />
-              </SettingsTableCell>
-              <SettingsTableCell align="center">
-                <Checkbox
+            <div class={cn('flex items-center gap-2 rounded-lg border px-3 py-2', redevenSurfaceRoleClass('panel'))}>
+              <Input
+                value={row().key}
+                onInput={(event) => props.onChangeKey(index, event.currentTarget.value)}
+                placeholder={props.keyPlaceholder}
+                size="sm"
+                class="min-w-0 flex-1 font-mono text-xs"
+                disabled={!props.canInteract}
+              />
+              <div class="flex items-center gap-1.5">
+                <PermToggle
+                  icon={Eye}
+                  label="Read"
                   checked={row().read}
-                  onChange={(value) => props.onChangePerm(index, 'read', value)}
                   disabled={!props.canInteract || !props.readEnabled}
-                  label=""
-                  size="sm"
+                  onChange={(v) => props.onChangePerm(index, 'read', v)}
                 />
-              </SettingsTableCell>
-              <SettingsTableCell align="center">
-                <Checkbox
+                <PermToggle
+                  icon={Pencil}
+                  label="Write"
                   checked={row().write}
-                  onChange={(value) => props.onChangePerm(index, 'write', value)}
                   disabled={!props.canInteract || !props.writeEnabled}
-                  label=""
-                  size="sm"
+                  onChange={(v) => props.onChangePerm(index, 'write', v)}
                 />
-              </SettingsTableCell>
-              <SettingsTableCell align="center">
-                <Checkbox
+                <PermToggle
+                  icon={Play}
+                  label="Execute"
                   checked={row().execute}
-                  onChange={(value) => props.onChangePerm(index, 'execute', value)}
                   disabled={!props.canInteract || !props.executeEnabled}
-                  label=""
-                  size="sm"
+                  onChange={(v) => props.onChangePerm(index, 'execute', v)}
                 />
-              </SettingsTableCell>
-              <SettingsTableCell>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  class="text-muted-foreground hover:text-destructive"
-                  onClick={() => props.onRemove(index)}
-                  disabled={!props.canInteract}
-                >
-                  Remove
-                </Button>
-              </SettingsTableCell>
-            </SettingsTableRow>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                class="text-muted-foreground hover:text-destructive"
+                onClick={() => props.onRemove(index)}
+                disabled={!props.canInteract}
+                icon={Trash}
+              />
+            </div>
           )}
         </Index>
-        {props.rows.length === 0 ? <SettingsTableEmptyRow colSpan={5}>{props.emptyMessage}</SettingsTableEmptyRow> : null}
-      </SettingsTableBody>
-    </SettingsTable>
+      </Show>
+    </div>
+  );
+}
+
+function PermToggle(props: {
+  icon: (props: { class?: string }) => JSX.Element;
+  label: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      class={cn(
+        'inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors',
+        props.checked
+          ? 'bg-success/10 text-success hover:bg-success/20'
+          : 'bg-muted text-muted-foreground hover:bg-muted/80',
+        props.disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+      )}
+      disabled={props.disabled}
+      onClick={() => props.onChange(!props.checked)}
+      aria-label={`${props.label}: ${props.checked ? 'enabled' : 'disabled'}`}
+    >
+      <props.icon class="h-3 w-3" />
+      <span>{props.checked ? '✓' : '✕'}</span>
+    </button>
   );
 }
 
@@ -105,58 +109,38 @@ export function PermissionMatrixTable(props: {
   canInteract: boolean;
   onChange: (key: 'read' | 'write' | 'execute', value: boolean) => void;
 }) {
-  const rows = [
-    {
-      key: 'read' as const,
-      label: 'Read',
-      description: 'Allow viewing files and reading state.',
-      checked: () => props.read,
-    },
-    {
-      key: 'write' as const,
-      label: 'Write',
-      description: 'Allow modifying files and local state.',
-      checked: () => props.write,
-    },
-    {
-      key: 'execute' as const,
-      label: 'Execute',
-      description: 'Allow terminal/process execution.',
-      checked: () => props.execute,
-    },
+  const perms = [
+    { key: 'read' as const, icon: Eye, label: 'Read', checked: props.read },
+    { key: 'write' as const, icon: Pencil, label: 'Write', checked: props.write },
+    { key: 'execute' as const, icon: Play, label: 'Execute', checked: props.execute },
   ];
 
   return (
-    <SettingsTable minWidthClass="min-w-[34rem]">
-      <SettingsTableHead>
-        <SettingsTableHeaderRow>
-          <SettingsTableHeaderCell>Permission</SettingsTableHeaderCell>
-          <SettingsTableHeaderCell>Description</SettingsTableHeaderCell>
-          <SettingsTableHeaderCell class="w-32">State</SettingsTableHeaderCell>
-        </SettingsTableHeaderRow>
-      </SettingsTableHead>
-      <SettingsTableBody>
-        <For each={rows}>
-          {(row) => (
-            <SettingsTableRow>
-              <SettingsTableCell class="font-medium">{row.label}</SettingsTableCell>
-              <SettingsTableCell class="text-muted-foreground">{row.description}</SettingsTableCell>
-              <SettingsTableCell>
-                <div class="flex items-center gap-3">
-                  <Checkbox
-                    checked={row.checked()}
-                    onChange={(value) => props.onChange(row.key, value)}
-                    disabled={!props.canInteract}
-                    label=""
-                    size="sm"
-                  />
-                  <SettingsPill tone={row.checked() ? 'success' : 'default'}>{row.checked() ? 'Enabled' : 'Disabled'}</SettingsPill>
-                </div>
-              </SettingsTableCell>
-            </SettingsTableRow>
-          )}
-        </For>
-      </SettingsTableBody>
-    </SettingsTable>
+    <div class="flex flex-wrap gap-2">
+      <For each={perms}>
+        {(perm) => (
+          <label
+            class={cn(
+              'inline-flex items-center gap-2 rounded-lg border px-3 py-2 transition-colors',
+              redevenSurfaceRoleClass('panel'),
+              props.canInteract ? 'cursor-pointer hover:border-primary/30' : 'cursor-not-allowed opacity-50',
+            )}
+          >
+            <Checkbox
+              checked={perm.checked}
+              onChange={(v) => props.onChange(perm.key, v)}
+              disabled={!props.canInteract}
+              label=""
+              size="sm"
+            />
+            <perm.icon class="h-3.5 w-3.5 text-muted-foreground" />
+            <span class="text-xs font-medium text-foreground">{perm.label}</span>
+            <SettingsPill tone={perm.checked ? 'success' : 'default'}>
+              {perm.checked ? 'Allowed' : 'Denied'}
+            </SettingsPill>
+          </label>
+        )}
+      </For>
+    </div>
   );
 }
