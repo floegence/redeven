@@ -3827,7 +3827,7 @@ export function EnvSettingsPage() {
 			            setAiDirty(true);
 			          }}
 			          placeholder="Select model..."
-			          class="w-52"
+			          class="w-52 !border-transparent !shadow-none !bg-transparent hover:!border-border/50"
 			          disabled={!canInteract() || aiModelOptions().length === 0 || aiSaving() || disableAISaving()}
 			        />
 			      </div>
