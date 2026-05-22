@@ -21,6 +21,7 @@ import {
   resolveDesktopSSHRemotePlatform,
   type DesktopSSHRemotePlatform,
 } from './sshReleaseAssets';
+import { DesktopOperationFailureError } from './desktopOperationFailure';
 
 function sha256(data: Buffer | string): string {
   return createHash('sha256').update(data).digest('hex');
@@ -96,15 +97,19 @@ async function createSourceRuntimeFixture(): Promise<Readonly<{
   root: string;
   cacheRoot: string;
   buildLogPath: string;
+  originalDistPath: string;
 }>> {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-source-runtime-fixture-'));
   const root = path.join(tempRoot, 'redeven');
   const buildLogPath = path.join(tempRoot, 'build-assets.log');
+  const originalDistPath = path.join(root, 'internal', 'envapp', 'ui', 'dist', 'env', 'index.html');
 
   await Promise.all([
     fs.mkdir(path.join(root, 'scripts'), { recursive: true }),
     fs.mkdir(path.join(root, 'cmd', 'redeven'), { recursive: true }),
+    fs.mkdir(path.dirname(originalDistPath), { recursive: true }),
   ]);
+  await fs.writeFile(originalDistPath, 'original checkout dist');
   await fs.writeFile(path.join(root, 'go.mod'), [
     'module example.invalid/redeven-source-runtime-fixture',
     '',
@@ -120,13 +125,14 @@ async function createSourceRuntimeFixture(): Promise<Readonly<{
   await fs.writeFile(path.join(root, 'scripts', 'build_assets.sh'), [
     '#!/usr/bin/env sh',
     'set -eu',
-    `printf 'assets\\n' >> ${JSON.stringify(buildLogPath)}`,
+    `printf 'assets:%s\\n' "$PWD" >> ${JSON.stringify(buildLogPath)}`,
   ].join('\n'), { mode: 0o755 });
 
   return {
     root,
     cacheRoot: runtimePackageCacheRoot(tempRoot),
     buildLogPath,
+    originalDistPath,
   };
 }
 
@@ -253,7 +259,10 @@ describe('runtimePackageCache', () => {
       expect(first.source).toBe('source_build');
       expect(cached.source).toBe('source_build_cache');
       expect(cached.archiveData).toEqual(first.archiveData);
-      await expect(fs.readFile(fixture.buildLogPath, 'utf8')).resolves.toBe('assets\n');
+      const buildLog = await fs.readFile(fixture.buildLogPath, 'utf8');
+      expect(buildLog).toMatch(/^assets:/u);
+      expect(buildLog).not.toContain(fixture.root);
+      await expect(fs.readFile(fixture.originalDistPath, 'utf8')).resolves.toBe('original checkout dist');
     } finally {
       await fs.rm(path.dirname(fixture.root), { recursive: true, force: true });
     }
@@ -276,7 +285,9 @@ describe('runtimePackageCache', () => {
       ]);
       expect(results[1].archiveData).toEqual(results[0].archiveData);
       expect(results[2].archiveData).toEqual(results[0].archiveData);
-      await expect(fs.readFile(fixture.buildLogPath, 'utf8')).resolves.toBe('assets\n');
+      const buildLog = await fs.readFile(fixture.buildLogPath, 'utf8');
+      expect(buildLog.trim().split('\n')).toHaveLength(1);
+      expect(buildLog).not.toContain(fixture.root);
     } finally {
       await fs.rm(path.dirname(fixture.root), { recursive: true, force: true });
     }
@@ -295,7 +306,35 @@ describe('runtimePackageCache', () => {
       expect(amd64Asset.source).toBe('source_build');
       expect(arm64Asset.source).toBe('source_build');
       expect(arm64Asset.archiveData).not.toEqual(amd64Asset.archiveData);
-      await expect(fs.readFile(fixture.buildLogPath, 'utf8')).resolves.toBe('assets\nassets\n');
+      const buildLog = await fs.readFile(fixture.buildLogPath, 'utf8');
+      expect(buildLog.trim().split('\n')).toHaveLength(2);
+      expect(buildLog).not.toContain(fixture.root);
+    } finally {
+      await fs.rm(path.dirname(fixture.root), { recursive: true, force: true });
+    }
+  }, 15_000);
+
+  it('keeps source runtime build failures concise with raw output in diagnostics', async () => {
+    const fixture = await createSourceRuntimeFixture();
+    const platform = resolveDesktopSSHRemotePlatform('linux', 'x86_64');
+    await fs.writeFile(path.join(fixture.root, 'cmd', 'redeven', 'main.go'), [
+      'package main',
+      '',
+      'func main() {',
+      '',
+    ].join('\n'));
+    try {
+      const error = await preparePackage({
+        cacheRoot: fixture.cacheRoot,
+        platform,
+        sourceRuntimeRoot: fixture.root,
+      }).catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(DesktopOperationFailureError);
+      expect((error as DesktopOperationFailureError).presentation.summary).toBe(
+        'Desktop could not prepare the linux/amd64 Redeven runtime package.',
+      );
+      expect((error as DesktopOperationFailureError).presentation.diagnostics?.[0]?.text).toContain('go failed');
     } finally {
       await fs.rm(path.dirname(fixture.root), { recursive: true, force: true });
     }
