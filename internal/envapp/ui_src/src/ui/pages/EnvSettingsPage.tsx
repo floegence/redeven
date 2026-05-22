@@ -3783,8 +3783,8 @@ export function EnvSettingsPage() {
 			      title="Current Model"
 			      description="Default model used when creating a new chat thread."
 			    />
-			    <div class={cn('flex items-center gap-3 rounded-xl border bg-background p-4', redevenSurfaceRoleClass('panel'))}>
-			      <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-muted ring-1 ring-border/30">
+			    <div class={cn('flex items-center gap-4 rounded-xl border bg-background p-4', redevenSurfaceRoleClass('panel'))}>
+			      <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-muted">
 			        <Show when={aiCurrentModelOption()} fallback={<Bot class="h-5 w-5 text-muted-foreground" />}>
 			          <ProviderBrandIcon type={aiProviders().find((p) => aiCurrentModelID().startsWith(String(p.id ?? '').trim() + '/'))?.type ?? 'openai'} class="h-5 w-5" />
 			        </Show>
@@ -3809,26 +3809,28 @@ export function EnvSettingsPage() {
 			          </div>
 			        </Show>
 			      </div>
-			      <Select
-			        value={aiCurrentModelID()}
-			        options={aiModelOptions().map((item) => ({ value: item.id, label: item.label }))}
-			        onChange={(value) => {
-			          const nextModelID = normalizeAICurrentModelID(String(value ?? '').trim(), aiProviders());
-			          if (!nextModelID) return;
-			          const prevModelID = normalizeAICurrentModelID(aiCurrentModelID(), aiProviders());
-			          if (nextModelID === prevModelID) return;
-			          setAiCurrentModelID(nextModelID);
-			          const canDirectSave = aiView() === 'ui' && !aiDirty() && !aiSaving() && !disableAISaving();
-			          if (canDirectSave) {
-			            void saveAICurrentModelDirectly(nextModelID, prevModelID || '');
-			            return;
-			          }
-			          setAiDirty(true);
-			        }}
-			        placeholder="Select model..."
-			        class="w-52 flex-shrink-0"
-			        disabled={!canInteract() || aiModelOptions().length === 0 || aiSaving() || disableAISaving()}
-			      />
+			      <div class="relative flex-shrink-0">
+			        <Select
+			          value={aiCurrentModelID()}
+			          options={aiModelOptions().map((item) => ({ value: item.id, label: item.label }))}
+			          onChange={(value) => {
+			            const nextModelID = normalizeAICurrentModelID(String(value ?? '').trim(), aiProviders());
+			            if (!nextModelID) return;
+			            const prevModelID = normalizeAICurrentModelID(aiCurrentModelID(), aiProviders());
+			            if (nextModelID === prevModelID) return;
+			            setAiCurrentModelID(nextModelID);
+			            const canDirectSave = aiView() === 'ui' && !aiDirty() && !aiSaving() && !disableAISaving();
+			            if (canDirectSave) {
+			              void saveAICurrentModelDirectly(nextModelID, prevModelID || '');
+			              return;
+			            }
+			            setAiDirty(true);
+			          }}
+			          placeholder="Select model..."
+			          class="w-52"
+			          disabled={!canInteract() || aiModelOptions().length === 0 || aiSaving() || disableAISaving()}
+			        />
+			      </div>
 			    </div>
 			  </div>
 
@@ -3860,8 +3862,8 @@ export function EnvSettingsPage() {
 			          const webSearchLabel = () => providerWebSearchSummary(provider);
 			          return (
 			            <div class={cn('flex gap-3 rounded-xl border bg-background p-4 transition-all', redevenSurfaceRoleClass('panel'), isDefault() && 'border-l-[3px] border-l-primary pl-[13px]')}>
-			              {/* Icon — fixed top-left */}
-			              <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-muted ring-1 ring-border/30">
+			              {/* Icon — no border ring */}
+			              <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-muted">
 			                <ProviderBrandIcon type={provider.type} class="h-5 w-5" />
 			              </div>
 
