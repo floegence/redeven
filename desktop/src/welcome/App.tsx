@@ -4365,8 +4365,19 @@ function EnvironmentCardFactsBlock(props: Readonly<{
                   class={cn(
                     'redeven-card-fact-value',
                     fact.value_tone === 'placeholder' && 'redeven-card-fact-value--placeholder',
+                    fact.copy_value && 'redeven-card-fact-value--copyable',
                   )}
                   title={fact.value}
+                  role={fact.copy_value ? 'button' : undefined}
+                  tabIndex={fact.copy_value ? 0 : undefined}
+                  aria-label={fact.copy_value ? `Copy ${fact.label}` : undefined}
+                  onClick={fact.copy_value ? () => { void props.copyEnvironmentValue(fact.value, fact.label); } : undefined}
+                  onKeyDown={fact.copy_value ? (e: KeyboardEvent) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      void props.copyEnvironmentValue(fact.value, fact.label);
+                    }
+                  } : undefined}
                 >
                   <Show when={fact.leading_icon}>
                     {(icon) => <img src={icon()} class="redeven-card-fact-leading-icon" aria-hidden="true" />}
