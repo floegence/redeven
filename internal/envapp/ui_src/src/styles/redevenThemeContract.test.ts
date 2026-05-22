@@ -44,6 +44,9 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--redeven-stroke-control: color-mix(in srgb, var(--redeven-stroke-panel) 76%, var(--foreground) 24%);');
     expect(src).toContain('--redeven-stroke-control-strong: color-mix(in srgb, var(--redeven-stroke-control) 74%, var(--foreground) 26%);');
     expect(src).toContain('--redeven-stroke-divider: color-mix(in srgb, var(--redeven-stroke-panel) 72%, transparent);');
+    expect(src).toContain('--redeven-link-fg: var(--color-blue-600);');
+    expect(src).toContain('--redeven-link-hover-fg: var(--color-blue-700);');
+    expect(src).toContain('--redeven-link-code-bg: color-mix(in srgb, var(--redeven-link-fg) 9%, var(--background));');
     expect(src).toContain('--card: var(--redeven-surface-panel);');
     expect(src).toContain('--popover: var(--redeven-surface-panel);');
     expect(src).toContain('--git-browser-selection-secondary-fg: color-mix(in srgb, var(--git-browser-selection-fg) 78%, transparent);');
@@ -64,6 +67,9 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--redeven-stroke-control: color-mix(in srgb, var(--redeven-stroke-panel) 68%, var(--foreground) 32%);');
     expect(src).toContain('--redeven-stroke-control-strong: color-mix(in srgb, var(--redeven-stroke-control) 68%, var(--foreground) 32%);');
     expect(src).toContain('--redeven-stroke-divider: color-mix(in srgb, var(--redeven-stroke-panel) 74%, transparent);');
+    expect(src).toContain('--redeven-link-fg: var(--color-sky-400);');
+    expect(src).toContain('--redeven-link-hover-fg: var(--color-sky-300);');
+    expect(src).toContain('--redeven-link-code-bg: color-mix(in srgb, var(--redeven-link-fg) 13%, var(--background));');
     expect(src).toContain('--git-browser-selection-secondary-fg: color-mix(in srgb, var(--git-browser-selection-fg) 82%, transparent);');
     expect(src).toContain('--git-browser-selection-chip-bg: color-mix(in srgb, var(--git-browser-selection-fg) 10%, transparent);');
     expect(src).toContain('--git-browser-selection-chip-border: color-mix(in srgb, var(--git-browser-selection-fg) 18%, var(--git-browser-selection-border) 82%);');

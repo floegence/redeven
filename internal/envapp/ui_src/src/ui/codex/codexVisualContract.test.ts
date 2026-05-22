@@ -82,6 +82,8 @@ describe('Codex visual contract', () => {
     );
     expect(css).toMatch(/\.codex-activity-detail-markdown \.chat-md-file-ref \{[\s\S]*color: var\(--codex-file-path-fg\);/);
     expect(css).toMatch(/\.codex-chat-markdown-block \.chat-md-inline-code \{[\s\S]*background: var\(--codex-inline-code-bg\);/);
+    expect(css).toMatch(/\.codex-chat-markdown-block \.chat-md-link \{[\s\S]*color: var\(--redeven-link-fg\);[\s\S]*cursor: pointer;/);
+    expect(css).toMatch(/\.codex-chat-markdown-block \.chat-md-link \.chat-md-inline-code \{[\s\S]*background: var\(--redeven-link-code-bg\);[\s\S]*color: inherit;/);
     expect(css).not.toContain('.codex-chat-file-change-path');
     expect(css).not.toContain('.git-patch-file-path');
     expect(detailPanelSrc).toContain('data-codex-activity-detail-title={props.detail.type}');

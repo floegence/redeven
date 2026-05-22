@@ -276,13 +276,24 @@ html.dark .file-markdown-body {
 
 /* Links */
 .file-markdown-body a.fm-link {
-  color: var(--primary);
+  color: var(--redeven-link-fg);
   text-decoration: none;
-  border-bottom: 1px solid color-mix(in srgb, var(--primary) 40%, transparent);
-  transition: border-color 0.15s;
+  border-bottom: 1px solid var(--redeven-link-underline);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background-color 0.15s;
 }
 
-.file-markdown-body a.fm-link:hover { border-bottom-color: var(--primary); }
+.file-markdown-body a.fm-link:hover { color: var(--redeven-link-hover-fg); border-bottom-color: var(--redeven-link-underline-hover); }
+.file-markdown-body a.fm-link:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--redeven-link-fg) 48%, transparent);
+  outline-offset: 2px;
+  border-radius: 0.1875rem;
+}
+.file-markdown-body a.fm-link code.fm-inline-code {
+  border: 1px solid var(--redeven-link-code-border);
+  background-color: var(--redeven-link-code-bg);
+  color: inherit;
+}
 .file-markdown-body a.fm-image-link {
   display: inline-block;
   line-height: 1;
