@@ -177,7 +177,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
 
                           <Show when={expanded()}>
                             <div
-                              ref={expandedScrollRef}
+                              ref={(el) => { expandedScrollRef = el; }}
                               class="border-t border-border/80 p-4 overflow-y-auto"
                               style="max-height:50vh"
                               onWheel={(e) => {
