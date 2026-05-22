@@ -15,6 +15,10 @@ import {
   type DesktopSSHRemotePlatform,
   type DesktopSSHVerifiedReleaseManifest,
 } from './sshReleaseAssets';
+import {
+  DesktopOperationFailureError,
+  desktopOperationFailurePresentation,
+} from './desktopOperationFailure';
 
 export type DesktopRuntimePackageCacheKey = Readonly<{
   release_tag: string;
@@ -99,6 +103,24 @@ function normalizeSourceRuntimeRoot(sourceRoot: string): string {
 
 function sourceRuntimeAssetCacheKey(sourceRoot: string, releaseTag: string, platformID: string): string {
   return `source:${sourceRoot}:${releaseTag}:${platformID}`;
+}
+
+function sourceRuntimeCopyIncludes(sourceRoot: string, candidatePath: string): boolean {
+  const relative = path.relative(sourceRoot, candidatePath);
+  if (relative === '') {
+    return true;
+  }
+  const normalized = relative.split(path.sep).join('/');
+  const parts = normalized.split('/');
+  if (parts.includes('.git') || parts.includes('node_modules')) {
+    return false;
+  }
+  return normalized !== 'desktop/dist'
+    && !normalized.startsWith('desktop/dist/')
+    && normalized !== 'internal/envapp/ui/dist'
+    && !normalized.startsWith('internal/envapp/ui/dist/')
+    && normalized !== 'internal/codeapp/ui/dist'
+    && !normalized.startsWith('internal/codeapp/ui/dist/');
 }
 
 function onceInFlight<T>(
@@ -255,6 +277,46 @@ async function buildSourceRuntimeAssets(sourceRoot: string, signal?: AbortSignal
   await runLocalCommand(scriptPath, [], { cwd: sourceRoot, signal });
 }
 
+async function copySourceRuntimeRoot(
+  sourceRoot: string,
+  buildRoot: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  throwIfCanceled(signal);
+  const buildSourceRoot = path.join(buildRoot, 'source');
+  await fs.cp(sourceRoot, buildSourceRoot, {
+    recursive: true,
+    dereference: false,
+    filter: (candidatePath) => {
+      throwIfCanceled(signal);
+      return sourceRuntimeCopyIncludes(sourceRoot, candidatePath);
+    },
+  });
+  return buildSourceRoot;
+}
+
+function runtimePackagePreparationFailure(
+  error: unknown,
+  platform: DesktopSSHRemotePlatform,
+): Error {
+  if (error instanceof DesktopOperationFailureError) {
+    return error;
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  return new DesktopOperationFailureError(desktopOperationFailurePresentation({
+    code: 'container_runtime_launch_failed',
+    title: 'Runtime package preparation failed',
+    summary: `Desktop could not prepare the ${platform.platform_label} Redeven runtime package.`,
+    detail: 'The local source runtime build failed before Desktop could upload the runtime package.',
+    recoveryHint: 'Run the Redeven asset build and runtime build locally, then retry the runtime lifecycle action.',
+    diagnostics: [{
+      channel: 'runtime_package_build',
+      label: 'Build output',
+      text: message,
+    }],
+  }), { cause: error });
+}
+
 async function prepareSourceRuntimeUploadAsset(args: Readonly<{
   sourceRuntimeRoot: string;
   runtimeReleaseTag: string;
@@ -271,11 +333,12 @@ async function prepareSourceRuntimeUploadAsset(args: Readonly<{
 
   const buildRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-source-runtime-'));
   try {
+    const buildSourceRoot = await copySourceRuntimeRoot(sourceRoot, buildRoot, args.signal);
     const binaryPath = path.join(buildRoot, 'redeven');
     const buildTime = compact(process.env.REDEVEN_DESKTOP_BUNDLE_BUILD_TIME)
       || new Date().toISOString().replace(/\.\d{3}Z$/u, 'Z');
     const commit = await readSourceRuntimeCommit(sourceRoot, args.signal);
-    await buildSourceRuntimeAssets(sourceRoot, args.signal);
+    await buildSourceRuntimeAssets(buildSourceRoot, args.signal);
     await runLocalCommand('go', [
       'build',
       '-trimpath',
@@ -285,7 +348,7 @@ async function prepareSourceRuntimeUploadAsset(args: Readonly<{
       binaryPath,
       './cmd/redeven',
     ], {
-      cwd: sourceRoot,
+      cwd: buildSourceRoot,
       env: {
         GOOS: args.platform.goos,
         GOARCH: args.platform.goarch,
@@ -552,6 +615,9 @@ export async function prepareDesktopRuntimeUploadAsset(args: Readonly<{
       source: 'release_cache',
     };
   } catch (error) {
+    if (compact(args.sourceRuntimeRoot) !== '') {
+      throw runtimePackagePreparationFailure(error, args.platform);
+    }
     throw new Error(
       `Desktop could not prepare the ${args.platform.platform_label} Redeven runtime package: ${error instanceof Error ? error.message : String(error)}`,
     );

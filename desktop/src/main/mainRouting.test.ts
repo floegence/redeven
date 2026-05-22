@@ -123,6 +123,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain('desktopRuntimeLifecycleLocation');
     expect(mainSrc).toContain('buildRuntimeLifecycleProgress');
     expect(mainSrc).toContain('updateRuntimeLifecycleOperation');
+    expect(mainSrc).toContain('lifecycleProgress.stage_index < current.lifecycle_progress.stage_index');
     expect(mainSrc).toContain("lifecycle_progress: runtimeLifecycleProgress({");
     expect(mainSrc).toContain("location: 'ssh_host'");
     expect(mainSrc).toContain("const hostAccess: DesktopRuntimeHostAccess = { kind: 'local_host' };");
@@ -163,6 +164,8 @@ describe('main routing', () => {
     expect(mainSrc).toContain('onProgress: (progress: ManagedRuntimeProgress) => {');
     expect(mainSrc).toContain('launcherOperations.isStale(runtimeKey)');
     expect(mainSrc).toContain('scheduleLauncherOperationRemoval(runtimeKey);');
+    expect(mainSrc).toContain('const startedAtUnixMs = snapshot?.started_at_unix_ms;');
+    expect(mainSrc).toContain('current?.started_at_unix_ms !== startedAtUnixMs');
     expect(mainSrc).toContain('function desktopFailureFromError(');
     expect(mainSrc).toContain('operationFailureFromUnknown(error, desktopOperationFailurePresentation({');
     expect(mainSrc).not.toContain('function friendlyRuntimeStartErrorMessage(');

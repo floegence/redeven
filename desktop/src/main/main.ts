@@ -2969,8 +2969,13 @@ function scheduleLauncherOperationRemoval(operationKey: string, delayMs = 4_000)
   if (existingTimer) {
     clearTimeout(existingTimer);
   }
+  const startedAtUnixMs = snapshot?.started_at_unix_ms;
   const timer = setTimeout(() => {
     launcherOperationRemovalTimers.delete(cleanOperationKey);
+    const current = launcherOperations.get(cleanOperationKey);
+    if (startedAtUnixMs !== undefined && current?.started_at_unix_ms !== startedAtUnixMs) {
+      return;
+    }
     launcherOperations.remove(cleanOperationKey);
     void emitDesktopWelcomeSnapshot('launcher');
   }, delayMs);
@@ -3890,15 +3895,24 @@ function updateRuntimeLifecycleOperation(
     cancelable?: boolean;
   }>,
 ): void {
+  const lifecycleProgress = buildRuntimeLifecycleProgress({
+    ...input,
+    targetID: input.targetID ?? operationKey,
+  });
+  const current = launcherOperations.get(operationKey);
+  if (
+    current?.status === 'running'
+    && current.lifecycle_progress
+    && lifecycleProgress.stage_index < current.lifecycle_progress.stage_index
+  ) {
+    return;
+  }
   launcherOperations.update(operationKey, {
     ...(input.status ? { status: input.status } : {}),
     phase: input.phase,
     title: input.title,
     detail: input.detail,
-    lifecycle_progress: buildRuntimeLifecycleProgress({
-      ...input,
-      targetID: input.targetID ?? operationKey,
-    }),
+    lifecycle_progress: lifecycleProgress,
     ...(input.failure ? { failure: input.failure } : {}),
     ...(input.cancelable !== undefined ? { cancelable: input.cancelable } : {}),
   });

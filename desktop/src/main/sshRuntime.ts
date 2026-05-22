@@ -1726,6 +1726,9 @@ async function prepareDesktopSSHUploadAsset(args: Readonly<{
     );
     return asset;
   } catch (error) {
+    if (error instanceof DesktopOperationFailureError) {
+      throw error;
+    }
     throw new DesktopSSHUploadAssetPreparationError(
       `Desktop could not prepare the ${args.platform.platform_label} Redeven runtime package locally: ${error instanceof Error ? error.message : String(error)}`,
     );

@@ -126,6 +126,13 @@ reports ready or the workflow timeout expires. A timeout fails the
 `Checking runtime service` step so the progress sequence matches the operation
 that actually stalled.
 
+Runtime lifecycle progress must not move backward within one launcher
+operation. The main process owns the user-visible lifecycle plan, while lower
+level host, SSH, package, and container helpers report observations into that
+plan. Restart and update plans include stop and stop-verification before
+package preparation and startup; helper observations for earlier probe phases
+are ignored once the visible plan has advanced beyond them.
+
 Blocked runtime reports and operation failures have separate responsibilities.
 Runtime reports describe machine-readable attach or maintenance state, such as
 `state_dir_locked`, owner metadata, active workload, and compatibility fields.
@@ -522,6 +529,11 @@ Desktop launcher cards keep their current dense SaaS tool layout:
   only visibility; it never cancels the workflow. Success remains visible while
   the popup is open, and failed/canceled/cleanup-failed progress remains visible
   until dismissed.
+- Development source-runtime package builds run from an isolated temporary copy
+  of the source checkout. This lets `scripts/build_assets.sh` rebuild ignored
+  embedded UI outputs without deleting files underneath another target-platform
+  `go build`; raw build output belongs in diagnostics, not in the visible
+  failure summary.
 - Action feedback for completion, failure, and other ephemeral events continues
   through Desktop toasts. No launcher content should shift when a version event
   arrives, and toasts must not become the progress surface for runtime lifecycle

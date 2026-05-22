@@ -82,6 +82,33 @@ describe('desktopRuntimeLifecycleProgress', () => {
       'checking_runtime_package',
       'stopping_runtime_process',
       'verifying_runtime_stopped',
+      'detecting_platform',
+      'preparing_runtime_package',
+      'installing_runtime_package',
+      'starting_runtime_process',
+      'checking_runtime_service',
+      'runtime_ready',
+    ]);
+    expect(runtimeLifecyclePhaseSequence('local_container', 'restart')).toEqual([
+      'checking_container',
+      'checking_runtime_package',
+      'stopping_runtime_process',
+      'verifying_runtime_stopped',
+      'detecting_platform',
+      'preparing_runtime_package',
+      'installing_runtime_package',
+      'starting_runtime_process',
+      'checking_runtime_service',
+      'runtime_ready',
+    ]);
+    expect(runtimeLifecyclePhaseSequence('local_container', 'update')).toEqual([
+      'checking_container',
+      'checking_runtime_package',
+      'stopping_runtime_process',
+      'verifying_runtime_stopped',
+      'detecting_platform',
+      'preparing_runtime_package',
+      'installing_runtime_package',
       'starting_runtime_process',
       'checking_runtime_service',
       'runtime_ready',
@@ -98,6 +125,17 @@ describe('desktopRuntimeLifecycleProgress', () => {
       'checking_runtime_service',
       'runtime_ready',
     ]);
+    expect(runtimeLifecycleProgress({
+      location: 'local_container',
+      operation: 'update',
+      phase: 'verifying_runtime_stopped',
+      targetLabel: 'Container',
+    }).stage_index).toBeLessThan(runtimeLifecycleProgress({
+      location: 'local_container',
+      operation: 'update',
+      phase: 'detecting_platform',
+      targetLabel: 'Container',
+    }).stage_index);
     expect(runtimeLifecyclePhaseSequence('ssh_host', 'stop')).toEqual([
       'checking_host',
       'stopping_runtime_process',
