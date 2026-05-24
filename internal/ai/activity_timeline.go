@@ -523,13 +523,17 @@ func (r *run) activityDetailRefsForTool(spec aitools.ToolPresentationSpec, toolI
 			Title:     "Command output",
 		}}
 	}
+	title := "Tool detail"
+	if detailKind == "file_read_content" {
+		title = ""
+	}
 	return []ActivityDetailRef{{
 		RefID:     "tool_detail:" + toolID,
 		Kind:      detailKind,
 		ToolID:    toolID,
 		FetchMode: "endpoint",
 		Endpoint:  "/_redeven_proxy/api/ai/runs/" + runID + "/tools/" + toolID + "/detail",
-		Title:     "Tool detail",
+		Title:     title,
 	}}
 }
 
@@ -539,8 +543,10 @@ func activityDetailKindForPresentation(spec aitools.ToolPresentationSpec) string
 		return "terminal_output"
 	case "todos":
 		return "todo_delta"
-	case "file_change", "file_context":
+	case "file_change":
 		return "file_change"
+	case "file_context":
+		return "file_read_content"
 	case "sources", "knowledge":
 		return "web_results"
 	default:

@@ -26,6 +26,7 @@ export type ActivityDetailSection =
   | TerminalDetailSection
   | TodoDetailSection
   | FileChangeDetailSection
+  | FileContentSection
   | WebDetailSection
   | ErrorDetailSection
   | StructuredFieldsSection;
@@ -64,6 +65,16 @@ export interface FileChangeDetailSection {
     summary?: string;
     diffPreview?: string;
   }>;
+}
+
+export interface FileContentSection {
+  kind: 'file_read_content';
+  filePath: string;
+  content: string;
+  lineOffset?: number;
+  lineCount?: number;
+  totalLines?: number;
+  truncated?: boolean;
 }
 
 export interface WebDetailSection {
