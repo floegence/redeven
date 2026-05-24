@@ -104,19 +104,6 @@ function lifecycleOperationForIntent(intent: EnvironmentLifecycleDisclosureInten
   }
 }
 
-export function lifecycleDisclosureTriggerLabel(intent: EnvironmentLifecycleDisclosureIntent): string {
-  switch (intent) {
-    case 'stop_runtime':
-      return 'Stopping...';
-    case 'restart_runtime':
-      return 'Restarting...';
-    case 'update_runtime':
-      return 'Updating...';
-    default:
-      return 'Starting...';
-  }
-}
-
 function lifecycleDisclosureTitle(intent: EnvironmentLifecycleDisclosureIntent): string {
   switch (intent) {
     case 'stop_runtime':

@@ -1200,8 +1200,17 @@ body {
   border-left: 2px solid color-mix(in srgb, var(--primary) 58%, transparent);
 }
 
+.redeven-split-action-trigger--attention {
+  cursor: pointer;
+  border-left: 2px solid color-mix(in srgb, #dc2626 68%, transparent);
+  background: color-mix(in srgb, #dc2626 10%, var(--card));
+  color: light-dark(#b91c1c, #fca5a5);
+}
+
 .redeven-split-action:has(.redeven-split-action-toggle)
-  .redeven-split-action-trigger--progress {
+  .redeven-split-action-trigger--progress,
+.redeven-split-action:has(.redeven-split-action-toggle)
+  .redeven-split-action-trigger--attention {
   border-top: 0;
   border-bottom: 0;
   border-right: 0;
