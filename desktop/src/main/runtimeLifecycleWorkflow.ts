@@ -1,9 +1,9 @@
 import {
-  runtimeLifecyclePhaseSequence,
   runtimeLifecycleProgress,
   type DesktopRuntimeLifecycleLocation,
+  type DesktopRuntimeLifecycleOmittedStep,
   type DesktopRuntimeLifecycleOperation,
-  type DesktopRuntimeLifecyclePhase,
+  type DesktopRuntimeLifecyclePlanState,
   type DesktopRuntimeLifecycleProgress,
   type DesktopRuntimeLifecycleStepID,
   type DesktopRuntimeLifecycleStepState,
@@ -14,6 +14,7 @@ import {
   operationFailureFromUnknown,
 } from './desktopOperationFailure';
 import type { DesktopOperationFailurePresentation } from '../shared/desktopOperationFailure';
+import { initialRuntimeLifecyclePlan } from './runtimeLifecycleExecutionPlan';
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -78,6 +79,12 @@ export type RuntimeLifecycleWorkflowContext = Readonly<{
   target_detail?: string;
 }>;
 
+export type RuntimeLifecyclePlanPatch = Readonly<{
+  state?: DesktopRuntimeLifecyclePlanState;
+  steps: readonly DesktopRuntimeLifecycleStepID[];
+  omitted_steps?: readonly DesktopRuntimeLifecycleOmittedStep[];
+}>;
+
 export type RuntimeLifecycleStepUpdate = Readonly<{
   title: string;
   detail: string;
@@ -85,19 +92,24 @@ export type RuntimeLifecycleStepUpdate = Readonly<{
 }>;
 
 export class RuntimeLifecycleWorkflow {
-  private readonly phases: readonly DesktopRuntimeLifecyclePhase[];
   private readonly states = new Map<DesktopRuntimeLifecycleStepID, DesktopRuntimeLifecycleStepState>();
+  private plan: readonly DesktopRuntimeLifecycleStepID[];
+  private planState: DesktopRuntimeLifecyclePlanState;
+  private planRevision = 0;
+  private omittedSteps: readonly DesktopRuntimeLifecycleOmittedStep[] = [];
   private activeStepID: DesktopRuntimeLifecycleStepID;
   private failedStepID: DesktopRuntimeLifecycleStepID | null = null;
 
   constructor(private readonly context: RuntimeLifecycleWorkflowContext) {
-    this.phases = runtimeLifecyclePhaseSequence(context.location, context.operation);
-    this.activeStepID = this.phases[0] ?? 'checking_existing_runtime';
-    for (const phase of this.phases) {
-      this.states.set(phase, {
-        id: phase,
-        status: 'pending',
-      });
+    const initialPlan = initialRuntimeLifecyclePlan({
+      location: context.location,
+      operation: context.operation,
+    });
+    this.plan = initialPlan.steps.map((step) => step.id);
+    this.planState = initialPlan.state;
+    this.activeStepID = this.plan[0] ?? 'checking_existing_runtime';
+    for (const step of initialPlan.steps) {
+      this.states.set(step.id, step);
     }
   }
 
@@ -109,12 +121,83 @@ export class RuntimeLifecycleWorkflow {
       target_label: progress.target_label,
       target_detail: progress.target_detail,
     });
+    workflow.plan = progress.steps.map((step) => step.id);
+    workflow.planState = progress.plan_state;
+    workflow.planRevision = progress.plan_revision;
+    workflow.omittedSteps = progress.diagnostics?.omitted_steps ?? [];
+    workflow.states.clear();
     for (const step of progress.steps) {
-      workflow.setStepState(step.id, step.status, step.detail, step.attempt_count);
+      workflow.states.set(step.id, {
+        id: step.id,
+        key: step.key,
+        label: step.label,
+        status: step.status,
+        detail: step.detail,
+        attempt_count: step.attempt_count,
+      });
     }
     workflow.activeStepID = progress.active_step_id;
     workflow.failedStepID = progress.failed_step_id ?? null;
     return workflow;
+  }
+
+  commitPlan(patch: RuntimeLifecyclePlanPatch): RuntimeLifecycleStepUpdate {
+    const previousPlan = this.plan;
+    const nextPlan = [...new Set(patch.steps)];
+    const protectedSteps = this.stepStates().filter((step) => step.status === 'succeeded' || step.status === 'running' || step.status === 'failed');
+    for (const step of protectedSteps) {
+      if (!nextPlan.includes(step.id)) {
+        throw new Error(`Runtime lifecycle plan cannot remove active or completed step "${step.id}".`);
+      }
+    }
+    this.plan = nextPlan;
+    this.planState = patch.state ?? this.planState;
+    this.omittedSteps = patch.omitted_steps ?? this.omittedSteps;
+    if (previousPlan.join('\n') !== this.plan.join('\n')) {
+      this.planRevision += 1;
+    }
+    for (const [index, stepID] of this.plan.entries()) {
+      const existing = this.states.get(stepID);
+      if (existing) {
+        this.states.set(stepID, {
+          ...existing,
+          key: existing.key ?? this.stepKey(stepID, index),
+        });
+      } else {
+        this.states.set(stepID, {
+          id: stepID,
+          key: this.stepKey(stepID, index),
+          status: 'pending',
+        });
+      }
+    }
+    for (const stepID of [...this.states.keys()]) {
+      if (!this.plan.includes(stepID)) {
+        this.states.delete(stepID);
+      }
+    }
+    if (!this.plan.includes(this.activeStepID)) {
+      this.activeStepID = this.firstPendingStep()?.id ?? this.plan.at(-1) ?? this.activeStepID;
+    }
+    return {
+      title: '',
+      detail: '',
+      progress: this.progress(),
+    };
+  }
+
+  ensureStepPlanned(
+    stepID: DesktopRuntimeLifecycleStepID,
+    patch: RuntimeLifecyclePlanPatch,
+  ): RuntimeLifecycleStepUpdate | null {
+    if (this.plan.includes(stepID)) {
+      return null;
+    }
+    return this.commitPlan(patch);
+  }
+
+  currentStepIDs(): readonly DesktopRuntimeLifecycleStepID[] {
+    return this.plan;
   }
 
   beginStep(
@@ -123,27 +206,24 @@ export class RuntimeLifecycleWorkflow {
     attemptCount?: number,
   ): RuntimeLifecycleStepUpdate {
     const nextIndex = this.stepIndex(stepID);
-    const activeIndex = this.stepIndex(this.activeStepID);
-    if (nextIndex < activeIndex) {
-      return {
-        title: '',
-        detail,
-        progress: this.progress(),
-      };
+    if (nextIndex < 0) {
+      throw new Error(`Runtime lifecycle step "${stepID}" is not in the current execution plan.`);
     }
-    const currentRunning = this.stepStates().find((step) => step.status === 'running');
-    if (currentRunning && this.stepIndex(currentRunning.id) < nextIndex) {
-      this.setStepState(currentRunning.id, 'succeeded');
+    const currentRunning = this.stepStates().find((step) => step.status === 'running') ?? null;
+    if (currentRunning && currentRunning.id !== stepID) {
+      const firstPending = this.firstPendingStep();
+      if (firstPending?.id !== stepID) {
+        throw new Error(`Runtime lifecycle step "${stepID}" cannot start while "${currentRunning.id}" is still running.`);
+      }
+      this.setStepState(currentRunning.id, 'succeeded', currentRunning.detail, currentRunning.attempt_count);
+    }
+    const firstPending = this.firstPendingStep();
+    if (firstPending && firstPending.id !== stepID && currentRunning?.id !== stepID) {
+      throw new Error(`Runtime lifecycle step "${stepID}" cannot skip pending step "${firstPending.id}".`);
     }
     this.activeStepID = stepID;
     this.failedStepID = null;
     this.setStepState(stepID, 'running', detail, attemptCount);
-    for (const phase of this.phases.slice(nextIndex + 1)) {
-      const state = this.states.get(phase);
-      if (state?.status === 'failed') {
-        this.setStepState(phase, 'pending');
-      }
-    }
     return {
       title: '',
       detail,
@@ -156,19 +236,14 @@ export class RuntimeLifecycleWorkflow {
     detail = '',
     attemptCount?: number,
   ): RuntimeLifecycleStepUpdate | null {
-    const observedIndex = this.stepIndex(stepID);
-    const activeIndex = this.stepIndex(this.activeStepID);
-    if (observedIndex < activeIndex) {
+    if (stepID !== this.activeStepID) {
       return null;
     }
-    if (observedIndex === activeIndex) {
-      const current = this.states.get(this.activeStepID);
-      if (current?.status === 'succeeded') {
-        return null;
-      }
-      return this.updateStep(detail, attemptCount);
+    const current = this.states.get(this.activeStepID);
+    if (current?.status === 'succeeded') {
+      return null;
     }
-    return this.beginStep(stepID, detail, attemptCount);
+    return this.updateStep(detail, attemptCount);
   }
 
   updateStep(detail: string, attemptCount?: number): RuntimeLifecycleStepUpdate {
@@ -187,8 +262,35 @@ export class RuntimeLifecycleWorkflow {
   }
 
   completeStep(stepID: DesktopRuntimeLifecycleStepID = this.activeStepID): RuntimeLifecycleStepUpdate {
+    const current = this.states.get(stepID);
+    if (!current || current.status !== 'running') {
+      throw new Error(`Runtime lifecycle step "${stepID}" cannot complete because it is not running.`);
+    }
     this.setStepState(stepID, 'succeeded');
     this.activeStepID = stepID;
+    if (this.stepStates().every((step) => step.status === 'succeeded')) {
+      this.planState = 'terminal';
+    }
+    return {
+      title: '',
+      detail: compact(this.states.get(stepID)?.detail),
+      progress: this.progress(),
+    };
+  }
+
+  completeThrough(stepID: DesktopRuntimeLifecycleStepID): RuntimeLifecycleStepUpdate {
+    const targetIndex = this.stepIndex(stepID);
+    if (targetIndex < 0) {
+      throw new Error(`Runtime lifecycle step "${stepID}" is not in the current execution plan.`);
+    }
+    for (const phase of this.plan.slice(0, targetIndex + 1)) {
+      const state = this.states.get(phase);
+      this.setStepState(phase, 'succeeded', state?.detail, state?.attempt_count);
+    }
+    this.activeStepID = stepID;
+    if (this.stepStates().every((step) => step.status === 'succeeded')) {
+      this.planState = 'terminal';
+    }
     return {
       title: '',
       detail: compact(this.states.get(stepID)?.detail),
@@ -203,16 +305,20 @@ export class RuntimeLifecycleWorkflow {
   ): RuntimeLifecycleStepFailureError {
     const stepFailure = runtimeLifecycleStepFailureError(error, stepID, fallback);
     const failedIndex = this.stepIndex(stepID);
+    if (failedIndex < 0) {
+      throw new Error(`Runtime lifecycle step "${stepID}" is not in the current execution plan.`);
+    }
     this.failedStepID = stepID;
     this.activeStepID = stepID;
-    for (const phase of this.phases.slice(0, failedIndex)) {
+    this.planState = 'terminal';
+    for (const phase of this.plan.slice(0, failedIndex)) {
       const state = this.states.get(phase);
-      if (state?.status === 'running') {
-        this.setStepState(phase, 'succeeded', state.detail, state.attempt_count);
+      if (state?.status !== 'failed') {
+        this.setStepState(phase, 'succeeded', state?.detail, state?.attempt_count);
       }
     }
     this.setStepState(stepID, 'failed', compact(stepFailure.presentation.summary));
-    for (const phase of this.phases.slice(failedIndex + 1)) {
+    for (const phase of this.plan.slice(failedIndex + 1)) {
       this.setStepState(phase, 'pending');
     }
     return stepFailure;
@@ -244,9 +350,12 @@ export class RuntimeLifecycleWorkflow {
     return runtimeLifecycleProgress({
       location: this.context.location,
       operation: this.context.operation,
+      planState: this.planState,
+      planRevision: this.planRevision,
       phase: this.activeStepID,
       failedPhase: this.failedStepID ?? undefined,
       stepStates: this.stepStates(),
+      omittedSteps: this.omittedSteps,
       targetID: this.context.target_id,
       targetLabel: this.context.target_label,
       targetDetail: this.context.target_detail,
@@ -254,8 +363,9 @@ export class RuntimeLifecycleWorkflow {
   }
 
   stepStates(): readonly DesktopRuntimeLifecycleStepState[] {
-    return this.phases.map((phase) => this.states.get(phase) ?? {
+    return this.plan.map((phase, index) => this.states.get(phase) ?? {
       id: phase,
+      key: this.stepKey(phase, index),
       status: 'pending' as const,
     });
   }
@@ -266,8 +376,11 @@ export class RuntimeLifecycleWorkflow {
     detail = '',
     attemptCount?: number,
   ): void {
+    const index = this.stepIndex(stepID);
     this.states.set(stepID, {
       id: stepID,
+      key: this.states.get(stepID)?.key ?? this.stepKey(stepID, index < 0 ? this.plan.length : index),
+      label: this.states.get(stepID)?.label,
       status,
       ...(compact(detail) ? { detail: compact(detail) } : {}),
       ...(attemptCount !== undefined ? { attempt_count: Math.max(0, Math.floor(attemptCount)) } : {}),
@@ -275,7 +388,14 @@ export class RuntimeLifecycleWorkflow {
   }
 
   private stepIndex(stepID: DesktopRuntimeLifecycleStepID): number {
-    const index = this.phases.indexOf(stepID);
-    return index >= 0 ? index : this.phases.length;
+    return this.plan.indexOf(stepID);
+  }
+
+  private firstPendingStep(): DesktopRuntimeLifecycleStepState | null {
+    return this.stepStates().find((step) => step.status === 'pending') ?? null;
+  }
+
+  private stepKey(stepID: DesktopRuntimeLifecycleStepID, index: number): string {
+    return `runtime-plan:${index}:${stepID}`;
   }
 }
