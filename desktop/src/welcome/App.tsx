@@ -217,15 +217,17 @@ import {
   closeEnvironmentLifecycleDisclosure,
   environmentActionStartsLifecycleDisclosure,
   environmentLifecycleDisclosureForEnvironment,
-  lifecycleDisclosureIntentForActionKind,
-  lifecycleDisclosureTriggerLabel,
   pendingEnvironmentLifecycleProgress,
   reconcileEnvironmentLifecycleDisclosure,
   reopenEnvironmentLifecycleDisclosure,
   type EnvironmentLifecycleDisclosureIntent,
   type EnvironmentLifecycleDisclosureState,
 } from './environmentLifecycleDisclosure';
-import { runtimeLifecycleReadyPrimaryAction } from './environmentProgressReadyAction';
+import {
+  environmentProgressPrimaryPresentation,
+  runtimeLifecycleReadyPrimaryAction,
+  selectEnvironmentPanelProgress,
+} from './environmentProgressPrimaryPresentation';
 import {
   busyStateForLauncherRequest,
   busyStateWithActionProgress,
@@ -5076,13 +5078,14 @@ function EnvironmentSplitActionButton(props: Readonly<{
   });
   const primaryProgress = createMemo(() => props.openConnectionProgress ?? null);
   const runtimeMenuProgress = createMemo(() => props.runtimeLifecycleProgress ?? null);
-  const hasOpenConnectionProgress = createMemo(() => primaryProgress()?.open_progress !== undefined);
-  const hasRuntimeLifecycleProgress = createMemo(() => runtimeMenuProgress()?.lifecycle_progress !== undefined);
-  const showProgress = createMemo(() => hasOpenConnectionProgress() || hasRuntimeLifecycleProgress());
-  const progressData = createMemo(() => primaryProgress() ?? runtimeMenuProgress());
-  const popoverOpen = createMemo(() => showProgress() ? props.progressOpen : props.guidanceOpen);
+  const panelProgress = createMemo(() => selectEnvironmentPanelProgress(primaryProgress(), runtimeMenuProgress()));
+  const hasPanelProgress = createMemo(() => panelProgress() !== null);
+  const progressPanelVisible = createMemo(() => props.progressOpen && hasPanelProgress());
+  const primaryProgressPresentation = createMemo(() => environmentProgressPrimaryPresentation(panelProgress()));
   const primaryActionOverlay = createMemo(() => (
-    hasOpenConnectionProgress() ? undefined : props.presentation.primary_action_overlay ?? sessionPopoverOverlay()
+    primaryProgressPresentation() || progressPanelVisible()
+      ? undefined
+      : props.presentation.primary_action_overlay ?? sessionPopoverOverlay()
   ));
   const tooltipOverlay = createMemo<Extract<EnvironmentPrimaryActionOverlayModel, Readonly<{ kind: 'tooltip' }>> | undefined>(() => {
     const overlay = primaryActionOverlay();
@@ -5100,21 +5103,13 @@ function EnvironmentSplitActionButton(props: Readonly<{
     && popoverOverlay()!.actions.length > 0
     && !props.presentation.primary_action.enabled
   ));
-  const popoverPrimaryRunsAction = createMemo(() => (
-    props.presentation.primary_action.enabled && popoverOverlay()?.actions.length === 0
+  const primaryFallbackRunsAction = createMemo(() => (
+    props.presentation.primary_action.enabled
+    && (popoverOverlay() === undefined || popoverOverlay()?.actions.length === 0)
   ));
+  const popoverOpen = createMemo(() => progressPanelVisible() || (props.guidanceOpen && popoverOverlay() !== undefined));
   const shimmerBlocked = createMemo(() => (
-    hasOpenConnectionProgress() || hasRuntimeLifecycleProgress() ? false : blockedPrimaryActionDisabled()
-  ));
-  const environmentProgressTriggerLabel = createMemo(() => (
-    primaryProgress()?.open_progress
-      ? 'Opening...'
-      : lifecycleDisclosureTriggerLabel(
-        lifecycleDisclosureIntentForActionKind(runtimeMenuProgress()?.action ?? 'start_environment_runtime') ?? 'start_runtime',
-      )
-  ));
-  const environmentProgressTriggerIcon = createMemo(() => (
-    runtimeMenuProgress()?.action === 'stop_environment_runtime' ? Stop : Play
+    primaryProgressPresentation() ? false : blockedPrimaryActionDisabled()
   ));
   const primaryButtonClass = createMemo(() => (
     cn('w-full justify-center', hasMenuActions() && 'rounded-r-none border-r-0')
@@ -5124,8 +5119,8 @@ function EnvironmentSplitActionButton(props: Readonly<{
       ? <ShieldCheck class="mr-1 h-3.5 w-3.5" />
       : null
   );
-  const renderEnvironmentProgressTriggerIcon = () => {
-    const ProgressIcon = environmentProgressTriggerIcon();
+  const renderEnvironmentProgressTriggerIcon = (icon: 'play' | 'stop') => {
+    const ProgressIcon = icon === 'stop' ? Stop : Play;
     return <ProgressIcon class="redeven-split-action-trigger__icon h-3.5 w-3.5" />;
   };
   let rootRef: HTMLDivElement | undefined;
@@ -5192,6 +5187,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
       disabled={!props.presentation.primary_action.enabled}
       onClick={() => {
         closeMenu();
+        props.onProgressOpenChange(false);
         props.onRunAction(props.presentation.primary_action);
       }}
     >
@@ -5203,7 +5199,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
     <div ref={rootRef} class="redeven-split-action flex-1">
       <div class="redeven-split-action-primary">
         <Show
-          when={showProgress() || popoverOverlay()}
+          when={hasPanelProgress() || popoverOverlay()}
           fallback={(
             <Show when={tooltipOverlay()} fallback={renderPrimaryButton()}>
               <DesktopTooltip
@@ -5222,7 +5218,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
               if (open) {
                 closeMenu();
               }
-              if (showProgress()) {
+              if (hasPanelProgress() && (open || progressPanelVisible())) {
                 props.onProgressOpenChange(open);
                 return;
               }
@@ -5232,7 +5228,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
               <div style={{ display: 'grid' }}>
                 <div
                   class="redeven-popover-panel-collapse"
-                  classList={{ 'redeven-popover-panel-collapse--open': !showProgress() }}
+                  classList={{ 'redeven-popover-panel-collapse--open': !progressPanelVisible() }}
                 >
                   <div>
                     <Show when={popoverOverlay()}>
@@ -5253,10 +5249,10 @@ function EnvironmentSplitActionButton(props: Readonly<{
                 </div>
                 <div
                   class="redeven-popover-panel-collapse"
-                  classList={{ 'redeven-popover-panel-collapse--open': showProgress() }}
+                  classList={{ 'redeven-popover-panel-collapse--open': progressPanelVisible() }}
                 >
                   <div>
-                    <Show when={progressData()}>
+                    <Show when={panelProgress()}>
                       {(p) => (
                         <EnvironmentProgressPanel
                           progress={p()}
@@ -5282,13 +5278,13 @@ function EnvironmentSplitActionButton(props: Readonly<{
             placement="top"
             anchorClass="flex w-full"
             popoverAriaLabel={
-              showProgress()
-                ? (progressData()?.title ?? 'Environment progress')
+              progressPanelVisible()
+                ? (panelProgress()?.title ?? 'Environment progress')
                 : (popoverOverlay()?.title ?? '')
             }
           >
             <Show
-              when={showProgress()}
+              when={primaryProgressPresentation()}
               fallback={(
                 <Button
                   size="sm"
@@ -5298,18 +5294,20 @@ function EnvironmentSplitActionButton(props: Readonly<{
                     blockedPrimaryActionDisabled() && 'redeven-split-action-trigger--blocked',
                   )}
                   style={{ 'min-width': 'var(--redeven-split-action-primary-min-width)' }}
-                  disabled={props.loading && popoverPrimaryRunsAction()}
+                  disabled={props.loading && primaryFallbackRunsAction()}
                   aria-disabled={blockedPrimaryActionDisabled() ? true : undefined}
-                  aria-haspopup="dialog"
-                  aria-expanded={props.guidanceOpen}
-                  aria-label={blockedPrimaryActionTriggerLabel(props.presentation.primary_action.label)}
+                  aria-haspopup={popoverOverlay() ? 'dialog' : undefined}
+                  aria-expanded={popoverOverlay() ? props.guidanceOpen : undefined}
+                  aria-label={blockedPrimaryActionDisabled() ? blockedPrimaryActionTriggerLabel(props.presentation.primary_action.label) : undefined}
                   onClick={() => {
                     closeMenu();
-                    if (popoverPrimaryRunsAction()) {
+                    if (primaryFallbackRunsAction()) {
                       props.onGuidanceOpenChange(false);
+                      props.onProgressOpenChange(false);
                       props.onRunAction(props.presentation.primary_action);
                       return;
                     }
+                    props.onProgressOpenChange(false);
                     props.onGuidanceOpenChange(!props.guidanceOpen);
                   }}
                 >
@@ -5327,24 +5325,36 @@ function EnvironmentSplitActionButton(props: Readonly<{
                 </Button>
               )}
             >
-              <Button
-                size="sm"
-                variant={props.presentation.primary_action.variant}
-                class={cn(primaryButtonClass(), 'redeven-split-action-trigger--progress')}
-                style={{ 'min-width': 'var(--redeven-split-action-primary-min-width)' }}
-                aria-haspopup="dialog"
-                aria-expanded={props.progressOpen}
-                aria-label={`${environmentProgressTriggerLabel()} progress`}
-                onClick={() => {
-                  closeMenu();
-                  props.onProgressOpenChange(!props.progressOpen);
-                }}
-              >
-                <span class="redeven-split-action-trigger__content">
-                  {renderEnvironmentProgressTriggerIcon()}
-                  <span>{environmentProgressTriggerLabel()}</span>
-                </span>
-              </Button>
+              {(presentation) => {
+                const currentPresentation = presentation();
+                return (
+                  <Button
+                    size="sm"
+                    variant={props.presentation.primary_action.variant}
+                    class={cn(
+                      primaryButtonClass(),
+                      currentPresentation.kind === 'progress_trigger'
+                        ? 'redeven-split-action-trigger--progress'
+                        : 'redeven-split-action-trigger--attention',
+                    )}
+                    style={{ 'min-width': 'var(--redeven-split-action-primary-min-width)' }}
+                    aria-haspopup="dialog"
+                    aria-expanded={props.progressOpen}
+                    aria-label={currentPresentation.ariaLabel}
+                    onClick={() => {
+                      closeMenu();
+                      props.onProgressOpenChange(!props.progressOpen);
+                    }}
+                  >
+                    <span class="redeven-split-action-trigger__content">
+                      {currentPresentation.kind === 'progress_trigger'
+                        ? renderEnvironmentProgressTriggerIcon(currentPresentation.icon)
+                        : <AlertTriangle class="redeven-split-action-trigger__icon h-3.5 w-3.5" />}
+                      <span>{currentPresentation.label}</span>
+                    </span>
+                  </Button>
+                );
+              }}
             </Show>
           </DesktopActionPopover>
         </Show>
@@ -5367,7 +5377,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
           aria-label={props.presentation.menu_button_label}
           aria-haspopup="menu"
           aria-expanded={props.menuOpen}
-          disabled={props.loading && !hasOpenConnectionProgress() && !hasRuntimeLifecycleProgress()}
+          disabled={props.loading && !primaryProgressPresentation()}
           onClick={() => props.onMenuOpenChange(!props.menuOpen)}
         >
           <ChevronDown class={cn('h-3.5 w-3.5 transition-transform duration-150', props.menuOpen && 'rotate-180')} />
@@ -5517,6 +5527,31 @@ function EnvironmentConnectionCard(props: Readonly<{
   const openConnectionProgress = createMemo(() => (
     activeOpenConnectionProgressForEnvironment(props.environment, props.busyState, props.actionProgress)
   ));
+  const [rememberedOpenConnectionProgress, setRememberedOpenConnectionProgress] = createSignal<DesktopLauncherActionProgress | null>(null);
+  const visibleOpenConnectionProgress = createMemo(() => (
+    openConnectionProgress() ?? rememberedOpenConnectionProgress()
+  ));
+  createEffect(() => {
+    const progress = openConnectionProgress();
+    if (!progress?.open_progress) {
+      if (!props.lifecycleProgressOpen) {
+        setRememberedOpenConnectionProgress(null);
+      }
+      return;
+    }
+    if (progress.status === 'succeeded' || progress.status === 'canceled') {
+      if (props.lifecycleProgressOpen) {
+        setRememberedOpenConnectionProgress(progress);
+      }
+      return;
+    }
+    setRememberedOpenConnectionProgress(null);
+  });
+  createEffect(() => {
+    if (!props.lifecycleProgressOpen) {
+      setRememberedOpenConnectionProgress(null);
+    }
+  });
   const disclosureRuntimeLifecycleProgress = createMemo(() => {
     const disclosure = props.lifecycleDisclosure;
     if (!disclosure) {
@@ -5733,7 +5768,7 @@ function EnvironmentConnectionCard(props: Readonly<{
           busyState={props.busyState}
           loading={isWindowActionBusy() || isRuntimeActionBusy()}
           runtimeLifecycleProgress={visibleRuntimeLifecycleProgress()}
-          openConnectionProgress={openConnectionProgress()}
+          openConnectionProgress={visibleOpenConnectionProgress()}
           cancelOperation={props.cancelOperation}
           dismissOperation={props.dismissOperation}
           copyOperationDiagnostics={props.copyOperationDiagnostics}
