@@ -5,7 +5,6 @@ import type {
   ActivityDetailSection,
   ActivityDetailStatus,
   FileChangeDetailSection,
-  FileContentSection,
   StructuredFieldsSection,
   TodoDetailSection,
   TodoDetailStatus,
