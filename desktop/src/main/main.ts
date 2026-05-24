@@ -100,6 +100,7 @@ import {
 import {
   RuntimeLifecycleStepFailureError,
   RuntimeLifecycleWorkflow,
+  runtimeLifecyclePlanPatchPreservingObservedHistory,
   runtimeLifecycleStepIDFromError,
 } from './runtimeLifecycleWorkflow';
 import {
@@ -4032,10 +4033,18 @@ function commitRuntimeLifecycleDecision(
     operation: input.operation,
     decision: input.decision,
   });
+  const patch = runtimeLifecyclePlanPatchPreservingObservedHistory({
+    currentSteps: workflow.stepStates(),
+    patch: {
+      state: plan.state,
+      steps: plan.steps.map((step) => step.id),
+      omitted_steps: plan.omitted_steps ?? [],
+    },
+  });
   workflow.commitPlan({
-    state: plan.state,
-    steps: plan.steps.map((step) => step.id),
-    omitted_steps: plan.omitted_steps,
+    state: patch.state,
+    steps: patch.steps,
+    omitted_steps: patch.omitted_steps,
   });
   return workflow;
 }

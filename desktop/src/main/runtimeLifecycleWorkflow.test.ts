@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { DesktopOperationFailureError, desktopOperationFailurePresentation } from './desktopOperationFailure';
-import { RuntimeLifecycleWorkflow } from './runtimeLifecycleWorkflow';
+import {
+  RuntimeLifecycleWorkflow,
+  runtimeLifecyclePlanPatchPreservingObservedHistory,
+} from './runtimeLifecycleWorkflow';
 import {
   runtimeLifecyclePlanAfterDecision,
   runtimeLifecyclePlanIncludingStep,
@@ -184,6 +187,140 @@ describe('RuntimeLifecycleWorkflow', () => {
       ['checking_runtime_service', 'pending'],
       ['runtime_ready', 'pending'],
     ]);
+  });
+
+  it('preserves completed stop history when a local container update decision moves from running to stopped', () => {
+    const subject = containerWorkflow();
+
+    subject.beginStep('checking_container', 'Checking container');
+    subject.completeStep('checking_container');
+    const runningPlan = runtimeLifecyclePlanAfterDecision({
+      location: 'local_container',
+      operation: 'update',
+      decision: 'runtime_update_required_running',
+    });
+    subject.commitPlan({
+      state: runningPlan.state,
+      steps: runningPlan.steps.map((step) => step.id),
+      omitted_steps: runningPlan.omitted_steps,
+    });
+    subject.beginStep('stopping_runtime_process', 'Stopping runtime');
+    subject.completeStep('stopping_runtime_process');
+    subject.beginStep('verifying_runtime_stopped', 'Verifying stop');
+    subject.completeStep('verifying_runtime_stopped');
+
+    const stoppedPlan = runtimeLifecyclePlanAfterDecision({
+      location: 'local_container',
+      operation: 'update',
+      decision: 'runtime_update_required_stopped',
+    });
+    expect(() => subject.commitPlan({
+      state: stoppedPlan.state,
+      steps: stoppedPlan.steps.map((step) => step.id),
+      omitted_steps: stoppedPlan.omitted_steps,
+    })).toThrow(/cannot remove active or completed step "stopping_runtime_process"/iu);
+
+    const stoppedPatch = runtimeLifecyclePlanPatchPreservingObservedHistory({
+      currentSteps: subject.stepStates(),
+      patch: {
+        state: stoppedPlan.state,
+        steps: stoppedPlan.steps.map((step) => step.id),
+        omitted_steps: stoppedPlan.omitted_steps,
+      },
+    });
+    subject.commitPlan(stoppedPatch);
+
+    expect(subject.progress().steps.map((step) => [step.id, step.status])).toEqual([
+      ['checking_container', 'succeeded'],
+      ['stopping_runtime_process', 'succeeded'],
+      ['verifying_runtime_stopped', 'succeeded'],
+    ]);
+    const omittedStepIDs = subject.progress().diagnostics?.omitted_steps?.map((step) => step.id) ?? [];
+    expect(omittedStepIDs).not.toContain('stopping_runtime_process');
+    expect(omittedStepIDs).not.toContain('verifying_runtime_stopped');
+
+    const platformPlan = runtimeLifecyclePlanIncludingStep({
+      location: 'local_container',
+      operation: 'update',
+      currentSteps: subject.currentStepIDs(),
+      step: 'detecting_platform',
+    });
+    subject.ensureStepPlanned('detecting_platform', {
+      state: platformPlan.state,
+      steps: platformPlan.steps.map((step) => step.id),
+      omitted_steps: platformPlan.omitted_steps,
+    });
+    subject.beginStep('detecting_platform', 'Detecting platform');
+    subject.completeStep('detecting_platform');
+
+    const packagePlan = runtimeLifecyclePlanIncludingStep({
+      location: 'local_container',
+      operation: 'update',
+      currentSteps: subject.currentStepIDs(),
+      step: 'preparing_runtime_package',
+    });
+    subject.ensureStepPlanned('preparing_runtime_package', {
+      state: packagePlan.state,
+      steps: packagePlan.steps.map((step) => step.id),
+      omitted_steps: packagePlan.omitted_steps,
+    });
+
+    expect(subject.progress().steps.map((step) => [step.id, step.status])).toEqual([
+      ['checking_container', 'succeeded'],
+      ['stopping_runtime_process', 'succeeded'],
+      ['verifying_runtime_stopped', 'succeeded'],
+      ['detecting_platform', 'succeeded'],
+      ['checking_runtime_package', 'pending'],
+      ['preparing_runtime_package', 'pending'],
+      ['installing_runtime_package', 'pending'],
+      ['starting_runtime_process', 'pending'],
+      ['checking_runtime_service', 'pending'],
+      ['runtime_ready', 'pending'],
+    ]);
+  });
+
+  it('merges decision plans with observed history without preserving future pending placeholders', () => {
+    const patch = {
+      state: 'executing' as const,
+      steps: [
+        'checking_container',
+        'checking_container',
+        'runtime_ready',
+      ] as const,
+      omitted_steps: [
+        { id: 'stopping_runtime_process' as const, reason: 'runtime_process_absent' as const },
+        { id: 'verifying_runtime_stopped' as const, reason: 'runtime_process_absent' as const },
+        { id: 'detecting_platform' as const, reason: 'managed_helper_not_required' as const },
+      ],
+    };
+    const input = {
+      currentSteps: [
+        { id: 'checking_container' as const, status: 'succeeded' as const },
+        { id: 'stopping_runtime_process' as const, status: 'running' as const },
+        { id: 'verifying_runtime_stopped' as const, status: 'failed' as const },
+        { id: 'detecting_platform' as const, status: 'pending' as const },
+      ],
+      patch,
+    };
+
+    const first = runtimeLifecyclePlanPatchPreservingObservedHistory(input);
+    const second = runtimeLifecyclePlanPatchPreservingObservedHistory(input);
+
+    expect(second).toEqual(first);
+    expect(first.steps).toEqual([
+      'checking_container',
+      'stopping_runtime_process',
+      'verifying_runtime_stopped',
+      'runtime_ready',
+    ]);
+    expect(first.steps).not.toContain('detecting_platform');
+    expect(first.omitted_steps?.map((step) => step.id)).toEqual([
+      'detecting_platform',
+    ]);
+    expect(new Set(first.steps).size).toBe(first.steps.length);
+    for (const omitted of first.omitted_steps ?? []) {
+      expect(first.steps).not.toContain(omitted.id);
+    }
   });
 
   it('keeps a completed container step active until the next step actually begins', () => {
