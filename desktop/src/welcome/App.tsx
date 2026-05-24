@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
+  ExternalLink,
   Globe,
   Lock,
   Moon,
@@ -224,6 +225,7 @@ import {
   type EnvironmentLifecycleDisclosureIntent,
   type EnvironmentLifecycleDisclosureState,
 } from './environmentLifecycleDisclosure';
+import { runtimeLifecycleReadyPrimaryAction } from './environmentProgressReadyAction';
 import {
   busyStateForLauncherRequest,
   busyStateWithActionProgress,
@@ -4666,9 +4668,11 @@ function environmentProgressStatusIconTone(progress: DesktopLauncherActionProgre
 
 function EnvironmentProgressPanel(props: Readonly<{
   progress: DesktopLauncherActionProgress;
+  primaryAction?: EnvironmentActionModel;
   cancelOperation: (progress: DesktopLauncherActionProgress) => void;
   dismissOperation: (progress: DesktopLauncherActionProgress) => void;
   copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
+  runPrimaryAction?: (action: EnvironmentActionModel) => void;
 }>) {
   const startup = createMemo(() => props.progress.lifecycle_progress);
   const openConnection = createMemo(() => props.progress.open_progress);
@@ -4701,6 +4705,9 @@ function EnvironmentProgressPanel(props: Readonly<{
     || props.progress.status === 'cleanup_failed'
     || props.progress.status === 'canceled'
   ));
+  const readyPrimaryAction = createMemo(() => {
+    return runtimeLifecycleReadyPrimaryAction(props.progress, props.primaryAction);
+  });
   const phaseSequence = createMemo<readonly { phase: string; key: string; label: string; status?: string }[]>(() => {
     const current = startup();
     const open = openConnection();
@@ -4855,6 +4862,21 @@ function EnvironmentProgressPanel(props: Readonly<{
             {props.progress.interrupt_label || 'Stop startup'}
           </Button>
         </div>
+      </Show>
+      <Show when={readyPrimaryAction()}>
+        {(action) => (
+          <div class="redeven-action-popover__actions">
+            <Button
+              size="sm"
+              variant="default"
+              class="w-full justify-center gap-1.5"
+              onClick={() => props.runPrimaryAction?.(action())}
+            >
+              <ExternalLink class="h-3.5 w-3.5" />
+              {action().label}
+            </Button>
+          </div>
+        )}
       </Show>
       <Show when={canDismiss()}>
         <div class="redeven-action-popover__actions">
@@ -5238,12 +5260,18 @@ function EnvironmentSplitActionButton(props: Readonly<{
                       {(p) => (
                         <EnvironmentProgressPanel
                           progress={p()}
+                          primaryAction={props.presentation.primary_action}
                           cancelOperation={props.cancelOperation}
                           dismissOperation={(progress) => {
                             props.dismissOperation(progress);
                             props.onProgressOpenChange(false);
                           }}
                           copyOperationDiagnostics={props.copyOperationDiagnostics}
+                          runPrimaryAction={(action) => {
+                            props.onProgressOpenChange(false);
+                            closeMenu();
+                            props.onRunAction(action);
+                          }}
                         />
                       )}
                     </Show>
