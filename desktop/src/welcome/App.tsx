@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, type JSX } from 'solid-js';
+import { For, Index, Show, createEffect, createMemo, createSignal, on, onCleanup, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { Motion, Presence } from 'solid-motionone';
 import { cn, FloeProvider, useCommand, useTheme } from '@floegence/floe-webapp-core';
@@ -236,6 +236,7 @@ import {
   IDLE_LAUNCHER_BUSY_STATE,
   type DesktopLauncherBusyState,
 } from './launcherBusyState';
+import { createRuntimeLifecycleStepAnimation } from './runtimeLifecycleStepAnimation';
 
 type DesktopLauncherBridge = Readonly<{
   getSnapshot: () => Promise<DesktopWelcomeSnapshot>;
@@ -4671,6 +4672,7 @@ function EnvironmentProgressPanel(props: Readonly<{
 }>) {
   const startup = createMemo(() => props.progress.lifecycle_progress);
   const openConnection = createMemo(() => props.progress.open_progress);
+  const currentRuntimeLifecycle = createMemo(() => props.progress.lifecycle_progress);
   const iconTone = createMemo(() => environmentProgressStatusIconTone(props.progress));
   const phaseStatus = createMemo(() => {
     const s = props.progress.status;
@@ -4679,10 +4681,18 @@ function EnvironmentProgressPanel(props: Readonly<{
     }
     return 'running';
   });
+  const runtimeSteps = createMemo(() => startup()?.steps ?? []);
+  const stepEntering = createRuntimeLifecycleStepAnimation(
+    runtimeSteps,
+    () => startup()?.plan_revision ?? 0,
+  );
   const stagePercent = createMemo(() => {
     const current = startup() ?? openConnection();
     if (!current || current.stage_count <= 0) {
       return 0;
+    }
+    if ('plan_state' in current && current.plan_state === 'planning') {
+      return 100;
     }
     return Math.max(0, Math.min(100, Math.round((current.stage_index / current.stage_count) * 100)));
   });
@@ -4694,18 +4704,19 @@ function EnvironmentProgressPanel(props: Readonly<{
     || props.progress.status === 'cleanup_failed'
     || props.progress.status === 'canceled'
   ));
-  const phaseSequence = createMemo<readonly { phase: string; label: string; status?: string }[]>(() => {
+  const phaseSequence = createMemo<readonly { phase: string; key: string; label: string; status?: string }[]>(() => {
     const current = startup();
     const open = openConnection();
     if (open) {
       return openConnectionPhaseSequence(open.location)
-        .map((p) => ({ phase: p, label: OPEN_CONNECTION_PHASE_LABELS[p] }));
+        .map((p, index) => ({ phase: p, key: `open:${index}:${p}`, label: OPEN_CONNECTION_PHASE_LABELS[p] }));
     }
     if (!current) {
       return [];
     }
     return current.steps.map((step) => ({
       phase: step.id,
+      key: step.key,
       label: step.label,
       status: step.status,
     }));
@@ -4779,29 +4790,46 @@ function EnvironmentProgressPanel(props: Readonly<{
         {(currentStartup) => (
           <>
             <div class="redeven-environment-progress__steps" aria-hidden="true">
-              <For each={phaseSequence()}>
+              <Index each={phaseSequence()}>
                 {(step, index) => {
-                  const state = () => stepState(index(), currentStartup().phase, phaseStatus());
-                  const isLast = () => index() === phaseSequence().length - 1;
+                  const state = () => stepState(index, currentStartup().phase, phaseStatus());
+                  const isLast = () => index === phaseSequence().length - 1;
                   return (
-                    <div class="redeven-environment-progress__step">
+                    <div
+                      class="redeven-environment-progress__step"
+                      data-step-key={step().key}
+                      data-plan-revision={startup()?.plan_revision ?? 0}
+                      data-entering={startup() ? stepEntering(step().key) : false}
+                    >
                       <div class="redeven-environment-progress__step-connector">
                         <span class="redeven-environment-progress__step-dot" data-state={state()} />
                         <Show when={!isLast()}>
                           <span class="redeven-environment-progress__step-line" data-state={state()} />
                         </Show>
                       </div>
-                      <span class="redeven-environment-progress__step-label" data-state={state()}>{step.label}</span>
+                      <span
+                        class="redeven-environment-progress__step-label"
+                        data-state={state()}
+                      >{step().label}</span>
                     </div>
                   );
                 }}
-              </For>
+              </Index>
             </div>
-            <div class="redeven-environment-progress__meter" aria-hidden="true">
+            <div
+              class="redeven-environment-progress__meter"
+              data-plan-state={startup()?.plan_state ?? 'executing'}
+              aria-hidden="true"
+            >
               <span style={{ width: `${stagePercent()}%` }} />
             </div>
             <div class="redeven-environment-progress__meta">
-              <span>Step {currentStartup().stage_index} of {currentStartup().stage_count}</span>
+              <Show
+                when={currentRuntimeLifecycle()?.plan_state !== 'planning'}
+                fallback={<span>{`Planning ${props.progress.action === 'restart_environment_runtime' ? 'restart' : props.progress.action === 'update_environment_runtime' ? 'update' : props.progress.action === 'stop_environment_runtime' ? 'stop' : 'startup'} path`}</span>}
+              >
+                <span>Step {currentStartup().stage_index} of {currentStartup().stage_count}</span>
+              </Show>
               <Show when={currentStartup().target_detail}>
                 {(detail) => <span>{detail()}</span>}
               </Show>

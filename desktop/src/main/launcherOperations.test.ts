@@ -103,9 +103,6 @@ describe('LauncherOperationRegistry', () => {
       ['detecting_platform', 'succeeded', ''],
       ['preparing_runtime_package', 'succeeded', ''],
       ['installing_runtime_package', 'running', 'Uploading.'],
-      ['starting_runtime_process', 'pending', ''],
-      ['checking_runtime_service', 'pending', ''],
-      ['runtime_ready', 'pending', ''],
     ]);
     expect(registry.currentSubjectGeneration('ssh_environment', operation.subject_id)).toBe(1);
     expect(registry.isStale(operation.operation_key)).toBe(true);

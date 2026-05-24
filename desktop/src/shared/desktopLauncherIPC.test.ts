@@ -523,10 +523,21 @@ describe('desktopLauncherIPC', () => {
   it('carries runtime lifecycle metadata in launcher operation and progress contracts', () => {
     const runtimeLifecycle = runtimeLifecycleProgress({
       location: 'local_container',
+      operation: 'update',
+      planState: 'executing',
+      planRevision: 3,
       phase: 'installing_runtime_package',
       targetID: 'local:container:docker:dev:abcd1234',
       targetLabel: 'Dev Container',
       targetDetail: 'docker/dev',
+      stepStates: [
+        { id: 'checking_container', key: 'runtime-plan:0:checking_container', status: 'succeeded' },
+        { id: 'checking_runtime_package', key: 'runtime-plan:1:checking_runtime_package', status: 'succeeded' },
+        { id: 'installing_runtime_package', key: 'runtime-plan:2:installing_runtime_package', status: 'running' },
+      ],
+      omittedSteps: [
+        { id: 'stopping_runtime_process', reason: 'runtime_process_absent' },
+      ],
     });
     const operation: DesktopLauncherOperationSnapshot = {
       operation_key: 'local:container:docker:dev:abcd1234',
@@ -572,6 +583,22 @@ describe('desktopLauncherIPC', () => {
 
     expect(operation.subject_kind).toBe('runtime_target');
     expect(progress.lifecycle_progress).toEqual(runtimeLifecycle);
+    expect(progress.lifecycle_progress).toEqual(expect.objectContaining({
+      plan_state: 'executing',
+      plan_revision: 3,
+      stage_index: 3,
+      stage_count: 3,
+      diagnostics: {
+        omitted_steps: [
+          { id: 'stopping_runtime_process', reason: 'runtime_process_absent' },
+        ],
+      },
+    }));
+    expect(progress.lifecycle_progress?.steps.map((step) => step.key)).toEqual([
+      'runtime-plan:0:checking_container',
+      'runtime-plan:1:checking_runtime_package',
+      'runtime-plan:2:installing_runtime_package',
+    ]);
   });
 
   it('carries Open connection metadata separately from runtime lifecycle metadata', () => {

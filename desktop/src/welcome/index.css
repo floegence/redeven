@@ -1646,6 +1646,7 @@ body {
   min-width: 0;
   gap: 0;
   margin: 0.15rem 0;
+  transition: min-height 180ms ease;
 }
 
 .redeven-environment-progress__step {
@@ -1653,6 +1654,15 @@ body {
   min-width: 0;
   align-items: flex-start;
   gap: 0.5rem;
+  transform-origin: top left;
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.redeven-environment-progress__step[data-entering='true'] {
+  opacity: 0;
+  transform: translateY(-0.25rem);
 }
 
 .redeven-environment-progress__step-connector {
@@ -1760,6 +1770,17 @@ body {
   transition: width 250ms ease;
 }
 
+.redeven-environment-progress__meter[data-plan-state='planning'] span {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--primary) 28%, transparent),
+    color-mix(in srgb, var(--primary) 76%, white 24%),
+    color-mix(in srgb, var(--primary) 28%, transparent)
+  );
+  background-size: 180% 100%;
+  animation: redeven-runtime-planning-meter 1.2s ease-in-out infinite;
+}
+
 .redeven-environment-progress__meta {
   display: flex;
   min-width: 0;
@@ -1787,6 +1808,16 @@ body {
 
   50% {
     box-shadow: 0 0 0 0.42rem color-mix(in srgb, var(--primary) 6%, transparent);
+  }
+}
+
+@keyframes redeven-runtime-planning-meter {
+  0% {
+    background-position: 100% 0;
+  }
+
+  100% {
+    background-position: -80% 0;
   }
 }
 
@@ -2140,6 +2171,15 @@ pre,
 
   .redeven-environment-progress__step-dot[data-state='active'] {
     animation-duration: 1ms;
+  }
+
+  .redeven-environment-progress__step,
+  .redeven-environment-progress__meter span {
+    transition-duration: 1ms;
+  }
+
+  .redeven-environment-progress__meter[data-plan-state='planning'] span {
+    animation: none;
   }
 
   .redeven-action-popover__status-dot {

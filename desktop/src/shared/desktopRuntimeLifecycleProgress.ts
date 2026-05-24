@@ -22,9 +22,16 @@ export type DesktopRuntimeLifecyclePhase =
   | 'starting_runtime_process'
   | 'checking_runtime_service'
   | 'runtime_ready'
+  | 'runtime_up_to_date'
+  | 'runtime_already_stopped'
   | 'runtime_stopped';
 
 export type DesktopRuntimeLifecycleStepID = DesktopRuntimeLifecyclePhase;
+
+export type DesktopRuntimeLifecyclePlanState =
+  | 'planning'
+  | 'executing'
+  | 'terminal';
 
 export type DesktopRuntimeLifecycleStepStatus =
   | 'pending'
@@ -34,16 +41,31 @@ export type DesktopRuntimeLifecycleStepStatus =
 
 export type DesktopRuntimeLifecycleStepSnapshot = Readonly<{
   id: DesktopRuntimeLifecycleStepID;
+  key: string;
   label: string;
   status: DesktopRuntimeLifecycleStepStatus;
   detail?: string;
   attempt_count?: number;
 }>;
 
+export type DesktopRuntimeLifecycleOmittedStepReason =
+  | 'runtime_already_openable'
+  | 'runtime_already_stopped'
+  | 'runtime_package_current'
+  | 'runtime_process_absent'
+  | 'managed_helper_not_required';
+
+export type DesktopRuntimeLifecycleOmittedStep = Readonly<{
+  id: DesktopRuntimeLifecycleStepID;
+  reason: DesktopRuntimeLifecycleOmittedStepReason;
+}>;
+
 export type DesktopRuntimeLifecycleProgress = Readonly<{
   kind: 'runtime_lifecycle';
   location: DesktopRuntimeLifecycleLocation;
   operation: DesktopRuntimeLifecycleOperation;
+  plan_state: DesktopRuntimeLifecyclePlanState;
+  plan_revision: number;
   phase: DesktopRuntimeLifecyclePhase;
   active_step_id: DesktopRuntimeLifecycleStepID;
   failed_step_id?: DesktopRuntimeLifecycleStepID;
@@ -53,189 +75,21 @@ export type DesktopRuntimeLifecycleProgress = Readonly<{
   target_id: string;
   target_label: string;
   target_detail?: string;
+  diagnostics?: {
+    omitted_steps?: readonly DesktopRuntimeLifecycleOmittedStep[];
+  };
 }>;
 
 export type DesktopRuntimeLifecycleOperation = 'start' | 'restart' | 'update' | 'stop';
 
 export type DesktopRuntimeLifecycleStepState = Readonly<{
   id: DesktopRuntimeLifecycleStepID;
+  key?: string;
+  label?: string;
   status: DesktopRuntimeLifecycleStepStatus;
   detail?: string;
   attempt_count?: number;
 }>;
-
-const LOCAL_HOST_LIFECYCLE_PHASES: readonly DesktopRuntimeLifecyclePhase[] = [
-  'checking_existing_runtime',
-  'starting_runtime_process',
-  'checking_runtime_service',
-  'runtime_ready',
-];
-
-const CONTAINER_LIFECYCLE_PHASES: readonly DesktopRuntimeLifecyclePhase[] = [
-  'checking_container',
-  'detecting_platform',
-  'checking_runtime_package',
-  'preparing_runtime_package',
-  'installing_runtime_package',
-  'starting_runtime_process',
-  'checking_runtime_service',
-  'runtime_ready',
-];
-
-const SSH_HOST_LIFECYCLE_PHASES: readonly DesktopRuntimeLifecyclePhase[] = [
-  'checking_host',
-  'checking_runtime_package',
-  'detecting_platform',
-  'preparing_runtime_package',
-  'installing_runtime_package',
-  'starting_runtime_process',
-  'checking_runtime_service',
-  'runtime_ready',
-];
-
-const SSH_CONTAINER_LIFECYCLE_PHASES: readonly DesktopRuntimeLifecyclePhase[] = [
-  'checking_host',
-  'checking_container',
-  'detecting_platform',
-  'checking_runtime_package',
-  'preparing_runtime_package',
-  'installing_runtime_package',
-  'starting_runtime_process',
-  'checking_runtime_service',
-  'runtime_ready',
-];
-
-const RUNTIME_LIFECYCLE_PHASES_BY_LOCATION: Record<DesktopRuntimeLifecycleLocation, readonly DesktopRuntimeLifecyclePhase[]> = {
-  local_host: LOCAL_HOST_LIFECYCLE_PHASES,
-  local_container: CONTAINER_LIFECYCLE_PHASES,
-  ssh_host: SSH_HOST_LIFECYCLE_PHASES,
-  ssh_container: SSH_CONTAINER_LIFECYCLE_PHASES,
-};
-
-const RUNTIME_LIFECYCLE_PHASES_BY_OPERATION: Record<DesktopRuntimeLifecycleOperation, Partial<Record<DesktopRuntimeLifecycleLocation, readonly DesktopRuntimeLifecyclePhase[]>>> = {
-  start: {},
-  restart: {
-    local_host: [
-      'checking_existing_runtime',
-      'stopping_runtime_process',
-      'verifying_runtime_stopped',
-      'starting_runtime_process',
-      'checking_runtime_service',
-      'runtime_ready',
-    ],
-    local_container: [
-      'checking_container',
-      'checking_runtime_package',
-      'stopping_runtime_process',
-      'verifying_runtime_stopped',
-      'detecting_platform',
-      'preparing_runtime_package',
-      'installing_runtime_package',
-      'starting_runtime_process',
-      'checking_runtime_service',
-      'runtime_ready',
-    ],
-    ssh_host: [
-      'checking_host',
-      'checking_runtime_package',
-      'stopping_runtime_process',
-      'verifying_runtime_stopped',
-      'detecting_platform',
-      'preparing_runtime_package',
-      'installing_runtime_package',
-      'starting_runtime_process',
-      'checking_runtime_service',
-      'runtime_ready',
-    ],
-    ssh_container: [
-      'checking_host',
-      'checking_container',
-      'checking_runtime_package',
-      'stopping_runtime_process',
-      'verifying_runtime_stopped',
-      'detecting_platform',
-      'preparing_runtime_package',
-      'installing_runtime_package',
-      'starting_runtime_process',
-      'checking_runtime_service',
-      'runtime_ready',
-    ],
-  },
-  update: {
-    local_host: [
-      'checking_existing_runtime',
-      'stopping_runtime_process',
-      'verifying_runtime_stopped',
-      'starting_runtime_process',
-      'checking_runtime_service',
-      'runtime_ready',
-    ],
-    local_container: [
-      'checking_container',
-      'checking_runtime_package',
-      'stopping_runtime_process',
-      'verifying_runtime_stopped',
-      'detecting_platform',
-      'preparing_runtime_package',
-      'installing_runtime_package',
-      'starting_runtime_process',
-      'checking_runtime_service',
-      'runtime_ready',
-    ],
-    ssh_host: [
-      'checking_host',
-      'checking_runtime_package',
-      'stopping_runtime_process',
-      'verifying_runtime_stopped',
-      'detecting_platform',
-      'preparing_runtime_package',
-      'installing_runtime_package',
-      'starting_runtime_process',
-      'checking_runtime_service',
-      'runtime_ready',
-    ],
-    ssh_container: [
-      'checking_host',
-      'checking_container',
-      'checking_runtime_package',
-      'stopping_runtime_process',
-      'verifying_runtime_stopped',
-      'detecting_platform',
-      'preparing_runtime_package',
-      'installing_runtime_package',
-      'starting_runtime_process',
-      'checking_runtime_service',
-      'runtime_ready',
-    ],
-  },
-  stop: {
-    local_host: [
-      'checking_existing_runtime',
-      'stopping_runtime_process',
-      'verifying_runtime_stopped',
-      'runtime_stopped',
-    ],
-    local_container: [
-      'checking_container',
-      'stopping_runtime_process',
-      'verifying_runtime_stopped',
-      'runtime_stopped',
-    ],
-    ssh_host: [
-      'checking_host',
-      'stopping_runtime_process',
-      'verifying_runtime_stopped',
-      'runtime_stopped',
-    ],
-    ssh_container: [
-      'checking_host',
-      'checking_container',
-      'stopping_runtime_process',
-      'verifying_runtime_stopped',
-      'runtime_stopped',
-    ],
-  },
-};
 
 export const RUNTIME_LIFECYCLE_PHASE_LABELS: Record<DesktopRuntimeLifecyclePhase, string> = {
   checking_existing_runtime: 'Checking existing runtime',
@@ -250,6 +104,8 @@ export const RUNTIME_LIFECYCLE_PHASE_LABELS: Record<DesktopRuntimeLifecyclePhase
   starting_runtime_process: 'Starting runtime',
   checking_runtime_service: 'Checking runtime service',
   runtime_ready: 'Runtime ready',
+  runtime_up_to_date: 'Runtime up to date',
+  runtime_already_stopped: 'Runtime already stopped',
   runtime_stopped: 'Runtime stopped',
 };
 
@@ -257,8 +113,16 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
+function lifecycleStepKey(
+  step: DesktopRuntimeLifecycleStepState,
+  index: number,
+  planRevision: number,
+): string {
+  return compact(step.key) || `runtime-lifecycle:${planRevision}:${index}:${step.id}`;
+}
+
 function stageIndexForPhase(
-  phases: readonly DesktopRuntimeLifecyclePhase[],
+  phases: readonly DesktopRuntimeLifecycleStepID[],
   phase: DesktopRuntimeLifecyclePhase,
 ): number {
   const index = phases.indexOf(phase);
@@ -268,34 +132,59 @@ function stageIndexForPhase(
   return 1;
 }
 
-function runtimeLifecycleSteps(input: Readonly<{
-  phases: readonly DesktopRuntimeLifecyclePhase[];
+export function runtimeLifecycleStepsFromStates(input: Readonly<{
+  stepStates: readonly DesktopRuntimeLifecycleStepState[];
+  planRevision?: number;
+}>): readonly DesktopRuntimeLifecycleStepSnapshot[] {
+  const planRevision = Math.max(0, Math.floor(input.planRevision ?? 0));
+  return input.stepStates.map((step, index) => {
+    const detail = compact(step.detail);
+    const attemptCount = step.attempt_count !== undefined
+      ? Math.max(0, Math.floor(step.attempt_count))
+      : undefined;
+    return {
+      id: step.id,
+      key: lifecycleStepKey(step, index, planRevision),
+      label: compact(step.label) || RUNTIME_LIFECYCLE_PHASE_LABELS[step.id],
+      status: step.status,
+      ...(detail ? { detail } : {}),
+      ...(attemptCount !== undefined ? { attempt_count: attemptCount } : {}),
+    };
+  });
+}
+
+function activeStepIDForSteps(
+  steps: readonly DesktopRuntimeLifecycleStepSnapshot[],
+  fallbackPhase: DesktopRuntimeLifecycleStepID,
+): DesktopRuntimeLifecycleStepID {
+  return steps.find((step) => step.status === 'failed')?.id
+    ?? steps.find((step) => step.status === 'running')?.id
+    ?? steps.find((step) => step.status === 'pending')?.id
+    ?? steps.at(-1)?.id
+    ?? fallbackPhase;
+}
+
+function runtimeLifecycleStepStates(input: Readonly<{
   activeStepID: DesktopRuntimeLifecyclePhase;
   failedStepID?: DesktopRuntimeLifecyclePhase;
   activeDetail?: string;
   attemptCount?: number;
   stepStates?: readonly DesktopRuntimeLifecycleStepState[];
-}>): readonly DesktopRuntimeLifecycleStepSnapshot[] {
-  const stateByID = new Map(input.stepStates?.map((step) => [step.id, step]) ?? []);
+}>): readonly DesktopRuntimeLifecycleStepState[] {
+  if (input.stepStates && input.stepStates.length > 0) {
+    return input.stepStates;
+  }
   const failedStepID = input.failedStepID;
-  return input.phases.map((phase) => {
-    const state = stateByID.get(phase);
-    const status = state?.status
-      ?? (failedStepID === phase ? 'failed' : phase === input.activeStepID && failedStepID === undefined ? 'running' : 'pending');
-    const detail = compact(state?.detail ?? (phase === input.activeStepID ? input.activeDetail : ''));
-    const attemptCount = state?.attempt_count !== undefined
-      ? Math.max(0, Math.floor(state.attempt_count))
-      : phase === input.activeStepID && input.attemptCount !== undefined
+  const detail = compact(input.activeDetail);
+  const attemptCount = input.attemptCount !== undefined
       ? Math.max(0, Math.floor(input.attemptCount))
       : undefined;
-    return {
-      id: phase,
-      label: RUNTIME_LIFECYCLE_PHASE_LABELS[phase],
-      status,
-      ...(detail ? { detail } : {}),
-      ...(attemptCount !== undefined ? { attempt_count: attemptCount } : {}),
-    };
-  });
+  return [{
+    id: input.activeStepID,
+    status: failedStepID === input.activeStepID ? 'failed' : failedStepID === undefined ? 'running' : 'pending',
+    ...(detail ? { detail } : {}),
+    ...(attemptCount !== undefined ? { attempt_count: attemptCount } : {}),
+  }];
 }
 
 export function desktopRuntimeLifecycleLocation(
@@ -308,23 +197,18 @@ export function desktopRuntimeLifecycleLocation(
   return hostAccess.kind === 'ssh_host' ? 'ssh_host' : 'local_host';
 }
 
-export function runtimeLifecyclePhaseSequence(
-  location: DesktopRuntimeLifecycleLocation,
-  operation: DesktopRuntimeLifecycleOperation = 'start',
-): readonly DesktopRuntimeLifecyclePhase[] {
-  return RUNTIME_LIFECYCLE_PHASES_BY_OPERATION[operation][location]
-    ?? RUNTIME_LIFECYCLE_PHASES_BY_LOCATION[location];
-}
-
 export function runtimeLifecycleProgress(
   input: Readonly<{
     location: DesktopRuntimeLifecycleLocation;
     operation?: DesktopRuntimeLifecycleOperation;
+    planState?: DesktopRuntimeLifecyclePlanState;
+    planRevision?: number;
     phase: DesktopRuntimeLifecyclePhase;
     failedPhase?: DesktopRuntimeLifecyclePhase;
     detail?: string;
     attemptCount?: number;
     stepStates?: readonly DesktopRuntimeLifecycleStepState[];
+    omittedSteps?: readonly DesktopRuntimeLifecycleOmittedStep[];
     targetID?: string;
     targetLabel: string;
     targetDetail?: string;
@@ -332,32 +216,38 @@ export function runtimeLifecycleProgress(
 ): DesktopRuntimeLifecycleProgress {
   const location = input.location;
   const operation = input.operation ?? 'start';
-  const phases = runtimeLifecyclePhaseSequence(location, operation);
-  const failedStepID = input.failedPhase ?? input.stepStates?.find((step) => step.status === 'failed')?.id;
-  const activeStepID = failedStepID
-    ?? input.stepStates?.find((step) => step.status === 'running')?.id
-    ?? input.phase;
-  const stageIndex = stageIndexForPhase(phases, activeStepID);
+  const planRevision = Math.max(0, Math.floor(input.planRevision ?? 0));
+  const stepStates = runtimeLifecycleStepStates({
+    activeStepID: input.phase,
+    failedStepID: input.failedPhase,
+    activeDetail: input.detail,
+    attemptCount: input.attemptCount,
+    stepStates: input.stepStates,
+  });
+  const steps = runtimeLifecycleStepsFromStates({
+    stepStates,
+    planRevision,
+  });
+  const failedStepID = input.failedPhase ?? steps.find((step) => step.status === 'failed')?.id;
+  const activeStepID = failedStepID ?? activeStepIDForSteps(steps, input.phase);
+  const stageIndex = stageIndexForPhase(steps.map((step) => step.id), activeStepID);
   const targetDetail = compact(input.targetDetail);
+  const omittedSteps = input.omittedSteps?.length ? input.omittedSteps : undefined;
   return {
     kind: 'runtime_lifecycle',
     location,
     operation,
+    plan_state: input.planState ?? (failedStepID || steps.every((step) => step.status === 'succeeded') ? 'terminal' : 'executing'),
+    plan_revision: planRevision,
     phase: activeStepID,
     active_step_id: activeStepID,
     ...(failedStepID ? { failed_step_id: failedStepID } : {}),
     stage_index: stageIndex,
-    stage_count: phases.length,
-    steps: runtimeLifecycleSteps({
-      phases,
-      activeStepID,
-      failedStepID,
-      activeDetail: input.detail,
-      attemptCount: input.attemptCount,
-      stepStates: input.stepStates,
-    }),
+    stage_count: steps.length,
+    steps,
     target_id: compact(input.targetID) || compact(input.targetLabel) || 'runtime',
     target_label: compact(input.targetLabel) || 'Runtime',
     ...(targetDetail ? { target_detail: targetDetail } : {}),
+    ...(omittedSteps ? { diagnostics: { omitted_steps: omittedSteps } } : {}),
   };
 }

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import {
   desktopRuntimeLifecycleLocation,
-  runtimeLifecyclePhaseSequence,
   runtimeLifecycleProgress,
 } from './desktopRuntimeLifecycleProgress';
 
@@ -34,175 +33,68 @@ describe('desktopRuntimeLifecycleProgress', () => {
     expect(desktopRuntimeLifecycleLocation(sshHost, containerPlacement)).toBe('ssh_container');
   });
 
-  it('keeps ordered phase metadata for all runtime startup locations', () => {
-    expect(runtimeLifecyclePhaseSequence('local_host')).toEqual([
-      'checking_existing_runtime',
-      'starting_runtime_process',
-      'checking_runtime_service',
-      'runtime_ready',
-    ]);
-    expect(runtimeLifecyclePhaseSequence('local_container')).toEqual([
-      'checking_container',
-      'detecting_platform',
-      'checking_runtime_package',
-      'preparing_runtime_package',
-      'installing_runtime_package',
-      'starting_runtime_process',
-      'checking_runtime_service',
-      'runtime_ready',
-    ]);
-    expect(runtimeLifecyclePhaseSequence('ssh_host')).toEqual([
-      'checking_host',
-      'checking_runtime_package',
-      'detecting_platform',
-      'preparing_runtime_package',
-      'installing_runtime_package',
-      'starting_runtime_process',
-      'checking_runtime_service',
-      'runtime_ready',
-    ]);
-    expect(runtimeLifecyclePhaseSequence('ssh_container')).toEqual([
-      'checking_host',
-      'checking_container',
-      'detecting_platform',
-      'checking_runtime_package',
-      'preparing_runtime_package',
-      'installing_runtime_package',
-      'starting_runtime_process',
-      'checking_runtime_service',
-      'runtime_ready',
-    ]);
-  });
-
-  it('keeps stop verification in uninterrupted restart/update workflows', () => {
-    expect(runtimeLifecyclePhaseSequence('ssh_host', 'restart')).toEqual([
-      'checking_host',
-      'checking_runtime_package',
-      'stopping_runtime_process',
-      'verifying_runtime_stopped',
-      'detecting_platform',
-      'preparing_runtime_package',
-      'installing_runtime_package',
-      'starting_runtime_process',
-      'checking_runtime_service',
-      'runtime_ready',
-    ]);
-    expect(runtimeLifecyclePhaseSequence('local_container', 'restart')).toEqual([
-      'checking_container',
-      'checking_runtime_package',
-      'stopping_runtime_process',
-      'verifying_runtime_stopped',
-      'detecting_platform',
-      'preparing_runtime_package',
-      'installing_runtime_package',
-      'starting_runtime_process',
-      'checking_runtime_service',
-      'runtime_ready',
-    ]);
-    expect(runtimeLifecyclePhaseSequence('local_container', 'update')).toEqual([
-      'checking_container',
-      'checking_runtime_package',
-      'stopping_runtime_process',
-      'verifying_runtime_stopped',
-      'detecting_platform',
-      'preparing_runtime_package',
-      'installing_runtime_package',
-      'starting_runtime_process',
-      'checking_runtime_service',
-      'runtime_ready',
-    ]);
-    expect(runtimeLifecyclePhaseSequence('ssh_host', 'update')).toEqual([
-      'checking_host',
-      'checking_runtime_package',
-      'stopping_runtime_process',
-      'verifying_runtime_stopped',
-      'detecting_platform',
-      'preparing_runtime_package',
-      'installing_runtime_package',
-      'starting_runtime_process',
-      'checking_runtime_service',
-      'runtime_ready',
-    ]);
-    expect(runtimeLifecyclePhaseSequence('local_host', 'update')).toEqual([
-      'checking_existing_runtime',
-      'stopping_runtime_process',
-      'verifying_runtime_stopped',
-      'starting_runtime_process',
-      'checking_runtime_service',
-      'runtime_ready',
-    ]);
-    expect(runtimeLifecycleProgress({
-      location: 'local_container',
-      operation: 'update',
-      phase: 'verifying_runtime_stopped',
-      targetLabel: 'Container',
-    }).stage_index).toBeLessThan(runtimeLifecycleProgress({
-      location: 'local_container',
-      operation: 'update',
-      phase: 'detecting_platform',
-      targetLabel: 'Container',
-    }).stage_index);
-    expect(runtimeLifecyclePhaseSequence('ssh_host', 'stop')).toEqual([
-      'checking_host',
-      'stopping_runtime_process',
-      'verifying_runtime_stopped',
-      'runtime_stopped',
-    ]);
-    expect(runtimeLifecyclePhaseSequence('local_host', 'stop')).toEqual([
-      'checking_existing_runtime',
-      'stopping_runtime_process',
-      'verifying_runtime_stopped',
-      'runtime_stopped',
-    ]);
-    expect(runtimeLifecyclePhaseSequence('local_container', 'stop')).toEqual([
-      'checking_container',
-      'stopping_runtime_process',
-      'verifying_runtime_stopped',
-      'runtime_stopped',
-    ]);
-    expect(runtimeLifecyclePhaseSequence('ssh_container', 'stop')).toEqual([
-      'checking_host',
-      'checking_container',
-      'stopping_runtime_process',
-      'verifying_runtime_stopped',
-      'runtime_stopped',
-    ]);
-  });
-
-  it('builds bounded stage metadata without faking percentage precision', () => {
-    expect(runtimeLifecycleProgress({
-      location: 'ssh_container',
-      phase: 'installing_runtime_package',
-      targetID: 'ssh:container:devbox:docker:dev',
-      targetLabel: ' Devbox Container ',
-      targetDetail: ' devbox · docker/dev ',
-    })).toEqual(expect.objectContaining({
-      kind: 'runtime_lifecycle',
-      location: 'ssh_container',
+  it('builds runtime lifecycle progress from the visible execution plan only', () => {
+    const progress = runtimeLifecycleProgress({
+      location: 'ssh_host',
       operation: 'start',
-      phase: 'installing_runtime_package',
-      active_step_id: 'installing_runtime_package',
-      stage_index: 6,
-      stage_count: 9,
-      target_id: 'ssh:container:devbox:docker:dev',
-      target_label: 'Devbox Container',
-      target_detail: 'devbox · docker/dev',
-      steps: expect.arrayContaining([
-        expect.objectContaining({
-          id: 'installing_runtime_package',
-          status: 'running',
-        }),
-      ]),
+      planState: 'executing',
+      planRevision: 2,
+      phase: 'checking_runtime_service',
+      targetID: 'ssh:devbox',
+      targetLabel: 'Devbox',
+      targetDetail: 'devbox',
+      stepStates: [
+        { id: 'checking_host', key: 'runtime-plan:0:checking_host', status: 'succeeded' },
+        { id: 'checking_runtime_package', key: 'runtime-plan:1:checking_runtime_package', status: 'succeeded' },
+        { id: 'checking_runtime_service', key: 'runtime-plan:2:checking_runtime_service', status: 'running', detail: 'Verifying service.' },
+        { id: 'runtime_ready', key: 'runtime-plan:3:runtime_ready', status: 'pending' },
+      ],
+      omittedSteps: [
+        { id: 'stopping_runtime_process', reason: 'runtime_already_openable' },
+        { id: 'installing_runtime_package', reason: 'runtime_already_openable' },
+      ],
+    });
+
+    expect(progress).toEqual(expect.objectContaining({
+      kind: 'runtime_lifecycle',
+      location: 'ssh_host',
+      operation: 'start',
+      plan_state: 'executing',
+      plan_revision: 2,
+      phase: 'checking_runtime_service',
+      active_step_id: 'checking_runtime_service',
+      stage_index: 3,
+      stage_count: 4,
+      target_id: 'ssh:devbox',
+      target_label: 'Devbox',
+      target_detail: 'devbox',
     }));
+    expect(progress.steps.map((step) => [step.id, step.key, step.status, step.detail ?? ''])).toEqual([
+      ['checking_host', 'runtime-plan:0:checking_host', 'succeeded', ''],
+      ['checking_runtime_package', 'runtime-plan:1:checking_runtime_package', 'succeeded', ''],
+      ['checking_runtime_service', 'runtime-plan:2:checking_runtime_service', 'running', 'Verifying service.'],
+      ['runtime_ready', 'runtime-plan:3:runtime_ready', 'pending', ''],
+    ]);
+    expect(progress.diagnostics?.omitted_steps).toEqual([
+      { id: 'stopping_runtime_process', reason: 'runtime_already_openable' },
+      { id: 'installing_runtime_package', reason: 'runtime_already_openable' },
+    ]);
   });
 
-  it('does not infer succeeded steps from the failed phase alone', () => {
+  it('keeps failed progress scoped to the execution plan instead of a static maximum sequence', () => {
     const progress = runtimeLifecycleProgress({
       location: 'local_container',
       operation: 'update',
+      planState: 'terminal',
       phase: 'preparing_runtime_package',
       failedPhase: 'preparing_runtime_package',
       targetLabel: 'Dev Container',
+      stepStates: [
+        { id: 'checking_container', status: 'succeeded' },
+        { id: 'checking_runtime_package', status: 'succeeded' },
+        { id: 'preparing_runtime_package', status: 'failed', detail: 'go build failed' },
+        { id: 'installing_runtime_package', status: 'pending' },
+      ],
     });
 
     expect(progress).toEqual(expect.objectContaining({
@@ -210,51 +102,52 @@ describe('desktopRuntimeLifecycleProgress', () => {
       phase: 'preparing_runtime_package',
       active_step_id: 'preparing_runtime_package',
       failed_step_id: 'preparing_runtime_package',
-      stage_index: 6,
-      stage_count: 10,
+      stage_index: 3,
+      stage_count: 4,
     }));
-    expect(progress.steps.map((step) => [step.id, step.status])).toEqual([
-      ['checking_container', 'pending'],
-      ['checking_runtime_package', 'pending'],
-      ['stopping_runtime_process', 'pending'],
-      ['verifying_runtime_stopped', 'pending'],
-      ['detecting_platform', 'pending'],
-      ['preparing_runtime_package', 'failed'],
-      ['installing_runtime_package', 'pending'],
-      ['starting_runtime_process', 'pending'],
-      ['checking_runtime_service', 'pending'],
-      ['runtime_ready', 'pending'],
-    ]);
-  });
-
-  it('uses authoritative step states for completed restart/update steps', () => {
-    const progress = runtimeLifecycleProgress({
-      location: 'local_container',
-      operation: 'update',
-      phase: 'preparing_runtime_package',
-      failedPhase: 'preparing_runtime_package',
-      targetLabel: 'Dev Container',
-      stepStates: [
-        { id: 'checking_container', status: 'succeeded' },
-        { id: 'checking_runtime_package', status: 'succeeded' },
-        { id: 'stopping_runtime_process', status: 'succeeded' },
-        { id: 'verifying_runtime_stopped', status: 'succeeded' },
-        { id: 'detecting_platform', status: 'succeeded' },
-        { id: 'preparing_runtime_package', status: 'failed', detail: 'go build failed' },
-      ],
-    });
-
     expect(progress.steps.map((step) => [step.id, step.status, step.detail ?? ''])).toEqual([
       ['checking_container', 'succeeded', ''],
       ['checking_runtime_package', 'succeeded', ''],
-      ['stopping_runtime_process', 'succeeded', ''],
-      ['verifying_runtime_stopped', 'succeeded', ''],
-      ['detecting_platform', 'succeeded', ''],
       ['preparing_runtime_package', 'failed', 'go build failed'],
       ['installing_runtime_package', 'pending', ''],
-      ['starting_runtime_process', 'pending', ''],
-      ['checking_runtime_service', 'pending', ''],
-      ['runtime_ready', 'pending', ''],
     ]);
+  });
+
+  it('supports explicit terminal steps for update-current and already-stopped outcomes', () => {
+    const upToDate = runtimeLifecycleProgress({
+      location: 'ssh_host',
+      operation: 'update',
+      planState: 'terminal',
+      phase: 'runtime_up_to_date',
+      targetLabel: 'Devbox',
+      stepStates: [
+        { id: 'checking_host', status: 'succeeded' },
+        { id: 'checking_runtime_package', status: 'succeeded' },
+        { id: 'checking_runtime_service', status: 'succeeded' },
+        { id: 'runtime_up_to_date', status: 'succeeded' },
+      ],
+    });
+    const stopped = runtimeLifecycleProgress({
+      location: 'local_host',
+      operation: 'stop',
+      planState: 'terminal',
+      phase: 'runtime_already_stopped',
+      targetLabel: 'Local',
+      stepStates: [
+        { id: 'checking_existing_runtime', status: 'succeeded' },
+        { id: 'runtime_already_stopped', status: 'succeeded' },
+      ],
+    });
+
+    expect(upToDate.steps.at(-1)).toEqual(expect.objectContaining({
+      id: 'runtime_up_to_date',
+      label: 'Runtime up to date',
+      status: 'succeeded',
+    }));
+    expect(stopped.steps.at(-1)).toEqual(expect.objectContaining({
+      id: 'runtime_already_stopped',
+      label: 'Runtime already stopped',
+      status: 'succeeded',
+    }));
   });
 });

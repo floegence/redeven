@@ -661,6 +661,14 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('progressOpen={props.lifecycleProgressOpen}');
     expect(appSrc).toContain('onProgressOpenChange={props.onLifecycleProgressOpenChange}');
     expect(appSrc).toContain('function EnvironmentProgressPanel');
+    expect(appSrc).toContain('createRuntimeLifecycleStepAnimation');
+    expect(appSrc).toContain('<Index each={phaseSequence()}>');
+    expect(appSrc).toContain('data-step-key={step().key}');
+    expect(appSrc).toContain('data-plan-revision={startup()?.plan_revision ?? 0}');
+    expect(appSrc).toContain('data-entering={startup() ? stepEntering(step().key) : false}');
+    expect(appSrc).toContain("data-plan-state={startup()?.plan_state ?? 'executing'}");
+    expect(appSrc).toContain("currentRuntimeLifecycle()?.plan_state !== 'planning'");
+    expect(appSrc).toContain("Planning ${props.progress.action === 'restart_environment_runtime' ? 'restart'");
     expect(appSrc).toContain('<Show when={props.progress.failure}>');
     expect(appSrc).toContain('<div class="redeven-action-popover__notice-detail">{failure().summary}</div>');
     expect(appSrc).not.toContain('props.progress.error_message');
@@ -679,6 +687,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('function SSHRuntimeActivityOverlay');
     expect(appSrc).not.toContain('Starting SSH Runtime');
     expect(styles).toContain('.redeven-environment-progress');
+    expect(styles).toContain(".redeven-environment-progress__step[data-entering='true']");
+    expect(styles).toContain(".redeven-environment-progress__meter[data-plan-state='planning'] span");
+    expect(styles).toContain('@media (prefers-reduced-motion: reduce)');
     expect(styles).toContain('.redeven-environment-progress__meter');
     expect(styles).toContain('.redeven-environment-progress__meta');
     expect(styles).toContain('.redeven-split-action-trigger--progress');

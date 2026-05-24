@@ -154,8 +154,8 @@ diagnostics, and next actions until the user handles or dismisses them.
 
 ### Runtime Lifecycle Progress
 
-Desktop launcher operations expose runtime lifecycle progress as a fixed
-workflow snapshot owned by Electron main:
+Desktop launcher operations expose runtime lifecycle progress as an execution
+plan snapshot owned by Electron main:
 
 ```ts
 type DesktopRuntimeLifecycleStepStatus =
@@ -166,6 +166,7 @@ type DesktopRuntimeLifecycleStepStatus =
 
 type DesktopRuntimeLifecycleStepSnapshot = Readonly<{
   id: DesktopRuntimeLifecycleStepID;
+  key: string;
   label: string;
   status: DesktopRuntimeLifecycleStepStatus;
   detail?: string;
@@ -176,6 +177,8 @@ type DesktopRuntimeLifecycleProgress = Readonly<{
   kind: 'runtime_lifecycle';
   location: 'local_host' | 'local_container' | 'ssh_host' | 'ssh_container';
   operation: 'start' | 'restart' | 'update' | 'stop';
+  plan_state: 'planning' | 'executing' | 'terminal';
+  plan_revision: number;
   phase: DesktopRuntimeLifecycleStepID;
   active_step_id: DesktopRuntimeLifecycleStepID;
   failed_step_id?: DesktopRuntimeLifecycleStepID;
@@ -185,21 +188,34 @@ type DesktopRuntimeLifecycleProgress = Readonly<{
   target_id: string;
   target_label: string;
   target_detail?: string;
+  diagnostics?: {
+    omitted_steps?: readonly RuntimeLifecycleOmittedStep[];
+  };
 }>;
 ```
 
-`steps` is the renderer's source of truth. `stage_index` and `stage_count`
-exist only for meter compatibility and must not be used to infer which step
-failed. Failed and canceled are launcher operation statuses, not lifecycle
-steps. When an operation fails, the main process preserves the active workflow
-step in `failed_step_id` and marks that step snapshot as `failed`.
+`steps` is the renderer's source of truth and contains only the visible
+execution plan for this operation. During `planning`, Desktop shows the
+decision-gate checks that are actually being run. After those checks identify
+the real path, Electron main increments `plan_revision`, switches to
+`executing`, and appends or replaces the remaining visible steps. Steps known
+not to execute are omitted from the main list instead of being left as pending;
+they may be recorded in `diagnostics.omitted_steps` for tests and support.
+`stage_index` and `stage_count` exist only for meter compatibility and must not
+be used to infer which step failed. Failed and canceled are launcher operation
+statuses, not lifecycle steps. When an operation fails, the main process
+preserves the active workflow step in `failed_step_id` and marks that step
+snapshot as `failed`.
 
 Electron main maintains that snapshot through a per-operation lifecycle
 workflow controller. The controller is the only component allowed to mark
-workflow steps as running, succeeded, or failed. Helper progress from SSH,
-local process, package, and container modules is an observation stream: it may
-update the current step detail or move to a later planned step, but it cannot
-rewind the user-visible workflow after the controller has advanced.
+workflow steps as running, succeeded, or failed, and it enforces that no later
+step can start or complete across a pending visible step. Helper progress from
+SSH, local process, package, and container modules is an observation stream: it
+may update the current step detail or move to the next step after the main
+process has committed that step into the plan, but it cannot select the
+top-level branch, invent missing steps, or rewind the user-visible workflow
+after the controller has advanced.
 
 `Runtime ready` is emitted only as the successful terminal step. Helper
 observations that say a daemon is becoming reachable stay inside

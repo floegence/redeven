@@ -102,6 +102,12 @@ import {
   RuntimeLifecycleWorkflow,
   runtimeLifecycleStepIDFromError,
 } from './runtimeLifecycleWorkflow';
+import {
+  initialRuntimeLifecyclePlan,
+  runtimeLifecyclePlanAfterDecision,
+  runtimeLifecyclePlanIncludingStep,
+  type RuntimeLifecycleDecision,
+} from './runtimeLifecycleExecutionPlan';
 import { LauncherOperationRegistry, launcherOperationProgress } from './launcherOperations';
 import { buildLocalUIEnvAppEntryURL } from './localUIURL';
 import { isAllowedAppNavigation } from './navigation';
@@ -3915,12 +3921,26 @@ function buildRuntimeLifecycleProgress(input: Readonly<{
   targetID: string;
   targetLabel: string;
 }>): DesktopRuntimeLifecycleProgress {
+  const location = desktopRuntimeLifecycleLocation(input.hostAccess, input.placement);
+  const operation = input.operation ?? 'start';
+  const plan = initialRuntimeLifecyclePlan({
+    location,
+    operation,
+  });
   return runtimeLifecycleProgress({
-    location: desktopRuntimeLifecycleLocation(input.hostAccess, input.placement),
-    operation: input.operation,
+    location,
+    operation,
+    planState: plan.state,
     phase: input.phase,
     failedPhase: input.failedPhase,
     detail: input.detail,
+    stepStates: plan.steps.map((step) => step.id === input.phase
+      ? {
+          ...step,
+          status: input.failedPhase === input.phase ? 'failed' : 'running',
+          ...(input.detail ? { detail: input.detail } : {}),
+        }
+      : step),
     targetID: input.targetID,
     targetLabel: input.targetLabel,
     targetDetail: runtimeTargetDetail(input.hostAccess, input.placement),
@@ -3974,11 +3994,50 @@ function runtimeLifecycleWorkflowFailure(
   }>,
 ): RuntimeLifecycleStepFailureError {
   const workflow = runtimeLifecycleWorkflowForOperation(operationKey, input);
+  const location = desktopRuntimeLifecycleLocation(input.hostAccess, input.placement);
+  const failedStepID = runtimeLifecycleStepIDFromError(input.error) ?? workflow.progress().active_step_id;
+  const failurePlan = runtimeLifecyclePlanIncludingStep({
+    location,
+    operation: input.operation,
+    currentSteps: workflow.currentStepIDs(),
+    step: failedStepID,
+  });
+  workflow.ensureStepPlanned(failedStepID, {
+    state: failurePlan.state,
+    steps: failurePlan.steps.map((step) => step.id),
+    omitted_steps: failurePlan.omitted_steps,
+  });
   return workflow.failStep(
     input.error,
     input.fallback,
-    runtimeLifecycleStepIDFromError(input.error) ?? workflow.progress().active_step_id,
+    failedStepID,
   );
+}
+
+function commitRuntimeLifecycleDecision(
+  operationKey: string,
+  input: Readonly<{
+    hostAccess: DesktopRuntimeHostAccess;
+    placement: DesktopRuntimePlacement;
+    operation: DesktopRuntimeLifecycleOperation;
+    targetID?: string;
+    targetLabel: string;
+    decision: RuntimeLifecycleDecision;
+  }>,
+): RuntimeLifecycleWorkflow {
+  const workflow = runtimeLifecycleWorkflowForOperation(operationKey, input);
+  const location = desktopRuntimeLifecycleLocation(input.hostAccess, input.placement);
+  const plan = runtimeLifecyclePlanAfterDecision({
+    location,
+    operation: input.operation,
+    decision: input.decision,
+  });
+  workflow.commitPlan({
+    state: plan.state,
+    steps: plan.steps.map((step) => step.id),
+    omitted_steps: plan.omitted_steps,
+  });
+  return workflow;
 }
 
 function completeRuntimeLifecycleWorkflowProgress(
@@ -3993,8 +4052,28 @@ function completeRuntimeLifecycleWorkflowProgress(
     detail?: string;
   }>,
 ): DesktopRuntimeLifecycleProgress {
+  const location = desktopRuntimeLifecycleLocation(input.hostAccess, input.placement);
   const workflow = runtimeLifecycleWorkflowForOperation(operationKey, input);
-  workflow.beginStep(input.phase, input.detail);
+  const completionPlan = runtimeLifecyclePlanIncludingStep({
+    location,
+    operation: input.operation,
+    currentSteps: workflow.currentStepIDs(),
+    step: input.phase,
+  });
+  workflow.ensureStepPlanned(input.phase, {
+    state: completionPlan.state,
+    steps: completionPlan.steps.map((step) => step.id),
+    omitted_steps: completionPlan.omitted_steps,
+  });
+  const status = workflow.stepStates().find((step) => step.id === input.phase)?.status;
+  if (status === 'succeeded') {
+    return workflow.progress();
+  }
+  if (status === 'pending') {
+    workflow.beginStep(input.phase, input.detail);
+  } else if (status === 'running') {
+    workflow.observeStep(input.phase, input.detail);
+  }
   workflow.completeStep(input.phase);
   return workflow.progress();
 }
@@ -4035,6 +4114,7 @@ function updateRuntimeLifecycleOperation(
 ): void {
   const current = launcherOperations.get(operationKey);
   const operation = input.operation ?? current?.lifecycle_progress?.operation ?? 'start';
+  const location = desktopRuntimeLifecycleLocation(input.hostAccess, input.placement);
   const workflow = runtimeLifecycleWorkflowForOperation(operationKey, {
     hostAccess: input.hostAccess,
     placement: input.placement,
@@ -4043,6 +4123,17 @@ function updateRuntimeLifecycleOperation(
     targetLabel: input.targetLabel,
   });
   if (input.failedPhase) {
+    const failurePlan = runtimeLifecyclePlanIncludingStep({
+      location,
+      operation,
+      currentSteps: workflow.currentStepIDs(),
+      step: input.failedPhase,
+    });
+    workflow.ensureStepPlanned(input.failedPhase, {
+      state: failurePlan.state,
+      steps: failurePlan.steps.map((step) => step.id),
+      omitted_steps: failurePlan.omitted_steps,
+    });
     workflow.failStep(input.failure ?? new Error(input.detail), input.failure ?? desktopOperationFailurePresentation({
       code: 'operation_failed',
       title: input.title,
@@ -4050,8 +4141,28 @@ function updateRuntimeLifecycleOperation(
       targetLabel: input.targetLabel,
     }), input.failedPhase);
   } else {
-    const update = workflow.observeStep(input.phase, input.detail);
-    if (!update) {
+    const phasePlan = runtimeLifecyclePlanIncludingStep({
+      location,
+      operation,
+      currentSteps: workflow.currentStepIDs(),
+      step: input.phase,
+    });
+    const planUpdate = workflow.ensureStepPlanned(input.phase, {
+      state: phasePlan.state,
+      steps: phasePlan.steps.map((step) => step.id),
+      omitted_steps: phasePlan.omitted_steps,
+    });
+    const currentStep = workflow.progress().active_step_id;
+    const currentStatus = workflow.stepStates().find((step) => step.id === input.phase)?.status;
+    let update: ReturnType<RuntimeLifecycleWorkflow['observeStep']> | ReturnType<RuntimeLifecycleWorkflow['beginStep']>;
+    if (currentStep === input.phase && currentStatus === 'running') {
+      update = workflow.observeStep(input.phase, input.detail);
+    } else if (currentStatus === 'succeeded' || currentStatus === 'failed') {
+      update = null;
+    } else {
+      update = workflow.beginStep(input.phase, input.detail);
+    }
+    if (!update && !planUpdate) {
       return;
     }
   }
@@ -4567,6 +4678,14 @@ async function startSSHEnvironmentRuntimeRecord(
           : undefined,
         signal,
       });
+      const workflowAfterProbe = runtimeLifecycleWorkflowForOperation(runtimeKey, {
+        hostAccess: { kind: 'ssh_host', ssh: sshDetails },
+        placement: { kind: 'host_process', runtime_root: sshDetails.runtime_root },
+        operation: lifecycleOperation,
+        targetID: runtimeKey,
+        targetLabel: label,
+      });
+      workflowAfterProbe.completeThrough('checking_runtime_package');
       if (statusProbe.status === 'ready') {
         if (!runtimeServiceIsOpenable(statusProbe.startup.runtime_service)) {
           const maintenance = sshRuntimeMaintenanceFromStartup(
@@ -4586,6 +4705,14 @@ async function startSSHEnvironmentRuntimeRecord(
           || action === 'update_environment_runtime'
           || options.forceRuntimeUpdate === true;
         if (replacingReadySSHRuntime) {
+          commitRuntimeLifecycleDecision(runtimeKey, {
+            hostAccess: { kind: 'ssh_host', ssh: sshDetails },
+            placement: { kind: 'host_process', runtime_root: sshDetails.runtime_root },
+            operation: lifecycleOperation,
+            targetID: runtimeKey,
+            targetLabel: label,
+            decision: lifecycleOperation === 'update' ? 'runtime_update_required_running' : 'runtime_running',
+          });
           const pid = statusProbe.startup.pid ?? 0;
           if (!Number.isInteger(pid) || pid <= 0) {
             throw new Error('Desktop cannot replace this SSH runtime because it did not report a process id.');
@@ -4639,6 +4766,16 @@ async function startSSHEnvironmentRuntimeRecord(
           sshRuntimeReadyByKey.delete(runtimeKey);
           sshRuntimeMaintenanceByKey.delete(runtimeKey);
         } else {
+          const readyWorkflow = commitRuntimeLifecycleDecision(runtimeKey, {
+            hostAccess: { kind: 'ssh_host', ssh: sshDetails },
+            placement: { kind: 'host_process', runtime_root: sshDetails.runtime_root },
+            operation: lifecycleOperation,
+            targetID: runtimeKey,
+            targetLabel: label,
+            decision: lifecycleOperation === 'update' ? 'runtime_already_current' : 'existing_runtime_openable',
+          });
+          readyWorkflow.beginStep('checking_runtime_service', 'Desktop is verifying the existing SSH runtime service.');
+          readyWorkflow.completeStep('checking_runtime_service');
           const attachedHandle: DesktopSessionRuntimeHandle = {
             runtime_kind: 'ssh',
             lifecycle_owner: 'external',
@@ -4659,16 +4796,20 @@ async function startSSHEnvironmentRuntimeRecord(
           sshRuntimeMaintenanceByKey.delete(runtimeKey);
           launcherOperations.finish(runtimeKey, 'succeeded', {
             phase: 'runtime_ready',
-            title: 'Runtime already running',
-            detail: 'Desktop found an openable SSH runtime and did not start a new process.',
+            title: lifecycleOperation === 'update' ? 'Runtime up to date' : 'Runtime already running',
+            detail: lifecycleOperation === 'update'
+              ? 'Desktop verified that this SSH runtime already matches the current Desktop runtime package.'
+              : 'Desktop found an openable SSH runtime and did not start a new process.',
             lifecycle_progress: completeRuntimeLifecycleWorkflowProgress(runtimeKey, {
               hostAccess: { kind: 'ssh_host', ssh: sshDetails },
               placement: { kind: 'host_process', runtime_root: sshDetails.runtime_root },
               operation: lifecycleOperation,
-              phase: 'runtime_ready',
+              phase: lifecycleOperation === 'update' ? 'runtime_up_to_date' : 'runtime_ready',
               targetID: runtimeKey,
               targetLabel: label,
-              detail: 'Desktop found an openable SSH runtime and did not start a new process.',
+              detail: lifecycleOperation === 'update'
+                ? 'Desktop verified that this SSH runtime already matches the current Desktop runtime package.'
+                : 'Desktop found an openable SSH runtime and did not start a new process.',
             }),
           });
           scheduleLauncherOperationRemoval(runtimeKey);
@@ -4692,11 +4833,27 @@ async function startSSHEnvironmentRuntimeRecord(
             classification.kind === 'update_required'
             && options.forceRuntimeUpdate === true
           ) {
+            commitRuntimeLifecycleDecision(runtimeKey, {
+              hostAccess: { kind: 'ssh_host', ssh: sshDetails },
+              placement: { kind: 'host_process', runtime_root: sshDetails.runtime_root },
+              operation: lifecycleOperation,
+              targetID: runtimeKey,
+              targetLabel: label,
+              decision: 'runtime_update_required_running',
+            });
             // Continue into the Desktop-owned package replacement path below.
           } else if (!maintenance.can_desktop_restart) {
             throw new DesktopSSHRuntimeMaintenanceRequiredError(maintenance.message, maintenance);
           }
           if (classification.kind === 'restart_required') {
+            commitRuntimeLifecycleDecision(runtimeKey, {
+              hostAccess: { kind: 'ssh_host', ssh: sshDetails },
+              placement: { kind: 'host_process', runtime_root: sshDetails.runtime_root },
+              operation: lifecycleOperation,
+              targetID: runtimeKey,
+              targetLabel: label,
+              decision: 'maintenance_restart_required',
+            });
             const pid = maintenance.lock_pid ?? 0;
             updateRuntimeLifecycleOperation(runtimeKey, {
               hostAccess: { kind: 'ssh_host', ssh: sshDetails },
@@ -4749,6 +4906,16 @@ async function startSSHEnvironmentRuntimeRecord(
       }
       if (statusProbe.status === 'failed') {
         throw new DesktopOperationFailureError(statusProbe.failure);
+      }
+      if (statusProbe.status === 'not_running') {
+        commitRuntimeLifecycleDecision(runtimeKey, {
+          hostAccess: { kind: 'ssh_host', ssh: sshDetails },
+          placement: { kind: 'host_process', runtime_root: sshDetails.runtime_root },
+          operation: lifecycleOperation,
+          targetID: runtimeKey,
+          targetLabel: label,
+          decision: lifecycleOperation === 'update' ? 'runtime_update_required_stopped' : 'runtime_missing',
+        });
       }
       const managedSSHRuntime = await ensureManagedSSHRuntimeReady({
         target: sshDetails,
@@ -6919,6 +7086,14 @@ async function ensureRuntimePlacementReadyRecordFromLauncher(
       if (existing && replacementRequested) {
         const bridgeRecord = runtimePlacementBridgeByTargetID.get(targetID) ?? null;
         const runtimePlacement = (bridgeRecord?.session.placement ?? existing.placement) as Extract<DesktopRuntimePlacement, Readonly<{ kind: 'container_process' }>>;
+        commitRuntimeLifecycleDecision(targetID, {
+          hostAccess: bridgeRecord?.session.host_access ?? existing.host_access,
+          placement: runtimePlacement,
+          operation: lifecycleOperation,
+          targetID,
+          targetLabel: label,
+          decision: lifecycleOperation === 'update' ? 'runtime_update_required_running' : 'runtime_running',
+        });
         updateRuntimeLifecycleOperation(targetID, {
           hostAccess: bridgeRecord?.session.host_access ?? existing.host_access,
           placement: runtimePlacement,
@@ -6977,6 +7152,14 @@ async function ensureRuntimePlacementReadyRecordFromLauncher(
       }
       let inspectionMaintenance = runtimePlacementMaintenanceByTargetID.get(targetID) ?? inspection.maintenance;
       if (inspectionMaintenance && desktopRuntimeMaintenanceRequiresRestart(inspectionMaintenance)) {
+        commitRuntimeLifecycleDecision(targetID, {
+          hostAccess,
+          placement,
+          operation: lifecycleOperation,
+          targetID,
+          targetLabel: label,
+          decision: 'maintenance_restart_required',
+        });
         updateRuntimeLifecycleOperation(targetID, {
           hostAccess,
           placement,
@@ -7015,6 +7198,14 @@ async function ensureRuntimePlacementReadyRecordFromLauncher(
         inspectionMaintenance = undefined;
       }
       if (inspection.ready_record && replacementRequested) {
+        commitRuntimeLifecycleDecision(targetID, {
+          hostAccess,
+          placement,
+          operation: lifecycleOperation,
+          targetID,
+          targetLabel: label,
+          decision: lifecycleOperation === 'update' ? 'runtime_update_required_running' : 'runtime_running',
+        });
         updateRuntimeLifecycleOperation(targetID, {
           hostAccess,
           placement,
@@ -7061,18 +7252,31 @@ async function ensureRuntimePlacementReadyRecordFromLauncher(
         runtimePlacementMaintenanceByTargetID.delete(targetID);
         inspectionMaintenance = undefined;
       } else if (inspection.ready_record) {
+        const readyWorkflow = commitRuntimeLifecycleDecision(targetID, {
+          hostAccess,
+          placement,
+          operation: lifecycleOperation,
+          targetID,
+          targetLabel: label,
+          decision: lifecycleOperation === 'update' ? 'runtime_already_current' : 'existing_runtime_openable',
+        });
+        readyWorkflow.completeThrough('checking_runtime_service');
         launcherOperations.finish(targetID, 'succeeded', {
           phase: 'runtime_ready',
-          title: 'Runtime already running',
-          detail: 'Desktop found an openable runtime in the container and did not start a new process.',
+          title: lifecycleOperation === 'update' ? 'Runtime up to date' : 'Runtime already running',
+          detail: lifecycleOperation === 'update'
+            ? 'Desktop verified that this container runtime already matches the current Desktop runtime package.'
+            : 'Desktop found an openable runtime in the container and did not start a new process.',
           lifecycle_progress: completeRuntimeLifecycleWorkflowProgress(targetID, {
             hostAccess,
             placement,
             operation: lifecycleOperation,
-            phase: 'runtime_ready',
+            phase: lifecycleOperation === 'update' ? 'runtime_up_to_date' : 'runtime_ready',
             targetID,
             targetLabel: label,
-            detail: 'Desktop found an openable runtime in the container and did not start a new process.',
+            detail: lifecycleOperation === 'update'
+              ? 'Desktop verified that this container runtime already matches the current Desktop runtime package.'
+              : 'Desktop found an openable runtime in the container and did not start a new process.',
           }),
         });
         scheduleLauncherOperationRemoval(targetID);
@@ -7095,6 +7299,16 @@ async function ensureRuntimePlacementReadyRecordFromLauncher(
         throw new Error(runtimeControlStatus.state === 'missing'
           ? runtimeControlStatus.message
           : 'Desktop could not verify the selected container runtime before starting.');
+      }
+      if (!runtimePlacementReadyByTargetID.has(targetID)) {
+        commitRuntimeLifecycleDecision(targetID, {
+          hostAccess,
+          placement,
+          operation: lifecycleOperation,
+          targetID,
+          targetLabel: label,
+          decision: lifecycleOperation === 'update' ? 'runtime_update_required_stopped' : 'runtime_missing',
+        });
       }
       let readyPlacement: Awaited<ReturnType<typeof ensureRuntimePlacementReady>>;
       try {
@@ -7598,6 +7812,14 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
     if (request.kind === 'restart_environment_runtime' || request.kind === 'update_environment_runtime') {
       const runtimeRecord = currentLocalEnvironmentRuntimeRecord(environment) ?? await attachLocalEnvironmentRuntime(environment);
       if (runtimeRecord) {
+        commitRuntimeLifecycleDecision(operationKey, {
+          hostAccess,
+          placement: localHostPlacement,
+          operation: lifecycleOperation,
+          targetID: operationKey,
+          targetLabel: environment.label,
+          decision: lifecycleOperation === 'update' ? 'runtime_update_required_running' : 'runtime_running',
+        });
         updateRuntimeLifecycleOperation(operationKey, {
           hostAccess,
           placement: localHostPlacement,
@@ -7623,6 +7845,15 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
         });
         await assertLocalEnvironmentRuntimeStopped(environment);
         clearLocalEnvironmentRuntimeRecord(environment);
+      } else {
+        commitRuntimeLifecycleDecision(operationKey, {
+          hostAccess,
+          placement: localHostPlacement,
+          operation: lifecycleOperation,
+          targetID: operationKey,
+          targetLabel: environment.label,
+          decision: lifecycleOperation === 'update' ? 'runtime_update_required_stopped' : 'runtime_stopped',
+        });
       }
     }
     const prepared = await prepareManagedTarget({
@@ -8529,17 +8760,6 @@ async function stopEnvironmentRuntimeFromLauncher(
     );
   }
 
-  const runtimeRecord = currentLocalEnvironmentRuntimeRecord(environment) ?? await attachLocalEnvironmentRuntime(environment);
-  if (!runtimeRecord) {
-    return launcherActionFailure(
-      'action_invalid',
-      'environment',
-      'The runtime is not currently running.',
-      {
-        environmentID: environment.id,
-      },
-    );
-  }
   const hostAccess: DesktopRuntimeHostAccess = { kind: 'local_host' };
   const localHostPlacement: DesktopRuntimePlacement = { kind: 'host_process', runtime_root: environment.local_hosting.state_dir };
   const operationKey = runtimeTargetIDFromRequest({
@@ -8573,6 +8793,37 @@ async function stopEnvironmentRuntimeFromLauncher(
   });
   const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
   try {
+    const runtimeRecord = currentLocalEnvironmentRuntimeRecord(environment) ?? await attachLocalEnvironmentRuntime(environment);
+    if (!runtimeRecord) {
+      const readyWorkflow = commitRuntimeLifecycleDecision(operationKey, {
+        hostAccess,
+        placement: localHostPlacement,
+        operation: lifecycleOperation,
+        targetID: operationKey,
+        targetLabel: environment.label,
+        decision: 'runtime_already_stopped',
+      });
+      readyWorkflow.completeThrough('checking_existing_runtime');
+      resetLauncherIssueState();
+      launcherOperations.finish(operationKey, 'succeeded', {
+        phase: 'runtime_already_stopped',
+        title: 'Runtime already stopped',
+        detail: 'Desktop confirmed that this local runtime is already stopped.',
+        lifecycle_progress: completeRuntimeLifecycleWorkflowProgress(operationKey, {
+          hostAccess,
+          placement: localHostPlacement,
+          operation: lifecycleOperation,
+          phase: 'runtime_already_stopped',
+          targetID: operationKey,
+          targetLabel: environment.label,
+          detail: 'Desktop confirmed that this local runtime is already stopped.',
+        }),
+      });
+      scheduleLauncherOperationRemoval(operation.operation_key);
+      clearRuntimeLifecycleWorkflow(operationKey);
+      broadcastDesktopWelcomeSnapshots();
+      return launcherActionSuccess('stopped_environment_runtime');
+    }
     updateRuntimeLifecycleOperation(operationKey, {
       hostAccess,
       placement: localHostPlacement,
