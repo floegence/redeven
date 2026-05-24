@@ -91,6 +91,51 @@ export type RuntimeLifecycleStepUpdate = Readonly<{
   progress: DesktopRuntimeLifecycleProgress;
 }>;
 
+const OBSERVED_RUNTIME_LIFECYCLE_STEP_STATUSES: readonly DesktopRuntimeLifecycleStepStatus[] = [
+  'running',
+  'succeeded',
+  'failed',
+];
+
+function uniqueStepIDs(ids: readonly DesktopRuntimeLifecycleStepID[]): readonly DesktopRuntimeLifecycleStepID[] {
+  return [...new Set(ids)];
+}
+
+function isObservedRuntimeLifecycleStep(step: DesktopRuntimeLifecycleStepState): boolean {
+  return OBSERVED_RUNTIME_LIFECYCLE_STEP_STATUSES.includes(step.status);
+}
+
+export function runtimeLifecyclePlanPatchPreservingObservedHistory(input: Readonly<{
+  currentSteps: readonly DesktopRuntimeLifecycleStepState[];
+  patch: RuntimeLifecyclePlanPatch;
+}>): RuntimeLifecyclePlanPatch {
+  const nextSteps = uniqueStepIDs(input.patch.steps);
+  let lastObservedIndex = -1;
+  for (const [index, step] of input.currentSteps.entries()) {
+    if (isObservedRuntimeLifecycleStep(step)) {
+      lastObservedIndex = index;
+    }
+  }
+  if (lastObservedIndex < 0) {
+    return {
+      ...input.patch,
+      steps: nextSteps,
+    };
+  }
+
+  const observedPrefix = input.currentSteps.slice(0, lastObservedIndex + 1).map((step) => step.id);
+  const mergedSteps = uniqueStepIDs([
+    ...observedPrefix,
+    ...nextSteps,
+  ]);
+  const omittedSteps = input.patch.omitted_steps?.filter((step) => !mergedSteps.includes(step.id));
+  return {
+    ...input.patch,
+    steps: mergedSteps,
+    ...(omittedSteps ? { omitted_steps: omittedSteps } : {}),
+  };
+}
+
 export class RuntimeLifecycleWorkflow {
   private readonly states = new Map<DesktopRuntimeLifecycleStepID, DesktopRuntimeLifecycleStepState>();
   private plan: readonly DesktopRuntimeLifecycleStepID[];

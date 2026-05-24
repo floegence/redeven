@@ -132,6 +132,11 @@ level host, SSH, package, and container helpers report observations into that
 plan. Restart and update plans include stop and stop-verification before
 package preparation and startup; helper observations for earlier probe phases
 are ignored once the visible plan has advanced beyond them.
+If a later probe changes the top-level decision after the operation has already
+run a step, Electron main must merge that new decision with the observed
+workflow history before committing the next plan. Steps that reached `running`,
+`succeeded`, or `failed` remain visible in order, while omitted-step diagnostics
+may only describe steps that are absent from the visible plan.
 
 Blocked runtime reports and operation failures have separate responsibilities.
 Runtime reports describe machine-readable attach or maintenance state, such as
