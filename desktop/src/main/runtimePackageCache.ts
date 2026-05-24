@@ -105,6 +105,18 @@ function sourceRuntimeAssetCacheKey(sourceRoot: string, releaseTag: string, plat
   return `source:${sourceRoot}:${releaseTag}:${platformID}`;
 }
 
+const sourceRuntimeCopyExcludedSubtrees = [
+  'desktop/dist',
+  'desktop/release',
+  'desktop/.bundle',
+  'internal/envapp/ui/dist',
+  'internal/codeapp/ui/dist',
+] as const;
+
+function isPathWithinSubtree(candidatePath: string, subtreePath: string): boolean {
+  return candidatePath === subtreePath || candidatePath.startsWith(`${subtreePath}/`);
+}
+
 function sourceRuntimeCopyIncludes(sourceRoot: string, candidatePath: string): boolean {
   const relative = path.relative(sourceRoot, candidatePath);
   if (relative === '') {
@@ -115,12 +127,7 @@ function sourceRuntimeCopyIncludes(sourceRoot: string, candidatePath: string): b
   if (parts.includes('.git') || parts.includes('node_modules')) {
     return false;
   }
-  return normalized !== 'desktop/dist'
-    && !normalized.startsWith('desktop/dist/')
-    && normalized !== 'internal/envapp/ui/dist'
-    && !normalized.startsWith('internal/envapp/ui/dist/')
-    && normalized !== 'internal/codeapp/ui/dist'
-    && !normalized.startsWith('internal/codeapp/ui/dist/');
+  return !sourceRuntimeCopyExcludedSubtrees.some((subtree) => isPathWithinSubtree(normalized, subtree));
 }
 
 function onceInFlight<T>(

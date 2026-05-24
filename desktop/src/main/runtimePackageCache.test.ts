@@ -98,18 +98,35 @@ async function createSourceRuntimeFixture(): Promise<Readonly<{
   cacheRoot: string;
   buildLogPath: string;
   originalDistPath: string;
+  originalBundlePath: string;
+  originalDesktopReleasePath: string;
 }>> {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-source-runtime-fixture-'));
   const root = path.join(tempRoot, 'redeven');
   const buildLogPath = path.join(tempRoot, 'build-assets.log');
   const originalDistPath = path.join(root, 'internal', 'envapp', 'ui', 'dist', 'env', 'index.html');
+  const originalBundlePath = path.join(root, 'desktop', '.bundle', 'linux-arm64', 'redeven');
+  const originalDesktopReleasePath = path.join(
+    root,
+    'desktop',
+    'release',
+    'mac-arm64',
+    'Redeven Desktop.app',
+    'Contents',
+    'Resources',
+    'app.asar',
+  );
 
   await Promise.all([
     fs.mkdir(path.join(root, 'scripts'), { recursive: true }),
     fs.mkdir(path.join(root, 'cmd', 'redeven'), { recursive: true }),
     fs.mkdir(path.dirname(originalDistPath), { recursive: true }),
+    fs.mkdir(path.dirname(originalBundlePath), { recursive: true }),
+    fs.mkdir(path.dirname(originalDesktopReleasePath), { recursive: true }),
   ]);
   await fs.writeFile(originalDistPath, 'original checkout dist');
+  await fs.writeFile(originalBundlePath, 'original bundled runtime');
+  await fs.writeFile(originalDesktopReleasePath, 'original desktop release package');
   await fs.writeFile(path.join(root, 'go.mod'), [
     'module example.invalid/redeven-source-runtime-fixture',
     '',
@@ -126,6 +143,9 @@ async function createSourceRuntimeFixture(): Promise<Readonly<{
     '#!/usr/bin/env sh',
     'set -eu',
     `printf 'assets:%s\\n' "$PWD" >> ${JSON.stringify(buildLogPath)}`,
+    `if [ -e "$PWD/internal/envapp/ui/dist/env/index.html" ]; then printf 'copied:envapp-dist\\n' >> ${JSON.stringify(buildLogPath)}; fi`,
+    `if [ -e "$PWD/desktop/.bundle/linux-arm64/redeven" ]; then printf 'copied:desktop-bundle\\n' >> ${JSON.stringify(buildLogPath)}; fi`,
+    `if [ -e "$PWD/desktop/release/mac-arm64/Redeven Desktop.app/Contents/Resources/app.asar" ]; then printf 'copied:desktop-release\\n' >> ${JSON.stringify(buildLogPath)}; fi`,
   ].join('\n'), { mode: 0o755 });
 
   return {
@@ -133,6 +153,8 @@ async function createSourceRuntimeFixture(): Promise<Readonly<{
     cacheRoot: runtimePackageCacheRoot(tempRoot),
     buildLogPath,
     originalDistPath,
+    originalBundlePath,
+    originalDesktopReleasePath,
   };
 }
 
@@ -262,7 +284,12 @@ describe('runtimePackageCache', () => {
       const buildLog = await fs.readFile(fixture.buildLogPath, 'utf8');
       expect(buildLog).toMatch(/^assets:/u);
       expect(buildLog).not.toContain(fixture.root);
+      expect(buildLog).not.toContain('copied:envapp-dist');
+      expect(buildLog).not.toContain('copied:desktop-bundle');
+      expect(buildLog).not.toContain('copied:desktop-release');
       await expect(fs.readFile(fixture.originalDistPath, 'utf8')).resolves.toBe('original checkout dist');
+      await expect(fs.readFile(fixture.originalBundlePath, 'utf8')).resolves.toBe('original bundled runtime');
+      await expect(fs.readFile(fixture.originalDesktopReleasePath, 'utf8')).resolves.toBe('original desktop release package');
     } finally {
       await fs.rm(path.dirname(fixture.root), { recursive: true, force: true });
     }
