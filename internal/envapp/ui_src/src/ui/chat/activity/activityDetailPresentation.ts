@@ -5,6 +5,7 @@ import type {
   ActivityDetailSection,
   ActivityDetailStatus,
   FileChangeDetailSection,
+  FileContentSection,
   StructuredFieldsSection,
   TodoDetailSection,
   TodoDetailStatus,
@@ -248,7 +249,7 @@ function todoPresentation(item: ActivityItem, ref: ActivityDetailRef, payload: u
 function presentationDetailKind(item: ActivityItem, ref: ActivityDetailRef): ActivityDetailSection['kind'] {
   const explicitKind = String(ref.kind ?? '').trim();
   if (explicitKind && explicitKind !== 'tool_detail') {
-    if (['terminal', 'todo_delta', 'file_change', 'web_results', 'error', 'structured_fields'].includes(explicitKind)) {
+    if (['terminal', 'todo_delta', 'file_change', 'file_read_content', 'web_results', 'error', 'structured_fields'].includes(explicitKind)) {
       return explicitKind as ActivityDetailSection['kind'];
     }
     if (explicitKind === 'terminal_output') return 'terminal';
@@ -256,7 +257,8 @@ function presentationDetailKind(item: ActivityItem, ref: ActivityDetailRef): Act
   const renderer = String(item.renderer ?? '').trim();
   if (renderer === 'command') return 'terminal';
   if (renderer === 'todos') return 'todo_delta';
-  if (renderer === 'file_change' || renderer === 'file_context') return 'file_change';
+  if (renderer === 'file_change') return 'file_change';
+  if (renderer === 'file_context') return 'file_read_content';
   if (renderer === 'sources' || renderer === 'knowledge') return 'web_results';
   return 'structured_fields';
 }
@@ -302,6 +304,49 @@ function filePresentation(item: ActivityItem, ref: ActivityDetailRef, payload: u
   presentation.chips.push({ label: `${files.length} file${files.length === 1 ? '' : 's'}` });
   presentation.copyTargets.push({ id: 'paths', label: 'Copy paths', text: files.map((file) => file.path).join('\n') });
   return ensureContent(presentation);
+}
+
+function fileReadContentPresentation(item: ActivityItem, ref: ActivityDetailRef, payload: unknown): ActivityDetailPresentation | null {
+  const rec = asRecord(payload);
+  const args = asRecord(rec.args);
+  const result = asRecord(rec.result);
+  const filePath = readString(args, 'file_path', 'path') || itemTarget(item);
+  if (!filePath) return null;
+  const content = readRawString(result, 'content');
+  const lineOffset = readNumber(result, 'line_offset', 'lineOffset');
+  const lineCount = readNumber(result, 'line_count', 'lineCount');
+  const totalLines = readNumber(result, 'total_lines', 'totalLines');
+  const truncated = readBoolean(result, 'truncated');
+
+  const presentation: ActivityDetailPresentation = {
+    detailId: detailID(item, ref),
+    title: item.label || 'Read file',
+    subtitle: filePath,
+    status: 'success',
+    toolName: readString(rec, 'tool_name', 'toolName') || item.toolName,
+    startedAtUnixMs: readNumber(rec, 'started_at_unix_ms', 'startedAtUnixMs'),
+    endedAtUnixMs: readNumber(rec, 'ended_at_unix_ms', 'endedAtUnixMs'),
+    durationMs: readNumber(rec, 'latency_ms', 'duration_ms', 'durationMs'),
+    chips: [],
+    sections: [],
+    copyTargets: [],
+  };
+
+  presentation.sections.push({
+    kind: 'file_read_content',
+    filePath,
+    content,
+    lineOffset,
+    lineCount,
+    totalLines,
+    truncated,
+  });
+
+  if (content) {
+    presentation.copyTargets.push({ id: 'content', label: 'Copy content', text: content });
+  }
+
+  return presentation;
 }
 
 function webPresentation(item: ActivityItem, ref: ActivityDetailRef, payload: unknown): ActivityDetailPresentation | null {
@@ -444,6 +489,7 @@ export function normalizeActivityDetail(item: ActivityItem, ref: ActivityDetailR
   const semanticPresentation = (() => {
     if (detailKind === 'todo_delta') return todoPresentation(item, ref, payload);
     if (detailKind === 'file_change') return filePresentation(item, ref, payload);
+    if (detailKind === 'file_read_content') return fileReadContentPresentation(item, ref, payload);
     if (detailKind === 'web_results') return webPresentation(item, ref, payload);
     return null;
   })();

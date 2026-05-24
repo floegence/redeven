@@ -6,6 +6,7 @@ import { writeTextToClipboard } from '../../utils/clipboard';
 import type { ActivityDetailLoadState, ActivityDetailSection } from './activityDetailTypes';
 import { ErrorDetailRenderer } from './renderers/ErrorDetailRenderer';
 import { FileChangeDetailRenderer } from './renderers/FileChangeDetailRenderer';
+import { FileReadContentRenderer } from './renderers/FileReadContentRenderer';
 import { StructuredFieldsRenderer } from './renderers/StructuredFieldsRenderer';
 import { TerminalDetailRenderer } from './renderers/TerminalDetailRenderer';
 import { TodoDetailRenderer } from './renderers/TodoDetailRenderer';
@@ -19,6 +20,8 @@ function renderSection(section: ActivityDetailSection) {
       return <TodoDetailRenderer section={section} />;
     case 'file_change':
       return <FileChangeDetailRenderer section={section} />;
+    case 'file_read_content':
+      return <FileReadContentRenderer section={section} />;
     case 'web_results':
       return <WebDetailRenderer section={section} />;
     case 'error':
