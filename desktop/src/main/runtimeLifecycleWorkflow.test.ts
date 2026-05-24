@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import { DesktopOperationFailureError, desktopOperationFailurePresentation } from './desktopOperationFailure';
 import { RuntimeLifecycleWorkflow } from './runtimeLifecycleWorkflow';
-import { runtimeLifecyclePlanAfterDecision } from './runtimeLifecycleExecutionPlan';
+import {
+  runtimeLifecyclePlanAfterDecision,
+  runtimeLifecyclePlanIncludingStep,
+} from './runtimeLifecycleExecutionPlan';
 
 function workflow(): RuntimeLifecycleWorkflow {
   return new RuntimeLifecycleWorkflow({
@@ -11,6 +14,16 @@ function workflow(): RuntimeLifecycleWorkflow {
     target_id: 'ssh:devbox',
     target_label: 'Devbox',
     target_detail: 'devbox',
+  });
+}
+
+function containerWorkflow(): RuntimeLifecycleWorkflow {
+  return new RuntimeLifecycleWorkflow({
+    location: 'local_container',
+    operation: 'update',
+    target_id: 'container:dev',
+    target_label: 'Dev container',
+    target_detail: 'dev',
   });
 }
 
@@ -63,6 +76,17 @@ describe('RuntimeLifecycleWorkflow', () => {
       steps: plan.steps.map((step) => step.id),
       omitted_steps: plan.omitted_steps,
     });
+    const platformPlan = runtimeLifecyclePlanIncludingStep({
+      location: 'ssh_host',
+      operation: 'update',
+      currentSteps: subject.currentStepIDs(),
+      step: 'detecting_platform',
+    });
+    subject.ensureStepPlanned('detecting_platform', {
+      state: platformPlan.state,
+      steps: platformPlan.steps.map((step) => step.id),
+      omitted_steps: platformPlan.omitted_steps,
+    });
     subject.beginStep('detecting_platform', 'Detecting platform');
     subject.completeStep('detecting_platform');
     subject.beginStep('preparing_runtime_package', 'Preparing package');
@@ -94,6 +118,96 @@ describe('RuntimeLifecycleWorkflow', () => {
       ['checking_runtime_service', 'pending'],
       ['runtime_ready', 'pending'],
     ]);
+  });
+
+  it('allows the container placement helper sequence without treating platform detection as an interrupt', () => {
+    const subject = containerWorkflow();
+
+    expect(subject.beginStep('checking_container', 'Checking container').progress.active_step_id)
+      .toBe('checking_container');
+
+    const platformPlan = runtimeLifecyclePlanIncludingStep({
+      location: 'local_container',
+      operation: 'update',
+      currentSteps: subject.currentStepIDs(),
+      step: 'detecting_platform',
+    });
+    subject.ensureStepPlanned('detecting_platform', {
+      state: platformPlan.state,
+      steps: platformPlan.steps.map((step) => step.id),
+      omitted_steps: platformPlan.omitted_steps,
+    });
+    expect(subject.beginStep('detecting_platform', 'Detecting platform').progress.active_step_id)
+      .toBe('detecting_platform');
+
+    const runtimeCheckPlan = runtimeLifecyclePlanIncludingStep({
+      location: 'local_container',
+      operation: 'update',
+      currentSteps: subject.currentStepIDs(),
+      step: 'checking_runtime_package',
+    });
+    subject.ensureStepPlanned('checking_runtime_package', {
+      state: runtimeCheckPlan.state,
+      steps: runtimeCheckPlan.steps.map((step) => step.id),
+      omitted_steps: runtimeCheckPlan.omitted_steps,
+    });
+    expect(subject.beginStep('checking_runtime_package', 'Checking runtime').progress.active_step_id)
+      .toBe('checking_runtime_package');
+
+    expect(subject.progress().steps.map((step) => [step.id, step.status])).toEqual([
+      ['checking_container', 'succeeded'],
+      ['detecting_platform', 'succeeded'],
+      ['checking_runtime_package', 'running'],
+    ]);
+
+    const installPlan = runtimeLifecyclePlanIncludingStep({
+      location: 'local_container',
+      operation: 'update',
+      currentSteps: subject.currentStepIDs(),
+      step: 'preparing_runtime_package',
+    });
+    subject.ensureStepPlanned('preparing_runtime_package', {
+      state: installPlan.state,
+      steps: installPlan.steps.map((step) => step.id),
+      omitted_steps: installPlan.omitted_steps,
+    });
+    expect(subject.beginStep('preparing_runtime_package', 'Preparing runtime').progress.active_step_id)
+      .toBe('preparing_runtime_package');
+
+    expect(subject.progress().steps.map((step) => [step.id, step.status])).toEqual([
+      ['checking_container', 'succeeded'],
+      ['detecting_platform', 'succeeded'],
+      ['checking_runtime_package', 'succeeded'],
+      ['preparing_runtime_package', 'running'],
+      ['installing_runtime_package', 'pending'],
+      ['starting_runtime_process', 'pending'],
+      ['checking_runtime_service', 'pending'],
+      ['runtime_ready', 'pending'],
+    ]);
+  });
+
+  it('keeps a completed container step active until the next step actually begins', () => {
+    const subject = containerWorkflow();
+
+    subject.beginStep('checking_container', 'Checking container');
+    const platformPlan = runtimeLifecyclePlanIncludingStep({
+      location: 'local_container',
+      operation: 'update',
+      currentSteps: subject.currentStepIDs(),
+      step: 'detecting_platform',
+    });
+    subject.ensureStepPlanned('detecting_platform', {
+      state: platformPlan.state,
+      steps: platformPlan.steps.map((step) => step.id),
+    });
+    subject.beginStep('detecting_platform', 'Detecting platform');
+    subject.completeStep('detecting_platform');
+
+    expect(subject.progress()).toEqual(expect.objectContaining({
+      phase: 'detecting_platform',
+      active_step_id: 'detecting_platform',
+      stage_index: 2,
+    }));
   });
 
   it('rejects terminal success across a pending gap', () => {

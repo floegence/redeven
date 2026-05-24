@@ -157,8 +157,10 @@ function activeStepIDForSteps(
   steps: readonly DesktopRuntimeLifecycleStepSnapshot[],
   fallbackPhase: DesktopRuntimeLifecycleStepID,
 ): DesktopRuntimeLifecycleStepID {
+  const fallbackStep = steps.find((step) => step.id === fallbackPhase);
   return steps.find((step) => step.status === 'failed')?.id
     ?? steps.find((step) => step.status === 'running')?.id
+    ?? fallbackStep?.id
     ?? steps.find((step) => step.status === 'pending')?.id
     ?? steps.at(-1)?.id
     ?? fallbackPhase;

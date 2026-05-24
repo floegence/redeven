@@ -165,6 +165,8 @@ describe('main routing', () => {
     expect(mainSrc).toContain('environment_label: label');
     expect(mainSrc).toContain('phase: sshRuntimeLifecyclePhase(progress.phase)');
     expect(mainSrc).toContain('detail: progress.detail');
+    expect(mainSrc).toContain("case 'ssh_checking_runtime':\n    case 'ssh_runtime_ready':\n      return 'checking_runtime_package';");
+    expect(mainSrc).not.toContain("case 'ssh_runtime_ready':\n      return 'checking_runtime_service';");
     expect(mainSrc).not.toContain('runtimeLifecycleProgressFromSSH(sshDetails, progress, label, lifecycleOperation)');
     expect(mainSrc).toContain('ensureRuntimePlacementReady({');
     expect(mainSrc).toContain('on_progress: (progress: RuntimePlacementProgress) => {');

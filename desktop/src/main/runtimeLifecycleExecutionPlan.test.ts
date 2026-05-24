@@ -20,7 +20,13 @@ describe('runtimeLifecycleExecutionPlan', () => {
       operation: 'update',
     }).steps.map((step) => step.id)).toEqual([
       'checking_container',
-      'checking_runtime_package',
+    ]);
+    expect(initialRuntimeLifecyclePlan({
+      location: 'ssh_container',
+      operation: 'update',
+    }).steps.map((step) => step.id)).toEqual([
+      'checking_host',
+      'checking_container',
     ]);
   });
 
@@ -57,13 +63,64 @@ describe('runtimeLifecycleExecutionPlan', () => {
     expect(plan.steps.map((step) => step.id)).toEqual([
       'checking_host',
       'checking_runtime_package',
-      'starting_runtime_process',
-      'checking_runtime_service',
-      'runtime_ready',
     ]);
     expect(plan.omitted_steps).toEqual([
       { id: 'stopping_runtime_process', reason: 'runtime_process_absent' },
       { id: 'verifying_runtime_stopped', reason: 'runtime_process_absent' },
+    ]);
+  });
+
+  it('keeps a stopped container restart on the already-observed decision gates until helper phases arrive', () => {
+    const plan = runtimeLifecyclePlanAfterDecision({
+      location: 'local_container',
+      operation: 'restart',
+      decision: 'runtime_stopped',
+    });
+
+    expect(plan.steps.map((step) => step.id)).toEqual([
+      'checking_container',
+    ]);
+    expect(plan.omitted_steps).toEqual([
+      { id: 'stopping_runtime_process', reason: 'runtime_process_absent' },
+      { id: 'verifying_runtime_stopped', reason: 'runtime_process_absent' },
+    ]);
+  });
+
+  it('keeps a container package decision on the already-observed decision gates until helper phases arrive', () => {
+    const plan = runtimeLifecyclePlanAfterDecision({
+      location: 'ssh_container',
+      operation: 'update',
+      decision: 'runtime_update_required_stopped',
+    });
+
+    expect(plan.steps.map((step) => step.id)).toEqual([
+      'checking_host',
+      'checking_container',
+    ]);
+    expect(plan.omitted_steps).toEqual([
+      { id: 'stopping_runtime_process', reason: 'runtime_process_absent' },
+      { id: 'verifying_runtime_stopped', reason: 'runtime_process_absent' },
+    ]);
+  });
+
+  it('starts replacement decisions from the steps already observed by the caller', () => {
+    expect(runtimeLifecyclePlanAfterDecision({
+      location: 'ssh_container',
+      operation: 'restart',
+      decision: 'runtime_running',
+    }).steps.map((step) => step.id)).toEqual([
+      'checking_host',
+      'stopping_runtime_process',
+      'verifying_runtime_stopped',
+    ]);
+    expect(runtimeLifecyclePlanAfterDecision({
+      location: 'local_container',
+      operation: 'update',
+      decision: 'runtime_update_required_running',
+    }).steps.map((step) => step.id)).toEqual([
+      'checking_container',
+      'stopping_runtime_process',
+      'verifying_runtime_stopped',
     ]);
   });
 
@@ -93,9 +150,6 @@ describe('runtimeLifecycleExecutionPlan', () => {
 
     expect(plan.steps.map((step) => step.id)).toEqual([
       'checking_existing_runtime',
-      'starting_runtime_process',
-      'checking_runtime_service',
-      'runtime_ready',
     ]);
     expect(plan.steps.map((step) => step.id)).not.toContain('preparing_runtime_package');
   });
@@ -114,6 +168,98 @@ describe('runtimeLifecycleExecutionPlan', () => {
     expect(plan.steps.map((step) => step.id)).toEqual([
       'checking_host',
       'checking_runtime_package',
+      'preparing_runtime_package',
+      'installing_runtime_package',
+      'starting_runtime_process',
+      'checking_runtime_service',
+      'runtime_ready',
+    ]);
+  });
+
+  it('expands container helper phases in the same order emitted by the placement manager', () => {
+    const afterDetectingPlatform = runtimeLifecyclePlanIncludingStep({
+      location: 'local_container',
+      operation: 'update',
+      currentSteps: [
+        'checking_container',
+      ],
+      step: 'detecting_platform',
+    });
+
+    expect(afterDetectingPlatform.steps.map((step) => step.id)).toEqual([
+      'checking_container',
+      'detecting_platform',
+      'checking_runtime_package',
+    ]);
+
+    const afterCheckingRuntime = runtimeLifecyclePlanIncludingStep({
+      location: 'local_container',
+      operation: 'update',
+      currentSteps: afterDetectingPlatform.steps.map((step) => step.id),
+      step: 'checking_runtime_package',
+    });
+
+    expect(afterCheckingRuntime.steps.map((step) => step.id)).toEqual([
+      'checking_container',
+      'detecting_platform',
+      'checking_runtime_package',
+    ]);
+  });
+
+  it('expands a current package probe when the helper reports installation work after the probe', () => {
+    const plan = runtimeLifecyclePlanIncludingStep({
+      location: 'local_container',
+      operation: 'update',
+      currentSteps: [
+        'checking_container',
+        'detecting_platform',
+        'checking_runtime_package',
+      ],
+      step: 'preparing_runtime_package',
+    });
+
+    expect(plan.steps.map((step) => step.id)).toEqual([
+      'checking_container',
+      'detecting_platform',
+      'checking_runtime_package',
+      'preparing_runtime_package',
+      'installing_runtime_package',
+      'starting_runtime_process',
+      'checking_runtime_service',
+      'runtime_ready',
+    ]);
+  });
+
+  it('keeps stop plans focused on the stop workflow instead of hidden package gates', () => {
+    expect(initialRuntimeLifecyclePlan({
+      location: 'ssh_host',
+      operation: 'stop',
+    }).steps.map((step) => step.id)).toEqual([
+      'checking_host',
+    ]);
+    expect(initialRuntimeLifecyclePlan({
+      location: 'ssh_container',
+      operation: 'stop',
+    }).steps.map((step) => step.id)).toEqual([
+      'checking_host',
+    ]);
+  });
+
+  it('keeps host package phases in the SSH helper order after the runtime package probe', () => {
+    const afterDetectingPlatform = runtimeLifecyclePlanIncludingStep({
+      location: 'ssh_host',
+      operation: 'update',
+      currentSteps: [
+        'checking_host',
+        'checking_runtime_package',
+      ],
+      step: 'detecting_platform',
+    });
+
+    expect(afterDetectingPlatform.steps.map((step) => step.id)).toEqual([
+      'checking_host',
+      'checking_runtime_package',
+      'detecting_platform',
       'preparing_runtime_package',
       'installing_runtime_package',
       'starting_runtime_process',
