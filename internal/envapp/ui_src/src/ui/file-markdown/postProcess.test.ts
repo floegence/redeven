@@ -35,7 +35,7 @@ describe('file markdown postProcess', () => {
   it('normalizes raw HTML badge rows to the same inline image treatment as markdown images', () => {
     const root = createRoot(`
       <p align="center">
-        <a href="https://go.dev/"><img alt="Go Version" src="https://img.shields.io/badge/Go-1.25.9-00ADD8?style=flat-square&logo=go"></a>
+        <a href="https://go.dev/"><img alt="Go Version" src="https://img.shields.io/badge/Go-1.26.3-00ADD8?style=flat-square&logo=go"></a>
         <a href="docs/ENV_APP.md"><img alt="Local Environment Workspace" src="https://img.shields.io/badge/Local%20Environment-Workspace-6C3BFF?style=flat-square"></a>
       </p>
     `);
