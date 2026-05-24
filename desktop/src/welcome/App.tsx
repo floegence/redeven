@@ -4691,9 +4691,6 @@ function EnvironmentProgressPanel(props: Readonly<{
     if (!current || current.stage_count <= 0) {
       return 0;
     }
-    if ('plan_state' in current && current.plan_state === 'planning') {
-      return 100;
-    }
     return Math.max(0, Math.min(100, Math.round((current.stage_index / current.stage_count) * 100)));
   });
   const canCancel = createMemo(() => (

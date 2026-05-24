@@ -668,6 +668,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('data-entering={startup() ? stepEntering(step().key) : false}');
     expect(appSrc).toContain("data-plan-state={startup()?.plan_state ?? 'executing'}");
     expect(appSrc).toContain("currentRuntimeLifecycle()?.plan_state !== 'planning'");
+    expect(appSrc).not.toContain("current.plan_state === 'planning'");
     expect(appSrc).toContain("Planning ${props.progress.action === 'restart_environment_runtime' ? 'restart'");
     expect(appSrc).toContain('<Show when={props.progress.failure}>');
     expect(appSrc).toContain('<div class="redeven-action-popover__notice-detail">{failure().summary}</div>');

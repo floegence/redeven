@@ -43,12 +43,10 @@ const HOST_PLANNING_STEPS: readonly DesktopRuntimeLifecycleStepID[] = [
 const SSH_CONTAINER_PLANNING_STEPS: readonly DesktopRuntimeLifecycleStepID[] = [
   'checking_host',
   'checking_container',
-  'checking_runtime_package',
 ];
 
 const LOCAL_CONTAINER_PLANNING_STEPS: readonly DesktopRuntimeLifecycleStepID[] = [
   'checking_container',
-  'checking_runtime_package',
 ];
 
 function firstCheckStep(location: DesktopRuntimeLifecycleLocation): DesktopRuntimeLifecycleStepID {
@@ -64,7 +62,13 @@ function firstCheckStep(location: DesktopRuntimeLifecycleLocation): DesktopRunti
   }
 }
 
-function planningStepIDs(location: DesktopRuntimeLifecycleLocation): readonly DesktopRuntimeLifecycleStepID[] {
+function planningStepIDs(
+  location: DesktopRuntimeLifecycleLocation,
+  operation: DesktopRuntimeLifecycleOperation,
+): readonly DesktopRuntimeLifecycleStepID[] {
+  if (operation === 'stop') {
+    return [firstCheckStep(location)];
+  }
   switch (location) {
     case 'local_host':
       return ['checking_existing_runtime'];
@@ -77,12 +81,29 @@ function planningStepIDs(location: DesktopRuntimeLifecycleLocation): readonly De
   }
 }
 
+function replacementDecisionStepIDs(location: DesktopRuntimeLifecycleLocation): readonly DesktopRuntimeLifecycleStepID[] {
+  if (location === 'ssh_container') {
+    return ['checking_host'];
+  }
+  return planningStepIDs(location, 'start');
+}
+
 function packageInstallSteps(): readonly DesktopRuntimeLifecycleStepID[] {
   return [
-    'detecting_platform',
     'preparing_runtime_package',
     'installing_runtime_package',
   ];
+}
+
+function containerPackageProbeSteps(): readonly DesktopRuntimeLifecycleStepID[] {
+  return [
+    'detecting_platform',
+    'checking_runtime_package',
+  ];
+}
+
+function isContainerLocation(location: DesktopRuntimeLifecycleLocation): boolean {
+  return location === 'local_container' || location === 'ssh_container';
 }
 
 function startReadySteps(): readonly DesktopRuntimeLifecycleStepID[] {
@@ -131,6 +152,14 @@ function uniqueStepIDs(ids: readonly DesktopRuntimeLifecycleStepID[]): readonly 
   return [...new Set(ids)];
 }
 
+function trimCurrentStepsForExpansion(
+  currentSteps: readonly DesktopRuntimeLifecycleStepID[],
+  step: DesktopRuntimeLifecycleStepID,
+): readonly DesktopRuntimeLifecycleStepID[] {
+  const index = currentSteps.indexOf(step);
+  return index >= 0 ? currentSteps.slice(0, index) : currentSteps;
+}
+
 function appendMissing(
   currentSteps: readonly DesktopRuntimeLifecycleStepID[],
   tail: readonly DesktopRuntimeLifecycleStepID[],
@@ -156,10 +185,17 @@ function startTailFrom(step: DesktopRuntimeLifecycleStepID): readonly DesktopRun
   }
 }
 
-function packageTailFrom(step: DesktopRuntimeLifecycleStepID): readonly DesktopRuntimeLifecycleStepID[] {
+function packageTailFrom(
+  location: DesktopRuntimeLifecycleLocation,
+  step: DesktopRuntimeLifecycleStepID,
+): readonly DesktopRuntimeLifecycleStepID[] {
   switch (step) {
     case 'detecting_platform':
-      return [...packageInstallSteps(), ...startReadySteps()];
+      return isContainerLocation(location)
+        ? containerPackageProbeSteps()
+        : ['detecting_platform', ...packageInstallSteps(), ...startReadySteps()];
+    case 'checking_runtime_package':
+      return ['checking_runtime_package'];
     case 'preparing_runtime_package':
       return ['preparing_runtime_package', 'installing_runtime_package', ...startReadySteps()];
     case 'installing_runtime_package':
@@ -177,12 +213,12 @@ function stopTailForOperation(
   if (step === 'stopping_runtime_process') {
     return operation === 'stop'
       ? stopSteps()
-      : ['stopping_runtime_process', 'verifying_runtime_stopped', ...startReadySteps()];
+      : ['stopping_runtime_process', 'verifying_runtime_stopped'];
   }
   if (step === 'verifying_runtime_stopped') {
     return terminal
       ? ['verifying_runtime_stopped', terminal]
-      : ['verifying_runtime_stopped', ...startReadySteps()];
+      : ['verifying_runtime_stopped'];
   }
   if (step === 'runtime_stopped') {
     return stopSteps();
@@ -193,41 +229,43 @@ function stopTailForOperation(
 export function initialRuntimeLifecyclePlan(input: RuntimeLifecyclePlanInput): RuntimeLifecyclePlanResult {
   return {
     state: 'planning',
-    steps: stepStates(planningStepIDs(input.location)),
+    steps: stepStates(planningStepIDs(input.location, input.operation)),
   };
 }
 
 export function runtimeLifecyclePlanIncludingStep(input: RuntimeLifecyclePlanStepInput): RuntimeLifecyclePlanResult {
+  const currentSteps = trimCurrentStepsForExpansion(input.currentSteps, input.step);
+  const explicitStopTail = stopTailForOperation(input.operation, input.step);
+  if (explicitStopTail.length > 0) {
+    return {
+      state: 'executing',
+      steps: stepStates(appendMissing(currentSteps, explicitStopTail)),
+    };
+  }
+  const explicitPackageTail = packageTailFrom(input.location, input.step);
+  if (explicitPackageTail.length > 0) {
+    return {
+      state: 'executing',
+      steps: stepStates(appendMissing(currentSteps, explicitPackageTail)),
+    };
+  }
   if (input.currentSteps.includes(input.step)) {
     return {
       state: 'executing',
       steps: stepStates(input.currentSteps),
     };
   }
-  const explicitStopTail = stopTailForOperation(input.operation, input.step);
-  if (explicitStopTail.length > 0) {
-    return {
-      state: 'executing',
-      steps: stepStates(appendMissing(input.currentSteps, explicitStopTail)),
-    };
-  }
-  const explicitPackageTail = packageTailFrom(input.step);
-  if (explicitPackageTail.length > 0) {
-    return {
-      state: 'executing',
-      steps: stepStates(appendMissing(input.currentSteps, explicitPackageTail)),
-    };
-  }
   return {
     state: 'executing',
-    steps: stepStates(appendMissing(input.currentSteps, [input.step])),
+    steps: stepStates(appendMissing(currentSteps, [input.step])),
   };
 }
 
 export function runtimeLifecyclePlanAfterDecision(input: RuntimeLifecyclePlanInput & Readonly<{
   decision: RuntimeLifecycleDecision;
 }>): RuntimeLifecyclePlanResult {
-  const planning = planningStepIDs(input.location);
+  const planning = planningStepIDs(input.location, input.operation);
+  const replacementPlanning = replacementDecisionStepIDs(input.location);
   const firstCheck = firstCheckStep(input.location);
 
   switch (input.decision) {
@@ -280,18 +318,14 @@ export function runtimeLifecyclePlanAfterDecision(input: RuntimeLifecyclePlanInp
       return {
         state: 'executing',
         steps: stepStates([
-          ...planning,
+          ...replacementPlanning,
           ...stopSteps('verifying_runtime_stopped').slice(0, 2),
-          ...startReadySteps(),
         ]),
       };
     case 'runtime_stopped':
       return {
         state: 'executing',
-        steps: stepStates([
-          ...planning,
-          ...startReadySteps(),
-        ]),
+        steps: stepStates(planning),
         omitted_steps: omitted([
           'stopping_runtime_process',
           'verifying_runtime_stopped',
@@ -300,30 +334,20 @@ export function runtimeLifecyclePlanAfterDecision(input: RuntimeLifecyclePlanInp
     case 'runtime_missing':
       return {
         state: 'executing',
-        steps: stepStates([
-          ...planning,
-          ...packageInstallSteps(),
-          ...startReadySteps(),
-        ]),
+        steps: stepStates(planning),
       };
     case 'runtime_update_required_running':
       return {
         state: 'executing',
         steps: stepStates([
-          ...planning,
+          ...replacementPlanning,
           ...stopSteps('verifying_runtime_stopped').slice(0, 2),
-          ...packageInstallSteps(),
-          ...startReadySteps(),
         ]),
       };
     case 'runtime_update_required_stopped':
       return {
         state: 'executing',
-        steps: stepStates([
-          ...planning,
-          ...packageInstallSteps(),
-          ...startReadySteps(),
-        ]),
+        steps: stepStates(planning),
         omitted_steps: omitted([
           'stopping_runtime_process',
           'verifying_runtime_stopped',

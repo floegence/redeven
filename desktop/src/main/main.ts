@@ -4274,9 +4274,8 @@ function sshRuntimeLifecyclePhase(
     case 'ssh_control_ready':
       return 'checking_host';
     case 'ssh_checking_runtime':
-      return 'checking_runtime_package';
     case 'ssh_runtime_ready':
-      return 'checking_runtime_service';
+      return 'checking_runtime_package';
     case 'ssh_detecting_platform':
       return 'detecting_platform';
     case 'ssh_preparing_upload':

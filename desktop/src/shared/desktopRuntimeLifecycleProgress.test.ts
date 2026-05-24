@@ -113,6 +113,59 @@ describe('desktopRuntimeLifecycleProgress', () => {
     ]);
   });
 
+  it('keeps the explicit active step after completion instead of jumping to the next pending step', () => {
+    const progress = runtimeLifecycleProgress({
+      location: 'local_container',
+      operation: 'update',
+      planState: 'executing',
+      phase: 'detecting_platform',
+      targetLabel: 'Dev Container',
+      stepStates: [
+        { id: 'checking_container', status: 'succeeded' },
+        { id: 'detecting_platform', status: 'succeeded' },
+        { id: 'checking_runtime_package', status: 'pending' },
+      ],
+    });
+
+    expect(progress).toEqual(expect.objectContaining({
+      phase: 'detecting_platform',
+      active_step_id: 'detecting_platform',
+      stage_index: 2,
+      stage_count: 3,
+    }));
+  });
+
+  it('keeps explicit container failures anchored to their failed step', () => {
+    const progress = runtimeLifecycleProgress({
+      location: 'ssh_container',
+      operation: 'update',
+      planState: 'terminal',
+      phase: 'detecting_platform',
+      failedPhase: 'detecting_platform',
+      targetLabel: 'SSH Container',
+      stepStates: [
+        { id: 'checking_host', status: 'succeeded' },
+        { id: 'checking_container', status: 'succeeded' },
+        { id: 'detecting_platform', status: 'failed', detail: 'platform probe failed' },
+        { id: 'checking_runtime_package', status: 'pending' },
+      ],
+    });
+
+    expect(progress).toEqual(expect.objectContaining({
+      phase: 'detecting_platform',
+      active_step_id: 'detecting_platform',
+      failed_step_id: 'detecting_platform',
+      stage_index: 3,
+      stage_count: 4,
+    }));
+    expect(progress.steps.map((step) => [step.id, step.status, step.detail ?? ''])).toEqual([
+      ['checking_host', 'succeeded', ''],
+      ['checking_container', 'succeeded', ''],
+      ['detecting_platform', 'failed', 'platform probe failed'],
+      ['checking_runtime_package', 'pending', ''],
+    ]);
+  });
+
   it('supports explicit terminal steps for update-current and already-stopped outcomes', () => {
     const upToDate = runtimeLifecycleProgress({
       location: 'ssh_host',
