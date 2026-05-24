@@ -4884,7 +4884,7 @@ function EnvironmentProgressPanel(props: Readonly<{
             <Button
               size="sm"
               variant="outline"
-              class="flex-1 justify-center gap-1.5"
+              class="flex-1 justify-center gap-1.5 whitespace-nowrap"
               onClick={() => props.copyOperationDiagnostics(props.progress)}
             >
               <Copy class="h-3.5 w-3.5" />
