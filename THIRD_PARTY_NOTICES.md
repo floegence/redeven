@@ -534,8 +534,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | boolean | 3.2.0 | MIT | Desktop shell | https://www.npmjs.com/package/boolean/v/3.2.0 |  |
 | brace-expansion | 1.1.13 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/brace-expansion/v/1.1.13 |  |
 | brace-expansion | 2.0.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/brace-expansion/v/2.0.3 |  |
-| brace-expansion | 5.0.5 | MIT | Desktop shell | https://www.npmjs.com/package/brace-expansion/v/5.0.5 |  |
-| brace-expansion | 5.0.6 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/brace-expansion/v/5.0.6 |  |
+| brace-expansion | 5.0.6 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/brace-expansion/v/5.0.6 |  |
 | browserslist | 4.28.1 | MIT | Env App UI | https://www.npmjs.com/package/browserslist/v/4.28.1 |  |
 | browserslist | 4.28.2 | MIT | Desktop shell | https://www.npmjs.com/package/browserslist/v/4.28.2 |  |
 | buffer-crc32 | 0.2.13 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/buffer-crc32/v/0.2.13 |  |

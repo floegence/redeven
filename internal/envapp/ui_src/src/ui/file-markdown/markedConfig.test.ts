@@ -25,7 +25,7 @@ describe('file markdown marked renderer', () => {
 
   it('keeps soft line breaks inline so badge images can flow like GitHub markdown', () => {
     const html = parseMarkdown([
-      '![Go Version](https://img.shields.io/badge/Go-1.25.9-00ADD8?logo=go)',
+      '![Go Version](https://img.shields.io/badge/Go-1.26.3-00ADD8?logo=go)',
       '![Node Version](https://img.shields.io/badge/Node.js-24-339933?logo=node.js)',
     ].join('\n'));
 
