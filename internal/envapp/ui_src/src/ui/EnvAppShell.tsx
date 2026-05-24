@@ -62,7 +62,7 @@ import { EnvAIPage } from './pages/EnvAIPage';
 import { CodexPage } from './codex/CodexPage';
 import { CodexProvider } from './codex/CodexProvider';
 import { CodexSidebar } from './codex/CodexSidebar';
-import { AIChatContext, createAIChatContextValue, type ModelsResponse } from './pages/AIChatContext';
+import { AIChatContext, createAIChatContextValue, normalizeModelsResponse } from './pages/AIChatContext';
 import { AIChatSidebar } from './pages/AIChatSidebar';
 import { EnvSettingsPage } from './pages/EnvSettingsPage';
 import { hasRWXPermissions } from './pages/aiPermissions';
@@ -903,10 +903,11 @@ export function EnvAppShell() {
   };
 
   const resolveAskFlowerModel = async (): Promise<string> => {
-    const models = await fetchGatewayJSON<ModelsResponse>('/_redeven_proxy/api/ai/models', { method: 'GET' });
-    const options = Array.isArray(models?.models) ? models.models : [];
+    const models = normalizeModelsResponse(
+      await fetchGatewayJSON<unknown>('/_redeven_proxy/api/ai/models', { method: 'GET' }),
+    );
     const allowed = new Set<string>();
-    for (const item of options) {
+    for (const item of models.models) {
       const id = String(item?.id ?? '').trim();
       if (id) allowed.add(id);
     }

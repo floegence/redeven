@@ -3,7 +3,7 @@
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createAIChatContextValue, type AIChatContextValue, type ThreadView } from './AIChatContext';
+import { createAIChatContextValue, normalizeModelsResponse, type AIChatContextValue, type ThreadView } from './AIChatContext';
 
 const hoisted = vi.hoisted(() => {
   const envResource: any = (() => ({
@@ -56,7 +56,7 @@ type MutableModelsResponse = {
     max_output_tokens?: number;
     input_modalities?: string[];
     supports_image_input?: boolean;
-  }>;
+  }> | null;
 };
 
 const baseModels = (): MutableModelsResponse => ({
@@ -290,6 +290,40 @@ describe('AIChatContext model selection', () => {
     expect(ctx.modelOptions().map((item) => item.value)).toEqual(['openai/model-a', 'openai/model-b']);
     expect(ctx.modelOptions()[0].source).toBe('runtime_config');
     expect(ctx.modelSourceGroups().map((group) => group.source)).toEqual(['runtime_config']);
+
+    dispose();
+  });
+
+  it('normalizes null model lists into an empty model contract', () => {
+    const normalized = normalizeModelsResponse({
+      current_model: 'desktop:model_missing',
+      models: null,
+      runtime: {
+        desktop_model_source: {
+          connected: true,
+          available: false,
+        },
+      },
+    });
+
+    expect(normalized.current_model).toBe('desktop:model_missing');
+    expect(normalized.models).toEqual([]);
+    expect(normalized.runtime?.desktop_model_source?.connected).toBe(true);
+  });
+
+  it('keeps the chat context stable when the models API returns null models', async () => {
+    modelsState = {
+      current_model: '',
+      models: null,
+    };
+
+    const { ctx, dispose } = await renderContext();
+
+    expect(ctx.modelsReady()).toBe(true);
+    expect(ctx.modelOptions()).toEqual([]);
+    expect(ctx.modelSourceGroups()).toEqual([]);
+    expect(ctx.selectedCurrentModel()).toBe('');
+    expect(ctx.selectedSendModel()).toBe('');
 
     dispose();
   });

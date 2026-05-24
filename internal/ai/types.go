@@ -161,6 +161,14 @@ type ModelsResponse struct {
 	Runtime      *AIRuntimeStatus `json:"runtime,omitempty"`
 }
 
+// NewModelsResponse keeps the public models contract stable for empty results.
+func NewModelsResponse(runtime *AIRuntimeStatus) *ModelsResponse {
+	return &ModelsResponse{
+		Models:  make([]Model, 0),
+		Runtime: runtime,
+	}
+}
+
 type ThreadView struct {
 	ThreadID            string                  `json:"thread_id"`
 	Title               string                  `json:"title"`

@@ -10,6 +10,7 @@ This integration is intentionally independent from Flower:
 - Runtime Settings groups Codex under `AI & Extensions` and only shows read-only host/runtime status there; it does not persist Codex runtime settings.
 - The Codex surface uses official OpenAI Codex branding assets and floe-webapp primitives without coupling Codex implementation details back to Flower.
 - Cross-surface `Ask Codex` entry points should be modeled as Context Action Protocol actions (`assistant.ask.codex`) rather than as Flower modes or Flower providers. See [`AGENT_SKILLS.md`](AGENT_SKILLS.md).
+- Empty Codex capability or model snapshots are valid host states. The Codex surface keeps diagnostics visible, disables model-backed actions when needed, and does not borrow Flower model fallback behavior.
 
 ## Architecture
 
