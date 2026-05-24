@@ -54,6 +54,29 @@ function lifecycleProgress(environmentID: string): DesktopLauncherActionProgress
   };
 }
 
+function restartReadyProgress(environmentID: string): DesktopLauncherActionProgress {
+  return {
+    action: 'restart_environment_runtime',
+    environment_id: environmentID,
+    environment_label: 'Local Environment',
+    operation_key: 'restart-runtime-op',
+    subject_kind: 'local_environment',
+    subject_id: environmentID,
+    started_at_unix_ms: 200,
+    status: 'succeeded',
+    phase: 'runtime_ready',
+    title: 'Runtime ready',
+    detail: 'Desktop restarted the local runtime.',
+    lifecycle_progress: runtimeLifecycleProgress({
+      location: 'local_host',
+      operation: 'restart',
+      phase: 'runtime_ready',
+      targetID: environmentID,
+      targetLabel: 'Local Environment',
+    }),
+  };
+}
+
 describe('environmentLifecycleDisclosure', () => {
   it('creates pending progress immediately from a lifecycle disclosure', () => {
     const environment = localEnvironmentEntry();
@@ -83,6 +106,21 @@ describe('environmentLifecycleDisclosure', () => {
       environment_id: environment.id,
       visibility: 'open',
       operation_key: 'runtime-op:100',
+      last_progress: realProgress,
+    }));
+    expect(reconcileEnvironmentLifecycleDisclosure(bound, [environment], [])).toBe(bound);
+  });
+
+  it('keeps terminal restart progress visible until the open popup can offer Open', () => {
+    const environment = localEnvironmentEntry();
+    const state = beginEnvironmentLifecycleDisclosure(null, environment.id, 'restart_runtime');
+    const realProgress = restartReadyProgress(environment.id);
+    const bound = reconcileEnvironmentLifecycleDisclosure(state, [environment], [realProgress]);
+
+    expect(bound).toEqual(expect.objectContaining({
+      environment_id: environment.id,
+      visibility: 'open',
+      operation_key: 'restart-runtime-op:200',
       last_progress: realProgress,
     }));
     expect(reconcileEnvironmentLifecycleDisclosure(bound, [environment], [])).toBe(bound);

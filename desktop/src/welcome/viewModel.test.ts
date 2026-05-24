@@ -1637,7 +1637,21 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildEnvironmentCardModel(entry!).status_label).toBe('Open');
     const actionModel = buildProviderBackedEnvironmentActionModel(entry!);
     expect(actionModel.status_label).not.toBe('RESTART REQUIRED');
+    expect(actionModel.action_presentation.primary_action).toMatchObject({
+      intent: 'open',
+      label: 'Open',
+      enabled: true,
+    });
     expect(actionModel.action_presentation.primary_action_overlay).toBeUndefined();
+    expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'restart_runtime',
+        action: expect.objectContaining({
+          intent: 'restart_runtime',
+          enabled: true,
+        }),
+      }),
+    ]));
   });
 
   it('lets NOT CHECKED runtime cards start Open-owned status preflight', () => {

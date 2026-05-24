@@ -661,6 +661,16 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('progressOpen={props.lifecycleProgressOpen}');
     expect(appSrc).toContain('onProgressOpenChange={props.onLifecycleProgressOpenChange}');
     expect(appSrc).toContain('function EnvironmentProgressPanel');
+    expect(appSrc).toContain('primaryAction?: EnvironmentActionModel;');
+    expect(appSrc).toContain('runPrimaryAction?: (action: EnvironmentActionModel) => void;');
+    expect(appSrc).toContain('const readyPrimaryAction = createMemo(() => {');
+    expect(appSrc).toContain('runtimeLifecycleReadyPrimaryAction(props.progress, props.primaryAction)');
+    expect(appSrc).toContain('<Show when={readyPrimaryAction()}>');
+    expect(appSrc).toContain('<ExternalLink class="h-3.5 w-3.5" />');
+    expect(appSrc).toContain('onClick={() => props.runPrimaryAction?.(action())}');
+    expect(appSrc).toContain('{action().label}');
+    expect(appSrc).toContain('primaryAction={props.presentation.primary_action}');
+    expect(appSrc).toContain('props.onProgressOpenChange(false);\n                            closeMenu();\n                            props.onRunAction(action);');
     expect(appSrc).toContain('createRuntimeLifecycleStepAnimation');
     expect(appSrc).toContain('<Index each={phaseSequence()}>');
     expect(appSrc).toContain('data-step-key={step().key}');
@@ -675,6 +685,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('props.progress.error_message');
     expect(appSrc).toContain('lifecycleDisclosureTriggerLabel(');
     expect(appSrc).toContain('lifecycleDisclosureIntentForActionKind(runtimeMenuProgress()?.action');
+    expect(appSrc).not.toContain('const progressOccupiesPrimaryTrigger = createMemo(() => (');
+    expect(appSrc).toContain('when={showProgress()}');
+    expect(appSrc).toContain('aria-haspopup="dialog"');
     expect(appSrc).toContain('const environmentProgressTriggerIcon = createMemo(() => (');
     expect(appSrc).toContain("runtimeMenuProgress()?.action === 'stop_environment_runtime' ? Stop : Play");
     expect(appSrc).toContain('aria-label={`${environmentProgressTriggerLabel()} progress`}');
