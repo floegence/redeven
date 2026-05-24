@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
 	"strings"
@@ -9,6 +10,21 @@ import (
 
 	"github.com/floegence/redeven/internal/config"
 )
+
+func TestNewModelsResponseJSONUsesEmptyModelsArray(t *testing.T) {
+	t.Parallel()
+
+	body, err := json.Marshal(NewModelsResponse(nil))
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if !strings.Contains(string(body), `"models":[]`) {
+		t.Fatalf("ModelsResponse JSON=%s, want models empty array", string(body))
+	}
+	if strings.Contains(string(body), `"models":null`) {
+		t.Fatalf("ModelsResponse JSON=%s, must not encode models as null", string(body))
+	}
+}
 
 func TestService_ListModels_CurrentFirstAndDedup(t *testing.T) {
 	t.Parallel()

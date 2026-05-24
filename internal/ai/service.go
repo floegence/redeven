@@ -595,9 +595,7 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 		return nil, ErrNotConfigured
 	}
 
-	out := &ModelsResponse{
-		Runtime: s.RuntimeStatus(context.Background()),
-	}
+	out := NewModelsResponse(s.RuntimeStatus(context.Background()))
 	configModels, currentModelID, err := configModelViews(cfg)
 	if err != nil && cfg != nil {
 		return nil, err

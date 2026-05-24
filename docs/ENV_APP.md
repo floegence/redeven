@@ -14,6 +14,7 @@ Key points:
 - Redeven Desktop supplies session context, shell-owned theme/window chrome, titlebar-safe floating surfaces, and system-browser handoff for browser-app windows such as Codespaces.
 - Runtime Settings groups endpoint controls by user intent: overview/runtime status, runtime configuration, Codespaces tooling, security, AI/extensions, and diagnostics.
 - The Flower settings card is a provider connection manager: users choose a provider type, then model(s), then secrets, and can expand `Advanced` for context window and image-input capability.
+- Flower model discovery uses a stable array contract: `/_redeven_proxy/api/ai/models` and `/_redeven_proxy/api/ai/current_model` must encode `models` as `[]` when no runtime-config or Desktop-source models are currently available. The Env App normalizes this gateway boundary once before view code reads model options, so empty model state remains a regular UI state instead of a Workbench-rendering failure.
 - Web Services is the user-facing registry for HTTP services reachable from the runtime host. Same-device local mode can open safe loopback targets directly; URL/SSH Local UI sessions use `/pf/<forward_id>/`; remote Provider sessions use the isolated Flowersec E2EE port-forward tunnel.
 - Codex is a separate optional AI runtime with its own activity-bar entry and gateway namespace. It is not a Flower mode/provider, and Runtime Settings reports Codex host status without persisting Codex approval, sandbox, model, or binary defaults.
 - File Browser keeps Monaco as the single text preview/edit surface where possible, treats symbolic links explicitly, and enforces `fs/read_file` as file-only before raw bytes are streamed.
@@ -67,6 +68,7 @@ Deck and Workbench reuse released floe-webapp layout/workbench primitives. Redev
 - Heavy widgets such as Files, Terminal, Preview, Codespaces, Flower, and Codex use floe-webapp's projected-surface render path while preserving the same world-space layout model.
 - App-owned floating surfaces such as Preview, File Browser, Ask Flower, stash confirmations, and Debug Console use the centralized `ENV_APP_FLOATING_LAYER` contract.
 - The Flower chat header shows the current model plus lightweight capability tags so users can see whether a model supports image input without opening settings.
+- If Flower has no model options, the widget renders the existing empty-model affordance and disables model-backed actions without affecting canvas selection, pan, zoom, or neighboring widgets.
 
 The runtime-shared widget-state contract is intentionally explicit:
 

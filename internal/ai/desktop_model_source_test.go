@@ -223,6 +223,54 @@ func TestServiceListModelsDoesNotFallbackToFirstDesktopModel(t *testing.T) {
 	}
 }
 
+func TestServiceListModelsWithDesktopModelSourceEmptyListUsesEmptyModelsArray(t *testing.T) {
+	t.Parallel()
+
+	modelSource, cleanup := startTestDesktopModelSource(t, func(frame DesktopModelSourceRPCFrame) DesktopModelSourceRPCFrame {
+		switch frame.Method {
+		case "ai.status.get":
+			return testDesktopModelSourceResult(t, frame.ID, DesktopModelSourceStatus{
+				BindingState:    string(runtimeservice.BindingStateBound),
+				Connected:       true,
+				Available:       false,
+				ModelSource:     DesktopModelSourceDefaultSource,
+				SessionID:       "desktop-session",
+				ModelCount:      0,
+				ExpiresAtUnixMS: time.Now().Add(time.Hour).UnixMilli(),
+			})
+		case "ai.models.list":
+			return testDesktopModelSourceResult(t, frame.ID, DesktopModelSourceModelSnapshot{
+				Configured: true,
+			})
+		default:
+			return testDesktopModelSourceError(frame.ID, "METHOD_NOT_FOUND", "unexpected method")
+		}
+	})
+	defer cleanup()
+
+	svc := &Service{desktopModelSource: modelSource}
+	out, err := svc.ListModels()
+	if err != nil {
+		t.Fatalf("ListModels: %v", err)
+	}
+	if out == nil {
+		t.Fatalf("ListModels returned nil")
+	}
+	if out.Models == nil {
+		t.Fatalf("Models is nil, want empty slice")
+	}
+	if got := len(out.Models); got != 0 {
+		t.Fatalf("len(Models)=%d, want 0", got)
+	}
+	body, err := json.Marshal(out)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if !strings.Contains(string(body), `"models":[]`) {
+		t.Fatalf("ListModels JSON=%s, want models empty array", string(body))
+	}
+}
+
 func TestServicePrepareDesktopModelSourceReportsRuntimeBinding(t *testing.T) {
 	t.Parallel()
 

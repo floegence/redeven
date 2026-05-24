@@ -34,17 +34,19 @@ import {
 
 export type ModelsResponse = Readonly<{
   current_model: string;
-  models: Array<{
-    id: string;
-    label?: string;
-    source?: string;
-    source_label?: string;
-    context_window?: number;
-    max_output_tokens?: number;
-    input_modalities?: string[];
-    supports_image_input?: boolean;
-  }>;
+  models: AIModelResponseItem[];
   runtime?: AIRuntimeStatus | null;
+}>;
+
+export type AIModelResponseItem = Readonly<{
+  id: string;
+  label?: string;
+  source?: string;
+  source_label?: string;
+  context_window?: number;
+  max_output_tokens?: number;
+  input_modalities?: string[];
+  supports_image_input?: boolean;
 }>;
 
 export type AIModelSourceKey = 'runtime_config' | 'desktop_model_source';
@@ -299,6 +301,45 @@ function defaultModelSourceLabel(source: AIModelSourceKey): string {
   return source === 'desktop_model_source' ? 'Desktop' : 'Runtime config';
 }
 
+function finiteInteger(raw: unknown): number | undefined {
+  return typeof raw === 'number' && Number.isFinite(raw) ? Math.trunc(raw) : undefined;
+}
+
+function normalizeStringList(raw: unknown): string[] {
+  return Array.isArray(raw)
+    ? raw.map((item) => String(item ?? '').trim()).filter(Boolean)
+    : [];
+}
+
+function normalizeModelResponseItem(raw: unknown): AIModelResponseItem | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const item = raw as Record<string, unknown>;
+  const id = String(item.id ?? '').trim();
+  if (!id) return null;
+  const inputModalities = normalizeStringList(item.input_modalities);
+  return {
+    id,
+    label: String(item.label ?? '').trim() || undefined,
+    source: String(item.source ?? '').trim() || undefined,
+    source_label: String(item.source_label ?? '').trim() || undefined,
+    context_window: finiteInteger(item.context_window),
+    max_output_tokens: finiteInteger(item.max_output_tokens),
+    input_modalities: inputModalities.length > 0 ? inputModalities : undefined,
+    supports_image_input: typeof item.supports_image_input === 'boolean' ? item.supports_image_input : undefined,
+  };
+}
+
+export function normalizeModelsResponse(raw: unknown): ModelsResponse {
+  const data = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+  return {
+    current_model: String(data.current_model ?? '').trim(),
+    models: Array.isArray(data.models)
+      ? data.models.map(normalizeModelResponseItem).filter((item): item is AIModelResponseItem => item !== null)
+      : [],
+    runtime: data.runtime && typeof data.runtime === 'object' ? data.runtime as AIRuntimeStatus : null,
+  };
+}
+
 function threadNeedsReadMark(readStatus: ThreadReadStatus | null | undefined): boolean {
   if (!readStatus) return false;
   return (
@@ -423,7 +464,12 @@ export function createAIChatContextValue(): AIChatContextValue {
 
   const [models, { mutate: mutateModels }] = createResource<ModelsResponse | null, number | null>(
     () => modelsKey(),
-    async (k) => (k == null ? null : await fetchGatewayJSON<ModelsResponse>('/_redeven_proxy/api/ai/models', { method: 'GET' })),
+    async (k) =>
+      k == null
+        ? null
+        : normalizeModelsResponse(
+            await fetchGatewayJSON<unknown>('/_redeven_proxy/api/ai/models', { method: 'GET' }),
+          ),
   );
 
   const modelsReady = createMemo(() => !!models() && !models.loading && !models.error);
@@ -471,23 +517,21 @@ export function createAIChatContextValue(): AIChatContextValue {
   const modelOptions = createMemo<AIModelOption[]>(() => {
     const m = models();
     if (!m) return [];
-    return m.models
-      .map((it) => {
-        const value = String(it.id ?? '').trim();
-        const source = normalizeAIModelSource(it.source);
-        const inputModalities = Array.isArray(it.input_modalities) ? it.input_modalities.map((x) => String(x ?? '').trim()).filter(Boolean) : ['text'];
-        return {
-          value,
-          label: String(it.label ?? value).trim() || value,
-          source,
-          sourceLabel: String(it.source_label ?? '').trim() || defaultModelSourceLabel(source),
-          contextWindow: typeof it.context_window === 'number' && Number.isFinite(it.context_window) ? Math.trunc(it.context_window) : undefined,
-          maxOutputTokens: typeof it.max_output_tokens === 'number' && Number.isFinite(it.max_output_tokens) ? Math.trunc(it.max_output_tokens) : undefined,
-          inputModalities,
-          supportsImageInput: Boolean(it.supports_image_input) || inputModalities.includes('image'),
-        };
-      })
-      .filter((it) => it.value !== '');
+    return m.models.map((it) => {
+      const value = it.id;
+      const source = normalizeAIModelSource(it.source);
+      const inputModalities = it.input_modalities ?? ['text'];
+      return {
+        value,
+        label: it.label ?? value,
+        source,
+        sourceLabel: it.source_label ?? defaultModelSourceLabel(source),
+        contextWindow: it.context_window,
+        maxOutputTokens: it.max_output_tokens,
+        inputModalities,
+        supportsImageInput: it.supports_image_input === true || inputModalities.includes('image'),
+      };
+    }).filter((it) => it.value !== '');
   });
 
   const modelSourceGroups = createMemo<AIModelSourceGroup[]>(() => {
@@ -1247,10 +1291,12 @@ export function createAIChatContextValue(): AIChatContextValue {
     const mid = String(nextModelId ?? '').trim();
     if (!mid) return false;
     try {
-      const resp = await fetchGatewayJSON<ModelsResponse>('/_redeven_proxy/api/ai/current_model', {
-        method: 'PUT',
-        body: JSON.stringify({ model_id: mid }),
-      });
+      const resp = normalizeModelsResponse(
+        await fetchGatewayJSON<unknown>('/_redeven_proxy/api/ai/current_model', {
+          method: 'PUT',
+          body: JSON.stringify({ model_id: mid }),
+        }),
+      );
       setDraftCurrentModelId(mid);
       mutateModels(resp);
       return true;
