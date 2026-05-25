@@ -1,22 +1,20 @@
 {
   "schema_version": 1,
   "release_review": {
-    "release_version": "v0.6.9",
-    "previous_release": "v0.6.8",
-    "reviewed_at": "2026-05-21",
-    "review_id": "workbench-filebrowser-action-surface-v1",
-    "summary": "Workbench File Browser now treats roots, breadcrumb, toolbar, segmented controls, and overflow triggers as action surfaces so workbench hover keeps pointer cursors while real reading surfaces preserve text selection.",
+    "release_version": "v0.6.10",
+    "previous_release": "v0.6.9",
+    "reviewed_at": "2026-05-25",
+    "review_id": "code-server-workspace-engine-archive-limit-v1",
+    "summary": "Managed Browser Editor installation now accepts current code-server packages by raising the workspace engine archive and extraction guard from 256 MiB to 512 MiB.",
     "checked_surfaces": [
-      "Workbench File Browser root rows, RO/RW toggles, breadcrumb segments, toolbar buttons, segmented controls, and overflow/menu triggers",
-      "Workbench text-selection projection keeps true reading surfaces selectable while excluding action surfaces",
-      "Workbench input routing keeps wheel ownership unchanged for selected widgets and explicit scroll viewports",
-      "File Browser interaction tests cover action-surface and text-selection separation",
-      "File Browser E2E hover coverage confirms pointer cursor behavior and no I-beam regression",
-      "Docs and design notes describe the action-surface versus text-selection boundary consistently",
-      "Desktop-managed machine presentation and startup report paths remain separated from human terminal UI",
+      "Workspace engine artifact manifest validation keeps sha256, compressed size, compression, platform, and binary path checks unchanged",
+      "Workspace engine archive extraction keeps path traversal, absolute path, unsafe path, and hard link/symlink rejection unchanged",
+      "Browser Editor package installation remains driven by the Desktop-prepared archive and manifest upload flow",
+      "Current code-server release package size fits inside the updated extraction guard while preserving the zip-bomb safety boundary",
+      "Desktop package cache, upload bootstrap, SSH runtime bootstrap, Local UI health, sys.ping, and startup report consumers do not require Runtime Service protocol changes",
       "Runtime Service compatibility contract fields and protocol version remain unchanged"
     ],
-    "same_window_rationale": "The release changes Workbench File Browser interaction classification and documentation only. It does not add, remove, or rename Runtime Service JSON fields, does not change the protocol version, and keeps Desktop attach/start, Local UI health, sys.ping, provider link, runtime-control, SSH runtime bootstrap, and startup report consumers on the existing compatibility window."
+    "same_window_rationale": "The release only changes the local workspace engine archive size guard used after Desktop has already prepared and uploaded a verified Browser Editor package. It does not add, remove, or rename Runtime Service JSON fields, does not change the protocol version, and keeps Desktop attach/start, Local UI health, sys.ping, provider link, runtime-control, SSH runtime bootstrap, and startup report consumers on the existing compatibility window."
   },
   "runtime_protocol_version": "redeven-runtime-v1",
   "compatibility_epoch": 5,
