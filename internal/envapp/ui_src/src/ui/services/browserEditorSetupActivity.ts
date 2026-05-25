@@ -65,8 +65,8 @@ export type BrowserEditorPendingIntent = Readonly<{
 }> | null;
 
 const browserEditorStepDefs: readonly Readonly<{ id: BrowserEditorSetupStepID; label: string }>[] = [
-  { id: 'lookup', label: 'Check latest package' },
-  { id: 'cache', label: 'Cache on Desktop' },
+  { id: 'lookup', label: 'Check latest editor' },
+  { id: 'cache', label: 'Download to Desktop' },
   { id: 'upload', label: 'Send to environment' },
   { id: 'verify', label: 'Verify editor' },
 ];
@@ -78,7 +78,13 @@ function clean(value: unknown): string {
 export function classifyBrowserEditorLocalFailure(message: string): BrowserEditorSetupFailureSource {
   const normalized = clean(message).toLowerCase();
   if (!normalized) return 'unknown';
-  if (normalized.includes('github release lookup') || normalized.includes('api rate limit') || normalized.includes('rate limit')) {
+  if (
+    normalized.includes('catalog lookup')
+    || normalized.includes('catalog is not fully mirrored')
+    || normalized.includes('catalog is missing')
+    || normalized.includes('catalog does not include')
+    || normalized.includes('latest browser editor')
+  ) {
     return 'desktop_release_lookup';
   }
   if (
@@ -196,7 +202,7 @@ function progressPercent(activeStepID: BrowserEditorSetupStepID, state: BrowserE
 function desktopFailureSummary(failure: BrowserEditorSetupLocalFailure): string {
   switch (failure.source) {
     case 'desktop_release_lookup':
-      return 'Couldn’t check the latest Browser Editor package.';
+      return 'Couldn’t check the latest Browser Editor.';
     case 'desktop_package_cache':
       return 'Couldn’t cache the Browser Editor package on Desktop.';
     case 'desktop_upload':
@@ -212,8 +218,8 @@ function desktopFailureSummary(failure: BrowserEditorSetupLocalFailure): string 
 }
 
 function desktopFailureDetail(failure: BrowserEditorSetupLocalFailure): string {
-  if (failure.source === 'desktop_release_lookup' && /403|rate limit/i.test(failure.message)) {
-    return `${failure.message} GitHub’s API limit was reached on this machine.`;
+  if (failure.source === 'desktop_release_lookup') {
+    return `${failure.message} Redeven’s update catalog may be temporarily unavailable.`;
   }
   return failure.message;
 }
@@ -353,7 +359,7 @@ export function buildBrowserEditorSetupActivity(args: Readonly<{
   if (args.localPending) {
     return baseActivity({
       state: 'preparing',
-      summary: 'Desktop is preparing the Browser Editor package.',
+      summary: 'Desktop is preparing the Browser Editor.',
       detail: 'Setup starts only after your explicit request. Redeven will not retry automatically if it fails.',
       steps: stepsFor('lookup', 'active'),
       activeStepID: 'lookup',

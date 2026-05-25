@@ -242,13 +242,13 @@ describe('CodeRuntimeSettingsCard', () => {
         managed_runtime_source: 'none',
         managed_runtime_version: '',
       }),
-      localPrepareFailure: browserEditorLocalFailureFromError(new Error('GitHub release lookup failed with HTTP 403.'), () => 123),
+      localPrepareFailure: browserEditorLocalFailureFromError(new Error('Redeven Browser Editor catalog lookup failed with HTTP 503.'), () => 123),
     });
 
     expect(host.textContent).toContain('Browser Editor');
     expect(host.textContent).toContain('Setup failed');
-    expect(host.textContent).toContain('Couldn’t check the latest Browser Editor package.');
-    expect(host.textContent).toContain('GitHub release lookup failed with HTTP 403.');
+    expect(host.textContent).toContain('Couldn’t check the latest Browser Editor.');
+    expect(host.textContent).toContain('Redeven Browser Editor catalog lookup failed with HTTP 503.');
   });
 
   it('does not expose retry or cancel actions without Browser Editor management permission', () => {
@@ -275,7 +275,7 @@ describe('CodeRuntimeSettingsCard', () => {
         managed_runtime_source: 'none',
         managed_runtime_version: '',
       }),
-      localPrepareFailure: browserEditorLocalFailureFromError(new Error('GitHub release lookup failed with HTTP 403.'), () => 123),
+      localPrepareFailure: browserEditorLocalFailureFromError(new Error('Redeven Browser Editor catalog lookup failed with HTTP 503.'), () => 123),
     });
 
     expect(host.textContent).toContain('Setup failed');

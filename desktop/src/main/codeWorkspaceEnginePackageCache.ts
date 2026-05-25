@@ -144,8 +144,8 @@ export async function prepareCodeWorkspaceEnginePackage(args: Readonly<{
       from_cache: archive.from_cache,
       manifest: buildManifest({
         asset,
-        sha256: archive.sha256,
-        sizeBytes: archive.size_bytes,
+        sha256: asset.sha256 || archive.sha256,
+        sizeBytes: asset.size_bytes || archive.size_bytes,
       }),
     };
   });

@@ -402,7 +402,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
               <HighlightBlock variant="warning" title="Browser Editor setup required">
                 <div class="space-y-2 text-sm text-muted-foreground">
                   <div>Set up the browser editor before opening codespaces.</div>
-                  <div>Desktop will cache one package on this computer and send it only after you confirm.</div>
+                  <div>Desktop will download the editor to this computer and send it only after you confirm.</div>
                 </div>
               </HighlightBlock>
             }
@@ -437,7 +437,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
         <div class="space-y-3">
           <p class="text-sm">
             {prepareCopy().intent === 'update'
-              ? 'Redeven Desktop will update the Browser Editor by downloading the latest package, caching one copy on this computer, and sending it to the connected environment.'
+              ? 'Redeven Desktop will update the Browser Editor by downloading the latest editor to this computer and sending it to the connected environment.'
               : prepareCopy().description}
           </p>
           <p class="text-sm text-muted-foreground">Workspace files stay in that environment. Setup starts only after you confirm.</p>

@@ -626,7 +626,7 @@ describe('EnvSettingsPage', () => {
     desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop.mockResolvedValueOnce({
       ok: false,
       prepared: false,
-      message: 'GitHub release lookup failed with HTTP 403.',
+      message: 'Redeven Browser Editor catalog lookup failed with HTTP 503.',
     });
 
     render(() => <EnvSettingsPage />, host);
@@ -638,9 +638,9 @@ describe('EnvSettingsPage', () => {
     button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
     await vi.waitFor(() => {
-      expect(host.querySelector('[data-settings-card="Browser Editor"]')?.textContent).toContain('GitHub release lookup failed with HTTP 403.');
+      expect(host.querySelector('[data-settings-card="Browser Editor"]')?.textContent).toContain('Redeven Browser Editor catalog lookup failed with HTTP 503.');
     });
 
-    expect(notificationMocks.error).toHaveBeenCalledWith('Browser Editor setup failed', 'GitHub release lookup failed with HTTP 403.');
+    expect(notificationMocks.error).toHaveBeenCalledWith('Browser Editor setup failed', 'Redeven Browser Editor catalog lookup failed with HTTP 503.');
   });
 });

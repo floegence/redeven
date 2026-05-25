@@ -5,7 +5,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  CODE_WORKSPACE_ENGINE_GITHUB_API_RELEASE_LATEST_URL,
+  CODE_WORKSPACE_ENGINE_CATALOG_LATEST_URL,
   ensureCodeWorkspaceEngineArchive,
   resolveLatestCodeWorkspaceEngineReleaseAsset,
   type CodeWorkspaceEnginePlatform,
@@ -32,19 +32,46 @@ function platform(): CodeWorkspaceEnginePlatform {
   };
 }
 
+function catalog(version = '4.109.1') {
+  const archiveSHA = version === '4.109.1'
+    ? '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81'
+    : 'a'.repeat(64);
+  return {
+    schema_version: 1,
+    engine: 'code-server',
+    generated_at: '2026-05-25T09:00:00Z',
+    source: {
+      kind: 'github_release',
+      repo: 'coder/code-server',
+      release_tag: `v${version}`,
+      release_url: `https://github.com/coder/code-server/releases/tag/v${version}`,
+    },
+    latest: {
+      version,
+      release_tag: `v${version}`,
+    },
+    platforms: {
+      'linux-amd64-glibc': {
+        os: 'linux',
+        arch: 'amd64',
+        libc: 'glibc',
+        platform_id: 'linux-amd64-glibc',
+        asset_name: `code-server-${version}-linux-amd64.tar.gz`,
+        download_url: `https://browser-editor-package.example.test/code-server/v${version}/code-server-${version}-linux-amd64.tar.gz`,
+        sha256: archiveSHA,
+        size_bytes: 3,
+        compression: 'tar.gz',
+        root_dir_hint: `code-server-${version}-linux-amd64`,
+      },
+    },
+    mirror_complete: true,
+  };
+}
+
 beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-    if (url === CODE_WORKSPACE_ENGINE_GITHUB_API_RELEASE_LATEST_URL) {
-      return response({
-        tag_name: 'v4.109.1',
-        html_url: 'https://github.com/coder/code-server/releases/tag/v4.109.1',
-        assets: [
-          {
-            name: 'code-server-4.109.1-linux-amd64.tar.gz',
-            browser_download_url: 'https://downloads.example.test/code-server-4.109.1-linux-amd64.tar.gz',
-          },
-        ],
-      });
+    if (url === CODE_WORKSPACE_ENGINE_CATALOG_LATEST_URL) {
+      return response(catalog());
     }
     return response(new Uint8Array([1, 2, 3]).buffer);
   }));
@@ -61,7 +88,7 @@ afterEach(async () => {
 });
 
 describe('code workspace engine release assets', () => {
-  it('resolves the latest code-server release asset for the target platform', async () => {
+  it('resolves the latest Browser Editor package from the Redeven catalog for the target platform', async () => {
     const asset = await resolveLatestCodeWorkspaceEngineReleaseAsset(platform());
 
     expect(asset).toEqual(expect.objectContaining({
@@ -69,18 +96,27 @@ describe('code workspace engine release assets', () => {
       release_tag: 'v4.109.1',
       asset_name: 'code-server-4.109.1-linux-amd64.tar.gz',
       root_dir_hint: 'code-server-4.109.1-linux-amd64',
-      download_url: 'https://downloads.example.test/code-server-4.109.1-linux-amd64.tar.gz',
+      download_url: 'https://browser-editor-package.example.test/code-server/v4.109.1/code-server-4.109.1-linux-amd64.tar.gz',
+      sha256: '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81',
+      size_bytes: 3,
     }));
   });
 
-  it('explains GitHub API rate-limit failures during latest release lookup', async () => {
+  it('does not request the GitHub latest release API during package resolution', async () => {
+    await resolveLatestCodeWorkspaceEngineReleaseAsset(platform());
+
+    const fetchMock = vi.mocked(fetch);
+    expect(fetchMock).toHaveBeenCalledWith(CODE_WORKSPACE_ENGINE_CATALOG_LATEST_URL, expect.anything());
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).not.toContain('https://api.github.com/repos/coder/code-server/releases/latest');
+  });
+
+  it('explains catalog lookup failures without exposing GitHub rate-limit guidance', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-      if (url === CODE_WORKSPACE_ENGINE_GITHUB_API_RELEASE_LATEST_URL) {
-        return response({ message: 'API rate limit exceeded' }, {
-          status: 403,
+      if (url === CODE_WORKSPACE_ENGINE_CATALOG_LATEST_URL) {
+        return response({ success: false, error: { code: 'BROWSER_EDITOR_CATALOG_UNAVAILABLE', message: 'Browser Editor catalog is not deployed.' } }, {
+          status: 503,
           headers: {
             'content-type': 'application/json',
-            'x-ratelimit-remaining': '0',
           },
         });
       }
@@ -88,7 +124,33 @@ describe('code workspace engine release assets', () => {
     }));
 
     await expect(resolveLatestCodeWorkspaceEngineReleaseAsset(platform())).rejects.toThrow(
-      'GitHub release lookup failed with HTTP 403: API rate limit exceeded.',
+      'Redeven Browser Editor catalog lookup failed with HTTP 503: Browser Editor catalog is not deployed.',
+    );
+  });
+
+  it('rejects incomplete catalogs before downloading a package', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === CODE_WORKSPACE_ENGINE_CATALOG_LATEST_URL) {
+        return response({ ...catalog(), mirror_complete: false });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    await expect(resolveLatestCodeWorkspaceEngineReleaseAsset(platform())).rejects.toThrow(
+      'Redeven Browser Editor catalog is not fully mirrored yet.',
+    );
+  });
+
+  it('fails when the catalog does not include the target platform', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === CODE_WORKSPACE_ENGINE_CATALOG_LATEST_URL) {
+        return response({ ...catalog(), platforms: {} });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    await expect(resolveLatestCodeWorkspaceEngineReleaseAsset(platform())).rejects.toThrow(
+      'Redeven Browser Editor catalog does not include linux/amd64.',
     );
   });
 
@@ -104,13 +166,33 @@ describe('code workspace engine release assets', () => {
       release_tag: 'v4.109.1',
       release_url: 'https://github.com/coder/code-server/releases/tag/v4.109.1',
       asset_name: 'code-server-4.109.1-linux-amd64.tar.gz',
-      download_url: 'https://downloads.example.test/code-server-4.109.1-linux-amd64.tar.gz',
+      download_url: 'https://browser-editor-package.example.test/code-server/v4.109.1/code-server-4.109.1-linux-amd64.tar.gz',
+      sha256: '06df4f7e1394f1c57cc6583fba4d8060a5a66f4f4771c14aeff6b9af8a28c9b3',
+      size_bytes: 3,
       platform: platform(),
       root_dir_hint: 'code-server-4.109.1-linux-amd64',
     }, archivePath);
 
     expect(out.from_cache).toBe(true);
     expect(out.size_bytes).toBe(3);
-    expect(fetchMock).not.toHaveBeenCalledWith('https://downloads.example.test/code-server-4.109.1-linux-amd64.tar.gz', expect.anything());
+    expect(fetchMock).not.toHaveBeenCalledWith('https://browser-editor-package.example.test/code-server/v4.109.1/code-server-4.109.1-linux-amd64.tar.gz', expect.anything());
+  });
+
+  it('rejects a downloaded archive when it does not match the catalog checksum', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-code-workspace-asset-'));
+    tempDirs.push(dir);
+    const archivePath = path.join(dir, 'code-server.tar.gz');
+
+    await expect(ensureCodeWorkspaceEngineArchive({
+      version: '4.109.1',
+      release_tag: 'v4.109.1',
+      release_url: 'https://github.com/coder/code-server/releases/tag/v4.109.1',
+      asset_name: 'code-server-4.109.1-linux-amd64.tar.gz',
+      download_url: 'https://browser-editor-package.example.test/code-server/v4.109.1/code-server-4.109.1-linux-amd64.tar.gz',
+      sha256: 'b'.repeat(64),
+      size_bytes: 3,
+      platform: platform(),
+      root_dir_hint: 'code-server-4.109.1-linux-amd64',
+    }, archivePath)).rejects.toThrow('Downloaded Browser Editor package checksum did not match the Redeven catalog.');
   });
 });
