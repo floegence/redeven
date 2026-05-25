@@ -141,6 +141,62 @@ afterEach(() => {
 });
 
 describe('createFollowBottomController', () => {
+  it('commits thread-switch bottom synchronously without waiting for a frame', () => {
+    const observerRecords: ObserverRecord[] = [];
+    const raf = createRafHarness();
+    const controller = createFollowBottomController({
+      createResizeObserver: createObserverFactory(observerRecords),
+      requestAnimationFrame: raf.requestAnimationFrame,
+      cancelAnimationFrame: raf.cancelAnimationFrame,
+      getPrefersReducedMotion: () => false,
+    });
+
+    const scrollContainer = document.createElement('div');
+    const contentRoot = document.createElement('div');
+    scrollContainer.append(contentRoot);
+    document.body.append(scrollContainer);
+
+    defineElementSize(scrollContainer, {
+      scrollHeight: () => 520,
+      clientHeight: () => 120,
+    });
+    installContainerRect(scrollContainer, 100, 120);
+
+    controller.setScrollContainer(scrollContainer);
+    controller.setContentRoot(contentRoot);
+
+    const result = controller.commitFollowBottomNow(followRequest(1, 'thread_switch', {
+      source: 'system',
+      behavior: 'smooth',
+    }));
+
+    expect(result).toBe('committed');
+    expect(scrollContainer.scrollTop).toBe(expectedBottomScrollTop(520));
+    expect(controller.mode()).toBe('following');
+    expect(controller.distanceToBottomPx()).toBe(0);
+
+    raf.flushAll();
+    expect(scrollContainer.scrollTop).toBe(expectedBottomScrollTop(520));
+    controller.dispose();
+  });
+
+  it('reports no container instead of pretending a reveal-safe commit happened', () => {
+    const controller = createFollowBottomController({
+      createResizeObserver: createObserverFactory([]),
+      requestAnimationFrame(callback) {
+        callback(16);
+        return 1;
+      },
+      cancelAnimationFrame() {
+        // No-op for test harness.
+      },
+    });
+
+    expect(controller.commitFollowBottomNow(followRequest(1, 'thread_switch'))).toBe('no_container');
+    expect(controller.distanceToBottomPx()).toBe(0);
+    controller.dispose();
+  });
+
   it('reasserts bottom follow instead of pausing on non-user scroll events', () => {
     const observerRecords: ObserverRecord[] = [];
     const controller = createFollowBottomController({

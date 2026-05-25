@@ -11,11 +11,16 @@ import { WorkingIndicator } from '../status/WorkingIndicator';
 import { MessageItem } from '../message/MessageItem';
 import type { Message } from '../types';
 import { captureViewportAnchor, resolveViewportAnchorScrollTop, type ViewportAnchor } from './scrollAnchor';
+import type { FollowBottomRequest } from '../scroll/createFollowBottomController';
 
 export interface VirtualMessageListProps {
   class?: string;
   tailVisible?: boolean;
   tailComponent?: Component;
+  conversationKey?: string;
+  revealRequestSeq?: number;
+  revealPolicy?: 'visible' | 'hidden_until_bottom_committed';
+  onBottomCommitted?: (conversationKey: string, revealRequestSeq: number) => void;
 }
 
 interface VirtualMessageRowProps {
@@ -41,13 +46,13 @@ const ChevronDownIcon: Component = () => (
   </svg>
 );
 
-type FollowMode = 'following' | 'paused';
-type FollowMotionMode = 'instant' | 'animated';
-
 const FOLLOW_BOTTOM_THRESHOLD_PX = 24;
 const EXTERNAL_SCROLL_SYNC_PASSES = 2;
 const ANIMATED_FOLLOW_TIME_CONSTANT_MS = 140;
 const ANIMATED_FOLLOW_MIN_STEP_PX = 1;
+
+type FollowMode = 'following' | 'paused';
+type FollowMotionMode = 'instant' | 'animated';
 
 const VirtualMessageRow: Component<VirtualMessageRowProps> = (props) => {
   let rowEl: HTMLDivElement | undefined;
@@ -86,6 +91,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
   const [distanceToBottomPx, setDistanceToBottomPx] = createSignal(0);
   const [pendingMessageCount, setPendingMessageCount] = createSignal(0);
   const [scrollContainerVersion, setScrollContainerVersion] = createSignal(0);
+  const [committedConversationKey, setCommittedConversationKey] = createSignal('');
 
   const messageByRenderKey = createMemo(() => {
     const byKey = new Map<string, Message>();
@@ -131,6 +137,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
   let tailObservedHeight = 0;
   let scrollViewportHeight = 0;
   let followMotionMode: FollowMotionMode = 'instant';
+  let revealCommitQueued = false;
   let prefersReducedMotion = false;
   let reducedMotionMedia: MediaQueryList | null = null;
 
@@ -183,6 +190,13 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
   const resolveFollowMotionMode = (behavior: ScrollToBottomBehavior): FollowMotionMode => (
     behavior === 'smooth' && !prefersReducedMotion ? 'animated' : 'instant'
   );
+
+  const resolveRequestMotionMode = (request?: FollowBottomRequest | null): FollowMotionMode => {
+    if (request?.reason === 'thread_switch' && request.source === 'system') {
+      return 'instant';
+    }
+    return resolveFollowMotionMode(request?.behavior ?? 'auto');
+  };
 
   const queueAnimatedFollow = (): void => {
     if (animatedFollowRaf !== null) return;
@@ -336,6 +350,53 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
     return true;
   };
 
+  const commitBottomNow = (): boolean => {
+    const el = scrollContainerEl;
+    if (!el) return false;
+    cancelScheduledInstantFollow();
+    setFollowMotionMode('instant');
+    virtualList.scrollToBottom();
+    el.scrollTop = getBottomScrollTop(el);
+    syncProgrammaticScroll(el);
+    return true;
+  };
+
+  const conversationKey = createMemo(() => String(props.conversationKey ?? 'default').trim() || 'default');
+  const revealRequestSeq = createMemo(() => Math.max(0, Number(props.revealRequestSeq ?? 0) || 0));
+  const committedRevealKey = createMemo(() => `${conversationKey()}:${revealRequestSeq()}`);
+  const revealRequiresBottomCommit = createMemo(() => (
+    props.revealPolicy === 'hidden_until_bottom_committed' && messages().length > 0
+  ));
+  const listRevealReady = createMemo(() => (
+    !revealRequiresBottomCommit() || committedConversationKey() === committedRevealKey()
+  ));
+
+  const completeRevealCommit = (key: string, requestSeq: number): boolean => {
+    if (key !== conversationKey() || requestSeq !== revealRequestSeq()) return false;
+    const revealKey = `${key}:${requestSeq}`;
+    if (committedConversationKey() === revealKey) return true;
+    if (!commitBottomNow()) return false;
+    setCommittedConversationKey(revealKey);
+    props.onBottomCommitted?.(key, requestSeq);
+    return true;
+  };
+
+  const queueRevealCommit = (): void => {
+    if (!revealRequiresBottomCommit()) return;
+    if (committedConversationKey() === committedRevealKey()) return;
+    if (!scrollContainerEl) return;
+    if (revealCommitQueued) return;
+    const key = conversationKey();
+    const requestSeq = revealRequestSeq();
+    revealCommitQueued = true;
+    requestAnimationFrame(() => {
+      revealCommitQueued = false;
+      if (!completeRevealCommit(key, requestSeq)) {
+        queueRevealCommit();
+      }
+    });
+  };
+
   const scheduleFollowToBottom = (behavior?: ScrollToBottomBehavior, passes = 1) => {
     if (behavior) {
       setFollowMotionMode(resolveFollowMotionMode(behavior));
@@ -383,7 +444,17 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
 
     requestAnimationFrame(() => {
       updateDistanceToBottom();
+      queueRevealCommit();
     });
+  });
+
+  createEffect(() => {
+    if (!revealRequiresBottomCommit()) {
+      return;
+    }
+    if (committedConversationKey() !== committedRevealKey()) {
+      queueRevealCommit();
+    }
   });
 
   // Initial mount sync for already-loaded thread messages.
@@ -398,7 +469,11 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
 
     didInitialBottomSync = true;
     applyFollowingMode('instant');
-    scheduleFollowToBottom('auto', EXTERNAL_SCROLL_SYNC_PASSES);
+    if (revealRequiresBottomCommit()) {
+      queueRevealCommit();
+    } else {
+      scheduleFollowToBottom('auto', EXTERNAL_SCROLL_SYNC_PASSES);
+    }
   });
 
   // External bottom intents (thread switch/send) are funneled into the same state machine.
@@ -409,9 +484,12 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
     if (request.seq <= lastHandledScrollRequestSeq) return;
 
     lastHandledScrollRequestSeq = request.seq;
-    applyFollowingMode(resolveFollowMotionMode(request.behavior));
+    applyFollowingMode(resolveRequestMotionMode(request));
     const syncPasses = request.source === 'system' ? EXTERNAL_SCROLL_SYNC_PASSES : 1;
-    scheduleFollowToBottom(request.behavior, syncPasses);
+    const behavior = request.reason === 'thread_switch' && request.source === 'system'
+      ? 'auto'
+      : request.behavior;
+    scheduleFollowToBottom(behavior, syncPasses);
   });
 
   const showScrollToBottom = createMemo(
@@ -531,6 +609,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
 
     if (followMode() === 'following') {
       applyFollowScrollDelta(target, delta);
+      queueRevealCommit();
     } else {
       updateDistanceToBottom(target);
     }
@@ -579,6 +658,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
     scrollContainerResizeObserver.disconnect();
     cancelScheduledInstantFollow();
     cancelAnimatedFollow();
+    revealCommitQueued = false;
   });
 
   // Ref callback for message items — observe resizes.
@@ -621,8 +701,11 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
           prevScrollTop = el.scrollTop;
           updateDistanceToBottom(el);
           setScrollContainerVersion((version) => version + 1);
+          queueRevealCommit();
         }) as any}
         onScroll={handleScroll}
+        data-chat-transcript-reveal-ready={listRevealReady() ? 'true' : 'false'}
+        style={listRevealReady() ? undefined : { visibility: 'hidden' }}
       >
         <div class="chat-message-list-inner">
           <div
@@ -670,7 +753,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
           class="chat-scroll-to-bottom-btn"
           onClick={() => {
             applyFollowingMode(resolveFollowMotionMode('smooth'));
-            ctx.requestScrollToBottom({ source: 'user', behavior: 'smooth' });
+            ctx.requestScrollToBottom({ source: 'user', behavior: 'smooth', reason: 'manual' });
           }}
           aria-label="Scroll to bottom"
           title={pendingMessageCount() > 0 ? `${pendingMessageCount()} new messages` : 'Scroll to bottom'}

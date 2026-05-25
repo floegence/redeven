@@ -16,6 +16,7 @@ import { FlowerIcon } from '../icons/FlowerIcon';
 import { FlowerSoftAuraIcon } from '../icons/FlowerSoftAuraIcon';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { Button, ConfirmDialog, Dialog, Dropdown, Input, Select, type DropdownItem } from '@floegence/floe-webapp-core/ui';
+import type { FollowBottomRequestReason } from '../chat/scroll/createFollowBottomController';
 import {
   AttachmentPreview,
   ChatProvider,
@@ -91,6 +92,12 @@ import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workb
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 
 type ExecutionMode = 'act' | 'plan';
+type FlowerThreadRevealPhase = 'idle' | 'loading' | 'committing' | 'visible';
+type FlowerThreadRevealState = Readonly<{
+  threadId: string;
+  phase: FlowerThreadRevealPhase;
+  requestSeq: number;
+}>;
 
 const EXECUTION_MODE_STORAGE_KEY = 'redeven_ai_execution_mode';
 
@@ -1338,6 +1345,10 @@ const EmptyChat: Component<EmptyChatProps> = (props) => {
 interface MessageListWithEmptyStateProps {
   hasMessages: boolean;
   loading?: boolean;
+  conversationKey?: string;
+  revealRequestSeq?: number;
+  revealPolicy?: 'visible' | 'hidden_until_bottom_committed';
+  onBottomCommitted?: (conversationKey: string, revealRequestSeq: number) => void;
   onSuggestionClick: (prompt: string) => void;
   disabled?: boolean;
   class?: string;
@@ -1353,6 +1364,10 @@ const MessageListWithEmptyState: Component<MessageListWithEmptyStateProps> = (pr
           class="h-full"
           tailVisible={props.tailVisible}
           tailComponent={props.tailComponent}
+          conversationKey={props.conversationKey}
+          revealRequestSeq={props.revealRequestSeq}
+          revealPolicy={props.revealPolicy}
+          onBottomCommitted={props.onBottomCommitted}
         />
       </Show>
       <Show when={!props.hasMessages && !props.loading}>
@@ -1385,6 +1400,12 @@ export function EnvAIPage() {
   const [deleting, setDeleting] = createSignal(false);
 
   const [messagesLoading, setMessagesLoading] = createSignal(false);
+  const [threadRevealState, setThreadRevealState] = createSignal<FlowerThreadRevealState>({
+    threadId: '',
+    phase: 'idle',
+    requestSeq: 0,
+  });
+  let threadRevealRequestSeq = 0;
   const [todosLoading, setTodosLoading] = createSignal(false);
   const [todosError, setTodosError] = createSignal('');
   const [threadTodos, setThreadTodos] = createSignal<ThreadTodosView | null>(null);
@@ -1519,10 +1540,64 @@ export function EnvAIPage() {
     })();
   });
 
-  const requestScrollToBottom = (source: 'system' | 'user' = 'system') => {
+  const requestScrollToBottom = (
+    source: 'system' | 'user' = 'system',
+    reason: FollowBottomRequestReason = source === 'user' ? 'manual' : 'bootstrap',
+  ) => {
     chat?.requestScrollToBottom({
       source,
       behavior: source === 'user' ? 'smooth' : 'auto',
+      reason,
+    });
+  };
+
+  const beginThreadReveal = (threadId: string): number => {
+    const tid = String(threadId ?? '').trim();
+    threadRevealRequestSeq += 1;
+    const requestSeq = threadRevealRequestSeq;
+    setThreadRevealState({
+      threadId: tid,
+      phase: tid ? 'loading' : 'idle',
+      requestSeq,
+    });
+    return requestSeq;
+  };
+
+  const markThreadRevealCommitting = (threadId: string, requestSeq: number): void => {
+    const tid = String(threadId ?? '').trim();
+    setThreadRevealState((current) => {
+      if (current.threadId !== tid || current.requestSeq !== requestSeq) return current;
+      return {
+        ...current,
+        phase: 'committing',
+      };
+    });
+  };
+
+  const markThreadRevealVisible = (threadId: string, requestSeq: number): void => {
+    const tid = String(threadId ?? '').trim();
+    setThreadRevealState((current) => {
+      if (current.threadId !== tid || current.requestSeq !== requestSeq) return current;
+      return {
+        ...current,
+        phase: 'visible',
+      };
+    });
+  };
+
+  const threadRevealMatches = (threadId: string, requestSeq: number | undefined): boolean => {
+    if (requestSeq === undefined) return true;
+    const tid = String(threadId ?? '').trim();
+    const current = untrack(threadRevealState);
+    return current.threadId === tid && current.requestSeq === requestSeq;
+  };
+
+  const resetThreadReveal = (): void => {
+    threadRevealRequestSeq += 1;
+    setThreadRevealState({
+      threadId: '',
+      phase: 'idle',
+      requestSeq: threadRevealRequestSeq,
     });
   };
 
@@ -1745,6 +1820,24 @@ export function EnvAIPage() {
   const hasMessages = createMemo(() =>
     transcriptMessages().length > 0 || hasLiveAssistantTail(),
   );
+  const revealStateForActiveThread = createMemo(() => {
+    const tid = String(ai.activeThreadId() ?? '').trim();
+    const state = threadRevealState();
+    return tid && state.threadId === tid ? state : null;
+  });
+  const transcriptRevealPending = createMemo(() => {
+    const state = revealStateForActiveThread();
+    return Boolean(state && state.phase !== 'visible');
+  });
+  const transcriptRevealPolicy = createMemo<'visible' | 'hidden_until_bottom_committed'>(() => {
+    const state = revealStateForActiveThread();
+    return state?.phase === 'committing' ? 'hidden_until_bottom_committed' : 'visible';
+  });
+  const transcriptConversationKey = createMemo(() => {
+    const tid = String(ai.activeThreadId() ?? '').trim();
+    return tid || 'draft';
+  });
+  const transcriptRevealRequestSeq = createMemo(() => revealStateForActiveThread()?.requestSeq ?? 0);
   const activeThreadWaitingUser = createMemo(() => {
     const status = String(ai.activeThread()?.run_status ?? '').trim().toLowerCase();
     return status === 'waiting_user';
@@ -2104,7 +2197,7 @@ export function EnvAIPage() {
 
   const loadThreadMessages = async (
     threadId: string,
-    opts?: { scrollToBottom?: boolean; reset?: boolean },
+    opts?: { scrollToBottom?: boolean; reset?: boolean; revealRequestSeq?: number },
   ): Promise<void> => {
     if (!chat) return;
     if (!canRWXReady()) return;
@@ -2127,6 +2220,7 @@ export function EnvAIPage() {
 
       const isActiveTid = tid === String(ai.activeThreadId() ?? '').trim();
       if (!isActiveTid) return;
+      if (!threadRevealMatches(tid, opts?.revealRequestSeq)) return;
 
       const nextAfter = Number((resp as any)?.nextAfterRowId ?? (resp as any)?.next_after_row_id ?? 0);
       if (baseline) {
@@ -2148,15 +2242,25 @@ export function EnvAIPage() {
       } else {
         threadRenderController.mergeTranscriptMessages(loaded);
       }
-      if (opts?.scrollToBottom) {
-        requestScrollToBottom('system');
+      if (baseline && opts?.revealRequestSeq !== undefined) {
+        if (loaded.length > 0) {
+          markThreadRevealCommitting(tid, opts.revealRequestSeq);
+        } else {
+          markThreadRevealVisible(tid, opts.revealRequestSeq);
+        }
+      } else if (opts?.scrollToBottom) {
+        requestScrollToBottom('system', 'thread_switch');
       }
     } catch (e) {
       if (reqNo !== lastMessagesReq) return;
+      if (!threadRevealMatches(tid, opts?.revealRequestSeq)) return;
       const msg = e instanceof Error ? e.message : String(e);
       notify.error('Failed to load chat', msg || 'Request failed.');
+      if (opts?.revealRequestSeq !== undefined) {
+        markThreadRevealVisible(tid, opts.revealRequestSeq);
+      }
     } finally {
-      if (reqNo === lastMessagesReq) {
+      if (reqNo === lastMessagesReq && threadRevealMatches(tid, opts?.revealRequestSeq)) {
         setMessagesLoading(false);
       }
     }
@@ -2641,6 +2745,7 @@ export function EnvAIPage() {
     if (!chatReady()) return;
 
     if (protocol.status() !== 'connected' || !ai.aiEnabled()) {
+      resetThreadReveal();
       chat?.clearMessages();
       resetThreadRenderSources();
       setRunPhaseLabel('Working');
@@ -2656,6 +2761,7 @@ export function EnvAIPage() {
     const tid = ai.activeThreadId();
 
     if (!tid) {
+      resetThreadReveal();
       chat?.clearMessages();
       resetThreadRenderSources();
       setRunPhaseLabel('Working');
@@ -2669,6 +2775,7 @@ export function EnvAIPage() {
     }
 
     const tidStr = String(tid ?? '').trim();
+    const revealRequestSeq = beginThreadReveal(tidStr);
     resetActiveTranscriptCursor(tidStr);
 
     // Draft -> thread promotion: keep the optimistic user message already rendered in the chat store.
@@ -2684,7 +2791,7 @@ export function EnvAIPage() {
     resetContextTelemetryState();
     setTodosError('');
     setTodosLoading(true);
-    void loadThreadMessages(tid, { scrollToBottom: true, reset: true });
+    void loadThreadMessages(tid, { scrollToBottom: true, reset: true, revealRequestSeq });
     void loadActiveRunSnapshot(tidStr);
     void loadThreadTodos(tid, { silent: false, notifyError: false });
     void loadFollowups(tidStr);
@@ -3540,7 +3647,7 @@ export function EnvAIPage() {
     if (ai.threads.loading && ai.aiEnabled() && !ai.threads()) {
       return { visible: true, surface: undefined, eyebrow: 'Flower', message: 'Loading chats...' };
     }
-    if (messagesLoading() && ai.aiEnabled() && !activeThreadRunning()) {
+    if ((messagesLoading() || transcriptRevealPending()) && ai.aiEnabled() && !activeThreadRunning()) {
       return { visible: true, surface: undefined, eyebrow: 'Flower', message: 'Loading chat...' };
     }
     return { visible: false, surface: undefined, eyebrow: 'Flower', message: '' };
@@ -3809,7 +3916,16 @@ export function EnvAIPage() {
                     >
                       <MessageListWithEmptyState
                         hasMessages={hasMessages()}
-                        loading={messagesLoading()}
+                        loading={messagesLoading() || transcriptRevealPending()}
+                        conversationKey={transcriptConversationKey()}
+                        revealRequestSeq={transcriptRevealRequestSeq()}
+                        revealPolicy={transcriptRevealPolicy()}
+                        onBottomCommitted={(conversationKey, revealRequestSeq) => {
+                          const state = threadRevealState();
+                          if (state.threadId !== conversationKey) return;
+                          if (state.requestSeq !== revealRequestSeq) return;
+                          markThreadRevealVisible(conversationKey, revealRequestSeq);
+                        }}
                         onSuggestionClick={handleSuggestionClick}
                         disabled={!canInteract()}
                         class="h-full"
