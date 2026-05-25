@@ -19,7 +19,7 @@ import (
 const (
 	workspaceEngineManifestSchemaVersion = 1
 	workspaceEngineNameCodeServer        = "code-server"
-	defaultWorkspaceEngineArchiveLimit   = 256 * 1024 * 1024
+	defaultWorkspaceEngineArchiveLimit   = 512 * 1024 * 1024
 )
 
 type WorkspaceEnginePlatform struct {
