@@ -23,6 +23,7 @@ import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surf
 import { FloatingContextMenu, type FloatingContextMenuItem } from './FloatingContextMenu';
 import { PermissionEmptyState } from './PermissionEmptyState';
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
+import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 
 export type RuntimeMonitorPanelVariant = 'page' | 'deck' | 'workbench';
 
@@ -518,8 +519,8 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
 
   const containerClass = () => (
     props.variant === 'deck' || props.variant === 'workbench'
-      ? 'runtime-monitor-panel h-full min-h-0 overflow-auto p-2'
-      : 'runtime-monitor-panel h-full min-h-0 overflow-auto p-3'
+      ? `runtime-monitor-panel h-full min-h-0 overflow-auto p-2 ${redevenSurfaceRoleClass('main')}`
+      : `runtime-monitor-panel h-full min-h-0 overflow-auto p-3 ${redevenSurfaceRoleClass('main')}`
   );
 
   const cpuSummary = () => {

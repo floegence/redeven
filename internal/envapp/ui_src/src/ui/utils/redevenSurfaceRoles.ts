@@ -1,4 +1,5 @@
 export type RedevenSurfaceRole =
+  | 'main'
   | 'panel'
   | 'panelInteractive'
   | 'panelStrong'
@@ -11,6 +12,7 @@ export type RedevenSurfaceRole =
 export type RedevenDividerRole = 'default' | 'strong';
 
 export const REDEVEN_SURFACE_ROLE_CLASS: Readonly<Record<RedevenSurfaceRole, string>> = Object.freeze({
+  main: 'redeven-surface-main',
   panel: 'redeven-surface-panel',
   panelInteractive: 'redeven-surface-panel redeven-surface-panel--interactive',
   panelStrong: 'redeven-surface-panel redeven-surface-panel--strong',

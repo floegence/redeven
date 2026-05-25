@@ -10,11 +10,13 @@ import {
 
 describe('redeven surface roles', () => {
   it('maps semantic surface roles to shared class contracts', () => {
+    expect(REDEVEN_SURFACE_ROLE_CLASS.main).toBe('redeven-surface-main');
     expect(REDEVEN_SURFACE_ROLE_CLASS.panel).toBe('redeven-surface-panel');
     expect(REDEVEN_SURFACE_ROLE_CLASS.panelInteractive).toContain('redeven-surface-panel--interactive');
     expect(REDEVEN_SURFACE_ROLE_CLASS.overlay).toBe('redeven-surface-overlay');
     expect(REDEVEN_SURFACE_ROLE_CLASS.controlMuted).toContain('redeven-surface-control--muted');
     expect(redevenSurfaceRoleClass('segmented')).toBe('redeven-surface-segmented');
+    expect(redevenSurfaceRoleClass('main')).toBe('redeven-surface-main');
   });
 
   it('maps divider roles and segmented items to shared class contracts', () => {

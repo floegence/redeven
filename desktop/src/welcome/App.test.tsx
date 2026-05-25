@@ -532,12 +532,18 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('runtimeTargetEnvironmentLibraryFilterTargetID(props.librarySourceFilter)');
     expect(appSrc).toContain('Linked runtime · ${environment.label}');
     expect(appSrc).toContain('redeven-card-fact-value--action');
+    expect(appSrc).toContain('cardFactIconMaskStyle');
+    expect(appSrc).not.toContain('<img src={icon()} class="redeven-card-fact-label-icon"');
+    expect(appSrc).not.toContain('<img src={icon()} class="redeven-card-fact-leading-icon"');
     expect(appSrc).toContain('function EndpointsPopover');
     expect(appSrc).toContain('Pinned');
     expect(appSrc).toContain('copyEnvironmentValue');
     expect(appSrc).toContain('<Pin class=');
     expect(styles).toContain('.redeven-card-fact-row');
     expect(styles).toContain('.redeven-card-fact-label');
+    expect(styles).toContain('--redeven-card-fact-icon-mask');
+    expect(styles).toContain('background-color: currentColor');
+    expect(styles).toContain('mask: var(--redeven-card-fact-icon-mask) center / contain no-repeat');
     expect(styles).toContain('.redeven-card-fact-value--action');
     expect(styles).toContain('.redeven-card-fact-value__text');
     expect(styles).toContain('.redeven-endpoints-section');

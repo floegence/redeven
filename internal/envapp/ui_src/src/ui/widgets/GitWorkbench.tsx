@@ -188,7 +188,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
   };
 
   return (
-    <div class={cn('relative flex h-full min-h-0 flex-col bg-background', props.class)}>
+    <div class={cn('relative flex h-full min-h-0 flex-col', redevenSurfaceRoleClass('main'), props.class)}>
       <div class={cn('shrink-0 border-b px-3 py-2 backdrop-blur-sm', redevenDividerRoleClass(), redevenSurfaceRoleClass('inset'))}>
         <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
           <GitLabelBlock

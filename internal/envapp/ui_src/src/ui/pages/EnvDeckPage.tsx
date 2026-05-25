@@ -4,6 +4,7 @@ import { DeckGrid, DeckTopBar } from '@floegence/floe-webapp-core/deck';
 
 import { useEnvContext } from './EnvContext';
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
+import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 
 export function EnvDeckPage() {
   const env = useEnvContext();
@@ -28,7 +29,7 @@ export function EnvDeckPage() {
   });
 
   return (
-    <div class="flex h-full min-h-0 flex-col bg-background">
+    <div class={`flex h-full min-h-0 flex-col ${redevenSurfaceRoleClass('main')}`}>
       <DeckTopBar />
       <div class="relative min-h-0 flex-1 overflow-hidden">
         <DeckGrid class="p-0" />

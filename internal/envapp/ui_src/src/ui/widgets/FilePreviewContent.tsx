@@ -1,4 +1,5 @@
 import { Show, createEffect, createSignal, onCleanup } from 'solid-js';
+import { cn } from '@floegence/floe-webapp-core';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { Check, Copy, Download, Loader2, Pencil, Save, X } from '@floegence/floe-webapp-core/icons';
 import { FlowerNavigationIcon } from '../icons/FlowerSoftAuraIcon';
@@ -6,6 +7,7 @@ import { renderRedevenFilePreviewBody } from '../file-preview/rendererRegistry';
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import type { FilePreviewDescriptor } from '../utils/filePreview';
 import { readSelectionTextFromPreview } from '../utils/filePreviewSelection';
+import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
 
 export interface FilePreviewContentProps {
@@ -201,7 +203,7 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
           props.contentRef?.(element);
         }}
         {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
-        class="relative flex-1 min-h-0 overflow-auto bg-background"
+        class={cn('relative flex-1 min-h-0 overflow-auto', redevenSurfaceRoleClass('main'))}
       >
         <Show when={!resolvedError()}>
           {renderRedevenFilePreviewBody(props)}
