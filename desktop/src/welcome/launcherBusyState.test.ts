@@ -1,14 +1,20 @@
 import { describe, expect, it } from 'vitest';
 
-import { openConnectionProgress as buildOpenConnectionProgress } from '../shared/desktopOpenConnectionProgress';
-import { runtimeLifecycleProgress } from '../shared/desktopRuntimeLifecycleProgress';
+import type { DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
+import {
+  openConnectionProgress as buildOpenConnectionProgress,
+  type DesktopOpenConnectionPhase,
+} from '../shared/desktopOpenConnectionProgress';
+import {
+  runtimeLifecycleProgress,
+  type DesktopRuntimeLifecycleOperation,
+  type DesktopRuntimeLifecyclePhase,
+} from '../shared/desktopRuntimeLifecycleProgress';
 import type { DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import type { DesktopProviderRuntimeLinkTarget } from '../shared/providerRuntimeLinkTarget';
 import {
-  activeRuntimeLifecycleProgressForEnvironment,
-  activeOpenConnectionProgressForEnvironment,
-  activeProgressForEnvironment,
   busyStateForLauncherRequest,
+  busyStateBlocksEnvironmentAction,
   busyStateMatchesActionProgress,
   busyStateMatchesAction,
   busyStateMatchesAnyAction,
@@ -19,8 +25,12 @@ import {
   environmentMatchesRuntimeLifecycleProgress,
   IDLE_LAUNCHER_BUSY_STATE,
   launcherProgressBlocksPrimaryAction,
+  selectedRuntimeLifecycleProgressForEnvironment,
+  selectedOpenConnectionProgressForEnvironment,
+  selectedProgressForEnvironment,
 } from './launcherBusyState';
 import type { RuntimeProgressEnvironmentMatch } from './launcherBusyState';
+import { environmentProgressPrimaryPresentation } from './environmentProgressPrimaryPresentation';
 
 function runtimeID(value: `local:${string}` | `ssh:${string}`): DesktopRuntimeTargetID {
   return value as DesktopRuntimeTargetID;
@@ -47,6 +57,74 @@ function providerRuntimeTarget(
     provider_link_state: 'linked',
     can_connect_provider: false,
     can_disconnect_provider: true,
+  };
+}
+
+type LauncherProgressStatus = NonNullable<DesktopLauncherActionProgress['status']>;
+
+function localOpenActionProgress(input: Readonly<{
+  status: LauncherProgressStatus;
+  phase: DesktopOpenConnectionPhase;
+  title: string;
+  operationKey?: string;
+  startedAt?: number;
+  updatedAt?: number;
+}>): DesktopLauncherActionProgress {
+  return {
+    action: 'open_local_environment',
+    environment_id: 'local',
+    environment_label: 'Local Environment',
+    operation_key: input.operationKey ?? 'local:host:local:open',
+    subject_kind: 'local_environment',
+    subject_id: 'local',
+    started_at_unix_ms: input.startedAt ?? 100,
+    updated_at_unix_ms: input.updatedAt,
+    status: input.status,
+    phase: input.phase,
+    title: input.title,
+    detail: 'Desktop is updating the local Env App window.',
+    open_progress: buildOpenConnectionProgress({
+      location: 'local_host',
+      phase: input.phase,
+      environmentID: 'local',
+      environmentLabel: 'Local Environment',
+      targetID: 'local:local',
+      targetLabel: 'Local Environment',
+    }),
+  };
+}
+
+function localRuntimeLifecycleActionProgress(input: Readonly<{
+  status: LauncherProgressStatus;
+  action: Extract<DesktopLauncherActionProgress['action'], 'start_environment_runtime' | 'restart_environment_runtime' | 'update_environment_runtime' | 'stop_environment_runtime'>;
+  operation: DesktopRuntimeLifecycleOperation;
+  phase: DesktopRuntimeLifecyclePhase;
+  title: string;
+  operationKey?: string;
+  startedAt?: number;
+  updatedAt?: number;
+}>): DesktopLauncherActionProgress {
+  return {
+    action: input.action,
+    environment_id: 'local',
+    environment_label: 'Local Environment',
+    operation_key: input.operationKey ?? 'local:host:local:lifecycle',
+    subject_kind: 'local_environment',
+    subject_id: 'local',
+    started_at_unix_ms: input.startedAt ?? 100,
+    updated_at_unix_ms: input.updatedAt,
+    status: input.status,
+    phase: input.phase,
+    title: input.title,
+    detail: 'Desktop is updating the local runtime lifecycle.',
+    lifecycle_progress: runtimeLifecycleProgress({
+      location: 'local_host',
+      operation: input.operation,
+      phase: input.phase,
+      failedPhase: input.status === 'failed' || input.status === 'cleanup_failed' ? input.phase : undefined,
+      targetID: 'local:local',
+      targetLabel: 'Local Environment',
+    }),
   };
 }
 
@@ -194,13 +272,13 @@ describe('launcherBusyState', () => {
 
     expect(environmentMatchesActionProgress(progress.environment_id, progress)).toBe(true);
     expect(busyStateMatchesActionProgress(state, progress)).toBe(true);
-    expect(activeProgressForEnvironment(progress.environment_id, state, [])).toBeNull();
+    expect(selectedProgressForEnvironment(progress.environment_id, state, [])).toBeNull();
 
     const stateWithProgress = busyStateWithActionProgress(state, progress);
-    expect(activeProgressForEnvironment(progress.environment_id, stateWithProgress, [])).toBe(progress);
-    expect(activeProgressForEnvironment('other', stateWithProgress, [progress])).toBeNull();
-    expect(activeProgressForEnvironment(progress.environment_id, IDLE_LAUNCHER_BUSY_STATE, [progress])).toBe(progress);
-    expect(activeProgressForEnvironment(progress.operation_key, IDLE_LAUNCHER_BUSY_STATE, [progress])).toBe(progress);
+    expect(selectedProgressForEnvironment(progress.environment_id, stateWithProgress, [])).toBe(progress);
+    expect(selectedProgressForEnvironment('other', stateWithProgress, [progress])).toBeNull();
+    expect(selectedProgressForEnvironment(progress.environment_id, IDLE_LAUNCHER_BUSY_STATE, [progress])).toBe(progress);
+    expect(selectedProgressForEnvironment(progress.operation_key, IDLE_LAUNCHER_BUSY_STATE, [progress])).toBe(progress);
   });
 
   it('blocks primary actions only while launcher progress is still active', () => {
@@ -266,18 +344,201 @@ describe('launcherBusyState', () => {
       }),
     };
 
-    expect(activeOpenConnectionProgressForEnvironment(
+    expect(selectedOpenConnectionProgressForEnvironment(
       environment as never,
       IDLE_LAUNCHER_BUSY_STATE,
       [succeededOpenProgress],
     )).toBe(succeededOpenProgress);
     expect(launcherProgressBlocksPrimaryAction(succeededOpenProgress)).toBe(false);
-    expect(activeOpenConnectionProgressForEnvironment(
+    expect(selectedOpenConnectionProgressForEnvironment(
       environment as never,
       IDLE_LAUNCHER_BUSY_STATE,
       [runningOpenProgress],
     )).toBe(runningOpenProgress);
     expect(launcherProgressBlocksPrimaryAction(runningOpenProgress)).toBe(true);
+  });
+
+  it('prefers a terminal Open progress update over stale running busy progress for the same operation', () => {
+    const environment: RuntimeProgressEnvironmentMatch = {
+      id: 'local',
+      managed_runtime_target_id: runtimeID('local:local'),
+      managed_runtime_placement_target_id: undefined,
+      provider_runtime_link_target: undefined,
+    };
+    const runningOpenProgress = localOpenActionProgress({
+      status: 'running',
+      phase: 'opening_window',
+      title: 'Opening environment',
+      operationKey: 'local:host:local:open:123',
+      startedAt: 100,
+      updatedAt: 110,
+    });
+    const failedOpenProgress = localOpenActionProgress({
+      status: 'failed',
+      phase: 'failed',
+      title: 'Open failed',
+      operationKey: 'local:host:local:open:123',
+      startedAt: 100,
+      updatedAt: 120,
+    });
+    const selectedProgress = selectedOpenConnectionProgressForEnvironment(
+      environment as never,
+      {
+        ...IDLE_LAUNCHER_BUSY_STATE,
+        action: 'open_local_environment',
+        environment_id: 'local',
+        progress: runningOpenProgress,
+      },
+      [failedOpenProgress],
+    );
+
+    expect(selectedProgress).toBe(failedOpenProgress);
+    expect(launcherProgressBlocksPrimaryAction(selectedProgress)).toBe(false);
+    expect(busyStateBlocksEnvironmentAction(
+      {
+        ...IDLE_LAUNCHER_BUSY_STATE,
+        action: 'open_local_environment',
+        environment_id: 'local',
+        progress: runningOpenProgress,
+      },
+      'local',
+      ['open_local_environment'],
+      selectedProgress,
+    )).toBe(false);
+    expect(environmentProgressPrimaryPresentation(selectedProgress)).toMatchObject({
+      kind: 'attention_trigger',
+      label: 'Open failed',
+    });
+  });
+
+  it('prefers snapshot terminal Open progress over busy running progress when timestamps tie on the same attempt', () => {
+    const environment: RuntimeProgressEnvironmentMatch = {
+      id: 'local',
+      managed_runtime_target_id: runtimeID('local:local'),
+      managed_runtime_placement_target_id: undefined,
+      provider_runtime_link_target: undefined,
+    };
+    const operationKey = 'local:host:local:open';
+    const runningBusyProgress = localOpenActionProgress({
+      status: 'running',
+      phase: 'opening_window',
+      title: 'Opening environment',
+      operationKey,
+      startedAt: 100,
+      updatedAt: 100,
+    });
+    const failedSnapshotProgress = localOpenActionProgress({
+      status: 'failed',
+      phase: 'failed',
+      title: 'Open failed',
+      operationKey,
+      startedAt: 100,
+      updatedAt: 100,
+    });
+
+    expect(selectedOpenConnectionProgressForEnvironment(
+      environment as never,
+      {
+        ...IDLE_LAUNCHER_BUSY_STATE,
+        action: 'open_local_environment',
+        environment_id: 'local',
+        progress: runningBusyProgress,
+      },
+      [failedSnapshotProgress],
+    )).toBe(failedSnapshotProgress);
+  });
+
+  it('keeps a retrying Open attempt ahead of a retained failure for the previous attempt', () => {
+    const environment: RuntimeProgressEnvironmentMatch = {
+      id: 'local',
+      managed_runtime_target_id: runtimeID('local:local'),
+      managed_runtime_placement_target_id: undefined,
+      provider_runtime_link_target: undefined,
+    };
+    const operationKey = 'local:host:local:open';
+    const failedPreviousAttempt = localOpenActionProgress({
+      status: 'failed',
+      phase: 'failed',
+      title: 'Open failed',
+      operationKey,
+      startedAt: 100,
+      updatedAt: 200,
+    });
+    const runningRetryAttempt = localOpenActionProgress({
+      status: 'running',
+      phase: 'opening_window',
+      title: 'Opening environment',
+      operationKey,
+      startedAt: 200,
+      updatedAt: 200,
+    });
+
+    expect(selectedOpenConnectionProgressForEnvironment(
+      environment as never,
+      IDLE_LAUNCHER_BUSY_STATE,
+      [failedPreviousAttempt, runningRetryAttempt],
+    )).toBe(runningRetryAttempt);
+    expect(launcherProgressBlocksPrimaryAction(runningRetryAttempt)).toBe(true);
+    expect(environmentProgressPrimaryPresentation(runningRetryAttempt)).toMatchObject({
+      kind: 'progress_trigger',
+      label: 'Opening...',
+    });
+  });
+
+  it('releases stale Open busy state when succeeded or canceled progress lands for the same attempt', () => {
+    const environment: RuntimeProgressEnvironmentMatch = {
+      id: 'local',
+      managed_runtime_target_id: runtimeID('local:local'),
+      managed_runtime_placement_target_id: undefined,
+      provider_runtime_link_target: undefined,
+    };
+    const operationKey = 'local:host:local:open';
+    const runningOpenProgress = localOpenActionProgress({
+      status: 'running',
+      phase: 'opening_window',
+      title: 'Opening environment',
+      operationKey,
+      startedAt: 100,
+      updatedAt: 100,
+    });
+    const busyState = {
+      ...IDLE_LAUNCHER_BUSY_STATE,
+      action: 'open_local_environment' as const,
+      environment_id: 'local',
+      progress: runningOpenProgress,
+    };
+    const succeededOpenProgress = localOpenActionProgress({
+      status: 'succeeded',
+      phase: 'open_ready',
+      title: 'Environment open',
+      operationKey,
+      startedAt: 100,
+      updatedAt: 100,
+    });
+    const canceledOpenProgress = localOpenActionProgress({
+      status: 'canceled',
+      phase: 'canceled',
+      title: 'Open canceled',
+      operationKey,
+      startedAt: 100,
+      updatedAt: 100,
+    });
+
+    for (const releasedProgress of [succeededOpenProgress, canceledOpenProgress]) {
+      const selectedProgress = selectedOpenConnectionProgressForEnvironment(
+        environment as never,
+        busyState,
+        [releasedProgress],
+      );
+      expect(selectedProgress).toBe(releasedProgress);
+      expect(launcherProgressBlocksPrimaryAction(selectedProgress)).toBe(false);
+      expect(busyStateBlocksEnvironmentAction(
+        busyState,
+        'local',
+        ['open_local_environment'],
+        selectedProgress,
+      )).toBe(false);
+    }
   });
 
   it('matches runtime lifecycle progress for local host, container, SSH host, and SSH container targets', () => {
@@ -379,12 +640,12 @@ describe('launcherBusyState', () => {
     expect(environmentMatchesRuntimeLifecycleProgress(sshContainerEnvironment, sshContainerProgress)).toBe(true);
     expect(environmentMatchesRuntimeLifecycleProgress(localHostEnvironment, localContainerProgress)).toBe(false);
 
-    expect(activeRuntimeLifecycleProgressForEnvironment(
+    expect(selectedRuntimeLifecycleProgressForEnvironment(
       localContainerEnvironment as never,
       IDLE_LAUNCHER_BUSY_STATE,
       [localHostProgress, localContainerProgress, sshHostProgress, sshContainerProgress],
     )).toBe(localContainerProgress);
-    expect(activeRuntimeLifecycleProgressForEnvironment(
+    expect(selectedRuntimeLifecycleProgressForEnvironment(
       sshHostEnvironment as never,
       {
         ...IDLE_LAUNCHER_BUSY_STATE,
@@ -394,6 +655,191 @@ describe('launcherBusyState', () => {
       },
       [],
     )).toBe(sshHostProgress);
+  });
+
+  it('prefers terminal runtime lifecycle progress over stale running busy progress for the same operation', () => {
+    const environment: RuntimeProgressEnvironmentMatch = {
+      id: 'local',
+      managed_runtime_target_id: runtimeID('local:local'),
+      managed_runtime_placement_target_id: undefined,
+      provider_runtime_link_target: undefined,
+    };
+    const runningStopProgress = localRuntimeLifecycleActionProgress({
+      status: 'running',
+      action: 'stop_environment_runtime',
+      operation: 'stop',
+      phase: 'stopping_runtime_process',
+      title: 'Stopping runtime',
+      operationKey: 'local:host:local:stop:456',
+      startedAt: 100,
+      updatedAt: 110,
+    });
+    const stopFailedProgress = localRuntimeLifecycleActionProgress({
+      status: 'failed',
+      action: 'stop_environment_runtime',
+      operation: 'stop',
+      phase: 'stopping_runtime_process',
+      title: 'Stop failed',
+      operationKey: 'local:host:local:stop:456',
+      startedAt: 100,
+      updatedAt: 120,
+    });
+    const cleanupFailedProgress = localRuntimeLifecycleActionProgress({
+      status: 'cleanup_failed',
+      action: 'stop_environment_runtime',
+      operation: 'stop',
+      phase: 'verifying_runtime_stopped',
+      title: 'Cleanup failed',
+      operationKey: 'local:host:local:stop:456',
+      startedAt: 100,
+      updatedAt: 130,
+    });
+    const busyState = {
+      ...IDLE_LAUNCHER_BUSY_STATE,
+      action: 'stop_environment_runtime' as const,
+      environment_id: 'local',
+      progress: runningStopProgress,
+    };
+
+    const selectedStopFailedProgress = selectedRuntimeLifecycleProgressForEnvironment(
+      environment as never,
+      busyState,
+      [stopFailedProgress],
+    );
+    const selectedCleanupFailedProgress = selectedRuntimeLifecycleProgressForEnvironment(
+      environment as never,
+      busyState,
+      [cleanupFailedProgress],
+    );
+
+    expect(selectedStopFailedProgress).toBe(stopFailedProgress);
+    expect(launcherProgressBlocksPrimaryAction(selectedStopFailedProgress)).toBe(false);
+    expect(busyStateBlocksEnvironmentAction(
+      busyState,
+      'local',
+      ['stop_environment_runtime'],
+      selectedStopFailedProgress,
+    )).toBe(false);
+    expect(environmentProgressPrimaryPresentation(selectedStopFailedProgress)).toMatchObject({
+      kind: 'attention_trigger',
+      label: 'Stop failed',
+    });
+
+    expect(selectedCleanupFailedProgress).toBe(cleanupFailedProgress);
+    expect(launcherProgressBlocksPrimaryAction(selectedCleanupFailedProgress)).toBe(false);
+    expect(busyStateBlocksEnvironmentAction(
+      busyState,
+      'local',
+      ['stop_environment_runtime'],
+      selectedCleanupFailedProgress,
+    )).toBe(false);
+    expect(environmentProgressPrimaryPresentation(selectedCleanupFailedProgress)).toMatchObject({
+      kind: 'attention_trigger',
+      label: 'Cleanup failed',
+    });
+  });
+
+  it('prefers snapshot terminal runtime lifecycle progress over busy running progress when timestamps tie on the same attempt', () => {
+    const environment: RuntimeProgressEnvironmentMatch = {
+      id: 'local',
+      managed_runtime_target_id: runtimeID('local:local'),
+      managed_runtime_placement_target_id: undefined,
+      provider_runtime_link_target: undefined,
+    };
+    const operationKey = 'local:host:local:restart';
+    const runningBusyProgress = localRuntimeLifecycleActionProgress({
+      status: 'running',
+      action: 'restart_environment_runtime',
+      operation: 'restart',
+      phase: 'starting_runtime_process',
+      title: 'Restarting runtime',
+      operationKey,
+      startedAt: 100,
+      updatedAt: 100,
+    });
+    const failedSnapshotProgress = localRuntimeLifecycleActionProgress({
+      status: 'failed',
+      action: 'restart_environment_runtime',
+      operation: 'restart',
+      phase: 'starting_runtime_process',
+      title: 'Restart failed',
+      operationKey,
+      startedAt: 100,
+      updatedAt: 100,
+    });
+
+    expect(selectedRuntimeLifecycleProgressForEnvironment(
+      environment as never,
+      {
+        ...IDLE_LAUNCHER_BUSY_STATE,
+        action: 'restart_environment_runtime',
+        environment_id: 'local',
+        progress: runningBusyProgress,
+      },
+      [failedSnapshotProgress],
+    )).toBe(failedSnapshotProgress);
+  });
+
+  it('releases stale lifecycle busy state when the same attempt succeeds or is canceled', () => {
+    const environment: RuntimeProgressEnvironmentMatch = {
+      id: 'local',
+      managed_runtime_target_id: runtimeID('local:local'),
+      managed_runtime_placement_target_id: undefined,
+      provider_runtime_link_target: undefined,
+    };
+    const operationKey = 'local:host:local:restart';
+    const runningRestartProgress = localRuntimeLifecycleActionProgress({
+      status: 'running',
+      action: 'restart_environment_runtime',
+      operation: 'restart',
+      phase: 'starting_runtime_process',
+      title: 'Restarting runtime',
+      operationKey,
+      startedAt: 100,
+      updatedAt: 100,
+    });
+    const busyState = {
+      ...IDLE_LAUNCHER_BUSY_STATE,
+      action: 'restart_environment_runtime' as const,
+      environment_id: 'local',
+      progress: runningRestartProgress,
+    };
+    const succeededRestartProgress = localRuntimeLifecycleActionProgress({
+      status: 'succeeded',
+      action: 'restart_environment_runtime',
+      operation: 'restart',
+      phase: 'runtime_ready',
+      title: 'Runtime ready',
+      operationKey,
+      startedAt: 100,
+      updatedAt: 100,
+    });
+    const canceledRestartProgress = localRuntimeLifecycleActionProgress({
+      status: 'canceled',
+      action: 'restart_environment_runtime',
+      operation: 'restart',
+      phase: 'checking_runtime_service',
+      title: 'Restart canceled',
+      operationKey,
+      startedAt: 100,
+      updatedAt: 100,
+    });
+
+    for (const releasedProgress of [succeededRestartProgress, canceledRestartProgress]) {
+      const selectedProgress = selectedRuntimeLifecycleProgressForEnvironment(
+        environment as never,
+        busyState,
+        [releasedProgress],
+      );
+      expect(selectedProgress).toBe(releasedProgress);
+      expect(launcherProgressBlocksPrimaryAction(selectedProgress)).toBe(false);
+      expect(busyStateBlocksEnvironmentAction(
+        busyState,
+        'local',
+        ['restart_environment_runtime'],
+        selectedProgress,
+      )).toBe(false);
+    }
   });
 
   it('matches Open connection progress without treating it as runtime lifecycle progress', () => {
@@ -453,13 +899,13 @@ describe('launcherBusyState', () => {
     };
 
     expect(environmentMatchesRuntimeLifecycleProgress(localHostEnvironment, localHostProgress)).toBe(false);
-    expect(activeOpenConnectionProgressForEnvironment(
+    expect(selectedOpenConnectionProgressForEnvironment(
       localHostEnvironment as never,
       IDLE_LAUNCHER_BUSY_STATE,
       [localHostProgress],
     )).toBe(localHostProgress);
     expect(environmentMatchesRuntimeLifecycleProgress(environment, progress)).toBe(false);
-    expect(activeOpenConnectionProgressForEnvironment(
+    expect(selectedOpenConnectionProgressForEnvironment(
       environment as never,
       IDLE_LAUNCHER_BUSY_STATE,
       [progress],

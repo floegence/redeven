@@ -664,10 +664,13 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain('const activeActionProgress = createMemo(() => snapshot().action_progress);');
     expect(appSrc).toContain('actionProgress={props.actionProgress}');
-    expect(appSrc).toContain('activeRuntimeLifecycleProgressForEnvironment(props.environment, props.busyState, props.actionProgress)');
-    expect(appSrc).toContain('activeOpenConnectionProgressForEnvironment(props.environment, props.busyState, props.actionProgress)');
+    expect(appSrc).toContain('selectedRuntimeLifecycleProgressForEnvironment(props.environment, props.busyState, props.actionProgress)');
+    expect(appSrc).toContain('selectedOpenConnectionProgressForEnvironment(props.environment, props.busyState, props.actionProgress)');
     expect(appSrc).toContain('launcherProgressBlocksPrimaryAction(openConnectionProgress())');
     expect(appSrc).not.toContain('|| openConnectionProgress() !== null');
+    expect(appSrc).not.toContain('activeRuntimeLifecycleProgressForEnvironment');
+    expect(appSrc).not.toContain('activeOpenConnectionProgressForEnvironment');
+    expect(appSrc).not.toContain('runtimeLifecycleProgress() !== null && !runtimeOpenable()');
     expect(appSrc).toContain('runtimeLifecycleProgress={visibleRuntimeLifecycleProgress()}');
     expect(appSrc).toContain('openConnectionProgress={visibleOpenConnectionProgress()}');
     expect(appSrc).toContain('pendingEnvironmentLifecycleProgress(props.environment, disclosure)');
@@ -702,6 +705,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('<div class="redeven-action-popover__notice-detail">{failure().summary}</div>');
     expect(appSrc).not.toContain('props.progress.error_message');
     expect(appSrc).toContain('const panelProgress = createMemo(() => selectEnvironmentPanelProgress(primaryProgress(), runtimeMenuProgress()));');
+    expect(appSrc).toContain('runtimeLifecycleProgress={runtimeMenuProgress()}');
+    expect(appSrc).toContain('busyStateBlocksEnvironmentAction(busyState, environmentID, [\'stop_environment_runtime\'], runtimeLifecycleProgress)');
     expect(appSrc).toContain('const progressPanelVisible = createMemo(() => props.progressOpen && hasPanelProgress());');
     expect(appSrc).toContain('const primaryProgressPresentation = createMemo(() => environmentProgressPrimaryPresentation(panelProgress()));');
     expect(appSrc).toContain('primaryProgressPresentation() || progressPanelVisible()');
