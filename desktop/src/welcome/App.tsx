@@ -231,14 +231,14 @@ import {
 import {
   busyStateForLauncherRequest,
   busyStateWithActionProgress,
-  activeProgressForEnvironment,
-  activeOpenConnectionProgressForEnvironment,
-  activeRuntimeLifecycleProgressForEnvironment,
+  busyStateBlocksEnvironmentAction,
   launcherProgressBlocksPrimaryAction,
   busyStateMatchesAction,
   busyStateMatchesControlPlane,
   busyStateMatchesEnvironment,
   IDLE_LAUNCHER_BUSY_STATE,
+  selectedOpenConnectionProgressForEnvironment,
+  selectedRuntimeLifecycleProgressForEnvironment,
   type DesktopLauncherBusyState,
 } from './launcherBusyState';
 import { createRuntimeLifecycleStepAnimation } from './runtimeLifecycleStepAnimation';
@@ -3993,8 +3993,8 @@ function EnvironmentCardsPanel(props: Readonly<{
       if (current.kind === 'lifecycle_progress') {
         const environment = props.entries.find((entry) => entry.id === current.environment_id);
         const progressStillVisible = environment
-          ? activeOpenConnectionProgressForEnvironment(environment, props.busyState, props.actionProgress) !== null
-            || activeRuntimeLifecycleProgressForEnvironment(environment, props.busyState, props.actionProgress) !== null
+          ? selectedOpenConnectionProgressForEnvironment(environment, props.busyState, props.actionProgress) !== null
+            || selectedRuntimeLifecycleProgressForEnvironment(environment, props.busyState, props.actionProgress) !== null
           : false;
         return (
           lifecycleDisclosure?.environment_id === current.environment_id
@@ -4587,6 +4587,7 @@ function isEnvironmentActionBusy(
   action: EnvironmentActionModel,
   busyState: DesktopLauncherBusyState | undefined,
   environmentID: string,
+  runtimeLifecycleProgress?: DesktopLauncherActionProgress | null,
 ): boolean {
   if (!busyState) {
     return false;
@@ -4597,19 +4598,19 @@ function isEnvironmentActionBusy(
         && busyState.provider_origin === action.provider_origin
         && busyState.action === 'start_control_plane_connect';
     case 'start_runtime':
-      return busyStateMatchesEnvironment(busyState, environmentID, ['start_environment_runtime']);
+      return busyStateBlocksEnvironmentAction(busyState, environmentID, ['start_environment_runtime'], runtimeLifecycleProgress);
     case 'restart_runtime':
-      return busyStateMatchesEnvironment(busyState, environmentID, ['restart_environment_runtime']);
+      return busyStateBlocksEnvironmentAction(busyState, environmentID, ['restart_environment_runtime'], runtimeLifecycleProgress);
     case 'update_runtime':
-      return busyStateMatchesEnvironment(busyState, environmentID, ['update_environment_runtime', 'manage_desktop_update']);
+      return busyStateBlocksEnvironmentAction(busyState, environmentID, ['update_environment_runtime', 'manage_desktop_update'], runtimeLifecycleProgress);
     case 'connect_provider_runtime':
       return busyStateMatchesEnvironment(busyState, environmentID, ['connect_provider_runtime']);
     case 'disconnect_provider_runtime':
       return busyStateMatchesEnvironment(busyState, environmentID, ['disconnect_provider_runtime']);
     case 'stop_runtime':
-      return busyStateMatchesEnvironment(busyState, environmentID, ['stop_environment_runtime']);
+      return busyStateBlocksEnvironmentAction(busyState, environmentID, ['stop_environment_runtime'], runtimeLifecycleProgress);
     case 'refresh_runtime':
-      return busyStateMatchesEnvironment(busyState, environmentID, ['refresh_environment_runtime'])
+      return busyStateBlocksEnvironmentAction(busyState, environmentID, ['refresh_environment_runtime'], runtimeLifecycleProgress)
         || busyStateMatchesAction(busyState, 'refresh_all_environment_runtimes');
     default:
       return false;
@@ -4938,6 +4939,7 @@ function EnvironmentPrimaryActionPanel(props: Readonly<{
   overlay: Extract<EnvironmentPrimaryActionOverlayModel, Readonly<{ kind: 'popover' }>>;
   environmentID: string;
   busyState?: DesktopLauncherBusyState;
+  runtimeLifecycleProgress?: DesktopLauncherActionProgress | null;
   session: EnvironmentGuidanceSessionState;
   onRunAction: (action: EnvironmentActionModel) => void;
 }>) {
@@ -4973,7 +4975,12 @@ function EnvironmentPrimaryActionPanel(props: Readonly<{
         <div class="redeven-action-popover__actions">
           <For each={props.overlay.actions}>
             {(item) => {
-              const loading = () => isEnvironmentActionBusy(item.action, props.busyState, props.environmentID);
+              const loading = () => isEnvironmentActionBusy(
+                item.action,
+                props.busyState,
+                props.environmentID,
+                props.runtimeLifecycleProgress,
+              );
               const isSecondary = item.emphasis === 'secondary';
               const secondaryIconOnly = () => isSecondary && props.overlay.actions.length > 1;
               const showsRefreshIcon = item.action.intent === 'refresh_runtime';
@@ -5260,6 +5267,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
                           overlay={overlay()}
                           environmentID={props.environmentID}
                           busyState={props.busyState}
+                          runtimeLifecycleProgress={runtimeMenuProgress()}
                           session={props.guidanceSession}
                           onRunAction={(action) => {
                             closeMenu();
@@ -5544,10 +5552,10 @@ function EnvironmentConnectionCard(props: Readonly<{
   const environmentActionModel = createMemo(() => buildProviderBackedEnvironmentActionModel(props.environment));
   const environmentActionPresentation = createMemo(() => environmentActionModel().action_presentation);
   const runtimeLifecycleProgress = createMemo(() => (
-    activeRuntimeLifecycleProgressForEnvironment(props.environment, props.busyState, props.actionProgress)
+    selectedRuntimeLifecycleProgressForEnvironment(props.environment, props.busyState, props.actionProgress)
   ));
   const openConnectionProgress = createMemo(() => (
-    activeOpenConnectionProgressForEnvironment(props.environment, props.busyState, props.actionProgress)
+    selectedOpenConnectionProgressForEnvironment(props.environment, props.busyState, props.actionProgress)
   ));
   const [rememberedOpenConnectionProgress, setRememberedOpenConnectionProgress] = createSignal<DesktopLauncherActionProgress | null>(null);
   const visibleOpenConnectionProgress = createMemo(() => (
@@ -5584,36 +5592,41 @@ function EnvironmentConnectionCard(props: Readonly<{
   const visibleRuntimeLifecycleProgress = createMemo(() => (
     runtimeLifecycleProgress() ?? disclosureRuntimeLifecycleProgress()
   ));
-  const runtimeOpenable = createMemo(() => (
-    props.environment.runtime_health.status === 'online'
-    && runtimeServiceIsOpenable(environmentRuntimeServiceSnapshot(props.environment))
-  ));
   const isCardOpen = createMemo(() => props.environment.window_state === 'open');
+  const windowBusyActions = [
+    'open_local_environment',
+    'open_provider_environment',
+    'open_remote_environment',
+    'open_ssh_environment',
+    'prepare_environment_open',
+    'focus_environment_window',
+  ] as const;
+  const runtimeBusyActions = [
+    'start_environment_runtime',
+    'restart_environment_runtime',
+    'update_environment_runtime',
+    'manage_desktop_update',
+    'stop_environment_runtime',
+    'refresh_environment_runtime',
+  ] as const;
   const isWindowActionBusy = createMemo(() => (
-    busyStateMatchesEnvironment(props.busyState, props.environment.id, [
-      'open_local_environment',
-      'open_provider_environment',
-      'open_remote_environment',
-      'open_ssh_environment',
-      'prepare_environment_open',
-      'focus_environment_window',
-    ])
+    busyStateBlocksEnvironmentAction(
+      props.busyState,
+      props.environment.id,
+      windowBusyActions,
+      openConnectionProgress(),
+    )
     || launcherProgressBlocksPrimaryAction(openConnectionProgress())
   ));
   const isRuntimeActionBusy = createMemo(() => (
-    busyStateMatchesEnvironment(props.busyState, props.environment.id, [
-      'start_environment_runtime',
-      'restart_environment_runtime',
-      'update_environment_runtime',
-      'manage_desktop_update',
-      'stop_environment_runtime',
-      'refresh_environment_runtime',
-    ])
-    || busyStateMatchesAction(props.busyState, 'refresh_all_environment_runtimes')
-    || ['start_environment_runtime', 'restart_environment_runtime', 'update_environment_runtime'].includes(
-      activeProgressForEnvironment(props.environment.id, props.busyState, props.actionProgress)?.action ?? '',
+    busyStateBlocksEnvironmentAction(
+      props.busyState,
+      props.environment.id,
+      runtimeBusyActions,
+      runtimeLifecycleProgress(),
     )
-    || (runtimeLifecycleProgress() !== null && !runtimeOpenable())
+    || busyStateMatchesAction(props.busyState, 'refresh_all_environment_runtimes')
+    || launcherProgressBlocksPrimaryAction(runtimeLifecycleProgress())
   ));
   const isPinBusy = createMemo(() => (
     busyStateMatchesEnvironment(props.busyState, props.environment.id, [
