@@ -356,8 +356,11 @@ Notes:
 - Password-protected Desktop-managed Local UI can resume the first protected browser editor request through `redeven_access_resume`, then exchange it for the normal local access cookie.
 - Browser editor cards expose right-click `Ask Flower` and `Open in Terminal` actions rooted at `workspace_path`.
 - Redeven does **not** set up the browser editor engine until the user explicitly confirms `Open`, `Start`, `Set up browser editor`, or `Update browser editor`.
-- After confirmation, Desktop downloads and caches the latest matching package on the user's machine, then sends it to the connected environment.
+- After confirmation, Desktop resolves the latest upstream code-server release for the target platform, downloads and caches only the latest matching package on the user's machine, then sends it to the connected environment.
 - Missing or unusable runtime state is handled by explicit setup/update/select UI in Browser Editor and Runtime Settings -> `Browser Editor`.
+- The Browser Editor page owns the primary setup activity surface. While setup is running, failed, or cancelled, the inline activity panel shows the stage, pending `Open`/`Start` intent when relevant, shared engine root, selected editor path when known, failure details, runtime log tail, refresh/cancel/retry actions, and explicit dismissal after recovery.
+- Desktop-side release lookup, cache, download, and upload failures must appear in that Browser Editor setup activity panel after the user explicitly starts setup/update. Toasts can supplement the failure, but they cannot be the only progress or failure surface.
+- Runtime-side import and verification failures reported by `/_redeven_proxy/api/code-runtime/status.operation` use the same activity panel and Runtime Settings operation block, including `last_error`, `last_error_code`, `stage`, `target_version`, and `log_tail`.
 - Runtime management UI separates steady inventory/status from transient setup, update, remove, cancel, failure, and recovery activity. See [`CODE_APP.md`](CODE_APP.md) for the full managed browser editor engine contract.
 
 ## Build

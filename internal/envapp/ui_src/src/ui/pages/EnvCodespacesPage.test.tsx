@@ -39,7 +39,7 @@ const gatewayMocks = vi.hoisted(() => ({
 const desktopCodeWorkspaceMocks = vi.hoisted(() => ({
   prepareAvailable: vi.fn(() => true),
   prepareWorkspaceEngine: vi.fn(async () => ({ ok: true, prepared: true })),
-  prepareWorkspaceEngineWithDesktop: vi.fn(async () => ({ ok: true, prepared: true })),
+  prepareWorkspaceEngineWithDesktop: vi.fn(async (): Promise<any> => ({ ok: true, prepared: true })),
 }));
 
 const desktopSessionContextMocks = vi.hoisted(() => ({
@@ -58,8 +58,11 @@ vi.mock('@floegence/floe-webapp-core', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/icons', () => ({
+  Check: (props: any) => <span class={props.class} data-testid="check-icon" />,
+  RefreshIcon: (props: any) => <span class={props.class} data-testid="refresh-icon" />,
   Sparkles: (props: any) => <span class={props.class} data-testid="sparkles-icon" />,
   Terminal: (props: any) => <span class={props.class} data-testid="terminal-icon" />,
+  X: (props: any) => <span class={props.class} data-testid="x-icon" />,
 }));
 
 vi.mock('@floegence/floe-webapp-core/layout', () => ({
@@ -467,12 +470,12 @@ describe('EnvCodespacesPage', () => {
     render(() => <EnvCodespacesPage />, host);
     await flushPage();
 
-    const wizard = host.querySelector('[data-testid="code-runtime-prepare-panel"]') as HTMLDivElement | null;
+    const wizard = host.querySelector('[data-testid="browser-editor-setup-activity"]') as HTMLDivElement | null;
     expect(wizard).toBeTruthy();
     expect(wizard?.textContent).toContain('Browser Editor');
     expect(wizard?.textContent).toContain('Not ready');
     expect(wizard?.textContent).toContain('Set up browser editor');
-    expect(wizard?.textContent).toContain('set up Browser Editor for this environment');
+    expect(wizard?.textContent).toContain('send it to the connected environment');
   });
 
   it('shows the Browser Editor setup panel inline while the initial runtime check is still running', async () => {
@@ -508,7 +511,7 @@ describe('EnvCodespacesPage', () => {
     render(() => <EnvCodespacesPage />, host);
     await flushPage();
 
-    const wizard = host.querySelector('[data-testid="code-runtime-prepare-panel"]') as HTMLDivElement | null;
+    const wizard = host.querySelector('[data-testid="browser-editor-setup-activity"]') as HTMLDivElement | null;
     expect(wizard).toBeTruthy();
     expect(wizard?.textContent).toContain('Browser Editor');
     expect(wizard?.textContent).toContain('Checking');
@@ -516,7 +519,7 @@ describe('EnvCodespacesPage', () => {
     resolveRuntimeStatus(makeRuntimeStatus());
     await flushPage();
 
-    expect(host.querySelector('[data-testid="code-runtime-prepare-panel"]')).toBeNull();
+    expect(host.querySelector('[data-testid="browser-editor-setup-activity"]')).toBeNull();
   });
 
   it('shows Retry setup when the Browser Editor setup operation failed', async () => {
@@ -547,7 +550,7 @@ describe('EnvCodespacesPage', () => {
     render(() => <EnvCodespacesPage />, host);
     await flushPage();
 
-    const wizard = host.querySelector('[data-testid="code-runtime-prepare-panel"]') as HTMLDivElement | null;
+    const wizard = host.querySelector('[data-testid="browser-editor-setup-activity"]') as HTMLDivElement | null;
     expect(wizard).toBeTruthy();
     expect(wizard?.textContent).toContain('Browser Editor');
     expect(wizard?.textContent).toContain('Retry setup');
@@ -632,6 +635,74 @@ describe('EnvCodespacesPage', () => {
     resolvePrepare({ ok: true, prepared: true, status: makeRuntimeStatus() });
     await flushPage();
     windowOpenSpy.mockRestore();
+  });
+
+  it('keeps Desktop prepare failures visible in the Browser Editor setup panel', async () => {
+    runtimeStatusResponse = makeRuntimeStatus({
+      active_runtime: {
+        detection_state: 'missing',
+        present: false,
+        source: 'none',
+        binary_path: '',
+      },
+      managed_runtime: {
+        detection_state: 'missing',
+        present: false,
+        source: 'managed',
+        binary_path: '',
+      },
+      installed_versions: [],
+      managed_runtime_version: '',
+      managed_runtime_source: 'none',
+      operation: { state: 'idle', log_tail: [] },
+    });
+    desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop.mockResolvedValueOnce({
+      ok: false,
+      prepared: false,
+      message: 'GitHub release lookup failed with HTTP 403.',
+    });
+    gatewayMocks.fetchGatewayJSON.mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/code-runtime/status') {
+        return runtimeStatusResponse;
+      }
+      if (url === '/_redeven_proxy/api/spaces') {
+        return {
+          spaces: [
+            {
+              code_space_id: 'space-1',
+              name: 'Demo Space',
+              description: 'Workspace demo',
+              workspace_path: '/workspace/demo',
+              code_port: 13337,
+              created_at_unix_ms: 1,
+              updated_at_unix_ms: 1,
+              last_opened_at_unix_ms: 1,
+              running: false,
+              pid: 0,
+            },
+          ],
+        };
+      }
+      throw new Error(`Unexpected gateway call: ${url}`);
+    });
+
+    render(() => <EnvCodespacesPage />, host);
+    await flushPage();
+
+    const startButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Start');
+    expect(startButton).toBeTruthy();
+
+    startButton?.click();
+    await waitForHostText(host, 'GitHub release lookup failed with HTTP 403.');
+
+    const wizard = host.querySelector('[data-testid="browser-editor-setup-activity"]') as HTMLDivElement | null;
+    expect(wizard).toBeTruthy();
+    expect(wizard?.textContent).toContain('Setup failed');
+    expect(wizard?.textContent).toContain('Couldn’t check the latest Browser Editor package.');
+    expect(wizard?.textContent).toContain('Retry setup');
+    expect(wizard?.textContent).not.toContain('Continue to start codespace');
+    expect(notificationMocks.error).toHaveBeenCalledWith('Browser Editor setup failed', 'GitHub release lookup failed with HTTP 403.');
+    expect(gatewayMocks.fetchGatewayJSON).not.toHaveBeenCalledWith('/_redeven_proxy/api/spaces/space-1/start', expect.anything());
   });
 
   it('opens a local-runtime codespace in the system browser when the desktop shell bridge is available', async () => {

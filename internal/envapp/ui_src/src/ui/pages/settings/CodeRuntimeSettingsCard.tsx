@@ -14,7 +14,12 @@ import {
   type CodeRuntimeInstalledVersion,
   type CodeRuntimeStatus,
 } from '../../services/codeRuntimeApi';
+import {
+  buildBrowserEditorSetupActivity,
+  type BrowserEditorSetupLocalFailure,
+} from '../../services/browserEditorSetupActivity';
 import { Tooltip } from '../../primitives/Tooltip';
+import { BrowserEditorSetupActivityPanel } from '../BrowserEditorSetupActivityPanel';
 import { SettingsCard, SettingsKeyValueTable, SettingsPill } from './SettingsPrimitives';
 
 type RuntimeDetailRow = Readonly<{
@@ -146,6 +151,7 @@ export interface CodeRuntimeSettingsCardProps {
   status: CodeRuntimeStatus | null | undefined;
   loading: boolean;
   error?: string | null;
+  localPrepareFailure?: BrowserEditorSetupLocalFailure | null;
   canInteract: boolean;
   canManage: boolean;
   actionLoading: boolean;
@@ -171,6 +177,15 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
   const installedVersions = createMemo(() => props.status?.installed_versions ?? []);
   const activeRuntime = createMemo(() => props.status?.active_runtime);
   const prepareCopy = createMemo(() => codeRuntimePrepareCopy(props.status));
+  const setupActivity = createMemo(() => buildBrowserEditorSetupActivity({
+    status: props.status,
+    localPending: props.actionLoading && !operationRunning(),
+    localFailure: props.localPrepareFailure,
+  }));
+  const prepareOperationActive = createMemo(() => String(props.status?.operation.action ?? '').trim() === 'prepare_workspace_engine');
+  const showSetupActivity = createMemo(() => Boolean(props.localPrepareFailure) || props.actionLoading || (prepareOperationActive() && (operationRunning() || operationNeedsAttention())));
+  const showRemovalOperation = createMemo(() => !prepareOperationActive() && (operationRunning() || operationNeedsAttention()));
+  const operationLogTail = createMemo(() => props.status?.operation.log_tail ?? []);
   const refreshActionLabel = () => 'Refresh';
   const refreshActionTooltip = () => 'Re-scan the Browser Editor inventory and active runtime.';
   const prepareActionLabel = () => codeRuntimeManagedActionLabel(props.status);
@@ -247,17 +262,15 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
     },
   ]);
 
-  const operationSummary = createMemo(() => {
+  const removalOperationSummary = createMemo(() => {
     if (operationRunning()) {
-      return props.status?.operation.action === 'remove_local_environment_version'
-        ? 'Redeven is removing one managed Browser Editor version after your explicit request.'
-        : 'Redeven Desktop is setting up the Browser Editor you explicitly requested.';
+      return 'Redeven is removing one managed Browser Editor version after your explicit request.';
     }
     if (operationFailed()) {
-      return 'The last Browser Editor setup did not finish successfully. Review the recent output below before retrying.';
+      return 'The last Browser Editor version removal did not finish successfully. Review the recent output below before retrying.';
     }
     if (operationCancelled()) {
-      return 'The last Browser Editor setup was cancelled before Redeven finished validating the result.';
+      return 'The last Browser Editor version removal was cancelled before Redeven finished validating the result.';
     }
     return '';
   });
@@ -332,7 +345,30 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
             </div>
           </Show>
 
-          <Show when={operationRunning() || operationNeedsAttention()}>
+          <Show when={showSetupActivity()}>
+            <BrowserEditorSetupActivityPanel
+              activity={setupActivity()}
+              loading={props.loading}
+              prepareSubmitting={props.actionLoading}
+              cancelSubmitting={props.cancelLoading}
+              actionLabel={setupActivity().can_retry ? 'Retry setup' : prepareActionLabel()}
+              runningLabel={prepareCopy().running_label}
+              onPrepare={props.canInteract && props.canManage ? () => void props.onPrepare() : undefined}
+              onRefresh={props.onRefresh}
+              onCancel={props.canInteract && props.canManage ? () => void props.onCancel() : undefined}
+              extraDetails={setupActivity().state === 'missing' || setupActivity().state === 'checking' ? undefined : (
+                <div class="grid gap-2 rounded-md border border-border bg-background/70 p-3 text-[11px] leading-5 text-muted-foreground">
+                  <Show when={props.status?.operation.target_version}>
+                    <div>Target version: <span class="font-mono text-foreground">{props.status?.operation.target_version}</span></div>
+                  </Show>
+                  <div>Shared editor root: <span class="font-mono text-foreground break-all">{props.status?.shared_runtime_root || '-'}</span></div>
+                  <div>Selected editor path: <span class="font-mono text-foreground break-all">{props.status?.managed_prefix || '-'}</span></div>
+                </div>
+              )}
+            />
+          </Show>
+
+          <Show when={showRemovalOperation()}>
             <div class="rounded-lg border border-border bg-muted/20 p-4">
               <div class="flex flex-wrap items-center gap-2">
                 <div class="text-sm font-semibold text-foreground">Recent runtime operation</div>
@@ -340,7 +376,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
                   {operationLabel(props.status)}
                 </SettingsPill>
               </div>
-              <div class="mt-2 text-sm text-muted-foreground">{operationSummary()}</div>
+              <div class="mt-2 text-sm text-muted-foreground">{removalOperationSummary()}</div>
               <Show when={props.status?.operation.target_version}>
                 <div class="mt-2 text-xs text-muted-foreground">
                   Target version: <span class="font-mono text-foreground">{props.status?.operation.target_version}</span>
@@ -352,7 +388,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
                 </div>
               </Show>
               <pre class="mt-3 max-h-52 overflow-auto rounded-md border border-border bg-background/80 p-3 text-[11px] leading-5 text-muted-foreground whitespace-pre-wrap break-words">
-                {(props.status?.operation.log_tail?.length ?? 0) > 0 ? props.status?.operation.log_tail?.join('\n') : 'No runtime output yet.'}
+                {operationLogTail().length > 0 ? operationLogTail().join('\n') : 'No runtime output yet.'}
               </pre>
             </div>
           </Show>
