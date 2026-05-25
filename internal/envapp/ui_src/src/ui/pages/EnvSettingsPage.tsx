@@ -2141,6 +2141,10 @@ export function EnvSettingsPage() {
     requestAnimationFrame(() => scrollToSection(section));
   });
 
+  const notifyRuntimeSettingsChanged = () => {
+    env.bumpSettingsSeq();
+  };
+
   const saveSettings = async (body: any): Promise<{ settings: AgentSettingsResponse | null; aiUpdate: SettingsAIUpdateMeta | null }> => {
     const data = await fetchGatewayJSON<AgentSettingsResponse | SettingsUpdateResponse>('/_redeven_proxy/api/settings', {
       method: 'PUT',
@@ -2152,7 +2156,7 @@ export function EnvSettingsPage() {
       // section reset effects can briefly rehydrate stale pre-save values.
       mutateSettings(normalized.settings);
     }
-    env.bumpSettingsSeq();
+    notifyRuntimeSettingsChanged();
     return normalized;
   };
 
@@ -2605,6 +2609,7 @@ export function EnvSettingsPage() {
       });
       const normalized = normalizeSettingsUpdateResponse(saved);
       if (normalized.settings) mutateSettings(normalized.settings);
+      notifyRuntimeSettingsChanged();
       setAiProviders(nextProviders);
       setAiCurrentModelID(nextCurrentModelID);
       setAiProviderKeyDraft((prev) => ({ ...prev, [id]: '' }));
@@ -2640,7 +2645,7 @@ export function EnvSettingsPage() {
         method: 'PUT',
         body: JSON.stringify({ model_id: modelID }),
       });
-      env.bumpSettingsSeq();
+      notifyRuntimeSettingsChanged();
       const now = Date.now();
       setAiSavedAt(now);
       setAiError(null);

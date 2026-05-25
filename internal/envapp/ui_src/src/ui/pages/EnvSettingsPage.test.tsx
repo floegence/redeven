@@ -141,7 +141,7 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Button: (props: any) => (
-    <button type="button" onClick={props.onClick} disabled={props.disabled}>
+    <button type="button" aria-label={props['aria-label']} onClick={props.onClick} disabled={props.disabled}>
       {props.children}
     </button>
   ),
@@ -251,7 +251,13 @@ vi.mock('./EnvDebugConsoleSettingsPanel', () => ({
 }));
 
 vi.mock('./settings/AIProviderDialog', () => ({
-  AIProviderDialog: () => null,
+  AIProviderDialog: (props: any) => (
+    <div data-testid="ai-provider-dialog" data-open={props.open ? 'true' : 'false'}>
+      <button type="button" onClick={props.onConfirm} disabled={!props.open || !props.canInteract || !props.canAdmin || props.aiSaving}>
+        Confirm provider
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock('./settings/CodeRuntimeSettingsCard', () => ({
@@ -485,6 +491,85 @@ describe('EnvSettingsPage', () => {
     const flowerCard = host.querySelector('[data-settings-card="Flower"]');
     expect(flowerCard?.textContent).toContain('The Desktop model source is available for this SSH environment.');
     expect(host.textContent).toContain('Desktop model source');
+  });
+
+  it('notifies the app settings revision after saving a Flower provider bundle', async () => {
+    protocolMocks.status.mockReturnValue('connected');
+    settingsResponse = {
+      config_path: '/tmp/config.json',
+      runtime: { agent_home_dir: '/workspace', shell: '/bin/zsh' },
+      logging: { log_format: 'plain', log_level: 'info' },
+      codespaces: { code_server_port_min: 0, code_server_port_max: 0 },
+      permission_policy: null,
+      ai: {
+        current_model_id: 'openai/gpt-5.2-mini',
+        providers: [
+          {
+            id: 'openai',
+            name: 'OpenAI',
+            type: 'openai',
+            base_url: 'https://api.openai.com/v1',
+            models: [
+              {
+                model_name: 'gpt-5.2-mini',
+                context_window: 400000,
+                max_output_tokens: 128000,
+                input_modalities: ['text', 'image'],
+              },
+            ],
+          },
+        ],
+      },
+      ai_secrets: { provider_api_key_set: { openai: true } },
+    };
+
+    (gatewayMocks.fetchGatewayJSON as any).mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/settings') {
+        return structuredClone(settingsResponse);
+      }
+      if (url === '/_redeven_proxy/api/ai/provider_keys/status') {
+        return { provider_api_key_set: { openai: true } };
+      }
+      if (url === '/_redeven_proxy/api/ai/web_search_provider_keys/status') {
+        return { provider_api_key_set: {} };
+      }
+      if (url === '/_redeven_proxy/api/ai/provider_bundle') {
+        return {
+          settings: structuredClone(settingsResponse),
+          ai_update: null,
+        };
+      }
+      return null;
+    });
+
+    render(() => <EnvSettingsPage />, host);
+    await vi.waitFor(() => {
+      expect(gatewayMocks.fetchGatewayJSON).toHaveBeenCalledWith('/_redeven_proxy/api/settings', { method: 'GET' });
+    });
+
+    await vi.waitFor(() => {
+      const button = host.querySelector('button[aria-label="Edit provider"]') as HTMLButtonElement | null;
+      expect(button).toBeTruthy();
+      expect(button?.disabled).toBe(false);
+    });
+    const editButton = host.querySelector('button[aria-label="Edit provider"]') as HTMLButtonElement;
+    editButton?.click();
+    await flushPage();
+
+    await vi.waitFor(() => {
+      expect(host.querySelector('[data-testid="ai-provider-dialog"]')?.getAttribute('data-open')).toBe('true');
+    });
+
+    const confirmButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Confirm provider'));
+    confirmButton?.click();
+
+    await vi.waitFor(() => {
+      expect(gatewayMocks.fetchGatewayJSON).toHaveBeenCalledWith(
+        '/_redeven_proxy/api/ai/provider_bundle',
+        expect.objectContaining({ method: 'PUT' }),
+      );
+      expect(envContextMocks.bumpSettingsSeq).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('updates the Browser Editor from the settings page through Desktop', async () => {

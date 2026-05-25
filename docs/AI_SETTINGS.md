@@ -174,6 +174,7 @@ Current Runtime Settings UI behavior is:
 - Web search controls are shown only inside OpenAI-compatible provider editing.
 - Native providers show built-in web-search status only; they do not show Brave or hosted-search configuration.
 - Models are configured inside each provider entry and the enabled-model list is the canonical allow-list for that provider.
+- After the user saves Flower provider, model, or key changes in Runtime Settings, Flower Chat refreshes the model picker in place on the current page without reloading the chat or discarding any draft message.
 - In a draft chat with no active thread, the chat model picker updates `current_model_id` immediately for future thread creation.
 - In an active unlocked thread, the chat model picker updates only that thread's `model_id`.
 - Locked threads show the current thread model as read-only instead of as an editable picker.
