@@ -314,7 +314,10 @@ body {
   width: 0.75rem;
   height: 0.75rem;
   flex-shrink: 0;
-  opacity: 0.65;
+  background-color: currentColor;
+  opacity: 0.72;
+  mask: var(--redeven-card-fact-icon-mask) center / contain no-repeat;
+  -webkit-mask: var(--redeven-card-fact-icon-mask) center / contain no-repeat;
 }
 
 .redeven-card-fact-value {
@@ -386,8 +389,11 @@ body {
   height: 1.05rem;
   flex-shrink: 0;
   margin-right: 0.28rem;
+  background-color: currentColor;
+  mask: var(--redeven-card-fact-icon-mask) center / contain no-repeat;
   vertical-align: -0.18rem;
-  opacity: 0.85;
+  opacity: 0.78;
+  -webkit-mask: var(--redeven-card-fact-icon-mask) center / contain no-repeat;
 }
 
 /* ── Card body: endpoint trigger button ── */

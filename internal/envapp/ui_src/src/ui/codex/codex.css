@@ -1,5 +1,5 @@
 .codex-page-shell {
-  --codex-surface-page: var(--redeven-surface-panel);
+  --codex-surface-page: var(--redeven-surface-main);
   --codex-surface-panel: var(--redeven-surface-panel);
   --codex-surface-panel-subtle: var(--redeven-surface-panel-soft);
   --codex-surface-panel-elevated: var(--redeven-surface-panel-elevated);

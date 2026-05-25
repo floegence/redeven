@@ -2849,7 +2849,7 @@ export function EnvSettingsPage() {
   // ============================================================================
 
   return (
-    <div class="relative h-full min-h-0 bg-background">
+    <div class={cn('relative h-full min-h-0', redevenSurfaceRoleClass('main'))}>
       <div class="h-full min-h-0 flex">
         <div class="hidden lg:block h-full">
           <Sidebar width={240} class="h-full">

@@ -32,6 +32,7 @@ describe('Redeven Env App surface theme contract', () => {
     const src = readRedevenCss();
 
     expect(src).toContain('--redeven-surface-panel: rgb(240, 238, 234);');
+    expect(src).toContain('--redeven-surface-main: color-mix(in srgb, var(--redeven-surface-panel) 72%, white 28%);');
     expect(src).toContain('--redeven-surface-panel-soft: #fafbfc;');
     expect(src).toContain('--redeven-surface-panel-elevated: #ffffff;');
     expect(src).toContain('--redeven-surface-overlay: var(--redeven-surface-panel-elevated);');
@@ -55,6 +56,7 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--git-browser-selection-chip-fg: var(--git-browser-selection-fg);');
 
     expect(src).toContain('--redeven-surface-panel: rgb(41, 44, 51);');
+    expect(src).toContain('--redeven-surface-main: var(--redeven-surface-panel);');
     expect(src).toContain('--redeven-surface-panel-soft: #353942;');
     expect(src).toContain('--redeven-surface-panel-elevated: #40454f;');
     expect(src).toContain('--redeven-surface-overlay: var(--redeven-surface-panel-elevated);');
@@ -76,10 +78,26 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--git-browser-selection-chip-fg: var(--git-browser-selection-fg);');
   });
 
-  it('keeps Flower on the shared panel surface family instead of private raw color literals', () => {
+  it('keeps the main content surface separate from shell chrome and global palette tokens', () => {
     const src = readRedevenCss();
 
-    expect(src).toContain('--flower-chat-surface: var(--redeven-surface-panel);');
+    expect(src).toContain('.redeven-surface-main {');
+    expect(src).toContain('background: var(--redeven-surface-main) !important;');
+    expect(src).toContain('--flower-chat-surface: var(--redeven-surface-main);');
+    expect(src).toContain('--redeven-workbench-default-body-surface: var(--redeven-surface-main);');
+    expect(src).not.toContain('--background: color-mix(in srgb, var(--redeven-surface-panel)');
+    expect(src).not.toContain('--muted: color-mix(in srgb, var(--redeven-surface-panel)');
+    expect(src).not.toContain('--border: color-mix(in srgb, var(--redeven-surface-panel)');
+    expect(src).not.toContain('--sidebar: color-mix(in srgb, var(--redeven-surface-panel)');
+    expect(src).not.toContain('--activity-bar: color-mix(in srgb, var(--redeven-surface-panel)');
+    expect(src).toContain('--card: var(--redeven-surface-panel);');
+    expect(src).toContain('--popover: var(--redeven-surface-panel);');
+  });
+
+  it('keeps Flower on the shared main content surface family instead of private raw color literals', () => {
+    const src = readRedevenCss();
+
+    expect(src).toContain('--flower-chat-surface: var(--redeven-surface-main);');
     expect(src).toContain('--flower-chat-surface-soft: var(--redeven-surface-panel-soft);');
     expect(src).toContain('--flower-chat-surface-elevated: var(--redeven-surface-panel-elevated);');
     expect(src).toContain('--flower-chat-surface-border: var(--redeven-surface-panel-border);');

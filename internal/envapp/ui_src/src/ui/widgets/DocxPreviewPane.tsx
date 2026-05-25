@@ -1,6 +1,8 @@
 import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import { cn } from '@floegence/floe-webapp-core';
 import { Button } from '@floegence/floe-webapp-core/ui';
 
+import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
 
 const DOCX_RENDER_CLASS_NAME = 'docx-preview-container';
@@ -254,7 +256,7 @@ export function DocxPreviewPane(props: DocxPreviewPaneProps) {
   };
 
   return (
-    <div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+    <div class={cn('flex h-full min-h-0 flex-col overflow-hidden', redevenSurfaceRoleClass('main'))}>
       <div ref={styleHostEl} class="hidden" aria-hidden="true" />
 
       <Show

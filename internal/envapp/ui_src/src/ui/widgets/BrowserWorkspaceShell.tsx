@@ -1,6 +1,7 @@
 import { Show, type JSX } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import { SidebarPane } from '@floegence/floe-webapp-core/layout';
+import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 
 /**
  * Fixed mobile sidebar width in px.
@@ -110,7 +111,7 @@ export function BrowserWorkspaceShell(props: BrowserWorkspaceShellProps) {
         </div>
       </SidebarPane>
 
-      <div class="min-w-0 min-h-0 flex-1 bg-background">
+      <div class={cn('min-w-0 min-h-0 flex-1', redevenSurfaceRoleClass('main'))}>
         {props.content}
       </div>
     </div>

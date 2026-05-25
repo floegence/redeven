@@ -4347,6 +4347,10 @@ function ConsoleChipActionButton(props: Readonly<{
   );
 }
 
+function cardFactIconMaskStyle(icon: string): JSX.CSSProperties {
+  return { '--redeven-card-fact-icon-mask': `url("${icon}")` } as JSX.CSSProperties;
+}
+
 function EnvironmentCardFactsBlock(props: Readonly<{
   facts: readonly EnvironmentCardFactModel[];
   minRows?: number;
@@ -4365,7 +4369,13 @@ function EnvironmentCardFactsBlock(props: Readonly<{
           <div class="redeven-card-fact-row">
             <div class="redeven-card-fact-label">
               <Show when={fact.label_icon}>
-                {(icon) => <img src={icon()} class="redeven-card-fact-label-icon" aria-hidden="true" />}
+                {(icon) => (
+                  <span
+                    class="redeven-card-fact-label-icon"
+                    style={cardFactIconMaskStyle(icon())}
+                    aria-hidden="true"
+                  />
+                )}
               </Show>
               {fact.label}
             </div>
@@ -4391,7 +4401,13 @@ function EnvironmentCardFactsBlock(props: Readonly<{
                   } : undefined}
                 >
                   <Show when={fact.leading_icon}>
-                    {(icon) => <img src={icon()} class="redeven-card-fact-leading-icon" aria-hidden="true" />}
+                    {(icon) => (
+                      <span
+                        class="redeven-card-fact-leading-icon"
+                        style={cardFactIconMaskStyle(icon())}
+                        aria-hidden="true"
+                      />
+                    )}
                   </Show>
                   {fact.value}
                   <Show when={fact.endpoints && fact.endpoints.length > 0}>
@@ -4412,7 +4428,13 @@ function EnvironmentCardFactsBlock(props: Readonly<{
                   onClick={() => props.onFactAction(action())}
                 >
                   <Show when={fact.leading_icon}>
-                    {(icon) => <img src={icon()} class="redeven-card-fact-leading-icon" aria-hidden="true" />}
+                    {(icon) => (
+                      <span
+                        class="redeven-card-fact-leading-icon"
+                        style={cardFactIconMaskStyle(icon())}
+                        aria-hidden="true"
+                      />
+                    )}
                   </Show>
                   <span class="redeven-card-fact-value__text">{fact.value}</span>
                   <ChevronRight class="redeven-card-fact-value__icon h-3 w-3" aria-hidden="true" />

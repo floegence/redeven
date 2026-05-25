@@ -1,8 +1,10 @@
 import { Show, createMemo } from 'solid-js';
+import { cn } from '@floegence/floe-webapp-core';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { Button, ConfirmDialog } from '@floegence/floe-webapp-core/ui';
 
 import type { FilePreviewDescriptor } from '../utils/filePreview';
+import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { FilePreviewContent } from './FilePreviewContent';
 import { WindowModal } from './WindowModal';
 
@@ -59,7 +61,7 @@ export function FilePreviewPanel(props: FilePreviewPanelProps) {
 
   return (
     <>
-      <div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+      <div class={cn('flex h-full min-h-0 flex-col overflow-hidden', redevenSurfaceRoleClass('main'))}>
         <div class="min-h-0 flex-1 overflow-hidden">
           <FilePreviewContent
             item={props.item}

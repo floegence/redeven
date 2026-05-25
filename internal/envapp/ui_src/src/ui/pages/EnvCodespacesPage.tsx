@@ -1343,7 +1343,7 @@ export function EnvCodespacesPage() {
   };
 
   return (
-    <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="h-full min-h-0 overflow-auto">
+    <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class={cn("h-full min-h-0 overflow-auto", redevenSurfaceRoleClass("main"))}>
       <Panel class={cn("border rounded-md overflow-hidden", redevenSurfaceRoleClass("panelStrong"))} data-testid="codespaces-panel">
         <PanelContent class="p-4 space-y-4">
           {/* Page header */}

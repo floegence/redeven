@@ -275,6 +275,7 @@
 :root {
   /* Keep the Env App panel surface contract at root scope so body portals inherit it too. */
   --redeven-surface-panel: rgb(240, 238, 234);
+  --redeven-surface-main: color-mix(in srgb, var(--redeven-surface-panel) 72%, white 28%);
   --redeven-surface-panel-soft: #fafbfc;
   --redeven-surface-panel-elevated: #ffffff;
   --redeven-surface-overlay: var(--redeven-surface-panel-elevated);
@@ -335,6 +336,7 @@
 
 html.dark {
   --redeven-surface-panel: rgb(41, 44, 51);
+  --redeven-surface-main: var(--redeven-surface-panel);
   --redeven-surface-panel-soft: #353942;
   --redeven-surface-panel-elevated: #40454f;
   --redeven-surface-overlay: var(--redeven-surface-panel-elevated);
@@ -719,6 +721,10 @@ html.dark .env-debug-console-switch[data-state='checked'] {
   background: var(--redeven-surface-panel) !important;
 }
 
+.redeven-surface-main {
+  background: var(--redeven-surface-main) !important;
+}
+
 .redeven-surface-panel--interactive {
   transition:
     border-color 150ms ease,
@@ -813,7 +819,7 @@ html.dark .env-debug-console-switch[data-state='checked'] {
 }
 
 .flower-chat-shell {
-  --flower-chat-surface: var(--redeven-surface-panel);
+  --flower-chat-surface: var(--redeven-surface-main);
   --flower-chat-surface-soft: var(--redeven-surface-panel-soft);
   --flower-chat-surface-elevated: var(--redeven-surface-panel-elevated);
   --flower-chat-surface-border: var(--redeven-surface-panel-border);
@@ -3412,8 +3418,8 @@ html.dark .redeven-workbench-progress-curtain {
   --redeven-workbench-default-widget-shadow-active:
     0 22px 48px -18px color-mix(in srgb, var(--primary) 18%, transparent),
     0 2px 6px color-mix(in srgb, var(--foreground) 10%, transparent);
-  --redeven-workbench-default-body-surface: color-mix(in srgb, var(--card) 90%, var(--background) 10%);
-  --redeven-workbench-default-body-surface-soft: color-mix(in srgb, var(--card) 74%, var(--background) 26%);
+  --redeven-workbench-default-body-surface: var(--redeven-surface-main);
+  --redeven-workbench-default-body-surface-soft: color-mix(in srgb, var(--redeven-surface-main) 84%, var(--background) 16%);
   --redeven-workbench-default-body-border: color-mix(in srgb, var(--border) 72%, transparent);
   --redeven-workbench-default-rail-bg:
     linear-gradient(

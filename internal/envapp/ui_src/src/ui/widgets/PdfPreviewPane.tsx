@@ -1,7 +1,9 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import { cn } from '@floegence/floe-webapp-core';
 import { Button } from '@floegence/floe-webapp-core/ui';
 
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
+import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
 import {
   isPDFRenderCancelled,
@@ -642,7 +644,7 @@ export function PdfPreviewPane(props: PdfPreviewPaneProps) {
   };
 
   return (
-    <div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+    <div class={cn('flex h-full min-h-0 flex-col overflow-hidden', redevenSurfaceRoleClass('main'))}>
       <div class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
         <div class="flex min-w-0 items-center gap-2">
           <span class="rounded-full border border-border/70 bg-muted/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">

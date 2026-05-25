@@ -495,7 +495,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
             workspaceRootEl = el;
           }}
           tabindex={-1}
-          class="flex h-full min-h-0 flex-col bg-background focus:outline-none"
+          class={cn('flex h-full min-h-0 flex-col focus:outline-none', redevenSurfaceRoleClass('main'))}
         >
           <FileWorkspaceHeader
             showMobileSidebarButton={props.showMobileSidebarButton}
@@ -525,7 +525,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
             }}
             {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
             data-testid="file-browser-content-scroll-region"
-            class="min-h-0 flex-1 overflow-auto bg-background"
+            class={cn('min-h-0 flex-1 overflow-auto', redevenSurfaceRoleClass('main'))}
             onContextMenu={handleWorkspaceBackgroundContextMenu}
           >
             <Show when={browser.viewMode() === 'list'} fallback={<FileGridView instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full" />}>
