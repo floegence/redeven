@@ -12,6 +12,7 @@ type DesktopAnchoredOverlaySurfaceProps = Readonly<{
   open: boolean;
   anchorRef: HTMLElement | undefined;
   placement?: DesktopOverlayPlacement;
+  constrainToViewport?: boolean;
   role?: JSX.HTMLAttributes<HTMLDivElement>['role'];
   ariaModal?: boolean;
   ariaLabel?: string;
@@ -64,6 +65,7 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
       viewportWidth,
       viewportHeight,
       preferredPlacement: props.placement,
+      constrainToViewport: props.constrainToViewport,
     });
 
     setPosition({

@@ -552,6 +552,7 @@ describe('DesktopWelcomeShell', () => {
 
   it('renders split runtime actions with refresh controls and external-runtime messaging', () => {
     const appSrc = readWelcomeSource();
+    const actionPopoverSrc = readDesktopActionPopoverSource();
     const styles = readWelcomeStyles();
 
     expect(appSrc).toContain('function EnvironmentSplitActionButton');
@@ -569,6 +570,10 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('<Show when={showsRefreshIcon}>');
     expect(appSrc).toContain('primary_action_overlay');
     expect(appSrc).toContain('<DesktopActionPopover');
+    expect(actionPopoverSrc).toContain('placement="top"');
+    expect(actionPopoverSrc).toContain('constrainToViewport={false}');
+    expect(actionPopoverSrc).not.toContain('placement?: DesktopOverlayPlacement');
+    expect(actionPopoverSrc).not.toContain('props.placement');
     expect(appSrc).toContain('<DesktopAnchoredOverlaySurface');
     expect(appSrc).toContain('const blockedPrimaryActionDisabled = createMemo(() => (');
     expect(appSrc).toContain('redeven-split-action-trigger__content');

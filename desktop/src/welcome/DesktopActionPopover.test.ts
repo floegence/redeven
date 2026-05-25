@@ -15,6 +15,11 @@ describe('DesktopActionPopover', () => {
     expect(source).toContain('redeven-action-popover-frame');
     expect(source).toContain('requestAnimationFrame(() => {');
     expect(source).toContain('firstFocusableElement(popoverRef)?.focus();');
+    expect(source).toContain('placement="top"');
+    expect(source).toContain('constrainToViewport={false}');
+    expect(source).not.toContain('placement?:');
+    expect(source).not.toContain('DesktopOverlayPlacement');
+    expect(source).not.toContain('props.placement');
     expect(source).toContain("document.addEventListener('mousedown', handlePointerDown);");
     expect(source).toContain("document.addEventListener('keydown', handleKeyDown);");
     expect(source).toContain("document.addEventListener('focusin', handleFocusIn);");

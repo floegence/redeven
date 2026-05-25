@@ -5276,7 +5276,6 @@ function EnvironmentSplitActionButton(props: Readonly<{
                 </div>
               </div>
             )}
-            placement="top"
             anchorClass="flex w-full"
             popoverAriaLabel={
               progressPanelVisible()

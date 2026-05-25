@@ -49,6 +49,48 @@ describe('desktopOverlayPosition', () => {
     expect(position.top).toBe(50);
   });
 
+  it('keeps an unconstrained overlay on the preferred top placement even when it overflows', () => {
+    const position = resolveDesktopAnchoredOverlayPosition({
+      anchorRect: rect(220, 18, 40, 24),
+      overlayWidth: 170,
+      overlayHeight: 72,
+      viewportWidth: 800,
+      viewportHeight: 600,
+      preferredPlacement: 'top',
+      constrainToViewport: false,
+    });
+
+    expect(position.placement).toBe('top');
+    expect(position.top).toBe(-62);
+    expect(position.left).toBe(155);
+  });
+
+  it('does not fallback to a side placement when unconstrained top overflows', () => {
+    const anchorRect = rect(64, 90, 32, 28);
+    const constrainedPosition = resolveDesktopAnchoredOverlayPosition({
+      anchorRect,
+      overlayWidth: 72,
+      overlayHeight: 180,
+      viewportWidth: 640,
+      viewportHeight: 210,
+      preferredPlacement: 'top',
+    });
+    const unconstrainedPosition = resolveDesktopAnchoredOverlayPosition({
+      anchorRect,
+      overlayWidth: 72,
+      overlayHeight: 180,
+      viewportWidth: 640,
+      viewportHeight: 210,
+      preferredPlacement: 'top',
+      constrainToViewport: false,
+    });
+
+    expect(constrainedPosition.placement).toBe('right');
+    expect(unconstrainedPosition.placement).toBe('top');
+    expect(unconstrainedPosition.top).toBe(-98);
+    expect(unconstrainedPosition.left).toBe(44);
+  });
+
   it('clamps the overlay inside the viewport while keeping the arrow offset usable', () => {
     const position = resolveDesktopAnchoredOverlayPosition({
       anchorRect: rect(6, 160, 24, 24),
@@ -64,5 +106,21 @@ describe('desktopOverlayPosition', () => {
     expect(position.arrowOffset).toBeLessThanOrEqual(188);
     expect(desktopOverlayArrowStyle(position)).toEqual({ left: `${position.arrowOffset}px` });
     expect(desktopOverlayArrowClass('top')).toContain('border-t-popover');
+  });
+
+  it('does not clamp an unconstrained overlay inside the viewport', () => {
+    const position = resolveDesktopAnchoredOverlayPosition({
+      anchorRect: rect(6, 160, 24, 24),
+      overlayWidth: 200,
+      overlayHeight: 70,
+      viewportWidth: 220,
+      viewportHeight: 400,
+      preferredPlacement: 'top',
+      constrainToViewport: false,
+    });
+
+    expect(position.placement).toBe('top');
+    expect(position.left).toBe(-82);
+    expect(position.arrowOffset).toBe(100);
   });
 });

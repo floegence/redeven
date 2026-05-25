@@ -37,8 +37,10 @@ export function resolveDesktopAnchoredOverlayPosition(options: Readonly<{
   viewportWidth: number;
   viewportHeight: number;
   preferredPlacement?: DesktopOverlayPlacement;
+  constrainToViewport?: boolean;
 }>): DesktopAnchoredOverlayPosition {
   const preferredPlacement = options.preferredPlacement ?? 'top';
+  const constrainToViewport = options.constrainToViewport ?? true;
   const margin = 8;
   const gap = 8;
   const arrowInset = 12;
@@ -59,12 +61,14 @@ export function resolveDesktopAnchoredOverlayPosition(options: Readonly<{
     preferredPlacement === 'top' || preferredPlacement === 'bottom' ? 'left' : 'top',
   ] as const;
 
-  const placement = orderedPlacements.find((candidate) => {
-    const requiredSpace = candidate === 'top' || candidate === 'bottom'
-      ? options.overlayHeight
-      : options.overlayWidth;
-    return availableSpace[candidate] >= requiredSpace;
-  }) ?? orderedPlacements.slice().sort((left, right) => availableSpace[right] - availableSpace[left])[0];
+  const placement = constrainToViewport
+    ? orderedPlacements.find((candidate) => {
+      const requiredSpace = candidate === 'top' || candidate === 'bottom'
+        ? options.overlayHeight
+        : options.overlayWidth;
+      return availableSpace[candidate] >= requiredSpace;
+    }) ?? orderedPlacements.slice().sort((left, right) => availableSpace[right] - availableSpace[left])[0]
+    : preferredPlacement;
 
   let left = 0;
   let top = 0;
@@ -88,8 +92,10 @@ export function resolveDesktopAnchoredOverlayPosition(options: Readonly<{
       break;
   }
 
-  left = clamp(left, margin, options.viewportWidth - options.overlayWidth - margin);
-  top = clamp(top, margin, options.viewportHeight - options.overlayHeight - margin);
+  if (constrainToViewport) {
+    left = clamp(left, margin, options.viewportWidth - options.overlayWidth - margin);
+    top = clamp(top, margin, options.viewportHeight - options.overlayHeight - margin);
+  }
 
   return {
     placement,

@@ -1,5 +1,4 @@
 import { Show, createEffect, createSignal, onCleanup, type JSX } from 'solid-js';
-import { type DesktopOverlayPlacement } from './desktopOverlayPosition';
 import { DesktopAnchoredOverlaySurface } from './DesktopAnchoredOverlaySurface';
 
 export type DesktopActionPopoverProps = Readonly<{
@@ -7,7 +6,6 @@ export type DesktopActionPopoverProps = Readonly<{
   children: JSX.Element;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  placement?: DesktopOverlayPlacement;
   class?: string;
   anchorClass?: string;
   popoverAriaLabel?: string;
@@ -135,7 +133,8 @@ export function DesktopActionPopover(props: DesktopActionPopoverProps) {
         <DesktopAnchoredOverlaySurface
           open={rendered()}
           anchorRef={anchorRef}
-          placement={props.placement}
+          placement="top"
+          constrainToViewport={false}
           role="dialog"
           ariaModal={false}
           ariaLabel={props.popoverAriaLabel}
