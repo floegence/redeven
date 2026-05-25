@@ -38,6 +38,7 @@ EOF
 
   cat >"${root}/docs/RELEASE.md" <<'EOF'
 The public manifest endpoint is https://version.agent.redeven.com/v1/manifest.json.
+The public Browser Editor catalog endpoint is https://version.agent.redeven.com/v1/browser-editor/code-server/latest.json.
 Solid <Portal>, body-level portal, overlay portal, and npm portal: are technical terms.
 EOF
 
@@ -95,7 +96,7 @@ if run_check "$bad_path_repo" "$bad_path_out" "$bad_path_err"; then
   echo "expected invalid redeven.com path to fail hygiene check" >&2
   exit 1
 fi
-assert_contains "$bad_path_err" "Only the public runtime endpoint literals https://redeven.com/install.sh and https://version.agent.redeven.com/v1/manifest.json may appear"
+assert_contains "$bad_path_err" "Only the public endpoint literals https://redeven.com/install.sh, https://version.agent.redeven.com/v1/manifest.json, and https://version.agent.redeven.com/v1/browser-editor/code-server/latest.json may appear"
 
 create_fixture_repo "$bad_domain_repo"
 write_allowed_contract_files "$bad_domain_repo"
@@ -109,7 +110,7 @@ if run_check "$bad_domain_repo" "$bad_domain_out" "$bad_domain_err"; then
   echo "expected private delivery domain to fail hygiene check" >&2
   exit 1
 fi
-assert_contains "$bad_domain_err" "Only the public runtime endpoint literals https://redeven.com/install.sh and https://version.agent.redeven.com/v1/manifest.json may appear"
+assert_contains "$bad_domain_err" "Only the public endpoint literals https://redeven.com/install.sh, https://version.agent.redeven.com/v1/manifest.json, and https://version.agent.redeven.com/v1/browser-editor/code-server/latest.json may appear"
 
 create_fixture_repo "$bad_product_repo"
 write_allowed_contract_files "$bad_product_repo"

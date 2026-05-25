@@ -659,7 +659,7 @@ describe('EnvCodespacesPage', () => {
     desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop.mockResolvedValueOnce({
       ok: false,
       prepared: false,
-      message: 'GitHub release lookup failed with HTTP 403.',
+      message: 'Redeven Browser Editor catalog lookup failed with HTTP 503.',
     });
     gatewayMocks.fetchGatewayJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/code-runtime/status') {
@@ -693,15 +693,15 @@ describe('EnvCodespacesPage', () => {
     expect(startButton).toBeTruthy();
 
     startButton?.click();
-    await waitForHostText(host, 'GitHub release lookup failed with HTTP 403.');
+    await waitForHostText(host, 'Redeven Browser Editor catalog lookup failed with HTTP 503.');
 
     const wizard = host.querySelector('[data-testid="browser-editor-setup-activity"]') as HTMLDivElement | null;
     expect(wizard).toBeTruthy();
     expect(wizard?.textContent).toContain('Setup failed');
-    expect(wizard?.textContent).toContain('Couldn’t check the latest Browser Editor package.');
+    expect(wizard?.textContent).toContain('Couldn’t check the latest Browser Editor.');
     expect(wizard?.textContent).toContain('Retry setup');
     expect(wizard?.textContent).not.toContain('Continue to start codespace');
-    expect(notificationMocks.error).toHaveBeenCalledWith('Browser Editor setup failed', 'GitHub release lookup failed with HTTP 403.');
+    expect(notificationMocks.error).toHaveBeenCalledWith('Browser Editor setup failed', 'Redeven Browser Editor catalog lookup failed with HTTP 503.');
     expect(gatewayMocks.fetchGatewayJSON).not.toHaveBeenCalledWith('/_redeven_proxy/api/spaces/space-1/start', expect.anything());
   });
 

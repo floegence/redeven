@@ -94,19 +94,21 @@ It does **not** delete the user's `workspace_path` directory.
 The runtime does **not** bundle code-server into the base CLI/Desktop installer.
 Instead, the browser editor uses a managed engine that is set up or updated only after an explicit user action inside Env App.
 The managed browser editor engine currently uses upstream `code-server` release tarballs.
+Redeven Desktop does not query GitHub Releases from the user's network during setup.
+It reads Redeven's Browser Editor Catalog, which is published by private operations after the upstream release assets have been mirrored and verified.
 
 Rules:
 
 - Redeven never sets up the browser editor engine on page load or merely because Env App connected.
 - The first `Open`, `Start`, `Set up browser editor`, or `Update browser editor` action asks the user to confirm before Desktop prepares the latest browser editor package for the connected environment.
-- After confirmation, Desktop resolves the latest upstream `code-server` release for the target platform, downloads the matching package on the user's machine, caches only that latest package for each platform, and sends that package to the connected environment.
+- After confirmation, Desktop resolves the latest package from Redeven's Browser Editor Catalog, downloads the matching mirrored package on the user's machine, caches only that latest package for each platform, and sends that package to the connected environment.
 - Setting up a managed version stores it once under the shared runtime root.
 - The current endpoint stores one managed runtime selection in `shared/code-server/<os>-<arch>/local-environment.json`.
 - The user-facing actions are `Set up browser editor`, `Update browser editor`, `Open`, and `Start`.
 - The runtime accepts a Desktop-generated artifact manifest plus package bytes, then verifies, extracts, probes, promotes, and selects the version.
 - The `apps/code/runtime/managed` path is only a symlink to the selected shared version.
 - No user shell commands or PATH edits are required for the managed runtime.
-- Redeven resolves the latest upstream `code-server` release only when the user explicitly starts setup or update. It does not refresh the upstream release metadata in the background.
+- Redeven Desktop reads the Browser Editor Catalog only when the user explicitly starts setup or update. It does not refresh Browser Editor package metadata in the background.
 - If the selected managed version is missing or unusable, Redeven reports the problem directly and does **not** silently fall back to another managed or host runtime.
 
 Managed runtime precedence remains:
@@ -133,11 +135,56 @@ The explicit preparation flow is:
 
 1. Env App reads runtime status.
 2. If the browser editor engine is missing or unusable, Env App blocks startup and starts setup only after the user's explicit `Open`, `Start`, `Set up browser editor`, or `Update browser editor` action.
-3. Desktop resolves the latest matching code-server release package for the target platform and uses the local package cache only when it already has that latest package.
+3. Desktop resolves the latest matching Browser Editor package from Redeven's Browser Editor Catalog and uses the local package cache only when it already has that latest package.
 4. Desktop uploads the package either through runtime-control direct upload or through the Env App session-mediated import-session path.
 5. Runtime validates the manifest, size, checksum, platform, archive layout, and staged binary, then promotes it to `shared/code-server/<os>-<arch>/versions/<version>/` and selects it for the current endpoint.
 6. Existing usable versions are reused instead of reinstalled; `POST /remove-version` deletes only a non-selected managed version.
 7. Running, failed, or cancelled operations keep focused status and recent output visible in the Browser Editor setup activity panel so the user can recover explicitly.
+
+## Browser Editor Catalog
+
+Redeven's Browser Editor Catalog is the product runtime dependency for managed Browser Editor setup.
+The upstream `coder/code-server` release remains the supply source, but Desktop consumes the Redeven-published catalog and mirrored package URLs instead of calling GitHub's `releases/latest` API during user setup.
+
+Catalog endpoints:
+
+```text
+https://version.agent.redeven.com/v1/browser-editor/code-server/latest.json
+```
+
+The catalog contains:
+
+- `schema_version`: catalog format version.
+- `engine`: currently `code-server`.
+- `source`: upstream release provenance.
+- `latest`: the release tag and version selected by Redeven private ops.
+- `platforms`: platform-keyed package entries with mirrored download URL, sha256, size, archive compression, and root directory hint.
+- `mirror_complete`: must be `true` before Desktop accepts the catalog.
+
+Desktop setup uses this catalog as follows:
+
+```text
+User confirms setup/update
+  |
+  v
+Desktop fetches latest.json
+  |
+  v
+Desktop selects status.platform.platform_id
+  |
+  v
+Desktop downloads the mirrored package
+  |
+  v
+Desktop caches only the latest package for that platform
+  |
+  v
+Desktop uploads the package to the connected environment
+```
+
+There is intentionally no GitHub fallback in Desktop.
+If the catalog is unavailable or malformed, setup fails in the inline Browser Editor setup activity and waits for the user to retry.
+This keeps GitHub API rate limits, upstream release instability, and mirror publication failures inside Redeven's private operations boundary rather than exposing them as user-side setup dependencies.
 
 ## Setup activity and failure ownership
 
@@ -152,7 +199,7 @@ The user can refresh, cancel an active setup, retry a failed setup, or dismiss a
 Failures from both halves of the setup path belong in this activity model:
 
 - Desktop-side preparation failures:
-  - latest upstream release lookup timeouts, HTTP failures, malformed release metadata, or missing platform assets
+  - Browser Editor Catalog lookup timeouts, HTTP failures, malformed catalog metadata, incomplete mirror state, or missing platform assets
   - package download, cache read/write, checksum, or cache-pruning failures on the user's machine
   - direct Desktop-to-runtime upload failures before the runtime can finish importing the package
 - Runtime-side import and verification failures:

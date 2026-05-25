@@ -71,27 +71,27 @@ function localFailure(message: string): BrowserEditorSetupLocalFailure {
 
 describe('browserEditorSetupActivity', () => {
   it('classifies Desktop-side release lookup failures for the first setup step', () => {
-    expect(classifyBrowserEditorLocalFailure('GitHub release lookup failed with HTTP 403.')).toBe('desktop_release_lookup');
-    expect(classifyBrowserEditorLocalFailure('API rate limit exceeded')).toBe('desktop_release_lookup');
+    expect(classifyBrowserEditorLocalFailure('Redeven Browser Editor catalog lookup failed with HTTP 503.')).toBe('desktop_release_lookup');
+    expect(classifyBrowserEditorLocalFailure('Redeven Browser Editor catalog is not fully mirrored yet.')).toBe('desktop_release_lookup');
   });
 
   it('models Desktop release lookup failures as retryable inline activity', () => {
     const activity = buildBrowserEditorSetupActivity({
       status: missingStatus(),
-      localFailure: localFailure('GitHub release lookup failed with HTTP 403.'),
+      localFailure: localFailure('Redeven Browser Editor catalog lookup failed with HTTP 503.'),
       pendingIntent: { kind: 'start' },
     });
 
     expect(activity).toMatchObject({
       state: 'failed',
       badge_label: 'Setup failed',
-      summary: 'Couldn’t check the latest Browser Editor package.',
+      summary: 'Couldn’t check the latest Browser Editor.',
       can_retry: true,
       show_log: false,
     });
     expect(activity.pending_action_label).toBeUndefined();
-    expect(activity.detail).toContain('GitHub release lookup failed with HTTP 403.');
-    expect(activity.detail).toContain('GitHub’s API limit');
+    expect(activity.detail).toContain('Redeven Browser Editor catalog lookup failed with HTTP 503.');
+    expect(activity.detail).toContain('Redeven’s update catalog may be temporarily unavailable.');
     expect(activity.steps.map((step) => [step.id, step.state])).toEqual([
       ['lookup', 'error'],
       ['cache', 'pending'],
@@ -107,7 +107,7 @@ describe('browserEditorSetupActivity', () => {
     });
 
     expect(activity.state).toBe('preparing');
-    expect(activity.summary).toBe('Desktop is preparing the Browser Editor package.');
+    expect(activity.summary).toBe('Desktop is preparing the Browser Editor.');
     expect(activity.can_cancel).toBe(false);
     expect(activity.steps[0]).toMatchObject({ id: 'lookup', state: 'active' });
   });

@@ -78,6 +78,24 @@ Behavior:
 - `Update runtime` is always explicit and user-visible. Existing outdated, incompatible, or maintenance-required runtimes keep `Open` blocked until the user chooses the update/restart action.
 - `Update runtime` is allowed on stopped SSH Host, Local Container, and SSH Container targets because there is no active runtime work to interrupt. On live runtimes, the explicit user action authorizes Desktop to run one uninterrupted lifecycle workflow: stop the current process, verify that it has stopped, replace the runtime package when needed, then start and check the runtime again.
 - Local Host update is a Desktop release handoff, not a runtime-only replacement path. The Welcome menu labels that action `Update Redeven Desktop` and executes the `desktop_local_update_handoff` method through Desktop update management. Welcome badges and disabled-Open guidance for this method use Desktop update wording, because the user action is to update the Desktop bundle that carries the local runtime. SSH Host, Local Container, and SSH Container update actions continue to execute explicit runtime package updates for the target runtime placement.
+
+## Browser Editor Package Catalog
+
+Desktop prepares the managed Browser Editor engine only after the user confirms `Set up browser editor`, `Update browser editor`, `Open`, or `Start` from Env App.
+That preparation path consumes Redeven's Browser Editor Catalog instead of querying GitHub Releases from the user's network.
+
+Desktop behavior:
+
+- Fetch `https://version.agent.redeven.com/v1/browser-editor/code-server/latest.json` only after explicit user confirmation.
+- Select the package entry that matches the connected environment's reported Browser Editor platform.
+- Download the mirrored package URL from the catalog to the local Desktop cache.
+- Keep only the latest package for each platform in that cache.
+- Upload the package and artifact manifest to the connected environment through the existing runtime-control or Env App import-session path.
+- Surface catalog, download, cache, upload, and runtime import failures in the inline Browser Editor setup activity instead of relying on toast-only feedback.
+
+There is no Desktop-side GitHub fallback and no user-facing mirror or token setting for this flow.
+If the Redeven catalog is temporarily unavailable, the setup activity explains that Desktop could not check the latest Browser Editor package and waits for an explicit retry.
+This keeps upstream release lookup, rate limits, and package mirroring as Redeven private-operations concerns rather than user setup concepts.
 - Runtime-control ownership and runtime-control forward availability only gate runtime-control RPC features such as provider linking. They do not decide whether the host/container runtime process can be stopped or restarted from the runtime card, and a missing per-open forward must not block `Open` from creating that forward.
 - If active workload is present, Desktop keeps `Open` blocked and shows interruption-safe guidance instead of closing terminals, sessions, tasks, or port forwards implicitly.
 - The Local UI password stays out of process args and environment variables.
