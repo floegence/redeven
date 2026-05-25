@@ -1545,7 +1545,7 @@ describe('sshRuntime integration', () => {
     await removeFakeSSHFixture(fixture);
   }, SSH_RUNTIME_MAINTENANCE_TEST_TIMEOUT_MS);
 
-  it('rebuilds and uploads source-dev runtime even when the remote tag already looks installed', async () => {
+  it('does not rebuild or upload source-dev runtime when the remote runtime is already ready', async () => {
     const fixture = await createFakeSSHFixture('ready');
     const source = await createFakeSourceRuntimeRoot(fixture.root);
     const previousPath = process.env.PATH;
@@ -1555,6 +1555,38 @@ describe('sshRuntime integration', () => {
     try {
       runtime = await startWithFakeSSH(fixture, 'auto', {
         sourceRuntimeRoot: source.sourceRoot,
+      });
+    } finally {
+      if (previousPath === undefined) {
+        delete process.env.PATH;
+      } else {
+        process.env.PATH = previousPath;
+      }
+      await runtime?.stop();
+    }
+
+    const events = await readFakeSSHEvents(fixture);
+    const eventNames = events.map((event) => event.event);
+    expect(eventNames).toContain('probe_runtime');
+    expect(eventNames).toContain('start_runtime');
+    expect(eventNames).not.toContain('probe_platform');
+    expect(eventNames).not.toContain('upload_archive');
+    expect(eventNames).not.toContain('upload_install');
+    expect(eventNames).not.toContain('remote_install');
+    await removeFakeSSHFixture(fixture);
+  }, SSH_RUNTIME_MAINTENANCE_TEST_TIMEOUT_MS);
+
+  it('rebuilds and uploads source-dev runtime when the user explicitly requests an update', async () => {
+    const fixture = await createFakeSSHFixture('ready');
+    const source = await createFakeSourceRuntimeRoot(fixture.root);
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${source.binDir}${path.delimiter}${previousPath ?? ''}`;
+
+    let runtime: ManagedSSHRuntime | null = null;
+    try {
+      runtime = await startWithFakeSSH(fixture, 'auto', {
+        sourceRuntimeRoot: source.sourceRoot,
+        forceRuntimeUpdate: true,
       });
     } finally {
       if (previousPath === undefined) {
