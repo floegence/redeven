@@ -4890,7 +4890,7 @@ function EnvironmentProgressPanel(props: Readonly<{
               onClick={() => props.copyOperationDiagnostics(props.progress)}
             >
               <Copy class="h-3.5 w-3.5" />
-              Copy diagnostics
+              Copy log
             </Button>
           </Show>
           <Button

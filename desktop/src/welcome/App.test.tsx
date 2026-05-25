@@ -757,7 +757,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain("props.progress.status === 'awaiting_confirmation'");
     expect(appSrc).not.toContain('onClick={() => props.continueOperation(props.progress)}');
     expect(appSrc).toContain('onClick={() => props.dismissOperation(props.progress)}');
-    expect(appSrc).toContain('Copy diagnostics');
+    expect(appSrc).toContain('Copy log');
     expect(appSrc).toContain('<Stop class="h-3.5 w-3.5" />');
     expect(appSrc).toContain("{props.progress.interrupt_label || 'Stop startup'}");
     expect(appSrc).toContain("class={shimmerBlocked() ? 'redeven-blocked-shimmer-overlay' : 'redeven-loading-shimmer-overlay'}");
