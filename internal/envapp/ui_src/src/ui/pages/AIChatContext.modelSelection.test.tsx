@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { render } from 'solid-js/web';
+import { createSignal } from 'solid-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createAIChatContextValue, normalizeModelsResponse, type AIChatContextValue, type ThreadView } from './AIChatContext';
@@ -17,6 +18,10 @@ const hoisted = vi.hoisted(() => {
   envResource.loading = false;
   envResource.error = null;
 
+  const envContextState = {
+    settingsSeq: () => 0,
+  };
+
   return {
     notificationMock: {
       error: vi.fn(),
@@ -30,10 +35,11 @@ const hoisted = vi.hoisted(() => {
     envContextValue: {
       env_id: () => 'env-1',
       env: envResource,
-      settingsSeq: () => 0,
+      settingsSeq: () => envContextState.settingsSeq(),
       aiThreadFocusSeq: () => 0,
       aiThreadFocusId: () => null,
     },
+    envContextState,
   };
 });
 
@@ -100,6 +106,8 @@ let settingsState: any;
 let currentModelRequests: Array<{ model_id: string }>;
 let threadPatchRequests: Array<{ threadId: string; body: { model_id?: string } }>;
 let createThreadBodies: Array<Record<string, unknown>>;
+let modelRequests: number;
+let bumpSettingsSeq: () => void;
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   useNotification: () => hoisted.notificationMock,
@@ -174,12 +182,17 @@ describe('AIChatContext model selection', () => {
     currentModelRequests = [];
     threadPatchRequests = [];
     createThreadBodies = [];
+    modelRequests = 0;
+    const [settingsSeq, setSettingsSeq] = createSignal(0);
+    hoisted.envContextState.settingsSeq = settingsSeq;
+    bumpSettingsSeq = () => setSettingsSeq((seq) => seq + 1);
     fetchGatewayJSONMock.mockReset();
     fetchGatewayJSONMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/settings') {
         return structuredClone(settingsState);
       }
       if (url === '/_redeven_proxy/api/ai/models') {
+        modelRequests += 1;
         return structuredClone(modelsState);
       }
       if (url === '/_redeven_proxy/api/ai/threads?limit=200') {
@@ -267,6 +280,29 @@ describe('AIChatContext model selection', () => {
       expect(currentModelRequests).toEqual([{ model_id: 'openai/model-b' }]);
       expect(modelsState.current_model).toBe('openai/model-b');
     });
+
+    dispose();
+  });
+
+  it('refreshes model options in the same chat context when settingsSeq changes', async () => {
+    const { ctx, dispose } = await renderContext();
+
+    expect(modelRequests).toBe(1);
+    expect(ctx.modelOptions().map((item) => item.value)).toEqual(['openai/model-a', 'openai/model-b']);
+
+    modelsState = {
+      current_model: 'openai/model-c',
+      models: [
+        { id: 'openai/model-c', label: 'Model C' },
+      ],
+    };
+    bumpSettingsSeq();
+
+    await vi.waitFor(() => {
+      expect(modelRequests).toBe(2);
+      expect(ctx.modelOptions().map((item) => item.value)).toEqual(['openai/model-c']);
+    });
+    expect(ctx.selectedCurrentModel()).toBe('openai/model-c');
 
     dispose();
   });
