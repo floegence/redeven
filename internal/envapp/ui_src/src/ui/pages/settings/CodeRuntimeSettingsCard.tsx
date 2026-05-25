@@ -3,10 +3,12 @@ import { Code, RefreshIcon } from '@floegence/floe-webapp-core/icons';
 import { Button, ConfirmDialog, HighlightBlock } from '@floegence/floe-webapp-core/ui';
 
 import {
+  codeRuntimeManagedActionLabel,
   codeRuntimeOperationCancelled,
   codeRuntimeOperationFailed,
   codeRuntimeOperationNeedsAttention,
   codeRuntimeOperationRunning,
+  codeRuntimePrepareCopy,
   codeRuntimeReady,
   codeRuntimeStageLabel,
   type CodeRuntimeInstalledVersion,
@@ -61,9 +63,9 @@ function operationLabel(status: CodeRuntimeStatus | null | undefined): string {
   const operation = status?.operation;
   if (!operation) return 'Idle';
   if (operation.state === 'running') return codeRuntimeStageLabel(operation.stage, operation.action);
-  if (operation.state === 'failed') return operation.action === 'remove_local_environment_version' ? 'Version removal failed' : 'Preparation failed';
-  if (operation.state === 'cancelled') return operation.action === 'remove_local_environment_version' ? 'Version removal cancelled' : 'Preparation cancelled';
-  if (operation.state === 'succeeded') return operation.action === 'remove_local_environment_version' ? 'Version removed' : 'Workspace ready';
+  if (operation.state === 'failed') return operation.action === 'remove_local_environment_version' ? 'Version removal failed' : 'Browser Editor setup failed';
+  if (operation.state === 'cancelled') return operation.action === 'remove_local_environment_version' ? 'Version removal cancelled' : 'Browser Editor setup cancelled';
+  if (operation.state === 'succeeded') return operation.action === 'remove_local_environment_version' ? 'Version removed' : 'Browser Editor ready';
   return 'Idle';
 }
 
@@ -104,7 +106,7 @@ function VersionRow(props: {
             <div class="text-sm font-semibold text-foreground">{props.version.version}</div>
             <SettingsPill tone={detectionTone()}>{runtimeStatusLabel(props.version.detection_state)}</SettingsPill>
             <Show when={props.version.selected_by_local_environment}>
-              <SettingsPill tone="success">Current Local Environment</SettingsPill>
+              <SettingsPill tone="success">Current editor</SettingsPill>
             </Show>
           </div>
           <div class="grid gap-1 text-[11px] text-muted-foreground">
@@ -124,7 +126,7 @@ function VersionRow(props: {
             onClick={() => props.onUse(props.version.version)}
             disabled={!props.canInteract || !props.canManage || props.busy || props.version.selected_by_local_environment}
           >
-            Use for this Local Environment
+            Use this version
           </Button>
           <Button
             size="sm"
@@ -132,7 +134,7 @@ function VersionRow(props: {
             onClick={() => props.onRemove(props.version.version)}
             disabled={!props.canInteract || !props.canManage || props.busy || !props.version.removable}
           >
-            Remove from Local Environment
+            Remove version
           </Button>
         </div>
       </div>
@@ -168,31 +170,32 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
   const operationNeedsAttention = createMemo(() => codeRuntimeOperationNeedsAttention(props.status));
   const installedVersions = createMemo(() => props.status?.installed_versions ?? []);
   const activeRuntime = createMemo(() => props.status?.active_runtime);
+  const prepareCopy = createMemo(() => codeRuntimePrepareCopy(props.status));
   const refreshActionLabel = () => 'Refresh';
-  const refreshActionTooltip = () => 'Re-scan the Local Environment inventory and the active runtime.';
-  const prepareActionLabel = () => 'Prepare latest';
-  const prepareActionTooltip = () => 'Prepare the latest workspace engine for this Local Environment.';
+  const refreshActionTooltip = () => 'Re-scan the Browser Editor inventory and active runtime.';
+  const prepareActionLabel = () => codeRuntimeManagedActionLabel(props.status);
+  const prepareActionTooltip = () => prepareCopy().intent === 'update' ? 'Update the Browser Editor runtime.' : prepareCopy().tooltip;
   const cancelActionLabel = () => 'Cancel';
-  const cancelActionTooltip = () => 'Cancel the current workspace preparation.';
+  const cancelActionTooltip = () => 'Cancel the current Browser Editor setup.';
 
   const currentRuntimeRows = createMemo<readonly RuntimeDetailRow[]>(() => {
     const active = activeRuntime();
     return [
       {
-        label: 'Managed runtime source',
-        value: props.status?.managed_runtime_source === 'managed' ? 'Current Local Environment selection' : 'No managed selection',
+        label: 'Managed editor source',
+        value: props.status?.managed_runtime_source === 'managed' ? 'Selected managed version' : 'No managed version selected',
         note:
           props.status?.managed_runtime_source === 'managed'
-            ? 'This Local Environment selects one managed runtime version.'
-            : 'Prepare or select a managed workspace engine version for this Local Environment.',
+            ? 'Codespaces uses the selected managed Browser Editor version.'
+            : 'Set up or select a managed Browser Editor version.',
       },
       {
         label: 'Selected version',
         value: props.status?.managed_runtime_version || 'None',
         note:
           props.status?.managed_runtime_version
-            ? 'Managed version currently selected for this Local Environment.'
-            : 'A value appears here after this Local Environment selects a managed version.',
+            ? 'Managed Browser Editor version currently selected.'
+            : 'A value appears here after setup selects a managed version.',
       },
       {
         label: 'Active runtime',
@@ -212,49 +215,49 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
             : active?.source === 'system'
               ? 'Host discovery is active because no managed runtime is selected.'
               : active?.source === 'managed'
-                ? 'A managed runtime is currently active for this Local Environment.'
-                : 'No active workspace engine is currently available.',
+                ? 'A managed Browser Editor runtime is currently active.'
+                : 'No active Browser Editor runtime is currently available.',
       },
       {
-        label: 'Active binary path',
+        label: 'Active editor path',
         value: active?.binary_path || 'Not detected',
         note: 'Executable path used when Codespaces launches.',
         mono: true,
       },
       {
-        label: 'Local Environment link path',
+        label: 'Selected editor path',
         value: props.status?.managed_prefix || '-',
-        note: 'This path points at the selected Local Environment runtime version.',
+        note: 'This path points at the selected managed Browser Editor version.',
         mono: true,
       },
       {
-      label: 'Shared runtime root',
-      value: props.status?.shared_runtime_root || '-',
-      note: 'Workspace engine versions for this Local Environment are stored here once per host.',
-      mono: true,
-    },
-  ];
+        label: 'Shared runtime root',
+        value: props.status?.shared_runtime_root || '-',
+        note: 'Browser Editor versions are stored here once per host.',
+        mono: true,
+      },
+    ];
   });
 
   const localEnvironmentRows = createMemo<readonly RuntimeDetailRow[]>(() => [
     {
       label: 'Installed versions',
       value: String(installedVersions().length),
-      note: installedVersions().length > 0 ? 'Workspace engine versions currently available for this Local Environment.' : 'No workspace engine versions are currently available for this Local Environment.',
+      note: installedVersions().length > 0 ? 'Browser Editor versions currently available.' : 'No Browser Editor versions are currently available.',
     },
   ]);
 
   const operationSummary = createMemo(() => {
     if (operationRunning()) {
       return props.status?.operation.action === 'remove_local_environment_version'
-        ? 'Redeven is removing one Local Environment runtime version after your explicit request.'
-        : 'Redeven Desktop is preparing the workspace engine you explicitly requested.';
+        ? 'Redeven is removing one managed Browser Editor version after your explicit request.'
+        : 'Redeven Desktop is setting up the Browser Editor you explicitly requested.';
     }
     if (operationFailed()) {
-      return 'The last workspace engine action did not finish successfully. Review the recent output below before retrying.';
+      return 'The last Browser Editor setup did not finish successfully. Review the recent output below before retrying.';
     }
     if (operationCancelled()) {
-      return 'The last workspace engine action was cancelled before Redeven finished validating the result.';
+      return 'The last Browser Editor setup was cancelled before Redeven finished validating the result.';
     }
     return '';
   });
@@ -277,9 +280,9 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
     <>
       <SettingsCard
         icon={Code}
-        title="Workspace Engine"
-        description="Prepare and manage the browser workspace engine for this Local Environment."
-        badge={operationRunning() ? operationLabel(props.status) : runtimeReady() ? 'Local Environment ready' : 'Workspace needs action'}
+        title="Browser Editor"
+        description="Manage the browser-based editor used by Codespaces."
+        badge={operationRunning() ? operationLabel(props.status) : runtimeReady() ? 'Ready' : 'Needs setup'}
         badgeVariant={operationRunning() ? 'warning' : runtimeReady() ? 'success' : 'warning'}
         error={props.error}
         actions={
@@ -304,7 +307,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
                       onClick={() => setPrepareConfirmOpen(true)}
                       disabled={!props.canInteract || !props.canManage || props.actionLoading}
                     >
-                      {props.actionLoading ? 'Preparing...' : prepareActionLabel()}
+                      {props.actionLoading ? prepareCopy().running_label : prepareActionLabel()}
                     </Button>
                   </ActionButtonTooltip>
                 </>
@@ -325,7 +328,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
         <div class="space-y-4">
           <Show when={!props.canManage}>
             <div class="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-              Preparing, selecting, or removing Local Environment workspace engine versions requires read, write, and execute access for this session.
+              Setting up, selecting, or removing Browser Editor versions requires read, write, and execute access for this session.
             </div>
           </Show>
 
@@ -354,22 +357,22 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
             </div>
           </Show>
 
-          <RuntimeDetailsTableSection title="Current Local Environment" rows={currentRuntimeRows()} />
-          <RuntimeDetailsTableSection title="Installed for this Local Environment" rows={localEnvironmentRows()} />
+          <RuntimeDetailsTableSection title="Current editor" rows={currentRuntimeRows()} />
+          <RuntimeDetailsTableSection title="Installed editor versions" rows={localEnvironmentRows()} />
 
           <Show
             when={installedVersions().length > 0}
             fallback={
-              <HighlightBlock variant="warning" title="Workspace preparation required">
+              <HighlightBlock variant="warning" title="Browser Editor setup required">
                 <div class="space-y-2 text-sm text-muted-foreground">
-                  <div>Prepare the workspace engine for this Local Environment.</div>
-                  <div>Desktop will cache and send the latest engine only after you confirm.</div>
+                  <div>Set up the browser editor before opening codespaces.</div>
+                  <div>Desktop will cache one package on this computer and send it only after you confirm.</div>
                 </div>
               </HighlightBlock>
             }
           >
             <div class="space-y-3">
-              <div class="text-sm font-semibold text-foreground">Installed versions</div>
+              <div class="text-sm font-semibold text-foreground">Installed editor versions</div>
               <For each={installedVersions()}>
                 {(version) => (
                   <VersionRow
@@ -390,16 +393,21 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
       <ConfirmDialog
         open={prepareConfirmOpen()}
         onOpenChange={(open) => setPrepareConfirmOpen(open)}
-        title="Prepare workspace"
+        title={prepareCopy().confirm_title}
         confirmText={prepareActionLabel()}
         loading={props.actionLoading}
         onConfirm={() => void confirmPrepare()}
       >
         <div class="space-y-3">
-          <p class="text-sm">Redeven Desktop will prepare the latest workspace engine for this Local Environment, then select it.</p>
+          <p class="text-sm">
+            {prepareCopy().intent === 'update'
+              ? 'Redeven Desktop will update the Browser Editor by downloading the latest package, caching one copy on this computer, and sending it to the connected environment.'
+              : prepareCopy().description}
+          </p>
+          <p class="text-sm text-muted-foreground">Workspace files stay in that environment. Setup starts only after you confirm.</p>
           <div class="grid gap-2 rounded-lg border border-border bg-muted/20 p-3 text-[11px] text-muted-foreground">
             <div>Shared engine root: <span class="font-mono text-foreground break-all">{props.status?.shared_runtime_root || '-'}</span></div>
-            <div>Local Environment link: <span class="font-mono text-foreground break-all">{props.status?.managed_prefix || '-'}</span></div>
+            <div>Selected editor path: <span class="font-mono text-foreground break-all">{props.status?.managed_prefix || '-'}</span></div>
           </div>
         </div>
       </ConfirmDialog>
@@ -407,18 +415,18 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
       <ConfirmDialog
         open={Boolean(removeVersionConfirmOpen())}
         onOpenChange={(open) => setRemoveVersionConfirmOpen(open ? removeVersionConfirmOpen() : null)}
-        title="Remove from Local Environment"
-        confirmText="Remove from Local Environment"
+        title="Remove editor version"
+        confirmText="Remove version"
         loading={Boolean(props.removeVersionLoading)}
         onConfirm={() => void confirmRemoveVersion()}
       >
         <div class="space-y-3">
-          <p class="text-sm">This removes one managed version from the Local Environment inventory only when it is not the current selection.</p>
+          <p class="text-sm">This removes one managed Browser Editor version only when it is not the current selection.</p>
           <div class="grid gap-2 rounded-lg border border-border bg-muted/20 p-3 text-[11px] text-muted-foreground">
             <div>Target version: <span class="font-mono text-foreground">{removeVersionConfirmOpen() || '-'}</span></div>
             <div>Shared runtime root: <span class="font-mono text-foreground break-all">{props.status?.shared_runtime_root || '-'}</span></div>
           </div>
-          <p class="text-xs text-muted-foreground">This does not delete any workspace files. Redeven blocks the action when the selected version is still active for this Local Environment.</p>
+          <p class="text-xs text-muted-foreground">This does not delete any workspace files. Redeven blocks the action when the selected version is still active.</p>
         </div>
       </ConfirmDialog>
     </>

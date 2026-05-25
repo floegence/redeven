@@ -99,11 +99,17 @@ vi.mock('@floegence/floe-webapp-core', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/icons', () => ({
+  AlertTriangle: icon('AlertTriangle'),
+  Bot: icon('Bot'),
   Code: icon('Code'),
   Database: icon('Database'),
   FileCode: icon('FileCode'),
+  FileText: icon('FileText'),
   Globe: icon('Globe'),
+  Key: icon('Key'),
   Layers: icon('Layers'),
+  Link: icon('Link'),
+  Pencil: icon('Pencil'),
   Plus: icon('Plus'),
   RefreshIcon: icon('RefreshIcon'),
   Shield: icon('Shield'),
@@ -250,10 +256,10 @@ vi.mock('./settings/AIProviderDialog', () => ({
 
 vi.mock('./settings/CodeRuntimeSettingsCard', () => ({
   CodeRuntimeSettingsCard: (props: any) => (
-    <section data-settings-card="Workspace Engine">
-      <div>Workspace Engine</div>
+    <section data-settings-card="Browser Editor">
+      <div>Browser Editor</div>
       <button type="button" onClick={props.onPrepare} disabled={props.actionLoading}>
-        Prepare latest
+        Update browser editor
       </button>
     </section>
   ),
@@ -271,7 +277,21 @@ vi.mock('./settings/SkillsCatalogTable', () => ({
 vi.mock('./settings/SettingsPrimitives', () => ({
   AutoSaveIndicator: () => <span>Auto-save</span>,
   CodeBadge: (props: any) => <code>{props.children}</code>,
+  CompactField: (props: any) => (
+    <label>
+      <span>{props.label}</span>
+      {props.children}
+    </label>
+  ),
+  CopyButton: (props: any) => <button type="button" data-copy-value={props.value}>Copy</button>,
   FieldLabel: (props: any) => <label>{props.children}</label>,
+  InfoRow: (props: any) => (
+    <div>
+      <span>{props.label}</span>
+      <span>{props.children}</span>
+      {props.actions}
+    </div>
+  ),
   JSONEditor: (props: any) => <textarea value={props.value} />,
   SectionGroup: (props: any) => (
     <section data-settings-group={props.groupId}>
@@ -426,7 +446,7 @@ describe('EnvSettingsPage', () => {
     render(() => <EnvSettingsPage />, host);
     await flushPage();
 
-    const runtimeStatus = host.querySelector('[data-settings-card="Runtime Status"]');
+    const runtimeStatus = host.querySelector('[data-settings-section="agent"]');
     expect(runtimeStatus?.textContent).toContain('Service owner');
     expect(runtimeStatus?.textContent).toContain('Redeven Desktop');
     expect(runtimeStatus?.textContent).toContain('Maintenance authority');
@@ -467,7 +487,7 @@ describe('EnvSettingsPage', () => {
     expect(host.textContent).toContain('Desktop model source');
   });
 
-  it('prepares the workspace engine from the settings page through Desktop', async () => {
+  it('updates the Browser Editor from the settings page through Desktop', async () => {
     settingsResponse = {
       ai: null,
     };
@@ -499,7 +519,7 @@ describe('EnvSettingsPage', () => {
     render(() => <EnvSettingsPage />, host);
     await flushPage();
 
-    const button = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Prepare latest'));
+    const button = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Update browser editor'));
     expect(button).toBeTruthy();
 
     button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));

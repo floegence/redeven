@@ -1,6 +1,6 @@
-# Code App (code-server over Flowersec E2EE)
+# Browser Editor (code-server over Flowersec E2EE)
 
-This document describes the **Code App** implementation in the Redeven runtime:
+This document describes the **Browser Editor** implementation in the Redeven runtime:
 
 - `floe_app = com.floegence.redeven.code`
 - Browser ↔ Runtime traffic is end-to-end encrypted (E2EE) via **Flowersec tunnel**
@@ -20,7 +20,7 @@ This document describes the **Code App** implementation in the Redeven runtime:
   - The runtime origin loads the actual app in an untrusted app iframe, so the app is not same-origin with the runtime window.
   - An app-origin Service Worker forwards `fetch()` through a cross-origin bridge to the runtime.
   - The injected script patches same-origin `WebSocket` so it also goes through `flowersec-proxy/ws`, but it now uses `registerCodeAppProxyBridge()` instead of reading `window.top.__flowersecProxyRuntime`.
-  - In Redeven Desktop, Env App requests the desktop shell to open Codespaces in the system browser, but the browser-facing bootstrap contract stays the same: the first load still starts from the trusted launcher with a short-lived bootstrap credential.
+  - In Redeven Desktop, Env App requests the desktop shell to open browser editor sessions in the system browser, but the browser-facing bootstrap contract stays the same: the first load still starts from the trusted launcher with a short-lived bootstrap credential.
   - For desktop-managed Local UI with an access password, the first protected `http://127.0.0.1:23998/cs/<code_space_id>/...` request can arrive with only `redeven_access_resume`. Local UI exchanges that resume token into the normal `redeven_local_access` cookie before returning the page so code-server subresources can continue on the standard same-origin session path.
 
 - Runtime side:
@@ -32,14 +32,14 @@ This document describes the **Code App** implementation in the Redeven runtime:
 
 ## Local data directory
 
-The Code App stores all code space data in the user's Local Environment state, not on Redeven servers.
+The browser editor stores all code space data in the endpoint runtime state, not on Redeven servers.
 
 By default, the Local Environment config is `~/.redeven/local-environment/config.json`, so the state directory is:
 
 - `state_dir = ~/.redeven/local-environment/`
 - `state_root = ~/.redeven/`
 
-Local Environment-scoped Code App data:
+Browser editor code space data:
 
 ```
 ~/.redeven/
@@ -62,7 +62,7 @@ Local Environment-scoped Code App data:
               stderr.log
 ```
 
-Local Environment-scoped shared managed runtime data:
+Shared managed browser editor runtime data:
 
 ```
 ~/.redeven/
@@ -83,43 +83,43 @@ Local Environment-scoped shared managed runtime data:
             lib/code-server-<upstream_release>/
 ```
 
-Deleting a codespace via the Env App (Codespaces page) removes:
+Deleting a browser editor workspace via the Env App removes:
 
 - `apps/code/spaces/<code_space_id>/` (entire directory)
 
 It does **not** delete the user's `workspace_path` directory.
 
-## Managed runtime model
+## Managed browser editor engine
 
 The runtime does **not** bundle code-server into the base CLI/Desktop installer.
-Instead, Codespaces prepares a managed workspace engine after an explicit user action inside Env App.
-The managed workspace engine currently uses upstream `code-server` release tarballs.
+Instead, the browser editor uses a managed engine that is set up or updated only after an explicit user action inside Env App.
+The managed browser editor engine currently uses upstream `code-server` release tarballs.
 
 Rules:
 
-- Redeven never prepares the workspace engine on page load or merely because Env App connected.
-- The first `Open`, `Start`, or `Prepare latest` action explicitly authorizes Desktop to prepare the latest workspace engine package for the target Environment.
-- Desktop downloads the latest matching upstream package on the user's machine, caches only the latest package for each platform, and uploads that package to the target Environment.
-- Preparing a managed version stores it once per Local Environment under the shared runtime root.
-- The current Local Environment stores one managed runtime selection in `shared/code-server/<os>-<arch>/local-environment.json`.
-- The user-facing action is `Prepare workspace for this Local Environment` or `Prepare latest workspace engine`.
+- Redeven never sets up the browser editor engine on page load or merely because Env App connected.
+- The first `Open`, `Start`, `Set up browser editor`, or `Update browser editor` action asks the user to confirm before Desktop prepares the latest browser editor package for the connected environment.
+- After confirmation, Desktop downloads the latest matching upstream package on the user's machine, caches only the latest package for each platform, and sends that package to the connected environment.
+- Setting up a managed version stores it once under the shared runtime root.
+- The current endpoint stores one managed runtime selection in `shared/code-server/<os>-<arch>/local-environment.json`.
+- The user-facing actions are `Set up browser editor`, `Update browser editor`, `Open`, and `Start`.
 - The runtime accepts a Desktop-generated artifact manifest plus package bytes, then verifies, extracts, probes, promotes, and selects the version.
-- The Local Environment `apps/code/runtime/managed` path is only a symlink to the selected shared version.
+- The `apps/code/runtime/managed` path is only a symlink to the selected shared version.
 - No user shell commands or PATH edits are required for the managed runtime.
 - Redeven always resolves the latest upstream `code-server` release when preparing a new package.
-- If the Local Environment selected a managed version and that version is missing or unusable, Redeven reports the problem directly and does **not** silently fall back to another managed or host runtime.
+- If the selected managed version is missing or unusable, Redeven reports the problem directly and does **not** silently fall back to another managed or host runtime.
 
 Managed runtime precedence remains:
 
 1. `REDEVEN_CODE_SERVER_BIN`
 2. `CODE_SERVER_BIN`
 3. `CODE_SERVER_PATH`
-4. current Local Environment managed selection
+4. current endpoint managed selection
 5. host runtime discovery
 
 ## Runtime status and preparation API
 
-Env App uses the local gateway runtime endpoints before it tries to start Code App:
+Env App uses the local gateway runtime endpoints before it tries to start the browser editor:
 
 - `GET /_redeven_proxy/api/code-runtime/status`
 - `POST /_redeven_proxy/api/code-runtime/import-sessions`
@@ -132,11 +132,11 @@ Env App uses the local gateway runtime endpoints before it tries to start Code A
 The explicit preparation flow is:
 
 1. Env App reads runtime status.
-2. If the workspace engine is missing or unusable, Env App blocks Codespace startup and starts preparation only after the user's explicit `Open`, `Start`, or `Prepare latest` action.
+2. If the browser editor engine is missing or unusable, Env App blocks startup and starts setup only after the user's explicit `Open`, `Start`, `Set up browser editor`, or `Update browser editor` action.
 3. Desktop resolves the latest matching code-server release package for the target platform and uses the local package cache when it already has that latest package.
 4. Desktop uploads the package either through runtime-control direct upload or through the Env App session-mediated import-session path.
-5. Runtime validates the manifest, size, checksum, platform, archive layout, and staged binary, then promotes it to `shared/code-server/<os>-<arch>/versions/<version>/` and selects it for the current Local Environment.
-6. Existing usable versions are reused instead of reinstalled; `POST /remove-version` deletes only a non-selected Local Environment version.
+5. Runtime validates the manifest, size, checksum, platform, archive layout, and staged binary, then promotes it to `shared/code-server/<os>-<arch>/versions/<version>/` and selects it for the current endpoint.
+6. Existing usable versions are reused instead of reinstalled; `POST /remove-version` deletes only a non-selected managed version.
 7. Running, failed, or cancelled operations keep focused status/recent output visible so the user can recover explicitly.
 
 Upload limits:
@@ -148,18 +148,18 @@ Upload limits:
 
 `GET /_redeven_proxy/api/code-runtime/status` returns:
 
-- `active_runtime`: the runtime currently selected for Codespaces (`managed`, `system`, `env_override`, or `none`)
-- `managed_runtime`: the managed version currently selected for this Local Environment, whether or not it is active
+- `active_runtime`: the runtime currently selected for the browser editor (`managed`, `system`, `env_override`, or `none`)
+- `managed_runtime`: the managed version currently selected for this endpoint, whether or not it is active
 - `managed_prefix`: the selected managed runtime install prefix, when available
-- `managed_runtime_version`: the managed version selected by this Local Environment
+- `managed_runtime_version`: the managed version selected by this endpoint
 - `managed_runtime_source`: `managed` or `none`
-- `shared_runtime_root`: the Local Environment-scoped shared runtime directory
-- `installed_versions[]`: every managed version installed for this Local Environment, including current selection, removability, and health
+- `shared_runtime_root`: the shared runtime directory
+- `installed_versions[]`: every managed version installed for this endpoint, including current selection, removability, and health
 - `platform`: the target platform descriptor Desktop uses to choose the matching latest package
 - `operation`: the current or most recent explicit management operation (`prepare_workspace_engine` / `remove_local_environment_version`) plus stage, error, target version, and log tail
 - `updated_at_unix_ms`: the runtime-status snapshot timestamp
 
-This split exists so Settings can truthfully show managed inventory, the current Local Environment selection, and active runtime precedence without inferring hidden state on the client.
+This split exists so Settings can truthfully show managed inventory, the current endpoint selection, and active runtime precedence without inferring hidden state on the client.
 
 ## code-server binary resolution
 
@@ -169,17 +169,17 @@ Binary resolution order:
    - `REDEVEN_CODE_SERVER_BIN`
    - `CODE_SERVER_BIN`
    - `CODE_SERVER_PATH`
-2) The current Local Environment managed version selection, if present
+2) The current endpoint managed version selection, if present
 3) Common install locations (`~/.local/bin/code-server`, Homebrew paths, `/usr/local/bin`, `/usr/bin`, ...)
 4) `PATH` (`exec.LookPath("code-server")`)
 
-The selected binary must be usable on the current host. If the Local Environment managed selection is missing or unusable, Redeven reports that exact problem and does not silently fall back to host discovery. If no managed selection exists at all, Env App blocks the Codespaces launch path and asks the user to explicitly prepare the workspace engine.
+The selected binary must be usable on the current host. If the managed selection is missing or unusable, Redeven reports that exact problem and does not silently fall back to host discovery. If no managed selection exists at all, Env App blocks the browser editor launch path and asks the user to explicitly set up the browser editor.
 
 ### Note for macOS/Homebrew
 
 Homebrew installs `code-server` as a **Node.js script** with a hardcoded shebang that points to a specific Homebrew node binary.
 
-To make the runtime more robust, the Code App detects a Node.js shebang and executes:
+To make the runtime more robust, the browser editor detects a Node.js shebang and executes:
 
 - `node <code-server-script> ...`
 
@@ -216,7 +216,7 @@ You can override the grace window with:
 
 ## Permissions
 
-For MVP, the runtime requires **all three** permissions before serving Code App sessions:
+For MVP, the runtime requires **all three** permissions before serving browser editor sessions:
 
 - `read`
 - `write`
@@ -224,20 +224,20 @@ For MVP, the runtime requires **all three** permissions before serving Code App 
 
 This is conservative: code-server is not designed to enforce a partial permission model at the proxy layer.
 
-Codespace workspace paths are resolved through the same runtime `filesystem_scope` registry used by Files, Git, Terminal, and Flower tools. `agent_home_dir` remains the default starting point, but workspace paths are not implicitly Home-only; a codespace may target any authorized root that passes the runtime path checks. Code App still requires `read + write + execute` because code-server itself is not a root-aware permission sandbox.
+Browser editor workspace paths are resolved through the same runtime `filesystem_scope` registry used by Files, Git, Terminal, and Flower tools. `agent_home_dir` remains the default starting point, but workspace paths are not implicitly Home-only; a workspace may target any authorized root that passes the runtime path checks. The browser editor still requires `read + write + execute` because code-server itself is not a root-aware permission sandbox.
 
 ## Troubleshooting
 
 - "Missing init payload" in the bootstrap page:
-  - Open the codespace from the Redeven Env App (Codespaces page). Do not open the sandbox subdomain directly.
+  - Open the browser editor from the Redeven Env App. Do not open the sandbox subdomain directly.
 
 - "code-server binary not found":
-  - Open Env App -> Runtime Settings -> `Codespaces & Tooling` -> `Workspace Engine` and use the explicit prepare action for the current environment.
+  - Open Env App -> Runtime Settings -> `Browser Editor` and use `Set up browser editor`.
   - If you intentionally manage `code-server` yourself, set `REDEVEN_CODE_SERVER_BIN` to a usable binary path.
 
 - "code-server binary is present but unusable":
   - Redeven detected a `code-server` binary, but the runtime probe failed on this host.
-  - Prepare or reselect a usable managed version from Env App -> Runtime Settings -> `Codespaces & Tooling` -> `Workspace Engine`, or point `REDEVEN_CODE_SERVER_BIN` at a usable binary.
+  - Update or reselect a usable managed version from Env App -> Runtime Settings -> `Browser Editor`, or point `REDEVEN_CODE_SERVER_BIN` at a usable binary.
 
 - "code-server did not start listening on 127.0.0.1:PORT":
   - Check the per-codespace logs under:

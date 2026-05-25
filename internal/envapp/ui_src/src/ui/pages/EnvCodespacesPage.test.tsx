@@ -299,7 +299,7 @@ describe('EnvCodespacesPage', () => {
         ],
         managed_runtime_version: '4.109.1',
         managed_runtime_source: 'managed',
-        operation: { state: 'succeeded', action: 'prepare_workspace_engine', log_tail: ['Workspace engine is ready.'] },
+        operation: { state: 'succeeded', action: 'prepare_workspace_engine', log_tail: ['Browser Editor is ready.'] },
       });
       return { ok: true, prepared: true, status: runtimeStatusResponse };
     });
@@ -331,7 +331,7 @@ describe('EnvCodespacesPage', () => {
         ],
         managed_runtime_version: '4.109.1',
         managed_runtime_source: 'managed',
-        operation: { state: 'succeeded', action: 'prepare_workspace_engine', log_tail: ['Workspace engine is ready.'] },
+        operation: { state: 'succeeded', action: 'prepare_workspace_engine', log_tail: ['Browser Editor is ready.'] },
       });
       return { ok: true, prepared: true, status: runtimeStatusResponse };
     });
@@ -444,7 +444,7 @@ describe('EnvCodespacesPage', () => {
     expect(buildAskFlowerComposerCopy(intent).question).toBe('What would you like to explore inside it?');
   });
 
-  it('shows preparation guidance when the workspace engine is missing', async () => {
+  it('shows Browser Editor setup guidance when the runtime is missing', async () => {
     runtimeStatusResponse = makeRuntimeStatus({
       active_runtime: {
         detection_state: 'missing',
@@ -469,13 +469,13 @@ describe('EnvCodespacesPage', () => {
 
     const wizard = host.querySelector('[data-testid="code-runtime-prepare-panel"]') as HTMLDivElement | null;
     expect(wizard).toBeTruthy();
-    expect(wizard?.textContent).toContain('Workspace engine');
+    expect(wizard?.textContent).toContain('Browser Editor');
     expect(wizard?.textContent).toContain('Not ready');
-    expect(wizard?.textContent).toContain('Prepare workspace for this Local Environment');
-    expect(wizard?.textContent).toContain('prepare this Environment for browser workspaces');
+    expect(wizard?.textContent).toContain('Set up browser editor');
+    expect(wizard?.textContent).toContain('set up Browser Editor for this environment');
   });
 
-  it('shows the workspace preparation panel inline while the initial runtime check is still running', async () => {
+  it('shows the Browser Editor setup panel inline while the initial runtime check is still running', async () => {
     let resolveRuntimeStatus!: (value: any) => void;
 
     gatewayMocks.fetchGatewayJSON.mockImplementation((url: string) => {
@@ -510,13 +510,48 @@ describe('EnvCodespacesPage', () => {
 
     const wizard = host.querySelector('[data-testid="code-runtime-prepare-panel"]') as HTMLDivElement | null;
     expect(wizard).toBeTruthy();
-    expect(wizard?.textContent).toContain('Workspace engine');
+    expect(wizard?.textContent).toContain('Browser Editor');
     expect(wizard?.textContent).toContain('Checking');
 
     resolveRuntimeStatus(makeRuntimeStatus());
     await flushPage();
 
     expect(host.querySelector('[data-testid="code-runtime-prepare-panel"]')).toBeNull();
+  });
+
+  it('shows Retry setup when the Browser Editor setup operation failed', async () => {
+    runtimeStatusResponse = makeRuntimeStatus({
+      active_runtime: {
+        detection_state: 'missing',
+        present: false,
+        source: 'none',
+        binary_path: '',
+      },
+      managed_runtime: {
+        detection_state: 'missing',
+        present: false,
+        source: 'managed',
+        binary_path: '',
+      },
+      installed_versions: [],
+      managed_runtime_version: '',
+      managed_runtime_source: 'none',
+      operation: {
+        state: 'failed',
+        action: 'prepare_workspace_engine',
+        last_error: 'Download failed.',
+        log_tail: ['Download failed.'],
+      },
+    });
+
+    render(() => <EnvCodespacesPage />, host);
+    await flushPage();
+
+    const wizard = host.querySelector('[data-testid="code-runtime-prepare-panel"]') as HTMLDivElement | null;
+    expect(wizard).toBeTruthy();
+    expect(wizard?.textContent).toContain('Browser Editor');
+    expect(wizard?.textContent).toContain('Retry setup');
+    expect(wizard?.textContent).toContain('Download failed.');
   });
 
   it('prepares the workspace through Desktop instead of calling the old gateway install path', async () => {
