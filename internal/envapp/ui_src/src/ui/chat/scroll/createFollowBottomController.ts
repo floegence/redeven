@@ -11,6 +11,8 @@ export type FollowBottomRequest = Readonly<{
   behavior: FollowBottomScrollBehavior;
 }>;
 
+export type FollowBottomCommitResult = 'committed' | 'already_bottom' | 'no_container';
+
 export type FollowBottomViewportAnchor = Readonly<{
   id: string;
   topOffsetPx: number;
@@ -39,6 +41,7 @@ export type FollowBottomController = Readonly<{
   setPausedContentAnchorRestoreEnabled: (enabled: boolean) => void;
   handleScroll: () => void;
   requestFollowBottom: (request?: FollowBottomRequest | null) => void;
+  commitFollowBottomNow: (request?: FollowBottomRequest | null) => FollowBottomCommitResult;
   mode: () => FollowBottomMode;
   distanceToBottomPx: () => number;
   dispose: () => void;
@@ -278,6 +281,13 @@ export function createFollowBottomController(
   const resolveFollowMotionMode = (behavior: FollowBottomScrollBehavior): FollowBottomMotionMode => (
     behavior === 'smooth' && !getPrefersReducedMotion() ? 'animated' : 'instant'
   );
+
+  const resolveRequestMotionMode = (request?: FollowBottomRequest | null): FollowBottomMotionMode => {
+    if (request?.reason === 'thread_switch' && request.source === 'system') {
+      return 'instant';
+    }
+    return resolveFollowMotionMode(request?.behavior ?? 'auto');
+  };
 
   const applyFollowingModeWithMotion = (nextMode?: FollowBottomMotionMode): void => {
     applyFollowingMode();
@@ -537,10 +547,34 @@ export function createFollowBottomController(
     if (request) {
       lastHandledRequestSeq = request.seq;
     }
-    const behavior = request?.behavior ?? 'auto';
     const source = request?.source ?? 'system';
-    applyFollowingModeWithMotion(resolveFollowMotionMode(behavior));
+    const behavior = request?.reason === 'thread_switch' && source === 'system'
+      ? 'auto'
+      : request?.behavior ?? 'auto';
+    applyFollowingModeWithMotion(resolveRequestMotionMode(request));
     scheduleFollowBottom(behavior, source === 'system' ? explicitSyncPasses : 1);
+  };
+
+  const commitFollowBottomNow = (request?: FollowBottomRequest | null): FollowBottomCommitResult => {
+    if (request && request.seq > lastHandledRequestSeq) {
+      lastHandledRequestSeq = request.seq;
+    }
+    cancelScheduledInstantFollow();
+    cancelAnimatedFollow();
+    cancelLayoutBatch();
+    remainingSyncPasses = 0;
+    applyFollowingModeWithMotion('instant');
+    if (!scrollContainerEl) {
+      updateDistanceToBottom(null);
+      return 'no_container';
+    }
+    const targetScrollTop = bottomScrollTop(scrollContainerEl);
+    const alreadyBottom = Math.abs(scrollContainerEl.scrollTop - targetScrollTop) <= 0.5;
+    if (!alreadyBottom) {
+      scrollContainerEl.scrollTop = targetScrollTop;
+    }
+    syncProgrammaticScroll(scrollContainerEl);
+    return alreadyBottom ? 'already_bottom' : 'committed';
   };
 
   const dispose = (): void => {
@@ -566,6 +600,7 @@ export function createFollowBottomController(
     setPausedContentAnchorRestoreEnabled,
     handleScroll,
     requestFollowBottom,
+    commitFollowBottomNow,
     mode: () => currentMode,
     distanceToBottomPx: () => currentDistanceToBottomPx,
     dispose,

@@ -93,12 +93,11 @@ export function CodexPageShell() {
   const [visibleTranscriptRootRef, setVisibleTranscriptRootRef] = createSignal<HTMLDivElement>();
   const [pendingThreadSwitchRequest, setPendingThreadSwitchRequest] = createSignal<FollowBottomRequest | null>(null);
   const [pendingThreadSwitchOriginKey, setPendingThreadSwitchOriginKey] = createSignal('new-thread');
+  const [pendingThreadSwitchTargetKey, setPendingThreadSwitchTargetKey] = createSignal('new-thread');
   const [stagingTranscriptThreadKey, setStagingTranscriptThreadKey] = createSignal<string | null>(null);
   const [stagingTranscriptMeasurementVersion, setStagingTranscriptMeasurementVersion] = createSignal(0);
   const [postRevealFollowRequest, setPostRevealFollowRequest] = createSignal<FollowBottomRequest | null>(null);
   let pendingRevealFrame: number | null = null;
-  let pendingFollowBottomDispatchTimeout: ReturnType<typeof globalThis.setTimeout> | null = null;
-  let pendingFollowBottomDispatchToken = 0;
   let postRevealFollowTimeout: ReturnType<typeof globalThis.setTimeout> | null = null;
   let lastRevealedTranscriptThreadKey = String(codex.displayedThreadID() ?? codex.activeThreadID() ?? '').trim() || 'new-thread';
 
@@ -108,14 +107,6 @@ export function CodexPageShell() {
     if (pendingRevealFrame === null) return;
     cancelFrame(pendingRevealFrame);
     pendingRevealFrame = null;
-  };
-
-  const cancelPendingFollowBottomDispatchFrame = (): void => {
-    pendingFollowBottomDispatchToken += 1;
-    if (pendingFollowBottomDispatchTimeout !== null) {
-      globalThis.clearTimeout(pendingFollowBottomDispatchTimeout);
-      pendingFollowBottomDispatchTimeout = null;
-    }
   };
 
   const clearPostRevealFollowRequest = (): void => {
@@ -136,16 +127,6 @@ export function CodexPageShell() {
     lastRevealedTranscriptThreadKey = String(threadKey ?? '').trim() || 'new-thread';
   };
 
-  const queueFollowBottomDispatch = (request: FollowBottomRequest): void => {
-    cancelPendingFollowBottomDispatchFrame();
-    const token = pendingFollowBottomDispatchToken;
-    pendingFollowBottomDispatchTimeout = globalThis.setTimeout(() => {
-      pendingFollowBottomDispatchTimeout = null;
-      if (pendingFollowBottomDispatchToken !== token) return;
-      followBottomController.requestFollowBottom(request);
-    }, 0);
-  };
-
   const armPostRevealFollowRequest = (request: FollowBottomRequest): void => {
     clearPostRevealFollowRequest();
     setPostRevealFollowRequest(request);
@@ -159,10 +140,19 @@ export function CodexPageShell() {
     threadKey: string,
     request: FollowBottomRequest,
   ): void => {
+    if (pendingThreadSwitchRequest()?.seq !== request.seq) return;
+    if (pendingThreadSwitchTargetKey() !== threadKey) return;
+    if (displayedTranscriptThreadKey() !== threadKey) return;
+    const selectedThreadKey = String(codex.selectedThreadID() ?? '').trim();
+    if (selectedThreadKey && selectedThreadKey !== threadKey) return;
+    const commitResult = followBottomController.commitFollowBottomNow(request);
+    if (commitResult === 'no_container') {
+      return;
+    }
     commitRevealedTranscriptThread(threadKey);
     setPendingThreadSwitchRequest(null);
+    setPendingThreadSwitchTargetKey(threadKey);
     clearThreadSwitchStaging();
-    queueFollowBottomDispatch(request);
     armPostRevealFollowRequest(request);
   };
 
@@ -224,7 +214,6 @@ export function CodexPageShell() {
   };
   onCleanup(() => {
     cancelPendingRevealFrame();
-    cancelPendingFollowBottomDispatchFrame();
     clearPostRevealFollowRequest();
     followBottomController.dispose();
   });
@@ -341,16 +330,16 @@ export function CodexPageShell() {
   ));
   const visibleTranscriptThreadKey = createMemo(() => stagingTranscriptThreadKey() ?? liveTranscriptThreadKey());
   const visibleTranscriptItems = createMemo(() => (
-    threadSwitchStagingActive() ? [] : codex.transcriptItems()
+    threadSwitchStagingActive() && !stagingTranscriptReady() ? [] : codex.transcriptItems()
   ));
   const visibleOptimisticUserTurns = createMemo(() => (
-    threadSwitchStagingActive() ? [] : codex.activeOptimisticUserTurns()
+    threadSwitchStagingActive() && !stagingTranscriptReady() ? [] : codex.activeOptimisticUserTurns()
   ));
   const visibleShowWorkingState = createMemo(() => (
-    !threadSwitchStagingActive() && shouldShowWorkingState()
+    (!threadSwitchStagingActive() || stagingTranscriptReady()) && shouldShowWorkingState()
   ));
   const visibleTranscriptLoading = createMemo(() => (
-    codex.threadLoading() || threadSwitchStagingActive()
+    codex.threadLoading() || (threadSwitchStagingActive() && !stagingTranscriptReady())
   ));
   const visibleTranscriptLoadingBody = createMemo(() => (
     threadSwitchStagingActive()
@@ -569,9 +558,15 @@ export function CodexPageShell() {
     if (!request) return;
     if (request.reason === 'thread_switch') {
       const originThreadKey = lastRevealedTranscriptThreadKey;
-      cancelPendingFollowBottomDispatchFrame();
+      const targetThreadKey = (
+        String(codex.selectedThreadID() ?? '').trim() ||
+        String(codex.activeThreadID() ?? '').trim() ||
+        liveTranscriptThreadKey()
+      );
+      cancelPendingRevealFrame();
       clearPostRevealFollowRequest();
       setPendingThreadSwitchOriginKey(originThreadKey);
+      setPendingThreadSwitchTargetKey(targetThreadKey);
       setPendingThreadSwitchRequest(request);
       return;
     }
@@ -582,6 +577,7 @@ export function CodexPageShell() {
       commitRevealedTranscriptThread(liveTranscriptThreadKey());
       clearThreadSwitchStaging();
     }
+    setPendingThreadSwitchTargetKey(liveTranscriptThreadKey());
     followBottomController.requestFollowBottom(request);
   });
 
@@ -594,7 +590,14 @@ export function CodexPageShell() {
     const request = pendingThreadSwitchRequest();
     if (!request) return;
     const originThreadKey = pendingThreadSwitchOriginKey();
+    const targetThreadKey = pendingThreadSwitchTargetKey();
     const threadKey = displayedTranscriptThreadKey();
+    if (!targetThreadKey) {
+      setPendingThreadSwitchRequest(null);
+      clearThreadSwitchStaging();
+      followBottomController.requestFollowBottom(request);
+      return;
+    }
     if (!threadKey) {
       if (!codex.threadLoading()) {
         setPendingThreadSwitchRequest(null);
@@ -603,13 +606,21 @@ export function CodexPageShell() {
       }
       return;
     }
-    if (threadKey === originThreadKey) {
+    if (threadKey !== targetThreadKey) {
       return;
     }
-    if (stagingTranscriptThreadKey() === threadKey) return;
+    if (threadKey === originThreadKey && !threadSwitchStagingActive()) {
+      const commitResult = followBottomController.commitFollowBottomNow(request);
+      if (commitResult === 'no_container') return;
+      commitRevealedTranscriptThread(threadKey);
+      setPendingThreadSwitchRequest(null);
+      armPostRevealFollowRequest(request);
+      return;
+    }
+    if (stagingTranscriptThreadKey() === targetThreadKey) return;
     cancelPendingRevealFrame();
     setStagingTranscriptMeasurementVersion(0);
-    setStagingTranscriptThreadKey(threadKey);
+    setStagingTranscriptThreadKey(targetThreadKey);
   });
 
   createEffect(() => {
@@ -621,7 +632,7 @@ export function CodexPageShell() {
         clearPostRevealFollowRequest();
         return;
       }
-      queueFollowBottomDispatch(request);
+      followBottomController.requestFollowBottom(request);
     });
     observer.observe(root);
     onCleanup(() => {
@@ -633,6 +644,7 @@ export function CodexPageShell() {
     const request = pendingThreadSwitchRequest();
     const threadKey = stagingTranscriptThreadKey();
     if (!request || !threadKey || !stagingTranscriptReady()) return;
+    if (pendingThreadSwitchTargetKey() !== threadKey) return;
     scheduleThreadSwitchReveal(threadKey, request);
   });
 
@@ -674,6 +686,8 @@ export function CodexPageShell() {
               {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
               class="codex-page-transcript-main"
               data-codex-transcript-scroll-region="true"
+              data-codex-thread-switch-staging={threadSwitchStagingActive() ? 'true' : 'false'}
+              style={threadSwitchStagingActive() ? { visibility: 'hidden' } : undefined}
               onScroll={followBottomController.handleScroll}
             >
               <CodexTranscript

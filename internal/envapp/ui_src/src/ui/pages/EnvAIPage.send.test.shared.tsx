@@ -168,9 +168,14 @@ const [runStateVersion, setRunStateVersion] = createSignal(0);
 
 const realtimeListeners = new Set<(event: any) => void>();
 let resizeObserverRecords: ResizeObserverRecord[] = [];
+const [threadSelectionVersion, setThreadSelectionVersion] = createSignal(0);
 
 function touchRunState(): void {
   setRunStateVersion((version) => version + 1);
+}
+
+function touchThreadSelection(): void {
+  setThreadSelectionVersion((version) => version + 1);
 }
 
 function isMockThreadRunActive(status: unknown): boolean {
@@ -309,8 +314,30 @@ const aiContextValue = new Proxy({
   selectThreadModel: vi.fn(),
   selectedSendModel: () => String(aiState.activeThread?.model_id ?? 'model-test').trim() || 'model-test',
   activeThreadModelLocked: () => false,
-  activeThreadId: () => aiState.activeThreadId || null,
-  activeThread: () => aiState.activeThread,
+  activeThreadId: () => {
+    threadSelectionVersion();
+    return aiState.activeThreadId || null;
+  },
+  selectThreadId: (threadId: string) => {
+    const tid = String(threadId ?? '').trim();
+    if (!tid) return;
+    aiState.activeThreadId = tid;
+    aiState.activeThread = {
+      thread_id: tid,
+      title: tid,
+      model_id: 'model-test',
+      execution_mode: 'act',
+      working_dir: '/workspace',
+      queued_turn_count: 0,
+      run_status: 'idle',
+    };
+    touchThreadSelection();
+    touchRunState();
+  },
+  activeThread: () => {
+    runStateVersion();
+    return aiState.activeThread;
+  },
   activeThreadWaitingPrompt: () => aiState.waitingPrompt,
   getStructuredPromptDrafts: () => aiState.structuredDrafts,
   submitStructuredPromptResponse: submitStructuredPromptResponseMock,
@@ -341,6 +368,7 @@ const aiContextValue = new Proxy({
       queued_turn_count: 0,
       run_status: 'idle',
     };
+    touchThreadSelection();
     return aiState.activeThreadId;
   },
   setDraftMode: () => {},
@@ -629,6 +657,8 @@ function resetScenario() {
   fetchGatewayJSONMock.mockImplementation(defaultFetchGatewayJSON);
   uploadGatewayFileMock.mockImplementation(async (_file: File) => '/_redeven_proxy/api/ai/uploads/upl_test');
   prepareGatewayRequestInitMock.mockImplementation(async (init: RequestInit = {}) => init);
+  listMessagesMock.mockImplementation(async (_req: unknown) => ({ messages: [], nextAfterRowId: 0, hasMore: false }));
+  getActiveRunSnapshotMock.mockImplementation(async (_req: unknown) => ({ ok: false }));
   envResource.latest.permissions.can_read = true;
   envResource.latest.permissions.can_write = true;
   envResource.latest.permissions.can_execute = true;
@@ -662,6 +692,7 @@ function resetScenario() {
     queued_turn_count: 0,
     run_status: 'idle',
   };
+  touchThreadSelection();
   aiState.waitingPrompt = null;
   aiState.structuredDrafts = {};
   aiState.runIdByThread = {};
@@ -768,6 +799,32 @@ function createDeferred<T>() {
     reject = rej;
   });
   return { promise, resolve, reject };
+}
+
+function createRafHarness() {
+  const callbacks: Array<FrameRequestCallback | null> = [];
+  let nextHandle = 1;
+  let nextTimestamp = 16;
+
+  return {
+    requestAnimationFrame(callback: FrameRequestCallback): number {
+      const handle = nextHandle;
+      nextHandle += 1;
+      callbacks[handle] = callback;
+      return handle;
+    },
+    cancelAnimationFrame(handle: number): void {
+      callbacks[handle] = null;
+    },
+    flushNext(): void {
+      const handle = callbacks.findIndex((callback, index) => index > 0 && callback !== null);
+      if (handle <= 0) return;
+      const callback = callbacks[handle];
+      callbacks[handle] = null;
+      callback?.(nextTimestamp);
+      nextTimestamp += 16;
+    },
+  };
 }
 
 function installResizeObserverHarness() {
@@ -930,11 +987,6 @@ function assistantRunIndicator(host: HTMLElement): HTMLElement | null {
 function liveRunPlaceholder(host: HTMLElement): HTMLElement | null {
   return liveAssistantSurface(host)?.querySelector('.chat-markdown-empty-streaming')
     ?? host.querySelector('.chat-markdown-empty-streaming');
-}
-
-function liveRunAnswerText(host: HTMLElement): HTMLElement | null {
-  return liveAssistantSurface(host)?.querySelector('.chat-streaming-text')
-    ?? host.querySelector('.chat-streaming-text');
 }
 
 function liveRunTail(host: HTMLElement): HTMLElement | null {
@@ -1308,6 +1360,159 @@ export function registerEnvAIPageSendTests() {
       }
     });
 
+    it('keeps a loaded Flower thread hidden until the transcript bottom commit completes', async () => {
+      const raf = createRafHarness();
+      vi.stubGlobal('requestAnimationFrame', raf.requestAnimationFrame);
+      vi.stubGlobal('cancelAnimationFrame', raf.cancelAnimationFrame);
+      listMessagesMock.mockImplementation(async (req: any): Promise<any> => {
+        if (req?.tail) {
+          return {
+            messages: [
+              {
+                rowId: 1,
+                messageJson: {
+                  id: 'flower-thread-switch-assistant',
+                  role: 'assistant',
+                  status: 'complete',
+                  timestamp: Date.now(),
+                  blocks: [{ type: 'markdown', content: 'Loaded Flower tail' }],
+                },
+              },
+            ],
+            nextAfterRowId: 1,
+            hasMore: false,
+          };
+        }
+        return { messages: [], nextAfterRowId: 1, hasMore: false };
+      });
+
+      const { host, dispose } = await renderPage();
+      try {
+        await waitFor(() => {
+          expect(host.textContent).toContain('Loaded Flower tail');
+        });
+
+        const scroller = host.querySelector('.chat-message-list-scroll') as HTMLDivElement | null;
+        expect(scroller).toBeTruthy();
+        expect(scroller!.style.visibility).toBe('hidden');
+        expect(scroller!.getAttribute('data-chat-transcript-reveal-ready')).toBe('false');
+        expect(host.textContent).toContain('Loading chat...');
+
+        let scrollTop = 0;
+        Object.defineProperty(scroller!, 'scrollHeight', {
+          configurable: true,
+          get: () => 560,
+        });
+        Object.defineProperty(scroller!, 'clientHeight', {
+          configurable: true,
+          get: () => 120,
+        });
+        Object.defineProperty(scroller!, 'scrollTop', {
+          configurable: true,
+          get: () => scrollTop,
+          set: (value) => {
+            scrollTop = Number(value);
+          },
+        });
+
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+          raf.flushNext();
+          await flushAsync();
+          if (scroller!.getAttribute('data-chat-transcript-reveal-ready') === 'true') break;
+        }
+
+        expect(scroller!.style.visibility).toBe('');
+        expect(scroller!.getAttribute('data-chat-transcript-reveal-ready')).toBe('true');
+        expect(scrollTop).toBe(440);
+        expect(host.textContent).not.toContain('Loading chat...');
+      } finally {
+        dispose();
+      }
+    });
+
+    it('ignores stale Flower thread-switch loads when the user switches back before reveal', async () => {
+      const raf = createRafHarness();
+      vi.stubGlobal('requestAnimationFrame', raf.requestAnimationFrame);
+      vi.stubGlobal('cancelAnimationFrame', raf.cancelAnimationFrame);
+
+      type DeferredResponse = {
+        resolve: (value: any) => void;
+        promise: Promise<any>;
+      };
+      const pendingResponses = new Map<string, DeferredResponse>();
+
+      listMessagesMock.mockImplementation((req: any): Promise<any> => {
+        const threadId = String(req?.threadId ?? '').trim();
+        const deferred: DeferredResponse = {} as DeferredResponse;
+        deferred.promise = new Promise((resolve) => {
+          deferred.resolve = resolve;
+        });
+        pendingResponses.set(threadId, deferred);
+        return deferred.promise;
+      });
+
+      const resolveThread = (threadId: string, content: string) => {
+        const deferred = pendingResponses.get(threadId);
+        if (!deferred) throw new Error(`missing pending response for ${threadId}`);
+        deferred.resolve({
+          messages: [
+            {
+              rowId: 1,
+              messageJson: {
+                id: `${threadId}-assistant`,
+                role: 'assistant',
+                status: 'complete',
+                timestamp: Date.now(),
+                blocks: [{ type: 'markdown', content }],
+              },
+            },
+          ],
+          nextAfterRowId: 1,
+          hasMore: false,
+        });
+      };
+
+      const { host, dispose } = await renderPage();
+      try {
+        await waitFor(() => {
+          expect(pendingResponses.has('thread-1')).toBe(true);
+        });
+        resolveThread('thread-1', 'Loaded thread one');
+        await waitFor(() => {
+          expect(host.textContent).toContain('Loaded thread one');
+        });
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          raf.flushNext();
+          await flushAsync();
+        }
+
+        aiContextValue.selectThreadId('thread-2');
+        await waitFor(() => {
+          expect(pendingResponses.has('thread-2')).toBe(true);
+        });
+        aiContextValue.selectThreadId('thread-1');
+        await flushAsync();
+
+        resolveThread('thread-2', 'Loaded stale thread two');
+        await flushAsync();
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          raf.flushNext();
+          await flushAsync();
+        }
+
+        expect(host.textContent).not.toContain('Loaded stale thread two');
+        expect(host.textContent).toContain('Loading chat...');
+
+        resolveThread('thread-1', 'Loaded fresh thread one');
+        await waitFor(() => {
+          expect(host.textContent).toContain('Loaded fresh thread one');
+        });
+        expect(host.textContent).not.toContain('Loaded stale thread two');
+      } finally {
+        dispose();
+      }
+    });
+
     it('keeps low-frequency header actions inside the overflow menu and renders the compact composer structure', async () => {
       const { host, dispose } = await renderPage();
       try {
@@ -1472,8 +1677,9 @@ export function registerEnvAIPageSendTests() {
         await flushAsync();
 
         await waitFor(() => {
-          const block = liveRunAnswerText(host);
-          expect(block?.textContent).toContain('Hello Flower');
+          const assistant = host.querySelector('.chat-message-item-assistant');
+          expect(assistant).toBeTruthy();
+          expect(assistant!.textContent).toContain('Hello Flower');
           expect(host.querySelector('.chat-message-item-assistant .chat-markdown-streaming-cursor-row')).toBeTruthy();
           expect(liveRunPlaceholder(host)).toBeNull();
         });
@@ -1516,8 +1722,8 @@ export function registerEnvAIPageSendTests() {
         });
         await flushAsync();
 
-        const firstBlock = liveRunAnswerText(host);
-        expect(firstBlock).toBeTruthy();
+        const firstAssistant = host.querySelector('.chat-message-item-assistant');
+        expect(firstAssistant).toBeTruthy();
 
         emitRealtimeEvent({
           threadId: 'thread-1',
@@ -1531,8 +1737,8 @@ export function registerEnvAIPageSendTests() {
         });
         await flushAsync();
 
-        const nextBlock = liveRunAnswerText(host);
-        expect(nextBlock).toBe(firstBlock);
+        const nextAssistant = host.querySelector('.chat-message-item-assistant');
+        expect(nextAssistant).toBe(firstAssistant);
         await waitFor(() => {
           expect(host.querySelector('.chat-message-item-assistant')?.textContent).toContain('Hello world');
         });

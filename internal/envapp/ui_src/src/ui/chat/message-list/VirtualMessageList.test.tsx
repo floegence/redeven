@@ -1,12 +1,13 @@
 /* @vitest-environment jsdom */
 
 import { render } from 'solid-js/web';
+import { createSignal } from 'solid-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Message } from '../types';
 
 let currentMessages: Message[] = [];
-let currentScrollRequest: { seq: number; behavior: 'auto' | 'smooth'; source: 'system' | 'user' } | null = null;
+let currentScrollRequest: { seq: number; reason?: 'bootstrap' | 'thread_switch' | 'send' | 'manual'; behavior: 'auto' | 'smooth'; source: 'system' | 'user' } | null = null;
 
 const scrollToBottomMock = vi.fn();
 const loadMoreHistoryMock = vi.fn();
@@ -77,6 +78,11 @@ async function flushAsync(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
   await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+async function flushMicrotasks(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
 }
 
 function triggerResize(target: Element, height = 180): void {
@@ -464,6 +470,159 @@ describe('VirtualMessageList', () => {
       raf.flushNext();
 
       expect(scrollTop).toBe(scrollHeight - clientHeight);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps hidden-until-committed transcripts hidden until the bottom commit lands', async () => {
+    const raf = createRafHarness();
+    vi.stubGlobal('requestAnimationFrame', raf.requestAnimationFrame);
+    vi.stubGlobal('cancelAnimationFrame', raf.cancelAnimationFrame);
+
+    const mod = await import('./VirtualMessageList');
+    currentMessages = [
+      {
+        id: 'm_thread_switch_1',
+        renderKey: 'thread-switch:thread-9',
+        role: 'assistant',
+        status: 'complete',
+        timestamp: 100,
+        blocks: [{ type: 'markdown', content: 'Thread switch transcript' }],
+      },
+    ];
+
+    const onBottomCommitted = vi.fn();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <mod.VirtualMessageList
+        conversationKey="thread-9"
+        revealRequestSeq={7}
+        revealPolicy="hidden_until_bottom_committed"
+        onBottomCommitted={onBottomCommitted}
+      />
+    ), host);
+
+    try {
+      await flushMicrotasks();
+
+      const scroller = host.querySelector('.chat-message-list-scroll') as HTMLDivElement | null;
+      const item = host.querySelector('.chat-message-list-item') as HTMLDivElement | null;
+      expect(scroller).toBeTruthy();
+      expect(item).toBeTruthy();
+      expect(scroller!.style.visibility).toBe('hidden');
+      expect(scroller!.getAttribute('data-chat-transcript-reveal-ready')).toBe('false');
+
+      let scrollTop = 0;
+      const scrollHeight = 560;
+      const clientHeight = 120;
+      Object.defineProperty(scroller!, 'scrollHeight', {
+        configurable: true,
+        get: () => scrollHeight,
+      });
+      Object.defineProperty(scroller!, 'clientHeight', {
+        configurable: true,
+        get: () => clientHeight,
+      });
+      Object.defineProperty(scroller!, 'scrollTop', {
+        configurable: true,
+        get: () => scrollTop,
+        set: (value) => {
+          scrollTop = Number(value);
+        },
+      });
+
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        raf.flushNext();
+        await flushMicrotasks();
+        if (onBottomCommitted.mock.calls.length > 0) break;
+      }
+
+      expect(onBottomCommitted).toHaveBeenCalledTimes(1);
+      expect(onBottomCommitted).toHaveBeenCalledWith('thread-9', 7);
+      expect(scroller!.style.visibility).toBe('');
+      expect(scroller!.getAttribute('data-chat-transcript-reveal-ready')).toBe('true');
+      expect(scrollTop).toBe(scrollHeight - clientHeight);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('does not let a stale hidden reveal frame commit a newer conversation generation', async () => {
+    const raf = createRafHarness();
+    vi.stubGlobal('requestAnimationFrame', raf.requestAnimationFrame);
+    vi.stubGlobal('cancelAnimationFrame', raf.cancelAnimationFrame);
+
+    const mod = await import('./VirtualMessageList');
+    currentMessages = [
+      {
+        id: 'm_stale_reveal_1',
+        renderKey: 'thread-switch:thread-9',
+        role: 'assistant',
+        status: 'complete',
+        timestamp: 100,
+        blocks: [{ type: 'markdown', content: 'Thread switch transcript' }],
+      },
+    ];
+
+    const onBottomCommitted = vi.fn();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const [revealRequestSeq, setRevealRequestSeq] = createSignal(1);
+
+    const dispose = render(() => (
+      <mod.VirtualMessageList
+        conversationKey="thread-9"
+        revealRequestSeq={revealRequestSeq()}
+        revealPolicy="hidden_until_bottom_committed"
+        onBottomCommitted={onBottomCommitted}
+      />
+    ), host);
+
+    try {
+      await flushMicrotasks();
+
+      const scroller = host.querySelector('.chat-message-list-scroll') as HTMLDivElement | null;
+      expect(scroller).toBeTruthy();
+
+      let scrollTop = 0;
+      Object.defineProperty(scroller!, 'scrollHeight', {
+        configurable: true,
+        get: () => 560,
+      });
+      Object.defineProperty(scroller!, 'clientHeight', {
+        configurable: true,
+        get: () => 120,
+      });
+      Object.defineProperty(scroller!, 'scrollTop', {
+        configurable: true,
+        get: () => scrollTop,
+        set: (value) => {
+          scrollTop = Number(value);
+        },
+      });
+
+      setRevealRequestSeq(2);
+      await flushMicrotasks();
+      raf.flushNext();
+      await flushMicrotasks();
+
+      expect(onBottomCommitted).not.toHaveBeenCalled();
+      expect(scroller!.style.visibility).toBe('hidden');
+      expect(scroller!.getAttribute('data-chat-transcript-reveal-ready')).toBe('false');
+
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        raf.flushNext();
+        await flushMicrotasks();
+        if (onBottomCommitted.mock.calls.length > 0) break;
+      }
+
+      expect(onBottomCommitted).toHaveBeenCalledTimes(1);
+      expect(onBottomCommitted).toHaveBeenCalledWith('thread-9', 2);
+      expect(scroller!.style.visibility).toBe('');
+      expect(scrollTop).toBe(440);
     } finally {
       dispose();
     }

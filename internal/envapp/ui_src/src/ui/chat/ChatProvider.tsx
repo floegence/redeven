@@ -13,6 +13,10 @@ import {
 } from 'solid-js';
 import { createStore, reconcile, produce } from 'solid-js/store';
 import type {
+  FollowBottomRequest,
+  FollowBottomRequestReason,
+} from './scroll/createFollowBottomController';
+import type {
   Message,
   ColdMessage,
   Attachment,
@@ -151,7 +155,7 @@ export interface ChatContextValue {
   handleStreamEvent: (event: StreamEvent) => void;
   uploadAttachment: (file: File) => Promise<string>;
   approveToolCall: (messageId: string, toolId: string, approved: boolean) => void;
-  scrollToBottomRequest: Accessor<ScrollToBottomRequest | null>;
+  scrollToBottomRequest: Accessor<FollowBottomRequest | null>;
   requestScrollToBottom: (options?: ScrollToBottomRequestOptions) => void;
 
   heightCache: Map<string, number>;
@@ -164,15 +168,10 @@ export interface ChatContextValue {
 // `smooth` is reserved for explicit user bottom intents; restore/bootstrap paths stay `auto`.
 export type ScrollToBottomBehavior = 'auto' | 'smooth';
 
-export interface ScrollToBottomRequest {
-  seq: number;
-  behavior: ScrollToBottomBehavior;
-  source: 'system' | 'user';
-}
-
 export interface ScrollToBottomRequestOptions {
   behavior?: ScrollToBottomBehavior;
   source?: 'system' | 'user';
+  reason?: FollowBottomRequestReason;
 }
 
 // ---- Context ----
@@ -228,13 +227,14 @@ export const ChatProvider: ParentComponent<ChatProviderProps> = (props) => {
   const [hasMoreHistory, setHasMoreHistory] = createSignal(true);
   const [streamingMessageId, setStreamingMessageId] = createSignal<string | null>(null);
   const [preparingCount, setPreparingCount] = createSignal(0);
-  const [scrollToBottomRequest, setScrollToBottomRequest] = createSignal<ScrollToBottomRequest | null>(null);
+  const [scrollToBottomRequest, setScrollToBottomRequest] = createSignal<FollowBottomRequest | null>(null);
   let scrollToBottomRequestSeq = 0;
 
   const requestScrollToBottom = (options?: ScrollToBottomRequestOptions): void => {
     scrollToBottomRequestSeq += 1;
     setScrollToBottomRequest({
       seq: scrollToBottomRequestSeq,
+      reason: options?.reason ?? (options?.source === 'user' ? 'manual' : 'bootstrap'),
       behavior: options?.behavior ?? 'auto',
       source: options?.source ?? 'system',
     });
