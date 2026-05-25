@@ -1,9 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { runtimeLifecycleProgress } from '../shared/desktopRuntimeLifecycleProgress';
 import { LauncherOperationRegistry } from './launcherOperations';
 
 describe('LauncherOperationRegistry', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('tracks operations as cancelable runtime lifecycle progress snapshots', () => {
     const changed: string[] = [];
     const registry = new LauncherOperationRegistry((snapshot) => {
@@ -52,6 +56,232 @@ describe('LauncherOperationRegistry', () => {
       }),
     ]);
     expect(changed).toEqual([`${operation.operation_key}:running:ssh_connecting`]);
+  });
+
+  it('replaces same-key ready progress when a new update attempt starts', () => {
+    const registry = new LauncherOperationRegistry();
+    const targetID = 'local:container:docker:dev:abcd1234';
+    registry.create({
+      operation_key: targetID,
+      action: 'start_environment_runtime',
+      subject_kind: 'runtime_target',
+      subject_id: targetID,
+      environment_id: targetID,
+      environment_label: 'Dev Container',
+      phase: 'runtime_ready',
+      title: 'Runtime ready',
+      detail: 'The previous runtime attempt is ready.',
+      lifecycle_progress: runtimeLifecycleProgress({
+        location: 'local_container',
+        operation: 'start',
+        planState: 'terminal',
+        phase: 'runtime_ready',
+        targetID,
+        targetLabel: 'Dev Container',
+        stepStates: [
+          { id: 'checking_container', status: 'succeeded' },
+          { id: 'preparing_runtime_package', status: 'pending' },
+          { id: 'checking_runtime_service', status: 'succeeded' },
+          { id: 'runtime_ready', status: 'succeeded' },
+        ],
+      }),
+      cancelable: false,
+    });
+    registry.finish(targetID, 'succeeded', {
+      phase: 'runtime_ready',
+      title: 'Runtime ready',
+      detail: 'The previous runtime attempt is ready.',
+    });
+
+    const update = registry.create({
+      operation_key: targetID,
+      action: 'update_environment_runtime',
+      subject_kind: 'runtime_target',
+      subject_id: targetID,
+      environment_id: targetID,
+      environment_label: 'Dev Container',
+      phase: 'checking_container',
+      title: 'Updating runtime in container',
+      detail: 'Desktop is checking the selected running container.',
+      lifecycle_progress: runtimeLifecycleProgress({
+        location: 'local_container',
+        operation: 'update',
+        phase: 'checking_container',
+        targetID,
+        targetLabel: 'Dev Container',
+        stepStates: [
+          { id: 'checking_container', status: 'running' },
+        ],
+      }),
+      cancelable: true,
+      interrupt_label: 'Stop startup',
+      interrupt_kind: 'generic',
+    });
+
+    expect(registry.progressItems()).toHaveLength(1);
+    expect(update.status).toBe('running');
+    expect(update.action).toBe('update_environment_runtime');
+    expect(update.lifecycle_progress).toEqual(expect.objectContaining({
+      operation: 'update',
+      active_step_id: 'checking_container',
+      plan_state: 'executing',
+    }));
+    expect(update.lifecycle_progress?.steps.map((step) => [step.id, step.status])).toEqual([
+      ['checking_container', 'running'],
+    ]);
+    expect(update.lifecycle_progress?.steps.map((step) => step.id)).not.toContain('preparing_runtime_package');
+    expect(update.lifecycle_progress?.steps.map((step) => step.id)).not.toContain('runtime_ready');
+  });
+
+  it('rejects stale same-key attempt updates after a newer operation starts', () => {
+    const registry = new LauncherOperationRegistry();
+    const operationKey = 'local:host:dev';
+    const first = registry.create({
+      operation_key: operationKey,
+      action: 'start_environment_runtime',
+      subject_kind: 'local_environment',
+      subject_id: 'dev',
+      environment_id: 'dev',
+      environment_label: 'Dev',
+      phase: 'checking_existing_runtime',
+      title: 'Checking runtime',
+      detail: 'Desktop is checking the previous runtime.',
+      lifecycle_progress: runtimeLifecycleProgress({
+        location: 'local_host',
+        operation: 'start',
+        phase: 'checking_existing_runtime',
+        targetID: operationKey,
+        targetLabel: 'Dev',
+      }),
+      cancelable: false,
+    });
+
+    const second = registry.create({
+      operation_key: operationKey,
+      action: 'update_environment_runtime',
+      subject_kind: 'local_environment',
+      subject_id: 'dev',
+      environment_id: 'dev',
+      environment_label: 'Dev',
+      phase: 'checking_existing_runtime',
+      title: 'Updating runtime',
+      detail: 'Desktop is checking the current runtime before updating.',
+      lifecycle_progress: runtimeLifecycleProgress({
+        location: 'local_host',
+        operation: 'update',
+        phase: 'checking_existing_runtime',
+        targetID: operationKey,
+        targetLabel: 'Dev',
+      }),
+      cancelable: false,
+    });
+
+    const staleAttempt = {
+      action: first.action,
+      started_at_unix_ms: first.started_at_unix_ms,
+    };
+    const currentAttempt = {
+      action: second.action,
+      started_at_unix_ms: second.started_at_unix_ms,
+    };
+
+    expect(registry.updateCurrentAttempt(operationKey, staleAttempt, {
+      phase: 'checking_runtime_service',
+      title: 'Runtime ready',
+      detail: 'A stale ready check completed late.',
+      lifecycle_progress: runtimeLifecycleProgress({
+        location: 'local_host',
+        operation: 'start',
+        phase: 'checking_runtime_service',
+        targetID: operationKey,
+        targetLabel: 'Dev',
+      }),
+    })).toBeNull();
+    expect(registry.finishCurrentAttempt(operationKey, staleAttempt, 'succeeded', {
+      phase: 'runtime_ready',
+      title: 'Runtime ready',
+      detail: 'A stale ready check finished late.',
+    })).toBeNull();
+
+    const current = registry.get(operationKey);
+    expect(current).toEqual(expect.objectContaining({
+      action: 'update_environment_runtime',
+      started_at_unix_ms: second.started_at_unix_ms,
+      status: 'running',
+      phase: 'checking_existing_runtime',
+    }));
+    expect(current?.lifecycle_progress).toEqual(expect.objectContaining({
+      operation: 'update',
+      active_step_id: 'checking_existing_runtime',
+    }));
+
+    expect(registry.updateCurrentAttempt(operationKey, currentAttempt, {
+      phase: 'checking_runtime_service',
+      title: 'Checking service',
+      detail: 'The active update attempt is checking the runtime service.',
+    })).toEqual(expect.objectContaining({
+      action: 'update_environment_runtime',
+      phase: 'checking_runtime_service',
+    }));
+  });
+
+  it('gives same-key same-action attempts distinct identities within one millisecond', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000);
+    const registry = new LauncherOperationRegistry();
+    const operationKey = 'local:host:dev';
+    const first = registry.create({
+      operation_key: operationKey,
+      action: 'update_environment_runtime',
+      subject_kind: 'local_environment',
+      subject_id: 'dev',
+      environment_id: 'dev',
+      environment_label: 'Dev',
+      phase: 'checking_existing_runtime',
+      title: 'Updating runtime',
+      detail: 'Desktop is checking the previous update attempt.',
+      lifecycle_progress: runtimeLifecycleProgress({
+        location: 'local_host',
+        operation: 'update',
+        phase: 'checking_existing_runtime',
+        targetID: operationKey,
+        targetLabel: 'Dev',
+      }),
+      cancelable: false,
+    });
+    const second = registry.create({
+      operation_key: operationKey,
+      action: 'update_environment_runtime',
+      subject_kind: 'local_environment',
+      subject_id: 'dev',
+      environment_id: 'dev',
+      environment_label: 'Dev',
+      phase: 'checking_existing_runtime',
+      title: 'Updating runtime',
+      detail: 'Desktop is checking the current update attempt.',
+      lifecycle_progress: runtimeLifecycleProgress({
+        location: 'local_host',
+        operation: 'update',
+        phase: 'checking_existing_runtime',
+        targetID: operationKey,
+        targetLabel: 'Dev',
+      }),
+      cancelable: false,
+    });
+
+    expect(second.started_at_unix_ms).toBeGreaterThan(first.started_at_unix_ms);
+    expect(registry.updateCurrentAttempt(operationKey, {
+      action: first.action,
+      started_at_unix_ms: first.started_at_unix_ms,
+    }, {
+      phase: 'checking_runtime_service',
+      title: 'Runtime ready',
+      detail: 'A stale same-action update completed late.',
+    })).toBeNull();
+    expect(registry.get(operationKey)).toEqual(expect.objectContaining({
+      action: second.action,
+      started_at_unix_ms: second.started_at_unix_ms,
+      phase: 'checking_existing_runtime',
+    }));
   });
 
   it('bumps subject generation on delete and marks matching operations stale', () => {
