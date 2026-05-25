@@ -19,7 +19,10 @@ import type {
   EnvironmentActionIntent,
   EnvironmentActionModel,
 } from './viewModel';
-import { environmentMatchesRuntimeLifecycleProgress } from './launcherBusyState';
+import {
+  environmentMatchesRuntimeLifecycleProgress,
+  type DesktopLauncherBusyState,
+} from './launcherBusyState';
 
 export type EnvironmentLifecycleDisclosureIntent = Extract<
   EnvironmentActionIntent,
@@ -292,6 +295,15 @@ export function environmentLifecycleDisclosureForEnvironment(
   return state?.environment_id === environmentID ? state : null;
 }
 
+export function environmentLifecycleDisclosureHasPendingRequest(
+  state: EnvironmentLifecycleDisclosureState,
+  busyState: Pick<DesktopLauncherBusyState, 'action' | 'environment_id'>,
+): boolean {
+  return state !== null
+    && state.environment_id === busyState.environment_id
+    && busyState.action === lifecycleActionKindForIntent(state.intent);
+}
+
 export function pendingEnvironmentLifecycleProgress(
   environment: DesktopEnvironmentEntry,
   state: Exclude<EnvironmentLifecycleDisclosureState, null>,
@@ -329,6 +341,7 @@ export function visibleEnvironmentLifecycleProgress(input: Readonly<{
   environment: DesktopEnvironmentEntry;
   selectedProgress: DesktopLauncherActionProgress | null | undefined;
   disclosure: EnvironmentLifecycleDisclosureState;
+  busyState?: Pick<DesktopLauncherBusyState, 'action' | 'environment_id'>;
 }>): DesktopLauncherActionProgress | null {
   if (!input.disclosure) {
     return input.selectedProgress?.lifecycle_progress ? input.selectedProgress : null;
@@ -338,6 +351,9 @@ export function visibleEnvironmentLifecycleProgress(input: Readonly<{
   }
   if (progressBelongsToDisclosure(input.selectedProgress, input.disclosure)) {
     return input.selectedProgress;
+  }
+  if (input.busyState && !environmentLifecycleDisclosureHasPendingRequest(input.disclosure, input.busyState)) {
+    return null;
   }
   return pendingEnvironmentLifecycleProgress(input.environment, input.disclosure);
 }

@@ -5,13 +5,26 @@ import { describe, expect, it } from 'vitest';
 
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import { desktopControlPlaneKey } from '../shared/controlPlaneProvider';
+import type { DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
+import { openConnectionProgress } from '../shared/desktopOpenConnectionProgress';
 import {
   testDesktopPreferences,
   testLocalAccess,
   testLocalEnvironment,
 } from '../testSupport/desktopTestHelpers';
 import {
+  environmentProgressPrimaryPresentation,
+  selectEnvironmentPanelProgress,
+} from './environmentProgressPrimaryPresentation';
+import {
+  IDLE_LAUNCHER_BUSY_STATE,
+  busyStateBlocksEnvironmentAction,
+  reconcileBusyStateWithActionProgressSnapshot,
+  selectedSnapshotOpenConnectionProgressForEnvironment,
+} from './launcherBusyState';
+import {
   buildDesktopWelcomeShellViewModel,
+  buildProviderBackedEnvironmentActionModel,
   capabilityUnavailableMessage,
   environmentLibraryCount,
   filterEnvironmentLibrary,
@@ -144,6 +157,114 @@ describe('DesktopWelcomeShell', () => {
         tone: 'success',
       }),
     ]));
+  });
+
+  it('derives the Env card primary progress from snapshot action progress instead of stale Opening state', () => {
+    const local = testLocalEnvironment({
+      currentRuntime: {
+        local_ui_url: 'http://localhost:23998/',
+        desktop_managed: true,
+        effective_run_mode: 'desktop',
+        runtime_service: {
+          protocol_version: 'redeven-runtime-v1',
+          service_owner: 'desktop',
+          desktop_managed: true,
+          effective_run_mode: 'desktop',
+          remote_enabled: false,
+          compatibility: 'compatible',
+          open_readiness: { state: 'openable' },
+          active_workload: {
+            terminal_count: 0,
+            session_count: 0,
+            task_count: 0,
+            port_forward_count: 0,
+          },
+        },
+      },
+    });
+    const failedOpenProgress: DesktopLauncherActionProgress = {
+      action: 'open_local_environment',
+      operation_key: 'local:host:local:open:failed',
+      subject_kind: 'local_environment',
+      subject_id: local.id,
+      environment_id: local.id,
+      environment_label: local.label,
+      started_at_unix_ms: 300,
+      updated_at_unix_ms: 320,
+      status: 'failed',
+      phase: 'failed',
+      title: 'Open failed',
+      detail: 'Desktop could not open the local environment.',
+      open_progress: openConnectionProgress({
+        location: 'local_host',
+        phase: 'failed',
+        environmentID: local.id,
+        environmentLabel: local.label,
+        targetID: 'local:local',
+        targetLabel: local.label,
+      }),
+    };
+    const staleBusyProgress: DesktopLauncherActionProgress = {
+      ...failedOpenProgress,
+      operation_key: 'local:host:local:open:stale',
+      started_at_unix_ms: 100,
+      updated_at_unix_ms: 400,
+      status: 'running',
+      phase: 'opening_window',
+      title: 'Opening environment',
+      open_progress: openConnectionProgress({
+        location: 'local_host',
+        phase: 'opening_window',
+        environmentID: local.id,
+        environmentLabel: local.label,
+        targetID: 'local:local',
+        targetLabel: local.label,
+      }),
+    };
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: local,
+      }),
+      openSessions: [{
+        session_key: 'env:local:local_host',
+        target: {
+          kind: 'local_environment',
+          session_key: 'env:local:local_host',
+          environment_id: local.id,
+          label: local.label,
+          route: 'local_host',
+          local_environment_kind: 'local',
+          has_local_hosting: true,
+          has_remote_desktop: false,
+        },
+        lifecycle: 'opening',
+      }],
+      actionProgress: [failedOpenProgress],
+    });
+    const entry = snapshot.environments.find((environment) => environment.id === local.id)!;
+    const fallbackAction = buildProviderBackedEnvironmentActionModel(entry).action_presentation.primary_action;
+    const selectedOpenProgress = selectedSnapshotOpenConnectionProgressForEnvironment(entry, snapshot.action_progress);
+    const panelProgress = selectEnvironmentPanelProgress(selectedOpenProgress, null);
+    const busyState = reconcileBusyStateWithActionProgressSnapshot({
+      ...IDLE_LAUNCHER_BUSY_STATE,
+      action: 'open_local_environment' as const,
+      environment_id: local.id,
+      progress: staleBusyProgress,
+    }, snapshot.action_progress);
+
+    expect(entry.open_action_label).toBe('Opening…');
+    expect(fallbackAction).toMatchObject({ intent: 'opening', enabled: false });
+    expect(environmentProgressPrimaryPresentation(panelProgress)).toMatchObject({
+      kind: 'attention_trigger',
+      label: 'Open failed',
+    });
+    expect(busyState).toBe(IDLE_LAUNCHER_BUSY_STATE);
+    expect(busyStateBlocksEnvironmentAction(
+      busyState,
+      local.id,
+      ['open_local_environment'],
+      panelProgress,
+    )).toBe(false);
   });
 
   it('filters the Environment Library by local and provider sources', () => {
@@ -663,30 +784,36 @@ describe('DesktopWelcomeShell', () => {
     const styles = readWelcomeStyles();
 
     expect(appSrc).toContain('const activeActionProgress = createMemo(() => snapshot().action_progress);');
+    expect(appSrc).toContain('reconcileBusyStateWithActionProgressSnapshot');
+    expect(appSrc).toContain('setBusyState((busy) => reconcileBusyStateWithActionProgressSnapshot(busy, next.action_progress));');
+    expect(appSrc).toContain('setBusyState((busy) => reconcileBusyStateWithActionProgressSnapshot(busy, acceptedSnapshot.action_progress));');
     expect(appSrc).toContain('actionProgress={props.actionProgress}');
-    expect(appSrc).toContain('selectedRuntimeLifecycleProgressForEnvironment(props.environment, props.busyState, props.actionProgress)');
-    expect(appSrc).toContain('selectedOpenConnectionProgressForEnvironment(props.environment, props.busyState, props.actionProgress)');
+    expect(appSrc).toContain('selectedSnapshotRuntimeLifecycleProgressForEnvironment(props.environment, props.actionProgress)');
+    expect(appSrc).toContain('selectedSnapshotOpenConnectionProgressForEnvironment(props.environment, props.actionProgress)');
     expect(appSrc).toContain('launcherProgressBlocksPrimaryAction(openConnectionProgress())');
     expect(appSrc).not.toContain('|| openConnectionProgress() !== null');
     expect(appSrc).not.toContain('activeRuntimeLifecycleProgressForEnvironment');
     expect(appSrc).not.toContain('activeOpenConnectionProgressForEnvironment');
+    expect(appSrc).not.toContain('selectedOpenConnectionProgressForEnvironment(props.environment, props.busyState, props.actionProgress)');
+    expect(appSrc).not.toContain('selectedRuntimeLifecycleProgressForEnvironment(props.environment, props.busyState, props.actionProgress)');
     expect(appSrc).not.toContain('runtimeLifecycleProgress() !== null && !runtimeOpenable()');
     expect(appSrc).toContain('runtimeLifecycleProgress={visibleRuntimeLifecycleProgress()}');
     expect(appSrc).toContain('openConnectionProgress={visibleOpenConnectionProgress()}');
     expect(appSrc).toContain('visibleEnvironmentLifecycleProgress({');
     expect(appSrc).toContain('selectedProgress: runtimeLifecycleProgress(),');
     expect(appSrc).toContain('disclosure: props.lifecycleDisclosure,');
+    expect(appSrc).toContain('busyState: props.busyState,');
     expect(appSrc).not.toContain('const disclosureRuntimeLifecycleProgress = createMemo');
+    expect(appSrc).toContain('environmentLifecycleDisclosureHasPendingRequest(lifecycleDisclosure, props.busyState)');
     expect(appSrc).toContain('progressOpen={props.lifecycleProgressOpen}');
     expect(appSrc).toContain('onProgressOpenChange={props.onLifecycleProgressOpenChange}');
     expect(appSrc).toContain('function EnvironmentProgressPanel');
     expect(appSrc).toContain('primaryAction?: EnvironmentActionModel;');
     expect(appSrc).toContain('runPrimaryAction?: (action: EnvironmentActionModel) => void;');
-    expect(appSrc).toContain('const readyPrimaryAction = createMemo(() => {');
-    expect(appSrc).toContain('runtimeLifecycleReadyPrimaryAction(props.progress, props.primaryAction)');
-    expect(appSrc).toContain('<Show when={readyPrimaryAction()}>');
+    expect(appSrc).toContain('const panelPrimaryAction = createMemo(() => environmentProgressPanelPrimaryAction(');
+    expect(appSrc).toContain('<Show when={panelPrimaryAction()}>');
     expect(appSrc).toContain('<ExternalLink class="h-3.5 w-3.5" />');
-    expect(appSrc).toContain('onClick={() => props.runPrimaryAction?.(action())}');
+    expect(appSrc).toContain('onClick={() => props.runPrimaryAction?.(action().action)}');
     expect(appSrc).toContain('{action().label}');
     expect(appSrc).toContain('primaryAction={props.presentation.primary_action}');
     expect(appSrc).toContain('const [rememberedOpenConnectionProgress, setRememberedOpenConnectionProgress] = createSignal<DesktopLauncherActionProgress | null>(null);');
@@ -706,6 +833,15 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("Planning ${props.progress.action === 'restart_environment_runtime' ? 'restart'");
     expect(appSrc).toContain('<Show when={props.progress.failure}>');
     expect(appSrc).toContain('<div class="redeven-action-popover__notice-detail">{failure().summary}</div>');
+    expect(appSrc).toContain('const nextActions = createMemo(() => visibleOperationNextActions(props.progress));');
+    expect(appSrc).toContain('<For each={nextActions()}>');
+    expect(appSrc).toContain("case 'refresh_status':");
+    expect(appSrc).toContain("case 'copy_diagnostics':");
+    expect(appSrc).toContain("case 'dismiss':");
+    expect(appSrc).toContain('runNextAction?.(action, props.progress)');
+    expect(appSrc).toContain('primaryActionBusy={props.loading === true}');
+    expect(appSrc).toContain('loading={action().loading}');
+    expect(appSrc).toContain('disabled={action().disabled}');
     expect(appSrc).not.toContain('props.progress.error_message');
     expect(appSrc).toContain('const panelProgress = createMemo(() => selectEnvironmentPanelProgress(primaryProgress(), runtimeMenuProgress()));');
     expect(appSrc).toContain('runtimeLifecycleProgress={runtimeMenuProgress()}');
@@ -783,7 +919,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain("props.progress.status === 'awaiting_confirmation'");
     expect(appSrc).not.toContain('onClick={() => props.continueOperation(props.progress)}');
     expect(appSrc).toContain('onClick={() => props.dismissOperation(props.progress)}');
-    expect(appSrc).toContain('Copy log');
+    expect(appSrc).toContain('Copy diagnostics');
     expect(appSrc).toContain('<Stop class="h-3.5 w-3.5" />');
     expect(appSrc).toContain("{props.progress.interrupt_label || 'Stop startup'}");
     expect(appSrc).toContain("class={shimmerBlocked() ? 'redeven-blocked-shimmer-overlay' : 'redeven-loading-shimmer-overlay'}");

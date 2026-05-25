@@ -2,14 +2,42 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DESKTOP_LAUNCHER_ACTION_PROGRESS_CHANNEL,
+  desktopWelcomeSnapshotGeneration,
+  desktopWelcomeSnapshotRevision,
   isDesktopLauncherActionFailure,
   isDesktopLauncherActionSuccess,
   normalizeDesktopLauncherActionRequest,
+  selectLatestDesktopWelcomeSnapshot,
 } from './desktopLauncherIPC';
 import type { DesktopLauncherActionProgress, DesktopLauncherOperationSnapshot } from './desktopLauncherIPC';
 import { runtimeLifecycleProgress } from './desktopRuntimeLifecycleProgress';
 
 describe('desktopLauncherIPC', () => {
+  it('orders welcome snapshots by generation before revision', () => {
+    const running = { snapshot_generation: 4, snapshot_revision: 10, value: 'running' };
+    const failed = { snapshot_generation: 5, snapshot_revision: 9, value: 'failed' };
+    const duplicateGeneration = { snapshot_generation: 5, snapshot_revision: 11, value: 'failed-later-revision' };
+    const staleDuplicateGeneration = { snapshot_generation: 5, snapshot_revision: 8, value: 'stale-failed' };
+    const legacy = { snapshot_revision: 12, value: 'legacy' };
+    const newerLegacy = { snapshot_revision: 13, value: 'legacy-newer' };
+    const newerGenerationLowerRevision = { snapshot_generation: 6, snapshot_revision: 1, value: 'newer-generation' };
+    const sameGenerationMissingRevision = { snapshot_generation: 5, value: 'same-generation-missing-revision' };
+    const generationZero = { snapshot_generation: 0, snapshot_revision: 14, value: 'generation-zero-legacy' };
+
+    expect(desktopWelcomeSnapshotGeneration(failed)).toBe(5);
+    expect(desktopWelcomeSnapshotRevision(failed)).toBe(9);
+    expect(selectLatestDesktopWelcomeSnapshot(failed, running)).toBe(failed);
+    expect(selectLatestDesktopWelcomeSnapshot(running, failed)).toBe(failed);
+    expect(selectLatestDesktopWelcomeSnapshot(failed, duplicateGeneration)).toBe(duplicateGeneration);
+    expect(selectLatestDesktopWelcomeSnapshot(failed, staleDuplicateGeneration)).toBe(failed);
+    expect(selectLatestDesktopWelcomeSnapshot(failed, newerGenerationLowerRevision)).toBe(newerGenerationLowerRevision);
+    expect(selectLatestDesktopWelcomeSnapshot(failed, sameGenerationMissingRevision)).toBe(failed);
+    expect(selectLatestDesktopWelcomeSnapshot(failed, legacy)).toBe(failed);
+    expect(selectLatestDesktopWelcomeSnapshot(legacy, newerLegacy)).toBe(newerLegacy);
+    expect(selectLatestDesktopWelcomeSnapshot(newerLegacy, legacy)).toBe(newerLegacy);
+    expect(selectLatestDesktopWelcomeSnapshot(newerLegacy, generationZero)).toBe(generationZero);
+  });
+
   it('normalizes launcher actions and trims Environment inputs', () => {
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'open_local_environment',

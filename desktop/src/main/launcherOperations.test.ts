@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { openConnectionProgress } from '../shared/desktopOpenConnectionProgress';
 import { runtimeLifecycleProgress } from '../shared/desktopRuntimeLifecycleProgress';
 import { LauncherOperationRegistry } from './launcherOperations';
 
@@ -482,6 +483,117 @@ describe('LauncherOperationRegistry', () => {
       next_actions: expect.arrayContaining([
         expect.objectContaining({ kind: 'dismiss' }),
       ]),
+    }));
+  });
+
+  it('preserves failed Open operation next actions in the durable progress contract', () => {
+    const registry = new LauncherOperationRegistry();
+    const operation = registry.create({
+      operation_key: 'local:host:local:open',
+      action: 'open_local_environment',
+      subject_kind: 'local_environment',
+      subject_id: 'local',
+      environment_id: 'local',
+      environment_label: 'Local Environment',
+      phase: 'checking_runtime_record',
+      title: 'Checking runtime status',
+      detail: 'Desktop is checking the runtime status before opening this environment.',
+      open_progress: openConnectionProgress({
+        location: 'local_host',
+        phase: 'checking_runtime_record',
+        environmentID: 'local',
+        environmentLabel: 'Local Environment',
+        targetID: 'local:local',
+        targetLabel: 'Local Environment',
+      }),
+      cancelable: true,
+    });
+
+    registry.finish(operation.operation_key, 'failed', {
+      phase: 'failed',
+      title: 'Open failed',
+      detail: 'Desktop could not open the local environment.',
+      open_progress: openConnectionProgress({
+        location: 'local_host',
+        phase: 'failed',
+        environmentID: 'local',
+        environmentLabel: 'Local Environment',
+        targetID: 'local:local',
+        targetLabel: 'Local Environment',
+      }),
+      next_actions: [
+        {
+          kind: 'refresh_status',
+          environment_id: 'local',
+          label: 'Refresh status',
+        },
+        {
+          kind: 'copy_diagnostics',
+          operation_key: operation.operation_key,
+          label: 'Copy diagnostics',
+        },
+        {
+          kind: 'dismiss',
+          operation_key: operation.operation_key,
+          label: 'Dismiss',
+        },
+      ],
+    });
+
+    expect(registry.operations()[0]).toEqual(expect.objectContaining({
+      status: 'failed',
+      next_actions: [
+        expect.objectContaining({ kind: 'refresh_status', environment_id: 'local' }),
+        expect.objectContaining({ kind: 'copy_diagnostics', operation_key: operation.operation_key }),
+        expect.objectContaining({ kind: 'dismiss', operation_key: operation.operation_key }),
+      ],
+    }));
+    expect(registry.progressItems()[0]).toEqual(expect.objectContaining({
+      status: 'failed',
+      open_progress: expect.objectContaining({ phase: 'failed' }),
+      next_actions: [
+        expect.objectContaining({ kind: 'refresh_status', environment_id: 'local' }),
+        expect.objectContaining({ kind: 'copy_diagnostics', operation_key: operation.operation_key }),
+        expect.objectContaining({ kind: 'dismiss', operation_key: operation.operation_key }),
+      ],
+    }));
+  });
+
+  it('projects provider remote Open operations into action progress', () => {
+    const registry = new LauncherOperationRegistry();
+    const operation = registry.create({
+      operation_key: 'env:cp%3Aenv_demo:remote_desktop:open',
+      action: 'open_provider_environment',
+      subject_kind: 'provider_environment',
+      subject_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      environment_label: 'Demo Environment',
+      provider_origin: 'https://cp.example.invalid',
+      provider_id: 'example_control_plane',
+      phase: 'opening_window',
+      title: 'Opening environment',
+      detail: 'Desktop is opening the provider environment window.',
+      open_progress: openConnectionProgress({
+        location: 'provider_remote',
+        phase: 'opening_window',
+        environmentID: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+        environmentLabel: 'Demo Environment',
+        targetID: 'env:cp%3Aenv_demo:remote_desktop',
+        targetLabel: 'Demo Environment',
+        targetDetail: 'Provider route',
+      }),
+      cancelable: true,
+    });
+
+    expect(registry.progressItems()[0]).toEqual(expect.objectContaining({
+      operation_key: operation.operation_key,
+      action: 'open_provider_environment',
+      subject_kind: 'provider_environment',
+      status: 'running',
+      open_progress: expect.objectContaining({
+        location: 'provider_remote',
+        phase: 'opening_window',
+      }),
     }));
   });
 });

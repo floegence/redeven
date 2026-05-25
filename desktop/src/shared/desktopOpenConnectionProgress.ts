@@ -8,6 +8,7 @@ export type DesktopOpenConnectionLocation =
   | 'local_container'
   | 'ssh_host'
   | 'ssh_container'
+  | 'external_local_ui'
   | 'provider_remote';
 
 export type DesktopOpenConnectionPhase =
@@ -88,11 +89,18 @@ const PROVIDER_REMOTE_OPEN_PHASES: readonly DesktopOpenConnectionPhase[] = [
   'open_ready',
 ];
 
+const EXTERNAL_LOCAL_UI_OPEN_PHASES: readonly DesktopOpenConnectionPhase[] = [
+  'checking_runtime_record',
+  'opening_window',
+  'open_ready',
+];
+
 const OPEN_CONNECTION_PHASES_BY_LOCATION: Record<DesktopOpenConnectionLocation, readonly DesktopOpenConnectionPhase[]> = {
   local_host: LOCAL_HOST_OPEN_PHASES,
   local_container: CONTAINER_OPEN_PHASES,
   ssh_host: SSH_HOST_OPEN_PHASES,
   ssh_container: SSH_CONTAINER_OPEN_PHASES,
+  external_local_ui: EXTERNAL_LOCAL_UI_OPEN_PHASES,
   provider_remote: PROVIDER_REMOTE_OPEN_PHASES,
 };
 

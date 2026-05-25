@@ -25,9 +25,9 @@ import {
   environmentMatchesRuntimeLifecycleProgress,
   IDLE_LAUNCHER_BUSY_STATE,
   launcherProgressBlocksPrimaryAction,
-  selectedRuntimeLifecycleProgressForEnvironment,
-  selectedOpenConnectionProgressForEnvironment,
-  selectedProgressForEnvironment,
+  reconcileBusyStateWithActionProgressSnapshot,
+  selectedSnapshotOpenConnectionProgressForEnvironment,
+  selectedSnapshotRuntimeLifecycleProgressForEnvironment,
 } from './launcherBusyState';
 import type { RuntimeProgressEnvironmentMatch } from './launcherBusyState';
 import { environmentProgressPrimaryPresentation } from './environmentProgressPrimaryPresentation';
@@ -136,13 +136,14 @@ describe('launcherBusyState', () => {
       label: 'Demo',
     });
 
-    expect(state).toEqual({
+    expect(state).toMatchObject({
       action: 'refresh_environment_runtime',
       environment_id: 'env_demo',
       provider_origin: '',
       provider_id: '',
       progress: null,
     });
+    expect(state.request_started_at_unix_ms).toBeGreaterThan(0);
     expect(busyStateMatchesEnvironment(state, 'env_demo')).toBe(true);
     expect(busyStateMatchesEnvironment(state, 'env_other')).toBe(false);
   });
@@ -154,7 +155,7 @@ describe('launcherBusyState', () => {
       local_ui_password: '',
       local_ui_password_mode: 'replace',
       auto_runtime_probe_enabled: false,
-    })).toEqual({
+    })).toMatchObject({
       action: 'save_settings',
       environment_id: '',
       provider_origin: '',
@@ -165,7 +166,7 @@ describe('launcherBusyState', () => {
     expect(busyStateForLauncherRequest({
       kind: 'delete_saved_environment',
       environment_id: 'saved_demo',
-    })).toEqual({
+    })).toMatchObject({
       action: 'delete_environment',
       environment_id: 'saved_demo',
       provider_origin: '',
@@ -272,13 +273,15 @@ describe('launcherBusyState', () => {
 
     expect(environmentMatchesActionProgress(progress.environment_id, progress)).toBe(true);
     expect(busyStateMatchesActionProgress(state, progress)).toBe(true);
-    expect(selectedProgressForEnvironment(progress.environment_id, state, [])).toBeNull();
-
     const stateWithProgress = busyStateWithActionProgress(state, progress);
-    expect(selectedProgressForEnvironment(progress.environment_id, stateWithProgress, [])).toBe(progress);
-    expect(selectedProgressForEnvironment('other', stateWithProgress, [progress])).toBeNull();
-    expect(selectedProgressForEnvironment(progress.environment_id, IDLE_LAUNCHER_BUSY_STATE, [progress])).toBe(progress);
-    expect(selectedProgressForEnvironment(progress.operation_key, IDLE_LAUNCHER_BUSY_STATE, [progress])).toBe(progress);
+    expect(stateWithProgress.progress).toBe(progress);
+    expect(busyStateMatchesActionProgress(stateWithProgress, progress)).toBe(true);
+    expect(busyStateMatchesActionProgress(stateWithProgress, {
+      ...progress,
+      environment_id: 'other',
+      operation_key: 'other',
+      subject_id: 'other',
+    })).toBe(false);
   });
 
   it('blocks primary actions only while launcher progress is still active', () => {
@@ -344,15 +347,13 @@ describe('launcherBusyState', () => {
       }),
     };
 
-    expect(selectedOpenConnectionProgressForEnvironment(
+    expect(selectedSnapshotOpenConnectionProgressForEnvironment(
       environment as never,
-      IDLE_LAUNCHER_BUSY_STATE,
       [succeededOpenProgress],
     )).toBe(succeededOpenProgress);
     expect(launcherProgressBlocksPrimaryAction(succeededOpenProgress)).toBe(false);
-    expect(selectedOpenConnectionProgressForEnvironment(
+    expect(selectedSnapshotOpenConnectionProgressForEnvironment(
       environment as never,
-      IDLE_LAUNCHER_BUSY_STATE,
       [runningOpenProgress],
     )).toBe(runningOpenProgress);
     expect(launcherProgressBlocksPrimaryAction(runningOpenProgress)).toBe(true);
@@ -381,14 +382,8 @@ describe('launcherBusyState', () => {
       startedAt: 100,
       updatedAt: 120,
     });
-    const selectedProgress = selectedOpenConnectionProgressForEnvironment(
+    const selectedProgress = selectedSnapshotOpenConnectionProgressForEnvironment(
       environment as never,
-      {
-        ...IDLE_LAUNCHER_BUSY_STATE,
-        action: 'open_local_environment',
-        environment_id: 'local',
-        progress: runningOpenProgress,
-      },
       [failedOpenProgress],
     );
 
@@ -411,7 +406,7 @@ describe('launcherBusyState', () => {
     });
   });
 
-  it('prefers snapshot terminal Open progress over busy running progress when timestamps tie on the same attempt', () => {
+  it('selects terminal Open progress from snapshot without consulting request busy progress', () => {
     const environment: RuntimeProgressEnvironmentMatch = {
       id: 'local',
       managed_runtime_target_id: runtimeID('local:local'),
@@ -419,14 +414,6 @@ describe('launcherBusyState', () => {
       provider_runtime_link_target: undefined,
     };
     const operationKey = 'local:host:local:open';
-    const runningBusyProgress = localOpenActionProgress({
-      status: 'running',
-      phase: 'opening_window',
-      title: 'Opening environment',
-      operationKey,
-      startedAt: 100,
-      updatedAt: 100,
-    });
     const failedSnapshotProgress = localOpenActionProgress({
       status: 'failed',
       phase: 'failed',
@@ -436,16 +423,303 @@ describe('launcherBusyState', () => {
       updatedAt: 100,
     });
 
-    expect(selectedOpenConnectionProgressForEnvironment(
+    expect(selectedSnapshotOpenConnectionProgressForEnvironment(
       environment as never,
+      [failedSnapshotProgress],
+    )).toBe(failedSnapshotProgress);
+  });
+
+  it('lets a failed Open snapshot own the same environment surface after stale busy progress is reconciled', () => {
+    const environment: RuntimeProgressEnvironmentMatch = {
+      id: 'local',
+      managed_runtime_target_id: runtimeID('local:local'),
+      managed_runtime_placement_target_id: undefined,
+      provider_runtime_link_target: undefined,
+    };
+    const staleBusyProgress = localOpenActionProgress({
+      status: 'running',
+      phase: 'opening_window',
+      title: 'Opening environment',
+      operationKey: 'local:host:local:open:stale',
+      startedAt: 100,
+      updatedAt: 400,
+    });
+    const failedSnapshotProgress = localOpenActionProgress({
+      status: 'failed',
+      phase: 'failed',
+      title: 'Open failed',
+      operationKey: 'local:host:local:open:failed',
+      startedAt: 300,
+      updatedAt: 320,
+    });
+    const reconciledBusyState = reconcileBusyStateWithActionProgressSnapshot({
+      ...IDLE_LAUNCHER_BUSY_STATE,
+      action: 'open_local_environment' as const,
+      environment_id: 'local',
+      progress: staleBusyProgress,
+    }, [failedSnapshotProgress]);
+
+    const selectedProgress = selectedSnapshotOpenConnectionProgressForEnvironment(
+      environment as never,
+      [failedSnapshotProgress],
+    );
+
+    expect(selectedProgress).toBe(failedSnapshotProgress);
+    expect(reconciledBusyState).toBe(IDLE_LAUNCHER_BUSY_STATE);
+    expect(launcherProgressBlocksPrimaryAction(selectedProgress)).toBe(false);
+    expect(busyStateBlocksEnvironmentAction(
+      reconciledBusyState,
+      'local',
+      ['open_local_environment'],
+      selectedProgress,
+    )).toBe(false);
+  });
+
+  it('uses snapshot-only Open progress for the Env card primary label once main owns the surface', () => {
+    const environment: RuntimeProgressEnvironmentMatch = {
+      id: 'local',
+      managed_runtime_target_id: runtimeID('local:local'),
+      managed_runtime_placement_target_id: undefined,
+      provider_runtime_link_target: undefined,
+    };
+    const staleBusyProgress = localOpenActionProgress({
+      status: 'running',
+      phase: 'opening_window',
+      title: 'Opening environment',
+      operationKey: 'local:host:local:open:stale',
+      startedAt: 100,
+      updatedAt: 400,
+    });
+    const failedSnapshotProgress = localOpenActionProgress({
+      status: 'failed',
+      phase: 'failed',
+      title: 'Open failed',
+      operationKey: 'local:host:local:open:failed',
+      startedAt: 300,
+      updatedAt: 320,
+    });
+    const reconciledBusyState = reconcileBusyStateWithActionProgressSnapshot({
+      ...IDLE_LAUNCHER_BUSY_STATE,
+      action: 'open_local_environment' as const,
+      environment_id: 'local',
+      progress: staleBusyProgress,
+    }, [failedSnapshotProgress]);
+    const selectedProgress = selectedSnapshotOpenConnectionProgressForEnvironment(
+      environment as never,
+      [failedSnapshotProgress],
+    );
+
+    expect(selectedProgress).toBe(failedSnapshotProgress);
+    expect(environmentProgressPrimaryPresentation(selectedProgress)).toMatchObject({
+      kind: 'attention_trigger',
+      label: 'Open failed',
+    });
+    expect(reconciledBusyState).toBe(IDLE_LAUNCHER_BUSY_STATE);
+    expect(busyStateBlocksEnvironmentAction(
+      reconciledBusyState,
+      'local',
+      ['open_local_environment'],
+      selectedProgress,
+    )).toBe(false);
+  });
+
+  it('keeps a fresh Open retry guarded while the card still shows the previous failure snapshot', () => {
+    const environment: RuntimeProgressEnvironmentMatch = {
+      id: 'local',
+      managed_runtime_target_id: runtimeID('local:local'),
+      managed_runtime_placement_target_id: undefined,
+      provider_runtime_link_target: undefined,
+    };
+    const failedSnapshotProgress = localOpenActionProgress({
+      status: 'failed',
+      phase: 'failed',
+      title: 'Open failed',
+      operationKey: 'local:host:local:open:failed',
+      startedAt: 100,
+      updatedAt: 120,
+    });
+    const freshRetryProgress = localOpenActionProgress({
+      status: 'running',
+      phase: 'opening_window',
+      title: 'Opening environment',
+      operationKey: 'local:host:local:open:retry',
+      startedAt: 200,
+      updatedAt: 220,
+    });
+    const selectedProgress = selectedSnapshotOpenConnectionProgressForEnvironment(
+      environment as never,
+      [failedSnapshotProgress],
+    );
+
+    expect(selectedProgress).toBe(failedSnapshotProgress);
+    expect(environmentProgressPrimaryPresentation(selectedProgress)).toMatchObject({
+      kind: 'attention_trigger',
+      label: 'Open failed',
+    });
+    expect(busyStateBlocksEnvironmentAction(
       {
         ...IDLE_LAUNCHER_BUSY_STATE,
         action: 'open_local_environment',
         environment_id: 'local',
-        progress: runningBusyProgress,
+        progress: freshRetryProgress,
       },
+      'local',
+      ['open_local_environment'],
+      selectedProgress,
+    )).toBe(true);
+  });
+
+  it('uses the newest Open attempt even when an older snapshot operation is still active', () => {
+    const environment: RuntimeProgressEnvironmentMatch = {
+      id: 'local',
+      managed_runtime_target_id: runtimeID('local:local'),
+      managed_runtime_placement_target_id: undefined,
+      provider_runtime_link_target: undefined,
+    };
+    const olderRunningProgress = localOpenActionProgress({
+      status: 'running',
+      phase: 'opening_window',
+      title: 'Opening environment',
+      operationKey: 'local:host:local:open:older-running',
+      startedAt: 100,
+      updatedAt: 500,
+    });
+    const newerFailedProgress = localOpenActionProgress({
+      status: 'failed',
+      phase: 'failed',
+      title: 'Open failed',
+      operationKey: 'local:host:local:open:newer-failed',
+      startedAt: 200,
+      updatedAt: 220,
+    });
+    const selectedProgress = selectedSnapshotOpenConnectionProgressForEnvironment(
+      environment as never,
+      [olderRunningProgress, newerFailedProgress],
+    );
+
+    expect(selectedProgress).toBe(newerFailedProgress);
+    expect(environmentProgressPrimaryPresentation(selectedProgress)).toMatchObject({
+      kind: 'attention_trigger',
+      label: 'Open failed',
+    });
+  });
+
+  it('clears busy progress when the accepted snapshot contains matching Open progress', () => {
+    const staleBusyProgress = localOpenActionProgress({
+      status: 'running',
+      phase: 'opening_window',
+      title: 'Opening environment',
+      operationKey: 'local:host:local:open:stale',
+      startedAt: 100,
+      updatedAt: 400,
+    });
+    const failedSnapshotProgress = localOpenActionProgress({
+      status: 'failed',
+      phase: 'failed',
+      title: 'Open failed',
+      operationKey: 'local:host:local:open:failed',
+      startedAt: 300,
+      updatedAt: 320,
+    });
+    const busyState = {
+      ...IDLE_LAUNCHER_BUSY_STATE,
+      action: 'open_local_environment' as const,
+      environment_id: 'local',
+      progress: staleBusyProgress,
+    };
+
+    expect(reconcileBusyStateWithActionProgressSnapshot(
+      busyState,
       [failedSnapshotProgress],
-    )).toBe(failedSnapshotProgress);
+    )).toBe(IDLE_LAUNCHER_BUSY_STATE);
+    expect(reconcileBusyStateWithActionProgressSnapshot(
+      busyState,
+      [localRuntimeLifecycleActionProgress({
+        status: 'running',
+        action: 'restart_environment_runtime',
+        operation: 'restart',
+        phase: 'starting_runtime_process',
+        title: 'Restarting runtime',
+        operationKey: 'local:host:local:restart',
+      })],
+    )).toBe(busyState);
+  });
+
+  it('keeps fresh retry busy progress when an older failed snapshot is still the card authority', () => {
+    const failedSnapshotProgress = localOpenActionProgress({
+      status: 'failed',
+      phase: 'failed',
+      title: 'Open failed',
+      operationKey: 'local:host:local:open:failed',
+      startedAt: 100,
+      updatedAt: 120,
+    });
+    const freshRetryProgress = localOpenActionProgress({
+      status: 'running',
+      phase: 'opening_window',
+      title: 'Opening environment',
+      operationKey: 'local:host:local:open:retry',
+      startedAt: 300,
+      updatedAt: 320,
+    });
+    const busyState = {
+      ...IDLE_LAUNCHER_BUSY_STATE,
+      action: 'open_local_environment' as const,
+      environment_id: 'local',
+      request_started_at_unix_ms: 250,
+      progress: freshRetryProgress,
+    };
+
+    expect(reconcileBusyStateWithActionProgressSnapshot(
+      busyState,
+      [failedSnapshotProgress],
+    )).toBe(busyState);
+  });
+
+  it('releases request busy when a matching current snapshot lands before an action progress receipt', () => {
+    const failedSnapshotProgress = localOpenActionProgress({
+      status: 'failed',
+      phase: 'failed',
+      title: 'Open failed',
+      operationKey: 'local:host:local:open:failed',
+      startedAt: 100,
+      updatedAt: 120,
+    });
+    const busyWithoutProgress = {
+      ...IDLE_LAUNCHER_BUSY_STATE,
+      action: 'open_local_environment' as const,
+      environment_id: 'local',
+      request_started_at_unix_ms: 90,
+      progress: null,
+    };
+
+    expect(reconcileBusyStateWithActionProgressSnapshot(
+      busyWithoutProgress,
+      [failedSnapshotProgress],
+    )).toBe(IDLE_LAUNCHER_BUSY_STATE);
+  });
+
+  it('keeps request busy when only an older failed snapshot exists for a fresh retry', () => {
+    const failedSnapshotProgress = localOpenActionProgress({
+      status: 'failed',
+      phase: 'failed',
+      title: 'Open failed',
+      operationKey: 'local:host:local:open:failed',
+      startedAt: 100,
+      updatedAt: 120,
+    });
+    const freshRetryBusy = {
+      ...IDLE_LAUNCHER_BUSY_STATE,
+      action: 'open_local_environment' as const,
+      environment_id: 'local',
+      request_started_at_unix_ms: 200,
+      progress: null,
+    };
+
+    expect(reconcileBusyStateWithActionProgressSnapshot(
+      freshRetryBusy,
+      [failedSnapshotProgress],
+    )).toBe(freshRetryBusy);
   });
 
   it('keeps a retrying Open attempt ahead of a retained failure for the previous attempt', () => {
@@ -473,9 +747,8 @@ describe('launcherBusyState', () => {
       updatedAt: 200,
     });
 
-    expect(selectedOpenConnectionProgressForEnvironment(
+    expect(selectedSnapshotOpenConnectionProgressForEnvironment(
       environment as never,
-      IDLE_LAUNCHER_BUSY_STATE,
       [failedPreviousAttempt, runningRetryAttempt],
     )).toBe(runningRetryAttempt);
     expect(launcherProgressBlocksPrimaryAction(runningRetryAttempt)).toBe(true);
@@ -525,9 +798,8 @@ describe('launcherBusyState', () => {
     });
 
     for (const releasedProgress of [succeededOpenProgress, canceledOpenProgress]) {
-      const selectedProgress = selectedOpenConnectionProgressForEnvironment(
+      const selectedProgress = selectedSnapshotOpenConnectionProgressForEnvironment(
         environment as never,
-        busyState,
         [releasedProgress],
       );
       expect(selectedProgress).toBe(releasedProgress);
@@ -640,21 +912,10 @@ describe('launcherBusyState', () => {
     expect(environmentMatchesRuntimeLifecycleProgress(sshContainerEnvironment, sshContainerProgress)).toBe(true);
     expect(environmentMatchesRuntimeLifecycleProgress(localHostEnvironment, localContainerProgress)).toBe(false);
 
-    expect(selectedRuntimeLifecycleProgressForEnvironment(
+    expect(selectedSnapshotRuntimeLifecycleProgressForEnvironment(
       localContainerEnvironment as never,
-      IDLE_LAUNCHER_BUSY_STATE,
       [localHostProgress, localContainerProgress, sshHostProgress, sshContainerProgress],
     )).toBe(localContainerProgress);
-    expect(selectedRuntimeLifecycleProgressForEnvironment(
-      sshHostEnvironment as never,
-      {
-        ...IDLE_LAUNCHER_BUSY_STATE,
-        action: 'start_environment_runtime',
-        environment_id: sshHostEnvironment.id,
-        progress: sshHostProgress,
-      },
-      [],
-    )).toBe(sshHostProgress);
   });
 
   it('prefers terminal runtime lifecycle progress over stale running busy progress for the same operation', () => {
@@ -701,14 +962,12 @@ describe('launcherBusyState', () => {
       progress: runningStopProgress,
     };
 
-    const selectedStopFailedProgress = selectedRuntimeLifecycleProgressForEnvironment(
+    const selectedStopFailedProgress = selectedSnapshotRuntimeLifecycleProgressForEnvironment(
       environment as never,
-      busyState,
       [stopFailedProgress],
     );
-    const selectedCleanupFailedProgress = selectedRuntimeLifecycleProgressForEnvironment(
+    const selectedCleanupFailedProgress = selectedSnapshotRuntimeLifecycleProgressForEnvironment(
       environment as never,
-      busyState,
       [cleanupFailedProgress],
     );
 
@@ -739,7 +998,7 @@ describe('launcherBusyState', () => {
     });
   });
 
-  it('prefers snapshot terminal runtime lifecycle progress over busy running progress when timestamps tie on the same attempt', () => {
+  it('selects terminal runtime lifecycle progress from snapshot without consulting request busy progress', () => {
     const environment: RuntimeProgressEnvironmentMatch = {
       id: 'local',
       managed_runtime_target_id: runtimeID('local:local'),
@@ -747,16 +1006,6 @@ describe('launcherBusyState', () => {
       provider_runtime_link_target: undefined,
     };
     const operationKey = 'local:host:local:restart';
-    const runningBusyProgress = localRuntimeLifecycleActionProgress({
-      status: 'running',
-      action: 'restart_environment_runtime',
-      operation: 'restart',
-      phase: 'starting_runtime_process',
-      title: 'Restarting runtime',
-      operationKey,
-      startedAt: 100,
-      updatedAt: 100,
-    });
     const failedSnapshotProgress = localRuntimeLifecycleActionProgress({
       status: 'failed',
       action: 'restart_environment_runtime',
@@ -768,16 +1017,51 @@ describe('launcherBusyState', () => {
       updatedAt: 100,
     });
 
-    expect(selectedRuntimeLifecycleProgressForEnvironment(
+    expect(selectedSnapshotRuntimeLifecycleProgressForEnvironment(
       environment as never,
-      {
-        ...IDLE_LAUNCHER_BUSY_STATE,
-        action: 'restart_environment_runtime',
-        environment_id: 'local',
-        progress: runningBusyProgress,
-      },
       [failedSnapshotProgress],
     )).toBe(failedSnapshotProgress);
+  });
+
+  it('uses snapshot-only Stop failure for the Env card label while a fresh request still blocks duplicate clicks', () => {
+    const environment: RuntimeProgressEnvironmentMatch = {
+      id: 'local',
+      managed_runtime_target_id: runtimeID('local:local'),
+      managed_runtime_placement_target_id: undefined,
+      provider_runtime_link_target: undefined,
+    };
+    const stopFailedProgress = localRuntimeLifecycleActionProgress({
+      status: 'failed',
+      action: 'stop_environment_runtime',
+      operation: 'stop',
+      phase: 'stopping_runtime_process',
+      title: 'Stop failed',
+      operationKey: 'local:host:local:stop',
+      startedAt: 100,
+      updatedAt: 120,
+    });
+    const busyState = {
+      ...IDLE_LAUNCHER_BUSY_STATE,
+      action: 'stop_environment_runtime' as const,
+      environment_id: 'local',
+      progress: null,
+    };
+    const selectedProgress = selectedSnapshotRuntimeLifecycleProgressForEnvironment(
+      environment as never,
+      [stopFailedProgress],
+    );
+
+    expect(selectedProgress).toBe(stopFailedProgress);
+    expect(environmentProgressPrimaryPresentation(selectedProgress)).toMatchObject({
+      kind: 'attention_trigger',
+      label: 'Stop failed',
+    });
+    expect(busyStateBlocksEnvironmentAction(
+      busyState,
+      'local',
+      ['stop_environment_runtime'],
+      selectedProgress,
+    )).toBe(true);
   });
 
   it('releases stale lifecycle busy state when the same attempt succeeds or is canceled', () => {
@@ -826,9 +1110,8 @@ describe('launcherBusyState', () => {
     });
 
     for (const releasedProgress of [succeededRestartProgress, canceledRestartProgress]) {
-      const selectedProgress = selectedRuntimeLifecycleProgressForEnvironment(
+      const selectedProgress = selectedSnapshotRuntimeLifecycleProgressForEnvironment(
         environment as never,
-        busyState,
         [releasedProgress],
       );
       expect(selectedProgress).toBe(releasedProgress);
@@ -899,15 +1182,13 @@ describe('launcherBusyState', () => {
     };
 
     expect(environmentMatchesRuntimeLifecycleProgress(localHostEnvironment, localHostProgress)).toBe(false);
-    expect(selectedOpenConnectionProgressForEnvironment(
+    expect(selectedSnapshotOpenConnectionProgressForEnvironment(
       localHostEnvironment as never,
-      IDLE_LAUNCHER_BUSY_STATE,
       [localHostProgress],
     )).toBe(localHostProgress);
     expect(environmentMatchesRuntimeLifecycleProgress(environment, progress)).toBe(false);
-    expect(selectedOpenConnectionProgressForEnvironment(
+    expect(selectedSnapshotOpenConnectionProgressForEnvironment(
       environment as never,
-      IDLE_LAUNCHER_BUSY_STATE,
       [progress],
     )).toBe(progress);
   });

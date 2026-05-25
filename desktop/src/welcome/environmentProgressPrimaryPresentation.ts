@@ -18,6 +18,14 @@ export type EnvironmentProgressPrimaryPresentation = Readonly<
     }
 >;
 
+export type EnvironmentProgressPanelPrimaryActionPresentation = Readonly<{
+  action: EnvironmentActionModel;
+  label: string;
+  icon: 'external_link';
+  loading: boolean;
+  disabled: boolean;
+}>;
+
 const RUNTIME_READY_ACTIONS: readonly DesktopLauncherActionKind[] = [
   'start_environment_runtime',
   'restart_environment_runtime',
@@ -46,6 +54,41 @@ export function runtimeLifecycleReadyPrimaryAction(
     return null;
   }
   return primaryAction;
+}
+
+export function openConnectionFailurePrimaryAction(
+  progress: DesktopLauncherActionProgress,
+  primaryAction: EnvironmentActionModel | undefined,
+): EnvironmentActionModel | null {
+  if (
+    !progress.open_progress
+    || (progress.status !== 'failed' && progress.status !== 'cleanup_failed')
+    || !primaryAction?.enabled
+    || (primaryAction.intent !== 'open' && primaryAction.intent !== 'focus')
+  ) {
+    return null;
+  }
+  return primaryAction;
+}
+
+export function environmentProgressPanelPrimaryAction(
+  progress: DesktopLauncherActionProgress,
+  primaryAction: EnvironmentActionModel | undefined,
+  input: Readonly<{ busy?: boolean }> = {},
+): EnvironmentProgressPanelPrimaryActionPresentation | null {
+  const action = runtimeLifecycleReadyPrimaryAction(progress, primaryAction)
+    ?? openConnectionFailurePrimaryAction(progress, primaryAction);
+  if (!action) {
+    return null;
+  }
+  const busy = input.busy === true;
+  return {
+    action,
+    label: action.intent === 'focus' ? 'Focus' : action.label,
+    icon: 'external_link',
+    loading: busy,
+    disabled: busy,
+  };
 }
 
 export function environmentProgressPrimaryPresentation(
@@ -94,11 +137,14 @@ export function selectEnvironmentPanelProgress(
   if (!runtimeRank) {
     return openRank.progress;
   }
-  if (openRank.priority !== runtimeRank.priority) {
-    return openRank.priority > runtimeRank.priority ? openRank.progress : runtimeRank.progress;
+  if (openRank.startedAt !== runtimeRank.startedAt) {
+    return openRank.startedAt > runtimeRank.startedAt ? openRank.progress : runtimeRank.progress;
   }
   if (openRank.timestamp !== runtimeRank.timestamp) {
     return openRank.timestamp > runtimeRank.timestamp ? openRank.progress : runtimeRank.progress;
+  }
+  if (openRank.priority !== runtimeRank.priority) {
+    return openRank.priority > runtimeRank.priority ? openRank.progress : runtimeRank.progress;
   }
   return openRank.tieBreak > runtimeRank.tieBreak ? openRank.progress : runtimeRank.progress;
 }
@@ -142,6 +188,7 @@ function rankedProgressCandidate(
 ): Readonly<{
   progress: DesktopLauncherActionProgress;
   priority: number;
+  startedAt: number;
   timestamp: number;
   tieBreak: number;
 }> | null {
@@ -151,6 +198,7 @@ function rankedProgressCandidate(
   return {
     progress,
     priority: progressSelectionPriority(progress),
+    startedAt: progress.started_at_unix_ms ?? 0,
     timestamp: progress.updated_at_unix_ms ?? progress.started_at_unix_ms ?? 0,
     tieBreak,
   };
