@@ -59,6 +59,7 @@ export type DesktopLauncherOperationStatus =
   | 'succeeded';
 export type DesktopLauncherOperationSubjectKind =
   | 'local_environment'
+  | 'provider_environment'
   | 'external_local_ui'
   | 'ssh_environment'
   | 'runtime_target'
@@ -259,6 +260,7 @@ export type DesktopEnvironmentEntry = Readonly<{
 
 export type DesktopWelcomeSnapshot = Readonly<{
   snapshot_revision?: number;
+  snapshot_generation?: number;
   surface: DesktopLauncherSurface;
   entry_reason: DesktopWelcomeEntryReason;
   close_action_label: 'Quit' | 'Close Launcher';
@@ -271,6 +273,58 @@ export type DesktopWelcomeSnapshot = Readonly<{
   issue: DesktopWelcomeIssue | null;
   settings_surface: DesktopSettingsSurfaceSnapshot;
 }>;
+
+export function desktopWelcomeSnapshotIsAtLeastGeneration(
+  snapshot: Pick<DesktopWelcomeSnapshot, 'snapshot_generation'>,
+  currentGeneration: number,
+): boolean {
+  return (snapshot.snapshot_generation ?? 0) >= currentGeneration;
+}
+
+export function desktopWelcomeSnapshotGeneration(
+  snapshot: Pick<DesktopWelcomeSnapshot, 'snapshot_generation'>,
+): number {
+  const generation = Number(snapshot.snapshot_generation);
+  return Number.isFinite(generation) && generation > 0 ? generation : 0;
+}
+
+export function desktopWelcomeSnapshotRevision(
+  snapshot: Pick<DesktopWelcomeSnapshot, 'snapshot_revision'>,
+): number {
+  const revision = Number(snapshot.snapshot_revision);
+  return Number.isFinite(revision) && revision > 0 ? revision : 0;
+}
+
+export function selectLatestDesktopWelcomeSnapshot<T extends Pick<
+  DesktopWelcomeSnapshot,
+  'snapshot_generation' | 'snapshot_revision'
+>>(
+  current: T,
+  next: T,
+): T {
+  const currentGeneration = desktopWelcomeSnapshotGeneration(current);
+  const nextGeneration = desktopWelcomeSnapshotGeneration(next);
+  if (currentGeneration > 0 || nextGeneration > 0) {
+    if (nextGeneration === 0 && currentGeneration > 0) {
+      return current;
+    }
+    if (nextGeneration !== currentGeneration) {
+      return nextGeneration > currentGeneration ? next : current;
+    }
+  }
+
+  const currentRevision = desktopWelcomeSnapshotRevision(current);
+  const nextRevision = desktopWelcomeSnapshotRevision(next);
+  if (currentRevision > 0 || nextRevision > 0) {
+    if (nextRevision === 0 && currentRevision > 0) {
+      return current;
+    }
+    if (nextRevision <= currentRevision) {
+      return current;
+    }
+  }
+  return next;
+}
 
 export type DesktopLauncherOperationSnapshot = Readonly<{
   operation_key: string;

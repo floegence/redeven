@@ -15,6 +15,7 @@ import {
   beginEnvironmentLifecycleDisclosure,
   closeEnvironmentLifecycleDisclosure,
   environmentActionStartsLifecycleDisclosure,
+  environmentLifecycleDisclosureHasPendingRequest,
   pendingEnvironmentLifecycleProgress,
   reconcileEnvironmentLifecycleDisclosure,
   reopenEnvironmentLifecycleDisclosure,
@@ -144,6 +145,34 @@ describe('environmentLifecycleDisclosure', () => {
     });
 
     expect(progress).toMatchObject({
+      action: 'restart_environment_runtime',
+      status: 'running',
+      title: 'Restarting runtime',
+    });
+  });
+
+  it('does not synthesize pending lifecycle progress when the current request no longer matches the disclosure', () => {
+    const environment = localEnvironmentEntry();
+    const state = beginEnvironmentLifecycleDisclosure(null, environment.id, 'restart_runtime');
+
+    expect(visibleEnvironmentLifecycleProgress({
+      environment,
+      selectedProgress: null,
+      disclosure: state,
+      busyState: {
+        action: '',
+        environment_id: '',
+      },
+    })).toBeNull();
+    expect(visibleEnvironmentLifecycleProgress({
+      environment,
+      selectedProgress: null,
+      disclosure: state,
+      busyState: {
+        action: 'restart_environment_runtime',
+        environment_id: environment.id,
+      },
+    })).toMatchObject({
       action: 'restart_environment_runtime',
       status: 'running',
       title: 'Restarting runtime',
@@ -416,6 +445,24 @@ describe('environmentLifecycleDisclosure', () => {
       environment_id: environment.id,
       visibility: 'open',
     }));
+  });
+
+  it('treats pending disclosure progress as visible only while the matching request is in flight', () => {
+    const environment = localEnvironmentEntry();
+    const state = beginEnvironmentLifecycleDisclosure(null, environment.id, 'restart_runtime');
+
+    expect(environmentLifecycleDisclosureHasPendingRequest(state, {
+      action: 'restart_environment_runtime',
+      environment_id: environment.id,
+    })).toBe(true);
+    expect(environmentLifecycleDisclosureHasPendingRequest(state, {
+      action: '',
+      environment_id: environment.id,
+    })).toBe(false);
+    expect(environmentLifecycleDisclosureHasPendingRequest(state, {
+      action: 'stop_environment_runtime',
+      environment_id: environment.id,
+    })).toBe(false);
   });
 
   it('clears terminal progress when the user dismisses the visible disclosure', () => {

@@ -57,6 +57,16 @@ describe('desktopOpenConnectionProgress', () => {
       'opening_window',
       'open_ready',
     ]);
+    expect(openConnectionPhaseSequence('provider_remote')).toEqual([
+      'checking_runtime_record',
+      'opening_window',
+      'open_ready',
+    ]);
+    expect(openConnectionPhaseSequence('external_local_ui')).toEqual([
+      'checking_runtime_record',
+      'opening_window',
+      'open_ready',
+    ]);
   });
 
   it('builds bounded stage metadata for the current Desktop Open session', () => {

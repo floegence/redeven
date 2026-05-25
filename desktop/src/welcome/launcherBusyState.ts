@@ -45,6 +45,7 @@ export type DesktopLauncherBusyState = Readonly<{
   environment_id: string;
   provider_origin: string;
   provider_id: string;
+  request_started_at_unix_ms: number;
   progress: DesktopLauncherActionProgress | null;
 }>;
 
@@ -53,75 +54,87 @@ export const IDLE_LAUNCHER_BUSY_STATE: DesktopLauncherBusyState = {
   environment_id: '',
   provider_origin: '',
   provider_id: '',
+  request_started_at_unix_ms: 0,
   progress: null,
 };
+
+function requestTimestamp(): number {
+  return Date.now();
+}
 
 export function busyStateForLauncherRequest(
   request: DesktopLauncherActionRequest,
 ): DesktopLauncherBusyState {
+  const requestStartedAt = requestTimestamp();
+  const withRequestTimestamp = (
+    state: Omit<DesktopLauncherBusyState, 'request_started_at_unix_ms'>,
+  ): DesktopLauncherBusyState => ({
+    ...state,
+    request_started_at_unix_ms: requestStartedAt,
+  });
   switch (request.kind) {
     case 'save_local_environment_settings':
-      return {
+      return withRequestTimestamp({
         action: 'save_settings',
         environment_id: '',
         provider_origin: '',
         provider_id: '',
         progress: null,
-      };
+      });
     case 'upsert_saved_environment':
     case 'upsert_saved_ssh_environment':
     case 'upsert_saved_runtime_target':
-      return {
+      return withRequestTimestamp({
         action: 'save_environment',
         environment_id: request.environment_id ?? '',
         provider_origin: '',
         provider_id: '',
         progress: null,
-      };
+      });
     case 'delete_saved_environment':
     case 'delete_saved_ssh_environment':
     case 'delete_saved_runtime_target':
-      return {
+      return withRequestTimestamp({
         action: 'delete_environment',
         environment_id: request.environment_id,
         provider_origin: '',
         provider_id: '',
         progress: null,
-      };
+      });
     case 'refresh_control_plane':
     case 'delete_control_plane':
-      return {
+      return withRequestTimestamp({
         action: request.kind,
         environment_id: '',
         provider_origin: request.provider_origin,
         provider_id: request.provider_id,
         progress: null,
-      };
+      });
     case 'cancel_launcher_operation':
     case 'dismiss_launcher_operation':
-      return {
+      return withRequestTimestamp({
         action: request.kind,
         environment_id: '',
         provider_origin: '',
         provider_id: '',
         progress: null,
-      };
+      });
     case 'start_control_plane_connect':
-      return {
+      return withRequestTimestamp({
         action: request.kind,
         environment_id: '',
         provider_origin: request.provider_origin,
         provider_id: '',
         progress: null,
-      };
+      });
     default:
-      return {
+      return withRequestTimestamp({
         action: request.kind,
         environment_id: 'environment_id' in request ? request.environment_id ?? '' : '',
         provider_origin: '',
         provider_id: '',
         progress: null,
-      };
+      });
   }
 }
 
@@ -140,6 +153,30 @@ export function busyStateWithActionProgress(
     ...state,
     progress,
   };
+}
+
+export function reconcileBusyStateWithActionProgressSnapshot(
+  state: DesktopLauncherBusyState,
+  progressItems: readonly DesktopLauncherActionProgress[],
+): DesktopLauncherBusyState {
+  if (!state.progress) {
+    const snapshotOwnsBusyRequest = progressItems.some((progress) => (
+      busyStateMatchesActionProgress(state, progress)
+      && launcherProgressStartedAt(progress) >= state.request_started_at_unix_ms
+    ));
+    return snapshotOwnsBusyRequest ? IDLE_LAUNCHER_BUSY_STATE : state;
+  }
+  const busyProgress = state.progress;
+  const busyOwnerKey = launcherProgressOwnerKey(busyProgress);
+  const busyStartedAt = launcherProgressStartedAt(busyProgress);
+  const snapshotOwnsBusySurface = progressItems.some((progress) => (
+    launcherProgressOwnerKey(progress) === busyOwnerKey
+    && (
+      launcherProgressIdentity(progress) === launcherProgressIdentity(busyProgress)
+      || launcherProgressStartedAt(progress) >= Math.max(busyStartedAt, state.request_started_at_unix_ms)
+    )
+  ));
+  return snapshotOwnsBusySurface ? IDLE_LAUNCHER_BUSY_STATE : state;
 }
 
 export function environmentMatchesActionProgress(
@@ -235,8 +272,14 @@ export function busyStateBlocksEnvironmentAction(
   }
   if (
     selectedProgress
-    && launcherProgressIdentity(selectedProgress) === launcherProgressIdentity(busyState.progress)
+    && actions.some((action) => action === selectedProgress.action)
+    && environmentMatchesActionProgress(environmentID, selectedProgress)
+    && launcherProgressOwnsSameSurface(selectedProgress, busyState.progress)
     && launcherProgressActivity(selectedProgress) !== 'active'
+    && (
+      launcherProgressIdentity(selectedProgress) === launcherProgressIdentity(busyState.progress)
+      || launcherProgressActivity(busyState.progress) !== 'active'
+    )
   ) {
     return false;
   }
@@ -244,39 +287,21 @@ export function busyStateBlocksEnvironmentAction(
     || launcherProgressActivity(busyState.progress) === 'unknown';
 }
 
-export function selectedProgressForEnvironment(
-  environmentID: string,
-  busyState: DesktopLauncherBusyState,
-  progressItems: readonly DesktopLauncherActionProgress[],
-): DesktopLauncherActionProgress | null {
-  return selectLauncherProgress(
-    busyState,
-    progressItems,
-    (progress) => environmentMatchesActionProgress(environmentID, progress),
-    (progress) => busyStateMatchesActionProgress(busyState, progress)
-      && environmentMatchesActionProgress(environmentID, progress),
-  );
-}
-
-export function selectedRuntimeLifecycleProgressForEnvironment(
+export function selectedSnapshotRuntimeLifecycleProgressForEnvironment(
   environment: DesktopEnvironmentEntry,
-  busyState: DesktopLauncherBusyState,
   progressItems: readonly DesktopLauncherActionProgress[],
 ): DesktopLauncherActionProgress | null {
   return selectLauncherProgress(
-    busyState,
     progressItems,
     (progress) => environmentMatchesRuntimeLifecycleProgress(environment, progress),
   );
 }
 
-export function selectedOpenConnectionProgressForEnvironment(
+export function selectedSnapshotOpenConnectionProgressForEnvironment(
   environment: DesktopEnvironmentEntry,
-  busyState: DesktopLauncherBusyState,
   progressItems: readonly DesktopLauncherActionProgress[],
 ): DesktopLauncherActionProgress | null {
   return selectLauncherProgress(
-    busyState,
     progressItems,
     (progress) => environmentMatchesOpenConnectionProgress(environment, progress),
   );
@@ -288,8 +313,8 @@ type LauncherProgressCandidate = Readonly<{
   progress: DesktopLauncherActionProgress;
   activity: LauncherProgressActivity;
   identity: string;
+  startedAt: number;
   timestamp: number;
-  sourceRank: number;
 }>;
 
 function launcherProgressActivity(
@@ -322,6 +347,22 @@ function launcherProgressIdentity(progress: DesktopLauncherActionProgress): stri
   const environmentID = String(progress.environment_id ?? progress.open_progress?.environment_id ?? '').trim();
   const subjectID = String(progress.subject_id ?? progress.open_progress?.target_id ?? '').trim();
   return `fallback:${action}:${environmentID}:${subjectID}${attemptKey}`;
+}
+
+function launcherProgressOwnerKey(progress: DesktopLauncherActionProgress): string {
+  const action = String(progress.action ?? '').trim();
+  const environmentID = String(progress.environment_id ?? progress.open_progress?.environment_id ?? '').trim();
+  const subjectID = String(progress.subject_id ?? progress.open_progress?.target_id ?? '').trim();
+  const operationKey = String(progress.operation_key ?? '').trim();
+  const surfaceID = environmentID || subjectID || operationKey;
+  return `surface:${action}:${surfaceID}:${subjectID}`;
+}
+
+function launcherProgressOwnsSameSurface(
+  left: DesktopLauncherActionProgress,
+  right: DesktopLauncherActionProgress,
+): boolean {
+  return launcherProgressOwnerKey(left) === launcherProgressOwnerKey(right);
 }
 
 function launcherProgressStartedAt(progress: DesktopLauncherActionProgress): number {
@@ -364,14 +405,13 @@ function sameOperationProgressionRank(activity: LauncherProgressActivity): numbe
 
 function candidateForProgress(
   progress: DesktopLauncherActionProgress,
-  sourceRank: number,
 ): LauncherProgressCandidate {
   return {
     progress,
     activity: launcherProgressActivity(progress),
     identity: launcherProgressIdentity(progress),
+    startedAt: launcherProgressStartedAt(progress),
     timestamp: launcherProgressTimestamp(progress),
-    sourceRank,
   };
 }
 
@@ -387,9 +427,6 @@ function compareSameOperationCandidate(
   if (leftProgressionRank !== rightProgressionRank) {
     return leftProgressionRank - rightProgressionRank;
   }
-  if (left.sourceRank !== right.sourceRank) {
-    return left.sourceRank - right.sourceRank;
-  }
   return 0;
 }
 
@@ -397,31 +434,29 @@ function compareVisibleProgressCandidate(
   left: LauncherProgressCandidate,
   right: LauncherProgressCandidate,
 ): number {
+  if (left.startedAt !== right.startedAt) {
+    return left.startedAt - right.startedAt;
+  }
+  if (left.timestamp !== right.timestamp) {
+    return left.timestamp - right.timestamp;
+  }
   const leftActivityRank = launcherProgressActivityRank(left.activity);
   const rightActivityRank = launcherProgressActivityRank(right.activity);
   if (leftActivityRank !== rightActivityRank) {
     return leftActivityRank - rightActivityRank;
   }
-  if (left.timestamp !== right.timestamp) {
-    return left.timestamp - right.timestamp;
-  }
-  return left.sourceRank - right.sourceRank;
+  return 0;
 }
 
 function selectLauncherProgress(
-  busyState: DesktopLauncherBusyState,
   progressItems: readonly DesktopLauncherActionProgress[],
   matchesProgress: (progress: DesktopLauncherActionProgress) => boolean,
-  matchesBusyProgress: (progress: DesktopLauncherActionProgress) => boolean = matchesProgress,
 ): DesktopLauncherActionProgress | null {
   const candidates: LauncherProgressCandidate[] = [];
   for (const progress of progressItems) {
     if (matchesProgress(progress)) {
-      candidates.push(candidateForProgress(progress, 2));
+      candidates.push(candidateForProgress(progress));
     }
-  }
-  if (busyState.progress && matchesBusyProgress(busyState.progress)) {
-    candidates.push(candidateForProgress(busyState.progress, 1));
   }
   if (candidates.length === 0) {
     return null;

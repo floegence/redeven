@@ -92,6 +92,7 @@ import { loadOrCreateDesktopRuntimeOwnerID } from './desktopRuntimeOwner';
 import { readBundledDesktopRuntimeIdentity, type DesktopRuntimeIdentity } from './desktopRuntimeIdentity';
 import { DesktopDiagnosticsRecorder } from './diagnostics';
 import { DesktopDownloadWriter } from './desktopDownloadWriter';
+import { DesktopWelcomeSnapshotOrder } from './desktopWelcomeSnapshotOrder';
 import {
   DesktopOperationFailureError,
   desktopOperationFailurePresentation,
@@ -384,6 +385,7 @@ import {
 import {
   desktopOpenConnectionLocation,
   openConnectionProgress,
+  type DesktopOpenConnectionLocation,
   type DesktopOpenConnectionPhase,
   type DesktopOpenConnectionProgress,
 } from '../shared/desktopOpenConnectionProgress';
@@ -651,6 +653,7 @@ const runtimePlacementReadyByTargetID = new Map<DesktopRuntimeTargetID, RuntimeP
 const pendingRuntimePlacementStartByTargetID = new Map<DesktopRuntimeTargetID, PendingRuntimePlacementStart>();
 const launcherOperationRemovalTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const launcherOperations = new LauncherOperationRegistry(handleLauncherOperationChange);
+const desktopWelcomeSnapshotOrder = new DesktopWelcomeSnapshotOrder();
 const welcomeRuntimeHealthStore = new DesktopWelcomeRuntimeHealthStore(
   () => broadcastDesktopWelcomeSnapshots(),
   recordWelcomeRuntimeProbeEvent,
@@ -670,7 +673,6 @@ const DESKTOP_GPU_TILE_MEMORY_BUDGET_MB = 2048;
 const pendingDesktopDeepLinks: string[] = [];
 let controlPlaneSyncPollTimer: NodeJS.Timeout | null = null;
 let welcomeRuntimePollTimer: NodeJS.Timeout | null = null;
-let desktopWelcomeSnapshotRevision = 0;
 
 // Apply before Electron is ready so Chromium sizes compositor tile memory for desktop Workbench surfaces.
 app.commandLine.appendSwitch('force-gpu-mem-available-mb', String(DESKTOP_GPU_TILE_MEMORY_BUDGET_MB));
@@ -2914,12 +2916,27 @@ async function buildCurrentDesktopWelcomeSnapshot(
   });
 }
 
-function stampDesktopWelcomeSnapshot(snapshot: DesktopWelcomeSnapshot): DesktopWelcomeSnapshot {
-  desktopWelcomeSnapshotRevision += 1;
-  return {
-    ...snapshot,
-    snapshot_revision: desktopWelcomeSnapshotRevision,
-  };
+function reserveDesktopWelcomeSnapshotGeneration(): number {
+  return desktopWelcomeSnapshotOrder.reserveGeneration();
+}
+
+function stampDesktopWelcomeSnapshot(
+  snapshot: DesktopWelcomeSnapshot,
+  snapshotGeneration = reserveDesktopWelcomeSnapshotGeneration(),
+): DesktopWelcomeSnapshot {
+  return desktopWelcomeSnapshotOrder.stamp(snapshot, snapshotGeneration);
+}
+
+function shouldEmitDesktopWelcomeSnapshotGeneration(snapshotGeneration: number): boolean {
+  return desktopWelcomeSnapshotOrder.shouldEmitGeneration(snapshotGeneration);
+}
+
+async function buildStampedDesktopWelcomeSnapshot(kind: DesktopUtilityWindowKind): Promise<DesktopWelcomeSnapshot> {
+  const snapshotGeneration = reserveDesktopWelcomeSnapshotGeneration();
+  return stampDesktopWelcomeSnapshot(
+    await buildCurrentDesktopWelcomeSnapshot(kind),
+    snapshotGeneration,
+  );
 }
 
 function liveUtilityWindow(kind: DesktopUtilityWindowKind): BrowserWindow | null {
@@ -2971,8 +2988,15 @@ async function emitDesktopWelcomeSnapshot(kind: DesktopUtilityWindowKind): Promi
   if (!win || win.webContents.isDestroyed()) {
     return;
   }
-  const snapshot = stampDesktopWelcomeSnapshot(await buildCurrentDesktopWelcomeSnapshot(kind));
-  win.webContents.send(DESKTOP_LAUNCHER_SNAPSHOT_UPDATED_CHANNEL, snapshot);
+  const snapshotGeneration = reserveDesktopWelcomeSnapshotGeneration();
+  const snapshot = await buildCurrentDesktopWelcomeSnapshot(kind);
+  if (!shouldEmitDesktopWelcomeSnapshotGeneration(snapshotGeneration)) {
+    return;
+  }
+  win.webContents.send(
+    DESKTOP_LAUNCHER_SNAPSHOT_UPDATED_CHANNEL,
+    stampDesktopWelcomeSnapshot(snapshot, snapshotGeneration),
+  );
 }
 
 function broadcastDesktopWelcomeSnapshots(): void {
@@ -4436,15 +4460,17 @@ function buildOpenConnectionProgress(input: Readonly<{
   environmentLabel: string;
   targetID?: string;
   targetLabel?: string;
+  targetDetail?: string;
+  location?: DesktopOpenConnectionLocation;
 }>): DesktopOpenConnectionProgress {
   return openConnectionProgress({
-    location: desktopOpenConnectionLocation(input.hostAccess, input.placement),
+    location: input.location ?? desktopOpenConnectionLocation(input.hostAccess, input.placement),
     phase: input.phase,
     environmentID: input.environmentID,
     environmentLabel: input.environmentLabel,
     targetID: input.targetID,
     targetLabel: input.targetLabel,
-    targetDetail: runtimeTargetDetail(input.hostAccess, input.placement),
+    targetDetail: input.targetDetail ?? runtimeTargetDetail(input.hostAccess, input.placement),
   });
 }
 
@@ -4597,6 +4623,29 @@ function runtimeLifecycleFailureNextActions(
       kind: 'copy_diagnostics',
       operation_key: operationKey,
       label: 'Copy log',
+    },
+    {
+      kind: 'dismiss',
+      operation_key: operationKey,
+      label: 'Dismiss',
+    },
+  ];
+}
+
+function openConnectionFailureNextActions(
+  operationKey: string,
+  environmentID: string,
+): readonly DesktopLauncherOperationNextAction[] {
+  return [
+    {
+      kind: 'refresh_status',
+      environment_id: compact(environmentID) || undefined,
+      label: 'Refresh status',
+    },
+    {
+      kind: 'copy_diagnostics',
+      operation_key: operationKey,
+      label: 'Copy diagnostics',
     },
     {
       kind: 'dismiss',
@@ -6173,15 +6222,25 @@ function launcherActionFailureForRuntimeNotOpenable(
     providerOrigin?: string;
     providerID?: string;
     envPublicID?: string;
+    targetLabel?: string;
   }> = {},
 ): DesktopLauncherActionFailure {
+  const summary = runtimeServiceOpenReadinessLabel(startup.runtime_service);
+  const failure = desktopOperationFailurePresentation({
+    code: 'environment_open_failed',
+    title: 'Open Failed',
+    summary,
+    targetLabel: options.targetLabel,
+    recoveryHint: 'Start or restart the runtime, then try again.',
+  });
   return launcherActionFailure(
     'runtime_not_ready',
     'environment',
-    runtimeServiceOpenReadinessLabel(startup.runtime_service),
+    failure.summary,
     {
       ...options,
       shouldRefreshSnapshot: true,
+      failure,
     },
   );
 }
@@ -6344,6 +6403,7 @@ function finishLocalHostOpenFailure(
       targetID: target.targetID,
       targetLabel: target.targetLabel,
     }),
+    ...(signal?.aborted ? {} : { next_actions: openConnectionFailureNextActions(operationKey, target.environmentID) }),
     ...(signal?.aborted || !result.failure ? {} : { failure: result.failure }),
   });
   scheduleLauncherOperationRemoval(operationKey);
@@ -6468,7 +6528,10 @@ async function openLocalEnvironmentRecord(
       detail: 'Desktop is checking whether the local Env App is ready to open.',
     });
     if (!runtimeServiceIsOpenable(runtimeRecord.startup.runtime_service)) {
-      const result = launcherActionFailureForRuntimeNotOpenable(runtimeRecord.startup, failureContext);
+      const result = launcherActionFailureForRuntimeNotOpenable(runtimeRecord.startup, {
+        ...failureContext,
+        targetLabel: environment.label,
+      });
       return finishLocalHostOpenFailure(operationKey, openTarget, signal, result);
     }
 
@@ -6567,7 +6630,54 @@ async function openProviderRemoteEnvironmentRecord(
     });
   }
 
+  const operationKey = `${target.session_key}:open`;
+  const operation = launcherOperations.create({
+    operation_key: operationKey,
+    action: 'open_provider_environment',
+    subject_kind: 'provider_environment',
+    subject_id: environment.id,
+    environment_id: environment.id,
+    environment_label: environment.label,
+    provider_origin: environment.provider_origin,
+    provider_id: environment.provider_id,
+    phase: 'checking_runtime_record',
+    title: 'Checking provider route',
+    detail: 'Desktop is checking the provider route before opening this environment.',
+    open_progress: buildOpenConnectionProgress({
+      hostAccess: { kind: 'local_host' },
+      placement: { kind: 'host_process', runtime_root: '' },
+      phase: 'checking_runtime_record',
+      environmentID: environment.id,
+      environmentLabel: environment.label,
+      targetID: target.session_key,
+      targetLabel: environment.label,
+      targetDetail: 'Provider route',
+      location: 'provider_remote',
+    }),
+    cancelable: true,
+    interrupt_label: 'Stop opening',
+    interrupt_detail: 'Desktop is stopping this provider open request before opening the environment window.',
+    interrupt_kind: 'stop_opening',
+  });
+  const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
+
   try {
+    launcherOperations.update(operationKey, {
+      phase: 'opening_window',
+      title: 'Opening environment',
+      detail: 'Desktop is opening the provider environment window.',
+      open_progress: buildOpenConnectionProgress({
+        hostAccess: { kind: 'local_host' },
+        placement: { kind: 'host_process', runtime_root: '' },
+        phase: 'opening_window',
+        environmentID: environment.id,
+        environmentLabel: environment.label,
+        targetID: target.session_key,
+        targetLabel: environment.label,
+        targetDetail: 'Provider route',
+        location: 'provider_remote',
+      }),
+    });
     const sessionRecord = await createSessionRecord(
       target,
       remoteManagedSessionStartup(args.remoteSessionURL),
@@ -6575,15 +6685,64 @@ async function openProviderRemoteEnvironmentRecord(
     );
     await waitForSessionInitialLoad(sessionRecord);
   } catch (error) {
-    return launcherActionFailureFromSessionOpenError(error, {
-      environmentID: environment.id,
-      providerOrigin: environment.provider_origin,
-      providerID: environment.provider_id,
-      envPublicID: environment.env_public_id,
+    const failure = desktopFailureFromError(error, {
+      code: 'environment_open_failed',
+      title: 'Open Failed',
+      summary: 'Desktop could not open this provider environment.',
+      targetLabel: environment.label,
     });
+    launcherOperations.finish(operationKey, signal?.aborted ? 'canceled' : 'failed', {
+      phase: signal?.aborted ? 'canceled' : 'failed',
+      title: signal?.aborted ? 'Open canceled' : 'Open failed',
+      detail: signal?.aborted ? 'Desktop canceled this open request.' : failure.summary,
+      open_progress: buildOpenConnectionProgress({
+        hostAccess: { kind: 'local_host' },
+        placement: { kind: 'host_process', runtime_root: '' },
+        phase: signal?.aborted ? 'canceled' : 'failed',
+        environmentID: environment.id,
+        environmentLabel: environment.label,
+        targetID: target.session_key,
+        targetLabel: environment.label,
+        targetDetail: 'Provider route',
+        location: 'provider_remote',
+      }),
+      ...(signal?.aborted ? {} : { next_actions: openConnectionFailureNextActions(operationKey, environment.id) }),
+      ...(signal?.aborted ? {} : { failure }),
+    });
+    scheduleLauncherOperationRemoval(operationKey);
+    return launcherActionFailure(
+      'action_invalid',
+      'environment',
+      failure.summary,
+      {
+        environmentID: environment.id,
+        providerOrigin: environment.provider_origin,
+        providerID: environment.provider_id,
+        envPublicID: environment.env_public_id,
+        shouldRefreshSnapshot: true,
+        failure,
+      },
+    );
   }
   resetLauncherIssueState();
   await persistDesktopPreferences(rememberProviderEnvironmentUse(preferences, environment.id));
+  launcherOperations.finish(operationKey, 'succeeded', {
+    phase: 'open_ready',
+    title: 'Environment open',
+    detail: 'Desktop opened this provider environment.',
+    open_progress: buildOpenConnectionProgress({
+      hostAccess: { kind: 'local_host' },
+      placement: { kind: 'host_process', runtime_root: '' },
+      phase: 'open_ready',
+      environmentID: environment.id,
+      environmentLabel: environment.label,
+      targetID: target.session_key,
+      targetLabel: environment.label,
+      targetDetail: 'Provider route',
+      location: 'provider_remote',
+    }),
+  });
+  scheduleLauncherOperationRemoval(operationKey);
   return launcherActionSuccess('opened_environment_window', {
     sessionKey: target.session_key,
   });
@@ -6715,8 +6874,79 @@ async function openRemoteEnvironmentFromLauncher(
     });
   }
 
+  const operationKey = `${optimisticSessionKey}:open`;
+  const operation = launcherOperations.create({
+    operation_key: operationKey,
+    action: 'open_remote_environment',
+    subject_kind: 'external_local_ui',
+    subject_id: optimisticSessionKey,
+    environment_id: request.environment_id ?? optimisticSessionKey,
+    environment_label: request.label ?? normalizedTargetURL,
+    phase: 'checking_runtime_record',
+    title: 'Checking local UI target',
+    detail: 'Desktop is checking the target before opening this Redeven URL.',
+    open_progress: buildOpenConnectionProgress({
+      hostAccess: { kind: 'local_host' },
+      placement: { kind: 'host_process', runtime_root: '' },
+      phase: 'checking_runtime_record',
+      environmentID: request.environment_id ?? optimisticSessionKey,
+      environmentLabel: request.label ?? normalizedTargetURL,
+      targetID: optimisticSessionKey,
+      targetLabel: request.label ?? normalizedTargetURL,
+      targetDetail: normalizedTargetURL,
+      location: 'external_local_ui',
+    }),
+    cancelable: true,
+    interrupt_label: 'Stop opening',
+    interrupt_detail: 'Desktop is stopping this open request before opening the Redeven URL window.',
+    interrupt_kind: 'stop_opening',
+  });
+  const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
+  const failureEnvironmentID = request.environment_id ?? optimisticSessionKey;
+  const finishRemoteOpenFailure = (result: DesktopLauncherActionFailure): DesktopLauncherActionFailure => {
+    const canceled = signal?.aborted === true;
+    launcherOperations.finish(operationKey, canceled ? 'canceled' : 'failed', {
+      phase: canceled ? 'canceled' : 'failed',
+      title: canceled ? 'Open canceled' : 'Open failed',
+      detail: canceled ? 'Desktop canceled this open request.' : result.message,
+      open_progress: buildOpenConnectionProgress({
+        hostAccess: { kind: 'local_host' },
+        placement: { kind: 'host_process', runtime_root: '' },
+        phase: canceled ? 'canceled' : 'failed',
+        environmentID: failureEnvironmentID,
+        environmentLabel: request.label ?? normalizedTargetURL,
+        targetID: optimisticSessionKey,
+        targetLabel: request.label ?? normalizedTargetURL,
+        targetDetail: normalizedTargetURL,
+        location: 'external_local_ui',
+      }),
+      ...(canceled ? {} : { next_actions: openConnectionFailureNextActions(operationKey, failureEnvironmentID) }),
+      ...(canceled || !result.failure ? {} : { failure: result.failure }),
+    });
+    scheduleLauncherOperationRemoval(operationKey);
+    return result;
+  };
+
   const prepared = await prepareExternalTarget(normalizedTargetURL);
   if (!prepared.ok) {
+    finishRemoteOpenFailure(launcherActionFailure(
+      'environment_route_unavailable',
+      'environment',
+      prepared.issue.message,
+      {
+        environmentID: failureEnvironmentID,
+        shouldRefreshSnapshot: true,
+        failure: desktopFailureFromError(prepared.issue.message, {
+          code: 'environment_open_failed',
+          title: 'Open Failed',
+          summary: prepared.issue.message,
+          targetLabel: request.label ?? normalizedTargetURL,
+        }),
+      },
+    ));
+    if (signal?.aborted) {
+      return launcherActionSuccess('canceled_launcher_operation');
+    }
     return openUtilityWindow('launcher', {
       entryReason: prepared.entryReason,
       issue: prepared.issue,
@@ -6724,9 +6954,11 @@ async function openRemoteEnvironmentFromLauncher(
     });
   }
   if (!runtimeServiceIsOpenable(prepared.startup.runtime_service)) {
-    return launcherActionFailureForRuntimeNotOpenable(prepared.startup, {
+    const result = launcherActionFailureForRuntimeNotOpenable(prepared.startup, {
       environmentID: request.environment_id,
+      targetLabel: request.label,
     });
+    return finishRemoteOpenFailure(result);
   }
 
   const target = buildExternalLocalUIDesktopTarget(prepared.startup.local_ui_url, {
@@ -6745,21 +6977,72 @@ async function openRemoteEnvironmentFromLauncher(
     await markSavedExternalTargetUsed(existingSession.target.environment_id, existingSession.startup.local_ui_url);
     focusEnvironmentSession(existingSession.session_key, { stealAppFocus: true });
     broadcastDesktopWelcomeSnapshots();
+    launcherOperations.finish(operationKey, 'succeeded', {
+      phase: 'open_ready',
+      title: 'Environment open',
+      detail: 'Desktop opened this Redeven URL window.',
+      open_progress: buildOpenConnectionProgress({
+        hostAccess: { kind: 'local_host' },
+        placement: { kind: 'host_process', runtime_root: '' },
+        phase: 'open_ready',
+        environmentID: request.environment_id ?? optimisticSessionKey,
+        environmentLabel: request.label ?? normalizedTargetURL,
+        targetID: optimisticSessionKey,
+        targetLabel: request.label ?? normalizedTargetURL,
+        targetDetail: normalizedTargetURL,
+        location: 'external_local_ui',
+      }),
+    });
+    scheduleLauncherOperationRemoval(operationKey);
     return launcherActionSuccess('focused_environment_window', {
       sessionKey: existingSession.session_key,
     });
   }
 
   try {
+    launcherOperations.update(operationKey, {
+      phase: 'opening_window',
+      title: 'Opening environment',
+      detail: 'Desktop is opening the Redeven URL window.',
+      open_progress: buildOpenConnectionProgress({
+        hostAccess: { kind: 'local_host' },
+        placement: { kind: 'host_process', runtime_root: '' },
+        phase: 'opening_window',
+        environmentID: request.environment_id ?? optimisticSessionKey,
+        environmentLabel: request.label ?? normalizedTargetURL,
+        targetID: optimisticSessionKey,
+        targetLabel: request.label ?? normalizedTargetURL,
+        targetDetail: normalizedTargetURL,
+        location: 'external_local_ui',
+      }),
+    });
     const sessionRecord = await createSessionRecord(target, prepared.startup, { stealAppFocus: true });
     await waitForSessionInitialLoad(sessionRecord);
   } catch (error) {
-    return launcherActionFailureFromSessionOpenError(error, {
+    const result = launcherActionFailureFromSessionOpenError(error, {
       environmentID: request.environment_id,
     });
+    return finishRemoteOpenFailure(result);
   }
   resetLauncherIssueState();
   await markSavedExternalTargetUsed(target.environment_id, prepared.startup.local_ui_url);
+  launcherOperations.finish(operationKey, 'succeeded', {
+    phase: 'open_ready',
+    title: 'Environment open',
+    detail: 'Desktop opened this Redeven URL window.',
+    open_progress: buildOpenConnectionProgress({
+      hostAccess: { kind: 'local_host' },
+      placement: { kind: 'host_process', runtime_root: '' },
+      phase: 'open_ready',
+      environmentID: request.environment_id ?? optimisticSessionKey,
+      environmentLabel: request.label ?? normalizedTargetURL,
+      targetID: optimisticSessionKey,
+      targetLabel: request.label ?? normalizedTargetURL,
+      targetDetail: normalizedTargetURL,
+      location: 'external_local_ui',
+    }),
+  });
+  scheduleLauncherOperationRemoval(operationKey);
   return launcherActionSuccess('opened_environment_window', {
     sessionKey: target.session_key,
   });
@@ -6891,6 +7174,7 @@ async function openSSHEnvironmentFromLauncher(
               targetID: optimisticSessionKey,
               targetLabel: request.label ?? defaultSavedSSHEnvironmentLabel(sshDetails),
             }),
+            ...(signal?.aborted ? {} : { next_actions: openConnectionFailureNextActions(operationKey, request.environment_id ?? optimisticSessionKey) }),
             ...(signal?.aborted || !result.failure ? {} : { failure: result.failure }),
           });
           scheduleLauncherOperationRemoval(operationKey);
@@ -6987,6 +7271,7 @@ async function openSSHEnvironmentFromLauncher(
     if (!runtimeServiceIsOpenable(runtimeRecord.startup.runtime_service)) {
       throw launcherActionFailureForRuntimeNotOpenable(runtimeRecord.startup, {
         environmentID: request.environment_id,
+        targetLabel: request.label ?? defaultSavedSSHEnvironmentLabel(sshDetails),
       });
     }
     const openTarget = buildSSHDesktopTarget(sshDetails, {
@@ -7035,6 +7320,7 @@ async function openSSHEnvironmentFromLauncher(
         targetID: optimisticSessionKey,
         targetLabel: request.label ?? defaultSavedSSHEnvironmentLabel(sshDetails),
       }),
+      ...(signal?.aborted ? {} : { next_actions: openConnectionFailureNextActions(operationKey, request.environment_id ?? optimisticSessionKey) }),
       ...(signal?.aborted ? {} : { failure }),
     });
     scheduleLauncherOperationRemoval(operationKey);
@@ -7781,6 +8067,7 @@ async function openRuntimePlacementBridgeFromLauncher(
               targetID,
               targetLabel: label,
             }),
+            ...(signal?.aborted ? {} : { next_actions: openConnectionFailureNextActions(operationKey, environmentID) }),
             ...(signal?.aborted || !result.failure ? {} : { failure: result.failure }),
           });
           scheduleLauncherOperationRemoval(operationKey);
@@ -7847,6 +8134,7 @@ async function openRuntimePlacementBridgeFromLauncher(
     if (!runtimeServiceIsOpenable(record.startup.runtime_service)) {
       throw launcherActionFailureForRuntimeNotOpenable(record.startup, {
         environmentID: record.environment_id,
+        targetLabel: record.label,
       });
     }
     updateOpenConnectionOperation(operationKey, {
@@ -7901,6 +8189,7 @@ async function openRuntimePlacementBridgeFromLauncher(
         targetID,
         targetLabel: label,
       }),
+      ...(signal?.aborted ? {} : { next_actions: openConnectionFailureNextActions(operationKey, environmentID) }),
       ...(signal?.aborted ? {} : { failure }),
     });
     scheduleLauncherOperationRemoval(operationKey);
@@ -11248,7 +11537,7 @@ if (!app.requestSingleInstanceLock()) {
     }
   });
   ipcMain.handle(DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL, async (event) => (
-    stampDesktopWelcomeSnapshot(await buildCurrentDesktopWelcomeSnapshot(senderUtilityWindowKind(event.sender.id)))
+    buildStampedDesktopWelcomeSnapshot(senderUtilityWindowKind(event.sender.id))
   ));
   ipcMain.handle(DESKTOP_LAUNCHER_GET_SSH_CONFIG_HOSTS_CHANNEL, async () => (
     loadDesktopSSHConfigHosts()

@@ -12,7 +12,9 @@ import {
 } from '../shared/desktopRuntimeLifecycleProgress';
 import type { EnvironmentActionModel } from './viewModel';
 import {
+  environmentProgressPanelPrimaryAction,
   environmentProgressPrimaryPresentation,
+  openConnectionFailurePrimaryAction,
   runtimeLifecycleReadyPrimaryAction,
   selectEnvironmentPanelProgress,
 } from './environmentProgressPrimaryPresentation';
@@ -140,6 +142,104 @@ describe('runtimeLifecycleReadyPrimaryAction', () => {
       lifecycleActionProgress(),
       { ...openAction, intent: 'restart_runtime', label: 'Restart runtime' },
     )).toBeNull();
+  });
+});
+
+describe('openConnectionFailurePrimaryAction', () => {
+  it('returns the enabled Open or Focus action only for failed Open progress', () => {
+    const focusAction: EnvironmentActionModel = {
+      intent: 'focus',
+      label: 'Focus',
+      enabled: true,
+      variant: 'default',
+    };
+
+    expect(openConnectionFailurePrimaryAction(openConnectionProgress('failed'), openAction)).toBe(openAction);
+    expect(openConnectionFailurePrimaryAction(openConnectionProgress('cleanup_failed'), openAction)).toBe(openAction);
+    expect(openConnectionFailurePrimaryAction(openConnectionProgress('failed'), focusAction)).toBe(focusAction);
+    expect(openConnectionFailurePrimaryAction(
+      openConnectionProgress('failed'),
+      { ...openAction, enabled: false },
+    )).toBeNull();
+    expect(openConnectionFailurePrimaryAction(
+      openConnectionProgress('failed'),
+      { ...openAction, intent: 'restart_runtime', label: 'Restart runtime' },
+    )).toBeNull();
+    expect(openConnectionFailurePrimaryAction(openConnectionProgress('running'), openAction)).toBeNull();
+    expect(openConnectionFailurePrimaryAction(lifecycleActionProgress({ status: 'failed' }), openAction)).toBeNull();
+  });
+});
+
+describe('environmentProgressPanelPrimaryAction', () => {
+  it('offers Open or Focus inside the popup without changing failed card presentation', () => {
+    const failedOpen = openConnectionProgress('failed');
+    const focusAction: EnvironmentActionModel = {
+      intent: 'focus',
+      label: 'Focus',
+      enabled: true,
+      variant: 'default',
+    };
+
+    expect(environmentProgressPrimaryPresentation(failedOpen)).toMatchObject({
+      kind: 'attention_trigger',
+      label: 'Open failed',
+    });
+    expect(environmentProgressPanelPrimaryAction(failedOpen, openAction)).toEqual({
+      action: openAction,
+      label: 'Open',
+      icon: 'external_link',
+      loading: false,
+      disabled: false,
+    });
+    expect(environmentProgressPanelPrimaryAction(failedOpen, focusAction, { busy: true })).toEqual({
+      action: focusAction,
+      label: 'Focus',
+      icon: 'external_link',
+      loading: true,
+      disabled: true,
+    });
+  });
+
+  it('offers Open or Focus for cleanup-failed Open receipts inside the popup', () => {
+    const cleanupFailedOpen = openConnectionProgress('cleanup_failed');
+
+    expect(environmentProgressPrimaryPresentation(cleanupFailedOpen)).toMatchObject({
+      kind: 'attention_trigger',
+      label: 'Cleanup failed',
+    });
+    expect(environmentProgressPanelPrimaryAction(cleanupFailedOpen, openAction)).toEqual({
+      action: openAction,
+      label: 'Open',
+      icon: 'external_link',
+      loading: false,
+      disabled: false,
+    });
+  });
+
+  it('offers the current primary action for runtime-ready receipts only in the popup', () => {
+    const readyProgress = lifecycleActionProgress({
+      action: 'restart_environment_runtime',
+      operation: 'restart',
+      status: 'succeeded',
+      phase: 'runtime_ready',
+    });
+    const stoppedProgress = lifecycleActionProgress({
+      action: 'stop_environment_runtime',
+      operation: 'stop',
+      status: 'succeeded',
+      phase: 'runtime_stopped',
+    });
+
+    expect(environmentProgressPrimaryPresentation(readyProgress)).toBeNull();
+    expect(environmentProgressPanelPrimaryAction(readyProgress, openAction, { busy: true })).toEqual({
+      action: openAction,
+      label: 'Open',
+      icon: 'external_link',
+      loading: true,
+      disabled: true,
+    });
+    expect(environmentProgressPrimaryPresentation(stoppedProgress)).toBeNull();
+    expect(environmentProgressPanelPrimaryAction(stoppedProgress, openAction)).toBeNull();
   });
 });
 
@@ -299,6 +399,27 @@ describe('selectEnvironmentPanelProgress', () => {
     });
 
     expect(selectEnvironmentPanelProgress(openRunning, staleRuntimeFailure)).toBe(openRunning);
+  });
+
+  it('uses the newest operation instead of letting stale active progress mask a newer failure', () => {
+    const staleOpenRunning = openConnectionProgress('running', { startedAt: 100, updatedAt: 500 });
+    const newerRuntimeFailure = lifecycleActionProgress({
+      action: 'stop_environment_runtime',
+      operation: 'stop',
+      status: 'failed',
+      startedAt: 200,
+      updatedAt: 220,
+    });
+    const staleRuntimeRunning = lifecycleActionProgress({
+      action: 'restart_environment_runtime',
+      status: 'running',
+      startedAt: 100,
+      updatedAt: 500,
+    });
+    const newerOpenFailure = openConnectionProgress('failed', { startedAt: 200, updatedAt: 220 });
+
+    expect(selectEnvironmentPanelProgress(staleOpenRunning, newerRuntimeFailure)).toBe(newerRuntimeFailure);
+    expect(selectEnvironmentPanelProgress(newerOpenFailure, staleRuntimeRunning)).toBe(newerOpenFailure);
   });
 
   it('uses the latest progress within the same priority and Open as the final tie breaker', () => {

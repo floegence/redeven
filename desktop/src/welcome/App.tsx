@@ -53,6 +53,7 @@ import type {
   DesktopLauncherActionProgress,
   DesktopLauncherActionResult,
   DesktopLauncherActionRequest,
+  DesktopLauncherOperationNextAction,
   DesktopLauncherSurface,
   DesktopLauncherRuntimeTarget,
   DesktopLocalEnvironmentStateRoute,
@@ -62,6 +63,7 @@ import type {
 import {
   isDesktopLauncherActionFailure,
   isDesktopLauncherActionSuccess,
+  selectLatestDesktopWelcomeSnapshot,
 } from '../shared/desktopLauncherIPC';
 import type { DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
 import {
@@ -201,6 +203,10 @@ import {
   splitPinnedEnvironmentEntryIDs,
 } from './environmentLibraryProjection';
 import {
+  operationNextActionsByKind,
+  visibleOperationNextActions,
+} from './operationNextActions';
+import {
   completeEnvironmentGuidanceRefresh,
   failEnvironmentGuidanceIntent,
   guidanceSessionKeepsPopoverOpen,
@@ -217,6 +223,7 @@ import {
   closeEnvironmentLifecycleDisclosure,
   environmentActionStartsLifecycleDisclosure,
   environmentLifecycleDisclosureForEnvironment,
+  environmentLifecycleDisclosureHasPendingRequest,
   reconcileEnvironmentLifecycleDisclosure,
   reopenEnvironmentLifecycleDisclosure,
   visibleEnvironmentLifecycleProgress,
@@ -225,21 +232,22 @@ import {
 } from './environmentLifecycleDisclosure';
 import {
   type EnvironmentProgressPrimaryPresentation,
+  environmentProgressPanelPrimaryAction,
   environmentProgressPrimaryPresentation,
-  runtimeLifecycleReadyPrimaryAction,
   selectEnvironmentPanelProgress,
 } from './environmentProgressPrimaryPresentation';
 import {
   busyStateForLauncherRequest,
   busyStateWithActionProgress,
   busyStateBlocksEnvironmentAction,
+  reconcileBusyStateWithActionProgressSnapshot,
   launcherProgressBlocksPrimaryAction,
   busyStateMatchesAction,
   busyStateMatchesControlPlane,
   busyStateMatchesEnvironment,
   IDLE_LAUNCHER_BUSY_STATE,
-  selectedOpenConnectionProgressForEnvironment,
-  selectedRuntimeLifecycleProgressForEnvironment,
+  selectedSnapshotOpenConnectionProgressForEnvironment,
+  selectedSnapshotRuntimeLifecycleProgressForEnvironment,
   type DesktopLauncherBusyState,
 } from './launcherBusyState';
 import { createRuntimeLifecycleStepAnimation } from './runtimeLifecycleStepAnimation';
@@ -459,21 +467,11 @@ function trimString(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-function desktopWelcomeSnapshotRevision(snapshot: DesktopWelcomeSnapshot): number {
-  const revision = Number(snapshot.snapshot_revision);
-  return Number.isFinite(revision) && revision > 0 ? revision : 0;
-}
-
 function nextDesktopWelcomeSnapshot(
   current: DesktopWelcomeSnapshot,
   next: DesktopWelcomeSnapshot,
 ): DesktopWelcomeSnapshot {
-  const currentRevision = desktopWelcomeSnapshotRevision(current);
-  const nextRevision = desktopWelcomeSnapshotRevision(next);
-  if (currentRevision > 0 && nextRevision > 0 && nextRevision < currentRevision) {
-    return current;
-  }
-  return next;
+  return selectLatestDesktopWelcomeSnapshot(current, next);
 }
 
 function defaultLocalUIPasswordMode(configured: boolean): DesktopLocalUIPasswordMode {
@@ -1184,6 +1182,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const unsubscribeSnapshot = props.runtime.launcher.subscribeSnapshot((nextSnapshot) => {
     setSnapshot((current) => {
       const next = nextDesktopWelcomeSnapshot(current, nextSnapshot);
+      if (next !== current) {
+        setBusyState((busy) => reconcileBusyStateWithActionProgressSnapshot(busy, next.action_progress));
+      }
       setEnvironmentFailures((failures) => {
         if (failures.size === 0) {
           return failures;
@@ -1257,6 +1258,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     let acceptedSnapshot = nextSnapshot;
     setSnapshot((current) => {
       acceptedSnapshot = nextDesktopWelcomeSnapshot(current, nextSnapshot);
+      if (acceptedSnapshot !== current) {
+        setBusyState((busy) => reconcileBusyStateWithActionProgressSnapshot(busy, acceptedSnapshot.action_progress));
+      }
       return acceptedSnapshot;
     });
     return acceptedSnapshot;
@@ -1609,6 +1613,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       environment_id: environmentID,
       provider_origin: '',
       provider_id: '',
+      request_started_at_unix_ms: Date.now(),
       progress: null,
     });
     void props.runtime.launcher.performAction({ kind: 'open_environment_settings', environment_id: environmentID })
@@ -2708,6 +2713,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       environment_id: '',
       provider_origin: '',
       provider_id: '',
+      request_started_at_unix_ms: Date.now(),
       progress: null,
     });
     try {
@@ -2753,6 +2759,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       environment_id: trimString(request.environment_id),
       provider_origin: '',
       provider_id: '',
+      request_started_at_unix_ms: Date.now(),
       progress: null,
     });
     try {
@@ -2792,6 +2799,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       environment_id: trimString(request.environment_id),
       provider_origin: '',
       provider_id: '',
+      request_started_at_unix_ms: Date.now(),
       progress: null,
     });
     try {
@@ -2836,6 +2844,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       environment_id: trimString(request.environment_id),
       provider_origin: '',
       provider_id: '',
+      request_started_at_unix_ms: Date.now(),
       progress: null,
     });
     try {
@@ -3099,6 +3108,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       environment_id: target.id,
       provider_origin: '',
       provider_id: '',
+      request_started_at_unix_ms: Date.now(),
       progress: null,
     });
     try {
@@ -3994,15 +4004,21 @@ function EnvironmentCardsPanel(props: Readonly<{
       if (current.kind === 'lifecycle_progress') {
         const environment = props.entries.find((entry) => entry.id === current.environment_id);
         const progressStillVisible = environment
-          ? selectedOpenConnectionProgressForEnvironment(environment, props.busyState, props.actionProgress) !== null
-            || selectedRuntimeLifecycleProgressForEnvironment(environment, props.busyState, props.actionProgress) !== null
+          ? selectedSnapshotOpenConnectionProgressForEnvironment(environment, props.actionProgress) !== null
+            || selectedSnapshotRuntimeLifecycleProgressForEnvironment(environment, props.actionProgress) !== null
           : false;
-        return (
-          lifecycleDisclosure?.environment_id === current.environment_id
+        const pendingDisclosureVisible = lifecycleDisclosure?.environment_id === current.environment_id
           && lifecycleDisclosure.visibility === 'open'
-        ) || progressStillVisible
+          && (
+            lifecycleDisclosure.last_progress !== undefined
+            || environmentLifecycleDisclosureHasPendingRequest(lifecycleDisclosure, props.busyState)
+          );
+        return (
+          pendingDisclosureVisible
+          || progressStillVisible
           ? current
-          : closedEnvironmentLibraryOverlayState();
+          : closedEnvironmentLibraryOverlayState()
+        );
       }
       if (
         current.kind === 'primary_action_guidance'
@@ -4696,9 +4712,11 @@ function environmentProgressStatusIconTone(progress: DesktopLauncherActionProgre
 function EnvironmentProgressPanel(props: Readonly<{
   progress: DesktopLauncherActionProgress;
   primaryAction?: EnvironmentActionModel;
+  primaryActionBusy?: boolean;
   cancelOperation: (progress: DesktopLauncherActionProgress) => void;
   dismissOperation: (progress: DesktopLauncherActionProgress) => void;
   copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
+  runNextAction?: (action: DesktopLauncherOperationNextAction, progress: DesktopLauncherActionProgress) => void;
   runPrimaryAction?: (action: EnvironmentActionModel) => void;
 }>) {
   const startup = createMemo(() => props.progress.lifecycle_progress);
@@ -4732,9 +4750,12 @@ function EnvironmentProgressPanel(props: Readonly<{
     || props.progress.status === 'cleanup_failed'
     || props.progress.status === 'canceled'
   ));
-  const readyPrimaryAction = createMemo(() => {
-    return runtimeLifecycleReadyPrimaryAction(props.progress, props.primaryAction);
-  });
+  const panelPrimaryAction = createMemo(() => environmentProgressPanelPrimaryAction(
+    props.progress,
+    props.primaryAction,
+    { busy: props.primaryActionBusy },
+  ));
+  const nextActions = createMemo(() => visibleOperationNextActions(props.progress));
   const phaseSequence = createMemo<readonly { phase: string; key: string; label: string; status?: string }[]>(() => {
     const current = startup();
     const open = openConnection();
@@ -4890,14 +4911,16 @@ function EnvironmentProgressPanel(props: Readonly<{
           </Button>
         </div>
       </Show>
-      <Show when={readyPrimaryAction()}>
+      <Show when={panelPrimaryAction()}>
         {(action) => (
           <div class="redeven-action-popover__actions">
             <Button
               size="sm"
               variant="default"
               class="w-full justify-center gap-1.5"
-              onClick={() => props.runPrimaryAction?.(action())}
+              loading={action().loading}
+              disabled={action().disabled}
+              onClick={() => props.runPrimaryAction?.(action().action)}
             >
               <ExternalLink class="h-3.5 w-3.5" />
               {action().label}
@@ -4905,9 +4928,31 @@ function EnvironmentProgressPanel(props: Readonly<{
           </div>
         )}
       </Show>
+      <Show when={nextActions().length > 0}>
+        <div class="redeven-action-popover__actions">
+          <For each={nextActions()}>
+            {(action) => (
+              <Button
+                size="sm"
+                variant="outline"
+                class="flex-1 justify-center gap-1.5 whitespace-nowrap"
+                onClick={() => props.runNextAction?.(action, props.progress)}
+              >
+                <Show
+                  when={action.kind === 'refresh_status'}
+                  fallback={action.kind === 'copy_diagnostics' ? <Copy class="h-3.5 w-3.5" /> : null}
+                >
+                  <Refresh class="h-3.5 w-3.5" />
+                </Show>
+                {action.label}
+              </Button>
+            )}
+          </For>
+        </div>
+      </Show>
       <Show when={canDismiss()}>
         <div class="redeven-action-popover__actions">
-          <Show when={props.progress.failure}>
+          <Show when={props.progress.failure && !operationNextActionsByKind(props.progress).has('copy_diagnostics')}>
             <Button
               size="sm"
               variant="outline"
@@ -4915,17 +4960,19 @@ function EnvironmentProgressPanel(props: Readonly<{
               onClick={() => props.copyOperationDiagnostics(props.progress)}
             >
               <Copy class="h-3.5 w-3.5" />
-              Copy log
+              Copy diagnostics
             </Button>
           </Show>
-          <Button
-            size="sm"
-            variant="outline"
-            class="flex-1 justify-center"
-            onClick={() => props.dismissOperation(props.progress)}
-          >
-            Dismiss
-          </Button>
+          <Show when={!operationNextActionsByKind(props.progress).has('dismiss')}>
+            <Button
+              size="sm"
+              variant="outline"
+              class="flex-1 justify-center"
+              onClick={() => props.dismissOperation(props.progress)}
+            >
+              Dismiss
+            </Button>
+          </Show>
         </div>
       </Show>
     </div>
@@ -5094,6 +5141,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
   cancelOperation: (progress: DesktopLauncherActionProgress) => void;
   dismissOperation: (progress: DesktopLauncherActionProgress) => void;
   copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
+  refreshEnvironmentRuntime: () => void;
   onRunAction: (action: EnvironmentActionModel) => void;
   onRunGuidanceAction: (action: EnvironmentActionModel) => void;
 }>) {
@@ -5300,12 +5348,27 @@ function EnvironmentSplitActionButton(props: Readonly<{
                         <EnvironmentProgressPanel
                           progress={p()}
                           primaryAction={props.presentation.primary_action}
+                          primaryActionBusy={props.loading === true}
                           cancelOperation={props.cancelOperation}
                           dismissOperation={(progress) => {
                             props.dismissOperation(progress);
                             props.onProgressOpenChange(false);
                           }}
                           copyOperationDiagnostics={props.copyOperationDiagnostics}
+                          runNextAction={(action, progress) => {
+                            switch (action.kind) {
+                              case 'refresh_status':
+                                props.refreshEnvironmentRuntime();
+                                break;
+                              case 'copy_diagnostics':
+                                props.copyOperationDiagnostics(progress);
+                                break;
+                              case 'dismiss':
+                                props.dismissOperation(progress);
+                                props.onProgressOpenChange(false);
+                                break;
+                            }
+                          }}
                           runPrimaryAction={(action) => {
                             props.onProgressOpenChange(false);
                             closeMenu();
@@ -5559,10 +5622,10 @@ function EnvironmentConnectionCard(props: Readonly<{
   const environmentActionModel = createMemo(() => buildProviderBackedEnvironmentActionModel(props.environment));
   const environmentActionPresentation = createMemo(() => environmentActionModel().action_presentation);
   const runtimeLifecycleProgress = createMemo(() => (
-    selectedRuntimeLifecycleProgressForEnvironment(props.environment, props.busyState, props.actionProgress)
+    selectedSnapshotRuntimeLifecycleProgressForEnvironment(props.environment, props.actionProgress)
   ));
   const openConnectionProgress = createMemo(() => (
-    selectedOpenConnectionProgressForEnvironment(props.environment, props.busyState, props.actionProgress)
+    selectedSnapshotOpenConnectionProgressForEnvironment(props.environment, props.actionProgress)
   ));
   const [rememberedOpenConnectionProgress, setRememberedOpenConnectionProgress] = createSignal<DesktopLauncherActionProgress | null>(null);
   const visibleOpenConnectionProgress = createMemo(() => (
@@ -5593,6 +5656,7 @@ function EnvironmentConnectionCard(props: Readonly<{
     environment: props.environment,
     selectedProgress: runtimeLifecycleProgress(),
     disclosure: props.lifecycleDisclosure,
+    busyState: props.busyState,
   }));
   const isCardOpen = createMemo(() => props.environment.window_state === 'open');
   const windowBusyActions = [
@@ -5809,6 +5873,9 @@ function EnvironmentConnectionCard(props: Readonly<{
           cancelOperation={props.cancelOperation}
           dismissOperation={props.dismissOperation}
           copyOperationDiagnostics={props.copyOperationDiagnostics}
+          refreshEnvironmentRuntime={() => {
+            void props.refreshEnvironmentRuntime(props.environment, 'connect');
+          }}
           onRunAction={(action) => {
             if (environmentActionStartsLifecycleDisclosure(action)) {
               props.beginLifecycleDisclosure(action.intent);
