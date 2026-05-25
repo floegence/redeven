@@ -52,7 +52,7 @@ export async function prepareWorkspaceEngineInDesktop(reason: WorkspaceEnginePre
     return {
       ok: false,
       prepared: false,
-      message: 'Open this Environment in Redeven Desktop to prepare the workspace.',
+      message: 'Open this environment in Redeven Desktop to set up Browser Editor.',
     };
   }
   return normalizeDesktopCodeWorkspacePrepareResponse(
@@ -77,7 +77,7 @@ export async function prepareWorkspaceEngineThroughSession(status?: CodeRuntimeS
     return {
       ok: false,
       prepared: false,
-      message: 'Open this Environment in Redeven Desktop to prepare the workspace.',
+      message: 'Open this environment in Redeven Desktop to set up Browser Editor.',
     };
   }
 
@@ -89,7 +89,7 @@ export async function prepareWorkspaceEngineThroughSession(status?: CodeRuntimeS
     return {
       ok: false,
       prepared: false,
-      message: prepared.message || 'Desktop could not prepare the workspace package.',
+      message: prepared.message || 'Desktop could not prepare the Browser Editor package.',
     };
   }
 
@@ -105,21 +105,21 @@ export async function prepareWorkspaceEngineThroughSession(status?: CodeRuntimeS
         length_bytes: Math.min(chunkSize, job.archive_size_bytes - offset),
       }));
       if (!chunkResp.ok || !chunkResp.chunk || chunkResp.length_bytes === undefined || chunkResp.length_bytes <= 0) {
-        throw new Error(chunkResp.message || 'Desktop could not read the workspace package.');
+        throw new Error(chunkResp.message || 'Desktop could not read the Browser Editor package.');
       }
       await appendCodeRuntimeImportChunk(session.upload_id, chunkIndex, chunkResp.chunk);
       offset += chunkResp.length_bytes;
       chunkIndex += 1;
     }
     if (offset !== job.archive_size_bytes) {
-      throw new Error('Desktop did not finish reading the workspace package.');
+      throw new Error('Desktop did not finish reading the Browser Editor package.');
     }
     const finalStatus = await completeCodeRuntimeImportSession(session.upload_id);
     return {
       ok: true,
       prepared: true,
       status: finalStatus,
-      message: job.from_cache ? 'Workspace engine was ready from Desktop cache.' : 'Workspace engine prepared.',
+      message: job.from_cache ? 'Browser Editor package was ready from Desktop cache.' : 'Browser Editor package prepared.',
     };
   } finally {
     if (bridge.disposeWorkspaceEnginePackage) {

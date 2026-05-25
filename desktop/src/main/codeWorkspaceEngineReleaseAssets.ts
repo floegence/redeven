@@ -73,13 +73,41 @@ function normalizeFetchTimeout(fetchPolicy?: CodeWorkspaceEngineFetchPolicy): nu
 }
 
 function codeWorkspaceFetchCanceledError(): DOMException {
-  return new DOMException('Workspace preparation was canceled while downloading the workspace engine.', 'AbortError');
+  return new DOMException('Browser Editor setup was canceled while downloading the package.', 'AbortError');
 }
 
 function throwIfCanceled(signal: AbortSignal | undefined): void {
   if (signal?.aborted) {
     throw codeWorkspaceFetchCanceledError();
   }
+}
+
+async function responseErrorDetail(response: Response): Promise<string> {
+  const contentType = response.headers.get('content-type') ?? '';
+  const body = await response.text().catch(() => '');
+  const trimmedBody = compact(body);
+  if (trimmedBody === '') return '';
+  if (contentType.includes('json')) {
+    try {
+      const parsed = JSON.parse(trimmedBody) as Record<string, unknown>;
+      return compact(parsed.message) || trimmedBody;
+    } catch {
+      return trimmedBody;
+    }
+  }
+  return trimmedBody;
+}
+
+async function githubReleaseLookupHTTPError(response: Response): Promise<Error> {
+  const detail = await responseErrorDetail(response);
+  const remaining = compact(response.headers.get('x-ratelimit-remaining'));
+  const reset = compact(response.headers.get('x-ratelimit-reset'));
+  const resetAt = reset ? Number(reset) * 1000 : 0;
+  const resetHint = Number.isFinite(resetAt) && resetAt > 0 ? ` Resets at ${new Date(resetAt).toLocaleString()}.` : '';
+  if (response.status === 403 && (remaining === '0' || /rate limit/i.test(detail))) {
+    return new Error(`GitHub release lookup failed with HTTP 403: API rate limit exceeded.${resetHint}`);
+  }
+  return new Error(`GitHub release lookup failed with HTTP ${response.status}${detail ? `: ${detail}` : ''}.`);
 }
 
 async function fetchJSON(sourceURL: string, fetchPolicy?: CodeWorkspaceEngineFetchPolicy): Promise<unknown> {
@@ -101,7 +129,7 @@ async function fetchJSON(sourceURL: string, fetchPolicy?: CodeWorkspaceEngineFet
       },
     });
     if (!response.ok) {
-      throw new Error(`GitHub release lookup failed with HTTP ${response.status}.`);
+      throw await githubReleaseLookupHTTPError(response);
     }
     throwIfCanceled(fetchPolicy?.signal);
     return response.json();

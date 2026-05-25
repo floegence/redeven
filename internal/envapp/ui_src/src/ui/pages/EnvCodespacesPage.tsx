@@ -24,18 +24,22 @@ import { useRedevenRpc, type FsFileInfo } from "../protocol/redeven_v1";
 import { Tooltip } from "../primitives/Tooltip";
 import {
   cancelCodeRuntimeOperation,
-  codeRuntimeManagedActionLabel,
   codeRuntimeMissing,
   codeRuntimeOperationRunning,
   codeRuntimePrepareCopy,
   codeRuntimeReady,
-  codeRuntimeStageLabel,
   fetchCodeRuntimeStatus,
   type CodeRuntimeStatus,
 } from "../services/codeRuntimeApi";
+import { BrowserEditorSetupActivityPanel } from "./BrowserEditorSetupActivityPanel";
 import { getEnvPublicIDFromSession, getLocalRuntime, mintEnvEntryTicketForApp } from "../services/controlplaneApi";
 import { FLOE_APP_CODE } from "../services/floeproxyContract";
 import { fetchGatewayJSON } from "../services/gatewayApi";
+import {
+  browserEditorLocalFailureFromError,
+  buildBrowserEditorSetupActivity,
+  type BrowserEditorSetupLocalFailure,
+} from "../services/browserEditorSetupActivity";
 import { appendLocalAccessResumeQuery } from "../services/localAccessAuth";
 import { trustedLauncherOriginFromSandboxLocation } from "../services/sandboxOrigins";
 import { registerSandboxWindow } from "../services/sandboxWindowRegistry";
@@ -581,29 +585,32 @@ function CodeRuntimePreparePanel(props: {
   status: CodeRuntimeStatus | null | undefined;
   loading: boolean;
   error?: string | null;
+  localFailure?: BrowserEditorSetupLocalFailure | null;
   pendingIntent: PendingCodespaceIntent;
   prepareSubmitting: boolean;
   cancelSubmitting: boolean;
   onPrepare: () => void;
   onRefresh: () => void;
   onCancel: () => void;
-  onRetry: () => void;
   onContinue: () => void;
   onDismiss: () => void;
 }) {
-  const [expanded, setExpanded] = createSignal(false);
   const [dismissed, setDismissed] = createSignal(false);
 
-  const prepareRunning = () => codeRuntimeOperationRunning(props.status);
-  const prepareFailed = () => props.status?.operation.state === "failed";
-  const prepareCancelled = () => props.status?.operation.state === "cancelled";
-  const runtimeReady = () => codeRuntimeReady(props.status);
-  const isError = () => !!props.error;
+  const activity = () => buildBrowserEditorSetupActivity({
+    status: props.status,
+    loading: props.loading,
+    error: props.error,
+    localPending: props.prepareSubmitting && !codeRuntimeOperationRunning(props.status),
+    localFailure: props.localFailure,
+    pendingIntent: props.pendingIntent ? { kind: props.pendingIntent.kind } : null,
+  });
   const prepareCopy = () => codeRuntimePrepareCopy(props.status);
+  const runtimeReady = () => codeRuntimeReady(props.status);
 
   createEffect(() => {
-    if (prepareRunning() || prepareFailed() || prepareCancelled()) {
-      setExpanded(true);
+    const state = activity().state;
+    if (state === "preparing") {
       setDismissed(false);
     }
   });
@@ -612,295 +619,42 @@ function CodeRuntimePreparePanel(props: {
     if (!runtimeReady()) setDismissed(false);
   });
 
-  const state = () => {
-    if (isError()) return "error" as const;
-    if (runtimeReady()) return "ready" as const;
-    if (prepareRunning()) return "preparing" as const;
-    if (prepareFailed()) return "failed" as const;
-    if (prepareCancelled()) return "cancelled" as const;
-    if (props.loading) return "checking" as const;
-    if (props.status?.active_runtime.detection_state === "unusable") return "unusable" as const;
-    return "missing" as const;
-  };
+  const alreadyReadyAndIdle = () => activity().state === "ready" && !props.pendingIntent;
+  const visible = () => !dismissed() && !alreadyReadyAndIdle();
 
-  const statusBadge = (): { label: string; variant: "neutral" | "info" | "success" | "warning" | "error" } => {
-    switch (state()) {
-      case "checking": return { label: "Checking", variant: "neutral" };
-      case "missing": return { label: "Not ready", variant: "neutral" };
-      case "preparing": return { label: "Preparing", variant: "info" };
-      case "ready": return { label: "Ready", variant: "success" };
-      case "failed": return { label: "Preparation failed", variant: "error" };
-      case "cancelled": return { label: "Cancelled", variant: "warning" };
-      case "error": return { label: "Error", variant: "error" };
-      case "unusable": return { label: "Needs attention", variant: "warning" };
-      default: return { label: "", variant: "neutral" };
-    }
-  };
-
-  const pendingActionLabel = () => {
-    if (props.pendingIntent?.kind === "open") return "Continue to open codespace";
-    if (props.pendingIntent?.kind === "start") return "Continue to start codespace";
-    return "Done";
-  };
-
-  const alreadyReadyAndIdle = () => state() === "ready" && !props.pendingIntent;
-  if (dismissed() || alreadyReadyAndIdle()) return null;
-
-  const toneClass = () => {
-    switch (state()) {
-      case "ready": return "border-emerald-500/40 bg-emerald-500/[0.05]";
-      case "preparing": return "border-blue-500/40 bg-blue-500/[0.05]";
-      case "failed":
-      case "error": return "border-red-500/40 bg-red-500/[0.05]";
-      case "cancelled":
-      case "unusable": return "border-amber-500/40 bg-amber-500/[0.05]";
-      default: return "";
-    }
-  };
-
-  const icon = () => {
-    const cls = "w-4 h-4 shrink-0";
-    switch (state()) {
-      case "checking":
-      case "preparing":
-        return (
-          <span class="origin-center scale-[0.72]">
-            <SnakeLoader size="sm" />
-          </span>
-        );
-      case "ready":
-        return (
-          <svg class={cn(cls, "text-emerald-500")} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-          </svg>
-        );
-      case "failed":
-      case "error":
-        return (
-          <svg class={cn(cls, "text-red-500")} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-          </svg>
-        );
-      case "cancelled":
-      case "unusable":
-        return (
-          <svg class={cn(cls, "text-amber-500")} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-          </svg>
-        );
-      default:
-        return (
-          <svg class={cn(cls, "text-muted-foreground")} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
-          </svg>
-        );
-    }
-  };
-
-  const message = () => {
-    switch (state()) {
-      case "checking":
-        return "Checking browser editor readiness...";
-      case "missing": {
-        const base = props.status
-          ? "Redeven can set up Browser Editor for this environment. Desktop will download it, cache one copy on this computer, and send it to the connected environment after you confirm."
-          : "Codespaces needs a browser editor on this host before it can open.";
-        if (props.pendingIntent?.kind === "open") return `${base} Redeven will open the codespace after setup.`;
-        if (props.pendingIntent?.kind === "start") return `${base} Redeven will start the codespace after setup.`;
-        return base;
-      }
-      case "preparing":
-        return codeRuntimeStageLabel(props.status?.operation.stage, props.status?.operation.action);
-      case "ready":
-        return `Ready. Editor path: ${props.status?.active_runtime.binary_path ?? "-"}`;
-      case "failed":
-        return props.status?.operation.last_error || "Browser editor setup did not finish successfully.";
-      case "cancelled":
-        return "Browser editor setup was cancelled before it finished.";
-      case "error":
-        return props.error || "Unable to check browser editor readiness.";
-      case "unusable":
-        return props.status?.active_runtime.error_message || "Redeven detected a browser editor, but it is not usable on this host.";
-      default:
-        return "";
-    }
-  };
-
-  const iconBg = () => {
-    switch (state()) {
-      case "ready": return "bg-emerald-500/10";
-      case "preparing": return "bg-blue-500/10";
-      case "failed":
-      case "error": return "bg-red-500/10";
-      case "cancelled":
-      case "unusable": return "bg-amber-500/10";
-      default: return "bg-muted";
-    }
-  };
-
-  const showLog = () => state() === "preparing" || state() === "failed" || state() === "cancelled";
-  const showDetails = () => state() === "unusable" || state() === "failed" || state() === "cancelled";
+  const extraDetails = () => (
+    <div class="grid gap-2 rounded-md border border-border bg-background/70 p-3 text-[11px] leading-5 text-muted-foreground">
+      <div>Shared editor root: <span class="font-mono text-foreground break-all">{props.status?.shared_runtime_root ?? "-"}</span></div>
+      <div>Selected editor path: <span class="font-mono text-foreground break-all">{props.status?.managed_prefix ?? "-"}</span></div>
+      <Show when={props.status?.active_runtime.binary_path}>
+        <div>Detected path: <span class="font-mono text-foreground break-all">{props.status?.active_runtime.binary_path}</span></div>
+      </Show>
+      <Show when={props.pendingIntent}>
+        <div>Next action: <span class="text-foreground">{props.pendingIntent?.kind === "open" ? "Open codespace" : "Start codespace"}</span></div>
+      </Show>
+    </div>
+  );
 
   return (
-    <div
-      data-testid="code-runtime-prepare-panel"
-      class={cn(
-        "rounded-lg border p-4 transition-colors duration-300",
-        toneClass(),
-        redevenSurfaceRoleClass("panelStrong"),
-      )}
-    >
-      <div class="flex items-start gap-3">
-        <div class={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full", iconBg())}>
-          {icon()}
-        </div>
-        <div class="min-w-0 flex-1">
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="text-sm font-semibold text-foreground">Browser Editor</span>
-            <Tag variant={statusBadge().variant} size="sm" class="cursor-default select-none">
-              {statusBadge().label}
-            </Tag>
-          </div>
-          <div class="text-xs text-muted-foreground mt-1">{message()}</div>
-
-          <div class="flex flex-wrap items-center gap-2 mt-3">
-            <Show when={state() === "checking"}>
-              <Button size="sm" variant="outline" onClick={props.onRefresh} disabled={props.loading}>
-                Refresh
-              </Button>
-            </Show>
-
-            <Show when={state() === "missing"}>
-              <Button size="sm" variant="default" onClick={props.onPrepare} disabled={props.prepareSubmitting}>
-                <Show when={props.prepareSubmitting}>
-                  <InlineButtonSnakeLoading class="mr-1" />
-                </Show>
-                {codeRuntimeManagedActionLabel(props.status)}
-              </Button>
-              <Button size="sm" variant="outline" onClick={props.onRefresh} disabled={props.loading}>
-                Refresh
-              </Button>
-            </Show>
-
-            <Show when={state() === "preparing"}>
-              <Button size="sm" variant="outline" onClick={props.onCancel} disabled={props.cancelSubmitting}>
-                <Show when={props.cancelSubmitting}>
-                  <InlineButtonSnakeLoading class="mr-1" />
-                </Show>
-                Cancel
-              </Button>
-              <Button size="sm" variant="ghost" onClick={props.onRefresh} disabled={props.loading}>
-                Refresh
-              </Button>
-            </Show>
-
-            <Show when={state() === "ready"}>
-              <Show when={!!props.pendingIntent}>
-                <Button size="sm" variant="default" onClick={props.onContinue}>
-                  {pendingActionLabel()}
-                </Button>
-              </Show>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setDismissed(true);
-                  props.onDismiss();
-                }}
-              >
-                Dismiss
-              </Button>
-            </Show>
-
-            <Show when={state() === "failed" || state() === "cancelled"}>
-              <Button size="sm" variant="default" onClick={props.onRetry} disabled={props.prepareSubmitting}>
-                <Show when={props.prepareSubmitting}>
-                  <InlineButtonSnakeLoading class="mr-1" />
-                </Show>
-                {prepareCopy().action_label}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setDismissed(true);
-                  props.onDismiss();
-                }}
-              >
-                Dismiss
-              </Button>
-            </Show>
-
-            <Show when={state() === "error"}>
-              <Button size="sm" variant="outline" onClick={props.onRefresh} disabled={props.loading}>
-                Refresh
-              </Button>
-            </Show>
-
-            <Show when={state() === "unusable"}>
-              <Button size="sm" variant="outline" onClick={() => setExpanded((v) => !v)}>
-                {expanded() ? "Hide details" : "View details"}
-              </Button>
-              <Button size="sm" variant="default" onClick={props.onPrepare}>
-                {prepareCopy().action_label}
-              </Button>
-            </Show>
-          </div>
-        </div>
-      </div>
-
-      <div
-        class={cn(
-          "grid transition-all duration-300 ease-in-out",
-          expanded() ? "grid-rows-[1fr] opacity-100 mt-4" : "grid-rows-[0fr] opacity-0 mt-0",
-        )}
-      >
-        <div class="overflow-hidden">
-          <div class="space-y-3 pt-3 border-t border-border">
-            <Show when={state() === "preparing"}>
-              <div class="rounded-lg border border-border bg-muted/20 p-3 space-y-2">
-                <div class="text-sm font-medium text-foreground">
-                  {codeRuntimeStageLabel(props.status?.operation.stage, props.status?.operation.action)}
-                </div>
-                <div class="text-xs text-muted-foreground">
-                  This setup was explicitly requested by you. Redeven will not retry automatically if it fails.
-                </div>
-              </div>
-            </Show>
-
-            <Show when={showDetails()}>
-              <div class="grid gap-2 rounded-lg border border-border bg-muted/20 p-3 text-[11px] text-muted-foreground">
-                <div>Shared engine root: <span class="font-mono text-foreground break-all">{props.status?.shared_runtime_root ?? "-"}</span></div>
-                <div>Selected editor path: <span class="font-mono text-foreground break-all">{props.status?.managed_prefix ?? "-"}</span></div>
-                <Show when={props.status?.active_runtime.binary_path}>
-                  <div>Detected path: <span class="font-mono text-foreground break-all">{props.status?.active_runtime.binary_path}</span></div>
-                </Show>
-                <Show when={props.pendingIntent}>
-                  <div>Pending action: <span class="text-foreground">{props.pendingIntent?.kind === "open" ? "Open codespace" : "Start codespace"}</span></div>
-                </Show>
-              </div>
-            </Show>
-
-            <Show when={showLog()}>
-              <div class="flex items-center justify-between">
-                <div class="text-xs font-medium text-muted-foreground">Details</div>
-                <Button size="sm" variant="ghost" onClick={props.onRefresh} disabled={props.loading}>
-                  Refresh
-                </Button>
-              </div>
-              <pre
-                data-testid="code-runtime-log-tail"
-                class="max-h-48 overflow-auto rounded-lg border border-border bg-background/80 p-3 text-[11px] leading-5 text-muted-foreground whitespace-pre-wrap break-words"
-              >
-                {(props.status?.operation.log_tail?.length ?? 0) > 0
-                  ? props.status?.operation.log_tail?.join("\n")
-                  : "No browser editor setup details yet."}
-              </pre>
-            </Show>
-          </div>
-        </div>
-      </div>
-    </div>
+    <Show when={visible()}>
+      <BrowserEditorSetupActivityPanel
+        activity={activity()}
+        loading={props.loading}
+        prepareSubmitting={props.prepareSubmitting}
+        cancelSubmitting={props.cancelSubmitting}
+        actionLabel={activity().can_retry ? "Retry setup" : prepareCopy().action_label}
+        runningLabel={prepareCopy().running_label}
+        onPrepare={props.onPrepare}
+        onRefresh={props.onRefresh}
+        onCancel={props.onCancel}
+        onContinue={props.onContinue}
+        onDismiss={() => {
+          setDismissed(true);
+          props.onDismiss();
+        }}
+        extraDetails={activity().state === "missing" || activity().state === "checking" ? undefined : extraDetails()}
+      />
+    </Show>
   );
 }
 
@@ -917,6 +671,7 @@ export function EnvCodespacesPage() {
   const [deleteLoading, setDeleteLoading] = createSignal(false);
   const [pendingIntent, setPendingIntent] = createSignal<PendingCodespaceIntent>(null);
   const [runtimePrepareLocalPending, setRuntimePrepareLocalPending] = createSignal(false);
+  const [runtimePrepareLocalFailure, setRuntimePrepareLocalFailure] = createSignal<BrowserEditorSetupLocalFailure | null>(null);
   const [runtimePrepareSubmitting, setRuntimePrepareSubmitting] = createSignal(false);
   const [runtimeCancelSubmitting, setRuntimeCancelSubmitting] = createSignal(false);
   const [busyActions, setBusyActions] = createSignal<Record<string, CodespaceBusyAction | undefined>>({});
@@ -941,7 +696,7 @@ export function EnvCodespacesPage() {
       intent?.code_space_id === codeSpaceID
       && (runtimePrepareSubmitting() || runtimePrepareLocalPending() || codeRuntimeOperationRunning(runtimeStatus()))
     ) {
-      return "Preparing workspace...";
+      return "Setting up editor...";
     }
     return undefined;
   };
@@ -997,6 +752,7 @@ export function EnvCodespacesPage() {
     const status = runtimeStatus();
     if (!codeRuntimeOperationRunning(status)) return;
     setRuntimePrepareLocalPending(false);
+    setRuntimePrepareLocalFailure(null);
 
     const timer = window.setInterval(() => {
       void refetchRuntimeStatus();
@@ -1004,6 +760,12 @@ export function EnvCodespacesPage() {
     onCleanup(() => {
       window.clearInterval(timer);
     });
+  });
+
+  createEffect(() => {
+    if (codeRuntimeReady(runtimeStatus())) {
+      setRuntimePrepareLocalFailure(null);
+    }
   });
 
   createEffect(() => {
@@ -1095,9 +857,10 @@ export function EnvCodespacesPage() {
   const startWorkspacePrepareFlow = async (reason: "open" | "start" | "settings" | "retry" = "retry") => {
     setRuntimePrepareLocalPending(true);
     setRuntimePrepareSubmitting(true);
+    setRuntimePrepareLocalFailure(null);
     try {
       if (!desktopCodeWorkspacePrepareAvailable()) {
-        throw new Error("Open this Environment in Redeven Desktop to prepare the workspace.");
+        throw new Error("Open this environment in Redeven Desktop to set up Browser Editor.");
       }
       const result = await prepareWorkspaceEngineWithDesktop({
         reason,
@@ -1105,12 +868,14 @@ export function EnvCodespacesPage() {
         preferSessionUpload: readDesktopSessionContextSnapshot()?.target_route === "remote_desktop",
       });
       if (!result.ok || !result.prepared) {
-        throw new Error(result.message || "Workspace preparation did not finish.");
+        throw new Error(result.message || "Browser Editor setup did not finish.");
       }
       await refetchRuntimeStatus();
       await continuePendingIntent();
     } catch (e) {
-      notification.error("Workspace preparation failed", e instanceof Error ? e.message : String(e));
+      const failure = browserEditorLocalFailureFromError(e);
+      setRuntimePrepareLocalFailure(failure);
+      notification.error("Browser Editor setup failed", failure.message);
       await refetchRuntimeStatus();
     } finally {
       setRuntimePrepareSubmitting(false);
@@ -1126,7 +891,7 @@ export function EnvCodespacesPage() {
       await refetchRuntimeStatus();
       if (codeRuntimeReady(latest)) return true;
     } catch {
-      // Ignore and use the explicit workspace preparation flow below.
+      // Ignore and use the explicit Browser Editor setup flow below.
     }
     openPreparePanel({
       kind,
@@ -1319,6 +1084,7 @@ export function EnvCodespacesPage() {
   };
   const showWizard = () => {
     const status = runtimeStatus();
+    if (runtimePrepareLocalFailure()) return true;
     if (runtimeStatusError()) return true;
     if (runtimeStatus.loading) return true;
     if (!status) return false;
@@ -1379,6 +1145,7 @@ export function EnvCodespacesPage() {
               status={runtimeStatus()}
               loading={runtimeStatus.loading}
               error={runtimeStatusError()}
+              localFailure={runtimePrepareLocalFailure()}
               pendingIntent={pendingIntent()}
               prepareSubmitting={runtimePrepareSubmitting()}
               cancelSubmitting={runtimeCancelSubmitting()}
@@ -1390,9 +1157,6 @@ export function EnvCodespacesPage() {
               }}
               onCancel={() => {
                 void cancelRuntimePrepareFlow();
-              }}
-              onRetry={() => {
-                void startWorkspacePrepareFlow("retry");
               }}
               onContinue={() => {
                 void continuePendingIntent();

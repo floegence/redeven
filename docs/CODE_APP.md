@@ -99,14 +99,14 @@ Rules:
 
 - Redeven never sets up the browser editor engine on page load or merely because Env App connected.
 - The first `Open`, `Start`, `Set up browser editor`, or `Update browser editor` action asks the user to confirm before Desktop prepares the latest browser editor package for the connected environment.
-- After confirmation, Desktop downloads the latest matching upstream package on the user's machine, caches only the latest package for each platform, and sends that package to the connected environment.
+- After confirmation, Desktop resolves the latest upstream `code-server` release for the target platform, downloads the matching package on the user's machine, caches only that latest package for each platform, and sends that package to the connected environment.
 - Setting up a managed version stores it once under the shared runtime root.
 - The current endpoint stores one managed runtime selection in `shared/code-server/<os>-<arch>/local-environment.json`.
 - The user-facing actions are `Set up browser editor`, `Update browser editor`, `Open`, and `Start`.
 - The runtime accepts a Desktop-generated artifact manifest plus package bytes, then verifies, extracts, probes, promotes, and selects the version.
 - The `apps/code/runtime/managed` path is only a symlink to the selected shared version.
 - No user shell commands or PATH edits are required for the managed runtime.
-- Redeven always resolves the latest upstream `code-server` release when preparing a new package.
+- Redeven resolves the latest upstream `code-server` release only when the user explicitly starts setup or update. It does not refresh the upstream release metadata in the background.
 - If the selected managed version is missing or unusable, Redeven reports the problem directly and does **not** silently fall back to another managed or host runtime.
 
 Managed runtime precedence remains:
@@ -133,11 +133,35 @@ The explicit preparation flow is:
 
 1. Env App reads runtime status.
 2. If the browser editor engine is missing or unusable, Env App blocks startup and starts setup only after the user's explicit `Open`, `Start`, `Set up browser editor`, or `Update browser editor` action.
-3. Desktop resolves the latest matching code-server release package for the target platform and uses the local package cache when it already has that latest package.
+3. Desktop resolves the latest matching code-server release package for the target platform and uses the local package cache only when it already has that latest package.
 4. Desktop uploads the package either through runtime-control direct upload or through the Env App session-mediated import-session path.
 5. Runtime validates the manifest, size, checksum, platform, archive layout, and staged binary, then promotes it to `shared/code-server/<os>-<arch>/versions/<version>/` and selects it for the current endpoint.
 6. Existing usable versions are reused instead of reinstalled; `POST /remove-version` deletes only a non-selected managed version.
-7. Running, failed, or cancelled operations keep focused status/recent output visible so the user can recover explicitly.
+7. Running, failed, or cancelled operations keep focused status and recent output visible in the Browser Editor setup activity panel so the user can recover explicitly.
+
+## Setup activity and failure ownership
+
+Browser Editor setup has a single primary progress surface: the inline setup activity panel in the Browser Editor page, with the same operation details also visible from Runtime Settings -> `Browser Editor`.
+Toast notifications may announce that attention is needed, but they are only supplementary.
+They must not be the only place where setup progress, blocking failures, or retry context appears.
+
+The activity panel stays visible while setup is running and after setup fails or is cancelled.
+It should show the pending user intent (`Open` or `Start` when setup was triggered from a codespace action), the current stage, the shared engine root, the selected editor path when known, the last error, and the runtime log tail.
+The user can refresh, cancel an active setup, retry a failed setup, or dismiss a completed/non-blocking panel.
+
+Failures from both halves of the setup path belong in this activity model:
+
+- Desktop-side preparation failures:
+  - latest upstream release lookup timeouts, HTTP failures, malformed release metadata, or missing platform assets
+  - package download, cache read/write, checksum, or cache-pruning failures on the user's machine
+  - direct Desktop-to-runtime upload failures before the runtime can finish importing the package
+- Runtime-side import and verification failures:
+  - import-session creation, chunk receive, size, or checksum mismatches
+  - manifest, platform, archive layout, extraction, binary probe, validation, promotion, or selection failures
+
+For runtime-side failures, `GET /_redeven_proxy/api/code-runtime/status` carries the authoritative `operation` state (`stage`, `last_error`, `last_error_code`, `target_version`, and `log_tail`).
+For Desktop-side failures that happen before the runtime can record a terminal operation state, Env App must still keep the Browser Editor setup activity open and render the failure there after refreshing runtime status.
+Retry starts a new explicit setup/update request; Redeven does not silently continue or auto-retry a failed setup in the background.
 
 Upload limits:
 

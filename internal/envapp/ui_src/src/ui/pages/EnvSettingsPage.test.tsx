@@ -264,6 +264,7 @@ vi.mock('./settings/CodeRuntimeSettingsCard', () => ({
   CodeRuntimeSettingsCard: (props: any) => (
     <section data-settings-card="Browser Editor">
       <div>Browser Editor</div>
+      <div>{props.localPrepareFailure?.message}</div>
       <button type="button" onClick={props.onPrepare} disabled={props.actionLoading}>
         Update browser editor
       </button>
@@ -616,5 +617,30 @@ describe('EnvSettingsPage', () => {
       preferSessionUpload: false,
     });
     expect(notificationMocks.error).not.toHaveBeenCalled();
+  });
+
+  it('keeps Desktop Browser Editor preparation failures visible on the settings page', async () => {
+    settingsResponse = {
+      ai: null,
+    };
+    desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop.mockResolvedValueOnce({
+      ok: false,
+      prepared: false,
+      message: 'GitHub release lookup failed with HTTP 403.',
+    });
+
+    render(() => <EnvSettingsPage />, host);
+    await flushPage();
+
+    const button = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Update browser editor'));
+    expect(button).toBeTruthy();
+
+    button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    await vi.waitFor(() => {
+      expect(host.querySelector('[data-settings-card="Browser Editor"]')?.textContent).toContain('GitHub release lookup failed with HTTP 403.');
+    });
+
+    expect(notificationMocks.error).toHaveBeenCalledWith('Browser Editor setup failed', 'GitHub release lookup failed with HTTP 403.');
   });
 });

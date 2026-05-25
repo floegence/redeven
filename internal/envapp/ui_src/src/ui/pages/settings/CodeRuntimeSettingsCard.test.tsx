@@ -5,10 +5,13 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CodeRuntimeSettingsCard, type CodeRuntimeSettingsCardProps } from './CodeRuntimeSettingsCard';
+import { browserEditorLocalFailureFromError } from '../../services/browserEditorSetupActivity';
 
 vi.mock('@floegence/floe-webapp-core/icons', () => ({
+  Check: (props: any) => <span class={props.class} data-testid="check-icon" />,
   Code: (props: any) => <span class={props.class} data-testid="code-icon" />,
   RefreshIcon: (props: any) => <span class={props.class} data-testid="refresh-icon" />,
+  X: (props: any) => <span class={props.class} data-testid="x-icon" />,
 }));
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
@@ -34,6 +37,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       {props.children}
     </div>
   ),
+  Tag: (props: any) => <span>{props.children}</span>,
 }));
 
 vi.mock('../../primitives/Tooltip', () => ({
@@ -215,6 +219,69 @@ describe('CodeRuntimeSettingsCard', () => {
     });
 
     expect(host.textContent).toContain('Retry setup');
-    expect(host.textContent).toContain('The last Browser Editor setup did not finish successfully.');
+    expect(host.textContent).toContain('Download failed.');
+    expect(host.textContent).toContain('Step');
+  });
+
+  it('shows local Desktop preparation failures before the runtime records an operation failure', () => {
+    renderCard(host, {
+      status: makeStatus({
+        active_runtime: {
+          detection_state: 'missing',
+          present: false,
+          source: 'none',
+          binary_path: '',
+        },
+        managed_runtime: {
+          detection_state: 'missing',
+          present: false,
+          source: 'managed',
+          binary_path: '',
+        },
+        installed_versions: [],
+        managed_runtime_source: 'none',
+        managed_runtime_version: '',
+      }),
+      localPrepareFailure: browserEditorLocalFailureFromError(new Error('GitHub release lookup failed with HTTP 403.'), () => 123),
+    });
+
+    expect(host.textContent).toContain('Browser Editor');
+    expect(host.textContent).toContain('Setup failed');
+    expect(host.textContent).toContain('Couldn’t check the latest Browser Editor package.');
+    expect(host.textContent).toContain('GitHub release lookup failed with HTTP 403.');
+  });
+
+  it('does not expose retry or cancel actions without Browser Editor management permission', () => {
+    const onPrepare = vi.fn();
+    const onCancel = vi.fn();
+    renderCard(host, {
+      canManage: false,
+      onPrepare,
+      onCancel,
+      status: makeStatus({
+        active_runtime: {
+          detection_state: 'missing',
+          present: false,
+          source: 'none',
+          binary_path: '',
+        },
+        managed_runtime: {
+          detection_state: 'missing',
+          present: false,
+          source: 'managed',
+          binary_path: '',
+        },
+        installed_versions: [],
+        managed_runtime_source: 'none',
+        managed_runtime_version: '',
+      }),
+      localPrepareFailure: browserEditorLocalFailureFromError(new Error('GitHub release lookup failed with HTTP 403.'), () => 123),
+    });
+
+    expect(host.textContent).toContain('Setup failed');
+    expect(host.textContent).not.toContain('Retry setup');
+    expect(host.textContent).not.toContain('Cancel');
+    expect(onPrepare).not.toHaveBeenCalled();
+    expect(onCancel).not.toHaveBeenCalled();
   });
 });

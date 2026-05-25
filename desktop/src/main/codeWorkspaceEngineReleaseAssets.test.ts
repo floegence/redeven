@@ -73,6 +73,25 @@ describe('code workspace engine release assets', () => {
     }));
   });
 
+  it('explains GitHub API rate-limit failures during latest release lookup', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === CODE_WORKSPACE_ENGINE_GITHUB_API_RELEASE_LATEST_URL) {
+        return response({ message: 'API rate limit exceeded' }, {
+          status: 403,
+          headers: {
+            'content-type': 'application/json',
+            'x-ratelimit-remaining': '0',
+          },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    await expect(resolveLatestCodeWorkspaceEngineReleaseAsset(platform())).rejects.toThrow(
+      'GitHub release lookup failed with HTTP 403: API rate limit exceeded.',
+    );
+  });
+
   it('uses a cached archive when a non-empty package already exists', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-code-workspace-asset-'));
     tempDirs.push(dir);
