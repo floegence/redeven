@@ -6,13 +6,13 @@ Key points:
 
 - The Env App UI is **runtime-bundled** (built + embedded into the Redeven runtime binary).
 - The browser accesses it over a **Flowersec E2EE proxy** (runtime mode).
-- Env details features live here: Activity, Deck, Workbench, Terminal, Monitor, File Browser, Git, Codespaces, Web Services, Flower, Codex, and Notes.
+- Env details features live here: Activity, Deck, Workbench, Terminal, Monitor, File Browser, Git, Browser Editor, Web Services, Flower, Codex, and Notes.
 - Shared shell primitives come from released `@floegence/floe-webapp-*` packages. Redeven owns environment routing, permission gates, persistence wiring, local runtime APIs, and business widget bodies.
 - Cross-surface right-click actions use Context Action Protocol v1. Surfaces provide structured context snapshots, while the shared action layer owns action identity and ordering for `Ask Flower`, `Ask Codex`, `Open in Terminal`, and `Browse Files`. See [`AGENT_SKILLS.md`](AGENT_SKILLS.md).
 - Workbench has explicit ownership boundaries: shell chrome handles selection/drag, while widget bodies own text selection, local dialogs, context menus, and component focus. Wheel routing remains selected-widget guarded and scroll-viewport explicit.
 - Runtime-shared Workbench state is the authority for durable scene/widget facts. Per-client camera, selection, drafts, scroll position, and transient gesture state stay local and must not be migrated into runtime layout from renderer storage.
-- Redeven Desktop supplies session context, shell-owned theme/window chrome, titlebar-safe floating surfaces, and system-browser handoff for browser-app windows such as Codespaces.
-- Runtime Settings groups endpoint controls by user intent: overview/runtime status, runtime configuration, Codespaces tooling, security, AI/extensions, and diagnostics.
+- Redeven Desktop supplies session context, shell-owned theme/window chrome, titlebar-safe floating surfaces, and system-browser handoff for browser-app windows such as Browser Editor.
+- Runtime Settings groups endpoint controls by user intent: overview/runtime status, runtime configuration, Browser Editor, security, AI/extensions, and diagnostics.
 - The Flower settings card is a provider connection manager: users choose a provider type, then model(s), then secrets, and can expand `Advanced` for context window and image-input capability.
 - Flower model discovery uses a stable array contract: `/_redeven_proxy/api/ai/models` and `/_redeven_proxy/api/ai/current_model` must encode `models` as `[]` when no runtime-config or Desktop-source models are currently available. The Env App normalizes this gateway boundary once before view code reads model options, so empty model state remains a regular UI state instead of a Workbench-rendering failure.
 - Web Services is the user-facing registry for HTTP services reachable from the runtime host. Same-device local mode can open safe loopback targets directly; URL/SSH Local UI sessions use `/pf/<forward_id>/`; remote Provider sessions use the isolated Flowersec E2EE port-forward tunnel.
@@ -22,7 +22,7 @@ Key points:
 - File Browser root rows own the high-frequency write toggle for exposed roots. Computer defaults to `RO`, custom roots reflect their configured `RO/RW` state, and enabling `RW` requires confirmation before the shared Runtime Settings update path persists the change and refreshes the runtime filesystem registry. Home shows its status but is managed from Runtime Settings rather than the root row. In Workbench mode, File Browser roots, breadcrumb segments, toolbar buttons, segmented controls, and overflow/menu triggers are all `action surface` items, so their hover cursor and selection behavior come from the surface contract rather than from the visible label text.
 - File downloads are owned by the Env App download manager. File Browser context menus and Preview buttons submit `DownloadCommand`s; source streaming, destination selection, task progress, cancel, retry, Open, and Reveal stay in the shared Downloads task center.
 - Terminal sessions are runtime-owned and may be attached by multiple Env App surfaces; only the focused surface emits resize ownership updates after attach.
-- Desktop-managed runs keep Preview, File Browser, Ask Flower, and Debug Console inside the main Env App window as product-owned floating surfaces. Browser-app windows such as Codespaces remain separate navigation flows.
+- Desktop-managed runs keep Preview, File Browser, Ask Flower, and Debug Console inside the main Env App window as product-owned floating surfaces. Browser-app windows such as Browser Editor remain separate navigation flows.
 
 ## Notes overlay
 
@@ -65,7 +65,7 @@ Deck and Workbench reuse released floe-webapp layout/workbench primitives. Redev
 - Workbench surface classification is shared: `action surface` is the first-class contract for clickable controls and always wins over text-selection projection, `text selection surface` remains reserved for true reading text, and `LOCAL_INTERACTION_SURFACE` does not automatically imply wheel ownership. File Browser roots, breadcrumb segments, toolbar buttons, segmented controls, and dropdown triggers all use the action-surface contract so cursor semantics stay uniform across the whole browser chrome.
 - Wheel routing is selection-first: blank canvas and unselected widgets keep canvas zoom; selected widget boundaries block canvas zoom; only explicit local scroll viewports scroll locally.
 - Production local scroll candidates must use the exported Workbench wheel props so the static `check:workbench-wheel` gate can catch accidental bypasses.
-- Heavy widgets such as Files, Terminal, Preview, Codespaces, Flower, and Codex use floe-webapp's projected-surface render path while preserving the same world-space layout model.
+- Heavy widgets such as Files, Terminal, Preview, Browser Editor, Flower, and Codex use floe-webapp's projected-surface render path while preserving the same world-space layout model.
 - App-owned floating surfaces such as Preview, File Browser, Ask Flower, stash confirmations, and Debug Console use the centralized `ENV_APP_FLOATING_LAYER` contract.
 - The Flower chat header shows the current model plus lightweight capability tags so users can see whether a model supports image input without opening settings.
 - If Flower has no model options, the widget renders the existing empty-model affordance and disables model-backed actions without affecting canvas selection, pan, zoom, or neighboring widgets.
@@ -218,7 +218,7 @@ Browser side:
 
 - A trusted bootstrap origin creates the runtime-mode proxy and loads the Env App UI from `/_redeven_proxy/env/`.
 - Browser `fetch()` / WebSocket traffic is forwarded through the proxy runtime and then over Flowersec E2EE to the Redeven runtime.
-- Trusted Env App documents may use a same-origin iframe pattern; untrusted app windows such as Codespaces and remote Web Services use a separate launcher/runtime/app-origin split.
+- Trusted Env App documents may use a same-origin iframe pattern; untrusted app windows such as Browser Editor and remote Web Services use a separate launcher/runtime/app-origin split.
 - In Local UI mode, Web Services can also open through `/pf/<forward_id>/`, protected by the Local UI access gate and resolved from the runtime host.
 
 Runtime side:
@@ -331,9 +331,9 @@ Behavior:
 
 The diagnostics stream is timing-focused and must remain separate from the audit log because it is intended for troubleshooting performance and startup issues rather than user-operation auditing.
 
-## Codespaces (code-server) management
+## Browser Editor (code-server) Management
 
-The Env App UI manages local codespaces via the local runtime gateway API:
+The Env App UI manages browser editor workspaces via the local runtime gateway API:
 
 - `GET /_redeven_proxy/api/spaces`
 - `POST /_redeven_proxy/api/spaces`
@@ -350,14 +350,15 @@ The Env App UI manages local codespaces via the local runtime gateway API:
 
 Notes:
 
-- Codespace windows receive only short-lived bootstrap credentials scoped to the requested app launch.
+- Browser editor windows receive only short-lived bootstrap credentials scoped to the requested app launch.
 - Browser sessions use a user-triggered popup/tab flow to satisfy popup-blocker rules.
-- Redeven Desktop opens Codespaces in the system browser while preserving the same short-lived bootstrap contract.
-- Password-protected Desktop-managed Local UI can resume the first protected Codespaces request through `redeven_access_resume`, then exchange it for the normal local access cookie.
-- Codespace cards expose right-click `Ask Flower` and `Open in Terminal` actions rooted at `workspace_path`.
-- Codespaces does **not** prepare the workspace engine until the user explicitly clicks `Open`, `Start`, or `Prepare latest`.
-- Missing or unusable runtime state is handled by explicit prepare/select UI in Codespaces and Runtime Settings -> `Codespaces & Tooling` -> `Workspace Engine`.
-- Runtime management UI separates steady inventory/status from transient prepare, remove, cancel, failure, and recovery activity. See [`CODE_APP.md`](CODE_APP.md) for the full managed workspace engine contract.
+- Redeven Desktop opens browser editor sessions in the system browser while preserving the same short-lived bootstrap contract.
+- Password-protected Desktop-managed Local UI can resume the first protected browser editor request through `redeven_access_resume`, then exchange it for the normal local access cookie.
+- Browser editor cards expose right-click `Ask Flower` and `Open in Terminal` actions rooted at `workspace_path`.
+- Redeven does **not** set up the browser editor engine until the user explicitly confirms `Open`, `Start`, `Set up browser editor`, or `Update browser editor`.
+- After confirmation, Desktop downloads and caches the latest matching package on the user's machine, then sends it to the connected environment.
+- Missing or unusable runtime state is handled by explicit setup/update/select UI in Browser Editor and Runtime Settings -> `Browser Editor`.
+- Runtime management UI separates steady inventory/status from transient setup, update, remove, cancel, failure, and recovery activity. See [`CODE_APP.md`](CODE_APP.md) for the full managed browser editor engine contract.
 
 ## Build
 

@@ -162,9 +162,58 @@ export function codeRuntimeManagedRuntimeSelected(status: CodeRuntimeStatus | nu
   return status?.active_runtime.source === 'managed' && status?.active_runtime.detection_state === 'ready';
 }
 
+export type CodeRuntimePrepareIntent = 'setup' | 'update' | 'retry';
+
+export type CodeRuntimePrepareCopy = Readonly<{
+  intent: CodeRuntimePrepareIntent;
+  action_label: string;
+  confirm_title: string;
+  running_label: string;
+  tooltip: string;
+  description: string;
+}>;
+
+export function codeRuntimePrepareIntent(status: CodeRuntimeStatus | null | undefined): CodeRuntimePrepareIntent {
+  if (codeRuntimeOperationNeedsAttention(status)) return 'retry';
+  if (!codeRuntimeManagedInstalled(status)) return 'setup';
+  return 'update';
+}
+
+export function codeRuntimePrepareCopy(status: CodeRuntimeStatus | null | undefined): CodeRuntimePrepareCopy {
+  switch (codeRuntimePrepareIntent(status)) {
+    case 'retry':
+      return {
+        intent: 'retry',
+        action_label: 'Retry setup',
+        confirm_title: 'Retry browser editor setup',
+        running_label: 'Setting up browser editor...',
+        tooltip: 'Retry setting up the browser editor for the connected environment.',
+        description: 'Redeven Desktop will download the latest browser editor package, cache one copy on this computer, and send it to the connected environment.',
+      };
+    case 'update':
+      return {
+        intent: 'update',
+        action_label: 'Update browser editor',
+        confirm_title: 'Update browser editor',
+        running_label: 'Updating browser editor...',
+        tooltip: 'Download and send the latest browser editor package to the connected environment.',
+        description: 'Redeven Desktop will download the latest browser editor package, cache one copy on this computer, and send it to the connected environment.',
+      };
+    case 'setup':
+    default:
+      return {
+        intent: 'setup',
+        action_label: 'Set up browser editor',
+        confirm_title: 'Set up browser editor',
+        running_label: 'Setting up browser editor...',
+        tooltip: 'Set up the browser editor used by Codespaces in the connected environment.',
+        description: 'Redeven Desktop will download the latest browser editor package, cache one copy on this computer, and send it to the connected environment.',
+      };
+  }
+}
+
 export function codeRuntimeManagedActionLabel(status: CodeRuntimeStatus | null | undefined): string {
-  if (!codeRuntimeManagedInstalled(status)) return 'Prepare workspace for this Local Environment';
-  return 'Prepare latest workspace engine';
+  return codeRuntimePrepareCopy(status).action_label;
 }
 
 export function codeRuntimeStageLabel(stage: string | null | undefined, action?: string | null | undefined): string {
@@ -172,33 +221,33 @@ export function codeRuntimeStageLabel(stage: string | null | undefined, action?:
   if (String(action ?? '').trim() === 'remove_local_environment_version') {
     switch (normalizedStage) {
       case 'preparing':
-        return 'Preparing Local Environment runtime removal...';
+        return 'Preparing editor version removal...';
       case 'removing':
-        return 'Removing Local Environment runtime files...';
+        return 'Removing editor version files...';
       case 'validating':
-        return 'Validating Local Environment runtime removal...';
+        return 'Validating editor version removal...';
       case 'finalizing':
-        return 'Finalizing Local Environment runtime removal...';
+        return 'Finalizing editor version removal...';
       default:
-        return 'Removing Local Environment runtime...';
+        return 'Removing editor version...';
     }
   }
 
   switch (normalizedStage) {
     case 'preparing':
-      return 'Preparing workspace engine...';
+      return 'Preparing browser editor...';
     case 'receiving':
-      return 'Sending workspace engine to this Environment...';
+      return 'Sending browser editor to this environment...';
     case 'verifying':
-      return 'Verifying workspace engine...';
+      return 'Verifying browser editor...';
     case 'installing':
-      return 'Installing workspace engine...';
+      return 'Installing browser editor...';
     case 'validating':
-      return 'Validating workspace engine...';
+      return 'Validating browser editor...';
     case 'finalizing':
-      return 'Finishing workspace setup...';
+      return 'Finishing browser editor setup...';
     default:
-      return 'Preparing workspace...';
+      return 'Setting up browser editor...';
   }
 }
 
@@ -208,13 +257,13 @@ export function codeRuntimePlatformForDesktop(status: CodeRuntimeStatus | null |
   const arch = String(platform?.arch ?? '').trim();
   const libc = String(platform?.libc ?? '').trim();
   if (osName !== 'linux' && osName !== 'darwin') {
-    throw new Error(platform?.message || 'This Environment is not supported by the managed workspace engine.');
+    throw new Error(platform?.message || 'This environment is not supported by the managed Browser Editor.');
   }
   if (arch !== 'amd64' && arch !== 'arm64') {
-    throw new Error(platform?.message || 'This Environment architecture is not supported by the managed workspace engine.');
+    throw new Error(platform?.message || 'This environment architecture is not supported by the managed Browser Editor.');
   }
   if (osName === 'linux' && libc !== '' && libc !== 'glibc' && libc !== 'unknown') {
-    throw new Error(platform?.message || 'This Linux Environment is not supported by the managed workspace engine.');
+    throw new Error(platform?.message || 'This Linux environment is not supported by the managed Browser Editor.');
   }
   return {
     os: osName,

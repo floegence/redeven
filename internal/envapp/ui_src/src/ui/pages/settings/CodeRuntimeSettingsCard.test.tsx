@@ -148,23 +148,20 @@ describe('CodeRuntimeSettingsCard', () => {
     host.remove();
   });
 
-  it('renders current Local Environment and inventory sections with scope-explicit wording', () => {
+  it('renders Browser Editor inventory sections with update wording', () => {
     renderCard(host);
 
-    expect(host.textContent).toContain('Current Local Environment');
-    expect(host.textContent).toContain('Installed for this Local Environment');
-    expect(host.textContent).toContain('Current Local Environment selection');
+    expect(host.textContent).toContain('Browser Editor');
     expect(host.textContent).toContain('Shared runtime root');
     expect(host.textContent).toContain('Refresh');
-    expect(host.textContent).toContain('Prepare latest');
-    expect(host.textContent).toContain('Use for this Local Environment');
+    expect(host.textContent).toContain('Update browser editor');
 
     const tooltipContents = Array.from(host.querySelectorAll('[data-testid="tooltip"]')).map((node) => node.getAttribute('data-content'));
-    expect(tooltipContents).toContain('Re-scan the Local Environment inventory and the active runtime.');
-    expect(tooltipContents).toContain('Prepare the latest workspace engine for this Local Environment.');
+    expect(tooltipContents).toContain('Re-scan the Browser Editor inventory and active runtime.');
+    expect(tooltipContents).toContain('Update the Browser Editor runtime.');
   });
 
-  it('shows an empty-state warning when no managed versions are installed for this Local Environment', () => {
+  it('shows Browser Editor setup copy when no managed versions are installed', () => {
     renderCard(host, {
       status: makeStatus({
         active_runtime: {
@@ -185,23 +182,39 @@ describe('CodeRuntimeSettingsCard', () => {
       }),
     });
 
-    expect(host.textContent).toContain('Workspace preparation required');
-    expect(host.textContent).toContain('Prepare the workspace engine for this Local Environment');
+    expect(host.textContent).toContain('Browser Editor setup required');
+    expect(host.textContent).toContain('Set up browser editor');
   });
 
-  it('opens the prepare confirmation and calls the prepare action', () => {
+  it('opens the Browser Editor update confirmation and calls the prepare action', () => {
     const onPrepare = vi.fn(async () => undefined);
     renderCard(host, { onPrepare });
 
-    const prepareButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Prepare latest');
+    const prepareButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Update browser editor');
     prepareButton?.click();
 
-    expect(host.textContent).toContain('Prepare workspace');
-    expect(host.textContent).toContain('Redeven Desktop will prepare the latest workspace engine');
+    expect(host.textContent).toContain('Update browser editor');
+    expect(host.textContent).toContain('Redeven Desktop will update the Browser Editor');
 
-    const confirmButton = Array.from(host.querySelectorAll('button')).filter((button) => button.textContent === 'Prepare latest').at(-1);
+    const confirmButton = Array.from(host.querySelectorAll('button')).filter((button) => button.textContent === 'Update browser editor').at(-1);
     confirmButton?.click();
 
     expect(onPrepare).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows Retry setup after the last Browser Editor setup action failed', () => {
+    renderCard(host, {
+      status: makeStatus({
+        operation: {
+          state: 'failed',
+          action: 'prepare_workspace_engine',
+          last_error: 'Download failed.',
+          log_tail: ['Download failed.'],
+        },
+      }),
+    });
+
+    expect(host.textContent).toContain('Retry setup');
+    expect(host.textContent).toContain('The last Browser Editor setup did not finish successfully.');
   });
 });

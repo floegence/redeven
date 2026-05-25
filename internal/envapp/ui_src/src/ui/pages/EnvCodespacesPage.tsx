@@ -27,6 +27,7 @@ import {
   codeRuntimeManagedActionLabel,
   codeRuntimeMissing,
   codeRuntimeOperationRunning,
+  codeRuntimePrepareCopy,
   codeRuntimeReady,
   codeRuntimeStageLabel,
   fetchCodeRuntimeStatus,
@@ -307,7 +308,7 @@ function EmptyState(props: { onCreateClick: () => void }) {
       </div>
       <h3 class="text-sm font-medium text-foreground mb-1">No codespaces yet</h3>
       <p class="text-xs text-muted-foreground text-center max-w-xs mb-4">
-        Create a codespace to start coding with VS Code in the browser. Your code stays in this Local Environment.
+        Create a codespace to start coding with VS Code in the browser. Files stay with this environment.
       </p>
       <Button size="sm" variant="default" onClick={props.onCreateClick}>
         Create Codespace
@@ -598,6 +599,7 @@ function CodeRuntimePreparePanel(props: {
   const prepareCancelled = () => props.status?.operation.state === "cancelled";
   const runtimeReady = () => codeRuntimeReady(props.status);
   const isError = () => !!props.error;
+  const prepareCopy = () => codeRuntimePrepareCopy(props.status);
 
   createEffect(() => {
     if (prepareRunning() || prepareFailed() || prepareCancelled()) {
@@ -698,27 +700,27 @@ function CodeRuntimePreparePanel(props: {
   const message = () => {
     switch (state()) {
       case "checking":
-        return "Checking workspace readiness...";
+        return "Checking browser editor readiness...";
       case "missing": {
         const base = props.status
-          ? "Redeven can prepare this Environment for browser workspaces."
-          : "Workspace preparation is required for Codespaces on this host.";
-        if (props.pendingIntent?.kind === "open") return `${base} Will open the codespace after preparation.`;
-        if (props.pendingIntent?.kind === "start") return `${base} Will start the codespace after preparation.`;
+          ? "Redeven can set up Browser Editor for this environment. Desktop will download it, cache one copy on this computer, and send it to the connected environment after you confirm."
+          : "Codespaces needs a browser editor on this host before it can open.";
+        if (props.pendingIntent?.kind === "open") return `${base} Redeven will open the codespace after setup.`;
+        if (props.pendingIntent?.kind === "start") return `${base} Redeven will start the codespace after setup.`;
         return base;
       }
       case "preparing":
         return codeRuntimeStageLabel(props.status?.operation.stage, props.status?.operation.action);
       case "ready":
-        return `Ready. Binary path: ${props.status?.active_runtime.binary_path ?? "-"}`;
+        return `Ready. Editor path: ${props.status?.active_runtime.binary_path ?? "-"}`;
       case "failed":
-        return props.status?.operation.last_error || "Workspace preparation did not finish successfully.";
+        return props.status?.operation.last_error || "Browser editor setup did not finish successfully.";
       case "cancelled":
-        return "Workspace preparation was cancelled before it finished.";
+        return "Browser editor setup was cancelled before it finished.";
       case "error":
-        return props.error || "Unable to check workspace readiness.";
+        return props.error || "Unable to check browser editor readiness.";
       case "unusable":
-        return props.status?.active_runtime.error_message || "Redeven detected a workspace engine, but it is not usable on this host.";
+        return props.status?.active_runtime.error_message || "Redeven detected a browser editor, but it is not usable on this host.";
       default:
         return "";
     }
@@ -754,7 +756,7 @@ function CodeRuntimePreparePanel(props: {
         </div>
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">
-            <span class="text-sm font-semibold text-foreground">Workspace engine</span>
+            <span class="text-sm font-semibold text-foreground">Browser Editor</span>
             <Tag variant={statusBadge().variant} size="sm" class="cursor-default select-none">
               {statusBadge().label}
             </Tag>
@@ -815,7 +817,7 @@ function CodeRuntimePreparePanel(props: {
                 <Show when={props.prepareSubmitting}>
                   <InlineButtonSnakeLoading class="mr-1" />
                 </Show>
-                Retry
+                {prepareCopy().action_label}
               </Button>
               <Button
                 size="sm"
@@ -840,7 +842,7 @@ function CodeRuntimePreparePanel(props: {
                 {expanded() ? "Hide details" : "View details"}
               </Button>
               <Button size="sm" variant="default" onClick={props.onPrepare}>
-                Prepare again
+                {prepareCopy().action_label}
               </Button>
             </Show>
           </div>
@@ -861,7 +863,7 @@ function CodeRuntimePreparePanel(props: {
                   {codeRuntimeStageLabel(props.status?.operation.stage, props.status?.operation.action)}
                 </div>
                 <div class="text-xs text-muted-foreground">
-                  This preparation was explicitly requested by you. Redeven will not retry automatically if it fails.
+                  This setup was explicitly requested by you. Redeven will not retry automatically if it fails.
                 </div>
               </div>
             </Show>
@@ -869,7 +871,7 @@ function CodeRuntimePreparePanel(props: {
             <Show when={showDetails()}>
               <div class="grid gap-2 rounded-lg border border-border bg-muted/20 p-3 text-[11px] text-muted-foreground">
                 <div>Shared engine root: <span class="font-mono text-foreground break-all">{props.status?.shared_runtime_root ?? "-"}</span></div>
-                <div>Local Environment link: <span class="font-mono text-foreground break-all">{props.status?.managed_prefix ?? "-"}</span></div>
+                <div>Selected editor path: <span class="font-mono text-foreground break-all">{props.status?.managed_prefix ?? "-"}</span></div>
                 <Show when={props.status?.active_runtime.binary_path}>
                   <div>Detected path: <span class="font-mono text-foreground break-all">{props.status?.active_runtime.binary_path}</span></div>
                 </Show>
@@ -892,7 +894,7 @@ function CodeRuntimePreparePanel(props: {
               >
                 {(props.status?.operation.log_tail?.length ?? 0) > 0
                   ? props.status?.operation.log_tail?.join("\n")
-                  : "No preparation details yet."}
+                  : "No browser editor setup details yet."}
               </pre>
             </Show>
           </div>
@@ -1349,7 +1351,7 @@ export function EnvCodespacesPage() {
             <div class="space-y-1">
               <div class="text-sm font-semibold">Codespaces</div>
               <div class="text-xs text-muted-foreground">
-                Create and manage local VS Code instances in your browser. All code stays securely in this Local Environment.
+                Create and manage browser-based VS Code workspaces. Files stay with this environment.
               </div>
             </div>
             <div class="flex items-center gap-2 flex-shrink-0">

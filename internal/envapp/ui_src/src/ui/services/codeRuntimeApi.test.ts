@@ -61,7 +61,7 @@ describe('codeRuntimeApi selectors', () => {
     expect(codeRuntimeOperationSucceeded(makeStatus('idle'))).toBe(false);
   });
 
-  it('labels workspace preparation actions around Local Environment-scoped reuse', () => {
+  it('labels Browser Editor setup, update, and retry actions', () => {
     expect(codeRuntimeManagedActionLabel({
       ...makeStatus('idle'),
       installed_versions: [],
@@ -76,8 +76,18 @@ describe('codeRuntimeApi selectors', () => {
         source: 'managed',
       },
       managed_runtime_source: 'none',
-    })).toBe('Prepare workspace for this Local Environment');
+    })).toBe('Set up browser editor');
 
-    expect(codeRuntimeManagedActionLabel(makeStatus('idle'))).toBe('Prepare latest workspace engine');
+    expect(codeRuntimeManagedActionLabel(makeStatus('idle'))).toBe('Update browser editor');
+
+    expect(codeRuntimeManagedActionLabel({
+      ...makeStatus('failed'),
+      operation: {
+        action: 'prepare_workspace_engine',
+        state: 'failed',
+        last_error: 'Download failed.',
+        log_tail: [],
+      },
+    })).toBe('Retry setup');
   });
 });

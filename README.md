@@ -21,8 +21,8 @@
 <p align="center">
   <a href="https://go.dev/"><img alt="Go Version" src="https://img.shields.io/badge/Go-1.26.3-00ADD8?style=flat-square&logo=go"></a>
   <a href="https://nodejs.org/"><img alt="Node Version" src="https://img.shields.io/badge/Node.js-24-339933?style=flat-square&logo=node.js"></a>
-  <a href="docs/ENV_APP.md"><img alt="Local Environment Workspace" src="https://img.shields.io/badge/Local%20Environment-Workspace-6C3BFF?style=flat-square"></a>
-  <a href="docs/CODE_APP.md"><img alt="Browser IDE" src="https://img.shields.io/badge/Browser-IDE-007ACC?style=flat-square"></a>
+  <a href="docs/ENV_APP.md"><img alt="Redeven Workspace" src="https://img.shields.io/badge/Redeven-Workspace-6C3BFF?style=flat-square"></a>
+  <a href="docs/CODE_APP.md"><img alt="Browser Editor" src="https://img.shields.io/badge/Browser-Editor-007ACC?style=flat-square"></a>
   <a href="docs/DESKTOP.md"><img alt="Desktop App" src="https://img.shields.io/badge/Desktop-App-47848F?style=flat-square&logo=electron"></a>
   <a href="docs/AI_AGENT.md"><img alt="AI Assistance" src="https://img.shields.io/badge/AI-Assistance-FF4FA3?style=flat-square"></a>
   <a href="https://github.com/floegence/redeven/releases"><img alt="Releases" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
@@ -35,7 +35,7 @@ Redeven is a single binary that brings your computers and servers into one brows
 It runs on your machine, your remote servers, or any reachable SSH host. Your files, processes, API keys, and credentials stay where they belong — Redeven does not move your plaintext through anyone else's infrastructure.
 
 - **Browser or Desktop** — open your workspace from any browser, or use the native Desktop app for local and remote sessions.
-- **No agent protocol, no remote Node.js** — the runtime is a single Go binary. Desktop prepares the optional browser workspace engine only after an explicit workspace action, then uploads the latest package to the target environment.
+- **No agent protocol, no remote Node.js** — the runtime is a single Go binary. Desktop sets up the optional browser editor engine only after the user confirms, then downloads, caches, and sends the latest package to the connected environment.
 - **AI that works where your data lives** — optional on-device AI assistance reads files, runs commands, and completes tasks under the same permission model as the rest of the workspace.
 
 ![Redeven architecture overview](docs/images/readme-architecture-overview.jpeg)
@@ -90,7 +90,7 @@ Interactive terminals use Redeven's rich runtime presentation by default: a comp
 | Files and Git | File upload/download, inline preview/edit, folder-scoped Git changes, diffs, and stash workflows. | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
 | Terminal | Multi-tab terminals rooted in the directories you are working with, under the same runtime permission model. | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
 | Monitor | CPU, memory, disk, network, and process views from the endpoint runtime. | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
-| Code App | Browser workspaces prepared explicitly by Desktop, isolated per codespace. | [`docs/CODE_APP.md`](docs/CODE_APP.md) |
+| Browser Editor | Browser editor sessions set up explicitly by Desktop, isolated per workspace. | [`docs/CODE_APP.md`](docs/CODE_APP.md) |
 | Web Services | Runtime-managed service registration and port-forward access without hand-written SSH tunnels. | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
 | Flower and Codex | Optional AI surfaces that use runtime-validated tools and local model/host configuration. | [`docs/AI_AGENT.md`](docs/AI_AGENT.md), [`docs/AI_SETTINGS.md`](docs/AI_SETTINGS.md), [`docs/CODEX_UI.md`](docs/CODEX_UI.md) |
 | Desktop | Native launcher for local, provider-hosted, SSH-bootstrapped, and saved Local UI environments. | [`docs/DESKTOP.md`](docs/DESKTOP.md) |
@@ -115,7 +115,7 @@ Read the full contract in [`docs/CAPABILITY_PERMISSIONS.md`](docs/CAPABILITY_PER
 | I want to... | Read |
 |---|---|
 | Work with files, terminals, monitoring, notes, ports, and settings | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
-| Run a browser IDE through Redeven | [`docs/CODE_APP.md`](docs/CODE_APP.md) |
+| Run the browser editor through Redeven | [`docs/CODE_APP.md`](docs/CODE_APP.md) |
 | Package, operate, or debug Redeven Desktop | [`docs/DESKTOP.md`](docs/DESKTOP.md) |
 | Configure optional AI assistance | [`docs/AI_AGENT.md`](docs/AI_AGENT.md), [`docs/AI_SETTINGS.md`](docs/AI_SETTINGS.md) |
 | Connect Codex to the same workspace | [`docs/CODEX_UI.md`](docs/CODEX_UI.md) |
