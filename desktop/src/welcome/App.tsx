@@ -4382,7 +4382,20 @@ function EnvironmentCardFactsBlock(props: Readonly<{
         : undefined}
     >
       <For each={props.facts}>
-        {(fact) => (
+        {(fact) => {
+          const [copied, setCopied] = createSignal(false);
+          let resetTimer: ReturnType<typeof setTimeout> | undefined;
+
+          const handleCopy = () => {
+            void props.copyEnvironmentValue(fact.value, fact.label);
+            setCopied(true);
+            clearTimeout(resetTimer);
+            resetTimer = setTimeout(() => setCopied(false), 1500);
+          };
+
+          onCleanup(() => clearTimeout(resetTimer));
+
+          return (
           <div class="redeven-card-fact-row">
             <div class="redeven-card-fact-label">
               <Show when={fact.label_icon}>
@@ -4409,11 +4422,11 @@ function EnvironmentCardFactsBlock(props: Readonly<{
                   role={fact.copy_value ? 'button' : undefined}
                   tabIndex={fact.copy_value ? 0 : undefined}
                   aria-label={fact.copy_value ? `Copy ${fact.label}` : undefined}
-                  onClick={fact.copy_value ? () => { void props.copyEnvironmentValue(fact.value, fact.label); } : undefined}
+                  onClick={fact.copy_value ? handleCopy : undefined}
                   onKeyDown={fact.copy_value ? (e: KeyboardEvent) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
-                      void props.copyEnvironmentValue(fact.value, fact.label);
+                      handleCopy();
                     }
                   } : undefined}
                 >
@@ -4432,6 +4445,18 @@ function EnvironmentCardFactsBlock(props: Readonly<{
                       endpoints={fact.endpoints!}
                       copyEnvironmentValue={props.copyEnvironmentValue}
                     />
+                  </Show>
+                  <Show when={fact.copy_value}>
+                    <span
+                      class={cn('redeven-card-fact-copy-icon', copied() && 'redeven-card-fact-copy-icon--active')}
+                      aria-hidden="true"
+                      onClick={(e: MouseEvent) => {
+                        e.stopPropagation();
+                        handleCopy();
+                      }}
+                    >
+                      {copied() ? <Check class="h-3 w-3" /> : <Copy class="h-3 w-3" />}
+                    </span>
                   </Show>
                 </div>
               )}
@@ -4459,7 +4484,8 @@ function EnvironmentCardFactsBlock(props: Readonly<{
               )}
             </Show>
           </div>
-        )}
+          );
+        }}
       </For>
     </div>
   );
