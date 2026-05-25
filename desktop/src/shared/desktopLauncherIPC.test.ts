@@ -559,7 +559,7 @@ describe('desktopLauncherIPC', () => {
       next_actions: [{
         kind: 'copy_diagnostics',
         operation_key: 'local:container:docker:dev:abcd1234',
-        label: 'Copy diagnostics',
+        label: 'Copy log',
       }],
     };
     const progress: DesktopLauncherActionProgress = {
