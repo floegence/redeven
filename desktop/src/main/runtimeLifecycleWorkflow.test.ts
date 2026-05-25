@@ -189,6 +189,53 @@ describe('RuntimeLifecycleWorkflow', () => {
     ]);
   });
 
+  it('rejects beginStep jumps over planned pending steps', () => {
+    const subject = containerWorkflow();
+
+    subject.beginStep('checking_container', 'Checking container');
+    subject.completeStep('checking_container');
+    const platformPlan = runtimeLifecyclePlanIncludingStep({
+      location: 'local_container',
+      operation: 'update',
+      currentSteps: subject.currentStepIDs(),
+      step: 'detecting_platform',
+    });
+    subject.ensureStepPlanned('detecting_platform', {
+      state: platformPlan.state,
+      steps: platformPlan.steps.map((step) => step.id),
+      omitted_steps: platformPlan.omitted_steps,
+    });
+    const installPlan = runtimeLifecyclePlanIncludingStep({
+      location: 'local_container',
+      operation: 'update',
+      currentSteps: subject.currentStepIDs(),
+      step: 'preparing_runtime_package',
+    });
+    subject.ensureStepPlanned('preparing_runtime_package', {
+      state: installPlan.state,
+      steps: installPlan.steps.map((step) => step.id),
+      omitted_steps: installPlan.omitted_steps,
+    });
+
+    expect(subject.progress().steps.map((step) => [step.id, step.status])).toEqual([
+      ['checking_container', 'succeeded'],
+      ['detecting_platform', 'pending'],
+      ['checking_runtime_package', 'pending'],
+      ['preparing_runtime_package', 'pending'],
+      ['installing_runtime_package', 'pending'],
+      ['starting_runtime_process', 'pending'],
+      ['checking_runtime_service', 'pending'],
+      ['runtime_ready', 'pending'],
+    ]);
+    expect(() => subject.beginStep('preparing_runtime_package', 'Preparing package'))
+      .toThrow(/cannot skip pending step "detecting_platform"/iu);
+    expect(subject.progress().active_step_id).toBe('checking_container');
+    expect(subject.progress().steps.map((step) => [step.id, step.status])).toContainEqual([
+      'checking_container',
+      'succeeded',
+    ]);
+  });
+
   it('preserves completed stop history when a local container update decision moves from running to stopped', () => {
     const subject = containerWorkflow();
 

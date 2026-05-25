@@ -173,7 +173,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain('const launch = await startManagedRuntime({');
     expect(mainSrc).toContain('onProgress: (progress: ManagedRuntimeProgress) => {');
     expect(mainSrc).toContain('launcherOperations.isStale(runtimeKey)');
-    expect(mainSrc).toContain('scheduleLauncherOperationRemoval(runtimeKey);');
+    expect(mainSrc).toContain('scheduleCurrentLauncherOperationRemoval(runtimeKey, lifecycleAttemptOwner);');
     expect(mainSrc).toContain('const startedAtUnixMs = snapshot?.started_at_unix_ms;');
     expect(mainSrc).toContain('current?.started_at_unix_ms !== startedAtUnixMs');
     expect(mainSrc).toContain('function desktopFailureFromError(');
@@ -181,6 +181,65 @@ describe('main routing', () => {
     expect(mainSrc).not.toContain('function friendlyRuntimeStartErrorMessage(');
     expect(mainSrc).not.toContain('firstDisplayLine(');
     expect(mainSrc).not.toContain(['The SSH host resolved its runtime directory to', '/root'].join(' '));
+  });
+
+  it('hydrates runtime lifecycle workflows only from active matching launcher attempts', () => {
+    const mainSrc = readMainSource();
+    const ownerStatusesStart = mainSrc.indexOf('const RUNTIME_LIFECYCLE_WORKFLOW_OWNER_STATUSES');
+    const ownerStatusesEnd = mainSrc.indexOf('];', ownerStatusesStart);
+    expect(ownerStatusesStart).toBeGreaterThanOrEqual(0);
+    expect(ownerStatusesEnd).toBeGreaterThan(ownerStatusesStart);
+    const ownerStatusesSrc = mainSrc.slice(ownerStatusesStart, ownerStatusesEnd);
+
+    expect(ownerStatusesSrc).toContain("'running'");
+    expect(ownerStatusesSrc).toContain("'canceling'");
+    expect(ownerStatusesSrc).toContain("'cleanup_running'");
+    expect(ownerStatusesSrc).not.toContain("'succeeded'");
+    expect(ownerStatusesSrc).not.toContain("'failed'");
+    expect(ownerStatusesSrc).not.toContain("'canceled'");
+
+    const matchStart = mainSrc.indexOf('function runtimeLifecycleAttemptMatchesSnapshot(');
+    const matchEnd = mainSrc.indexOf('function runtimeLifecycleWorkflowFromInput(', matchStart);
+    expect(matchStart).toBeGreaterThanOrEqual(0);
+    expect(matchEnd).toBeGreaterThan(matchStart);
+    const matchSrc = mainSrc.slice(matchStart, matchEnd);
+    expect(matchSrc).toContain('attempt.workflow.progress().operation !== operation');
+    expect(matchSrc).toMatch(/attempt\.action === (snapshot|identity)\.action/u);
+    expect(matchSrc).toMatch(/attempt\.started_at_unix_ms === (snapshot|identity)\.started_at_unix_ms/u);
+
+    const workflowStart = mainSrc.indexOf('function runtimeLifecycleWorkflowForOperation(');
+    const workflowEnd = mainSrc.indexOf('function runtimeLifecycleWorkflowFailure(', workflowStart);
+    expect(workflowStart).toBeGreaterThanOrEqual(0);
+    expect(workflowEnd).toBeGreaterThan(workflowStart);
+    const workflowSrc = mainSrc.slice(workflowStart, workflowEnd);
+    expect(workflowSrc).toContain('runtimeLifecycleWorkflowAttemptsByKey.get(key)');
+    expect(workflowSrc).toContain('owner: LauncherOperationAttemptIdentity');
+    expect(workflowSrc).toContain('runtimeLifecycleAttemptMatchesIdentity(existing, owner)');
+    expect(workflowSrc).toContain('runtimeLifecycleAttemptMatchesSnapshot(existing, snapshot, input.operation)');
+    expect(workflowSrc).toContain('runtimeLifecycleWorkflowAttemptsByKey.delete(key)');
+    expect(workflowSrc).toContain('const identity = runtimeLifecycleAttemptIdentity(snapshot)');
+    expect(workflowSrc).toContain('currentProgress.operation === input.operation');
+    expect(workflowSrc).toContain('&& identity');
+    expect(workflowSrc).not.toContain('if (currentProgress) {\n    const hydrated = RuntimeLifecycleWorkflow.fromProgress(currentProgress);');
+
+    const updateLifecycleStart = mainSrc.indexOf('function updateRuntimeLifecycleOperation(');
+    const updateLifecycleEnd = mainSrc.indexOf('function runtimeLifecyclePhaseFromManagedRuntime(', updateLifecycleStart);
+    expect(updateLifecycleStart).toBeGreaterThanOrEqual(0);
+    expect(updateLifecycleEnd).toBeGreaterThan(updateLifecycleStart);
+    const updateLifecycleSrc = mainSrc.slice(updateLifecycleStart, updateLifecycleEnd);
+    expect(updateLifecycleSrc).toContain('owner: LauncherOperationAttemptIdentity');
+    expect(updateLifecycleSrc).toContain('launcherOperations.updateCurrentAttempt(operationKey, owner');
+
+    const removalStart = mainSrc.indexOf('function scheduleCurrentLauncherOperationRemoval(');
+    const removalEnd = mainSrc.indexOf('function setLauncherViewState(', removalStart);
+    expect(removalStart).toBeGreaterThanOrEqual(0);
+    expect(removalEnd).toBeGreaterThan(removalStart);
+    const removalSrc = mainSrc.slice(removalStart, removalEnd);
+    expect(removalSrc).toContain('owner: LauncherOperationAttemptIdentity');
+    expect(removalSrc).toContain('const snapshot = launcherOperations.get(operationKey)');
+    expect(removalSrc).toContain('launcherOperationMatchesAttempt(snapshot, owner)');
+    expect(removalSrc).toContain('const current = launcherOperations.get(cleanOperationKey)');
+    expect(removalSrc).toContain('launcherOperationMatchesAttempt(current, owner)');
   });
 
   it('routes runtime maintenance through an explicit Desktop session contract', () => {

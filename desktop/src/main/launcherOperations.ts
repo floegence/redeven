@@ -35,6 +35,21 @@ type CreateLauncherOperationInput = Readonly<{
   next_actions?: DesktopLauncherOperationSnapshot['next_actions'];
 }>;
 
+export type LauncherOperationAttemptIdentity = Readonly<{
+  action: DesktopLauncherActionKind;
+  started_at_unix_ms: number;
+}>;
+
+export type LauncherOperationUpdatePatch = Partial<Omit<
+  DesktopLauncherOperationSnapshot,
+  'operation_key' | 'action' | 'started_at_unix_ms' | 'subject_kind' | 'subject_id' | 'subject_generation'
+>>;
+
+export type LauncherOperationFinishPatch = Partial<Omit<
+  DesktopLauncherOperationSnapshot,
+  'operation_key' | 'action' | 'started_at_unix_ms' | 'subject_kind' | 'subject_id' | 'subject_generation' | 'status'
+>>;
+
 function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
@@ -69,6 +84,15 @@ function operationProgress(snapshot: DesktopLauncherOperationSnapshot): DesktopL
     next_actions: snapshot.next_actions,
     failure: snapshot.failure,
   };
+}
+
+function operationAttemptMatches(
+  snapshot: DesktopLauncherOperationSnapshot | null,
+  attempt: LauncherOperationAttemptIdentity,
+): boolean {
+  return !!snapshot
+    && snapshot.action === attempt.action
+    && snapshot.started_at_unix_ms === attempt.started_at_unix_ms;
 }
 
 function cancelPhaseForSnapshot(snapshot: DesktopLauncherOperationSnapshot): Readonly<{
@@ -108,6 +132,7 @@ export class LauncherOperationRegistry {
   private readonly operationsByKey = new Map<string, DesktopLauncherOperationSnapshot>();
   private readonly abortControllersByKey = new Map<string, AbortController>();
   private readonly subjectGenerations = new Map<string, number>();
+  private lastStartedAtUnixMs = 0;
 
   constructor(private readonly onChange: OperationChangeListener = () => undefined) {}
 
@@ -124,6 +149,8 @@ export class LauncherOperationRegistry {
 
   create(input: CreateLauncherOperationInput): DesktopLauncherOperationSnapshot {
     const now = Date.now();
+    const startedAtUnixMs = Math.max(now, this.lastStartedAtUnixMs + 1);
+    this.lastStartedAtUnixMs = startedAtUnixMs;
     const operationKey = compact(input.operation_key);
     const subjectID = compact(input.subject_id);
     if (operationKey === '') {
@@ -143,8 +170,8 @@ export class LauncherOperationRegistry {
       environment_label: compact(input.environment_label) || undefined,
       provider_origin: compact(input.provider_origin) || undefined,
       provider_id: compact(input.provider_id) || undefined,
-      started_at_unix_ms: now,
-      updated_at_unix_ms: now,
+      started_at_unix_ms: startedAtUnixMs,
+      updated_at_unix_ms: startedAtUnixMs,
       status: input.status ?? 'running',
       phase: compact(input.phase),
       title: compact(input.title),
@@ -184,7 +211,7 @@ export class LauncherOperationRegistry {
 
   update(
     operationKey: string,
-    patch: Partial<Omit<DesktopLauncherOperationSnapshot, 'operation_key' | 'started_at_unix_ms' | 'subject_kind' | 'subject_id' | 'subject_generation'>>,
+    patch: LauncherOperationUpdatePatch,
   ): DesktopLauncherOperationSnapshot | null {
     const key = compact(operationKey);
     const current = this.operationsByKey.get(key);
@@ -201,10 +228,22 @@ export class LauncherOperationRegistry {
     return next;
   }
 
+  updateCurrentAttempt(
+    operationKey: string,
+    attempt: LauncherOperationAttemptIdentity,
+    patch: LauncherOperationUpdatePatch,
+  ): DesktopLauncherOperationSnapshot | null {
+    const key = compact(operationKey);
+    if (!operationAttemptMatches(this.operationsByKey.get(key) ?? null, attempt)) {
+      return null;
+    }
+    return this.update(key, patch);
+  }
+
   finish(
     operationKey: string,
     status: Extract<DesktopLauncherOperationStatus, 'canceled' | 'cleanup_failed' | 'failed' | 'succeeded'>,
-    patch: Partial<Omit<DesktopLauncherOperationSnapshot, 'operation_key' | 'started_at_unix_ms' | 'subject_kind' | 'subject_id' | 'subject_generation' | 'status'>> = {},
+    patch: LauncherOperationFinishPatch = {},
   ): DesktopLauncherOperationSnapshot | null {
     const next = this.update(operationKey, {
       ...patch,
@@ -213,6 +252,26 @@ export class LauncherOperationRegistry {
       next_actions: patch.next_actions,
     });
     this.abortControllersByKey.delete(compact(operationKey));
+    return next;
+  }
+
+  finishCurrentAttempt(
+    operationKey: string,
+    attempt: LauncherOperationAttemptIdentity,
+    status: Extract<DesktopLauncherOperationStatus, 'canceled' | 'cleanup_failed' | 'failed' | 'succeeded'>,
+    patch: LauncherOperationFinishPatch = {},
+  ): DesktopLauncherOperationSnapshot | null {
+    const key = compact(operationKey);
+    if (!operationAttemptMatches(this.operationsByKey.get(key) ?? null, attempt)) {
+      return null;
+    }
+    const next = this.update(key, {
+      ...patch,
+      status,
+      cancelable: false,
+      next_actions: patch.next_actions,
+    });
+    this.abortControllersByKey.delete(key);
     return next;
   }
 
