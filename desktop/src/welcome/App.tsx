@@ -234,6 +234,7 @@ import {
   activeProgressForEnvironment,
   activeOpenConnectionProgressForEnvironment,
   activeRuntimeLifecycleProgressForEnvironment,
+  launcherProgressBlocksPrimaryAction,
   busyStateMatchesAction,
   busyStateMatchesControlPlane,
   busyStateMatchesEnvironment,
@@ -5576,7 +5577,7 @@ function EnvironmentConnectionCard(props: Readonly<{
       'prepare_environment_open',
       'focus_environment_window',
     ])
-    || openConnectionProgress() !== null
+    || launcherProgressBlocksPrimaryAction(openConnectionProgress())
   ));
   const isRuntimeActionBusy = createMemo(() => (
     busyStateMatchesEnvironment(props.busyState, props.environment.id, [

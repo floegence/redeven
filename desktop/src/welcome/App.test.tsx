@@ -655,6 +655,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('actionProgress={props.actionProgress}');
     expect(appSrc).toContain('activeRuntimeLifecycleProgressForEnvironment(props.environment, props.busyState, props.actionProgress)');
     expect(appSrc).toContain('activeOpenConnectionProgressForEnvironment(props.environment, props.busyState, props.actionProgress)');
+    expect(appSrc).toContain('launcherProgressBlocksPrimaryAction(openConnectionProgress())');
+    expect(appSrc).not.toContain('|| openConnectionProgress() !== null');
     expect(appSrc).toContain('runtimeLifecycleProgress={visibleRuntimeLifecycleProgress()}');
     expect(appSrc).toContain('openConnectionProgress={visibleOpenConnectionProgress()}');
     expect(appSrc).toContain('pendingEnvironmentLifecycleProgress(props.environment, disclosure)');
