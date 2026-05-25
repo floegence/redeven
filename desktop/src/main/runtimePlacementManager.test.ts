@@ -160,7 +160,78 @@ describe('runtimePlacementManager', () => {
     ]);
   });
 
-  it('replaces a ready container runtime when Desktop is using the current source runtime', async () => {
+  it('does not replace a ready container runtime just because Desktop is using the current source runtime', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-placement-manager-'));
+    const { markerPath } = await installFakeDocker(tempDir);
+    await fs.writeFile(markerPath, 'old-runtime');
+    const progressPhases: RuntimePlacementProgressPhase[] = [];
+
+    const ready = await ensureRuntimePlacementReady({
+      host_access: { kind: 'local_host' },
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'dev',
+        container_ref: 'dev',
+        container_label: 'dev',
+        runtime_root: '/root/.redeven',
+        bridge_strategy: 'exec_stream',
+      },
+      runtime_release_tag: 'v1.2.3',
+      release_base_url: 'https://example.invalid/releases',
+      source_runtime_root: tempDir,
+      asset_cache_root: tempDir,
+      desktop_owner_id: 'owner',
+      on_progress: (progress) => {
+        progressPhases.push(progress.phase);
+      },
+    });
+
+    expect(ready.runtime_binary_path).toBe('/root/.redeven/runtime/releases/v1.2.3/bin/redeven');
+    expect(await fs.readFile(markerPath, 'utf8')).toBe('old-runtime');
+    expect(uploadAssetMocks.prepareDesktopRuntimeUploadAsset).not.toHaveBeenCalled();
+    expect(progressPhases).toEqual([
+      'checking_container',
+      'detecting_platform',
+      'checking_runtime',
+      'starting_runtime_daemon',
+      'waiting_runtime_daemon',
+      'runtime_ready',
+    ]);
+  });
+
+  it('installs a missing container runtime from the current source runtime', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-placement-manager-'));
+    const { markerPath } = await installFakeDocker(tempDir);
+
+    const ready = await ensureRuntimePlacementReady({
+      host_access: { kind: 'local_host' },
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'dev',
+        container_ref: 'dev',
+        container_label: 'dev',
+        runtime_root: '/root/.redeven',
+        bridge_strategy: 'exec_stream',
+      },
+      runtime_release_tag: 'v1.2.3',
+      release_base_url: 'https://example.invalid/releases',
+      source_runtime_root: tempDir,
+      asset_cache_root: tempDir,
+      desktop_owner_id: 'owner',
+    });
+
+    expect(ready.runtime_binary_path).toBe('/root/.redeven/runtime/releases/v1.2.3/bin/redeven');
+    expect(await fs.readFile(markerPath, 'utf8')).toBe('redeven-archive');
+    expect(uploadAssetMocks.prepareDesktopRuntimeUploadAsset).toHaveBeenCalledWith(expect.objectContaining({
+      runtimeReleaseTag: 'v1.2.3',
+      sourceRuntimeRoot: tempDir,
+      platform: expect.objectContaining({ platform_id: 'linux_amd64' }),
+    }));
+  });
+
+  it('replaces a ready container runtime when the user explicitly requests an update', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-placement-manager-'));
     const { markerPath } = await installFakeDocker(tempDir);
     await fs.writeFile(markerPath, 'old-runtime');
@@ -180,6 +251,7 @@ describe('runtimePlacementManager', () => {
       release_base_url: 'https://example.invalid/releases',
       source_runtime_root: tempDir,
       asset_cache_root: tempDir,
+      force_runtime_update: true,
       desktop_owner_id: 'owner',
     });
 

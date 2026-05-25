@@ -293,14 +293,12 @@ export async function ensureRuntimePlacementReady(
   );
   let probe = await probeContainerRuntime(executor, placement, runtimeReleaseTag, args.signal);
   const sourceRuntimeRoot = compact(args.source_runtime_root);
-  const shouldInstallRuntime = probe.status !== 'ready'
-    || args.force_runtime_update === true
-    || sourceRuntimeRoot !== '';
+  const shouldReplaceRuntimePackage = args.force_runtime_update === true;
+  const shouldInstallRuntime = probe.status === 'missing_binary' || shouldReplaceRuntimePackage;
   if (
     probe.status !== 'ready'
     && probe.status !== 'missing_binary'
-    && args.force_runtime_update !== true
-    && sourceRuntimeRoot === ''
+    && !shouldReplaceRuntimePackage
   ) {
     const maintenance = buildDesktopRuntimeMaintenanceRequirement({
       kind: 'runtime_update_required',

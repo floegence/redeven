@@ -1898,12 +1898,11 @@ async function ensureRemoteRuntimeInstalled(args: Readonly<{
   signal?: AbortSignal;
 }>): Promise<void> {
   const initialProbe = await probeRemoteRuntimeCompatibility(args);
-  const sourceRuntimeRoot = compact(args.sourceRuntimeRoot);
-  const shouldForceInstall = args.forceRuntimeUpdate === true || sourceRuntimeRoot !== '';
-  if (initialProbe.status === 'ready' && !shouldForceInstall) {
+  const shouldReplaceRuntimePackage = args.forceRuntimeUpdate === true;
+  if (initialProbe.status === 'ready' && !shouldReplaceRuntimePackage) {
     return;
   }
-  if (!shouldForceInstall && initialProbe.status !== 'missing_binary') {
+  if (!shouldReplaceRuntimePackage && initialProbe.status !== 'missing_binary') {
     const maintenance = buildDesktopRuntimeMaintenanceRequirement({
       kind: 'runtime_update_required',
       required_for: 'open',
@@ -1924,7 +1923,7 @@ async function ensureRemoteRuntimeInstalled(args: Readonly<{
   }
 
   const failures: string[] = [
-    shouldForceInstall
+    shouldReplaceRuntimePackage
       ? `existing runtime will be replaced: ${describeManagedSSHRuntimeProbeResult(initialProbe)}`
       : `existing runtime: ${describeManagedSSHRuntimeProbeResult(initialProbe)}`,
   ];
