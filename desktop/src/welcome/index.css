@@ -381,6 +381,34 @@ body {
   color: var(--primary);
 }
 
+.redeven-card-fact-copy-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex-shrink: 0;
+  opacity: 0;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition:
+    opacity 150ms ease,
+    color 150ms ease;
+}
+
+.redeven-card-fact-value--copyable:hover .redeven-card-fact-copy-icon {
+  opacity: 1;
+}
+
+.redeven-card-fact-copy-icon:hover {
+  color: var(--primary);
+}
+
+.redeven-card-fact-copy-icon--active {
+  opacity: 1;
+  color: var(--success);
+}
+
 /* ── Card body: leading icon ── */
 
 .redeven-card-fact-leading-icon {

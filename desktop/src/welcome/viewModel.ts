@@ -567,6 +567,7 @@ function runtimePlacementFacts(environment: DesktopEnvironmentEntry): readonly E
   return [
     buildEnvironmentCardFact('CONTAINER', placement.container_label || placement.container_id, {
       leading_icon: CONTAINER_ENGINE_ICON[engine],
+      copy_value: true,
     }),
   ];
 }
