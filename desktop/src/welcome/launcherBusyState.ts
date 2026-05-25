@@ -215,6 +215,14 @@ export function busyStateMatchesActionProgress(
   return environmentMatchesActionProgress(state.environment_id, progress);
 }
 
+export function launcherProgressBlocksPrimaryAction(
+  progress: DesktopLauncherActionProgress | null | undefined,
+): boolean {
+  return progress?.status === 'running'
+    || progress?.status === 'canceling'
+    || progress?.status === 'cleanup_running';
+}
+
 export function activeProgressForEnvironment(
   environmentID: string,
   busyState: DesktopLauncherBusyState,

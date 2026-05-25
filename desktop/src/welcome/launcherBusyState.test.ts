@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { openConnectionProgress as buildOpenConnectionProgress } from '../shared/desktopOpenConnectionProgress';
 import { runtimeLifecycleProgress } from '../shared/desktopRuntimeLifecycleProgress';
 import type { DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import type { DesktopProviderRuntimeLinkTarget } from '../shared/providerRuntimeLinkTarget';
@@ -17,6 +18,7 @@ import {
   environmentMatchesActionProgress,
   environmentMatchesRuntimeLifecycleProgress,
   IDLE_LAUNCHER_BUSY_STATE,
+  launcherProgressBlocksPrimaryAction,
 } from './launcherBusyState';
 import type { RuntimeProgressEnvironmentMatch } from './launcherBusyState';
 
@@ -199,6 +201,83 @@ describe('launcherBusyState', () => {
     expect(activeProgressForEnvironment('other', stateWithProgress, [progress])).toBeNull();
     expect(activeProgressForEnvironment(progress.environment_id, IDLE_LAUNCHER_BUSY_STATE, [progress])).toBe(progress);
     expect(activeProgressForEnvironment(progress.operation_key, IDLE_LAUNCHER_BUSY_STATE, [progress])).toBe(progress);
+  });
+
+  it('blocks primary actions only while launcher progress is still active', () => {
+    const progress = {
+      action: 'open_local_environment' as const,
+      environment_id: 'local',
+      phase: 'opening_window',
+      title: 'Opening environment',
+      detail: 'Desktop is opening the local Env App window.',
+    };
+
+    expect(launcherProgressBlocksPrimaryAction({ ...progress, status: 'running' })).toBe(true);
+    expect(launcherProgressBlocksPrimaryAction({ ...progress, status: 'canceling' })).toBe(true);
+    expect(launcherProgressBlocksPrimaryAction({ ...progress, status: 'cleanup_running' })).toBe(true);
+
+    expect(launcherProgressBlocksPrimaryAction({ ...progress, status: 'succeeded' })).toBe(false);
+    expect(launcherProgressBlocksPrimaryAction({ ...progress, status: 'failed' })).toBe(false);
+    expect(launcherProgressBlocksPrimaryAction({ ...progress, status: 'canceled' })).toBe(false);
+    expect(launcherProgressBlocksPrimaryAction({ ...progress, status: 'cleanup_failed' })).toBe(false);
+    expect(launcherProgressBlocksPrimaryAction(progress)).toBe(false);
+    expect(launcherProgressBlocksPrimaryAction(null)).toBe(false);
+  });
+
+  it('keeps retained terminal Open progress inspectable without blocking the primary action', () => {
+    const environment: RuntimeProgressEnvironmentMatch = {
+      id: 'local',
+      managed_runtime_target_id: runtimeID('local:local'),
+      managed_runtime_placement_target_id: undefined,
+      provider_runtime_link_target: undefined,
+    };
+    const succeededOpenProgress = {
+      action: 'open_local_environment' as const,
+      environment_id: 'local',
+      operation_key: 'local:host:local:open',
+      subject_kind: 'local_environment' as const,
+      subject_id: 'local',
+      phase: 'open_ready',
+      title: 'Open ready',
+      detail: 'Desktop opened the local Env App window.',
+      status: 'succeeded' as const,
+      open_progress: buildOpenConnectionProgress({
+        location: 'local_host',
+        phase: 'open_ready',
+        environmentID: 'local',
+        environmentLabel: 'Local Environment',
+        targetID: 'local:local',
+        targetLabel: 'Local Environment',
+      }),
+    };
+    const runningOpenProgress = {
+      ...succeededOpenProgress,
+      phase: 'opening_window',
+      title: 'Opening environment',
+      detail: 'Desktop is opening the local Env App window.',
+      status: 'running' as const,
+      open_progress: buildOpenConnectionProgress({
+        location: 'local_host',
+        phase: 'opening_window',
+        environmentID: 'local',
+        environmentLabel: 'Local Environment',
+        targetID: 'local:local',
+        targetLabel: 'Local Environment',
+      }),
+    };
+
+    expect(activeOpenConnectionProgressForEnvironment(
+      environment as never,
+      IDLE_LAUNCHER_BUSY_STATE,
+      [succeededOpenProgress],
+    )).toBe(succeededOpenProgress);
+    expect(launcherProgressBlocksPrimaryAction(succeededOpenProgress)).toBe(false);
+    expect(activeOpenConnectionProgressForEnvironment(
+      environment as never,
+      IDLE_LAUNCHER_BUSY_STATE,
+      [runningOpenProgress],
+    )).toBe(runningOpenProgress);
+    expect(launcherProgressBlocksPrimaryAction(runningOpenProgress)).toBe(true);
   });
 
   it('matches runtime lifecycle progress for local host, container, SSH host, and SSH container targets', () => {
