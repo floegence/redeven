@@ -217,13 +217,14 @@ import {
   closeEnvironmentLifecycleDisclosure,
   environmentActionStartsLifecycleDisclosure,
   environmentLifecycleDisclosureForEnvironment,
-  pendingEnvironmentLifecycleProgress,
   reconcileEnvironmentLifecycleDisclosure,
   reopenEnvironmentLifecycleDisclosure,
+  visibleEnvironmentLifecycleProgress,
   type EnvironmentLifecycleDisclosureIntent,
   type EnvironmentLifecycleDisclosureState,
 } from './environmentLifecycleDisclosure';
 import {
+  type EnvironmentProgressPrimaryPresentation,
   environmentProgressPrimaryPresentation,
   runtimeLifecycleReadyPrimaryAction,
   selectEnvironmentPanelProgress,
@@ -5070,6 +5071,12 @@ function splitMenuItemTone(intent: EnvironmentActionIntent): string {
   }
 }
 
+function progressTriggerClassName(presentation: EnvironmentProgressPrimaryPresentation): string {
+  return presentation.kind === 'progress_trigger'
+    ? 'redeven-split-action-trigger--progress'
+    : 'redeven-split-action-trigger--attention';
+}
+
 function EnvironmentSplitActionButton(props: Readonly<{
   presentation: Extract<EnvironmentActionPresentation, Readonly<{ kind: 'split_button' }>>;
   environmentID: string;
@@ -5153,6 +5160,11 @@ function EnvironmentSplitActionButton(props: Readonly<{
     const ProgressIcon = icon === 'stop' ? Stop : Play;
     return <ProgressIcon class="redeven-split-action-trigger__icon h-3.5 w-3.5" />;
   };
+  const renderEnvironmentProgressPresentationIcon = (presentation: EnvironmentProgressPrimaryPresentation) => (
+    presentation.kind === 'progress_trigger'
+      ? renderEnvironmentProgressTriggerIcon(presentation.icon)
+      : <AlertTriangle class="redeven-split-action-trigger__icon h-3.5 w-3.5" />
+  );
   let rootRef: HTMLDivElement | undefined;
   let menuRef: HTMLDivElement | undefined;
   let menuFocusFrame = 0;
@@ -5356,31 +5368,26 @@ function EnvironmentSplitActionButton(props: Readonly<{
               )}
             >
               {(presentation) => {
-                const currentPresentation = presentation();
                 return (
                   <Button
                     size="sm"
                     variant={props.presentation.primary_action.variant}
                     class={cn(
                       primaryButtonClass(),
-                      currentPresentation.kind === 'progress_trigger'
-                        ? 'redeven-split-action-trigger--progress'
-                        : 'redeven-split-action-trigger--attention',
+                      progressTriggerClassName(presentation()),
                     )}
                     style={{ 'min-width': 'var(--redeven-split-action-primary-min-width)' }}
                     aria-haspopup="dialog"
                     aria-expanded={props.progressOpen}
-                    aria-label={currentPresentation.ariaLabel}
+                    aria-label={presentation().ariaLabel}
                     onClick={() => {
                       closeMenu();
                       props.onProgressOpenChange(!props.progressOpen);
                     }}
                   >
                     <span class="redeven-split-action-trigger__content">
-                      {currentPresentation.kind === 'progress_trigger'
-                        ? renderEnvironmentProgressTriggerIcon(currentPresentation.icon)
-                        : <AlertTriangle class="redeven-split-action-trigger__icon h-3.5 w-3.5" />}
-                      <span>{currentPresentation.label}</span>
+                      {renderEnvironmentProgressPresentationIcon(presentation())}
+                      <span>{presentation().label}</span>
                     </span>
                   </Button>
                 );
@@ -5582,16 +5589,11 @@ function EnvironmentConnectionCard(props: Readonly<{
       setRememberedOpenConnectionProgress(null);
     }
   });
-  const disclosureRuntimeLifecycleProgress = createMemo(() => {
-    const disclosure = props.lifecycleDisclosure;
-    if (!disclosure) {
-      return null;
-    }
-    return disclosure.last_progress ?? pendingEnvironmentLifecycleProgress(props.environment, disclosure);
-  });
-  const visibleRuntimeLifecycleProgress = createMemo(() => (
-    runtimeLifecycleProgress() ?? disclosureRuntimeLifecycleProgress()
-  ));
+  const visibleRuntimeLifecycleProgress = createMemo(() => visibleEnvironmentLifecycleProgress({
+    environment: props.environment,
+    selectedProgress: runtimeLifecycleProgress(),
+    disclosure: props.lifecycleDisclosure,
+  }));
   const isCardOpen = createMemo(() => props.environment.window_state === 'open');
   const windowBusyActions = [
     'open_local_environment',
