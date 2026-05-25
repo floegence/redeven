@@ -32,6 +32,7 @@ export type EnvironmentLifecycleDisclosureState = Readonly<{
   environment_id: string;
   intent: EnvironmentLifecycleDisclosureIntent;
   visibility: EnvironmentLifecycleDisclosureVisibility;
+  started_at_unix_ms: number;
   operation_key?: string;
   last_progress?: DesktopLauncherActionProgress;
 }> | null;
@@ -189,6 +190,7 @@ export function beginEnvironmentLifecycleDisclosure(
     environment_id: environmentID,
     intent,
     visibility: 'open',
+    started_at_unix_ms: Date.now(),
   };
 }
 
@@ -235,6 +237,25 @@ function progressIsTerminal(progress: DesktopLauncherActionProgress): boolean {
     || progress.status === 'cleanup_failed';
 }
 
+function progressStartedAt(progress: DesktopLauncherActionProgress | null | undefined): number {
+  const startedAt = Number(progress?.started_at_unix_ms);
+  return Number.isFinite(startedAt) && startedAt > 0 ? startedAt : 0;
+}
+
+function progressBelongsToDisclosure(
+  progress: DesktopLauncherActionProgress | null | undefined,
+  state: Exclude<EnvironmentLifecycleDisclosureState, null>,
+): progress is DesktopLauncherActionProgress {
+  if (
+    !progress?.lifecycle_progress
+    || lifecycleDisclosureIntentForActionKind(progress.action) !== state.intent
+  ) {
+    return false;
+  }
+  const progressStarted = progressStartedAt(progress);
+  return progressStarted === 0 || progressStarted >= state.started_at_unix_ms;
+}
+
 export function reconcileEnvironmentLifecycleDisclosure(
   state: EnvironmentLifecycleDisclosureState,
   entries: readonly DesktopEnvironmentEntry[],
@@ -248,8 +269,7 @@ export function reconcileEnvironmentLifecycleDisclosure(
     return null;
   }
   const progress = progressItems.find((candidate) => (
-    candidate.lifecycle_progress
-    && lifecycleDisclosureIntentForActionKind(candidate.action) === state.intent
+    progressBelongsToDisclosure(candidate, state)
     && environmentMatchesRuntimeLifecycleProgress(environment, candidate)
   )) ?? null;
   if (progress) {
@@ -303,4 +323,21 @@ export function pendingEnvironmentLifecycleProgress(
       targetLabel: environment.label,
     }),
   };
+}
+
+export function visibleEnvironmentLifecycleProgress(input: Readonly<{
+  environment: DesktopEnvironmentEntry;
+  selectedProgress: DesktopLauncherActionProgress | null | undefined;
+  disclosure: EnvironmentLifecycleDisclosureState;
+}>): DesktopLauncherActionProgress | null {
+  if (!input.disclosure) {
+    return input.selectedProgress?.lifecycle_progress ? input.selectedProgress : null;
+  }
+  if (input.disclosure.last_progress) {
+    return input.disclosure.last_progress;
+  }
+  if (progressBelongsToDisclosure(input.selectedProgress, input.disclosure)) {
+    return input.selectedProgress;
+  }
+  return pendingEnvironmentLifecycleProgress(input.environment, input.disclosure);
 }

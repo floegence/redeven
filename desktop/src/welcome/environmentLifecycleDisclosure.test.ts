@@ -18,6 +18,7 @@ import {
   pendingEnvironmentLifecycleProgress,
   reconcileEnvironmentLifecycleDisclosure,
   reopenEnvironmentLifecycleDisclosure,
+  visibleEnvironmentLifecycleProgress,
 } from './environmentLifecycleDisclosure';
 
 function localEnvironmentEntry() {
@@ -34,7 +35,7 @@ function localEnvironmentEntry() {
   return entry;
 }
 
-function lifecycleProgress(environmentID: string): DesktopLauncherActionProgress {
+function lifecycleProgress(environmentID: string, startedAt = 100): DesktopLauncherActionProgress {
   return {
     action: 'update_environment_runtime',
     environment_id: environmentID,
@@ -42,7 +43,7 @@ function lifecycleProgress(environmentID: string): DesktopLauncherActionProgress
     operation_key: 'runtime-op',
     subject_kind: 'local_environment',
     subject_id: environmentID,
-    started_at_unix_ms: 100,
+    started_at_unix_ms: startedAt,
     status: 'succeeded',
     phase: 'runtime_ready',
     title: 'Runtime ready',
@@ -57,7 +58,7 @@ function lifecycleProgress(environmentID: string): DesktopLauncherActionProgress
   };
 }
 
-function restartReadyProgress(environmentID: string): DesktopLauncherActionProgress {
+function restartReadyProgress(environmentID: string, startedAt = 200): DesktopLauncherActionProgress {
   return {
     action: 'restart_environment_runtime',
     environment_id: environmentID,
@@ -65,7 +66,7 @@ function restartReadyProgress(environmentID: string): DesktopLauncherActionProgr
     operation_key: 'restart-runtime-op',
     subject_kind: 'local_environment',
     subject_id: environmentID,
-    started_at_unix_ms: 200,
+    started_at_unix_ms: startedAt,
     status: 'succeeded',
     phase: 'runtime_ready',
     title: 'Runtime ready',
@@ -78,6 +79,10 @@ function restartReadyProgress(environmentID: string): DesktopLauncherActionProgr
       targetLabel: 'Local Environment',
     }),
   };
+}
+
+function progressStartedAfter(state: Exclude<ReturnType<typeof beginEnvironmentLifecycleDisclosure>, null>): number {
+  return state.started_at_unix_ms + 1;
 }
 
 function actionLifecycleProgress(input: Readonly<{
@@ -129,31 +134,196 @@ describe('environmentLifecycleDisclosure', () => {
     }));
   });
 
+  it('uses pending lifecycle progress only until matching real progress exists', () => {
+    const environment = localEnvironmentEntry();
+    const state = beginEnvironmentLifecycleDisclosure(null, environment.id, 'restart_runtime');
+    const progress = visibleEnvironmentLifecycleProgress({
+      environment,
+      selectedProgress: null,
+      disclosure: state,
+    });
+
+    expect(progress).toMatchObject({
+      action: 'restart_environment_runtime',
+      status: 'running',
+      title: 'Restarting runtime',
+    });
+  });
+
+  it('returns selected lifecycle progress directly when no disclosure is active', () => {
+    const environment = localEnvironmentEntry();
+    const selectedProgress = actionLifecycleProgress({
+      environmentID: environment.id,
+      action: 'update_environment_runtime',
+      operation: 'update',
+      phase: 'checking_runtime_service',
+      status: 'running',
+      operationKey: 'update-op',
+      startedAt: 500,
+    });
+
+    expect(visibleEnvironmentLifecycleProgress({
+      environment,
+      selectedProgress,
+      disclosure: null,
+    })).toBe(selectedProgress);
+  });
+
+  it('uses a matching real failed progress instead of synthetic pending progress', () => {
+    const environment = localEnvironmentEntry();
+    const state = beginEnvironmentLifecycleDisclosure(null, environment.id, 'restart_runtime');
+    const failedRestart = actionLifecycleProgress({
+      environmentID: environment.id,
+      action: 'restart_environment_runtime',
+      operation: 'restart',
+      phase: 'checking_runtime_service',
+      status: 'failed',
+      operationKey: 'restart-failed-op',
+      startedAt: progressStartedAfter(state!),
+    });
+
+    expect(visibleEnvironmentLifecycleProgress({
+      environment,
+      selectedProgress: failedRestart,
+      disclosure: state,
+    })).toBe(failedRestart);
+  });
+
+  it('uses the terminal disclosure receipt instead of a stale selected running progress for the same attempt', () => {
+    const environment = localEnvironmentEntry();
+    const state = beginEnvironmentLifecycleDisclosure(null, environment.id, 'restart_runtime');
+    const startedAt = progressStartedAfter(state!);
+    const runningRestart = actionLifecycleProgress({
+      environmentID: environment.id,
+      action: 'restart_environment_runtime',
+      operation: 'restart',
+      phase: 'checking_runtime_service',
+      status: 'running',
+      operationKey: 'restart-op',
+      startedAt,
+    });
+    const failedRestart = actionLifecycleProgress({
+      environmentID: environment.id,
+      action: 'restart_environment_runtime',
+      operation: 'restart',
+      phase: 'checking_runtime_service',
+      status: 'failed',
+      operationKey: 'restart-op',
+      startedAt,
+    });
+    const bound = reconcileEnvironmentLifecycleDisclosure(state, [environment], [failedRestart]);
+
+    expect(visibleEnvironmentLifecycleProgress({
+      environment,
+      selectedProgress: runningRestart,
+      disclosure: bound,
+    })).toBe(failedRestart);
+  });
+
+  it('does not let an older lifecycle progress replace a new pending disclosure', () => {
+    const environment = localEnvironmentEntry();
+    const state = beginEnvironmentLifecycleDisclosure(null, environment.id, 'restart_runtime');
+    const oldUpdateFailure = actionLifecycleProgress({
+      environmentID: environment.id,
+      action: 'restart_environment_runtime',
+      operation: 'restart',
+      phase: 'checking_runtime_service',
+      status: 'failed',
+      operationKey: 'restart-failed-op',
+      startedAt: state!.started_at_unix_ms - 1,
+    });
+
+    const progress = visibleEnvironmentLifecycleProgress({
+      environment,
+      selectedProgress: oldUpdateFailure,
+      disclosure: state,
+    });
+
+    expect(progress).not.toBe(oldUpdateFailure);
+    expect(progress).toMatchObject({
+      action: 'restart_environment_runtime',
+      status: 'running',
+    });
+  });
+
+  it('does not let a different lifecycle action replace a new pending disclosure', () => {
+    const environment = localEnvironmentEntry();
+    const state = beginEnvironmentLifecycleDisclosure(null, environment.id, 'restart_runtime');
+    const updateFailure = actionLifecycleProgress({
+      environmentID: environment.id,
+      action: 'update_environment_runtime',
+      operation: 'update',
+      phase: 'checking_runtime_service',
+      status: 'failed',
+      operationKey: 'update-failed-op',
+      startedAt: progressStartedAfter(state!),
+    });
+
+    const progress = visibleEnvironmentLifecycleProgress({
+      environment,
+      selectedProgress: updateFailure,
+      disclosure: state,
+    });
+
+    expect(progress).not.toBe(updateFailure);
+    expect(progress).toMatchObject({
+      action: 'restart_environment_runtime',
+      status: 'running',
+    });
+  });
+
   it('binds real progress and keeps terminal progress while the popup is open', () => {
     const environment = localEnvironmentEntry();
     const state = beginEnvironmentLifecycleDisclosure(null, environment.id, 'update_runtime');
-    const realProgress = lifecycleProgress(environment.id);
+    const startedAt = progressStartedAfter(state!);
+    const realProgress = lifecycleProgress(environment.id, startedAt);
     const bound = reconcileEnvironmentLifecycleDisclosure(state, [environment], [realProgress]);
 
     expect(bound).toEqual(expect.objectContaining({
       environment_id: environment.id,
       visibility: 'open',
-      operation_key: 'runtime-op:100',
+      operation_key: `runtime-op:${startedAt}`,
       last_progress: realProgress,
     }));
     expect(reconcileEnvironmentLifecycleDisclosure(bound, [environment], [])).toBe(bound);
   });
 
+  it('keeps a terminal receipt visible after the registry removes it while the popup is open', () => {
+    const environment = localEnvironmentEntry();
+    const state = beginEnvironmentLifecycleDisclosure(null, environment.id, 'restart_runtime');
+    const failedRestart = actionLifecycleProgress({
+      environmentID: environment.id,
+      action: 'restart_environment_runtime',
+      operation: 'restart',
+      phase: 'checking_runtime_service',
+      status: 'failed',
+      operationKey: 'restart-failed-op',
+      startedAt: progressStartedAfter(state!),
+    });
+    const bound = reconcileEnvironmentLifecycleDisclosure(
+      state,
+      [environment],
+      [failedRestart],
+    );
+
+    expect(visibleEnvironmentLifecycleProgress({
+      environment,
+      selectedProgress: null,
+      disclosure: bound,
+    })).toBe(failedRestart);
+  });
+
   it('keeps terminal restart progress visible until the open popup can offer Open', () => {
     const environment = localEnvironmentEntry();
     const state = beginEnvironmentLifecycleDisclosure(null, environment.id, 'restart_runtime');
-    const realProgress = restartReadyProgress(environment.id);
+    const startedAt = progressStartedAfter(state!);
+    const realProgress = restartReadyProgress(environment.id, startedAt);
     const bound = reconcileEnvironmentLifecycleDisclosure(state, [environment], [realProgress]);
 
     expect(bound).toEqual(expect.objectContaining({
       environment_id: environment.id,
       visibility: 'open',
-      operation_key: 'restart-runtime-op:200',
+      operation_key: `restart-runtime-op:${startedAt}`,
       last_progress: realProgress,
     }));
     expect(reconcileEnvironmentLifecycleDisclosure(bound, [environment], [])).toBe(bound);
@@ -162,6 +332,7 @@ describe('environmentLifecycleDisclosure', () => {
   it('keeps terminal stop success visible as a receipt while the popup is open', () => {
     const environment = localEnvironmentEntry();
     const state = beginEnvironmentLifecycleDisclosure(null, environment.id, 'stop_runtime');
+    const startedAt = progressStartedAfter(state!);
     const realProgress = actionLifecycleProgress({
       environmentID: environment.id,
       action: 'stop_environment_runtime',
@@ -169,14 +340,14 @@ describe('environmentLifecycleDisclosure', () => {
       phase: 'runtime_stopped',
       status: 'succeeded',
       operationKey: 'stop-runtime-op',
-      startedAt: 250,
+      startedAt,
     });
     const bound = reconcileEnvironmentLifecycleDisclosure(state, [environment], [realProgress]);
 
     expect(bound).toEqual(expect.objectContaining({
       environment_id: environment.id,
       visibility: 'open',
-      operation_key: 'stop-runtime-op:250',
+      operation_key: `stop-runtime-op:${startedAt}`,
       last_progress: realProgress,
     }));
     expect(reconcileEnvironmentLifecycleDisclosure(bound, [environment], [])).toBe(bound);
@@ -186,6 +357,7 @@ describe('environmentLifecycleDisclosure', () => {
   it('binds terminal failure progress without relying on disclosure state as the dismiss owner', () => {
     const environment = localEnvironmentEntry();
     const state = beginEnvironmentLifecycleDisclosure(null, environment.id, 'stop_runtime');
+    const startedAt = progressStartedAfter(state!);
     const realProgress = actionLifecycleProgress({
       environmentID: environment.id,
       action: 'stop_environment_runtime',
@@ -193,14 +365,14 @@ describe('environmentLifecycleDisclosure', () => {
       phase: 'verifying_runtime_stopped',
       status: 'failed',
       operationKey: 'stop-failed-op',
-      startedAt: 275,
+      startedAt,
     });
     const bound = reconcileEnvironmentLifecycleDisclosure(state, [environment], [realProgress]);
 
     expect(bound).toEqual(expect.objectContaining({
       environment_id: environment.id,
       visibility: 'open',
-      operation_key: 'stop-failed-op:275',
+      operation_key: `stop-failed-op:${startedAt}`,
       last_progress: realProgress,
     }));
     expect(reconcileEnvironmentLifecycleDisclosure(bound, [environment], [])).toBe(bound);
@@ -210,6 +382,7 @@ describe('environmentLifecycleDisclosure', () => {
   it('keeps canceled lifecycle receipts visible only until the user closes the popup', () => {
     const environment = localEnvironmentEntry();
     const state = beginEnvironmentLifecycleDisclosure(null, environment.id, 'restart_runtime');
+    const startedAt = progressStartedAfter(state!);
     const realProgress = actionLifecycleProgress({
       environmentID: environment.id,
       action: 'restart_environment_runtime',
@@ -217,14 +390,14 @@ describe('environmentLifecycleDisclosure', () => {
       phase: 'checking_runtime_service',
       status: 'canceled',
       operationKey: 'restart-canceled-op',
-      startedAt: 290,
+      startedAt,
     });
     const bound = reconcileEnvironmentLifecycleDisclosure(state, [environment], [realProgress]);
 
     expect(bound).toEqual(expect.objectContaining({
       environment_id: environment.id,
       visibility: 'open',
-      operation_key: 'restart-canceled-op:290',
+      operation_key: `restart-canceled-op:${startedAt}`,
       last_progress: realProgress,
     }));
     expect(closeEnvironmentLifecycleDisclosure(bound, environment.id)).toBeNull();
@@ -247,10 +420,11 @@ describe('environmentLifecycleDisclosure', () => {
 
   it('clears terminal progress when the user dismisses the visible disclosure', () => {
     const environment = localEnvironmentEntry();
+    const initial = beginEnvironmentLifecycleDisclosure(null, environment.id, 'update_runtime');
     const state = reconcileEnvironmentLifecycleDisclosure(
-      beginEnvironmentLifecycleDisclosure(null, environment.id, 'update_runtime'),
+      initial,
       [environment],
-      [lifecycleProgress(environment.id)],
+      [lifecycleProgress(environment.id, progressStartedAfter(initial!))],
     );
 
     expect(closeEnvironmentLifecycleDisclosure(state, environment.id)).toBeNull();
