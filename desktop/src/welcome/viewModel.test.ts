@@ -1301,7 +1301,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(entry).toBeTruthy();
     expect(buildEnvironmentCardModel(entry!)).toEqual(expect.objectContaining({
       kind_label: 'SSH Host',
-      status_label: 'RUNTIME NEEDS UPDATE',
+      status_label: 'Open',
       status_tone: 'success',
       target_secondary: 'http://127.0.0.1:24111/',
     }));
@@ -1316,7 +1316,7 @@ describe('buildEnvironmentCardModel', () => {
     ]);
     const actionModel = buildProviderBackedEnvironmentActionModel(entry!);
     expect(actionModel).toMatchObject({
-      status_label: 'RUNTIME NEEDS UPDATE',
+      status_label: 'Open',
       status_tone: 'success',
       action_presentation: {
         primary_action: {
@@ -1404,7 +1404,7 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(entry).toBeTruthy();
     expect(buildEnvironmentCardModel(entry!)).toMatchObject({
-      status_label: 'READY TO OPEN',
+      status_label: 'Open',
       status_tone: 'success',
     });
     expect(buildEnvironmentCardFactsModel(entry!)).toContainEqual(defaultFact('VERSION', 'v0.0.0-dev'));
@@ -1539,7 +1539,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(actionModel.action_presentation.primary_action_overlay).toMatchObject({
       kind: 'popover',
       title: 'Runtime restart required',
-      detail: 'This local container runtime needs a successful restart before it can open this environment. Open stays locked until the runtime restarts and reports ready.',
+      detail: 'This local container runtime needs a successful restart before it can open this environment. Restart the runtime, then open it again after it reports ready.',
       actions: expect.arrayContaining([
         expect.objectContaining({
           label: 'Restart runtime…',
@@ -2655,11 +2655,11 @@ describe('buildEnvironmentCardModel', () => {
     expect(entry).toBeTruthy();
     expect(buildEnvironmentCardModel(entry!)).toEqual(expect.objectContaining({
       kind_label: 'Local',
-      status_label: 'READY TO OPEN',
+      status_label: 'Open',
       status_tone: 'success',
     }));
     expect(buildProviderBackedEnvironmentActionModel(entry!)).toMatchObject({
-      status_label: 'READY TO OPEN',
+      status_label: 'Open',
       status_tone: 'success',
       action_presentation: {
         primary_action: {
@@ -2672,7 +2672,52 @@ describe('buildEnvironmentCardModel', () => {
     });
   });
 
-  it('keeps Open disabled while an online runtime is still preparing Env App readiness', () => {
+  it('keeps Open available when a newer runtime requires a Desktop update', () => {
+    const local = testLocalEnvironment({
+      currentRuntime: {
+        local_ui_url: 'http://127.0.0.1:24001/',
+        desktop_managed: true,
+        runtime_service: {
+          ...providerRuntimeService({
+            state: 'blocked',
+            reason_code: 'desktop_update_required',
+            message: 'Update Desktop before opening this runtime.',
+          }),
+          compatibility: 'desktop_update_required',
+        },
+      },
+    });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: local,
+      }),
+    });
+    const entry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
+
+    expect(entry).toBeTruthy();
+    const cardModel = buildEnvironmentCardModel(entry!);
+    const actionModel = buildProviderBackedEnvironmentActionModel(entry!);
+    expect(cardModel).toEqual(expect.objectContaining({
+      kind_label: 'Local',
+      status_label: 'Open',
+      status_tone: 'success',
+    }));
+    expect(cardModel.status_label).not.toBe('RUNTIME NEEDS UPDATE');
+    expect(actionModel).toMatchObject({
+      status_label: 'Open',
+      status_tone: 'success',
+      action_presentation: {
+        primary_action: {
+          intent: 'open',
+          label: 'Open',
+          enabled: true,
+        },
+        primary_action_overlay: undefined,
+      },
+    });
+  });
+
+  it('keeps Open available while an online runtime is still preparing Env App readiness', () => {
     const local = testLocalEnvironment({
       currentRuntime: {
         local_ui_url: 'http://127.0.0.1:24001/',
@@ -2695,19 +2740,15 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(entry).toBeTruthy();
     expect(buildProviderBackedEnvironmentActionModel(entry!)).toMatchObject({
-      status_label: 'RUNTIME PREPARING',
-      status_tone: 'warning',
+      status_label: 'Open',
+      status_tone: 'success',
       action_presentation: {
         primary_action: {
           intent: 'open',
           label: 'Open',
-          enabled: false,
+          enabled: true,
         },
-        primary_action_overlay: {
-          kind: 'tooltip',
-          tone: 'warning',
-          message: 'Env App gateway is starting.',
-        },
+        primary_action_overlay: undefined,
       },
     });
   });

@@ -841,6 +841,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("case 'copy_diagnostics':");
     expect(appSrc).toContain("case 'dismiss':");
     expect(appSrc).toContain('runNextAction?.(action, props.progress)');
+    expect(appSrc).toContain("case 'manage_desktop_update':");
+    expect(appSrc).toContain('props.runDesktopUpdateHandoff(props.environmentID, props.environmentLabel);');
     expect(appSrc).toContain('primaryActionBusy={props.loading === true}');
     expect(appSrc).toContain('loading={action().loading}');
     expect(appSrc).toContain('disabled={action().disabled}');

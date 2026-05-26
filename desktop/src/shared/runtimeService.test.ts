@@ -3,9 +3,11 @@ import { describe, expect, it } from 'vitest';
 import {
   envAppShellUnavailableOpenReadiness,
   normalizeRuntimeServiceSnapshot,
+  runtimeServiceAllowsOpenAttempt,
   runtimeServiceDesktopModelSourceBindingState,
   runtimeServiceIsOpenable,
   runtimeServiceMatchesIdentity,
+  runtimeServiceNeedsDesktopUpdate,
   runtimeServiceNeedsRuntimeUpdate,
   runtimeServiceOpenReadinessLabel,
   runtimeServiceProviderConnectionState,
@@ -16,23 +18,20 @@ import {
 } from './runtimeService';
 
 describe('runtimeService', () => {
-  it('blocks runtimes that do not expose explicit Desktop open-readiness', () => {
+  it('treats missing open-readiness as openable for otherwise compatible runtimes', () => {
     const snapshot = normalizeRuntimeServiceSnapshot({
       runtime_version: 'v0.5.9',
       compatibility: 'compatible',
       active_workload: {},
     });
 
-    expect(runtimeServiceIsOpenable(snapshot)).toBe(false);
-    expect(snapshot.open_readiness).toEqual({
-      state: 'blocked',
-      reason_code: 'runtime_open_readiness_unavailable',
-      message: 'This running runtime is older than this Desktop. Install the update, then restart the runtime when it is safe to interrupt active work.',
-    });
+    expect(runtimeServiceIsOpenable(snapshot)).toBe(true);
+    expect(runtimeServiceAllowsOpenAttempt(snapshot)).toBe(true);
+    expect(snapshot.open_readiness).toEqual({ state: 'openable' });
     expect(runtimeServiceOpenReadinessLabel(snapshot)).toBe(
-      'This running runtime is older than this Desktop. Install the update, then restart the runtime when it is safe to interrupt active work.',
+      'Runtime is ready to open.',
     );
-    expect(runtimeServiceNeedsRuntimeUpdate(snapshot)).toBe(true);
+    expect(runtimeServiceNeedsRuntimeUpdate(snapshot)).toBe(false);
   });
 
   it('keeps explicit openable readiness openable', () => {
@@ -48,6 +47,41 @@ describe('runtimeService', () => {
     expect(runtimeServiceNeedsRuntimeUpdate(snapshot)).toBe(false);
   });
 
+  it('allows Open attempts for compatibility update blocks while preserving the update type', () => {
+    const runtimeUpdate = normalizeRuntimeServiceSnapshot({
+      runtime_version: 'v0.5.9',
+      compatibility: 'update_required',
+      compatibility_message: 'Redeven Desktop has a newer bundled runtime.',
+      active_workload: {},
+    });
+    const desktopUpdate = normalizeRuntimeServiceSnapshot({
+      runtime_version: 'v0.8.0',
+      compatibility: 'desktop_update_required',
+      compatibility_message: 'Update Desktop before opening this runtime.',
+      active_workload: {},
+    });
+
+    expect(runtimeUpdate.open_readiness).toEqual({
+      state: 'blocked',
+      reason_code: 'runtime_update_required',
+      message: 'Redeven Desktop has a newer bundled runtime.',
+    });
+    expect(runtimeServiceIsOpenable(runtimeUpdate)).toBe(false);
+    expect(runtimeServiceAllowsOpenAttempt(runtimeUpdate)).toBe(true);
+    expect(runtimeServiceNeedsRuntimeUpdate(runtimeUpdate)).toBe(true);
+    expect(runtimeServiceNeedsDesktopUpdate(runtimeUpdate)).toBe(false);
+
+    expect(desktopUpdate.open_readiness).toEqual({
+      state: 'blocked',
+      reason_code: 'desktop_update_required',
+      message: 'Update Desktop before opening this runtime.',
+    });
+    expect(runtimeServiceIsOpenable(desktopUpdate)).toBe(false);
+    expect(runtimeServiceAllowsOpenAttempt(desktopUpdate)).toBe(true);
+    expect(runtimeServiceNeedsRuntimeUpdate(desktopUpdate)).toBe(false);
+    expect(runtimeServiceNeedsDesktopUpdate(desktopUpdate)).toBe(true);
+  });
+
   it('treats a missing Env App shell as an update-required runtime block', () => {
     const snapshot = normalizeRuntimeServiceSnapshot({
       runtime_version: 'v0.0.0-dev',
@@ -57,10 +91,28 @@ describe('runtimeService', () => {
     });
 
     expect(runtimeServiceIsOpenable(snapshot)).toBe(false);
+    expect(runtimeServiceAllowsOpenAttempt(snapshot)).toBe(true);
     expect(runtimeServiceNeedsRuntimeUpdate(snapshot)).toBe(true);
     expect(runtimeServiceOpenReadinessLabel(snapshot)).toBe(
       'The Environment App shell is not available in this runtime build. Install the update, then restart the runtime when it is safe to interrupt active work.',
     );
+  });
+
+  it('allows Open attempts while Env App readiness is still starting', () => {
+    const snapshot = normalizeRuntimeServiceSnapshot({
+      runtime_version: 'v0.5.11',
+      compatibility: 'compatible',
+      open_readiness: {
+        state: 'starting',
+        reason_code: 'env_app_gateway_starting',
+        message: 'Env App gateway is starting.',
+      },
+      active_workload: {},
+    });
+
+    expect(runtimeServiceIsOpenable(snapshot)).toBe(false);
+    expect(runtimeServiceAllowsOpenAttempt(snapshot)).toBe(true);
+    expect(runtimeServiceNeedsRuntimeUpdate(snapshot)).toBe(false);
   });
 
   it('requires every expected bundled identity field to match when present', () => {

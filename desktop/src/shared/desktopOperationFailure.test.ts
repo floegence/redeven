@@ -79,4 +79,19 @@ describe('desktopOperationFailure', () => {
       summary: 'Desktop could not stop the container runtime.',
     })?.code).toBe('container_runtime_stop_failed');
   });
+
+  it('preserves typed update failure codes returned by runtime Open compatibility checks', () => {
+    expect(normalizeDesktopOperationFailurePresentation({
+      code: 'runtime_update_required',
+      severity: 'warning',
+      title: 'Runtime Update Required',
+      summary: 'Update the runtime before opening this environment.',
+    })?.code).toBe('runtime_update_required');
+    expect(normalizeDesktopOperationFailurePresentation({
+      code: 'desktop_update_required',
+      severity: 'warning',
+      title: 'Desktop Update Required',
+      summary: 'Update Desktop before opening this environment.',
+    })?.code).toBe('desktop_update_required');
+  });
 });

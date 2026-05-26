@@ -3230,6 +3230,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           runLocalEnvironmentAction={triggerLocalEnvironmentAction}
           refreshEnvironmentRuntime={refreshEnvironmentRuntime}
           runEnvironmentGuidanceAction={runEnvironmentGuidanceAction}
+          runDesktopUpdateHandoff={async (environmentID, label) => {
+            const result = await performLauncherAction({
+              kind: 'manage_desktop_update',
+              environment_id: environmentID,
+              label,
+            });
+            if (result?.outcome === 'opened_desktop_update_handoff') {
+              showActionToast(`Desktop update options opened for ${label || 'this environment'}.`, 'info');
+            }
+          }}
           toggleEnvironmentPinned={toggleEnvironmentPinned}
           copyEnvironmentValue={copyEnvironmentValue}
           editEnvironment={startEditingEnvironment}
@@ -3623,6 +3633,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
   ) => Promise<EnvironmentGuidanceActionResolution>;
+  runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
   toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
@@ -3914,6 +3925,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 runLocalEnvironmentAction={props.runLocalEnvironmentAction}
                 refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
                 runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
+                runDesktopUpdateHandoff={props.runDesktopUpdateHandoff}
                 runEnvironmentCardFactAction={props.runEnvironmentCardFactAction}
                 toggleEnvironmentPinned={props.toggleEnvironmentPinned}
                 copyEnvironmentValue={props.copyEnvironmentValue}
@@ -3959,6 +3971,7 @@ function EnvironmentCardsPanel(props: Readonly<{
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
   ) => Promise<EnvironmentGuidanceActionResolution>;
+  runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
   runEnvironmentCardFactAction: (action: EnvironmentCardFactActionModel) => void;
   toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
@@ -4198,6 +4211,7 @@ function EnvironmentCardsPanel(props: Readonly<{
                     runLocalEnvironmentAction={props.runLocalEnvironmentAction}
                     refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
                     runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
+                    runDesktopUpdateHandoff={props.runDesktopUpdateHandoff}
                     runEnvironmentCardFactAction={props.runEnvironmentCardFactAction}
                     toggleEnvironmentPinned={props.toggleEnvironmentPinned}
                     copyEnvironmentValue={props.copyEnvironmentValue}
@@ -4237,6 +4251,7 @@ function EnvironmentCardsPanel(props: Readonly<{
                     runLocalEnvironmentAction={props.runLocalEnvironmentAction}
                     refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
                     runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
+                    runDesktopUpdateHandoff={props.runDesktopUpdateHandoff}
                     runEnvironmentCardFactAction={props.runEnvironmentCardFactAction}
                     toggleEnvironmentPinned={props.toggleEnvironmentPinned}
                     copyEnvironmentValue={props.copyEnvironmentValue}
@@ -4975,6 +4990,8 @@ function EnvironmentProgressPanel(props: Readonly<{
                   when={action.kind === 'refresh_status'}
                   fallback={action.kind === 'update_runtime'
                     ? <Refresh class="h-3.5 w-3.5" />
+                    : action.kind === 'manage_desktop_update'
+                      ? <ExternalLink class="h-3.5 w-3.5" />
                     : action.kind === 'copy_diagnostics'
                       ? <Copy class="h-3.5 w-3.5" />
                       : null}
@@ -5164,6 +5181,7 @@ function progressTriggerClassName(presentation: EnvironmentProgressPrimaryPresen
 function EnvironmentSplitActionButton(props: Readonly<{
   presentation: Extract<EnvironmentActionPresentation, Readonly<{ kind: 'split_button' }>>;
   environmentID: string;
+  environmentLabel: string;
   menuOpen: boolean;
   onMenuOpenChange: (open: boolean) => void;
   guidanceOpen: boolean;
@@ -5179,6 +5197,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
   dismissOperation: (progress: DesktopLauncherActionProgress) => void;
   copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
   refreshEnvironmentRuntime: () => void;
+  runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
   onRunAction: (action: EnvironmentActionModel) => void;
   onRunGuidanceAction: (action: EnvironmentActionModel) => void;
 }>) {
@@ -5402,6 +5421,18 @@ function EnvironmentSplitActionButton(props: Readonly<{
                                 if (updateAction) {
                                   props.onRunAction(updateAction);
                                 }
+                                break;
+                              }
+                              case 'manage_desktop_update': {
+                                const desktopUpdateAction = props.presentation.menu_actions.find((item) => (
+                                  item.action.intent === 'update_runtime'
+                                  && item.action.runtime_operation_method === 'desktop_local_update_handoff'
+                                ))?.action;
+                                if (desktopUpdateAction) {
+                                  props.onRunAction(desktopUpdateAction);
+                                  break;
+                                }
+                                void props.runDesktopUpdateHandoff(props.environmentID, props.environmentLabel);
                                 break;
                               }
                               case 'copy_diagnostics':
@@ -5649,6 +5680,7 @@ function EnvironmentConnectionCard(props: Readonly<{
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
   ) => Promise<EnvironmentGuidanceActionResolution>;
+  runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
   runEnvironmentCardFactAction: (action: EnvironmentCardFactActionModel) => void;
   toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
@@ -5903,6 +5935,7 @@ function EnvironmentConnectionCard(props: Readonly<{
         <EnvironmentSplitActionButton
           presentation={environmentActionPresentation()}
           environmentID={props.environment.id}
+          environmentLabel={props.environment.label}
           menuOpen={props.runtimeMenuOpen}
           onMenuOpenChange={props.onRuntimeMenuOpenChange}
           guidanceOpen={props.primaryActionGuidanceOpen}
@@ -5919,6 +5952,9 @@ function EnvironmentConnectionCard(props: Readonly<{
           copyOperationDiagnostics={props.copyOperationDiagnostics}
           refreshEnvironmentRuntime={() => {
             void props.refreshEnvironmentRuntime(props.environment, 'connect');
+          }}
+          runDesktopUpdateHandoff={async (environmentID, label) => {
+            await props.runDesktopUpdateHandoff(environmentID, label);
           }}
           onRunAction={(action) => {
             if (environmentActionStartsLifecycleDisclosure(action)) {

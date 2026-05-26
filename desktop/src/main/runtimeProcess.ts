@@ -13,12 +13,10 @@ import {
 import { parseLaunchReport, type LaunchBlockedReport, type LaunchReport } from './launchReport';
 import { type StartupReport } from './startup';
 import {
+  runtimeServiceAllowsOpenAttempt,
   runtimeServiceHasActiveWork,
-  runtimeServiceMatchesIdentity,
-  runtimeServiceNeedsRuntimeUpdate,
   runtimeServiceOpenReadinessLabel,
   runtimeServiceIsOpenable,
-  type RuntimeServiceIdentity,
 } from '../shared/runtimeService';
 
 const STARTUP_REPORT_POLL_MS = 100;
@@ -52,7 +50,6 @@ export type StartManagedRuntimeArgs = Readonly<{
   runtimeStabilityWindowMs?: number;
   runtimeStabilityPollMs?: number;
   desktopOwnerID?: string;
-  expectedRuntimeIdentity?: RuntimeServiceIdentity | null;
   forceRuntimeUpdate?: boolean;
   passwordStdin?: string;
   onProgress?: (progress: ManagedRuntimeProgress) => void;
@@ -580,7 +577,6 @@ function managedRuntimeAttachPolicy(
   startup: StartupReport,
   args: Readonly<{
     desktopOwnerID?: string;
-    expectedRuntimeIdentity?: RuntimeServiceIdentity | null;
     forceRuntimeUpdate?: boolean;
   }>,
 ): ManagedRuntimeAttachPolicy {
@@ -595,9 +591,7 @@ function managedRuntimeAttachPolicy(
     };
   }
 
-  const runtimeNeedsRestart = ownership === 'unowned'
-    || runtimeServiceNeedsRuntimeUpdate(startup.runtime_service)
-    || !runtimeServiceMatchesIdentity(startup.runtime_service, args.expectedRuntimeIdentity);
+  const runtimeNeedsRestart = ownership === 'unowned';
   if (!runtimeNeedsRestart) {
     return { action: 'reuse' };
   }
@@ -672,7 +666,6 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
     assertRuntimePIDAlive(existingRuntime, { stdout: '', stderr: '' });
     const attachPolicy = managedRuntimeAttachPolicy(existingRuntime, {
       desktopOwnerID: args.desktopOwnerID,
-      expectedRuntimeIdentity: args.expectedRuntimeIdentity,
       forceRuntimeUpdate: args.forceRuntimeUpdate,
     });
     if (attachPolicy.action === 'block') {
@@ -685,7 +678,9 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
         'Checking runtime readiness',
         'Desktop found a compatible local runtime and is checking whether it can open the Environment App.',
       );
-      assertRuntimeOpenable(existingRuntime, { stdout: '', stderr: '' });
+      if (!runtimeServiceAllowsOpenAttempt(existingRuntime.runtime_service)) {
+        assertRuntimeOpenable(existingRuntime, { stdout: '', stderr: '' });
+      }
       emitManagedRuntimeProgress(
         args.onProgress,
         'runtime_ready',
@@ -796,7 +791,6 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
       });
       const attachPolicy = managedRuntimeAttachPolicy(attachedStartup, {
         desktopOwnerID: args.desktopOwnerID,
-        expectedRuntimeIdentity: args.expectedRuntimeIdentity,
         forceRuntimeUpdate: args.forceRuntimeUpdate,
       });
       if (attachPolicy.action === 'block') {
@@ -806,7 +800,9 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
         await attachedStop(attachedStartup, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS)();
         return startManagedRuntime(args);
       }
-      assertRuntimeOpenable(attachedStartup, recentLogs);
+      if (!runtimeServiceAllowsOpenAttempt(attachedStartup.runtime_service)) {
+        assertRuntimeOpenable(attachedStartup, recentLogs);
+      }
       emitManagedRuntimeProgress(
         args.onProgress,
         'runtime_ready',
@@ -844,7 +840,6 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
       assertRuntimePIDAlive(attachedStartup, recentLogs);
       const attachPolicy = managedRuntimeAttachPolicy(attachedStartup, {
         desktopOwnerID: args.desktopOwnerID,
-        expectedRuntimeIdentity: args.expectedRuntimeIdentity,
         forceRuntimeUpdate: args.forceRuntimeUpdate,
       });
       if (attachPolicy.action === 'block') {
@@ -854,7 +849,9 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
         await attachedStop(attachedStartup, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS)();
         return startManagedRuntime(args);
       }
-      assertRuntimeOpenable(attachedStartup, recentLogs);
+      if (!runtimeServiceAllowsOpenAttempt(attachedStartup.runtime_service)) {
+        assertRuntimeOpenable(attachedStartup, recentLogs);
+      }
       emitManagedRuntimeProgress(
         args.onProgress,
         'runtime_ready',

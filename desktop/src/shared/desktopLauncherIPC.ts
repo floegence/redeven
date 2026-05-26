@@ -379,6 +379,11 @@ export type DesktopLauncherOperationNextAction = Readonly<
       environment_id: string;
       label: string;
     }
+  | {
+      kind: 'manage_desktop_update';
+      environment_id: string;
+      label: string;
+    }
 >;
 
 export type DesktopLauncherActionRequest = Readonly<

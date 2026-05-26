@@ -1,9 +1,6 @@
 import {
+  runtimeServiceAllowsOpenAttempt,
   runtimeServiceHasActiveWork,
-  runtimeServiceIsOpenable,
-  runtimeServiceMatchesIdentity,
-  runtimeServiceNeedsRuntimeUpdate,
-  type RuntimeServiceIdentity,
   type RuntimeServiceProviderLinkBinding,
   type RuntimeServiceSnapshot,
 } from './runtimeService';
@@ -17,7 +14,6 @@ export type DesktopLocalRuntimeOpenPlanState =
   | 'openable'
   | 'starting'
   | 'restart_to_reclaim'
-  | 'restart_to_update'
   | 'blocked_active_work'
   | 'blocked_external_runtime'
   | 'blocked_runtime';
@@ -132,7 +128,6 @@ export function buildDesktopLocalRuntimeOpenPlan(
   runtime: DesktopLocalRuntimeObservation | null | undefined,
   options: Readonly<{
     desktopOwnerID?: string;
-    expectedRuntimeIdentity?: RuntimeServiceIdentity | null;
   }> = {},
 ): DesktopLocalRuntimeOpenPlan {
   const runtimeURL = compact(runtime?.local_ui_url);
@@ -142,9 +137,6 @@ export function buildDesktopLocalRuntimeOpenPlan(
   const runtimeMatchesTarget = true;
   const requiresBootstrap = false;
   const runtimeService = runtime?.runtime_service;
-  const runtimeNeedsUpdate = !runtimeService
-    || runtimeServiceNeedsRuntimeUpdate(runtimeService)
-    || !runtimeServiceMatchesIdentity(runtimeService, options.expectedRuntimeIdentity);
   const runtimeHasActiveWork = runtimeServiceHasActiveWork(runtimeService);
 
   if (!runtimeRunning) {
@@ -213,10 +205,15 @@ export function buildDesktopLocalRuntimeOpenPlan(
     });
   }
 
-  if (runtimeMatchesTarget && !runtimeNeedsUpdate && runtimeServiceIsOpenable(runtimeService)) {
+  if (runtimeMatchesTarget && runtimeServiceAllowsOpenAttempt(runtimeService)) {
+    const readinessState = runtimeService?.open_readiness?.state;
     return plan({
       target,
-      state: 'openable',
+      state: readinessState === 'openable'
+        ? 'openable'
+        : readinessState === 'starting'
+          ? 'starting'
+          : 'openable',
       runtimeRunning,
       runtimeMatchesTarget,
       desktopCanManage,
@@ -226,73 +223,11 @@ export function buildDesktopLocalRuntimeOpenPlan(
       requiresRestart: false,
       requiresConfirmation: false,
       runtimeURL,
-      message: 'Runtime is ready to open.',
-    });
-  }
-
-  if (runtimeNeedsUpdate) {
-    if (!desktopCanManage) {
-      return plan({
-        target,
-        state: 'blocked_external_runtime',
-        runtimeRunning,
-        runtimeMatchesTarget,
-        desktopCanManage,
-        canOpen: false,
-        canPrepare: false,
-        requiresBootstrap,
-        requiresRestart: true,
-        requiresConfirmation: false,
-        runtimeURL,
-        message: 'This runtime needs an update, but it is not managed by Desktop. Restart it from its owner, then refresh status.',
-      });
-    }
-    if (runtimeHasActiveWork) {
-      return plan({
-        target,
-        state: 'blocked_active_work',
-        runtimeRunning,
-        runtimeMatchesTarget,
-        desktopCanManage,
-        canOpen: false,
-        canPrepare: false,
-        requiresBootstrap,
-        requiresRestart: true,
-        requiresConfirmation: true,
-        runtimeURL,
-        message: 'Redeven Desktop needs an update, but active work is still running. Close or stop that work before opening the Desktop update handoff.',
-      });
-    }
-    return plan({
-      target,
-      state: 'restart_to_update',
-      runtimeRunning,
-      runtimeMatchesTarget,
-      desktopCanManage,
-      canOpen: false,
-      canPrepare: false,
-      requiresBootstrap,
-      requiresRestart: true,
-      requiresConfirmation: false,
-      runtimeURL,
-      message: 'Open the Redeven Desktop update handoff before opening this Local Environment. Open stays separate from runtime maintenance.',
-    });
-  }
-
-  if (runtimeService?.open_readiness?.state === 'starting') {
-    return plan({
-      target,
-      state: 'starting',
-      runtimeRunning,
-      runtimeMatchesTarget,
-      desktopCanManage,
-      canOpen: false,
-      canPrepare: false,
-      requiresBootstrap,
-      requiresRestart: false,
-      requiresConfirmation: false,
-      runtimeURL,
-      message: runtimeService.open_readiness.message || 'Runtime is preparing the Environment App.',
+      message: readinessState === 'openable'
+        ? 'Runtime is ready to open.'
+        : readinessState === 'starting'
+          ? runtimeService?.open_readiness?.message || 'Desktop will wait for the Environment App to finish preparing.'
+          : 'Desktop will try opening this runtime and report upgrade guidance if the runtime rejects the connection.',
     });
   }
 

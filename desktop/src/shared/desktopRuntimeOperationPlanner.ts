@@ -11,9 +11,9 @@ import type {
 } from './desktopRuntimePlacement';
 import type { RuntimeServiceSnapshot } from './runtimeService';
 import {
+  runtimeServiceAllowsOpenAttempt,
   runtimeServiceHasActiveWork,
   runtimeServiceIsOpenable,
-  runtimeServiceNeedsRuntimeUpdate,
 } from './runtimeService';
 import {
   desktopRuntimeOperationPlan,
@@ -149,16 +149,21 @@ export function buildDesktopRuntimeOperationPlans(
   const updateMaintenance = desktopRuntimeMaintenanceRequiresUpdate(maintenance);
   const openConnectionRequired = input.open_connection_required === true;
   const updateAvailable = requiresUpdate || updateMaintenance;
+  const optimisticOpenMaintenance = Boolean(
+    maintenance?.required_for === 'open'
+    && updateMaintenance
+    && runtimeServiceAllowsOpenAttempt(input.runtime_service),
+  );
   const updateMessage = updateMethod === 'desktop_local_update_handoff'
     ? localDesktopUpdateMessage(input.package_state)
     : updateRequiredMessage(input.package_state);
   const canOpen = input.openable
     || openConnectionRequired
     || updateMaintenance
-    || runtimeServiceNeedsRuntimeUpdate(input.runtime_service);
+    || runtimeServiceAllowsOpenAttempt(input.runtime_service);
   const managementBlockedStatus = runtimeTargetUnavailableStatus(input.runtime_control_status, openConnectionRequired);
   const managementBlocked = !!managementBlockedStatus;
-  const blockedByRecoveryMaintenance = restartMaintenance;
+  const blockedByRecoveryMaintenance = restartMaintenance && !optimisticOpenMaintenance;
   const openAvailability = input.running && canOpen && !blockedByRecoveryMaintenance && !managementBlocked
     ? 'available'
     : 'blocked';

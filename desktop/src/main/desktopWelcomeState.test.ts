@@ -867,6 +867,71 @@ describe('desktopWelcomeState', () => {
     expect(JSON.stringify(sshEntry?.provider_runtime_link_target)).not.toContain('base_url');
   });
 
+  it('keeps a running SSH runtime Open operation available when compatibility requires an update', () => {
+    const sshID = 'ssh:devbox:2222:key_agent:remote_default';
+    const updateRequiredPresence = sshRuntimePresence({
+      openable: false,
+      runtime_service: {
+        protocol_version: 'redeven-runtime-v1',
+        service_owner: 'desktop',
+        desktop_managed: true,
+        effective_run_mode: 'desktop',
+        remote_enabled: false,
+        compatibility: 'update_required',
+        open_readiness: {
+          state: 'blocked',
+          reason_code: 'runtime_update_required',
+          message: 'Update runtime before opening this environment.',
+        },
+        active_workload: {
+          terminal_count: 0,
+          session_count: 0,
+          task_count: 0,
+          port_forward_count: 0,
+        },
+      },
+    });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        saved_ssh_environments: [{
+          id: sshID,
+          label: 'SSH Lab',
+          ssh_destination: 'devbox',
+          ssh_port: 2222,
+          auth_mode: 'key_agent',
+          runtime_root: 'remote_default',
+          bootstrap_strategy: 'desktop_upload',
+          release_base_url: '',
+          connect_timeout_seconds: 10,
+          pinned: false,
+          created_at_ms: 10,
+          last_used_at_ms: 100,
+        }],
+      }),
+      managedRuntimePresenceByTargetID: {
+        'ssh:ssh:devbox:2222:key_agent:remote_default': updateRequiredPresence,
+      },
+    });
+
+    const sshEntry = snapshot.environments.find((entry) => entry.id === sshID);
+
+    expect(sshEntry).toMatchObject({
+      kind: 'ssh_environment',
+      managed_runtime_target_id: 'ssh:ssh:devbox:2222:key_agent:remote_default',
+      runtime_maintenance: undefined,
+      runtime_operations: expect.objectContaining({
+        open: expect.objectContaining({
+          availability: 'available',
+          method: 'ssh_host',
+        }),
+        update: expect.objectContaining({
+          availability: 'available',
+          method: 'ssh_host',
+        }),
+      }),
+    });
+  });
+
   it('marks provider environment candidates as occupied per selected runtime target', () => {
     const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
     const localService = {
@@ -1227,6 +1292,142 @@ describe('desktopWelcomeState', () => {
       managed_runtime_target_id: 'local:local',
       runtime_operations: expect.objectContaining({
         stop: expect.objectContaining({ availability: 'available' }),
+      }),
+    });
+  });
+
+  it('projects compatibility update blocks as available Open operations for running local runtimes', () => {
+    const presence = localRuntimePresence({
+      openable: false,
+      runtime_service: {
+        protocol_version: 'redeven-runtime-v1',
+        service_owner: 'desktop',
+        desktop_managed: true,
+        effective_run_mode: 'desktop',
+        remote_enabled: false,
+        compatibility: 'desktop_update_required',
+        open_readiness: {
+          state: 'blocked',
+          reason_code: 'desktop_update_required',
+          message: 'Update Desktop before opening this runtime.',
+        },
+        active_workload: {
+          terminal_count: 0,
+          session_count: 0,
+          task_count: 0,
+          port_forward_count: 0,
+        },
+      },
+    });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment(),
+      }),
+      managedRuntimePresenceByTargetID: {
+        'local:local': presence,
+      },
+    });
+
+    const entry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
+
+    expect(entry).toMatchObject({
+      managed_runtime_target_id: 'local:local',
+      runtime_operations: expect.objectContaining({
+        open: expect.objectContaining({
+          availability: 'available',
+          method: 'local_host',
+        }),
+        update: expect.objectContaining({
+          availability: 'available',
+          method: 'desktop_local_update_handoff',
+        }),
+      }),
+    });
+  });
+
+  it('projects running container compatibility update blocks without open maintenance', () => {
+    const targetID = 'local:container:docker:redeven-dev-mysql-db-dev-1:63ce185e';
+    const placement = {
+      kind: 'container_process' as const,
+      container_engine: 'docker' as const,
+      container_id: '840f2eee03368aab7c6c7d6be7ff19d0392c03b3d73cd5d2fdd12d97f19a0e6d',
+      container_ref: 'redeven-dev-mysql-db-dev-1',
+      container_label: 'redeven-dev-mysql-db-dev-1',
+      runtime_root: '/root/.redeven',
+      bridge_strategy: 'exec_stream' as const,
+    };
+    const presence = localRuntimePresence({
+      target_id: `local:${targetID}`,
+      placement_target_id: targetID,
+      environment_id: targetID,
+      label: 'redeven-dev-mysql-db-dev-1',
+      runtime_key: targetID,
+      placement,
+      running: true,
+      local_ui_url: '',
+      openable: false,
+      open_connection_required: true,
+      runtime_service: {
+        protocol_version: 'redeven-runtime-v1',
+        service_owner: 'desktop',
+        desktop_managed: true,
+        effective_run_mode: 'desktop',
+        remote_enabled: false,
+        compatibility: 'update_required',
+        open_readiness: {
+          state: 'blocked',
+          reason_code: 'runtime_update_required',
+          message: 'Update runtime before opening this environment.',
+        },
+        active_workload: {
+          terminal_count: 0,
+          session_count: 0,
+          task_count: 0,
+          port_forward_count: 0,
+        },
+      },
+      maintenance: {
+        kind: 'runtime_update_required',
+        required_for: 'open',
+        recovery_action: 'update_runtime',
+        can_desktop_start: false,
+        can_desktop_restart: true,
+        has_active_work: false,
+        active_work_label: 'No active work',
+        message: 'Update runtime before opening this environment.',
+      },
+      runtime_control_status: {
+        state: 'missing',
+        reason_code: 'forward_unavailable',
+        message: 'Open this runtime to prepare the Desktop bridge and provider connection.',
+      },
+    });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        saved_runtime_targets: [{
+          schema_version: 1,
+          id: targetID,
+          label: 'redeven-dev-mysql-db-dev-1',
+          host_access: { kind: 'local_host' },
+          placement,
+          pinned: false,
+          last_used_at_ms: 1779100944496,
+          created_at_ms: 1779100944496,
+          updated_at_ms: 1779100944496,
+        }],
+      }),
+      managedRuntimePresenceByTargetID: {
+        [presence.target_id]: presence,
+      },
+    });
+
+    const entry = snapshot.environments.find((environment) => environment.id === targetID);
+
+    expect(entry).toMatchObject({
+      managed_runtime_open_connection_required: true,
+      runtime_maintenance: undefined,
+      runtime_operations: expect.objectContaining({
+        open: expect.objectContaining({ availability: 'available' }),
       }),
     });
   });

@@ -1,5 +1,5 @@
 import {
-  runtimeServiceIsOpenable,
+  runtimeServiceAllowsOpenAttempt,
   type RuntimeServiceSnapshot,
 } from './runtimeService';
 
@@ -167,7 +167,7 @@ export function desktopRuntimeMaintenanceForRuntimeService(
   if (!normalized) {
     return undefined;
   }
-  if (normalized.required_for === 'open' && runtimeServiceIsOpenable(runtimeService)) {
+  if (normalized.required_for === 'open' && runtimeServiceAllowsOpenAttempt(runtimeService)) {
     return undefined;
   }
   return normalized;
