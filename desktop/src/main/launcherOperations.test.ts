@@ -530,7 +530,7 @@ describe('LauncherOperationRegistry', () => {
         {
           kind: 'copy_diagnostics',
           operation_key: operation.operation_key,
-          label: 'Copy diagnostics',
+          label: 'Copy log',
         },
         {
           kind: 'dismiss',
