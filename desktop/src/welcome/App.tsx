@@ -4439,7 +4439,11 @@ function EnvironmentCardFactsBlock(props: Readonly<{
                       />
                     )}
                   </Show>
-                  {fact.value}
+                  {fact.copy_value ? (
+                    <span class="redeven-card-fact-value__text">{fact.value}</span>
+                  ) : (
+                    fact.value
+                  )}
                   <Show when={fact.endpoints && fact.endpoints.length > 0}>
                     <EndpointsPopover
                       endpoints={fact.endpoints!}
