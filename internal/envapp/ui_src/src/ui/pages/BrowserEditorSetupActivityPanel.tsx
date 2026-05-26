@@ -20,24 +20,6 @@ export type BrowserEditorSetupActivityPanelProps = Readonly<{
   extraDetails?: JSX.Element;
 }>;
 
-function heroBackground(state: BrowserEditorSetupActivity['state']): string {
-  switch (state) {
-    case 'preparing':
-    case 'checking':
-      return 'bg-info/[0.04]';
-    case 'failed':
-    case 'error':
-      return 'bg-error/[0.04]';
-    case 'ready':
-      return 'bg-success/[0.04]';
-    case 'cancelled':
-    case 'unusable':
-      return 'bg-warning/[0.04]';
-    default:
-      return 'bg-muted/30';
-  }
-}
-
 function activityIconClass(state: BrowserEditorSetupActivity['state']): string {
   switch (state) {
     case 'ready':
@@ -59,25 +41,25 @@ function activityIconClass(state: BrowserEditorSetupActivity['state']): string {
 function activityIconGlow(state: BrowserEditorSetupActivity['state']): string {
   switch (state) {
     case 'ready':
-      return '0 0 0 8px color-mix(in srgb, var(--success) 6%, transparent)';
+      return '0 0 0 4px color-mix(in srgb, var(--success) 8%, transparent)';
     case 'preparing':
     case 'checking':
-      return '0 0 0 8px color-mix(in srgb, var(--info) 6%, transparent)';
+      return '0 0 0 4px color-mix(in srgb, var(--info) 8%, transparent)';
     case 'failed':
     case 'error':
-      return '0 0 0 8px color-mix(in srgb, var(--error) 6%, transparent)';
+      return '0 0 0 4px color-mix(in srgb, var(--error) 8%, transparent)';
     case 'cancelled':
     case 'unusable':
-      return '0 0 0 8px color-mix(in srgb, var(--warning) 6%, transparent)';
+      return '0 0 0 4px color-mix(in srgb, var(--warning) 8%, transparent)';
     default:
       return 'none';
   }
 }
 
 function activityIcon(state: BrowserEditorSetupActivity['state']): JSX.Element {
-  if (state === 'ready') return <Check class="h-5 w-5" />;
-  if (state === 'failed' || state === 'error' || state === 'cancelled') return <X class="h-5 w-5" />;
-  return <RefreshIcon class={cn('h-5 w-5', state === 'preparing' || state === 'checking' ? 'animate-spin' : '')} />;
+  if (state === 'ready') return <Check class="h-3.5 w-3.5" />;
+  if (state === 'failed' || state === 'error' || state === 'cancelled') return <X class="h-3.5 w-3.5" />;
+  return <RefreshIcon class={cn('h-3.5 w-3.5', state === 'preparing' || state === 'checking' ? 'animate-spin' : '')} />;
 }
 
 function detailCalloutClass(state: BrowserEditorSetupActivity['state']): string {
@@ -104,12 +86,22 @@ function progressBarStyle(state: BrowserEditorSetupActivity['state'], percent: n
   return base;
 }
 
+function hasActionBar(activity: BrowserEditorSetupActivity, props: BrowserEditorSetupActivityPanelProps): boolean {
+  return Boolean(
+    (activity.can_continue && props.onContinue) ||
+    ((activity.state === 'missing' || activity.can_retry || activity.state === 'unusable') && props.onPrepare) ||
+    (activity.can_cancel && props.onCancel) ||
+    (props.onDismiss && (activity.state === 'ready' || activity.state === 'failed' || activity.state === 'cancelled')),
+  );
+}
+
 export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivityPanelProps) {
   const activity = () => props.activity;
   const canPrepare = createMemo(() => activity().state === 'missing' || activity().can_retry || activity().state === 'unusable');
   const hasTechnicalDetails = createMemo(() => Boolean(props.extraDetails || activity().show_log));
   const actionLabel = createMemo(() => (props.prepareSubmitting ? props.runningLabel : props.actionLabel));
   const isActive = createMemo(() => activity().state === 'preparing' || activity().state === 'checking');
+  const showActionBar = createMemo(() => hasActionBar(activity(), props));
   const [detailsOpen, setDetailsOpen] = createSignal(false);
 
   return (
@@ -118,68 +110,56 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
       class="rounded-xl border border-border bg-card shadow-sm transition-colors duration-300"
       aria-live="polite"
     >
-      {/* ── Hero ── */}
-      <div class={cn('flex flex-col items-center gap-4 rounded-t-xl p-6 text-center', heroBackground(activity().state))}>
-        <div
-          class={cn(
-            'flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 transition-shadow duration-300',
-            activityIconClass(activity().state),
-          )}
-          style={{ 'box-shadow': activityIconGlow(activity().state) } as JSX.CSSProperties}
-        >
-          {activityIcon(activity().state)}
-        </div>
-
-        <div class="space-y-1.5">
-          <div class="flex flex-wrap items-center justify-center gap-2">
-            <h3 class="text-lg font-semibold text-foreground">{activity().title}</h3>
+      {/* ── Header row ── */}
+      <div class="flex items-center justify-between gap-4 p-4">
+        <div class="flex min-w-0 items-center gap-3">
+          <div
+            class={cn(
+              'flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-shadow duration-300',
+              activityIconClass(activity().state),
+            )}
+            style={{ 'box-shadow': activityIconGlow(activity().state) } as JSX.CSSProperties}
+          >
+            {activityIcon(activity().state)}
+          </div>
+          <div class="flex min-w-0 items-center gap-2">
+            <h3 class="text-sm font-semibold text-foreground">{activity().title}</h3>
             <Tag variant={activity().badge_variant} tone="soft" size="sm" class="cursor-default select-none">
               {activity().badge_label}
             </Tag>
           </div>
-          <p class="text-sm leading-relaxed text-muted-foreground">{activity().summary}</p>
         </div>
-
-        <Show when={activity().detail}>
-          {(detail) => (
-            <div class={cn('w-full rounded-md px-4 py-3 text-left text-sm leading-relaxed', detailCalloutClass(activity().state))}>
-              <p class="text-muted-foreground">{detail()}</p>
-            </div>
-          )}
+        <Show when={props.onRefresh}>
+          <Button size="icon" variant="ghost" onClick={() => props.onRefresh?.()} disabled={props.loading} aria-label="Refresh">
+            <RefreshIcon class={cn('h-4 w-4', props.loading ? 'animate-spin' : '')} />
+          </Button>
         </Show>
-
-        <div class="flex flex-wrap items-center justify-center gap-2">
-          <Show when={activity().can_continue && props.onContinue}>
-            <Button size="sm" variant="default" onClick={() => props.onContinue?.()}>
-              {activity().pending_action_label || 'Continue'}
-            </Button>
-          </Show>
-          <Show when={canPrepare() && props.onPrepare}>
-            <Button size="sm" variant="default" onClick={() => props.onPrepare?.()} disabled={props.prepareSubmitting}>
-              {actionLabel()}
-            </Button>
-          </Show>
-          <Show when={activity().can_cancel && props.onCancel}>
-            <Button size="sm" variant="outline" onClick={() => props.onCancel?.()} disabled={props.cancelSubmitting}>
-              {props.cancelSubmitting ? 'Cancelling...' : 'Cancel'}
-            </Button>
-          </Show>
-          <Show when={props.onRefresh}>
-            <Button size="sm" variant="ghost" onClick={() => props.onRefresh?.()} disabled={props.loading}>
-              Refresh
-            </Button>
-          </Show>
-          <Show when={(activity().state === 'ready' || activity().state === 'failed' || activity().state === 'cancelled') && props.onDismiss}>
-            <Button size="sm" variant="ghost" onClick={() => props.onDismiss?.()}>
-              Dismiss
-            </Button>
-          </Show>
-        </div>
       </div>
 
+      {/* ── Summary ── */}
+      <div class="px-4 pb-1">
+        <p class="text-sm leading-relaxed text-muted-foreground">{activity().summary}</p>
+      </div>
+
+      {/* ── Detail callout ── */}
+      <Show when={activity().detail}>
+        {(detail) => (
+          <div class="px-4 pt-3">
+            <div class={cn('rounded-md px-4 py-3 text-sm leading-relaxed', detailCalloutClass(activity().state))}>
+              <p class="text-muted-foreground">{detail()}</p>
+            </div>
+          </div>
+        )}
+      </Show>
+
       {/* ── Progress ── */}
-      <div class="space-y-4 border-t border-border p-6">
-        <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Setup progress</span>
+      <div class="space-y-3 px-4 pt-4">
+        <div class="flex items-center justify-between gap-4">
+          <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Setup progress</span>
+          <span class="text-xs font-medium text-muted-foreground">
+            Step {activity().active_step_index} of {activity().step_count}
+          </span>
+        </div>
 
         <div class="redeven-environment-progress">
           <div class="redeven-environment-progress__steps">
@@ -204,25 +184,17 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
           </div>
         </div>
 
-        <div class="space-y-2">
-          <div
-            class="redeven-environment-progress__meter"
-            data-plan-state={isActive() ? 'planning' : undefined}
-          >
-            <span style={progressBarStyle(activity().state, activity().progress_percent)} />
-          </div>
-          <div class="redeven-environment-progress__meta">
-            <span>Step {activity().active_step_index} of {activity().step_count}</span>
-            <Show when={activity().pending_action_label}>
-              {(label) => <span>{label()}</span>}
-            </Show>
-          </div>
+        <div
+          class="redeven-environment-progress__meter"
+          data-plan-state={isActive() ? 'planning' : undefined}
+        >
+          <span style={progressBarStyle(activity().state, activity().progress_percent)} />
         </div>
       </div>
 
       {/* ── Technical details (collapsible) ── */}
       <Show when={hasTechnicalDetails()}>
-        <div class="border-t border-border px-6 pb-6">
+        <div class="px-4">
           <button
             type="button"
             class="flex w-full items-center gap-1.5 py-3 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
@@ -235,7 +207,7 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
           </button>
 
           <Show when={detailsOpen()}>
-            <div class="space-y-3">
+            <div class="space-y-3 pb-3">
               {props.extraDetails}
               <Show when={activity().show_log}>
                 <pre
@@ -246,6 +218,34 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
                 </pre>
               </Show>
             </div>
+          </Show>
+        </div>
+      </Show>
+
+      {/* ── Action bar (fixed at bottom) ── */}
+      <Show when={showActionBar()}>
+        <div class="flex items-center justify-between gap-3 border-t border-border p-4">
+          <div class="flex items-center gap-2">
+            <Show when={activity().can_continue && props.onContinue}>
+              <Button size="sm" variant="default" onClick={() => props.onContinue?.()}>
+                {activity().pending_action_label || 'Continue'}
+              </Button>
+            </Show>
+            <Show when={canPrepare() && props.onPrepare}>
+              <Button size="sm" variant="default" onClick={() => props.onPrepare?.()} disabled={props.prepareSubmitting}>
+                {actionLabel()}
+              </Button>
+            </Show>
+            <Show when={activity().can_cancel && props.onCancel}>
+              <Button size="sm" variant="outline" onClick={() => props.onCancel?.()} disabled={props.cancelSubmitting}>
+                {props.cancelSubmitting ? 'Cancelling...' : 'Cancel'}
+              </Button>
+            </Show>
+          </div>
+          <Show when={(activity().state === 'ready' || activity().state === 'failed' || activity().state === 'cancelled') && props.onDismiss}>
+            <Button size="sm" variant="ghost" onClick={() => props.onDismiss?.()}>
+              Dismiss
+            </Button>
           </Show>
         </div>
       </Show>
