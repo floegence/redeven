@@ -28,7 +28,7 @@ describe('operationNextActions', () => {
       {
         kind: 'copy_diagnostics',
         operation_key: 'local:host:local:open',
-        label: 'Copy diagnostics',
+        label: 'Copy log',
       },
       {
         kind: 'retry',
@@ -53,14 +53,14 @@ describe('operationNextActions', () => {
       {
         kind: 'copy_diagnostics',
         operation_key: 'local:host:local:open',
-        label: 'Copy diagnostics again',
+        label: 'Copy log again',
       },
     ]);
 
     expect(visibleOperationNextActions(progress)).toEqual([
       expect.objectContaining({ kind: 'refresh_status', label: 'Refresh status' }),
       expect.objectContaining({ kind: 'update_runtime', label: 'Update runtime' }),
-      expect.objectContaining({ kind: 'copy_diagnostics', label: 'Copy diagnostics' }),
+      expect.objectContaining({ kind: 'copy_diagnostics', label: 'Copy log' }),
       expect.objectContaining({ kind: 'dismiss', label: 'Dismiss' }),
     ]);
   });

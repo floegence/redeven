@@ -4653,7 +4653,7 @@ function openConnectionFailureNextActions(
     {
       kind: 'copy_diagnostics',
       operation_key: operationKey,
-      label: 'Copy diagnostics',
+      label: 'Copy log',
     },
     {
       kind: 'dismiss',

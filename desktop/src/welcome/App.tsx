@@ -1967,7 +1967,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return;
     }
     await navigator.clipboard.writeText(formatDesktopOperationFailureForClipboard(failure));
-    showActionToast('Diagnostics copied.', 'info');
+    showActionToast('Log copied.', 'info');
   }
 
   async function openLocalEnvironment(
@@ -4997,7 +4997,7 @@ function EnvironmentProgressPanel(props: Readonly<{
               onClick={() => props.copyOperationDiagnostics(props.progress)}
             >
               <Copy class="h-3.5 w-3.5" />
-              Copy diagnostics
+              Copy log
             </Button>
           </Show>
           <Show when={!operationNextActionsByKind(props.progress).has('dismiss')}>
