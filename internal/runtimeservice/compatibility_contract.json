@@ -1,20 +1,20 @@
 {
   "schema_version": 1,
   "release_review": {
-    "release_version": "unreleased",
+    "release_version": "v0.6.11",
     "previous_release": "v0.6.10",
     "reviewed_at": "2026-05-26",
-    "review_id": "runtime-maintenance-verification-v1",
-    "summary": "Runtime update flows now verify the running Runtime Service version after restart, persist self-upgrade maintenance reconciliation across exec, and expose clearer Desktop-managed SSH mismatch diagnostics.",
+    "review_id": "browser-editor-managed-engine-transfer-v1",
+    "summary": "Browser Editor setup now keeps managed code-server transfers on the runtime-control loopback path reliable across reused connections and accepts safe archive-internal symlinks during code-server extraction.",
     "checked_surfaces": [
-      "sys.ping maintenance snapshots add optional cross-exec reconciliation diagnostics including previous/observed runtime instance ids while preserving existing kind, state, target_version, message, and timestamp fields",
-      "Env App maintenance polling treats Updated as successful only after sys.ping or Runtime Service identity reaches the requested release tag",
-      "Runtime-owned self-upgrade writes a local maintenance marker before installer execution and reconciles it during the next process startup",
-      "Desktop-managed SSH startup keeps the existing machine startup report contract and adds non-secret expected/observed version diagnostics for identity mismatch failures",
-      "Container launcher update continues to stop and verify the runtime daemon before package replacement and startup",
-      "Local UI health, startup reports, runtime-control, provider link, and desktop bridge protocol fields keep the same compatibility window"
+      "Desktop runtime-control loopback proxy rewrites every eligible runtime-control request on reused keep-alive connections while leaving Local UI traffic on the original passthrough path",
+      "runtime-control WebSocket upgrade requests are rewritten only for the HTTP handshake and continue as the existing raw tunnel after upgrade",
+      "Browser Editor code-server archive extraction accepts safe internal relative symlinks required by current code-server packages",
+      "Archive extraction still rejects absolute symlinks, parent-escaping symlinks, hardlinks, symlink parents for regular file writes, and unsafe special entries",
+      "Desktop Browser Editor setup progress, provider link framing, session upload behavior, and Env App status polling keep their existing API contracts",
+      "Runtime Service protocol JSON fields, compatibility epoch, startup reports, sys.ping, Local UI health, and SSH runtime bootstrap keep the same compatibility window"
     ],
-    "same_window_rationale": "The release adds optional diagnostic fields to sys.ping maintenance snapshots and tightens client-side success semantics, including per-attempt filtering for persisted maintenance snapshots, without removing or changing any existing Runtime Service JSON fields, protocol version, runtime-control endpoint, startup report shape, Local UI health surface, provider-link surface, or desktop bridge framing. Older clients can ignore the new optional fields, and newer clients still receive the existing maintenance kind/state/message data from older runtimes."
+    "same_window_rationale": "This release changes Desktop-side request routing inside the loopback proxy and runtime-side code-server archive validation rules, but it does not add, remove, or rename Runtime Service JSON fields, runtime-control methods, startup report fields, sys.ping fields, Local UI health fields, provider-link framing, or SSH bootstrap contracts. Older and newer Desktop/Runtime pairs continue to use the same protocol window; the updated behavior only makes managed Browser Editor setup complete reliably with current code-server packages."
   },
   "runtime_protocol_version": "redeven-runtime-v1",
   "compatibility_epoch": 5,
