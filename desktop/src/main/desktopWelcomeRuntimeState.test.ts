@@ -241,7 +241,7 @@ describe('desktopWelcomeRuntimeState', () => {
     }
   });
 
-  it('keeps an owned Desktop-managed runtime openable when bundled identity differs', async () => {
+  it('keeps an owned Desktop-managed runtime openable without comparing bundled identity', async () => {
     const server = await startRuntimeServer({
       status: 'online',
       password_required: false,
@@ -276,11 +276,6 @@ describe('desktopWelcomeRuntimeState', () => {
         ],
         {
           desktopOwnerID: 'desktop-owner-1',
-          expectedRuntimeIdentity: {
-            runtime_version: 'v2.0.0',
-            runtime_commit: 'new-commit',
-            runtime_build_time: 'new-build',
-          },
         },
       );
 

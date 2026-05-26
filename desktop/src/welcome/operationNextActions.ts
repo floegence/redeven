@@ -7,6 +7,7 @@ function operationNextActionKey(action: DesktopLauncherOperationNextAction): str
   switch (action.kind) {
     case 'refresh_status':
     case 'update_runtime':
+    case 'manage_desktop_update':
       return `${action.kind}:${action.environment_id ?? ''}:${action.label}`;
     case 'copy_diagnostics':
     case 'dismiss':
@@ -40,6 +41,7 @@ export function visibleOperationNextActions(
   };
   push('refresh_status');
   push('update_runtime');
+  push('manage_desktop_update');
   push('copy_diagnostics');
   push('dismiss');
   return actions;

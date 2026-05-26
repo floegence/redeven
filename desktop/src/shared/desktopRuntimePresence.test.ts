@@ -239,6 +239,132 @@ describe('desktopRuntimePresence', () => {
     });
   });
 
+  it('keeps Open available for compatibility update blocks while preserving Update as a separate operation', () => {
+    for (const [compatibility, reasonCode] of [
+      ['update_required', 'runtime_update_required'],
+      ['desktop_update_required', 'desktop_update_required'],
+    ] as const) {
+      const plans = buildDesktopRuntimeOperationPlans({
+        surface: 'managed_runtime_card',
+        host_access: { kind: 'local_host' },
+        placement: hostPlacement,
+        running: true,
+        openable: false,
+        runtime_service: {
+          protocol_version: 'redeven-runtime-v1',
+          service_owner: 'desktop',
+          desktop_managed: true,
+          effective_run_mode: 'desktop',
+          remote_enabled: false,
+          compatibility,
+          open_readiness: {
+            state: 'blocked',
+            reason_code: reasonCode,
+            message: 'The runtime rejected Desktop compatibility.',
+          },
+          active_workload: {
+            terminal_count: 0,
+            session_count: 0,
+            task_count: 0,
+            port_forward_count: 0,
+          },
+        },
+        runtime_control_status: desktopRuntimeControlStatusAvailable(),
+      });
+
+      expect(plans.open).toMatchObject({
+        availability: 'available',
+        method: 'local_host',
+      });
+      expect(plans.update).toMatchObject({
+        availability: 'available',
+        method: 'desktop_local_update_handoff',
+        menu_visibility: 'stable',
+      });
+    }
+  });
+
+  it('keeps Open available while a running runtime is preparing Env App readiness', () => {
+    const plans = buildDesktopRuntimeOperationPlans({
+      surface: 'managed_runtime_card',
+      host_access: { kind: 'local_host' },
+      placement: hostPlacement,
+      running: true,
+      openable: false,
+      runtime_service: {
+        protocol_version: 'redeven-runtime-v1',
+        service_owner: 'desktop',
+        desktop_managed: true,
+        effective_run_mode: 'desktop',
+        remote_enabled: false,
+        compatibility: 'compatible',
+        open_readiness: {
+          state: 'starting',
+          reason_code: 'env_app_gateway_starting',
+          message: 'Env App gateway is starting.',
+        },
+        active_workload: {
+          terminal_count: 0,
+          session_count: 0,
+          task_count: 0,
+          port_forward_count: 0,
+        },
+      },
+      runtime_control_status: desktopRuntimeControlStatusAvailable(),
+    });
+
+    expect(plans.open).toMatchObject({
+      availability: 'available',
+      method: 'local_host',
+    });
+  });
+
+  it('does not let open-level update maintenance lock a compatible Open attempt', () => {
+    const maintenance = {
+      kind: 'runtime_update_required' as const,
+      required_for: 'open' as const,
+      recovery_action: 'update_runtime' as const,
+      can_desktop_start: false,
+      can_desktop_restart: true,
+      has_active_work: false,
+      active_work_label: 'No active work',
+      message: 'Update this runtime before opening it with this Desktop.',
+    };
+    const plans = buildDesktopRuntimeOperationPlans({
+      surface: 'managed_runtime_card',
+      host_access: { kind: 'local_host' },
+      placement: hostPlacement,
+      running: true,
+      openable: false,
+      runtime_service: {
+        protocol_version: 'redeven-runtime-v1',
+        service_owner: 'desktop',
+        desktop_managed: true,
+        effective_run_mode: 'desktop',
+        remote_enabled: false,
+        compatibility: 'update_required',
+        open_readiness: {
+          state: 'blocked',
+          reason_code: 'runtime_update_required',
+          message: 'The runtime rejected Desktop compatibility.',
+        },
+        active_workload: {
+          terminal_count: 0,
+          session_count: 0,
+          task_count: 0,
+          port_forward_count: 0,
+        },
+      },
+      runtime_control_status: desktopRuntimeControlStatusAvailable(),
+      maintenance,
+    });
+
+    expect(plans.open).toMatchObject({
+      availability: 'available',
+      method: 'local_host',
+    });
+  });
+
   it('guides running container runtime-control failures through Restart while preserving Stop and Update', () => {
     const maintenance = {
       kind: 'runtime_restart_required' as const,

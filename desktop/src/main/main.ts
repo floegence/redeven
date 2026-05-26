@@ -89,7 +89,6 @@ import { hydrateWelcomeLocalEnvironmentRuntimeState } from './desktopWelcomeRunt
 import { defaultDesktopStateStorePath, DesktopStateStore } from './desktopStateStore';
 import { DesktopThemeState } from './desktopThemeState';
 import { loadOrCreateDesktopRuntimeOwnerID } from './desktopRuntimeOwner';
-import { readBundledDesktopRuntimeIdentity, type DesktopRuntimeIdentity } from './desktopRuntimeIdentity';
 import { DesktopDiagnosticsRecorder } from './diagnostics';
 import { DesktopDownloadWriter } from './desktopDownloadWriter';
 import { DesktopWelcomeSnapshotOrder } from './desktopWelcomeSnapshotOrder';
@@ -409,6 +408,8 @@ import {
   runtimeServiceSupportsProviderLink,
   runtimeServiceOpenReadinessLabel,
   runtimeServiceIsOpenable,
+  runtimeServiceAllowsOpenAttempt,
+  runtimeServiceNeedsDesktopUpdate,
   runtimeServiceNeedsRuntimeUpdate,
   runtimeServiceHasActiveWork,
   formatRuntimeServiceWorkload,
@@ -633,7 +634,6 @@ let desktopPreferencesCache: DesktopPreferences | null = null;
 let desktopStateStoreCache: DesktopStateStore | null = null;
 let desktopThemeStateCache: DesktopThemeState | null = null;
 let desktopRuntimeOwnerIDTask: Promise<string> | null = null;
-let bundledRuntimeIdentityCache: DesktopRuntimeIdentity | null | undefined;
 const controlPlaneAccessStateByKey = new Map<string, DesktopControlPlaneAccessState>();
 const controlPlaneSyncStateByKey = new Map<string, DesktopControlPlaneSyncRecord>();
 const providerRuntimeHealthByControlPlaneKey = new Map<string, Map<string, DesktopProviderEnvironmentRuntimeHealth>>();
@@ -688,18 +688,6 @@ function bundledRuntimeExecutablePath(): string {
     resourcesPath: process.resourcesPath,
     appPath: app.getAppPath(),
   });
-}
-
-function bundledRuntimeIdentity(): DesktopRuntimeIdentity | null {
-  if (bundledRuntimeIdentityCache !== undefined) {
-    return bundledRuntimeIdentityCache;
-  }
-  try {
-    bundledRuntimeIdentityCache = readBundledDesktopRuntimeIdentity(bundledRuntimeExecutablePath());
-  } catch {
-    bundledRuntimeIdentityCache = null;
-  }
-  return bundledRuntimeIdentityCache;
 }
 
 async function desktopRuntimeOwnerID(): Promise<string> {
@@ -1739,7 +1727,7 @@ async function inspectRuntimePlacementTargetState(
           };
         }
         const maintenance = runtimePlacementMaintenanceForRuntimeService(target.targetID, report.startup.runtime_service);
-        if (runtimeServiceIsOpenable(report.startup.runtime_service)) {
+        if (runtimeServiceAllowsOpenAttempt(report.startup.runtime_service)) {
           const readyRecord: RuntimePlacementReadyRecord = {
             runtime_key: target.targetID,
             environment_id: target.environmentID,
@@ -1751,7 +1739,11 @@ async function inspectRuntimePlacementTargetState(
             startup: report.startup,
           };
           runtimePlacementReadyByTargetID.set(target.targetID, readyRecord);
-          runtimePlacementMaintenanceByTargetID.delete(target.targetID);
+          if (maintenance) {
+            runtimePlacementMaintenanceByTargetID.set(target.targetID, maintenance);
+          } else {
+            runtimePlacementMaintenanceByTargetID.delete(target.targetID);
+          }
           return {
             running: true,
             startup: report.startup,
@@ -2539,7 +2531,6 @@ async function probeLocalEnvironmentRuntimeHealth(
 
   const hydratedPreferences = await hydrateWelcomeLocalEnvironmentRuntimeState(preferences, openSessions, {
     desktopOwnerID: await desktopRuntimeOwnerID(),
-    expectedRuntimeIdentity: bundledRuntimeIdentity(),
     executablePath: bundledRuntimeExecutablePath(),
   });
   const runtime = hydratedPreferences.local_environment.local_hosting.current_runtime;
@@ -3924,7 +3915,6 @@ async function prepareManagedTarget(
     env: launchPlan.env,
     stateRoot: launchPlan.state_layout.stateRoot,
     desktopOwnerID,
-    expectedRuntimeIdentity: bundledRuntimeIdentity(),
     forceRuntimeUpdate: options.forceRuntimeUpdate === true,
     passwordStdin: launchPlan.password_stdin,
     tempRoot: app.getPath('temp'),
@@ -4669,6 +4659,8 @@ function openConnectionFailureNextActions(
   environmentID: string,
   options: Readonly<{
     includeUpdateRuntime?: boolean;
+    includeDesktopUpdate?: boolean;
+    desktopUpdateAvailable?: boolean;
   }> = {},
 ): readonly DesktopLauncherOperationNextAction[] {
   return [
@@ -4681,6 +4673,11 @@ function openConnectionFailureNextActions(
       kind: 'update_runtime' as const,
       environment_id: compact(environmentID),
       label: 'Update runtime',
+    }] : []),
+    ...(options.includeDesktopUpdate && options.desktopUpdateAvailable === true && compact(environmentID) !== '' ? [{
+      kind: 'manage_desktop_update' as const,
+      environment_id: compact(environmentID),
+      label: 'Update Redeven Desktop',
     }] : []),
     {
       kind: 'copy_diagnostics',
@@ -4695,29 +4692,45 @@ function openConnectionFailureNextActions(
   ];
 }
 
-function runtimeOpenFailureShouldOfferUpdate(input: Readonly<{
+function desktopUpdateHandoffAvailable(
+  preferences: DesktopPreferences,
+  environmentID: string,
+): boolean {
+  return Boolean(findLocalEnvironmentByID(preferences, environmentID));
+}
+
+function runtimeOpenFailureRecoveryActions(input: Readonly<{
   error?: unknown;
   failure?: DesktopOperationFailurePresentation;
   launcherFailure?: DesktopLauncherActionFailure | null;
   maintenance?: DesktopRuntimeMaintenanceRequirement | null;
   runtimeService?: RuntimeServiceSnapshot | null;
-}>): boolean {
+}>): Readonly<{
+  includeUpdateRuntime: boolean;
+  includeDesktopUpdate: boolean;
+}> {
+  const failureCode = input.failure?.code ?? input.launcherFailure?.failure?.code;
+  if (failureCode === 'desktop_update_required') {
+    return { includeUpdateRuntime: false, includeDesktopUpdate: true };
+  }
+  if (failureCode === 'runtime_update_required') {
+    return { includeUpdateRuntime: true, includeDesktopUpdate: false };
+  }
   if (input.maintenance?.recovery_action === 'update_runtime') {
-    return true;
+    return { includeUpdateRuntime: true, includeDesktopUpdate: false };
   }
-  if (input.failure?.code === 'runtime_update_required') {
-    return true;
+  const maintenance = input.error instanceof DesktopSSHRuntimeMaintenanceRequiredError
+    ? input.error.maintenance
+    : input.error instanceof RuntimePlacementMaintenanceRequiredError
+      ? input.error.maintenance
+      : null;
+  if (maintenance?.recovery_action === 'update_runtime') {
+    return { includeUpdateRuntime: true, includeDesktopUpdate: false };
   }
-  if (input.launcherFailure?.failure?.code === 'runtime_update_required') {
-    return true;
-  }
-  if (input.error instanceof DesktopSSHRuntimeMaintenanceRequiredError) {
-    return input.error.maintenance.recovery_action === 'update_runtime';
-  }
-  if (input.error instanceof RuntimePlacementMaintenanceRequiredError) {
-    return input.error.maintenance.recovery_action === 'update_runtime';
-  }
-  return runtimeServiceNeedsRuntimeUpdate(input.runtimeService);
+  return {
+    includeUpdateRuntime: runtimeServiceNeedsRuntimeUpdate(input.runtimeService),
+    includeDesktopUpdate: runtimeServiceNeedsDesktopUpdate(input.runtimeService),
+  };
 }
 
 function assertRuntimeStopVerifiedFromLaunchReport(report: LaunchReport): void {
@@ -5019,7 +5032,7 @@ async function startSSHEnvironmentRuntimeRecord(
       });
       workflowAfterProbe.completeThrough('checking_runtime_package');
       if (statusProbe.status === 'ready') {
-        if (!runtimeServiceIsOpenable(statusProbe.startup.runtime_service)) {
+        if (!runtimeServiceIsOpenable(statusProbe.startup.runtime_service) && !runtimeServiceAllowsOpenAttempt(statusProbe.startup.runtime_service)) {
           const maintenance = sshRuntimeMaintenanceFromStartup(
             statusProbe.startup,
             'This SSH runtime is running but cannot open with this Desktop yet.',
@@ -6290,18 +6303,26 @@ function launcherActionFailureForRuntimeNotOpenable(
 ): DesktopLauncherActionFailure {
   const summary = runtimeServiceOpenReadinessLabel(startup.runtime_service);
   const needsUpdate = runtimeServiceNeedsRuntimeUpdate(startup.runtime_service);
+  const needsDesktopUpdate = runtimeServiceNeedsDesktopUpdate(startup.runtime_service);
   const failure = desktopOperationFailurePresentation({
-    code: needsUpdate ? 'runtime_update_required' : 'environment_open_failed',
+    code: needsDesktopUpdate ? 'desktop_update_required' : needsUpdate ? 'runtime_update_required' : 'environment_open_failed',
     title: 'Open Failed',
     summary,
     targetLabel: options.targetLabel,
-    detail: needsUpdate
+    detail: needsDesktopUpdate
+      ? [
+          `Installed runtime: ${startup.runtime_service?.runtime_version ?? 'unknown'}`,
+          `Required Desktop: ${startup.runtime_service?.minimum_desktop_version ?? 'current Desktop'}`,
+        ].join('\n')
+      : needsUpdate
       ? [
           `Installed runtime: ${startup.runtime_service?.runtime_version ?? 'unknown'}`,
           `Required runtime: ${startup.runtime_service?.minimum_runtime_version ?? 'current Desktop runtime'}`,
         ].join('\n')
       : undefined,
-    recoveryHint: needsUpdate
+    recoveryHint: needsDesktopUpdate
+      ? 'Update Redeven Desktop, then try opening this environment again.'
+      : needsUpdate
       ? 'Update runtime, then try opening this environment again.'
       : 'Start or restart the runtime, then try again.',
   });
@@ -6461,6 +6482,7 @@ function finishLocalHostOpenFailure(
   target: LocalHostOpenTarget,
   signal: AbortSignal | undefined,
   result: DesktopLauncherActionFailure,
+  preferences: DesktopPreferences,
 ): DesktopLauncherActionFailure {
   launcherOperations.finish(operationKey, signal?.aborted ? 'canceled' : 'failed', {
     phase: signal?.aborted ? 'canceled' : 'failed',
@@ -6476,10 +6498,11 @@ function finishLocalHostOpenFailure(
       targetLabel: target.targetLabel,
     }),
     ...(signal?.aborted ? {} : { next_actions: openConnectionFailureNextActions(operationKey, target.environmentID, {
-      includeUpdateRuntime: runtimeOpenFailureShouldOfferUpdate({
+      ...runtimeOpenFailureRecoveryActions({
         failure: result.failure,
         launcherFailure: result,
       }),
+      desktopUpdateAvailable: desktopUpdateHandoffAvailable(preferences, target.environmentID),
     }) }),
     ...(signal?.aborted || !result.failure ? {} : { failure: result.failure }),
   });
@@ -6568,7 +6591,7 @@ async function openLocalEnvironmentRecord(
             targetLabel: environment.label,
           },
         );
-        return finishLocalHostOpenFailure(operationKey, openTarget, signal, result);
+        return finishLocalHostOpenFailure(operationKey, openTarget, signal, result, preferences);
       }
     }
 
@@ -6578,7 +6601,6 @@ async function openLocalEnvironmentRecord(
       runtimeRecord.startup,
       {
         desktopOwnerID: ownerID,
-        expectedRuntimeIdentity: bundledRuntimeIdentity(),
       },
     );
     if (runtimePlan.requires_restart || !runtimePlan.can_open) {
@@ -6590,7 +6612,7 @@ async function openLocalEnvironmentRecord(
           targetLabel: environment.label,
         },
       );
-      return finishLocalHostOpenFailure(operationKey, openTarget, signal, result);
+      return finishLocalHostOpenFailure(operationKey, openTarget, signal, result, preferences);
     }
 
     updateOpenConnectionOperation(operationKey, {
@@ -6609,7 +6631,7 @@ async function openLocalEnvironmentRecord(
         ...failureContext,
         targetLabel: environment.label,
       });
-      return finishLocalHostOpenFailure(operationKey, openTarget, signal, result);
+      return finishLocalHostOpenFailure(operationKey, openTarget, signal, result, preferences);
     }
 
     updateOpenConnectionOperation(operationKey, {
@@ -6631,7 +6653,7 @@ async function openLocalEnvironmentRecord(
     await waitForSessionInitialLoad(sessionRecord);
   } catch (error) {
     const result = launcherActionFailureFromSessionOpenError(error, failureContext);
-    return finishLocalHostOpenFailure(operationKey, openTarget, signal, result);
+    return finishLocalHostOpenFailure(operationKey, openTarget, signal, result, preferences);
   }
   resetLauncherIssueState();
   await persistDesktopPreferences(rememberLocalEnvironmentUse(preferences, environment.id, 'local_host'));
@@ -6784,7 +6806,8 @@ async function openProviderRemoteEnvironmentRecord(
         location: 'provider_remote',
       }),
       ...(signal?.aborted ? {} : { next_actions: openConnectionFailureNextActions(operationKey, environment.id, {
-        includeUpdateRuntime: runtimeOpenFailureShouldOfferUpdate({ failure }),
+        ...runtimeOpenFailureRecoveryActions({ failure }),
+        desktopUpdateAvailable: desktopUpdateHandoffAvailable(preferences, environment.id),
       }) }),
       ...(signal?.aborted ? {} : { failure }),
     });
@@ -6981,6 +7004,7 @@ async function openRemoteEnvironmentFromLauncher(
     interrupt_kind: 'stop_opening',
   });
   const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
+  const preferences = await loadDesktopPreferencesCached();
   const failureEnvironmentID = request.environment_id ?? optimisticSessionKey;
   const finishRemoteOpenFailure = (result: DesktopLauncherActionFailure): DesktopLauncherActionFailure => {
     const canceled = signal?.aborted === true;
@@ -7000,10 +7024,11 @@ async function openRemoteEnvironmentFromLauncher(
         location: 'external_local_ui',
       }),
       ...(canceled ? {} : { next_actions: openConnectionFailureNextActions(operationKey, failureEnvironmentID, {
-        includeUpdateRuntime: runtimeOpenFailureShouldOfferUpdate({
+        ...runtimeOpenFailureRecoveryActions({
           failure: result.failure,
           launcherFailure: result,
         }),
+        desktopUpdateAvailable: desktopUpdateHandoffAvailable(preferences, failureEnvironmentID),
       }) }),
       ...(canceled || !result.failure ? {} : { failure: result.failure }),
     });
@@ -7230,8 +7255,9 @@ async function openSSHEnvironmentFromLauncher(
   const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
   let runtimeRecord = existingRuntimeRecord;
   let desktopModelSource: ManagedDesktopModelSource | null = null;
+  let preferences: DesktopPreferences | null = null;
   try {
-    const preferences = await loadDesktopPreferencesCached();
+    preferences = await loadDesktopPreferencesCached();
     const sshPassword = savedSSHPasswordForDetails(preferences, sshDetails, request.environment_id);
     if (!runtimeRecord) {
       await refreshWelcomeRuntimeHealthForEnvironment(request.environment_id ?? optimisticSessionKey);
@@ -7258,11 +7284,12 @@ async function openSSHEnvironmentFromLauncher(
             targetLabel: request.label ?? defaultSavedSSHEnvironmentLabel(sshDetails),
           }),
           ...(signal?.aborted ? {} : { next_actions: openConnectionFailureNextActions(operationKey, request.environment_id ?? optimisticSessionKey, {
-            includeUpdateRuntime: runtimeOpenFailureShouldOfferUpdate({
+            ...runtimeOpenFailureRecoveryActions({
               failure: result.failure,
               launcherFailure: result,
               maintenance,
             }),
+            desktopUpdateAvailable: desktopUpdateHandoffAvailable(preferences, request.environment_id ?? optimisticSessionKey),
           }) }),
           ...(signal?.aborted || !result.failure ? {} : { failure: result.failure }),
         });
@@ -7409,7 +7436,8 @@ async function openSSHEnvironmentFromLauncher(
         targetLabel: request.label ?? defaultSavedSSHEnvironmentLabel(sshDetails),
       }),
       ...(signal?.aborted ? {} : { next_actions: openConnectionFailureNextActions(operationKey, request.environment_id ?? optimisticSessionKey, {
-        includeUpdateRuntime: runtimeOpenFailureShouldOfferUpdate({ error, failure }),
+        ...runtimeOpenFailureRecoveryActions({ error, failure }),
+        desktopUpdateAvailable: preferences ? desktopUpdateHandoffAvailable(preferences, request.environment_id ?? optimisticSessionKey) : false,
       }) }),
       ...(signal?.aborted ? {} : { failure }),
     });
@@ -7677,11 +7705,11 @@ async function ensureRuntimePlacementReadyRecordFromLauncher(
     started_at_unix_ms: operation.started_at_unix_ms,
   };
   const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
+  const preferences = await loadDesktopPreferencesCached();
 
   const task = (async () => {
     let operationSettled = false;
     try {
-      const preferences = await loadDesktopPreferencesCached();
       const savedTarget = preferences.saved_runtime_targets.find((target) => target.id === targetID) ?? null;
       const sshPassword = savedTarget?.ssh_password_configured === true
         ? savedTarget.ssh_password ?? ''
@@ -8058,6 +8086,7 @@ async function openRuntimePlacementBridgeFromLauncher(
     interrupt_kind: 'stop_opening',
   });
   const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
+  const preferences = await loadDesktopPreferencesCached();
   let desktopModelSource: ManagedDesktopModelSource | null = null;
   let bridgeSession: RuntimePlacementBridgeSession | null = null;
   let sessionRecord: DesktopSessionRecord | null = null;
@@ -8098,11 +8127,12 @@ async function openRuntimePlacementBridgeFromLauncher(
               targetLabel: label,
             }),
             ...(signal?.aborted ? {} : { next_actions: openConnectionFailureNextActions(operationKey, environmentID, {
-              includeUpdateRuntime: runtimeOpenFailureShouldOfferUpdate({
+              ...runtimeOpenFailureRecoveryActions({
                 failure: result.failure,
                 launcherFailure: result,
                 maintenance,
               }),
+              desktopUpdateAvailable: desktopUpdateHandoffAvailable(preferences, environmentID),
             }) }),
             ...(signal?.aborted || !result.failure ? {} : { failure: result.failure }),
           });
@@ -8112,7 +8142,6 @@ async function openRuntimePlacementBridgeFromLauncher(
       }
       const runtimeBinaryPath = readyRecord!.runtime_binary_path;
       placement = readyRecord!.placement;
-      const preferences = await loadDesktopPreferencesCached();
       const savedTarget = preferences.saved_runtime_targets.find((target) => target.id === targetID) ?? null;
       const sshPassword = savedTarget?.ssh_password_configured === true ? savedTarget.ssh_password ?? '' : compact(request.ssh_password);
       updateOpenConnectionOperation(operationKey, {
@@ -8226,7 +8255,8 @@ async function openRuntimePlacementBridgeFromLauncher(
         targetLabel: label,
       }),
       ...(signal?.aborted ? {} : { next_actions: openConnectionFailureNextActions(operationKey, environmentID, {
-        includeUpdateRuntime: runtimeOpenFailureShouldOfferUpdate({ error, failure }),
+        ...runtimeOpenFailureRecoveryActions({ error, failure }),
+        desktopUpdateAvailable: desktopUpdateHandoffAvailable(preferences, environmentID),
       }) }),
       ...(signal?.aborted ? {} : { failure }),
     });
@@ -8236,7 +8266,6 @@ async function openRuntimePlacementBridgeFromLauncher(
     });
   }
   resetLauncherIssueState();
-  const preferences = await loadDesktopPreferencesCached();
   await persistDesktopPreferences(markSavedRuntimeTargetUsed(preferences, {
     environment_id: record!.session.placement_target_id,
     host_access: record!.session.host_access,

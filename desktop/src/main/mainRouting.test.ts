@@ -508,7 +508,7 @@ describe('main routing', () => {
     expect(localOpenSrc).toContain('await refreshWelcomeRuntimeHealthForEnvironment(environment.id)');
     expect(localOpenSrc).toContain('runtimeRecord = await attachLocalEnvironmentRuntime(environment)');
     expect(localOpenSrc).toContain('localRuntimeHealthForOpenPreflight(environment.id)');
-    expect(localOpenSrc).toContain('finishLocalHostOpenFailure(operationKey, openTarget, signal, result)');
+    expect(localOpenSrc).toContain('finishLocalHostOpenFailure(operationKey, openTarget, signal, result, preferences)');
     expect(localOpenSrc).toContain("phase: 'checking_env_app_readiness'");
     expect(localOpenSrc).toContain("phase: 'opening_window'");
     expect(localOpenSrc).toContain("phase: 'open_ready'");

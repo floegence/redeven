@@ -182,15 +182,7 @@ function missingOpenReadinessFromCompatibility(
   compatibility: RuntimeServiceCompatibility,
   compatibilityMessage: string | undefined,
 ): RuntimeServiceOpenReadiness {
-  const inferred = openReadinessFromCompatibility(compatibility, compatibilityMessage);
-  if (inferred.state === 'blocked') {
-    return inferred;
-  }
-  return {
-    state: 'blocked',
-    reason_code: 'runtime_open_readiness_unavailable',
-    message: 'This running runtime is older than this Desktop. Install the update, then restart the runtime when it is safe to interrupt active work.',
-  };
+  return openReadinessFromCompatibility(compatibility, compatibilityMessage);
 }
 
 export function envAppShellUnavailableOpenReadiness(): RuntimeServiceOpenReadiness {
@@ -363,6 +355,24 @@ export function runtimeServiceIsOpenable(snapshot: RuntimeServiceSnapshot | null
   return snapshot.open_readiness?.state === 'openable';
 }
 
+export function runtimeServiceAllowsOpenAttempt(snapshot: RuntimeServiceSnapshot | null | undefined): boolean {
+  if (!snapshot) {
+    return false;
+  }
+  if (runtimeServiceIsOpenable(snapshot)) {
+    return true;
+  }
+  if (snapshot.open_readiness?.state === 'starting') {
+    return true;
+  }
+  const reasonCode = compact(snapshot.open_readiness?.reason_code);
+  return snapshot.compatibility === 'update_required'
+    || snapshot.compatibility === 'desktop_update_required'
+    || reasonCode === 'runtime_update_required'
+    || reasonCode === 'desktop_update_required'
+    || reasonCode === RUNTIME_SERVICE_ENV_APP_SHELL_UNAVAILABLE_REASON;
+}
+
 export function runtimeServiceMatchesIdentity(
   snapshot: RuntimeServiceSnapshot | null | undefined,
   expected: RuntimeServiceIdentity | null | undefined,
@@ -389,8 +399,15 @@ export function runtimeServiceNeedsRuntimeUpdate(snapshot: RuntimeServiceSnapsho
   const reasonCode = compact(snapshot.open_readiness?.reason_code);
   return snapshot.compatibility === 'update_required'
     || reasonCode === 'runtime_update_required'
-    || reasonCode === 'runtime_open_readiness_unavailable'
     || reasonCode === RUNTIME_SERVICE_ENV_APP_SHELL_UNAVAILABLE_REASON;
+}
+
+export function runtimeServiceNeedsDesktopUpdate(snapshot: RuntimeServiceSnapshot | null | undefined): boolean {
+  if (!snapshot) {
+    return false;
+  }
+  return snapshot.compatibility === 'desktop_update_required'
+    || compact(snapshot.open_readiness?.reason_code) === 'desktop_update_required';
 }
 
 export function runtimeServiceOpenReadinessLabel(snapshot: RuntimeServiceSnapshot | null | undefined): string {

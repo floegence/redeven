@@ -13,6 +13,7 @@ export type DesktopFailureCode =
   | 'container_runtime_stop_failed'
   | 'runtime_host_command_failed'
   | 'runtime_update_required'
+  | 'desktop_update_required'
   | 'environment_open_failed'
   | 'provider_link_failed'
   | 'workspace_engine_prepare_failed'
@@ -56,6 +57,7 @@ function normalizeFailureCode(value: unknown): DesktopFailureCode {
     case 'container_runtime_stop_failed':
     case 'runtime_host_command_failed':
     case 'runtime_update_required':
+    case 'desktop_update_required':
     case 'environment_open_failed':
     case 'provider_link_failed':
     case 'workspace_engine_prepare_failed':

@@ -7,6 +7,7 @@ import type {
 import { desktopControlPlaneKey, type DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
 import type { DesktopControlPlaneSyncState } from '../shared/providerEnvironmentState';
 import {
+  runtimeServiceAllowsOpenAttempt,
   runtimeServiceOpenReadinessLabel,
   runtimeServiceIsOpenable,
   runtimeServiceNeedsRuntimeUpdate,
@@ -802,6 +803,9 @@ function runtimeStatusLabel(environment: DesktopEnvironmentEntry): string {
     if (desktopRuntimeMaintenanceIsStaleLock(maintenance)) {
       return 'RUNTIME OFFLINE';
     }
+    if (desktopRuntimeMaintenanceRequiresUpdate(maintenance) && environmentOpenOperationAvailable(environment)) {
+      return 'Open';
+    }
     return desktopRuntimeMaintenanceRequiresRestart(maintenance)
       ? 'RESTART REQUIRED'
       : 'RUNTIME NEEDS UPDATE';
@@ -818,6 +822,11 @@ function runtimeStatusLabel(environment: DesktopEnvironmentEntry): string {
     }
     return 'RUNTIME OFFLINE';
   }
+  if (environmentOpenOperationAvailable(environment)) {
+    return runtimeServiceAllowsOpenAttempt(environmentRuntimeService(environment))
+      ? 'Open'
+      : 'READY TO OPEN';
+  }
   if (environment.managed_runtime_open_connection_required === true) {
     return 'READY TO OPEN';
   }
@@ -825,10 +834,7 @@ function runtimeStatusLabel(environment: DesktopEnvironmentEntry): string {
   if (runtimeServiceIsOpenable(snapshot)) {
     return 'Open';
   }
-  if (environment.kind !== 'provider_environment' && environmentOpenOperationAvailable(environment)) {
-    return 'READY TO OPEN';
-  }
-  if (snapshot?.open_readiness?.state === 'blocked') {
+  if (snapshot?.open_readiness?.state === 'blocked' && !runtimeServiceAllowsOpenAttempt(snapshot)) {
     return runtimeServiceNeedsRuntimeUpdate(snapshot)
       ? runtimeUpdatePresentation(environment).status_label
       : 'RUNTIME BLOCKED';
@@ -1274,7 +1280,7 @@ function runtimeMaintenanceSubject(environment: DesktopEnvironmentEntry): string
 
 function blockedRuntimePrimaryActionTitle(
   environment: DesktopEnvironmentEntry,
-  snapshot: RuntimeServiceSnapshot | undefined,
+  _snapshot: RuntimeServiceSnapshot | undefined,
 ): string {
   const maintenance = environmentRuntimeMaintenance(environment);
   if (maintenance?.kind === 'desktop_model_source_requires_runtime_update') {
@@ -1289,9 +1295,7 @@ function blockedRuntimePrimaryActionTitle(
   if (desktopRuntimeMaintenanceRequiresUpdate(maintenance)) {
     return runtimeUpdatePresentation(environment).required_title;
   }
-  return runtimeServiceNeedsRuntimeUpdate(snapshot)
-    ? runtimeUpdatePresentation(environment).required_title
-    : 'Runtime cannot open yet';
+  return 'Runtime cannot open yet';
 }
 
 function blockedRuntimePrimaryActionDetail(
@@ -1307,7 +1311,7 @@ function blockedRuntimePrimaryActionDetail(
       return `This ${runtimeMaintenanceSubject(environment)} is not running. Start the runtime again; Open becomes available after the runtime reports ready.`;
     }
     if (desktopRuntimeMaintenanceRequiresRestart(maintenance)) {
-      return `This ${runtimeMaintenanceSubject(environment)} needs a successful restart before it can open this environment. Open stays locked until the runtime restarts and reports ready.`;
+      return `This ${runtimeMaintenanceSubject(environment)} needs a successful restart before it can open this environment. Restart the runtime, then open it again after it reports ready.`;
     }
     const presentation = runtimeUpdatePresentation(environment);
     if (presentation.uses_desktop_update_handoff) {
@@ -1317,15 +1321,6 @@ function blockedRuntimePrimaryActionDetail(
       ? 'Update and restart the runtime first'
       : 'Update the runtime first';
     return `This ${runtimeMaintenanceSubject(environment)} needs an update before it can open this environment. ${updateAction}; Open stays separate and becomes available after the runtime is ready.`;
-  }
-  if (runtimeServiceNeedsRuntimeUpdate(snapshot)) {
-    const presentation = runtimeUpdatePresentation(environment);
-    if (presentation.uses_desktop_update_handoff) {
-      return presentation.blocked_detail;
-    }
-    return environment.kind === 'ssh_environment'
-      ? 'SSH is connected, but the running runtime on this host needs an update before it can open the Environment App. Open will stay locked until the runtime is updated and restarted when active work can be interrupted.'
-      : 'This running runtime needs an update before it can open the Environment App. Open will stay locked until the runtime is updated and restarted when active work can be interrupted.';
   }
   return runtimeServiceOpenReadinessLabel(snapshot);
 }
@@ -1445,7 +1440,7 @@ function primaryActionOverlay(
     if (runtimeServiceIsOpenable(snapshot) || environmentOpenOperationAvailable(environment)) {
       return undefined;
     }
-    if (environmentRuntimeMaintenance(environment) || snapshot?.open_readiness?.state === 'blocked') {
+    if (environmentRuntimeMaintenance(environment) || (snapshot?.open_readiness?.state === 'blocked' && !runtimeServiceAllowsOpenAttempt(snapshot))) {
       return {
         kind: 'popover',
         tone: 'warning',

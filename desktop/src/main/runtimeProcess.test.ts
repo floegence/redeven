@@ -8,7 +8,22 @@ import { DesktopOperationFailureError } from './desktopOperationFailure';
 import { launchStartedFreshManagedRuntime, startManagedRuntime } from './runtimeProcess';
 import { parseStartupReport } from './startup';
 
-function runtimeStatusPayload(baseURL: string, readiness: 'starting' | 'openable' = 'openable'): Record<string, unknown> {
+function runtimeStatusPayload(
+  baseURL: string,
+  readiness: 'starting' | 'openable' = 'openable',
+  runtimeServiceOverrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const activeWorkload = runtimeServiceOverrides.active_workload
+    && typeof runtimeServiceOverrides.active_workload === 'object'
+    ? runtimeServiceOverrides.active_workload
+    : {};
+  const compatibility = typeof runtimeServiceOverrides.compatibility === 'string'
+    ? runtimeServiceOverrides.compatibility
+    : 'compatible';
+  const openReadiness = runtimeServiceOverrides.open_readiness
+    ?? (readiness === 'openable'
+      ? { state: 'openable' }
+      : { state: 'starting', reason_code: 'env_app_gateway_starting', message: 'Env App gateway is starting.' });
   return {
     status: 'ready',
     local_ui_url: baseURL,
@@ -26,11 +41,10 @@ function runtimeStatusPayload(baseURL: string, readiness: 'starting' | 'openable
       desktop_managed: true,
       effective_run_mode: 'local',
       remote_enabled: false,
-      compatibility: 'compatible',
-      open_readiness: readiness === 'openable'
-        ? { state: 'openable' }
-        : { state: 'starting', reason_code: 'env_app_gateway_starting', message: 'Env App gateway is starting.' },
-      active_workload: {},
+      ...runtimeServiceOverrides,
+      compatibility,
+      open_readiness: openReadiness,
+      active_workload: activeWorkload,
     },
   };
 }
@@ -73,6 +87,10 @@ if (process.argv[2] === 'desktop-runtime-status') {
     const count = fs.existsSync(counterFile) ? Number(fs.readFileSync(counterFile, 'utf8')) || 0 : 0;
     fs.writeFileSync(counterFile, String(count + 1));
     const payload = readJSON(statusFile);
+    if (process.env.REDEVEN_TEST_RUNTIME_MODE === 'attach_existing_update_required' && count === 0) {
+      process.stdout.write(JSON.stringify({ status: 'blocked', code: 'not_running', message: 'Runtime daemon is not running.' }) + '\\n');
+      process.exit(0);
+    }
     if (count >= 2 && payload.runtime_service) {
       payload.runtime_service.open_readiness = { state: 'openable' };
       writeJSON(statusFile, payload);
@@ -81,6 +99,10 @@ if (process.argv[2] === 'desktop-runtime-status') {
     }
   }
   process.stdout.write(fs.readFileSync(statusFile, 'utf8'));
+  process.exit(0);
+}
+
+if (process.env.REDEVEN_TEST_RUNTIME_MODE === 'attach_existing_update_required') {
   process.exit(0);
 }
 
@@ -171,6 +193,108 @@ describe('runtimeProcess', () => {
       }
       expect(launch.spawned).toBe(false);
       expect(launch.managedRuntime.attached).toBe(true);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reuses an existing local runtime even when its bundled identity differs', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-'));
+    const statusFile = path.join(dir, 'status.json');
+    const executablePath = await writeFakeRuntimeExecutable(dir);
+    try {
+      await writeJSON(statusFile, runtimeStatusPayload('http://127.0.0.1:43123/', 'openable', {
+        runtime_version: 'v0.5.9',
+        runtime_commit: 'old-runtime',
+        runtime_build_time: '2026-01-01T00:00:00Z',
+      }));
+      const launch = await startManagedRuntime({
+        executablePath,
+        runtimeArgs: [],
+        env: { REDEVEN_TEST_STATUS_FILE: statusFile },
+        runtimeAttachTimeoutMs: 5_000,
+        desktopOwnerID: 'desktop-owner-1',
+      });
+      expect(launch.kind).toBe('ready');
+      if (launch.kind !== 'ready') {
+        return;
+      }
+      expect(launch.spawned).toBe(false);
+      expect(launch.managedRuntime.attached).toBe(true);
+      expect(launch.managedRuntime.startup.runtime_service?.runtime_commit).toBe('old-runtime');
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reuses an existing local runtime that reports a compatibility update block', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-'));
+    const statusFile = path.join(dir, 'status.json');
+    const executablePath = await writeFakeRuntimeExecutable(dir);
+    try {
+      await writeJSON(statusFile, runtimeStatusPayload('http://127.0.0.1:43123/', 'openable', {
+        compatibility: 'update_required',
+        runtime_version: 'v0.5.9',
+        open_readiness: {
+          state: 'blocked',
+          reason_code: 'runtime_update_required',
+          message: 'Redeven Desktop has a newer bundled runtime.',
+        },
+      }));
+      const launch = await startManagedRuntime({
+        executablePath,
+        runtimeArgs: [],
+        env: { REDEVEN_TEST_STATUS_FILE: statusFile },
+        runtimeAttachTimeoutMs: 5_000,
+        desktopOwnerID: 'desktop-owner-1',
+      });
+      expect(launch.kind).toBe('ready');
+      if (launch.kind !== 'ready') {
+        return;
+      }
+      expect(launch.spawned).toBe(false);
+      expect(launch.managedRuntime.attached).toBe(true);
+      expect(launch.managedRuntime.startup.runtime_service?.compatibility).toBe('update_required');
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reuses an attached local runtime that reports a compatibility update block after launch handoff', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-'));
+    const statusFile = path.join(dir, 'status.json');
+    const counterFile = path.join(dir, 'status-count.txt');
+    const executablePath = await writeFakeRuntimeExecutable(dir);
+    try {
+      await writeJSON(statusFile, runtimeStatusPayload('http://127.0.0.1:43123/', 'openable', {
+        compatibility: 'update_required',
+        runtime_version: 'v0.5.9',
+        open_readiness: {
+          state: 'blocked',
+          reason_code: 'runtime_update_required',
+          message: 'Redeven Desktop has a newer bundled runtime.',
+        },
+      }));
+      const launch = await startManagedRuntime({
+        executablePath,
+        runtimeArgs: [],
+        env: {
+          REDEVEN_TEST_STATUS_FILE: statusFile,
+          REDEVEN_TEST_STATUS_COUNTER_FILE: counterFile,
+          REDEVEN_TEST_RUNTIME_MODE: 'attach_existing_update_required',
+        },
+        tempRoot: dir,
+        startupTimeoutMs: 500,
+        runtimeAttachTimeoutMs: 5_000,
+        desktopOwnerID: 'desktop-owner-1',
+      });
+      expect(launch.kind).toBe('ready');
+      if (launch.kind !== 'ready') {
+        return;
+      }
+      expect(launch.spawned).toBe(true);
+      expect(launch.managedRuntime.attached).toBe(true);
+      expect(launch.managedRuntime.startup.runtime_service?.compatibility).toBe('update_required');
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }

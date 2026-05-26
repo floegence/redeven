@@ -46,6 +46,11 @@ describe('operationNextActions', () => {
         label: 'Update runtime',
       },
       {
+        kind: 'manage_desktop_update',
+        environment_id: 'local',
+        label: 'Update Redeven Desktop',
+      },
+      {
         kind: 'dismiss',
         operation_key: 'local:host:local:open',
         label: 'Dismiss',
@@ -60,6 +65,7 @@ describe('operationNextActions', () => {
     expect(visibleOperationNextActions(progress)).toEqual([
       expect.objectContaining({ kind: 'refresh_status', label: 'Refresh status' }),
       expect.objectContaining({ kind: 'update_runtime', label: 'Update runtime' }),
+      expect.objectContaining({ kind: 'manage_desktop_update', label: 'Update Redeven Desktop' }),
       expect.objectContaining({ kind: 'copy_diagnostics', label: 'Copy log' }),
       expect.objectContaining({ kind: 'dismiss', label: 'Dismiss' }),
     ]);
