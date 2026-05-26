@@ -6,6 +6,7 @@ import type {
 function operationNextActionKey(action: DesktopLauncherOperationNextAction): string {
   switch (action.kind) {
     case 'refresh_status':
+    case 'update_runtime':
       return `${action.kind}:${action.environment_id ?? ''}:${action.label}`;
     case 'copy_diagnostics':
     case 'dismiss':
@@ -38,6 +39,7 @@ export function visibleOperationNextActions(
     }
   };
   push('refresh_status');
+  push('update_runtime');
   push('copy_diagnostics');
   push('dismiss');
   return actions;

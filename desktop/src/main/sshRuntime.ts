@@ -40,7 +40,6 @@ import {
   runtimeServiceHasActiveWork,
   runtimeServiceIsOpenable,
   runtimeServiceMatchesIdentity,
-  runtimeServiceNeedsRuntimeUpdate,
   runtimeServiceSupportsDesktopModelSource,
   type RuntimeServiceIdentity,
 } from '../shared/runtimeService';
@@ -59,7 +58,7 @@ const DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS = 15;
 const DEFAULT_SSH_POLL_INTERVAL_MS = 200;
 const MAX_RECENT_LOG_CHARS = 8_000;
 export const MANAGED_SSH_RUNTIME_STAMP_FILENAME = 'managed-runtime.stamp';
-export const MANAGED_SSH_RUNTIME_STAMP_SCHEMA_VERSION = 1;
+export const MANAGED_SSH_RUNTIME_STAMP_SCHEMA_VERSION = 2;
 
 type SpawnedSSHProcess = ChildProcessByStdio<Writable | null, Readable | null, Readable>;
 type RemoteInstallStrategy = 'desktop_upload' | 'remote_install';
@@ -102,7 +101,7 @@ export type StopManagedSSHRuntimeProcessArgs = Readonly<{
 export type DesktopSSHRemoteRuntimeStamp = Readonly<{
   schema_version: typeof MANAGED_SSH_RUNTIME_STAMP_SCHEMA_VERSION;
   managed_by: 'redeven-desktop';
-  runtime_release_tag: string;
+  slot_release_tag: string;
   install_strategy: RemoteInstallStrategy;
 }>;
 export type DesktopSSHRemoteRuntimeProbeStatus =
@@ -111,13 +110,14 @@ export type DesktopSSHRemoteRuntimeProbeStatus =
   | 'binary_not_executable'
   | 'version_command_failed'
   | 'version_output_invalid'
-  | 'version_mismatch'
+  | 'slot_version_mismatch'
   | 'stamp_missing'
   | 'stamp_invalid';
 export type DesktopSSHRemoteRuntimeProbeResult = Readonly<{
   status: DesktopSSHRemoteRuntimeProbeStatus;
-  expected_release_tag: string;
+  slot_release_tag: string | null;
   reported_release_tag: string | null;
+  target_release_tag: string | null;
   binary_path: string;
   stamp_path: string;
   reason: string;
@@ -280,6 +280,8 @@ export type StartManagedSSHRuntimeArgs = Readonly<{
   ) => void;
   onProgress?: (progress: DesktopSSHRuntimeProgress) => void;
 }>;
+
+type ManagedRuntimePackageIntent = 'use_installed' | 'install_if_missing' | 'replace_with_desktop_target';
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -548,19 +550,92 @@ function buildRemoteInstallRootShell(): string {
 
 function buildManagedSSHRuntimePathShell(): string {
   return [
-    'release_tag="$2"',
-    'release_root="${runtime_root%/}/runtime/releases/${release_tag}"',
-    'bin_dir="${release_root}/bin"',
+    'target_release_tag="${2:-}"',
+    'managed_root="${runtime_root%/}/runtime/managed"',
+    'bin_dir="${managed_root}/bin"',
     'binary="${bin_dir}/redeven"',
-    `stamp_path="\${release_root}/${MANAGED_SSH_RUNTIME_STAMP_FILENAME}"`,
+    `stamp_path="\${managed_root}/${MANAGED_SSH_RUNTIME_STAMP_FILENAME}"`,
   ].join('\n');
 }
 
 function buildManagedSSHRuntimeProbeShell(): string {
   return [
+    'allow_legacy_migration="${allow_legacy_migration:-0}"',
     'probe_status=""',
     'probe_reason=""',
+    'slot_release_tag=""',
     'reported_release_tag=""',
+    'legacy_release_layout_present() {',
+    '  legacy_releases_root="${runtime_root%/}/runtime/releases"',
+    '  [ -d "$legacy_releases_root" ] || return 1',
+    '  for legacy_candidate in "$legacy_releases_root"/*; do',
+    '    [ -d "$legacy_candidate" ] && return 0',
+    '  done',
+    '  return 1',
+    '}',
+    'legacy_runtime_is_valid() {',
+    '  legacy_root="$1"',
+    '  legacy_binary="${legacy_root}/bin/redeven"',
+    `  legacy_stamp="\${legacy_root}/${MANAGED_SSH_RUNTIME_STAMP_FILENAME}"`,
+    '  legacy_slot_release_tag=""',
+    '  legacy_reported_release_tag=""',
+    '  if [ ! -x "$legacy_binary" ] || [ ! -f "$legacy_stamp" ]; then',
+    '    return 1',
+    '  fi',
+    `  if ! grep -Fx "schema_version=1" "$legacy_stamp" >/dev/null 2>&1; then`,
+    '    return 1',
+    '  fi',
+    '  if ! grep -Fx "managed_by=redeven-desktop" "$legacy_stamp" >/dev/null 2>&1; then',
+    '    return 1',
+    '  fi',
+    '  while IFS= read -r legacy_stamp_line; do',
+    '    case "$legacy_stamp_line" in',
+    '      runtime_release_tag=*) legacy_slot_release_tag="${legacy_stamp_line#runtime_release_tag=}" ;;',
+    '    esac',
+    '  done < "$legacy_stamp"',
+    '  case "$legacy_slot_release_tag" in',
+    '    "") return 1 ;;',
+    '    v*) ;;',
+    '    *) legacy_slot_release_tag="v$legacy_slot_release_tag" ;;',
+    '  esac',
+    '  if ! legacy_version_output="$("$legacy_binary" version 2>/dev/null)"; then',
+    '    return 1',
+    '  fi',
+    '  set -- $legacy_version_output',
+    '  if [ "${1:-}" != "redeven" ] || [ -z "${2:-}" ]; then',
+    '    return 1',
+    '  fi',
+    '  legacy_reported_release_tag="$2"',
+    '  case "$legacy_reported_release_tag" in v*) ;; *) legacy_reported_release_tag="v$legacy_reported_release_tag" ;; esac',
+    '  [ "$legacy_slot_release_tag" = "$legacy_reported_release_tag" ]',
+    '}',
+    'copy_legacy_runtime_to_slot() {',
+    '  legacy_root="$1"',
+    '  mkdir -p "$bin_dir"',
+    '  cp "${legacy_root}/bin/redeven" "$binary"',
+    '  chmod +x "$binary"',
+    '  write_runtime_stamp "desktop_upload" "$legacy_slot_release_tag"',
+    '  cleanup_legacy_releases',
+    '}',
+    'maybe_migrate_legacy_runtime() {',
+    '  legacy_releases_root="${runtime_root%/}/runtime/releases"',
+    '  [ ! -e "$binary" ] || return 0',
+    '  [ -d "$legacy_releases_root" ] || return 1',
+    '  legacy_candidate_count=0',
+    '  legacy_candidate_root=""',
+    '  for legacy_candidate in "$legacy_releases_root"/*; do',
+    '    [ -d "$legacy_candidate" ] || continue',
+    '    if legacy_runtime_is_valid "$legacy_candidate"; then',
+    '      legacy_candidate_count=$((legacy_candidate_count + 1))',
+    '      legacy_candidate_root="$legacy_candidate"',
+    '    fi',
+    '  done',
+    '  if [ "$legacy_candidate_count" -ne 1 ]; then',
+    '    return 1',
+    '  fi',
+    '  legacy_runtime_is_valid "$legacy_candidate_root" || return 1',
+    '  copy_legacy_runtime_to_slot "$legacy_candidate_root"',
+    '}',
     'read_install_strategy_line() {',
     '  install_strategy_line=""',
     '  while IFS= read -r stamp_line; do',
@@ -573,7 +648,15 @@ function buildManagedSSHRuntimeProbeShell(): string {
     '  done < "$stamp_path"',
     '}',
     'runtime_is_compatible() {',
+    '  if [ ! -e "$binary" ] && [ "$allow_legacy_migration" = "1" ]; then',
+    '    maybe_migrate_legacy_runtime || true',
+    '  fi',
     '  if [ ! -e "$binary" ]; then',
+    '    if legacy_release_layout_present; then',
+    '      probe_status="stamp_invalid"',
+    '      probe_reason="legacy managed runtime layout is not deterministically migratable; use Update runtime to replace it"',
+    '      return 1',
+    '    fi',
     '    probe_status="missing_binary"',
     '    probe_reason="managed runtime binary is missing"',
     '    return 1',
@@ -599,11 +682,6 @@ function buildManagedSSHRuntimeProbeShell(): string {
     '    v*) ;;',
     '    *) reported_release_tag="v$reported_release_tag" ;;',
     '  esac',
-    '  if [ "$reported_release_tag" != "$release_tag" ]; then',
-    '    probe_status="version_mismatch"',
-    '    probe_reason="managed runtime version does not match the requested Desktop release"',
-    '    return 1',
-    '  fi',
     '  if [ ! -f "$stamp_path" ]; then',
     '    probe_status="stamp_missing"',
     '    probe_reason="managed runtime stamp is missing"',
@@ -619,9 +697,24 @@ function buildManagedSSHRuntimeProbeShell(): string {
     '    probe_reason="managed runtime stamp owner is invalid"',
     '    return 1',
     '  fi',
-    '  if ! grep -Fx "runtime_release_tag=$release_tag" "$stamp_path" >/dev/null 2>&1; then',
-    '    probe_status="stamp_invalid"',
-    '    probe_reason="managed runtime stamp release does not match the requested Desktop release"',
+    '  slot_release_tag=""',
+    '  while IFS= read -r stamp_line; do',
+    '    case "$stamp_line" in',
+    '      slot_release_tag=*) slot_release_tag="${stamp_line#slot_release_tag=}" ;;',
+    '    esac',
+    '  done < "$stamp_path"',
+    '  case "$slot_release_tag" in',
+    '    "")',
+    '      probe_status="stamp_invalid"',
+    '      probe_reason="managed runtime stamp release is missing"',
+    '      return 1',
+    '      ;;',
+    '    v*) ;;',
+    '    *) slot_release_tag="v$slot_release_tag" ;;',
+    '  esac',
+    '  if [ "$slot_release_tag" != "$reported_release_tag" ]; then',
+    '    probe_status="slot_version_mismatch"',
+    '    probe_reason="managed runtime stamp release does not match the installed binary"',
     '    return 1',
     '  fi',
     '  read_install_strategy_line',
@@ -645,15 +738,56 @@ function buildManagedSSHRuntimeStampShell(): string {
   return [
     'write_runtime_stamp() {',
     '  install_strategy="$1"',
-    '  mkdir -p "$release_root"',
+    '  slot_release_tag="$2"',
+    '  mkdir -p "$managed_root"',
     '  temp_stamp="${stamp_path}.tmp.$$"',
     '  {',
     `    printf 'schema_version=${MANAGED_SSH_RUNTIME_STAMP_SCHEMA_VERSION}\\n'`,
     "    printf 'managed_by=redeven-desktop\\n'",
-    "    printf 'runtime_release_tag=%s\\n' \"$release_tag\"",
+    "    printf 'slot_release_tag=%s\\n' \"$slot_release_tag\"",
     "    printf 'install_strategy=%s\\n' \"$install_strategy\"",
+    "    printf 'installed_at_unix_ms=%s\\n' \"$(date +%s)000\"",
     '  } > "$temp_stamp"',
     '  mv "$temp_stamp" "$stamp_path"',
+    '}',
+  ].join('\n');
+}
+
+function buildManagedSSHRuntimeCleanupShell(): string {
+  return [
+    'cleanup_legacy_releases() {',
+    '  rm -rf "${runtime_root%/}/runtime/releases"',
+    '}',
+  ].join('\n');
+}
+
+function buildManagedSSHRuntimeSwitchShell(): string {
+  return [
+    'switch_staged_runtime() {',
+    '  staged_binary="${staging_root}/bin/redeven"',
+    `  staged_stamp="\${staging_root}/${MANAGED_SSH_RUNTIME_STAMP_FILENAME}"`,
+    '  if [ ! -x "$staged_binary" ]; then',
+    '    echo "staged Redeven binary is missing" >&2',
+    '    return 1',
+    '  fi',
+    '  if [ ! -f "$staged_stamp" ]; then',
+    '    echo "staged Redeven stamp is missing" >&2',
+    '    return 1',
+    '  fi',
+    '  mkdir -p "$(dirname "$managed_root")"',
+    '  previous_managed_root="${managed_root}.previous.$$"',
+    '  rm -rf "$previous_managed_root"',
+    '  if [ -e "$managed_root" ]; then',
+    '    mv "$managed_root" "$previous_managed_root"',
+    '  fi',
+    '  if mv "$staging_root" "$managed_root"; then',
+    '    rm -rf "$previous_managed_root"',
+    '    return 0',
+    '  fi',
+    '  if [ -e "$previous_managed_root" ]; then',
+    '    mv "$previous_managed_root" "$managed_root" || true',
+    '  fi',
+    '  return 1',
     '}',
   ].join('\n');
 }
@@ -663,11 +797,15 @@ export function buildManagedSSHRuntimeProbeScript(): string {
     'set -eu',
     buildRemoteInstallRootShell(),
     buildManagedSSHRuntimePathShell(),
+    'allow_legacy_migration="${3:-0}"',
+    buildManagedSSHRuntimeStampShell(),
+    buildManagedSSHRuntimeCleanupShell(),
     buildManagedSSHRuntimeProbeShell(),
     'runtime_is_compatible || true',
     "printf 'status=%s\\n' \"$probe_status\"",
-    "printf 'expected_release_tag=%s\\n' \"$release_tag\"",
+    "printf 'slot_release_tag=%s\\n' \"$slot_release_tag\"",
     "printf 'reported_release_tag=%s\\n' \"$reported_release_tag\"",
+    "printf 'target_release_tag=%s\\n' \"$target_release_tag\"",
     "printf 'binary_path=%s\\n' \"$binary\"",
     "printf 'stamp_path=%s\\n' \"$stamp_path\"",
     "printf 'reason=%s\\n' \"$probe_reason\"",
@@ -681,21 +819,59 @@ export function buildManagedSSHRemoteInstallScript(): string {
     buildManagedSSHRuntimePathShell(),
     'install_script_url="$3"',
     'force_install="${4:-0}"',
+    'allow_legacy_migration=0',
     buildManagedSSHRuntimeProbeShell(),
     buildManagedSSHRuntimeStampShell(),
+    buildManagedSSHRuntimeCleanupShell(),
+    buildManagedSSHRuntimeSwitchShell(),
     'install_runtime() {',
-    '  script_path="${release_root}/install.sh.$$"',
-    '  mkdir -p "$bin_dir"',
+    '  if [ -z "$target_release_tag" ]; then',
+    '    echo "target release tag is required for remote runtime install" >&2',
+    '    exit 1',
+    '  fi',
+    '  mkdir -p "${runtime_root%/}/runtime"',
+    '  staging_root="$(mktemp -d "${managed_root}.staging.XXXXXX")"',
+    '  staging_bin_dir="${staging_root}/bin"',
+    '  script_path="${staging_root}/install.sh"',
+    '  mkdir -p "$staging_bin_dir"',
     '  curl -fsSL "$install_script_url" -o "$script_path"',
-    '  if ! REDEVEN_INSTALL_MODE=upgrade REDEVEN_VERSION="$release_tag" REDEVEN_INSTALL_DIR="$bin_dir" sh "$script_path"; then',
-    '    rm -f "$script_path"',
+    '  if ! REDEVEN_INSTALL_MODE=upgrade REDEVEN_VERSION="$target_release_tag" REDEVEN_INSTALL_DIR="$staging_bin_dir" sh "$script_path"; then',
+    '    rm -rf "$staging_root"',
+    '    return 1',
+    '  fi',
+    '  old_stamp_path="$stamp_path"',
+    '  old_managed_root="$managed_root"',
+    '  managed_root="$staging_root"',
+    `  stamp_path="\${managed_root}/${MANAGED_SSH_RUNTIME_STAMP_FILENAME}"`,
+    '  write_runtime_stamp "remote_install" "$target_release_tag"',
+    '  managed_root="$old_managed_root"',
+    '  stamp_path="$old_stamp_path"',
+    '  staged_binary="${staging_bin_dir}/redeven"',
+    '  if [ ! -x "$staged_binary" ]; then',
+    '    rm -rf "$staging_root"',
+    '    echo "installed Redeven binary is missing from staging" >&2',
+    '    return 1',
+    '  fi',
+    '  if ! staged_version_output="$("$staged_binary" version 2>/dev/null)"; then',
+    '    rm -rf "$staging_root"',
+    '    echo "staged Redeven binary failed to report its version" >&2',
+    '    return 1',
+    '  fi',
+    '  set -- $staged_version_output',
+    '  staged_release_tag="${2:-}"',
+    '  case "$staged_release_tag" in v*) ;; *) staged_release_tag="v$staged_release_tag" ;; esac',
+    '  if [ "$staged_release_tag" != "$target_release_tag" ]; then',
+    '    rm -rf "$staging_root"',
+    '    echo "staged Redeven binary reported $staged_release_tag instead of $target_release_tag" >&2',
     '    return 1',
     '  fi',
     '  rm -f "$script_path"',
+    '  switch_staged_runtime',
+    '  rm -rf "$staging_root"',
     '}',
     'if [ "$force_install" = "1" ] || ! runtime_is_compatible; then',
     '  install_runtime',
-    '  write_runtime_stamp "remote_install"',
+    '  cleanup_legacy_releases',
     'fi',
   ].join('\n');
 }
@@ -707,11 +883,20 @@ export function buildManagedSSHUploadedInstallScript(): string {
     buildManagedSSHRuntimePathShell(),
     'archive_path="$3"',
     'upload_dir="$4"',
+    'allow_legacy_migration=0',
     buildManagedSSHRuntimeStampShell(),
+    buildManagedSSHRuntimeCleanupShell(),
+    buildManagedSSHRuntimeSwitchShell(),
+    'if [ -z "$target_release_tag" ]; then',
+    '  echo "target release tag is required for uploaded runtime install" >&2',
+    '  exit 1',
+    'fi',
+    'mkdir -p "${runtime_root%/}/runtime"',
+    'staging_root="$(mktemp -d "${managed_root}.staging.XXXXXX")"',
     'extract_dir="$(mktemp -d "${upload_dir%/}/extract.XXXXXX")"',
-    'cleanup() { rm -rf "$extract_dir" "$upload_dir"; }',
+    'cleanup() { rm -rf "$extract_dir" "$upload_dir" "$staging_root"; }',
     'trap cleanup EXIT INT TERM',
-    'mkdir -p "$bin_dir"',
+    'mkdir -p "${staging_root}/bin"',
     'if tar --warning=no-unknown-keyword -xzf "$archive_path" -C "$extract_dir" 2>/dev/null; then',
     '  :',
     'elif tar -xzf "$archive_path" -C "$extract_dir"; then',
@@ -725,9 +910,28 @@ export function buildManagedSSHUploadedInstallScript(): string {
     '  echo "uploaded Redeven archive did not contain redeven" >&2',
     '  exit 1',
     'fi',
-    'mv "$binary_path" "${bin_dir}/redeven"',
-    'chmod +x "${bin_dir}/redeven"',
-    'write_runtime_stamp "desktop_upload"',
+    'mv "$binary_path" "${staging_root}/bin/redeven"',
+    'chmod +x "${staging_root}/bin/redeven"',
+    'if ! staged_version_output="$("${staging_root}/bin/redeven" version 2>/dev/null)"; then',
+    '  echo "uploaded Redeven binary failed to report its version" >&2',
+    '  exit 1',
+    'fi',
+    'set -- $staged_version_output',
+    'staged_release_tag="${2:-}"',
+    'case "$staged_release_tag" in v*) ;; *) staged_release_tag="v$staged_release_tag" ;; esac',
+    'if [ "$staged_release_tag" != "$target_release_tag" ]; then',
+    '  echo "uploaded Redeven binary reported $staged_release_tag instead of $target_release_tag" >&2',
+    '  exit 1',
+    'fi',
+    'old_stamp_path="$stamp_path"',
+    'old_managed_root="$managed_root"',
+    'managed_root="$staging_root"',
+    `stamp_path="\${managed_root}/${MANAGED_SSH_RUNTIME_STAMP_FILENAME}"`,
+    'write_runtime_stamp "desktop_upload" "$target_release_tag"',
+    'managed_root="$old_managed_root"',
+    'stamp_path="$old_stamp_path"',
+    'switch_staged_runtime',
+    'cleanup_legacy_releases',
   ].join('\n');
 }
 
@@ -989,7 +1193,7 @@ export function buildManagedSSHStopScript(): string {
 function probeResultFallbackReason(status: DesktopSSHRemoteRuntimeProbeStatus): string {
   switch (status) {
     case 'ready':
-      return 'desktop-managed runtime is compatible';
+      return 'desktop-managed runtime slot is ready';
     case 'missing_binary':
       return 'managed runtime binary is missing';
     case 'binary_not_executable':
@@ -998,8 +1202,8 @@ function probeResultFallbackReason(status: DesktopSSHRemoteRuntimeProbeStatus): 
       return 'managed runtime failed to report its version';
     case 'version_output_invalid':
       return 'managed runtime returned an invalid version string';
-    case 'version_mismatch':
-      return 'managed runtime version does not match the requested Desktop release';
+    case 'slot_version_mismatch':
+      return 'managed runtime stamp release does not match the installed binary';
     case 'stamp_missing':
       return 'managed runtime stamp is missing';
     case 'stamp_invalid':
@@ -1015,7 +1219,7 @@ function normalizeProbeStatus(value: string): DesktopSSHRemoteRuntimeProbeStatus
     case 'binary_not_executable':
     case 'version_command_failed':
     case 'version_output_invalid':
-    case 'version_mismatch':
+    case 'slot_version_mismatch':
     case 'stamp_missing':
     case 'stamp_invalid':
       return clean as DesktopSSHRemoteRuntimeProbeStatus;
@@ -1040,11 +1244,14 @@ function parseProbeResultLines(raw: string): ReadonlyMap<string, string> {
   return values;
 }
 
+function normalizeOptionalRuntimeReleaseTag(raw: string | undefined): string | null {
+  const clean = compact(raw);
+  return clean === '' ? null : normalizeRuntimeReleaseTag(clean);
+}
+
 export function parseManagedSSHRuntimeProbeResult(raw: string): DesktopSSHRemoteRuntimeProbeResult {
   const values = parseProbeResultLines(raw);
   const status = normalizeProbeStatus(values.get('status') ?? '');
-  const expectedReleaseTag = normalizeRuntimeReleaseTag(values.get('expected_release_tag') ?? '');
-  const reportedReleaseTagRaw = compact(values.get('reported_release_tag'));
   const binaryPath = compact(values.get('binary_path'));
   const stampPath = compact(values.get('stamp_path'));
   if (binaryPath === '') {
@@ -1055,8 +1262,9 @@ export function parseManagedSSHRuntimeProbeResult(raw: string): DesktopSSHRemote
   }
   return {
     status,
-    expected_release_tag: expectedReleaseTag,
-    reported_release_tag: reportedReleaseTagRaw === '' ? null : normalizeRuntimeReleaseTag(reportedReleaseTagRaw),
+    slot_release_tag: normalizeOptionalRuntimeReleaseTag(values.get('slot_release_tag')),
+    reported_release_tag: normalizeOptionalRuntimeReleaseTag(values.get('reported_release_tag')),
+    target_release_tag: normalizeOptionalRuntimeReleaseTag(values.get('target_release_tag')),
     binary_path: binaryPath,
     stamp_path: stampPath,
     reason: compact(values.get('reason')) || probeResultFallbackReason(status),
@@ -1066,13 +1274,13 @@ export function parseManagedSSHRuntimeProbeResult(raw: string): DesktopSSHRemote
 export function describeManagedSSHRuntimeProbeResult(result: DesktopSSHRemoteRuntimeProbeResult): string {
   switch (result.status) {
     case 'ready':
-      return `Desktop-managed runtime at ${result.binary_path} is ready for ${result.expected_release_tag}.`;
-    case 'version_mismatch':
-      return `Managed runtime at ${result.binary_path} reports ${result.reported_release_tag ?? 'an unknown version'} instead of ${result.expected_release_tag}.`;
+      return `Desktop-managed runtime at ${result.binary_path} is ready (${result.reported_release_tag ?? result.slot_release_tag ?? 'unknown version'}).`;
+    case 'slot_version_mismatch':
+      return `Managed runtime at ${result.binary_path} reports ${result.reported_release_tag ?? 'an unknown version'}, but its Desktop stamp records ${result.slot_release_tag ?? 'an unknown version'}.`;
     case 'stamp_missing':
-      return `Managed runtime at ${result.binary_path} matches ${result.expected_release_tag}, but the Desktop stamp is missing at ${result.stamp_path}.`;
+      return `Managed runtime stamp is missing at ${result.stamp_path}.`;
     case 'stamp_invalid':
-      return `Managed runtime stamp at ${result.stamp_path} is invalid for ${result.expected_release_tag}.`;
+      return `Managed runtime stamp at ${result.stamp_path} is invalid.`;
     default:
       return `${result.reason} (${result.binary_path}).`;
   }
@@ -1429,6 +1637,7 @@ async function probeRemoteRuntimeCompatibility(args: Readonly<{
   connectTimeoutSeconds: number;
   auth: SSHCommandAuthContext;
   runtimeReleaseTag: string;
+  allowLegacyMigration?: boolean;
   logs: MutableRecentLogs;
   onLog: StartManagedSSHRuntimeArgs['onLog'];
   onProgress: StartManagedSSHRuntimeArgs['onProgress'];
@@ -1449,6 +1658,7 @@ async function probeRemoteRuntimeCompatibility(args: Readonly<{
       remoteShellCommand(buildManagedSSHRuntimeProbeScript(), 'redeven-ssh-runtime-probe', [
         args.target.runtime_root,
         args.runtimeReleaseTag,
+        args.allowLegacyMigration === true ? '1' : '0',
       ]),
     ],
     args.auth,
@@ -1891,35 +2101,27 @@ async function ensureRemoteRuntimeInstalled(args: Readonly<{
   assetCacheRoot: string;
   sourceRuntimeRoot?: string;
   forceRuntimeUpdate?: boolean;
+  packageIntent?: ManagedRuntimePackageIntent;
   fetchPolicy: DesktopSSHReleaseFetchPolicy;
   logs: MutableRecentLogs;
   onLog: StartManagedSSHRuntimeArgs['onLog'];
   onProgress: StartManagedSSHRuntimeArgs['onProgress'];
   signal?: AbortSignal;
 }>): Promise<void> {
-  const initialProbe = await probeRemoteRuntimeCompatibility(args);
-  const shouldReplaceRuntimePackage = args.forceRuntimeUpdate === true;
+  const packageIntent = args.packageIntent ?? (args.forceRuntimeUpdate === true ? 'replace_with_desktop_target' : 'install_if_missing');
+  const initialProbe = await probeRemoteRuntimeCompatibility({
+    ...args,
+    allowLegacyMigration: packageIntent !== 'replace_with_desktop_target',
+  });
+  const shouldReplaceRuntimePackage = packageIntent === 'replace_with_desktop_target';
   if (initialProbe.status === 'ready' && !shouldReplaceRuntimePackage) {
     return;
   }
+  if (packageIntent === 'use_installed') {
+    throw new Error(describeManagedSSHRuntimeProbeResult(initialProbe));
+  }
   if (!shouldReplaceRuntimePackage && initialProbe.status !== 'missing_binary') {
-    const maintenance = buildDesktopRuntimeMaintenanceRequirement({
-      kind: 'runtime_update_required',
-      required_for: 'open',
-      recovery_action: 'update_runtime',
-      can_desktop_start: false,
-      can_desktop_restart: true,
-      has_active_work: false,
-      active_work_label: 'No active work',
-      current_runtime_version: initialProbe.reported_release_tag ?? undefined,
-      target_runtime_version: initialProbe.expected_release_tag,
-      message: 'Update this SSH runtime before starting it with the bundled runtime.',
-    });
-    throw new DesktopSSHRuntimeMaintenanceRequiredError(
-      maintenance.message,
-      maintenance,
-      formatRecentLogsForMaintenanceDetails(args.logs),
-    );
+    throw new Error(describeManagedSSHRuntimeProbeResult(initialProbe));
   }
 
   const failures: string[] = [
@@ -1964,7 +2166,10 @@ async function ensureRemoteRuntimeInstalled(args: Readonly<{
           onProgress: args.onProgress,
           signal: args.signal,
         });
-        const uploadProbe = await probeRemoteRuntimeCompatibility(args);
+        const uploadProbe = await probeRemoteRuntimeCompatibility({
+          ...args,
+          allowLegacyMigration: false,
+        });
         if (uploadProbe.status === 'ready') {
           return;
         }
@@ -1976,7 +2181,10 @@ async function ensureRemoteRuntimeInstalled(args: Readonly<{
       }
 
       await installRemoteRuntimeViaRemoteInstall(args);
-      const installProbe = await probeRemoteRuntimeCompatibility(args);
+      const installProbe = await probeRemoteRuntimeCompatibility({
+        ...args,
+        allowLegacyMigration: false,
+      });
       if (installProbe.status === 'ready') {
         return;
       }
@@ -2158,12 +2366,12 @@ function startupReportsStoppablePID(startup: StartupReport): boolean {
   return Number.isInteger(pid) && pid > 0;
 }
 
-function managedSSHRuntimeBinaryPath(target: DesktopSSHEnvironmentDetails, runtimeReleaseTag: string): string {
+function managedSSHRuntimeBinaryPath(target: DesktopSSHEnvironmentDetails): string {
   const runtimeRoot = compact(target.runtime_root);
   const rootLabel = runtimeRoot === DEFAULT_DESKTOP_SSH_RUNTIME_ROOT
     ? '~/.redeven'
     : runtimeRoot;
-  return `${rootLabel.replace(/\/+$/u, '')}/runtime/releases/${runtimeReleaseTag}/bin/redeven`;
+  return `${rootLabel.replace(/\/+$/u, '')}/runtime/managed/bin/redeven`;
 }
 
 function runtimeIdentityMismatchDiagnostic(
@@ -2182,7 +2390,7 @@ function runtimeIdentityMismatchDiagnostic(
     ...(Number.isInteger(pid) && pid > 0 ? { observed_pid: pid } : {}),
     state_dir: compact(startup.state_dir) || compact(args.target.runtime_root) || undefined,
     runtime_control_base_url: compact(startup.runtime_control?.base_url) || undefined,
-    binary_path: managedSSHRuntimeBinaryPath(args.target, args.runtimeReleaseTag),
+    binary_path: managedSSHRuntimeBinaryPath(args.target),
     desktop_owner_id: compact(startup.desktop_owner_id) || compact(startup.runtime_control?.desktop_owner_id) || args.desktopOwnerID,
   };
 }
@@ -2209,50 +2417,57 @@ function formatRuntimeIdentityMismatchDiagnostic(diagnostic: RuntimeIdentityMism
 function managedSSHRuntimeAttachPolicy(
   startup: StartupReport,
   args: Readonly<{
-    expectedRuntimeIdentity: RuntimeServiceIdentity;
+    launchMode: ManagedSSHRemoteStartup['launch_mode'];
     requireDesktopModelSource: boolean;
     allowActiveWorkReplacement: boolean;
-    allowRuntimeReplacement: boolean;
+    allowProcessRestart: boolean;
+    enforceTargetRuntimeIdentity: boolean;
+    targetRuntimeVersion: string;
   }>,
 ): ManagedSSHRuntimeAttachPolicy {
   const runtimeService = startup.runtime_service;
-  const identityMismatch = !runtimeServiceMatchesIdentity(runtimeService, args.expectedRuntimeIdentity);
-  const needsRuntimeUpdate = runtimeServiceNeedsRuntimeUpdate(runtimeService);
   const runtimeControlUnavailable = !startupHasForwardableRuntimeControl(startup);
   const modelSourceUnsupported = args.requireDesktopModelSource
     && !runtimeServiceSupportsDesktopModelSource(runtimeService);
+  const expectedRuntimeIdentity: RuntimeServiceIdentity | null = args.enforceTargetRuntimeIdentity
+    ? { runtime_version: args.targetRuntimeVersion }
+    : null;
+  const runtimeIdentityMismatch = expectedRuntimeIdentity !== null
+    && !runtimeServiceMatchesIdentity(runtimeService, expectedRuntimeIdentity);
+  const attachedRuntimeNeedsUpdateRestart = args.enforceTargetRuntimeIdentity && args.launchMode === 'attached';
+  const runtimeReplacementRequired = runtimeIdentityMismatch || attachedRuntimeNeedsUpdateRestart;
 
-  if (!identityMismatch && !needsRuntimeUpdate && !runtimeControlUnavailable && !modelSourceUnsupported) {
+  if (!runtimeControlUnavailable && !modelSourceUnsupported && !runtimeReplacementRequired) {
     return { action: 'reuse' };
   }
 
-  const maintenanceKind = modelSourceUnsupported
+  const maintenanceKind = runtimeReplacementRequired
+    ? 'runtime_update_required'
+    : modelSourceUnsupported
     ? 'desktop_model_source_requires_runtime_update'
-    : needsRuntimeUpdate
-      ? 'runtime_update_required'
-      : 'runtime_restart_required';
+    : 'runtime_restart_required';
   const maintenanceRequiredFor = modelSourceUnsupported ? 'desktop_model_source' : 'open';
-  const maintenanceMessage = modelSourceUnsupported
+  const maintenanceMessage = runtimeReplacementRequired
+    ? 'Restart this SSH runtime to finish applying the selected runtime update.'
+    : modelSourceUnsupported
     ? 'Update and restart this SSH runtime before Desktop can make your local model settings available here.'
-    : needsRuntimeUpdate
-      ? 'Update and restart this SSH runtime before opening this environment.'
-      : runtimeControlUnavailable
-        ? 'Restart this SSH runtime so Desktop can prepare runtime-control before provider linking or opening this environment.'
-        : 'Restart this SSH runtime before opening this environment.';
+    : runtimeControlUnavailable
+      ? 'Restart this SSH runtime so Desktop can prepare runtime-control before provider linking or opening this environment.'
+      : 'Restart this SSH runtime before opening this environment.';
   const maintenance = buildDesktopRuntimeMaintenanceRequirement({
     kind: maintenanceKind,
     required_for: maintenanceRequiredFor,
-    recovery_action: needsRuntimeUpdate || modelSourceUnsupported ? 'update_runtime' : 'restart_runtime',
+    recovery_action: runtimeReplacementRequired || modelSourceUnsupported ? 'update_runtime' : 'restart_runtime',
     can_desktop_start: false,
     can_desktop_restart: startupReportsStoppablePID(startup),
     has_active_work: runtimeServiceHasActiveWork(runtimeService),
     active_work_label: formatRuntimeServiceWorkload(runtimeService),
     current_runtime_version: runtimeService?.runtime_version,
-    target_runtime_version: args.expectedRuntimeIdentity.runtime_version,
+    target_runtime_version: args.targetRuntimeVersion,
     message: maintenanceMessage,
   });
 
-  if (!args.allowRuntimeReplacement) {
+  if (!args.allowProcessRestart) {
     return {
       action: 'block',
       message: maintenanceMessage,
@@ -2262,7 +2477,9 @@ function managedSSHRuntimeAttachPolicy(
   if (runtimeServiceHasActiveWork(runtimeService) && !args.allowActiveWorkReplacement) {
     return {
       action: 'block',
-      message: modelSourceUnsupported
+      message: runtimeReplacementRequired
+        ? 'This SSH runtime needs to restart to finish the selected runtime update, but active work is still running.'
+        : modelSourceUnsupported
         ? 'This SSH runtime needs to update before Desktop can prepare the Desktop model source, but active work is still running.'
         : runtimeControlUnavailable
           ? 'This SSH runtime needs to restart before Desktop can prepare runtime-control, but active work is still running.'
@@ -2273,7 +2490,9 @@ function managedSSHRuntimeAttachPolicy(
   if (!startupReportsStoppablePID(startup)) {
     return {
       action: 'block',
-      message: modelSourceUnsupported
+      message: runtimeReplacementRequired
+        ? 'This SSH runtime needs to restart to finish the selected runtime update, but it did not report a process id Desktop can stop.'
+        : modelSourceUnsupported
         ? 'This SSH runtime needs to update before Desktop can prepare the Desktop model source, but it did not report a process id Desktop can stop.'
         : runtimeControlUnavailable
           ? 'This SSH runtime needs to restart before Desktop can prepare runtime-control, but it did not report a process id Desktop can stop.'
@@ -2283,7 +2502,9 @@ function managedSSHRuntimeAttachPolicy(
   }
   return {
     action: 'replace',
-    message: modelSourceUnsupported
+    message: runtimeReplacementRequired
+      ? 'Restarting SSH runtime to finish applying the selected runtime update.'
+      : modelSourceUnsupported
       ? 'Restarting SSH runtime so Desktop can prepare the Desktop model source.'
       : runtimeControlUnavailable
         ? 'Restarting SSH runtime so Desktop can prepare runtime-control.'
@@ -2310,6 +2531,9 @@ async function startManagedSSHRuntimeInternal(
   const stopTimeoutMs = args.stopTimeoutMs ?? DEFAULT_SSH_STOP_TIMEOUT_MS;
   const connectTimeoutSeconds = args.connectTimeoutSeconds ?? DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS;
   const releaseFetchPolicy = resolveDesktopSSHReleaseFetchPolicy(startupTimeoutMs, connectTimeoutSeconds);
+  const packageIntent: ManagedRuntimePackageIntent = args.forceRuntimeUpdate === true
+    ? 'replace_with_desktop_target'
+    : 'install_if_missing';
   const logs: MutableRecentLogs = {
     master_stderr: '',
     control_stdout: '',
@@ -2422,6 +2646,7 @@ async function startManagedSSHRuntimeInternal(
       assetCacheRoot,
       sourceRuntimeRoot: args.sourceRuntimeRoot,
       forceRuntimeUpdate: args.forceRuntimeUpdate,
+      packageIntent,
       fetchPolicy: releaseFetchPolicy,
       logs,
       onLog: args.onLog,
@@ -2477,10 +2702,12 @@ async function startManagedSSHRuntimeInternal(
       });
       remoteRuntimePID = launch.startup.pid ?? null;
       const attachPolicy = managedSSHRuntimeAttachPolicy(launch.startup, {
-        expectedRuntimeIdentity: { runtime_version: runtimeReleaseTag },
+        launchMode: launch.launch_mode,
         requireDesktopModelSource: false,
         allowActiveWorkReplacement: args.allowActiveWorkReplacement === true,
-        allowRuntimeReplacement: args.forceRuntimeUpdate === true || args.allowActiveWorkReplacement === true,
+        allowProcessRestart: packageIntent === 'replace_with_desktop_target' || args.allowActiveWorkReplacement === true,
+        enforceTargetRuntimeIdentity: packageIntent === 'replace_with_desktop_target',
+        targetRuntimeVersion: runtimeReleaseTag,
       });
       if (attachPolicy.action === 'block') {
         throw new DesktopSSHRuntimeMaintenanceRequiredError(

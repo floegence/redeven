@@ -984,7 +984,7 @@ describe('buildEnvironmentCardModel', () => {
     });
   });
 
-  it('offers Update runtime when a stopped container target has a stale runtime package', () => {
+  it('keeps Start available while offering Update runtime for a stopped container target with a stale package', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: testLocalEnvironment(),
@@ -1032,8 +1032,7 @@ describe('buildEnvironmentCardModel', () => {
         id: 'start_runtime',
         action: expect.objectContaining({
           intent: 'start_runtime',
-          enabled: false,
-          disabled_reason: 'Update this runtime from v0.5.9 to v0.6.7 before continuing.',
+          enabled: true,
         }),
       }),
       expect.objectContaining({
@@ -1048,13 +1047,11 @@ describe('buildEnvironmentCardModel', () => {
     expect(actionModel.action_presentation.primary_action_overlay).toMatchObject({
       kind: 'popover',
       title: 'Runtime update required',
-      detail: 'This local container runtime needs an update before it can open this environment. Update the runtime first; Open stays separate and becomes available after the runtime is ready.',
       actions: expect.arrayContaining([
         expect.objectContaining({
           label: 'Update runtime',
           action: expect.objectContaining({
             intent: 'update_runtime',
-            label: 'Update runtime',
             enabled: true,
           }),
         }),
@@ -1241,7 +1238,7 @@ describe('buildEnvironmentCardModel', () => {
     ]));
   });
 
-  it('keeps an online SSH runtime visible but blocks Open when the running runtime needs an update', () => {
+  it('keeps an online SSH runtime openable while offering Update runtime separately when it needs an update', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         saved_ssh_environments: [{
@@ -1305,7 +1302,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildEnvironmentCardModel(entry!)).toEqual(expect.objectContaining({
       kind_label: 'SSH Host',
       status_label: 'RUNTIME NEEDS UPDATE',
-      status_tone: 'warning',
+      status_tone: 'success',
       target_secondary: 'http://127.0.0.1:24111/',
     }));
     expect(buildEnvironmentCardFactsModel(entry!)).toEqual([
@@ -1320,25 +1317,13 @@ describe('buildEnvironmentCardModel', () => {
     const actionModel = buildProviderBackedEnvironmentActionModel(entry!);
     expect(actionModel).toMatchObject({
       status_label: 'RUNTIME NEEDS UPDATE',
-      status_tone: 'warning',
+      status_tone: 'success',
       action_presentation: {
         primary_action: {
           intent: 'open',
-          enabled: false,
+          enabled: true,
         },
-        primary_action_overlay: {
-          kind: 'popover',
-          title: 'Runtime update required',
-          actions: expect.arrayContaining([
-            expect.objectContaining({
-              label: 'Update and restart…',
-              action: expect.objectContaining({
-                intent: 'update_runtime',
-                runtime_operation_method: 'ssh_host',
-              }),
-            }),
-          ]),
-        },
+        primary_action_overlay: undefined,
       },
     });
     expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
@@ -1354,8 +1339,7 @@ describe('buildEnvironmentCardModel', () => {
         id: 'restart_runtime',
         action: expect.objectContaining({
           intent: 'restart_runtime',
-          enabled: false,
-          disabled_reason: 'Update this runtime from v0.5.9 to v0.6.7 before continuing.',
+          enabled: true,
         }),
       }),
       expect.objectContaining({
@@ -1420,18 +1404,15 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(entry).toBeTruthy();
     expect(buildEnvironmentCardModel(entry!)).toMatchObject({
-      status_label: 'RUNTIME NEEDS UPDATE',
-      status_tone: 'warning',
+      status_label: 'READY TO OPEN',
+      status_tone: 'success',
     });
     expect(buildEnvironmentCardFactsModel(entry!)).toContainEqual(defaultFact('VERSION', 'v0.0.0-dev'));
     expect(buildProviderBackedEnvironmentActionModel(entry!).action_presentation.primary_action).toMatchObject({
       intent: 'open',
-      enabled: false,
+      enabled: true,
     });
-    expect(buildProviderBackedEnvironmentActionModel(entry!).action_presentation.primary_action_overlay).toMatchObject({
-      kind: 'popover',
-      title: 'Runtime update required',
-    });
+    expect(buildProviderBackedEnvironmentActionModel(entry!).action_presentation.primary_action_overlay).toBeUndefined();
   });
 
   it('guides SSH runtime-control maintenance through Restart instead of Start', () => {
@@ -2652,7 +2633,7 @@ describe('buildEnvironmentCardModel', () => {
     ]));
   });
 
-  it('uses Desktop update wording when the Local Environment bundled runtime blocks Open', () => {
+  it('keeps Open available when the Local Environment bundled runtime may need an update', () => {
     const local = testLocalEnvironment({
       currentRuntime: {
         local_ui_url: 'http://127.0.0.1:24001/',
@@ -2674,37 +2655,19 @@ describe('buildEnvironmentCardModel', () => {
     expect(entry).toBeTruthy();
     expect(buildEnvironmentCardModel(entry!)).toEqual(expect.objectContaining({
       kind_label: 'Local',
-      status_label: 'DESKTOP UPDATE REQUIRED',
-      status_tone: 'warning',
+      status_label: 'READY TO OPEN',
+      status_tone: 'success',
     }));
     expect(buildProviderBackedEnvironmentActionModel(entry!)).toMatchObject({
-      status_label: 'DESKTOP UPDATE REQUIRED',
-      status_tone: 'warning',
+      status_label: 'READY TO OPEN',
+      status_tone: 'success',
       action_presentation: {
         primary_action: {
           intent: 'open',
           label: 'Open',
-          enabled: false,
+          enabled: true,
         },
-        primary_action_overlay: {
-          kind: 'popover',
-          eyebrow: 'Runtime blocked',
-          title: 'Redeven Desktop update required',
-          detail: 'This Local Environment uses the runtime bundled with Redeven Desktop. Open becomes available after the Desktop update handoff refreshes the app and bundled local runtime.',
-          actions: expect.arrayContaining([
-            expect.objectContaining({
-              label: 'Update Redeven Desktop',
-              action: expect.objectContaining({
-                intent: 'update_runtime',
-                label: 'Update Redeven Desktop',
-                runtime_operation_method: 'desktop_local_update_handoff',
-              }),
-            }),
-            expect.objectContaining({
-              label: 'Refresh status',
-            }),
-          ]),
-        },
+        primary_action_overlay: undefined,
       },
     });
   });

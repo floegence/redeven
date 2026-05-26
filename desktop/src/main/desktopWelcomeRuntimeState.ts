@@ -11,7 +11,6 @@ import type {
 } from '../shared/desktopLocalEnvironmentState';
 import {
   normalizeRuntimeServiceSnapshot,
-  runtimeServiceMatchesIdentity,
   type RuntimeServiceIdentity,
   type RuntimeServiceOwner,
 } from '../shared/runtimeService';
@@ -41,7 +40,7 @@ function runtimeDesktopOwnership(startup: StartupReport, desktopOwnerID: string)
 function runtimeStateFromStartup(
   startup: StartupReport,
   desktopOwnerID: string,
-  expectedRuntimeIdentity: RuntimeServiceIdentity | null | undefined,
+  _expectedRuntimeIdentity: RuntimeServiceIdentity | null | undefined,
   localUIURLOverride?: string,
   serviceOwner?: RuntimeServiceOwner,
 ): DesktopLocalEnvironmentRuntimeState | undefined {
@@ -57,8 +56,6 @@ function runtimeStateFromStartup(
     effectiveRunMode: startup.effective_run_mode,
     remoteEnabled: startup.remote_enabled === true,
   });
-  const desktopRuntimeIdentityMismatch = rawDesktopManaged
-    && !runtimeServiceMatchesIdentity(runtimeService, expectedRuntimeIdentity);
   return {
     local_ui_url: localUIURL,
     effective_run_mode: compact(startup.effective_run_mode),
@@ -73,18 +70,7 @@ function runtimeStateFromStartup(
     diagnostics_enabled: startup.diagnostics_enabled === true,
     pid: Number.isInteger(pid) && pid > 0 ? pid : 0,
     runtime_control: startup.runtime_control,
-    runtime_service: desktopRuntimeIdentityMismatch
-      ? normalizeRuntimeServiceSnapshot({
-          ...runtimeService,
-          compatibility: 'update_required',
-          compatibility_message: 'Redeven Desktop has a newer bundled runtime. Open the Desktop update handoff before opening this Local Environment.',
-          open_readiness: {
-            state: 'blocked',
-            reason_code: 'runtime_update_required',
-            message: 'Redeven Desktop has a newer bundled runtime. Open the Desktop update handoff before opening this Local Environment.',
-          },
-        })
-      : runtimeService,
+    runtime_service: runtimeService,
   };
 }
 

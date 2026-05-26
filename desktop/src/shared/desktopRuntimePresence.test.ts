@@ -200,7 +200,7 @@ describe('desktopRuntimePresence', () => {
     });
   });
 
-  it('blocks Open, Start, and Restart until an outdated container runtime is updated', () => {
+  it('keeps Start and Restart available while exposing outdated runtime update as a separate action', () => {
     const plans = buildDesktopRuntimeOperationPlans({
       surface: 'managed_runtime_card',
       host_access: { kind: 'local_host' },
@@ -221,17 +221,15 @@ describe('desktopRuntimePresence', () => {
     expect(plans.open).toMatchObject({
       availability: 'blocked',
       method: 'local_container_exec',
-      message: 'Update this runtime from v0.5.9 to v0.6.7 before continuing.',
+      message: 'Start this runtime before opening it.',
     });
     expect(plans.start).toMatchObject({
-      availability: 'blocked',
-      reason_code: 'runtime_update_required',
-      message: 'Update this runtime from v0.5.9 to v0.6.7 before continuing.',
+      availability: 'available',
+      method: 'local_container_exec',
     });
     expect(plans.restart).toMatchObject({
-      availability: 'blocked',
-      reason_code: 'runtime_update_required',
-      message: 'Update this runtime from v0.5.9 to v0.6.7 before continuing.',
+      availability: 'available',
+      method: 'local_container_exec',
     });
     expect(plans.update).toMatchObject({
       availability: 'available',

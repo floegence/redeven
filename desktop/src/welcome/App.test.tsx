@@ -833,6 +833,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("Planning ${props.progress.action === 'restart_environment_runtime' ? 'restart'");
     expect(appSrc).toContain('<Show when={props.progress.failure}>');
     expect(appSrc).toContain('<div class="redeven-action-popover__notice-detail">{failure().summary}</div>');
+    expect(appSrc).toContain('redeven-action-popover__notice-detail--pre');
+    expect(appSrc).toContain("action.kind === 'update_runtime'");
     expect(appSrc).toContain('const nextActions = createMemo(() => visibleOperationNextActions(props.progress));');
     expect(appSrc).toContain('<For each={nextActions()}>');
     expect(appSrc).toContain("case 'refresh_status':");

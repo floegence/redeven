@@ -138,16 +138,26 @@ describe('containerRuntime', () => {
       '-c',
       'set -eu\nuname -s\nuname -m',
     ]);
-    expect(containerRuntimeProbeCommand({
+    const probeCommand = containerRuntimeProbeCommand({
       engine: 'docker',
       container_id: 'dev',
       runtime_root: '/root/.redeven',
       runtime_release_tag: 'v1.2.3',
-    })).toEqual(expect.arrayContaining([
+    });
+    expect(probeCommand).toEqual(expect.arrayContaining([
       'redeven-container-runtime-probe',
       '/root/.redeven',
       'v1.2.3',
     ]));
+    expect(probeCommand.join('\n')).toContain('runtime/managed');
+    expect(probeCommand.join('\n')).toContain('managed-runtime.stamp');
+    expect(probeCommand.join('\n')).toContain('slot_release_tag=');
+    expect(probeCommand.join('\n')).toContain('reported_release_tag=');
+    expect(probeCommand.join('\n')).toContain('target_release_tag=');
+    expect(probeCommand.join('\n')).toContain('runtime/releases');
+    expect(probeCommand.join('\n')).not.toContain('runtime/releases/${runtime_release_tag}');
+    expect(probeCommand.join('\n')).not.toContain('runtime/releases/${target_release_tag}');
+    expect(probeCommand.join('\n')).not.toContain('runtime/releases/${release_tag}');
     const installCommand = containerRuntimeUploadedInstallCommand({
       engine: 'podman',
       container_id: 'dev',
@@ -165,13 +175,28 @@ describe('containerRuntime', () => {
     ]));
     expect(installCommand.join('\n')).toContain('cat > "$archive_path"');
     expect(installCommand.join('\n')).toContain('write_runtime_stamp "desktop_upload"');
+    expect(installCommand.join('\n')).toContain('runtime/managed');
+    expect(installCommand.join('\n')).toContain('managed-runtime.stamp');
+    expect(installCommand.join('\n')).toContain('schema_version=2');
+    expect(installCommand.join('\n')).toContain('slot_release_tag=');
+    expect(installCommand.join('\n')).toContain('installed_at_unix_ms=');
+    expect(installCommand.join('\n')).toContain('staging_root="$(mktemp -d "${managed_root}.staging.XXXXXX")"');
+    expect(installCommand.join('\n')).toContain('if [ "$staged_release_tag" != "$target_release_tag" ]; then');
+    expect(installCommand.join('\n')).toContain('switch_staged_runtime');
+    expect(installCommand.join('\n')).toContain('if mv "$staging_root" "$managed_root"; then');
+    expect(installCommand.join('\n')).not.toContain('mv "$temp_binary" "$binary"');
+    expect(installCommand.join('\n')).toContain('runtime/releases');
+    expect(installCommand.join('\n')).not.toContain('release_root="${runtime_root%/}/runtime/releases');
+    expect(installCommand.join('\n')).not.toContain('runtime/releases/${runtime_release_tag}');
+    expect(installCommand.join('\n')).not.toContain('runtime/releases/${target_release_tag}');
+    expect(installCommand.join('\n')).not.toContain('runtime/releases/${release_tag}');
   });
 
   it('builds daemon lifecycle commands separately from bridge attach', () => {
     expect(containerRuntimeDaemonStartCommand({
       engine: 'docker',
       container_id: 'dev',
-      runtime_binary_path: '/root/.redeven/runtime/releases/v1.2.3/bin/redeven',
+      runtime_binary_path: '/root/.redeven/runtime/managed/bin/redeven',
       runtime_root: '/root/.redeven',
       desktop_owner_id: 'desktop-owner',
     })).toEqual([
@@ -181,7 +206,7 @@ describe('containerRuntime', () => {
       '--env',
       'REDEVEN_DESKTOP_OWNER_ID=desktop-owner',
       'dev',
-      '/root/.redeven/runtime/releases/v1.2.3/bin/redeven',
+      '/root/.redeven/runtime/managed/bin/redeven',
       'run',
       '--mode',
       'desktop',
@@ -196,14 +221,14 @@ describe('containerRuntime', () => {
     expect(containerRuntimeDaemonStatusCommand({
       engine: 'docker',
       container_id: 'dev',
-      runtime_binary_path: '/root/.redeven/runtime/releases/v1.2.3/bin/redeven',
+      runtime_binary_path: '/root/.redeven/runtime/managed/bin/redeven',
       runtime_root: '/root/.redeven',
     })).toEqual([
       'docker',
       'exec',
       '-i',
       'dev',
-      '/root/.redeven/runtime/releases/v1.2.3/bin/redeven',
+      '/root/.redeven/runtime/managed/bin/redeven',
       'desktop-runtime-status',
       '--state-root',
       '/root/.redeven',
@@ -211,14 +236,14 @@ describe('containerRuntime', () => {
     expect(containerRuntimeDaemonStopCommand({
       engine: 'docker',
       container_id: 'dev',
-      runtime_binary_path: '/root/.redeven/runtime/releases/v1.2.3/bin/redeven',
+      runtime_binary_path: '/root/.redeven/runtime/managed/bin/redeven',
       runtime_root: '/root/.redeven',
     })).toEqual([
       'docker',
       'exec',
       '-i',
       'dev',
-      '/root/.redeven/runtime/releases/v1.2.3/bin/redeven',
+      '/root/.redeven/runtime/managed/bin/redeven',
       'desktop-runtime-stop',
       '--state-root',
       '/root/.redeven',
@@ -229,13 +254,13 @@ describe('containerRuntime', () => {
     const stopCommand = containerRuntimeDaemonStopCommand({
       engine: 'docker',
       container_id: 'dev',
-      runtime_binary_path: '/root/.redeven/runtime/releases/v1.2.3/bin/redeven',
+      runtime_binary_path: '/root/.redeven/runtime/managed/bin/redeven',
       runtime_root: '/root/.redeven',
     });
     const statusCommand = containerRuntimeDaemonStatusCommand({
       engine: 'docker',
       container_id: 'dev',
-      runtime_binary_path: '/root/.redeven/runtime/releases/v1.2.3/bin/redeven',
+      runtime_binary_path: '/root/.redeven/runtime/managed/bin/redeven',
       runtime_root: '/root/.redeven',
     });
 
@@ -244,7 +269,7 @@ describe('containerRuntime', () => {
       'exec',
       '-i',
       'dev',
-      '/root/.redeven/runtime/releases/v1.2.3/bin/redeven',
+      '/root/.redeven/runtime/managed/bin/redeven',
       'desktop-runtime-stop',
       '--state-root',
       '/root/.redeven',
@@ -254,7 +279,7 @@ describe('containerRuntime', () => {
       'exec',
       '-i',
       'dev',
-      '/root/.redeven/runtime/releases/v1.2.3/bin/redeven',
+      '/root/.redeven/runtime/managed/bin/redeven',
       'desktop-runtime-status',
       '--state-root',
       '/root/.redeven',

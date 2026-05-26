@@ -111,7 +111,10 @@ function readState() {
   try {
     return JSON.parse(fs.readFileSync(statePath, 'utf8'));
   } catch {
-    return { installed: scenario === 'ready' || scenario === 'no_report' };
+    return {
+      installed: scenario === 'ready' || scenario === 'no_report',
+      installed_version: 'v1.2.3',
+    };
   }
 }
 
@@ -126,7 +129,9 @@ function futureExpiryUnixMS() {
 
 function currentRuntimeService() {
   const state = readState();
-  const runtimeVersion = scenario === 'persistent_version_mismatch' ? 'v1.2.2' : 'v1.2.3';
+  const runtimeVersion = scenario === 'persistent_version_mismatch'
+    ? 'v1.2.2'
+    : String(state.installed_version || 'v1.2.3');
   return {
     runtime_version: runtimeVersion,
     protocol_version: 'redeven-runtime-v1',
@@ -338,14 +343,16 @@ function writeProbeResult() {
   const state = readState();
   const installed = state.installed === true;
   const status = installed ? 'ready' : 'missing_binary';
-  const reason = installed ? 'desktop-managed runtime is compatible' : 'managed runtime binary is missing';
+  const reason = installed ? 'desktop-managed runtime slot is ready' : 'managed runtime binary is missing';
   const releaseTag = remoteScriptArgs()[1] || args[args.length - 1] || 'v0.0.0';
+  const installedVersion = String(state.installed_version || releaseTag);
   process.stdout.write([
     'status=' + status,
-    'expected_release_tag=' + releaseTag,
-    'reported_release_tag=' + (installed ? releaseTag : ''),
-    'binary_path=/remote/redeven/releases/' + releaseTag + '/bin/redeven',
-    'stamp_path=/remote/redeven/releases/' + releaseTag + '/managed-runtime.stamp',
+    'slot_release_tag=' + (installed ? installedVersion : ''),
+    'reported_release_tag=' + (installed ? installedVersion : ''),
+    'target_release_tag=' + releaseTag,
+    'binary_path=/remote/redeven/runtime/managed/bin/redeven',
+    'stamp_path=/remote/redeven/runtime/managed/managed-runtime.stamp',
     'reason=' + reason,
     '',
   ].join('\n'));
@@ -520,8 +527,11 @@ if (args.includes('-M') && args.includes('-N')) {
       process.exit(0);
       break;
     case 'redeven-ssh-remote-install':
-      appendLog('remote_install', { install_script_url: remoteScriptArgs()[2] || args[args.length - 1] || '' });
-      writeState({ installed: true });
+      appendLog('remote_install', {
+        install_script_url: remoteScriptArgs()[2] || args[args.length - 1] || '',
+        release_tag: remoteScriptArgs()[1] || '',
+      });
+      writeState({ ...readState(), installed: true, installed_version: remoteScriptArgs()[1] || 'v1.2.3' });
       process.exit(0);
       break;
     case 'redeven-ssh-upload-archive':
@@ -536,7 +546,7 @@ if (args.includes('-M') && args.includes('-N')) {
         process.stderr.write('simulated upload install failure\n');
         process.exit(2);
       }
-      writeState({ installed: true });
+      writeState({ ...readState(), installed: true, installed_version: remoteScriptArgs()[1] || 'v1.2.3' });
       process.exit(0);
       break;
     case 'redeven-ssh-cleanup-path':
@@ -664,6 +674,7 @@ async function createFakeSSHFixture(scenario: FakeSSHScenario): Promise<FakeSSHF
       || scenario === 'no_report'
       || scenario === 'quick_exit_report'
       || scenario === 'blocked_report',
+    installed_version: 'v1.2.3',
   }));
   return {
     root,
@@ -755,6 +766,7 @@ async function startWithFakeSSH(
     target?: DesktopSSHEnvironmentDetails;
     sourceRuntimeRoot?: string;
     forceRuntimeUpdate?: boolean;
+    runtimeReleaseTag?: string;
     allowActiveWorkReplacement?: boolean;
     requireDesktopModelSource?: boolean;
     signal?: AbortSignal;
@@ -762,7 +774,7 @@ async function startWithFakeSSH(
 ): Promise<ManagedSSHRuntime> {
   return withFakeSSHEnv(fixture, () => startManagedSSHRuntime({
     target: options.target ?? targetFor(strategy),
-    runtimeReleaseTag: 'v1.2.3',
+    runtimeReleaseTag: options.runtimeReleaseTag ?? 'v1.2.3',
     desktopOwnerID: 'desktop-owner-test',
     sshBinary: fixture.sshBinary,
     sourceRuntimeRoot: options.sourceRuntimeRoot,
@@ -1025,7 +1037,7 @@ describe('sshRuntime integration', () => {
     expect(events.some((event) => event.event === 'remote_install' || event.event === 'upload_install')).toBe(false);
     const runtimeProbe = events.find((event) => event.event === 'probe_runtime');
     expect(runtimeProbe?.data).toEqual(expect.objectContaining({
-      script_args: ['remote_default', 'v1.2.3'],
+      script_args: ['remote_default', 'v1.2.3', '1'],
       open_ssh_remote_command: true,
     }));
     const masterStart = events.find((event) => event.event === 'master_start');
@@ -1035,6 +1047,35 @@ describe('sshRuntime integration', () => {
       disables_x11: true,
       disables_tty: true,
     }));
+    await removeFakeSSHFixture(fixture);
+  });
+
+  it('does not reinstall an already-installed SSH runtime when the Desktop target changes to a dev build', async () => {
+    const fixture = await createFakeSSHFixture('ready');
+    await fs.writeFile(fixture.statePath, JSON.stringify({
+      installed: true,
+      installed_version: 'v0.6.10',
+    }));
+    let runtime: ManagedSSHRuntime | null = null;
+    try {
+      runtime = await startWithFakeSSH(fixture, 'auto', {
+        runtimeReleaseTag: 'v0.0.0-dev',
+      });
+      expect(runtime.startup.runtime_service?.runtime_version).toBe('v0.6.10');
+    } finally {
+      await runtime?.disconnect();
+    }
+
+    const state = JSON.parse(await fs.readFile(fixture.statePath, 'utf8')) as { installed_version?: string };
+    expect(state.installed_version).toBe('v0.6.10');
+    const events = await readFakeSSHEvents(fixture);
+    const eventNames = events.map((event) => event.event);
+    expect(eventNames).toContain('probe_runtime');
+    expect(eventNames).toContain('start_runtime');
+    expect(eventNames).not.toContain('remote_install');
+    expect(eventNames).not.toContain('upload_install');
+    const probe = events.find((event) => event.event === 'probe_runtime');
+    expect(probe?.data?.script_args).toEqual(['remote_default', 'v0.0.0-dev', '1']);
     await removeFakeSSHFixture(fixture);
   });
 
@@ -1137,8 +1178,8 @@ describe('sshRuntime integration', () => {
       })).rejects.toMatchObject({
         name: 'DesktopSSHRuntimeMaintenanceRequiredError',
         maintenance: expect.objectContaining({
-          kind: 'runtime_update_required',
-          required_for: 'open',
+          kind: 'desktop_model_source_requires_runtime_update',
+          required_for: 'desktop_model_source',
           has_active_work: false,
         }),
       });
@@ -1271,8 +1312,8 @@ describe('sshRuntime integration', () => {
       })).rejects.toMatchObject({
         name: 'DesktopSSHRuntimeMaintenanceRequiredError',
         maintenance: expect.objectContaining({
-          kind: 'runtime_update_required',
-          required_for: 'open',
+          kind: 'desktop_model_source_requires_runtime_update',
+          required_for: 'desktop_model_source',
           has_active_work: true,
         }),
       });

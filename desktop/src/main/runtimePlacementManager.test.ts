@@ -19,6 +19,9 @@ vi.mock('./runtimePackageCache', async () => {
 import { ensureRuntimePlacementReady } from './runtimePlacementManager';
 import type { RuntimePlacementProgressPhase } from './runtimePlacementManager';
 
+const MANAGED_RUNTIME_BINARY_PATH = '/root/.redeven/runtime/managed/bin/redeven';
+const MANAGED_RUNTIME_STAMP_PATH = '/root/.redeven/runtime/managed/managed-runtime.stamp';
+
 describe('runtimePlacementManager', () => {
   let originalPath = '';
 
@@ -36,6 +39,7 @@ describe('runtimePlacementManager', () => {
 
   async function installFakeDocker(tempDir: string): Promise<Readonly<{
     markerPath: string;
+    uploadedArchivePath: string;
     daemonPath: string;
     orphanPath: string;
     notRunningPath: string;
@@ -43,6 +47,7 @@ describe('runtimePlacementManager', () => {
   }>> {
     const dockerPath = path.join(tempDir, 'docker');
     const markerPath = path.join(tempDir, 'installed');
+    const uploadedArchivePath = path.join(tempDir, 'uploaded-archive');
     const daemonPath = path.join(tempDir, 'daemon');
     const orphanPath = path.join(tempDir, 'orphan');
     const notRunningPath = path.join(tempDir, 'not-running-status');
@@ -51,11 +56,18 @@ describe('runtimePlacementManager', () => {
       '#!/usr/bin/env node',
       'const fs = require("node:fs");',
       `const marker = ${JSON.stringify(markerPath)};`,
+      `const uploadedArchive = ${JSON.stringify(uploadedArchivePath)};`,
       `const daemon = ${JSON.stringify(daemonPath)};`,
       `const orphan = ${JSON.stringify(orphanPath)};`,
       `const notRunning = ${JSON.stringify(notRunningPath)};`,
       `const events = ${JSON.stringify(eventsPath)};`,
+      `const managedBinary = ${JSON.stringify(MANAGED_RUNTIME_BINARY_PATH)};`,
+      `const managedStamp = ${JSON.stringify(MANAGED_RUNTIME_STAMP_PATH)};`,
       'function event(name) { fs.appendFileSync(events, `${name}\\n`); }',
+      'function normalizedReleaseTag(value) {',
+      '  const clean = String(value || "").trim();',
+      '  return clean.startsWith("v") ? clean : `v${clean}`;',
+      '}',
       'const args = process.argv.slice(2);',
       'if (args[0] === "inspect") {',
       '  process.stdout.write(JSON.stringify([{ Id: args[1], Name: "/dev", State: { Running: true, Status: "running" } }]));',
@@ -75,17 +87,20 @@ describe('runtimePlacementManager', () => {
       '  const script = args.includes("-c") ? args[args.indexOf("-c") + 1] : "";',
       '  if (script.includes("uname -s")) { process.stdout.write("Linux\\nx86_64\\n"); process.exit(0); }',
       '  if (args[markerIndex] === "redeven-container-runtime-probe") {',
+      '    const expectedReleaseTag = normalizedReleaseTag(args[markerIndex + 2]);',
       '    if (fs.existsSync(marker)) {',
-      '      process.stdout.write("status=ready\\nexpected_release_tag=v1.2.3\\nreported_release_tag=v1.2.3\\nbinary_path=/root/.redeven/runtime/releases/v1.2.3/bin/redeven\\nstamp_path=/root/.redeven/runtime/releases/v1.2.3/managed-runtime.stamp\\nreason=ready\\n");',
+      '      const installedReleaseTag = normalizedReleaseTag(fs.readFileSync(marker, "utf8"));',
+      '      process.stdout.write(`status=ready\\nslot_release_tag=${installedReleaseTag}\\nreported_release_tag=${installedReleaseTag}\\ntarget_release_tag=${expectedReleaseTag}\\nbinary_path=${managedBinary}\\nstamp_path=${managedStamp}\\nreason=ready\\n`);',
       '    } else {',
-      '      process.stdout.write("status=missing_binary\\nexpected_release_tag=v1.2.3\\nreported_release_tag=\\nbinary_path=/root/.redeven/runtime/releases/v1.2.3/bin/redeven\\nstamp_path=/root/.redeven/runtime/releases/v1.2.3/managed-runtime.stamp\\nreason=missing\\n");',
+      '      process.stdout.write(`status=missing_binary\\nslot_release_tag=\\nreported_release_tag=\\ntarget_release_tag=${expectedReleaseTag}\\nbinary_path=${managedBinary}\\nstamp_path=${managedStamp}\\nreason=missing\\n`);',
       '    }',
       '    process.exit(0);',
       '  }',
       '  if (args[markerIndex] === "redeven-container-upload-driver") {',
+      '    const installedReleaseTag = normalizedReleaseTag(args[markerIndex + 2]);',
       '    const chunks = [];',
       '    process.stdin.on("data", (chunk) => chunks.push(chunk));',
-      '    process.stdin.on("end", () => { fs.writeFileSync(marker, Buffer.concat(chunks)); process.exit(0); });',
+      '    process.stdin.on("end", () => { fs.writeFileSync(uploadedArchive, Buffer.concat(chunks)); fs.writeFileSync(marker, installedReleaseTag); process.exit(0); });',
       '    return;',
       '  }',
       '}',
@@ -93,7 +108,7 @@ describe('runtimePlacementManager', () => {
       'process.exit(1);',
     ].join('\n'), { mode: 0o755 });
     process.env.PATH = `${tempDir}${path.delimiter}${originalPath}`;
-    return { markerPath, daemonPath, orphanPath, notRunningPath, eventsPath };
+    return { markerPath, uploadedArchivePath, daemonPath, orphanPath, notRunningPath, eventsPath };
   }
 
   async function installFakeSSH(tempDir: string): Promise<void> {
@@ -119,7 +134,7 @@ describe('runtimePlacementManager', () => {
 
   it('installs a missing runtime inside a running local container before returning a bridge binary path', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-placement-manager-'));
-    const { markerPath } = await installFakeDocker(tempDir);
+    const { markerPath, uploadedArchivePath } = await installFakeDocker(tempDir);
     const progressPhases: RuntimePlacementProgressPhase[] = [];
 
     const ready = await ensureRuntimePlacementReady({
@@ -142,8 +157,17 @@ describe('runtimePlacementManager', () => {
       },
     });
 
-    expect(ready.runtime_binary_path).toBe('/root/.redeven/runtime/releases/v1.2.3/bin/redeven');
-    expect(await fs.readFile(markerPath, 'utf8')).toBe('redeven-archive');
+    expect(ready.runtime_binary_path).toBe(MANAGED_RUNTIME_BINARY_PATH);
+    expect(ready.probe).toMatchObject({
+      status: 'ready',
+      slot_release_tag: 'v1.2.3',
+      reported_release_tag: 'v1.2.3',
+      target_release_tag: 'v1.2.3',
+      binary_path: MANAGED_RUNTIME_BINARY_PATH,
+      stamp_path: MANAGED_RUNTIME_STAMP_PATH,
+    });
+    expect(await fs.readFile(markerPath, 'utf8')).toBe('v1.2.3');
+    expect(await fs.readFile(uploadedArchivePath, 'utf8')).toBe('redeven-archive');
     expect(uploadAssetMocks.prepareDesktopRuntimeUploadAsset).toHaveBeenCalledWith(expect.objectContaining({
       runtimeReleaseTag: 'v1.2.3',
       platform: expect.objectContaining({ platform_id: 'linux_amd64' }),
@@ -160,10 +184,10 @@ describe('runtimePlacementManager', () => {
     ]);
   });
 
-  it('does not replace a ready container runtime just because Desktop is using the current source runtime', async () => {
+  it('does not replace a ready container runtime when Start sees an older installed version than the Desktop target', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-placement-manager-'));
     const { markerPath } = await installFakeDocker(tempDir);
-    await fs.writeFile(markerPath, 'old-runtime');
+    await fs.writeFile(markerPath, 'v0.6.10');
     const progressPhases: RuntimePlacementProgressPhase[] = [];
 
     const ready = await ensureRuntimePlacementReady({
@@ -177,7 +201,7 @@ describe('runtimePlacementManager', () => {
         runtime_root: '/root/.redeven',
         bridge_strategy: 'exec_stream',
       },
-      runtime_release_tag: 'v1.2.3',
+      runtime_release_tag: 'v0.0.0-dev',
       release_base_url: 'https://example.invalid/releases',
       source_runtime_root: tempDir,
       asset_cache_root: tempDir,
@@ -187,8 +211,16 @@ describe('runtimePlacementManager', () => {
       },
     });
 
-    expect(ready.runtime_binary_path).toBe('/root/.redeven/runtime/releases/v1.2.3/bin/redeven');
-    expect(await fs.readFile(markerPath, 'utf8')).toBe('old-runtime');
+    expect(ready.runtime_binary_path).toBe(MANAGED_RUNTIME_BINARY_PATH);
+    expect(ready.probe).toMatchObject({
+      status: 'ready',
+      slot_release_tag: 'v0.6.10',
+      reported_release_tag: 'v0.6.10',
+      target_release_tag: 'v0.0.0-dev',
+      binary_path: MANAGED_RUNTIME_BINARY_PATH,
+      stamp_path: MANAGED_RUNTIME_STAMP_PATH,
+    });
+    expect(await fs.readFile(markerPath, 'utf8')).toBe('v0.6.10');
     expect(uploadAssetMocks.prepareDesktopRuntimeUploadAsset).not.toHaveBeenCalled();
     expect(progressPhases).toEqual([
       'checking_container',
@@ -202,7 +234,7 @@ describe('runtimePlacementManager', () => {
 
   it('installs a missing container runtime from the current source runtime', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-placement-manager-'));
-    const { markerPath } = await installFakeDocker(tempDir);
+    const { markerPath, uploadedArchivePath } = await installFakeDocker(tempDir);
 
     const ready = await ensureRuntimePlacementReady({
       host_access: { kind: 'local_host' },
@@ -222,8 +254,10 @@ describe('runtimePlacementManager', () => {
       desktop_owner_id: 'owner',
     });
 
-    expect(ready.runtime_binary_path).toBe('/root/.redeven/runtime/releases/v1.2.3/bin/redeven');
-    expect(await fs.readFile(markerPath, 'utf8')).toBe('redeven-archive');
+    expect(ready.runtime_binary_path).toBe(MANAGED_RUNTIME_BINARY_PATH);
+    expect(ready.probe.reported_release_tag).toBe('v1.2.3');
+    expect(await fs.readFile(markerPath, 'utf8')).toBe('v1.2.3');
+    expect(await fs.readFile(uploadedArchivePath, 'utf8')).toBe('redeven-archive');
     expect(uploadAssetMocks.prepareDesktopRuntimeUploadAsset).toHaveBeenCalledWith(expect.objectContaining({
       runtimeReleaseTag: 'v1.2.3',
       sourceRuntimeRoot: tempDir,
@@ -233,8 +267,8 @@ describe('runtimePlacementManager', () => {
 
   it('replaces a ready container runtime when the user explicitly requests an update', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-placement-manager-'));
-    const { markerPath } = await installFakeDocker(tempDir);
-    await fs.writeFile(markerPath, 'old-runtime');
+    const { markerPath, uploadedArchivePath } = await installFakeDocker(tempDir);
+    await fs.writeFile(markerPath, 'v0.6.10');
 
     const ready = await ensureRuntimePlacementReady({
       host_access: { kind: 'local_host' },
@@ -247,7 +281,7 @@ describe('runtimePlacementManager', () => {
         runtime_root: '/root/.redeven',
         bridge_strategy: 'exec_stream',
       },
-      runtime_release_tag: 'v1.2.3',
+      runtime_release_tag: 'v0.0.0-dev',
       release_base_url: 'https://example.invalid/releases',
       source_runtime_root: tempDir,
       asset_cache_root: tempDir,
@@ -255,10 +289,19 @@ describe('runtimePlacementManager', () => {
       desktop_owner_id: 'owner',
     });
 
-    expect(ready.runtime_binary_path).toBe('/root/.redeven/runtime/releases/v1.2.3/bin/redeven');
-    expect(await fs.readFile(markerPath, 'utf8')).toBe('redeven-archive');
+    expect(ready.runtime_binary_path).toBe(MANAGED_RUNTIME_BINARY_PATH);
+    expect(ready.probe).toMatchObject({
+      status: 'ready',
+      slot_release_tag: 'v0.0.0-dev',
+      reported_release_tag: 'v0.0.0-dev',
+      target_release_tag: 'v0.0.0-dev',
+      binary_path: MANAGED_RUNTIME_BINARY_PATH,
+      stamp_path: MANAGED_RUNTIME_STAMP_PATH,
+    });
+    expect(await fs.readFile(markerPath, 'utf8')).toBe('v0.0.0-dev');
+    expect(await fs.readFile(uploadedArchivePath, 'utf8')).toBe('redeven-archive');
     expect(uploadAssetMocks.prepareDesktopRuntimeUploadAsset).toHaveBeenCalledWith(expect.objectContaining({
-      runtimeReleaseTag: 'v1.2.3',
+      runtimeReleaseTag: 'v0.0.0-dev',
       sourceRuntimeRoot: tempDir,
       platform: expect.objectContaining({ platform_id: 'linux_amd64' }),
     }));
@@ -267,7 +310,7 @@ describe('runtimePlacementManager', () => {
   it('waits through a transient live process without a reachable management socket', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-placement-manager-'));
     const { markerPath, orphanPath, eventsPath } = await installFakeDocker(tempDir);
-    await fs.writeFile(markerPath, 'current-runtime');
+    await fs.writeFile(markerPath, 'v0.6.10');
     await fs.writeFile(orphanPath, 'old-daemon-without-management-socket');
     const progressPhases: RuntimePlacementProgressPhase[] = [];
 
@@ -291,7 +334,8 @@ describe('runtimePlacementManager', () => {
       },
     });
 
-    expect(ready.runtime_binary_path).toBe('/root/.redeven/runtime/releases/v1.2.3/bin/redeven');
+    expect(ready.runtime_binary_path).toBe(MANAGED_RUNTIME_BINARY_PATH);
+    expect(ready.probe.reported_release_tag).toBe('v0.6.10');
     expect(await fs.readFile(eventsPath, 'utf8')).toBe('run\norphan_status\n');
     expect(progressPhases).toEqual([
       'checking_container',
@@ -306,7 +350,7 @@ describe('runtimePlacementManager', () => {
   it('waits through not-running status reports without converting them to restart maintenance', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-placement-manager-'));
     const { markerPath, notRunningPath, eventsPath } = await installFakeDocker(tempDir);
-    await fs.writeFile(markerPath, 'current-runtime');
+    await fs.writeFile(markerPath, 'v0.6.10');
     await fs.writeFile(notRunningPath, 'first-status-poll');
     const progressPhases: RuntimePlacementProgressPhase[] = [];
 
@@ -330,14 +374,15 @@ describe('runtimePlacementManager', () => {
       },
     });
 
-    expect(ready.runtime_binary_path).toBe('/root/.redeven/runtime/releases/v1.2.3/bin/redeven');
+    expect(ready.runtime_binary_path).toBe(MANAGED_RUNTIME_BINARY_PATH);
+    expect(ready.probe.reported_release_tag).toBe('v0.6.10');
     expect(await fs.readFile(eventsPath, 'utf8')).toBe('run\nnot_running_status\n');
     expect(progressPhases).toContain('waiting_runtime_daemon');
   });
 
   it('installs an SSH container runtime through the same Desktop package cache path', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-placement-manager-'));
-    const { markerPath } = await installFakeDocker(tempDir);
+    const { markerPath, uploadedArchivePath } = await installFakeDocker(tempDir);
     await installFakeSSH(tempDir);
     const progressPhases: RuntimePlacementProgressPhase[] = [];
 
@@ -369,8 +414,10 @@ describe('runtimePlacementManager', () => {
       },
     });
 
-    expect(ready.runtime_binary_path).toBe('/root/.redeven/runtime/releases/v1.2.3/bin/redeven');
-    expect(await fs.readFile(markerPath, 'utf8')).toBe('redeven-archive');
+    expect(ready.runtime_binary_path).toBe(MANAGED_RUNTIME_BINARY_PATH);
+    expect(ready.probe.reported_release_tag).toBe('v1.2.3');
+    expect(await fs.readFile(markerPath, 'utf8')).toBe('v1.2.3');
+    expect(await fs.readFile(uploadedArchivePath, 'utf8')).toBe('redeven-archive');
     expect(uploadAssetMocks.prepareDesktopRuntimeUploadAsset).toHaveBeenCalledWith(expect.objectContaining({
       runtimeReleaseTag: 'v1.2.3',
       platform: expect.objectContaining({ platform_id: 'linux_amd64' }),

@@ -1613,6 +1613,12 @@ body {
   white-space: normal;
 }
 
+.redeven-action-popover__notice-detail--pre {
+  margin: 0.28rem 0 0;
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+}
+
 .redeven-action-popover__actions {
   display: flex;
   min-width: 0;
