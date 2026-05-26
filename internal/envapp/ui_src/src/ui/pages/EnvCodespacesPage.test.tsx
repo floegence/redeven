@@ -59,6 +59,8 @@ vi.mock('@floegence/floe-webapp-core', () => ({
 
 vi.mock('@floegence/floe-webapp-core/icons', () => ({
   Check: (props: any) => <span class={props.class} data-testid="check-icon" />,
+  ChevronDown: (props: any) => <span class={props.class} data-testid="chevron-down-icon" />,
+  ChevronRight: (props: any) => <span class={props.class} data-testid="chevron-right-icon" />,
   RefreshIcon: (props: any) => <span class={props.class} data-testid="refresh-icon" />,
   Sparkles: (props: any) => <span class={props.class} data-testid="sparkles-icon" />,
   Terminal: (props: any) => <span class={props.class} data-testid="terminal-icon" />,
