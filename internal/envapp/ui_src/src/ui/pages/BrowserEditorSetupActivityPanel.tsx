@@ -1,6 +1,6 @@
-import { For, Show, createMemo, type JSX } from 'solid-js';
+import { For, Show, createMemo, createSignal, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { Check, RefreshIcon, X } from '@floegence/floe-webapp-core/icons';
+import { Check, ChevronDown, ChevronRight, RefreshIcon, X } from '@floegence/floe-webapp-core/icons';
 import { Button, Tag } from '@floegence/floe-webapp-core/ui';
 
 import { type BrowserEditorSetupActivity } from '../services/browserEditorSetupActivity';
@@ -20,37 +20,21 @@ export type BrowserEditorSetupActivityPanelProps = Readonly<{
   extraDetails?: JSX.Element;
 }>;
 
-function accentBarClass(state: BrowserEditorSetupActivity['state']): string {
+function heroBackground(state: BrowserEditorSetupActivity['state']): string {
   switch (state) {
-    case 'ready':
-      return 'bg-emerald-500';
     case 'preparing':
-      return 'bg-blue-500';
+    case 'checking':
+      return 'bg-info/[0.04]';
     case 'failed':
     case 'error':
-      return 'bg-red-500';
-    case 'cancelled':
-    case 'unusable':
-      return 'bg-amber-500';
-    default:
-      return 'bg-border';
-  }
-}
-
-function panelSurfaceClass(state: BrowserEditorSetupActivity['state']): string {
-  switch (state) {
+      return 'bg-error/[0.04]';
     case 'ready':
-      return 'border-emerald-500/30';
-    case 'preparing':
-      return 'border-blue-500/30';
-    case 'failed':
-    case 'error':
-      return 'border-red-500/30';
+      return 'bg-success/[0.04]';
     case 'cancelled':
     case 'unusable':
-      return 'border-amber-500/30';
+      return 'bg-warning/[0.04]';
     default:
-      return 'border-border';
+      return 'bg-muted/30';
   }
 }
 
@@ -59,6 +43,7 @@ function activityIconClass(state: BrowserEditorSetupActivity['state']): string {
     case 'ready':
       return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300';
     case 'preparing':
+    case 'checking':
       return 'border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-300';
     case 'failed':
     case 'error':
@@ -74,24 +59,38 @@ function activityIconClass(state: BrowserEditorSetupActivity['state']): string {
 function activityIconGlow(state: BrowserEditorSetupActivity['state']): string {
   switch (state) {
     case 'ready':
-      return '0 0 0 6px color-mix(in srgb, var(--success) 8%, transparent)';
+      return '0 0 0 8px color-mix(in srgb, var(--success) 6%, transparent)';
     case 'preparing':
-      return '0 0 0 6px color-mix(in srgb, var(--info) 8%, transparent)';
+    case 'checking':
+      return '0 0 0 8px color-mix(in srgb, var(--info) 6%, transparent)';
     case 'failed':
     case 'error':
-      return '0 0 0 6px color-mix(in srgb, var(--error) 8%, transparent)';
+      return '0 0 0 8px color-mix(in srgb, var(--error) 6%, transparent)';
     case 'cancelled':
     case 'unusable':
-      return '0 0 0 6px color-mix(in srgb, var(--warning) 8%, transparent)';
+      return '0 0 0 8px color-mix(in srgb, var(--warning) 6%, transparent)';
     default:
       return 'none';
   }
 }
 
 function activityIcon(state: BrowserEditorSetupActivity['state']): JSX.Element {
-  if (state === 'ready') return <Check class="h-4 w-4" />;
-  if (state === 'failed' || state === 'error' || state === 'cancelled') return <X class="h-4 w-4" />;
-  return <RefreshIcon class={cn('h-4 w-4', state === 'preparing' || state === 'checking' ? 'animate-spin' : '')} />;
+  if (state === 'ready') return <Check class="h-5 w-5" />;
+  if (state === 'failed' || state === 'error' || state === 'cancelled') return <X class="h-5 w-5" />;
+  return <RefreshIcon class={cn('h-5 w-5', state === 'preparing' || state === 'checking' ? 'animate-spin' : '')} />;
+}
+
+function detailCalloutClass(state: BrowserEditorSetupActivity['state']): string {
+  switch (state) {
+    case 'failed':
+    case 'error':
+      return 'border-l-2 border-l-red-500 bg-red-500/[0.04]';
+    case 'cancelled':
+    case 'unusable':
+      return 'border-l-2 border-l-amber-500 bg-amber-500/[0.04]';
+    default:
+      return 'border-l-2 border-l-blue-500 bg-blue-500/[0.04]';
+  }
 }
 
 function progressBarStyle(state: BrowserEditorSetupActivity['state'], percent: number): JSX.CSSProperties {
@@ -108,45 +107,48 @@ function progressBarStyle(state: BrowserEditorSetupActivity['state'], percent: n
 export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivityPanelProps) {
   const activity = () => props.activity;
   const canPrepare = createMemo(() => activity().state === 'missing' || activity().can_retry || activity().state === 'unusable');
-  const showDetails = createMemo(() => Boolean(activity().detail || props.extraDetails || activity().show_log));
+  const hasTechnicalDetails = createMemo(() => Boolean(props.extraDetails || activity().show_log));
   const actionLabel = createMemo(() => (props.prepareSubmitting ? props.runningLabel : props.actionLabel));
   const isActive = createMemo(() => activity().state === 'preparing' || activity().state === 'checking');
+  const [detailsOpen, setDetailsOpen] = createSignal(false);
 
   return (
     <div
       data-testid="browser-editor-setup-activity"
-      class={cn(
-        'relative overflow-hidden rounded-lg border bg-card p-5 transition-colors duration-300',
-        panelSurfaceClass(activity().state),
-      )}
+      class="rounded-xl border border-border bg-card shadow-sm transition-colors duration-300"
       aria-live="polite"
     >
-      <div class={cn('absolute left-0 top-0 h-full w-[3px]', accentBarClass(activity().state))} />
-
-      {/* ── Header ── */}
-      <div class="flex flex-wrap items-start justify-between gap-4">
-        <div class="flex min-w-0 items-start gap-4">
-          <div
-            class={cn(
-              'flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition-shadow duration-300',
-              activityIconClass(activity().state),
-            )}
-            style={{ 'box-shadow': activityIconGlow(activity().state) } as JSX.CSSProperties}
-          >
-            {activityIcon(activity().state)}
-          </div>
-          <div class="min-w-0 space-y-1">
-            <div class="flex flex-wrap items-center gap-2">
-              <h3 class="text-base font-semibold text-foreground">{activity().title}</h3>
-              <Tag variant={activity().badge_variant} tone="soft" size="sm" class="cursor-default select-none">
-                {activity().badge_label}
-              </Tag>
-            </div>
-            <p class="text-sm leading-relaxed text-muted-foreground">{activity().summary}</p>
-          </div>
+      {/* ── Hero ── */}
+      <div class={cn('flex flex-col items-center gap-4 rounded-t-xl p-6 text-center', heroBackground(activity().state))}>
+        <div
+          class={cn(
+            'flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 transition-shadow duration-300',
+            activityIconClass(activity().state),
+          )}
+          style={{ 'box-shadow': activityIconGlow(activity().state) } as JSX.CSSProperties}
+        >
+          {activityIcon(activity().state)}
         </div>
 
-        <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
+        <div class="space-y-1.5">
+          <div class="flex flex-wrap items-center justify-center gap-2">
+            <h3 class="text-lg font-semibold text-foreground">{activity().title}</h3>
+            <Tag variant={activity().badge_variant} tone="soft" size="sm" class="cursor-default select-none">
+              {activity().badge_label}
+            </Tag>
+          </div>
+          <p class="text-sm leading-relaxed text-muted-foreground">{activity().summary}</p>
+        </div>
+
+        <Show when={activity().detail}>
+          {(detail) => (
+            <div class={cn('w-full rounded-md px-4 py-3 text-left text-sm leading-relaxed', detailCalloutClass(activity().state))}>
+              <p class="text-muted-foreground">{detail()}</p>
+            </div>
+          )}
+        </Show>
+
+        <div class="flex flex-wrap items-center justify-center gap-2">
           <Show when={activity().can_continue && props.onContinue}>
             <Button size="sm" variant="default" onClick={() => props.onContinue?.()}>
               {activity().pending_action_label || 'Continue'}
@@ -175,8 +177,10 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
         </div>
       </div>
 
-      {/* ── Steps + Progress ── */}
-      <div class="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(12rem,15rem)] lg:items-center">
+      {/* ── Progress ── */}
+      <div class="space-y-4 border-t border-border p-6">
+        <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Setup progress</span>
+
         <div class="redeven-environment-progress">
           <div class="redeven-environment-progress__steps">
             <For each={activity().steps}>
@@ -200,7 +204,7 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
           </div>
         </div>
 
-        <div class="min-w-0 space-y-2">
+        <div class="space-y-2">
           <div
             class="redeven-environment-progress__meter"
             data-plan-state={isActive() ? 'planning' : undefined}
@@ -216,27 +220,32 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
         </div>
       </div>
 
-      {/* ── Details ── */}
-      <Show when={showDetails()}>
-        <div class="mt-4 space-y-3 border-t border-border pt-4">
-          <Show when={activity().detail}>
-            {(detail) => (
-              <div class="flex items-start gap-2.5 rounded-md border border-info/25 bg-info/[0.04] p-3 text-xs leading-5 text-muted-foreground">
-                <div class="mt-px flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-info/15 text-[10px] font-semibold text-info">
-                  i
-                </div>
-                <div>{detail()}</div>
-              </div>
-            )}
-          </Show>
-          {props.extraDetails}
-          <Show when={activity().show_log}>
-            <pre
-              data-testid="code-runtime-log-tail"
-              class="max-h-48 overflow-auto rounded-lg border bg-[color-mix(in_srgb,var(--terminal-background)_6%,var(--background))] p-3 font-mono text-[11px] leading-5 text-muted-foreground whitespace-pre-wrap break-words"
-            >
-              {activity().log_tail.length > 0 ? activity().log_tail.join('\n') : 'No browser editor setup details yet.'}
-            </pre>
+      {/* ── Technical details (collapsible) ── */}
+      <Show when={hasTechnicalDetails()}>
+        <div class="border-t border-border px-6 pb-6">
+          <button
+            type="button"
+            class="flex w-full items-center gap-1.5 py-3 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+            onClick={() => setDetailsOpen((v) => !v)}
+          >
+            <Show when={detailsOpen()} fallback={<ChevronRight class="h-3.5 w-3.5" />}>
+              <ChevronDown class="h-3.5 w-3.5" />
+            </Show>
+            Technical details
+          </button>
+
+          <Show when={detailsOpen()}>
+            <div class="space-y-3">
+              {props.extraDetails}
+              <Show when={activity().show_log}>
+                <pre
+                  data-testid="code-runtime-log-tail"
+                  class="max-h-48 overflow-auto rounded-lg border bg-[color-mix(in_srgb,var(--terminal-background)_6%,var(--background))] p-3 font-mono text-[11px] leading-5 text-muted-foreground whitespace-pre-wrap break-words"
+                >
+                  {activity().log_tail.length > 0 ? activity().log_tail.join('\n') : 'No browser editor setup details yet.'}
+                </pre>
+              </Show>
+            </div>
           </Show>
         </div>
       </Show>
