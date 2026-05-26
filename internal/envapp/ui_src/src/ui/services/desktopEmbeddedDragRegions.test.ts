@@ -366,6 +366,56 @@ describe('desktopEmbeddedDragRegions', () => {
     sync?.dispose();
   });
 
+  it('ignores workbench subtree mutations outside the drag-region anchors', async () => {
+    document.body.innerHTML = `
+      <div data-floe-shell-slot="top-bar">
+        <button id="left-action">Left</button>
+      </div>
+      <main id="workbench-root">
+        <div id="workbench-widget">Initial</div>
+      </main>
+    `;
+
+    const topBar = document.querySelector('[data-floe-shell-slot="top-bar"]') as HTMLElement;
+    const leftAction = document.getElementById('left-action') as HTMLButtonElement;
+    const workbenchRoot = document.getElementById('workbench-root') as HTMLElement;
+    const workbenchWidget = document.getElementById('workbench-widget') as HTMLElement;
+    stubRect(topBar, { x: 0, y: 0, width: 240, height: 40 });
+    stubRect(leftAction, { x: 0, y: 0, width: 64, height: 40 });
+    stubRect(workbenchRoot, { x: 0, y: 48, width: 400, height: 240 });
+    stubRect(workbenchWidget, { x: 16, y: 72, width: 128, height: 48 });
+
+    const setSnapshot = vi.fn();
+    const clear = vi.fn();
+    const { currentWindow, frameCallbacks } = createFakeSyncWindow();
+    currentWindow.redevenDesktopEmbeddedDragRegions = { setSnapshot, clear };
+
+    const sync = installDesktopEmbeddedDragRegionSync({
+      currentWindow,
+      createResizeObserver: () => null,
+    });
+    expect(sync).toBeTruthy();
+
+    flushNextFrame(frameCallbacks);
+    expect(setSnapshot).toHaveBeenCalledTimes(1);
+    expect(frameCallbacks).toHaveLength(0);
+
+    workbenchWidget.textContent = 'Changed';
+    await flushMutationObserver();
+
+    expect(frameCallbacks).toHaveLength(0);
+    expect(setSnapshot).toHaveBeenCalledTimes(1);
+
+    topBar.style.setProperty('--drag-region-test-offset', '1px');
+    await flushMutationObserver();
+
+    expect(frameCallbacks).toHaveLength(1);
+    flushNextFrame(frameCallbacks);
+    expect(setSnapshot).toHaveBeenCalledTimes(1);
+
+    sync?.dispose();
+  });
+
   it('unobserves removed drag targets without recreating the resize observer', () => {
     document.body.innerHTML = `
       <div data-floe-shell-slot="top-bar">
