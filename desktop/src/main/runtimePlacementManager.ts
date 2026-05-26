@@ -94,6 +94,8 @@ export type EnsureRuntimePlacementReadyArgs = Readonly<{
   on_progress?: (progress: RuntimePlacementProgress) => void;
 }>;
 
+type RuntimePackageIntent = 'use_installed' | 'install_if_missing' | 'replace_with_desktop_target';
+
 function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
@@ -244,8 +246,9 @@ export async function ensureRuntimePlacementReady(
       runtime_binary_path: 'redeven',
       probe: {
         status: 'ready',
-        expected_release_tag: runtimeReleaseTag,
+        slot_release_tag: runtimeReleaseTag,
         reported_release_tag: runtimeReleaseTag,
+        target_release_tag: null,
         binary_path: 'redeven',
         stamp_path: '',
         reason: 'host-process runtime bootstrap is handled by the existing host runtime launcher',
@@ -285,6 +288,9 @@ export async function ensureRuntimePlacementReady(
   }), { signal: args.signal });
   const platform = parseContainerPlatformProbeOutput(platformResult.stdout);
 
+  const packageIntent: RuntimePackageIntent = args.force_runtime_update === true
+    ? 'replace_with_desktop_target'
+    : 'install_if_missing';
   emitProgress(
     args.on_progress,
     'checking_runtime',
@@ -293,8 +299,8 @@ export async function ensureRuntimePlacementReady(
   );
   let probe = await probeContainerRuntime(executor, placement, runtimeReleaseTag, args.signal);
   const sourceRuntimeRoot = compact(args.source_runtime_root);
-  const shouldReplaceRuntimePackage = args.force_runtime_update === true;
-  const shouldInstallRuntime = probe.status === 'missing_binary' || shouldReplaceRuntimePackage;
+  const shouldReplaceRuntimePackage = packageIntent === 'replace_with_desktop_target';
+  const shouldInstallRuntime = shouldReplaceRuntimePackage || (packageIntent === 'install_if_missing' && probe.status === 'missing_binary');
   if (
     probe.status !== 'ready'
     && probe.status !== 'missing_binary'
@@ -309,7 +315,7 @@ export async function ensureRuntimePlacementReady(
       has_active_work: false,
       active_work_label: 'No active work',
       current_runtime_version: probe.reported_release_tag ?? undefined,
-      target_runtime_version: probe.expected_release_tag,
+      target_runtime_version: probe.target_release_tag ?? runtimeReleaseTag,
       message: 'Update this container runtime before starting it with the bundled runtime.',
     });
     throw new RuntimePlacementMaintenanceRequiredError(maintenance.message, maintenance);

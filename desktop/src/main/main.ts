@@ -1691,7 +1691,7 @@ async function inspectRuntimePlacementTargetState(
           has_active_work: true,
           active_work_label: 'Existing runtime work may be active',
           current_runtime_version: probe.reported_release_tag ?? undefined,
-          target_runtime_version: probe.expected_release_tag,
+          target_runtime_version: probe.target_release_tag ?? resolveSSHRuntimeReleaseTag(),
           message: 'Update this container runtime before opening it with this Desktop.',
         });
         runtimePlacementMaintenanceByTargetID.set(target.targetID, maintenance);
@@ -4635,6 +4635,9 @@ function runtimeLifecycleFailureNextActions(
 function openConnectionFailureNextActions(
   operationKey: string,
   environmentID: string,
+  options: Readonly<{
+    includeUpdateRuntime?: boolean;
+  }> = {},
 ): readonly DesktopLauncherOperationNextAction[] {
   return [
     {
@@ -4642,6 +4645,11 @@ function openConnectionFailureNextActions(
       environment_id: compact(environmentID) || undefined,
       label: 'Refresh status',
     },
+    ...(options.includeUpdateRuntime && compact(environmentID) !== '' ? [{
+      kind: 'update_runtime' as const,
+      environment_id: compact(environmentID),
+      label: 'Update runtime',
+    }] : []),
     {
       kind: 'copy_diagnostics',
       operation_key: operationKey,
@@ -4653,6 +4661,31 @@ function openConnectionFailureNextActions(
       label: 'Dismiss',
     },
   ];
+}
+
+function runtimeOpenFailureShouldOfferUpdate(input: Readonly<{
+  error?: unknown;
+  failure?: DesktopOperationFailurePresentation;
+  launcherFailure?: DesktopLauncherActionFailure | null;
+  maintenance?: DesktopRuntimeMaintenanceRequirement | null;
+  runtimeService?: RuntimeServiceSnapshot | null;
+}>): boolean {
+  if (input.maintenance?.recovery_action === 'update_runtime') {
+    return true;
+  }
+  if (input.failure?.code === 'runtime_update_required') {
+    return true;
+  }
+  if (input.launcherFailure?.failure?.code === 'runtime_update_required') {
+    return true;
+  }
+  if (input.error instanceof DesktopSSHRuntimeMaintenanceRequiredError) {
+    return input.error.maintenance.recovery_action === 'update_runtime';
+  }
+  if (input.error instanceof RuntimePlacementMaintenanceRequiredError) {
+    return input.error.maintenance.recovery_action === 'update_runtime';
+  }
+  return runtimeServiceNeedsRuntimeUpdate(input.runtimeService);
 }
 
 function assertRuntimeStopVerifiedFromLaunchReport(report: LaunchReport): void {
@@ -6226,12 +6259,21 @@ function launcherActionFailureForRuntimeNotOpenable(
   }> = {},
 ): DesktopLauncherActionFailure {
   const summary = runtimeServiceOpenReadinessLabel(startup.runtime_service);
+  const needsUpdate = runtimeServiceNeedsRuntimeUpdate(startup.runtime_service);
   const failure = desktopOperationFailurePresentation({
-    code: 'environment_open_failed',
+    code: needsUpdate ? 'runtime_update_required' : 'environment_open_failed',
     title: 'Open Failed',
     summary,
     targetLabel: options.targetLabel,
-    recoveryHint: 'Start or restart the runtime, then try again.',
+    detail: needsUpdate
+      ? [
+          `Installed runtime: ${startup.runtime_service?.runtime_version ?? 'unknown'}`,
+          `Required runtime: ${startup.runtime_service?.minimum_runtime_version ?? 'current Desktop runtime'}`,
+        ].join('\n')
+      : undefined,
+    recoveryHint: needsUpdate
+      ? 'Update runtime, then try opening this environment again.'
+      : 'Start or restart the runtime, then try again.',
   });
   return launcherActionFailure(
     'runtime_not_ready',
@@ -6403,7 +6445,12 @@ function finishLocalHostOpenFailure(
       targetID: target.targetID,
       targetLabel: target.targetLabel,
     }),
-    ...(signal?.aborted ? {} : { next_actions: openConnectionFailureNextActions(operationKey, target.environmentID) }),
+    ...(signal?.aborted ? {} : { next_actions: openConnectionFailureNextActions(operationKey, target.environmentID, {
+      includeUpdateRuntime: runtimeOpenFailureShouldOfferUpdate({
+        failure: result.failure,
+        launcherFailure: result,
+      }),
+    }) }),
     ...(signal?.aborted || !result.failure ? {} : { failure: result.failure }),
   });
   scheduleLauncherOperationRemoval(operationKey);
@@ -6706,7 +6753,9 @@ async function openProviderRemoteEnvironmentRecord(
         targetDetail: 'Provider route',
         location: 'provider_remote',
       }),
-      ...(signal?.aborted ? {} : { next_actions: openConnectionFailureNextActions(operationKey, environment.id) }),
+      ...(signal?.aborted ? {} : { next_actions: openConnectionFailureNextActions(operationKey, environment.id, {
+        includeUpdateRuntime: runtimeOpenFailureShouldOfferUpdate({ failure }),
+      }) }),
       ...(signal?.aborted ? {} : { failure }),
     });
     scheduleLauncherOperationRemoval(operationKey);
@@ -6920,7 +6969,12 @@ async function openRemoteEnvironmentFromLauncher(
         targetDetail: normalizedTargetURL,
         location: 'external_local_ui',
       }),
-      ...(canceled ? {} : { next_actions: openConnectionFailureNextActions(operationKey, failureEnvironmentID) }),
+      ...(canceled ? {} : { next_actions: openConnectionFailureNextActions(operationKey, failureEnvironmentID, {
+        includeUpdateRuntime: runtimeOpenFailureShouldOfferUpdate({
+          failure: result.failure,
+          launcherFailure: result,
+        }),
+      }) }),
       ...(canceled || !result.failure ? {} : { failure: result.failure }),
     });
     scheduleLauncherOperationRemoval(operationKey);
@@ -7174,7 +7228,13 @@ async function openSSHEnvironmentFromLauncher(
               targetID: optimisticSessionKey,
               targetLabel: request.label ?? defaultSavedSSHEnvironmentLabel(sshDetails),
             }),
-            ...(signal?.aborted ? {} : { next_actions: openConnectionFailureNextActions(operationKey, request.environment_id ?? optimisticSessionKey) }),
+            ...(signal?.aborted ? {} : { next_actions: openConnectionFailureNextActions(operationKey, request.environment_id ?? optimisticSessionKey, {
+              includeUpdateRuntime: runtimeOpenFailureShouldOfferUpdate({
+                failure: result.failure,
+                launcherFailure: result,
+                maintenance,
+              }),
+            }) }),
             ...(signal?.aborted || !result.failure ? {} : { failure: result.failure }),
           });
           scheduleLauncherOperationRemoval(operationKey);
@@ -7320,7 +7380,9 @@ async function openSSHEnvironmentFromLauncher(
         targetID: optimisticSessionKey,
         targetLabel: request.label ?? defaultSavedSSHEnvironmentLabel(sshDetails),
       }),
-      ...(signal?.aborted ? {} : { next_actions: openConnectionFailureNextActions(operationKey, request.environment_id ?? optimisticSessionKey) }),
+      ...(signal?.aborted ? {} : { next_actions: openConnectionFailureNextActions(operationKey, request.environment_id ?? optimisticSessionKey, {
+        includeUpdateRuntime: runtimeOpenFailureShouldOfferUpdate({ error, failure }),
+      }) }),
       ...(signal?.aborted ? {} : { failure }),
     });
     scheduleLauncherOperationRemoval(operationKey);
@@ -8067,7 +8129,13 @@ async function openRuntimePlacementBridgeFromLauncher(
               targetID,
               targetLabel: label,
             }),
-            ...(signal?.aborted ? {} : { next_actions: openConnectionFailureNextActions(operationKey, environmentID) }),
+            ...(signal?.aborted ? {} : { next_actions: openConnectionFailureNextActions(operationKey, environmentID, {
+              includeUpdateRuntime: runtimeOpenFailureShouldOfferUpdate({
+                failure: result.failure,
+                launcherFailure: result,
+                maintenance,
+              }),
+            }) }),
             ...(signal?.aborted || !result.failure ? {} : { failure: result.failure }),
           });
           scheduleLauncherOperationRemoval(operationKey);
@@ -8189,7 +8257,9 @@ async function openRuntimePlacementBridgeFromLauncher(
         targetID,
         targetLabel: label,
       }),
-      ...(signal?.aborted ? {} : { next_actions: openConnectionFailureNextActions(operationKey, environmentID) }),
+      ...(signal?.aborted ? {} : { next_actions: openConnectionFailureNextActions(operationKey, environmentID, {
+        includeUpdateRuntime: runtimeOpenFailureShouldOfferUpdate({ error, failure }),
+      }) }),
       ...(signal?.aborted ? {} : { failure }),
     });
     scheduleLauncherOperationRemoval(operationKey);

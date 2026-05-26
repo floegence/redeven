@@ -241,7 +241,7 @@ describe('desktopWelcomeRuntimeState', () => {
     }
   });
 
-  it('marks an owned Desktop-managed runtime for update when bundled identity differs', async () => {
+  it('keeps an owned Desktop-managed runtime openable when bundled identity differs', async () => {
     const server = await startRuntimeServer({
       status: 'online',
       password_required: false,
@@ -287,11 +287,10 @@ describe('desktopWelcomeRuntimeState', () => {
       expect(hydrated.local_environment.local_hosting.current_runtime).toEqual(expect.objectContaining({
         desktop_ownership: 'owned',
         runtime_service: expect.objectContaining({
-          compatibility: 'update_required',
+          runtime_version: 'v1.4.0',
+          compatibility: 'compatible',
           open_readiness: {
-            state: 'blocked',
-            reason_code: 'runtime_update_required',
-            message: 'Redeven Desktop has a newer bundled runtime. Open the Desktop update handoff before opening this Local Environment.',
+            state: 'openable',
           },
         }),
       }));

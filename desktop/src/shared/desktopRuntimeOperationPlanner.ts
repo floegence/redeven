@@ -13,6 +13,7 @@ import type { RuntimeServiceSnapshot } from './runtimeService';
 import {
   runtimeServiceHasActiveWork,
   runtimeServiceIsOpenable,
+  runtimeServiceNeedsRuntimeUpdate,
 } from './runtimeService';
 import {
   desktopRuntimeOperationPlan,
@@ -147,21 +148,24 @@ export function buildDesktopRuntimeOperationPlans(
   const restartMaintenance = desktopRuntimeMaintenanceRequiresRestart(maintenance);
   const updateMaintenance = desktopRuntimeMaintenanceRequiresUpdate(maintenance);
   const openConnectionRequired = input.open_connection_required === true;
-  const blockedByUpdate = requiresUpdate || updateMaintenance;
+  const updateAvailable = requiresUpdate || updateMaintenance;
   const updateMessage = updateMethod === 'desktop_local_update_handoff'
     ? localDesktopUpdateMessage(input.package_state)
     : updateRequiredMessage(input.package_state);
-  const canOpen = input.openable || openConnectionRequired;
+  const canOpen = input.openable
+    || openConnectionRequired
+    || updateMaintenance
+    || runtimeServiceNeedsRuntimeUpdate(input.runtime_service);
   const managementBlockedStatus = runtimeTargetUnavailableStatus(input.runtime_control_status, openConnectionRequired);
   const managementBlocked = !!managementBlockedStatus;
   const blockedByRecoveryMaintenance = restartMaintenance;
-  const openAvailability = input.running && canOpen && !blockedByUpdate && !blockedByRecoveryMaintenance && !managementBlocked
+  const openAvailability = input.running && canOpen && !blockedByRecoveryMaintenance && !managementBlocked
     ? 'available'
     : 'blocked';
   const openMessage = managementBlocked
     ? managementBlockedStatus.message
-    : blockedByUpdate || blockedByRecoveryMaintenance
-      ? maintenance?.message ?? updateMessage
+    : blockedByRecoveryMaintenance
+      ? maintenance?.message
     : !input.running
     ? 'Start this runtime before opening it.'
     : canOpen
@@ -191,14 +195,12 @@ export function buildDesktopRuntimeOperationPlans(
           ? 'unavailable'
           : managementBlocked
             ? 'blocked'
-          : blockedByUpdate
-            ? 'blocked'
             : 'available'
         : 'hidden',
       method,
       {
-        reasonCode: managementBlocked ? 'runtime_target_unavailable' : blockedByUpdate ? 'runtime_update_required' : input.running ? 'runtime_already_running' : undefined,
-        message: managementBlocked ? managementBlockedStatus.message : blockedByUpdate ? updateMessage : undefined,
+        reasonCode: managementBlocked ? 'runtime_target_unavailable' : input.running ? 'runtime_already_running' : undefined,
+        message: managementBlocked ? managementBlockedStatus.message : undefined,
         packageState: input.package_state,
         maintenance,
         menuVisibility: hasManagement && !input.running ? 'contextual' : 'hidden',
@@ -219,21 +221,15 @@ export function buildDesktopRuntimeOperationPlans(
       hasManagement
         ? managementBlocked
           ? 'blocked'
-          : blockedByUpdate
-            ? 'blocked'
-            : 'available'
+          : 'available'
         : 'hidden',
       method,
       {
         reasonCode: managementBlocked
           ? 'runtime_target_unavailable'
-          : blockedByUpdate
-          ? 'runtime_update_required'
           : undefined,
         message: managementBlocked
           ? managementBlockedStatus.message
-          : blockedByUpdate
-          ? updateMessage
           : maintenance?.message ?? activeWorkMessage(input.runtime_service),
         packageState: input.package_state,
         maintenance,
@@ -249,7 +245,7 @@ export function buildDesktopRuntimeOperationPlans(
         : 'hidden',
       updateMethod,
       {
-        reasonCode: blockedByUpdate ? 'runtime_update_required' : undefined,
+        reasonCode: updateAvailable ? 'runtime_update_required' : undefined,
         label: updateMethod === 'desktop_local_update_handoff' ? 'Update Redeven Desktop' : undefined,
         message: managementBlocked ? managementBlockedStatus.message : maintenance?.message ?? updateMessage,
         packageState: input.package_state,

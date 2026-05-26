@@ -2,10 +2,7 @@ import {
   desktopRuntimeMaintenanceRequiresUpdate,
   type DesktopRuntimeMaintenanceRequirement,
 } from './desktopRuntimeHealth';
-import {
-  runtimeServiceNeedsRuntimeUpdate,
-  type RuntimeServiceSnapshot,
-} from './runtimeService';
+import type { RuntimeServiceSnapshot } from './runtimeService';
 
 export type DesktopRuntimePackageState =
   | Readonly<{
@@ -45,13 +42,6 @@ export function desktopRuntimePackageStateFromRuntimeService(
   const targetVersion = compact(maintenance?.target_runtime_version);
   const currentVersion = compact(maintenance?.current_runtime_version ?? runtimeService?.runtime_version);
   if (desktopRuntimeMaintenanceRequiresUpdate(maintenance)) {
-    return {
-      state: 'outdated',
-      current_version: currentVersion || 'unknown',
-      target_version: targetVersion || currentVersion || 'unknown',
-    };
-  }
-  if (runtimeServiceNeedsRuntimeUpdate(runtimeService)) {
     return {
       state: 'outdated',
       current_version: currentVersion || 'unknown',

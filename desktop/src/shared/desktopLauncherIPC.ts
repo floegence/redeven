@@ -374,6 +374,11 @@ export type DesktopLauncherOperationNextAction = Readonly<
       operation_key: string;
       label: string;
     }
+  | {
+      kind: 'update_runtime';
+      environment_id: string;
+      label: string;
+    }
 >;
 
 export type DesktopLauncherActionRequest = Readonly<

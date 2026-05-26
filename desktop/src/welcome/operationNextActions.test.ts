@@ -41,6 +41,11 @@ describe('operationNextActions', () => {
         label: 'Refresh status',
       },
       {
+        kind: 'update_runtime',
+        environment_id: 'local',
+        label: 'Update runtime',
+      },
+      {
         kind: 'dismiss',
         operation_key: 'local:host:local:open',
         label: 'Dismiss',
@@ -54,6 +59,7 @@ describe('operationNextActions', () => {
 
     expect(visibleOperationNextActions(progress)).toEqual([
       expect.objectContaining({ kind: 'refresh_status', label: 'Refresh status' }),
+      expect.objectContaining({ kind: 'update_runtime', label: 'Update runtime' }),
       expect.objectContaining({ kind: 'copy_diagnostics', label: 'Copy diagnostics' }),
       expect.objectContaining({ kind: 'dismiss', label: 'Dismiss' }),
     ]);

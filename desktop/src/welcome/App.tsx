@@ -4924,6 +4924,9 @@ function EnvironmentProgressPanel(props: Readonly<{
           <div class="redeven-action-popover__notice" data-tone="error">
             <div class="redeven-action-popover__notice-title">{failureNoticeTitle()}</div>
             <div class="redeven-action-popover__notice-detail">{failure().summary}</div>
+            <Show when={failure().detail}>
+              {(detail) => <pre class="redeven-action-popover__notice-detail redeven-action-popover__notice-detail--pre">{detail()}</pre>}
+            </Show>
           </div>
         )}
       </Show>
@@ -4970,7 +4973,11 @@ function EnvironmentProgressPanel(props: Readonly<{
               >
                 <Show
                   when={action.kind === 'refresh_status'}
-                  fallback={action.kind === 'copy_diagnostics' ? <Copy class="h-3.5 w-3.5" /> : null}
+                  fallback={action.kind === 'update_runtime'
+                    ? <Refresh class="h-3.5 w-3.5" />
+                    : action.kind === 'copy_diagnostics'
+                      ? <Copy class="h-3.5 w-3.5" />
+                      : null}
                 >
                   <Refresh class="h-3.5 w-3.5" />
                 </Show>
@@ -5390,6 +5397,13 @@ function EnvironmentSplitActionButton(props: Readonly<{
                               case 'refresh_status':
                                 props.refreshEnvironmentRuntime();
                                 break;
+                              case 'update_runtime': {
+                                const updateAction = props.presentation.menu_actions.find((item) => item.action.intent === 'update_runtime')?.action;
+                                if (updateAction) {
+                                  props.onRunAction(updateAction);
+                                }
+                                break;
+                              }
                               case 'copy_diagnostics':
                                 props.copyOperationDiagnostics(progress);
                                 break;

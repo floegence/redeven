@@ -260,6 +260,20 @@ describe('main routing', () => {
     expect(mainSrc).toContain("launcherActionSuccess('opened_desktop_update_handoff')");
     expect(mainSrc).toContain('forceRuntimeUpdate: options.forceRuntimeUpdate === true');
     expect(mainSrc).toContain('allowActiveWorkReplacement: true');
+
+    const startEnvironmentRuntimeStart = mainSrc.indexOf('async function startEnvironmentRuntimeFromLauncher(');
+    const updateEnvironmentRuntimeStart = mainSrc.indexOf('async function updateEnvironmentRuntimeFromLauncher(');
+    const restartEnvironmentRuntimeStart = mainSrc.indexOf('async function restartEnvironmentRuntimeFromLauncher(');
+    expect(startEnvironmentRuntimeStart).toBeGreaterThanOrEqual(0);
+    expect(updateEnvironmentRuntimeStart).toBeGreaterThan(startEnvironmentRuntimeStart);
+    expect(restartEnvironmentRuntimeStart).toBeGreaterThan(updateEnvironmentRuntimeStart);
+    const startEnvironmentRuntimeSrc = mainSrc.slice(startEnvironmentRuntimeStart, updateEnvironmentRuntimeStart);
+    const updateEnvironmentRuntimeSrc = mainSrc.slice(updateEnvironmentRuntimeStart, restartEnvironmentRuntimeStart);
+    const restartEnvironmentRuntimeSrc = mainSrc.slice(restartEnvironmentRuntimeStart, mainSrc.indexOf('async function manageDesktopUpdateFromLauncher(', restartEnvironmentRuntimeStart));
+    expect(startEnvironmentRuntimeSrc).toContain('return runEnvironmentRuntimeLifecycleFromLauncher(request);');
+    expect(updateEnvironmentRuntimeSrc).toContain("kind: 'update_environment_runtime',\n    force_runtime_update: true,");
+    expect(restartEnvironmentRuntimeSrc).toContain("kind: 'restart_environment_runtime',\n    force_runtime_update: false,");
+
     expect(mainSrc).toContain("if (normalized.action === 'restart_runtime')");
     expect(mainSrc).toContain("if (normalized.action === 'upgrade_runtime')");
   });
