@@ -29,6 +29,7 @@ type StateLayout struct {
 	LockPath                 string
 	StateDir                 string
 	RuntimeControlSocketPath string
+	RuntimeMaintenancePath   string
 	DiagnosticsDir           string
 	AuditDir                 string
 	AppsDir                  string
@@ -92,6 +93,7 @@ func stateLayoutForResolvedRoot(stateRoot string) StateLayout {
 		LockPath:                 filepath.Join(stateDir, "agent.lock"),
 		StateDir:                 stateDir,
 		RuntimeControlSocketPath: filepath.Join(runtimeDir, "control.sock"),
+		RuntimeMaintenancePath:   filepath.Join(runtimeDir, "maintenance", "current.json"),
 		DiagnosticsDir:           filepath.Join(stateDir, "diagnostics"),
 		AuditDir:                 filepath.Join(stateDir, "audit"),
 		AppsDir:                  filepath.Join(stateDir, "apps"),
@@ -105,6 +107,14 @@ func RuntimeControlSocketPathFromConfigPath(configPath string) string {
 		return filepath.Join("runtime", "control.sock")
 	}
 	return filepath.Join(filepath.Dir(configPath), "runtime", "control.sock")
+}
+
+func RuntimeMaintenancePathFromConfigPath(configPath string) string {
+	configPath = strings.TrimSpace(configPath)
+	if configPath == "" {
+		return filepath.Join("runtime", "maintenance", "current.json")
+	}
+	return filepath.Join(filepath.Dir(configPath), "runtime", "maintenance", "current.json")
 }
 
 func normalizeControlplaneBaseURL(raw string) (string, error) {

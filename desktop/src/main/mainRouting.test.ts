@@ -333,6 +333,22 @@ describe('main routing', () => {
     expect(ensureRuntimeEnd).toBeGreaterThan(ensureRuntimeStart);
     const ensureRuntimeSrc = mainSrc.slice(ensureRuntimeStart, ensureRuntimeEnd);
     expect(ensureRuntimeSrc).toContain('inspection.ready_record && replacementRequested');
+    const stopCommandIndexes = [...ensureRuntimeSrc.matchAll(/containerRuntimeDaemonStopCommand\(/gu)].map((match) => match.index ?? -1);
+    expect(stopCommandIndexes.length).toBeGreaterThanOrEqual(2);
+    for (const stopIndex of stopCommandIndexes) {
+      const afterStop = ensureRuntimeSrc.slice(stopIndex);
+      const verifyIndex = afterStop.indexOf('await assertContainerRuntimeStopped({');
+      const cacheDeleteIndex = afterStop.indexOf('runtimePlacementReadyByTargetID.delete(targetID)');
+      expect(verifyIndex).toBeGreaterThan(0);
+      expect(cacheDeleteIndex).toBeGreaterThan(verifyIndex);
+    }
+    const replacementBranchStart = ensureRuntimeSrc.indexOf('if (inspection.ready_record && replacementRequested)');
+    const replacementBranchEnd = ensureRuntimeSrc.indexOf('} else if (inspection.ready_record)', replacementBranchStart);
+    expect(replacementBranchStart).toBeGreaterThanOrEqual(0);
+    expect(replacementBranchEnd).toBeGreaterThan(replacementBranchStart);
+    const replacementBranchSrc = ensureRuntimeSrc.slice(replacementBranchStart, replacementBranchEnd);
+    expect(replacementBranchSrc).not.toContain('runtime_already_current');
+    expect(replacementBranchSrc).not.toContain('runtime_up_to_date');
 
     const startRuntimeStart = mainSrc.indexOf('async function runEnvironmentRuntimeLifecycleFromLauncher(');
     const startRuntimeEnd = mainSrc.indexOf('async function connectProviderRuntimeFromLauncher(', startRuntimeStart);

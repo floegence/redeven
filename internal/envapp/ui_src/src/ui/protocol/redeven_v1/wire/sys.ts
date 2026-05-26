@@ -11,9 +11,19 @@ export type wire_sys_ping_resp = {
     kind?: string;
     state?: string;
     target_version?: string;
+    previous_version?: string;
+    observed_version?: string;
+    previous_process_started_at_ms?: number;
+    observed_process_started_at_ms?: number;
+    previous_runtime_instance_id?: string;
+    observed_runtime_instance_id?: string;
+    install_dir?: string;
+    exe_path?: string;
     message?: string;
+    error_code?: string;
     started_at_ms?: number;
     updated_at_ms?: number;
+    completed_at_ms?: number;
   };
   runtime_service?: {
     runtime_version?: string;

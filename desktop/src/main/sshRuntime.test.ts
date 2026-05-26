@@ -121,23 +121,47 @@ describe('sshRuntime', () => {
     });
   });
 
-  it('describes missing or incompatible managed runtimes for diagnostics', () => {
-    expect(describeManagedSSHRuntimeProbeResult({
-      status: 'stamp_missing',
-      expected_release_tag: 'v1.2.3',
-      reported_release_tag: 'v1.2.3',
-      binary_path: '/opt/redeven/bin/redeven',
-      stamp_path: '/opt/redeven/managed-runtime.stamp',
-      reason: 'managed runtime stamp is missing',
-    })).toContain('Desktop stamp is missing');
-    expect(describeManagedSSHRuntimeProbeResult({
-      status: 'version_mismatch',
-      expected_release_tag: 'v1.2.3',
-      reported_release_tag: 'v1.2.2',
-      binary_path: '/opt/redeven/bin/redeven',
-      stamp_path: '/opt/redeven/managed-runtime.stamp',
-      reason: 'managed runtime version does not match the requested Desktop release',
-    })).toContain('reports v1.2.2 instead of v1.2.3');
+  it('describes managed SSH version and stamp mismatches with actionable paths', () => {
+    const cases = [
+      {
+        status: 'version_mismatch' as const,
+        expected: 'reports v1.2.2 instead of v1.2.3',
+      },
+      {
+        status: 'stamp_missing' as const,
+        expected: 'Desktop stamp is missing at /opt/redeven/managed-runtime.stamp',
+      },
+      {
+        status: 'stamp_invalid' as const,
+        expected: 'stamp at /opt/redeven/managed-runtime.stamp is invalid for v1.2.3',
+      },
+    ];
+
+    for (const item of cases) {
+      const description = describeManagedSSHRuntimeProbeResult({
+        status: item.status,
+        expected_release_tag: 'v1.2.3',
+        reported_release_tag: 'v1.2.2',
+        binary_path: '/opt/redeven/bin/redeven',
+        stamp_path: '/opt/redeven/managed-runtime.stamp',
+        reason: 'probe reason',
+      });
+      expect(description.toLowerCase()).toContain(item.expected.toLowerCase());
+    }
+  });
+
+  it('probe shell validates binary version before trusting the managed stamp', () => {
+    const script = buildManagedSSHRuntimeProbeScript();
+    const versionProbeIndex = script.indexOf('version_output="$("$binary" version 2>/dev/null)"');
+    const reportedVersionIndex = script.indexOf('reported_release_tag="$2"');
+    const stampExistsIndex = script.indexOf('if [ ! -f "$stamp_path" ]; then');
+    const stampSchemaIndex = script.indexOf('schema_version=');
+
+    expect(versionProbeIndex).toBeGreaterThanOrEqual(0);
+    expect(reportedVersionIndex).toBeGreaterThan(versionProbeIndex);
+    expect(stampExistsIndex).toBeGreaterThan(reportedVersionIndex);
+    expect(stampSchemaIndex).toBeGreaterThan(stampExistsIndex);
+    expect(script).toContain("printf 'reported_release_tag=%s\\n' \"$reported_release_tag\"");
   });
 
   it('checks the SSH master socket, probes remote platform, and keeps auto fallback limited to local asset preparation failures', () => {

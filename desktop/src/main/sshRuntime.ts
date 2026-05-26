@@ -2143,9 +2143,67 @@ type ManagedSSHRuntimeAttachPolicy =
   | Readonly<{ action: 'replace'; message: string }>
   | Readonly<{ action: 'block'; message: string; maintenance: DesktopRuntimeMaintenanceRequirement }>;
 
+type RuntimeIdentityMismatchDiagnostic = Readonly<{
+  expected_runtime_version?: string;
+  observed_runtime_version?: string;
+  observed_pid?: number;
+  state_dir?: string;
+  runtime_control_base_url?: string;
+  binary_path?: string;
+  desktop_owner_id?: string;
+}>;
+
 function startupReportsStoppablePID(startup: StartupReport): boolean {
   const pid = Number(startup.pid ?? Number.NaN);
   return Number.isInteger(pid) && pid > 0;
+}
+
+function managedSSHRuntimeBinaryPath(target: DesktopSSHEnvironmentDetails, runtimeReleaseTag: string): string {
+  const runtimeRoot = compact(target.runtime_root);
+  const rootLabel = runtimeRoot === DEFAULT_DESKTOP_SSH_RUNTIME_ROOT
+    ? '~/.redeven'
+    : runtimeRoot;
+  return `${rootLabel.replace(/\/+$/u, '')}/runtime/releases/${runtimeReleaseTag}/bin/redeven`;
+}
+
+function runtimeIdentityMismatchDiagnostic(
+  startup: StartupReport,
+  args: Readonly<{
+    target: DesktopSSHEnvironmentDetails;
+    runtimeReleaseTag: string;
+    desktopOwnerID: string;
+  }>,
+): RuntimeIdentityMismatchDiagnostic {
+  const runtimeService = startup.runtime_service;
+  const pid = Number(startup.pid ?? Number.NaN);
+  return {
+    expected_runtime_version: args.runtimeReleaseTag,
+    observed_runtime_version: compact(runtimeService?.runtime_version) || undefined,
+    ...(Number.isInteger(pid) && pid > 0 ? { observed_pid: pid } : {}),
+    state_dir: compact(startup.state_dir) || compact(args.target.runtime_root) || undefined,
+    runtime_control_base_url: compact(startup.runtime_control?.base_url) || undefined,
+    binary_path: managedSSHRuntimeBinaryPath(args.target, args.runtimeReleaseTag),
+    desktop_owner_id: compact(startup.desktop_owner_id) || compact(startup.runtime_control?.desktop_owner_id) || args.desktopOwnerID,
+  };
+}
+
+function formatRuntimeIdentityMismatchDiagnostic(diagnostic: RuntimeIdentityMismatchDiagnostic): string {
+  const rows: [string, unknown][] = [
+    ['expected_runtime_version', diagnostic.expected_runtime_version],
+    ['observed_runtime_version', diagnostic.observed_runtime_version],
+    ['observed_pid', diagnostic.observed_pid],
+    ['state_dir', diagnostic.state_dir],
+    ['runtime_control_base_url', diagnostic.runtime_control_base_url],
+    ['binary_path', diagnostic.binary_path],
+    ['desktop_owner_id', diagnostic.desktop_owner_id],
+  ];
+  return rows
+    .map(([key, value]) => {
+      const text = compact(value);
+      return text === '' ? '' : `${key}=${text}`;
+    })
+    .filter(Boolean)
+    .join('\n');
 }
 
 function managedSSHRuntimeAttachPolicy(
@@ -2436,10 +2494,18 @@ async function startManagedSSHRuntimeInternal(
         break;
       }
       if (replacementAttempted) {
+        const identityDiagnostic = runtimeIdentityMismatchDiagnostic(launch.startup, {
+          target,
+          runtimeReleaseTag,
+          desktopOwnerID,
+        });
         throw readinessFailure('Desktop restarted the SSH runtime, but the running Runtime Service still does not match this session.', logs, {
           code: 'ssh_runtime_launch_failed',
           title: 'SSH Runtime Restart Failed',
-          detail: 'The restarted runtime still reported an incompatible Runtime Service identity.',
+          detail: [
+            'The restarted runtime still reported an incompatible Runtime Service identity.',
+            formatRuntimeIdentityMismatchDiagnostic(identityDiagnostic),
+          ].filter(Boolean).join('\n\n'),
           targetLabel: desktopSSHAuthority(target),
         });
       }

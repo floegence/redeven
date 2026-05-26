@@ -202,4 +202,45 @@ describe('sys codec', () => {
       },
     });
   });
+
+  it('decodes maintenance reconciliation diagnostics from ping responses', () => {
+    expect(fromWireSysPingResponse({
+      server_time_ms: 42,
+      maintenance: {
+        kind: 'upgrade',
+        state: 'succeeded',
+        target_version: 'v1.2.0',
+        previous_version: 'v1.1.0',
+        observed_version: 'v1.2.0',
+        previous_process_started_at_ms: 100,
+        observed_process_started_at_ms: 200,
+        previous_runtime_instance_id: 'rt_previous',
+        observed_runtime_instance_id: 'rt_observed',
+        install_dir: '/opt/redeven/bin',
+        exe_path: '/opt/redeven/bin/redeven',
+        message: 'Redeven updated to v1.2.0.',
+        error_code: 'version_mismatch',
+        started_at_ms: 10,
+        updated_at_ms: 20,
+        completed_at_ms: 30,
+      },
+    }).maintenance).toEqual({
+      kind: 'upgrade',
+      state: 'succeeded',
+      targetVersion: 'v1.2.0',
+      previousVersion: 'v1.1.0',
+      observedVersion: 'v1.2.0',
+      previousProcessStartedAtMs: 100,
+      observedProcessStartedAtMs: 200,
+      previousRuntimeInstanceId: 'rt_previous',
+      observedRuntimeInstanceId: 'rt_observed',
+      installDir: '/opt/redeven/bin',
+      exePath: '/opt/redeven/bin/redeven',
+      message: 'Redeven updated to v1.2.0.',
+      errorCode: 'version_mismatch',
+      startedAtMs: 10,
+      updatedAtMs: 20,
+      completedAtMs: 30,
+    });
+  });
 });

@@ -225,6 +225,44 @@ describe('containerRuntime', () => {
     ]);
   });
 
+  it('keeps daemon stop scoped to the runtime process and pairs with status verification', () => {
+    const stopCommand = containerRuntimeDaemonStopCommand({
+      engine: 'docker',
+      container_id: 'dev',
+      runtime_binary_path: '/root/.redeven/runtime/releases/v1.2.3/bin/redeven',
+      runtime_root: '/root/.redeven',
+    });
+    const statusCommand = containerRuntimeDaemonStatusCommand({
+      engine: 'docker',
+      container_id: 'dev',
+      runtime_binary_path: '/root/.redeven/runtime/releases/v1.2.3/bin/redeven',
+      runtime_root: '/root/.redeven',
+    });
+
+    expect(stopCommand).toEqual([
+      'docker',
+      'exec',
+      '-i',
+      'dev',
+      '/root/.redeven/runtime/releases/v1.2.3/bin/redeven',
+      'desktop-runtime-stop',
+      '--state-root',
+      '/root/.redeven',
+    ]);
+    expect(statusCommand).toEqual([
+      'docker',
+      'exec',
+      '-i',
+      'dev',
+      '/root/.redeven/runtime/releases/v1.2.3/bin/redeven',
+      'desktop-runtime-status',
+      '--state-root',
+      '/root/.redeven',
+    ]);
+    expect(stopCommand.join(' ')).not.toContain('docker stop');
+    expect(stopCommand.join(' ')).not.toContain('podman stop');
+  });
+
   it('rejects malformed command inputs instead of falling back', () => {
     expect(() => containerInspectCommand('docker', '')).toThrow('Container reference');
     expect(() => containerRuntimeExecCommand({

@@ -18,16 +18,21 @@ import (
 	"github.com/floegence/redeven/internal/sys"
 )
 
+type runtimeServiceSnapshot struct {
+	RuntimeVersion string `json:"runtime_version,omitempty"`
+}
+
 type connectArtifactEnvelope struct {
 	ConnectArtifact json.RawMessage `json:"connect_artifact"`
 }
 
 type pingResponse struct {
-	ServerTimeMs       int64  `json:"server_time_ms,omitempty"`
-	AgentInstanceID    string `json:"agent_instance_id,omitempty"`
-	ProcessStartedAtMs int64  `json:"process_started_at_ms,omitempty"`
-	Version            string `json:"version,omitempty"`
-	Commit             string `json:"commit,omitempty"`
+	ServerTimeMs       int64                   `json:"server_time_ms,omitempty"`
+	AgentInstanceID    string                  `json:"agent_instance_id,omitempty"`
+	ProcessStartedAtMs int64                   `json:"process_started_at_ms,omitempty"`
+	Version            string                  `json:"version,omitempty"`
+	Commit             string                  `json:"commit,omitempty"`
+	RuntimeService     *runtimeServiceSnapshot `json:"runtime_service,omitempty"`
 }
 
 type commandResult struct {

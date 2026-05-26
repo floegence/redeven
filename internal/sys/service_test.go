@@ -81,12 +81,22 @@ func TestServicePingReportsMaintenanceSnapshot(t *testing.T) {
 		BuildTime:          "2026-03-19T00:00:00Z",
 		Maintenance: staticMaintenanceProvider{
 			snapshot: &MaintenanceSnapshot{
-				Kind:          MaintenanceKindUpgrade,
-				State:         MaintenanceStateFailed,
-				TargetVersion: "v1.3.0",
-				Message:       "Install failed: curl: (6) Could not resolve host.",
-				StartedAtMs:   101,
-				UpdatedAtMs:   202,
+				Kind:                       MaintenanceKindUpgrade,
+				State:                      MaintenanceStateFailed,
+				TargetVersion:              "v1.3.0",
+				PreviousVersion:            "v1.2.3",
+				ObservedVersion:            "v1.2.3",
+				PreviousProcessStartedAtMs: 100,
+				ObservedProcessStartedAtMs: 200,
+				PreviousRuntimeInstanceID:  "rt_previous",
+				ObservedRuntimeInstanceID:  "rt_observed",
+				InstallDir:                 "/opt/redeven/bin",
+				ExePath:                    "/opt/redeven/bin/redeven",
+				Message:                    "Install failed: curl: (6) Could not resolve host.",
+				ErrorCode:                  "install_failed",
+				StartedAtMs:                101,
+				UpdatedAtMs:                202,
+				CompletedAtMs:              203,
 			},
 		},
 	}).Register(router, nil)
@@ -114,6 +124,18 @@ func TestServicePingReportsMaintenanceSnapshot(t *testing.T) {
 	}
 	if resp.Maintenance.Message != "Install failed: curl: (6) Could not resolve host." {
 		t.Fatalf("Maintenance.Message = %q", resp.Maintenance.Message)
+	}
+	if resp.Maintenance.PreviousVersion != "v1.2.3" ||
+		resp.Maintenance.ObservedVersion != "v1.2.3" ||
+		resp.Maintenance.PreviousProcessStartedAtMs != 100 ||
+		resp.Maintenance.ObservedProcessStartedAtMs != 200 ||
+		resp.Maintenance.PreviousRuntimeInstanceID != "rt_previous" ||
+		resp.Maintenance.ObservedRuntimeInstanceID != "rt_observed" ||
+		resp.Maintenance.InstallDir != "/opt/redeven/bin" ||
+		resp.Maintenance.ExePath != "/opt/redeven/bin/redeven" ||
+		resp.Maintenance.ErrorCode != "install_failed" ||
+		resp.Maintenance.CompletedAtMs != 203 {
+		t.Fatalf("Maintenance diagnostics were not preserved: %#v", resp.Maintenance)
 	}
 }
 
