@@ -203,8 +203,8 @@ import {
   splitPinnedEnvironmentEntryIDs,
 } from './environmentLibraryProjection';
 import {
+  groupedVisibleOperationNextActions,
   operationNextActionsByKind,
-  visibleOperationNextActions,
 } from './operationNextActions';
 import {
   completeEnvironmentGuidanceRefresh,
@@ -4800,7 +4800,15 @@ function EnvironmentProgressPanel(props: Readonly<{
     props.primaryAction,
     { busy: props.primaryActionBusy },
   ));
-  const nextActions = createMemo(() => visibleOperationNextActions(props.progress));
+  const nextActionsByKind = createMemo(() => operationNextActionsByKind(props.progress));
+  const nextActionGroups = createMemo(() => groupedVisibleOperationNextActions(props.progress));
+  const showFallbackCopyAction = createMemo(() => (
+    props.progress.failure !== undefined && !nextActionsByKind().has('copy_diagnostics')
+  ));
+  const showFallbackDismissAction = createMemo(() => !nextActionsByKind().has('dismiss'));
+  const showFallbackActions = createMemo(() => (
+    canDismiss() && (showFallbackCopyAction() || showFallbackDismissAction())
+  ));
   const phaseSequence = createMemo<readonly { phase: string; key: string; label: string; status?: string }[]>(() => {
     const current = startup();
     const open = openConnection();
@@ -4976,37 +4984,46 @@ function EnvironmentProgressPanel(props: Readonly<{
           </div>
         )}
       </Show>
-      <Show when={nextActions().length > 0}>
-        <div class="redeven-action-popover__actions">
-          <For each={nextActions()}>
-            {(action) => (
-              <Button
-                size="sm"
-                variant="outline"
-                class="flex-1 justify-center gap-1.5 whitespace-nowrap"
-                onClick={() => props.runNextAction?.(action, props.progress)}
+      <Show when={nextActionGroups().length > 0}>
+        <div class="redeven-action-popover__action-stack">
+          <For each={nextActionGroups()}>
+            {(group) => (
+              <div
+                class="redeven-action-popover__actions"
+                data-layout={group.kind}
               >
-                <Show
-                  when={action.kind === 'refresh_status'}
-                  fallback={action.kind === 'update_runtime'
-                    ? <Refresh class="h-3.5 w-3.5" />
-                    : action.kind === 'manage_desktop_update'
-                      ? <ExternalLink class="h-3.5 w-3.5" />
-                    : action.kind === 'copy_diagnostics'
-                      ? <Copy class="h-3.5 w-3.5" />
-                      : null}
-                >
-                  <Refresh class="h-3.5 w-3.5" />
-                </Show>
-                {action.label}
-              </Button>
+                <For each={group.actions}>
+                  {(action) => (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      class="justify-center gap-1.5"
+                      onClick={() => props.runNextAction?.(action, props.progress)}
+                    >
+                      <Show
+                        when={action.kind === 'refresh_status'}
+                        fallback={action.kind === 'update_runtime'
+                          ? <Refresh class="h-3.5 w-3.5" />
+                          : action.kind === 'manage_desktop_update'
+                            ? <ExternalLink class="h-3.5 w-3.5" />
+                          : action.kind === 'copy_diagnostics'
+                            ? <Copy class="h-3.5 w-3.5" />
+                            : null}
+                      >
+                        <Refresh class="h-3.5 w-3.5" />
+                      </Show>
+                      {action.label}
+                    </Button>
+                  )}
+                </For>
+              </div>
             )}
           </For>
         </div>
       </Show>
-      <Show when={canDismiss()}>
+      <Show when={showFallbackActions()}>
         <div class="redeven-action-popover__actions">
-          <Show when={props.progress.failure && !operationNextActionsByKind(props.progress).has('copy_diagnostics')}>
+          <Show when={showFallbackCopyAction()}>
             <Button
               size="sm"
               variant="outline"
@@ -5017,7 +5034,7 @@ function EnvironmentProgressPanel(props: Readonly<{
               Copy log
             </Button>
           </Show>
-          <Show when={!operationNextActionsByKind(props.progress).has('dismiss')}>
+          <Show when={showFallbackDismissAction()}>
             <Button
               size="sm"
               variant="outline"

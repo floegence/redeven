@@ -776,6 +776,10 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('flex-wrap: wrap;');
     expect(styles).toContain('.redeven-action-popover');
     expect(styles).toContain('.redeven-action-popover__actions');
+    expect(styles).toContain('.redeven-action-popover__action-stack');
+    expect(styles).toContain(".redeven-action-popover__actions[data-layout='primary']");
+    expect(styles).toContain(".redeven-action-popover__actions[data-layout='secondary']");
+    expect(styles).toContain('grid-template-columns: repeat(2, minmax(0, 1fr));');
     expect(styles).toContain('.redeven-action-popover__notice');
   });
 
@@ -835,8 +839,10 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('<div class="redeven-action-popover__notice-detail">{failure().summary}</div>');
     expect(appSrc).toContain('redeven-action-popover__notice-detail--pre');
     expect(appSrc).toContain("action.kind === 'update_runtime'");
-    expect(appSrc).toContain('const nextActions = createMemo(() => visibleOperationNextActions(props.progress));');
-    expect(appSrc).toContain('<For each={nextActions()}>');
+    expect(appSrc).toContain('const nextActionGroups = createMemo(() => groupedVisibleOperationNextActions(props.progress));');
+    expect(appSrc).toContain('<For each={nextActionGroups()}>');
+    expect(appSrc).toContain('data-layout={group.kind}');
+    expect(appSrc).toContain('<For each={group.actions}>');
     expect(appSrc).toContain("case 'refresh_status':");
     expect(appSrc).toContain("case 'copy_diagnostics':");
     expect(appSrc).toContain("case 'dismiss':");

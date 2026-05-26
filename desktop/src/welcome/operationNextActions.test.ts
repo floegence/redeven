@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import type { DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
-import { visibleOperationNextActions } from './operationNextActions';
+import {
+  groupedVisibleOperationNextActions,
+  visibleOperationNextActions,
+} from './operationNextActions';
 
 function failedProgress(
   nextActions: NonNullable<DesktopLauncherActionProgress['next_actions']>,
@@ -68,6 +71,84 @@ describe('operationNextActions', () => {
       expect.objectContaining({ kind: 'manage_desktop_update', label: 'Update Redeven Desktop' }),
       expect.objectContaining({ kind: 'copy_diagnostics', label: 'Copy log' }),
       expect.objectContaining({ kind: 'dismiss', label: 'Dismiss' }),
+    ]);
+  });
+
+  it('groups recovery and utility actions so failure popovers never place three actions in one row', () => {
+    const progress = failedProgress([
+      {
+        kind: 'refresh_status',
+        environment_id: 'local',
+        label: 'Refresh status',
+      },
+      {
+        kind: 'copy_diagnostics',
+        operation_key: 'local:host:local:open',
+        label: 'Copy log',
+      },
+      {
+        kind: 'dismiss',
+        operation_key: 'local:host:local:open',
+        label: 'Dismiss',
+      },
+    ]);
+
+    expect(groupedVisibleOperationNextActions(progress)).toEqual([
+      {
+        kind: 'primary',
+        actions: [
+          expect.objectContaining({ kind: 'refresh_status', label: 'Refresh status' }),
+        ],
+      },
+      {
+        kind: 'secondary',
+        actions: [
+          expect.objectContaining({ kind: 'copy_diagnostics', label: 'Copy log' }),
+          expect.objectContaining({ kind: 'dismiss', label: 'Dismiss' }),
+        ],
+      },
+    ]);
+  });
+
+  it('keeps long recovery actions full-width before utility actions', () => {
+    const progress = failedProgress([
+      {
+        kind: 'manage_desktop_update',
+        environment_id: 'local',
+        label: 'Update Redeven Desktop',
+      },
+      {
+        kind: 'refresh_status',
+        environment_id: 'local',
+        label: 'Refresh status',
+      },
+      {
+        kind: 'copy_diagnostics',
+        operation_key: 'local:host:local:open',
+        label: 'Copy log',
+      },
+      {
+        kind: 'dismiss',
+        operation_key: 'local:host:local:open',
+        label: 'Dismiss',
+      },
+    ]);
+
+    expect(groupedVisibleOperationNextActions(progress)).toEqual([
+      {
+        kind: 'primary',
+        actions: [
+          expect.objectContaining({ kind: 'refresh_status', label: 'Refresh status' }),
+          expect.objectContaining({ kind: 'manage_desktop_update', label: 'Update Redeven Desktop' }),
+        ],
+      },
+      {
+        kind: 'secondary',
+        actions: [
+          expect.objectContaining({ kind: 'copy_diagnostics', label: 'Copy log' }),
+          expect.objectContaining({ kind: 'dismiss', label: 'Dismiss' }),
+        ],
+      },
     ]);
   });
 });

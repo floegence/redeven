@@ -46,3 +46,34 @@ export function visibleOperationNextActions(
   push('dismiss');
   return actions;
 }
+
+export type OperationNextActionLayoutGroup = Readonly<{
+  kind: 'primary' | 'secondary';
+  actions: readonly DesktopLauncherOperationNextAction[];
+}>;
+
+function operationNextActionIsPrimary(action: DesktopLauncherOperationNextAction): boolean {
+  return action.kind === 'refresh_status'
+    || action.kind === 'update_runtime'
+    || action.kind === 'manage_desktop_update';
+}
+
+export function groupedVisibleOperationNextActions(
+  progress: DesktopLauncherActionProgress,
+): readonly OperationNextActionLayoutGroup[] {
+  const primary: DesktopLauncherOperationNextAction[] = [];
+  const secondary: DesktopLauncherOperationNextAction[] = [];
+
+  for (const action of visibleOperationNextActions(progress)) {
+    if (operationNextActionIsPrimary(action)) {
+      primary.push(action);
+    } else {
+      secondary.push(action);
+    }
+  }
+
+  return [
+    ...(primary.length > 0 ? [{ kind: 'primary' as const, actions: primary }] : []),
+    ...(secondary.length > 0 ? [{ kind: 'secondary' as const, actions: secondary }] : []),
+  ];
+}
