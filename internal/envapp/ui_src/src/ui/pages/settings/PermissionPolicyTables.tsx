@@ -66,6 +66,7 @@ export function PermissionRuleTable(props: {
                 onClick={() => props.onRemove(index)}
                 disabled={!props.canInteract}
                 icon={Trash}
+                aria-label={`Remove ${props.keyHeader.toLowerCase()} permission rule`}
               />
             </div>
           )}
@@ -109,7 +110,7 @@ export function PermissionMatrixTable(props: {
   canInteract: boolean;
   onChange: (key: 'read' | 'write' | 'execute', value: boolean) => void;
 }) {
-  const perms = [
+  const perms = () => [
     { key: 'read' as const, icon: Eye, label: 'Read', checked: props.read },
     { key: 'write' as const, icon: Pencil, label: 'Write', checked: props.write },
     { key: 'execute' as const, icon: Play, label: 'Execute', checked: props.execute },
@@ -117,7 +118,7 @@ export function PermissionMatrixTable(props: {
 
   return (
     <div class="flex flex-wrap gap-2">
-      <For each={perms}>
+      <For each={perms()}>
         {(perm) => (
           <label
             class={cn(

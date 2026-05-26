@@ -48,11 +48,11 @@ describe('EnvDebugConsoleSettingsPanel', () => {
       />
     ), host);
 
-    expect(host.textContent).toContain('Debug Console');
     expect(host.textContent).toContain('Frontend only');
-    expect(host.textContent).toContain('No runtime config writes');
     expect(host.textContent).not.toContain('collect_ui_metrics');
     expect(host.textContent).not.toContain('Show the floating debug console in this Env App session.');
+    expect(host.textContent).not.toContain('Debug Console');
+    expect(host.textContent).not.toContain('No runtime config writes');
     expect(host.textContent).not.toContain('Console hidden');
     expect(host.textContent).not.toContain('UI metrics start on open');
     expect(host.textContent).not.toContain('Open floating console');
