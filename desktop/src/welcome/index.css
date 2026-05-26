@@ -1619,6 +1619,15 @@ body {
   white-space: pre-wrap;
 }
 
+.redeven-action-popover__action-stack {
+  display: grid;
+  min-width: 0;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 46%, transparent);
+}
+
 .redeven-action-popover__actions {
   display: flex;
   min-width: 0;
@@ -1637,6 +1646,31 @@ body {
 .redeven-action-popover__actions button {
   min-width: 0;
   white-space: normal;
+}
+
+.redeven-action-popover__action-stack .redeven-action-popover__actions {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.redeven-action-popover__actions[data-layout='primary'] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.redeven-action-popover__actions[data-layout='secondary'] {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.redeven-action-popover__action-stack button {
+  width: 100%;
+  white-space: nowrap;
+}
+
+.redeven-action-popover__action-stack svg {
+  flex-shrink: 0;
 }
 
 .redeven-environment-progress {
