@@ -181,7 +181,7 @@ export class DesktopWelcomeRuntimeHealthStore {
       generation,
       target,
       health: withFreshness(previous?.health ?? target.checking_health, 'checking'),
-      presence: previous?.presence,
+      presence: undefined,
     });
     this.onChange();
 
@@ -217,7 +217,7 @@ export class DesktopWelcomeRuntimeHealthStore {
             checked_at_unix_ms: Date.now(),
             offline_reason: message || target.checking_health.offline_reason,
           }, 'failed'),
-          presence: previous?.presence,
+          presence: undefined,
         });
         this.onProbeEvent({
           target_id: target.environment_id,

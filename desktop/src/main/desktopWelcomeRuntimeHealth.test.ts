@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { DesktopRuntimeHealth } from '../shared/desktopRuntimeHealth';
+import type { DesktopManagedRuntimePresence } from '../shared/desktopRuntimePresence';
 import {
   DesktopWelcomeRuntimeHealthStore,
   type DesktopWelcomeRuntimeHealthTarget,
@@ -46,6 +47,29 @@ function target(
     probe,
     ...overrides,
   };
+}
+
+function presence(
+  overrides: Partial<DesktopManagedRuntimePresence> = {},
+): DesktopManagedRuntimePresence {
+  const base = {
+    target_id: 'local:demo',
+    placement_target_id: 'local:host:demo',
+    kind: 'local_environment',
+    environment_id: 'demo',
+    label: 'Demo',
+    runtime_key: 'demo',
+    host_access: { kind: 'local_host' },
+    placement: { kind: 'host_process', runtime_root: '' },
+    running: true,
+    local_ui_url: 'http://127.0.0.1:24000/',
+    openable: true,
+    runtime_control_status: { state: 'available', owner: 'current_desktop' },
+    operations: {},
+    checked_at_unix_ms: 1,
+    ...overrides,
+  } as DesktopManagedRuntimePresence;
+  return base;
 }
 
 describe('DesktopWelcomeRuntimeHealthStore', () => {
@@ -153,6 +177,94 @@ describe('DesktopWelcomeRuntimeHealthStore', () => {
       offline_reason: 'ssh timed out',
     }));
     expect(events).toEqual(['failed:ssh timed out']);
+  });
+
+  it('does not carry previous presence into checking state', async () => {
+    const probeResult = deferred<{ health: DesktopRuntimeHealth }>();
+    const store = new DesktopWelcomeRuntimeHealthStore(() => undefined);
+    const runtimePresence = presence();
+
+    await store.refresh([target(async () => ({
+      health: health({
+        status: 'online',
+        local_ui_url: runtimePresence.local_ui_url,
+      }),
+      presence: runtimePresence,
+    }), {
+      slot: 'local_environment',
+      presence_target_id: runtimePresence.target_id,
+    })]);
+    expect(store.snapshot().managedRuntimePresenceByTargetID[runtimePresence.target_id]).toBeTruthy();
+
+    const refresh = store.refresh([target(() => probeResult.promise, {
+      slot: 'local_environment',
+      presence_target_id: runtimePresence.target_id,
+    })], { force: true });
+
+    expect(store.snapshot().managedRuntimePresenceByTargetID[runtimePresence.target_id]).toBeUndefined();
+    probeResult.resolve({ health: health({ status: 'offline' }) });
+    await refresh;
+  });
+
+  it('clears previous presence when a fresh probe does not return presence', async () => {
+    const store = new DesktopWelcomeRuntimeHealthStore(() => undefined);
+    const runtimePresence = presence();
+
+    await store.refresh([target(async () => ({
+      health: health({
+        status: 'online',
+        local_ui_url: runtimePresence.local_ui_url,
+      }),
+      presence: runtimePresence,
+    }), {
+      slot: 'local_environment',
+      presence_target_id: runtimePresence.target_id,
+    })]);
+    await store.refresh([target(async () => ({
+      health: health({
+        status: 'offline',
+        offline_reason: 'Runtime stopped.',
+      }),
+    }), {
+      slot: 'local_environment',
+      presence_target_id: runtimePresence.target_id,
+    })], { force: true });
+
+    expect(store.snapshot().managedRuntimePresenceByTargetID[runtimePresence.target_id]).toBeUndefined();
+    expect(store.snapshot().localRuntimeHealth.demo).toEqual(expect.objectContaining({
+      freshness: 'fresh',
+      status: 'offline',
+      offline_reason: 'Runtime stopped.',
+    }));
+  });
+
+  it('clears previous presence when a probe fails', async () => {
+    const store = new DesktopWelcomeRuntimeHealthStore(() => undefined);
+    const runtimePresence = presence();
+
+    await store.refresh([target(async () => ({
+      health: health({
+        status: 'online',
+        local_ui_url: runtimePresence.local_ui_url,
+      }),
+      presence: runtimePresence,
+    }), {
+      slot: 'local_environment',
+      presence_target_id: runtimePresence.target_id,
+    })]);
+    await store.refresh([target(async () => {
+      throw new Error('runtime unavailable');
+    }, {
+      slot: 'local_environment',
+      presence_target_id: runtimePresence.target_id,
+    })], { force: true });
+
+    expect(store.snapshot().managedRuntimePresenceByTargetID[runtimePresence.target_id]).toBeUndefined();
+    expect(store.snapshot().localRuntimeHealth.demo).toEqual(expect.objectContaining({
+      freshness: 'failed',
+      status: 'offline',
+      offline_reason: 'runtime unavailable',
+    }));
   });
 
   it('skips fresh entries inside the in-memory TTL and prunes removed targets only on full refreshes', async () => {

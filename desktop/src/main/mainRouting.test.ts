@@ -97,10 +97,31 @@ describe('main routing', () => {
 
     expect(mainSrc).toContain('function runtimePlacementMaintenanceForRuntimeService(');
     expect(mainSrc).toContain('runtimePlacementMaintenanceByTargetID.delete(targetID)');
-    expect(inspectSrc).toContain('maintenance: runtimePlacementMaintenanceForRuntimeService(target.targetID, bridgeRecord.startup.runtime_service)');
-    expect(inspectSrc).toContain('maintenance: runtimePlacementMaintenanceForRuntimeService(target.targetID, cachedReadyRecord.startup?.runtime_service)');
+    expect(inspectSrc.indexOf('resolveRuntimeContainerPlacement(')).toBeLessThan(
+      inspectSrc.indexOf('const bridgeRecord = await verifyRuntimePlacementBridgeRecord(target.targetID)'),
+    );
+    expect(inspectSrc).not.toContain('const bridgeRecord = runtimePlacementBridgeByTargetID.get(target.targetID) ?? null');
+    expect(inspectSrc).toContain('await clearRuntimePlacementTargetRecords(target.targetID)');
+    expect(inspectSrc).not.toContain('const cachedReadyRecord = runtimePlacementReadyByTargetID.get(target.targetID) ?? null');
+    expect(inspectSrc).not.toContain('cachedReadyRecord.startup');
+    expect(inspectSrc).toContain('runtimePlacementReadyByTargetID.delete(target.targetID)');
     expect(inspectSrc).toContain('const maintenance = runtimePlacementMaintenanceForRuntimeService(target.targetID, report.startup.runtime_service);');
     expect(inspectSrc).not.toContain('maintenance: maintenance && !runtimeServiceIsOpenable(report.startup.runtime_service)');
+  });
+
+  it('does not publish stale runtime target presence for offline probes', () => {
+    const mainSrc = readMainSource();
+    const probeStart = mainSrc.indexOf('async function probeSavedRuntimeTargetHealth(');
+    const probeEnd = mainSrc.indexOf('function buildWelcomeRuntimeHealthTargets(', probeStart);
+    expect(probeStart).toBeGreaterThanOrEqual(0);
+    expect(probeEnd).toBeGreaterThan(probeStart);
+    const probeSrc = mainSrc.slice(probeStart, probeEnd);
+
+    expect(probeSrc).toContain('if (!state.running)');
+    expect(probeSrc.indexOf('if (!state.running)')).toBeLessThan(
+      probeSrc.indexOf('presence: runtimeTargetPresenceFromState(target, state)'),
+    );
+    expect(probeSrc).toContain('health: runtimeTargetHealthFromState(target, state)');
   });
 
   it('lets dev SSH bootstrap use an explicit runtime release tag without changing the bundled runtime version', () => {
@@ -150,7 +171,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain('const sshRuntimeMaintenanceByKey = new Map');
     expect(mainSrc).toContain('error instanceof DesktopSSHRuntimeMaintenanceRequiredError');
     expect(mainSrc).toContain('sshRuntimeMaintenanceByKey.set(runtimeKey, error.maintenance)');
-    expect(mainSrc).toContain('runtime_maintenance: maintenance');
+    expect(mainSrc).not.toContain('runtime_maintenance: maintenance');
     expect(mainSrc).toContain('sshRuntimeMaintenanceByKey.delete(runtimeKey)');
     expect(mainSrc).toContain('const operation = launcherOperations.create({');
     expect(mainSrc).toContain("phase: 'ssh_preparing_start'");
@@ -181,6 +202,76 @@ describe('main routing', () => {
     expect(mainSrc).not.toContain('function friendlyRuntimeStartErrorMessage(');
     expect(mainSrc).not.toContain('firstDisplayLine(');
     expect(mainSrc).not.toContain(['The SSH host resolved its runtime directory to', '/root'].join(' '));
+  });
+
+  it('verifies runtime liveness before reusing launcher cache records', () => {
+    const mainSrc = readMainSource();
+
+    const providerStart = mainSrc.indexOf('async function resolveProviderRuntimeLinkTarget(');
+    const providerEnd = mainSrc.indexOf('function updateProviderRuntimeTargetStartup(', providerStart);
+    expect(providerStart).toBeGreaterThanOrEqual(0);
+    expect(providerEnd).toBeGreaterThan(providerStart);
+    const providerSrc = mainSrc.slice(providerStart, providerEnd);
+    expect(providerSrc).toContain('await refreshWelcomeRuntimeHealthForEnvironment(runtimeKey)');
+    expect(providerSrc).toContain('await verifyCurrentLocalEnvironmentRuntimeRecord(preferences.local_environment)');
+    expect(providerSrc).not.toContain('const record = currentLocalEnvironmentRuntimeRecord(preferences.local_environment)');
+
+    const providerOccupancyStart = mainSrc.indexOf('async function providerEnvironmentOccupyingRuntime(');
+    const providerOccupancyEnd = mainSrc.indexOf('type ProviderDesktopSessionMaterial', providerOccupancyStart);
+    expect(providerOccupancyStart).toBeGreaterThanOrEqual(0);
+    expect(providerOccupancyEnd).toBeGreaterThan(providerOccupancyStart);
+    const providerOccupancySrc = mainSrc.slice(providerOccupancyStart, providerOccupancyEnd);
+    expect(providerOccupancySrc).toContain('preferences: DesktopPreferences');
+    expect(providerOccupancySrc).toContain('await verifyCurrentLocalEnvironmentRuntimeRecord(preferences.local_environment)');
+    expect(providerOccupancySrc).toContain('await verifySSHEnvironmentRuntimeRecord(runtimeKey)');
+    expect(providerOccupancySrc).toContain('await verifyRuntimePlacementBridgeRecord(targetID)');
+    expect(providerOccupancySrc).not.toContain('if (localEnvironmentRuntimeRecord)');
+    expect(providerOccupancySrc).not.toContain('for (const record of sshEnvironmentRuntimeByKey.values())');
+    expect(providerOccupancySrc).not.toContain('for (const record of runtimePlacementBridgeByTargetID.values())');
+
+    const sshProbeStart = mainSrc.indexOf('async function probeSavedSSHRuntimeHealth(');
+    const sshProbeEnd = mainSrc.indexOf('function runtimeTargetProbeSource(', sshProbeStart);
+    expect(sshProbeStart).toBeGreaterThanOrEqual(0);
+    expect(sshProbeEnd).toBeGreaterThan(sshProbeStart);
+    const sshProbeSrc = mainSrc.slice(sshProbeStart, sshProbeEnd);
+    expect(sshProbeSrc).toContain('const runtimeRecord = await verifySSHEnvironmentRuntimeRecord(runtimeKey)');
+    expect(sshProbeSrc).toContain('sshRuntimeReadyByKey.delete(runtimeKey)');
+    expect(sshProbeSrc).not.toContain('const runtimeRecord = sshEnvironmentRuntimeByKey.get(runtimeKey) ?? null');
+
+    const openSSHStart = mainSrc.indexOf('async function openSSHEnvironmentFromLauncher(');
+    const openSSHEnd = mainSrc.indexOf('function thrownLauncherActionFailure(', openSSHStart);
+    expect(openSSHStart).toBeGreaterThanOrEqual(0);
+    expect(openSSHEnd).toBeGreaterThan(openSSHStart);
+    const openSSHSrc = mainSrc.slice(openSSHStart, openSSHEnd);
+    expect(openSSHSrc).toContain('let readyRecord: SSHRuntimeReadyRecord | null = null;');
+    expect(openSSHSrc).toContain('let existingRuntimeRecord = await verifySSHEnvironmentRuntimeRecord(optimisticSessionKey);');
+    expect(openSSHSrc).toContain('await refreshWelcomeRuntimeHealthForEnvironment(request.environment_id ?? optimisticSessionKey)');
+    expect(openSSHSrc).not.toContain('let readyRecord = sshRuntimeReadyByKey.get(optimisticSessionKey) ?? null');
+
+    const ensureRuntimeStart = mainSrc.indexOf('async function ensureRuntimePlacementReadyRecordFromLauncher(');
+    const ensureRuntimeEnd = mainSrc.indexOf('async function openRuntimePlacementBridgeFromLauncher(', ensureRuntimeStart);
+    expect(ensureRuntimeStart).toBeGreaterThanOrEqual(0);
+    expect(ensureRuntimeEnd).toBeGreaterThan(ensureRuntimeStart);
+    const ensureRuntimeSrc = mainSrc.slice(ensureRuntimeStart, ensureRuntimeEnd);
+    expect(ensureRuntimeSrc).not.toContain('return existing;');
+    expect(ensureRuntimeSrc).not.toContain('if (existing &&');
+    expect(ensureRuntimeSrc).toContain('const inspection = await inspectRuntimePlacementTargetState({');
+
+    const bridgeHelperStart = mainSrc.indexOf('async function openRuntimePlacementBridgeForReadyRecord(');
+    const bridgeHelperEnd = mainSrc.indexOf('type ProviderRuntimeLinkTargetRecord', bridgeHelperStart);
+    expect(bridgeHelperStart).toBeGreaterThanOrEqual(0);
+    expect(bridgeHelperEnd).toBeGreaterThan(bridgeHelperStart);
+    const bridgeHelperSrc = mainSrc.slice(bridgeHelperStart, bridgeHelperEnd);
+    expect(bridgeHelperSrc).toContain('await clearRuntimePlacementBridgeRecord(readyRecord.runtime_key as DesktopRuntimeTargetID)');
+    expect(bridgeHelperSrc).not.toContain('return existing;');
+
+    const deleteRuntimeTargetStart = mainSrc.indexOf('async function deleteSavedRuntimeTargetFromWelcome(');
+    const deleteRuntimeTargetEnd = mainSrc.indexOf('async function listRuntimeContainersFromLauncher(', deleteRuntimeTargetStart);
+    expect(deleteRuntimeTargetStart).toBeGreaterThanOrEqual(0);
+    expect(deleteRuntimeTargetEnd).toBeGreaterThan(deleteRuntimeTargetStart);
+    const deleteRuntimeTargetSrc = mainSrc.slice(deleteRuntimeTargetStart, deleteRuntimeTargetEnd);
+    expect(deleteRuntimeTargetSrc).toContain('await clearRuntimePlacementTargetRecords(runtimeTargetID)');
+    expect(deleteRuntimeTargetSrc).not.toContain('runtimePlacementBridgeByTargetID.get(runtimeTargetID)');
   });
 
   it('hydrates runtime lifecycle workflows only from active matching launcher attempts', () => {
@@ -426,7 +517,7 @@ describe('main routing', () => {
     const refreshRuntimeStart = mainSrc.indexOf('async function refreshEnvironmentRuntimeFromLauncher(');
     const refreshRuntimeEnd = mainSrc.indexOf('async function refreshAllEnvironmentRuntimesFromLauncher(', refreshRuntimeStart);
     const refreshRuntimeSrc = mainSrc.slice(refreshRuntimeStart, refreshRuntimeEnd);
-    expect(refreshRuntimeSrc).toContain('const runtimeRecord = currentLocalEnvironmentRuntimeRecord(localEnvironment)\n      ?? await attachLocalEnvironmentRuntime(localEnvironment);');
+    expect(refreshRuntimeSrc).toContain('const runtimeRecord = await verifyCurrentLocalEnvironmentRuntimeRecord(localEnvironment)\n      ?? await attachLocalEnvironmentRuntime(localEnvironment);');
   });
 
   it('keeps provider-link tickets separate from remote open route readiness', () => {
