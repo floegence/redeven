@@ -1376,6 +1376,68 @@ describe('desktopWelcomeState', () => {
     });
   });
 
+  it('does not keep a saved container target openable after presence disappears', () => {
+    const targetID = 'local:container:docker:redeven-demo-ubuntu:63ce185e';
+    const placement = {
+      kind: 'container_process' as const,
+      container_engine: 'docker' as const,
+      container_id: 'missing-container-id',
+      container_ref: 'redeven-demo-ubuntu',
+      container_label: 'redeven-demo-ubuntu',
+      runtime_root: '/root/.redeven',
+      bridge_strategy: 'exec_stream' as const,
+    };
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        saved_runtime_targets: [{
+          schema_version: 1,
+          id: targetID,
+          label: 'redeven-demo-ubuntu',
+          host_access: { kind: 'local_host' },
+          placement,
+          pinned: false,
+          last_used_at_ms: 1779100944496,
+          created_at_ms: 1779100944496,
+          updated_at_ms: 1779100944496,
+        }],
+      }),
+      savedRuntimeTargetHealth: {
+        [targetID]: {
+          status: 'offline',
+          checked_at_unix_ms: 1779100946000,
+          source: 'local_runtime_probe',
+          freshness: 'failed',
+          offline_reason_code: 'container_not_running',
+          offline_reason: 'Container redeven-demo-ubuntu is not running.',
+        },
+      },
+      managedRuntimePresenceByTargetID: {},
+    });
+
+    const entry = snapshot.environments.find((environment) => environment.id === targetID);
+
+    expect(entry).toMatchObject({
+      runtime_health: expect.objectContaining({
+        status: 'offline',
+        freshness: 'failed',
+        offline_reason_code: 'container_not_running',
+      }),
+      runtime_operations: expect.objectContaining({
+        open: expect.objectContaining({
+          availability: 'blocked',
+          reason_code: 'runtime_not_started',
+        }),
+        start: expect.objectContaining({
+          availability: 'available',
+        }),
+      }),
+      provider_runtime_link_target: expect.objectContaining({
+        runtime_running: false,
+      }),
+    });
+    expect(entry?.managed_runtime_open_connection_required).toBeUndefined();
+  });
+
   it('drops stale open maintenance when a saved runtime target reports an openable runtime', () => {
     const targetID = 'local:container:docker:redeven-nginx-dev:63ce185e';
     const placement = {
