@@ -1,20 +1,19 @@
 {
   "schema_version": 1,
   "release_review": {
-    "release_version": "v0.6.11",
-    "previous_release": "v0.6.10",
+    "release_version": "v0.6.12",
+    "previous_release": "v0.6.11",
     "reviewed_at": "2026-05-26",
-    "review_id": "browser-editor-managed-engine-transfer-v1",
-    "summary": "Browser Editor setup now keeps managed code-server transfers on the runtime-control loopback path reliable across reused connections and accepts safe archive-internal symlinks during code-server extraction.",
+    "review_id": "desktop-drag-region-refresh-scope-v1",
+    "summary": "Desktop embedded drag-region synchronization now ignores Workbench subtree mutations that cannot affect window chrome drag or no-drag regions.",
     "checked_surfaces": [
-      "Desktop runtime-control loopback proxy rewrites every eligible runtime-control request on reused keep-alive connections while leaving Local UI traffic on the original passthrough path",
-      "runtime-control WebSocket upgrade requests are rewritten only for the HTTP handshake and continue as the existing raw tunnel after upgrade",
-      "Browser Editor code-server archive extraction accepts safe internal relative symlinks required by current code-server packages",
-      "Archive extraction still rejects absolute symlinks, parent-escaping symlinks, hardlinks, symlink parents for regular file writes, and unsafe special entries",
-      "Desktop Browser Editor setup progress, provider link framing, session upload behavior, and Env App status polling keep their existing API contracts",
-      "Runtime Service protocol JSON fields, compatibility epoch, startup reports, sys.ping, Local UI health, and SSH runtime bootstrap keep the same compatibility window"
+      "Desktop embedded drag-region mutation routing only schedules snapshot refreshes for top-bar, explicit drag-root, or explicit no-drag marker changes",
+      "Workbench subtree mutations outside drag-region anchors no longer force repeated drag-region DOM scans or layout reads",
+      "ResizeObserver-backed geometry refreshes, titlebar drag roots, and no-drag blocker behavior continue to use the existing Desktop embedded drag-region host contract",
+      "Desktop preload drag-region host messages keep the same snapshot payload shape and continue to accept renderer refreshes through the existing bridge",
+      "Env App Workbench wheel ownership, text selection ownership, widget pointer routing, runtime-control, Local UI health, startup reports, provider link, and desktop bridge protocol fields keep the same compatibility window"
     ],
-    "same_window_rationale": "This release changes Desktop-side request routing inside the loopback proxy and runtime-side code-server archive validation rules, but it does not add, remove, or rename Runtime Service JSON fields, runtime-control methods, startup report fields, sys.ping fields, Local UI health fields, provider-link framing, or SSH bootstrap contracts. Older and newer Desktop/Runtime pairs continue to use the same protocol window; the updated behavior only makes managed Browser Editor setup complete reliably with current code-server packages."
+    "same_window_rationale": "The release changes only Desktop renderer-side drag-region refresh scheduling. It does not add, remove, or change any Runtime Service JSON fields, protocol version, runtime-control endpoint, startup report shape, Local UI health surface, provider-link surface, or desktop bridge framing. Existing Desktop hosts continue to receive the same drag-region snapshot contract, with fewer irrelevant Workbench mutation-triggered refreshes."
   },
   "runtime_protocol_version": "redeven-runtime-v1",
   "compatibility_epoch": 5,
