@@ -49,21 +49,71 @@ type CreateAgentMaintenanceControllerArgs = Readonly<{
 }>;
 
 function normalizeProcessStartedAtMs(value: unknown): number | null {
-  const numeric = Number(value ?? Number.NaN);
-  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+	const numeric = Number(value ?? Number.NaN);
+	return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+}
+
+function normalizeTimestampMs(value: unknown): number | null {
+	const numeric = Number(value ?? Number.NaN);
+	return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+}
+
+function maintenanceSnapshotTimestampMs(snapshot: SysPingResponse['maintenance'] | null | undefined): number | null {
+	if (!snapshot) return null;
+	return normalizeTimestampMs(snapshot.completedAtMs) ??
+		normalizeTimestampMs(snapshot.updatedAtMs) ??
+		normalizeTimestampMs(snapshot.startedAtMs);
+}
+
+function maintenanceSnapshotMatchesAttempt(
+	kind: MaintenanceKind,
+	snapshot: SysPingResponse['maintenance'] | null | undefined,
+	attempt: Readonly<{ startedAtMs: number; targetVersion: string }>,
+): boolean {
+	if (!snapshot) return false;
+	if (String(snapshot.kind ?? '').trim() !== kind) return false;
+	const target = String(attempt.targetVersion ?? '').trim();
+	if (kind === 'upgrade' && !target) return false;
+	const snapshotAtMs = maintenanceSnapshotTimestampMs(snapshot);
+	if (snapshotAtMs === null || snapshotAtMs < attempt.startedAtMs) return false;
+	if (!target) return true;
+	return String(snapshot.targetVersion ?? '').trim() === target;
 }
 
 function resolveMaintenanceFailure(
-  kind: MaintenanceKind,
-  snapshot: SysPingResponse['maintenance'] | null | undefined,
+	kind: MaintenanceKind,
+	snapshot: SysPingResponse['maintenance'] | null | undefined,
+	attempt: Readonly<{ startedAtMs: number; targetVersion: string }>,
 ): string | null {
-  if (!snapshot) return null;
-  if (String(snapshot.kind ?? '').trim() !== kind) return null;
-  if (String(snapshot.state ?? '').trim() !== 'failed') return null;
+	if (!snapshot) return null;
+	if (!maintenanceSnapshotMatchesAttempt(kind, snapshot, attempt)) return null;
+	if (String(snapshot.state ?? '').trim() !== 'failed') return null;
 
-  const message = String(snapshot.message ?? '').trim();
+	const message = String(snapshot.message ?? '').trim();
   if (message) return message;
   return kind === 'upgrade' ? 'Update failed.' : 'Restart failed.';
+}
+
+function resolveMaintenanceSuccess(
+	kind: MaintenanceKind,
+	snapshot: SysPingResponse['maintenance'] | null | undefined,
+	attempt: Readonly<{ startedAtMs: number; targetVersion: string }>,
+): boolean {
+	if (!snapshot) return false;
+	if (!maintenanceSnapshotMatchesAttempt(kind, snapshot, attempt)) return false;
+	return String(snapshot.state ?? '').trim() === 'succeeded';
+}
+
+function formatUpgradeTimeoutMessage(previousVersion: string, targetVersion: string, observedVersion: string): string {
+  const target = String(targetVersion ?? '').trim();
+  const observed = String(observedVersion ?? '').trim() || String(previousVersion ?? '').trim();
+  if (target && observed) {
+    return `Timed out waiting for Redeven to update from ${observed} to ${target}.`;
+  }
+  if (target) {
+    return `Timed out waiting for Redeven to update to ${target}.`;
+  }
+  return 'Timed out waiting for the runtime update to finish.';
 }
 
 export function createAgentMaintenanceController(args: CreateAgentMaintenanceControllerArgs): AgentMaintenanceController {
@@ -157,12 +207,17 @@ export function createAgentMaintenanceController(args: CreateAgentMaintenanceCon
     const previousVersion = nextKind === 'upgrade'
       ? String(baselinePing?.version ?? args.currentVersion() ?? '').trim()
       : '';
-    const previousProcessStartedAtMs =
-      normalizeProcessStartedAtMs(baselinePing?.processStartedAtMs) ??
-      normalizeProcessStartedAtMs(args.currentProcessStartedAtMs());
+	const previousProcessStartedAtMs =
+		normalizeProcessStartedAtMs(baselinePing?.processStartedAtMs) ??
+		normalizeProcessStartedAtMs(args.currentProcessStartedAtMs());
+	const attemptStartedAtMs = normalizeTimestampMs(baselinePing?.serverTimeMs) ?? Date.now();
+	const maintenanceAttempt = {
+		startedAtMs: attemptStartedAtMs,
+		targetVersion: cleanTargetVersion,
+	};
 
-    let started = false;
-    try {
+	let started = false;
+	try {
       const response: SysUpgradeResponse | SysRestartResponse =
         nextKind === 'upgrade'
           ? await (args.startUpgradeRequest ? args.startUpgradeRequest(cleanTargetVersion) : args.rpc.sys.upgrade({ targetVersion: cleanTargetVersion }))
@@ -202,20 +257,23 @@ export function createAgentMaintenanceController(args: CreateAgentMaintenanceCon
       }
     }
 
-    if (!started) {
-      setKind(null);
-      return;
-    }
+	if (!started) {
+		setKind(null);
+		return;
+	}
 
-    const startedAt = Date.now();
+	const startedAt = Date.now();
     const timeoutMs = nextKind === 'upgrade' ? 10 * 60 * 1000 : 5 * 60 * 1000;
     let sawDisconnect = false;
+    let lastObservedVersion = previousVersion;
 
     for (;;) {
       if (maintenanceAborted) return;
 
       if (Date.now() - startedAt > timeoutMs) {
-        const message = 'Timed out waiting for the runtime to restart.';
+        const message = nextKind === 'upgrade'
+          ? formatUpgradeTimeoutMessage(previousVersion, cleanTargetVersion, lastObservedVersion)
+          : 'Timed out waiting for the runtime to restart.';
         setError(message);
         args.notify.error(nextKind === 'upgrade' ? 'Update timed out' : 'Restart timed out', message);
         setKind(null);
@@ -235,11 +293,11 @@ export function createAgentMaintenanceController(args: CreateAgentMaintenanceCon
       }
 
       if (String(args.protocolStatus() ?? '').trim() === 'connected') {
-        try {
-          const ping = await args.refetchCurrentVersion();
-          const maintenanceFailure = resolveMaintenanceFailure(nextKind, ping?.maintenance);
-          if (maintenanceFailure) {
-            setError(maintenanceFailure);
+		try {
+			const ping = await args.refetchCurrentVersion();
+			const maintenanceFailure = resolveMaintenanceFailure(nextKind, ping?.maintenance, maintenanceAttempt);
+			if (maintenanceFailure) {
+				setError(maintenanceFailure);
             setKind(null);
             setPolledStatus(null);
             setTargetVersion('');
@@ -248,11 +306,38 @@ export function createAgentMaintenanceController(args: CreateAgentMaintenanceCon
           }
 
           const nextVersion = String(ping?.version ?? '').trim();
+          const observedRuntimeServiceVersion = String(ping?.runtimeService?.runtimeVersion ?? '').trim();
+          const observedMaintenanceVersion = String(ping?.maintenance?.observedVersion ?? '').trim();
+          lastObservedVersion = observedRuntimeServiceVersion || observedMaintenanceVersion || nextVersion || lastObservedVersion;
           const nextProcessStartedAtMs = normalizeProcessStartedAtMs(ping?.processStartedAtMs);
           const restarted = previousProcessStartedAtMs !== null
             ? nextProcessStartedAtMs !== null && nextProcessStartedAtMs !== previousProcessStartedAtMs
             : sawDisconnect && nextProcessStartedAtMs !== null;
-          if (!restarted) {
+
+			const maintenanceSucceeded = resolveMaintenanceSuccess(nextKind, ping?.maintenance, maintenanceAttempt);
+          const targetReached = cleanTargetVersion
+            ? (
+                nextVersion === cleanTargetVersion
+                || observedRuntimeServiceVersion === cleanTargetVersion
+                || observedMaintenanceVersion === cleanTargetVersion
+              )
+            : false;
+          if (nextKind === 'upgrade') {
+            if (!cleanTargetVersion && restarted) {
+              setKind(null);
+              setPolledStatus(null);
+              setTargetVersion('');
+              if (args.refetchEnvironment) {
+                await args.refetchEnvironment();
+              }
+              args.notify.success('Desktop operation completed', 'Redeven Desktop finished the runtime update request.');
+              return;
+            }
+            if (!targetReached) {
+              await sleep(1500);
+              continue;
+            }
+          } else if (!restarted && !maintenanceSucceeded) {
             await sleep(1500);
             continue;
           }
@@ -264,8 +349,8 @@ export function createAgentMaintenanceController(args: CreateAgentMaintenanceCon
             await args.refetchEnvironment();
           }
 
-          if (nextKind === 'upgrade' && previousVersion && nextVersion && nextVersion !== previousVersion) {
-            args.notify.success('Updated', `Redeven updated to ${nextVersion}.`);
+          if (nextKind === 'upgrade') {
+            args.notify.success('Updated', `Redeven updated to ${observedRuntimeServiceVersion || observedMaintenanceVersion || nextVersion || cleanTargetVersion}.`);
           } else {
             args.notify.success('Reconnected', 'The runtime is back online.');
           }

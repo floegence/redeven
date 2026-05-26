@@ -1,20 +1,20 @@
 {
   "schema_version": 1,
   "release_review": {
-    "release_version": "v0.6.10",
-    "previous_release": "v0.6.9",
-    "reviewed_at": "2026-05-25",
-    "review_id": "code-server-workspace-engine-archive-limit-v1",
-    "summary": "Managed Browser Editor installation now accepts current code-server packages by raising the workspace engine archive and extraction guard from 256 MiB to 512 MiB.",
+    "release_version": "unreleased",
+    "previous_release": "v0.6.10",
+    "reviewed_at": "2026-05-26",
+    "review_id": "runtime-maintenance-verification-v1",
+    "summary": "Runtime update flows now verify the running Runtime Service version after restart, persist self-upgrade maintenance reconciliation across exec, and expose clearer Desktop-managed SSH mismatch diagnostics.",
     "checked_surfaces": [
-      "Workspace engine artifact manifest validation keeps sha256, compressed size, compression, platform, and binary path checks unchanged",
-      "Workspace engine archive extraction keeps path traversal, absolute path, unsafe path, and hard link/symlink rejection unchanged",
-      "Browser Editor package installation remains driven by the Desktop-prepared archive and manifest upload flow",
-      "Current code-server release package size fits inside the updated extraction guard while preserving the zip-bomb safety boundary",
-      "Desktop package cache, upload bootstrap, SSH runtime bootstrap, Local UI health, sys.ping, and startup report consumers do not require Runtime Service protocol changes",
-      "Runtime Service compatibility contract fields and protocol version remain unchanged"
+      "sys.ping maintenance snapshots add optional cross-exec reconciliation diagnostics including previous/observed runtime instance ids while preserving existing kind, state, target_version, message, and timestamp fields",
+      "Env App maintenance polling treats Updated as successful only after sys.ping or Runtime Service identity reaches the requested release tag",
+      "Runtime-owned self-upgrade writes a local maintenance marker before installer execution and reconciles it during the next process startup",
+      "Desktop-managed SSH startup keeps the existing machine startup report contract and adds non-secret expected/observed version diagnostics for identity mismatch failures",
+      "Container launcher update continues to stop and verify the runtime daemon before package replacement and startup",
+      "Local UI health, startup reports, runtime-control, provider link, and desktop bridge protocol fields keep the same compatibility window"
     ],
-    "same_window_rationale": "The release only changes the local workspace engine archive size guard used after Desktop has already prepared and uploaded a verified Browser Editor package. It does not add, remove, or rename Runtime Service JSON fields, does not change the protocol version, and keeps Desktop attach/start, Local UI health, sys.ping, provider link, runtime-control, SSH runtime bootstrap, and startup report consumers on the existing compatibility window."
+    "same_window_rationale": "The release adds optional diagnostic fields to sys.ping maintenance snapshots and tightens client-side success semantics, including per-attempt filtering for persisted maintenance snapshots, without removing or changing any existing Runtime Service JSON fields, protocol version, runtime-control endpoint, startup report shape, Local UI health surface, provider-link surface, or desktop bridge framing. Older clients can ignore the new optional fields, and newer clients still receive the existing maintenance kind/state/message data from older runtimes."
   },
   "runtime_protocol_version": "redeven-runtime-v1",
   "compatibility_epoch": 5,

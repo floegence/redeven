@@ -27,6 +27,7 @@ type FakeSSHScenario =
   | 'missing_runtime_control_active'
   | 'attached_unsupported_idle'
   | 'attached_unsupported_active'
+  | 'persistent_version_mismatch'
   | 'forwarded_blocked_readiness'
   | 'forwarded_invalid_env_shell'
   | 'remote_install'
@@ -125,8 +126,9 @@ function futureExpiryUnixMS() {
 
 function currentRuntimeService() {
   const state = readState();
+  const runtimeVersion = scenario === 'persistent_version_mismatch' ? 'v1.2.2' : 'v1.2.3';
   return {
-    runtime_version: 'v1.2.3',
+    runtime_version: runtimeVersion,
     protocol_version: 'redeven-runtime-v1',
     service_owner: 'desktop',
     desktop_managed: true,
@@ -656,6 +658,7 @@ async function createFakeSSHFixture(scenario: FakeSSHScenario): Promise<FakeSSHF
       || scenario === 'missing_runtime_control_active'
       || scenario === 'attached_unsupported_idle'
       || scenario === 'attached_unsupported_active'
+      || scenario === 'persistent_version_mismatch'
       || scenario === 'forwarded_blocked_readiness'
       || scenario === 'forwarded_invalid_env_shell'
       || scenario === 'no_report'
@@ -1221,6 +1224,43 @@ describe('sshRuntime integration', () => {
     expect(eventNames.filter((event) => event === 'upload_install')).toHaveLength(0);
     expect(eventNames.indexOf('stop_runtime')).toBeLessThan(eventNames.indexOf('runtime_control_forward_start'));
     await removeFakeSSHFixture(fixture);
+  });
+
+  it('surfaces post-restart SSH runtime identity mismatch diagnostics', async () => {
+    const fixture = await createFakeSSHFixture('persistent_version_mismatch');
+    try {
+      let caught: unknown;
+      try {
+        await startWithFakeSSH(fixture, 'auto', {
+          forceRuntimeUpdate: true,
+        });
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toMatchObject({
+        name: 'DesktopOperationFailureError',
+        presentation: expect.objectContaining({
+          title: 'SSH Runtime Restart Failed',
+          summary: 'Desktop restarted the SSH runtime, but the running Runtime Service still does not match this session.',
+          detail: expect.stringContaining('expected_runtime_version=v1.2.3'),
+        }),
+      });
+      expect(caught).toMatchObject({
+        presentation: expect.objectContaining({
+          detail: expect.stringContaining('observed_runtime_version=v1.2.2'),
+        }),
+      });
+      expect(caught).toMatchObject({
+        presentation: expect.objectContaining({
+          detail: expect.stringContaining('observed_pid=4242'),
+        }),
+      });
+    } finally {
+      const events = await readFakeSSHEvents(fixture);
+      expect(events.map((event) => event.event).filter((event) => event === 'start_runtime')).toHaveLength(2);
+      expect(events.map((event) => event.event)).toContain('stop_runtime');
+      await removeFakeSSHFixture(fixture);
+    }
   });
 
   it('blocks lifecycle update for an active attached runtime before Desktop model source setup', async () => {

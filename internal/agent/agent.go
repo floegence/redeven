@@ -140,8 +140,9 @@ type Agent struct {
 	sys  *syssvc.Service
 	code *codeapp.Service
 
-	maintenanceOp    atomic.Int32
-	maintenanceState maintenanceSnapshotStore
+	maintenanceOp          atomic.Int32
+	maintenanceState       maintenanceSnapshotStore
+	maintenanceMarkerStore *runtimeMaintenanceMarkerStore
 
 	providerLinkMu sync.Mutex
 	mu             sync.Mutex
@@ -221,34 +222,35 @@ func New(opts Options) (*Agent, error) {
 		}
 		stateRoot = resolvedStateRoot
 	}
-
 	a := &Agent{
-		cfg:                   opts.Config,
-		log:                   logger,
-		version:               strings.TrimSpace(opts.Version),
-		commit:                strings.TrimSpace(opts.Commit),
-		buildTime:             strings.TrimSpace(opts.BuildTime),
-		agentHomeAbs:          agentHomeAbs,
-		filesystemScope:       filesystemScope,
-		configPath:            cfgPathAbs,
-		instanceID:            strings.TrimSpace(opts.InstanceID),
-		binaryPath:            currentExecutablePath(),
-		localUIBind:           strings.TrimSpace(opts.LocalUIBind),
-		processStartedAtMs:    time.Now().UnixMilli(),
-		term:                  terminal.NewManagerWithScope(shell, filesystemScope, logger),
-		mon:                   monitor.NewService(logger),
-		sessions:              make(map[string]*activeSession),
-		onControlConnected:    opts.OnControlConnected,
-		onControlConnecting:   opts.OnControlConnecting,
-		onControlRetry:        opts.OnControlRetry,
-		onControlDisabled:     opts.OnControlDisabled,
-		localUIEnabled:        opts.LocalUIEnabled,
-		controlChannelEnabled: opts.ControlChannelEnabled,
-		desktopManaged:        opts.DesktopManaged,
-		effectiveRunMode:      strings.TrimSpace(opts.EffectiveRunMode),
-		remoteEnabled:         opts.RemoteEnabled,
-		accessGate:            opts.AccessGate,
+		cfg:                    opts.Config,
+		log:                    logger,
+		version:                strings.TrimSpace(opts.Version),
+		commit:                 strings.TrimSpace(opts.Commit),
+		buildTime:              strings.TrimSpace(opts.BuildTime),
+		agentHomeAbs:           agentHomeAbs,
+		filesystemScope:        filesystemScope,
+		configPath:             cfgPathAbs,
+		instanceID:             strings.TrimSpace(opts.InstanceID),
+		binaryPath:             currentExecutablePath(),
+		localUIBind:            strings.TrimSpace(opts.LocalUIBind),
+		processStartedAtMs:     time.Now().UnixMilli(),
+		term:                   terminal.NewManagerWithScope(shell, filesystemScope, logger),
+		mon:                    monitor.NewService(logger),
+		sessions:               make(map[string]*activeSession),
+		maintenanceMarkerStore: newRuntimeMaintenanceMarkerStore(config.RuntimeMaintenancePathFromConfigPath(cfgPathAbs)),
+		onControlConnected:     opts.OnControlConnected,
+		onControlConnecting:    opts.OnControlConnecting,
+		onControlRetry:         opts.OnControlRetry,
+		onControlDisabled:      opts.OnControlDisabled,
+		localUIEnabled:         opts.LocalUIEnabled,
+		controlChannelEnabled:  opts.ControlChannelEnabled,
+		desktopManaged:         opts.DesktopManaged,
+		effectiveRunMode:       strings.TrimSpace(opts.EffectiveRunMode),
+		remoteEnabled:          opts.RemoteEnabled,
+		accessGate:             opts.AccessGate,
 	}
+	a.reconcileRuntimeMaintenanceMarker()
 
 	auditStore, err := auditlog.New(auditlog.Options{Logger: logger, StateDir: stateDir})
 	if err != nil {

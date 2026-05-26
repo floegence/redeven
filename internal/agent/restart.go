@@ -59,7 +59,11 @@ func (r *sysRestarter) StartRestart(_ctx context.Context, meta *session.Meta, _ 
 		"exe_path", plan.exePath,
 		"local_ui_bind", plan.localUIBind,
 	)
-	a.markMaintenanceRunning(syssvc.MaintenanceKindRestart, "", "Restarting runtime...")
+	a.markMaintenanceRunning(runtimeMaintenanceRunInput{
+		kind:    syssvc.MaintenanceKindRestart,
+		message: "Restarting runtime...",
+		plan:    plan,
+	})
 
 	go a.runSelfRestart(plan, userPublicID, channelID)
 
@@ -96,7 +100,11 @@ func (a *Agent) runSelfRestart(plan selfExecPlan, userPublicID string, channelID
 			"channel_id", channelID,
 			"error", err,
 		)
-		a.markMaintenanceFailed(syssvc.MaintenanceKindRestart, "", failureMessage)
+		a.markMaintenanceFailed(runtimeMaintenanceFailureInput{
+			kind:      syssvc.MaintenanceKindRestart,
+			message:   failureMessage,
+			errorCode: runtimeMaintenanceErrorExecFailed,
+		})
 		a.maintenanceOp.Store(maintenanceOpNone)
 		return
 	}

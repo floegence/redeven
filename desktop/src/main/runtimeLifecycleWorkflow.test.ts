@@ -326,6 +326,68 @@ describe('RuntimeLifecycleWorkflow', () => {
     ]);
   });
 
+  it('does not allow container update to finish as up-to-date after a verified replacement stop', () => {
+    const subject = containerWorkflow();
+
+    subject.beginStep('checking_container', 'Checking container');
+    subject.completeStep('checking_container');
+    const runningPlan = runtimeLifecyclePlanAfterDecision({
+      location: 'local_container',
+      operation: 'update',
+      decision: 'runtime_update_required_running',
+    });
+    subject.commitPlan({
+      state: runningPlan.state,
+      steps: runningPlan.steps.map((step) => step.id),
+      omitted_steps: runningPlan.omitted_steps,
+    });
+    subject.beginStep('stopping_runtime_process', 'Stopping runtime');
+    subject.completeStep('stopping_runtime_process');
+    subject.beginStep('verifying_runtime_stopped', 'Verifying stop');
+    subject.completeStep('verifying_runtime_stopped');
+
+    const alreadyCurrentPlan = runtimeLifecyclePlanAfterDecision({
+      location: 'local_container',
+      operation: 'update',
+      decision: 'runtime_already_current',
+    });
+    expect(() => subject.commitPlan({
+      state: alreadyCurrentPlan.state,
+      steps: alreadyCurrentPlan.steps.map((step) => step.id),
+      omitted_steps: alreadyCurrentPlan.omitted_steps,
+    })).toThrow(/cannot remove active or completed step "stopping_runtime_process"/iu);
+
+    const alreadyCurrentPatch = runtimeLifecyclePlanPatchPreservingObservedHistory({
+      currentSteps: subject.stepStates(),
+      patch: {
+        state: alreadyCurrentPlan.state,
+        steps: alreadyCurrentPlan.steps.map((step) => step.id),
+        omitted_steps: alreadyCurrentPlan.omitted_steps,
+      },
+    });
+    expect(alreadyCurrentPatch.steps).toEqual([
+      'checking_container',
+      'stopping_runtime_process',
+      'verifying_runtime_stopped',
+      'checking_runtime_service',
+      'runtime_up_to_date',
+    ]);
+
+    const packagePlan = runtimeLifecyclePlanIncludingStep({
+      location: 'local_container',
+      operation: 'update',
+      currentSteps: subject.currentStepIDs(),
+      step: 'preparing_runtime_package',
+    });
+    subject.ensureStepPlanned('preparing_runtime_package', {
+      state: packagePlan.state,
+      steps: packagePlan.steps.map((step) => step.id),
+      omitted_steps: packagePlan.omitted_steps,
+    });
+    expect(subject.progress().steps.map((step) => step.id)).toContain('starting_runtime_process');
+    expect(subject.progress().steps.map((step) => step.id)).not.toContain('runtime_up_to_date');
+  });
+
   it('merges decision plans with observed history without preserving future pending placeholders', () => {
     const patch = {
       state: 'executing' as const,

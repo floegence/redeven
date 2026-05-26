@@ -175,17 +175,28 @@ const (
 	MaintenanceKindUpgrade = "upgrade"
 	MaintenanceKindRestart = "restart"
 
-	MaintenanceStateRunning = "running"
-	MaintenanceStateFailed  = "failed"
+	MaintenanceStateRunning   = "running"
+	MaintenanceStateSucceeded = "succeeded"
+	MaintenanceStateFailed    = "failed"
 )
 
 type MaintenanceSnapshot struct {
-	Kind          string `json:"kind,omitempty"`
-	State         string `json:"state,omitempty"`
-	TargetVersion string `json:"target_version,omitempty"`
-	Message       string `json:"message,omitempty"`
-	StartedAtMs   int64  `json:"started_at_ms,omitempty"`
-	UpdatedAtMs   int64  `json:"updated_at_ms,omitempty"`
+	Kind                       string `json:"kind,omitempty"`
+	State                      string `json:"state,omitempty"`
+	TargetVersion              string `json:"target_version,omitempty"`
+	PreviousVersion            string `json:"previous_version,omitempty"`
+	ObservedVersion            string `json:"observed_version,omitempty"`
+	PreviousProcessStartedAtMs int64  `json:"previous_process_started_at_ms,omitempty"`
+	ObservedProcessStartedAtMs int64  `json:"observed_process_started_at_ms,omitempty"`
+	PreviousRuntimeInstanceID  string `json:"previous_runtime_instance_id,omitempty"`
+	ObservedRuntimeInstanceID  string `json:"observed_runtime_instance_id,omitempty"`
+	InstallDir                 string `json:"install_dir,omitempty"`
+	ExePath                    string `json:"exe_path,omitempty"`
+	Message                    string `json:"message,omitempty"`
+	ErrorCode                  string `json:"error_code,omitempty"`
+	StartedAtMs                int64  `json:"started_at_ms,omitempty"`
+	UpdatedAtMs                int64  `json:"updated_at_ms,omitempty"`
+	CompletedAtMs              int64  `json:"completed_at_ms,omitempty"`
 }
 
 type MaintenanceSnapshotProvider interface {

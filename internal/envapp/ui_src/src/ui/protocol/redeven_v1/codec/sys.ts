@@ -18,11 +18,21 @@ function fromWireSysMaintenanceSnapshot(resp: wire_sys_ping_resp['maintenance'])
   if (!resp) return undefined;
   return {
     kind: resp?.kind === 'upgrade' || resp?.kind === 'restart' ? resp.kind : undefined,
-    state: resp?.state === 'running' || resp?.state === 'failed' ? resp.state : undefined,
+    state: resp?.state === 'running' || resp?.state === 'succeeded' || resp?.state === 'failed' ? resp.state : undefined,
     targetVersion: resp?.target_version ? String(resp.target_version) : undefined,
+    previousVersion: resp?.previous_version ? String(resp.previous_version) : undefined,
+    observedVersion: resp?.observed_version ? String(resp.observed_version) : undefined,
+    previousProcessStartedAtMs: typeof resp?.previous_process_started_at_ms === 'number' ? Number(resp.previous_process_started_at_ms) : undefined,
+    observedProcessStartedAtMs: typeof resp?.observed_process_started_at_ms === 'number' ? Number(resp.observed_process_started_at_ms) : undefined,
+    previousRuntimeInstanceId: resp?.previous_runtime_instance_id ? String(resp.previous_runtime_instance_id) : undefined,
+    observedRuntimeInstanceId: resp?.observed_runtime_instance_id ? String(resp.observed_runtime_instance_id) : undefined,
+    installDir: resp?.install_dir ? String(resp.install_dir) : undefined,
+    exePath: resp?.exe_path ? String(resp.exe_path) : undefined,
     message: resp?.message ? String(resp.message) : undefined,
+    errorCode: resp?.error_code ? String(resp.error_code) : undefined,
     startedAtMs: typeof resp?.started_at_ms === 'number' ? Number(resp.started_at_ms) : undefined,
     updatedAtMs: typeof resp?.updated_at_ms === 'number' ? Number(resp.updated_at_ms) : undefined,
+    completedAtMs: typeof resp?.completed_at_ms === 'number' ? Number(resp.completed_at_ms) : undefined,
   };
 }
 

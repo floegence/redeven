@@ -124,6 +124,54 @@ describe('runtimeLifecycleExecutionPlan', () => {
     ]);
   });
 
+  it('routes container update replacement through stop verification before package start', () => {
+    const plan = runtimeLifecyclePlanAfterDecision({
+      location: 'local_container',
+      operation: 'update',
+      decision: 'runtime_update_required_running',
+    });
+
+    expect(plan.steps.map((step) => step.id)).toEqual([
+      'checking_container',
+      'stopping_runtime_process',
+      'verifying_runtime_stopped',
+    ]);
+
+    const afterDetectingPlatform = runtimeLifecyclePlanIncludingStep({
+      location: 'local_container',
+      operation: 'update',
+      currentSteps: plan.steps.map((step) => step.id),
+      step: 'detecting_platform',
+    });
+    expect(afterDetectingPlatform.steps.map((step) => step.id)).toEqual([
+      'checking_container',
+      'stopping_runtime_process',
+      'verifying_runtime_stopped',
+      'detecting_platform',
+      'checking_runtime_package',
+    ]);
+
+    const afterPackagePrepare = runtimeLifecyclePlanIncludingStep({
+      location: 'local_container',
+      operation: 'update',
+      currentSteps: afterDetectingPlatform.steps.map((step) => step.id),
+      step: 'preparing_runtime_package',
+    });
+    expect(afterPackagePrepare.steps.map((step) => step.id)).toEqual([
+      'checking_container',
+      'stopping_runtime_process',
+      'verifying_runtime_stopped',
+      'detecting_platform',
+      'checking_runtime_package',
+      'preparing_runtime_package',
+      'installing_runtime_package',
+      'starting_runtime_process',
+      'checking_runtime_service',
+      'runtime_ready',
+    ]);
+    expect(afterPackagePrepare.steps.map((step) => step.id)).not.toContain('runtime_up_to_date');
+  });
+
   it('uses a short already-stopped stop plan after a verified stopped state', () => {
     const plan = runtimeLifecyclePlanAfterDecision({
       location: 'local_host',

@@ -85,6 +85,9 @@ type helperResult struct {
 		ProcessStartedAtMs int64  `json:"process_started_at_ms,omitempty"`
 		Version            string `json:"version,omitempty"`
 		Commit             string `json:"commit,omitempty"`
+		RuntimeService     *struct {
+			RuntimeVersion string `json:"runtime_version,omitempty"`
+		} `json:"runtime_service,omitempty"`
 	} `json:"ping,omitempty"`
 	Restart *struct {
 		OK      bool   `json:"ok"`
@@ -163,11 +166,22 @@ func TestDockerUbuntuDesktopRuntimeLifecycle(t *testing.T) {
 	if finalPing.Ping == nil || finalPing.Ping.ProcessStartedAtMs != afterUpgrade.ProcessStartedAtMs {
 		t.Fatalf("unexpected final ping result: %#v; afterUpgrade=%#v", finalPing, afterUpgrade)
 	}
+	if finalPing.Ping.Version != targetVersion {
+		t.Fatalf("final sys.ping version = %q, want %q", finalPing.Ping.Version, targetVersion)
+	}
+	if finalPing.Ping.RuntimeService == nil || finalPing.Ping.RuntimeService.RuntimeVersion != targetVersion {
+		t.Fatalf("final runtime_service version = %#v, want %q", finalPing.Ping.RuntimeService, targetVersion)
+	}
+	if afterUpgrade.Version != targetVersion || afterUpgrade.RuntimeServiceVersion != targetVersion {
+		t.Fatalf("afterUpgrade versions = %#v, want %q", afterUpgrade, targetVersion)
+	}
 }
 
 type pingSnapshot struct {
-	LocalUIURL         string
-	ProcessStartedAtMs int64
+	LocalUIURL            string
+	ProcessStartedAtMs    int64
+	Version               string
+	RuntimeServiceVersion string
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -222,10 +236,18 @@ func (f *fixture) detectContainerArch(ctx context.Context) {
 func (f *fixture) buildBinaries(ctx context.Context) {
 	f.t.Helper()
 	redevenOut := filepath.Join(f.tempRoot, "redeven-linux")
+	upgradedRedevenOut := filepath.Join(f.tempRoot, "redeven-linux-upgraded")
 	helperOut := filepath.Join(f.tempRoot, "redeven-e2e-client")
 	env := append(os.Environ(), "GOOS=linux", "GOARCH="+f.goarch, "CGO_ENABLED=0")
 	if _, err := f.runHostEnv(ctx, f.repoRoot, env, "go", "build", "-o", redevenOut, "./cmd/redeven"); err != nil {
 		f.t.Fatalf("build redeven: %v", err)
+	}
+	if _, err := f.runHostEnv(ctx, f.repoRoot, env, "go", "build",
+		"-ldflags", "-X main.Version="+targetVersion,
+		"-o", upgradedRedevenOut,
+		"./cmd/redeven",
+	); err != nil {
+		f.t.Fatalf("build upgraded redeven: %v", err)
 	}
 	if _, err := f.runHostEnv(ctx, f.repoRoot, env, "go", "build", "-o", helperOut, "./tests/docker_runtime_e2e/testclient"); err != nil {
 		f.t.Fatalf("build e2e helper: %v", err)
@@ -236,7 +258,11 @@ func (f *fixture) buildBinaries(ctx context.Context) {
 	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", helperOut, f.containerName+":"+containerHelper); err != nil {
 		f.t.Fatalf("copy helper: %v", err)
 	}
-	f.dockerExec(ctx, nil, "chmod", "0755", containerRedeven, containerHelper)
+	f.dockerExec(ctx, nil, "mkdir", "-p", filepath.Dir(upgradedRedeven))
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", upgradedRedevenOut, f.containerName+":"+upgradedRedeven); err != nil {
+		f.t.Fatalf("copy upgraded redeven: %v", err)
+	}
+	f.dockerExec(ctx, nil, "chmod", "0755", containerRedeven, upgradedRedeven, containerHelper)
 }
 
 func (f *fixture) startRuntime(ctx context.Context, binaryPath string) {
@@ -260,9 +286,6 @@ func (f *fixture) startRuntime(ctx context.Context, binaryPath string) {
 func (f *fixture) performDesktopOwnedUpgrade(ctx context.Context) {
 	f.t.Helper()
 	f.stopRuntime(ctx)
-	f.dockerExec(ctx, nil, "mkdir", "-p", filepath.Dir(upgradedRedeven))
-	f.dockerExec(ctx, nil, "cp", containerRedeven, upgradedRedeven)
-	f.dockerExec(ctx, nil, "chmod", "0755", upgradedRedeven)
 	stamp := strings.Join([]string{
 		"schema_version=1",
 		"managed_by=redeven-desktop",
@@ -401,8 +424,10 @@ func (f *fixture) waitPingAfter(ctx context.Context, previousProcessStartedAtMs 
 			result, helperErr := f.tryHelper(ctx, status.LocalUIURL, "ping", "")
 			if helperErr == nil && result.Ping != nil && result.Ping.ProcessStartedAtMs > previousProcessStartedAtMs {
 				return pingSnapshot{
-					LocalUIURL:         status.LocalUIURL,
-					ProcessStartedAtMs: result.Ping.ProcessStartedAtMs,
+					LocalUIURL:            status.LocalUIURL,
+					ProcessStartedAtMs:    result.Ping.ProcessStartedAtMs,
+					Version:               result.Ping.Version,
+					RuntimeServiceVersion: runtimeServiceVersion(result.Ping.RuntimeService),
 				}
 			}
 			lastErr = helperErr
@@ -414,6 +439,15 @@ func (f *fixture) waitPingAfter(ctx context.Context, previousProcessStartedAtMs 
 	f.dumpContainerDiagnostics(ctx)
 	f.t.Fatalf("runtime did not restart after process_started_at_ms=%d: %v", previousProcessStartedAtMs, lastErr)
 	return pingSnapshot{}
+}
+
+func runtimeServiceVersion(snapshot *struct {
+	RuntimeVersion string `json:"runtime_version,omitempty"`
+}) string {
+	if snapshot == nil {
+		return ""
+	}
+	return strings.TrimSpace(snapshot.RuntimeVersion)
 }
 
 func (f *fixture) runtimeStatus(ctx context.Context) (launchReport, error) {

@@ -1,10 +1,20 @@
 export type SysMaintenanceSnapshot = {
   kind?: 'upgrade' | 'restart';
-  state?: 'running' | 'failed';
+  state?: 'running' | 'succeeded' | 'failed';
   targetVersion?: string;
+  previousVersion?: string;
+  observedVersion?: string;
+  previousProcessStartedAtMs?: number;
+  observedProcessStartedAtMs?: number;
+  previousRuntimeInstanceId?: string;
+  observedRuntimeInstanceId?: string;
+  installDir?: string;
+  exePath?: string;
   message?: string;
+  errorCode?: string;
   startedAtMs?: number;
   updatedAtMs?: number;
+  completedAtMs?: number;
 };
 
 export type RuntimeServiceOwner = 'desktop' | 'external' | 'unknown';

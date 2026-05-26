@@ -40,11 +40,11 @@ type sysUpgrader struct {
 
 func normalizeTargetVersion(req *syssvc.UpgradeRequest) (string, error) {
 	if req == nil {
-		return "", nil
+		return "", &rpc.Error{Code: 400, Message: "missing target_version"}
 	}
 	v := strings.TrimSpace(req.TargetVersion)
 	if v == "" {
-		return "", nil
+		return "", &rpc.Error{Code: 400, Message: "missing target_version"}
 	}
 	if !releaseTagPattern.MatchString(v) {
 		return "", &rpc.Error{Code: 400, Message: "invalid target_version (expected release tag like v1.2.3)"}
@@ -103,7 +103,12 @@ func (u *sysUpgrader) StartUpgrade(_ctx context.Context, meta *session.Meta, req
 		"local_ui_bind", plan.localUIBind,
 		"target_version", targetVersion,
 	)
-	a.markMaintenanceRunning(syssvc.MaintenanceKindUpgrade, targetVersion, "Downloading and installing update...")
+	a.markMaintenanceRunning(runtimeMaintenanceRunInput{
+		kind:          syssvc.MaintenanceKindUpgrade,
+		targetVersion: targetVersion,
+		message:       "Downloading and installing update...",
+		plan:          plan,
+	})
 
 	go a.runSelfUpgrade(plan, userPublicID, channelID, targetVersion)
 
@@ -147,7 +152,12 @@ func (a *Agent) runSelfUpgrade(plan selfExecPlan, userPublicID string, channelID
 			"output_len", out.Len(),
 			"output_snippet", truncateForLog(out.String(), 8_000),
 		)
-		a.markMaintenanceFailed(syssvc.MaintenanceKindUpgrade, targetVersion, failureMessage)
+		a.markMaintenanceFailed(runtimeMaintenanceFailureInput{
+			kind:          syssvc.MaintenanceKindUpgrade,
+			targetVersion: targetVersion,
+			message:       failureMessage,
+			errorCode:     runtimeMaintenanceErrorInstallFailed,
+		})
 		a.maintenanceOp.Store(maintenanceOpNone)
 		return
 	}
@@ -182,7 +192,12 @@ func (a *Agent) runSelfUpgrade(plan selfExecPlan, userPublicID string, channelID
 			"channel_id", channelID,
 			"error", err,
 		)
-		a.markMaintenanceFailed(syssvc.MaintenanceKindUpgrade, targetVersion, failureMessage)
+		a.markMaintenanceFailed(runtimeMaintenanceFailureInput{
+			kind:          syssvc.MaintenanceKindUpgrade,
+			targetVersion: targetVersion,
+			message:       failureMessage,
+			errorCode:     runtimeMaintenanceErrorExecFailed,
+		})
 		a.maintenanceOp.Store(maintenanceOpNone)
 		return
 	}

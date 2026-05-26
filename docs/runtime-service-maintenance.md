@@ -493,6 +493,56 @@ explicit `Restart runtime` action authorizes Desktop to run the restart
 workflow without a second prompt. It does not authorize replacing an installed
 runtime package; package replacement belongs to `Update runtime`.
 
+### Runtime-Owned Maintenance Snapshot
+
+Runtime-owned restart and self-upgrade use a small local marker under the
+runtime state directory to bridge the `syscall.Exec` boundary. The marker is not
+a second lifecycle authority. It records one in-flight maintenance attempt so
+the next process image can reconcile what is actually running before Env App
+declares success.
+
+The marker is written before the installer or restart exec begins, updated on
+installer or exec failure while the old process is still alive, and reconciled
+during Agent startup before `sys.ping` is served. `syscall.Exec` may keep the
+same OS process id, so upgrade success never depends on PID changes. The
+observable identity is the requested target version plus the current
+`sys.ping.version`, Runtime Service `runtime_version`, process start marker,
+and runtime instance id.
+
+The `sys.ping.maintenance` snapshot keeps the existing `kind`, `state`,
+`target_version`, `message`, `started_at_ms`, and `updated_at_ms` fields, and
+may include these additional diagnostics:
+
+```ts
+type SysMaintenanceSnapshot = {
+  kind?: 'upgrade' | 'restart';
+  state?: 'running' | 'succeeded' | 'failed';
+  target_version?: string;
+  previous_version?: string;
+  observed_version?: string;
+  previous_process_started_at_ms?: number;
+  observed_process_started_at_ms?: number;
+  previous_runtime_instance_id?: string;
+  observed_runtime_instance_id?: string;
+  install_dir?: string;
+  exe_path?: string;
+  message?: string;
+  error_code?: string;
+  started_at_ms?: number;
+  updated_at_ms?: number;
+  completed_at_ms?: number;
+};
+```
+
+`succeeded` means the reconciled runtime identity matches the requested
+maintenance semantics. For upgrade with an explicit target version, the running
+version must equal that target. `failed` means the installer, exec, marker read,
+or reconciliation check produced a concrete failure; the message should include
+the expected and observed versions when version reconciliation fails. A damaged
+marker must not block startup, but Runtime logs the read failure and exposes a
+failed maintenance snapshot instead of silently treating the operation as
+successful.
+
 ### Contract Carriers
 
 - `desktop-runtime-status`: structured attach status used by Desktop before spawn.
@@ -719,6 +769,21 @@ The stable flow is intentionally small:
    - `desktop_ssh`: ask Desktop to restart the SSH-managed service, or run the explicit Desktop-owned runtime package update workflow when the user chooses `Update runtime`. Start and Restart install only missing packages; existing mismatches surface `Update runtime`. Package preparation reuses the shared release/cache or development source-package path before using any remote installer fallback.
    - `host_device` / `manual`: show guidance and keep direct actions disabled.
 5. Reconnect through the normal Env App recovery path and surface completion/failure through toast feedback.
+
+For runtime-owned self-upgrade, `target_version` is required for every
+non-dry-run `sys.upgrade` request. `Update started` only means the maintenance
+request was accepted. Env App may show `Downloading and installing update...`
+while the old process is connected, then `Runtime restarting...` and
+`Verifying update...` while it polls. `Updated` is reserved for the point where
+`sys.ping.version`, Runtime Service `runtime_version`, or the reconciled
+maintenance snapshot reaches the requested release tag. A restart or reconnect
+with the old version remains in progress until the marker reports failure or
+the controller times out with target/current diagnostics. Env App filters
+maintenance snapshots by the current request target and runtime timestamp; for
+Desktop-owned update handoff without a target release tag it ignores
+runtime-owned upgrade snapshots entirely, so a persisted failure from an earlier
+runtime-owned upgrade cannot fail a later Desktop-owned handoff. `Reconnected`
+belongs to restart flows, not upgrade completion.
 
 Welcome can run runtime restart/update before an Env App window exists. The card records the runtime maintenance requirement, then the main-process lifecycle workflow performs authoritative preflight and proceeds through the same operation key without a second confirmation or independent retry request. For Local Host update, Welcome opens the Desktop update handoff instead of calling runtime package update, because the local bundled runtime is updated with the Desktop app; the visible badge, disabled-Open title, and primary recovery action all use the same Desktop update handoff wording. It does not auto-open the Environment after maintenance; it unlocks `Open` once the refreshed snapshot is openable.
 
