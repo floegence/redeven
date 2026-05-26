@@ -333,7 +333,7 @@ body {
 
 .redeven-card-fact-value--action {
   display: inline-flex;
-  max-width: 68%;
+  max-width: 55%;
   align-items: center;
   justify-content: flex-end;
   gap: 0.18rem;
@@ -375,7 +375,7 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  max-width: 50%;
+  max-width: 55%;
   cursor: pointer;
   transition: color 150ms ease;
 }
@@ -391,7 +391,7 @@ body {
   width: 1.5rem;
   height: 1.5rem;
   flex-shrink: 0;
-  opacity: 0;
+  opacity: 0.45;
   color: var(--muted-foreground);
   cursor: pointer;
   transition:
