@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -149,6 +150,153 @@ func TestRuntimeManagerInstallPromotesSharedVersionAndSelectsEnvironment(t *test
 	}
 	if filepath.Clean(linkTarget) != filepath.Clean(sharedVersionRoot(stateRoot, "4.109.1")) {
 		t.Fatalf("managed link target=%q, want %q", linkTarget, sharedVersionRoot(stateRoot, "4.109.1"))
+	}
+}
+
+func TestRuntimeManagerInstallPreservesSafeRelativeSymlink(t *testing.T) {
+	stateDir := t.TempDir()
+	stateRoot := t.TempDir()
+	version := "4.109.1"
+	manifest, archivePath := writeFakeWorkspaceEngineArchiveWithEntries(t, version, stateRoot, []fakeWorkspaceEngineArchiveEntry{
+		{
+			RelPath: "node_modules/typescript/bin/tsc",
+			Body:    []byte("#!/bin/sh\necho tsc\n"),
+			Mode:    0o755,
+		},
+		{
+			RelPath:  "node_modules/.bin/tsc",
+			Typeflag: tar.TypeSymlink,
+			Linkname: "../typescript/bin/tsc",
+			Mode:     0o777,
+		},
+	})
+	mgr := NewRuntimeManager(RuntimeManagerOptions{
+		StateDir:  stateDir,
+		StateRoot: stateRoot,
+	})
+	session, err := mgr.CreateImportSession(context.Background(), manifest)
+	if err != nil {
+		t.Fatalf("CreateImportSession() error = %v", err)
+	}
+	appendArchiveToSession(t, mgr, session.UploadID, archivePath)
+	if _, err := mgr.CompleteImportSession(context.Background(), session.UploadID); err != nil {
+		t.Fatalf("CompleteImportSession() error = %v", err)
+	}
+
+	linkPath := filepath.Join(sharedVersionRoot(stateRoot, version), "node_modules", ".bin", "tsc")
+	info, err := os.Lstat(linkPath)
+	if err != nil {
+		t.Fatalf("lstat symlink: %v", err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("installed path mode=%v, want symlink", info.Mode())
+	}
+	linkTarget, err := os.Readlink(linkPath)
+	if err != nil {
+		t.Fatalf("readlink: %v", err)
+	}
+	if filepath.ToSlash(linkTarget) != "../typescript/bin/tsc" {
+		t.Fatalf("symlink target=%q, want ../typescript/bin/tsc", linkTarget)
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(linkPath), filepath.FromSlash(linkTarget))); err != nil {
+		t.Fatalf("symlink target should resolve inside install root: %v", err)
+	}
+}
+
+func TestRuntimeManagerInstallRejectsUnsafeArchiveLinks(t *testing.T) {
+	tests := []struct {
+		name string
+		link fakeWorkspaceEngineArchiveEntry
+	}{
+		{
+			name: "absolute symlink",
+			link: fakeWorkspaceEngineArchiveEntry{
+				RelPath:  "node_modules/.bin/evil",
+				Typeflag: tar.TypeSymlink,
+				Linkname: "/etc/passwd",
+				Mode:     0o777,
+			},
+		},
+		{
+			name: "escaping symlink",
+			link: fakeWorkspaceEngineArchiveEntry{
+				RelPath:  "node_modules/.bin/evil",
+				Typeflag: tar.TypeSymlink,
+				Linkname: "../../../outside",
+				Mode:     0o777,
+			},
+		},
+		{
+			name: "hard link",
+			link: fakeWorkspaceEngineArchiveEntry{
+				RelPath:  "bin/evil-hardlink",
+				Typeflag: tar.TypeLink,
+				Linkname: "bin/" + codeServerBinaryName(),
+				Mode:     0o755,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stateDir := t.TempDir()
+			stateRoot := t.TempDir()
+			version := "4.109.1"
+			manifest, archivePath := writeFakeWorkspaceEngineArchiveWithEntries(t, version, stateRoot, []fakeWorkspaceEngineArchiveEntry{tt.link})
+			mgr := NewRuntimeManager(RuntimeManagerOptions{
+				StateDir:  stateDir,
+				StateRoot: stateRoot,
+			})
+			session, err := mgr.CreateImportSession(context.Background(), manifest)
+			if err != nil {
+				t.Fatalf("CreateImportSession() error = %v", err)
+			}
+			appendArchiveToSession(t, mgr, session.UploadID, archivePath)
+			if _, err := mgr.CompleteImportSession(context.Background(), session.UploadID); err == nil {
+				t.Fatalf("CompleteImportSession() error = nil, want link rejection")
+			}
+			if _, err := os.Stat(sharedVersionRoot(stateRoot, version)); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("unsafe archive should not promote shared version, stat error = %v", err)
+			}
+		})
+	}
+}
+
+func TestRuntimeManagerInstallDoesNotWriteRegularFilesThroughSymlinkedParent(t *testing.T) {
+	stateDir := t.TempDir()
+	stateRoot := t.TempDir()
+	version := "4.109.1"
+	manifest, archivePath := writeFakeWorkspaceEngineArchiveWithEntries(t, version, stateRoot, []fakeWorkspaceEngineArchiveEntry{
+		{
+			RelPath:  "node_modules/.bin",
+			Typeflag: tar.TypeSymlink,
+			Linkname: "../typescript/bin",
+			Mode:     0o777,
+		},
+		{
+			RelPath: "node_modules/.bin/tsc",
+			Body:    []byte("#!/bin/sh\necho replaced\n"),
+			Mode:    0o755,
+		},
+	})
+	mgr := NewRuntimeManager(RuntimeManagerOptions{
+		StateDir:  stateDir,
+		StateRoot: stateRoot,
+	})
+	session, err := mgr.CreateImportSession(context.Background(), manifest)
+	if err != nil {
+		t.Fatalf("CreateImportSession() error = %v", err)
+	}
+	appendArchiveToSession(t, mgr, session.UploadID, archivePath)
+	if _, err := mgr.CompleteImportSession(context.Background(), session.UploadID); err == nil {
+		t.Fatalf("CompleteImportSession() error = nil, want symlink parent rejection")
+	}
+
+	versionRoot := sharedVersionRoot(stateRoot, version)
+	if _, err := os.Stat(filepath.Join(versionRoot, "node_modules", "typescript", "bin", "tsc")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("regular file should not be written through removed symlink parent, stat error = %v", err)
+	}
+	if _, err := os.Stat(versionRoot); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("archive with symlink parent should not promote shared version, stat error = %v", err)
 	}
 }
 
@@ -545,7 +693,20 @@ echo "ok"
 	}
 }
 
+type fakeWorkspaceEngineArchiveEntry struct {
+	RelPath  string
+	Typeflag byte
+	Body     []byte
+	Linkname string
+	Mode     int64
+}
+
 func writeFakeWorkspaceEngineArchive(t *testing.T, version string, root string) (WorkspaceEngineArtifactManifest, string) {
+	t.Helper()
+	return writeFakeWorkspaceEngineArchiveWithEntries(t, version, root, nil)
+}
+
+func writeFakeWorkspaceEngineArchiveWithEntries(t *testing.T, version string, root string, extraEntries []fakeWorkspaceEngineArchiveEntry) (WorkspaceEngineArtifactManifest, string) {
 	t.Helper()
 	archivePath := filepath.Join(t.TempDir(), "code-server.tar.gz")
 	file, err := os.Create(archivePath)
@@ -555,14 +716,43 @@ func writeFakeWorkspaceEngineArchive(t *testing.T, version string, root string) 
 	gz := gzip.NewWriter(file)
 	tw := tar.NewWriter(gz)
 	script := fmt.Sprintf("#!/bin/sh\nif [ \"${1:-}\" = \"--version\" ]; then\n  echo \"%s\"\n  exit 0\nfi\necho ok\n", version)
-	entries := map[string][]byte{
-		fmt.Sprintf("code-server-%s/bin/%s", version, codeServerBinaryName()): []byte(script),
+	entries := []fakeWorkspaceEngineArchiveEntry{
+		{
+			RelPath: path.Join("bin", codeServerBinaryName()),
+			Body:    []byte(script),
+			Mode:    0o755,
+		},
 	}
-	for name, body := range entries {
-		if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o755, Size: int64(len(body))}); err != nil {
+	entries = append(entries, extraEntries...)
+	for _, entry := range entries {
+		rel := path.Clean(strings.TrimPrefix(filepath.ToSlash(strings.TrimSpace(entry.RelPath)), "/"))
+		if rel == "." || rel == "" || strings.HasPrefix(rel, "../") || rel == ".." {
+			t.Fatalf("test archive entry path is unsafe: %q", entry.RelPath)
+		}
+		typeflag := entry.Typeflag
+		if typeflag == 0 {
+			typeflag = tar.TypeReg
+		}
+		mode := entry.Mode
+		if mode == 0 {
+			mode = 0o644
+		}
+		header := &tar.Header{
+			Name:     path.Join(fmt.Sprintf("code-server-%s", version), rel),
+			Typeflag: typeflag,
+			Mode:     mode,
+			Linkname: entry.Linkname,
+		}
+		if typeflag == tar.TypeReg {
+			header.Size = int64(len(entry.Body))
+		}
+		if err := tw.WriteHeader(header); err != nil {
 			t.Fatalf("write tar header: %v", err)
 		}
-		if _, err := tw.Write(body); err != nil {
+		if typeflag != tar.TypeReg {
+			continue
+		}
+		if _, err := tw.Write(entry.Body); err != nil {
 			t.Fatalf("write tar body: %v", err)
 		}
 	}

@@ -39,6 +39,14 @@ async function readSocketUntilClose(socket: net.Socket): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
+function requestLine(chunk: Buffer): string {
+  return chunk.toString('latin1').split('\r\n', 1)[0] ?? '';
+}
+
+function isHTTPRequestLine(line: string): boolean {
+  return /^(GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS) /u.test(line);
+}
+
 describe('runtimePlacementBridgeSession', () => {
   it('opens bridge streams before forwarding loopback data into them', async () => {
     const events: string[] = [];
@@ -106,6 +114,193 @@ describe('runtimePlacementBridgeSession', () => {
 
     expect(events[0]).toBe('open:runtime_control');
     expect(events[1]).toBe('data:POST /v1/provider-link/connect HTTP/1.1');
+  });
+
+  it('rewrites every runtime-control request on a reused loopback keep-alive connection', async () => {
+    const surfaces: string[] = [];
+    const writes: string[] = [];
+    const bridge: RuntimePlacementBridgeSessionHandle = {
+      openStream: (surface) => {
+        surfaces.push(surface);
+        return {
+          id: `${surface}-1`,
+          onData: () => undefined,
+          onClose: () => undefined,
+          onError: () => undefined,
+          write: async (chunk) => {
+            const line = requestLine(chunk);
+            if (isHTTPRequestLine(line)) {
+              writes.push(line);
+            }
+          },
+          close: async () => undefined,
+        };
+      },
+    };
+    const proxy = await startRuntimePlacementLoopbackProxy(bridge);
+    const socket = net.createConnection(proxy.port, '127.0.0.1');
+    socket.on('error', () => undefined);
+    try {
+      await new Promise<void>((resolve) => socket.once('connect', resolve));
+      socket.write([
+        'GET /__redeven_runtime_control/v1/code-workspace-engine/status HTTP/1.1',
+        'Host: 127.0.0.1',
+        'Connection: keep-alive',
+        '',
+        '',
+      ].join('\r\n'));
+      await waitForValue(() => writes.length, (count) => count === 1);
+
+      socket.write([
+        'POST /__redeven_runtime_control/v1/code-workspace-engine/import-sessions HTTP/1.1',
+        'Host: 127.0.0.1',
+        'Connection: keep-alive',
+        'Content-Length: 2',
+        '',
+        '{}',
+      ].join('\r\n'));
+      await waitForValue(() => writes.length, (count) => count === 2);
+    } finally {
+      socket.destroy();
+      await proxy.close();
+    }
+
+    expect(surfaces).toEqual(['runtime_control']);
+    expect(writes).toEqual([
+      'GET /v1/code-workspace-engine/status HTTP/1.1',
+      'POST /v1/code-workspace-engine/import-sessions HTTP/1.1',
+    ]);
+  });
+
+  it('preserves a runtime-control request body before rewriting the next request in the same TCP chunk', async () => {
+    const writes: Buffer[] = [];
+    const bridge: RuntimePlacementBridgeSessionHandle = {
+      openStream: (surface) => {
+        expect(surface).toBe('runtime_control');
+        return {
+          id: `${surface}-1`,
+          onData: () => undefined,
+          onClose: () => undefined,
+          onError: () => undefined,
+          write: async (chunk) => {
+            writes.push(Buffer.from(chunk));
+          },
+          close: async () => undefined,
+        };
+      },
+    };
+    const proxy = await startRuntimePlacementLoopbackProxy(bridge);
+    const socket = net.createConnection(proxy.port, '127.0.0.1');
+    socket.on('error', () => undefined);
+    try {
+      await new Promise<void>((resolve) => socket.once('connect', resolve));
+      socket.write([
+        'POST /__redeven_runtime_control/v1/code-workspace-engine/import-sessions HTTP/1.1',
+        'Host: 127.0.0.1',
+        'Connection: keep-alive',
+        'Content-Length: 2',
+        '',
+        '{}GET /__redeven_runtime_control/v1/code-workspace-engine/status HTTP/1.1',
+        'Host: 127.0.0.1',
+        'Connection: keep-alive',
+        '',
+        '',
+      ].join('\r\n'));
+      await waitForValue(() => writes.length, (count) => count === 3);
+    } finally {
+      socket.destroy();
+      await proxy.close();
+    }
+
+    expect(requestLine(writes[0])).toBe('POST /v1/code-workspace-engine/import-sessions HTTP/1.1');
+    expect(writes[1].toString('latin1')).toBe('{}');
+    expect(requestLine(writes[2])).toBe('GET /v1/code-workspace-engine/status HTTP/1.1');
+  });
+
+  it('leaves local-ui keep-alive requests unchanged after selecting the local-ui surface', async () => {
+    const surfaces: string[] = [];
+    const writes: string[] = [];
+    const bridge: RuntimePlacementBridgeSessionHandle = {
+      openStream: (surface) => {
+        surfaces.push(surface);
+        return {
+          id: `${surface}-1`,
+          onData: () => undefined,
+          onClose: () => undefined,
+          onError: () => undefined,
+          write: async (chunk) => {
+            writes.push(requestLine(chunk));
+          },
+          close: async () => undefined,
+        };
+      },
+    };
+    const proxy = await startRuntimePlacementLoopbackProxy(bridge);
+    const socket = net.createConnection(proxy.port, '127.0.0.1');
+    socket.on('error', () => undefined);
+    try {
+      await new Promise<void>((resolve) => socket.once('connect', resolve));
+      socket.write('GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: keep-alive\r\n\r\n');
+      await waitForValue(() => writes.length, (count) => count === 1);
+
+      socket.write('GET /__redeven_runtime_control/v1/provider-link/connect HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: keep-alive\r\n\r\n');
+      await waitForValue(() => writes.length, (count) => count === 2);
+    } finally {
+      socket.destroy();
+      await proxy.close();
+    }
+
+    expect(surfaces).toEqual(['local_ui']);
+    expect(writes).toEqual([
+      'GET / HTTP/1.1',
+      'GET /__redeven_runtime_control/v1/provider-link/connect HTTP/1.1',
+    ]);
+  });
+
+  it('rewrites only the runtime-control WebSocket upgrade handshake before passing payload bytes through', async () => {
+    const writes: Buffer[] = [];
+    const bridge: RuntimePlacementBridgeSessionHandle = {
+      openStream: (surface) => {
+        expect(surface).toBe('runtime_control');
+        return {
+          id: `${surface}-1`,
+          onData: () => undefined,
+          onClose: () => undefined,
+          onError: () => undefined,
+          write: async (chunk) => {
+            writes.push(Buffer.from(chunk));
+          },
+          close: async () => undefined,
+        };
+      },
+    };
+    const proxy = await startRuntimePlacementLoopbackProxy(bridge);
+    const socket = net.createConnection(proxy.port, '127.0.0.1');
+    const payload = Buffer.from('GET /__redeven_runtime_control/v1/not-a-real-request HTTP/1.1\r\n\r\n', 'latin1');
+    socket.on('error', () => undefined);
+    try {
+      await new Promise<void>((resolve) => socket.once('connect', resolve));
+      socket.write([
+        'GET /__redeven_runtime_control/v1/events HTTP/1.1',
+        'Host: 127.0.0.1',
+        'Connection: Upgrade',
+        'Upgrade: websocket',
+        `Sec-WebSocket-Key: ${'test-' + 'websocket-' + 'nonce'}`,
+        'Sec-WebSocket-Version: 13',
+        '',
+        '',
+      ].join('\r\n'));
+      await waitForValue(() => writes.length, (count) => count === 1);
+
+      socket.write(payload);
+      await waitForValue(() => writes.length, (count) => count === 2);
+    } finally {
+      socket.destroy();
+      await proxy.close();
+    }
+
+    expect(requestLine(writes[0])).toBe('GET /v1/events HTTP/1.1');
+    expect(writes[1]).toEqual(payload);
   });
 
   it('does not treat unprefixed provider-link paths as runtime-control fallbacks', async () => {
