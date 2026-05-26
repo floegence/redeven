@@ -8,7 +8,7 @@ import { PermissionMatrixTable, PermissionRuleTable } from './PermissionPolicyTa
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Button: (props: any) => (
-    <button type="button" disabled={props.disabled} onClick={props.onClick}>
+    <button type="button" disabled={props.disabled} onClick={props.onClick} aria-label={props['aria-label']}>
       {props.children}
     </button>
   ),
@@ -68,18 +68,18 @@ describe('PermissionPolicyTables', () => {
       );
     }, host);
 
-    const countPills = (label: 'Enabled' | 'Disabled') => (host.textContent?.match(new RegExp(label, 'g')) ?? []).length;
+    const countPills = (label: 'Allowed' | 'Denied') => (host.textContent?.match(new RegExp(label, 'g')) ?? []).length;
 
-    expect(countPills('Enabled')).toBe(2);
-    expect(countPills('Disabled')).toBe(1);
+    expect(countPills('Allowed')).toBe(2);
+    expect(countPills('Denied')).toBe(1);
 
     setWrite(true);
-    expect(countPills('Enabled')).toBe(3);
-    expect(countPills('Disabled')).toBe(0);
+    expect(countPills('Allowed')).toBe(3);
+    expect(countPills('Denied')).toBe(0);
 
     setExecute(false);
-    expect(countPills('Enabled')).toBe(2);
-    expect(countPills('Disabled')).toBe(1);
+    expect(countPills('Allowed')).toBe(2);
+    expect(countPills('Denied')).toBe(1);
 
     const toggles = host.querySelectorAll('input[type="checkbox"]');
     const readToggle = toggles[0] as HTMLInputElement;
@@ -87,8 +87,8 @@ describe('PermissionPolicyTables', () => {
     readToggle.dispatchEvent(new Event('change', { bubbles: true }));
 
     expect(onChange).toHaveBeenCalledWith('read', false);
-    expect(countPills('Enabled')).toBe(1);
-    expect(countPills('Disabled')).toBe(2);
+    expect(countPills('Allowed')).toBe(1);
+    expect(countPills('Denied')).toBe(2);
   });
 
   it('renders editable rule rows and empty state messaging', () => {
@@ -144,11 +144,11 @@ describe('PermissionPolicyTables', () => {
     input.value = 'user_456';
     input.dispatchEvent(new Event('input', { bubbles: true }));
 
-    const firstRowToggle = host.querySelector('input[type="checkbox"]') as HTMLInputElement;
-    firstRowToggle.checked = false;
-    firstRowToggle.dispatchEvent(new Event('change', { bubbles: true }));
+    const firstRowToggle = host.querySelector('button[aria-label="Read: enabled"]') as HTMLButtonElement | null;
+    if (!firstRowToggle) throw new Error('Read permission toggle not found');
+    firstRowToggle.click();
 
-    const removeButton = Array.from(host.querySelectorAll('button')).find((candidate) => candidate.textContent?.trim() === 'Remove');
+    const removeButton = host.querySelector('button[aria-label="Remove user permission rule"]') as HTMLButtonElement | null;
     if (!removeButton) throw new Error('Remove button not found');
     removeButton.click();
 

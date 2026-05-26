@@ -2,6 +2,7 @@
 
 import { FileBrowserDragProvider, LayoutProvider } from '@floegence/floe-webapp-core';
 import type { ContextMenuEvent, ContextMenuItem, FileBrowserRevealRequest, FileItem } from '@floegence/floe-webapp-core/file-browser';
+import { SURFACE_PORTAL_LAYER_ATTR } from '@floegence/floe-webapp-core/ui';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -29,6 +30,36 @@ async function flush() {
   await Promise.resolve();
   await Promise.resolve();
   await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+type RafQueueEntry = {
+  id: number;
+  callback: FrameRequestCallback;
+};
+
+function createManualRafQueue() {
+  let nextId = 0;
+  const queue: RafQueueEntry[] = [];
+
+  return {
+    request(callback: FrameRequestCallback) {
+      const id = ++nextId;
+      queue.push({ id, callback });
+      return id;
+    },
+    cancel(id: number) {
+      const index = queue.findIndex((entry) => entry.id === id);
+      if (index >= 0) {
+        queue.splice(index, 1);
+      }
+    },
+    flush() {
+      const pending = queue.splice(0);
+      for (const entry of pending) {
+        entry.callback(performance.now());
+      }
+    },
+  };
 }
 
 function dispatchPointerDown(target: EventTarget, options: {
@@ -174,6 +205,25 @@ function defineElementWidth(element: Element, width: number) {
   Object.defineProperty(element, 'offsetWidth', {
     configurable: true,
     get: () => width,
+  });
+}
+
+function mockElementRect(element: Element, rect: {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  width: number;
+  height: number;
+}) {
+  Object.defineProperty(element, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => ({
+      ...rect,
+      x: rect.left,
+      y: rect.top,
+      toJSON: () => ({}),
+    }),
   });
 }
 
@@ -1473,6 +1523,133 @@ describe('FileBrowserWorkspace interactions', () => {
 
       expect(duplicateSpy).toHaveBeenCalledTimes(1);
       expect(duplicateSpy.mock.calls[0]?.[0]?.[0]?.path).toBe('/src');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('shows the workbench surface context menu only after resolving its final clamped position', async () => {
+    const manualRaf = createManualRafQueue();
+    vi.stubGlobal('requestAnimationFrame', ((callback: FrameRequestCallback) => (
+      manualRaf.request(callback)
+    )) as typeof requestAnimationFrame);
+    vi.stubGlobal('cancelAnimationFrame', ((handle: number) => {
+      manualRaf.cancel(handle);
+    }) as typeof cancelAnimationFrame);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div
+          {...{ [SURFACE_PORTAL_LAYER_ATTR]: 'true' }}
+          class="relative h-[360px] w-[520px]"
+          data-testid="surface-portal-layer"
+        >
+          <article
+            {...{ [FLOE_DIALOG_SURFACE_HOST_ATTR]: 'true' }}
+            {...{ [REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR]: 'true' }}
+            {...{ [REDEVEN_WORKBENCH_WIDGET_ID_ATTR]: 'widget-files-position' }}
+            class="absolute h-[240px] w-[320px]"
+            data-testid="surface-host"
+          >
+            <FileBrowserWorkspace
+              mode="files"
+              onModeChange={() => {}}
+              files={files}
+              currentPath="/"
+              initialPath="/"
+              persistenceKey="test-files-workspace-surface-context-menu-position"
+              instanceId="test-files-workspace-surface-context-menu-position"
+              resetKey={0}
+              width={260}
+              open
+              contextMenuCallbacks={{ onDuplicate: vi.fn() }}
+            />
+          </article>
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await Promise.resolve();
+
+      const surfaceLayer = host.querySelector('[data-testid="surface-portal-layer"]') as HTMLElement | null;
+      const surfaceHost = host.querySelector('[data-testid="surface-host"]') as HTMLElement | null;
+      const folderButton = host.querySelector('button[title="src"]') as HTMLButtonElement | null;
+      expect(surfaceLayer).toBeTruthy();
+      expect(surfaceHost).toBeTruthy();
+      expect(folderButton).toBeTruthy();
+
+      mockElementRect(surfaceLayer!, {
+        left: 20,
+        top: 30,
+        right: 540,
+        bottom: 390,
+        width: 520,
+        height: 360,
+      });
+      mockElementRect(surfaceHost!, {
+        left: 120,
+        top: 80,
+        right: 440,
+        bottom: 320,
+        width: 320,
+        height: 240,
+      });
+
+      folderButton!.dispatchEvent(new PointerEvent('pointerdown', {
+        bubbles: true,
+        pointerId: 1,
+        pointerType: 'mouse',
+        button: 2,
+        clientX: 430,
+        clientY: 315,
+      }));
+      folderButton!.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+        button: 2,
+        clientX: 430,
+        clientY: 315,
+      }));
+      await Promise.resolve();
+
+      const menu = surfaceLayer!.querySelector('[role="menu"]') as HTMLElement | null;
+      expect(menu).toBeTruthy();
+      expect(surfaceLayer?.contains(menu ?? null)).toBe(true);
+      expect(surfaceHost?.contains(menu ?? null)).toBe(false);
+      expect(menu?.style.left).toBe('410px');
+      expect(menu?.style.top).toBe('285px');
+      expect(menu?.style.visibility).toBe('hidden');
+      expect(menu?.style.pointerEvents).toBe('none');
+      expect(menu?.getAttribute('aria-hidden')).toBe('true');
+
+      const duplicateButton = Array.from(menu!.querySelectorAll('button')).find((node) =>
+        node.textContent?.includes('Duplicate')
+      ) as HTMLButtonElement | undefined;
+      expect(duplicateButton).toBeTruthy();
+      expect(document.activeElement).not.toBe(duplicateButton);
+
+      mockElementRect(menu!, {
+        left: 430,
+        top: 315,
+        right: 630,
+        bottom: 435,
+        width: 200,
+        height: 120,
+      });
+
+      manualRaf.flush();
+      await Promise.resolve();
+
+      expect(menu?.style.visibility).toBe('visible');
+      expect(menu?.style.pointerEvents).toBe('auto');
+      expect(menu?.getAttribute('aria-hidden')).toBeNull();
+      expect(menu?.style.left).toBe('212px');
+      expect(menu?.style.top).toBe('162px');
+      expect(document.activeElement).toBe(duplicateButton);
     } finally {
       dispose();
     }
