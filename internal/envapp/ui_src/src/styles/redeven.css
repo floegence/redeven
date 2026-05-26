@@ -3396,6 +3396,19 @@ html.dark .redeven-workbench-progress-curtain {
     background: color-mix(in srgb, var(--foreground) 15%, transparent);
     width: 100%;
   }
+
+  .redeven-environment-progress__step-dot[data-state='active'] {
+    animation-duration: 1ms;
+  }
+
+  .redeven-environment-progress__step,
+  .redeven-environment-progress__meter span {
+    transition-duration: 1ms;
+  }
+
+  .redeven-environment-progress__meter[data-plan-state='planning'] span {
+    animation: none;
+  }
 }
 
 .workbench-surface[data-workbench-theme='default'] {
@@ -3503,4 +3516,240 @@ html.dark .redeven-workbench-progress-curtain {
   animation: none !important;
   opacity: 1;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+/* ── Environment progress (shared step indicator + meter) ── */
+
+.redeven-environment-progress {
+  min-width: 0;
+  gap: 0.55rem;
+}
+
+.redeven-environment-progress__header {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.redeven-environment-progress__target {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--muted-foreground);
+}
+
+.redeven-environment-progress__status {
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--primary) 22%, transparent);
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+  padding: 0.12rem 0.45rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--primary) 82%, white 18%);
+  transition:
+    border-color 200ms ease,
+    background-color 200ms ease,
+    color 200ms ease;
+}
+
+.redeven-environment-progress__status[data-phase='succeeded'] {
+  border-color: color-mix(in srgb, var(--success) 22%, transparent);
+  background: color-mix(in srgb, var(--success) 6%, transparent);
+  color: color-mix(in srgb, var(--success) 82%, white 18%);
+}
+
+.redeven-environment-progress__status[data-phase='failed'],
+.redeven-environment-progress__status[data-phase='canceled'] {
+  border-color: color-mix(in srgb, var(--error) 22%, transparent);
+  background: color-mix(in srgb, var(--error) 6%, transparent);
+  color: color-mix(in srgb, var(--error) 82%, white 18%);
+}
+
+/* ── Step indicator ── */
+
+.redeven-environment-progress__steps {
+  display: grid;
+  min-width: 0;
+  gap: 0;
+  margin: 0.15rem 0;
+  transition: min-height 180ms ease;
+}
+
+.redeven-environment-progress__step {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 0.5rem;
+  transform-origin: top left;
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.redeven-environment-progress__step[data-entering='true'] {
+  opacity: 0;
+  transform: translateY(-0.25rem);
+}
+
+.redeven-environment-progress__step-connector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  width: 1rem;
+  padding-top: 0.15rem;
+}
+
+.redeven-environment-progress__step-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 9999px;
+  flex-shrink: 0;
+  transition:
+    background-color 200ms ease,
+    box-shadow 200ms ease,
+    border-color 200ms ease,
+    transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.redeven-environment-progress__step-dot[data-state='done'] {
+  background: color-mix(in srgb, var(--success) 72%, white 28%);
+  border: 1.5px solid color-mix(in srgb, var(--success) 60%, transparent);
+  box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--success) 10%, transparent);
+}
+
+.redeven-environment-progress__step-dot[data-state='active'] {
+  background: color-mix(in srgb, var(--primary) 72%, white 28%);
+  border: 1.5px solid color-mix(in srgb, var(--primary) 56%, transparent);
+  box-shadow: 0 0 0 0.22rem color-mix(in srgb, var(--primary) 14%, transparent);
+  animation: redeven-step-pulse 2.2s ease-in-out infinite;
+}
+
+.redeven-environment-progress__step-dot[data-state='pending'] {
+  background: transparent;
+  border: 1.5px solid color-mix(in srgb, var(--border) 64%, transparent);
+}
+
+.redeven-environment-progress__step-dot[data-state='error'] {
+  background: color-mix(in srgb, var(--error) 72%, white 28%);
+  border: 1.5px solid color-mix(in srgb, var(--error) 56%, transparent);
+}
+
+.redeven-environment-progress__step-line {
+  width: 1.5px;
+  flex: 1;
+  min-height: 0.5rem;
+  background: color-mix(in srgb, var(--border) 48%, transparent);
+  transition: background-color 200ms ease;
+}
+
+.redeven-environment-progress__step-line[data-state='done'] {
+  background: color-mix(in srgb, var(--success) 36%, transparent);
+}
+
+.redeven-environment-progress__step-label {
+  min-width: 0;
+  padding-top: 0.06rem;
+  padding-bottom: 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--muted-foreground);
+  overflow-wrap: anywhere;
+  transition: color 200ms ease;
+}
+
+.redeven-environment-progress__step-label[data-state='done'] {
+  color: var(--foreground);
+}
+
+.redeven-environment-progress__step-label[data-state='active'] {
+  font-weight: 600;
+  color: var(--popover-foreground);
+}
+
+.redeven-environment-progress__step:last-child .redeven-environment-progress__step-line {
+  background: transparent;
+}
+
+.redeven-environment-progress__step:last-child .redeven-environment-progress__step-label {
+  padding-bottom: 0;
+}
+
+/* ── Progress meter (secondary, compact) ── */
+
+.redeven-environment-progress__meter {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  height: 0.28rem;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--border) 48%, transparent);
+}
+
+.redeven-environment-progress__meter span {
+  display: block;
+  height: 100%;
+  min-width: 0.28rem;
+  border-radius: inherit;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--primary) 76%, white 24%), color-mix(in srgb, var(--success) 58%, var(--primary)));
+  transition: width 250ms ease;
+}
+
+.redeven-environment-progress__meter[data-plan-state='planning'] span {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--primary) 28%, transparent),
+    color-mix(in srgb, var(--primary) 76%, white 24%),
+    color-mix(in srgb, var(--primary) 28%, transparent)
+  );
+  background-size: 180% 100%;
+  animation: redeven-runtime-planning-meter 1.2s ease-in-out infinite;
+}
+
+.redeven-environment-progress__meta {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--muted-foreground);
+}
+
+.redeven-environment-progress__meta span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ── Step animations ── */
+
+@keyframes redeven-step-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0.22rem color-mix(in srgb, var(--primary) 14%, transparent);
+  }
+
+  50% {
+    box-shadow: 0 0 0 0.42rem color-mix(in srgb, var(--primary) 6%, transparent);
+  }
+}
+
+@keyframes redeven-runtime-planning-meter {
+  0% {
+    background-position: 100% 0;
+  }
+
+  100% {
+    background-position: -80% 0;
+  }
 }
