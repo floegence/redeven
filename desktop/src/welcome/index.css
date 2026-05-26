@@ -372,6 +372,9 @@ body {
 }
 
 .redeven-card-fact-value--copyable {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
   max-width: 50%;
   cursor: pointer;
   transition: color 150ms ease;
