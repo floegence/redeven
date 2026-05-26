@@ -272,13 +272,21 @@ func extractWorkspaceEngineArchive(ctx context.Context, archivePath string, dest
 		if rel == "" {
 			continue
 		}
-		target := filepath.Join(dest, filepath.FromSlash(rel))
-		if !strings.HasPrefix(filepath.Clean(target)+string(os.PathSeparator), filepath.Clean(dest)+string(os.PathSeparator)) {
+		target, err := workspaceEngineArchiveTarget(dest, rel)
+		if err != nil {
 			return fmt.Errorf("workspace engine archive entry escapes target directory: %s", hdr.Name)
 		}
 		switch hdr.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0o700); err != nil {
+			if err := ensureWorkspaceEngineArchiveDirectory(filepath.Dir(target)); err != nil {
+				return err
+			}
+			if fi, err := os.Lstat(target); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+				if err := os.Remove(target); err != nil {
+					return err
+				}
+			}
+			if err := ensureWorkspaceEngineArchiveDirectory(target); err != nil {
 				return err
 			}
 		case tar.TypeReg:
@@ -286,7 +294,10 @@ func extractWorkspaceEngineArchive(ctx context.Context, archivePath string, dest
 			if total > defaultWorkspaceEngineArchiveLimit {
 				return fmt.Errorf("workspace engine archive extracts too much data: %d bytes", total)
 			}
-			if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+			if err := ensureWorkspaceEngineArchiveDirectory(filepath.Dir(target)); err != nil {
+				return err
+			}
+			if err := os.RemoveAll(target); err != nil {
 				return err
 			}
 			mode := os.FileMode(0o600)
@@ -305,13 +316,86 @@ func extractWorkspaceEngineArchive(ctx context.Context, archivePath string, dest
 			if closeErr != nil {
 				return closeErr
 			}
-		case tar.TypeSymlink, tar.TypeLink:
-			return fmt.Errorf("workspace engine archive links are not allowed: %s", hdr.Name)
+		case tar.TypeSymlink:
+			linkTarget, err := cleanArchiveSymlinkTarget(rel, hdr.Linkname)
+			if err != nil {
+				return err
+			}
+			if err := ensureWorkspaceEngineArchiveDirectory(filepath.Dir(target)); err != nil {
+				return err
+			}
+			if err := os.RemoveAll(target); err != nil {
+				return err
+			}
+			if err := os.Symlink(linkTarget, target); err != nil {
+				return err
+			}
+		case tar.TypeLink:
+			return fmt.Errorf("workspace engine archive hard links are not supported: %s", hdr.Name)
 		default:
 			continue
 		}
 	}
 	return nil
+}
+
+func ensureWorkspaceEngineArchiveDirectory(dir string) error {
+	cleanDir := filepath.Clean(dir)
+	info, err := os.Lstat(cleanDir)
+	if err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("workspace engine archive directory is a symlink: %s", cleanDir)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("workspace engine archive directory is not a directory: %s", cleanDir)
+		}
+		return nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	parent := filepath.Dir(cleanDir)
+	if parent != cleanDir {
+		if err := ensureWorkspaceEngineArchiveDirectory(parent); err != nil {
+			return err
+		}
+	}
+	if err := os.Mkdir(cleanDir, 0o700); err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return ensureWorkspaceEngineArchiveDirectory(cleanDir)
+		}
+		return err
+	}
+	return nil
+}
+
+func workspaceEngineArchiveTarget(dest string, rel string) (string, error) {
+	cleanDest := filepath.Clean(dest)
+	target := filepath.Join(cleanDest, filepath.FromSlash(rel))
+	cleanTarget := filepath.Clean(target)
+	if cleanTarget == cleanDest || strings.HasPrefix(cleanTarget+string(os.PathSeparator), cleanDest+string(os.PathSeparator)) {
+		return cleanTarget, nil
+	}
+	return "", fmt.Errorf("workspace engine archive entry escapes target directory: %s", rel)
+}
+
+func cleanArchiveSymlinkTarget(entryRel string, rawLink string) (string, error) {
+	link := strings.TrimSpace(filepath.ToSlash(rawLink))
+	if link == "" {
+		return "", errors.New("workspace engine archive contains an empty symlink target")
+	}
+	if strings.HasPrefix(link, "/") {
+		return "", fmt.Errorf("workspace engine archive contains absolute symlink target: %s", rawLink)
+	}
+	resolved := path.Clean(path.Join(path.Dir(filepath.ToSlash(entryRel)), link))
+	if !safeRelativePath(resolved) {
+		return "", fmt.Errorf("workspace engine archive symlink escapes target directory: %s -> %s", entryRel, rawLink)
+	}
+	cleanLink := path.Clean(link)
+	if cleanLink == "." || cleanLink == "" {
+		return "", errors.New("workspace engine archive contains an empty symlink target")
+	}
+	return filepath.FromSlash(cleanLink), nil
 }
 
 func cleanArchivePath(raw string) (string, error) {

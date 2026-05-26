@@ -157,6 +157,8 @@ Desktop-managed Local Runtime also exposes a separate runtime-control endpoint w
 - Successful `connect` updates the Local Runtime config and starts or replaces the provider control-channel goroutine without restarting Local UI, local direct sessions, terminals, tasks, or port forwards.
 - Successful `disconnect` revokes the local persisted provider authorization and stops the provider control-channel state without stopping the Local Runtime. When an active provider control channel exists, the runtime first sends `runtime_disconnect` so the provider can clear the current binding; when that channel is already gone, local unlink still completes so a removed or unreachable provider Environment cannot trap the user in a linked state.
 
+Bridge-backed sessions may route runtime-control through a Desktop loopback path prefix such as `/__redeven_runtime_control`. That prefix is an Electron-main routing detail for multiplexing Local UI and runtime-control on one loopback origin; runtime APIs and product copy should continue to describe runtime-control endpoints from the service root.
+
 When the selected target is `Remote Environment`, Desktop does not start the bundled binary.
 Instead it validates and probes the configured Local UI base URL, then opens that exact origin in the shell.
 

@@ -13,6 +13,7 @@ const LOOPBACK_BRIDGE_UNAVAILABLE_RESPONSE = Buffer.from(
   'HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\nContent-Length: 0\r\n\r\n',
   'latin1',
 );
+const HTTP_HEADER_END = Buffer.from('\r\n\r\n', 'latin1');
 
 export type RuntimePlacementLoopbackProxy = Readonly<{
   url: string;
@@ -24,13 +25,19 @@ function localForwardURL(port: number): string {
   return `http://127.0.0.1:${port}/`;
 }
 
-function normalizeRuntimeControlRequest(buffer: Buffer): Buffer {
-  const text = buffer.toString('latin1');
-  const marker = '\r\n';
-  const firstLineEnd = text.indexOf(marker);
+class LoopbackHeaderTooLargeError extends Error {
+  constructor() {
+    super('Loopback request header is too large.');
+    this.name = 'LoopbackHeaderTooLargeError';
+  }
+}
+
+function normalizeRuntimeControlRequestHeader(buffer: Buffer): Buffer {
+  const firstLineEnd = buffer.indexOf('\r\n', 0, 'latin1');
   if (firstLineEnd < 0) {
     return buffer;
   }
+  const text = buffer.toString('latin1');
   const firstLine = text.slice(0, firstLineEnd);
   const match = /^(GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS)\s+\/__redeven_runtime_control(\/[^\s]*)?\s+(HTTP\/1\.[01])$/u.exec(firstLine);
   if (!match) {
@@ -38,6 +45,89 @@ function normalizeRuntimeControlRequest(buffer: Buffer): Buffer {
   }
   const nextPath = match[2] && match[2] !== '' ? match[2] : '/';
   return Buffer.from(`${match[1]} ${nextPath} ${match[3]}${text.slice(firstLineEnd)}`, 'latin1');
+}
+
+function runtimeControlRequestContentLength(header: Buffer): number {
+  const text = header.toString('latin1');
+  const match = /\r\ncontent-length:\s*(\d+)\s*(?=\r\n)/iu.exec(text);
+  if (!match) {
+    return 0;
+  }
+  const length = Number(match[1]);
+  return Number.isSafeInteger(length) && length > 0 ? length : 0;
+}
+
+function runtimeControlRequestNeedsRawTunnel(header: Buffer): boolean {
+  const text = header.toString('latin1');
+  return /\r\nconnection:[^\r\n]*\bupgrade\b/iu.test(text) &&
+    /\r\nupgrade:\s*[^\r\n]+/iu.test(text);
+}
+
+class RuntimeControlRequestStreamNormalizer {
+  private pendingHeader = Buffer.alloc(0);
+  private remainingBodyBytes = 0;
+  private rawTunnel = false;
+
+  push(chunk: Buffer): Buffer[] {
+    if (this.rawTunnel) {
+      return [chunk];
+    }
+    let input = chunk;
+    const output: Buffer[] = [];
+
+    while (input.length > 0) {
+      if (this.remainingBodyBytes > 0) {
+        const bodyLength = Math.min(this.remainingBodyBytes, input.length);
+        output.push(input.subarray(0, bodyLength));
+        this.remainingBodyBytes -= bodyLength;
+        input = input.subarray(bodyLength);
+        continue;
+      }
+
+      this.pendingHeader = Buffer.concat([this.pendingHeader, input]);
+      input = Buffer.alloc(0);
+
+      while (this.pendingHeader.length > 0) {
+        const headerEnd = this.pendingHeader.indexOf(HTTP_HEADER_END);
+        if (headerEnd < 0) {
+          if (this.pendingHeader.length > MAX_LOOPBACK_REQUEST_HEADER_BYTES) {
+            throw new LoopbackHeaderTooLargeError();
+          }
+          break;
+        }
+
+        const headerLength = headerEnd + HTTP_HEADER_END.length;
+        const header = this.pendingHeader.subarray(0, headerLength);
+        const rest = this.pendingHeader.subarray(headerLength);
+        output.push(normalizeRuntimeControlRequestHeader(header));
+
+        if (runtimeControlRequestNeedsRawTunnel(header)) {
+          if (rest.length > 0) {
+            output.push(rest);
+          }
+          this.pendingHeader = Buffer.alloc(0);
+          this.rawTunnel = true;
+          break;
+        }
+
+        // Runtime-control callers in Desktop use Content-Length. Keeping that
+        // boundary explicit lets the proxy normalize each keep-alive request
+        // without growing a general HTTP chunked-transfer parser here.
+        const contentLength = runtimeControlRequestContentLength(header);
+        const bodyLength = Math.min(contentLength, rest.length);
+        if (bodyLength > 0) {
+          output.push(rest.subarray(0, bodyLength));
+        }
+        this.remainingBodyBytes = contentLength - bodyLength;
+        this.pendingHeader = rest.subarray(bodyLength);
+        if (this.remainingBodyBytes > 0 || this.pendingHeader.length === 0) {
+          break;
+        }
+      }
+    }
+
+    return output;
+  }
 }
 
 function normalizeStreamError(error: unknown): Error {
@@ -99,6 +189,7 @@ export async function startRuntimePlacementLoopbackProxy(
         socket.end(LOOPBACK_BRIDGE_UNAVAILABLE_RESPONSE);
         return;
       }
+      const requestNormalizer = isRuntimeControl ? new RuntimeControlRequestStreamNormalizer() : null;
       let bridgeWriteQueue = Promise.resolve();
       let closing = false;
 
@@ -112,10 +203,20 @@ export async function startRuntimePlacementLoopbackProxy(
         });
       };
 
-      const enqueueBridgeWrite = (chunk: Buffer) => {
+      const enqueueBridgeChunks = (chunks: Buffer[]) => {
+        if (chunks.length === 0) {
+          if (!socket.destroyed && !closing) {
+            socket.resume();
+          }
+          return;
+        }
         socket.pause();
         bridgeWriteQueue = bridgeWriteQueue
-          .then(() => stream.write(chunk))
+          .then(async () => {
+            for (const chunk of chunks) {
+              await stream.write(chunk);
+            }
+          })
           .catch((error: unknown) => {
             if (!socket.destroyed) {
               socket.destroy(normalizeStreamError(error));
@@ -126,6 +227,19 @@ export async function startRuntimePlacementLoopbackProxy(
               socket.resume();
             }
           });
+      };
+      const handleSocketData = (chunk: Buffer) => {
+        try {
+          enqueueBridgeChunks(requestNormalizer ? requestNormalizer.push(chunk) : [chunk]);
+        } catch (error) {
+          socket.off('data', handleSocketData);
+          if (error instanceof LoopbackHeaderTooLargeError) {
+            socket.end(LOOPBACK_HEADER_TOO_LARGE_RESPONSE);
+          } else {
+            socket.destroy(normalizeStreamError(error));
+          }
+          closeBridgeStream();
+        }
       };
 
       stream.onData(async (chunk) => {
@@ -147,11 +261,11 @@ export async function startRuntimePlacementLoopbackProxy(
           socket.destroy(error);
         }
       });
-      socket.on('data', enqueueBridgeWrite);
+      socket.on('data', handleSocketData);
       socket.once('end', closeBridgeStream);
       socket.once('error', closeBridgeStream);
       socket.once('close', closeBridgeStream);
-      enqueueBridgeWrite(isRuntimeControl ? normalizeRuntimeControlRequest(firstChunk) : firstChunk);
+      handleSocketData(firstChunk);
     };
 
     const onInitialData = (chunk: Buffer) => {

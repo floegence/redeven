@@ -56,8 +56,9 @@ Runtime Service snapshots expose the capability and live binding under
 ## Runtime-Control Endpoints
 
 All endpoints are rooted at the runtime-control service base URL. Bridge-backed
-runtimes may expose that base URL under a path prefix such as
-`/__redeven_runtime_control/`.
+runtimes may route that service through a Desktop loopback prefix such as
+`/__redeven_runtime_control/`, but that prefix is an Electron-main transport
+detail rather than part of the runtime-control endpoint paths.
 
 ```text
 GET  /v1/desktop-model-source

@@ -106,6 +106,7 @@ Rules:
 - The current endpoint stores one managed runtime selection in `shared/code-server/<os>-<arch>/local-environment.json`.
 - The user-facing actions are `Set up browser editor`, `Update browser editor`, `Open`, and `Start`.
 - The runtime accepts a Desktop-generated artifact manifest plus package bytes, then verifies, extracts, probes, promotes, and selects the version.
+- Official `code-server` tarballs may contain internal relative symlinks. Redeven allows those symlinks only when they resolve within the extracted package root, and continues to reject hard links, special archive entries, or links that escape that root.
 - The `apps/code/runtime/managed` path is only a symlink to the selected shared version.
 - No user shell commands or PATH edits are required for the managed runtime.
 - Redeven Desktop reads the Browser Editor Catalog only when the user explicitly starts setup or update. It does not refresh Browser Editor package metadata in the background.
@@ -137,7 +138,7 @@ The explicit preparation flow is:
 2. If the browser editor engine is missing or unusable, Env App blocks startup and starts setup only after the user's explicit `Open`, `Start`, `Set up browser editor`, or `Update browser editor` action.
 3. Desktop resolves the latest matching Browser Editor package from Redeven's Browser Editor Catalog and uses the local package cache only when it already has that latest package.
 4. Desktop uploads the package either through runtime-control direct upload or through the Env App session-mediated import-session path.
-5. Runtime validates the manifest, size, checksum, platform, archive layout, and staged binary, then promotes it to `shared/code-server/<os>-<arch>/versions/<version>/` and selects it for the current endpoint.
+5. Runtime validates the manifest, size, checksum, platform, archive layout, safe internal symlinks, and staged binary, then promotes it to `shared/code-server/<os>-<arch>/versions/<version>/` and selects it for the current endpoint.
 6. Existing usable versions are reused instead of reinstalled; `POST /remove-version` deletes only a non-selected managed version.
 7. Running, failed, or cancelled operations keep focused status and recent output visible in the Browser Editor setup activity panel so the user can recover explicitly.
 
@@ -204,7 +205,7 @@ Failures from both halves of the setup path belong in this activity model:
   - direct Desktop-to-runtime upload failures before the runtime can finish importing the package
 - Runtime-side import and verification failures:
   - import-session creation, chunk receive, size, or checksum mismatches
-  - manifest, platform, archive layout, extraction, binary probe, validation, promotion, or selection failures
+  - manifest, platform, archive layout, unsafe archive link, extraction, binary probe, validation, promotion, or selection failures
 
 For runtime-side failures, `GET /_redeven_proxy/api/code-runtime/status` carries the authoritative `operation` state (`stage`, `last_error`, `last_error_code`, `target_version`, and `log_tail`).
 For Desktop-side failures that happen before the runtime can record a terminal operation state, Env App must still keep the Browser Editor setup activity open and render the failure there after refreshing runtime status.
