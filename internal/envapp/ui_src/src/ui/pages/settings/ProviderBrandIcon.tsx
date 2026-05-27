@@ -17,6 +17,7 @@ export function ProviderBrandIcon(props: { type: AIProviderType; class?: string 
           aria-label={def().title}
           role="img"
           data-provider-brand={brand().type}
+          // eslint-disable-next-line solid/no-innerhtml -- trusted provider SVG
           innerHTML={def().svgContent}
         />
       </Match>
