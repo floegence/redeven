@@ -410,9 +410,46 @@ describe('MarkdownBlock', () => {
     expect(fileRef?.getAttribute('href')).toContain('#L278');
     expect(fileRef?.querySelector('.chat-md-file-ref-name')?.textContent).toBe('controlplaneApi.ts');
     expect(fileRef?.querySelector('.chat-md-file-ref-line')?.textContent).toBe('L278');
+    expect(fileRef?.dataset.filePath).toBe('/Users/tangjianyin/Downloads/code/redeven/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts');
+    expect(fileRef?.dataset.fileLine).toBe('278');
     expect(renderMarkdownSnapshotMock).toHaveBeenCalledWith(normalized, {
       streaming: false,
       rendererVariant: 'codex',
+    });
+  });
+
+  it('renders colon-style codex file links as file references with clean preview paths', async () => {
+    const content = '[exec.rs](/Users/tangjianyin/Downloads/code/codex/codex-rs/core/src/exec.rs:1306)';
+    const normalized = normalizeMarkdownForDisplay(content);
+    renderMarkdownSnapshotMock.mockResolvedValue(createSnapshot(normalized, false, 'codex'));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderWithFilePreviewContext(
+      () => <MarkdownBlock content={content} class="codex-chat-markdown-block" rendererVariant="codex" />,
+      host,
+    );
+
+    await waitFor(() => {
+      expect(host.querySelectorAll('.chat-md-file-ref')).toHaveLength(1);
+    });
+
+    const fileRef = host.querySelector('.chat-md-file-ref') as HTMLAnchorElement | null;
+    expect(fileRef?.getAttribute('href')).toBe('/Users/tangjianyin/Downloads/code/codex/codex-rs/core/src/exec.rs:1306');
+    expect(fileRef?.dataset.filePath).toBe('/Users/tangjianyin/Downloads/code/codex/codex-rs/core/src/exec.rs');
+    expect(fileRef?.dataset.fileLine).toBe('1306');
+    expect(fileRef?.querySelector('.chat-md-file-ref-name')?.textContent).toBe('exec.rs');
+    expect(fileRef?.querySelector('.chat-md-file-ref-line')?.textContent).toBe('L1306');
+
+    fileRef?.click();
+    await flushAsync();
+
+    expect(openPreviewMock).toHaveBeenCalledWith({
+      id: '/Users/tangjianyin/Downloads/code/codex/codex-rs/core/src/exec.rs',
+      name: 'exec.rs',
+      path: '/Users/tangjianyin/Downloads/code/codex/codex-rs/core/src/exec.rs',
+      type: 'file',
     });
   });
 
