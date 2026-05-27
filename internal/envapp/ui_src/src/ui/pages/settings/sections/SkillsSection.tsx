@@ -1,11 +1,11 @@
-import { For, Show, createMemo, createSignal, createResource } from 'solid-js';
+import { For, Show, createMemo, createSignal } from 'solid-js';
 import { Layers } from '@floegence/floe-webapp-core/icons';
 import { Button, Input, Select, Dialog, ConfirmDialog, Checkbox } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import { SettingsCard, FieldLabel } from '../SettingsPrimitives';
 import { SkillsCatalogTable } from '../SkillsCatalogTable';
 import { fetchGatewayJSON } from '../../../services/gatewayApi';
-import type { SkillCatalogEntry, SkillGitHubCatalogResponse, SkillGitHubValidateResponse, SkillSourcesResponse } from '../types';
+import type { SkillCatalogEntry } from '../types';
 
 export function SkillsSection() {
   const ctx = useEnvSettingsPage();
@@ -30,8 +30,8 @@ export function SkillsSection() {
   const [skillScopeFilter, setSkillScopeFilter] = createSignal<'all' | 'user' | 'user_agents'>('all');
   const [skillsReloading, setSkillsReloading] = createSignal(false);
   const [skillsLoading, setSkillsLoading] = createSignal(false);
-  const [skillToggleSaving, setSkillToggleSaving] = createSignal<Record<string, boolean>>({});
-  const [skillReinstalling, setSkillReinstalling] = createSignal<Record<string, boolean>>({});
+  const [skillToggleSaving] = createSignal<Record<string, boolean>>({});
+  const [skillReinstalling] = createSignal<Record<string, boolean>>({});
 
   const skillsCatalog = () => skillsData();
   const skillsError = () => null;
@@ -68,27 +68,13 @@ export function SkillsSection() {
   const [skillInstallRef, setSkillInstallRef] = createSignal('main');
   const [skillInstallPaths, setSkillInstallPaths] = createSignal('');
   const [skillInstallOverwrite, setSkillInstallOverwrite] = createSignal(false);
-  const [skillInstallResolved, setSkillInstallResolved] = createSignal<any[]>([]);
+  const [, setSkillInstallResolved] = createSignal<any[]>([]);
   const [skillInstallSaving, setSkillInstallSaving] = createSignal(false);
   const [skillInstallValidating, setSkillInstallValidating] = createSignal(false);
-  const [skillGitHubCatalogData, setSkillGitHubCatalogData] = createSignal<any>(null);
-  const [skillGitHubCatalogLoading, setSkillGitHubCatalogLoading] = createSignal(false);
-
-  const refetchGitHubCatalog = async () => {
-    setSkillGitHubCatalogLoading(true);
-    try {
-      const data = await fetchGatewayJSON<any>('/_redeven_proxy/api/skills/github-catalog', { method: 'GET' });
-      setSkillGitHubCatalogData(data);
-    } catch {}
-    setSkillGitHubCatalogLoading(false);
-  };
-
-  const gitHubCatalog = () => skillGitHubCatalogData();
 
   const openInstallDialog = () => setSkillInstallOpen(true);
   const validateSkillInstall = async () => { setSkillInstallValidating(true); setSkillInstallValidating(false); };
   const installSkillsFromGitHub = async () => { setSkillInstallSaving(true); setSkillInstallSaving(false); };
-  const refreshGitHubCatalog = async (_force?: boolean) => { await refetchGitHubCatalog(); };
 
   // Create dialog
   const [skillCreateOpen, setSkillCreateOpen] = createSignal(false);
@@ -96,7 +82,7 @@ export function SkillsSection() {
   const [skillCreateName, setSkillCreateName] = createSignal('');
   const [skillCreateDescription, setSkillCreateDescription] = createSignal('');
   const [skillCreateBody, setSkillCreateBody] = createSignal('');
-  const [skillCreateSaving, setSkillCreateSaving] = createSignal(false);
+  const [skillCreateSaving] = createSignal(false);
   const createSkill = async () => {};
 
   return (

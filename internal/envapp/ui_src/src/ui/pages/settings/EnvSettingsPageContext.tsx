@@ -1,10 +1,10 @@
-import { createContext, useContext, createMemo, createSignal, createEffect, createResource, onCleanup, onMount, type Resource, type JSX, type Accessor } from 'solid-js';
+import { createContext, useContext, createMemo, createSignal, createEffect, createResource, onCleanup, type Resource, type JSX, type Accessor } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useRuntimeUpdateContext } from '../../maintenance/RuntimeUpdateContext';
 import { resolveAgentUpgradeState } from '../../maintenance/agentUpgradeState';
 import { isReleaseVersion } from '../../maintenance/agentVersion';
-import { formatAgentStatusLabel, formatUnknownError } from '../../maintenance/shared';
+import { formatAgentStatusLabel } from '../../maintenance/shared';
 import { fetchGatewayJSON } from '../../services/gatewayApi';
 import { fetchCodeRuntimeStatus, type CodeRuntimeStatus } from '../../services/codeRuntimeApi';
 import { useEnvContext, type EnvSettingsSection } from '../EnvContext';
@@ -178,11 +178,11 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element }) {
   });
 
   // Code runtime
-  const [codeRuntimeActionLoading, setCodeRuntimeActionLoading] = createSignal(false);
-  const [codeRuntimeCancelLoading, setCodeRuntimeCancelLoading] = createSignal(false);
+  const [codeRuntimeActionLoading] = createSignal(false);
+  const [codeRuntimeCancelLoading] = createSignal(false);
   const [codeRuntimeLocalPrepareFailure, setCodeRuntimeLocalPrepareFailure] = createSignal<any>(null);
-  const [codeRuntimeSelectionLoadingVersion, setCodeRuntimeSelectionLoadingVersion] = createSignal<string | null>(null);
-  const [codeRuntimeRemoveVersionLoading, setCodeRuntimeRemoveVersionLoading] = createSignal<string | null>(null);
+  const [codeRuntimeSelectionLoadingVersion] = createSignal<string | null>(null);
+  const [codeRuntimeRemoveVersionLoading] = createSignal<string | null>(null);
   const [pendingRuntimeSuccessAction, setPendingRuntimeSuccessAction] = createSignal<'' | 'prepare_workspace_engine' | 'remove_local_environment_version'>('');
 
   createEffect(() => {
@@ -217,7 +217,7 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element }) {
   });
 
   // Loading curtain
-  const [loadingCurtain, setLoadingCurtain] = createSignal<{ visible: boolean; surface: string; eyebrow?: string; message?: string }>({ visible: false, surface: '' });
+  const [, setLoadingCurtain] = createSignal<{ visible: boolean; surface: string; eyebrow?: string; message?: string }>({ visible: false, surface: '' });
   const showLoadingCurtain = (opts: { surface: string; eyebrow?: string; message?: string }) => setLoadingCurtain({ visible: true, ...opts });
   const hideLoadingCurtain = () => setLoadingCurtain({ visible: false, surface: '' });
 

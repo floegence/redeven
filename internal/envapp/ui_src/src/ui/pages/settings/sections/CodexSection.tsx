@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal, createResource } from 'solid-js';
+import { Show, createMemo } from 'solid-js';
 import { RefreshIcon, Code } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
