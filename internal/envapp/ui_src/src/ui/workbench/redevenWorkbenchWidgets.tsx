@@ -3,7 +3,7 @@ import type {
   WorkbenchWidgetDefinition,
   WorkbenchWidgetType,
 } from '@floegence/floe-webapp-core/workbench';
-import { Activity, Code, Files, Globe, Search, Terminal } from '@floegence/floe-webapp-core/icons';
+import { DockCpu, DockFileCode, DockFolder, DockTerminal, Search } from '@floegence/floe-webapp-core/icons';
 import { Show, type JSX } from 'solid-js';
 
 import { CodexWorkbenchIcon } from '../icons/CodexIcon';
@@ -193,11 +193,41 @@ function CodexWidget(_props: RedevenWorkbenchWidgetBodyProps) {
   );
 }
 
+function WebServicesDockIcon(props: { class?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" width="48" height="48" class={props.class}>
+      <defs>
+        <linearGradient id="ws-bg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="color-mix(in srgb, var(--card), #0a5c8a 8%)" />
+          <stop offset="100%" stop-color="color-mix(in srgb, var(--card), #0a5c8a 18%)" />
+        </linearGradient>
+        <linearGradient id="ws-rim" x1="0" y1="0" x2="0" y2=".35">
+          <stop offset="0%" stop-color="white" stop-opacity=".14" />
+          <stop offset="100%" stop-color="white" stop-opacity="0" />
+        </linearGradient>
+      </defs>
+      <rect x="2" y="2" width="44" height="44" rx="12" fill="url(#ws-bg)" />
+      <rect x="2" y="2" width="44" height="44" rx="12" fill="url(#ws-rim)" />
+      <circle cx="24" cy="24" r="6" fill="none" stroke="var(--foreground)" stroke-opacity=".55" stroke-width="2" />
+      <ellipse cx="24" cy="24" rx="6" ry="2.5" fill="none" stroke="var(--foreground)" stroke-opacity=".18" stroke-width="1" />
+      <line x1="18" y1="24" x2="30" y2="24" stroke="var(--foreground)" stroke-opacity=".18" stroke-width="1" />
+      <line x1="24" y1="12" x2="24" y2="18" stroke="var(--foreground)" stroke-opacity=".3" stroke-width="1.5" />
+      <line x1="24" y1="30" x2="24" y2="37" stroke="var(--foreground)" stroke-opacity=".3" stroke-width="1.5" />
+      <line x1="12" y1="24" x2="18" y2="24" stroke="var(--foreground)" stroke-opacity=".3" stroke-width="1.5" />
+      <line x1="30" y1="24" x2="37" y2="24" stroke="var(--foreground)" stroke-opacity=".3" stroke-width="1.5" />
+      <circle cx="24" cy="8.5" r="2.8" fill="var(--chart-4)" fill-opacity=".7" />
+      <circle cx="24" cy="39.5" r="2.8" fill="var(--chart-4)" fill-opacity=".7" />
+      <circle cx="8.5" cy="24" r="2.8" fill="var(--chart-4)" fill-opacity=".7" />
+      <circle cx="39.5" cy="24" r="2.8" fill="var(--chart-4)" fill-opacity=".7" />
+    </svg>
+  );
+}
+
 export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
   {
     type: 'redeven.files',
     label: 'Files',
-    icon: Files,
+    icon: DockFolder,
     body: FilesWidget,
     defaultTitle: 'Files',
     defaultSize: { width: 1080, height: 700 },
@@ -208,7 +238,7 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
   {
     type: 'redeven.terminal',
     label: 'Terminal',
-    icon: Terminal,
+    icon: DockTerminal,
     body: TerminalWidget,
     defaultTitle: 'Terminal',
     defaultSize: { width: 1120, height: 680 },
@@ -230,7 +260,7 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
   {
     type: 'redeven.monitor',
     label: 'Monitoring',
-    icon: Activity,
+    icon: DockCpu,
     body: MonitorWidget,
     defaultTitle: 'Monitoring',
     defaultSize: { width: 1040, height: 640 },
@@ -242,7 +272,7 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
   {
     type: 'redeven.codespaces',
     label: 'Codespaces',
-    icon: Code,
+    icon: DockFileCode,
     body: CodespacesWidget,
     defaultTitle: 'Codespaces',
     defaultSize: { width: 1040, height: 660 },
@@ -253,7 +283,7 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
   {
     type: 'redeven.ports',
     label: 'Web Services',
-    icon: Globe,
+    icon: WebServicesDockIcon,
     body: PortsWidget,
     defaultTitle: 'Web Services',
     defaultSize: { width: 1000, height: 620 },
