@@ -18,6 +18,7 @@ import { normalizeMarkdownForDisplay, normalizeMarkdownForStreamingDisplay } fro
 import { AppendOnlyText, isAppendOnlyTextCompatible } from '../status/AppendOnlyText';
 import { buildMarkdownRenderSnapshot } from '../markdown/streamingMarkdownModel';
 import { StreamingCursor } from '../status/StreamingCursor';
+import { StreamingShimmer } from '../status/StreamingShimmer';
 import type { MarkdownRenderSnapshot } from '../types';
 import { renderMarkdownSnapshot } from '../workers/markdownWorkerClient';
 import { fileItemFromPath } from '../../utils/filePreviewItem';
@@ -259,7 +260,7 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
         when={!isEmptyStreaming()}
         fallback={
           <div class="chat-markdown-empty-streaming" aria-label="Assistant is responding">
-            <StreamingCursor />
+            <StreamingShimmer />
           </div>
         }
       >

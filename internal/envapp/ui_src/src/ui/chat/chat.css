@@ -154,6 +154,7 @@
   justify-self: start;
   align-items: stretch;
   width: min(100%, 44rem);
+  padding-top: 0.25rem;
 }
 
 .chat-message-item-user .chat-message-content-wrapper {
@@ -990,23 +991,26 @@ pre.chat-md-code-block ::selection, pre.chat-md-code-block *::selection,
   min-height: 1rem;
 }
 
-.streaming-shimmer-line {
-  width: 100%;
-  height: 2px;
-  border-radius: 999px;
+.streaming-shimmer-text {
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: transparent;
   background: linear-gradient(
     90deg,
-    transparent 0%,
-    color-mix(in srgb, var(--primary) 50%, transparent) 25%,
-    transparent 50%
+    var(--muted-foreground) 35%,
+    var(--foreground) 50%,
+    var(--muted-foreground) 65%
   );
   background-size: 200% 100%;
-  animation: streamingShimmer 2s linear infinite;
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation: streamingShimmer 2s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .streaming-shimmer-line {
+  .streaming-shimmer-text {
     animation: none !important;
+    color: var(--muted-foreground);
   }
 }
 

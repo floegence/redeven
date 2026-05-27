@@ -9,8 +9,8 @@ export const StreamingShimmer: Component<StreamingShimmerProps> = (props) => (
   <div
     class={cn('streaming-shimmer', props.class)}
     role="status"
-    aria-label="Assistant is responding"
+    aria-label="Assistant is thinking"
   >
-    <div class="streaming-shimmer-line" aria-hidden="true" />
+    <span class="streaming-shimmer-text" aria-hidden="true">Thinking...</span>
   </div>
 );
