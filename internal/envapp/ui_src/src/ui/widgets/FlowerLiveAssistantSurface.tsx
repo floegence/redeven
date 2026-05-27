@@ -1,7 +1,7 @@
 import { Show, createMemo, type Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 
-import { MessageBubble, StreamingCursor, StreamingShimmer, type ChatAvatar, type Message } from '../chat';
+import { MessageBubble, StreamingShimmer, type ChatAvatar, type Message } from '../chat';
 import { hasVisibleMessageContent } from '../chat/message/messageVisibility';
 import { MessageFrame } from '../chat/message/MessageFrame';
 
@@ -18,7 +18,7 @@ const LiveAssistantPlaceholderBubble: Component = () => (
     <div class="chat-message-block-slot">
       <div class="chat-markdown-block">
         <div class="chat-markdown-empty-streaming" aria-label="Assistant is responding">
-          <StreamingCursor />
+          <StreamingShimmer />
         </div>
       </div>
     </div>
@@ -50,7 +50,7 @@ export const FlowerLiveAssistantSurface: Component<FlowerLiveAssistantSurfacePro
             </Show>
           </Show>
 
-          <Show when={props.active}>
+          <Show when={props.active && !hasVisibleAnswer()}>
             <div class="chat-message-status-rail">
               <div class="chat-message-ornament">
                 <StreamingShimmer />

@@ -84,6 +84,7 @@ import {
   type ListFollowupsResponse,
 } from './followupsState';
 import { StreamingShimmer } from '../chat';
+import { hasVisibleMessageContent } from '../chat/message/messageVisibility';
 import { FlowerLiveAssistantSurface } from '../widgets/FlowerLiveAssistantSurface';
 import { createAIThreadRenderController } from './createAIThreadRenderController';
 import { createAIContextTelemetryController } from './createAIContextTelemetryController';
@@ -3596,7 +3597,7 @@ export function EnvAIPage() {
           assistantAvatar: FlowerAssistantAvatar,
           showListWorkingIndicator: false,
           renderMessageOrnament: (props) => (
-            props.message.role === 'assistant' && props.isActiveAssistantStreaming && (
+            props.message.role === 'assistant' && props.isActiveAssistantStreaming && !hasVisibleMessageContent(props.message) && (
               <StreamingShimmer />
             )
           ),
