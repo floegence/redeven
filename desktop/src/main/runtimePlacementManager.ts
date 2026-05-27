@@ -88,6 +88,8 @@ export type EnsureRuntimePlacementReadyArgs = Readonly<{
   source_runtime_root?: string;
   asset_cache_root: string;
   force_runtime_update?: boolean;
+  previous_runtime_pid?: number;
+  require_new_daemon?: boolean;
   timeout_ms?: number;
   desktop_owner_id?: string;
   signal?: AbortSignal;
@@ -133,6 +135,8 @@ async function waitForContainerRuntimeDaemon(args: Readonly<{
   runtime_binary_path: string;
   timeout_ms: number;
   runtime_release_tag: string;
+  previous_runtime_pid?: number;
+  require_new_daemon?: boolean;
   signal?: AbortSignal;
 }>): Promise<StartupReport> {
   const deadline = Date.now() + Math.max(1_000, args.timeout_ms);
@@ -152,7 +156,23 @@ async function waitForContainerRuntimeDaemon(args: Readonly<{
     }
     if (report?.status !== 'blocked') {
       if (report) {
-        return report.startup;
+        const readyPID = Number(report.startup.pid ?? Number.NaN);
+        const previousPID = Number(args.previous_runtime_pid ?? Number.NaN);
+        if (args.require_new_daemon === true) {
+          if (!Number.isInteger(readyPID) || readyPID <= 0) {
+            lastError = new Error('Runtime daemon readiness did not include a process pid for replacement verification.');
+          } else if (
+            Number.isInteger(previousPID)
+            && previousPID > 0
+            && readyPID === previousPID
+          ) {
+            lastError = new Error(`Runtime daemon still reports the previous process pid ${previousPID}.`);
+          } else {
+            return report.startup;
+          }
+        } else {
+          return report.startup;
+        }
       }
     } else {
       lastError = new Error(report.message);
@@ -381,6 +401,8 @@ export async function ensureRuntimePlacementReady(
     runtime_binary_path: probe.binary_path,
     timeout_ms: args.timeout_ms ?? 45_000,
     runtime_release_tag: runtimeReleaseTag,
+    previous_runtime_pid: args.previous_runtime_pid,
+    require_new_daemon: args.require_new_daemon,
     signal: args.signal,
   });
   emitProgress(

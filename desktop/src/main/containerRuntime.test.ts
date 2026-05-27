@@ -190,6 +190,10 @@ describe('containerRuntime', () => {
     expect(installCommand.join('\n')).not.toContain('runtime/releases/${runtime_release_tag}');
     expect(installCommand.join('\n')).not.toContain('runtime/releases/${target_release_tag}');
     expect(installCommand.join('\n')).not.toContain('runtime/releases/${release_tag}');
+    expect(installCommand.join('\n')).not.toContain('desktop-runtime-stop');
+    expect(installCommand.join('\n')).not.toContain('redeven run');
+    expect(installCommand.join('\n')).not.toContain('docker stop');
+    expect(installCommand.join('\n')).not.toContain('podman stop');
   });
 
   it('builds daemon lifecycle commands separately from bridge attach', () => {
