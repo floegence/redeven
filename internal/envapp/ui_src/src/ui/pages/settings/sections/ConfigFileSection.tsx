@@ -1,7 +1,7 @@
 import { Show, createMemo, createSignal } from 'solid-js';
 import { FileCode } from '@floegence/floe-webapp-core/icons';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
-import { SettingsCard, ViewToggle, CopyButton, SubSectionHeader, JSONEditor, type ViewMode } from '../SettingsPrimitives';
+import { SettingsCard, ViewToggle, CopyButton, JSONEditor, type ViewMode } from '../SettingsPrimitives';
 
 export function ConfigFileSection() {
   const ctx = useEnvSettingsPage();

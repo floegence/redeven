@@ -1,10 +1,10 @@
-import { Show, createMemo } from 'solid-js';
-import { Zap, RefreshIcon, FileCode, Globe, Key, Link } from '@floegence/floe-webapp-core/icons';
+import { Show } from 'solid-js';
+import { Zap, RefreshIcon } from '@floegence/floe-webapp-core/icons';
 import { Button, Input } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import {
   SettingsCard, SettingsTable, SettingsTableHead, SettingsTableHeaderRow, SettingsTableHeaderCell,
-  SettingsTableBody, SettingsTableRow, SettingsTableCell, SettingsPill, CopyButton, InfoRow,
+  SettingsTableBody, SettingsTableRow, SettingsTableCell, SettingsPill,
 } from '../SettingsPrimitives';
 import { formatRuntimeServiceOwner, runtimeServiceCompatibilityTone, formatRuntimeServiceCompatibility } from './helpers';
 

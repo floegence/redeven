@@ -1,16 +1,14 @@
-import { For, Show, createMemo, createSignal, createEffect, onCleanup } from 'solid-js';
+import { Show, createMemo, createSignal, createEffect, onCleanup } from 'solid-js';
 import { Shield } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import {
-  SettingsCard, SettingsTable, SettingsTableHead, SettingsTableHeaderRow, SettingsTableHeaderCell,
-  SettingsTableBody, SettingsTableRow, SettingsTableCell, ViewToggle,
-  AutoSaveIndicator, JSONEditor, SubSectionHeader, CodeBadge, type ViewMode,
+  SettingsCard, ViewToggle, AutoSaveIndicator, JSONEditor, SubSectionHeader, CodeBadge, type ViewMode,
 } from '../SettingsPrimitives';
 import { PermissionMatrixTable, PermissionRuleTable } from '../PermissionPolicyTables';
 import { buildPermissionPolicyValue } from '../permissionPolicy';
 import { formatUnknownError } from '../../../maintenance/shared';
-import type { PermissionPolicy, PermissionRow, PermissionSet } from '../types';
+import type { PermissionRow, PermissionSet } from '../types';
 
 const AUTO_SAVE_DELAY_MS = 700;
 

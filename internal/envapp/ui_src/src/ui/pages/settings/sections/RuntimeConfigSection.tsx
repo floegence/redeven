@@ -75,7 +75,7 @@ export function RuntimeConfigSection() {
       if (!dirty() || saving() || !ctx.canInteract()) return;
       setSaving(true);
       try {
-        const resp = await ctx.saveSettings({
+        await ctx.saveSettings({
           runtime: {
             agent_home_dir: agentHomeDir() || null,
             shell: shell() || null,

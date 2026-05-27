@@ -2,7 +2,7 @@ import { Show, createMemo } from 'solid-js';
 import { Database, FileText, Zap } from '@floegence/floe-webapp-core/icons';
 import { Select } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
-import { ViewToggle, AutoSaveIndicator, type ViewMode } from '../SettingsPrimitives';
+import { ViewToggle, AutoSaveIndicator } from '../SettingsPrimitives';
 import { SettingsCard, CompactField, JSONEditor, type ViewMode as VM } from '../SettingsPrimitives';
 import { createSignal, createEffect, onCleanup } from 'solid-js';
 import { formatUnknownError } from '../../../maintenance/shared';
@@ -46,7 +46,7 @@ export function LoggingSection() {
       if (!dirty() || saving() || !ctx.canInteract()) return;
       setSaving(true);
       try {
-        const resp = await ctx.saveSettings({ logging: { log_format: logFormat() || null, log_level: logLevel() || null } });
+        await ctx.saveSettings({ logging: { log_format: logFormat() || null, log_level: logLevel() || null } });
         setSaving(false);
         setSavedAt(Date.now());
         setDirty(false);

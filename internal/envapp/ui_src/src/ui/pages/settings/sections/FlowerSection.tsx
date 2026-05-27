@@ -1,11 +1,11 @@
 import { For, Show, createMemo, createSignal, createEffect, onCleanup } from 'solid-js';
-import { AlertTriangle, Bot, Pencil, Plus, Shield, Trash, Zap } from '@floegence/floe-webapp-core/icons';
-import { Button, Checkbox, ConfirmDialog, Input, Select } from '@floegence/floe-webapp-core/ui';
+import { AlertTriangle, Bot, Pencil, Shield, Trash, Zap } from '@floegence/floe-webapp-core/icons';
+import { Button, Checkbox, ConfirmDialog, Select } from '@floegence/floe-webapp-core/ui';
 import { cn } from '@floegence/floe-webapp-core';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import {
   SettingsCard, ViewToggle, AutoSaveIndicator, JSONEditor, SubSectionHeader,
-  CodeBadge, SettingsPill, type ViewMode,
+  CodeBadge, type ViewMode,
 } from '../SettingsPrimitives';
 import { AIProviderDialog } from '../AIProviderDialog';
 import { ProviderBrandIcon } from '../ProviderBrandIcon';
@@ -15,10 +15,10 @@ import {
   cloneAIProviderRow, defaultBaseURLForProviderType, modelID, modelSupportsImageInput,
   normalizeAIProviderRowDraft, providerBuiltInWebSearchLabel, providerDisplayName,
   providerNeedsWebSearchConfig, providerPresetForType, providerTypeLabel,
-  providerTypeRequiresBaseURL, providerUsesCustomConnectionName,
+  providerUsesCustomConnectionName,
   recommendedModelsForProviderType, normalizeContextWindowByProvider,
   normalizeEffectiveContextPercent, normalizeInputModalities, normalizePositiveInteger,
-  providerSupportsCustomModelNames, defaultContextWindowForProviderType,
+  defaultContextWindowForProviderType,
 } from '../aiCatalog';
 import type {
   AIProviderRow, AIProviderType, AIProviderModelRow, AIProviderWebSearchMode,
@@ -26,8 +26,6 @@ import type {
 } from '../types';
 
 const AUTO_SAVE_DELAY_MS = 700;
-const DEFAULT_EFFECTIVE_CONTEXT_WINDOW_PERCENT = 80;
-
 function newProviderID(): string {
   try { const uuid = (globalThis.crypto as any)?.randomUUID?.(); if (uuid && typeof uuid === 'string') return `prov_${uuid}`; } catch {}
   return `prov_${Date.now().toString(16)}_${Math.random().toString(16).slice(2)}`;
@@ -115,12 +113,12 @@ export function FlowerSection() {
   const [blockDangerousCommands, setBlockDangerousCommands] = createSignal(false);
   const [currentModelID, setCurrentModelID] = createSignal('');
   const [providers, setProviders] = createSignal<AIProviderRow[]>([]);
-  const [providerKeySet, setProviderKeySet] = createSignal<Record<string, boolean>>({});
+  const [providerKeySet] = createSignal<Record<string, boolean>>({});
   const [providerKeyDraft, setProviderKeyDraft] = createSignal<Record<string, string>>({});
-  const [providerKeySaving, setProviderKeySaving] = createSignal<Record<string, boolean>>({});
-  const [webSearchKeySet, setWebSearchKeySet] = createSignal<Record<string, boolean>>({});
+  const [providerKeySaving] = createSignal<Record<string, boolean>>({});
+  const [webSearchKeySet] = createSignal<Record<string, boolean>>({});
   const [webSearchKeyDraft, setWebSearchKeyDraft] = createSignal<Record<string, string>>({});
-  const [webSearchKeySaving, setWebSearchKeySaving] = createSignal<Record<string, boolean>>({});
+  const [webSearchKeySaving] = createSignal<Record<string, boolean>>({});
   const [dirty, setDirty] = createSignal(false);
   const [saving, setSaving] = createSignal(false);
   const [savedAt, setSavedAt] = createSignal<number | null>(null);
@@ -149,8 +147,6 @@ export function FlowerSection() {
 
   const aiModelOptions = createMemo(() => collectAIModelOptions(providers()));
   const aiCurrentModelOption = createMemo(() => aiModelOptions().find((o) => o.id === currentModelID()));
-  const effectiveCurrentModelID = createMemo(() => normalizeAICurrentModelID(currentModelID(), providers()));
-
   const jsonText = createMemo(() => JSON.stringify({
     current_model_id: currentModelID() || null,
     execution_policy: { require_user_approval: requireUserApproval(), block_dangerous_commands: blockDangerousCommands() },
@@ -206,7 +202,7 @@ export function FlowerSection() {
         },
       });
       setSavedAt(Date.now());
-    } catch (e) { /* ignore */ }
+    } catch { /* ignore */ }
   };
 
   // Provider dialog
@@ -249,7 +245,7 @@ export function FlowerSection() {
     try {
       await ctx.saveSettings({ ai: null });
       setAiEnabled(false); setDisableAIOpen(false); setDirty(false);
-    } catch (e) { /* ignore */ }
+    } catch { /* ignore */ }
     setDisableAISaving(false);
   };
 
@@ -457,7 +453,7 @@ export function FlowerSection() {
           updateAIProviderDialogDraft((c) => ({ ...c, models: normalizeProviderModelRows(c.type, [...(Array.isArray(c.models) ? c.models : []), { model_name: name, context_window: defaultContextWindowForProviderType(c.type), input_modalities: ['text'] }]) }));
         }}
         onChangeModelName={(i, v) => updateAIProviderDialogDraft((c) => ({ ...c, models: (Array.isArray(c.models) ? c.models : []).map((m, mi) => mi === i ? { ...m, model_name: v } : m) }))}
-        onChangeModelNumber={(i, k, raw) => { /* simplified */ }}
+        onChangeModelNumber={() => { /* simplified */ }}
         onChangeModelImageInput={(i, enabled) => updateAIProviderDialogDraft((c) => ({ ...c, models: (Array.isArray(c.models) ? c.models : []).map((m, mi) => mi === i ? { ...m, input_modalities: enabled ? ['text', 'image'] : ['text'] } : m) }))}
         onRemoveModel={(i) => updateAIProviderDialogDraft((c) => ({ ...c, models: (Array.isArray(c.models) ? c.models : []).filter((_, mi) => mi !== i) }))}
       />
