@@ -3,7 +3,7 @@ import type {
   WorkbenchWidgetDefinition,
   WorkbenchWidgetType,
 } from '@floegence/floe-webapp-core/workbench';
-import { DockCpu, DockFileCode, DockFolder, DockTerminal, Search } from '@floegence/floe-webapp-core/icons';
+import { DockCpu, DockFolder, DockTerminal, Search } from '@floegence/floe-webapp-core/icons';
 import { Show, type JSX } from 'solid-js';
 
 import { CodexWorkbenchIcon } from '../icons/CodexIcon';
@@ -198,27 +198,60 @@ function WebServicesDockIcon(props: { class?: string }) {
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" width="48" height="48" class={props.class}>
       <defs>
         <linearGradient id="ws-bg" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="color-mix(in srgb, var(--card), #0a5c8a 8%)" />
-          <stop offset="100%" stop-color="color-mix(in srgb, var(--card), #0a5c8a 18%)" />
+          <stop offset="0%" stop-color="color-mix(in srgb, var(--card), #1a2030 8%)" />
+          <stop offset="100%" stop-color="color-mix(in srgb, var(--card), #1a2030 18%)" />
         </linearGradient>
         <linearGradient id="ws-rim" x1="0" y1="0" x2="0" y2=".35">
           <stop offset="0%" stop-color="white" stop-opacity=".14" />
           <stop offset="100%" stop-color="white" stop-opacity="0" />
         </linearGradient>
+        <clipPath id="ws-clip">
+          <circle cx="24" cy="20" r="8.5" />
+        </clipPath>
       </defs>
       <rect x="2" y="2" width="44" height="44" rx="12" fill="url(#ws-bg)" />
       <rect x="2" y="2" width="44" height="44" rx="12" fill="url(#ws-rim)" />
-      <circle cx="24" cy="24" r="6" fill="none" stroke="var(--foreground)" stroke-opacity=".55" stroke-width="2" />
-      <ellipse cx="24" cy="24" rx="6" ry="2.5" fill="none" stroke="var(--foreground)" stroke-opacity=".18" stroke-width="1" />
-      <line x1="18" y1="24" x2="30" y2="24" stroke="var(--foreground)" stroke-opacity=".18" stroke-width="1" />
-      <line x1="24" y1="12" x2="24" y2="18" stroke="var(--foreground)" stroke-opacity=".3" stroke-width="1.5" />
-      <line x1="24" y1="30" x2="24" y2="37" stroke="var(--foreground)" stroke-opacity=".3" stroke-width="1.5" />
-      <line x1="12" y1="24" x2="18" y2="24" stroke="var(--foreground)" stroke-opacity=".3" stroke-width="1.5" />
-      <line x1="30" y1="24" x2="37" y2="24" stroke="var(--foreground)" stroke-opacity=".3" stroke-width="1.5" />
-      <circle cx="24" cy="8.5" r="2.8" fill="var(--chart-4)" fill-opacity=".7" />
-      <circle cx="24" cy="39.5" r="2.8" fill="var(--chart-4)" fill-opacity=".7" />
-      <circle cx="8.5" cy="24" r="2.8" fill="var(--chart-4)" fill-opacity=".7" />
-      <circle cx="39.5" cy="24" r="2.8" fill="var(--chart-4)" fill-opacity=".7" />
+      <circle cx="24" cy="20" r="8.5" fill="#475569" fill-opacity=".4" stroke="var(--foreground)" stroke-opacity=".3" stroke-width="1.2" />
+      <g clip-path="url(#ws-clip)">
+        <ellipse cx="24" cy="14" rx="9" ry="3.2" fill="none" stroke="var(--foreground)" stroke-opacity=".16" stroke-width=".95" />
+        <ellipse cx="24" cy="26" rx="9" ry="3.2" fill="none" stroke="var(--foreground)" stroke-opacity=".16" stroke-width=".95" />
+        <path d="M 24 11.5 a 12 12 0 0 0 0 17 a 12 12 0 0 0 0 -17" fill="none" stroke="var(--foreground)" stroke-opacity=".16" stroke-width=".95" />
+        <line x1="24" y1="11.5" x2="24" y2="28.5" stroke="var(--foreground)" stroke-opacity=".16" stroke-width=".95" />
+      </g>
+      <text x="24" y="37" text-anchor="middle" font-family="'Inter','SF Pro Display',-apple-system,sans-serif" font-size="6.5" font-weight="800" letter-spacing=".6" fill="var(--foreground)" fill-opacity=".65">HTTP</text>
+    </svg>
+  );
+}
+
+function CodespacesDockIcon(props: { class?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" width="48" height="48" class={props.class}>
+      <defs>
+        <linearGradient id="cs-bg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="color-mix(in srgb, var(--card), #1a2038 8%)" />
+          <stop offset="100%" stop-color="color-mix(in srgb, var(--card), #1a2038 18%)" />
+        </linearGradient>
+        <linearGradient id="cs-rim" x1="0" y1="0" x2="0" y2=".35">
+          <stop offset="0%" stop-color="white" stop-opacity=".14" />
+          <stop offset="100%" stop-color="white" stop-opacity="0" />
+        </linearGradient>
+      </defs>
+      <rect x="2" y="2" width="44" height="44" rx="12" fill="url(#cs-bg)" />
+      <rect x="2" y="2" width="44" height="44" rx="12" fill="url(#cs-rim)" />
+      <rect x="10" y="10" width="28" height="28" rx="4" fill="var(--foreground)" fill-opacity=".06" stroke="var(--foreground)" stroke-opacity=".3" stroke-width="1.1" />
+      <rect x="10" y="10" width="7.5" height="28" rx="4" fill="var(--foreground)" fill-opacity=".05" />
+      <line x1="17.5" y1="10" x2="17.5" y2="38" stroke="var(--foreground)" stroke-opacity=".08" stroke-width=".5" />
+      <circle cx="13.8" cy="14" r=".9" fill="var(--foreground)" fill-opacity=".22" />
+      <circle cx="13.8" cy="19.5" r=".9" fill="var(--foreground)" fill-opacity=".22" />
+      <circle cx="13.8" cy="25" r=".9" fill="var(--foreground)" fill-opacity=".22" />
+      <circle cx="13.8" cy="30.5" r=".9" fill="var(--foreground)" fill-opacity=".22" />
+      <rect x="18.8" y="11.8" width="6" height="2.6" rx="1.2" fill="#4338ca" fill-opacity=".7" />
+      <rect x="25.5" y="11.8" width="10" height="2.6" rx="1.2" fill="var(--foreground)" fill-opacity=".18" />
+      <rect x="18.8" y="17.3" width="5" height="2.6" rx="1.2" fill="#ea580c" fill-opacity=".6" />
+      <rect x="24.5" y="17.3" width="10" height="2.6" rx="1.2" fill="var(--foreground)" fill-opacity=".14" />
+      <rect x="18.8" y="22.8" width="10" height="2.6" rx="1.2" fill="var(--foreground)" fill-opacity=".12" />
+      <rect x="18.8" y="22.8" width="5" height="2.6" rx="1.2" fill="#16a34a" fill-opacity=".6" />
+      <rect x="18.8" y="28.3" width="7" height="2.6" rx="1.2" fill="#0d9488" fill-opacity=".55" />
     </svg>
   );
 }
@@ -272,7 +305,7 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
   {
     type: 'redeven.codespaces',
     label: 'Codespaces',
-    icon: DockFileCode,
+    icon: CodespacesDockIcon,
     body: CodespacesWidget,
     defaultTitle: 'Codespaces',
     defaultSize: { width: 1040, height: 660 },
