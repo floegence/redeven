@@ -61,7 +61,7 @@ describe('AI provider preset catalog', () => {
     for (const providerType of optionTypes) {
       const brand = providerBrandForType(providerType);
       expect(brand.label).toBe(providerTypeLabel(providerType));
-      expect(brand.icon.paths.join('')).not.toEqual('');
+      expect(brand.icon.paths?.join('') || brand.icon.svgContent || '').not.toEqual('');
       expect(brand.icon.viewBox).not.toEqual('');
     }
     expect(providerBrandForType('deepseek').icon.title).toBe('DeepSeek');
