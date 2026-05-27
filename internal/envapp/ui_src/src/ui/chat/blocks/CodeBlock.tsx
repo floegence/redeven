@@ -12,6 +12,7 @@ export interface CodeBlockProps {
   content: string;
   filename?: string;
   class?: string;
+  streaming?: boolean;
 }
 
 const CHAT_CODE_THEME = resolveCodeHighlightTheme('dark');
@@ -80,6 +81,11 @@ export const CodeBlock: Component<CodeBlockProps> = (props) => {
     const language = props.language;
     const seq = (highlightRequestSeq += 1);
     let disposed = false;
+
+    if (props.streaming) {
+      setHighlightedHtml('');
+      return;
+    }
 
     setHighlightedHtml('');
     if (!code) return;
