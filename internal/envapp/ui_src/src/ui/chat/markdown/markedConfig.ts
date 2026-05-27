@@ -86,8 +86,14 @@ function renderCodexFileReference(token: MarkdownLinkToken): string | null {
   const line = reference.lineLabel
     ? `<span class="chat-md-file-ref-line">${escapeHtml(reference.lineLabel)}</span>`
     : '';
+  const lineAttr = reference.lineNumber !== null
+    ? ` data-file-line="${escapeHtml(String(reference.lineNumber))}"`
+    : '';
+  const columnAttr = reference.columnNumber !== null
+    ? ` data-file-column="${escapeHtml(String(reference.columnNumber))}"`
+    : '';
 
-  return `<a href="${escapeHtml(reference.href)}" class="chat-md-link chat-md-file-ref" target="_blank" rel="noopener noreferrer" data-file-path="${escapeHtml(reference.path)}"${titleAttr}>${prefixHtml}<span class="chat-md-file-ref-name">${escapeHtml(reference.displayName)}</span>${line}</a>`;
+  return `<a href="${escapeHtml(reference.href)}" class="chat-md-link chat-md-file-ref" target="_blank" rel="noopener noreferrer" data-file-path="${escapeHtml(reference.path)}"${lineAttr}${columnAttr}${titleAttr}>${prefixHtml}<span class="chat-md-file-ref-name">${escapeHtml(reference.displayName)}</span>${line}</a>`;
 }
 
 export function withMarkdownRenderContext<T>(

@@ -3,6 +3,8 @@ export interface MarkdownFileReference {
   path: string;
   displayName: string;
   lineLabel: string | null;
+  lineNumber: number | null;
+  columnNumber: number | null;
   title: string;
 }
 
@@ -10,12 +12,24 @@ export interface MarkdownLocalFileHref {
   href: string;
   path: string;
   fragment: string;
+  lineLabel: string | null;
+  lineNumber: number | null;
+  columnNumber: number | null;
 }
 
 const LOCAL_FILE_PATH_RE = /^(?:\/|\.{1,2}\/|[A-Za-z]:[\\/])/;
+const RELATIVE_FILE_PATH_RE = /[\\/]/;
+const URI_SCHEME_RE = /^[A-Za-z][A-Za-z0-9+.-]*:/;
 const FRAGMENT_LINE_RE = /^L(\d+)(?:C(\d+))?$/i;
 const TEXT_LINE_RE = /\bL(\d+)(?:C(\d+))?\b/i;
 const TEXT_COLON_LINE_RE = /:(\d+)(?::(\d+))?$/;
+const PATH_COLON_LINE_RE = /^(.*?):([1-9]\d*)(?::([1-9]\d*))?$/;
+
+type MarkdownLineTarget = Readonly<{
+  lineLabel: string;
+  lineNumber: number;
+  columnNumber: number | null;
+}>;
 
 function collapseWhitespace(value: string): string {
   return String(value ?? '').replace(/\s+/g, ' ').trim();
@@ -42,11 +56,53 @@ function formatLineLabel(line: string, column?: string | null): string {
   return column ? `L${line}C${column}` : `L${line}`;
 }
 
+function parsePositiveLineNumber(value: string | undefined): number | null {
+  if (!value) return null;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
+function buildLineTarget(line: string | undefined, column?: string | null): MarkdownLineTarget | null {
+  const lineNumber = parsePositiveLineNumber(line);
+  if (lineNumber === null) return null;
+
+  const columnNumber = column ? parsePositiveLineNumber(column) : null;
+  if (column && columnNumber === null) return null;
+
+  return {
+    lineLabel: formatLineLabel(String(lineNumber), columnNumber === null ? null : String(columnNumber)),
+    lineNumber,
+    columnNumber,
+  };
+}
+
 function normalizePathSegments(path: string): string[] {
   return String(path ?? '')
     .replace(/\\/g, '/')
     .split('/')
     .filter(Boolean);
+}
+
+function isLocalMarkdownFilePath(path: string, hasLineTarget: boolean): boolean {
+  if (LOCAL_FILE_PATH_RE.test(path)) return true;
+  if (URI_SCHEME_RE.test(path)) return false;
+  if (RELATIVE_FILE_PATH_RE.test(path)) return true;
+  return hasLineTarget && basenameFromMarkdownPath(path).includes('.');
+}
+
+function splitPathLineTarget(path: string): { path: string; lineTarget: MarkdownLineTarget | null } {
+  const match = String(path ?? '').match(PATH_COLON_LINE_RE);
+  if (!match) return { path, lineTarget: null };
+
+  const candidatePath = match[1] ?? '';
+  const lineTarget = buildLineTarget(match[2], match[3] ?? null);
+  if (!candidatePath || !lineTarget) return { path, lineTarget: null };
+
+  return {
+    path: candidatePath,
+    lineTarget,
+  };
 }
 
 function collectMarkdownFileReferences(value: unknown, output: MarkdownFileReference[], seen: Set<object>): void {
@@ -77,20 +133,20 @@ function collectMarkdownFileReferences(value: unknown, output: MarkdownFileRefer
   }
 }
 
-function extractLineLabelFromFragment(fragment: string): string | null {
+function extractLineTargetFromFragment(fragment: string): MarkdownLineTarget | null {
   const match = String(fragment ?? '').trim().match(FRAGMENT_LINE_RE);
   if (!match) return null;
-  return formatLineLabel(match[1] ?? '', match[2] ?? null);
+  return buildLineTarget(match[1], match[2] ?? null);
 }
 
-function extractLineLabelFromText(text: string): string | null {
+function extractLineTargetFromText(text: string): MarkdownLineTarget | null {
   const normalized = collapseWhitespace(text);
   const lineMatch = normalized.match(TEXT_LINE_RE);
-  if (lineMatch) return formatLineLabel(lineMatch[1] ?? '', lineMatch[2] ?? null);
+  if (lineMatch) return buildLineTarget(lineMatch[1], lineMatch[2] ?? null);
 
   const colonMatch = normalized.match(TEXT_COLON_LINE_RE);
   if (!colonMatch) return null;
-  return formatLineLabel(colonMatch[1] ?? '', colonMatch[2] ?? null);
+  return buildLineTarget(colonMatch[1], colonMatch[2] ?? null);
 }
 
 export function parseMarkdownFileReference(href: string, text: string): MarkdownFileReference | null {
@@ -101,14 +157,24 @@ export function parseMarkdownFileReference(href: string, text: string): Markdown
   const displayName = basenameFromMarkdownPath(path);
   if (!displayName) return null;
 
-  const lineLabel = extractLineLabelFromFragment(fragment) ?? extractLineLabelFromText(text);
-  if (!lineLabel && !displayName.includes('.')) return null;
+  const lineTarget = extractLineTargetFromFragment(fragment) ?? (
+    localHref.lineLabel && localHref.lineNumber !== null
+      ? {
+        lineLabel: localHref.lineLabel,
+        lineNumber: localHref.lineNumber,
+        columnNumber: localHref.columnNumber,
+      }
+      : null
+  ) ?? extractLineTargetFromText(text);
+  if (!lineTarget?.lineLabel && !displayName.includes('.')) return null;
 
   return {
     href: localHref.href,
     path,
     displayName,
-    lineLabel,
+    lineLabel: lineTarget?.lineLabel ?? null,
+    lineNumber: lineTarget?.lineNumber ?? null,
+    columnNumber: lineTarget?.columnNumber ?? null,
     title: localHref.href,
   };
 }
@@ -117,13 +183,20 @@ export function parseMarkdownLocalFileHref(href: string): MarkdownLocalFileHref 
   const rawHref = String(href ?? '').trim();
   if (!rawHref) return null;
 
-  const { path, fragment } = splitHref(rawHref);
-  if (!LOCAL_FILE_PATH_RE.test(path)) return null;
+  const { path: hrefPath, fragment } = splitHref(rawHref);
+  const fragmentLineTarget = extractLineTargetFromFragment(fragment);
+  const pathParts = splitPathLineTarget(hrefPath);
+  const path = pathParts.path;
+  const lineTarget = fragmentLineTarget ?? pathParts.lineTarget;
+  if (!isLocalMarkdownFilePath(path, Boolean(lineTarget))) return null;
 
   return {
     href: rawHref,
     path,
     fragment,
+    lineLabel: lineTarget?.lineLabel ?? null,
+    lineNumber: lineTarget?.lineNumber ?? null,
+    columnNumber: lineTarget?.columnNumber ?? null,
   };
 }
 
