@@ -1094,7 +1094,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | tldts | 6.1.86 | MIT | Env App UI | https://www.npmjs.com/package/tldts/v/6.1.86 |  |
 | tldts | 7.0.27 | MIT | Desktop shell | https://www.npmjs.com/package/tldts/v/7.0.27 |  |
 | tmp-promise | 3.0.3 | MIT | Desktop shell | https://www.npmjs.com/package/tmp-promise/v/3.0.3 |  |
-| tmp | 0.2.5 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/tmp/v/0.2.5 |  |
+| tmp | 0.2.6 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/tmp/v/0.2.6 |  |
 | totalist | 3.0.1 | MIT | Env App UI | https://www.npmjs.com/package/totalist/v/3.0.1 |  |
 | tough-cookie | 5.1.2 | BSD-3-Clause | Env App UI | https://www.npmjs.com/package/tough-cookie/v/5.1.2 |  |
 | tough-cookie | 6.0.1 | BSD-3-Clause | Desktop shell | https://www.npmjs.com/package/tough-cookie/v/6.0.1 |  |
