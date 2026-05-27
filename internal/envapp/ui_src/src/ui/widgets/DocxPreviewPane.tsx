@@ -4,6 +4,7 @@ import { Button } from '@floegence/floe-webapp-core/ui';
 
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
+import { FilePreviewErrorState } from './FilePreviewErrorState';
 
 const DOCX_RENDER_CLASS_NAME = 'docx-preview-container';
 const DOCX_PREVIEW_INSET = 12;
@@ -262,10 +263,10 @@ export function DocxPreviewPane(props: DocxPreviewPaneProps) {
       <Show
         when={!renderError()}
         fallback={
-          <div class="p-4 text-sm text-error">
-            <div class="mb-1 font-medium">Failed to load file</div>
-            <div class="text-xs text-muted-foreground">{renderError()}</div>
-          </div>
+          <FilePreviewErrorState
+            errorType="render_error"
+            message={renderError()}
+          />
         }
       >
         <>

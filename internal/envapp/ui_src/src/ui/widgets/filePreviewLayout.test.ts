@@ -31,6 +31,8 @@ describe('file preview wiring', () => {
     expect(rendererRegistrySrc).toContain("import { DocxPreviewPane } from '../widgets/DocxPreviewPane';");
     expect(rendererRegistrySrc).toContain("import { PdfPreviewPane } from '../widgets/PdfPreviewPane';");
     expect(rendererRegistrySrc).toContain("import { TextFilePreviewPane } from '../widgets/TextFilePreviewPane';");
+    expect(rendererRegistrySrc).toContain("import { FilePreviewErrorState } from '../widgets/FilePreviewErrorState';");
+    expect(rendererRegistrySrc).toContain('<FilePreviewErrorState');
     expect(rendererRegistrySrc).toContain('export const REDEVEN_FILE_PREVIEW_RENDERERS');
     expect(rendererRegistrySrc).toContain('<DocxPreviewPane bytes={props.bytes} />');
     expect(rendererRegistrySrc).toContain('<PdfPreviewPane bytes={props.bytes} />');
@@ -41,11 +43,15 @@ describe('file preview wiring', () => {
     expect(docxPaneSrc).toContain('inWrapper: true');
     expect(docxPaneSrc).toContain('Fit');
     expect(docxPaneSrc).toContain('Zoom in docx preview');
+    expect(docxPaneSrc).toContain("import { FilePreviewErrorState } from './FilePreviewErrorState';");
+    expect(docxPaneSrc).toContain('<FilePreviewErrorState');
     expect(pdfPaneSrc).toContain("import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';");
     expect(pdfPaneSrc).toContain('loadPDFDocument');
     expect(pdfPaneSrc).toContain('Zoom in PDF preview');
     expect(pdfPaneSrc).toContain('Fit PDF preview to width');
     expect(pdfPaneSrc).toContain('Loading PDF...');
+    expect(pdfPaneSrc).toContain("import { FilePreviewErrorState } from './FilePreviewErrorState';");
+    expect(pdfPaneSrc).toContain('<FilePreviewErrorState');
     expect(pdfPaneSrc).toContain('Rendering page...');
     expect(pdfPaneSrc).not.toContain('Rendering PDF...');
     expect(textPaneSrc).toContain("from '@floegence/floe-webapp-core/editor';");
@@ -88,7 +94,9 @@ describe('file preview wiring', () => {
     expect(rendererRegistrySrc).toContain('truncated={props.truncated}');
     expect(fs.existsSync(codePreviewPath)).toBe(false);
     expect(contentSrc).toContain('Loading file...');
-    expect(contentSrc).toContain('Failed to load file');
+    expect(contentSrc).toContain("import { FilePreviewErrorState } from './FilePreviewErrorState';");
+    expect(contentSrc).toContain("import { classifyFilePreviewError } from './filePreviewErrorUtils';");
+    expect(contentSrc).toContain('<FilePreviewErrorState');
 
     expect(panelSrc).toContain("import { Button, ConfirmDialog } from '@floegence/floe-webapp-core/ui';");
     expect(panelSrc).toContain("import { FilePreviewContent } from './FilePreviewContent';");
