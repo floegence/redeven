@@ -1,14 +1,12 @@
-import { For, Show, createMemo } from 'solid-js';
+import { For, Show, createMemo, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Search, X } from '@floegence/floe-webapp-core/icons';
 import { Button, Select } from '@floegence/floe-webapp-core/ui';
 import { RefreshIcon } from '@floegence/floe-webapp-core/icons';
 
 import { EnvSettingsPageProvider, useEnvSettingsPage } from './settings/EnvSettingsPageContext';
-import { SETTINGS_NAV_ITEMS, SETTINGS_GROUPS, settingsSectionElementID, type SettingsNavItem } from './settings/settingsStructure';
-import { FieldLabel } from './settings/SettingsPrimitives';
+import { SETTINGS_NAV_ITEMS, SETTINGS_GROUPS, type SettingsNavItem } from './settings/settingsStructure';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
-import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import type { EnvSettingsSection } from './EnvContext';
 
 import { ConfigFileSection } from './settings/sections/ConfigFileSection';
@@ -23,7 +21,7 @@ import { SkillsSection } from './settings/sections/SkillsSection';
 import { CodexSection } from './settings/sections/CodexSection';
 import { DebugConsoleSection } from './settings/sections/DebugConsoleSection';
 
-// ── Search keywords for nav items ──
+// ── Search keywords ──
 const NAV_SEARCH_KEYWORDS: Record<EnvSettingsSection, string[]> = {
   config: ['path', 'config file', 'configuration', 'json', 'config_path', 'toml'],
   connection: ['url', 'e2ee', 'psk', 'encryption', 'websocket', 'ws', 'channel', 'environment id', 'instance id', 'control plane'],
@@ -48,34 +46,29 @@ function filterNavItems(query: string): SettingsNavItem[] {
   });
 }
 
-// ── Section Renderer ──
-function SectionRenderer(props: { section: EnvSettingsSection }) {
-  switch (props.section) {
-    case 'config': return <ConfigFileSection />;
-    case 'connection': return <ConnectionSection />;
-    case 'agent': return <RuntimeStatusSection />;
-    case 'runtime': return <RuntimeConfigSection />;
-    case 'logging': return <LoggingSection />;
-    case 'codespaces': return <CodespacesSection />;
-    case 'permission_policy': return <PermissionPolicySection />;
-    case 'ai': return <FlowerSection />;
-    case 'skills': return <SkillsSection />;
-    case 'codex': return <CodexSection />;
-    case 'debug_console': return <DebugConsoleSection />;
-    default: return null;
-  }
-}
+// ── Section component map ──
+const sectionComponents: Record<EnvSettingsSection, () => JSX.Element> = {
+  config: ConfigFileSection,
+  connection: ConnectionSection,
+  agent: RuntimeStatusSection,
+  runtime: RuntimeConfigSection,
+  logging: LoggingSection,
+  codespaces: CodespacesSection,
+  permission_policy: PermissionPolicySection,
+  ai: FlowerSection,
+  skills: SkillsSection,
+  codex: CodexSection,
+  debug_console: DebugConsoleSection,
+};
 
-// ── Inner Content (has context access) ──
+// ── Inner Content ──
 function EnvSettingsPageContent() {
   const ctx = useEnvSettingsPage();
 
   const filteredItems = createMemo(() => filterNavItems(ctx.searchQuery()));
 
-  const currentNavLabel = createMemo(() => {
-    const item = SETTINGS_NAV_ITEMS.find((it) => it.id === ctx.activeSection());
-    return item?.label ?? 'Settings';
-  });
+  // Reactive current section component
+  const ActiveSection = createMemo(() => sectionComponents[ctx.activeSection()]);
 
   return (
     <div class={cn('relative h-full min-h-0 flex flex-col', redevenSurfaceRoleClass('main'))}>
@@ -83,7 +76,6 @@ function EnvSettingsPageContent() {
       <div class={cn('flex items-center justify-between gap-3 border-b px-4 py-2.5 shrink-0', redevenSurfaceRoleClass('panelStrong'))}>
         <div class="flex items-center gap-3 min-w-0">
           <h1 class="text-sm font-semibold text-foreground tracking-tight truncate">Runtime Settings</h1>
-          <span class="hidden sm:inline text-[11px] text-muted-foreground truncate">/ {currentNavLabel()}</span>
         </div>
         <Button size="sm" variant="outline" onClick={() => void ctx.refreshSettingsPage()} disabled={ctx.settings.loading} class="gap-1.5 shrink-0">
           <RefreshIcon class="w-3.5 h-3.5" />
@@ -92,9 +84,8 @@ function EnvSettingsPageContent() {
       </div>
 
       <div class="flex-1 min-h-0 flex">
-        {/* Sidebar */}
+        {/* Desktop Sidebar */}
         <div class={cn('hidden md:flex flex-col border-r w-56 shrink-0 h-full overflow-hidden', redevenSurfaceRoleClass('panel'))}>
-          {/* Search */}
           <div class={cn('p-3 border-b', redevenSurfaceRoleClass('panel'))}>
             <div class="relative">
               <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
@@ -108,7 +99,7 @@ function EnvSettingsPageContent() {
               <Show when={ctx.searchQuery()}>
                 <button
                   type="button"
-                  class="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-muted-foreground hover:text-foreground"
+                  class="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded cursor-pointer text-muted-foreground hover:text-foreground"
                   onClick={() => ctx.setSearchQuery('')}
                 >
                   <X class="h-3 w-3" />
@@ -120,12 +111,11 @@ function EnvSettingsPageContent() {
             </Show>
           </div>
 
-          {/* Nav items grouped */}
           <div class="flex-1 overflow-y-auto py-1">
             <For each={SETTINGS_GROUPS}>
               {(group) => {
                 const groupItems = createMemo(() =>
-                  filteredItems().filter((item) => group.sections.includes(item.id as any)),
+                  filteredItems().filter((item) => (group.sections as readonly string[]).includes(item.id)),
                 );
                 return (
                   <Show when={groupItems().length > 0}>
@@ -141,7 +131,7 @@ function EnvSettingsPageContent() {
                             <button
                               type="button"
                               class={cn(
-                                'w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-xs transition-colors',
+                                'w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-xs transition-colors cursor-pointer',
                                 isActive()
                                   ? 'bg-primary/10 text-primary font-medium border-r-2 border-primary'
                                   : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground border-r-2 border-transparent',
@@ -162,26 +152,14 @@ function EnvSettingsPageContent() {
           </div>
         </div>
 
-        {/* Mobile nav dropdown */}
+        {/* Mobile nav */}
         <div class={cn('md:hidden border-b px-3 py-2 shrink-0', redevenSurfaceRoleClass('panel'))}>
-          <div class="flex gap-2">
-            <div class="relative flex-1">
-              <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-              <input
-                type="text"
-                value={ctx.searchQuery()}
-                onInput={(e) => ctx.setSearchQuery(e.currentTarget.value)}
-                placeholder="Search..."
-                class="w-full rounded-md border bg-background py-1.5 pl-8 pr-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              />
-            </div>
-            <Select
-              value={ctx.activeSection()}
-              onChange={(v) => v && ctx.setActiveSection(v as EnvSettingsSection)}
-              options={filteredItems().map((it) => ({ value: it.id, label: it.label }))}
-              class="w-44 shrink-0"
-            />
-          </div>
+          <Select
+            value={ctx.activeSection()}
+            onChange={(v) => v && ctx.setActiveSection(v as EnvSettingsSection)}
+            options={filteredItems().map((it) => ({ value: it.id, label: it.label }))}
+            class="w-full"
+          />
         </div>
 
         {/* Main content area */}
@@ -195,15 +173,10 @@ function EnvSettingsPageContent() {
                 </div>
               </div>
             </Show>
-            <SectionRenderer section={ctx.activeSection()} />
+            {ActiveSection()()}
           </div>
         </div>
       </div>
-
-      {/* Loading Curtain */}
-      <RedevenLoadingCurtain
-        visible={false}
-      />
     </div>
   );
 }
