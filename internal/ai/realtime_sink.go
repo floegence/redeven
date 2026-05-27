@@ -655,10 +655,28 @@ func (w *aiSinkWriter) loop() {
 		default:
 		}
 
-		if msg, ok := w.popLow(); ok {
+		// Drain all low-priority messages eagerly to keep the coalesce window small.
+		// Still check for high-priority messages between pops so they can preempt.
+		drained := false
+		for {
+			msg, ok := w.popLow()
+			if !ok {
+				break
+			}
+			drained = true
 			if err := w.notify(msg); err != nil {
 				return
 			}
+			// Allow high-priority messages to preempt between low-priority notifications.
+			select {
+			case hiMsg := <-w.hiCh:
+				if err := w.notify(hiMsg); err != nil {
+					return
+				}
+			default:
+			}
+		}
+		if drained {
 			continue
 		}
 

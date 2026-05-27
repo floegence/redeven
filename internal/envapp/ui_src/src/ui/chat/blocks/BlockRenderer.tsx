@@ -193,6 +193,7 @@ export const BlockRenderer: Component<BlockRendererProps> = (props) => {
                 language={b.language}
                 content={b.content}
                 filename={b.filename}
+                streaming={props.isStreaming}
               />
             </Suspense>
           );

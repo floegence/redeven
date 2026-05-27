@@ -38,7 +38,10 @@ export const AppendOnlyText: Component<AppendOnlyTextProps> = (props) => {
       if (!node || !pending) return;
       const text = pending;
       pending = '';
-      node.appendChild(document.createTextNode(text));
+      const span = document.createElement('span');
+      span.className = 'chat-streaming-fade-in';
+      span.appendChild(document.createTextNode(text));
+      node.appendChild(span);
     });
   };
 

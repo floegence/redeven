@@ -62,6 +62,23 @@ function renderCommittedSegments(
   return segments;
 }
 
+function findUnclosedBlockBacktrack(
+  entries: TokenEntry[],
+  fromIndex: number,
+): number {
+  for (let i = fromIndex; i >= 0; i -= 1) {
+    const t = entries[i]?.token;
+    if (t?.type === 'code') {
+      const raw = String((t as { raw?: string }).raw ?? '');
+      const fences = raw.match(/^```/gm);
+      if (fences && fences.length % 2 !== 0) {
+        return i;
+      }
+    }
+  }
+  return -1;
+}
+
 export function buildMarkdownRenderSnapshot(
   markdown: MarkdownParser,
   content: string,
@@ -125,6 +142,22 @@ export function buildMarkdownRenderSnapshot(
       };
     }
 
+    const unclosedBlockIdx = findUnclosedBlockBacktrack(entries, lastMeaningfulIndex);
+    if (unclosedBlockIdx >= 0) {
+      const committedEnd = unclosedBlockIdx;
+      return {
+        sourceLength: source.length,
+        committedSourceLength: entries[unclosedBlockIdx]?.start ?? 0,
+        committedSegments: committedEnd > 0
+          ? renderCommittedSegments(markdown, entries.slice(0, committedEnd), links)
+          : [],
+        tail: {
+          kind: 'raw',
+          key: `${entries[unclosedBlockIdx]?.start ?? 0}:${source.length}:code-unclosed`,
+        },
+      };
+    }
+
     const hasTrailingSpace = lastMeaningfulIndex < entries.length - 1;
     if (hasTrailingSpace) {
       return {
@@ -143,6 +176,20 @@ export function buildMarkdownRenderSnapshot(
     }
 
     const tailEntry = entries[lastMeaningfulIndex];
+    if (tailEntry?.token.type === 'code') {
+      return {
+        sourceLength: source.length,
+        committedSourceLength: tailEntry.start,
+        committedSegments: lastMeaningfulIndex > 0
+          ? renderCommittedSegments(markdown, entries.slice(0, lastMeaningfulIndex), links)
+          : [],
+        tail: {
+          kind: 'raw',
+          key: `${tailEntry.start}:${tailEntry.end}:code-tail`,
+        },
+      };
+    }
+
     const tailHtml = renderTokenHtml(markdown, tailEntry.token, links);
 
     return {

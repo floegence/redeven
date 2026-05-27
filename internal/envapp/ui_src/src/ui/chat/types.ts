@@ -427,7 +427,12 @@ export interface MarkdownHtmlTail {
   html: string;
 }
 
-export type MarkdownTail = MarkdownEmptyTail | MarkdownHtmlTail;
+export interface MarkdownRawTail {
+  kind: 'raw';
+  key: string;
+}
+
+export type MarkdownTail = MarkdownEmptyTail | MarkdownHtmlTail | MarkdownRawTail;
 
 export interface MarkdownRenderSnapshot {
   sourceLength: number;

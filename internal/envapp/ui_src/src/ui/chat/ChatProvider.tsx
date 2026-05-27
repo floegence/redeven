@@ -318,15 +318,15 @@ export const ChatProvider: ParentComponent<ChatProviderProps> = (props) => {
     setMessages(reconcile(next));
   };
 
-  // ---- Stream event handling (batched via rAF) ----
+  // ---- Stream event handling (batched via microtask) ----
 
   let pendingEvents: StreamEvent[] = [];
-  let rafHandle: number | null = null;
+  let scheduled = false;
 
   const flushStreamEvents = (): void => {
     const events = pendingEvents;
     pendingEvents = [];
-    rafHandle = null;
+    scheduled = false;
     if (events.length === 0) {
       return;
     }
@@ -443,8 +443,9 @@ export const ChatProvider: ParentComponent<ChatProviderProps> = (props) => {
 
     handleStreamEvent: (event) => {
       pendingEvents.push(event);
-      if (!rafHandle) {
-        rafHandle = requestAnimationFrame(flushStreamEvents);
+      if (!scheduled) {
+        scheduled = true;
+        queueMicrotask(flushStreamEvents);
       }
     },
 
