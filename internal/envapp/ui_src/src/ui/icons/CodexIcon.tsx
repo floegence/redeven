@@ -21,6 +21,7 @@ function CodexArtwork(props: {
         props.class,
       )}
       style={props.style}
+      // eslint-disable-next-line solid/no-innerhtml -- trusted inlined SVG
       innerHTML={CODEX_SVG}
     />
   );
