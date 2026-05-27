@@ -3,6 +3,7 @@ import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 
 import type { FilePreviewDescriptor, PreviewMode } from '../utils/filePreview';
 import { DocxPreviewPane } from '../widgets/DocxPreviewPane';
+import { FilePreviewErrorState } from '../widgets/FilePreviewErrorState';
 import { MarkdownPreviewPane } from '../widgets/MarkdownPreviewPane';
 import { PdfPreviewPane } from '../widgets/PdfPreviewPane';
 import { TextFilePreviewPane } from '../widgets/TextFilePreviewPane';
@@ -114,14 +115,11 @@ function renderSpreadsheetPreview(props: RedevenFilePreviewRenderProps): JSX.Ele
 }
 
 function renderUnavailablePreview(props: RedevenFilePreviewRenderProps): JSX.Element {
-  const binary = () => props.descriptor.mode === 'binary';
   return (
-    <div class="p-4 text-sm text-muted-foreground">
-      <div class="mb-1 font-medium text-foreground">
-        {binary() ? 'Binary file' : 'Preview not available'}
-      </div>
-      <div class="text-xs">{props.message || 'Preview is not available.'}</div>
-    </div>
+    <FilePreviewErrorState
+      errorType="unsupported"
+      message={props.message}
+    />
   );
 }
 

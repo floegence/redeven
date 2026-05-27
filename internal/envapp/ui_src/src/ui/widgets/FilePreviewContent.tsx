@@ -9,6 +9,8 @@ import type { FilePreviewDescriptor } from '../utils/filePreview';
 import { readSelectionTextFromPreview } from '../utils/filePreviewSelection';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
+import { FilePreviewErrorState } from './FilePreviewErrorState';
+import { classifyFilePreviewError } from './filePreviewErrorUtils';
 
 export interface FilePreviewContentProps {
   item?: FileItem | null;
@@ -39,6 +41,7 @@ export interface FilePreviewContentProps {
   onDiscard?: () => void;
   onDownload?: () => void;
   onAskFlower?: (selectionText: string) => void | Promise<void>;
+  onRetry?: () => void;
 }
 
 const PREVIEW_HEADER_ICON_BUTTON_CLASS = [
@@ -210,10 +213,11 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
         </Show>
 
         <Show when={resolvedError()}>
-          <div class="p-4 text-sm text-error">
-            <div class="mb-1 font-medium">Failed to load file</div>
-            <div class="text-xs text-muted-foreground">{resolvedError()}</div>
-          </div>
+          <FilePreviewErrorState
+            errorType={classifyFilePreviewError(resolvedError())}
+            message={resolvedError()}
+            onRetry={props.onRetry}
+          />
         </Show>
 
         <RedevenLoadingCurtain visible={!!props.loading} eyebrow="Preview" message={props.message || 'Loading file...'} />

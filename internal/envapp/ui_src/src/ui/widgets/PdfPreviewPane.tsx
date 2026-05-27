@@ -13,6 +13,7 @@ import {
   type PDFPageProxy,
   type RenderTask,
 } from './pdfPreviewRuntime';
+import { FilePreviewErrorState } from './FilePreviewErrorState';
 
 const PDF_PREVIEW_INSET = 12;
 const PDF_ZOOM_STEP = 0.1;
@@ -694,12 +695,12 @@ export function PdfPreviewPane(props: PdfPreviewPaneProps) {
       >
         <Show
           when={!renderError()}
-          fallback={(
-            <div class="rounded-lg border border-error/20 bg-error/5 p-4 text-sm text-error">
-              <div class="font-medium">Failed to load PDF preview</div>
-              <div class="mt-1 text-xs text-muted-foreground">{renderError()}</div>
-            </div>
-          )}
+          fallback={
+            <FilePreviewErrorState
+              errorType="render_error"
+              message={renderError()}
+            />
+          }
         >
           <div
             class="pdf-preview-pane__content relative mx-auto"
