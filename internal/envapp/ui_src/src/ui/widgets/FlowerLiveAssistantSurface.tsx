@@ -1,15 +1,14 @@
 import { Show, createMemo, type Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 
-import { MessageBubble, StreamingCursor, type ChatAvatar, type Message } from '../chat';
+import { MessageBubble, StreamingCursor, StreamingShimmer, type ChatAvatar, type Message } from '../chat';
 import { hasVisibleMessageContent } from '../chat/message/messageVisibility';
 import { MessageFrame } from '../chat/message/MessageFrame';
-import { FlowerMessageRunIndicator } from './FlowerMessageRunIndicator';
+
 
 export interface FlowerLiveAssistantSurfaceProps {
   message: Message | null;
   active: boolean;
-  phaseLabel?: string;
   avatar?: ChatAvatar;
   class?: string;
 }
@@ -54,7 +53,7 @@ export const FlowerLiveAssistantSurface: Component<FlowerLiveAssistantSurfacePro
           <Show when={props.active}>
             <div class="chat-message-status-rail">
               <div class="chat-message-ornament">
-                <FlowerMessageRunIndicator phaseLabel={props.phaseLabel} />
+                <StreamingShimmer />
               </div>
             </div>
           </Show>

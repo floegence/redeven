@@ -980,8 +980,8 @@ function makeCompletedEmptyAssistantMessage(messageId = 'assistant-empty-1') {
 }
 
 function assistantRunIndicator(host: HTMLElement): HTMLElement | null {
-  return liveAssistantSurface(host)?.querySelector('.flower-message-run-indicator')
-    ?? host.querySelector('.flower-message-run-indicator');
+  return liveAssistantSurface(host)?.querySelector('.streaming-shimmer')
+    ?? host.querySelector('.streaming-shimmer');
 }
 
 function liveRunPlaceholder(host: HTMLElement): HTMLElement | null {
@@ -1807,7 +1807,7 @@ export function registerEnvAIPageSendTests() {
         });
         await flushAsync();
 
-        const firstIndicator = host.querySelector('.flower-message-run-indicator');
+        const firstIndicator = host.querySelector('.streaming-shimmer');
         expect(firstIndicator).toBeTruthy();
 
         emitRealtimeEvent({
@@ -1825,7 +1825,7 @@ export function registerEnvAIPageSendTests() {
           expect(host.querySelector('.chat-message-item-assistant')?.textContent).toContain('Hello Flower');
         });
 
-        const nextIndicator = host.querySelector('.flower-message-run-indicator');
+        const nextIndicator = host.querySelector('.streaming-shimmer');
         expect(nextIndicator).toBe(firstIndicator);
       } finally {
         dispose();
@@ -2243,7 +2243,7 @@ export function registerEnvAIPageSendTests() {
         const assistant = host.querySelector('.chat-message-item-assistant');
         expect(assistant).toBeTruthy();
         expect(assistantRunIndicator(host)).toBeTruthy();
-        expect(host.querySelectorAll('.flower-message-run-indicator')).toHaveLength(1);
+        expect(host.querySelectorAll('.streaming-shimmer')).toHaveLength(1);
         expect(host.querySelector('.chat-working-indicator')).toBeNull();
       } finally {
         dispose();
@@ -2326,7 +2326,7 @@ export function registerEnvAIPageSendTests() {
 
         const userMessage = host.querySelector('.chat-message-item-user');
         expect(userMessage).toBeTruthy();
-        expect(userMessage?.querySelector('.flower-message-run-indicator')).toBeNull();
+        expect(userMessage?.querySelector('.streaming-shimmer')).toBeNull();
       } finally {
         dispose();
       }
