@@ -2,6 +2,7 @@
 
 export { WorkingIndicator, type WorkingIndicatorProps } from './WorkingIndicator';
 export { StreamingCursor, type StreamingCursorProps } from './StreamingCursor';
+export { StreamingShimmer, type StreamingShimmerProps } from './StreamingShimmer';
 export {
   ActivityLine,
   ActivityStatusIcon,

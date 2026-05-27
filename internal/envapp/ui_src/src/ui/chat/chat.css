@@ -979,6 +979,37 @@ pre.chat-md-code-block ::selection, pre.chat-md-code-block *::selection,
 @keyframes chatActivityPulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
 @keyframes chatMessageFadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
+@keyframes streamingShimmer {
+  0% { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+
+.streaming-shimmer {
+  display: flex;
+  align-items: center;
+  min-height: 1rem;
+}
+
+.streaming-shimmer-line {
+  width: 100%;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--primary) 50%, transparent) 25%,
+    transparent 50%
+  );
+  background-size: 200% 100%;
+  animation: streamingShimmer 2s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .streaming-shimmer-line {
+    animation: none !important;
+  }
+}
+
 .chat-message-list-scroll::-webkit-scrollbar { width: 6px; }
 .chat-message-list-scroll::-webkit-scrollbar-track { background: transparent; }
 .chat-message-list-scroll::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 3px; }

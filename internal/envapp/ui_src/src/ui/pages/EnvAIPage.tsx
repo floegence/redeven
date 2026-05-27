@@ -83,7 +83,7 @@ import {
   type FollowupLane,
   type ListFollowupsResponse,
 } from './followupsState';
-import { FlowerMessageRunIndicator } from '../widgets/FlowerMessageRunIndicator';
+import { StreamingShimmer } from '../chat';
 import { FlowerLiveAssistantSurface } from '../widgets/FlowerLiveAssistantSurface';
 import { createAIThreadRenderController } from './createAIThreadRenderController';
 import { createAIContextTelemetryController } from './createAIContextTelemetryController';
@@ -1613,7 +1613,6 @@ export function EnvAIPage() {
   let activeContextResetSeq = 0;
   const activeContextReplaySeqByRun = new Map<string, number>();
   const failureNotifiedRuns = new Set<string>();
-  const [runPhaseLabel, setRunPhaseLabel] = createSignal('Working');
   const resetContextTelemetryState = () => {
     contextTelemetryController.reset();
     activeContextResetSeq += 1;
@@ -1778,44 +1777,6 @@ export function EnvAIPage() {
     }
     return hasKnownContextRun() || hasContextTelemetry();
   });
-
-  const normalizeLifecyclePhase = (raw: unknown): string => {
-    const v = String(raw ?? '').trim().toLowerCase();
-    switch (v) {
-      case 'planning':
-      case 'start':
-        return 'planning';
-      case 'executing_tools':
-      case 'tool_call':
-      case 'tool':
-        return 'executing_tools';
-      case 'synthesizing':
-      case 'synthesis':
-        return 'synthesizing';
-      case 'finalizing':
-      case 'end':
-      case 'finish':
-      case 'ended':
-        return 'finalizing';
-      default:
-        return '';
-    }
-  };
-
-  const lifecyclePhaseLabel = (phase: string): string => {
-    switch (phase) {
-      case 'planning':
-        return 'Planning...';
-      case 'executing_tools':
-        return 'Executing tools...';
-      case 'synthesizing':
-        return 'Synthesizing answer...';
-      case 'finalizing':
-        return 'Finalizing...';
-      default:
-        return 'Working';
-    }
-  };
 
   const hasMessages = createMemo(() =>
     transcriptMessages().length > 0 || hasLiveAssistantTail(),
@@ -2172,7 +2133,6 @@ export function EnvAIPage() {
       <FlowerLiveAssistantSurface
         message={liveAssistantTailMessage()}
         active={liveAssistantSurfaceActive()}
-        phaseLabel={runPhaseLabel()}
         avatar={FlowerAssistantAvatar}
       />
     </div>
@@ -2717,7 +2677,6 @@ export function EnvAIPage() {
     const tid = String(ai.activeThreadId() ?? '').trim();
     if (!tid) return;
     if (!ensureRWX()) return;
-    setRunPhaseLabel('Stopping...');
     void rpc.ai.stopThread({ threadId: tid }).then(async (resp) => {
       const recovered = Array.isArray(resp?.recoveredFollowups)
         ? resp.recoveredFollowups.map(stopFollowupToPageFollowup).filter((item): item is FollowupItem => !!item)
@@ -2732,11 +2691,9 @@ export function EnvAIPage() {
       }
       await loadFollowups(tid, { silent: true });
       ai.bumpThreadsSeq();
-      setRunPhaseLabel('Working');
     }).catch((e) => {
       const msg = e instanceof Error ? e.message : String(e);
       notify.error('Failed to stop run', msg || 'Request failed.');
-      setRunPhaseLabel('Working');
     });
   };
 
@@ -2748,7 +2705,6 @@ export function EnvAIPage() {
       resetThreadReveal();
       chat?.clearMessages();
       resetThreadRenderSources();
-      setRunPhaseLabel('Working');
       setThreadTodos(null);
       resetFollowupsState();
       resetContextTelemetryState();
@@ -2764,7 +2720,6 @@ export function EnvAIPage() {
       resetThreadReveal();
       chat?.clearMessages();
       resetThreadRenderSources();
-      setRunPhaseLabel('Working');
       setThreadTodos(null);
       resetFollowupsState();
       resetContextTelemetryState();
@@ -2786,7 +2741,6 @@ export function EnvAIPage() {
     }
     resetThreadRenderSources();
 
-    setRunPhaseLabel('Working');
     setThreadTodos(null);
     resetContextTelemetryState();
     setTodosError('');
@@ -2819,7 +2773,6 @@ export function EnvAIPage() {
         resetActiveTranscriptCursor(tid);
         chat?.clearMessages();
         resetThreadRenderSources();
-        setRunPhaseLabel('Working');
         setThreadTodos(null);
         resetContextTelemetryState();
         setTodosError('');
@@ -2887,12 +2840,6 @@ export function EnvAIPage() {
           return;
         }
         if (streamType === 'lifecycle-phase') {
-          if (isActiveTid) {
-            const normalizedPhase = normalizeLifecyclePhase(streamEvent?.phase ?? event.diag?.phase);
-            if (normalizedPhase) {
-              setRunPhaseLabel(lifecyclePhaseLabel(normalizedPhase));
-            }
-          }
           return;
         }
         if (isActiveTid) {
@@ -2923,7 +2870,6 @@ export function EnvAIPage() {
       }
 
       if (tid === String(ai.activeThreadId() ?? '').trim()) {
-        setRunPhaseLabel('Working');
         cancelActiveRunSnapshotRecovery();
         void loadThreadMessages(tid, { reset: false });
       }
@@ -3126,7 +3072,6 @@ export function EnvAIPage() {
 
   const rollbackRejectedComposerSend = (context?: Partial<PendingSendContext>) => {
     setSendPending(false);
-    setRunPhaseLabel('Working');
 
     const sourceFollowupId = String(context?.sourceFollowupId ?? '').trim();
     if (!sourceFollowupId || !context?.sourceDraftSnapshot || !chatInputApi()) {
@@ -3283,8 +3228,6 @@ export function EnvAIPage() {
         const binding = contextTelemetryController.setLiveRun(runId);
         void loadContextRunEvents(runId, { reset: binding.switched });
         scheduleActiveRunSnapshotRecovery(tid, runId);
-      } else {
-        setRunPhaseLabel('Working');
       }
 
       ai.bumpThreadsSeq();
@@ -3339,7 +3282,6 @@ export function EnvAIPage() {
     const sourceFollowupId = context.sourceFollowupId;
 
     setSendPending(true);
-    setRunPhaseLabel('Planning...');
     if (userMessageId) {
       requestScrollToBottom('user');
     }
@@ -3377,7 +3319,6 @@ export function EnvAIPage() {
         // Best-effort: sendUserTurn still persists the message and can self-heal via transcript refresh.
       }
 
-      setRunPhaseLabel('Planning...');
       const baseReq = {
         threadId: tid,
         model,
@@ -3430,7 +3371,6 @@ export function EnvAIPage() {
         if (userMessageId) {
           chat?.deleteMessage(userMessageId);
         }
-        setRunPhaseLabel('Working');
         void loadFollowups(tid, { silent: true });
       }
       if (rid) {
@@ -3441,9 +3381,6 @@ export function EnvAIPage() {
         scheduleActiveRunSnapshotRecovery(tid, rid);
       }
       ai.bumpThreadsSeq();
-      if (responseKind === 'steer' || responseKind === 'queued') {
-        setRunPhaseLabel('Working');
-      }
     } catch (e) {
       ai.clearThreadPendingRun(tid);
       if (e instanceof ComposerSendRejectedError) {
@@ -3452,7 +3389,6 @@ export function EnvAIPage() {
       rollbackRejectedComposerSend(context);
       const msg = e instanceof Error ? e.message : String(e);
       notify.error('AI failed', msg || 'Request failed.');
-      setRunPhaseLabel('Working');
       void loadThreadMessages(tid);
       void loadFollowups(tid, { silent: true });
       throw e instanceof Error ? e : new Error(msg || 'Request failed.');
@@ -3487,7 +3423,6 @@ export function EnvAIPage() {
 
       if (!canInteract()) return;
       setSendPending(true);
-      setRunPhaseLabel('Planning...');
       requestScrollToBottom('user');
     },
     onSendMessage: async (content, attachments, userMessageId, _addMessage) => {
@@ -3662,7 +3597,7 @@ export function EnvAIPage() {
           showListWorkingIndicator: false,
           renderMessageOrnament: (props) => (
             props.message.role === 'assistant' && props.isActiveAssistantStreaming && (
-              <FlowerMessageRunIndicator phaseLabel={runPhaseLabel()} />
+              <StreamingShimmer />
             )
           ),
           allowAttachments: canInteract(),
