@@ -586,7 +586,7 @@ export const ruRU = {
     version: "Version",
     provider: "Provider",
     localLink: "Локальная связь",
-    environmentId: "Environment ID",
+    environmentId: "ENV ID",
     source: "Источник",
     runtimeRoot: "Корень Runtime",
     bootstrap: "Bootstrap",

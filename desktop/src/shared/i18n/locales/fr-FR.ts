@@ -566,7 +566,7 @@ export const frFR = {
     version: "Version",
     provider: "Provider",
     localLink: "Lien local",
-    environmentId: "Environment ID",
+    environmentId: "ENV ID",
     source: "Source",
     runtimeRoot: "Racine Runtime",
     bootstrap: "Bootstrap",
