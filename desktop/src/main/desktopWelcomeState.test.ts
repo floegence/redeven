@@ -487,6 +487,106 @@ describe('desktopWelcomeState', () => {
     ]));
   });
 
+  it('does not invent provider runtime startup time from environment access time', () => {
+    if (!testProvider) {
+      throw new Error('missing test provider');
+    }
+    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo', {
+      lastUsedAtMS: 1778750000000,
+    });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        provider_environments: [providerEnvironment],
+      }),
+      openSessions: [{
+        session_key: controlPlaneDesktopSessionKey('https://cp.example.invalid', 'env_demo'),
+        target: buildProviderEnvironmentDesktopTarget(providerEnvironment, { route: 'remote_desktop' }),
+        lifecycle: 'open',
+        entry_url: 'https://env.example.invalid/_redeven_boot/#redeven=abc',
+        startup: {
+          local_ui_url: 'https://env.example.invalid/_redeven_boot/#redeven=abc',
+          local_ui_urls: ['https://env.example.invalid/_redeven_boot/#redeven=abc'],
+          effective_run_mode: 'remote_desktop',
+        },
+      }],
+      controlPlanes: [{
+        provider: testProvider,
+        account: {
+          provider_id: testProvider.provider_id,
+          provider_origin: testProvider.provider_origin,
+          display_name: testProvider.display_name,
+          user_public_id: 'user_demo',
+          user_display_name: 'Demo User',
+          authorization_expires_at_unix_ms: 1778759999999,
+        },
+        environments: [{
+          provider_id: testProvider.provider_id,
+          provider_origin: testProvider.provider_origin,
+          env_public_id: 'env_demo',
+          label: 'Demo Environment',
+          description: 'team sandbox',
+          namespace_public_id: 'ns_demo',
+          namespace_name: 'Demo Team',
+          status: 'online',
+          lifecycle_status: 'active',
+          last_seen_at_unix_ms: 1778754444444,
+          runtime_health: {
+            env_public_id: 'env_demo',
+            runtime_status: 'online',
+            observed_at_unix_ms: 1778754444444,
+            last_seen_at_unix_ms: 1778754444444,
+            offline_reason_code: '',
+            offline_reason: '',
+          },
+        }],
+        display_label: 'Demo Control Plane',
+        last_synced_at_ms: 1778754444444,
+        sync_state: 'ready',
+        last_sync_attempt_at_ms: 1778754444444,
+        last_sync_error_code: '',
+        last_sync_error_message: '',
+        catalog_freshness: 'fresh',
+      }],
+    });
+
+    const providerEntry = snapshot.environments.find((entry) => entry.id === providerEnvironment.id);
+    expect(providerEntry).toMatchObject({
+      last_used_at_ms: 1778750000000,
+    });
+    expect(providerEntry?.runtime_started_at_unix_ms).toBeUndefined();
+  });
+
+  it('projects provider startup time only when the open remote session reports it', () => {
+    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo', {
+      lastUsedAtMS: 1778750000000,
+    });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        provider_environments: [providerEnvironment],
+      }),
+      openSessions: [{
+        session_key: controlPlaneDesktopSessionKey('https://cp.example.invalid', 'env_demo'),
+        target: buildProviderEnvironmentDesktopTarget(providerEnvironment, { route: 'remote_desktop' }),
+        lifecycle: 'open',
+        entry_url: 'https://env.example.invalid/_redeven_boot/#redeven=abc',
+        startup: {
+          local_ui_url: 'https://env.example.invalid/_redeven_boot/#redeven=abc',
+          local_ui_urls: ['https://env.example.invalid/_redeven_boot/#redeven=abc'],
+          effective_run_mode: 'remote_desktop',
+          started_at_unix_ms: 1778753333333,
+        },
+      }],
+    });
+
+    expect(snapshot.environments).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: providerEnvironment.id,
+        last_used_at_ms: 1778750000000,
+        runtime_started_at_unix_ms: 1778753333333,
+      }),
+    ]));
+  });
+
   it('keeps the single Local Environment protected', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
@@ -884,7 +984,9 @@ describe('desktopWelcomeState', () => {
         provider_environments: [providerEnvironment],
       }),
       managedRuntimePresenceByTargetID: {
-        'ssh:ssh:devbox:2222:key_agent:remote_default': sshRuntimePresence(),
+        'ssh:ssh:devbox:2222:key_agent:remote_default': sshRuntimePresence({
+          started_at_unix_ms: 1778755555555,
+        }),
       },
     });
 
@@ -892,6 +994,7 @@ describe('desktopWelcomeState', () => {
     expect(sshEntry).toMatchObject({
       is_open: false,
       local_ui_url: 'http://127.0.0.1:40111/',
+      runtime_started_at_unix_ms: 1778755555555,
       managed_runtime_target_id: 'ssh:ssh:devbox:2222:key_agent:remote_default',
       managed_runtime_placement_target_id: 'ssh:host:devbox%3A2222:remote_default',
       managed_runtime_host_access: expect.objectContaining({
@@ -1246,6 +1349,7 @@ describe('desktopWelcomeState', () => {
           runtime_key: localContainerID,
           placement: containerPlacement,
           local_ui_url: 'http://127.0.0.1:40123/',
+          started_at_unix_ms: 1778756666666,
         }),
         [`ssh:${sshContainerID}`]: sshRuntimePresence({
           target_id: `ssh:${sshContainerID}`,
@@ -1256,6 +1360,7 @@ describe('desktopWelcomeState', () => {
           host_access: sshHostAccess,
           placement: containerPlacement,
           local_ui_url: 'http://127.0.0.1:40124/',
+          started_at_unix_ms: 1778757777777,
         }),
       },
     });
@@ -1271,6 +1376,7 @@ describe('desktopWelcomeState', () => {
       kind: 'local_environment',
       label: 'Local Container Runtime',
       local_ui_url: 'http://127.0.0.1:40123/',
+      runtime_started_at_unix_ms: 1778756666666,
       managed_runtime_target_id: localContainerID,
       managed_runtime_placement_target_id: localContainerID,
       managed_runtime_host_access: { kind: 'local_host' },
@@ -1297,6 +1403,7 @@ describe('desktopWelcomeState', () => {
       kind: 'ssh_environment',
       label: 'SSH Container Runtime',
       local_ui_url: 'http://127.0.0.1:40124/',
+      runtime_started_at_unix_ms: 1778757777777,
       managed_runtime_target_id: sshContainerID,
       managed_runtime_placement_target_id: sshContainerID,
       managed_runtime_host_access: expect.objectContaining({ kind: 'ssh_host' }),

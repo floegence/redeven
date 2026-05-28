@@ -1556,6 +1556,8 @@ async function verifyRuntimePlacementBridgeRecord(
           local_ui_urls: startup.local_ui_urls,
           runtime_control: bridgeRecord.startup.runtime_control,
           password_required: startup.password_required,
+          started_at_unix_ms: startup.started_at_unix_ms
+            ?? bridgeRecord.startup.started_at_unix_ms,
           runtime_service: startup.runtime_service ?? bridgeRecord.startup.runtime_service,
         },
       };
@@ -1592,6 +1594,8 @@ async function verifySSHEnvironmentRuntimeRecord(
           local_ui_urls: startup.local_ui_urls,
           runtime_control: runtimeRecord.startup.runtime_control,
           password_required: startup.password_required,
+          started_at_unix_ms: startup.started_at_unix_ms
+            ?? runtimeRecord.startup.started_at_unix_ms,
           runtime_service: startup.runtime_service ?? runtimeRecord.startup.runtime_service,
         },
         local_forward_url: runtimeRecord.local_forward_url,

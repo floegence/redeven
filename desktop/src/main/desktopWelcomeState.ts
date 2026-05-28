@@ -1391,6 +1391,9 @@ function buildProviderEnvironmentEntry(
   const effectiveWindowState = effectiveSession
     ? environmentWindowState(effectiveSession)
     : 'closed';
+  const startedAtUnixMS = runtimeStartedAtUnixMS(
+    effectiveSession?.startup?.started_at_unix_ms,
+  );
   return {
     id: environment.id,
     kind: 'provider_environment',
@@ -1429,6 +1432,7 @@ function buildProviderEnvironmentEntry(
     is_opening: effectiveWindowState === 'opening',
     runtime_health: runtimeHealth,
     runtime_service: undefined,
+    runtime_started_at_unix_ms: startedAtUnixMS,
     runtime_operations: providerRuntimeOperations(effectiveWindowState === 'open' || routeDetails.remoteRouteState === 'ready'),
     open_session_key: effectiveSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(effectiveSession),
