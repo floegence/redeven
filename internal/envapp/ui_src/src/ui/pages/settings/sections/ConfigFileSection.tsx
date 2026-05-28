@@ -14,14 +14,20 @@ export function ConfigFileSection() {
     <SettingsSection
       icon={FileCode}
       title={i18n.t('settings.configFile.title')}
-      description={`${i18n.t('settings.configFile.description')} ${i18n.t('settings.configFile.readOnlyRuntimeManaged')}`}
+      description={i18n.t('settings.configFile.description')}
     >
-      <div class="group flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-2.5">
-        <code class="min-w-0 flex-1 break-all font-mono text-xs">{configPath() || i18n.t('settings.configFile.unknownPath')}</code>
-        <div class="flex-shrink-0 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+      <div class="rounded-xl border border-border/50 bg-muted/20 px-5 py-4">
+        <div class="flex items-start justify-between gap-4">
+          <div class="min-w-0">
+            <div class="text-[11px] text-muted-foreground mb-1.5">配置文件路径</div>
+            <code class="text-sm font-mono text-foreground break-all leading-relaxed">
+              {configPath() || i18n.t('settings.configFile.unknownPath')}
+            </code>
+          </div>
           <CopyButton value={configPath() || ''} />
         </div>
       </div>
+      <p class="mt-2 text-[11px] text-muted-foreground">{i18n.t('settings.configFile.readOnlyRuntimeManaged')}</p>
     </SettingsSection>
   );
 }

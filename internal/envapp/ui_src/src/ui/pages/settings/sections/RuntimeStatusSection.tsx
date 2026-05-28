@@ -1,8 +1,9 @@
 import { Show } from 'solid-js';
 import { Zap, RefreshIcon } from '@floegence/floe-webapp-core/icons';
 import { Button, Input } from '@floegence/floe-webapp-core/ui';
+import { cn } from '@floegence/floe-webapp-core';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
-import { SettingsSection, PropertyRow, DotIndicator } from '../SettingsPrimitives';
+import { SettingsSection, DotIndicator } from '../SettingsPrimitives';
 import { useI18n, type I18nHelpers } from '../../../i18n';
 import { runtimeServiceCompatibilityTone } from './helpers';
 
@@ -33,15 +34,9 @@ export function RuntimeStatusSection() {
       default: return ctx.statusLabel();
     }
   };
-  const statusActive = () => ctx.displayedStatus() === 'online';
+  const statusOnline = () => ctx.displayedStatus() === 'online';
 
-  const serviceOwnerLabel = () => {
-    const service = ctx.runtimeService();
-    if (service?.serviceOwner === 'desktop' || service?.desktopManaged) return i18n.t('runtimeStatus.owner.redevenDesktop');
-    if (service?.serviceOwner === 'external') return i18n.t('runtimeStatus.owner.externalService');
-    return i18n.t('runtimeStatus.unknown');
-  };
-  const runtimeServiceCompatibility = () => {
+  const compatLabel = () => {
     switch (String(ctx.runtimeService()?.compatibility ?? 'unknown').trim()) {
       case 'compatible': return i18n.t('runtimeStatus.compatibility.compatible');
       case 'update_available': return i18n.t('runtimeStatus.compatibility.updateAvailable');
@@ -53,7 +48,11 @@ export function RuntimeStatusSection() {
     }
   };
   const compatTone = runtimeServiceCompatibilityTone(ctx.runtimeService());
-  const compatActive = () => compatTone === 'success';
+  const compatOk = () => compatTone === 'success';
+
+  const version = () => ctx.runtimeUpdate.version.currentVersion() || '—';
+  const latestVersion = () => ctx.latestVersion()?.latest_version ? String(ctx.latestVersion()!.latest_version) : '—';
+
   const activeWorkSummary = () => {
     const workload = ctx.runtimeService()?.activeWorkload;
     if (!workload) return i18n.t('runtimeStatus.noActiveWork');
@@ -65,6 +64,14 @@ export function RuntimeStatusSection() {
     ].filter(Boolean);
     return parts.length > 0 ? parts.join(', ') : i18n.t('runtimeStatus.noActiveWork');
   };
+
+  const serviceOwnerLabel = () => {
+    const service = ctx.runtimeService();
+    if (service?.serviceOwner === 'desktop' || service?.desktopManaged) return i18n.t('runtimeStatus.owner.redevenDesktop');
+    if (service?.serviceOwner === 'external') return i18n.t('runtimeStatus.owner.externalService');
+    return i18n.t('runtimeStatus.unknown');
+  };
+
   const maintenanceAuthority = () => {
     const authority = String(ctx.maintenanceContext()?.authority ?? '').trim();
     if (!authority) return i18n.t('runtimeStatus.runtimeRpc');
@@ -72,6 +79,7 @@ export function RuntimeStatusSection() {
     if (authority === 'desktop_shell') return i18n.t('runtimeStatus.owner.redevenDesktop');
     return authority.replace(/_/g, ' ');
   };
+
   const upgradeActionLabel = () => {
     const label = String(ctx.upgradeState().actionLabel ?? '').trim();
     if (label === 'Manage in Desktop') return i18n.t('runtimeStatus.manageInDesktopAction');
@@ -85,7 +93,7 @@ export function RuntimeStatusSection() {
       title={i18n.t('runtimeStatus.title')}
       description={i18n.t('runtimeStatus.description')}
       badge={statusLabel()}
-      badgeVariant={ctx.displayedStatus() === 'online' ? 'success' : ctx.displayedStatus() === 'offline' ? 'warning' : 'default'}
+      badgeVariant={statusOnline() ? 'success' : ctx.displayedStatus() === 'offline' ? 'warning' : 'default'}
       error={ctx.maintenanceError()}
       actions={
         <>
@@ -102,46 +110,84 @@ export function RuntimeStatusSection() {
         </>
       }
     >
-      <div class="flex items-center gap-2 mb-5">
-        <DotIndicator active={statusActive()} label={statusLabel()} />
+      {/* Metric cards */}
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div class={cn('rounded-xl border p-4', statusOnline() ? 'border-success/30 bg-success/5' : 'border-border/50 bg-background')}>
+          <div class="flex items-center gap-2.5 mb-1">
+            <div class={cn('h-2 w-2 rounded-full', statusOnline() ? 'bg-success' : 'bg-muted-foreground/30')} />
+            <span class="text-sm font-semibold text-foreground">{statusLabel()}</span>
+          </div>
+          <div class="text-[11px] text-muted-foreground">运行状态</div>
+        </div>
+        <div class="rounded-xl border border-border/50 bg-background p-4">
+          <div class="text-sm font-semibold font-mono text-foreground mb-1">{version()}</div>
+          <div class="text-[11px] text-muted-foreground">{i18n.t('runtimeStatus.currentVersion')}</div>
+        </div>
+        <div class={cn('rounded-xl border p-4', compatOk() ? 'border-success/30 bg-success/5' : 'border-border/50 bg-background')}>
+          <div class="flex items-center gap-2.5 mb-1">
+            <div class={cn('h-2 w-2 rounded-full', compatOk() ? 'bg-success' : 'bg-warning')} />
+            <span class="text-sm font-semibold text-foreground">{compatLabel()}</span>
+          </div>
+          <div class="text-[11px] text-muted-foreground">{i18n.t('runtimeStatus.compatibilityLabel')}</div>
+        </div>
       </div>
 
-      <PropertyRow label={i18n.t('runtimeStatus.currentVersion')} mono>
-        {ctx.runtimeUpdate.version.currentVersion() || '—'}
-      </PropertyRow>
-      <PropertyRow label={i18n.t('runtimeStatus.latestVersion')} mono>
-        {ctx.latestVersion()?.latest_version ? String(ctx.latestVersion()!.latest_version) : ctx.latestVersionLoading() ? i18n.t('runtimeStatus.loading') : '—'}
-      </PropertyRow>
-      <PropertyRow label={i18n.t('runtimeStatus.activeWork')}>
-        {activeWorkSummary()}
-      </PropertyRow>
-      <PropertyRow label={i18n.t('runtimeStatus.compatibilityLabel')}>
-        <DotIndicator active={compatActive()} label={runtimeServiceCompatibility()} />
-      </PropertyRow>
-      <PropertyRow label={i18n.t('runtimeStatus.serviceOwner')}>
-        {serviceOwnerLabel()}
-      </PropertyRow>
-      <PropertyRow label={i18n.t('runtimeStatus.maintenanceAuthority')}>
-        {maintenanceAuthority()}
-      </PropertyRow>
-      <PropertyRow label={i18n.t('runtimeStatus.runtimeProtocol')} mono>
-        {ctx.runtimeService()?.protocolVersion || '—'}
-      </PropertyRow>
-      <PropertyRow label={i18n.t('runtimeStatus.desktopModelSource')}>
-        <DotIndicator active={desktopModelSourceActive(ctx.runtimeDesktopModelSourceBinding()?.state)} label={formatDesktopModelSourceBindingState(ctx.runtimeDesktopModelSourceBinding()?.state, i18n)} />
-      </PropertyRow>
-      <PropertyRow label={i18n.t('runtimeStatus.manifestETag')} mono>
-        {ctx.latestVersion()?.manifest_etag ? String(ctx.latestVersion()!.manifest_etag) : '—'}
-      </PropertyRow>
+      {/* Detail groups */}
+      <div class="mt-5 space-y-4">
+        <div class="rounded-xl border border-border/50 bg-background px-4 py-3">
+          <div class="text-[11px] font-medium text-muted-foreground mb-3 uppercase tracking-wider">{i18n.t('runtimeStatus.currentVersion')}</div>
+          <div class="space-y-2.5">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-muted-foreground">{i18n.t('runtimeStatus.currentVersion')}</span>
+              <code class="font-mono text-foreground">{version()}</code>
+            </div>
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-muted-foreground">{i18n.t('runtimeStatus.latestVersion')}</span>
+              <code class="font-mono text-foreground">{ctx.latestVersionLoading() ? i18n.t('runtimeStatus.loading') : latestVersion()}</code>
+            </div>
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-muted-foreground">{i18n.t('runtimeStatus.manifestETag')}</span>
+              <code class="font-mono text-[11px] text-foreground">{ctx.latestVersion()?.manifest_etag ? String(ctx.latestVersion()!.manifest_etag) : '—'}</code>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-border/50 bg-background px-4 py-3">
+          <div class="text-[11px] font-medium text-muted-foreground mb-3 uppercase tracking-wider">负载与兼容性</div>
+          <div class="space-y-2.5">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-muted-foreground">{i18n.t('runtimeStatus.activeWork')}</span>
+              <span class="text-foreground">{activeWorkSummary()}</span>
+            </div>
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-muted-foreground">{i18n.t('runtimeStatus.serviceOwner')}</span>
+              <span class="text-foreground">{serviceOwnerLabel()}</span>
+            </div>
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-muted-foreground">{i18n.t('runtimeStatus.maintenanceAuthority')}</span>
+              <span class="text-foreground">{maintenanceAuthority()}</span>
+            </div>
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-muted-foreground">{i18n.t('runtimeStatus.runtimeProtocol')}</span>
+              <code class="font-mono text-foreground">{ctx.runtimeService()?.protocolVersion || '—'}</code>
+            </div>
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-muted-foreground">{i18n.t('runtimeStatus.desktopModelSource')}</span>
+              <DotIndicator active={desktopModelSourceActive(ctx.runtimeDesktopModelSourceBinding()?.state)} label={formatDesktopModelSourceBindingState(ctx.runtimeDesktopModelSourceBinding()?.state, i18n)} />
+            </div>
+          </div>
+        </div>
+      </div>
 
       <Show when={ctx.upgradeState().allowsUpgradeAction && ctx.upgradeState().requiresTargetVersion}>
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 py-2.5">
-          <label class="text-[11px] text-muted-foreground">{i18n.t('runtimeStatus.targetVersion')}</label>
+        <div class="mt-3 flex items-center gap-3">
+          <span class="text-xs text-muted-foreground">{i18n.t('runtimeStatus.targetVersion')}</span>
           <Input value={ctx.targetVersionInput()} onInput={(e) => ctx.setTargetVersionInput(e.currentTarget.value)}
-            placeholder="v1.2.3" size="sm" class="sm:w-48" disabled={ctx.maintaining()} />
+            placeholder="v1.2.3" size="sm" class="w-40" disabled={ctx.maintaining()} />
         </div>
       </Show>
 
+      {/* Status messages */}
       <div class="mt-4 pt-4 border-t border-border/20 space-y-1.5">
         <Show when={ctx.upgradeState().requiresTargetVersion && ctx.targetUpgradeVersion() && !ctx.targetUpgradeVersionValid()}>
           <div class="text-[11px] text-destructive">{i18n.t('runtimeStatus.validReleaseTagHint')}</div>

@@ -1,8 +1,9 @@
-import { Show } from 'solid-js';
-import { RefreshIcon, Code } from '@floegence/floe-webapp-core/icons';
+import { Show, createSignal } from 'solid-js';
+import { RefreshIcon, Code, ChevronDown } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
+import { cn } from '@floegence/floe-webapp-core';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
-import { SettingsSection, PropertyRow, DotIndicator } from '../SettingsPrimitives';
+import { SettingsSection } from '../SettingsPrimitives';
 import type { CodexHostStatus } from '../types';
 import { useI18n } from '../../../i18n';
 
@@ -12,14 +13,17 @@ export function CodexSection() {
 
   const codexStatus = () => ctx.codexStatus() as CodexHostStatus | null;
   const loaded = () => codexStatus() !== null;
+  const hostOk = () => Boolean(codexStatus()?.available);
+  const bridgeOk = () => Boolean(codexStatus()?.ready);
+  const [showDetails, setShowDetails] = createSignal(false);
 
   return (
     <SettingsSection
       icon={RefreshIcon}
       title={i18n.t('codexSettings.title')}
       description={i18n.t('codexSettings.description')}
-      badge={codexStatus()?.available ? i18n.t('codexSettings.hostDetected') : i18n.t('codexSettings.needsHostInstall')}
-      badgeVariant={codexStatus()?.available ? 'success' : 'default'}
+      badge={hostOk() ? i18n.t('codexSettings.hostDetected') : i18n.t('codexSettings.needsHostInstall')}
+      badgeVariant={hostOk() ? 'success' : 'default'}
       error={ctx.codexStatus.error ? String(ctx.codexStatus.error) : null}
       actions={
         <Button size="sm" variant="outline" onClick={() => ctx.refreshCodexStatus()} disabled={ctx.codexStatus.loading}>
@@ -28,41 +32,69 @@ export function CodexSection() {
         </Button>
       }
     >
-      <div class="flex flex-wrap items-center gap-4 mb-4">
-        <DotIndicator active={Boolean(codexStatus()?.available)} label={i18n.t('codexSettings.pills.hostBinaryDetected')} />
-        <DotIndicator active={Boolean(codexStatus()?.ready)} label={i18n.t('codexSettings.pills.bridgeConnected')} />
-      </div>
-
-      <Show when={loaded() && !codexStatus()?.available}>
-        <div class="flex items-center gap-3 rounded-lg border border-border/50 bg-muted/30 p-3 mb-4">
-          <Code class="h-4 w-4 text-muted-foreground" />
-          <div class="text-xs text-muted-foreground">{i18n.t('codexSettings.installNotice')}</div>
+      <Show when={!loaded() || hostOk()}>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div class={cn('rounded-xl border p-4', hostOk() ? 'border-success/30 bg-success/5' : 'border-border/50 bg-background')}>
+            <div class="flex items-center gap-3">
+              <div class={cn('flex h-10 w-10 items-center justify-center rounded-full', hostOk() ? 'bg-success/15' : 'bg-muted')}>
+                <Code class={cn('h-5 w-5', hostOk() ? 'text-success' : 'text-muted-foreground')} />
+              </div>
+              <div>
+                <div class="text-sm font-semibold text-foreground">
+                  {loaded() ? (hostOk() ? i18n.t('codexSettings.status.detected') : i18n.t('codexSettings.status.notFound')) : '—'}
+                </div>
+                <div class="text-[11px] text-muted-foreground">{i18n.t('codexSettings.pills.hostBinaryDetected')}</div>
+              </div>
+            </div>
+          </div>
+          <div class={cn('rounded-xl border p-4', bridgeOk() ? 'border-success/30 bg-success/5' : 'border-border/50 bg-background')}>
+            <div class="flex items-center gap-3">
+              <div class={cn('flex h-10 w-10 items-center justify-center rounded-full', bridgeOk() ? 'bg-success/15' : 'bg-muted')}>
+                <div class={cn('h-2.5 w-2.5 rounded-full', bridgeOk() ? 'bg-success' : 'bg-muted-foreground/30')} />
+              </div>
+              <div>
+                <div class="text-sm font-semibold text-foreground">
+                  {loaded() ? (bridgeOk() ? i18n.t('codexSettings.status.connected') : i18n.t('codexSettings.status.startsOnDemand')) : '—'}
+                </div>
+                <div class="text-[11px] text-muted-foreground">{i18n.t('codexSettings.pills.bridgeConnected')}</div>
+              </div>
+            </div>
+          </div>
         </div>
       </Show>
 
-      <PropertyRow label={i18n.t('codexSettings.rows.binary')} mono>
-        {loaded() ? (codexStatus()!.available ? i18n.t('codexSettings.status.detected') : i18n.t('codexSettings.status.notFound')) : i18n.t('codexSettings.status.notAvailable')}
-      </PropertyRow>
-      <PropertyRow label={i18n.t('codexSettings.rows.binaryPath')} mono>
-        {codexStatus()?.binary_path || '—'}
-      </PropertyRow>
-      <PropertyRow label={i18n.t('codexSettings.rows.agentHomeDir')} mono>
-        {codexStatus()?.agent_home_dir || '—'}
-      </PropertyRow>
-      <PropertyRow label={i18n.t('codexSettings.rows.bridge')}>
-        <DotIndicator active={Boolean(codexStatus()?.ready)} label={codexStatus()?.ready ? i18n.t('codexSettings.status.connected') : i18n.t('codexSettings.status.startsOnDemand')} />
-      </PropertyRow>
-      <PropertyRow label={i18n.t('codexSettings.rows.error')} mono>
-        {codexStatus()?.error || '—'}
-      </PropertyRow>
+      <Show when={loaded() && !hostOk()}>
+        <div class="flex items-center gap-3 rounded-xl border border-border/50 bg-muted/20 p-4">
+          <Code class="h-5 w-5 text-muted-foreground" />
+          <div class="text-sm text-muted-foreground">{i18n.t('codexSettings.installNotice')}</div>
+        </div>
+      </Show>
 
-      <div class="mt-4 pt-4 border-t border-border/20">
-        <div class="text-xs leading-6 text-muted-foreground">
-          {i18n.t('codexSettings.notesHostRuntimeDefaults')}
-        </div>
-        <div class="text-xs leading-6 text-muted-foreground">
-          {i18n.t('codexSettings.notesActivityIsolation')}
-        </div>
+      <div class="mt-4">
+        <button
+          type="button"
+          class="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+          onClick={() => setShowDetails(!showDetails())}
+        >
+          <ChevronDown class={`h-3 w-3 transition-transform ${showDetails() ? '' : '-rotate-90'}`} />
+          技术详情
+        </button>
+        <Show when={showDetails()}>
+          <div class="mt-2 rounded-lg border border-border/40 bg-muted/20 px-4 py-3 space-y-2.5">
+            <div>
+              <div class="text-[11px] text-muted-foreground">{i18n.t('codexSettings.rows.binaryPath')}</div>
+              <code class="text-[11px] font-mono text-foreground">{codexStatus()?.binary_path || '—'}</code>
+            </div>
+            <div>
+              <div class="text-[11px] text-muted-foreground">{i18n.t('codexSettings.rows.agentHomeDir')}</div>
+              <code class="text-[11px] font-mono text-foreground">{codexStatus()?.agent_home_dir || '—'}</code>
+            </div>
+            <div>
+              <div class="text-[11px] text-muted-foreground">错误信息</div>
+              <code class="text-[11px] font-mono text-foreground">{codexStatus()?.error || '—'}</code>
+            </div>
+          </div>
+        </Show>
       </div>
     </SettingsSection>
   );

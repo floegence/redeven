@@ -10,7 +10,7 @@ import {
   useI18n,
   type RedevenLocalePreference,
 } from '../../../i18n';
-import { SettingsSection, PropertyRow } from '../SettingsPrimitives';
+import { SettingsSection } from '../SettingsPrimitives';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 
 export function InterfaceSection() {
@@ -21,15 +21,13 @@ export function InterfaceSection() {
     { value: SYSTEM_LOCALE_PREFERENCE, label: i18n.t('language.systemDefault') },
     ...LOCALE_OPTIONS.map((meta) => ({ value: meta.id, label: localeDisplayName(meta.id) })),
   ]);
+
   const languageSourceLabel = createMemo(() => {
     switch (i18n.snapshot().source) {
-      case 'explicit':
-        return i18n.t('language.source.explicit');
-      case 'system':
-        return i18n.t('language.source.system');
+      case 'explicit': return i18n.t('language.source.explicit');
+      case 'system': return i18n.t('language.source.system');
       case 'fallback':
-      default:
-        return i18n.t('language.source.fallback');
+      default: return i18n.t('language.source.fallback');
     }
   });
 
@@ -43,41 +41,40 @@ export function InterfaceSection() {
   };
 
   return (
-    <div data-settings-section="interface">
-      <SettingsSection
-        icon={Globe}
-        title={i18n.t('settings.interfaceTitle')}
-        description={`${i18n.t('settings.interfaceDescription')} ${i18n.tn('language.availableCount', LOCALE_OPTIONS.length)}`}
-      >
-        <div class="space-y-5">
-          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
-            <div class="sm:max-w-[55%]">
-              <label class="text-xs font-medium text-foreground">{i18n.t('language.preferenceLabel')}</label>
-              <p class="mt-0.5 text-[11px] text-muted-foreground">{i18n.t('settings.languageDescription')}</p>
-            </div>
-            <Select
-              value={i18n.localePreference()}
-              onChange={(value) => updateLanguagePreference(value)}
-              options={languagePreferenceOptions()}
-              class="sm:w-48 cursor-pointer"
-            />
-          </div>
-
-          <div class="border-t border-border/20 pt-4">
-            <PropertyRow label={i18n.t('language.label')}>
-              {i18n.t('language.currentResolved', { language: localeDisplayName(i18n.locale()) })}
-            </PropertyRow>
-            <PropertyRow label={i18n.t('language.sourceLabel')}>
-              {languageSourceLabel()}
-            </PropertyRow>
-            <p class="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-              {i18n.source() === 'desktop'
-                ? i18n.t('settings.desktopBridgeNote')
-                : i18n.t('settings.standaloneNote')}
-            </p>
-          </div>
+    <SettingsSection
+      icon={Globe}
+      title={i18n.t('settings.interfaceTitle')}
+      description={i18n.t('settings.interfaceDescription')}
+      badge={i18n.tn('language.availableCount', LOCALE_OPTIONS.length)}
+    >
+      {/* Current language card */}
+      <div class="rounded-xl border border-border/50 bg-background p-6 text-center">
+        <div class="text-[11px] text-muted-foreground mb-3 uppercase tracking-wider">
+          {i18n.t('language.preferenceLabel')}
         </div>
-      </SettingsSection>
-    </div>
+        <div class="text-lg font-semibold text-foreground mb-1">
+          {localeDisplayName(i18n.locale())}
+        </div>
+        <div class="text-[11px] text-muted-foreground mb-4">
+          {i18n.t('language.sourceLabel')}: {languageSourceLabel()}
+        </div>
+        <div class="inline-flex items-center gap-2">
+          <span class="text-xs text-muted-foreground">{i18n.t('language.updatedTitle')}</span>
+          <Select
+            value={i18n.localePreference()}
+            onChange={(value) => updateLanguagePreference(value)}
+            options={languagePreferenceOptions()}
+            class="w-48 cursor-pointer"
+          />
+        </div>
+      </div>
+
+      <p class="mt-3 text-[11px] text-muted-foreground">
+        {i18n.t('settings.languageDescription')}
+      </p>
+      <p class="text-[11px] text-muted-foreground">
+        {i18n.source() === 'desktop' ? i18n.t('settings.desktopBridgeNote') : i18n.t('settings.standaloneNote')}
+      </p>
+    </SettingsSection>
   );
 }

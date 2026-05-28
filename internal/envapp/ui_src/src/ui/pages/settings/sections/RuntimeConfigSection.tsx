@@ -1,8 +1,8 @@
-import { For, createSignal, createEffect, onCleanup } from 'solid-js';
+import { For, Show, createSignal, createEffect, onCleanup } from 'solid-js';
 import { Terminal, Plus, Trash } from '@floegence/floe-webapp-core/icons';
 import { Button, Input, ConfirmDialog } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
-import { SettingsSection, AutoSaveIndicator, CardRow, DotIndicator } from '../SettingsPrimitives';
+import { SettingsSection, AutoSaveIndicator, DotIndicator } from '../SettingsPrimitives';
 import { formatUnknownError } from '../../../maintenance/shared';
 import { useI18n } from '../../../i18n';
 import type { FilesystemRootPolicy, FilesystemScope } from '../types';
@@ -68,8 +68,7 @@ export function RuntimeConfigSection() {
       try {
         await ctx.saveSettings({
           runtime: {
-            agent_home_dir: agentHomeDir() || null,
-            shell: shell() || null,
+            agent_home_dir: agentHomeDir() || null, shell: shell() || null,
             filesystem_roots: roots().map((r) => ({ id: r.id, path: r.path, permissions: r.permissions, label: r.label })),
           },
         });
@@ -83,8 +82,7 @@ export function RuntimeConfigSection() {
   onCleanup(() => { autoSaveTimer = clearTimer(autoSaveTimer); });
 
   const updateRootAt = (index: number, fn: (r: FilesystemRootPolicy) => FilesystemRootPolicy) => {
-    setRoots((prev) => prev.map((r, i) => (i === index ? fn(r) : r)));
-    setDirty(true);
+    setRoots((prev) => prev.map((r, i) => (i === index ? fn(r) : r))); setDirty(true);
   };
   const addRoot = () => { setRoots((prev: any) => [...prev, { id: nextCustomRootID(prev), label: '', path: '', kind: 'custom' as const, permissions: { read: true, write: false }, hidden: false, system: false }]); setDirty(true); };
   const removeRoot = (index: number) => { setRoots((prev) => prev.filter((_, i) => i !== index)); setDirty(true); };
@@ -111,63 +109,63 @@ export function RuntimeConfigSection() {
           <AutoSaveIndicator dirty={dirty()} saving={saving()} error={error()} savedAt={savedAt()} enabled={ctx.canInteract()} />
         }
       >
-        <div class="space-y-5">
-          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
-            <div class="sm:max-w-[45%]">
-              <label class="text-xs font-medium text-foreground">agent_home_dir</label>
-              <p class="mt-0.5 text-[11px] text-muted-foreground">{i18n.t('runtimeConfig.agentHomeDirNote')}</p>
+        {/* Shell environment card */}
+        <div class="rounded-xl border border-border/50 bg-background p-4">
+          <div class="text-[11px] font-medium text-muted-foreground mb-3 uppercase tracking-wider">Shell 环境</div>
+          <div class="space-y-3">
+            <div class="flex items-center gap-4">
+              <label class="w-40 flex-shrink-0 text-xs text-muted-foreground">agent_home_dir</label>
+              <Input value={agentHomeDir()} onInput={(e) => { setAgentHomeDir(e.currentTarget.value); setDirty(true); }}
+                placeholder="/home/user" size="sm" class="flex-1 font-mono text-xs" disabled={!ctx.canInteract()} />
             </div>
-            <Input value={agentHomeDir()} onInput={(e) => { setAgentHomeDir(e.currentTarget.value); setDirty(true); }}
-              placeholder="/home/user" size="sm" class="sm:w-56" disabled={!ctx.canInteract()} />
-          </div>
-          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
-            <div class="sm:max-w-[45%]">
-              <label class="text-xs font-medium text-foreground">shell</label>
-              <p class="mt-0.5 text-[11px] text-muted-foreground">{i18n.t('runtimeConfig.shellNote')}</p>
+            <div class="flex items-center gap-4">
+              <label class="w-40 flex-shrink-0 text-xs text-muted-foreground">shell</label>
+              <Input value={shell()} onInput={(e) => { setShell(e.currentTarget.value); setDirty(true); }}
+                placeholder="/bin/bash" size="sm" class="flex-1 font-mono text-xs" disabled={!ctx.canInteract()} />
             </div>
-            <Input value={shell()} onInput={(e) => { setShell(e.currentTarget.value); setDirty(true); }}
-              placeholder="/bin/bash" size="sm" class="sm:w-56" disabled={!ctx.canInteract()} />
           </div>
         </div>
 
-        <div class="mt-6 pt-5 border-t border-border/20 space-y-3">
-          <div class="flex items-center justify-between">
-            <div>
-              <div class="text-sm font-semibold text-foreground">{i18n.t('runtimeConfig.filesystemRootsTitle')}</div>
-              <p class="mt-0.5 text-xs text-muted-foreground">{i18n.t('runtimeConfig.filesystemRootsDescription')}</p>
-            </div>
+        {/* Filesystem roots */}
+        <div class="mt-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">文件系统根路径</div>
             <Button size="sm" variant="outline" icon={Plus} onClick={addRoot} disabled={!ctx.canInteract()}>{i18n.t('runtimeConfig.addRoot')}</Button>
           </div>
-
-          <For each={roots()}>
-            {(root, index) => (
-              <CardRow
-                label={
-                  <div class="flex items-center gap-1.5">
-                    <span>{root.label || root.id}</span>
-                    <code class="text-[10px] font-mono text-muted-foreground">{root.id}</code>
+          <div class="space-y-2">
+            <For each={roots()}>
+              {(root, index) => (
+                <div class="rounded-lg border border-border/50 bg-background px-4 py-3">
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0 flex-1">
+                      <div class="flex items-center gap-2 mb-1">
+                        <code class="text-sm font-mono font-semibold text-foreground">{root.path}</code>
+                        <span class="text-[10px] text-muted-foreground">{root.label || root.id}</span>
+                      </div>
+                      <div class="flex items-center gap-2 mt-2">
+                        <span class={root.system ? 'text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground' : 'text-[10px] bg-success/10 px-1.5 py-0.5 rounded text-success'}>
+                          {root.system ? i18n.t('runtimeConfig.systemRoot') : i18n.t('runtimeConfig.customRoot')}
+                        </span>
+                        <DotIndicator active={Boolean(root.permissions?.read)} label="读" />
+                        <DotIndicator active={Boolean(root.permissions?.write)} label="写" onClick={root.system ? undefined : () => requestWriteChange(index(), root, !root.permissions?.write)} />
+                      </div>
+                    </div>
+                    <Show when={!root.system}>
+                      <Button size="icon" variant="ghost" icon={Trash} class="text-muted-foreground hover:text-destructive"
+                        onClick={() => removeRoot(index())} disabled={!ctx.canInteract()} aria-label={i18n.t('runtimeConfig.removeRoot')} />
+                    </Show>
                   </div>
-                }
-                badge={root.system ? i18n.t('runtimeConfig.systemRoot') : i18n.t('runtimeConfig.customRoot')}
-                badgeTone={root.system ? 'default' : 'success'}
-                actions={
-                  <Button size="icon" variant="ghost" icon={Trash} aria-label={i18n.t('runtimeConfig.removeRoot')}
-                    class={root.system ? 'invisible' : 'text-muted-foreground hover:text-destructive'}
-                    onClick={() => removeRoot(index())} disabled={!ctx.canInteract() || root.system} />
-                }
-              >
-                <div class="space-y-2">
-                  <Input value={root.path} onInput={(e) => updateRootAt(index(), (r) => ({ ...r, path: e.currentTarget.value }))}
-                    placeholder="/path/to/folder" size="sm" class="w-full font-mono text-xs" disabled={!ctx.canInteract() || root.system} />
-                  <div class="flex items-center gap-4">
-                    <DotIndicator active={Boolean(root.permissions?.read)} label={i18n.t('permissionPolicy.permission.read')} />
-                    <DotIndicator active={Boolean(root.permissions?.write)} label={i18n.t('permissionPolicy.permission.write')} onClick={root.system ? undefined : () => requestWriteChange(index(), root, !root.permissions?.write)} />
-                  </div>
+                  <Show when={!root.system}>
+                    <div class="mt-2 pt-2 border-t border-border/30">
+                      <Input value={root.path} onInput={(e) => updateRootAt(index(), (r) => ({ ...r, path: e.currentTarget.value }))}
+                        placeholder="/path/to/folder" size="sm" class="w-full font-mono text-xs" disabled={!ctx.canInteract()} />
+                    </div>
+                  </Show>
                 </div>
-              </CardRow>
-            )}
-          </For>
-          <p class="text-[11px] text-muted-foreground">{i18n.t('runtimeConfig.systemRootsNote')}</p>
+              )}
+            </For>
+          </div>
+          <p class="mt-2 text-[11px] text-muted-foreground">{i18n.t('runtimeConfig.systemRootsNote')}</p>
         </div>
       </SettingsSection>
 
