@@ -106,18 +106,21 @@ function listSourceFiles(root: string): readonly string[] {
 }
 
 function collectLiteralTranslationKeysFromSource(root: string): ReadonlyMap<string, readonly string[]> {
-  const directCallPattern = /(?:^|[^\w.])(?:(?:i18n|props\.i18n)\.)?(?:t|tn|rich|translateEnvAppKey)\(\s*['"`]([A-Za-z][A-Za-z0-9_.-]*)['"`]/g;
-  const keyFieldPattern = /\b(?:titleKey|labelKey|valueKey|contentKey|helpKey|placeholderKey|descriptionKey|detailKey|messageKey|ariaLabelKey)\s*:\s*['"`]([A-Za-z][A-Za-z0-9_.-]*)['"`]/g;
-  const typedReturnPattern = /function\s+\w+\([^)]*\)\s*:\s*(?:EnvAppTranslationKey|[^({;]*\|\s*undefined)[\s\S]*?return\s+['"`]([A-Za-z][A-Za-z0-9_]*\.[A-Za-z0-9_.-]*)['"`]\s*;/g;
-  const typeAssertionPattern = /['"`]([A-Za-z][A-Za-z0-9_]*\.[A-Za-z0-9_.-]*)['"`]\s+as\s+EnvAppTranslationKey\b/g;
+  const keyPattern = '([A-Za-z][A-Za-z0-9_-]*(?:\\.[A-Za-z][A-Za-z0-9_-]*)+)';
+  const directCallPattern = new RegExp(`(?:^|[^\\w.])(?:props\\.i18n\\.|[A-Za-z_$][A-Za-z0-9_$]*(?:\\([^)]*\\))?\\.)?(?:t|tn|rich|translateEnvAppKey)\\(\\s*['"\`]${keyPattern}['"\`]`, 'g');
+  const keyFieldPattern = new RegExp(`\\b(?:titleKey|labelKey|valueKey|contentKey|helpKey|placeholderKey|descriptionKey|detailKey|messageKey|ariaLabelKey)\\s*:\\s*['"\`]${keyPattern}['"\`]`, 'g');
+  const returnLiteralPattern = new RegExp(`\\breturn\\s+['"\`]${keyPattern}['"\`]\\s*;`, 'g');
+  const typeAssertionPattern = new RegExp(`['"\`]${keyPattern}['"\`]\\s+as\\s+EnvAppTranslationKey\\b`, 'g');
+  const statusTemplatePattern = /`chatActivity\.status\.\$\{status\}`\s+as\s+EnvAppTranslationKey\b/g;
   const found = new Map<string, string[]>();
 
   for (const file of listSourceFiles(root)) {
     const source = fs.readFileSync(file, 'utf8');
+    const relativeFile = path.relative(root, file);
     for (const pattern of [
       directCallPattern,
       keyFieldPattern,
-      typedReturnPattern,
+      returnLiteralPattern,
       typeAssertionPattern,
     ]) {
       pattern.lastIndex = 0;
@@ -126,10 +129,16 @@ function collectLiteralTranslationKeysFromSource(root: string): ReadonlyMap<stri
         if (!key) {
           continue;
         }
-        const relativeFile = path.relative(root, file);
         found.set(key, [...(found.get(key) ?? []), relativeFile]);
       }
     }
+    if (statusTemplatePattern.test(source)) {
+      found.set('chatActivity.status.${status}', [
+        ...(found.get('chatActivity.status.${status}') ?? []),
+        relativeFile,
+      ]);
+    }
+    statusTemplatePattern.lastIndex = 0;
   }
 
   return found;

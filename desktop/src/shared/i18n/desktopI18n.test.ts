@@ -18,6 +18,10 @@ import {
 import { isPluralMessage } from './messageTypes';
 import { enUS } from './locales/en-US';
 
+const DESKTOP_TRANSLATION_ROOTS = new Set(
+  Object.keys(enUS).filter((key) => key !== 'plural'),
+);
+
 function listSourceFiles(root: string): readonly string[] {
   const entries = fs.readdirSync(root, { withFileTypes: true });
   const files: string[] = [];
@@ -41,11 +45,12 @@ function listSourceFiles(root: string): readonly string[] {
 }
 
 function collectLiteralTranslationKeysFromSource(root: string): ReadonlyMap<string, readonly string[]> {
-  const directCallPattern = /(?:^|[^\w.])(?:(?:i18n|props\.i18n)\.)?(?:t|tn|translateDesktopKey)\(\s*['"`]([A-Za-z][A-Za-z0-9_.-]*)['"`]/g;
-  const snakeKeyFieldPattern = /\b(?:title|summary|detail|recovery_hint|interrupt_label|interrupt_detail|label|value|content|help|placeholder|description|message|aria_label|window_title|save_label|access_mode_label)_key\s*:\s*['"`]([A-Za-z][A-Za-z0-9_.-]*)['"`]/g;
-  const camelKeyFieldPattern = /\b(?:titleKey|labelKey|valueKey|contentKey|helpKey|placeholderKey|descriptionKey|detailKey|messageKey|ariaLabelKey)\s*:\s*['"`]([A-Za-z][A-Za-z0-9_.-]*)['"`]/g;
-  const typedReturnPattern = /function\s+\w+\([^)]*\)\s*:\s*(?:Desktop(?:Plural)?TranslationKey|[^({;]*\|\s*undefined)[\s\S]*?return\s+['"`]([A-Za-z][A-Za-z0-9_]*\.[A-Za-z0-9_.-]*)['"`]\s*;/g;
-  const typeAssertionPattern = /['"`]([A-Za-z][A-Za-z0-9_]*\.[A-Za-z0-9_.-]*)['"`]\s+as\s+Desktop(?:Plural)?TranslationKey\b/g;
+  const keyPattern = '([A-Za-z][A-Za-z0-9_-]*(?:\\.[A-Za-z][A-Za-z0-9_-]*)+)';
+  const directCallPattern = new RegExp(`(?:^|[^\\w.])(?:props\\.i18n\\.|[A-Za-z_$][A-Za-z0-9_$]*(?:\\([^)]*\\))?\\.|createDesktopI18n\\([^)]*\\)\\.)?(?:t|tn|translateDesktopKey)\\(\\s*['"\`]${keyPattern}['"\`]`, 'g');
+  const snakeKeyFieldPattern = new RegExp(`\\b(?:title|summary|detail|recovery_hint|interrupt_label|interrupt_detail|label|value|content|help|placeholder|description|message|aria_label|window_title|save_label|access_mode_label)_key\\s*:\\s*['"\`]${keyPattern}['"\`]`, 'g');
+  const camelKeyFieldPattern = new RegExp(`\\b(?:titleKey|labelKey|valueKey|contentKey|helpKey|placeholderKey|descriptionKey|detailKey|messageKey|ariaLabelKey)\\s*:\\s*['"\`]${keyPattern}['"\`]`, 'g');
+  const returnLiteralPattern = new RegExp(`\\breturn\\s+['"\`]${keyPattern}['"\`]\\s*;`, 'g');
+  const typeAssertionPattern = new RegExp(`['"\`]${keyPattern}['"\`]\\s+as\\s+Desktop(?:Plural)?TranslationKey\\b`, 'g');
   const found = new Map<string, string[]>();
 
   for (const file of listSourceFiles(root)) {
@@ -54,13 +59,16 @@ function collectLiteralTranslationKeysFromSource(root: string): ReadonlyMap<stri
       directCallPattern,
       snakeKeyFieldPattern,
       camelKeyFieldPattern,
-      typedReturnPattern,
+      returnLiteralPattern,
       typeAssertionPattern,
     ]) {
       pattern.lastIndex = 0;
       for (const match of source.matchAll(pattern)) {
         const key = match[1];
         if (!key) {
+          continue;
+        }
+        if (!DESKTOP_TRANSLATION_ROOTS.has(key.split('.')[0] ?? '')) {
           continue;
         }
         const relativeFile = path.relative(root, file);
