@@ -28,13 +28,36 @@ describe('askUserContract', () => {
       question: 'Choose the closest situation.',
       isSecret: false,
       responseMode: 'select_or_write',
-      writeLabel: undefined,
-      writePlaceholder: undefined,
+      writeLabel: 'None of the above',
+      writePlaceholder: 'Type another answer',
       choices: [
         { choiceId: 'working', label: 'Already working', kind: 'select', description: undefined, actions: undefined },
         { choiceId: 'studying', label: 'Studying full time', kind: 'select', description: undefined, actions: undefined },
       ],
     });
+  });
+
+  it('preserves legacy write fallback when select choices exceed the display cap', () => {
+    const [question] = normalizeAskUserQuestions([
+      {
+        id: 'question-1',
+        header: 'Situation',
+        question: 'Choose the closest situation.',
+        is_other: true,
+        options: [
+          { option_id: 'one', label: 'One' },
+          { option_id: 'two', label: 'Two' },
+          { option_id: 'three', label: 'Three' },
+          { option_id: 'four', label: 'Four' },
+          { option_id: 'five', label: 'Five' },
+        ],
+      },
+    ]);
+
+    expect(question.responseMode).toBe('select_or_write');
+    expect(question.writeLabel).toBe('None of the above');
+    expect(question.writePlaceholder).toBe('Type another answer');
+    expect(question.choices.map((choice) => choice.label)).toEqual(['One', 'Two', 'Three', 'Four']);
   });
 
   it('normalizes legacy option detail modes into a question-level write fallback', () => {
@@ -67,6 +90,26 @@ describe('askUserContract', () => {
         { choiceId: 'working', label: 'Already working', kind: 'select', description: undefined, actions: undefined },
       ],
     });
+  });
+
+  it('uses the canonical localized write fallback when a write choice omits its label', () => {
+    const [question] = normalizeAskUserQuestions([
+      {
+        id: 'question-1',
+        header: 'Situation',
+        question: 'Choose the closest situation.',
+        response_mode: 'select_or_write',
+        choices: [
+          { choice_id: 'working', label: 'Already working', kind: 'select' },
+          { choice_id: 'other', kind: 'write' },
+        ],
+      },
+    ]);
+
+    expect(question.responseMode).toBe('select_or_write');
+    expect(question.writeLabel).toBe('None of the above');
+    expect(question.writePlaceholder).toBe('Type another answer');
+    expect(question.choices.map((choice) => choice.label)).toEqual(['Already working']);
   });
 
   it('only autofills composer text when the question is direct-write or the write path is selected', () => {

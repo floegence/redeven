@@ -696,13 +696,8 @@ export function EnvAppShell() {
   });
 
   const openSettings = (section?: EnvSettingsSection) => {
-    if (!section) {
-      setSettingsFocusSection(null);
-    }
-    if (section) {
-      setSettingsFocusSection(section);
-      setSettingsFocusSeq((n) => n + 1);
-    }
+    setSettingsFocusSection(section ?? 'config');
+    setSettingsFocusSeq((n) => n + 1);
     setViewMode('activity');
     activateActivitySurface('settings', { persist: false });
   };

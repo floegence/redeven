@@ -244,7 +244,7 @@ describe('ActivityTimelineBlock', () => {
 
     expect(fetchGatewayJSONMock).not.toHaveBeenCalled();
     expect(host.textContent).toContain('/workspace');
-    expect(host.textContent).toContain('exit');
+    expect(host.textContent).toContain('Exit');
   });
 
   it('does not expand a detail row while text is selected', async () => {
@@ -372,6 +372,58 @@ describe('ActivityTimelineBlock', () => {
     expect(host.textContent).toContain('Inspect current implementation');
     expect(host.textContent).toContain('In progress');
     expect(host.textContent).not.toContain('"todos"');
+  });
+
+  it('copies localized fallback text for untitled todo summaries', async () => {
+    fetchGatewayJSONMock.mockResolvedValue({
+      tool_name: 'write_todos',
+      status: 'success',
+      result: {
+        todos: [
+          { id: 't1', status: 'pending' },
+        ],
+      },
+    });
+    const host = renderActivity(baseBlock({
+      summary: { status: 'success', totalItems: 1, visibleItems: 1, label: '1 todo update' },
+      groups: [{
+        groupId: 'todos',
+        kind: 'todo',
+        renderer: 'todos',
+        status: 'success',
+        title: 'Updated todos',
+        defaultOpen: true,
+        items: [{
+          itemId: 'tool_todos',
+          toolId: 'tool_todos',
+          toolName: 'write_todos',
+          kind: 'todo',
+          renderer: 'todos',
+          status: 'success',
+          label: 'Updated todos',
+          detailRefs: [{
+            refId: 'tool_detail:tool_todos',
+            kind: 'tool_detail',
+            toolId: 'tool_todos',
+            fetchMode: 'endpoint',
+            endpoint: '/_redeven_proxy/api/ai/runs/run_1/tools/tool_todos/detail',
+            title: 'Tool detail',
+          }],
+        }],
+      }],
+    }));
+
+    const row = host.querySelector('.chat-activity-item-clickable') as HTMLDivElement | null;
+    row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsync();
+
+    const copyButton = [...host.querySelectorAll('.chat-activity-detail-action')]
+      .find((button) => button.textContent === 'Copy summary') as HTMLButtonElement | undefined;
+    copyButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsync();
+
+    expect(host.textContent).toContain('Untitled todo');
+    expect(writeTextToClipboardMock).toHaveBeenCalledWith('pending: Untitled todo');
   });
 
   it('renders file, web, and generic tool details without exposing raw JSON', async () => {

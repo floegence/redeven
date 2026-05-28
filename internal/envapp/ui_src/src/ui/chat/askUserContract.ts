@@ -31,6 +31,10 @@ export type AskUserDraft = Readonly<{
   writeSelected?: boolean;
 }>;
 
+export const ASK_USER_SELECT_OR_WRITE_DEFAULT_LABEL = 'None of the above';
+export const ASK_USER_SELECT_OR_WRITE_DEFAULT_PLACEHOLDER = 'Type another answer';
+export const ASK_USER_WRITE_DEFAULT_PLACEHOLDER = 'Type your answer';
+
 type NormalizedChoiceSource = Readonly<{
   choices: AskUserChoice[];
   hasWritePath: boolean;
@@ -74,13 +78,15 @@ function normalizeAskUserActions(raw: unknown): AskUserAction[] {
   return out;
 }
 
-function defaultWriteLabel(responseMode: AskUserResponseMode, header: string, question: string): string | undefined {
-  if (responseMode === 'select_or_write') return undefined;
+function defaultWriteLabel(responseMode: AskUserResponseMode, header: string, question: string): string {
+  if (responseMode === 'select_or_write') return ASK_USER_SELECT_OR_WRITE_DEFAULT_LABEL;
   return header || question || 'Your answer';
 }
 
-function defaultWritePlaceholder(responseMode: AskUserResponseMode): string | undefined {
-  return responseMode === 'select_or_write' ? undefined : 'Type your answer';
+function defaultWritePlaceholder(responseMode: AskUserResponseMode): string {
+  return responseMode === 'select_or_write'
+    ? ASK_USER_SELECT_OR_WRITE_DEFAULT_PLACEHOLDER
+    : ASK_USER_WRITE_DEFAULT_PLACEHOLDER;
 }
 
 function normalizeAskUserChoicesArray(raw: unknown): NormalizedChoiceSource {
@@ -95,7 +101,7 @@ function normalizeAskUserChoicesArray(raw: unknown): NormalizedChoiceSource {
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue;
     const kind = normalizeAskUserChoiceKind((item as any).kind);
-    const label = asTrimmedString((item as any).label);
+    const label = asTrimmedString((item as any).label) || (kind === 'write' ? ASK_USER_SELECT_OR_WRITE_DEFAULT_LABEL : '');
     if (!label) continue;
     const choiceId = asTrimmedString((item as any).choice_id ?? (item as any).choiceId) || `${kind}_${choices.length + 1}`;
     const actions = normalizeAskUserActions((item as any).actions);
@@ -109,19 +115,20 @@ function normalizeAskUserChoicesArray(raw: unknown): NormalizedChoiceSource {
       continue;
     }
 
-    const choiceKey = choiceId.toLowerCase();
-    const labelKey = label.toLowerCase();
-    if (seenChoice.has(choiceKey) || seenLabel.has(labelKey)) continue;
-    seenChoice.add(choiceKey);
-    seenLabel.add(labelKey);
-    choices.push({
-      choiceId,
-      label,
-      description: asTrimmedString((item as any).description) || undefined,
-      kind: 'select',
-      actions: actions.length > 0 ? actions : undefined,
-    });
-    if (choices.length >= 4) break;
+    if (choices.length < 4) {
+      const choiceKey = choiceId.toLowerCase();
+      const labelKey = label.toLowerCase();
+      if (seenChoice.has(choiceKey) || seenLabel.has(labelKey)) continue;
+      seenChoice.add(choiceKey);
+      seenLabel.add(labelKey);
+      choices.push({
+        choiceId,
+        label,
+        description: asTrimmedString((item as any).description) || undefined,
+        kind: 'select',
+        actions: actions.length > 0 ? actions : undefined,
+      });
+    }
   }
 
   return {
@@ -147,13 +154,18 @@ function normalizeLegacyAskUserChoices(raw: unknown, allowOther: boolean): Norma
     };
   }).filter(Boolean);
 
-  const normalized = normalizeAskUserChoicesArray(projected);
-  if (!allowOther) return normalized;
+  if (allowOther) {
+    projected.push({
+      choice_id: 'other',
+      label: ASK_USER_SELECT_OR_WRITE_DEFAULT_LABEL,
+      description: `${ASK_USER_SELECT_OR_WRITE_DEFAULT_PLACEHOLDER}.`,
+      kind: 'write',
+      input_placeholder: ASK_USER_SELECT_OR_WRITE_DEFAULT_PLACEHOLDER,
+      actions: undefined,
+    });
+  }
 
-  return {
-    ...normalized,
-    hasWritePath: true,
-  };
+  return normalizeAskUserChoicesArray(projected);
 }
 
 export function normalizeAskUserQuestions(raw: unknown): AskUserQuestion[] {
